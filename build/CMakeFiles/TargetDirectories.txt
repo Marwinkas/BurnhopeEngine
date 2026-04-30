@@ -1,0 +1,3 @@
+/home/marwinka/Музыка/BurnhopeEngine/build/CMakeFiles/BurnHopeEngine.dir
+/home/marwinka/Музыка/BurnhopeEngine/build/CMakeFiles/edit_cache.dir
+/home/marwinka/Музыка/BurnhopeEngine/build/CMakeFiles/rebuild_cache.dir
