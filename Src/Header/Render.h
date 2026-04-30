@@ -3,7 +3,6 @@
 #include "Mesh.h"
 #include "LitShader.h"
 #include "ShadowShader.h"
-#include "GameObject.h"
 #include "PostProcessingShader.h"
 #include "Window.h"
 #include <unordered_map>

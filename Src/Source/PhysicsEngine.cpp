@@ -7,6 +7,7 @@
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include "../Header/Components.h"
 
 using namespace JPH;
 
@@ -282,8 +283,10 @@ void PhysicsEngine::UpdatePhysicsFromTransforms(entt::registry& registry) {
         }
 
         // Берем новые координаты из GLM
-        glm::vec3 p = transformComp.transform.position; // Проверь, с большой или маленькой буквы у тебя position!
-        glm::vec3 r = transformComp.transform.rotation;
+        glm::vec3 p = transformComp.transform.position;
+
+        // ВАЖНО: Добавляем glm::radians, чтобы Jolt не сошел с ума от градусов!
+        glm::vec3 r = glm::radians(transformComp.transform.rotation);
 
         JPH::Vec3 newPos(p.x, p.y, p.z);
         JPH::Quat newRot = JPH::Quat::sEulerAngles(JPH::Vec3(r.x, r.y, r.z));

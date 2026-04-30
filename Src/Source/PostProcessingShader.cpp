@@ -111,14 +111,14 @@ PostProcessingShader::PostProcessingShader(Window& window) {
 
     glGenTextures(1, &postProcessingTexture);
     glBindTexture(GL_TEXTURE_2D, postProcessingTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, window.width, window.height, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, window.settings.width, window.settings.height, 0, GL_RGBA, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, postProcessingTexture, 0);
 
     glGenTextures(1, &postDepthTexture);
     glBindTexture(GL_TEXTURE_2D, postDepthTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, window.width, window.height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, window.settings.width, window.settings.height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -128,10 +128,10 @@ PostProcessingShader::PostProcessingShader(Window& window) {
     // =================================================================
     // 6. HI-Z ТЕКСТУРА
     // =================================================================
-    hiZMipMapCount = (int)std::floor(std::log2(std::max(window.width, window.height))) + 1;
+    hiZMipMapCount = (int)std::floor(std::log2(std::max(window.settings.width, window.settings.height))) + 1;
     glGenTextures(1, &hiZTexture);
     glBindTexture(GL_TEXTURE_2D, hiZTexture);
-    glTexStorage2D(GL_TEXTURE_2D, hiZMipMapCount, GL_R32F, window.width, window.height);
+    glTexStorage2D(GL_TEXTURE_2D, hiZMipMapCount, GL_R32F, window.settings.width, window.settings.height);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -144,18 +144,38 @@ PostProcessingShader::PostProcessingShader(Window& window) {
 
     glGenTextures(1, &ssrTexture);
     glBindTexture(GL_TEXTURE_2D, ssrTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, window.width, window.height, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, window.settings.width, window.settings.height, 0, GL_RGBA, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // Генерируем FBO и Текстуру
+    glGenFramebuffers(1, &finalSceneFBO);
+    glGenTextures(1, &finalSceneTexture);
+
+    // Настраиваем текстуру размером с экран игры (fullW, fullH)
+    glBindTexture(GL_TEXTURE_2D, finalSceneTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, window.settings.width, window.settings.height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // Привязываем текстуру к FBO
+    glBindFramebuffer(GL_FRAMEBUFFER, finalSceneFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, finalSceneTexture, 0);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "[ERROR] Финальный FBO не создался!" << std::endl;
+
+    // Отвязываем, чтобы ничего не сломать
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void PostProcessingShader::Bind(Window& window) {
     glBindFramebuffer(GL_FRAMEBUFFER, FBO);
-    glViewport(0, 0, window.width, window.height);
+    glViewport(0, 0, window.settings.width, window.settings.height);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
@@ -168,8 +188,8 @@ void PostProcessingShader::Update(Window& window, float crntTime, Camera& camera
     // Гарантируем, что Compute Shader закончил работу со светом
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
-    int fullW = window.width;
-    int fullH = window.height;
+    int fullW = window.settings.width;
+    int fullH = window.settings.height;
     int halfW = fullW / 2;
     int halfH = fullH / 2;
     int quarterW = fullW / 4;
@@ -550,8 +570,8 @@ void PostProcessingShader::Update(Window& window, float crntTime, Camera& camera
    // ==========================================
     // 8. ВЫВОД НА ЭКРАН (FXAA + Sharpen)
     // ==========================================
-    glBindFramebuffer(GL_FRAMEBUFFER, 0); // 0 = Монитор!
-    glViewport(0, 0, window.width, window.height);
+    glBindFramebuffer(GL_FRAMEBUFFER, finalSceneFBO);
+    glViewport(0, 0, window.settings.width, window.settings.height);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glDisable(GL_DEPTH_TEST);
@@ -570,6 +590,7 @@ void PostProcessingShader::Update(Window& window, float crntTime, Camera& camera
 
     glBindVertexArray(rectVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glEnable(GL_DEPTH_TEST);
 
     // ОЧИСТКА ПУЛА

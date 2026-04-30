@@ -27,6 +27,7 @@ private:
 
 public:
     // ЗАПРАШИВАЕМ ТЕКСТУРУ ИЗ ПУЛА
+
     TransientRT Acquire(int width, int height, GLenum format) {
         // 1. Ищем свободную текстуру такого же размера и формата
         for (auto it = freeRTs.begin(); it != freeRTs.end(); ++it) {
@@ -93,7 +94,8 @@ public:
     unsigned int rcCascadeArray;
     unsigned int rcMergedTexture;
     int numCascades = 4;
-       
+    GLuint finalSceneFBO = 0;
+    GLuint finalSceneTexture = 0;
     Shader sharpenShader; 
     Shader volInjectShader;
     Shader volAccumulateShader;

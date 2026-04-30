@@ -8,7 +8,6 @@
 #include <string>
 #include "shaderClass.h"
 #include "Window.h"
-#include "GameObject.h"
 #include <glm/gtc/random.hpp>
 class VoxelShader : public Shader {
 public:

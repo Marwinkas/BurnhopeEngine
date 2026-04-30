@@ -2,14 +2,13 @@
 #define PHYSICSENGINE_CLASS_H
 
 #include <vector>
-#include "GameObject.h"
 
 // Основные заголовки Jolt (обычно подключаются после определения JPH_MATH_FAST)
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Core/JobSystemThreadPool.h>
-
+#include <entt/entt.hpp>
 // Jolt требует реализации своих интерфейсов фильтрации коллизий.
 // Чтобы не засорять заголовочный файл, сделаем опережающие объявления, 
 // а саму логику спрячем в .cpp.

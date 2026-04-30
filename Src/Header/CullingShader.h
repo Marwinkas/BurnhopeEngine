@@ -9,7 +9,6 @@
 #include <array>
 #include "shaderClass.h"
 #include "Window.h"
-#include "GameObject.h"
 #include "Camera.h"
 struct BoundingSphere {
     glm::vec4 posAndRadius;

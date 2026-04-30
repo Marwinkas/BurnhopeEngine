@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <unordered_map>
 #include <fstream>
+#include <glm/gtx/intersect.hpp>
 #include <nlohmann/json.hpp>
 #include "stb_image.h" 
 #include <algorithm> 
@@ -38,6 +39,63 @@ namespace fs = std::filesystem;
 
 class UI {
 public:
+    bool isSceneUnsaved = false; // Отслеживает, есть ли изменения
+    bool showExitPrompt = false; // Нужно ли показать окошко
+    bool readyToExit = false;    // Точно ли мы готовы выйти
+
+    // Переменные для контроля состояния
+    bool isPlaying = false;
+    entt::registry backupRegistry; // Здесь будет храниться копия сцены
+    // Переменные для окошка Сцены
+    ImVec2 viewportSize = ImVec2(0, 0);
+    ImVec2 viewportBounds[2] = { ImVec2(0, 0), ImVec2(0, 0) };
+    bool isViewportHovered = false;
+    // Шаблонная магия C++17: копирует любые компоненты из одного реестра в другой
+ // Переменные для хранения "слепка" до запуска игры
+    std::map<entt::entity, TransformComponent> backupTransforms;
+    std::map<entt::entity, PhysicsComponent> backupPhysics;
+
+    void SaveSceneState(entt::registry& registry) {
+        backupTransforms.clear();
+        backupPhysics.clear();
+
+        // Запоминаем позиции и настройки физики для КАЖДОГО объекта
+        for (auto [entity] : registry.storage<entt::entity>().each()) {
+            if (registry.all_of<TransformComponent>(entity)) {
+                backupTransforms[entity] = registry.get<TransformComponent>(entity);
+            }
+            if (registry.all_of<PhysicsComponent>(entity)) {
+                backupPhysics[entity] = registry.get<PhysicsComponent>(entity);
+            }
+        }
+    }
+
+    void RestoreSceneState(entt::registry& registry) {
+        // 1. Если во время игры родились новые объекты (например, пули) - удаляем их
+        std::vector<entt::entity> toDelete;
+        for (auto [entity] : registry.storage<entt::entity>().each()) {
+            if (backupTransforms.find(entity) == backupTransforms.end()) {
+                toDelete.push_back(entity);
+            }
+        }
+        for (auto e : toDelete) registry.destroy(e);
+
+        // 2. Возвращаем старые координаты и физику всем изначальным объектам!
+        for (auto& [entity, tComp] : backupTransforms) {
+            if (registry.valid(entity)) {
+                registry.emplace_or_replace<TransformComponent>(entity, tComp);
+            }
+        }
+        for (auto& [entity, pComp] : backupPhysics) {
+            if (registry.valid(entity)) {
+                registry.emplace_or_replace<PhysicsComponent>(entity, pComp);
+                // Пингуем Jolt Physics, чтобы он телепортировал коллайдеры обратно наверх
+                registry.get<PhysicsComponent>(entity).updatePhysicsTransform = true;
+
+            }
+        }
+    }
+
     entt::entity selectedEntity = entt::null;
     glm::mat4 model = glm::mat4(1.0f);
 
@@ -168,7 +226,153 @@ public:
         if (selectedEntity == target) selectedEntity = entt::null;
         registry.destroy(target);
     }
+    // --- ХЕЛПЕРЫ ДЛЯ КРАСИВОГО ИНСПЕКТОРА (КАК В UNREAL) ---
 
+    // Начинаем табличку из 3 колонок: Название | Значение | Кнопка сброса
+    bool BeginInspectorTable(const char* tableId) {
+        ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp;
+        if (ImGui::BeginTable(tableId, 3, flags)) {
+            // Настраиваем колонки: первая под текст, вторая тянется, третья узкая для кнопки
+            ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Reset", ImGuiTableColumnFlags_WidthFixed, 22.0f);
+            return true;
+        }
+        return false;
+    }
+
+    // Вектор из трех чисел (например, позиция)
+    bool DrawPropertyVec3(const char* label, glm::vec3& values, const glm::vec3& resetValue = glm::vec3(0.0f)) {
+        bool changed = false;
+        ImGui::TableNextRow();
+
+        ImGui::TableSetColumnIndex(0);
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("%s", label);
+
+        ImGui::TableSetColumnIndex(1);
+        ImGui::PushID(label);
+        ImGui::SetNextItemWidth(-FLT_MIN); // Растягиваем на всю ширину
+        if (ImGui::DragFloat3("##v", glm::value_ptr(values), 0.1f)) changed = true;
+
+        ImGui::TableSetColumnIndex(2);
+        if (ImGui::Button("<", ImVec2(22, 22))) {
+            values = resetValue;
+            changed = true;
+
+        }
+        ImGui::PopID();
+        return changed;
+    }
+    void DrawToolbar(entt::registry& registry, Render& render) {
+        // Убираем отступы, чтобы панелька была аккуратной
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 4));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0));
+
+        // Создаем окно сверху (высота 40 пикселей)
+        ImGui::Begin("##Toolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+        float buttonSize = 32.0f;
+        // Центрируем кнопки
+        ImGui::SetCursorPosX((ImGui::GetWindowContentRegionMax().x * 0.5f) - (80.0f * 0.5f));
+
+        if (!isPlaying) {
+            // КНОПКА PLAY (Зеленая)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
+            if (ImGui::Button("▶ PLAY", ImVec2(80, buttonSize))) {
+                selectedEntity = entt::null;
+                SaveSceneState(registry); // Делаем безопасный слепок!
+                isPlaying = true;
+            }
+            ImGui::PopStyleColor(2);
+        }
+        else {
+            // КНОПКА STOP (Красная)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+            if (ImGui::Button("■ STOP", ImVec2(80, buttonSize))) {
+                selectedEntity = entt::null;
+                RestoreSceneState(registry); // Возвращаем всё как было!
+                isPlaying = false;
+                render.isSceneDirty = true;
+            }
+            ImGui::PopStyleColor(2);
+        }
+
+        ImGui::End();
+        ImGui::PopStyleVar(2);
+    }
+    // Обычное число
+    bool DrawPropertyFloat(const char* label, float& value, float resetValue = 0.0f, float speed = 0.1f, float min = 0.0f, float max = 0.0f) {
+        bool changed = false;
+        ImGui::TableNextRow();
+
+        ImGui::TableSetColumnIndex(0);
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("%s", label);
+
+        ImGui::TableSetColumnIndex(1);
+        ImGui::PushID(label);
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::DragFloat("##f", &value, speed, min, max)) changed = true;
+
+        ImGui::TableSetColumnIndex(2);
+        if (ImGui::Button("<", ImVec2(22, 22))) { value = resetValue; changed = true; }
+        ImGui::PopID();
+        return changed;
+    }
+
+    // Выбор ассета (теперь показывает только ИМЯ файла, а не длинный путь!)
+    bool DrawAssetPickerTable(const char* label, std::string& outPath, const std::vector<std::string>& extensions) {
+        bool changed = false;
+        ImGui::TableNextRow();
+
+        ImGui::TableSetColumnIndex(0);
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("%s", label);
+
+        ImGui::TableSetColumnIndex(1);
+        ImGui::PushID(label);
+
+        // ВОТ ЗДЕСЬ МАГИЯ: достаем только само имя файла для красоты
+        std::string displayName = outPath.empty() ? "None" : fs::path(outPath).filename().string();
+
+        // Рисуем кнопочку как в Unreal
+        float buttonWidth = ImGui::GetContentRegionAvail().x - 28.0f;
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.11f, 0.14f, 1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
+        if (ImGui::Button(displayName.c_str(), ImVec2(buttonWidth, 0))) {
+            ImGui::OpenPopup("AssetPickerPopup");
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine();
+        if (ImGui::Button("...", ImVec2(24.0f, 0))) ImGui::OpenPopup("AssetPickerPopup");
+
+        if (ImGui::BeginPopup("AssetPickerPopup")) {
+            ImGui::TextColored(ImVec4(0.26f, 0.59f, 0.98f, 1.0f), "Available Assets:");
+            ImGui::Separator();
+            for (auto& entry : fs::recursive_directory_iterator(projectDirectory)) {
+                if (entry.is_regular_file()) {
+                    std::string ext = entry.path().extension().string(); bool match = false;
+                    for (const auto& e : extensions) { if (ext == e) match = true; }
+                    if (match) {
+                        std::string relPath = fs::relative(entry.path(), projectDirectory).string();
+                        std::replace(relPath.begin(), relPath.end(), '\\', '/');
+                        if (ImGui::Selectable(relPath.c_str())) { outPath = relPath; changed = true; }
+                    }
+                }
+            }
+            ImGui::EndPopup();
+        }
+
+        ImGui::TableSetColumnIndex(2);
+        if (ImGui::Button("<", ImVec2(22, 22))) { outPath = ""; changed = true; }
+        ImGui::PopID();
+        return changed;
+    }
     void DeleteGameObject(entt::registry& registry, entt::entity target) {
         SaveState(registry);
 
@@ -217,31 +421,40 @@ public:
         ImGuiStyle& style = ImGui::GetStyle(); ImVec4* colors = style.Colors;
         style.WindowRounding = 6.0f; style.ChildRounding = 4.0f; style.FrameRounding = 4.0f; style.PopupRounding = 6.0f; style.TabRounding = 6.0f;
         style.WindowBorderSize = 1.0f; style.FrameBorderSize = 0.0f; style.PopupBorderSize = 1.0f; style.ItemSpacing = ImVec2(8, 6);
+
+        // Теплый темный фон
         colors[ImGuiCol_Text] = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
-        colors[ImGuiCol_WindowBg] = ImVec4(0.11f, 0.10f, 0.13f, 1.00f);
-        colors[ImGuiCol_ChildBg] = ImVec4(0.09f, 0.08f, 0.11f, 1.00f);
-        colors[ImGuiCol_PopupBg] = ImVec4(0.11f, 0.10f, 0.13f, 0.98f);
-        colors[ImGuiCol_Border] = ImVec4(0.24f, 0.18f, 0.32f, 1.00f);
-        colors[ImGuiCol_FrameBg] = ImVec4(0.16f, 0.14f, 0.20f, 1.00f);
-        colors[ImGuiCol_FrameBgHovered] = ImVec4(0.24f, 0.18f, 0.32f, 1.00f);
-        colors[ImGuiCol_FrameBgActive] = ImVec4(0.35f, 0.22f, 0.50f, 1.00f);
-        colors[ImGuiCol_Button] = ImVec4(0.24f, 0.18f, 0.32f, 1.00f);
-        colors[ImGuiCol_ButtonHovered] = ImVec4(0.35f, 0.22f, 0.50f, 1.00f);
-        colors[ImGuiCol_ButtonActive] = ImVec4(0.48f, 0.30f, 0.68f, 1.00f);
-        colors[ImGuiCol_Header] = ImVec4(0.20f, 0.16f, 0.26f, 1.00f);
-        colors[ImGuiCol_HeaderHovered] = ImVec4(0.28f, 0.20f, 0.38f, 1.00f);
-        colors[ImGuiCol_HeaderActive] = ImVec4(0.40f, 0.25f, 0.55f, 1.00f);
-        colors[ImGuiCol_Tab] = ImVec4(0.14f, 0.12f, 0.17f, 1.00f);
-        colors[ImGuiCol_TabHovered] = ImVec4(0.28f, 0.20f, 0.38f, 1.00f);
-        colors[ImGuiCol_TabActive] = ImVec4(0.24f, 0.18f, 0.32f, 1.00f);
-        colors[ImGuiCol_TabUnfocused] = ImVec4(0.11f, 0.10f, 0.13f, 1.00f);
-        colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.16f, 0.14f, 0.20f, 1.00f);
-        colors[ImGuiCol_CheckMark] = ImVec4(0.68f, 0.45f, 0.95f, 1.00f);
-        colors[ImGuiCol_SliderGrab] = ImVec4(0.55f, 0.35f, 0.85f, 1.00f);
-        colors[ImGuiCol_SliderGrabActive] = ImVec4(0.70f, 0.50f, 1.00f, 1.00f);
-        colors[ImGuiCol_TitleBg] = ImVec4(0.11f, 0.10f, 0.13f, 1.00f);
-        colors[ImGuiCol_TitleBgActive] = ImVec4(0.16f, 0.14f, 0.20f, 1.00f);
-        colors[ImGuiCol_MenuBarBg] = ImVec4(0.09f, 0.08f, 0.11f, 1.00f);
+        colors[ImGuiCol_WindowBg] = ImVec4(0.12f, 0.11f, 0.10f, 1.00f);
+        colors[ImGuiCol_ChildBg] = ImVec4(0.10f, 0.09f, 0.08f, 1.00f);
+        colors[ImGuiCol_PopupBg] = ImVec4(0.12f, 0.11f, 0.10f, 0.98f);
+
+        // Оранжевые акценты (кнопки, рамки, ползунки)
+        colors[ImGuiCol_Border] = ImVec4(0.45f, 0.25f, 0.10f, 1.00f);
+        colors[ImGuiCol_FrameBg] = ImVec4(0.18f, 0.15f, 0.13f, 1.00f);
+        colors[ImGuiCol_FrameBgHovered] = ImVec4(0.45f, 0.25f, 0.10f, 1.00f);
+        colors[ImGuiCol_FrameBgActive] = ImVec4(0.65f, 0.35f, 0.12f, 1.00f);
+
+        colors[ImGuiCol_Button] = ImVec4(0.45f, 0.25f, 0.10f, 1.00f);
+        colors[ImGuiCol_ButtonHovered] = ImVec4(0.65f, 0.35f, 0.12f, 1.00f);
+        colors[ImGuiCol_ButtonActive] = ImVec4(0.85f, 0.45f, 0.15f, 1.00f);
+
+        colors[ImGuiCol_Header] = ImVec4(0.35f, 0.18f, 0.05f, 1.00f);
+        colors[ImGuiCol_HeaderHovered] = ImVec4(0.50f, 0.28f, 0.10f, 1.00f);
+        colors[ImGuiCol_HeaderActive] = ImVec4(0.70f, 0.40f, 0.15f, 1.00f);
+
+        colors[ImGuiCol_Tab] = ImVec4(0.22f, 0.14f, 0.08f, 1.00f);
+        colors[ImGuiCol_TabHovered] = ImVec4(0.50f, 0.28f, 0.10f, 1.00f);
+        colors[ImGuiCol_TabActive] = ImVec4(0.45f, 0.25f, 0.10f, 1.00f);
+        colors[ImGuiCol_TabUnfocused] = ImVec4(0.12f, 0.11f, 0.10f, 1.00f);
+        colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.18f, 0.15f, 0.13f, 1.00f);
+
+        colors[ImGuiCol_CheckMark] = ImVec4(0.95f, 0.55f, 0.20f, 1.00f); // Яркая оранжевая галочка
+        colors[ImGuiCol_SliderGrab] = ImVec4(0.80f, 0.45f, 0.15f, 1.00f);
+        colors[ImGuiCol_SliderGrabActive] = ImVec4(0.95f, 0.55f, 0.20f, 1.00f);
+
+        colors[ImGuiCol_TitleBg] = ImVec4(0.12f, 0.11f, 0.10f, 1.00f);
+        colors[ImGuiCol_TitleBgActive] = ImVec4(0.18f, 0.15f, 0.13f, 1.00f);
+        colors[ImGuiCol_MenuBarBg] = ImVec4(0.10f, 0.09f, 0.08f, 1.00f);
     }
 
     UI(Window& window, const std::string& projectPath, const std::string& exePath) {
@@ -256,7 +469,38 @@ public:
         dirHistory.push_back(currentDirectory); dirHistoryIndex = 0;
         LoadPostProcessSettings();
     }
+    // --- КАСТОМНЫЙ ЗАГОЛОВОК КОМПОНЕНТА С ИКОНКОЙ ---
+    bool DrawComponentHeader(const char* title, const char* iconFileName, bool& removeClicked, bool isTransform = false) {
+        // Используем стандартные флаги CollapsingHeader
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowItemOverlap | ImGuiTreeNodeFlags_CollapsingHeader;
 
+        // МАГИЯ: добавляем 7 невидимых пробелов перед названием. 
+        // Они освобождают идеальное место для нашей иконки!
+        std::string label = std::string("       ") + title;
+
+        bool isOpen = ImGui::CollapsingHeader(label.c_str(), flags);
+
+        // Достаем координаты только что нарисованного прямоугольника заголовка
+        ImVec2 min = ImGui::GetItemRectMin();
+        ImVec2 max = ImGui::GetItemRectMax();
+
+        // Загружаем и рисуем нашу иконку поверх пустого места
+        GLuint iconID = GetImageThumbnail(ExeDirectory.string() + "/Resources/" + iconFileName);
+        if (iconID != 0) {
+            float iconSize = 18.0f; // Можно сделать больше или меньше по вкусу
+            // Треугольник ImGui обычно занимает ~20 пикселей. Ставим иконку сразу за ним (min.x + 24.0f)
+            ImVec2 iconPos = ImVec2(min.x + 29.0f, min.y + (max.y - min.y - iconSize) * 0.5f);
+            ImGui::GetWindowDrawList()->AddImage((ImTextureID)(intptr_t)iconID, iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize));
+        }
+
+        // Рисуем крестик для удаления (но для Transform скрываем, его удалять нельзя)
+        if (!isTransform) {
+            ImGui::SameLine(ImGui::GetWindowWidth() - 40);
+            if (ImGui::Button((std::string("X##RM_") + title).c_str())) removeClicked = true;
+        }
+
+        return isOpen;
+    }
     // --- МЕЛКИЕ ХЕЛПЕРЫ ДЛЯ ФАЙЛОВ ---
     std::string TruncateText(const std::string& text, float maxWidth) {
         if (ImGui::CalcTextSize(text.c_str()).x <= maxWidth) return text;
@@ -441,7 +685,63 @@ public:
             ImGui::TreePop();
         }
     }
+    // --- НОВЫЕ ХЕЛПЕРЫ ДЛЯ СВЕТА И ФИЗИКИ ---
 
+    // Выпадающий список (Combo)
+    bool DrawPropertyCombo(const char* label, int& currentItem, const char* const items[], int itemsCount, int resetIndex = 0) {
+        bool changed = false;
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("%s", label);
+
+        ImGui::TableSetColumnIndex(1);
+        ImGui::PushID(label);
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::Combo("##combo", &currentItem, items, itemsCount)) changed = true;
+
+        ImGui::TableSetColumnIndex(2);
+        if (ImGui::Button("<", ImVec2(22, 22))) { currentItem = resetIndex; changed = true; }
+        ImGui::PopID();
+        return changed;
+    }
+
+    // Выбор цвета
+    bool DrawPropertyColor(const char* label, glm::vec3& color, const glm::vec3& resetValue = glm::vec3(1.0f)) {
+        bool changed = false;
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("%s", label);
+
+        ImGui::TableSetColumnIndex(1);
+        ImGui::PushID(label);
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::ColorEdit3("##color", glm::value_ptr(color))) changed = true;
+
+        ImGui::TableSetColumnIndex(2);
+        if (ImGui::Button("<", ImVec2(22, 22))) { color = resetValue; changed = true; }
+        ImGui::PopID();
+        return changed;
+    }
+
+    // Галочка (Checkbox)
+    bool DrawPropertyBool(const char* label, bool& value, bool resetValue = true) {
+        bool changed = false;
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("%s", label);
+
+        ImGui::TableSetColumnIndex(1);
+        ImGui::PushID(label);
+        if (ImGui::Checkbox("##bool", &value)) changed = true;
+
+        ImGui::TableSetColumnIndex(2);
+        if (ImGui::Button("<", ImVec2(22, 22))) { value = resetValue; changed = true; }
+        ImGui::PopID();
+        return changed;
+    }
     void DrawSceneOutliner(entt::registry& registry, ImGuiIO& io) {
         if (!showOutliner) return;
         ImGui::Begin("Scene Outliner", &showOutliner);
@@ -516,150 +816,236 @@ public:
         if (ImGui::InputText("##ObjectName", nameBuf, sizeof(nameBuf))) { tag.name = nameBuf; }
         ImGui::PopItemWidth(); ImGui::Spacing();
 
+        // --- ТРАНСФОРМ ---
         if (registry.all_of<TransformComponent>(selectedEntity)) {
             auto& tComp = registry.get<TransformComponent>(selectedEntity);
-            if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
-                bool transformChanged = false;
-                if (ImGui::DragFloat3("Position", glm::value_ptr(tComp.transform.position), 0.1f)) transformChanged = true;
-                if (ImGui::IsItemActivated()) SaveState(registry);
-                if (ImGui::DragFloat3("Rotation", glm::value_ptr(tComp.transform.rotation), 1.0f)) transformChanged = true;
-                if (ImGui::IsItemActivated()) SaveState(registry);
-                if (ImGui::DragFloat3("Scale", glm::value_ptr(tComp.transform.scale), 0.05f)) transformChanged = true;
-                if (ImGui::IsItemActivated()) SaveState(registry);
+            bool dummyRemove = false;
+            if (DrawComponentHeader("Transform", "icon_transform.png", dummyRemove, true)) {
 
-                if (transformChanged) {
-                    tComp.transform.updatematrix = true;
-                    if (registry.all_of<PhysicsComponent>(selectedEntity)) registry.get<PhysicsComponent>(selectedEntity).updatePhysicsTransform = true;
-                    ImGuizmo::RecomposeMatrixFromComponents(glm::value_ptr(tComp.transform.position), glm::value_ptr(tComp.transform.rotation), glm::value_ptr(tComp.transform.scale), glm::value_ptr(model));
+                if (BeginInspectorTable("TransformTable")) {
+                    bool transformChanged = false;
+
+                    if (DrawPropertyVec3("Position", tComp.transform.position, glm::vec3(0.0f))) transformChanged = true;
+                    if (ImGui::IsItemActivated()) SaveState(registry);
+
+                    if (DrawPropertyVec3("Rotation", tComp.transform.rotation, glm::vec3(0.0f))) transformChanged = true;
+                    if (ImGui::IsItemActivated()) SaveState(registry);
+
+                    if (DrawPropertyVec3("Scale", tComp.transform.scale, glm::vec3(1.0f))) transformChanged = true;
+                    if (ImGui::IsItemActivated()) SaveState(registry);
+
+                    if (transformChanged) {
+                        tComp.transform.updatematrix = true;
+                        if (registry.all_of<PhysicsComponent>(selectedEntity)) registry.get<PhysicsComponent>(selectedEntity).updatePhysicsTransform = true;
+                        ImGuizmo::RecomposeMatrixFromComponents(glm::value_ptr(tComp.transform.position), glm::value_ptr(tComp.transform.rotation), glm::value_ptr(tComp.transform.scale), glm::value_ptr(model));
+                        isSceneUnsaved = true;
+                        render.isSceneDirty = true;
+                    }
+                    ImGui::EndTable();
                 }
             }
         }
 
+        // --- MESH RENDERER ---
+        // --- MESH RENDERER ---
         if (registry.all_of<MeshComponent>(selectedEntity)) {
             auto& meshComp = registry.get<MeshComponent>(selectedEntity);
             bool removeMesh = false;
-            if (ImGui::CollapsingHeader("Mesh Renderer", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowItemOverlap)) {
+            if (DrawComponentHeader("Mesh", "icon_mesh.png", removeMesh)) {
                 ImGui::SameLine(ImGui::GetWindowWidth() - 40);
                 if (ImGui::Button("X##RM_MESH")) removeMesh = true;
 
-                ImGui::Checkbox("Static", &meshComp.isStatic); ImGui::SameLine();
-                ImGui::Checkbox("Visible", &meshComp.isVisible); ImGui::SameLine();
-                ImGui::Checkbox("Cast Shadow", &meshComp.castShadow);
+                // Начинаем табличку сразу, чтобы галочки тоже были ровными
+                if (BeginInspectorTable("MeshTable")) {
+                    bool meshChanged = false;
 
-                if (DrawAssetPicker("Model", meshComp.modelPath, { ".bhmesh" })) {
-                    SaveState(registry);
-                    render.isSceneDirty = true;
-                    fs::path absProjectDir = fs::absolute(projectDirectory);
-                    std::string fullModelPath = (absProjectDir / meshComp.modelPath).string();
+                    // Раздел: Основные настройки
+                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0);
+                    ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "Settings"); // Оранжевый заголовок
 
-                    if (Serializer::loadedModels.find(fullModelPath) == Serializer::loadedModels.end()) {
-                        Serializer::loadedModels[fullModelPath] = new Model(fullModelPath, projectDirectory.string());
+                    if (DrawPropertyBool("Static", meshComp.isStatic, false)) meshChanged = true;
+                    if (DrawPropertyBool("Visible", meshComp.isVisible, true)) meshChanged = true;
+                    if (DrawPropertyBool("Cast Shadow", meshComp.castShadow, true)) meshChanged = true;
+
+                    if (meshChanged) {
+                        SaveState(registry);
+                        render.isSceneDirty = true;
+                        isSceneUnsaved = true;
+                        render.isSceneDirty = true;
                     }
-                    Model* newModel = Serializer::loadedModels[fullModelPath];
 
-                    if (newModel && !newModel->meshes.empty()) {
-                        meshComp.materialPaths.clear();
-                        for (const std::string& rawMatPath : newModel->loadedMaterialPaths) {
-                            if (rawMatPath.empty()) meshComp.materialPaths.push_back("");
-                            else {
-                                fs::path p(rawMatPath);
-                                if (p.is_absolute()) meshComp.materialPaths.push_back(fs::relative(p, absProjectDir).generic_string());
-                                else meshComp.materialPaths.push_back(p.generic_string());
+                    // Раздел: Геометрия
+                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Spacing();
+                    ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "Geometry");
+
+                    // Выбор модели!
+                    if (DrawAssetPickerTable("Model", meshComp.modelPath, { ".bhmesh" })) {
+                        SaveState(registry);
+                        render.isSceneDirty = true;
+                        fs::path absProjectDir = fs::absolute(projectDirectory);
+                        std::string fullModelPath = (absProjectDir / meshComp.modelPath).string();
+
+                        if (Serializer::loadedModels.find(fullModelPath) == Serializer::loadedModels.end()) {
+                            Serializer::loadedModels[fullModelPath] = new Model(fullModelPath, projectDirectory.string());
+                        }
+                        Model* newModel = Serializer::loadedModels[fullModelPath];
+
+                        if (newModel && !newModel->meshes.empty()) {
+                            meshComp.materialPaths.clear();
+                            for (const std::string& rawMatPath : newModel->loadedMaterialPaths) {
+                                if (rawMatPath.empty()) meshComp.materialPaths.push_back("");
+                                else {
+                                    fs::path p(rawMatPath);
+                                    if (p.is_absolute()) meshComp.materialPaths.push_back(fs::relative(p, absProjectDir).generic_string());
+                                    else meshComp.materialPaths.push_back(p.generic_string());
+                                }
+                            }
+
+                            meshComp.renderer.subMeshes.clear();
+                            for (int i = 0; i < newModel->meshes.size(); i++) {
+                                std::string relMatPath = (i < meshComp.materialPaths.size()) ? meshComp.materialPaths[i] : "";
+                                Material* mat = nullptr;
+                                if (!relMatPath.empty()) {
+                                    std::string fullMatPath = (absProjectDir / relMatPath).string();
+                                    mat = Serializer::LoadMaterial(fullMatPath, projectDirectory.string());
+                                }
+                                if (mat == nullptr) mat = new Material();
+                                meshComp.renderer.AddSubMesh(&newModel->meshes[i], mat);
                             }
                         }
+                        if (registry.all_of<PhysicsComponent>(selectedEntity)) registry.get<PhysicsComponent>(selectedEntity).rebuildPhysics = true;
+                    }
 
-                        meshComp.renderer.subMeshes.clear();
-                        for (int i = 0; i < newModel->meshes.size(); i++) {
-                            std::string relMatPath = (i < meshComp.materialPaths.size()) ? meshComp.materialPaths[i] : "";
-                            Material* mat = nullptr;
-                            if (!relMatPath.empty()) {
-                                std::string fullMatPath = (absProjectDir / relMatPath).string();
-                                mat = Serializer::LoadMaterial(fullMatPath, projectDirectory.string());
+                    // Раздел: Отрисовка материалов
+                    if (!meshComp.renderer.subMeshes.empty()) {
+                        ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Spacing();
+                        ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "Materials");
+
+                        if (meshComp.materialPaths.size() != meshComp.renderer.subMeshes.size()) meshComp.materialPaths.resize(meshComp.renderer.subMeshes.size(), "");
+
+                        for (int i = 0; i < meshComp.renderer.subMeshes.size(); i++) {
+                            std::string mName = meshComp.renderer.subMeshes[i].mesh ? meshComp.renderer.subMeshes[i].mesh->name : "Mesh";
+                            char slotName[512]; sprintf_s(slotName, "Slot [%d]", i);
+
+                            if (DrawAssetPickerTable(slotName, meshComp.materialPaths[i], { ".bhmat" })) {
+                                SaveState(registry);
+                                render.isSceneDirty = true;
+                                std::string fullMatPath = (projectDirectory / meshComp.materialPaths[i]).string();
+                                Material* newMat = Serializer::LoadMaterial(fullMatPath, projectDirectory.string());
+                                if (newMat) meshComp.renderer.subMeshes[i].material = newMat;
                             }
-                            if (mat == nullptr) mat = new Material();
-                            meshComp.renderer.AddSubMesh(&newModel->meshes[i], mat);
                         }
                     }
-                    if (registry.all_of<PhysicsComponent>(selectedEntity)) registry.get<PhysicsComponent>(selectedEntity).rebuildPhysics = true;
-                    
-                }
-
-                if (!meshComp.renderer.subMeshes.empty()) {
-                    ImGui::Separator(); ImGui::TextColored(ImVec4(0.6f, 0.4f, 0.9f, 1.0f), "Material Slots:");
-                    if (meshComp.materialPaths.size() != meshComp.renderer.subMeshes.size()) meshComp.materialPaths.resize(meshComp.renderer.subMeshes.size(), "");
-
-                    for (int i = 0; i < meshComp.renderer.subMeshes.size(); i++) {
-                        std::string mName = meshComp.renderer.subMeshes[i].mesh ? meshComp.renderer.subMeshes[i].mesh->name : "Mesh";
-                        char slotName[512]; sprintf_s(slotName, "Slot [%d] %s", i, mName.c_str());
-
-                        if (DrawAssetPicker(slotName, meshComp.materialPaths[i], { ".bhmat" })) {
-                            SaveState(registry);
-                            render.isSceneDirty = true;
-                            std::string fullMatPath = (projectDirectory / meshComp.materialPaths[i]).string();
-                            Material* newMat = Serializer::LoadMaterial(fullMatPath, projectDirectory.string());
-                            if (newMat) meshComp.renderer.subMeshes[i].material = newMat;
-                        }
-                    }
+                    ImGui::EndTable();
                 }
             }
-            if (removeMesh) { SaveState(registry); registry.erase<MeshComponent>(selectedEntity); render.isSceneDirty = true;
-            }
+            if (removeMesh) { SaveState(registry); registry.erase<MeshComponent>(selectedEntity); render.isSceneDirty = true; }
         }
 
+        // --- LIGHT COMPONENT ---
         if (registry.all_of<LightComponent>(selectedEntity)) {
             auto& lComp = registry.get<LightComponent>(selectedEntity).light;
             bool removeLight = false;
-            if (ImGui::CollapsingHeader("Light Component", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowItemOverlap)) {
+            if (DrawComponentHeader("Light", "icon_light.png", removeLight)) {
                 ImGui::SameLine(ImGui::GetWindowWidth() - 40);
                 if (ImGui::Button("X##RM_LIGHT")) removeLight = true;
 
-                ImGui::Checkbox("Enable Light", &lComp.enable);
-                const char* lightTypes[] = { "Directional", "Point", "Spot", "Rect", "Sky" }; int currentType = (int)lComp.type;
-                if (ImGui::Combo("Type", &currentType, lightTypes, IM_ARRAYSIZE(lightTypes))) { SaveState(registry); lComp.type = (LightType)currentType; }
+                if (BeginInspectorTable("LightTable")) {
+                    bool stateChanged = false;
 
-                const char* lightTypes2[] = { "Static", "Movable"}; int currentType2 = (int)lComp.mobility;
-                if (ImGui::Combo("Type Move", &currentType2, lightTypes2, IM_ARRAYSIZE(lightTypes2))) { SaveState(registry); lComp.mobility = (LightMobility)currentType2; }
+                    // Основные настройки
+                    if (DrawPropertyBool("Enable Light", lComp.enable, true)) stateChanged = true;
+                    if (DrawPropertyBool("Cast Shadows", lComp.castShadows, true)) stateChanged = true;
 
+                    const char* lightTypes[] = { "Directional", "Point", "Spot", "Rect", "Sky" };
+                    int currentType = (int)lComp.type;
+                    if (DrawPropertyCombo("Type", currentType, lightTypes, IM_ARRAYSIZE(lightTypes), 0)) {
+                        lComp.type = (LightType)currentType; stateChanged = true;
+                    }
 
-                ImGui::ColorEdit3("Color", glm::value_ptr(lComp.color));
-                ImGui::DragFloat("Intensity", &lComp.intensity, 0.1f, 0.0f, 1000.0f);
-                if (lComp.type == LightType::Point || lComp.type == LightType::Spot) ImGui::DragFloat("Radius", &lComp.radius, 0.5f, 0.1f, 500.0f);
-                if (lComp.type == LightType::Spot) {
-                    ImGui::DragFloat("Inner Angle", &lComp.innerCone, 0.5f, 0.0f, lComp.outerCone);
-                    ImGui::DragFloat("Outer Angle", &lComp.outerCone, 0.5f, lComp.innerCone, 90.0f);
+                    const char* mobilityTypes[] = { "Static", "Movable" };
+                    int currentMob = (int)lComp.mobility;
+                    if (DrawPropertyCombo("Mobility", currentMob, mobilityTypes, IM_ARRAYSIZE(mobilityTypes), 1)) {
+                        lComp.mobility = (LightMobility)currentMob; stateChanged = true;
+                    }
+
+                    // Визуал Света
+                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Spacing();
+                    ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "Appearance");
+
+                    if (DrawPropertyColor("Color", lComp.color, glm::vec3(1.0f))) stateChanged = true;
+                    if (DrawPropertyFloat("Intensity", lComp.intensity, 1.0f, 0.1f, 0.0f, 1000.0f)) stateChanged = true;
+
+                    // Специфичные параметры в зависимости от типа света
+                    if (lComp.type == LightType::Point || lComp.type == LightType::Spot) {
+                        ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Spacing();
+                        ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "Shape");
+                        if (DrawPropertyFloat("Radius", lComp.radius, 10.0f, 0.5f, 0.1f, 500.0f)) stateChanged = true;
+                    }
+
+                    if (lComp.type == LightType::Spot) {
+                        if (DrawPropertyFloat("Inner Angle", lComp.innerCone, 15.0f, 0.5f, 0.0f, lComp.outerCone)) stateChanged = true;
+                        if (DrawPropertyFloat("Outer Angle", lComp.outerCone, 30.0f, 0.5f, lComp.innerCone, 90.0f)) stateChanged = true;
+                    }
+
+                    if (stateChanged) { SaveState(registry); isSceneUnsaved = true;
+                    render.isSceneDirty = true;
+                    }
+                    ImGui::EndTable();
                 }
-                ImGui::Checkbox("Cast Shadows", &lComp.castShadows);
             }
             if (removeLight) { SaveState(registry); registry.erase<LightComponent>(selectedEntity); }
         }
 
+        // --- PHYSICS COMPONENT ---
         if (registry.all_of<PhysicsComponent>(selectedEntity)) {
             auto& phys = registry.get<PhysicsComponent>(selectedEntity);
             bool removePhysics = false;
-            if (ImGui::CollapsingHeader("Physics Component", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowItemOverlap)) {
+
+            if (DrawComponentHeader("Physics", "icon_physics.png", removePhysics)) {
                 ImGui::SameLine(ImGui::GetWindowWidth() - 40);
                 if (ImGui::Button("X##RM_PHYSICS")) removePhysics = true;
 
-                bool rebuild = false;
-                const char* rbTypes[] = { "Static", "Dynamic" }; int currentRbType = (int)phys.bodyType;
-                if (ImGui::Combo("Body Type", &currentRbType, rbTypes, IM_ARRAYSIZE(rbTypes))) { phys.bodyType = (RigidBodyType)currentRbType; rebuild = true; }
+                if (BeginInspectorTable("PhysicsTable")) {
+                    bool rebuild = false;
 
-                if (ImGui::DragFloat("Mass", &phys.mass, 0.1f, 0.0f, 1000.0f)) rebuild = true;
-                if (ImGui::DragFloat("Friction", &phys.friction, 0.01f, 0.0f, 1.0f)) rebuild = true;
-                if (ImGui::DragFloat("Restitution", &phys.restitution, 0.01f, 0.0f, 1.0f)) rebuild = true;
+                    // Настройки твердого тела
+                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0);
+                    ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "Rigid Body");
 
-                ImGui::Separator();
-                const char* colTypes[] = { "Box", "Sphere", "Plane" }; int currentColType = (int)phys.colliderType;
-                if (ImGui::Combo("Shape", &currentColType, colTypes, IM_ARRAYSIZE(colTypes))) { phys.colliderType = (ColliderType)currentColType; rebuild = true; }
+                    const char* rbTypes[] = { "Static", "Dynamic" };
+                    int currentRbType = (int)phys.bodyType;
+                    if (DrawPropertyCombo("Body Type", currentRbType, rbTypes, IM_ARRAYSIZE(rbTypes), 1)) {
+                        phys.bodyType = (RigidBodyType)currentRbType; rebuild = true;
+                    }
 
-                if (phys.colliderType == ColliderType::Box) {
-                    if (ImGui::DragFloat3("Extents", glm::value_ptr(phys.extents), 0.1f)) rebuild = true;
+                    // Масса и трение
+                    if (DrawPropertyFloat("Mass", phys.mass, 10.0f, 0.1f, 0.0f, 1000.0f)) rebuild = true;
+                    if (DrawPropertyFloat("Friction", phys.friction, 0.5f, 0.01f, 0.0f, 1.0f)) rebuild = true;
+                    if (DrawPropertyFloat("Restitution", phys.restitution, 0.5f, 0.01f, 0.0f, 1.0f)) rebuild = true;
+
+                    // Настройки коллайдера
+                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Spacing();
+                    ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "Collider");
+
+                    const char* colTypes[] = { "Box", "Sphere", "Plane" };
+                    int currentColType = (int)phys.colliderType;
+                    if (DrawPropertyCombo("Shape", currentColType, colTypes, IM_ARRAYSIZE(colTypes), 0)) {
+                        phys.colliderType = (ColliderType)currentColType; rebuild = true;
+                    }
+
+                    // Форма коллайдера (отображается динамически)
+                    if (phys.colliderType == ColliderType::Box) {
+                        if (DrawPropertyVec3("Extents", phys.extents, glm::vec3(1.0f))) rebuild = true;
+                    }
+                    else if (phys.colliderType == ColliderType::Sphere) {
+                        if (DrawPropertyFloat("Radius", phys.radius, 1.0f, 0.1f, 0.0f, 100.0f)) rebuild = true;
+                    }
+
+                    if (rebuild) { SaveState(registry); phys.rebuildPhysics = true;  isSceneUnsaved = true; isSceneUnsaved = true; isSceneUnsaved = true;
+                    }
+                    ImGui::EndTable();
                 }
-                else if (phys.colliderType == ColliderType::Sphere) {
-                    if (ImGui::DragFloat("Radius", &phys.radius, 0.1f)) rebuild = true;
-                }
-
-                if (rebuild) { SaveState(registry); phys.rebuildPhysics = true; }
             }
             if (removePhysics) { SaveState(registry); registry.erase<PhysicsComponent>(selectedEntity); }
         }
@@ -673,10 +1059,6 @@ public:
             ImGui::EndPopup();
         }
         ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
-
-        // ВАЖНО: Тебе нужно будет обновить Serializer, чтобы он читал из EnTT, а не из вектора!
-        // Пока можно просто выводить текст или закомментить функцию сохранения, пока не перепишем Serializer.
-        if (ImGui::Button("💾 SAVE SCENE", ImVec2(-1, 40))) { std::cout << "Need to update Serializer for EnTT!\n"; }
         ImGui::End();
     }
         void DrawFolderTree(const fs::path& dir) {
@@ -1391,25 +1773,133 @@ public:
         }
         ImGui::PopID(); return changed;
     }
-    bool TestRayOBB(glm::vec3 rayOrigin, glm::vec3 rayDir, glm::mat4 modelMatrix, float& tOutput) {
-        glm::mat4 invModel = glm::inverse(modelMatrix);
-        glm::vec3 localOrigin = glm::vec3(invModel * glm::vec4(rayOrigin, 1.0f)); glm::vec3 localDir = glm::normalize(glm::vec3(invModel * glm::vec4(rayDir, 0.0f)));
-        float tMin = -100000.0f; float tMax = 100000.0f; glm::vec3 boxMin = glm::vec3(-1.0f); glm::vec3 boxMax = glm::vec3(1.0f);
-        for (int i = 0; i < 3; i++) {
-            float invD = 1.0f / localDir[i]; float t1 = (boxMin[i] - localOrigin[i]) * invD; float t2 = (boxMax[i] - localOrigin[i]) * invD;
-            if (invD < 0.0f) std::swap(t1, t2); tMin = t1 > tMin ? t1 : tMin; tMax = t2 < tMax ? t2 : tMax;
-            if (tMin > tMax) return false;
+    // 1. Хелпер для получения реальной позиции в мире (для дочерних объектов)
+    glm::mat4 GetWorldMatrix(entt::registry& registry, entt::entity entity) {
+        if (!registry.all_of<TransformComponent>(entity)) return glm::mat4(1.0f);
+
+        glm::mat4 world = registry.get<TransformComponent>(entity).transform.matrix;
+        entt::entity curr = entity;
+
+        while (registry.all_of<HierarchyComponent>(curr)) {
+            curr = registry.get<HierarchyComponent>(curr).parent;
+            if (curr != entt::null && registry.all_of<TransformComponent>(curr)) {
+                // Умножаем на матрицу родителя
+                world = registry.get<TransformComponent>(curr).transform.matrix * world;
+            }
+            else {
+                break;
+            }
         }
-        tOutput = tMin; return tMax > 0;
-    }
-    glm::vec3 GetMouseRay(Window& window, Camera& camera) {
-        double mouseX, mouseY; glfwGetCursorPos(window.window, &mouseX, &mouseY);
-        float x = (2.0f * (float)mouseX) / window.width - 1.0f; float y = 1.0f - (2.0f * (float)mouseY) / window.height;
-        glm::mat4 invProj = glm::inverse(camera.GetProjectionMatrix(45.0f, 0.1f, 100.0f)); glm::mat4 invView = glm::inverse(glm::lookAt(camera.Position, camera.Position + camera.Orientation, camera.Up));
-        glm::vec4 rayClip = glm::vec4(x, y, -1.0f, 1.0f); glm::vec4 rayEye = invProj * rayClip;
-        rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f); return glm::normalize(glm::vec3(invView * rayEye));
+        return world;
     }
 
+    // 2. Идеальный Ray-OBB каст через GLM
+    // 2. Идеальный Ray-OBB каст (Своя реализация Slab Method)
+    bool TestRayOBB(glm::vec3 rayOrigin, glm::vec3 rayDir, glm::vec3 aabbMin, glm::vec3 aabbMax, glm::mat4 worldMatrix, float& tOutput) {
+        // Переводим луч в локальную систему координат объекта
+        glm::mat4 invModel = glm::inverse(worldMatrix);
+        glm::vec3 localOrigin = glm::vec3(invModel * glm::vec4(rayOrigin, 1.0f));
+        glm::vec3 localDir = glm::normalize(glm::vec3(invModel * glm::vec4(rayDir, 0.0f)));
+
+        // --- МАТЕМАТИКА ПЕРЕСЕЧЕНИЯ С AABB ---
+        // Получаем обратное направление луча (чтобы заменить медленное деление на быстрое умножение)
+        glm::vec3 invDir = 1.0f / localDir;
+
+        // Ищем точки входа и выхода для каждой из трех осей
+        glm::vec3 t0 = (aabbMin - localOrigin) * invDir;
+        glm::vec3 t1 = (aabbMax - localOrigin) * invDir;
+
+        glm::vec3 tmin = glm::min(t0, t1);
+        glm::vec3 tmax = glm::max(t0, t1);
+
+        // Находим самое позднее время входа и самое раннее время выхода
+        float tNear = glm::max(glm::max(tmin.x, tmin.y), tmin.z);
+        float tFar = glm::min(glm::min(tmax.x, tmax.y), tmax.z);
+
+        // Если луч промахивается мимо коробки, или коробка строго позади луча
+        if (tNear > tFar || tFar < 0.0f) {
+            return false;
+        }
+
+        // Если камера находится прямо ВНУТРИ объекта (tNear < 0), мы берем точку выхода (tFar)
+        tOutput = (tNear < 0.0f) ? tFar : tNear;
+
+        // Дополнительная проверка, чтобы точно не выделить то, что за спиной
+        return tOutput > 0.0f;
+    }
+
+    // 3. Правильный луч от мыши с учетом DPI масштаба Windows
+    glm::vec3 GetMouseRay(Camera& camera) {
+        // Берем позицию мыши прямо из ImGui
+        ImVec2 mousePos = ImGui::GetMousePos();
+
+        // Высчитываем позицию мыши ТОЛЬКО внутри нашего окошка Сцены (от 0 до 1)
+        float x = (mousePos.x - viewportBounds[0].x) / viewportSize.x;
+        float y = (mousePos.y - viewportBounds[0].y) / viewportSize.y;
+
+        // Переводим в координаты для видеокарты (от -1 до 1)
+        // Ось Y у картинок обычно перевернута, поэтому 1.0f - ...
+        float ndcX = (x * 2.0f) - 1.0f;
+        float ndcY = 1.0f - (y * 2.0f);
+
+        // Дальше идет твоя старая математика камер
+        glm::mat4 invProj = glm::inverse(camera.GetProjectionMatrix(45.0f, 0.1f, 1000.0f));
+        glm::mat4 invView = glm::inverse(glm::lookAt(camera.Position, camera.Position + camera.Orientation, camera.Up));
+
+        glm::vec4 rayClip = glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
+        glm::vec4 rayEye = invProj * rayClip;
+        rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);
+
+        return glm::normalize(glm::vec3(invView * rayEye));
+    }
+    void DrawExitPrompt(Window& window, entt::registry& registry) {
+        // Если пришел сигнал показать окошко — открываем его
+        if (showExitPrompt) {
+            ImGui::OpenPopup("Внимание");
+            showExitPrompt = false;
+        }
+
+        // Центрируем окошко ровно посередине экрана
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        // Создаем Modal (оно блокирует нажатия на всё остальное, пока не ответишь)
+        if (ImGui::BeginPopupModal("Внимание", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+            ImGui::Text("У вас есть несохраненная сцена. Сохранить перед выходом?");
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Кнопка ДА
+            if (ImGui::Button("Да", ImVec2(120, 0))) {
+                // Вызываем твою функцию сохранения
+                Serializer::SaveScene(projectDirectory.string() + "/MyLevel.bhscene", registry);
+                isSceneUnsaved = false; // Теперь всё сохранено
+                readyToExit = true;     // Разрешаем выход
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+
+            // Кнопка НЕТ
+            if (ImGui::Button("Нет", ImVec2(120, 0))) {
+                readyToExit = true;     // Разрешаем выход без сохранения
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+
+            // Кнопка ОТМЕНА
+            if (ImGui::Button("Отмена", ImVec2(120, 0))) {
+                // Просто закрываем окошко, продолжаем работать дальше
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        // Если после ответа на вопрос мы решили выйти, говорим окну закрыться по-настоящему
+        if (readyToExit) {
+            glfwSetWindowShouldClose(window.window, GLFW_TRUE);
+        }
+    }
     void DrawMainMenuBar(entt::registry& registry) {
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::BeginMenu("File")) {
@@ -1431,11 +1921,94 @@ public:
         }
     }
 
-    void Draw(Window& window, Camera& camera, entt::registry& registry, Render& render) {
+    void Draw(Window& window, Camera& camera, entt::registry& registry, Render& render, PostProcessingShader postprocessingshader) {
         ImGui_ImplOpenGL3_NewFrame(); ImGui_ImplGlfw_NewFrame(); ImGui::NewFrame();
+
+        // 1. Меню бар
         DrawMainMenuBar(registry);
         ImGuiIO& io = ImGui::GetIO();
 
+        // =====================================================================
+        // 2. ГЛАВНЫЙ ХОЛСТ (DOCKSPACE) - ОБЯЗАТЕЛЬНО ДОЛЖЕН БЫТЬ В САМОМ НАЧАЛЕ!
+        // =====================================================================
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGui::SetNextWindowViewport(viewport->ID);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground;
+
+        ImGui::Begin("MainDockSpace_Window", nullptr, window_flags);
+        ImGui::PopStyleVar(3);
+
+        ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+
+        // Первая авто-настройка окон
+        static bool first_time = true;
+        if (first_time || resetLayout) {
+            first_time = false; resetLayout = false;
+            ImGui::DockBuilderRemoveNode(dockspace_id);
+            ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
+
+            auto dock_main = dockspace_id; // Центр!
+            auto dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.15f, nullptr, &dock_main);
+            auto dock_bottom = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.25f, nullptr, &dock_main);
+            auto dock_right = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.25f, nullptr, &dock_main);
+
+            // ВАЖНО: Привязываем "Сцену" в самый центр!
+            ImGui::DockBuilderDockWindow("Сцена", dock_main);
+
+            ImGui::DockBuilderDockWindow("Scene Outliner", dock_left);
+            ImGui::DockBuilderDockWindow("Content Browser", dock_bottom);
+            ImGui::DockBuilderDockWindow("Scene Inspector", dock_right);
+            ImGui::DockBuilderDockWindow("Properties", dock_right);
+            ImGui::DockBuilderFinish(dockspace_id);
+        }
+        ImGui::End(); // Закрываем MainDockSpace_Window
+
+        // =====================================================================
+        // 3. ОКНО СЦЕНЫ (Теперь оно ляжет правильно внутрь DockSpace)
+        // =====================================================================
+        ImGuiWindowFlags viewFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoMove;
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGui::Begin("Сцена", nullptr, viewFlags);
+
+        ImVec2 windowSize = ImGui::GetContentRegionAvail();
+        viewportSize = windowSize;
+
+        ImVec2 minBound = ImGui::GetWindowContentRegionMin();
+        ImVec2 maxBound = ImGui::GetWindowContentRegionMax();
+        ImVec2 windowPos = ImGui::GetWindowPos();
+        viewportBounds[0] = ImVec2(minBound.x + windowPos.x, minBound.y + windowPos.y);
+        viewportBounds[1] = ImVec2(maxBound.x + windowPos.x, maxBound.y + windowPos.y);
+
+        ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+        ImGui::Image((ImTextureID)(intptr_t)postprocessingshader.finalSceneTexture, windowSize, ImVec2(0, 1), ImVec2(1, 0));
+
+        ImGui::SetCursorScreenPos(cursorPos);
+        ImGui::InvisibleButton("##ViewportButton", windowSize);
+        isViewportHovered = ImGui::IsItemHovered();
+
+        // 4. НАСТРОЙКА ГИЗМО - ТЕПЕРЬ ОНО РАБОТАЕТ ТОЛЬКО ВНУТРИ СЦЕНЫ!
+        ImGuizmo::BeginFrame();
+        ImGuizmo::SetOrthographic(false);
+        ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList()); // Рисуем в контексте текущего окна
+        // ИДЕАЛЬНЫЕ КООРДИНАТЫ ДЛЯ ГИЗМО:
+        ImGuizmo::SetRect(viewportBounds[0].x, viewportBounds[0].y, viewportSize.x, viewportSize.y);
+
+        ImGui::End();
+        ImGui::PopStyleVar();
+
+        // =====================================================================
+        // 5. ГОРЯЧИЕ КЛАВИШИ, ЛУЧ И ЛОГИКА ГИЗМО
+        // =====================================================================
         if (!ImGui::IsAnyItemActive()) {
             if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) Undo(registry);
             if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) Redo(registry);
@@ -1447,62 +2020,65 @@ public:
                 if (parent != entt::null) registry.get<HierarchyComponent>(parent).children.push_back(newEnt);
                 selectedEntity = newEnt;
             }
-            // Копирование (Clipboard) для ECS сделать сложнее, пока оставляем пустое место
         }
 
-        ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(viewport->WorkPos); ImGui::SetNextWindowSize(viewport->WorkSize); ImGui::SetNextWindowViewport(viewport->ID);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f); ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f); ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground;
-        ImGui::Begin("MainDockSpace_Window", nullptr, window_flags); ImGui::PopStyleVar(3);
-        ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
-
-        static bool first_time = true;
-        if (first_time || resetLayout) {
-            first_time = false; resetLayout = false;
-            ImGui::DockBuilderRemoveNode(dockspace_id); ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace); ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
-            auto dock_main = dockspace_id;
-            auto dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.15f, nullptr, &dock_main);
-            auto dock_bottom = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.25f, nullptr, &dock_main);
-            auto dock_right = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.25f, nullptr, &dock_main);
-            ImGui::DockBuilderDockWindow("Scene Outliner", dock_left); ImGui::DockBuilderDockWindow("Content Browser", dock_bottom);
-            ImGui::DockBuilderDockWindow("Scene Inspector", dock_right); ImGui::DockBuilderDockWindow("Properties", dock_right);
-            ImGui::DockBuilderFinish(dockspace_id);
-        }
-        ImGui::End();
-
-        ImGuizmo::BeginFrame(); ImGuizmo::SetOrthographic(false); ImGuizmo::SetDrawlist(ImGui::GetForegroundDrawList()); ImGuizmo::SetRect(0, 0, (float)window.width, (float)window.height);
         static ImGuizmo::OPERATION currentGizmoOperation = ImGuizmo::TRANSLATE;
         static ImGuizmo::MODE currentGizmoMode = ImGuizmo::WORLD;
         if (ImGui::IsKeyPressed(ImGuiKey_Q)) currentGizmoOperation = ImGuizmo::TRANSLATE;
         if (ImGui::IsKeyPressed(ImGuiKey_E)) currentGizmoOperation = ImGuizmo::ROTATE;
         if (ImGui::IsKeyPressed(ImGuiKey_R)) currentGizmoOperation = ImGuizmo::SCALE;
-        glm::mat4 view = camera.GetViewMatrix(); glm::mat4 proj = camera.GetProjectionMatrix(45.0f, 0.1f, 1000.0f);
 
-        // --- МЫШКА (ЛУЧ) ---
-        if (ImGui::IsMouseClicked(0) && !ImGui::IsAnyItemHovered() && !ImGuizmo::IsOver()) {
-            glm::vec3 rayOrigin = camera.Position; glm::vec3 rayDir = GetMouseRay(window, camera);
-            float closestT = 1000.0f; entt::entity hitIndex = entt::null;
+        glm::mat4 view = camera.GetViewMatrix();
+        glm::mat4 proj = camera.GetProjectionMatrix(45.0f, 0.1f, 1000.0f);
+
+        // --- МЫШКА (ЛУЧ И ВЫДЕЛЕНИЕ) ---
+        if (ImGui::IsMouseClicked(0) && isViewportHovered && !ImGuizmo::IsOver()) {
+            glm::vec3 rayOrigin = camera.Position;
+            glm::vec3 rayDir = GetMouseRay(camera);
+            float closestT = 100000.0f;
+            entt::entity hitIndex = entt::null;
 
             auto pickView = registry.view<TransformComponent>();
             pickView.each([&](entt::entity entity, TransformComponent& tComp) {
                 float t;
-                if (TestRayOBB(rayOrigin, rayDir, tComp.transform.matrix, t)) {
-                    if (t < closestT) { closestT = t; hitIndex = entity; }
+                glm::vec3 aabbMin = glm::vec3(-1.0f);
+                glm::vec3 aabbMax = glm::vec3(1.0f);
+
+                if (registry.all_of<PhysicsComponent>(entity)) {
+                    auto& phys = registry.get<PhysicsComponent>(entity);
+                    if (phys.colliderType == ColliderType::Box) {
+                        aabbMin = -phys.extents;
+                        aabbMax = phys.extents;
+                    }
+                    else if (phys.colliderType == ColliderType::Sphere) {
+                        aabbMin = glm::vec3(-phys.radius);
+                        aabbMax = glm::vec3(phys.radius);
+                    }
+                }
+
+                glm::mat4 worldMatrix = GetWorldMatrix(registry, entity);
+                if (TestRayOBB(rayOrigin, rayDir, aabbMin, aabbMax, worldMatrix, t)) {
+                    if (t < closestT) {
+                        closestT = t;
+                        hitIndex = entity;
+                    }
                 }
                 });
+
+            selectedEntity = hitIndex;
             if (hitIndex != entt::null) {
-                selectedEntity = hitIndex;
                 render.isSceneDirty = true;
-                ImGuizmo::RecomposeMatrixFromComponents(glm::value_ptr(registry.get<TransformComponent>(selectedEntity).transform.position), glm::value_ptr(registry.get<TransformComponent>(selectedEntity).transform.rotation), glm::value_ptr(registry.get<TransformComponent>(selectedEntity).transform.scale), glm::value_ptr(model));
+                ImGuizmo::RecomposeMatrixFromComponents(
+                    glm::value_ptr(registry.get<TransformComponent>(selectedEntity).transform.position),
+                    glm::value_ptr(registry.get<TransformComponent>(selectedEntity).transform.rotation),
+                    glm::value_ptr(registry.get<TransformComponent>(selectedEntity).transform.scale),
+                    glm::value_ptr(model));
             }
         }
 
         if (selectedEntity != entt::null && registry.valid(selectedEntity) && registry.all_of<TransformComponent>(selectedEntity)) {
             auto& tComp = registry.get<TransformComponent>(selectedEntity);
 
-            // 1. Собираем АКТУАЛЬНУЮ локальную матрицу каждый кадр
             glm::mat4 localMatrix;
             ImGuizmo::RecomposeMatrixFromComponents(
                 glm::value_ptr(tComp.transform.position),
@@ -1511,7 +2087,6 @@ public:
                 glm::value_ptr(localMatrix)
             );
 
-            // 2. Если есть родитель - переводим в МИРОВЫЕ координаты (Гизмо работает только с миром)
             glm::mat4 worldMatrix = localMatrix;
             glm::mat4 parentWorldMatrix = glm::mat4(1.0f);
 
@@ -1523,21 +2098,17 @@ public:
                 }
             }
 
-            // 3. Отслеживаем начало перетаскивания для Undo/Redo
             if (ImGuizmo::IsUsing() && !wasUsingGizmo) SaveState(registry);
             wasUsingGizmo = ImGuizmo::IsUsing();
 
-            // 4. РИСУЕМ САМ ГИЗМО
             ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), currentGizmoOperation, currentGizmoMode, glm::value_ptr(worldMatrix));
 
-            // 5. Если мы потянули за стрелочку - сохраняем новые координаты обратно
             if (ImGuizmo::IsUsing()) {
                 render.isSceneDirty = true;
+                isSceneUnsaved = true; // Сцена изменилась!
 
-                // Очищаем мировую матрицу от родительской, чтобы получить новые локальные координаты
                 glm::mat4 newLocalMatrix = glm::inverse(parentWorldMatrix) * worldMatrix;
 
-                // Записываем прямо в TransformComponent!
                 ImGuizmo::DecomposeMatrixToComponents(
                     glm::value_ptr(newLocalMatrix),
                     glm::value_ptr(tComp.transform.position),
@@ -1547,20 +2118,21 @@ public:
 
                 tComp.transform.updatematrix = true;
 
-                // Говорим физике, что мы сдвинули объект руками
                 if (registry.all_of<PhysicsComponent>(selectedEntity)) {
                     registry.get<PhysicsComponent>(selectedEntity).updatePhysicsTransform = true;
                 }
             }
         }
 
+        // =====================================================================
+        // 6. ОТРИСОВКА ОСТАЛЬНЫХ ОКОН
+        // =====================================================================
+        DrawExitPrompt(window, registry);
+        DrawToolbar(registry, render);
         DrawSceneOutliner(registry, io);
-        DrawSceneInspector(registry,render);
+        DrawSceneInspector(registry, render);
         DrawContentBrowser();
         DrawPropertiesWindow(render);
-        // Вызов твоих старых методов, которые я не стал сюда переписывать целиком, чтобы не было ошибки лимита символов
-        // Вставь сюда свой код DrawContentBrowser() и DrawPropertiesWindow() из старого файла
-        // Я оставил в классе прототипы функций, просто скопируй тела этих двух функций из старого UI.h!
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

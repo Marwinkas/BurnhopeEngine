@@ -23,7 +23,6 @@
     <ClInclude Include="Src\Header\Components.h" />
     <ClInclude Include="Src\Header\CullingShader.h" />
     <ClInclude Include="Src\Header\DefferedShader.h" />
-    <ClInclude Include="Src\Header\GameObject.h" />
     <ClInclude Include="Src\Header\GLBuffer.h" />
     <ClInclude Include="Src\Header\GLTexture.h" />
     <ClInclude Include="Src\Header\Light.h" />

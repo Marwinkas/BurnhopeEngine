@@ -220,7 +220,7 @@ void Render::RebuildBatches(entt::registry& registry) {
         glUniformMatrix4fv(glGetUniformLocation(cullingshader.lightCullingShader.ID, "projMatrix"),
             1, GL_FALSE, glm::value_ptr(camera.GetProjectionMatrix(45.0f, 0.1f, 1000.0f)));
         glUniform2f(glGetUniformLocation(cullingshader.lightCullingShader.ID, "screenSize"),
-            (float)window.width, (float)window.height);
+            (float)window.settings.width, (float)window.settings.height);
         glUniform1i(glGetUniformLocation(cullingshader.lightCullingShader.ID, "useOcclusionCull"), 1);
 
         // Биндим Hi-Z текстуру (она из прошлого кадра — это нормально)
@@ -248,7 +248,7 @@ void Render::RebuildBatches(entt::registry& registry) {
 
 		glEnable(GL_CULL_FACE);
 		glCullFace(GL_BACK);
-		glViewport(0, 0, window.width, window.height);
+		glViewport(0, 0, window.settings.width, window.settings.height);
 
 		RenderMainPass(camera, window, cachedMainBatches, registry, sunMatrices, geometryShader, defferedShader, shadowshader, cullingshader, postprocessingshader);
 
@@ -459,8 +459,7 @@ void Render::RebuildBatches(entt::registry& registry) {
 
         center = glm::vec3(glm::inverse(lightView) * glm::vec4(centerLightSpace, 1.0f));
         lightView = glm::lookAt(center - sunDir * 1000.0f, center, up);
-        printf("Cascade[%d] radius = %.1f, texel size = %.3f m\n",
-            1, radius, (radius * 2.0f) / shadowSize);
+   
         // ТЕПЕРЬ Z-RANGE НОРМАЛЬНЫЙ: от 0.0 до 2000.0
         // Твой шейдер куллинга больше не будет отсекать тени!
         return glm::ortho(-radius, radius, -radius, radius, -500.0f, 2000.0f) * lightView;
@@ -486,7 +485,7 @@ void Render::RebuildBatches(entt::registry& registry) {
         cullingshader.Set(cullingshader.loc.viewProjection, viewProj);
 
         if (!isShadowPass) {
-            cullingshader.Set(cullingshader.loc.screenSize, (float)window.width, (float)window.height);
+            cullingshader.Set(cullingshader.loc.screenSize, (float)window.settings.width, (float)window.settings.height);
             cullingshader.Set(cullingshader.loc.hiZTexture, hiZTex, 0);
         }
 
@@ -730,7 +729,7 @@ void Render::RebuildBatches(entt::registry& registry) {
         // ФАЗА 1.5: КОПИРОВАНИЕ ГЛУБИНЫ
         glBindFramebuffer(GL_READ_FRAMEBUFFER, gBufferFBO);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, ppShader.FBO);
-        glBlitFramebuffer(0, 0, window.width, window.height, 0, 0, window.width, window.height, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        glBlitFramebuffer(0, 0, window.settings.width, window.settings.height, 0, 0, window.settings.width, window.settings.height, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
         glDisable(GL_DEPTH_TEST);
 
         // ФАЗА 2: COMPUTE DEFERRED LIGHTING
@@ -742,7 +741,7 @@ void Render::RebuildBatches(entt::registry& registry) {
         // ПЕРЕДАЕМ РАЗМЕР ЭКРАНА ОБЯЗАТЕЛЬНО (иначе UV = NaN)
 
         glUniform3fv(glGetUniformLocation(deferredComputeShader.ID, "sunDir"), 1, glm::value_ptr(sunDir));
-        glUniform2f(glGetUniformLocation(deferredComputeShader.ID, "screenSize"), (float)window.width, (float)window.height);
+        glUniform2f(glGetUniformLocation(deferredComputeShader.ID, "screenSize"), (float)window.settings.width, (float)window.settings.height);
 
         deferredComputeShader.Set(deferredComputeShader.loc.sunLightSpaceMatrices, sunMatrices);
         deferredComputeShader.Set(deferredComputeShader.loc.cascadeSplits, shadowshader.cascadeSplits);
@@ -779,8 +778,8 @@ void Render::RebuildBatches(entt::registry& registry) {
         // ПРИВЯЗЫВАЕМ ТЕКСТУРУ ДЛЯ ЗАПИСИ
         glBindImageTexture(0, hdrOutputTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA16F);
 
-        GLuint numGroupsX = (window.width + 15) / 16;
-        GLuint numGroupsY = (window.height + 15) / 16;
+        GLuint numGroupsX = (window.settings.width + 15) / 16;
+        GLuint numGroupsY = (window.settings.height + 15) / 16;
         glDispatchCompute(numGroupsX, numGroupsY, 1);
 
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);

@@ -78,9 +78,6 @@
     <ClInclude Include="Src\Header\DefferedShader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Src\Header\GameObject.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Src\Header\GLBuffer.h">
       <Filter>Header Files</Filter>
     </ClInclude>

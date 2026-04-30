@@ -3,7 +3,6 @@ namespace fs = std::filesystem;
 #include <windows.h>
 #include <string>
 #include"../Header/Model.h"
-#include"../Header/GameObject.h"
 #include "../Header/LitShader.h"
 #include "../Header/ShadowShader.h"
 #include "../Header/PostProcessingShader.h"
@@ -22,7 +21,6 @@ namespace fs = std::filesystem;
 #include "../Header/DefferedShader.h"
 #include "../Header/TextureStreamer.h"
 using namespace entt;
-std::vector <GameObject> Objects;
 std::vector <Material> material;
 std::vector <Mesh> mesh;
 std::string getExecutablePaths()
@@ -41,11 +39,11 @@ double crntTime = 0.0;
 glm::vec3 GetMouseRay(Window& window, Camera& camera) {
 	double mouseX, mouseY;
 	glfwGetCursorPos(window.window, &mouseX, &mouseY);
-	glm::vec4 viewport = glm::vec4(0, 0, window.width, window.height);
+	glm::vec4 viewport = glm::vec4(0, 0, window.settings.width, window.settings.height);
 	glm::mat4 view = glm::lookAt(camera.Position, camera.Position + camera.Orientation, camera.Up);
 	glm::mat4 proj = camera.GetProjectionMatrix(45.0f, 0.1f, 100.0f);
-		glm::vec3 nearPos = glm::unProject(glm::vec3(mouseX, window.height - mouseY, 0.0f), view, proj, viewport);
-		glm::vec3 farPos = glm::unProject(glm::vec3(mouseX, window.height - mouseY, 1.0f), view, proj, viewport);
+		glm::vec3 nearPos = glm::unProject(glm::vec3(mouseX, window.settings.height - mouseY, 0.0f), view, proj, viewport);
+		glm::vec3 farPos = glm::unProject(glm::vec3(mouseX, window.settings.height - mouseY, 1.0f), view, proj, viewport);
 	return glm::normalize(farPos - nearPos);
 }
 TextureStreamer* globalTextureStreamer = nullptr;
@@ -56,28 +54,31 @@ int main()
     try {
         // Устанавливаем кодировку вывода в UTF-8 (код 65001)
 
-        Window window = Window();
-        Objects.reserve(1000);
-     
+        WindowSettings winProps;
+        winProps.title = "BurnHope Engine - Level Editor";
+        winProps.width = 1280;
+        winProps.height = 720;
+        winProps.vSync = true;   // Включаем лок кадров под монитор
+        winProps.resizable = true;
+
+        // Передаем их в окно
+        Window window(winProps);
+
         // Проверяем пути
         std::string exePath = getExecutablePaths();
         std::string projectFolder = exePath + "/project";
+        std::string projectFolder2 = exePath + "\\project";
         std::string sceneFile = projectFolder + "/level1.bhscene";
-
-        std::cout << "Loading scene: " << sceneFile << std::endl;
-
-        // Загрузка сцены
-        Objects = Serializer::LoadScene(sceneFile, projectFolder);
-
+        window.SetIcon(exePath + "\\Resources\\icon.png");
         UI ui(window, projectFolder, exePath);
         CullingShader cullingshader;
 
         PostProcessingShader postprocessingshader(window);
         ShadowShader shadowshader;
         DefferedShader deferredshader;
-        Camera camera(window.width, window.height, glm::vec3(0.0f, 0.0f, 2.0f));
+        Camera camera(window.settings.width, window.settings.height, glm::vec3(0.0f, 0.0f, 2.0f));
         Render render;
-        render.InitGBuffer(window.width, window.height);
+        render.InitGBuffer(window.settings.width, window.settings.height);
         render.UpdateClusterGrid(camera, window, cullingshader);
         TextureStreamer texStreamer;
         globalTextureStreamer = &texStreamer;
@@ -90,32 +91,27 @@ int main()
         float lastFrame = glfwGetTime();
 
         entt::registry registry;
-        // === СПАВНИМ ПОЛ (СТАТИКА) ===
-        auto floorEntity = registry.create();
-        registry.emplace<TagComponent>(floorEntity, "Floor");
-        auto& floorTransform = registry.emplace<TransformComponent>(floorEntity);
-        floorTransform.transform.position = glm::vec3(0.0f, -5.0f, 0.0f); // Чуть ниже центра
-        floorTransform.transform.scale = glm::vec3(50.0f, 1.0f, 50.0f);
-        auto& floorPhysics = registry.emplace<PhysicsComponent>(floorEntity);
-        floorPhysics.bodyType = RigidBodyType::Static;
-        floorPhysics.colliderType = ColliderType::Box;
-        floorPhysics.extents = glm::vec3(50.0f, 1.0f, 50.0f); // Широкий плоский пол
 
-        // === СПАВНИМ КУБИК (ДИНАМИКА) ===
-        auto cubeEntity = registry.create();
-        registry.emplace<TagComponent>(cubeEntity, "FallingCube");
-        auto& cubeTransform = registry.emplace<TransformComponent>(cubeEntity);
-        cubeTransform.transform.position = glm::vec3(0.0f, 10.0f, 0.0f); // Висит в воздухе
-
-        auto& cubePhysics = registry.emplace<PhysicsComponent>(cubeEntity);
-        cubePhysics.bodyType = RigidBodyType::Dynamic;
-        cubePhysics.colliderType = ColliderType::Box;
-        cubePhysics.extents = glm::vec3(0.5f, 0.5f, 0.5f); // Размер кубика 1х1х1
-        registry.on_destroy<PhysicsComponent>().connect<&PhysicsEngine::OnPhysicsComponentDestroyed>(&physicsEngine);
-        // Инициализируем Jolt тела для этих двух сущностей
+        Serializer::LoadScene(projectFolder2 + "\\MyLevel.bhscene", projectFolder2, registry);
         physicsEngine.RegisterEntities(registry);
-        while (!glfwWindowShouldClose(window.window))
+        render.isSceneDirty = true; // Говорим рендеру, что сцена обновилась
+        window.Show();
+
+        while (true)
         {
+            if (glfwWindowShouldClose(window.window)) {
+                // Если сцена не сохранена и мы еще не дали ответ
+                if (ui.isSceneUnsaved && !ui.readyToExit) {
+                    // Отменяем закрытие окна!
+                    glfwSetWindowShouldClose(window.window, GLFW_FALSE);
+                    // Командуем UI показать всплывающее окно
+                    ui.showExitPrompt = true;
+                }
+                else {
+                    // Если всё сохранено или мы ответили "Нет" — прерываем цикл (выходим из игры)
+                    break;
+                }
+            }
             if (texStreamer.Update()) {
                 render.isSceneDirty = true;
             }
@@ -134,24 +130,28 @@ int main()
                     f5Pressed = true;
                 }
             }
-            render.isSceneDirty = true;
             render.Draw(registry, litshader, shadowshader, postprocessingshader, window, camera, deltaTime, ui, cullingshader, deferredshader);
             
             if (!f5Pressed) {
-                ui.Draw(window, camera, registry, render);
+                ui.Draw(window, camera, registry, render, postprocessingshader);
+
             }
             physicsEngine.RebuildPhysicsEntities(registry);
 
             // 2. Движение Гизмо (ручной перенос)
             physicsEngine.UpdatePhysicsFromTransforms(registry);
+            if (ui.isPlaying) {
 
-            // 3. Шаг физики Jolt
-            physicsEngine.Update(deltaTime);
 
-            // 4. Синхронизация обратно в графику
-            if (physicsEngine.SyncTransforms(registry)) {
-                render.isSceneDirty = true;
+                // 3. Шаг физики Jolt
+                physicsEngine.Update(deltaTime);
+
+                // 4. Синхронизация обратно в графику
+                if (physicsEngine.SyncTransforms(registry)) {
+                    render.isSceneDirty = true;
+                }
             }
+
 
             glfwSwapBuffers(window.window);
             glfwPollEvents();
