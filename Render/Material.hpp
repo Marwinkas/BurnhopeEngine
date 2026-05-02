@@ -58,7 +58,10 @@ namespace burnhope {
             aoMap = tex;
             hasAO = (tex != nullptr);
         }
-
+        void setHeight(std::shared_ptr<BurnhopeTexture> tex) {
+            heightMap = tex;
+            hasHeight = (tex != nullptr);
+        }
         // Метод для безопасного получения текстуры (защита от краша Vulkan)
         // Если текстуры нет, отдаем дефолтную (которую мы заранее создадим в движке)
         std::shared_ptr<BurnhopeTexture> getAlbedoSafe(std::shared_ptr<BurnhopeTexture> defaultWhite) {

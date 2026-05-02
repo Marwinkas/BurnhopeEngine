@@ -25,7 +25,7 @@ namespace burnhope {
     };
 class BurnhopeTexture {
  public:
-  BurnhopeTexture(BurnhopeDevice &device, const std::string &textureFilepath);
+  BurnhopeTexture(BurnhopeDevice &device, const std::string &textureFilepath, bool isSRGB = true);
   BurnhopeTexture(
       BurnhopeDevice &device,
       VkFormat format,
@@ -55,12 +55,13 @@ class BurnhopeTexture {
   uint32_t arrayLayers = 1;
   void updateDescriptor();
   void transitionLayout(VkCommandBuffer commandBuffer, VkImageLayout oldLayout, VkImageLayout newLayout);
-
+// Добавь это в BurnhopeTexture
+void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
   static std::unique_ptr<BurnhopeTexture> createTextureFromFile(
       BurnhopeDevice &device, const std::string &filepath);
-
+static std::unique_ptr<BurnhopeTexture> createDataTextureFromFile(BurnhopeDevice &device, const std::string &filepath);
  private:
-  void createTextureImage(const std::string &filepath);
+  void createTextureImage(const std::string &filepath, bool isSRGB = true);
   void createTextureImageView(VkImageViewType viewType);
   void createTextureSampler();
 

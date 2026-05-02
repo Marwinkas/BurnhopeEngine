@@ -23,7 +23,9 @@ struct LightGPUData {
     glm::vec4 shadowParams;      // x=innerCone, y=outerCone, z=castShadows, w=encodedSlot
     glm::mat4 lightSpaceMatrix;
 };
-
+struct PointFaceMatrices {
+    glm::mat4 faces[6];
+};
 struct LightUBOData {
     int activeLightsCount;
     int _pad[3];
@@ -51,6 +53,7 @@ public:
 
     // Вызывается перед render pass — устанавливает viewport/scissor для тайла
     void setTileViewport(VkCommandBuffer cmd, int pixelX, int pixelY, int tileSize) const;
+    // shadow.hpp:
 
 private:
     void createResources();
@@ -126,7 +129,8 @@ public:
     const std::array<glm::mat4, BurnhopeCSM::CASCADE_COUNT>& getCascadeMatrices() const {
         return cascadeMatrices;
     }
-
+    PointFaceMatrices faceMatricesData[100]{};
+    const PointFaceMatrices* getFaceMatricesData() const { return faceMatricesData; }
     glm::vec3 getSunDir() const { return sunDir; }
 
     BurnhopeShadowAtlas* getAtlas() { return shadowAtlas.get(); }

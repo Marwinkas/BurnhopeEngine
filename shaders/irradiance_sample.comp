@@ -1,0 +1,133 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Set 0: Global UBO
+layout(set = 0, binding = 0) uniform GlobalUbo {
+    mat4 projection;
+    mat4 invViewProj;
+    mat4 view;
+    vec3 camPos;
+    float zNear;
+    vec3 sunDir;
+    float zFar;
+    vec4 screenSize;
+    mat4 sunLightSpaceMatrices[4];
+    vec4 cascadeSplits;
+    uint gridDimX; uint gridDimY; uint gridDimZ;
+    float lightSize;
+} ubo;
+
+// Set 1: G-Buffer
+layout(set = 1, binding = 0) uniform sampler2D gNormalRoughness;
+layout(set = 1, binding = 1) uniform sampler2D gAlbedoMetallic;
+layout(set = 1, binding = 2) uniform sampler2D gHeightAO;
+layout(set = 1, binding = 3) uniform sampler2D gDepth;
+
+// Set 2: irradiance output + cascade0 input
+layout(set = 2, binding = 0, rgba16f) uniform image2D outIrradiance;
+layout(set = 2, binding = 1) uniform sampler2D cascade0;
+
+layout(push_constant) uniform RC {
+    mat4  invViewProj;
+    vec4  cameraPos;
+    vec4  probeGridMin;
+    vec4  probeGridMax;
+    ivec4 probeCount;
+    float rayLength;
+    float cascadeIndex;
+    float screenWidth;
+    float screenHeight;
+} rc;
+
+// Октаэдральное кодирование нормали → UV в зонде
+vec2 octaEncode(vec3 dir) {
+    dir = normalize(dir);
+    dir /= (abs(dir.x) + abs(dir.y) + abs(dir.z));
+    if (dir.z < 0.0)
+        dir.xy = (1.0 - abs(dir.yx)) * sign(dir.xy);
+    return dir.xy * 0.5 + 0.5;
+}
+
+// Сэмплируем зонд с индексом probeIdx по нормали dir
+vec3 sampleProbe(ivec3 probeIdx, vec3 dir) {
+    const int octaSize = 8;
+    ivec3 pCount = rc.probeCount.xyz;
+
+    vec2 octaUV = octaEncode(dir);
+
+    // Позиция зонда в текстуре
+    int baseX = probeIdx.x * octaSize;
+    int baseY = (probeIdx.z * pCount.y + probeIdx.y) * octaSize;
+
+    ivec2 texSize = textureSize(cascade0, 0);
+    vec2 uv = (vec2(baseX, baseY) + octaUV * float(octaSize) + 0.5) / vec2(texSize);
+    uv = clamp(uv, vec2(0.001), vec2(0.999));
+
+    return texture(cascade0, uv).rgb;
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (pixel.x >= int(rc.screenWidth) || pixel.y >= int(rc.screenHeight)) return;
+
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(rc.screenWidth, rc.screenHeight);
+    float depth = texture(gDepth, uv).r;
+
+    if (depth >= 1.0) {
+        imageStore(outIrradiance, pixel, vec4(0.0));
+        return;
+    }
+
+    vec3 N = normalize(texture(gNormalRoughness, uv).rgb);
+
+    // Реконструируем мировую позицию
+    vec4 ndc = vec4(uv * 2.0 - 1.0, depth, 1.0);
+    vec4 worldRaw = rc.invViewProj * ndc;
+    vec3 worldPos = worldRaw.xyz / worldRaw.w;
+
+    // Находим позицию зонда в сетке
+    vec3 gridSize = rc.probeGridMax.xyz - rc.probeGridMin.xyz;
+    ivec3 pCount  = rc.probeCount.xyz;
+
+    vec3 localPos = (worldPos - rc.probeGridMin.xyz) / gridSize;
+    localPos = clamp(localPos, vec3(0.001), vec3(0.999));
+
+    // Трилинейные веса
+    vec3 probeF   = localPos * vec3(pCount) - 0.5;
+    ivec3 p000    = clamp(ivec3(floor(probeF)), ivec3(0), pCount - 1);
+    ivec3 p111    = clamp(p000 + 1,             ivec3(0), pCount - 1);
+    vec3 t        = fract(probeF);
+
+    vec3 irradiance  = vec3(0.0);
+    float totalWeight = 0.0;
+
+    for (int ix = 0; ix < 2; ix++)
+    for (int iy = 0; iy < 2; iy++)
+    for (int iz = 0; iz < 2; iz++) {
+        ivec3 idx = ivec3(
+            ix == 0 ? p000.x : p111.x,
+            iy == 0 ? p000.y : p111.y,
+            iz == 0 ? p000.z : p111.z
+        );
+
+        float w =
+            (ix == 0 ? (1.0 - t.x) : t.x) *
+            (iy == 0 ? (1.0 - t.y) : t.y) *
+            (iz == 0 ? (1.0 - t.z) : t.z);
+
+        // Чебышёвское visibility: зонды за стеной вносят меньший вклад
+        vec3 probeWorldPos = rc.probeGridMin.xyz + gridSize *
+            (vec3(idx) + 0.5) / vec3(pCount);
+        vec3 toProbe = normalize(probeWorldPos - worldPos);
+        float vis = max(0.05, dot(N, toProbe) * 0.5 + 0.5);
+        w *= vis;
+
+        irradiance  += sampleProbe(idx, N) * w;
+        totalWeight += w;
+    }
+
+    if (totalWeight > 0.001)
+        irradiance /= totalWeight;
+
+    imageStore(outIrradiance, pixel, vec4(irradiance, 1.0));
+}

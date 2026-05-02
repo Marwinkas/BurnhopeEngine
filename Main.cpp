@@ -8,7 +8,6 @@
 
 int main() {
     burnhope::FirstApp app{};
-    SetConsoleOutputCP(CP_UTF8);
     try {
         app.run();
     }

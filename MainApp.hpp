@@ -18,25 +18,34 @@
 #include <string>
 #include <iostream>
 #include <filesystem>
-
+#ifdef _WIN32
+    #include <windows.h>
+#else
+    #include <unistd.h>
+    #include <limits.h>
+#endif
 // Небольшой макрос для Windows
 #define NOMINMAX
-#include <windows.h>
 #include "Render/Deferred.hpp"
-#include "Render/Shadow.hpp"
-
+#include "Render/shadow.hpp"
+#include "Render/RadianceCascades.hpp"
 namespace burnhope {
 
     // Функция для получения пути к экзешнику
+namespace fs = std::filesystem;
+
     inline std::string getExecutablePaths() {
+    #ifdef _WIN32
         char buffer[MAX_PATH];
         GetModuleFileNameA(NULL, buffer, MAX_PATH);
-        std::filesystem::path exePath(buffer);
-        std::string path = exePath.parent_path().string();
-        std::cout << "[DEBUG] Путь к EXE: " << path << std::endl;
-        return path;
+        return fs::path(buffer).parent_path().string();
+    #else
+        char buffer[PATH_MAX];
+        ssize_t count = readlink("/proc/self/exe", buffer, PATH_MAX);
+        if (count == -1) return "";
+        return fs::path(std::string(buffer, count)).parent_path().string();
+    #endif
     }
-
     class FirstApp {
     public:
         static constexpr int WIDTH = 800;
@@ -61,13 +70,15 @@ namespace burnhope {
 
         // Отдельный descriptor set layout для shadow pass (objectBuffer)
         std::unique_ptr<BurnhopeDescriptorSetLayout> shadowObjectLayoutPtr;
+
+
         VkDescriptorSet shadowObjectSet = VK_NULL_HANDLE;
         // Сеты для Compute-шейдера
         VkDescriptorSetLayout gBufferSetLayout;
         VkDescriptorSetLayout outputSetLayout;
         std::unique_ptr<BurnhopeDescriptorSetLayout> gBufferLayoutPtr;
         std::unique_ptr<BurnhopeDescriptorSetLayout> outputLayoutPtr;
-
+        std::unique_ptr<BurnhopeDescriptorSetLayout> irradianceLayoutPtr;
         std::unique_ptr<BurnhopeBuffer> dummyGridBuffer;
         std::unique_ptr<BurnhopeBuffer> dummyIndexBuffer;
 
@@ -75,9 +86,10 @@ namespace burnhope {
         VkDescriptorSet shadowDummySet;  // Set 2
         VkDescriptorSet lightDummySet;   // Set 3
         VkDescriptorSet computeOutputSet;// Set 4
+
         // Наша главная функция сборки данных перед кадром
         void RebuildBatches(entt::registry& registry, GeometryRenderSystem& renderSystem);
-
+        std::unique_ptr<burnhope::RadianceCascadesSystem> rcSystem;
         BurnhopeWindow lveWindow{ WIDTH, HEIGHT, "BurnHope Engine" };
         BurnhopeDevice lveDevice{ lveWindow };
         BurnhopeRenderer lveRenderer{ lveWindow, lveDevice };
@@ -94,7 +106,15 @@ namespace burnhope {
         VkDescriptorSet shadowSet = VK_NULL_HANDLE;
         VkDescriptorSet lightSet = VK_NULL_HANDLE;
         // Наш UI
-        UI ui{ lveWindow, lveDevice, lveRenderer.getSwapChainRenderPass(), "C:/", "C:/" };
+
+        #ifdef _WIN32
+            std::string rootPath = "C:/";
+        #else
+            // Для тебя на Linux лучше использовать текущую папку проекта или корень
+            std::string rootPath = fs::current_path().string(); 
+        #endif
+
+        UI ui{ lveWindow, lveDevice, lveRenderer.getSwapChainRenderPass(), rootPath, rootPath };
 
         // База данных объектов
         entt::registry registry;
@@ -102,7 +122,7 @@ namespace burnhope {
         // Буферы для передачи данных на видеокарту (ССБО)
         std::unique_ptr<BurnhopeBuffer> objectBuffer;
         std::unique_ptr<BurnhopeBuffer> materialBuffer;
-
+        std::unique_ptr<BurnhopeBuffer> faceMatricesBuffer;
         // Наборы данных (Сеты) для шейдера
         VkDescriptorSet storageSet;
         VkDescriptorSet textureSet;

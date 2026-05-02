@@ -7,7 +7,7 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 #include <meshoptimizer.h>
-
+#include <cstring>
 namespace fs = std::filesystem;
 namespace burnhope {
     bool ModelImporter::ImportModel(const std::string& srcPath, const std::string& destPath)
@@ -105,7 +105,8 @@ namespace burnhope {
             }
 
             BHMeshHeader meshHeader{};
-            strcpy_s(meshHeader.name, sizeof(meshHeader.name), aimesh->mName.length > 0 ? aimesh->mName.C_Str() : "Mesh");
+            strncpy(meshHeader.name, aimesh->mName.length > 0 ? aimesh->mName.C_Str() : "Mesh", sizeof(meshHeader.name) - 1);
+            meshHeader.name[sizeof(meshHeader.name) - 1] = '\0';
             meshHeader.materialIndex = 0; // Больше не нужно
             meshHeader.aabbMin = aabbMin;
             meshHeader.aabbMax = aabbMax;

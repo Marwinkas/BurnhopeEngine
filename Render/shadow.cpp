@@ -1,4 +1,4 @@
-#include "Shadow.hpp"
+#include "shadow.hpp"
 #include <stdexcept>
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
@@ -388,7 +388,7 @@ void BurnhopeShadowSystem::updateLights(entt::registry& registry, const glm::vec
 
         int i = lightUBO.activeLightsCount;
         LightGPUData& g = lightUBO.lights[i];
-
+     
         g.posType   = glm::vec4(tc.position, (float)lc.type);
         g.colorInt  = glm::vec4(lc.color, lc.intensity);
 
@@ -397,12 +397,22 @@ void BurnhopeShadowSystem::updateLights(entt::registry& registry, const glm::vec
         g.dirRadius  = glm::vec4(dir, lc.radius);
 
         if (lc.type == LightType::Spot) {
-            glm::mat4 lp = glm::perspective(glm::radians(lc.outerCone * 2.0f), 1.0f, 0.1f, 1000.0f);
-            lp[1][1] *= -1; // <--- ДОБАВЬ ПЕРЕВОРОТ ДЛЯ VULKAN!
-            glm::mat4 lv = glm::lookAt(tc.position, tc.position + dir, glm::vec3(0, 1, 0));
-            lc.lightSpaceMatrix = lp * lv;
-        }
+    glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+    if (std::abs(dir.y) > 0.99f) {
+        up = glm::vec3(0.0f, 0.0f, 1.0f);
+    }
 
+    // Эпсилон чтобы избежать вырождения при x=0, z=0
+    glm::vec3 safePos = tc.position;
+    if (std::abs(safePos.x) < 0.001f && std::abs(safePos.z) < 0.001f) {
+        safePos.x += 0.001f;
+    }
+
+    glm::mat4 lp = glm::perspective(glm::radians(lc.outerCone * 2.0f), 1.0f, 0.1f, lc.radius);
+    lp[1][1] *= -1;
+    glm::mat4 lv = glm::lookAt(safePos, safePos + dir, up);
+    lc.lightSpaceMatrix = lp * lv;
+}
         float encodedSlot = (float)(lc.shadowSlot * 10000 + lc.shadowTileSize);
         g.shadowParams   = glm::vec4(
             glm::cos(glm::radians(lc.innerCone)),
@@ -410,7 +420,23 @@ void BurnhopeShadowSystem::updateLights(entt::registry& registry, const glm::vec
             lc.castShadows ? 1.0f : 0.0f,
             encodedSlot);
         g.lightSpaceMatrix = lc.lightSpaceMatrix;
-
+            if (lc.type == LightType::Point && lc.castShadows) {
+                glm::vec3 pos = tc.position;
+                glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, lc.radius);
+                
+                const glm::vec3 dirs[6] = {
+                    {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}
+                };
+                const glm::vec3 ups[6] = {
+                    {0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}
+                };
+                
+                int lightIdx = lightUBO.activeLightsCount; // индекс текущего света
+                for (int f = 0; f < 6; f++) {
+                    faceMatricesData[lightIdx].faces[f] = 
+                        proj * glm::lookAt(pos, pos + dirs[f], ups[f]);
+                }
+            }
         lightUBO.activeLightsCount++;
     }
 }

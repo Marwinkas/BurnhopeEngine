@@ -1,4 +1,5 @@
-﻿#ifndef UI_CLASS_H
+﻿
+#ifndef UI_CLASS_H
 #define UI_CLASS_H
 
 #define _CRT_SECURE_NO_WARNINGS
@@ -12,19 +13,38 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <iostream>
+#define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui.h"
 #include "imgui_internal.h" 
 #include "ImGuizmo.h"
 #include "Components.hpp" // НАШ НОВЫЙ ФАЙЛ С КОМПОНЕНТАМИ!
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
+
+#ifndef _WIN32
+    // Исправляем MAX_PATH для Linux
+    #define MAX_PATH 4096 
+    
+    // Правильная перегрузка strcpy_s через шаблоны (как в Windows)
+    template<size_t size>
+    inline void strcpy_s(char (&dest)[size], const char* src) {
+        strncpy(dest, src, size - 1);
+        dest[size - 1] = '\0';
+    }
+    inline void strcpy_s(char* dest, size_t size, const char* src) {
+        strncpy(dest, src, size - 1);
+        dest[size - 1] = '\0';
+    }
+    
+    // Заглушка для Windows-функции GetModuleFileNameA
+    #define GetModuleFileNameA(unused, buf, size) // на Linux это не сработает здесь
+#endif
 #include <unordered_map>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include "stb_image.h" 
 #include <algorithm> 
-#include <windows.h>
-#include <shellapi.h>
 #include <memory>
 #include "../Render/ModelImporter.h"
 #include "FrameInfo.hpp"
@@ -32,6 +52,10 @@
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
+
+
+
+
 namespace burnhope{
 class UI {
 public:
@@ -256,7 +280,6 @@ public:
         ImFontConfig font_cfg;
         font_cfg.OversampleH = 2;
         font_cfg.OversampleV = 2;
-        io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 18.0f, &font_cfg, io.Fonts->GetGlyphRangesCyrillic());
 
         SetupBurnhopeTheme();
 
@@ -284,29 +307,28 @@ public:
 
         ImGui_ImplGlfw_InitForVulkan(window.getGLFWwindow(), true);
 
+
         ImGui_ImplVulkan_InitInfo init_info = {};
         init_info.Instance = device.getInstance();
         init_info.PhysicalDevice = device.getPhysicalDevice();
         init_info.Device = device.device();
         init_info.QueueFamily = device.getGraphicsQueueFamily();
         init_info.Queue = device.graphicsQueue();
-        init_info.PipelineCache = VK_NULL_HANDLE;
         init_info.DescriptorPool = imguiPool;
-        init_info.Subpass = 0;
         init_info.MinImageCount = 2;
         init_info.ImageCount = 3;
-        init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-        init_info.Allocator = nullptr;
-        init_info.CheckVkResultFn = nullptr;
 
-        // === ВОТ ОНО! ПЕРЕДАЕМ RENDERPASS ВНУТРЬ СТРУКТУРЫ ===
-        init_info.RenderPass = renderPass;
+        // Теперь настройки рендеринга живут здесь:
+        init_info.PipelineInfoMain.RenderPass = renderPass;
+        init_info.PipelineInfoMain.Subpass = 0;
+        init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+        init_info.UseDynamicRendering = false; // или true, если нужно
 
         // Вызываем Init с одним аргументом, как требует новая версия!
         ImGui_ImplVulkan_Init(&init_info);
 
         // Загружаем шрифты
-        ImGui_ImplVulkan_CreateFontsTexture();
 
         projectDirectory = projectPath; currentDirectory = projectPath; ExeDirectory = exePath;
         dirHistory.push_back(currentDirectory); dirHistoryIndex = 0;
@@ -331,12 +353,12 @@ public:
         return "File";
     }
     void MoveToRecycleBin(const std::string& path) {
-        std::string winPath = fs::absolute(path).string();
-        std::replace(winPath.begin(), winPath.end(), '/', '\\');
-        winPath.push_back('\0'); winPath.push_back('\0');
-        SHFILEOPSTRUCTA fileOp = { 0 }; fileOp.wFunc = FO_DELETE; fileOp.pFrom = winPath.c_str();
-        fileOp.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
-        SHFileOperationA(&fileOp);
+        // Вместо SHFILEOPSTRUCTA используем стандарт C++
+        try {
+            std::filesystem::remove_all(path); 
+        } catch (...) {
+            // Ошибка удаления
+        }
     }
     bool IsSelected(const std::string& path) { return std::find(selectedAssets.begin(), selectedAssets.end(), path) != selectedAssets.end(); }
     std::string GetPrimarySelection() { return selectedAssets.empty() ? "" : selectedAssets.back(); }
@@ -392,29 +414,14 @@ public:
         }
     }
 
-    GLuint GetImageThumbnail(const std::string& fullPath) {
-        if (imageThumbnails.find(fullPath) != imageThumbnails.end()) return imageThumbnails[fullPath];
-        int w, h, c; unsigned char* data = stbi_load(fullPath.c_str(), &w, &h, &c, 4);
-        if (!data) { imageThumbnails[fullPath] = 0; return 0; }
-        GLuint id; glGenTextures(1, &id); glBindTexture(GL_TEXTURE_2D, id);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        stbi_image_free(data); imageThumbnails[fullPath] = id; return id;
-    }
-    GLuint GetFileIcon(const std::string& ext, bool isDir) {
-        if (isDir) return GetImageThumbnail(ExeDirectory.string() + "/Resources/icon_folder.png");
-        if (ext == ".bhmat") return GetImageThumbnail(ExeDirectory.string() + "/Resources/icon_material.png");
-        if (ext == ".bhscene") return GetImageThumbnail(ExeDirectory.string() + "/Resources/icon_scene.png");
-        if (ext == ".obj" || ext == ".fbx" || ext == ".gltf") return GetImageThumbnail(ExeDirectory.string() + "/Resources/icon_model.png");
-        return GetImageThumbnail(ExeDirectory.string() + "/Resources/icon_file.png");
-    }
+
 
     // --- ОТРИСОВКА ОКНА: OUTLINER ---
     void DrawOutlinerNode(entt::registry& registry, entt::entity entity) {
         if (!registry.valid(entity)) return;
         auto& tag = registry.get<TagComponent>(entity);
 
-        ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowItemOverlap;
+        ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap;
         if (selectedEntity == entity) nodeFlags |= ImGuiTreeNodeFlags_Selected;
 
         auto* hc = registry.try_get<HierarchyComponent>(entity);
@@ -457,14 +464,7 @@ public:
 
         float iconSize = 16.0f;
         float iconX = ImGui::GetWindowContentRegionMax().x - iconSize - 5.0f;
-        auto DrawIcon = [&](const std::string& fileName) {
-            GLuint texID = GetImageThumbnail(ExeDirectory.string() + "/Resources/" + fileName);
-            if (texID != 0) { ImGui::SameLine(iconX); ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(iconSize, iconSize)); iconX -= (iconSize + 4.0f); }
-            };
 
-        if (registry.all_of<LightComponent>(entity)) DrawIcon("icon_light.png");
-        if (registry.all_of<MeshComponent>(entity))  DrawIcon("icon_model.png");
-        if (!registry.all_of<MeshComponent>(entity) && !registry.all_of<LightComponent>(entity)) DrawIcon("icon_folder.png");
 
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
             ImGui::SetDragDropPayload("OUTLINER_NODE", &entity, sizeof(entt::entity));
@@ -596,7 +596,7 @@ public:
         if (registry.all_of<LightComponent>(selectedEntity)) {
             auto& lComp = registry.get<LightComponent>(selectedEntity).light;
             bool removeLight = false;
-            if (ImGui::CollapsingHeader("Light Component", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowItemOverlap)) {
+            if (ImGui::CollapsingHeader("Light Component", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap)) {
                 ImGui::SameLine(ImGui::GetWindowWidth() - 40);
                 if (ImGui::Button("X##RM_LIGHT")) removeLight = true;
 
@@ -879,19 +879,9 @@ public:
                 ImGui::EndPopup();
             }
                         ImGui::SetCursorScreenPos(ImVec2(itemPos.x + (itemWidth - thumbnailSize) / 2.0f, itemPos.y + 6.0f));
-            GLuint texID = 0;
-            if (!isDir && (ext == ".png" || ext == ".jpg" || ext == ".jpeg")) {
-                texID = GetImageThumbnail(pathStr);             }
-            else {
-                texID = GetFileIcon(ext, isDir);             }
-            if (texID != 0) {
-                ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(thumbnailSize, thumbnailSize));
-            }
-            else {
-                                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.22f, 0.25f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.22f, 0.25f, 1.0f));
                 ImGui::Button(isDir ? "DIR" : "FILE", ImVec2(thumbnailSize, thumbnailSize));
                 ImGui::PopStyleColor();
-            }
                         if (renamingPath == pathStr) {
                 ImGui::SetCursorScreenPos(ImVec2(itemPos.x + 4, itemPos.y + thumbnailSize + 10.0f));
                 ImGui::SetNextItemWidth(itemWidth - 8);
@@ -1090,11 +1080,7 @@ void SavePostProcessSettings() {
 
         // Так как .bhtex - это сжатый бинарник видеокарты, stb_image не сможет сделать из него миниатюру.
         // Поэтому мы просто показываем красивую иконку текстуры.
-        GLuint texID = GetFileIcon(".bhtex", false);
 
-        if (texID != 0 && strlen(pathBuffer) > 0)
-            ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(64, 64));
-        else
             ImGui::Button("NO TEX", ImVec2(64, 64));
 
         ImGui::SameLine();

@@ -2,15 +2,15 @@
 
 
 #include <stb_image.h>
-
+#include <cstring>
 // std
 #include <cmath>
 #include <stdexcept>
 #include <iostream>
 
 namespace burnhope {
-BurnhopeTexture::BurnhopeTexture(BurnhopeDevice &device, const std::string &textureFilepath) : mDevice{device} {
-  createTextureImage(textureFilepath);
+BurnhopeTexture::BurnhopeTexture(BurnhopeDevice &device, const std::string &textureFilepath, bool isSRGB) : mDevice{device} {
+  createTextureImage(textureFilepath, isSRGB);
   createTextureImageView(VK_IMAGE_VIEW_TYPE_2D);
   createTextureSampler();
   updateDescriptor();
@@ -158,7 +158,7 @@ BurnhopeTexture::BurnhopeTexture(
     samplerInfo.maxAnisotropy = 1.0f;
     samplerInfo.minLod = 0.0f;
     samplerInfo.maxLod = 1.0f;
-    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 
     if (vkCreateSampler(device.device(), &samplerInfo, nullptr, &mTextureSampler) != VK_SUCCESS) {
       throw std::runtime_error("failed to create sampler!");
@@ -182,7 +182,13 @@ BurnhopeTexture::~BurnhopeTexture() {
 
 std::unique_ptr<BurnhopeTexture> BurnhopeTexture::createTextureFromFile(
     BurnhopeDevice &device, const std::string &filepath) {
-  return std::make_unique<BurnhopeTexture>(device, filepath);
+  return std::make_unique<BurnhopeTexture>(device, filepath, true);
+}
+
+// 3. Реализуем новую функцию (грузит данные как есть)
+std::unique_ptr<BurnhopeTexture> BurnhopeTexture::createDataTextureFromFile(
+    BurnhopeDevice &device, const std::string &filepath) {
+  return std::make_unique<BurnhopeTexture>(device, filepath, false); 
 }
 
 void BurnhopeTexture::updateDescriptor() {
@@ -191,7 +197,7 @@ void BurnhopeTexture::updateDescriptor() {
   mDescriptor.imageLayout = mTextureLayout;
 }
 
-void BurnhopeTexture::createTextureImage(const std::string& filepath) {
+void BurnhopeTexture::createTextureImage(const std::string& filepath, bool isSRGB) {
     // =========================================================
     // ПУТЬ 1: ЗАГРУЗКА БИНАРНОГО ФОРМАТА .BHTEX (СЖАТЫЙ DXT/BC)
     // =========================================================
@@ -310,6 +316,9 @@ void BurnhopeTexture::createTextureImage(const std::string& filepath) {
     // =========================================================
     // ПУТЬ 2: ОБЫЧНЫЕ КАРТИНКИ (.PNG, .JPG) ЧЕРЕЗ STB
     // =========================================================
+    // =========================================================
+    // ПУТЬ 2: ОБЫЧНЫЕ КАРТИНКИ (.PNG, .JPG) ЧЕРЕЗ STB
+    // =========================================================
     int texWidth, texHeight, texChannels;
     stbi_uc* pixels = stbi_load(filepath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     VkDeviceSize imageSize = texWidth * texHeight * 4;
@@ -317,8 +326,8 @@ void BurnhopeTexture::createTextureImage(const std::string& filepath) {
         throw std::runtime_error("failed to load texture image: " + filepath);
     }
 
-    mMipLevels = 1; // У обычных картинок мипмапов пока нет
-    mFormat = VK_FORMAT_R8G8B8A8_SRGB;
+    mMipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+    mFormat = isSRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
     mExtent = { static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 1 };
 
     VkBuffer stagingBuffer;
@@ -343,17 +352,22 @@ void BurnhopeTexture::createTextureImage(const std::string& filepath) {
     imageInfo.format = mFormat;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    
+    // ИЗМЕНЕНИЕ 2: Добавляем флаг TRANSFER_SRC_BIT для генерации мипмапов
+    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     mDevice.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mTextureImage, mTextureImageMemory);
 
+    // Подготавливаем текстуру к копированию из буфера
     transitionLayout(mDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
+    // Копируем STB пиксели в нулевой мип-уровень
     mDevice.copyBufferToImage(stagingBuffer, mTextureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), mLayerCount);
 
-    transitionLayout(mDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    // ИЗМЕНЕНИЕ 3: Вызываем нашу новую функцию генерации мипмапов вместо старого transitionLayout
+    generateMipmaps(mTextureImage, mFormat, texWidth, texHeight, mMipLevels);
     mTextureLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     vkDestroyBuffer(mDevice.device(), stagingBuffer, nullptr);
@@ -365,7 +379,10 @@ void BurnhopeTexture::createTextureImageView(VkImageViewType viewType) {
   viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   viewInfo.image = mTextureImage;
   viewInfo.viewType = viewType;
-  viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+  
+  // Теперь используем тот формат, который мы выбрали при создании текстуры
+  viewInfo.format = mFormat; 
+  
   viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
   viewInfo.subresourceRange.baseMipLevel = 0;
   viewInfo.subresourceRange.levelCount = mMipLevels;
@@ -493,5 +510,92 @@ void BurnhopeTexture::transitionLayout(VkCommandBuffer commandBuffer, VkImageLay
       0, nullptr,
       1, &barrier);
   mDevice.endSingleTimeCommands(commandBuffer);
+}
+void BurnhopeTexture::generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels) {
+    // Убеждаемся, что видеокарта поддерживает линейную фильтрацию (blitting) для этого формата
+    VkFormatProperties formatProperties;
+    vkGetPhysicalDeviceFormatProperties(mDevice.getPhysicalDevice(), imageFormat, &formatProperties);
+
+    if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
+        throw std::runtime_error("Texture image format does not support linear blitting!");
+    }
+
+    VkCommandBuffer commandBuffer = mDevice.beginSingleTimeCommands();
+
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.image = image;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = mLayerCount; // Применяем ко всем слоям
+    barrier.subresourceRange.levelCount = 1;
+
+    int32_t mipWidth = texWidth;
+    int32_t mipHeight = texHeight;
+
+    for (uint32_t i = 1; i < mipLevels; i++) {
+        // Подготавливаем предыдущий уровень (i-1) к ЧТЕНИЮ
+        barrier.subresourceRange.baseMipLevel = i - 1;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+            0, nullptr, 0, nullptr, 1, &barrier);
+
+        // Указываем зоны копирования (откуда и куда)
+        VkImageBlit blit{};
+        blit.srcOffsets[0] = {0, 0, 0};
+        blit.srcOffsets[1] = {mipWidth, mipHeight, 1};
+        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.srcSubresource.mipLevel = i - 1;
+        blit.srcSubresource.baseArrayLayer = 0;
+        blit.srcSubresource.layerCount = mLayerCount;
+
+        blit.dstOffsets[0] = {0, 0, 0};
+        blit.dstOffsets[1] = { mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1, 1 };
+        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.dstSubresource.mipLevel = i;
+        blit.dstSubresource.baseArrayLayer = 0;
+        blit.dstSubresource.layerCount = mLayerCount;
+
+        // Сама команда копирования с уменьшением (LINEAR фильтрация)
+        vkCmdBlitImage(commandBuffer,
+            image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &blit,
+            VK_FILTER_LINEAR);
+
+        // Переводим предыдущий уровень (i-1) в финальный статус ЧТЕНИЯ ШЕЙДЕРОМ
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+            0, nullptr, 0, nullptr, 1, &barrier);
+
+        // Делим размеры на 2 для следующей итерации
+        if (mipWidth > 1) mipWidth /= 2;
+        if (mipHeight > 1) mipHeight /= 2;
+    }
+
+    // Переводим САМЫЙ ПОСЛЕДНИЙ (самый маленький) уровень в статус ЧТЕНИЯ ШЕЙДЕРОМ
+    barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    vkCmdPipelineBarrier(commandBuffer,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+        0, nullptr, 0, nullptr, 1, &barrier);
+
+    mDevice.endSingleTimeCommands(commandBuffer);
 }
 }  // namespace burnhope
