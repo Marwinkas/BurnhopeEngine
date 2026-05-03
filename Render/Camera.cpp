@@ -96,7 +96,7 @@ namespace burnhope {
 
                 float currentSpeed = speed;
                 // Ускорение на Shift
-                if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) currentSpeed *= 4.0f;
+                if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) currentSpeed *= 20.0f;
 
                 if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) Position += currentSpeed * Orientation;
                 if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) Position += currentSpeed * -Orientation;

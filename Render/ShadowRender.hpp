@@ -4,6 +4,7 @@
 #include "../Utils/Descriptors.hpp"
 #include "../Utils/Components.hpp"
 #include "../Utils/Buffer.hpp"
+#include "CullingSystem.hpp"
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <memory>
@@ -26,11 +27,13 @@ public:
     ShadowRenderSystem& operator=(const ShadowRenderSystem&) = delete;
 
     // Рисует всю геометрию с заданной lightSpaceMatrix
-    void renderShadow(
-        VkCommandBuffer commandBuffer,
-        const glm::mat4& lightSpaceMatrix,
-        entt::registry& registry,
-        VkDescriptorSet objectStorageSet);
+void renderShadow(
+    VkCommandBuffer commandBuffer,
+    const glm::mat4& lightSpaceMatrix,
+    CullingSystem& cullingSystem, 
+    entt::registry& registry,     // <--- Возвращаем registry
+    
+    VkDescriptorSet objectStorageSet);
 
 private:
     void createPipelineLayout(VkDescriptorSetLayout objectSetLayout);

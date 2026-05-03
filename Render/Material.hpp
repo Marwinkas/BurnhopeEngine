@@ -19,7 +19,7 @@ namespace burnhope {
         std::shared_ptr<BurnhopeTexture> metallicMap = nullptr;
         std::shared_ptr<BurnhopeTexture> roughnessMap = nullptr;
         std::shared_ptr<BurnhopeTexture> aoMap = nullptr;
-
+        bool isORM = false;
         bool hasAlbedo = false;
         bool hasNormal = false;
         bool hasHeight = false;

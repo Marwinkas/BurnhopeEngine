@@ -7,12 +7,18 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
-
+#include "Material.hpp"
 // std
 #include <memory>
 #include <vector>
 #include <string>
-
+#include <iostream>
+#include <fstream>
+#include <filesystem>
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+#include <meshoptimizer.h>
 namespace burnhope {
     struct Vertex {
         glm::vec3 position;   // 12 байт
@@ -33,20 +39,35 @@ namespace burnhope {
         }
     };
     struct SubMesh {
-        uint32_t indexCount;
-        uint32_t firstIndex;
+    uint32_t lodCount;          // Сколько уровней есть
+    uint32_t indexCounts[4];    // Количество индексов для каждого LOD
+    uint32_t firstIndices[4];   // Смещение индексов для каждого LOD
+    
         uint32_t materialIndex; // Индекс из исходного файла (FBX/OBJ)
+        glm::vec3 aabbMin        = glm::vec3(0.0f);
+        glm::vec3 aabbMax        = glm::vec3(0.0f);
+        float     boundingRadius = 0.0f;
     };
+    struct MaterialPaths {
+    std::string albedo;
+    std::string normal;
+    std::string orm;
+};
+
     struct Builder {
         std::vector<Vertex> vertices{};
         std::vector<uint32_t> indices{};
         std::vector<SubMesh> subMeshes{};
+
+        std::vector<MaterialPaths> materialPaths;
+        std::string modelDir; // Папка, где лежит модель (чтобы движок знал, где искать текстуры)
+
         void loadModel(const std::string& filepath);
     };
    
     class BurnhopeModel {
     public:
-
+        std::vector<std::shared_ptr<Material>> loadedMaterials;
         const std::vector<SubMesh>& getSubMeshes() const { return subMeshes; }
         BurnhopeModel(BurnhopeDevice& device, const Builder& builder);
         ~BurnhopeModel();
@@ -59,7 +80,12 @@ namespace burnhope {
 
         void bind(VkCommandBuffer commandBuffer);
         void draw(VkCommandBuffer commandBuffer);
+        std::unique_ptr<BurnhopeBuffer> vertexBuffer;
+        uint32_t vertexCount;
 
+        bool hasIndexBuffer = false;
+        std::unique_ptr<BurnhopeBuffer> indexBuffer;
+        uint32_t indexCount;
     private:
         std::vector<SubMesh> subMeshes; // Наш новый список частей
         void createVertexBuffers(const std::vector<Vertex>& vertices);
@@ -67,11 +93,6 @@ namespace burnhope {
 
         BurnhopeDevice& lveDevice;
 
-        std::unique_ptr<BurnhopeBuffer> vertexBuffer;
-        uint32_t vertexCount;
 
-        bool hasIndexBuffer = false;
-        std::unique_ptr<BurnhopeBuffer> indexBuffer;
-        uint32_t indexCount;
     };
 }  // namespace burnhope

@@ -64,7 +64,8 @@ static std::unique_ptr<BurnhopeTexture> createDataTextureFromFile(BurnhopeDevice
   void createTextureImage(const std::string &filepath, bool isSRGB = true);
   void createTextureImageView(VkImageViewType viewType);
   void createTextureSampler();
-
+bool loadFromBHTex(const std::string& filepath);
+        void generateAndCacheBHTex(const std::string& srcPath, const std::string& cachePath, bool isSRGB);
   VkDescriptorImageInfo mDescriptor{};
 
   BurnhopeDevice &mDevice;

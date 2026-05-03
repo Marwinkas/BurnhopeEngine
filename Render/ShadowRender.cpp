@@ -59,7 +59,7 @@ void ShadowRenderSystem::createPipeline(VkRenderPass renderPass) {
     config.rasterizationInfo.depthBiasSlopeFactor    = 1.75f;
 
     // Culling: front face culling убирает peter-panning
-    config.rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
+    config.rasterizationInfo.cullMode = VK_CULL_MODE_FRONT_BIT;
 
     pipeline = std::make_unique<BurnhopePipeline>(
         lveDevice,
@@ -70,58 +70,43 @@ void ShadowRenderSystem::createPipeline(VkRenderPass renderPass) {
 void ShadowRenderSystem::renderShadow(
     VkCommandBuffer commandBuffer,
     const glm::mat4& lightSpaceMatrix,
-    entt::registry& registry,
+    CullingSystem& cullingSystem, 
+     entt::registry& registry,
     VkDescriptorSet objectStorageSet)
 {
     pipeline->bind(commandBuffer);
 
-    // 1. Проверяем сет, как мы делали это в геометрии, чтобы избежать крашей
-    if (objectStorageSet == VK_NULL_HANDLE) {
-        std::cerr << "Warning: Cannot render shadows, storage set is not initialized!" << std::endl;
-        return;
-    }
+    if (objectStorageSet == VK_NULL_HANDLE) return;
 
-    // 2. Биндим сет с нашими матрицами объектов (SSBO).
-    // ВАЖНО: В GeometryRenderSystem твой storageSet шел под индексом 1 (вторым в списке).
-    // Если в шейдере теней у тебя тоже написано layout(set = 1, binding = ...), 
-    // то здесь нужно передать 1 вместо 0! Я поставил 1 для безопасности.
-    vkCmdBindDescriptorSets(
-        commandBuffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipelineLayout,
-        0, // <--- ИЗМЕНИ ЭТО НА 0 (firstSet)
-        1, // descriptorSetCount
-        &objectStorageSet,
-        0, nullptr);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        pipelineLayout, 0, 1, &objectStorageSet, 0, nullptr);
 
-    // 3. Отправляем матрицу света. 
-    // Она общая для всех объектов в кадре, поэтому делаем это один раз ДО цикла.
     ShadowPushConstant push{};
     push.lightSpaceMatrix = lightSpaceMatrix;
-    vkCmdPushConstants(
-        commandBuffer,
-        pipelineLayout,
-        VK_SHADER_STAGE_VERTEX_BIT,
-        0, sizeof(ShadowPushConstant),
-        &push);
+    vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ShadowPushConstant), &push);
 
-    // 4. Проходимся по всем объектам сцены
     auto view = registry.view<TransformComponent, MeshComponent>();
-    uint32_t instanceIndex = 0; // Тот самый индекс для поиска в SSBO
+    uint32_t instanceIndex = 0;
 
+    // Проходим по моделям (как в G-Buffer)
     for (auto [entity, transformComp, meshComp] : view.each()) {
         if (!meshComp.model || !meshComp.isVisible) continue;
 
+        // САМОЕ ГЛАВНОЕ: Биндим вершины и индексы для текущей модели!
         meshComp.model->bind(commandBuffer);
 
         const auto& subMeshes = meshComp.model->getSubMeshes();
-        for (const auto& sub : subMeshes) {
-            // Передаем instanceIndex! 
-            // Теперь шейдер теней вытащит правильную modelMatrix из массива.
-            vkCmdDrawIndexed(commandBuffer, sub.indexCount, 1, sub.firstIndex, 0, instanceIndex);
-            instanceIndex++;
-        }
+        uint32_t subMeshCount = static_cast<uint32_t>(subMeshes.size());
 
+        // Рисуем все кластеры ЭТОЙ модели за один вызов
+        vkCmdDrawIndexedIndirect(
+            commandBuffer,
+            cullingSystem.getDrawCommandBuffer(),
+            instanceIndex * sizeof(VkDrawIndexedIndirectCommand), // Сдвиг для нужных команд
+            subMeshCount,
+            sizeof(VkDrawIndexedIndirectCommand));
+
+        instanceIndex += subMeshCount;
     }
 }
 

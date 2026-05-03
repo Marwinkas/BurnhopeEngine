@@ -150,6 +150,7 @@ void BurnhopeDevice::createLogicalDevice() {
   }
 
   VkPhysicalDeviceFeatures deviceFeatures = {};
+  deviceFeatures.multiDrawIndirect = VK_TRUE;  // ← добавить
   deviceFeatures.samplerAnisotropy = VK_TRUE;
   VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
   indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;

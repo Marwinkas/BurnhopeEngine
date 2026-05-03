@@ -15,50 +15,123 @@
 #define ENGINE_DIR "../"
 #endif
 #include "ModelImporter.h"
+
 #include <filesystem>
 
 namespace burnhope {
 
     // ----------------------------------------
 
-    BurnhopeModel::BurnhopeModel(BurnhopeDevice& device, const Builder& builder) : lveDevice{ device } {
-        createVertexBuffers(builder.vertices);
-        createIndexBuffers(builder.indices);
-        this->subMeshes = builder.subMeshes;
-    }
 
     BurnhopeModel::~BurnhopeModel() {}
 
-    std::unique_ptr<BurnhopeModel> BurnhopeModel::createModelFromFile(
-        BurnhopeDevice& device, const std::string& filepath) {
+// 1. Изменяем проверку расширений для создания
+std::unique_ptr<BurnhopeModel> BurnhopeModel::createModelFromFile(BurnhopeDevice& device, const std::string& filepath) {
+    std::string finalPath = ENGINE_DIR + filepath;
 
-        std::string finalPath = ENGINE_DIR + filepath;
+    // Добавляем поддержку .gltf
+    if (finalPath.ends_with(".obj") || finalPath.ends_with(".fbx") || finalPath.ends_with(".gltf")) {
+        std::string bhmeshPath = finalPath.substr(0, finalPath.find_last_of('.')) + ".bhmesh";
+        if (!std::filesystem::exists(bhmeshPath)) {
+            std::cout << "Вижу новую модель! Конвертирую в .bhmesh...\n";
+            ModelImporter::ImportModel(finalPath, bhmeshPath);
+        }
+        finalPath = bhmeshPath;
+    }
 
-        // Если ты попросил загрузить оригинальную модель (obj или fbx)
-        if (finalPath.ends_with(".obj") || finalPath.ends_with(".fbx")) {
+    Builder builder{};
+    // Запоминаем папку, где лежит модель (например "models/")
+    builder.modelDir = finalPath.substr(0, finalPath.find_last_of('/') + 1);
+    builder.loadModel(finalPath);
 
-            // Придумываем имя для нашего бинарника (меняем расширение на .bhmesh)
-            std::string bhmeshPath = finalPath.substr(0, finalPath.find_last_of('.')) + ".bhmesh";
+    return std::make_unique<BurnhopeModel>(device, builder);
+}
 
-            // Если такого файла еще нет, значит нужно сконвертировать!
-            if (!std::filesystem::exists(bhmeshPath)) {
-                std::cout << "Вижу новую модель! Конвертирую в .bhmesh...\n";
 
-                // Вызываем твой импортер (корневую папку укажешь свою)
-                ModelImporter::ImportModel(finalPath, bhmeshPath);
-            }
+// 3. Авто-загрузка текстур в конструкторе модели
+BurnhopeModel::BurnhopeModel(BurnhopeDevice& device, const Builder& builder) : lveDevice{ device } {
+    createVertexBuffers(builder.vertices);
+    createIndexBuffers(builder.indices);
+    this->subMeshes = builder.subMeshes;
 
-            // Теперь мы точно знаем, что .bhmesh существует. Загружаем именно его!
-            finalPath = bhmeshPath;
+    // МАГИЯ: Автоматическая генерация материалов!
+// МАГИЯ: Автоматическая генерация материалов!
+    for (size_t i = 0; i < builder.materialPaths.size(); ++i) {
+    const auto& paths = builder.materialPaths[i];
+    auto mat = std::make_shared<Material>();
+
+    std::cout << "Загрузка текстур для материала " << i << ":\n";
+
+    // Умная функция поиска текстуры
+    auto resolvePath = [&](const std::string& rawPath) -> std::string {
+        std::filesystem::path p(rawPath);
+        
+        // 1. Если путь абсолютный (C:/...) и файл реально там лежит — берем его!
+        if (std::filesystem::exists(p)) {
+            return p.string();
+        }
+        
+        // 2. Иначе отрезаем весь мусор, оставляем только имя файла (например, diffuse2.png)
+        // и ищем его прямо в папке рядом с моделью
+        std::filesystem::path localPath = std::filesystem::path(builder.modelDir) / p.filename();
+        if (std::filesystem::exists(localPath)) {
+            return localPath.string();
         }
 
-        Builder builder{};
-        // Загрузчик теперь всегда читает только быстрые .bhmesh
-        builder.loadModel(finalPath);
+        // 3. Супер-поиск: проверяем папку textures рядом с папкой models
+        // (если модель в ../models/, то ищем в ../textures/)
+        std::filesystem::path texFolder = std::filesystem::path(builder.modelDir).parent_path() / "textures" / p.filename();
+        if (std::filesystem::exists(texFolder)) {
+            return texFolder.string();
+        }
 
-        return std::make_unique<BurnhopeModel>(device, builder);
+        // Если нигде не нашли, возвращаем просто путь рядом с моделью (чтобы в логе ошибка была понятной)
+        return localPath.string();
+    };
+
+    if (!paths.albedo.empty() && paths.albedo[0] != '*') {
+        std::string fullPath = resolvePath(paths.albedo);
+        std::cout << "  -> Albedo: " << fullPath << "\n";
+        
+        try {
+            mat->setAlbedo(BurnhopeTexture::createTextureFromFile(lveDevice, fullPath));
+        } catch (const std::exception& e) {
+            std::cerr << "[WARNING] Не удалось загрузить Albedo: " << fullPath << "\n";
+        }
     }
-    void BurnhopeModel::createVertexBuffers(const std::vector<Vertex>& vertices) {
+    
+    if (!paths.normal.empty() && paths.normal[0] != '*') {
+        std::string fullPath = resolvePath(paths.normal);
+        std::cout << "  -> Normal: " << fullPath << "\n";
+        
+        try {
+            mat->setNormal(BurnhopeTexture::createDataTextureFromFile(lveDevice, fullPath));
+        } catch (const std::exception& e) {
+            std::cerr << "[WARNING] Не удалось загрузить Normal: " << fullPath << "\n";
+        }
+    }
+    
+    if (!paths.orm.empty() && paths.orm[0] != '*') {
+        std::string fullPath = resolvePath(paths.orm);
+        std::cout << "  -> ORM: " << fullPath << "\n";
+        
+        try {
+            std::shared_ptr<BurnhopeTexture> ormTex = BurnhopeTexture::createDataTextureFromFile(lveDevice, fullPath);
+            if (ormTex) {
+                mat->setRoughness(ormTex); 
+                mat->setMetallic(ormTex);
+                mat->setAO(ormTex);
+                mat->isORM = true; // Тот самый флаг из предыдущего шага!
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[WARNING] Не удалось загрузить ORM: " << fullPath << "\n";
+        }
+    }
+
+    loadedMaterials.push_back(mat);
+}
+}
+   void BurnhopeModel::createVertexBuffers(const std::vector<Vertex>& vertices) {
         vertexCount = static_cast<uint32_t>(vertices.size());
         assert(vertexCount >= 3 && "Vertex count must be at least 3");
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertexCount;
@@ -68,9 +141,10 @@ namespace burnhope {
             lveDevice,
             vertexSize,
             vertexCount,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         };
+
 
         stagingBuffer.map();
         stagingBuffer.writeToBuffer((void*)vertices.data());
@@ -79,11 +153,13 @@ namespace burnhope {
             lveDevice,
             vertexSize,
             vertexCount,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
 
         lveDevice.copyBuffer(stagingBuffer.getBuffer(), vertexBuffer->getBuffer(), bufferSize);
     }
+
     void BurnhopeModel::createIndexBuffers(const std::vector<uint32_t>& indices) {
         indexCount = static_cast<uint32_t>(indices.size());
         hasIndexBuffer = indexCount > 0;
@@ -99,9 +175,10 @@ namespace burnhope {
             lveDevice,
             indexSize,
             indexCount,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+              VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         };
+
 
         stagingBuffer.map();
         stagingBuffer.writeToBuffer((void*)indices.data());
@@ -110,8 +187,9 @@ namespace burnhope {
             lveDevice,
             indexSize,
             indexCount,
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                     VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
 
         lveDevice.copyBuffer(stagingBuffer.getBuffer(), indexBuffer->getBuffer(), bufferSize);
     }
@@ -198,77 +276,85 @@ namespace burnhope {
         }
 
         // 2. Пропускаем пути к материалам (мы их теперь вешаем через UI)
-        for (uint32_t i = 0; i < header.materialCount; ++i) {
-            char pathBuf[256];
-            file.read(pathBuf, sizeof(pathBuf));
-        }
+    materialPaths.clear();
+    for (uint32_t i = 0; i < header.materialCount; ++i) {
+        BHMaterialData matData;
+        file.read(reinterpret_cast<char*>(&matData), sizeof(BHMaterialData));
+        
+        MaterialPaths paths;
+        paths.albedo = matData.albedoPath;
+        paths.normal = matData.normalPath;
+        paths.orm = matData.ormPath;
+        materialPaths.push_back(paths);
+    }
 
         vertices.clear();
         indices.clear();
         subMeshes.clear(); // Очищаем список частей перед загрузкой
+uint32_t lastMeshVertexOffset = 0; // ← для кластеров
 
-        // 3. Читаем каждый саб-меш
-        for (uint32_t m = 0; m < header.meshCount; ++m) {
-            BHMeshHeader meshHeader;
-            file.read(reinterpret_cast<char*>(&meshHeader), sizeof(BHMeshHeader));
+    for (uint32_t m = 0; m < header.meshCount; ++m) {
+        BHMeshHeader meshHeader;
+        file.read(reinterpret_cast<char*>(&meshHeader), sizeof(BHMeshHeader));
 
-            uint32_t vCount;
-            file.read(reinterpret_cast<char*>(&vCount), sizeof(uint32_t));
+        uint32_t vCount;
+        file.read(reinterpret_cast<char*>(&vCount), sizeof(uint32_t));
 
-            // Предохранитель от битых файлов
-            if (vCount > 10000000) {
-                throw std::runtime_error("[FATAL] Mesh too large! Struct alignment mismatch?");
-            }
+        if (vCount > 10000000) {
+            throw std::runtime_error("[FATAL] Mesh too large!");
+        }
 
-            // Запоминаем текущее кол-во вершин для смещения индексов
-            uint32_t vertexOffset = static_cast<uint32_t>(vertices.size());
+        uint32_t vertexOffset;
 
-            // Читаем вершины (Vertex всегда 56 байт)
+        if (vCount > 0) {
+            // Обычный меш или ПЕРВЫЙ кластер — читаем вершины
+            vertexOffset = static_cast<uint32_t>(vertices.size());
+            lastMeshVertexOffset = vertexOffset; // запоминаем для следующих кластеров
+
             std::vector<Vertex> subVertices(vCount);
             file.read(reinterpret_cast<char*>(subVertices.data()), vCount * sizeof(Vertex));
             vertices.insert(vertices.end(), subVertices.begin(), subVertices.end());
+        } else {
+            // vCount == 0 → кластер того же меша, шарит вершины
+            vertexOffset = lastMeshVertexOffset;
+            // вершины уже в буфере, ничего не читаем
+        }
+        SubMesh sub{};
+        sub.materialIndex = meshHeader.materialIndex;
+        sub.aabbMin = meshHeader.aabbMin;
+        sub.aabbMax = meshHeader.aabbMax;
+        sub.boundingRadius = meshHeader.boundingRadius;
+        sub.lodCount = std::min(meshHeader.lodCount, 4u); // Максимум 4 LODа
+        for (uint32_t l = 0; l < meshHeader.lodCount; ++l) {
+            BHLodHeader lodHeader;
+            file.read(reinterpret_cast<char*>(&lodHeader), sizeof(BHLodHeader));
 
-            // 4. Читаем LOD'ы
-            for (uint32_t l = 0; l < meshHeader.lodCount; ++l) {
-                BHLodHeader lodHeader;
-                file.read(reinterpret_cast<char*>(&lodHeader), sizeof(BHLodHeader));
+            if (l < 4) { // Сохраняем первые 4 LODа
+                    sub.indexCounts[l]  = lodHeader.indexCount;
+                    sub.firstIndices[l] = static_cast<uint32_t>(indices.size());
 
-                // Нам нужен только LOD 0 (максимальная детализация)
-                if (l == 0) {
-                    // СОХРАНЯЕМ ИНФОРМАЦИЮ О SUBMESH
-                    SubMesh sub{};
-                    sub.indexCount = lodHeader.indexCount;
-                    sub.firstIndex = static_cast<uint32_t>(indices.size());
-                    sub.materialIndex = meshHeader.materialIndex;
-                    subMeshes.push_back(sub);
-
-                    // Читаем индексы
-                    if (meshHeader.indexType == 0) { // 16-bit
+                    // Читаем индексы и кладём их в общий буфер
+                    if (meshHeader.indexType == 0) {
                         std::vector<uint16_t> idx16(lodHeader.indexCount);
                         file.read(reinterpret_cast<char*>(idx16.data()), lodHeader.indexCount * sizeof(uint16_t));
-                        for (uint16_t idx : idx16) {
-                            indices.push_back(static_cast<uint32_t>(idx) + vertexOffset);
-                        }
-                    }
-                    else { // 32-bit
+                        for (uint16_t idx : idx16) indices.push_back(static_cast<uint32_t>(idx) + vertexOffset);
+                    } else {
                         std::vector<uint32_t> idx32(lodHeader.indexCount);
                         file.read(reinterpret_cast<char*>(idx32.data()), lodHeader.indexCount * sizeof(uint32_t));
-                        for (uint32_t idx : idx32) {
-                            indices.push_back(idx + vertexOffset);
-                        }
+                        for (uint32_t idx : idx32) indices.push_back(idx + vertexOffset);
                     }
-                }
-                else {
-                    // Если это не LOD 0, просто пропускаем байты индексов в файле
+                } else {
+                    // Если LODов больше 4 (что редкость), просто пропускаем их
                     uint32_t indexSize = (meshHeader.indexType == 0) ? 2 : 4;
                     file.seekg(lodHeader.indexCount * indexSize, std::ios::cur);
                 }
-            }
         }
-
-        file.close();
-        std::cout << "[SUCCESS] Loaded " << filepath << ": "
-            << vertices.size() << " verts, "
-            << subMeshes.size() << " submeshes\n";
+        subMeshes.push_back(sub);
     }
+
+    file.close();
+    std::cout << "[SUCCESS] Loaded " << filepath << ": "
+              << vertices.size() << " verts, "
+              << subMeshes.size() << " submeshes\n";
+}
 }

@@ -5,7 +5,7 @@
 #include "../Utils/Descriptors.hpp"
 #include "../Utils/FrameInfo.hpp"
 #include "../Utils/Components.hpp" // Твои компоненты (Transform, Mesh)
-
+#include "CullingSystem.hpp" 
 // libs
 #include <entt/entt.hpp>
 #include <memory>
@@ -43,7 +43,8 @@ namespace burnhope {
         int useTriplanar;
         float triplanarScale;
         glm::vec2 uvScale;
-        glm::vec2 padding; // Выравнивание до кратного 16 байтам
+        int useORM; // <--- Наш новый переключатель
+        int pad1, pad2, pad3; // Выравнивание до 16 байт (std430)
     };
     class GeometryRenderSystem {
     public:
@@ -54,7 +55,9 @@ namespace burnhope {
         GeometryRenderSystem(const GeometryRenderSystem&) = delete;
         GeometryRenderSystem& operator=(const GeometryRenderSystem&) = delete;
 
-        void renderEntities(FrameInfo& frameInfo, entt::registry& registry, VkDescriptorSet storageSet, VkDescriptorSet textureSet);
+        void renderEntities(FrameInfo& frameInfo, entt::registry& registry, VkDescriptorSet storageSet, VkDescriptorSet textureSet,
+        CullingSystem& cullingSystem,   // ← добавляем
+        uint32_t totalSubMeshCount);
 
     private:
         void createPipelineLayout(VkDescriptorSetLayout globalSetLayout);

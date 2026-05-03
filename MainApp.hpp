@@ -11,6 +11,8 @@
 // Подключаем систему рендера (убедись, что название файла совпадает с твоим)
 #include "Render/MainRender.hpp" 
 #include "Render/ShadowRender.hpp"
+#include "Render/GTAOSystem.hpp"
+#include "Render/HiZSystem.hpp"
 // std
 #include <memory>
 #include <vector>
@@ -66,11 +68,13 @@ namespace fs = std::filesystem;
         void rebuildGBufferDescriptorSets();
         std::unique_ptr<DeferredLightingSystem> lightingSystem;
         std::unique_ptr<BurnhopeTexture> hdrOutputTexture; // Холст для готового кадра
+        std::unique_ptr<BurnhopeTexture> gtaoOutputTexture; // Холст для готового кадра
         std::unique_ptr<ShadowRenderSystem> shadowRenderSystem;
 
         // Отдельный descriptor set layout для shadow pass (objectBuffer)
         std::unique_ptr<BurnhopeDescriptorSetLayout> shadowObjectLayoutPtr;
-
+        std::unique_ptr<CullingSystem> cullingSystem;
+        uint32_t totalSubMeshCount = 0;
 
         VkDescriptorSet shadowObjectSet = VK_NULL_HANDLE;
         // Сеты для Compute-шейдера
@@ -103,10 +107,14 @@ namespace fs = std::filesystem;
         std::unique_ptr<BurnhopeBuffer>       lightUboBuffer;
         std::unique_ptr<BurnhopeDescriptorSetLayout> shadowLayoutPtr;
         std::unique_ptr<BurnhopeDescriptorSetLayout> lightLayoutPtr;
+         std::unique_ptr<BurnhopeDescriptorSetLayout> gtaoLayoutPtr;
         VkDescriptorSet shadowSet = VK_NULL_HANDLE;
         VkDescriptorSet lightSet = VK_NULL_HANDLE;
-        // Наш UI
+        std::unique_ptr<HiZSystem> hizSystem;
 
+        // Наш UI
+        VkDescriptorSet gtaoSet = VK_NULL_HANDLE;
+        std::unique_ptr<GTAOSystem> gtaoSystem;
         #ifdef _WIN32
             std::string rootPath = "C:/";
         #else

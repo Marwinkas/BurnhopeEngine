@@ -90,75 +90,48 @@ namespace burnhope {
             "shaders/gbuffer.frag.spv",
             pipelineConfig);
     }
-    void GeometryRenderSystem::renderEntities(
-        FrameInfo& frameInfo,
-        entt::registry& registry,
-        VkDescriptorSet storageSet,
-        VkDescriptorSet textureSet) {
+// GeometryRenderSystem.cpp
+void GeometryRenderSystem::renderEntities(
+    FrameInfo& frameInfo,
+    entt::registry& registry,
+    VkDescriptorSet storageSet,
+    VkDescriptorSet textureSet,
+    CullingSystem& cullingSystem,
+    uint32_t totalSubMeshCount)
+{
+    if (storageSet == VK_NULL_HANDLE || textureSet == VK_NULL_HANDLE) return;
 
-        lvePipeline->bind(frameInfo.commandBuffer);
+    lvePipeline->bind(frameInfo.commandBuffer);
 
-        // СОБИРАЕМ ВСЕ 3 СЕТА
-        // 0: Global (UBO камеры)
-        // 1: Storage (Матрицы объектов и параметры материалов)
-        // 2: Textures (Массив текстур)
-        std::vector<VkDescriptorSet> sets = {
-            frameInfo.globalDescriptorSet,
-            storageSet,
-            textureSet
-        };
+    std::vector<VkDescriptorSet> sets = {
+        frameInfo.globalDescriptorSet, storageSet, textureSet
+    };
+    vkCmdBindDescriptorSets(frameInfo.commandBuffer,
+        VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout,
+        0, static_cast<uint32_t>(sets.size()), sets.data(), 0, nullptr);
 
-        // ВАЖНО: Если какой-то сет не создался, мы не можем рисовать!
-        // Лучше выдать ошибку здесь, чем крашнуться внутри драйвера.
-        if (storageSet == VK_NULL_HANDLE || textureSet == VK_NULL_HANDLE) {
-            std::cerr << "Warning: Cannot render entities, descriptor sets are not initialized!" << std::endl;
-            return;
-        }
+    auto view = registry.view<TransformComponent, MeshComponent>();
+    uint32_t instanceIndex = 0;
 
-        // БИНДИМ СРАЗУ ВСЕ 3 СЕТА (indexCount = 3)
-        vkCmdBindDescriptorSets(
+    for (auto [entity, transformComp, meshComp] : view.each()) {
+        if (!meshComp.model || !meshComp.isVisible) continue;
+
+        meshComp.model->bind(frameInfo.commandBuffer);
+
+        const auto& subMeshes = meshComp.model->getSubMeshes();
+        uint32_t subMeshCount = static_cast<uint32_t>(subMeshes.size());
+
+        // Один вызов на ВСЕ submesh'и модели через indirect
+        // stride = sizeof(VkDrawIndexedIndirectCommand) = 20 байт
+        vkCmdDrawIndexedIndirect(
             frameInfo.commandBuffer,
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
-            pipelineLayout,
-            0,                                   // firstSet
-            static_cast<uint32_t>(sets.size()),  // descriptorSetCount (тут будет 3)
-            sets.data(),
-            0,
-            nullptr);
+            cullingSystem.getDrawCommandBuffer(),
+            instanceIndex * sizeof(VkDrawIndexedIndirectCommand), // offset
+            subMeshCount,                                          // drawCount
+            sizeof(VkDrawIndexedIndirectCommand));                 // stride
 
-        auto view = registry.view<TransformComponent, MeshComponent>();
-        uint32_t instanceIndex = 0; // Наш индекс в SSBO
-
-        for (auto [entity, transformComp, meshComp] : view.each()) {
-            if (!meshComp.model || !meshComp.isVisible) continue;
-
-            // Передаем матрицы через Push Constants (или берем из SSBO в шейдере по instanceIndex)
-            GeometryPushConstants push{};
-            push.modelMatrix = transformComp.transform.matrix;
-            push.normalMatrix = glm::transpose(glm::inverse(glm::mat3(transformComp.transform.matrix)));
-
-            vkCmdPushConstants(
-                frameInfo.commandBuffer,
-                pipelineLayout,
-                VK_SHADER_STAGE_VERTEX_BIT,
-                0, sizeof(GeometryPushConstants),
-                &push);
-
-            meshComp.model->bind(frameInfo.commandBuffer);
-
-            const auto& subMeshes = meshComp.model->getSubMeshes();
-            for (const auto& sub : subMeshes) {
-                // ВАЖНО: В Deferred мы НЕ переключаем дескрипторы текстур здесь!
-                // Шейдер сам возьмет нужную текстуру из массива по ID материала.
-
-                // Если ты хочешь рисовать через gl_InstanceIndex, 
-                // передавай instanceIndex как baseInstance
-
-                vkCmdDrawIndexed(frameInfo.commandBuffer, sub.indexCount, 1, sub.firstIndex, 0, instanceIndex);
-                instanceIndex++;
-            }
-         
-        }
+        instanceIndex += subMeshCount;
     }
+}
 
 } // namespace burnhope

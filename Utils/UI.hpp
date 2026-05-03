@@ -13,7 +13,6 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <iostream>
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui.h"
 #include "imgui_internal.h" 
 #include "ImGuizmo.h"
@@ -660,9 +659,6 @@ public:
             for (auto& entry : fs::directory_iterator(dir)) { if (entry.is_directory()) DrawFolderTree(entry.path()); }
             ImGui::TreePop();
         }
-    }
-    GLuint GetMaterialThumbnail(const std::string& matPath) {
-
     }
   
                 void DrawContentBrowser() {

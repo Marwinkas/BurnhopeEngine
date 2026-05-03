@@ -24,7 +24,7 @@ layout(set = 1, binding = 0) uniform sampler2D gNormalRoughness;
 layout(set = 1, binding = 1) uniform sampler2D gAlbedoMetallic;
 layout(set = 1, binding = 2) uniform sampler2D gHeightAO;
 layout(set = 1, binding = 3) uniform sampler2D gDepth;
-
+layout(set = 6, binding = 2, r8) uniform readonly image2D gtaoMap;
 layout(set = 2, binding = 0) uniform sampler2DArray sunShadowMap;
 layout(set = 2, binding = 1) uniform sampler2D shadowAtlas;
 layout(set = 2, binding = 2) uniform sampler2D noiseTexture;
@@ -369,7 +369,51 @@ float SunShadowCalculation(vec3 fragPos, vec3 N, vec3 L) {
     
     return CalculateSingleCascadeShadow(fragPos, N, L, layer, depth);
 }
-
+// --- КОНТАКТНЫЕ ТЕНИ (Screen Space Shadows) ---
+float ContactShadows(vec3 worldPos, vec3 L) {
+    int steps = 16;                // Количество шагов луча (влияет на качество и фпс)
+    float maxRayLength = 0.3;      // Максимальная длина тени в метрах (например, полметра)
+    float stepSize = maxRayLength / float(steps);
+    
+    // Добавляем шум (dithering), чтобы размыть "ступеньки" от малого количества шагов
+    float dither = fract(sin(dot(gl_GlobalInvocationID.xy, vec2(12.9898, 78.233))) * 43758.5453);
+    
+    vec3 rayPos = worldPos + L * stepSize * dither;
+    
+    for (int i = 0; i < steps; i++) {
+        rayPos += L * stepSize;
+        
+        // Проецируем точку луча на экран (NDC координаты)
+        vec4 clipPos = ubo.projection * ubo.view * vec4(rayPos, 1.0);
+        vec3 ndc = clipPos.xyz / clipPos.w;
+        
+        // Переводим в UV (Vulkan)
+        vec2 sampleUV = ndc.xy * 0.5 + 0.5;
+        
+        // Если луч улетел за экран — прерываем
+        if (sampleUV.x < 0.0 || sampleUV.x > 1.0 || sampleUV.y < 0.0 || sampleUV.y > 1.0) break;
+        
+        // Читаем глубину из G-Buffer в этой точке
+        float sampledDepth = textureLod(gDepth, sampleUV, 0.0).r;
+        
+        // В Vulkan Z идёт от 0 до 1. Если глубина экрана МЕНЬШЕ глубины луча, значит луч ЗА объектом
+        if (sampledDepth < ndc.z) {
+            // Восстанавливаем позицию преграды, чтобы проверить толщину
+            vec4 hitClip = vec4(ndc.xy, sampledDepth, 1.0);
+            vec4 hitWorldRaw = ubo.invViewProj * hitClip;
+            vec3 hitWorld = hitWorldRaw.xyz / hitWorldRaw.w;
+            
+            float thickness = length(hitWorld - rayPos);
+            
+            // Если преграда тонкая (меньше 20 см), считаем это настоящей тенью.
+            // Если толстая - возможно, луч просто пролетел за горой на фоне.
+            if (thickness < 0.2) { 
+                return 0.0; // Тень найдена!
+            }
+        }
+    }
+    return 1.0; // Тени нет
+}
 void main() {
     ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
     if (pixelCoords.x >= int(ubo.screenSize.x) || pixelCoords.y >= int(ubo.screenSize.y)) return;
@@ -400,7 +444,7 @@ void main() {
     float metallic = albMet.a;
     float height   = heightAO.r; 
     float ao       = heightAO.g; 
-
+    float gtao = imageLoad(gtaoMap, pixelCoords).r;
     // Vulkan NDC depth от 0 до 1, поэтому Z не трогаем (не нужно * 2.0 - 1.0 для глубины)
     vec4 ndc = vec4(uv.x * 2.0 - 1.0, uv.y * 2.0 - 1.0, depth, 1.0);
     vec4 worldPosRaw = ubo.invViewProj * ndc;
@@ -490,6 +534,10 @@ void main() {
             if (light.type == 0)      attenuation *= (1.0 - SunShadowCalculation(crntPos, N, L));
             else if (light.type == 1) attenuation *= (1.0 - PointShadowCalculation_Atlas(crntPos, N, light));
             else if (light.type == 2) attenuation *= (1.0 - AtlasShadowCalculation(crntPos, N, L, light));
+
+            if (attenuation > 0.01) {
+                attenuation *= ContactShadows(crntPos, L);
+            }
         }
 
         vec3 radiance = light.color * light.intensity * attenuation;
@@ -532,6 +580,11 @@ void main() {
     }
     vec3 gi = texture(giIrradiance, uv).rgb;
     
-    vec3 finalColor = ambient + resultRadiance + gi * albedo * ao * 3;
+    vec3 ambientTotal = (ambient + gi * albedo * ao * cavity) * gtao;
+
+    // 4. Итоговый цвет
+    // Суммируем Ambient (непрямой свет) и resultRadiance (прямой свет от ламп)
+    // Прямой свет (resultRadiance) на AO/GTAO умножать НЕ НУЖНО, так как там уже есть тени
+    vec3 finalColor = ambientTotal + resultRadiance;
     imageStore(outColor, pixelCoords, vec4(finalColor, 1.0));
 }

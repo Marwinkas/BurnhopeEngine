@@ -1,13 +1,14 @@
 ﻿#include "Texture.hpp"
-
-
 #include <stb_image.h>
+
+#include <stb/stb_image_resize2.h>
+
 #include <cstring>
-// std
 #include <cmath>
 #include <stdexcept>
 #include <iostream>
-
+#include <vector>
+#include <filesystem>
 namespace burnhope {
 BurnhopeTexture::BurnhopeTexture(BurnhopeDevice &device, const std::string &textureFilepath, bool isSRGB) : mDevice{device} {
   createTextureImage(textureFilepath, isSRGB);
@@ -198,6 +199,34 @@ void BurnhopeTexture::updateDescriptor() {
 }
 
 void BurnhopeTexture::createTextureImage(const std::string& filepath, bool isSRGB) {
+
+    // 1. Если это уже готовый .bhtex - просто грузим
+    if (filepath.ends_with(".bhtex")) {
+        if (!loadFromBHTex(filepath)) {
+            throw std::runtime_error("Failed to load .bhtex: " + filepath);
+        }
+        return;
+    }
+
+    // 2. Если это .png / .jpg, проверяем, есть ли рядом кэш
+    std::string cachePath = filepath.substr(0, filepath.find_last_of('.')) + ".bhtex";
+    
+    if (std::filesystem::exists(cachePath)) {
+        // Кэш найден! Грузим мгновенно.
+        std::cout << "[CACHE] Быстрая загрузка: " << cachePath << "\n";
+        if (loadFromBHTex(cachePath)) {
+            return;
+        }
+    }
+
+    // 3. Кэша нет. Генерируем его ОДИН РАЗ (это долгий процесс)
+    std::cout << "[BUILD] Создаю кэш .bhtex для: " << filepath << "\n";
+    generateAndCacheBHTex(filepath, cachePath, isSRGB);
+    
+    // 4. Загружаем свежесозданный кэш
+    if (!loadFromBHTex(cachePath)) {
+        throw std::runtime_error("Failed to load generated .bhtex!");
+    }
     // =========================================================
     // ПУТЬ 1: ЗАГРУЗКА БИНАРНОГО ФОРМАТА .BHTEX (СЖАТЫЙ DXT/BC)
     // =========================================================
@@ -598,4 +627,148 @@ void BurnhopeTexture::generateMipmaps(VkImage image, VkFormat imageFormat, int32
 
     mDevice.endSingleTimeCommands(commandBuffer);
 }
-}  // namespace burnhope
+bool BurnhopeTexture::loadFromBHTex(const std::string& filepath) {
+    std::ifstream file(filepath, std::ios::binary);
+    if (!file.is_open()) return false;
+
+    BHTexHeader header;
+    file.read(reinterpret_cast<char*>(&header), sizeof(BHTexHeader));
+
+    mMipLevels = header.mipCount;
+    mExtent = { header.width, header.height, 1 };
+
+    // Определяем формат Vulkan
+    if (header.format == 0) mFormat = header.isSRGB ? VK_FORMAT_BC1_RGB_SRGB_BLOCK : VK_FORMAT_BC1_RGB_UNORM_BLOCK;
+    else if (header.format == 1) mFormat = header.isSRGB ? VK_FORMAT_BC3_SRGB_BLOCK : VK_FORMAT_BC3_UNORM_BLOCK;
+    else if (header.format == 2) mFormat = VK_FORMAT_BC5_UNORM_BLOCK;
+    else if (header.format == 3) mFormat = header.isSRGB ? VK_FORMAT_BC7_SRGB_BLOCK : VK_FORMAT_BC7_UNORM_BLOCK;
+    else mFormat = header.isSRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM; // Формат 4 (RAW)
+
+    // Читаем все данные одним махом
+    std::vector<char> allMipData;
+    std::vector<VkBufferImageCopy> bufferCopyRegions;
+
+    uint32_t currentW = header.width;
+    uint32_t currentH = header.height;
+
+    for (uint32_t i = 0; i < mMipLevels; ++i) {
+        uint32_t dataSize;
+        file.read(reinterpret_cast<char*>(&dataSize), sizeof(uint32_t));
+
+        size_t currentOffset = allMipData.size();
+        allMipData.resize(currentOffset + dataSize);
+        file.read(allMipData.data() + currentOffset, dataSize);
+
+        VkBufferImageCopy region{};
+        region.bufferOffset = currentOffset;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = i;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageExtent = { currentW, currentH, 1 };
+        bufferCopyRegions.push_back(region);
+
+        currentW = std::max(1u, currentW / 2);
+        currentH = std::max(1u, currentH / 2);
+    }
+    file.close();
+
+    // Заливаем в видеокарту
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    mDevice.createBuffer(allMipData.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(mDevice.device(), stagingBufferMemory, 0, allMipData.size(), 0, &data);
+    memcpy(data, allMipData.data(), allMipData.size());
+    vkUnmapMemory(mDevice.device(), stagingBufferMemory);
+
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.extent = mExtent;
+    imageInfo.mipLevels = mMipLevels;
+    imageInfo.arrayLayers = mLayerCount;
+    imageInfo.format = mFormat;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    mDevice.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mTextureImage, mTextureImageMemory);
+
+    transitionLayout(mDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    VkCommandBuffer commandBuffer = mDevice.beginSingleTimeCommands();
+    vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, mTextureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        static_cast<uint32_t>(bufferCopyRegions.size()), bufferCopyRegions.data());
+    mDevice.endSingleTimeCommands(commandBuffer);
+
+    transitionLayout(mDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    mTextureLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    vkDestroyBuffer(mDevice.device(), stagingBuffer, nullptr);
+    vkFreeMemory(mDevice.device(), stagingBufferMemory, nullptr);
+    return true;
+}
+
+void BurnhopeTexture::generateAndCacheBHTex(const std::string& srcPath, const std::string& cachePath, bool isSRGB) {
+    int texWidth, texHeight, texChannels;
+    // Мы всегда запрашиваем 4 канала (RGBA), чтобы не мучиться с выравниванием
+    stbi_uc* pixels = stbi_load(srcPath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    if (!pixels) throw std::runtime_error("Failed to load source image: " + srcPath);
+
+    uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+
+    BHTexHeader header{};
+    header.width = texWidth;
+    header.height = texHeight;
+    header.mipCount = mipLevels;
+    header.isSRGB = isSRGB;
+    header.format = 4; // RAW_RGBA (пока без BC7)
+
+    std::ofstream outFile(cachePath, std::ios::binary);
+    outFile.write(reinterpret_cast<const char*>(&header), sizeof(BHTexHeader));
+
+    int currentW = texWidth;
+    int currentH = texHeight;
+    
+    // Подготавливаем данные первого уровня
+    std::vector<stbi_uc> currentMip(pixels, pixels + (texWidth * texHeight * 4));
+
+    for (uint32_t i = 0; i < mipLevels; ++i) {
+        // 1. Записываем текущий уровень в файл
+        uint32_t dataSize = currentW * currentH * 4; 
+        outFile.write(reinterpret_cast<char*>(&dataSize), sizeof(uint32_t));
+        outFile.write(reinterpret_cast<char*>(currentMip.data()), dataSize);
+
+        // 2. Генерируем следующий уровень на CPU
+        if (i < mipLevels - 1) {
+            int nextW = std::max(1, currentW / 2);
+            int nextH = std::max(1, currentH / 2);
+            std::vector<stbi_uc> nextMip(nextW * nextH * 4);
+
+            // ИСПОЛЬЗУЕМ ТВОИ НОВЫЕ ФУНКЦИИ
+            if (isSRGB) {
+                // Для Albedo (цвета) используем SRGB ресайз, чтобы не терять яркость
+                stbir_resize_uint8_srgb(currentMip.data(), currentW, currentH, 0,
+                                        nextMip.data(), nextW, nextH, 0, STBIR_RGBA);
+            } else {
+                // для NormalMap, Roughness и Metallic - строго Linear!
+                stbir_resize_uint8_linear(currentMip.data(), currentW, currentH, 0,
+                                          nextMip.data(), nextW, nextH, 0, STBIR_RGBA);
+            }
+
+            currentMip = std::move(nextMip);
+            currentW = nextW;
+            currentH = nextH;
+        }
+    }
+
+    outFile.close();
+    stbi_image_free(pixels);
+    std::cout << "[DONE] Кэш .bhtex создан для: " << srcPath << "\n";
+}
+
+}

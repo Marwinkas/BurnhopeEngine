@@ -42,8 +42,8 @@ layout(std430, set = 1, binding = 0) readonly buffer ObjectBuffer {
 
 void main() {
     // В Vulkan gl_InstanceIndex уже включает BaseInstance, как в OpenGL (gl_BaseInstanceARB + gl_InstanceID)
-    uint globalIndex = gl_InstanceIndex; 
-    ObjectData obj = objectBuffer.objects[globalIndex];
+    uint globalIndex = gl_InstanceIndex; // firstInstance передаётся сюда
+ObjectData obj = objectBuffer.objects[globalIndex];
     
     mat4 modelMatrix = obj.modelMatrix;
     outMatID = obj.materialID;
