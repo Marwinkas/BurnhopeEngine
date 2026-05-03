@@ -27,7 +27,7 @@ namespace burnhope
         // 2. Загружаем дефолтные текстуры, чтобы они всегда были под рукой
         // Замени пути на свои, если они лежат в другом месте!
         defaultWhiteTex = BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/white.png");
-        defaultNormalTex = BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/normal2.png");
+        defaultNormalTex = BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/white.png");
         shadowSystem = std::make_unique<BurnhopeShadowSystem>(lveDevice);
 
         defaultWhiteMaterial = std::make_shared<Material>();
