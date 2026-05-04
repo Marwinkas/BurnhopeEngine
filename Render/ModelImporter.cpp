@@ -1,5 +1,5 @@
 ﻿#include "ModelImporter.h"
-#include "Model.hpp" // Подключаем, чтобы взять оттуда BurnhopeModel::Vertex
+#include "Model.hpp" 
 
 namespace fs = std::filesystem;
 namespace burnhope {
@@ -9,7 +9,7 @@ namespace burnhope {
         const aiScene* scene = importer.ReadFile(srcPath,
             aiProcess_Triangulate |
             aiProcess_FlipUVs |
-            aiProcess_GenNormals |   // жёсткие грани если нет нормалей
+            aiProcess_GenNormals |   
             aiProcess_CalcTangentSpace |
             aiProcess_JoinIdenticalVertices);
 
@@ -23,10 +23,10 @@ namespace burnhope {
 
 BHModelHeader modelHeader;
 modelHeader.meshCount     = 0;
-modelHeader.materialCount = scene->mNumMaterials; // ВОЗВРАЩАЕМ МАТЕРИАЛЫ!
+modelHeader.materialCount = scene->mNumMaterials; 
 outFile.write(reinterpret_cast<const char*>(&modelHeader), sizeof(BHModelHeader));
 
-// ЧИТАЕМ И ПИШЕМ МАТЕРИАЛЫ СРАЗУ ПОСЛЕ ЗАГОЛОВКА
+
 for (unsigned int i = 0; i < scene->mNumMaterials; i++) {
     aiMaterial* mat = scene->mMaterials[i];
     BHMaterialData matData{};
@@ -34,7 +34,7 @@ for (unsigned int i = 0; i < scene->mNumMaterials; i++) {
 
     aiString path;
     
-    // 1. Albedo (Цвет)
+    
     aiString albedoPath, normalPath, ormPath;
 
     if (mat->GetTexture(aiTextureType_BASE_COLOR, 0, &albedoPath) == AI_SUCCESS) {
@@ -43,29 +43,29 @@ for (unsigned int i = 0; i < scene->mNumMaterials; i++) {
         strncpy(matData.albedoPath, albedoPath.C_Str(), sizeof(matData.albedoPath) - 1);
     }
 
-    // Normal
+    
     if (mat->GetTexture(aiTextureType_NORMALS, 0, &normalPath) == AI_SUCCESS) {
         strncpy(matData.normalPath, normalPath.C_Str(), sizeof(matData.normalPath) - 1);
     } else if (mat->GetTexture(aiTextureType_HEIGHT, 0, &normalPath) == AI_SUCCESS) {
         strncpy(matData.normalPath, normalPath.C_Str(), sizeof(matData.normalPath) - 1);
     }
 
-    // ORM — для glTF это всегда UNKNOWN slot 0
-    // Metalness и Roughness в glTF ВСЕГДА одна текстура, не склеиваем!
-    // ORM для glTF — Roughness и Metalness это ОДНА текстура (metallicRoughnessTexture)
-// Assimp кладёт её в UNKNOWN slot 0
+    
+    
+    
+
     if (mat->GetTexture(aiTextureType_UNKNOWN, 0, &path) == AI_SUCCESS) {
         strncpy(matData.ormPath, path.C_Str(), sizeof(matData.ormPath) - 1);
     }
-    // Для НЕ-glTF форматов (OBJ, FBX) — ищем отдельно, но берём ТОЛЬКО ОДИН путь
+    
     else if (mat->GetTexture(aiTextureType_DIFFUSE_ROUGHNESS, 0, &path) == AI_SUCCESS) {
         strncpy(matData.ormPath, path.C_Str(), sizeof(matData.ormPath) - 1);
     }
     else if (mat->GetTexture(aiTextureType_METALNESS, 0, &path) == AI_SUCCESS) {
         strncpy(matData.ormPath, path.C_Str(), sizeof(matData.ormPath) - 1);
     }
-// НЕ делаем двойной strncpy подряд — это и было причиной склейки!
-    // ВЫВОДИМ В КОНСОЛЬ, ЧТОБЫ ВИДЕТЬ, ЧТО НАШЛИ
+
+    
     if (strlen(matData.ormPath) > 0 && 
         strcmp(matData.albedoPath, matData.ormPath) == 0) {
         std::cerr << "[WARNING] Material " << i 
@@ -93,24 +93,24 @@ for (unsigned int i = 0; i < scene->mNumMaterials; i++) {
             for (unsigned int i = 0; i < aimesh->mNumVertices; i++) {
                 Vertex& v = vertices[i];
 
-                // Позиция
+                
                 v.position = { aimesh->mVertices[i].x, aimesh->mVertices[i].y, aimesh->mVertices[i].z };
                 aabbMin = glm::min(aabbMin, v.position);
                 aabbMax = glm::max(aabbMax, v.position);
 
-                // Нормаль
+                
                 if (aimesh->HasNormals())
                     v.normal = glm::normalize(glm::vec3(aimesh->mNormals[i].x, aimesh->mNormals[i].y, aimesh->mNormals[i].z));
                 else
                     v.normal = glm::vec3(0.0f, 1.0f, 0.0f);
 
-                // UV
+                
                 if (aimesh->HasTextureCoords(0))
                     v.texUV = { aimesh->mTextureCoords[0][i].x, aimesh->mTextureCoords[0][i].y };
                 else
                     v.texUV = { 0.0f, 0.0f };
 
-                // Тангенс / битангенс
+                
                 if (aimesh->HasTangentsAndBitangents()) {
                     v.tangent = glm::normalize(glm::vec3(aimesh->mTangents[i].x, aimesh->mTangents[i].y, aimesh->mTangents[i].z));
                     v.bitangent = glm::normalize(glm::vec3(aimesh->mBitangents[i].x, aimesh->mBitangents[i].y, aimesh->mBitangents[i].z));
@@ -126,14 +126,14 @@ for (unsigned int i = 0; i < scene->mNumMaterials; i++) {
                 for (unsigned int j = 0; j < aimesh->mFaces[i].mNumIndices; j++)
                     indices.push_back(aimesh->mFaces[i].mIndices[j]);
 
-            // Оптимизация буферов (Meshoptimizer)
+            
             meshopt_optimizeVertexCache(indices.data(), indices.data(), indices.size(), vertices.size());
             meshopt_optimizeOverdraw(indices.data(), indices.data(), indices.size(), &vertices[0].position.x, vertices.size(), sizeof(Vertex), 1.05f);
             meshopt_optimizeVertexFetch(vertices.data(), indices.data(), indices.size(), vertices.data(), vertices.size(), sizeof(Vertex));
             if (aimesh->mNumVertices > CLUSTER_SPLIT_THRESHOLD) {
                 writeMeshAsCluster(outFile, vertices, indices, 
                                 aimesh, aabbMin, aabbMax,
-                                modelHeader.meshCount);  // ← передаём счётчик
+                                modelHeader.meshCount);  
             } else {
                 writeMeshWithLODs(outFile, vertices, indices, aimesh, aabbMin, aabbMax);
                 modelHeader.meshCount++;
@@ -146,7 +146,7 @@ for (unsigned int i = 0; i < scene->mNumMaterials; i++) {
         return true;
     }
 
- // ModelImporter.cpp
+ 
 
 void ModelImporter::writeMeshWithLODs(
     std::ofstream& outFile,
@@ -155,7 +155,7 @@ void ModelImporter::writeMeshWithLODs(
     aiMesh* aimesh,
     glm::vec3 aabbMin, glm::vec3 aabbMax)
 {
-    // --- Старый код генерации LOD из предыдущей версии ---
+    
     std::vector<std::vector<uint32_t>> lods;
     lods.push_back(indices);
     if (!vertices.empty() && indices.size() >= 300) {
@@ -276,7 +276,7 @@ void ModelImporter::writeMeshAsCluster(
         outFile.write(reinterpret_cast<const char*>(clusterIndices.data()),
                       clusterIndices.size() * sizeof(uint32_t));
 
-        meshCountOut++;  // ← безопасно увеличиваем счётчик
+        meshCountOut++;  
     }
 }
 }

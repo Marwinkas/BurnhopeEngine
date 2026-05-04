@@ -14,7 +14,7 @@ HiZSystem::HiZSystem(BurnhopeDevice& device, VkExtent2D extent, BurnhopeDescript
                      VkImageView gDepthView, VkSampler depthSampler)
     : lveDevice(device), globalPool(pool) 
 {
-    // Layout: 0 = входная текстура, 1 = выходная картинка (текущий мип)
+    
     setLayout = BurnhopeDescriptorSetLayout::Builder(lveDevice)
         .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
         .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
@@ -32,7 +32,7 @@ HiZSystem::HiZSystem(BurnhopeDevice& device, VkExtent2D extent, BurnhopeDescript
 
     vkCreatePipelineLayout(lveDevice.device(), &pipelineLayoutInfo, nullptr, &pipelineLayout);
 
-    // Загрузка шейдера (ты создашь hiz_downsample.comp.spv)
+    
     std::ifstream file("shaders/hiz_downsample.comp.spv", std::ios::binary);
     std::vector<char> code((std::istreambuf_iterator<char>(file)), {});
     VkShaderModuleCreateInfo shaderInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, nullptr, 0, code.size(), reinterpret_cast<const uint32_t*>(code.data())};
@@ -77,13 +77,13 @@ void HiZSystem::rebuild(VkExtent2D extent, VkImageView gDepthView, VkSampler dep
 }
 
 void HiZSystem::createResources(VkExtent2D extent, VkImageView gDepthView, VkSampler depthSampler) {
-    // 1. Считаем количество уровней
+    
     mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(extent.width, extent.height)))) + 1;
 
-    // 2. Создаём картинку
+    
     VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.format = VK_FORMAT_R32_SFLOAT; // Сохраняем глубину как Float
+    imageInfo.format = VK_FORMAT_R32_SFLOAT; 
     imageInfo.extent = {extent.width, extent.height, 1};
     imageInfo.mipLevels = mipLevels;
     imageInfo.arrayLayers = 1;
@@ -93,18 +93,18 @@ void HiZSystem::createResources(VkExtent2D extent, VkImageView gDepthView, VkSam
 
     lveDevice.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, hiZImage, hiZMemory);
 
-    // 3. Создаём вьюхи и сэмплер
+    
     VkSamplerCreateInfo samplerInfo{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
     samplerInfo.magFilter = VK_FILTER_NEAREST; 
     samplerInfo.minFilter = VK_FILTER_NEAREST;
     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
     
-    // =========================================================
-    // ДОБАВИТЬ ВОТ ЭТИ ТРИ СТРОЧКИ: Запрещаем текстуре повторяться!
+    
+    
     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    // =========================================================
+    
     
     samplerInfo.maxLod = static_cast<float>(mipLevels);
     vkCreateSampler(lveDevice.device(), &samplerInfo, nullptr, &hiZSampler);
@@ -123,7 +123,7 @@ void HiZSystem::createResources(VkExtent2D extent, VkImageView gDepthView, VkSam
         vkCreateImageView(lveDevice.device(), &viewInfo, nullptr, &mipViews[i]);
     }
 
-    // 4. Переводим текстуру в GENERAL layout (разово)
+    
     auto cmd = lveDevice.beginSingleTimeCommands();
     VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
     barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -135,12 +135,12 @@ void HiZSystem::createResources(VkExtent2D extent, VkImageView gDepthView, VkSam
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
     lveDevice.endSingleTimeCommands(cmd);
 
-    // 5. Создаём дескрипторы для каждого шага
+    
     mipSets.resize(mipLevels);
     for (uint32_t i = 0; i < mipLevels; i++) {
         VkDescriptorImageInfo inputInfo{};
         inputInfo.sampler = depthSampler;
-        // На нулевом шаге читаем из gDepth, дальше - из предыдущего мипа Hi-Z
+        
         inputInfo.imageView = (i == 0) ? gDepthView : mipViews[i - 1]; 
         inputInfo.imageLayout = (i == 0) ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
 
@@ -166,7 +166,7 @@ void HiZSystem::compute(VkCommandBuffer cmd, VkExtent2D extent) {
     uint32_t mipHeight = extent.height;
 
     for (uint32_t i = 0; i < mipLevels; i++) {
-        // Каждый мипмап в 2 раза меньше предыдущего
+        
         mipWidth = std::max(1u, mipWidth / 2);
         mipHeight = std::max(1u, mipHeight / 2);
 
@@ -178,7 +178,7 @@ void HiZSystem::compute(VkCommandBuffer cmd, VkExtent2D extent) {
  
         vkCmdDispatch(cmd, (mipWidth + 15) / 16, (mipHeight + 15) / 16, 1);
 
-        // Барьер: ждём, пока запишется текущий мип, чтобы на следующей итерации можно было из него читать
+        
         VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
         barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -190,4 +190,4 @@ void HiZSystem::compute(VkCommandBuffer cmd, VkExtent2D extent) {
     }
 }
 
-} // namespace burnhope
+} 

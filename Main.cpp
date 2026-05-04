@@ -1,7 +1,7 @@
 ﻿
 #include "MainApp.hpp"
 
-// std
+
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>

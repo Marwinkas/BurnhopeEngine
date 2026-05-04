@@ -4,7 +4,7 @@
 #include "SwapChain.hpp"
 #include "Window.hpp"
 
-// std
+
 #include <cassert>
 #include <memory>
 #include <vector>
@@ -56,4 +56,4 @@ class BurnhopeRenderer {
   int currentFrameIndex{0};
   bool isFrameStarted{false};
 };
-}  // namespace burnhope
+}  

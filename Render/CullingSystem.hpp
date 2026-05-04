@@ -1,4 +1,4 @@
-// CullingSystem.hpp
+
 #pragma once
 #include "../Utils/Device.hpp"
 #include "../Utils/Buffer.hpp"
@@ -13,13 +13,13 @@ struct SubMeshGPUInfo {
     glm::vec3 aabbMin;
     float     boundingRadius;
     glm::vec3 aabbMax;
-    uint32_t  lodCount;        // <--- Заменили indexCount на lodCount
+    uint32_t  lodCount;        
     
-    uint32_t  indexCounts[4];  // Массивы LODов
+    uint32_t  indexCounts[4];  
     uint32_t  firstIndices[4];
     
     uint32_t  materialIndex;
-    uint32_t  pad1; // Для выравнивания
+    uint32_t  pad1; 
     uint32_t  pad2;
     uint32_t  pad3;
 };
@@ -38,10 +38,10 @@ public:
     CullingSystem(BurnhopeDevice& device, uint32_t maxObjects);
     ~CullingSystem();
  void bindObjectBuffer(VkBuffer objectBuf, VkDeviceSize objectBufSize);
-    // Вызывается один раз при загрузке сцены
+    
     void uploadSubMeshData(const std::vector<SubMeshGPUInfo>& subMeshes);
     void updateHiZDescriptor(VkDescriptorImageInfo hiZInfo);
-    // Вызывается каждый кадр перед G-Buffer pass
+    
     void dispatchCulling(VkCommandBuffer cmd, 
                          const glm::mat4& viewProj,
                          const glm::vec3& camPos,
@@ -53,7 +53,7 @@ public:
     }
     uint32_t getMaxDrawCount() const { return maxObjects; }
 
-    // Утилита: извлечь плоскости фрустума из VP матрицы
+    
     static std::array<glm::vec4, 6> extractFrustumPlanes(const glm::mat4& vp);
 
 private:
@@ -75,4 +75,4 @@ private:
     VkPipeline        cullPipeline       = VK_NULL_HANDLE;
 };
 
-} // namespace burnhope
+} 

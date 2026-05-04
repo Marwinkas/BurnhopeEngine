@@ -2,10 +2,10 @@
 
 #include "../Utils/Device.hpp"
 
-// libs
+
 #include <vulkan/vulkan.h>
 
-// std
+
 #include <memory>
 #include <string>
 #include <fstream>
@@ -15,7 +15,7 @@ namespace burnhope {
         uint32_t width;
         uint32_t height;
         uint32_t mipCount;
-        uint32_t format; // 0 = DXT1(BC1), 1 = DXT5(BC3), 2 = BC5(RGTC2)
+        uint32_t format; 
         uint32_t wrapS;
         uint32_t wrapT;
         uint32_t minFilter;
@@ -39,8 +39,8 @@ class BurnhopeTexture {
       VkExtent3D extent,
       VkImageUsageFlags usage,
       VkSampleCountFlagBits sampleCount,
-      uint32_t arrayLayers);  // ← новый конструктор
-  // delete copy constructors
+      uint32_t arrayLayers);  
+  
   BurnhopeTexture(const BurnhopeTexture &) = delete;
   BurnhopeTexture &operator=(const BurnhopeTexture &) = delete;
   VkSampler getSampler() const { return mTextureSampler; }
@@ -55,7 +55,7 @@ class BurnhopeTexture {
   uint32_t arrayLayers = 1;
   void updateDescriptor();
   void transitionLayout(VkCommandBuffer commandBuffer, VkImageLayout oldLayout, VkImageLayout newLayout);
-// Добавь это в BurnhopeTexture
+
 void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
   static std::unique_ptr<BurnhopeTexture> createTextureFromFile(
       BurnhopeDevice &device, const std::string &filepath);
@@ -80,4 +80,4 @@ bool loadFromBHTex(const std::string& filepath);
   VkExtent3D mExtent{};
 };
 
-}  // namespace burnhope
+}  

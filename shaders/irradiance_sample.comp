@@ -1,7 +1,7 @@
 #version 450
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-// Set 0: Global UBO
+
 layout(set = 0, binding = 0) uniform GlobalUbo {
     mat4 projection;
     mat4 invViewProj;
@@ -17,13 +17,13 @@ layout(set = 0, binding = 0) uniform GlobalUbo {
     float lightSize;
 } ubo;
 
-// Set 1: G-Buffer
+
 layout(set = 1, binding = 0) uniform sampler2D gNormalRoughness;
 layout(set = 1, binding = 1) uniform sampler2D gAlbedoMetallic;
 layout(set = 1, binding = 2) uniform sampler2D gHeightAO;
 layout(set = 1, binding = 3) uniform sampler2D gDepth;
 
-// Set 2: irradiance output + cascade0 input
+
 layout(set = 2, binding = 0, rgba16f) uniform image2D outIrradiance;
 layout(set = 2, binding = 1) uniform sampler2D cascade0;
 
@@ -39,7 +39,7 @@ layout(push_constant) uniform RC {
     float screenHeight;
 } rc;
 
-// Октаэдральное кодирование нормали → UV в зонде
+
 vec2 octaEncode(vec3 dir) {
     dir = normalize(dir);
     dir /= (abs(dir.x) + abs(dir.y) + abs(dir.z));
@@ -48,14 +48,14 @@ vec2 octaEncode(vec3 dir) {
     return dir.xy * 0.5 + 0.5;
 }
 
-// Сэмплируем зонд с индексом probeIdx по нормали dir
+
 vec3 sampleProbe(ivec3 probeIdx, vec3 dir) {
     const int octaSize = 8;
     ivec3 pCount = rc.probeCount.xyz;
 
     vec2 octaUV = octaEncode(dir);
 
-    // Позиция зонда в текстуре
+    
     int baseX = probeIdx.x * octaSize;
     int baseY = (probeIdx.z * pCount.y + probeIdx.y) * octaSize;
 
@@ -80,19 +80,19 @@ void main() {
 
     vec3 N = normalize(texture(gNormalRoughness, uv).rgb);
 
-    // Реконструируем мировую позицию
+    
     vec4 ndc = vec4(uv * 2.0 - 1.0, depth, 1.0);
     vec4 worldRaw = rc.invViewProj * ndc;
     vec3 worldPos = worldRaw.xyz / worldRaw.w;
 
-    // Находим позицию зонда в сетке
+    
     vec3 gridSize = rc.probeGridMax.xyz - rc.probeGridMin.xyz;
     ivec3 pCount  = rc.probeCount.xyz;
 
     vec3 localPos = (worldPos - rc.probeGridMin.xyz) / gridSize;
     localPos = clamp(localPos, vec3(0.001), vec3(0.999));
 
-    // Трилинейные веса
+    
     vec3 probeF   = localPos * vec3(pCount) - 0.5;
     ivec3 p000    = clamp(ivec3(floor(probeF)), ivec3(0), pCount - 1);
     ivec3 p111    = clamp(p000 + 1,             ivec3(0), pCount - 1);
@@ -115,7 +115,7 @@ void main() {
             (iy == 0 ? (1.0 - t.y) : t.y) *
             (iz == 0 ? (1.0 - t.z) : t.z);
 
-        // Чебышёвское visibility: зонды за стеной вносят меньший вклад
+        
         vec3 probeWorldPos = rc.probeGridMin.xyz + gridSize *
             (vec3(idx) + 0.5) / vec3(pCount);
         vec3 toProbe = normalize(probeWorldPos - worldPos);

@@ -4,8 +4,8 @@
 namespace burnhope {
 
     struct GeometryPushConstants {
-        // В Deferred нам часто хватает только ID объекта, 
-        // но давай оставим матрицы для совместимости
+        
+        
         glm::mat4 modelMatrix{ 1.f };
         glm::mat4 normalMatrix{ 1.f };
     };
@@ -14,25 +14,25 @@ namespace burnhope {
         BurnhopeDevice& device, VkRenderPass gBufferRenderPass, VkDescriptorSetLayout globalSetLayout)
         : lveDevice{ device } {
 
-        // Сеты теперь выглядят так:
-        // Set 0: Global (Camera)
-        // Set 1: Storage (Objects, Materials)
-        // Set 2: Текстуры (Массив sampler2D)
+        
+        
+        
+        
         createPipelineLayout(globalSetLayout);
         createPipeline(gBufferRenderPass);
     }
 
     void GeometryRenderSystem::createPipelineLayout(VkDescriptorSetLayout globalSetLayout) {
-        // 1. Создаем Layout для SSBO (Binding 0: Objects, Binding 1: Materials)
+        
         renderSystemLayout = BurnhopeDescriptorSetLayout::Builder(lveDevice)
             .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
             .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT)
             .build();
 
-        // 2. Layout для Текстур (Массив)
-        // ВАЖНО: Тут мы используем дескриптор с переменным размером (Bindless)
+        
+        
         textureLayout = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-            .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1000) // Массив до 1000 текстур
+            .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1000) 
             .build();
 
         std::vector<VkDescriptorSetLayout> layouts = {
@@ -46,7 +46,7 @@ namespace burnhope {
         pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(layouts.size());
         pipelineLayoutInfo.pSetLayouts = layouts.data();
 
-        // Push constants для быстрой передачи данных (например, индекса объекта)
+        
         VkPushConstantRange pushConstantRange{ VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstants) };
         pipelineLayoutInfo.pushConstantRangeCount = 1;
         pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
@@ -61,13 +61,13 @@ namespace burnhope {
         PipelineConfigInfo pipelineConfig{};
         BurnhopePipeline::defaultPipelineConfigInfo(pipelineConfig);
 
-        // =====================================================================
-        // КРИТИЧЕСКИ ВАЖНО: Настраиваем MRT (Multiple Render Targets)
-        // По умолчанию движок настроен на 1 выход (экран). Нам нужно 3 выхода!
-        // =====================================================================
+        
+        
+        
+        
 
-        // Создаем настройки для 3-х текстур (Normal, Albedo, Height/AO)
-        // Мы отключаем блендинг (прозрачность), потому что в G-Buffer данные пишутся "как есть"
+        
+        
         static std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(3);
         for (int i = 0; i < 3; i++) {
             blendAttachments[i].colorWriteMask =
@@ -78,19 +78,19 @@ namespace burnhope {
 
         pipelineConfig.colorBlendInfo.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
         pipelineConfig.colorBlendInfo.pAttachments = blendAttachments.data();
-        // =====================================================================
+        
 
         pipelineConfig.renderPass = renderPass;
         pipelineConfig.pipelineLayout = pipelineLayout;
 
-        // ВАЖНО: Указываем твои новые шейдеры!
+        
         lvePipeline = std::make_unique<BurnhopePipeline>(
             lveDevice,
             "shaders/gbuffer.vert.spv",
             "shaders/gbuffer.frag.spv",
             pipelineConfig);
     }
-// GeometryRenderSystem.cpp
+
 void GeometryRenderSystem::renderEntities(
     FrameInfo& frameInfo,
     entt::registry& registry,
@@ -121,17 +121,17 @@ void GeometryRenderSystem::renderEntities(
         const auto& subMeshes = meshComp.model->getSubMeshes();
         uint32_t subMeshCount = static_cast<uint32_t>(subMeshes.size());
 
-        // Один вызов на ВСЕ submesh'и модели через indirect
-        // stride = sizeof(VkDrawIndexedIndirectCommand) = 20 байт
+        
+        
         vkCmdDrawIndexedIndirect(
             frameInfo.commandBuffer,
             cullingSystem.getDrawCommandBuffer(),
-            instanceIndex * sizeof(VkDrawIndexedIndirectCommand), // offset
-            subMeshCount,                                          // drawCount
-            sizeof(VkDrawIndexedIndirectCommand));                 // stride
+            instanceIndex * sizeof(VkDrawIndexedIndirectCommand), 
+            subMeshCount,                                          
+            sizeof(VkDrawIndexedIndirectCommand));                 
 
         instanceIndex += subMeshCount;
     }
 }
 
-} // namespace burnhope
+} 

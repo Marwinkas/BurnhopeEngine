@@ -2,10 +2,10 @@
 
 #include "Device.hpp"
 
-// vulkan headers
+
 #include <vulkan/vulkan.h>
 
-// std lib headers
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -56,7 +56,7 @@ class BurnhopeSwapChain {
   void createFramebuffers();
   void createSyncObjects();
 
-  // Helper functions
+  
   VkSurfaceFormatKHR chooseSwapSurfaceFormat(
       const std::vector<VkSurfaceFormatKHR> &availableFormats);
   VkPresentModeKHR chooseSwapPresentMode(
@@ -89,4 +89,4 @@ class BurnhopeSwapChain {
   size_t currentFrame = 0;
 };
 
-}  // namespace burnhope
+}  

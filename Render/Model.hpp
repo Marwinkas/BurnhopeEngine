@@ -3,12 +3,12 @@
 #include "../Utils/Buffer.hpp"
 #include "../Utils/Device.hpp"
 
-// libs
+
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include "Material.hpp"
-// std
+
 #include <memory>
 #include <vector>
 #include <string>
@@ -21,11 +21,11 @@
 #include <meshoptimizer.h>
 namespace burnhope {
     struct Vertex {
-        glm::vec3 position;   // 12 байт
-        glm::vec3 normal;     // 12 байт  
-        glm::vec2 texUV;      // 8 байт
-        glm::vec3 tangent;    // 12 байт
-        glm::vec3 bitangent;  // 12 байт
+        glm::vec3 position;   
+        glm::vec3 normal;     
+        glm::vec2 texUV;      
+        glm::vec3 tangent;    
+        glm::vec3 bitangent;  
 
         static std::vector<VkVertexInputBindingDescription> getBindingDescriptions();
         static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
@@ -39,11 +39,11 @@ namespace burnhope {
         }
     };
     struct SubMesh {
-    uint32_t lodCount;          // Сколько уровней есть
-    uint32_t indexCounts[4];    // Количество индексов для каждого LOD
-    uint32_t firstIndices[4];   // Смещение индексов для каждого LOD
+    uint32_t lodCount;          
+    uint32_t indexCounts[4];    
+    uint32_t firstIndices[4];   
     
-        uint32_t materialIndex; // Индекс из исходного файла (FBX/OBJ)
+        uint32_t materialIndex; 
         glm::vec3 aabbMin        = glm::vec3(0.0f);
         glm::vec3 aabbMax        = glm::vec3(0.0f);
         float     boundingRadius = 0.0f;
@@ -60,7 +60,7 @@ namespace burnhope {
         std::vector<SubMesh> subMeshes{};
 
         std::vector<MaterialPaths> materialPaths;
-        std::string modelDir; // Папка, где лежит модель (чтобы движок знал, где искать текстуры)
+        std::string modelDir; 
 
         void loadModel(const std::string& filepath);
     };
@@ -87,7 +87,7 @@ namespace burnhope {
         std::unique_ptr<BurnhopeBuffer> indexBuffer;
         uint32_t indexCount;
     private:
-        std::vector<SubMesh> subMeshes; // Наш новый список частей
+        std::vector<SubMesh> subMeshes; 
         void createVertexBuffers(const std::vector<Vertex>& vertices);
         void createIndexBuffers(const std::vector<uint32_t>& indices);
 
@@ -95,4 +95,4 @@ namespace burnhope {
 
 
     };
-}  // namespace burnhope
+}  

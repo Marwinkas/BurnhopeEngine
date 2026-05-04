@@ -2,7 +2,7 @@
 
 #include "Device.hpp"
 
-// std
+
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -101,4 +101,4 @@ class BurnhopeDescriptorWriter {
   std::vector<VkWriteDescriptorSet> writes;
 };
 
-}  // namespace burnhope
+}  

@@ -1,11 +1,11 @@
 ﻿    #include "Model.hpp"
     #include "../Utils/Utils.hpp"
 
-    // libs
+    
     #define GLM_ENABLE_EXPERIMENTAL
     #include <glm/gtx/hash.hpp>
 
-    // std
+    
     #include <cassert>
     #include <cstring>
     #include <fstream>
@@ -20,16 +20,16 @@
 
     namespace burnhope {
 
-        // ----------------------------------------
+        
 
 
         BurnhopeModel::~BurnhopeModel() {}
 
-    // 1. Изменяем проверку расширений для создания
+    
     std::unique_ptr<BurnhopeModel> BurnhopeModel::createModelFromFile(BurnhopeDevice& device, const std::string& filepath) {
         std::string finalPath = ENGINE_DIR + filepath;
 
-        // Добавляем поддержку .gltf
+        
         if (finalPath.ends_with(".obj") || finalPath.ends_with(".fbx") || finalPath.ends_with(".gltf")) {
             std::string bhmeshPath = finalPath.substr(0, finalPath.find_last_of('.')) + ".bhmesh";
             if (!std::filesystem::exists(bhmeshPath)) {
@@ -40,7 +40,7 @@
         }
 
         Builder builder{};
-        // Запоминаем папку, где лежит модель (например "models/")
+        
         builder.modelDir = finalPath.substr(0, finalPath.find_last_of('/') + 1);
         builder.loadModel(finalPath);
 
@@ -48,44 +48,44 @@
     }
 
 
-    // 3. Авто-загрузка текстур в конструкторе модели
+    
     BurnhopeModel::BurnhopeModel(BurnhopeDevice& device, const Builder& builder) : lveDevice{ device } {
         createVertexBuffers(builder.vertices);
         createIndexBuffers(builder.indices);
         this->subMeshes = builder.subMeshes;
 
-        // МАГИЯ: Автоматическая генерация материалов!
-    // МАГИЯ: Автоматическая генерация материалов!
+        
+    
         for (size_t i = 0; i < builder.materialPaths.size(); ++i) {
         const auto& paths = builder.materialPaths[i];
         auto mat = std::make_shared<Material>();
 
         std::cout << "Загрузка текстур для материала " << i << ":\n";
 
-        // Умная функция поиска текстуры
+        
         auto resolvePath = [&](const std::string& rawPath) -> std::string {
             std::filesystem::path p(rawPath);
             
-            // 1. Если путь абсолютный (C:/...) и файл реально там лежит — берем его!
+            
             if (std::filesystem::exists(p)) {
                 return p.string();
             }
             
-            // 2. Иначе отрезаем весь мусор, оставляем только имя файла (например, diffuse2.png)
-            // и ищем его прямо в папке рядом с моделью
+            
+            
             std::filesystem::path localPath = std::filesystem::path(builder.modelDir) / p.filename();
             if (std::filesystem::exists(localPath)) {
                 return localPath.string();
             }
 
-            // 3. Супер-поиск: проверяем папку textures рядом с папкой models
-            // (если модель в ../models/, то ищем в ../textures/)
+            
+            
             std::filesystem::path texFolder = std::filesystem::path(builder.modelDir).parent_path() / "textures" / p.filename();
             if (std::filesystem::exists(texFolder)) {
                 return texFolder.string();
             }
 
-            // Если нигде не нашли, возвращаем просто путь рядом с моделью (чтобы в логе ошибка была понятной)
+            
             return localPath.string();
         };
 
@@ -121,7 +121,7 @@
                     mat->setRoughness(ormTex); 
                     mat->setMetallic(ormTex);
                     mat->setAO(ormTex);
-                    mat->isORM = true; // Тот самый флаг из предыдущего шага!
+                    mat->isORM = true; 
                 }
             } catch (const std::exception& e) {
                 std::cerr << "[WARNING] Не удалось загрузить ORM: " << fullPath << "\n";
@@ -221,31 +221,31 @@
         std::vector<VkVertexInputAttributeDescription> Vertex::getAttributeDescriptions() {
             std::vector<VkVertexInputAttributeDescription> attributeDescriptions(5);
 
-            // 0: Позиция (vec3)
+            
             attributeDescriptions[0].binding = 0;
             attributeDescriptions[0].location = 0;
             attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
             attributeDescriptions[0].offset = offsetof(Vertex, position);
 
-            // 1: Нормаль (vec3)
+            
             attributeDescriptions[1].binding = 0;
             attributeDescriptions[1].location = 1;
             attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
             attributeDescriptions[1].offset = offsetof(Vertex, normal);
 
-            // 2: UV координаты (vec2)
+            
             attributeDescriptions[2].binding = 0;
             attributeDescriptions[2].location = 2;
             attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
             attributeDescriptions[2].offset = offsetof(Vertex, texUV);
 
-            // 3: Тангенс (vec3)
+            
             attributeDescriptions[3].binding = 0;
             attributeDescriptions[3].location = 3;
             attributeDescriptions[3].format = VK_FORMAT_R32G32B32_SFLOAT;
             attributeDescriptions[3].offset = offsetof(Vertex, tangent);
 
-            // 4: Битангенс (vec3)
+            
             attributeDescriptions[4].binding = 0;
             attributeDescriptions[4].location = 4;
             attributeDescriptions[4].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -254,9 +254,9 @@
             return attributeDescriptions;
         }
 
-        // ==========================================================
-        // НОВЫЙ ЧТИТЕЛЬ ФОРМАТА .BHMESH
-        // ==========================================================
+        
+        
+        
         void Builder::loadModel(const std::string& filepath) {
             if (!filepath.ends_with(".bhmesh")) {
                 throw std::runtime_error("[ERROR] Only .bhmesh files are supported! " + filepath);
@@ -267,7 +267,7 @@
                 throw std::runtime_error("[ERROR] Failed to open .bhmesh: " + filepath);
             }
 
-            // 1. Читаем главный заголовок
+            
             BHModelHeader header;
             file.read(reinterpret_cast<char*>(&header), sizeof(BHModelHeader));
 
@@ -275,7 +275,7 @@
                 throw std::runtime_error("[ERROR] Not a valid BurnHope Model file!");
             }
 
-            // 2. Пропускаем пути к материалам (мы их теперь вешаем через UI)
+            
         materialPaths.clear();
         for (uint32_t i = 0; i < header.materialCount; ++i) {
             BHMaterialData matData;
@@ -290,8 +290,8 @@
 
             vertices.clear();
             indices.clear();
-            subMeshes.clear(); // Очищаем список частей перед загрузкой
-    uint32_t lastMeshVertexOffset = 0; // ← для кластеров
+            subMeshes.clear(); 
+    uint32_t lastMeshVertexOffset = 0; 
 
         for (uint32_t m = 0; m < header.meshCount; ++m) {
             BHMeshHeader meshHeader;
@@ -307,33 +307,33 @@
             uint32_t vertexOffset;
 
             if (vCount > 0) {
-                // Обычный меш или ПЕРВЫЙ кластер — читаем вершины
+                
                 vertexOffset = static_cast<uint32_t>(vertices.size());
-                lastMeshVertexOffset = vertexOffset; // запоминаем для следующих кластеров
+                lastMeshVertexOffset = vertexOffset; 
 
                 std::vector<Vertex> subVertices(vCount);
                 file.read(reinterpret_cast<char*>(subVertices.data()), vCount * sizeof(Vertex));
                 vertices.insert(vertices.end(), subVertices.begin(), subVertices.end());
             } else {
-                // vCount == 0 → кластер того же меша, шарит вершины
+                
                 vertexOffset = lastMeshVertexOffset;
-                // вершины уже в буфере, ничего не читаем
+                
             }
             SubMesh sub{};
             sub.materialIndex = meshHeader.materialIndex;
             sub.aabbMin = meshHeader.aabbMin;
             sub.aabbMax = meshHeader.aabbMax;
             sub.boundingRadius = meshHeader.boundingRadius;
-            sub.lodCount = std::min(meshHeader.lodCount, 4u); // Максимум 4 LODа
+            sub.lodCount = std::min(meshHeader.lodCount, 4u); 
             for (uint32_t l = 0; l < meshHeader.lodCount; ++l) {
                 BHLodHeader lodHeader;
                 file.read(reinterpret_cast<char*>(&lodHeader), sizeof(BHLodHeader));
 
-                if (l < 4) { // Сохраняем первые 4 LODа
+                if (l < 4) { 
                         sub.indexCounts[l]  = lodHeader.indexCount;
                         sub.firstIndices[l] = static_cast<uint32_t>(indices.size());
 
-                        // Читаем индексы и кладём их в общий буфер
+                        
                         if (meshHeader.indexType == 0) {
                             std::vector<uint16_t> idx16(lodHeader.indexCount);
                             file.read(reinterpret_cast<char*>(idx16.data()), lodHeader.indexCount * sizeof(uint16_t));
@@ -344,7 +344,7 @@
                             for (uint32_t idx : idx32) indices.push_back(idx + vertexOffset);
                         }
                     } else {
-                        // Если LODов больше 4 (что редкость), просто пропускаем их
+                        
                         uint32_t indexSize = (meshHeader.indexType == 0) ? 2 : 4;
                         file.seekg(lodHeader.indexCount * indexSize, std::ios::cur);
                     }

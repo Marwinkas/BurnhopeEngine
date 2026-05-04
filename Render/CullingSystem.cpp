@@ -1,11 +1,11 @@
-// CullingSystem.cpp
+
 #include "CullingSystem.hpp"
 #include <stdexcept>
 #include <fstream>
-#include <array>          // ← добавить
+#include <array>          
 #include <glm/glm.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/matrix_operation.hpp>  // для glm::row
+#include <glm/gtx/matrix_operation.hpp>  
 
 namespace burnhope {
 
@@ -14,9 +14,9 @@ CullingSystem::CullingSystem(BurnhopeDevice& device, uint32_t maxObjects)
 {
     drawCommandBuffer = std::make_unique<BurnhopeBuffer>(
     device, sizeof(VkDrawIndexedIndirectCommand), maxObjects,
-    // Вот сюда переносим флаг:
+    
     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-    // А отсюда убираем:
+    
     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     subMeshBuffer = std::make_unique<BurnhopeBuffer>(
@@ -28,18 +28,18 @@ CullingSystem::CullingSystem(BurnhopeDevice& device, uint32_t maxObjects)
         .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
         .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
         .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
-        .addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) // <--- Hi-Z Texture
+        .addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) 
         .build();
 
     cullPool = BurnhopeDescriptorPool::Builder(device)
         .setMaxSets(4)
         .setPoolFlags(VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT)
         .addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 12)
-        .addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4) // <--- ОБЯЗАТЕЛЬНО ДОБАВЬ ЭТО!
+        .addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4) 
         .build();
     int go = 0;
     createPipeline();
-    // cullSet НЕ создаём здесь — objectBuffer ещё не известен
+    
 }
 void CullingSystem::bindObjectBuffer(VkBuffer objectBuf, VkDeviceSize size) {
     externalObjectBuffer     = objectBuf;
@@ -59,7 +59,7 @@ void CullingSystem::updateHiZDescriptor(VkDescriptorImageInfo hiZInfo) {
         .writeBuffer(0, &objInfo)
         .writeBuffer(1, &subInfo)
         .writeBuffer(2, &drawInfo)
-        .writeImage(3, &hiZInfo) // <--- Пишем картинку
+        .writeImage(3, &hiZInfo) 
         .build(cullSet);
 }
 
@@ -72,10 +72,10 @@ CullingSystem::~CullingSystem() {
         vkDestroyPipeline(device.device(), cullPipeline, nullptr);
     if (cullPipelineLayout != VK_NULL_HANDLE)
         vkDestroyPipelineLayout(device.device(), cullPipelineLayout, nullptr);
-    // unique_ptr буферы и pool/layout уничтожатся автоматически
+    
 }
 void CullingSystem::uploadSubMeshData(const std::vector<SubMeshGPUInfo>& data) {
-    // Staging upload
+    
     BurnhopeBuffer staging(device, sizeof(SubMeshGPUInfo), data.size(),
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -88,9 +88,9 @@ void CullingSystem::uploadSubMeshData(const std::vector<SubMeshGPUInfo>& data) {
 
 void CullingSystem::createDescriptors() {
     cullLayout = BurnhopeDescriptorSetLayout::Builder(device)
-        .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) // objects
-        .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) // submeshes
-        .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) // draw commands
+        .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) 
+        .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) 
+        .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) 
         .build();
 
     cullPool = BurnhopeDescriptorPool::Builder(device)
@@ -115,7 +115,7 @@ void CullingSystem::createPipeline() {
 
     vkCreatePipelineLayout(device.device(), &layoutInfo, nullptr, &cullPipelineLayout);
 
-    // Загружаем скомпилированный шейдер
+    
     std::ifstream file("shaders/culling.comp.spv", std::ios::binary);
     if (!file.is_open())
         throw std::runtime_error("Failed to open culling.comp.spv!");
@@ -142,9 +142,9 @@ void CullingSystem::createPipeline() {
                                   &pipelineInfo, nullptr, &cullPipeline) != VK_SUCCESS)
         throw std::runtime_error("Failed to create culling pipeline!");
 
-    // Уничтожаем ОДИН РАЗ сразу после создания пайплайна
+    
     vkDestroyShaderModule(device.device(), shaderModule, nullptr);
-    shaderModule = VK_NULL_HANDLE; // ← защита от повторного destroy
+    shaderModule = VK_NULL_HANDLE; 
 }
 
 void CullingSystem::dispatchCulling(VkCommandBuffer cmd,
@@ -153,7 +153,7 @@ void CullingSystem::dispatchCulling(VkCommandBuffer cmd,
                                     const std::array<glm::vec4, 6>& planes,
                                     uint32_t objectCount)
 {
-    // Барьер: GPU завершил прошлый indirect draw перед записью нового
+    
     VkBufferMemoryBarrier barrier{};
     barrier.sType         = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
     barrier.srcAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
@@ -182,7 +182,7 @@ void CullingSystem::dispatchCulling(VkCommandBuffer cmd,
     uint32_t groups = (objectCount + 63) / 64;
     vkCmdDispatch(cmd, groups, 1, 1);
 
-    // Барьер: compute завершил запись, indirect draw может читать
+    
     barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     barrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
     vkCmdPipelineBarrier(cmd,
@@ -199,22 +199,22 @@ std::array<glm::vec4, 6> CullingSystem::extractFrustumPlanes(const glm::mat4& vp
     glm::vec4 r2 = { vp[0][2], vp[1][2], vp[2][2], vp[3][2] };
     glm::vec4 r3 = { vp[0][3], vp[1][3], vp[2][3], vp[3][3] };
 
-    planes[0] = r3 + r0; // Left
-    planes[1] = r3 - r0; // Right
-    planes[2] = r3 + r1; // Bottom
-    planes[3] = r3 - r1; // Top
-    planes[4] = r2;      // Near (Vulkan: Z от 0 до 1)
-    planes[5] = r3 - r2; // Far  (Vulkan: Z от 0 до 1)
+    planes[0] = r3 + r0; 
+    planes[1] = r3 - r0; 
+    planes[2] = r3 + r1; 
+    planes[3] = r3 - r1; 
+    planes[4] = r2;      
+    planes[5] = r3 - r2; 
 
-    // Правильная нормализация плоскости
+    
     for (int i = 0; i < 6; i++) {
-        // Берём длину только от вектора нормали (x, y, z)
+        
         float length = glm::length(glm::vec3(planes[i]));
-        // Делим весь vec4 на эту длину
+        
         planes[i] /= length;
     }
 
     return planes;
 }
 
-} // namespace burnhope
+} 

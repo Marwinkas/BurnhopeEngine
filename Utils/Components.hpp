@@ -5,9 +5,9 @@
 #include <vector>
 #include <glm/glm.hpp>
 #include "../Render/Light.hpp"
-#include "../Render/Model.hpp" // Твоя Vulkan-модель
-#include "../Render/Material.hpp"  // Твои материалы с текстурами
-// 1. Имя и теги (Всё, что нужно для UI и поиска)
+#include "../Render/Model.hpp" 
+#include "../Render/Material.hpp"  
+
 namespace burnhope {
 
     class Transform {
@@ -24,12 +24,12 @@ namespace burnhope {
         std::vector<std::string> layers;
     };
 
-    // 2. Координаты в пространстве
+    
     struct TransformComponent {
         Transform transform;
     };
 
-    // 3. Визуал (если у сущности нет этого компонента, рендер её просто игнорирует)
+    
     struct MeshComponent {
         std::string modelPath = "";
         std::vector<std::string> materialPaths;
@@ -44,7 +44,7 @@ namespace burnhope {
     };
 
 
-    // 5. Иерархия (Родитель и дети теперь ссылаются на ID сущностей, а не на индексы массива)
+    
     struct HierarchyComponent {
         entt::entity parent = entt::null;
         std::vector<entt::entity> children;

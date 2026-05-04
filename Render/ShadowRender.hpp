@@ -11,7 +11,7 @@
 
 namespace burnhope {
 
-// Push constant для shadow pass — только матрица
+
 struct ShadowPushConstant {
     glm::mat4 lightSpaceMatrix;
 };
@@ -26,12 +26,12 @@ public:
     ShadowRenderSystem(const ShadowRenderSystem&) = delete;
     ShadowRenderSystem& operator=(const ShadowRenderSystem&) = delete;
 
-    // Рисует всю геометрию с заданной lightSpaceMatrix
+    
 void renderShadow(
     VkCommandBuffer commandBuffer,
     const glm::mat4& lightSpaceMatrix,
     CullingSystem& cullingSystem, 
-    entt::registry& registry,     // <--- Возвращаем registry
+    entt::registry& registry,     
     
     VkDescriptorSet objectStorageSet);
 
@@ -44,4 +44,4 @@ private:
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
 };
 
-} // namespace burnhope
+} 

@@ -13,14 +13,14 @@
 
 namespace burnhope {
 
-// ============================================================
-// Структуры, которые уходят в шейдер (должны совпадать с GLSL)
-// ============================================================
+
+
+
 struct LightGPUData {
-    glm::vec4 posType;           // xyz = position, w = type (0=sun,1=point,2=spot)
-    glm::vec4 colorInt;          // xyz = color, w = intensity
-    glm::vec4 dirRadius;         // xyz = direction, w = radius
-    glm::vec4 shadowParams;      // x=innerCone, y=outerCone, z=castShadows, w=encodedSlot
+    glm::vec4 posType;           
+    glm::vec4 colorInt;          
+    glm::vec4 dirRadius;         
+    glm::vec4 shadowParams;      
     glm::mat4 lightSpaceMatrix;
 };
 struct PointFaceMatrices {
@@ -32,14 +32,14 @@ struct LightUBOData {
     LightGPUData lights[100];
 };
 
-// ============================================================
-// SHADOW ATLAS — для Point и Spot источников
-// ============================================================
+
+
+
 class BurnhopeShadowAtlas {
 public:
     static constexpr int ATLAS_RESOLUTION = 4096;
     static constexpr int MIN_TILE         = 128;
-    static constexpr int ATLAS_IN_UNITS   = ATLAS_RESOLUTION / MIN_TILE; // 32
+    static constexpr int ATLAS_IN_UNITS   = ATLAS_RESOLUTION / MIN_TILE; 
 
     BurnhopeShadowAtlas(BurnhopeDevice& device);
     ~BurnhopeShadowAtlas();
@@ -51,9 +51,9 @@ public:
     VkFramebuffer getFramebuffer() const { return framebuffer; }
     BurnhopeTexture* getTexture() { return atlasTexture.get(); }
 
-    // Вызывается перед render pass — устанавливает viewport/scissor для тайла
+    
     void setTileViewport(VkCommandBuffer cmd, int pixelX, int pixelY, int tileSize) const;
-    // shadow.hpp:
+    
 
 private:
     void createResources();
@@ -66,9 +66,9 @@ private:
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
 };
 
-// ============================================================
-// CSM — Cascaded Shadow Maps для солнца (4 каскада)
-// ============================================================
+
+
+
 class BurnhopeCSM {
 public:
     static constexpr int CASCADE_COUNT    = 4;
@@ -84,7 +84,7 @@ public:
     VkFramebuffer getFramebuffer(int cascade)  const { return framebuffers[cascade]; }
     BurnhopeTexture* getTexture()                    { return csmTexture.get(); }
 
-    // Возвращает матрицы для всех 4 каскадов
+    
     std::array<glm::mat4, CASCADE_COUNT> calculateMatrices(
         const Camera& camera,
         glm::vec3 sunDir,
@@ -101,16 +101,16 @@ private:
     BurnhopeDevice& device;
     std::unique_ptr<BurnhopeTexture> csmTexture;
 
-    // По одному framebuffer на каждый каскад (через VkImageView с baseArrayLayer)
+    
     std::array<VkImageView,   CASCADE_COUNT> cascadeViews{};
     std::array<VkFramebuffer, CASCADE_COUNT> framebuffers{};
 
     VkRenderPass renderPass = VK_NULL_HANDLE;
 };
 
-// ============================================================
-// SHADOW SYSTEM — оркестрирует всё вместе
-// ============================================================
+
+
+
 class BurnhopeShadowSystem {
 public:
     BurnhopeShadowSystem(BurnhopeDevice& device);
@@ -119,13 +119,13 @@ public:
     BurnhopeShadowSystem(const BurnhopeShadowSystem&) = delete;
     BurnhopeShadowSystem& operator=(const BurnhopeShadowSystem&) = delete;
 
-    // Собирает LightUBOData из registry, раздаёт слоты в атласе
+    
     void updateLights(entt::registry& registry, const glm::vec3& camPos);
 
-    // Возвращает заполненный UBO для записи в буфер
+    
     const LightUBOData& getLightUBO() const { return lightUBO; }
 
-    // Матрицы каскадов (обновляются каждый кадр)
+    
     const std::array<glm::mat4, BurnhopeCSM::CASCADE_COUNT>& getCascadeMatrices() const {
         return cascadeMatrices;
     }
@@ -148,4 +148,4 @@ private:
     glm::vec3 sunDir{ 0.0f, -1.0f, 0.0f };
 };
 
-} // namespace burnhope
+} 

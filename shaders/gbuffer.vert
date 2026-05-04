@@ -4,7 +4,7 @@ layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 layout (location = 2) in vec2 aTex;
 layout (location = 3) in vec3 aTangent;
-layout (location = 4) in vec3 aBitangent; // Оставлено для совместимости с C++ пайплайном
+layout (location = 4) in vec3 aBitangent; 
 
 layout (location = 0) out vec3 outCrntPos;
 layout (location = 1) out vec2 outTexCoord;
@@ -41,8 +41,8 @@ layout(std430, set = 1, binding = 0) readonly buffer ObjectBuffer {
 } objectBuffer;
 
 void main() {
-    // В Vulkan gl_InstanceIndex уже включает BaseInstance, как в OpenGL (gl_BaseInstanceARB + gl_InstanceID)
-    uint globalIndex = gl_InstanceIndex; // firstInstance передаётся сюда
+    
+    uint globalIndex = gl_InstanceIndex; 
 ObjectData obj = objectBuffer.objects[globalIndex];
     
     mat4 modelMatrix = obj.modelMatrix;
@@ -52,12 +52,12 @@ ObjectData obj = objectBuffer.objects[globalIndex];
     outCrntPos = worldPos.xyz;
     outTexCoord = aTex;
 
-    // Считаем нормаль-матрицу точно как в OpenGL
+    
     mat3 normalMatrix = transpose(inverse(mat3(modelMatrix)));
 
     vec3 N = normalize(normalMatrix * aNormal);
     vec3 T = normalize(normalMatrix * aTangent);
-    T = normalize(T - dot(T, N) * N); // Gram-Schmidt ортогонализация
+    T = normalize(T - dot(T, N) * N); 
     vec3 B = cross(N, T);
     
     outTBN = mat3(T, B, N);

@@ -2,7 +2,7 @@
 #extension GL_EXT_shader_atomic_float : enable
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
-// Set 0: Global UBO
+
 layout(set = 0, binding = 0) uniform GlobalUbo {
     mat4 projection;
     mat4 invViewProj;
@@ -18,13 +18,13 @@ layout(set = 0, binding = 0) uniform GlobalUbo {
     float lightSize;
 } ubo;
 
-// Set 1: G-Buffer
+
 layout(set = 1, binding = 0) uniform sampler2D gNormalRoughness;
 layout(set = 1, binding = 1) uniform sampler2D gAlbedoMetallic;
 layout(set = 1, binding = 2) uniform sampler2D gHeightAO;
 layout(set = 1, binding = 3) uniform sampler2D gDepth;
 
-// Set 2: probe output + lighting input
+
 layout(set = 2, binding = 0, rgba16f) uniform image2D outProbe;
 layout(set = 2, binding = 1) uniform sampler2D inLighting;
 
@@ -33,14 +33,14 @@ layout(push_constant) uniform RC {
     vec4  cameraPos;
     vec4  probeGridMin;
     vec4  probeGridMax;
-    ivec4 probeCount;   // x,y,z,cascadeIndex
+    ivec4 probeCount;   
     float rayLength;
     float cascadeIndex;
     float screenWidth;
     float screenHeight;
 } rc;
 
-// Октаэдральное декодирование направления из UV [0,1]^2
+
 vec3 octaDecode(vec2 uv) {
     uv = uv * 2.0 - 1.0;
     vec3 v = vec3(uv.x, uv.y, 1.0 - abs(uv.x) - abs(uv.y));
@@ -48,14 +48,14 @@ vec3 octaDecode(vec2 uv) {
     return normalize(v);
 }
 
-// Реконструкция мировой позиции из UV + depth
+
 vec3 worldFromUVDepth(vec2 uv, float depth) {
     vec4 ndc = vec4(uv * 2.0 - 1.0, depth, 1.0);
     vec4 w = rc.invViewProj * ndc;
     return w.xyz / w.w;
 }
 
-// Проецируем мировую позицию в screen UV
+
 vec2 projectToScreen(vec3 worldPos) {
     vec4 clip = ubo.projection * ubo.view * vec4(worldPos, 1.0);
     if (clip.w <= 0.0) return vec2(-1.0);
@@ -63,9 +63,9 @@ vec2 projectToScreen(vec3 worldPos) {
     return ndc.xy * 0.5 + 0.5;
 }
 
-// Screen-space raymarching от зонда по направлению dir
+
 vec4 ssRaymarch(vec3 origin, vec3 dir) {
-    const int STEPS = 20; // Чуть больше шагов для плотности
+    const int STEPS = 20; 
     float stepSize = rc.rayLength / float(STEPS);
     vec3 currentPos = origin;
 
@@ -74,46 +74,46 @@ vec4 ssRaymarch(vec3 origin, vec3 dir) {
 
         vec2 screenUV = projectToScreen(currentPos);
         
-        // Если луч улетел за границы экрана
+        
         if (screenUV.x < 0.0 || screenUV.x > 1.0 || screenUV.y < 0.0 || screenUV.y > 1.0) {
             break; 
         }
 
         float sceneDepth = texture(gDepth, screenUV).r;
-        if (sceneDepth >= 1.0) continue; // Пропускаем небо
+        if (sceneDepth >= 1.0) continue; 
 
-        // Получаем реальную мировую 3D-позицию поверхности в этом пикселе
+        
         vec3 scenePos = worldFromUVDepth(screenUV, sceneDepth);
 
-        // Считаем квадрат расстояния от КАМЕРЫ до луча и до поверхности
-        // Это избавляет нас от багов с перевернутыми осями Vulkan!
+        
+        
         vec3 camToRay = currentPos - ubo.camPos;
         vec3 camToScene = scenePos - ubo.camPos;
 
-        // Если луч оказался ДАЛЬШЕ от камеры, чем поверхность стены 
-        // (значит, он "вонзился" в неё или прошел насквозь)
+        
+        
         if (dot(camToRay, camToRay) >= dot(camToScene, camToScene)) {
             
-            // Защита: врезались ли мы именно в эту стену, а не перепрыгнули на фон?
+            
             float distToSurface = distance(currentPos, scenePos);
             if (distToSurface < stepSize * 3.0) {
                 
-                // МЫ УСПЕШНО ПОПАЛИ! Читаем цвет и свет.
+                
                 vec3 N = normalize(texture(gNormalRoughness, screenUV).rgb);
                 vec3 albedo = texture(gAlbedoMetallic, screenUV).rgb;
                 vec3 lighting = texture(inLighting, screenUV).rgb;
 
                 float NdotL = max(dot(N, -dir), 0.0);
                 
-                // Умножаем на 0.4 для мягкого затухания света
+                
                 vec3 radiance = lighting * albedo * (NdotL * 0.5 + 0.5) * 0.4;
                 
-                return vec4(radiance, 1.0); // Возвращаем свет и alpha=1 (попадание)
+                return vec4(radiance, 1.0); 
             }
         }
     }
 
-    // Ни во что не врезались
+    
     return vec4(0.0);
 }
 void main() {
@@ -124,7 +124,7 @@ void main() {
     int octaSize = 8;
     ivec3 pCount = rc.probeCount.xyz;
 
-    // Индекс зонда
+    
     int probeIdxX  = pixel.x / octaSize;
     int probeIdxYZ = pixel.y / octaSize;
     int probeIdxY  = probeIdxYZ % pCount.y;
@@ -135,7 +135,7 @@ void main() {
         return;
     }
 
-    // Мировая позиция зонда
+    
     vec3 gridSize = rc.probeGridMax.xyz - rc.probeGridMin.xyz;
     vec3 probePos = rc.probeGridMin.xyz + gridSize * vec3(
         (float(probeIdxX) + 0.5) / float(pCount.x),
@@ -143,7 +143,7 @@ void main() {
         (float(probeIdxZ) + 0.5) / float(pCount.z)
     );
 
-    // UV внутри октаэдра (локальные)
+    
     vec2 localUV = vec2(
         (float(pixel.x % octaSize) + 0.5) / float(octaSize),
         (float(pixel.y % octaSize) + 0.5) / float(octaSize)
@@ -151,7 +151,7 @@ void main() {
 
     vec3 rayDir = octaDecode(localUV);
 
-    // Трассируем и записываем результат
+    
     vec4 radiance = ssRaymarch(probePos, rayDir);
     imageStore(outProbe, pixel, radiance);
 }

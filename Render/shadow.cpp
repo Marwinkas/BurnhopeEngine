@@ -5,9 +5,9 @@
 
 namespace burnhope {
 
-// ============================================================
-// SHADOW ATLAS
-// ============================================================
+
+
+
 BurnhopeShadowAtlas::BurnhopeShadowAtlas(BurnhopeDevice& dev) : device(dev) {
     createResources();
     createRenderPass();
@@ -31,7 +31,7 @@ void BurnhopeShadowAtlas::createResources() {
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         VK_SAMPLE_COUNT_1_BIT);
 
-    // Переводим в нужный layout
+    
     VkCommandBuffer cmd = device.beginSingleTimeCommands();
     VkImageMemoryBarrier barrier{};
     barrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -54,7 +54,7 @@ void BurnhopeShadowAtlas::createRenderPass() {
     VkAttachmentDescription depth{};
     depth.format         = atlasTexture->getFormat();
     depth.samples        = VK_SAMPLE_COUNT_1_BIT;
-    depth.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;   // Сохраняем атлас между тайлами
+    depth.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;   
     depth.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
     depth.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -68,7 +68,7 @@ void BurnhopeShadowAtlas::createRenderPass() {
     subpass.colorAttachmentCount    = 0;
     subpass.pDepthStencilAttachment = &depthRef;
 
-    // Два dependency: вход (чтобы предыдущие записи видны) и выход (для compute)
+    
     std::array<VkSubpassDependency, 2> deps{};
     deps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
     deps[0].dstSubpass      = 0;
@@ -131,9 +131,9 @@ void BurnhopeShadowAtlas::setTileViewport(VkCommandBuffer cmd,
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 }
 
-// ============================================================
-// CSM
-// ============================================================
+
+
+
 BurnhopeCSM::BurnhopeCSM(BurnhopeDevice& dev) : device(dev) {
     createResources();
     createRenderPass();
@@ -155,14 +155,14 @@ void BurnhopeCSM::createResources() {
         VK_IMAGE_TILING_OPTIMAL,
         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-    // Создаём одну текстуру с 4 слоями
+    
     csmTexture = std::make_unique<BurnhopeTexture>(
         device, depthFmt, ext,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         VK_SAMPLE_COUNT_1_BIT,
-        CASCADE_COUNT); // arrayLayers = 4 — убедись что BurnhopeTexture принимает этот параметр
+        CASCADE_COUNT); 
 
-    // Переводим все слои в нужный layout
+    
     VkCommandBuffer cmd = device.beginSingleTimeCommands();
     VkImageMemoryBarrier barrier{};
     barrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -185,7 +185,7 @@ void BurnhopeCSM::createRenderPass() {
     VkAttachmentDescription depth{};
     depth.format         = csmTexture->getFormat();
     depth.samples        = VK_SAMPLE_COUNT_1_BIT;
-    depth.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;   // Каждый каскад чистим заново
+    depth.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;   
     depth.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
     depth.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -229,7 +229,7 @@ void BurnhopeCSM::createRenderPass() {
 
 void BurnhopeCSM::createFramebuffers() {
     for (int i = 0; i < CASCADE_COUNT; i++) {
-        // Отдельный VkImageView для каждого слоя
+        
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image                           = csmTexture->getImage();
@@ -238,7 +238,7 @@ void BurnhopeCSM::createFramebuffers() {
         viewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT;
         viewInfo.subresourceRange.baseMipLevel   = 0;
         viewInfo.subresourceRange.levelCount     = 1;
-        viewInfo.subresourceRange.baseArrayLayer = i;   // ← каждый слой отдельно
+        viewInfo.subresourceRange.baseArrayLayer = i;   
         viewInfo.subresourceRange.layerCount     = 1;
 
         if (vkCreateImageView(device.device(), &viewInfo, nullptr, &cascadeViews[i]) != VK_SUCCESS)
@@ -274,7 +274,7 @@ std::array<glm::mat4, BurnhopeCSM::CASCADE_COUNT> BurnhopeCSM::calculateMatrices
 glm::mat4 BurnhopeCSM::calculateCascadeMatrix(float nearP, float farP,
     const Camera& camera, glm::vec3 sunDir, float shadowSize) const
 {
-    // Перенесён 1:1 из твоего OpenGL кода CalculateCalculateCSMMatrix
+    
     glm::mat4 proj    = camera.GetProjectionMatrix(45.0f, nearP, farP);
     glm::mat4 invCam  = glm::inverse(proj * camera.GetViewMatrix());
 
@@ -283,9 +283,9 @@ glm::mat4 BurnhopeCSM::calculateCascadeMatrix(float nearP, float farP,
         for (int y = 0; y < 2; y++)
             for (int z = 0; z < 2; z++) {
                 glm::vec4 pt = invCam * glm::vec4(
-                    2.0f * x - 1.0f, // X: от -1 до 1 (Vulkan NDC)
-                    2.0f * y - 1.0f, // Y: от -1 до 1 (Vulkan NDC)
-                    (float)z,        // Z: от  0 до 1 (Vulkan NDC) <-- ПРАВИЛЬНО!
+                    2.0f * x - 1.0f, 
+                    2.0f * y - 1.0f, 
+                    (float)z,        
                     1.0f);
                 corners.push_back(pt / pt.w);
             }
@@ -306,34 +306,34 @@ glm::mat4 BurnhopeCSM::calculateCascadeMatrix(float nearP, float farP,
     glm::vec3 up = glm::vec3(0, 1, 0);
     if (std::abs(sunDir.y) > 0.999f) up = glm::vec3(0, 0, 1);
 
-    // Отодвигаем камеру света на фиксированное расстояние
+    
     float lightDistance = 2000.0f;
     glm::mat4 lightView = glm::lookAt(center - sunDir * lightDistance, center, up);
 
-    // Стабилизация мерцания (оставляем твой код)
+    
     float wupt = (radius * 2.0f) / shadowSize;
     glm::vec3 cls = glm::vec3(lightView * glm::vec4(center, 1.0f));
     cls.x = std::floor(cls.x / wupt) * wupt;
     cls.y = std::floor(cls.y / wupt) * wupt;
     center = glm::vec3(glm::inverse(lightView) * glm::vec4(cls, 1.0f));
 
-    // Обновляем матрицу с отцентрированной позицией
+    
     lightView = glm::lookAt(center - sunDir * lightDistance, center, up);
 
-    // УМНЫЕ Z-ГРАНИЦЫ:
-    // zNear: Даем огромный запас сзади (-2000), чтобы горы или высокие здания отбрасывали тень
-    // zFar: Дистанция до центра (lightDistance) + радиус шара (radius) + запас 500
+    
+    
+    
     float zNear = -2000.0f;
     float zFar = lightDistance + radius + 500.0f;
 
     glm::mat4 projs = glm::ortho(-radius, radius, -radius, radius, zNear, zFar);
-    projs[1][1] *= -1; // ← Vulkan Y flip
+    projs[1][1] *= -1; 
     return projs * lightView;
 }
 
-// ============================================================
-// SHADOW SYSTEM
-// ============================================================
+
+
+
 BurnhopeShadowSystem::BurnhopeShadowSystem(BurnhopeDevice& dev) : device(dev) {
     shadowAtlas = std::make_unique<BurnhopeShadowAtlas>(dev);
     csm         = std::make_unique<BurnhopeCSM>(dev);
@@ -346,7 +346,7 @@ void BurnhopeShadowSystem::updateLights(entt::registry& registry, const glm::vec
     const int atlasInUnits = BurnhopeShadowAtlas::ATLAS_IN_UNITS;
     const int minTile      = BurnhopeShadowAtlas::MIN_TILE;
 
-    // Проход 1: раздаём слоты в атласе Point/Spot лампочкам
+    
     auto lightView = registry.view<LightComponent, TransformComponent>();
     for (auto entity : lightView) {
         auto& light     = lightView.get<LightComponent>(entity).light;
@@ -373,7 +373,7 @@ void BurnhopeShadowSystem::updateLights(entt::registry& registry, const glm::vec
         allocX += unitsPerTile * facesCount;
     }
 
-    // Проход 2: заполняем LightUBO
+    
     sunDir = glm::vec3(0, -1, 0);
     for (auto entity : lightView) {
         auto& lc = lightView.get<LightComponent>(entity).light;
@@ -402,7 +402,7 @@ void BurnhopeShadowSystem::updateLights(entt::registry& registry, const glm::vec
         up = glm::vec3(0.0f, 0.0f, 1.0f);
     }
 
-    // Эпсилон чтобы избежать вырождения при x=0, z=0
+    
     glm::vec3 safePos = tc.position;
     if (std::abs(safePos.x) < 0.001f && std::abs(safePos.z) < 0.001f) {
         safePos.x += 0.001f;
@@ -431,7 +431,7 @@ void BurnhopeShadowSystem::updateLights(entt::registry& registry, const glm::vec
                     {0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}
                 };
                 
-                int lightIdx = lightUBO.activeLightsCount; // индекс текущего света
+                int lightIdx = lightUBO.activeLightsCount; 
                 for (int f = 0; f < 6; f++) {
                     faceMatricesData[lightIdx].faces[f] = 
                         proj * glm::lookAt(pos, pos + dirs[f], ups[f]);
@@ -441,4 +441,4 @@ void BurnhopeShadowSystem::updateLights(entt::registry& registry, const glm::vec
     }
 }
 
-} // namespace burnhope
+} 

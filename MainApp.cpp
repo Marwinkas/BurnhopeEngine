@@ -15,17 +15,17 @@ namespace burnhope
 
     FirstApp::FirstApp()
     {
-        // 1. Создаем большой пул, куда влезет всё: и буферы, и огромный массив текстур!
+        
         globalPool = BurnhopeDescriptorPool::Builder(lveDevice)
                          .setMaxSets(100)
                          .setPoolFlags(VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT)
                          .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 50)
-                         .addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 50) // <--- Увеличили с 50 до 2500!
+                         .addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 50) 
                          .addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2000)
                          .addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 50)
                          .build();
-        // 2. Загружаем дефолтные текстуры, чтобы они всегда были под рукой
-        // Замени пути на свои, если они лежат в другом месте!
+        
+        
         defaultWhiteTex = BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/white.png");
         defaultNormalTex = BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/white.png");
         shadowSystem = std::make_unique<BurnhopeShadowSystem>(lveDevice);
@@ -34,15 +34,15 @@ namespace burnhope
         defaultWhiteMaterial->setAlbedo(defaultWhiteTex);
         defaultWhiteMaterial->setNormal(defaultNormalTex);
         gBuffer = std::make_unique<BurnhopeGBuffer>(lveDevice, lveWindow.getExtent());
-        // 3. Загружаем сцену
+        
         loadGameObjects(registry);
     }
 
     FirstApp::~FirstApp()
     {
         vkDeviceWaitIdle(lveDevice.device());
-        cullingSystem.reset(); // ← добавить перед остальными reset()
-        // 1. Сначала всё что использует device
+        cullingSystem.reset(); 
+        
         lightingSystem.reset();
         shadowSystem.reset();
         lightUboBuffer.reset();
@@ -51,7 +51,7 @@ namespace burnhope
         objectBuffer.reset();
         materialBuffer.reset();
         faceMatricesBuffer.reset();
-        // 2. Потом пулы и layouts
+        
         globalPool.reset();
         gBufferLayoutPtr.reset();
         outputLayoutPtr.reset();
@@ -59,7 +59,7 @@ namespace burnhope
         lightLayoutPtr.reset();
         dummyGridBuffer.reset();
         dummyIndexBuffer.reset();
-        // 3. lveDevice уничтожается последним (автоматически как член класса)
+        
     }
     glm::mat4 shadowPerspective(float fovY, float aspect, float zNear, float zFar)
     {
@@ -80,14 +80,14 @@ namespace burnhope
         uint32_t globalMatIndex = 0;
         uint32_t globalTexIndex = 0;
 
-        // Кладем дефолтные текстуры в самое начало (они будут под индексами 0 и 1)
+        
         textureInfos.push_back(defaultWhiteTex->getImageInfo());
         uint32_t defaultWhiteIdx = globalTexIndex++;
 
         textureInfos.push_back(defaultNormalTex->getImageInfo());
         uint32_t defaultNormalIdx = globalTexIndex++;
 
-        // Помощник для поиска и добавления текстур
+        
         auto getTexIndex = [&](std::shared_ptr<BurnhopeTexture> tex, uint32_t defaultIdx) -> uint32_t
         {
             if (!tex)
@@ -110,13 +110,13 @@ namespace burnhope
             const auto &subMeshes = meshComp.model->getSubMeshes();
             for (uint32_t i = 0; i < subMeshes.size(); i++)
             {
-                uint32_t matIdx = subMeshes[i].materialIndex; // Берём индекс, который сохранил Assimp!
+                uint32_t matIdx = subMeshes[i].materialIndex; 
                 std::shared_ptr<Material> currentMat = (matIdx < meshComp.materials.size())
                                                            ? meshComp.materials[matIdx]
                                                            : defaultWhiteMaterial;
                 uint32_t currentMatID = 0;
 
-                // Упаковываем материал, если видим его впервые
+                
                 if (matToIndex.find(currentMat.get()) == matToIndex.end())
                 {
                     currentMatID = globalMatIndex++;
@@ -153,13 +153,13 @@ namespace burnhope
 
         totalSubMeshCount = static_cast<uint32_t>(objDataList.size());
 
-        // ШАГ 1: Создаём cullingSystem ПЕРВЫМ
+        
         if (!cullingSystem)
         {
             cullingSystem = std::make_unique<CullingSystem>(lveDevice, totalSubMeshCount);
         }
 
-        // ШАГ 2: Заливаем objectBuffer
+        
         if (!objDataList.empty())
         {
             objectBuffer = std::make_unique<BurnhopeBuffer>(
@@ -169,13 +169,13 @@ namespace burnhope
             objectBuffer->map();
             objectBuffer->writeToBuffer(objDataList.data());
 
-            // ШАГ 3: Только теперь bindObjectBuffer — cullingSystem уже существует
+            
             cullingSystem->bindObjectBuffer(
                 objectBuffer->getBuffer(),
                 sizeof(ObjectData) * objDataList.size());
         }
 
-        // ШАГ 4: materialBuffer
+        
         if (!matDataList.empty())
         {
             materialBuffer = std::make_unique<BurnhopeBuffer>(
@@ -186,7 +186,7 @@ namespace burnhope
             materialBuffer->writeToBuffer(matDataList.data());
         }
 
-        // ШАГ 5: Дескрипторы геометрии
+        
         if (objectBuffer && materialBuffer)
         {
             auto objInfo = objectBuffer->descriptorInfo();
@@ -197,7 +197,7 @@ namespace burnhope
                 .build(storageSet);
         }
 
-        // ШАГ 6: SubMesh данные для culling
+        
         std::vector<SubMeshGPUInfo> subMeshInfos;
         auto view2 = registry.view<TransformComponent, MeshComponent>();
         for (auto [entity, transformComp, meshComp] : view2.each())
@@ -227,7 +227,7 @@ namespace burnhope
         {
             cullingSystem->updateHiZDescriptor(hizSystem->getHiZImageInfo());
         }
-        // ШАГ 7: Текстуры
+        
         if (!textureInfos.empty())
         {
             BurnhopeDescriptorWriter(*renderSystem.getTextureLayout(), *globalPool)
@@ -238,7 +238,7 @@ namespace burnhope
 
     void FirstApp::run()
     {
-        // Создаем буферы для камеры
+        
         std::vector<std::unique_ptr<BurnhopeBuffer>> uboBuffers(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
         for (int i = 0; i < uboBuffers.size(); i++)
         {
@@ -262,14 +262,14 @@ namespace burnhope
                 .build(globalDescriptorSets[i]);
         }
         initCompute(globalSetLayout->getDescriptorSetLayout());
-        // Наша система геометрии
+        
 
         GeometryRenderSystem simpleRenderSystem{
             lveDevice,
             gBuffer->getRenderPass(),
             globalSetLayout->getDescriptorSetLayout()};
 
-        // СБОРКА СЦЕНЫ ПЕРЕД ПЕРВЫМ КАДРОМ!
+        
         RebuildBatches(registry, simpleRenderSystem);
 
         shadowObjectLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
@@ -277,14 +277,14 @@ namespace burnhope
                                                 VK_SHADER_STAGE_VERTEX_BIT)
                                     .build();
 
-        // Создаём shadow render system
+        
         shadowRenderSystem = std::make_unique<ShadowRenderSystem>(
             lveDevice,
-            shadowSystem->getCSM()->getRenderPass(), // Render pass для теней
+            shadowSystem->getCSM()->getRenderPass(), 
             shadowObjectLayoutPtr->getDescriptorSetLayout());
 
-        // Биндим objectBuffer в shadow set
-        // (после RebuildBatches, когда objectBuffer уже создан)
+        
+        
         if (objectBuffer)
         {
             auto objInfo = objectBuffer->descriptorInfo();
@@ -302,8 +302,8 @@ namespace burnhope
         while (!lveWindow.shouldClose())
         {
             glfwPollEvents();
-            // В run() — замени блок resize:
-            // Ждём пока окно не нулевого размера
+            
+            
             auto extent = lveWindow.getExtent();
             while (extent.width == 0 || extent.height == 0)
             {
@@ -312,14 +312,14 @@ namespace burnhope
             }
             camera.width = lveWindow.getExtent().width;
             camera.height = lveWindow.getExtent().height;
-            // ← Проверяем ресайз ДО beginFrame
+            
             VkExtent2D swapExtent = lveRenderer.getSwapChainExtent();
             if (extent.width != swapExtent.width || extent.height != swapExtent.height)
             {
                 vkDeviceWaitIdle(lveDevice.device());
 
-                // Swapchain пересоздаём вручную
-                lveRenderer.recreateSwapChain(); // ← сделай этот метод публичным!
+                
+                lveRenderer.recreateSwapChain(); 
 
                 VkExtent2D newExtent = lveRenderer.getSwapChainExtent();
 
@@ -342,10 +342,10 @@ namespace burnhope
                     rcSystem->rebuildOnResize(newExtent, hdrOutputTexture->getImageView(), hdrOutputTexture->getSampler());
                 }
 
-                continue; // пропускаем кадр — всё пересоздано
+                continue; 
             }
 
-            // Дальше обычный render loop
+            
             auto newTime = std::chrono::high_resolution_clock::now();
             float frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
             currentTime = newTime;
@@ -368,9 +368,9 @@ namespace burnhope
                     frameIndex, frameTime, commandBuffer,
                     camera, globalDescriptorSets[frameIndex], *globalPool};
 
-                // ================================================================
-                // 0. ОБНОВЛЕНИЕ UBO (Свет и камера)
-                // ================================================================
+                
+                
+                
                 GlobalUbo ubo{};
                 shadowSystem->updateLights(registry, camera.Position);
                 {
@@ -378,7 +378,7 @@ namespace burnhope
                     lightUboBuffer->writeToBuffer((void *)&uboData);
                     lightUboBuffer->flush();
                 }
-                // После shadowSystem->updateLights(...):
+                
                 faceMatricesBuffer->writeToBuffer(const_cast<PointFaceMatrices *>(shadowSystem->getFaceMatricesData()));
                 faceMatricesBuffer->flush();
                 ubo.projection = camera.GetProjectionMatrix(45.0f, 0.01f, 1000.0f);
@@ -405,12 +405,12 @@ namespace burnhope
                 uboBuffers[frameIndex]->writeToBuffer(&ubo);
                 uboBuffers[frameIndex]->flush();
 
-                // Создаем наш граф
+                
                 RenderGraph renderGraph;
 
-                // ================================================================
-                // ШАГ 1: ТЕНИ (Каскады + Атлас)
-                // ================================================================
+                
+                
+                
                 std::vector<VkImageMemoryBarrier> shadowBarriersBegin(2);
                 shadowBarriersBegin[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
                 shadowBarriersBegin[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -428,7 +428,7 @@ namespace burnhope
 
                 renderGraph.addPass("Shadow Maps Pass", shadowBarriersBegin, [&](VkCommandBuffer cmd)
                                     {
-        // Отрисовка каскадов солнца
+        
         for (int i = 0; i < BurnhopeCSM::CASCADE_COUNT; i++) {
             VkRenderPassBeginInfo rpInfo{};
             rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -450,7 +450,7 @@ namespace burnhope
             vkCmdEndRenderPass(cmd);
         }
 
-        // Очистка и отрисовка атласа
+        
         VkRenderPassBeginInfo clearPass{};
         clearPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         clearPass.renderPass = shadowSystem->getAtlas()->getRenderPass();
@@ -483,7 +483,7 @@ namespace burnhope
                 const glm::vec3 dirs[6] = {
                     {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}
                 };
-                // Оставляем как есть, это эталонные вектора
+                
                 const glm::vec3 ups[6] = {
                     {0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}
                 };  
@@ -506,7 +506,7 @@ namespace burnhope
                 auto vp = ubo.projection * ubo.view;
                 auto planes = CullingSystem::extractFrustumPlanes(vp);
 
-                // 2. Dispatch culling compute (заполняет drawCommandBuffer)
+                
                 cullingSystem->dispatchCulling(commandBuffer, vp, ubo.camPos, planes, totalSubMeshCount);
 
                 static bool debugDone = false;
@@ -514,13 +514,13 @@ namespace burnhope
                 {
                     vkDeviceWaitIdle(lveDevice.device());
 
-                    // Создаём readback буфер
+                    
                     BurnhopeBuffer readback(lveDevice,
                                             sizeof(VkDrawIndexedIndirectCommand), totalSubMeshCount,
                                             VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-                    // Копируем draw command буфер на CPU
+                    
                     auto cmd = lveDevice.beginSingleTimeCommands();
                     VkBufferCopy copy{};
                     copy.size = sizeof(VkDrawIndexedIndirectCommand) * totalSubMeshCount;
@@ -543,9 +543,9 @@ namespace burnhope
                               << culled << " culled out of " << totalSubMeshCount << "\n";
                     debugDone = true;
                 }
-                // ================================================================
-                // ШАГ 2: G-BUFFER
-                // ================================================================
+                
+                
+                
                 std::vector<VkImageMemoryBarrier> shadowBarriersEnd(2);
                 shadowBarriersEnd[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
                 shadowBarriersEnd[0].oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -588,14 +588,14 @@ namespace burnhope
 
 
 
-        // 3. G-Buffer pass читает drawCommandBuffer через vkCmdDrawIndexedIndirect
+        
         simpleRenderSystem.renderEntities(frameInfo, registry, 
                                         storageSet, textureSet,
                                         *cullingSystem, totalSubMeshCount);
         vkCmdEndRenderPass(cmd); });
 
                 std::vector<VkImageMemoryBarrier> hizBarriers(1);
-                // Подготавливаем оригинальный gDepth для чтения в Compute Shader
+                
                 hizBarriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
                 hizBarriers[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 hizBarriers[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -608,9 +608,9 @@ namespace burnhope
 
                 renderGraph.addPass("Hi-Z Pass", hizBarriers, [&](VkCommandBuffer cmd)
                                     { hizSystem->compute(cmd, lveWindow.getExtent()); });
-                // ================================================================
-                // ШАГ 2.5: GTAO PASS
-                // ================================================================
+                
+                
+                
                 std::vector<VkImageMemoryBarrier> gtaoBarriers(1);
                 gtaoBarriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
                 gtaoBarriers[0].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -624,12 +624,12 @@ namespace burnhope
 
                 renderGraph.addPass("GTAO Pass", gtaoBarriers, [&](VkCommandBuffer cmd)
                                     {
-        // Передаём глобальный сет камеры (он есть в frameInfo) и наш новый сет GTAO
+        
         gtaoSystem->compute(cmd, globalDescriptorSets[frameIndex], gtaoSet, 
                             lveWindow.getExtent().width, lveWindow.getExtent().height); });
-                // ================================================================
-                // ШАГ 3: COMPUTE LIGHTING
-                // ================================================================
+                
+                
+                
                 std::vector<VkImageMemoryBarrier> gBufBarriers(4);
                 VkImage gBufImages[4] = {
                     gBuffer->getNormalRoughness()->getImage(),
@@ -660,9 +660,9 @@ namespace burnhope
         };
         lightingSystem->computeLighting(cmd, computeSets, lveWindow.getExtent().width, lveWindow.getExtent().height); });
 
-                // ================================================================
-                // ШАГ 3.5: RADIANCE CASCADES GI
-                // ================================================================
+                
+                
+                
                 std::vector<VkImageMemoryBarrier> rcBarriers(1);
                 rcBarriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
                 rcBarriers[0].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -689,11 +689,11 @@ namespace burnhope
             sceneMax,
             lveWindow.getExtent()
         ); });
-                // ================================================================
-                // ШАГ 4: BLIT И UI
-                // ================================================================
+                
+                
+                
                 std::vector<VkImageMemoryBarrier> blitBarriers(2);
-                // Барьер для Compute -> Transfer Src
+                
                 blitBarriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
                 blitBarriers[0].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
                 blitBarriers[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -704,7 +704,7 @@ namespace burnhope
                 blitBarriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
                 blitBarriers[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
-                // Возвращаем depth для UI (если нужно)
+                
                 blitBarriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
                 blitBarriers[1].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 blitBarriers[1].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -719,7 +719,7 @@ namespace burnhope
                                     {
         VkImage swapChainImage = lveRenderer.getCurrentSwapChainImage();
 
-        // Переводим swapchain в TRANSFER_DST
+        
         VkImageMemoryBarrier swapToDst{};
         swapToDst.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         swapToDst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -734,7 +734,7 @@ namespace burnhope
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 
                              0, 0, nullptr, 0, nullptr, 1, &swapToDst);
 
-        // Blit
+        
         VkImageBlit blit{};
         blit.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
         blit.srcOffsets[1] = { (int32_t)lveWindow.getExtent().width, (int32_t)lveWindow.getExtent().height, 1 };
@@ -744,7 +744,7 @@ namespace burnhope
         vkCmdBlitImage(cmd, hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                        swapChainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
 
-        // Переводим swapchain в COLOR_ATTACHMENT для UI
+        
         VkImageMemoryBarrier swapToAttach{};
         swapToAttach.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         swapToAttach.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -759,14 +759,14 @@ namespace burnhope
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                              0, 0, nullptr, 0, nullptr, 1, &swapToAttach);
 
-        // Отрисовка UI
+        
         lveRenderer.beginSwapChainRenderPass(cmd);
         ui.Draw(lveWindow, camera, registry, cmd);
         lveRenderer.endSwapChainRenderPass(cmd); });
 
-                // ================================================================
-                // ШАГ 5: ВОЗВРАТ СОСТОЯНИЙ
-                // ================================================================
+                
+                
+                
                 std::vector<VkImageMemoryBarrier> finalBarriers(1);
                 finalBarriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
                 finalBarriers[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -780,7 +780,7 @@ namespace burnhope
 
                 renderGraph.addPass("Reset Layouts", finalBarriers, [](VkCommandBuffer cmd) {});
 
-                // Выполняем весь собранный граф!
+                
                 renderGraph.execute(commandBuffer);
 
                 lveRenderer.endFrame();
@@ -806,18 +806,18 @@ namespace burnhope
 
         gtaoOutputTexture = std::make_unique<BurnhopeTexture>(
             lveDevice,
-            VK_FORMAT_R8_UNORM, // Или R16_SFLOAT, если нужна супер-точность
+            VK_FORMAT_R8_UNORM, 
             extent,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_SAMPLE_COUNT_1_BIT);
 
-        // Переводим её в GENERAL, чтобы Compute Shader мог в неё писать
+        
         gtaoOutputTexture->transitionLayout(
             lveDevice.beginSingleTimeCommands(),
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_GENERAL);
 
-        // 1. СОХРАНЯЕМ LAYOUT'Ы В КЛАСС (Они больше не удалятся)
+        
         gBufferLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                                .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                                .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
@@ -829,28 +829,28 @@ namespace burnhope
                               .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
                               .build();
 
-        // SET 2: тени — sunShadowMap (2DArray), shadowAtlas (2D), noiseTexture (2D)
+        
         shadowLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                              .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) // sunShadowMap (array)
-                              .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) // shadowAtlas
-                              .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) // noiseTexture
+                              .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) 
+                              .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) 
+                              .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) 
                               .build();
 
-        // SET 3: свет — LightBlock UBO + lightGrid SSBO + indexList SSBO
+        
         lightLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                             .addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) // LightBlock
-                             .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) // lightGrid
-                             .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) // indexList
-                             .addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) // faceMatrices
+                             .addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) 
+                             .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) 
+                             .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) 
+                             .addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT) 
                              .build();
         irradianceLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                                   .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                                   .build();
 
         gtaoLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                            .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) // Depth
-                            .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) // Normal/Roughness
-                            .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)          // Выходная текстура
+                            .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) 
+                            .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) 
+                            .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)          
                             .build();
 
         faceMatricesBuffer = std::make_unique<BurnhopeBuffer>(
@@ -860,23 +860,23 @@ namespace burnhope
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         faceMatricesBuffer->map();
-        // 2. ЗАПОЛНЯЕМ G-BUFFER СЕТ
+        
         auto normInfo = gBuffer->getNormalRoughness()->getImageInfo();
         auto albInfo = gBuffer->getAlbedoMetallic()->getImageInfo();
         auto extraInfo = gBuffer->getHeightAO()->getImageInfo();
         VkDescriptorImageInfo depthInfo{};
         depthInfo.sampler = gBuffer->getDepth()->getSampler();
         depthInfo.imageView = gBuffer->getDepth()->getImageView();
-        depthInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // <-- вот фикс
+        depthInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; 
 
         BurnhopeDescriptorWriter(*gBufferLayoutPtr, *globalPool)
             .writeImage(0, &normInfo)
             .writeImage(1, &albInfo)
             .writeImage(2, &extraInfo)
-            .writeImage(3, &depthInfo) // depth с правильным layout
+            .writeImage(3, &depthInfo) 
             .build(gBufferSet);
 
-        // 3. ЗАПОЛНЯЕМ OUTPUT СЕТ
+        
         VkDescriptorImageInfo outImgInfo{};
         outImgInfo.imageView = hdrOutputTexture->getImageView();
         outImgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -891,11 +891,11 @@ namespace burnhope
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         lightUboBuffer->map();
 
-        // --- ЖЕЛЕЗОБЕТОННЫЙ 2D_ARRAY VIEW ДЛЯ CSM ---
+        
         VkImageViewCreateInfo arrayViewInfo{};
         arrayViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         arrayViewInfo.image = shadowSystem->getCSM()->getTexture()->getImage();
-        arrayViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY; // <--- МАГИЯ ЗДЕСЬ
+        arrayViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY; 
         arrayViewInfo.format = shadowSystem->getCSM()->getTexture()->getFormat();
         arrayViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         arrayViewInfo.subresourceRange.baseMipLevel = 0;
@@ -909,15 +909,15 @@ namespace burnhope
             throw std::runtime_error("Failed to create 2D Array View for CSM!");
         }
 
-        // Заполняем shadow set
+        
         VkDescriptorImageInfo csmInfo{};
         csmInfo.sampler = shadowSystem->getCSM()->getTexture()->getSampler();
-        csmInfo.imageView = csmArrayView; // Используем НАШ новый массивный View!
+        csmInfo.imageView = csmArrayView; 
         csmInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        // ВАЖНО: для CSM нужен VkImageView на весь array (не на отдельный слой)
-        // Если BurnhopeTexture::getImageInfo() возвращает view на весь image — всё OK
+        
+        
         auto atlasInfo = shadowSystem->getAtlas()->getTexture()->getImageInfo();
-        auto noiseInfo = defaultWhiteTex->getImageInfo(); // временная заглушка для noise
+        auto noiseInfo = defaultWhiteTex->getImageInfo(); 
 
         BurnhopeDescriptorWriter(*shadowLayoutPtr, *globalPool)
             .writeImage(0, &csmInfo)
@@ -925,7 +925,7 @@ namespace burnhope
             .writeImage(2, &noiseInfo)
             .build(shadowSet);
 
-        // Заполняем light set
+        
         struct LightGrid
         {
             uint32_t offset;
@@ -934,11 +934,11 @@ namespace burnhope
         dummyGridBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice,
             sizeof(LightGrid),
-            16 * 9 * 24, // gridDimX * gridDimY * gridDimZ
+            16 * 9 * 24, 
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         dummyGridBuffer->map();
-        // Заполняем нулями — count=0 → шейдер не будет итерировать
+        
         memset(dummyGridBuffer->getMappedMemory(), 0, sizeof(LightGrid) * 16 * 9 * 24);
 
         dummyIndexBuffer = std::make_unique<BurnhopeBuffer>(
@@ -960,12 +960,12 @@ namespace burnhope
             .writeBuffer(3, &faceMatInfo)
             .build(lightSet);
 
-        // 6. ПРАВИЛЬНЫЙ ПОРЯДОК LAYOUT'ОВ
+        
         std::vector<VkDescriptorSetLayout> computeLayouts = {
             globalSetLayout,
             gBufferLayoutPtr->getDescriptorSetLayout(),
-            shadowLayoutPtr->getDescriptorSetLayout(), // ← было dummyShadowPtr
-            lightLayoutPtr->getDescriptorSetLayout(),  // ← было dummyLightPtr
+            shadowLayoutPtr->getDescriptorSetLayout(), 
+            lightLayoutPtr->getDescriptorSetLayout(),  
             outputLayoutPtr->getDescriptorSetLayout(),
             irradianceLayoutPtr->getDescriptorSetLayout(),
             gtaoLayoutPtr->getDescriptorSetLayout()};
@@ -991,10 +991,10 @@ namespace burnhope
             .writeImage(2, &gtaoOutInfo)
             .build(gtaoSet);
 
-        // 4. Создаем саму систему GTAO (передаём 2 Layout'а)
+        
         std::vector<VkDescriptorSetLayout> gtaoLayouts = {
-            globalSetLayout,                        // Set 0: UBO
-            gtaoLayoutPtr->getDescriptorSetLayout() // Set 1: Textures
+            globalSetLayout,                        
+            gtaoLayoutPtr->getDescriptorSetLayout() 
         };
         gtaoSystem = std::make_unique<GTAOSystem>(lveDevice, gtaoLayouts);
 
@@ -1017,7 +1017,7 @@ namespace burnhope
             computeOutputSet = VK_NULL_HANDLE;
         }
 
-        // Пересоздаём G-Buffer сет (текстуры изменились)
+        
         auto normInfo = gBuffer->getNormalRoughness()->getImageInfo();
         auto albInfo = gBuffer->getAlbedoMetallic()->getImageInfo();
         auto extraInfo = gBuffer->getHeightAO()->getImageInfo();
@@ -1039,14 +1039,14 @@ namespace burnhope
             throw std::runtime_error("Failed to rebuild gBufferSet!");
         }
 
-        // Пересоздаём output сет (hdrOutputTexture тоже пересоздана)
-        // Сначала переводим layout в GENERAL
+        
+        
         hdrOutputTexture->transitionLayout(
             lveDevice.beginSingleTimeCommands(),
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_GENERAL);
 
-        // Сначала очищаем старый дескриптор
+        
         if (gtaoSet != VK_NULL_HANDLE)
         {
             std::vector<VkDescriptorSet> toFree = {gtaoSet};
@@ -1054,7 +1054,7 @@ namespace burnhope
             gtaoSet = VK_NULL_HANDLE;
         }
 
-        // Пересоздаём текстуру
+        
         VkExtent3D extent = {lveWindow.getExtent().width, lveWindow.getExtent().height, 1};
         gtaoOutputTexture = std::make_unique<BurnhopeTexture>(
             lveDevice, VK_FORMAT_R8_UNORM, extent,
@@ -1063,7 +1063,7 @@ namespace burnhope
         gtaoOutputTexture->transitionLayout(
             lveDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
-        // Пишем новый дескриптор точно так же, как в initCompute
+        
 
         auto normalInfo = gBuffer->getNormalRoughness()->getImageInfo();
         VkDescriptorImageInfo gtaoOutInfo{};
@@ -1074,13 +1074,13 @@ namespace burnhope
             lveDevice, lveWindow.getExtent(), *globalPool,
             gBuffer->getDepth()->getImageView(), gBuffer->getDepth()->getSampler());
 
-        // Добавляем проверку, что куллинг уже существует:
+        
         if (hizSystem && cullingSystem) 
         {
             cullingSystem->updateHiZDescriptor(hizSystem->getHiZImageInfo());
         }
      
-        // Обновляем куллинг новой текстурой!
+        
 
         BurnhopeDescriptorWriter(*gtaoLayoutPtr, *globalPool)
             .writeImage(0, &depthInfo)
@@ -1105,7 +1105,7 @@ namespace burnhope
             std::shared_ptr<BurnhopeTexture> diffuseTexture =
                 BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/diffuse3.bhtex");
 
-            // А вот нормали и всё остальное загружаем через новую функцию!
+            
             std::shared_ptr<BurnhopeTexture> normalTexture =
                 BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/normal3.bhtex");
                 
@@ -1165,19 +1165,19 @@ namespace burnhope
             registry.emplace<TagComponent>(sunEntity, "Sun");
 
             auto& sunTransform = registry.emplace<TransformComponent>(sunEntity);
-            sunTransform.transform.rotation = glm::vec3(-45.0f, 30.0f, 0.0f); // угол падения
+            sunTransform.transform.rotation = glm::vec3(-45.0f, 30.0f, 0.0f); 
 
             auto& sunLight = registry.emplace<LightComponent>(sunEntity);
             sunLight.light.enable = true;
             sunLight.light.type = LightType::Directional;
-            sunLight.light.color = glm::vec3(1.0f, 0.95f, 0.8f); // тёплый белый
+            sunLight.light.color = glm::vec3(1.0f, 0.95f, 0.8f); 
             sunLight.light.intensity = 50.0f;
             sunLight.light.castShadows = true;
             sunLight.light.mobility = LightMobility::Movable;
 
-            // ================================================
-            // POINT LIGHT (Лампочка)
-            // ================================================
+            
+            
+            
             auto pointEntity = registry.create();
             registry.emplace<TagComponent>(pointEntity, "PointLight_1");
 
@@ -1187,12 +1187,12 @@ namespace burnhope
             auto& ptLight = registry.emplace<LightComponent>(pointEntity);
             ptLight.light.enable = true;
             ptLight.light.type = LightType::Point;
-            ptLight.light.color = glm::vec3(1.0f, 0.4f, 0.1f); // оранжевый
+            ptLight.light.color = glm::vec3(1.0f, 0.4f, 0.1f); 
             ptLight.light.intensity = 20.0f;
             ptLight.light.radius = 500.0f;
-            ptLight.light.castShadows = true; // тени атласа пока без рендера геометрии
+            ptLight.light.castShadows = true; 
             ptLight.light.mobility = LightMobility::Movable;
 
 
         }
-    } // namespace burnhope
+    } 

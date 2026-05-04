@@ -1,4 +1,4 @@
-// GTAOSystem.cpp
+
 #include "GTAOSystem.hpp"
 #include <stdexcept>
 #include <fstream>
@@ -15,7 +15,7 @@ GTAOSystem::GTAOSystem(BurnhopeDevice& device, const std::vector<VkDescriptorSet
         throw std::runtime_error("Failed to create GTAO pipeline layout!");
     }
 
-    // Загрузка шейдера (сделай как в CullingSystem)
+    
     std::ifstream file("shaders/gtao.comp.spv", std::ios::binary);
     std::vector<char> code((std::istreambuf_iterator<char>(file)), {});
     VkShaderModuleCreateInfo shaderInfo{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
@@ -43,7 +43,7 @@ GTAOSystem::~GTAOSystem() {
 void GTAOSystem::compute(VkCommandBuffer cmd, VkDescriptorSet globalSet, VkDescriptorSet gtaoSet, uint32_t width, uint32_t height) {
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
     
-    // Биндим оба сета!
+    
     VkDescriptorSet sets[] = { globalSet, gtaoSet };
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 2, sets, 0, nullptr);
 

@@ -18,14 +18,14 @@ ShadowRenderSystem::~ShadowRenderSystem() {
 }
 
 void ShadowRenderSystem::createPipelineLayout(VkDescriptorSetLayout objectSetLayout) {
-    // Push constant: только lightSpaceMatrix (64 байта)
+    
     VkPushConstantRange pushRange{};
     pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     pushRange.offset     = 0;
     pushRange.size       = sizeof(ShadowPushConstant);
 
-    // Set 0: globalUbo (нужен для доступа к objectBuffer если он там)
-    // Set 1: objectStorageSet (objectBuffer с modelMatrix)
+    
+    
     std::vector<VkDescriptorSetLayout> layouts = {
         objectSetLayout
     };
@@ -45,20 +45,20 @@ void ShadowRenderSystem::createPipeline(VkRenderPass renderPass) {
     PipelineConfigInfo config{};
     BurnhopePipeline::defaultPipelineConfigInfo(config);
 
-    // Shadow pipeline: только depth, без цвета
+    
     config.renderPass     = renderPass;
     config.pipelineLayout = pipelineLayout;
 
-    // Нет color attachments
+    
     config.colorBlendInfo.attachmentCount = 0;
     config.colorBlendInfo.pAttachments    = nullptr;
 
-    // Depth bias для борьбы с shadow acne
+    
     config.rasterizationInfo.depthBiasEnable         = VK_TRUE;
     config.rasterizationInfo.depthBiasConstantFactor = 1.25f;
     config.rasterizationInfo.depthBiasSlopeFactor    = 1.75f;
 
-    // Culling: front face culling убирает peter-panning
+    
     config.rasterizationInfo.cullMode = VK_CULL_MODE_FRONT_BIT;
 
     pipeline = std::make_unique<BurnhopePipeline>(
@@ -88,21 +88,21 @@ void ShadowRenderSystem::renderShadow(
     auto view = registry.view<TransformComponent, MeshComponent>();
     uint32_t instanceIndex = 0;
 
-    // Проходим по моделям (как в G-Buffer)
+    
     for (auto [entity, transformComp, meshComp] : view.each()) {
         if (!meshComp.model || !meshComp.isVisible) continue;
 
-        // САМОЕ ГЛАВНОЕ: Биндим вершины и индексы для текущей модели!
+        
         meshComp.model->bind(commandBuffer);
 
         const auto& subMeshes = meshComp.model->getSubMeshes();
         uint32_t subMeshCount = static_cast<uint32_t>(subMeshes.size());
 
-        // Рисуем все кластеры ЭТОЙ модели за один вызов
+        
         vkCmdDrawIndexedIndirect(
             commandBuffer,
             cullingSystem.getDrawCommandBuffer(),
-            instanceIndex * sizeof(VkDrawIndexedIndirectCommand), // Сдвиг для нужных команд
+            instanceIndex * sizeof(VkDrawIndexedIndirectCommand), 
             subMeshCount,
             sizeof(VkDrawIndexedIndirectCommand));
 
@@ -110,4 +110,4 @@ void ShadowRenderSystem::renderShadow(
     }
 }
 
-} // namespace burnhope
+} 

@@ -2,7 +2,7 @@
 
 #include "Window.hpp"
 
-// std lib headers
+
 #include <string>
 #include <vector>
 
@@ -33,7 +33,7 @@ class BurnhopeDevice {
   BurnhopeDevice(BurnhopeWindow &window);
   ~BurnhopeDevice();
 
-  // Not copyable or movable
+  
   BurnhopeDevice(const BurnhopeDevice &) = delete;
   BurnhopeDevice &operator=(const BurnhopeDevice &) = delete;
   BurnhopeDevice(BurnhopeDevice &&) = delete;
@@ -45,11 +45,11 @@ class BurnhopeDevice {
   VkQueue graphicsQueue() { return graphicsQueue_; }
   VkQueue presentQueue() { return presentQueue_; }
 
-  // === ДОБАВЬ ЭТИ ТРИ СТРОЧКИ ДЛЯ IMGUI ===
+  
   VkInstance getInstance() { return instance; }
   VkPhysicalDevice getPhysicalDevice() { return physicalDevice; }
   uint32_t getGraphicsQueueFamily() { return findPhysicalQueueFamilies().graphicsFamily; }
-  // ========================================
+  
 
   SwapChainSupportDetails getSwapChainSupport() { return querySwapChainSupport(physicalDevice); }
   uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
@@ -57,7 +57,7 @@ class BurnhopeDevice {
   VkFormat findSupportedFormat(
       const std::vector<VkFormat> &candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
 
-  // Buffer Helper Functions
+  
   void createBuffer(
       VkDeviceSize size,
       VkBufferUsageFlags usage,
@@ -94,7 +94,7 @@ class BurnhopeDevice {
   void createLogicalDevice();
   void createCommandPool();
 
-  // helper functions
+  
   bool isDeviceSuitable(VkPhysicalDevice device);
   std::vector<const char *> getRequiredExtensions();
   bool checkValidationLayerSupport();
@@ -119,4 +119,4 @@ class BurnhopeDevice {
   const std::vector<const char *> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 };
 
-}  // namespace burnhope
+}  

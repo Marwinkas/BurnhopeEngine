@@ -12,7 +12,7 @@ namespace burnhope {
         int ID;
         glm::vec2 uvScale = glm::vec2(1.0f, 1.0f);
 
-        // Умные указатели на текстуры Vulkan
+        
         std::shared_ptr<BurnhopeTexture> albedoMap = nullptr;
         std::shared_ptr<BurnhopeTexture> normalMap = nullptr;
         std::shared_ptr<BurnhopeTexture> heightMap = nullptr;
@@ -32,8 +32,8 @@ namespace burnhope {
             ID = MaterialGlobalID++;
         }
 
-        // В будущем сюда добавим твой TextureStreamer!
-        // Сейчас просто принимаем уже загруженные текстуры из движка
+        
+        
         void setAlbedo(std::shared_ptr<BurnhopeTexture> tex) {
             albedoMap = tex;
             hasAlbedo = (tex != nullptr);
@@ -62,8 +62,8 @@ namespace burnhope {
             heightMap = tex;
             hasHeight = (tex != nullptr);
         }
-        // Метод для безопасного получения текстуры (защита от краша Vulkan)
-        // Если текстуры нет, отдаем дефолтную (которую мы заранее создадим в движке)
+        
+        
         std::shared_ptr<BurnhopeTexture> getAlbedoSafe(std::shared_ptr<BurnhopeTexture> defaultWhite) {
             return hasAlbedo ? albedoMap : defaultWhite;
         }
@@ -73,4 +73,4 @@ namespace burnhope {
         }
     };
 
-} // namespace burnhope
+} 

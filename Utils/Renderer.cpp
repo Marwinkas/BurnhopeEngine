@@ -1,6 +1,6 @@
 ﻿#include "Renderer.hpp"
 
-// std
+
 #include <array>
 #include <cassert>
 #include <stdexcept>
@@ -165,4 +165,4 @@ void BurnhopeRenderer::endSwapChainRenderPass(VkCommandBuffer commandBuffer) {
   vkCmdEndRenderPass(commandBuffer);
 }
 
-}  // namespace burnhope
+}  

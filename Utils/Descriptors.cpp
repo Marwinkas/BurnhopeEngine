@@ -1,12 +1,12 @@
 ﻿#include "Descriptors.hpp"
 
-// std
+
 #include <cassert>
 #include <stdexcept>
 
 namespace burnhope {
 
-// *************** Descriptor Set Layout Builder *********************
+
 
 BurnhopeDescriptorSetLayout::Builder &BurnhopeDescriptorSetLayout::Builder::addBinding(
     uint32_t binding,
@@ -27,7 +27,7 @@ std::unique_ptr<BurnhopeDescriptorSetLayout> BurnhopeDescriptorSetLayout::Builde
   return std::make_unique<BurnhopeDescriptorSetLayout>(lveDevice, bindings);
 }
 
-// *************** Descriptor Set Layout *********************
+
 
 BurnhopeDescriptorSetLayout::BurnhopeDescriptorSetLayout(
     BurnhopeDevice &lveDevice, std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings)
@@ -55,7 +55,7 @@ BurnhopeDescriptorSetLayout::~BurnhopeDescriptorSetLayout() {
   vkDestroyDescriptorSetLayout(lveDevice.device(), descriptorSetLayout, nullptr);
 }
 
-// *************** Descriptor Pool Builder *********************
+
 
 BurnhopeDescriptorPool::Builder &BurnhopeDescriptorPool::Builder::addPoolSize(
     VkDescriptorType descriptorType, uint32_t count) {
@@ -77,7 +77,7 @@ std::unique_ptr<BurnhopeDescriptorPool> BurnhopeDescriptorPool::Builder::build()
   return std::make_unique<BurnhopeDescriptorPool>(lveDevice, maxSets, poolFlags, poolSizes);
 }
 
-// *************** Descriptor Pool *********************
+
 
 BurnhopeDescriptorPool::BurnhopeDescriptorPool(
     BurnhopeDevice &lveDevice,
@@ -110,8 +110,8 @@ bool BurnhopeDescriptorPool::allocateDescriptor(
   allocInfo.pSetLayouts = &descriptorSetLayout;
   allocInfo.descriptorSetCount = 1;
 
-  // Might want to create a "DescriptorPoolManager" class that handles this case, and builds
-  // a new pool whenever an old pool fills up. But this is beyond our current scope
+  
+  
   if (vkAllocateDescriptorSets(lveDevice.device(), &allocInfo, &descriptor) != VK_SUCCESS) {
     return false;
   }
@@ -130,7 +130,7 @@ void BurnhopeDescriptorPool::resetPool() {
   vkResetDescriptorPool(lveDevice.device(), descriptorPool, 0);
 }
 
-// *************** Descriptor Writer *********************
+
 
 BurnhopeDescriptorWriter::BurnhopeDescriptorWriter(BurnhopeDescriptorSetLayout &setLayout, BurnhopeDescriptorPool &pool)
     : setLayout{setLayout}, pool{pool} {}
@@ -195,8 +195,8 @@ BurnhopeDescriptorWriter& BurnhopeDescriptorWriter::writeImageArray(
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     write.descriptorType = bindingDescription.descriptorType;
     write.dstBinding = binding;
-    write.pImageInfo = imageInfos.data(); // Передаем указатель на массив
-    write.descriptorCount = static_cast<uint32_t>(imageInfos.size()); // Указываем количество
+    write.pImageInfo = imageInfos.data(); 
+    write.descriptorCount = static_cast<uint32_t>(imageInfos.size()); 
 
     writes.push_back(write);
     return *this;
@@ -208,4 +208,4 @@ void BurnhopeDescriptorWriter::overwrite(VkDescriptorSet &set) {
   vkUpdateDescriptorSets(pool.lveDevice.device(), writes.size(), writes.data(), 0, nullptr);
 }
 
-}  // namespace burnhope
+}  

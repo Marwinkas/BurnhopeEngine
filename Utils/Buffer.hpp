@@ -56,4 +56,4 @@ class BurnhopeBuffer {
   VkMemoryPropertyFlags memoryPropertyFlags;
 };
 
-}  // namespace burnhope
+}  

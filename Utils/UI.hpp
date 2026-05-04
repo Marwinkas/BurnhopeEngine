@@ -8,7 +8,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <vulkan/vulkan.h>
 #include "imgui_impl_vulkan.h"
-#include "Device.hpp" // Чтобы иметь доступ к Vulkan
+#include "Device.hpp" 
 #include <vector>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -16,16 +16,16 @@
 #include "imgui.h"
 #include "imgui_internal.h" 
 #include "ImGuizmo.h"
-#include "Components.hpp" // НАШ НОВЫЙ ФАЙЛ С КОМПОНЕНТАМИ!
+#include "Components.hpp" 
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 
 #ifndef _WIN32
-    // Исправляем MAX_PATH для Linux
+    
     #define MAX_PATH 4096 
     
-    // Правильная перегрузка strcpy_s через шаблоны (как в Windows)
+    
     template<size_t size>
     inline void strcpy_s(char (&dest)[size], const char* src) {
         strncpy(dest, src, size - 1);
@@ -36,8 +36,8 @@
         dest[size - 1] = '\0';
     }
     
-    // Заглушка для Windows-функции GetModuleFileNameA
-    #define GetModuleFileNameA(unused, buf, size) // на Linux это не сработает здесь
+    
+    #define GetModuleFileNameA(unused, buf, size) 
 #endif
 #include <unordered_map>
 #include <fstream>
@@ -81,7 +81,7 @@ public:
     bool showProperties = true; bool showContentBrowser = true;
     bool resetLayout = false; bool showAboutModal = false;
     BurnhopeDevice *m_device;
-    // --- СИСТЕМА СОХРАНЕНИЯ СОСТОЯНИЙ (ДЛЯ ENTT) ---
+    
     struct SceneSnapshot {
         std::shared_ptr<entt::registry> regCopy;
         entt::entity selectedEntity;
@@ -90,12 +90,12 @@ public:
     std::vector<SceneSnapshot> redoStack;
     bool wasUsingGizmo = false;
 
-    // Хелпер для полного копирования реестра (нужен для Undo/Redo)
+    
     void CopyRegistry(entt::registry& src, entt::registry& dst) {
         dst.clear();
-        // Используем безопасный обход по TagComponent
+        
         src.view<TagComponent>().each([&](entt::entity entity, TagComponent& tag) {
-            entt::entity newEnt = dst.create(entity); // Создаем с тем же ID
+            entt::entity newEnt = dst.create(entity); 
             dst.emplace<TagComponent>(newEnt, tag);
             if (src.all_of<TransformComponent>(entity)) dst.emplace<TransformComponent>(newEnt, src.get<TransformComponent>(entity));
             if (src.all_of<MeshComponent>(entity)) dst.emplace<MeshComponent>(newEnt, src.get<MeshComponent>(entity));
@@ -147,7 +147,7 @@ public:
         }
     }
 
-    // --- ИЕРАРХИЯ И УДАЛЕНИЕ ---
+    
     entt::entity CloneHierarchy(entt::registry& registry, entt::entity source, entt::entity newParent) {
         entt::entity copy = registry.create();
 
@@ -175,7 +175,7 @@ public:
 
     void DeleteEntityRecursive(entt::registry& registry, entt::entity target) {
         if (registry.all_of<HierarchyComponent>(target)) {
-            // Копируем массив детей, так как мы будем их удалять
+            
             auto children = registry.get<HierarchyComponent>(target).children;
             for (entt::entity child : children) {
                 DeleteEntityRecursive(registry, child);
@@ -207,7 +207,7 @@ public:
         return false;
     }
 
-    // --- ПОСТ ПРОЦЕССИНГ ---
+    
     struct PostProcessSettings {
         bool enableSSAO = true; float ssaoRadius = 0.5f; float ssaoBias = 0.025f; float ssaoIntensity = 2.0f; float ssaoPower = 2.0f;
         bool enableSSGI = true; int ssgiRayCount = 8; float ssgiStepSize = 0.4f; float ssgiThickness = 0.5f;
@@ -282,7 +282,7 @@ public:
 
         SetupBurnhopeTheme();
 
-        // Пул дескрипторов (взял расширенный вариант, чтобы точно хватило на все текстуры)
+        
         VkDescriptorPoolSize pool_sizes[] = {
             { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
             { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
@@ -317,24 +317,24 @@ public:
         init_info.MinImageCount = 2;
         init_info.ImageCount = 3;
 
-        // Теперь настройки рендеринга живут здесь:
+        
         init_info.PipelineInfoMain.RenderPass = renderPass;
         init_info.PipelineInfoMain.Subpass = 0;
         init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
-        init_info.UseDynamicRendering = false; // или true, если нужно
+        init_info.UseDynamicRendering = false; 
 
-        // Вызываем Init с одним аргументом, как требует новая версия!
+        
         ImGui_ImplVulkan_Init(&init_info);
 
-        // Загружаем шрифты
+        
 
         projectDirectory = projectPath; currentDirectory = projectPath; ExeDirectory = exePath;
         dirHistory.push_back(currentDirectory); dirHistoryIndex = 0;
         LoadPostProcessSettings();
     }
 
-    // --- МЕЛКИЕ ХЕЛПЕРЫ ДЛЯ ФАЙЛОВ ---
+    
     std::string TruncateText(const std::string& text, float maxWidth) {
         if (ImGui::CalcTextSize(text.c_str()).x <= maxWidth) return text;
         std::string res = text;
@@ -352,11 +352,11 @@ public:
         return "File";
     }
     void MoveToRecycleBin(const std::string& path) {
-        // Вместо SHFILEOPSTRUCTA используем стандарт C++
+        
         try {
             std::filesystem::remove_all(path); 
         } catch (...) {
-            // Ошибка удаления
+            
         }
     }
     bool IsSelected(const std::string& path) { return std::find(selectedAssets.begin(), selectedAssets.end(), path) != selectedAssets.end(); }
@@ -415,7 +415,7 @@ public:
 
 
 
-    // --- ОТРИСОВКА ОКНА: OUTLINER ---
+    
     void DrawOutlinerNode(entt::registry& registry, entt::entity entity) {
         if (!registry.valid(entity)) return;
         auto& tag = registry.get<TagComponent>(entity);
@@ -489,7 +489,7 @@ public:
 
         if (nodeOpen) {
             if (hc) {
-                // Копия, чтобы безопасно итерироваться, если массив изменится
+                
                 auto children = hc->children;
                 for (entt::entity child : children) DrawOutlinerNode(registry, child);
             }
@@ -631,8 +631,8 @@ public:
         }
         ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
-        // ВАЖНО: Тебе нужно будет обновить Serializer, чтобы он читал из EnTT, а не из вектора!
-        // Пока можно просто выводить текст или закомментить функцию сохранения, пока не перепишем Serializer.
+        
+        
         if (ImGui::Button("💾 SAVE SCENE", ImVec2(-1, 40))) { std::cout << "Need to update Serializer for EnTT!\n"; }
         ImGui::End();
     }
@@ -752,8 +752,8 @@ public:
             for (auto& entry : fs::directory_iterator(currentDirectory)) {
                 items.push_back(entry);
 
-                // --- АВТО-КОНВЕРТАЦИЯ ПРИ ОБНАРУЖЕНИИ ---
-                // --- АВТО-КОНВЕРТАЦИЯ ПРИ ОБНАРУЖЕНИИ ---
+                
+                
                 if (entry.is_regular_file()) {
                     std::string ext = entry.path().extension().string();
                     if (ext == ".fbx" || ext == ".obj") {
@@ -1074,8 +1074,8 @@ void SavePostProcessSettings() {
         ImGui::PushID(label);
         ImGui::Text("%s", label);
 
-        // Так как .bhtex - это сжатый бинарник видеокарты, stb_image не сможет сделать из него миниатюру.
-        // Поэтому мы просто показываем красивую иконку текстуры.
+        
+        
 
             ImGui::Button("NO TEX", ImVec2(64, 64));
 
@@ -1093,7 +1093,7 @@ void SavePostProcessSettings() {
                 if (entry.is_regular_file()) {
                     std::string ext = entry.path().extension().string();
 
-                    // --- ТЕПЕРЬ ИЩЕМ ТОЛЬКО .bhtex ---
+                    
                     if (ext == ".bhtex") {
                         std::string relPath = fs::relative(entry.path(), projectDirectory).string();
                         std::replace(relPath.begin(), relPath.end(), '\\', '/');
@@ -1156,7 +1156,7 @@ void SavePostProcessSettings() {
     }
 
     void Draw(BurnhopeWindow& window, Camera& camera, entt::registry& registry, VkCommandBuffer commandBuffer) {
-        ImGui_ImplVulkan_NewFrame(); // <-- VULKAN
+        ImGui_ImplVulkan_NewFrame(); 
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         DrawMainMenuBar(registry);
@@ -1173,7 +1173,7 @@ void SavePostProcessSettings() {
                 if (parent != entt::null) registry.get<HierarchyComponent>(parent).children.push_back(newEnt);
                 selectedEntity = newEnt;
             }
-            // Копирование (Clipboard) для ECS сделать сложнее, пока оставляем пустое место
+            
         }
 
         ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -1210,7 +1210,7 @@ void SavePostProcessSettings() {
         glm::mat4 gizmoProj = proj;
         gizmoProj[1][1] *= -1.0f;
 
-        // --- МЫШКА (ЛУЧ) ---
+        
         if (ImGui::IsMouseClicked(0) && !ImGui::IsAnyItemHovered() && !ImGuizmo::IsOver()) {
             glm::vec3 rayOrigin = camera.Position; glm::vec3 rayDir = GetMouseRay(window, camera);
             float closestT = 1000.0f; entt::entity hitIndex = entt::null;
@@ -1232,7 +1232,7 @@ void SavePostProcessSettings() {
         if (selectedEntity != entt::null && registry.valid(selectedEntity) && registry.all_of<TransformComponent>(selectedEntity)) {
             auto& tComp = registry.get<TransformComponent>(selectedEntity);
 
-            // 1. Собираем АКТУАЛЬНУЮ локальную матрицу каждый кадр
+            
             glm::mat4 localMatrix;
             ImGuizmo::RecomposeMatrixFromComponents(
                 glm::value_ptr(tComp.transform.position),
@@ -1241,7 +1241,7 @@ void SavePostProcessSettings() {
                 glm::value_ptr(localMatrix)
             );
 
-            // 2. Если есть родитель - переводим в МИРОВЫЕ координаты (Гизмо работает только с миром)
+            
             glm::mat4 worldMatrix = localMatrix;
             glm::mat4 parentWorldMatrix = glm::mat4(1.0f);
 
@@ -1253,21 +1253,21 @@ void SavePostProcessSettings() {
                 }
             }
 
-            // 3. Отслеживаем начало перетаскивания для Undo/Redo
+            
             if (ImGuizmo::IsUsing() && !wasUsingGizmo) SaveState(registry);
             wasUsingGizmo = ImGuizmo::IsUsing();
 
-            // 4. РИСУЕМ САМ ГИЗМО
+            
             ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(gizmoProj), currentGizmoOperation, currentGizmoMode, glm::value_ptr(worldMatrix));
 
-            // 5. Если мы потянули за стрелочку - сохраняем новые координаты обратно
+            
             if (ImGuizmo::IsUsing()) {
 
 
-                // Очищаем мировую матрицу от родительской, чтобы получить новые локальные координаты
+                
                 glm::mat4 newLocalMatrix = glm::inverse(parentWorldMatrix) * worldMatrix;
 
-                // Записываем прямо в TransformComponent!
+                
                 ImGuizmo::DecomposeMatrixToComponents(
                     glm::value_ptr(newLocalMatrix),
                     glm::value_ptr(tComp.transform.position),
@@ -1285,12 +1285,12 @@ void SavePostProcessSettings() {
         DrawSceneInspector(registry);
         DrawContentBrowser();
         DrawPropertiesWindow();
-        // Вызов твоих старых методов, которые я не стал сюда переписывать целиком, чтобы не было ошибки лимита символов
-        // Вставь сюда свой код DrawContentBrowser() и DrawPropertiesWindow() из старого файла
-        // Я оставил в классе прототипы функций, просто скопируй тела этих двух функций из старого UI.h!
+        
+        
+        
 
         ImGui::Render();
-        // ТЕПЕРЬ ПЕРЕДАЕМ БУФЕР КОМАНД В ФУНКЦИЮ ОТРИСОВКИ!
+        
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
     }
 };

@@ -82,7 +82,7 @@ const vec2 poissonDisk[16] = vec2[](
     vec2(0.19984126, 0.78641367), vec2(0.14383161, -0.14100790)
 );
 
-// --- PBR Функции ---
+
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
     float a = roughness * roughness;
     float a2 = a * a;
@@ -113,21 +113,21 @@ vec3 CalculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metallic, float rou
     float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001;
     vec3 specular = numerator / denominator;
     
-    // МАГИЯ ВЫСОТЫ: Глубокие трещины (cavity) поглощают блики!
+    
     return (kD * albedo / 3.141592 + specular * cavity) * radiance * max(dot(N, L), 0.0);
 }
 
-// --- ТЕНИ АТЛАСА ---
+
 float CalculatePCSS_Atlas(vec2 atlasUV, vec2 tileMin, vec2 tileMax, float currentDepth, float bias, mat2 rot) {
     vec2 texelSize = vec2(1.0 / atlasResolution);
 
-    // Вычисляем расстояние до краев тайла в пикселях
+    
     float distToEdgeX = min(atlasUV.x - tileMin.x, tileMax.x - atlasUV.x) / texelSize.x;
     float distToEdgeY = min(atlasUV.y - tileMin.y, tileMax.y - atlasUV.y) / texelSize.y;
-    // Радиус никогда не пересечет границу тайла!
+    
     float maxRadius = max(min(distToEdgeX, distToEdgeY) - 1.0, 1.0); 
 
-    // Ограничиваем радиус поиска блокеров
+    
     float searchRadius = min(ubo.lightSize * 2.0, maxRadius); 
     int blockers = 0;
     float avgBlockerDepth = 0.0;
@@ -152,7 +152,7 @@ float CalculatePCSS_Atlas(vec2 atlasUV, vec2 tileMin, vec2 tileMax, float curren
 
     float distanceToBlocker = max(currentDepth - avgBlockerDepth, 0.0);
     float penumbra = distanceToBlocker * 300.0;
-    // Ограничиваем радиус финального размытия
+    
     float filterRadius = min(clamp(penumbra * ubo.lightSize, 0.0, 15.0), maxRadius);
 
     float shadow = 0.0;
@@ -175,9 +175,9 @@ float AtlasShadowCalculation(vec3 fragPos, vec3 N, vec3 L, Light light) {
     vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos + normalOffset, 1.0);
     
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
-    // В Vulkan Z не трогаем, он уже 0..1. Скейлим только XY.
+    
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
-    projCoords.y = 1.0 - projCoords.y; // ← добавить Y-flip для spot        
+    projCoords.y = 1.0 - projCoords.y; 
     
     if(projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0) return 0.0;
     
@@ -237,7 +237,7 @@ float PointShadowCalculation_Atlas(vec3 fragPos, vec3 N, Light light) {
 
     vec3 projCoords = fragLightSpace.xyz / fragLightSpace.w;
 
-    // Отсекаем фрагменты вне frustum грани
+    
     if (projCoords.z <= 0.0 || projCoords.z >= 1.0) return 0.0;
     if (abs(projCoords.x) > 1.0 || abs(projCoords.y) > 1.0) return 0.0;
 
@@ -279,7 +279,7 @@ float PointShadowCalculation_Atlas(vec3 fragPos, vec3 N, Light light) {
 
     return CalculatePCSS_Atlas(atlasUV, tileMin, tileMax, currentDepth, bias, rot);
 }
-// --- ТЕНИ КАСКАДОВ (СОЛНЦЕ) ---
+
 float SearchBlocker(vec3 projCoords, int layer, float zReceiver, vec2 texelSize, mat2 rot) {
     int blockers = 0;
     float avgBlockerDepth = 0.0;
@@ -310,7 +310,7 @@ float SearchBlocker(vec3 projCoords, int layer, float zReceiver, vec2 texelSize,
 float CalculateSingleCascadeShadow(vec3 fragPos, vec3 N, vec3 L, int layer, float depth) {
     float NdotL = max(dot(N, L), 0.0);
     
-    // Динамический сдвиг из твоего OpenGL-шейдера!
+    
     float offsetMultiplier = (layer == 0) ? 0.02 : (layer == 1) ? 0.05 : 
                              (layer == 2) ? 0.15 : 0.5;
     vec3 normalOffset = N * offsetMultiplier * (1.0 - NdotL);
@@ -318,7 +318,7 @@ float CalculateSingleCascadeShadow(vec3 fragPos, vec3 N, vec3 L, int layer, floa
     vec4 fragPosLightSpace = ubo.sunLightSpaceMatrices[layer] * vec4(fragPos + normalOffset, 1.0);
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     
-    // В Vulkan масштабируем только X и Y. Z уже готов.
+    
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
     
     if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0) {
@@ -369,13 +369,13 @@ float SunShadowCalculation(vec3 fragPos, vec3 N, vec3 L) {
     
     return CalculateSingleCascadeShadow(fragPos, N, L, layer, depth);
 }
-// --- КОНТАКТНЫЕ ТЕНИ (Screen Space Shadows) ---
+
 float ContactShadows(vec3 worldPos, vec3 L) {
-    int steps = 16;                // Количество шагов луча (влияет на качество и фпс)
-    float maxRayLength = 0.3;      // Максимальная длина тени в метрах (например, полметра)
+    int steps = 16;                
+    float maxRayLength = 0.3;      
     float stepSize = maxRayLength / float(steps);
     
-    // Добавляем шум (dithering), чтобы размыть "ступеньки" от малого количества шагов
+    
     float dither = fract(sin(dot(gl_GlobalInvocationID.xy, vec2(12.9898, 78.233))) * 43758.5453);
     
     vec3 rayPos = worldPos + L * stepSize * dither;
@@ -383,36 +383,36 @@ float ContactShadows(vec3 worldPos, vec3 L) {
     for (int i = 0; i < steps; i++) {
         rayPos += L * stepSize;
         
-        // Проецируем точку луча на экран (NDC координаты)
+        
         vec4 clipPos = ubo.projection * ubo.view * vec4(rayPos, 1.0);
         vec3 ndc = clipPos.xyz / clipPos.w;
         
-        // Переводим в UV (Vulkan)
+        
         vec2 sampleUV = ndc.xy * 0.5 + 0.5;
         
-        // Если луч улетел за экран — прерываем
+        
         if (sampleUV.x < 0.0 || sampleUV.x > 1.0 || sampleUV.y < 0.0 || sampleUV.y > 1.0) break;
         
-        // Читаем глубину из G-Buffer в этой точке
+        
         float sampledDepth = textureLod(gDepth, sampleUV, 0.0).r;
         
-        // В Vulkan Z идёт от 0 до 1. Если глубина экрана МЕНЬШЕ глубины луча, значит луч ЗА объектом
+        
         if (sampledDepth < ndc.z) {
-            // Восстанавливаем позицию преграды, чтобы проверить толщину
+            
             vec4 hitClip = vec4(ndc.xy, sampledDepth, 1.0);
             vec4 hitWorldRaw = ubo.invViewProj * hitClip;
             vec3 hitWorld = hitWorldRaw.xyz / hitWorldRaw.w;
             
             float thickness = length(hitWorld - rayPos);
             
-            // Если преграда тонкая (меньше 20 см), считаем это настоящей тенью.
-            // Если толстая - возможно, луч просто пролетел за горой на фоне.
+            
+            
             if (thickness < 0.2) { 
-                return 0.0; // Тень найдена!
+                return 0.0; 
             }
         }
     }
-    return 1.0; // Тени нет
+    return 1.0; 
 }
 void main() {
     ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
@@ -422,13 +422,13 @@ void main() {
     float depth = texelFetch(gDepth, pixelCoords, 0).r;
 
     if (depth >= 1.0) {
-        imageStore(outColor, pixelCoords, vec4(0.0, 0.0, 0.0, 1.0)); // Сделал фон черным, как в OpenGL
+        imageStore(outColor, pixelCoords, vec4(0.0, 0.0, 0.0, 1.0)); 
         return; 
     }
 
     vec4 normRough = texelFetch(gNormalRoughness, pixelCoords, 0);
     
-    // Защита: если нормаль пустая (например, небо без геометрии) - не считаем свет
+    
     if (length(normRough.rgb) < 0.1) {
         imageStore(outColor, pixelCoords, vec4(0.0));
         return; 
@@ -445,7 +445,7 @@ void main() {
     float height   = heightAO.r; 
     float ao       = heightAO.g; 
     float gtao = imageLoad(gtaoMap, pixelCoords).r;
-    // Vulkan NDC depth от 0 до 1, поэтому Z не трогаем (не нужно * 2.0 - 1.0 для глубины)
+    
     vec4 ndc = vec4(uv.x * 2.0 - 1.0, uv.y * 2.0 - 1.0, depth, 1.0);
     vec4 worldPosRaw = ubo.invViewProj * ndc;
     vec3 crntPos = worldPosRaw.xyz / worldPosRaw.w;
@@ -456,7 +456,7 @@ void main() {
     vec3 ambient = vec3(0.03) * albedo * ao * cavity; 
     vec3 resultRadiance = vec3(0.0);
 
-    // --- КЛАСТЕРНОЕ ОСВЕЩЕНИЕ ---
+    
     vec4 viewPos = ubo.view * vec4(crntPos, 1.0);
     float zView = max(-viewPos.z, ubo.zNear + 0.001); 
     
@@ -472,7 +472,7 @@ void main() {
     uint offset = lightGrid[clusterIdx].offset;
     uint lightsInCluster = lightGrid[clusterIdx].count;
     
-    // ИСПРАВЛЕНИЕ: Теперь цикл работает по ИНДЕКСАМ КЛАСТЕРА, а не по всем активным источникам!
+    
     for (uint i = 0; i < lightBlock.activeLightsCount; ++i) { 
         uint lightIndex = i;
         PointLightData rawLight = lightBlock.lights[lightIndex];
@@ -493,10 +493,10 @@ void main() {
         vec3 L = vec3(0.0);
         float attenuation = 1.0;
         
-        if (light.type == 0) { // СОЛНЦЕ
+        if (light.type == 0) { 
             L = normalize(-light.direction);
         }
-        else if (light.type == 1) { // POINT
+        else if (light.type == 1) { 
             L = normalize(light.position - crntPos);
             float dist = length(light.position - crntPos);
             float distSq = dist * dist;
@@ -504,7 +504,7 @@ void main() {
             float falloff = clamp(1.0 - pow(distSq / radiusSq, 2.0), 0.0, 1.0);
             attenuation = (falloff * falloff) / (distSq + 0.0001); 
         }
-        else if (light.type == 2) { // SPOT
+        else if (light.type == 2) { 
             L = normalize(light.position - crntPos);
             float dist = length(light.position - crntPos);
             float distSq = dist * dist;
@@ -517,13 +517,13 @@ void main() {
             float spotEffect = clamp((theta - light.outerCone) / epsilon, 0.0, 1.0);
             attenuation *= spotEffect;
         }
-        else if (light.type == 4) { // SKY
+        else if (light.type == 4) { 
             float skyBlend = 0.5 * (N.y + 1.0); 
             ambient += (light.color * light.intensity * skyBlend + (light.color * 0.2) * light.intensity * (1.0 - skyBlend)) * albedo * ao * cavity;
             continue;         
         }
         
-        // ФИКС МЕРЦАНИЯ
+        
         float NdotL = dot(N, L);
         float angleFade = smoothstep(0.0, 0.05, NdotL);
         attenuation *= angleFade;
@@ -548,13 +548,13 @@ void main() {
     int debugMode = 0; 
 
     if (debugMode == 1) {
-        // Нормали от -1..1 переводим в диапазон 0..1 для цвета
+        
         imageStore(outColor, pixelCoords, vec4(N * 0.5 + 0.5, 1.0));
         return;
     } 
     else if (debugMode == 2) {
-        // Глубина обычно почти белая (близка к 1). 
-        // Возводим в степень, чтобы визуально увеличить контраст.
+        
+        
         float d = pow(depth, 50.0); 
         imageStore(outColor, pixelCoords, vec4(vec3(d), 1.0));
         return;
@@ -564,7 +564,7 @@ void main() {
         return;
     }
     else if (debugMode == 4) {
-        // Мировые координаты (делим на 10, чтобы влезло в диапазон цвета)
+        
         vec4 ndc = vec4(uv.x * 2.0 - 1.0, uv.y * 2.0 - 1.0, depth, 1.0);
         vec4 worldPosRaw = ubo.invViewProj * ndc;
         vec3 crntPos = worldPosRaw.xyz / worldPosRaw.w;
@@ -573,8 +573,8 @@ void main() {
     }
     else if (debugMode == 5) {
         vec3 gi = texture(giIrradiance, uv).rgb;
-        // Выводим только GI. Можно умножить на какое-то число, если оно слишком темное
-        // Я сказала тебе отключить прямой свет и вывести ТОЛЬКО GI!
+        
+        
         imageStore(outColor, pixelCoords, vec4(gi * 5.0, 1.0));
         return;
     }
@@ -582,9 +582,9 @@ void main() {
     
     vec3 ambientTotal = (ambient + gi * albedo * ao * cavity) * gtao;
 
-    // 4. Итоговый цвет
-    // Суммируем Ambient (непрямой свет) и resultRadiance (прямой свет от ламп)
-    // Прямой свет (resultRadiance) на AO/GTAO умножать НЕ НУЖНО, так как там уже есть тени
+    
+    
+    
     vec3 finalColor = ambientTotal + resultRadiance;
     imageStore(outColor, pixelCoords, vec4(finalColor, 1.0));
 }

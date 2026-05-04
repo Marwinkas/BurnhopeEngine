@@ -4,7 +4,7 @@
 #include "../Utils/Pipeline.hpp"
 #include "../Utils/FrameInfo.hpp"
 
-// std
+
 #include <memory>
 #include <vector>
 
@@ -12,14 +12,14 @@ namespace burnhope {
 
     class DeferredLightingSystem {
     public:
-        // Передаем массив лэйаутов для всех сетов, которые ждет шейдер (Global, GBuffer, Shadows и т.д.)
+        
         DeferredLightingSystem(BurnhopeDevice& device, const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts);
         ~DeferredLightingSystem();
 
         DeferredLightingSystem(const DeferredLightingSystem&) = delete;
         DeferredLightingSystem& operator=(const DeferredLightingSystem&) = delete;
 
-        // Метод, который запустит вычисления
+        
         void computeLighting(VkCommandBuffer commandBuffer, const std::vector<VkDescriptorSet>& descriptorSets, uint32_t width, uint32_t height);
 
     private:
@@ -31,4 +31,4 @@ namespace burnhope {
         VkPipelineLayout pipelineLayout;
     };
 
-} // namespace burnhope
+} 

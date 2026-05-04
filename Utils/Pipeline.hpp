@@ -2,7 +2,7 @@
 
 #include "Device.hpp"
 
-// std
+
 #include <string>
 #include <vector>
 
@@ -39,19 +39,19 @@ class BurnhopePipeline {
   ~BurnhopePipeline();
 
 
-  // В секцию public:
+  
   BurnhopePipeline(
       BurnhopeDevice& device,
       const std::string& compFilepath,
-      VkPipelineLayout pipelineLayout); // Новый конструктор для Compute
+      VkPipelineLayout pipelineLayout); 
 
-  void bindCompute(VkCommandBuffer commandBuffer); // Новый метод бинда
+  void bindCompute(VkCommandBuffer commandBuffer); 
 
-  // В секцию private:
+  
   void createComputePipeline(const std::string& compFilepath, VkPipelineLayout pipelineLayout);
 
-  VkShaderModule compShaderModule = VK_NULL_HANDLE; // Модуль шейдера
-  VkPipeline computePipeline = VK_NULL_HANDLE;      // Сам конвейер
+  VkShaderModule compShaderModule = VK_NULL_HANDLE; 
+  VkPipeline computePipeline = VK_NULL_HANDLE;      
 
 
 
@@ -81,4 +81,4 @@ class BurnhopePipeline {
   VkShaderModule vertShaderModule;
   VkShaderModule fragShaderModule;
 };
-}  // namespace burnhope
+}  

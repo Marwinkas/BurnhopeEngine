@@ -1,6 +1,6 @@
 ﻿#include "SwapChain.hpp"
 
-// std
+
 #include <array>
 #include <cstdlib>
 #include <cstring>
@@ -55,7 +55,7 @@ BurnhopeSwapChain::~BurnhopeSwapChain() {
 
   vkDestroyRenderPass(device.device(), renderPass, nullptr);
 
-  // cleanup synchronization objects
+  
   for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
       vkDestroySemaphore(device.device(), imageAvailableSemaphores[i], nullptr);
       vkDestroyFence(device.device(), inFlightFences[i], nullptr);
@@ -77,7 +77,7 @@ VkResult BurnhopeSwapChain::acquireNextImage(uint32_t *imageIndex) {
       device.device(),
       swapChain,
       std::numeric_limits<uint64_t>::max(),
-      imageAvailableSemaphores[currentFrame],  // must be a not signaled semaphore
+      imageAvailableSemaphores[currentFrame],  
       VK_NULL_HANDLE,
       imageIndex);
 
@@ -146,7 +146,7 @@ void BurnhopeSwapChain::createSwapChain() {
 
   VkSwapchainCreateInfoKHR createInfo = {};
   if (!(swapChainSupport.capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
-      // Если твоя карта вдруг не поддерживает blit в экран, мы это увидим
+      
       std::cout << "Warning: Swapchain doesn't support Transfer DST" << std::endl;
   }
   createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -168,8 +168,8 @@ void BurnhopeSwapChain::createSwapChain() {
     createInfo.pQueueFamilyIndices = queueFamilyIndices;
   } else {
     createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    createInfo.queueFamilyIndexCount = 0;      // Optional
-    createInfo.pQueueFamilyIndices = nullptr;  // Optional
+    createInfo.queueFamilyIndexCount = 0;      
+    createInfo.pQueueFamilyIndices = nullptr;  
   }
 
   createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
@@ -184,10 +184,10 @@ void BurnhopeSwapChain::createSwapChain() {
     throw std::runtime_error("failed to create swap chain!");
   }
 
-  // we only specified a minimum number of images in the swap chain, so the implementation is
-  // allowed to create a swap chain with more. That's why we'll first query the final number of
-  // images with vkGetSwapchainImagesKHR, then resize the container and finally call it again to
-  // retrieve the handles.
+  
+  
+  
+  
   vkGetSwapchainImagesKHR(device.device(), swapChain, &imageCount, nullptr);
   swapChainImages.resize(imageCount);
   vkGetSwapchainImagesKHR(device.device(), swapChain, &imageCount, swapChainImages.data());
@@ -353,12 +353,12 @@ void BurnhopeSwapChain::createDepthResources() {
 }
 
 void BurnhopeSwapChain::createSyncObjects() {
-    uint32_t imgCount = imageCount(); // У нас тут 3 картинки
+    uint32_t imgCount = imageCount(); 
 
     imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
     inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
-    // А вот семафоров завершения делаем РОВНО по количеству картинок!
+    
     renderFinishedSemaphores.resize(imgCount);
     imagesInFlight.resize(imgCount, VK_NULL_HANDLE);
 
@@ -376,7 +376,7 @@ void BurnhopeSwapChain::createSyncObjects() {
         }
     }
 
-    // Отдельный цикл для семафоров рендера
+    
     for (size_t i = 0; i < imgCount; i++) {
         if (vkCreateSemaphore(device.device(), &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS) {
             throw std::runtime_error("failed to create renderFinishedSemaphores!");
@@ -386,7 +386,7 @@ void BurnhopeSwapChain::createSyncObjects() {
 VkSurfaceFormatKHR BurnhopeSwapChain::chooseSwapSurfaceFormat(
     const std::vector<VkSurfaceFormatKHR>& availableFormats) {
     for (const auto& availableFormat : availableFormats) {
-        // МЕНЯЕМ SRGB НА UNORM ВОТ ЗДЕСЬ:
+        
         if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM &&
             availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             return availableFormat;
@@ -404,12 +404,12 @@ VkPresentModeKHR BurnhopeSwapChain::chooseSwapPresentMode(
     }
   }
 
-  // for (const auto &availablePresentMode : availablePresentModes) {
-  //   if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
-  //     std::cout << "Present mode: Immediate" << std::endl;
-  //     return availablePresentMode;
-  //   }
-  // }
+  
+  
+  
+  
+  
+  
 
   std::cout << "Present mode: V-Sync" << std::endl;
   return VK_PRESENT_MODE_FIFO_KHR;
@@ -438,4 +438,4 @@ VkFormat BurnhopeSwapChain::findDepthFormat() {
       VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 }
 
-}  // namespace burnhope
+}  

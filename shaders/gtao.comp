@@ -1,8 +1,8 @@
-// Замени самое начало шейдера gtao.comp на это:
+
 #version 450
 layout(local_size_x = 16, local_size_y = 16) in;
 
-// Set 0: Глобальная камера (передаём из FirstApp)
+
 
 layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     mat4 projection;
@@ -21,27 +21,27 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     float lightSize;
 } ubo;
 
-// Set 1: Данные для вычислений GTAO
+
 layout(set = 1, binding = 0) uniform sampler2D depthMap;
 layout(set = 1, binding = 1) uniform sampler2D normalRoughnessMap;
 layout(set = 1, binding = 2, r8) uniform writeonly image2D outGTAO;
 
-// Настройки качества (потом можно вынести в Push Constants)
-const float RADIUS = 0.5;         // Радиус поиска в мировых координатах
-const int   STEPS = 16;            // Количество шагов вдоль каждого направления
-const int   DIRECTIONS = 16;       // Количество направлений поиска (лучей)
 
-// Константы для математики
+const float RADIUS = 0.5;         
+const int   STEPS = 16;            
+const int   DIRECTIONS = 16;       
+
+
 const float PI = 3.14159265359;
 
-// Функция восстановления мировой позиции из глубины (ты уже умеешь это делать)
+
 vec3 reconstructWorldPos(vec2 uv, float depth) {
     vec4 clipSpace = vec4(uv * 2.0 - 1.0, depth, 1.0);
     vec4 worldSpace = ubo.invViewProj * clipSpace;
     return worldSpace.xyz / worldSpace.w;
 }
 
-// Псевдослучайный шум для поворота лучей, чтобы скрыть артефакты (Dithering)
+
 float interleavedGradientNoise(vec2 pixelCoord) {
     return fract(52.9829189 * fract(dot(pixelCoord, vec2(0.06711056, 0.00583715))));
 }
@@ -54,57 +54,57 @@ void main() {
 
     vec2 uv = (vec2(pixelCoord) + 0.5) / vec2(texSize);
     
-    // Читаем глубину текущего пикселя
+    
     float depth = textureLod(depthMap, uv, 0.0).r;
     
-    // Если это небо (глубина 1.0), то затенения нет
+    
     if (depth >= 1.0) {
         imageStore(outGTAO, pixelCoord, vec4(1.0));
         return;
     }
 
-    // Восстанавливаем позицию и читаем нормаль
+    
     vec3 viewPos = (ubo.view * vec4(reconstructWorldPos(uv, depth), 1.0)).xyz; 
     vec3 worldNormal = textureLod(normalRoughnessMap, uv, 0.0).rgb;
-    // Нам нужна нормаль в пространстве вида (View Space) для алгоритма
+    
     vec3 viewNormal = normalize(mat3(ubo.view) * worldNormal);
 
-    // Добавляем шум для поворота (Spatial offset)
+    
     float noise = interleavedGradientNoise(vec2(pixelCoord));
     float angleOffset = noise * PI;
 
-    // Считаем размер пикселя на экране
+    
     vec2 texelSize = 1.0 / vec2(texSize);
     
-    // Переводим радиус из мирового в экранный (приближенно)
+    
     float screenRadius = (RADIUS / -viewPos.z) * ubo.projection[1][1]; 
-    screenRadius = max(screenRadius, 2.0 * texelSize.y); // Минимум 2 пикселя
+    screenRadius = max(screenRadius, 2.0 * texelSize.y); 
 
     float visibility = 0.0;
 
-    // Главный цикл: "вращаем" линию на экране
+    
     for (int i = 0; i < DIRECTIONS; ++i) {
         float angle = angleOffset + (float(i) / float(DIRECTIONS)) * PI;
         vec2 dir = vec2(cos(angle), sin(angle));
 
-        // В GTAO мы ищем два угла: слева (h1) и справа (h2)
-        // Для упрощения базовой версии мы сделаем классическую интеграцию (Horizon Based)
+        
+        
         float maxElevation1 = -1.0; 
         float maxElevation2 = -1.0;
 
-        // Шагаем вдоль линии
+        
         for (int j = 1; j <= STEPS; ++j) {
-            float t = (float(j) - 0.5 + noise) / float(STEPS); // Сдвигаем точки шумом
+            float t = (float(j) - 0.5 + noise) / float(STEPS); 
             vec2 stepUV = dir * screenRadius * t;
 
-            // Сэмпл 1 (в одну сторону)
+            
             vec2 uv1 = uv + stepUV;
             if (uv1.x > 0.0 && uv1.x < 1.0 && uv1.y > 0.0 && uv1.y < 1.0) {
                 float d1 = textureLod(depthMap, uv1, 0.0).r;
                 vec3 p1 = (ubo.view * vec4(reconstructWorldPos(uv1, d1), 1.0)).xyz;
                 vec3 v1 = p1 - viewPos;
                 float lenV1 = length(v1);
-                // Ослабление (falloff) по расстоянию
+                
                 float weight = max(0.0, 1.0 - (lenV1 * lenV1) / (RADIUS * RADIUS));
                 if(lenV1 > 0.001) {
                     float elevation = dot(v1 / lenV1, viewNormal);
@@ -112,7 +112,7 @@ void main() {
                 }
             }
 
-            // Сэмпл 2 (в противоположную сторону)
+            
             vec2 uv2 = uv - stepUV;
             if (uv2.x > 0.0 && uv2.x < 1.0 && uv2.y > 0.0 && uv2.y < 1.0) {
                 float d2 = textureLod(depthMap, uv2, 0.0).r;
@@ -127,17 +127,17 @@ void main() {
             }
         }
         
-        // Суммируем видимость (1.0 = не затенено, 0.0 = полностью затенено)
-        // Затенение тем сильнее, чем выше "горизонт" 
+        
+        
         visibility += (1.0 - max(maxElevation1, 0.0)) * (1.0 - max(maxElevation2, 0.0));
     }
 
-    // Усредняем по количеству направлений
+    
     visibility /= float(DIRECTIONS);
 
-    // Немного усиливаем контраст
+    
     visibility = pow(visibility, 1.5);
 
-    // Пишем результат
+    
     imageStore(outGTAO, pixelCoord, vec4(visibility, visibility, visibility, 1.0));
 }

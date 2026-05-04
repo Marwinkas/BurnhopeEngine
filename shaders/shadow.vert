@@ -3,15 +3,15 @@
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 layout (location = 2) in vec2 aTex;
-layout (location = 3) in vec3 aTangent; // Возвращаем тангенс!
+layout (location = 3) in vec3 aTangent; 
 layout (location = 4) in vec3 aBitangent;
 
-// Push constant с матрицей света
+
 layout(push_constant) uniform PushConstants {
     mat4 lightSpaceMatrix;
 } push;
 
-// ObjectBuffer — для получения modelMatrix по instanceIndex
+
 struct ObjectData {
     mat4 modelMatrix;
     uint materialID;

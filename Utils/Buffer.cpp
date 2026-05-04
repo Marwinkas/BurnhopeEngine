@@ -2,12 +2,12 @@
  * Encapsulates a vulkan buffer
  *
  * Initially based off VulkanBuffer by Sascha Willems -
- * https://github.com/SaschaWillems/Vulkan/blob/master/base/VulkanBuffer.h
+ * https:
  */
 
 #include "Buffer.hpp"
 
-// std
+
 #include <cassert>
 #include <cstring>
 
@@ -204,4 +204,4 @@ VkResult BurnhopeBuffer::invalidateIndex(int index) {
   return invalidate(alignmentSize, index * alignmentSize);
 }
 
-}  // namespace burnhope
+}  

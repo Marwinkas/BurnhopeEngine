@@ -26,11 +26,11 @@ private:
 
     VkImage hiZImage = VK_NULL_HANDLE;
     VkDeviceMemory hiZMemory = VK_NULL_HANDLE;
-    VkImageView fullView = VK_NULL_HANDLE; // Для куллинга (все мипы)
+    VkImageView fullView = VK_NULL_HANDLE; 
     VkSampler hiZSampler = VK_NULL_HANDLE;
     
-    std::vector<VkImageView> mipViews;     // Для записи в каждый мип отдельно
-    std::vector<VkDescriptorSet> mipSets;  // Дескрипторы для каждого шага сжатия
+    std::vector<VkImageView> mipViews;     
+    std::vector<VkDescriptorSet> mipSets;  
     
     uint32_t mipLevels = 1;
 
@@ -39,4 +39,4 @@ private:
     VkPipeline pipeline;
 };
 
-} // namespace burnhope
+} 

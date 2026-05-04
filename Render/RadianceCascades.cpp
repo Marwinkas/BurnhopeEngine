@@ -4,7 +4,7 @@
 
 namespace burnhope {
 
-// Размер текстуры зондов каскада с учётом масштаба
+
 static int cascadeProbeX(int cascade) { return std::max(1, RCConfig::PROBE_X >> cascade); }
 static int cascadeProbeY(int cascade) { return std::max(1, RCConfig::PROBE_Y >> cascade); }
 static int cascadeProbeZ(int cascade) { return std::max(1, RCConfig::PROBE_Z >> cascade); }
@@ -49,7 +49,7 @@ void RadianceCascadesSystem::createProbeTextures() {
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_SAMPLE_COUNT_1_BIT);
 
-        // Переводим в GENERAL для compute записи
+        
         VkCommandBuffer cmd = device.beginSingleTimeCommands();
         VkImageMemoryBarrier barrier{};
         barrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -96,38 +96,38 @@ void RadianceCascadesSystem::createIrradianceTexture() {
 }
 
 void RadianceCascadesSystem::createLayouts() {
-    // Layout для probe_update: пишем в текущий каскад, читаем lighting
+    
     probeWriteLayout = BurnhopeDescriptorSetLayout::Builder(device)
-        .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,         VK_SHADER_STAGE_COMPUTE_BIT) // write probe
-        .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) // read lighting
+        .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,         VK_SHADER_STAGE_COMPUTE_BIT) 
+        .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) 
         .build();
 
-    // Layout для cascade_merge: читаем следующий каскад, пишем в текущий
+    
     mergeLayout = BurnhopeDescriptorSetLayout::Builder(device)
-        .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          VK_SHADER_STAGE_COMPUTE_BIT) // write current
-        .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,  VK_SHADER_STAGE_COMPUTE_BIT) // read next
+        .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          VK_SHADER_STAGE_COMPUTE_BIT) 
+        .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,  VK_SHADER_STAGE_COMPUTE_BIT) 
         .build();
 
-    // Layout для irradiance_sample: пишем irradiance, читаем cascade 0
+    
     sampleWriteLayout = BurnhopeDescriptorSetLayout::Builder(device)
-        .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          VK_SHADER_STAGE_COMPUTE_BIT) // write irradiance
-        .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,  VK_SHADER_STAGE_COMPUTE_BIT) // read cascade0
+        .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          VK_SHADER_STAGE_COMPUTE_BIT) 
+        .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,  VK_SHADER_STAGE_COMPUTE_BIT) 
         .build();
 }
 
 void RadianceCascadesSystem::createPipelines() {
-    // Push constants одни для всех — RCPushConstants
+    
     VkPushConstantRange pushRange{};
     pushRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pushRange.offset     = 0;
     pushRange.size       = sizeof(RCPushConstants);
 
-    // --- probe_update pipeline ---
+    
     {
         std::vector<VkDescriptorSetLayout> layouts = {
-            globalLayoutRef,                           // set 0: global UBO
-            gBufferLayoutRef,                          // set 1: gBuffer
-            probeWriteLayout->getDescriptorSetLayout() // set 2: probe write + lighting read
+            globalLayoutRef,                           
+            gBufferLayoutRef,                          
+            probeWriteLayout->getDescriptorSetLayout() 
         };
         VkPipelineLayoutCreateInfo li{};
         li.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -141,10 +141,10 @@ void RadianceCascadesSystem::createPipelines() {
             device, "shaders/probe_update.comp.spv", probeUpdatePL);
     }
 
-    // --- cascade_merge pipeline ---
+    
     {
         std::vector<VkDescriptorSetLayout> layouts = {
-            mergeLayout->getDescriptorSetLayout() // set 0: write current + read next
+            mergeLayout->getDescriptorSetLayout() 
         };
         VkPipelineLayoutCreateInfo li{};
         li.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -158,7 +158,7 @@ void RadianceCascadesSystem::createPipelines() {
             device, "shaders/cascade_merge.comp.spv", mergePL);
     }
 
-    // --- irradiance_sample pipeline ---
+    
     {
         std::vector<VkDescriptorSetLayout> layouts = {
             globalLayoutRef,
@@ -179,13 +179,13 @@ void RadianceCascadesSystem::createPipelines() {
 }
 
 void RadianceCascadesSystem::createDescriptorSets(VkImageView lightingImageView, VkSampler lightingSampler) {
-    // Lighting read descriptor info
+    
     VkDescriptorImageInfo lightInfo{};
     lightInfo.imageView   = lightingImageView;
     lightInfo.sampler     = lightingSampler;
     lightInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
-    // probe write sets (один на каскад)
+    
     for (int c = 0; c < RCConfig::CASCADE_COUNT; c++) {
         VkDescriptorImageInfo probeWriteInfo{};
         probeWriteInfo.imageView   = probeTex[c]->getImageView();
@@ -197,8 +197,8 @@ void RadianceCascadesSystem::createDescriptorSets(VkImageView lightingImageView,
             .build(probeWriteSets[c]);
     }
 
-    // merge sets: каждый каскад читает следующий
-    // каскад CASCADE_COUNT-1 читает сам себя (последний, дальше некуда)
+    
+    
     for (int c = 0; c < RCConfig::CASCADE_COUNT; c++) {
         int nextC = std::min(c + 1, RCConfig::CASCADE_COUNT - 1);
 
@@ -217,7 +217,7 @@ void RadianceCascadesSystem::createDescriptorSets(VkImageView lightingImageView,
             .build(mergeReadSets[c]);
     }
 
-    // irradiance write set
+    
     {
         VkDescriptorImageInfo irWriteInfo{};
         irWriteInfo.imageView   = irradianceTex->getImageView();
@@ -234,8 +234,8 @@ void RadianceCascadesSystem::createDescriptorSets(VkImageView lightingImageView,
             .build(irradianceWriteSet);
     }
 
-    // irradiance read set (для lighting.comp)
-    // Создаём отдельный layout с одним sampler2D
+    
+    
     auto irReadLayout = BurnhopeDescriptorSetLayout::Builder(device)
         .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
         .build();
@@ -279,9 +279,9 @@ void RadianceCascadesSystem::dispatch(
     const glm::vec3& sceneMax,
     VkExtent2D extent)
 {
-    // ========================================================
-    // PASS 1: Обновляем зонды всех каскадов (от дальнего к ближнему)
-    // ========================================================
+    
+    
+    
     probeUpdatePipeline->bindCompute(cmd);
 
     for (int c = RCConfig::CASCADE_COUNT - 1; c >= 0; c--) {
@@ -310,16 +310,16 @@ void RadianceCascadesSystem::dispatch(
 
         vkCmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
 
-        // Барьер между каскадами
+        
         insertBarrier(cmd, probeTex[c]->getImage(),
             VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
             VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
     }
 
-    // ========================================================
-    // PASS 2: Слияние каскадов (от дальнего к ближнему)
-    // ========================================================
+    
+    
+    
     mergePipeline->bindCompute(cmd);
 
     for (int c = RCConfig::CASCADE_COUNT - 2; c >= 0; c--) {
@@ -344,9 +344,9 @@ void RadianceCascadesSystem::dispatch(
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
     }
 
-    // ========================================================
-    // PASS 3: Сэмплируем irradiance для каждого пикселя
-    // ========================================================
+    
+    
+    
     samplePipeline->bindCompute(cmd);
 
     RCPushConstants push{};
@@ -377,4 +377,4 @@ void RadianceCascadesSystem::rebuildOnResize(VkExtent2D newExtent,
     createDescriptorSets(lightingImageView, lightingSampler);
 }
 
-} // namespace burnhope
+} 

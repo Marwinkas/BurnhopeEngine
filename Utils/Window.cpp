@@ -1,6 +1,6 @@
 #include "Window.hpp"
 
-// std
+
 #include <stdexcept>
 
 namespace burnhope {
@@ -37,4 +37,4 @@ void BurnhopeWindow::framebufferResizeCallback(GLFWwindow *window, int width, in
   lveWindow->height = height;
 }
 
-}  // namespace burnhope
+}  

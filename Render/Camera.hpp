@@ -18,10 +18,10 @@ public:
     glm::vec3 Orientation = glm::vec3(0.0f, 0.0f, -1.0f);
     glm::vec3 Up = glm::vec3(0.0f, 1.0f, 0.0f);
 
-    // --- ПРАВИЛЬНЫЕ ИМЕНА ПЕРЕМЕННЫХ ---
-    // Это готовые матрицы (Projection * View), которые ты обновляешь каждый кадр
+    
+    
     glm::mat4 viewProjectionMatrix = glm::mat4(1.0f);
-    glm::mat4 cleanViewProjectionMatrix = glm::mat4(1.0f); // Для TAA без тряски
+    glm::mat4 cleanViewProjectionMatrix = glm::mat4(1.0f); 
 
     double lastMouseX = 0.0, lastMouseY = 0.0;
     bool firstClick = true;
@@ -31,38 +31,38 @@ public:
     float sensitivity = 0.2f;
 
     Camera(int width, int height, glm::vec3 position);
-    // 1. МАТРИЦА ПРОЕКЦИИ (Перспектива, FOV, Near/Far)
+    
     bool IsSphereInFrustum(const glm::vec4* planes, const glm::vec3& center, float radius);
     glm::mat4 GetProjectionMatrix(float FOVdeg, float nearPlane, float farPlane) const
     {
         glm::mat4 proj = glm::perspective(glm::radians(FOVdeg), (float)width / (float)height, nearPlane, farPlane);
-        // ВОТ ЭТО КРИТИЧЕСКИ ВАЖНО ДЛЯ VULKAN!
+        
         proj[1][1] *= -1;
         return proj;
     }
     glm::mat4 GetProjectionMatrix(float FOVdeg, float nearPlane, float aspect, float farPlane) const
     {
         glm::mat4 proj = glm::perspective(glm::radians(FOVdeg), aspect, nearPlane, farPlane);
-        // ВОТ ЭТО КРИТИЧЕСКИ ВАЖНО ДЛЯ VULKAN!
+        
         proj[1][1] *= -1;
         return proj;
     }
-    // 2. МАТРИЦА ВИДА (Где стоит камера и куда смотрит)
-    // Раньше была: GetLookAtMatrix()
+    
+    
     glm::mat4 GetViewMatrix() const
     {
         return glm::lookAt(Position, Position + Orientation, Up);
     }
 
-    // 3. КОМБИНИРОВАННАЯ МАТРИЦА (Projection * View)
-    // Раньше была: GetViewMatrix() - что вызывало жуткую путаницу!
+    
+    
     glm::mat4 GetViewProjectionMatrix()
     {
         return viewProjectionMatrix;
     }
 
     void updateMatrix(float FOVdeg, float nearPlane, float farPlane);
-    void Inputs(GLFWwindow* window, float deltaTime); // Добавили deltaTime для плавной физики!
+    void Inputs(GLFWwindow* window, float deltaTime); 
 };
 }
 #endif

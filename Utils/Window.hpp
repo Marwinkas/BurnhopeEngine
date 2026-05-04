@@ -33,4 +33,4 @@ class BurnhopeWindow {
   std::string windowName;
   GLFWwindow *window;
 };
-}  // namespace burnhope
+}  

@@ -1,6 +1,6 @@
 ﻿#include "Device.hpp"
 
-// std headers
+
 #include <cstring>
 #include <iostream>
 #include <set>
@@ -8,7 +8,7 @@
 
 namespace burnhope {
 
-// local callback functions
+
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -46,7 +46,7 @@ void DestroyDebugUtilsMessengerEXT(
   }
 }
 
-// class member functions
+
 BurnhopeDevice::BurnhopeDevice(BurnhopeWindow &window) : window{window} {
   createInstance();
   setupDebugMessenger();
@@ -150,7 +150,7 @@ void BurnhopeDevice::createLogicalDevice() {
   }
 
   VkPhysicalDeviceFeatures deviceFeatures = {};
-  deviceFeatures.multiDrawIndirect = VK_TRUE;  // ← добавить
+  deviceFeatures.multiDrawIndirect = VK_TRUE;  
   deviceFeatures.samplerAnisotropy = VK_TRUE;
   VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
   indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
@@ -161,15 +161,15 @@ void BurnhopeDevice::createLogicalDevice() {
 
   VkPhysicalDeviceFeatures2 deviceFeatures2{};
   deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-  deviceFeatures2.features = deviceFeatures; // Твои старые фичи (samplerAnisotropy и т.д.)
+  deviceFeatures2.features = deviceFeatures; 
   deviceFeatures2.pNext = &indexingFeatures;
 
-  // Теперь найди VkDeviceCreateInfo createInfo = {};
-  // И прикрепи наши фичи к ней через pNext:
+  
+  
   
   VkDeviceCreateInfo createInfo = {};
   createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  createInfo.pNext = &deviceFeatures2; // <-- Передаем features2 через pNext
+  createInfo.pNext = &deviceFeatures2; 
 
   createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
   createInfo.pQueueCreateInfos = queueCreateInfos.data();
@@ -178,8 +178,8 @@ void BurnhopeDevice::createLogicalDevice() {
   createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
   createInfo.ppEnabledExtensionNames = deviceExtensions.data();
   createInfo.pNext = &indexingFeatures;
-  // might not really be necessary anymore because device specific validation layers
-  // have been deprecated
+  
+  
   if (enableValidationLayers) {
     createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
     createInfo.ppEnabledLayerNames = validationLayers.data();
@@ -238,7 +238,7 @@ void BurnhopeDevice::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreat
                            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
   createInfo.pfnUserCallback = debugCallback;
-  createInfo.pUserData = nullptr;  // Optional
+  createInfo.pUserData = nullptr;  
 }
 
 void BurnhopeDevice::setupDebugMessenger() {
@@ -485,8 +485,8 @@ void BurnhopeDevice::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDevice
   VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
   VkBufferCopy copyRegion{};
-  copyRegion.srcOffset = 0;  // Optional
-  copyRegion.dstOffset = 0;  // Optional
+  copyRegion.srcOffset = 0;  
+  copyRegion.dstOffset = 0;  
   copyRegion.size = size;
   vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
@@ -553,9 +553,9 @@ void BurnhopeDevice::transitionImageLayout(
     VkImageLayout newLayout,
     uint32_t mipLevels,
     uint32_t layerCount) {
-  // uses an image memory barrier transition image layouts and transfer queue
-  // family ownership when VK_SHARING_MODE_EXCLUSIVE is used. There is an
-  // equivalent buffer memory barrier to do this for buffers
+  
+  
+  
   VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
   VkImageMemoryBarrier barrier{};
@@ -632,4 +632,4 @@ void BurnhopeDevice::transitionImageLayout(
   endSingleTimeCommands(commandBuffer);
 }
 
-}  // namespace burnhope
+}  

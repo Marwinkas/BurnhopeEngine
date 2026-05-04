@@ -1,31 +1,31 @@
 cmake_minimum_required(VERSION 3.10)
 project(BurnhopeEngine)
 
-# --- 1. Глобальные настройки проекта ---
+
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Математика для ImGui
+
 add_definitions(-DIMGUI_DEFINE_MATH_OPERATORS)
 
-# Исправляем ошибки кодировки UTF-8 для компилятора Visual Studio (MSVC)
+
 if(MSVC)
     add_compile_options(/utf-8)
 endif()
 
-# --- 2. Поиск системных пакетов ---
+
 
 find_package(Vulkan REQUIRED)
 find_package(Threads REQUIRED)
-# GLFW обычно ищется так, если он установлен в системе, 
-# либо подключается через add_subdirectory, если он в папке Libraries
+
+
 find_package(glfw3 QUIET) 
 
-# --- 3. Настройка Assimp (максимальная очистка) ---
 
-# Выключаем всё, что тянет лишние зависимости (DirectX, GUI, тесты)
+
+
 set(ASSIMP_BUILD_ASSIMP_VIEW OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -33,26 +33,26 @@ set(ASSIMP_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
 set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
 set(ASSIMP_NO_EXPORT ON CACHE BOOL "" FORCE)
 
-# Собираем статически, чтобы не таскать .dll/.so
+
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
-# Оставляем только нужные форматы (OBJ, FBX, GLTF)
+
 set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_OBJ_IMPORTER ON CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_FBX_IMPORTER ON CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_GLTF_IMPORTER ON CACHE BOOL "" FORCE)
 
-# Принудительно используем внутренний zlib и minizip (для работы с архивами внутри FBX/GLTF)
+
 set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
 set(ASSIMP_FORCE_ZLIB ON CACHE BOOL "" FORCE)
 
-# Фикс ошибки unzip.h: явно указываем путь к папке с заголовками архиватора
+
 include_directories(Libraries/assimp/contrib/unzip)
 
-# Подключаем Assimp
+
 add_subdirectory(Libraries/assimp)
 
-# --- 4. Заголовки (Include) ---
+
 
 include_directories(
     Libraries/include
@@ -61,23 +61,23 @@ include_directories(
     Libraries/include/imgui/backends
     Libraries/include/stb
     Libraries/include/nlohmann
-    # Путь к заголовкам Assimp (публичный интерфейс)
+    
     Libraries/assimp/include
 )
 
-# --- 5. Сбор исходных файлов ---
 
-# Собираем файлы движка точечно, чтобы не захватить лишние Main.cpp из библиотек
+
+
 file(GLOB ENGINE_BASE_SOURCES 
     "${CMAKE_CURRENT_SOURCE_DIR}/Main.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/MainApp.cpp"
 )
 
-# Рекурсивно собираем только твои папки с кодом
+
 file(GLOB_RECURSE RENDER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Render/*.cpp")
 file(GLOB_RECURSE UTILS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Utils/*.cpp")
 
-# Собираем ImGui
+
 file(GLOB_RECURSE IMGUI_SOURCES 
     "Libraries/src/imgui/*.cpp"
     "Libraries/src/imguizmo/*.cpp"
@@ -85,7 +85,7 @@ file(GLOB_RECURSE IMGUI_SOURCES
     "Libraries/src/imgui/backends/imgui_impl_glfw.cpp"
 )
 
-# Объединяем всё в один список
+
 set(ALL_SOURCES 
     ${ENGINE_BASE_SOURCES} 
     ${RENDER_SOURCES} 
@@ -94,11 +94,11 @@ set(ALL_SOURCES
     "Libraries/include/glm/detail/glm.cpp"
 )
 
-# --- 6. Создание исполняемого файла ---
+
 
 add_executable(${PROJECT_NAME} ${ALL_SOURCES})
 
-# --- 7. Компиляция шейдеров в SPIR-V ---
+
 
 find_program(GLSLC_EXECUTABLE glslc)
 
@@ -124,22 +124,22 @@ endforeach()
 add_custom_target(ShadersTarget ALL DEPENDS ${SPIRV_SHADERS})
 add_dependencies(${PROJECT_NAME} ShadersTarget)
 
-# --- 8. Линковка библиотек ---
+
 
 target_link_libraries(${PROJECT_NAME} 
     glfw 
     Vulkan::Vulkan 
-    assimp           # Ссылка на цель из add_subdirectory
+    assimp           
     meshoptimizer
     Threads::Threads
-    ${CMAKE_DL_LIBS} # Для UNIX систем (dl)
-    m                # Математическая библиотека
+    ${CMAKE_DL_LIBS} 
+    m                
 )
 
-# --- 9. Копирование ресурсов (модели, текстуры, шейдеры) ---
+
 
 if(UNIX)
-    # На Linux создаем символические ссылки (экономим место)
+    
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/shaders ${CMAKE_CURRENT_BINARY_DIR}/shaders
         COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/models ${CMAKE_CURRENT_BINARY_DIR}/models
@@ -147,7 +147,7 @@ if(UNIX)
         COMMENT "Creating symlinks for assets"
     )
 else()
-    # На Windows копируем папки целиком в build/Release или build/Debug
+    
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/shaders ${CMAKE_CURRENT_BINARY_DIR}/shaders
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/models ${CMAKE_CURRENT_BINARY_DIR}/models

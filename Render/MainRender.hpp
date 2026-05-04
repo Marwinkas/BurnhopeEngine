@@ -4,22 +4,22 @@
 #include "../Utils/Pipeline.hpp"
 #include "../Utils/Descriptors.hpp"
 #include "../Utils/FrameInfo.hpp"
-#include "../Utils/Components.hpp" // Твои компоненты (Transform, Mesh)
+#include "../Utils/Components.hpp" 
 #include "CullingSystem.hpp" 
-// libs
+
 #include <entt/entt.hpp>
 #include <memory>
 #include <vector>
 
 namespace burnhope {
     struct GBuffer {
-        // 1. Normal (RGB16F) + Roughness (A)
+        
         std::unique_ptr<BurnhopeTexture> gNormalRoughness;
-        // 2. Albedo (RGBA8/16) + Metallic (A)
+        
         std::unique_ptr<BurnhopeTexture> gAlbedoMetallic;
-        // 3. Height (R) + AO (G) + Emission (B)
+        
         std::unique_ptr<BurnhopeTexture> gExtra;
-        // 4. Depth
+        
         VkImage depthImage;
         VkDeviceMemory depthImageMemory;
         VkImageView depthImageView;
@@ -43,8 +43,8 @@ namespace burnhope {
         int useTriplanar;
         float triplanarScale;
         glm::vec2 uvScale;
-        int useORM; // <--- Наш новый переключатель
-        int pad1, pad2, pad3; // Выравнивание до 16 байт (std430)
+        int useORM; 
+        int pad1, pad2, pad3; 
     };
     class GeometryRenderSystem {
     public:
@@ -56,7 +56,7 @@ namespace burnhope {
         GeometryRenderSystem& operator=(const GeometryRenderSystem&) = delete;
 
         void renderEntities(FrameInfo& frameInfo, entt::registry& registry, VkDescriptorSet storageSet, VkDescriptorSet textureSet,
-        CullingSystem& cullingSystem,   // ← добавляем
+        CullingSystem& cullingSystem,   
         uint32_t totalSubMeshCount);
 
     private:

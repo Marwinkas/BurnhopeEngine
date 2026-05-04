@@ -1,7 +1,7 @@
     #version 450
     layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
-    // Set 0: текущий каскад (запись) + следующий каскад (чтение)
+    
     layout(set = 0, binding = 0, rgba16f) uniform image2D currentCascade;
     layout(set = 0, binding = 1) uniform sampler2D nextCascade;
 
@@ -24,18 +24,18 @@
 
         vec4 near = imageLoad(currentCascade, pixel);
 
-        // Если луч попал (alpha >= 1) — дальний каскад не нужен
+        
         if (near.a >= 0.99) {
             imageStore(currentCascade, pixel, vec4(near.rgb, 1.0));
             return;
         }
 
-        // Находим соответствующий пиксель в следующем каскаде
-        // Следующий каскад вдвое меньше — билинейно сэмплируем
+        
+        
         vec2 uv = (vec2(pixel) + 0.5) / vec2(sz);
         vec4 far = texture(nextCascade, uv);
 
-        // Смешиваем: то что ближний луч не накрыл — берём из дальнего
+        
         float missFactor = 1.0 - near.a;
         vec3 merged = near.rgb + far.rgb * missFactor;
 
