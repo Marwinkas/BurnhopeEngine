@@ -1,10 +1,7 @@
     #version 450
     layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-
-    
     layout(set = 0, binding = 0, rgba16f) uniform image2D currentCascade;
     layout(set = 0, binding = 1) uniform sampler2D nextCascade;
-
     layout(push_constant) uniform RC {
         mat4  invViewProj;
         vec4  cameraPos;
@@ -16,28 +13,18 @@
         float screenWidth;
         float screenHeight;
     } rc;
-
     void main() {
         ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
         ivec2 sz = imageSize(currentCascade);
         if (pixel.x >= sz.x || pixel.y >= sz.y) return;
-
         vec4 near = imageLoad(currentCascade, pixel);
-
-        
         if (near.a >= 0.99) {
             imageStore(currentCascade, pixel, vec4(near.rgb, 1.0));
             return;
         }
-
-        
-        
         vec2 uv = (vec2(pixel) + 0.5) / vec2(sz);
         vec4 far = texture(nextCascade, uv);
-
-        
         float missFactor = 1.0 - near.a;
         vec3 merged = near.rgb + far.rgb * missFactor;
-
         imageStore(currentCascade, pixel, vec4(merged, 1.0));
     }

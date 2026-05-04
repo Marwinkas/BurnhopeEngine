@@ -8,40 +8,33 @@
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <memory>
+namespace burnhope
+{
+    struct ShadowPushConstant
+    {
+        glm::mat4 lightSpaceMatrix;
+    };
+    class ShadowRenderSystem
+    {
+    public:
+        ShadowRenderSystem(BurnhopeDevice &device,
+                           VkRenderPass shadowRenderPass,
+                           VkDescriptorSetLayout globalSetLayout);
+        ~ShadowRenderSystem();
+        ShadowRenderSystem(const ShadowRenderSystem &) = delete;
+        ShadowRenderSystem &operator=(const ShadowRenderSystem &) = delete;
+        void renderShadow(
+            VkCommandBuffer commandBuffer,
+            const glm::mat4 &lightSpaceMatrix,
+            CullingSystem &cullingSystem,
+            entt::registry &registry,
+            VkDescriptorSet objectStorageSet);
 
-namespace burnhope {
-
-
-struct ShadowPushConstant {
-    glm::mat4 lightSpaceMatrix;
-};
-
-class ShadowRenderSystem {
-public:
-    ShadowRenderSystem(BurnhopeDevice& device,
-        VkRenderPass shadowRenderPass,
-        VkDescriptorSetLayout globalSetLayout);
-    ~ShadowRenderSystem();
-
-    ShadowRenderSystem(const ShadowRenderSystem&) = delete;
-    ShadowRenderSystem& operator=(const ShadowRenderSystem&) = delete;
-
-    
-void renderShadow(
-    VkCommandBuffer commandBuffer,
-    const glm::mat4& lightSpaceMatrix,
-    CullingSystem& cullingSystem, 
-    entt::registry& registry,     
-    
-    VkDescriptorSet objectStorageSet);
-
-private:
-    void createPipelineLayout(VkDescriptorSetLayout objectSetLayout);
-    void createPipeline(VkRenderPass renderPass);
-
-    BurnhopeDevice& lveDevice;
-    std::unique_ptr<BurnhopePipeline> pipeline;
-    VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
-};
-
-} 
+    private:
+        void createPipelineLayout(VkDescriptorSetLayout objectSetLayout);
+        void createPipeline(VkRenderPass renderPass);
+        BurnhopeDevice &lveDevice;
+        std::unique_ptr<BurnhopePipeline> pipeline;
+        VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+    };
+}

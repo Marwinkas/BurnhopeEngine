@@ -1,6 +1,5 @@
 #version 450
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
-
 layout(set = 4, binding = 0, rgba16f) writeonly uniform image2D outColor;
 layout(set = 5, binding = 0) uniform sampler2D giIrradiance;
 layout(set = 0, binding = 0) uniform GlobalSceneUbo {
@@ -19,7 +18,6 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     uint gridDimZ;
     float lightSize;
 } ubo;
-
 layout(set = 1, binding = 0) uniform sampler2D gNormalRoughness;
 layout(set = 1, binding = 1) uniform sampler2D gAlbedoMetallic;
 layout(set = 1, binding = 2) uniform sampler2D gHeightAO;
@@ -28,7 +26,6 @@ layout(set = 6, binding = 2, r8) uniform readonly image2D gtaoMap;
 layout(set = 2, binding = 0) uniform sampler2DArray sunShadowMap;
 layout(set = 2, binding = 1) uniform sampler2D shadowAtlas;
 layout(set = 2, binding = 2) uniform sampler2D noiseTexture;
-
 struct PointLightData {
     vec4 posType;                
     vec4 colorInt;              
@@ -36,7 +33,6 @@ struct PointLightData {
     vec4 shadowParams;          
     mat4 lightSpaceMatrix;
 };
-
 layout(std140, set = 3, binding = 0) uniform LightBlock {
     int activeLightsCount;
     PointLightData lights[100];
@@ -44,7 +40,6 @@ layout(std140, set = 3, binding = 0) uniform LightBlock {
 struct PointFaceMatrices {
     mat4 faces[6];
 };
-
 layout(std430, set = 3, binding = 3) readonly buffer FaceMatricesBlock {
     PointFaceMatrices faceMatrices[100];
 } faceMatricesBuffer;
@@ -62,15 +57,11 @@ struct Light {
     mat4 lightSpaceMatrix;
     int lightIndex; 
 };
-
 struct LightGrid { uint offset; uint count; };
-
 layout(std430, set = 3, binding = 1) readonly buffer GridBuffer { LightGrid lightGrid[]; };
 layout(std430, set = 3, binding = 2) readonly buffer IndexBuffer { uint globalIndexList[]; };
-
 const float PI = 3.14159265359;
 const float atlasResolution = 4096.0;
-
 const vec2 poissonDisk[16] = vec2[](
     vec2(-0.94201624, -0.39906216), vec2(0.94558609, -0.76890725),
     vec2(-0.094184101, -0.92938870), vec2(0.34495938, 0.29387760),
@@ -81,8 +72,6 @@ const vec2 poissonDisk[16] = vec2[](
     vec2(-0.24188840, 0.99706507), vec2(-0.81409955, 0.91437590),
     vec2(0.19984126, 0.78641367), vec2(0.14383161, -0.14100790)
 );
-
-
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
     float a = roughness * roughness;
     float a2 = a * a;
@@ -100,7 +89,6 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
 vec3 fresnelSchlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
-
 vec3 CalculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metallic, float roughness, vec3 radiance, float cavity) {
     vec3 H = normalize(V + L);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
@@ -112,32 +100,21 @@ vec3 CalculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metallic, float rou
     vec3 numerator = NDF * G * F;
     float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001;
     vec3 specular = numerator / denominator;
-    
-    
     return (kD * albedo / 3.141592 + specular * cavity) * radiance * max(dot(N, L), 0.0);
 }
-
-
 float CalculatePCSS_Atlas(vec2 atlasUV, vec2 tileMin, vec2 tileMax, float currentDepth, float bias, mat2 rot) {
     vec2 texelSize = vec2(1.0 / atlasResolution);
-
-    
     float distToEdgeX = min(atlasUV.x - tileMin.x, tileMax.x - atlasUV.x) / texelSize.x;
     float distToEdgeY = min(atlasUV.y - tileMin.y, tileMax.y - atlasUV.y) / texelSize.y;
-    
     float maxRadius = max(min(distToEdgeX, distToEdgeY) - 1.0, 1.0); 
-
-    
     float searchRadius = min(ubo.lightSize * 2.0, maxRadius); 
     int blockers = 0;
     float avgBlockerDepth = 0.0;
-
     float centerDepth = texture(shadowAtlas, clamp(atlasUV, tileMin, tileMax)).r;
     if (centerDepth < currentDepth - bias) {
         blockers++;
         avgBlockerDepth += centerDepth;
     }
-
     for (int i = 0; i < 8; i++) {
         vec2 offset = rot * poissonDisk[i] * searchRadius * texelSize;
         float pcfDepth = texture(shadowAtlas, clamp(atlasUV + offset, tileMin, tileMax)).r;
@@ -146,84 +123,60 @@ float CalculatePCSS_Atlas(vec2 atlasUV, vec2 tileMin, vec2 tileMax, float curren
             avgBlockerDepth += pcfDepth;
         }
     }
-
     if (blockers == 0) return 0.0; 
     avgBlockerDepth /= float(blockers);
-
     float distanceToBlocker = max(currentDepth - avgBlockerDepth, 0.0);
     float penumbra = distanceToBlocker * 300.0;
-    
     float filterRadius = min(clamp(penumbra * ubo.lightSize, 0.0, 15.0), maxRadius);
-
     float shadow = 0.0;
     for (int i = 0; i < 16; ++i) {
         vec2 offset = rot * poissonDisk[i] * filterRadius * texelSize; 
         float pcfDepth = texture(shadowAtlas, clamp(atlasUV + offset, tileMin, tileMax)).r;
         shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
     }
-
     return shadow / 16.0;
 }
-
 float AtlasShadowCalculation(vec3 fragPos, vec3 N, vec3 L, Light light) {
     if (light.shadowSlot < 0) return 0.0;         
-
     float NdotL = max(dot(N, L), 0.0);
     float slope = 1.0 - NdotL;
-    
     vec3 normalOffset = N * (0.005 + 0.01 * slope);
     vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos + normalOffset, 1.0);
-    
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
-    
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
     projCoords.y = 1.0 - projCoords.y; 
-    
     if(projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0) return 0.0;
-    
     float currentDepth = projCoords.z;
     float bias = 0.00005 + 0.0002 * slope;
-    
     int encodedInt = int(light.shadowSlot);
     int realSlot   = encodedInt / 10000;
     int tileSzInt  = encodedInt % 10000; 
-
     const int minTile      = 128;
     const int atlasInUnits = int(atlasResolution) / minTile; 
-
     int pxX = (realSlot % atlasInUnits) * minTile;
     int pxY = (realSlot / atlasInUnits) * minTile;
-
     float uvScale = float(tileSzInt) / atlasResolution;
     vec2 tileMin  = vec2(float(pxX), float(pxY)) / atlasResolution;
     vec2 tileMax  = tileMin + vec2(uvScale) - vec2(1.0 / atlasResolution);
     vec2 atlasUV  = projCoords.xy * uvScale + tileMin;
-    
     vec2 noiseUV = (gl_GlobalInvocationID.xy / 256.0) + vec2(float(light.shadowSlot) * 0.137);
     float randomAngle = texture(noiseTexture, noiseUV).r * 6.2831853;
     float s = sin(randomAngle);
     float c = cos(randomAngle);
     mat2 rot = mat2(c, -s, s, c);
-    
     return CalculatePCSS_Atlas(atlasUV, tileMin, tileMax, currentDepth, bias, rot);
 }
-
 float PointShadowCalculation_Atlas(vec3 fragPos, vec3 N, Light light) {
     if (light.shadowSlot < 0) return 0.0;
-
     vec3 L_dir = normalize(light.position - fragPos);
     float NdotL = max(dot(N, L_dir), 0.0);
     float slope = 1.0 - NdotL;
-
     vec3 normalOffset = N * (0.02 + 0.05 * slope);
     vec3 offsetFragPos = fragPos + normalOffset;
-
     vec3 fragToLight = offsetFragPos - light.position;
     vec3 absVec = abs(fragToLight);
     float maxAxis = max(max(absVec.x, absVec.y), absVec.z);
-
     if (maxAxis >= light.radius) return 0.0;
-
     int face = 0;
     if (absVec.x >= absVec.y && absVec.x >= absVec.z)
         face = fragToLight.x > 0.0 ? 0 : 1;
@@ -231,182 +184,123 @@ float PointShadowCalculation_Atlas(vec3 fragPos, vec3 N, Light light) {
         face = fragToLight.y > 0.0 ? 2 : 3;
     else
         face = fragToLight.z > 0.0 ? 4 : 5;
-
     mat4 faceMat = faceMatricesBuffer.faceMatrices[light.lightIndex].faces[face];
     vec4 fragLightSpace = faceMat * vec4(offsetFragPos, 1.0);
-
     vec3 projCoords = fragLightSpace.xyz / fragLightSpace.w;
-
-    
     if (projCoords.z <= 0.0 || projCoords.z >= 1.0) return 0.0;
     if (abs(projCoords.x) > 1.0 || abs(projCoords.y) > 1.0) return 0.0;
-
     vec2 uv = projCoords.xy * 0.5 + 0.5;
-
-
     float currentDepth = projCoords.z;
-
     int encodedSlot    = light.shadowSlot;
     int realSlot       = encodedSlot / 10000;
     int tileSize       = encodedSlot % 10000;
     float uvScale      = float(tileSize) / atlasResolution;
-
     const int minTile      = 128;
     const int atlasInUnits = int(atlasResolution) / minTile;
-
     int baseX = (realSlot % atlasInUnits) * minTile;
     int baseY = (realSlot / atlasInUnits) * minTile;
-
     int faceX = baseX + face * tileSize;
     int faceY = baseY;
     if (faceX + tileSize > int(atlasResolution)) {
         faceX = faceX % int(atlasResolution);
         faceY += tileSize;
     }
-
     vec2 halfTexel = vec2(0.5 / atlasResolution);
     vec2 tileMin   = vec2(float(faceX), float(faceY)) / atlasResolution + halfTexel;
     vec2 tileMax   = tileMin + vec2(uvScale) - halfTexel * 2.0;
     vec2 atlasUV   = uv * uvScale + vec2(float(faceX), float(faceY)) / atlasResolution;
-
     float bias = 0.002 + 0.005 * slope;
-
     vec2 noiseUV     = (gl_GlobalInvocationID.xy / 256.0) + vec2(float(light.shadowSlot + face) * 0.137);
     float randomAngle = texture(noiseTexture, noiseUV).r * 6.2831853;
     float s = sin(randomAngle);
     float c = cos(randomAngle);
     mat2 rot = mat2(c, -s, s, c);
-
     return CalculatePCSS_Atlas(atlasUV, tileMin, tileMax, currentDepth, bias, rot);
 }
-
 float SearchBlocker(vec3 projCoords, int layer, float zReceiver, vec2 texelSize, mat2 rot) {
     int blockers = 0;
     float avgBlockerDepth = 0.0;
     float searchRadius = ubo.lightSize * 3.0; 
-    
     float blockerBias = 0.00001;
-
     float centerDepth = texture(sunShadowMap, vec3(projCoords.xy, float(layer))).r;
     if (centerDepth < zReceiver - blockerBias) {
         blockers++;
         avgBlockerDepth += centerDepth;
     }
-
     for (int i = 0; i < 8; i++) {
         vec2 offset = rot * poissonDisk[i] * searchRadius;
         float pcfDepth = texture(sunShadowMap, vec3(projCoords.xy + offset * texelSize, float(layer))).r;
-        
         if (pcfDepth < zReceiver - blockerBias) {
             blockers++;
             avgBlockerDepth += pcfDepth;
         }
     }
-    
     if (blockers > 0) return avgBlockerDepth / float(blockers);
     return -1.0; 
 }
-
 float CalculateSingleCascadeShadow(vec3 fragPos, vec3 N, vec3 L, int layer, float depth) {
     float NdotL = max(dot(N, L), 0.0);
-    
-    
     float offsetMultiplier = (layer == 0) ? 0.02 : (layer == 1) ? 0.05 : 
                              (layer == 2) ? 0.15 : 0.5;
     vec3 normalOffset = N * offsetMultiplier * (1.0 - NdotL);
-    
     vec4 fragPosLightSpace = ubo.sunLightSpaceMatrices[layer] * vec4(fragPos + normalOffset, 1.0);
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
-    
-    
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
-    
     if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0) {
         return 0.0;
     }
-    
     vec2 texelSize = 1.0 / vec2(textureSize(sunShadowMap, 0));
     float currentDepth = projCoords.z;
     float bias = max(0.0005 * (1.0 - NdotL), 0.0001) * (float(layer) + 1.0);
-    
     vec2 noiseUV = (gl_GlobalInvocationID.xy / 256.0) + vec2(float(layer) * 0.137);
     float randomAngle = texture(noiseTexture, noiseUV).r * 6.2831853;
     float s = sin(randomAngle); float c = cos(randomAngle);
     mat2 rot = mat2(c, -s, s, c);
-    
     float avgBlockerDepth = SearchBlocker(projCoords, layer, currentDepth, texelSize, rot);
     if (avgBlockerDepth == -1.0) return 0.0;
-    
     float distanceToBlocker = max(currentDepth - avgBlockerDepth, 0.0);
     float penumbra = distanceToBlocker * 150.0;
-    
     float minFilter = (layer == 0) ? 1.0 :
                       (layer == 1) ? 2.0 :
                       (layer == 2) ? 3.0 : 4.0;
-
     float filterRadius = max(clamp(penumbra * ubo.lightSize, 0.0, 20.0), minFilter);
-    
     float shadow = 0.0;
     for (int i = 0; i < 16; ++i) {
         vec2 offset = rot * poissonDisk[i] * filterRadius;
         float pcfDepth = texture(sunShadowMap, vec3(projCoords.xy + offset * texelSize, float(layer))).r;
         shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
     }
-    
     return shadow / 16.0;
 }
-
 float SunShadowCalculation(vec3 fragPos, vec3 N, vec3 L) {
     float depth = abs((ubo.view * vec4(fragPos, 1.0)).z);
     int layer = 3;
-    
     for(int i = 0; i < 4; i++) {
         if(depth < ubo.cascadeSplits[i] + 0.5) {
             layer = i;
             break;
         }
     }
-    
     return CalculateSingleCascadeShadow(fragPos, N, L, layer, depth);
 }
-
 float ContactShadows(vec3 worldPos, vec3 L) {
     int steps = 16;                
     float maxRayLength = 0.3;      
     float stepSize = maxRayLength / float(steps);
-    
-    
     float dither = fract(sin(dot(gl_GlobalInvocationID.xy, vec2(12.9898, 78.233))) * 43758.5453);
-    
     vec3 rayPos = worldPos + L * stepSize * dither;
-    
     for (int i = 0; i < steps; i++) {
         rayPos += L * stepSize;
-        
-        
         vec4 clipPos = ubo.projection * ubo.view * vec4(rayPos, 1.0);
         vec3 ndc = clipPos.xyz / clipPos.w;
-        
-        
         vec2 sampleUV = ndc.xy * 0.5 + 0.5;
-        
-        
         if (sampleUV.x < 0.0 || sampleUV.x > 1.0 || sampleUV.y < 0.0 || sampleUV.y > 1.0) break;
-        
-        
         float sampledDepth = textureLod(gDepth, sampleUV, 0.0).r;
-        
-        
         if (sampledDepth < ndc.z) {
-            
             vec4 hitClip = vec4(ndc.xy, sampledDepth, 1.0);
             vec4 hitWorldRaw = ubo.invViewProj * hitClip;
             vec3 hitWorld = hitWorldRaw.xyz / hitWorldRaw.w;
-            
             float thickness = length(hitWorld - rayPos);
-            
-            
-            
             if (thickness < 0.2) { 
                 return 0.0; 
             }
@@ -417,66 +311,47 @@ float ContactShadows(vec3 worldPos, vec3 L) {
 void main() {
     ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
     if (pixelCoords.x >= int(ubo.screenSize.x) || pixelCoords.y >= int(ubo.screenSize.y)) return;
-
     vec2 uv = (vec2(pixelCoords) + 0.5) / ubo.screenSize.xy;
     float depth = texelFetch(gDepth, pixelCoords, 0).r;
-
     if (depth >= 1.0) {
         imageStore(outColor, pixelCoords, vec4(0.0, 0.0, 0.0, 1.0)); 
         return; 
     }
-
     vec4 normRough = texelFetch(gNormalRoughness, pixelCoords, 0);
-    
-    
     if (length(normRough.rgb) < 0.1) {
         imageStore(outColor, pixelCoords, vec4(0.0));
         return; 
     }
-
     vec4 albMet    = texelFetch(gAlbedoMetallic, pixelCoords, 0); 
     vec4 heightAO  = texelFetch(gHeightAO, pixelCoords, 0); 
-    
     vec3 N = normalize(normRough.rgb);
     float roughness = clamp(normRough.a, 0.15, 1.0);
-
     vec3 albedo    = albMet.rgb;
     float metallic = albMet.a;
     float height   = heightAO.r; 
     float ao       = heightAO.g; 
     float gtao = imageLoad(gtaoMap, pixelCoords).r;
-    
     vec4 ndc = vec4(uv.x * 2.0 - 1.0, uv.y * 2.0 - 1.0, depth, 1.0);
     vec4 worldPosRaw = ubo.invViewProj * ndc;
     vec3 crntPos = worldPosRaw.xyz / worldPosRaw.w;
-
     vec3 V = normalize(ubo.camPos - crntPos); 
-
     float cavity = clamp(height * 1.5 + 0.2, 0.0, 1.0); 
     vec3 ambient = vec3(0.03) * albedo * ao * cavity; 
     vec3 resultRadiance = vec3(0.0);
-
-    
     vec4 viewPos = ubo.view * vec4(crntPos, 1.0);
     float zView = max(-viewPos.z, ubo.zNear + 0.001); 
-    
     uint clusterX = uint(float(pixelCoords.x) / (ubo.screenSize.x / float(ubo.gridDimX)));
     uint clusterY = uint(float(pixelCoords.y) / (ubo.screenSize.y / float(ubo.gridDimY)));
     uint clusterZ = uint(max(0.0, log(zView / ubo.zNear) * float(ubo.gridDimZ) / log(ubo.zFar / ubo.zNear)));
-    
     clusterX = clamp(clusterX, 0u, ubo.gridDimX - 1u);
     clusterY = clamp(clusterY, 0u, ubo.gridDimY - 1u);
     clusterZ = clamp(clusterZ, 0u, ubo.gridDimZ - 1u);
-
     uint clusterIdx = clusterX + clusterY * ubo.gridDimX + clusterZ * ubo.gridDimX * ubo.gridDimY;
     uint offset = lightGrid[clusterIdx].offset;
     uint lightsInCluster = lightGrid[clusterIdx].count;
-    
-    
     for (uint i = 0; i < lightBlock.activeLightsCount; ++i) { 
         uint lightIndex = i;
         PointLightData rawLight = lightBlock.lights[lightIndex];
-        
         Light light;
         light.type = int(rawLight.posType.w);
         light.position = rawLight.posType.xyz;
@@ -492,7 +367,6 @@ void main() {
         light.lightIndex  = int(i);
         vec3 L = vec3(0.0);
         float attenuation = 1.0;
-        
         if (light.type == 0) { 
             L = normalize(-light.direction);
         }
@@ -511,7 +385,6 @@ void main() {
             float radiusSq = light.radius * light.radius;
             float falloff = clamp(1.0 - pow(distSq / radiusSq, 2.0), 0.0, 1.0);
             attenuation = (falloff * falloff) / (distSq + 0.0001);
-            
             float theta = dot(L, normalize(-light.direction));
             float epsilon = light.innerCone - light.outerCone;
             float spotEffect = clamp((theta - light.outerCone) / epsilon, 0.0, 1.0);
@@ -522,39 +395,27 @@ void main() {
             ambient += (light.color * light.intensity * skyBlend + (light.color * 0.2) * light.intensity * (1.0 - skyBlend)) * albedo * ao * cavity;
             continue;         
         }
-        
-        
         float NdotL = dot(N, L);
         float angleFade = smoothstep(0.0, 0.05, NdotL);
         attenuation *= angleFade;
-        
         if (attenuation <= 0.001) continue; 
-        
         if (light.castShadows == 1) {
             if (light.type == 0)      attenuation *= (1.0 - SunShadowCalculation(crntPos, N, L));
             else if (light.type == 1) attenuation *= (1.0 - PointShadowCalculation_Atlas(crntPos, N, light));
             else if (light.type == 2) attenuation *= (1.0 - AtlasShadowCalculation(crntPos, N, L, light));
-
             if (attenuation > 0.01) {
                 attenuation *= ContactShadows(crntPos, L);
             }
         }
-
         vec3 radiance = light.color * light.intensity * attenuation;
         resultRadiance += CalculatePBR(N, V, L, albedo, metallic, roughness, radiance, cavity);
     }
-    
-
     int debugMode = 0; 
-
     if (debugMode == 1) {
-        
         imageStore(outColor, pixelCoords, vec4(N * 0.5 + 0.5, 1.0));
         return;
     } 
     else if (debugMode == 2) {
-        
-        
         float d = pow(depth, 50.0); 
         imageStore(outColor, pixelCoords, vec4(vec3(d), 1.0));
         return;
@@ -564,7 +425,6 @@ void main() {
         return;
     }
     else if (debugMode == 4) {
-        
         vec4 ndc = vec4(uv.x * 2.0 - 1.0, uv.y * 2.0 - 1.0, depth, 1.0);
         vec4 worldPosRaw = ubo.invViewProj * ndc;
         vec3 crntPos = worldPosRaw.xyz / worldPosRaw.w;
@@ -573,18 +433,11 @@ void main() {
     }
     else if (debugMode == 5) {
         vec3 gi = texture(giIrradiance, uv).rgb;
-        
-        
         imageStore(outColor, pixelCoords, vec4(gi * 5.0, 1.0));
         return;
     }
     vec3 gi = texture(giIrradiance, uv).rgb;
-    
     vec3 ambientTotal = (ambient + gi * albedo * ao * cavity) * gtao;
-
-    
-    
-    
     vec3 finalColor = ambientTotal + resultRadiance;
     imageStore(outColor, pixelCoords, vec4(finalColor, 1.0));
 }

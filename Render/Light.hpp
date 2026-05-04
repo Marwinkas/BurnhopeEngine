@@ -2,22 +2,38 @@
 #define LIGHT_CLASS_H
 #include <glm/glm.hpp>
 #include <string>
-namespace burnhope {
-    enum class LightType { Directional, Point, Spot, Rect, Sky, None };
-    enum class LightMobility { Static, Movable };
-    struct PointLightData {
+namespace burnhope
+{
+    enum class LightType
+    {
+        Directional,
+        Point,
+        Spot,
+        Rect,
+        Sky,
+        None
+    };
+    enum class LightMobility
+    {
+        Static,
+        Movable
+    };
+    struct PointLightData
+    {
         glm::vec4 posType;
         glm::vec4 colorInt;
         glm::vec4 dirRadius;
         glm::vec4 shadowParams;
         glm::mat4 lightSpaceMatrix;
     };
-    struct LightUBOBlock {
+    struct LightUBOBlock
+    {
         int activeLightsCount;
         int padding[3];
         PointLightData lights[100];
     };
-    class Light {
+    class Light
+    {
     public:
         bool enable = false;
         LightType type = LightType::Point;

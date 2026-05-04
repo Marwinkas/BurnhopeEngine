@@ -3,56 +3,51 @@
 #include <string>
 #include <vector>
 #include <functional>
-
-namespace burnhope {
-
-    
-    struct RenderPassNode {
+namespace burnhope
+{
+    struct RenderPassNode
+    {
         std::string name;
         std::vector<VkImageMemoryBarrier> barriersBefore;
         std::function<void(VkCommandBuffer)> executeFunction;
     };
-
-    class RenderGraph {
+    class RenderGraph
+    {
     public:
-        
-        void addPass(const std::string& name, 
-                     const std::vector<VkImageMemoryBarrier>& barriers, 
-                     std::function<void(VkCommandBuffer)> execute) {
+        void addPass(const std::string &name,
+                     const std::vector<VkImageMemoryBarrier> &barriers,
+                     std::function<void(VkCommandBuffer)> execute)
+        {
             passes.push_back({name, barriers, execute});
         }
-
-        
-        void execute(VkCommandBuffer commandBuffer) {
-            for (const auto& pass : passes) {
-                
-                if (!pass.barriersBefore.empty()) {
+        void execute(VkCommandBuffer commandBuffer)
+        {
+            for (const auto &pass : passes)
+            {
+                if (!pass.barriersBefore.empty())
+                {
                     vkCmdPipelineBarrier(
                         commandBuffer,
-                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 
                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                        0, 
-                        0, nullptr, 
+                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                        0,
                         0, nullptr,
-                        static_cast<uint32_t>(pass.barriersBefore.size()), 
-                        pass.barriersBefore.data()
-                    );
+                        0, nullptr,
+                        static_cast<uint32_t>(pass.barriersBefore.size()),
+                        pass.barriersBefore.data());
                 }
-
-                
-                if (pass.executeFunction) {
+                if (pass.executeFunction)
+                {
                     pass.executeFunction(commandBuffer);
                 }
             }
         }
-
-        
-        void clear() {
+        void clear()
+        {
             passes.clear();
         }
 
     private:
         std::vector<RenderPassNode> passes;
     };
-
-} 
+}

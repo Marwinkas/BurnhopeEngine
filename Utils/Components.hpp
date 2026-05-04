@@ -5,12 +5,12 @@
 #include <vector>
 #include <glm/glm.hpp>
 #include "../Render/Light.hpp"
-#include "../Render/Model.hpp" 
-#include "../Render/Material.hpp"  
-
-namespace burnhope {
-
-    class Transform {
+#include "../Render/Model.hpp"
+#include "../Render/Material.hpp"
+namespace burnhope
+{
+    class Transform
+    {
     public:
         glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f);
         glm::vec3 rotation = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -18,19 +18,18 @@ namespace burnhope {
         glm::mat4 matrix = glm::mat4(1.0f);
         bool updatematrix = true;
     };
-    struct TagComponent {
+    struct TagComponent
+    {
         std::string name = "Entity";
         std::vector<std::string> tags;
         std::vector<std::string> layers;
     };
-
-    
-    struct TransformComponent {
+    struct TransformComponent
+    {
         Transform transform;
     };
-
-    
-    struct MeshComponent {
+    struct MeshComponent
+    {
         std::string modelPath = "";
         std::vector<std::string> materialPaths;
         std::shared_ptr<BurnhopeModel> model;
@@ -39,16 +38,13 @@ namespace burnhope {
         bool isVisible = true;
         bool castShadow = true;
     };
-    struct LightComponent {
+    struct LightComponent
+    {
         Light light;
     };
-
-
-    
-    struct HierarchyComponent {
+    struct HierarchyComponent
+    {
         entt::entity parent = entt::null;
         std::vector<entt::entity> children;
     };
-
-
 }
