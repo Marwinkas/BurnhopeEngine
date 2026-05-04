@@ -11,6 +11,7 @@
 #include "Render/ShadowRender.hpp"
 #include "Render/GTAOSystem.hpp"
 #include "Render/HiZSystem.hpp"
+#include "Render/ComputeShader.hpp"
 #include <memory>
 #include <vector>
 #include <map>

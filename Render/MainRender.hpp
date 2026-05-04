@@ -5,6 +5,7 @@
 #include "../Utils/FrameInfo.hpp"
 #include "../Utils/Components.hpp"
 #include "CullingSystem.hpp"
+#include "GraphicsShader.hpp"
 #include <entt/entt.hpp>
 #include <memory>
 #include <vector>
@@ -63,5 +64,6 @@ namespace burnhope
         VkPipelineLayout pipelineLayout;
         std::unique_ptr<BurnhopeDescriptorSetLayout> renderSystemLayout;
         std::unique_ptr<BurnhopeDescriptorSetLayout> textureLayout;
+        std::unique_ptr<GraphicsShader> shader;
     };
 }

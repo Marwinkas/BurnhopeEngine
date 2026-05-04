@@ -1,6 +1,9 @@
 #pragma once
 #include "../Utils/Device.hpp"
 #include "../Utils/Pipeline.hpp"
+#include "ComputeShader.hpp"
+#include "iostream"
+#include <memory>
 namespace burnhope
 {
     class GTAOSystem
@@ -12,7 +15,6 @@ namespace burnhope
 
     private:
         BurnhopeDevice &lveDevice;
-        VkPipelineLayout pipelineLayout;
-        VkPipeline pipeline;
+        std::unique_ptr<ComputeShader> shader;
     };
 }

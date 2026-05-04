@@ -2,6 +2,7 @@
 #include "../Utils/Device.hpp"
 #include "../Utils/Buffer.hpp"
 #include "../Utils/Descriptors.hpp"
+#include "ComputeShader.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
@@ -61,7 +62,6 @@ namespace burnhope
         std::unique_ptr<BurnhopeDescriptorSetLayout> cullLayout;
         std::unique_ptr<BurnhopeDescriptorPool> cullPool;
         VkDescriptorSet cullSet = VK_NULL_HANDLE;
-        VkPipelineLayout cullPipelineLayout = VK_NULL_HANDLE;
-        VkPipeline cullPipeline = VK_NULL_HANDLE;
+        std::unique_ptr<ComputeShader> cullShader;
     };
 }

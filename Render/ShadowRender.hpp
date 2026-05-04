@@ -5,6 +5,7 @@
 #include "../Utils/Components.hpp"
 #include "../Utils/Buffer.hpp"
 #include "CullingSystem.hpp"
+#include "GraphicsShader.hpp"
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <memory>
@@ -36,5 +37,6 @@ namespace burnhope
         BurnhopeDevice &lveDevice;
         std::unique_ptr<BurnhopePipeline> pipeline;
         VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+        std::unique_ptr<GraphicsShader> shader;
     };
 }

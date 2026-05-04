@@ -18,7 +18,6 @@ namespace burnhope
                 VkShaderStageFlags stageFlags,
                 uint32_t count = 1);
             std::unique_ptr<BurnhopeDescriptorSetLayout> build() const;
-
         private:
             BurnhopeDevice &lveDevice;
             std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings{};
@@ -29,7 +28,6 @@ namespace burnhope
         BurnhopeDescriptorSetLayout(const BurnhopeDescriptorSetLayout &) = delete;
         BurnhopeDescriptorSetLayout &operator=(const BurnhopeDescriptorSetLayout &) = delete;
         VkDescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
-
     private:
         BurnhopeDevice &lveDevice;
         VkDescriptorSetLayout descriptorSetLayout;
@@ -47,7 +45,6 @@ namespace burnhope
             Builder &setPoolFlags(VkDescriptorPoolCreateFlags flags);
             Builder &setMaxSets(uint32_t count);
             std::unique_ptr<BurnhopeDescriptorPool> build() const;
-
         private:
             BurnhopeDevice &lveDevice;
             std::vector<VkDescriptorPoolSize> poolSizes{};
@@ -66,7 +63,6 @@ namespace burnhope
             const VkDescriptorSetLayout descriptorSetLayout, VkDescriptorSet &descriptor) const;
         void freeDescriptors(std::vector<VkDescriptorSet> &descriptors) const;
         void resetPool();
-
     private:
         BurnhopeDevice &lveDevice;
         VkDescriptorPool descriptorPool;
@@ -81,7 +77,6 @@ namespace burnhope
         BurnhopeDescriptorWriter &writeImageArray(uint32_t binding, const std::vector<VkDescriptorImageInfo> &imageInfos);
         bool build(VkDescriptorSet &set);
         void overwrite(VkDescriptorSet &set);
-
     private:
         BurnhopeDescriptorSetLayout &setLayout;
         BurnhopeDescriptorPool &pool;

@@ -4,6 +4,7 @@
 #include "../Utils/FrameInfo.hpp"
 #include <memory>
 #include <vector>
+#include "ComputeShader.hpp"
 namespace burnhope
 {
     class DeferredLightingSystem
@@ -21,5 +22,6 @@ namespace burnhope
         BurnhopeDevice &lveDevice;
         std::unique_ptr<BurnhopePipeline> lvePipeline;
         VkPipelineLayout pipelineLayout;
+        std::unique_ptr<ComputeShader> shader;
     };
 }

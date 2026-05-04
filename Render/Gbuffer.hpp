@@ -3,6 +3,7 @@
 #include "Texture.hpp"
 #include <memory>
 #include <vector>
+#include "GraphicsShader.hpp"
 namespace burnhope
 {
     class BurnhopeGBuffer

@@ -1,7 +1,7 @@
 #include "HiZSystem.hpp"
+#include "ComputeShader.hpp"
 #include <cmath>
 #include <algorithm>
-#include <fstream>
 #include <stdexcept>
 namespace burnhope
 {
@@ -17,32 +17,16 @@ namespace burnhope
                         .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                         .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
                         .build();
-        VkPushConstantRange pushRange{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(HiZPush)};
-        auto layout = setLayout->getDescriptorSetLayout();
-        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &layout;
-        pipelineLayoutInfo.pushConstantRangeCount = 1;
-        pipelineLayoutInfo.pPushConstantRanges = &pushRange;
-        vkCreatePipelineLayout(lveDevice.device(), &pipelineLayoutInfo, nullptr, &pipelineLayout);
-        std::ifstream file("shaders/hiz_downsample.comp.spv", std::ios::binary);
-        std::vector<char> code((std::istreambuf_iterator<char>(file)), {});
-        VkShaderModuleCreateInfo shaderInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, nullptr, 0, code.size(), reinterpret_cast<const uint32_t *>(code.data())};
-        VkShaderModule shaderModule;
-        vkCreateShaderModule(lveDevice.device(), &shaderInfo, nullptr, &shaderModule);
-        VkComputePipelineCreateInfo pipelineInfo{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
-        pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, shaderModule, "main", nullptr};
-        vkCreateComputePipelines(lveDevice.device(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
-        vkDestroyShaderModule(lveDevice.device(), shaderModule, nullptr);
+        shader = std::make_unique<ComputeShader>(
+            lveDevice,
+            "shaders/hiz_downsample.comp.spv",
+            std::vector<VkDescriptorSetLayout>{setLayout->getDescriptorSetLayout()},
+            sizeof(HiZPush));
         createResources(extent, gDepthView, depthSampler);
     }
     HiZSystem::~HiZSystem()
     {
         destroyResources();
-        vkDestroyPipeline(lveDevice.device(), pipeline, nullptr);
-        vkDestroyPipelineLayout(lveDevice.device(), pipelineLayout, nullptr);
     }
     void HiZSystem::destroyResources()
     {
@@ -134,18 +118,18 @@ namespace burnhope
     }
     void HiZSystem::compute(VkCommandBuffer cmd, VkExtent2D extent)
     {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+        shader->bind(cmd);
         uint32_t mipWidth = extent.width;
         uint32_t mipHeight = extent.height;
         for (uint32_t i = 0; i < mipLevels; i++)
         {
             mipWidth = std::max(1u, mipWidth / 2);
             mipHeight = std::max(1u, mipHeight / 2);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &mipSets[i], 0, nullptr);
+            shader->bindDescriptorSets(cmd, {mipSets[i]});
             HiZPush push{};
             push.invSize = {1.0f / float(std::max(1u, mipWidth * 2)), 1.0f / float(std::max(1u, mipHeight * 2))};
-            vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(HiZPush), &push);
-            vkCmdDispatch(cmd, (mipWidth + 15) / 16, (mipHeight + 15) / 16, 1);
+            shader->pushConstants(cmd, &push, sizeof(HiZPush));
+            shader->dispatch(cmd, (mipWidth + 15) / 16, (mipHeight + 15) / 16, 1);
             VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
             barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
             barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;

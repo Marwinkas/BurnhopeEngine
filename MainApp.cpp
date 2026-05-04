@@ -197,10 +197,7 @@ namespace burnhope
         std::vector<std::unique_ptr<BurnhopeBuffer>> uboBuffers(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
         for (int i = 0; i < uboBuffers.size(); i++)
         {
-            uboBuffers[i] = std::make_unique<BurnhopeBuffer>(
-                lveDevice, sizeof(GlobalUbo), 1,
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            uboBuffers[i] = std::make_unique<BurnhopeBuffer>(lveDevice, sizeof(GlobalUbo), 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
             uboBuffers[i]->map();
         }
         auto globalSetLayout = BurnhopeDescriptorSetLayout::Builder(lveDevice)
@@ -210,36 +207,23 @@ namespace burnhope
         for (int i = 0; i < globalDescriptorSets.size(); i++)
         {
             auto bufferInfo = uboBuffers[i]->descriptorInfo();
-            BurnhopeDescriptorWriter(*globalSetLayout, *globalPool)
-                .writeBuffer(0, &bufferInfo)
-                .build(globalDescriptorSets[i]);
+            BurnhopeDescriptorWriter(*globalSetLayout, *globalPool).writeBuffer(0, &bufferInfo).build(globalDescriptorSets[i]);
         }
         initCompute(globalSetLayout->getDescriptorSetLayout());
-        GeometryRenderSystem simpleRenderSystem{
-            lveDevice,
-            gBuffer->getRenderPass(),
-            globalSetLayout->getDescriptorSetLayout()};
+        GeometryRenderSystem simpleRenderSystem{lveDevice, gBuffer->getRenderPass(), globalSetLayout->getDescriptorSetLayout()};
         RebuildBatches(registry, simpleRenderSystem);
-        shadowObjectLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                                    .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                                VK_SHADER_STAGE_VERTEX_BIT)
-                                    .build();
-        shadowRenderSystem = std::make_unique<ShadowRenderSystem>(
-            lveDevice,
-            shadowSystem->getCSM()->getRenderPass(),
-            shadowObjectLayoutPtr->getDescriptorSetLayout());
+        shadowObjectLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice).addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT).build();
+        shadowRenderSystem = std::make_unique<ShadowRenderSystem>(lveDevice, shadowSystem->getCSM()->getRenderPass(), shadowObjectLayoutPtr->getDescriptorSetLayout());
         if (objectBuffer)
         {
             auto objInfo = objectBuffer->descriptorInfo();
-            BurnhopeDescriptorWriter(*shadowObjectLayoutPtr, *globalPool)
-                .writeBuffer(0, &objInfo)
-                .build(shadowObjectSet);
+            BurnhopeDescriptorWriter(*shadowObjectLayoutPtr, *globalPool).writeBuffer(0, &objInfo).build(shadowObjectSet);
         }
         Camera camera(WIDTH, HEIGHT, glm::vec3(0.0f, 0.0f, 0.0f));
         auto currentTime = std::chrono::high_resolution_clock::now();
         int frameCount = 0;
         auto fpsTimer = currentTime;
-        VkExtent2D lastExtent = lveWindow.getExtent();
+        RenderPipeline renderPipeline;
         while (!lveWindow.shouldClose())
         {
             glfwPollEvents();
@@ -249,8 +233,8 @@ namespace burnhope
                 extent = lveWindow.getExtent();
                 glfwWaitEvents();
             }
-            camera.width = lveWindow.getExtent().width;
-            camera.height = lveWindow.getExtent().height;
+            camera.width = extent.width;
+            camera.height = extent.height;
             VkExtent2D swapExtent = lveRenderer.getSwapChainExtent();
             if (extent.width != swapExtent.width || extent.height != swapExtent.height)
             {
@@ -258,15 +242,10 @@ namespace burnhope
                 lveRenderer.recreateSwapChain();
                 VkExtent2D newExtent = lveRenderer.getSwapChainExtent();
                 gBuffer = std::make_unique<BurnhopeGBuffer>(lveDevice, newExtent);
-                hdrOutputTexture = std::make_unique<BurnhopeTexture>(
-                    lveDevice,
-                    VK_FORMAT_R16G16B16A16_SFLOAT,
-                    VkExtent3D{newExtent.width, newExtent.height, 1},
-                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                        VK_IMAGE_USAGE_STORAGE_BIT |
-                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                        VK_IMAGE_USAGE_SAMPLED_BIT,
-                    VK_SAMPLE_COUNT_1_BIT);
+                hdrOutputTexture = std::make_unique<BurnhopeTexture>(lveDevice, VK_FORMAT_R16G16B16A16_SFLOAT,
+                                                                     VkExtent3D{newExtent.width, newExtent.height, 1},
+                                                                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                                                                     VK_SAMPLE_COUNT_1_BIT);
                 rebuildGBufferDescriptorSets();
                 if (rcSystem)
                 {
@@ -280,7 +259,7 @@ namespace burnhope
             frameCount++;
             if (std::chrono::duration<float>(newTime - fpsTimer).count() >= 1.0f)
             {
-                std::cout << "FPS: " << frameCount << std::endl;
+                std::cout << "FPS: " << frameCount << "\n";
                 frameCount = 0;
                 fpsTimer = newTime;
             }
@@ -288,10 +267,7 @@ namespace burnhope
             if (auto commandBuffer = lveRenderer.beginFrame())
             {
                 int frameIndex = lveRenderer.getFrameIndex();
-                FrameInfo frameInfo{
-                    frameIndex, frameTime, commandBuffer,
-                    camera, globalDescriptorSets[frameIndex], *globalPool};
-                GlobalUbo ubo{};
+                FrameInfo frameInfo{frameIndex, frameTime, commandBuffer, camera, globalDescriptorSets[frameIndex], *globalPool};
                 shadowSystem->updateLights(registry, camera.Position);
                 {
                     const auto &uboData = shadowSystem->getLightUBO();
@@ -300,317 +276,131 @@ namespace burnhope
                 }
                 faceMatricesBuffer->writeToBuffer(const_cast<PointFaceMatrices *>(shadowSystem->getFaceMatricesData()));
                 faceMatricesBuffer->flush();
+                GlobalUbo ubo{};
                 ubo.projection = camera.GetProjectionMatrix(45.0f, 0.01f, 1000.0f);
                 ubo.view = camera.GetViewMatrix();
                 ubo.invViewProj = glm::inverse(ubo.projection * ubo.view);
                 ubo.camPos = camera.Position;
                 ubo.zNear = 0.1f;
                 ubo.zFar = 1000.0f;
-                ubo.screenSize = glm::vec4(lveWindow.getExtent().width, lveWindow.getExtent().height, 0.f, 0.f);
+                ubo.screenSize = glm::vec4(extent.width, extent.height, 0.f, 0.f);
                 ubo.sunDir = shadowSystem->getSunDir();
                 ubo.lightSize = 1.0f;
                 auto cascadeMats = shadowSystem->getCSM()->calculateMatrices(
                     camera, shadowSystem->getSunDir(),
-                    {shadowSystem->cascadeSplits[0], shadowSystem->cascadeSplits[1],
-                     shadowSystem->cascadeSplits[2], shadowSystem->cascadeSplits[3]});
+                    {shadowSystem->cascadeSplits[0], shadowSystem->cascadeSplits[1], shadowSystem->cascadeSplits[2], shadowSystem->cascadeSplits[3]});
                 for (int i = 0; i < 4; i++)
                     ubo.sunLightSpaceMatrices[i] = cascadeMats[i];
-                ubo.cascadeSplits = glm::vec4(
-                    shadowSystem->cascadeSplits[0], shadowSystem->cascadeSplits[1],
-                    shadowSystem->cascadeSplits[2], shadowSystem->cascadeSplits[3]);
+                ubo.cascadeSplits = glm::vec4(shadowSystem->cascadeSplits[0], shadowSystem->cascadeSplits[1], shadowSystem->cascadeSplits[2], shadowSystem->cascadeSplits[3]);
                 uboBuffers[frameIndex]->writeToBuffer(&ubo);
                 uboBuffers[frameIndex]->flush();
-                RenderGraph renderGraph;
-                std::vector<VkImageMemoryBarrier> shadowBarriersBegin(2);
-                shadowBarriersBegin[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                shadowBarriersBegin[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-                shadowBarriersBegin[0].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-                shadowBarriersBegin[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                shadowBarriersBegin[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                shadowBarriersBegin[0].image = shadowSystem->getCSM()->getTexture()->getImage();
-                shadowBarriersBegin[0].subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, BurnhopeCSM::CASCADE_COUNT};
-                shadowBarriersBegin[0].srcAccessMask = 0;
-                shadowBarriersBegin[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-                shadowBarriersBegin[1] = shadowBarriersBegin[0];
-                shadowBarriersBegin[1].image = shadowSystem->getAtlas()->getTexture()->getImage();
-                shadowBarriersBegin[1].subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
-                renderGraph.addPass("Shadow Maps Pass", shadowBarriersBegin, [&](VkCommandBuffer cmd)
-                                    {
-        for (int i = 0; i < BurnhopeCSM::CASCADE_COUNT; i++) {
-            VkRenderPassBeginInfo rpInfo{};
-            rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            rpInfo.renderPass = shadowSystem->getCSM()->getRenderPass();
-            rpInfo.framebuffer = shadowSystem->getCSM()->getFramebuffer(i);
-            rpInfo.renderArea.offset = { 0, 0 };
-            rpInfo.renderArea.extent = { BurnhopeCSM::SHADOW_MAP_SIZE, BurnhopeCSM::SHADOW_MAP_SIZE };
-            VkClearValue clearVal{}; clearVal.depthStencil = { 1.0f, 0 };
-            rpInfo.clearValueCount = 1; rpInfo.pClearValues = &clearVal;
-            vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
-            VkViewport vp{}; vp.width = vp.height = (float)BurnhopeCSM::SHADOW_MAP_SIZE;
-            vp.minDepth = 0.0f; vp.maxDepth = 1.0f;
-            vkCmdSetViewport(cmd, 0, 1, &vp);
-            VkRect2D sc{ {0,0}, {BurnhopeCSM::SHADOW_MAP_SIZE, BurnhopeCSM::SHADOW_MAP_SIZE} };
-            vkCmdSetScissor(cmd, 0, 1, &sc);
-            shadowRenderSystem->renderShadow(cmd, cascadeMats[i], *cullingSystem, registry, shadowObjectSet);
-            vkCmdEndRenderPass(cmd);
-        }
-        VkRenderPassBeginInfo clearPass{};
-        clearPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        clearPass.renderPass = shadowSystem->getAtlas()->getRenderPass();
-        clearPass.framebuffer = shadowSystem->getAtlas()->getFramebuffer();
-        clearPass.renderArea.offset = { 0, 0 };
-        clearPass.renderArea.extent = { BurnhopeShadowAtlas::ATLAS_RESOLUTION, BurnhopeShadowAtlas::ATLAS_RESOLUTION };
-        VkClearValue clearVal{}; clearVal.depthStencil = { 1.0f, 0 };
-        clearPass.clearValueCount = 1; clearPass.pClearValues = &clearVal;
-        vkCmdBeginRenderPass(cmd, &clearPass, VK_SUBPASS_CONTENTS_INLINE);
-        auto lightView = registry.view<LightComponent, TransformComponent>();
-        for (auto entity : lightView) {
-            auto& light = lightView.get<LightComponent>(entity).light;
-            auto& trans = lightView.get<TransformComponent>(entity).transform;
-            if (!light.enable || !light.castShadows || light.type == LightType::Directional || light.shadowSlot < 0) continue;
-            int tileSize = light.shadowTileSize;
-            int pxX = (light.shadowSlot % BurnhopeShadowAtlas::ATLAS_IN_UNITS) * BurnhopeShadowAtlas::MIN_TILE;
-            int pxY = (light.shadowSlot / BurnhopeShadowAtlas::ATLAS_IN_UNITS) * BurnhopeShadowAtlas::MIN_TILE;
-            if (light.type == LightType::Spot) {
-                shadowSystem->getAtlas()->setTileViewport(cmd, pxX, pxY, tileSize);
-                shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, *cullingSystem, registry, shadowObjectSet);
-            }
-            else if (light.type == LightType::Point) {
-                glm::vec3 pos = trans.position;
-                glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, light.radius);
-                const glm::vec3 dirs[6] = {
-                    {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}
-                };
-                const glm::vec3 ups[6] = {
-                    {0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}
-                };  
-                for (int face = 0; face < 6; face++) {
-                    int fx = pxX + face * tileSize;
-                    int fy = pxY;
-                    if (fx + tileSize > BurnhopeShadowAtlas::ATLAS_RESOLUTION) {
-                        fx = fx % BurnhopeShadowAtlas::ATLAS_RESOLUTION; fy += tileSize;
+                renderPipeline.clear();
+                renderPipeline.addPass("Shadow Maps Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
+                                       {
+                    for (int i = 0; i < BurnhopeCSM::CASCADE_COUNT; i++) {
+                        VkRenderPassBeginInfo rpInfo{};
+                        rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO; rpInfo.renderPass = shadowSystem->getCSM()->getRenderPass();
+                        rpInfo.framebuffer = shadowSystem->getCSM()->getFramebuffer(i);
+                        rpInfo.renderArea.extent = { BurnhopeCSM::SHADOW_MAP_SIZE, BurnhopeCSM::SHADOW_MAP_SIZE };
+                        VkClearValue clearVal{}; clearVal.depthStencil = { 1.0f, 0 };
+                        rpInfo.clearValueCount = 1; rpInfo.pClearValues = &clearVal;
+                        vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
+                        VkViewport vp{}; vp.width = vp.height = (float)BurnhopeCSM::SHADOW_MAP_SIZE; vp.maxDepth = 1.0f;
+                        vkCmdSetViewport(cmd, 0, 1, &vp);
+                        VkRect2D sc{ {0,0}, {BurnhopeCSM::SHADOW_MAP_SIZE, BurnhopeCSM::SHADOW_MAP_SIZE} };
+                        vkCmdSetScissor(cmd, 0, 1, &sc);
+                        shadowRenderSystem->renderShadow(cmd, cascadeMats[i], *cullingSystem, registry, shadowObjectSet);
+                        vkCmdEndRenderPass(cmd);
                     }
-                        glm::mat4 faceProj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, light.radius);
-                        glm::mat4 faceView = glm::lookAt(pos, pos + dirs[face], ups[face]);
-                        glm::mat4 faceMatrix = faceProj * faceView;
-                    shadowSystem->getAtlas()->setTileViewport(cmd, fx, fy, tileSize);
-                    shadowRenderSystem->renderShadow(cmd, faceMatrix, *cullingSystem, registry, shadowObjectSet);
-                }
-            }
-        }
-        vkCmdEndRenderPass(cmd); });
-                auto vp = ubo.projection * ubo.view;
-                auto planes = CullingSystem::extractFrustumPlanes(vp);
-                cullingSystem->dispatchCulling(commandBuffer, vp, ubo.camPos, planes, totalSubMeshCount);
-                static bool debugDone = false;
-                if (!debugDone)
-                {
-                    vkDeviceWaitIdle(lveDevice.device());
-                    BurnhopeBuffer readback(lveDevice,
-                                            sizeof(VkDrawIndexedIndirectCommand), totalSubMeshCount,
-                                            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-                    auto cmd = lveDevice.beginSingleTimeCommands();
-                    VkBufferCopy copy{};
-                    copy.size = sizeof(VkDrawIndexedIndirectCommand) * totalSubMeshCount;
-                    vkCmdCopyBuffer(cmd, cullingSystem->getDrawCommandBuffer(),
-                                    readback.getBuffer(), 1, &copy);
-                    lveDevice.endSingleTimeCommands(cmd);
-                    readback.map();
-                    auto *cmds = reinterpret_cast<VkDrawIndexedIndirectCommand *>(readback.getMappedMemory());
-                    uint32_t visible = 0, culled = 0;
-                    for (uint32_t i = 0; i < totalSubMeshCount; i++)
-                    {
-                        if (cmds[i].instanceCount > 0)
-                            visible++;
-                        else
-                            culled++;
+                    VkRenderPassBeginInfo clearPass{};
+                    clearPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO; clearPass.renderPass = shadowSystem->getAtlas()->getRenderPass();
+                    clearPass.framebuffer = shadowSystem->getAtlas()->getFramebuffer();
+                    clearPass.renderArea.extent = { BurnhopeShadowAtlas::ATLAS_RESOLUTION, BurnhopeShadowAtlas::ATLAS_RESOLUTION };
+                    VkClearValue clearVal{}; clearVal.depthStencil = { 1.0f, 0 };
+                    clearPass.clearValueCount = 1; clearPass.pClearValues = &clearVal;
+                    vkCmdBeginRenderPass(cmd, &clearPass, VK_SUBPASS_CONTENTS_INLINE);
+                    auto lightView = registry.view<LightComponent, TransformComponent>();
+                    for (auto entity : lightView) {
+                        auto& light = lightView.get<LightComponent>(entity).light;
+                        auto& trans = lightView.get<TransformComponent>(entity).transform;
+                        if (!light.enable || !light.castShadows || light.type == LightType::Directional || light.shadowSlot < 0) continue;
+                        int tileSize = light.shadowTileSize;
+                        int pxX = (light.shadowSlot % BurnhopeShadowAtlas::ATLAS_IN_UNITS) * BurnhopeShadowAtlas::MIN_TILE;
+                        int pxY = (light.shadowSlot / BurnhopeShadowAtlas::ATLAS_IN_UNITS) * BurnhopeShadowAtlas::MIN_TILE;
+                        if (light.type == LightType::Spot) {
+                            shadowSystem->getAtlas()->setTileViewport(cmd, pxX, pxY, tileSize);
+                            shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, *cullingSystem, registry, shadowObjectSet);
+                        }
+                        else if (light.type == LightType::Point) {
+                            glm::vec3 pos = trans.position;
+                            glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, light.radius);
+                            const glm::vec3 dirs[6] = {
+                                {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}
+                            };
+                            const glm::vec3 ups[6] = {
+                                {0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}
+                            };  
+                            for (int face = 0; face < 6; face++) {
+                                int fx = pxX + face * tileSize;
+                                int fy = pxY;
+                                if (fx + tileSize > BurnhopeShadowAtlas::ATLAS_RESOLUTION) {
+                                    fx = fx % BurnhopeShadowAtlas::ATLAS_RESOLUTION; fy += tileSize;
+                                }
+                                    glm::mat4 faceProj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, light.radius);
+                                    glm::mat4 faceView = glm::lookAt(pos, pos + dirs[face], ups[face]);
+                                    glm::mat4 faceMatrix = faceProj * faceView;
+                                shadowSystem->getAtlas()->setTileViewport(cmd, fx, fy, tileSize);
+                                shadowRenderSystem->renderShadow(cmd, faceMatrix, *cullingSystem, registry, shadowObjectSet);
+                            }
+                        }
                     }
-                    std::cout << "Culling result: " << visible << " visible, "
-                              << culled << " culled out of " << totalSubMeshCount << "\n";
-                    debugDone = true;
-                }
-                std::vector<VkImageMemoryBarrier> shadowBarriersEnd(2);
-                shadowBarriersEnd[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                shadowBarriersEnd[0].oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-                shadowBarriersEnd[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                shadowBarriersEnd[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                shadowBarriersEnd[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                shadowBarriersEnd[0].image = shadowSystem->getCSM()->getTexture()->getImage();
-                shadowBarriersEnd[0].subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, BurnhopeCSM::CASCADE_COUNT};
-                shadowBarriersEnd[0].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-                shadowBarriersEnd[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-                shadowBarriersEnd[1] = shadowBarriersEnd[0];
-                shadowBarriersEnd[1].image = shadowSystem->getAtlas()->getTexture()->getImage();
-                shadowBarriersEnd[1].subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
-                renderGraph.addPass("G-Buffer Pass", shadowBarriersEnd, [&](VkCommandBuffer cmd)
-                                    {
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = gBuffer->getRenderPass();
-        renderPassInfo.framebuffer = gBuffer->getFramebuffer();
-        renderPassInfo.renderArea.offset = { 0, 0 };
-        renderPassInfo.renderArea.extent = lveWindow.getExtent();
-        std::array<VkClearValue, 4> clearValues{};
-        clearValues[3].depthStencil = { 1.0f, 0 };
-        renderPassInfo.clearValueCount = (uint32_t)clearValues.size();
-        renderPassInfo.pClearValues = clearValues.data();
-        vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-        VkViewport viewport{};
-        viewport.width = (float)lveWindow.getExtent().width;
-        viewport.height = (float)lveWindow.getExtent().height;
-        viewport.minDepth = 0.0f; viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-        VkRect2D scissor{ {0, 0}, lveWindow.getExtent() };
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
-        simpleRenderSystem.renderEntities(frameInfo, registry, 
-                                        storageSet, textureSet,
-                                        *cullingSystem, totalSubMeshCount);
-        vkCmdEndRenderPass(cmd); });
-                std::vector<VkImageMemoryBarrier> hizBarriers(1);
-                hizBarriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                hizBarriers[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                hizBarriers[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                hizBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                hizBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                hizBarriers[0].image = gBuffer->getDepth()->getImage();
-                hizBarriers[0].subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
-                hizBarriers[0].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-                hizBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-                renderGraph.addPass("Hi-Z Pass", hizBarriers, [&](VkCommandBuffer cmd)
-                                    { hizSystem->compute(cmd, lveWindow.getExtent()); });
-                std::vector<VkImageMemoryBarrier> gtaoBarriers(1);
-                gtaoBarriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                gtaoBarriers[0].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-                gtaoBarriers[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
-                gtaoBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                gtaoBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                gtaoBarriers[0].image = gtaoOutputTexture->getImage();
-                gtaoBarriers[0].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-                gtaoBarriers[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-                gtaoBarriers[0].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-                renderGraph.addPass("GTAO Pass", gtaoBarriers, [&](VkCommandBuffer cmd)
-                                    { gtaoSystem->compute(cmd, globalDescriptorSets[frameIndex], gtaoSet,
-                                                          lveWindow.getExtent().width, lveWindow.getExtent().height); });
-                std::vector<VkImageMemoryBarrier> gBufBarriers(4);
-                VkImage gBufImages[4] = {
-                    gBuffer->getNormalRoughness()->getImage(),
-                    gBuffer->getAlbedoMetallic()->getImage(),
-                    gBuffer->getHeightAO()->getImage(),
-                    gBuffer->getDepth()->getImage()};
-                VkImageAspectFlags aspects[4] = {VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_ASPECT_DEPTH_BIT};
-                for (int i = 0; i < 4; i++)
-                {
-                    gBufBarriers[i].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                    gBufBarriers[i].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                    gBufBarriers[i].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                    gBufBarriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                    gBufBarriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                    gBufBarriers[i].image = gBufImages[i];
-                    gBufBarriers[i].subresourceRange = {aspects[i], 0, 1, 0, 1};
-                    gBufBarriers[i].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-                    gBufBarriers[i].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-                }
-                gBufBarriers[3].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-                renderGraph.addPass("Compute Lighting", gBufBarriers, [&](VkCommandBuffer cmd)
-                                    {
-        std::vector<VkDescriptorSet> computeSets = {
-            globalDescriptorSets[frameIndex], gBufferSet, shadowSet, lightSet, computeOutputSet,rcSystem->getIrradianceSet() ,
-        gtaoSet 
-        };
-        lightingSystem->computeLighting(cmd, computeSets, lveWindow.getExtent().width, lveWindow.getExtent().height); });
-                std::vector<VkImageMemoryBarrier> rcBarriers(1);
-                rcBarriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                rcBarriers[0].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-                rcBarriers[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
-                rcBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                rcBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                rcBarriers[0].image = hdrOutputTexture->getImage();
-                rcBarriers[0].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-                rcBarriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-                rcBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-                renderGraph.addPass("Radiance Cascades GI", rcBarriers, [&](VkCommandBuffer cmd)
-                                    {
-        glm::vec3 sceneMin(-20.0f, -2.0f, -20.0f);
-        glm::vec3 sceneMax( 20.0f, 10.0f,  20.0f);
-        rcSystem->dispatch(
-            cmd,
-            globalDescriptorSets[frameIndex],
-            gBufferSet,
-            ubo.invViewProj,
-            camera.Position,
-            sceneMin,
-            sceneMax,
-            lveWindow.getExtent()
-        ); });
-                std::vector<VkImageMemoryBarrier> blitBarriers(2);
-                blitBarriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                blitBarriers[0].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-                blitBarriers[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-                blitBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                blitBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                blitBarriers[0].image = hdrOutputTexture->getImage();
-                blitBarriers[0].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-                blitBarriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-                blitBarriers[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-                blitBarriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                blitBarriers[1].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                blitBarriers[1].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-                blitBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                blitBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                blitBarriers[1].image = gBuffer->getDepth()->getImage();
-                blitBarriers[1].subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
-                blitBarriers[1].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-                blitBarriers[1].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-                renderGraph.addPass("Blit and UI", blitBarriers, [&](VkCommandBuffer cmd)
-                                    {
-        VkImage swapChainImage = lveRenderer.getCurrentSwapChainImage();
-        VkImageMemoryBarrier swapToDst{};
-        swapToDst.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        swapToDst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        swapToDst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        swapToDst.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        swapToDst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        swapToDst.image = swapChainImage;
-        swapToDst.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-        swapToDst.srcAccessMask = 0;
-        swapToDst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 
-                             0, 0, nullptr, 0, nullptr, 1, &swapToDst);
-        VkImageBlit blit{};
-        blit.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-        blit.srcOffsets[1] = { (int32_t)lveWindow.getExtent().width, (int32_t)lveWindow.getExtent().height, 1 };
-        blit.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-        blit.dstOffsets[1] = { (int32_t)lveWindow.getExtent().width, (int32_t)lveWindow.getExtent().height, 1 };
-        vkCmdBlitImage(cmd, hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                       swapChainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
-        VkImageMemoryBarrier swapToAttach{};
-        swapToAttach.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        swapToAttach.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        swapToAttach.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        swapToAttach.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        swapToAttach.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        swapToAttach.image = swapChainImage;
-        swapToAttach.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-        swapToAttach.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        swapToAttach.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                             0, 0, nullptr, 0, nullptr, 1, &swapToAttach);
-        lveRenderer.beginSwapChainRenderPass(cmd);
-        ui.Draw(lveWindow, camera, registry, cmd);
-        lveRenderer.endSwapChainRenderPass(cmd); });
-                std::vector<VkImageMemoryBarrier> finalBarriers(1);
-                finalBarriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                finalBarriers[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-                finalBarriers[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
-                finalBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                finalBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                finalBarriers[0].image = hdrOutputTexture->getImage();
-                finalBarriers[0].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-                finalBarriers[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-                finalBarriers[0].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-                renderGraph.addPass("Reset Layouts", finalBarriers, [](VkCommandBuffer cmd) {});
-                renderGraph.execute(commandBuffer);
+                    vkCmdEndRenderPass(cmd); });
+                renderPipeline.addPass("Frustum Culling", [&](VkCommandBuffer cmd)
+                                       {
+                    auto vp = ubo.projection * ubo.view;
+                    auto planes = CullingSystem::extractFrustumPlanes(vp);
+                    cullingSystem->dispatchCulling(cmd, vp, ubo.camPos, planes, totalSubMeshCount); });
+                renderPipeline.addPass("G-Buffer Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
+                                       {
+                    VkRenderPassBeginInfo renderPassInfo{};
+                    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO; renderPassInfo.renderPass = gBuffer->getRenderPass();
+                    renderPassInfo.framebuffer = gBuffer->getFramebuffer(); renderPassInfo.renderArea.extent = extent;
+                    std::array<VkClearValue, 4> clearValues{}; clearValues[3].depthStencil = { 1.0f, 0 };
+                    renderPassInfo.clearValueCount = (uint32_t)clearValues.size(); renderPassInfo.pClearValues = clearValues.data();
+                    vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+                    VkViewport viewport{}; viewport.width = (float)extent.width; viewport.height = (float)extent.height; viewport.maxDepth = 1.0f;
+                    vkCmdSetViewport(cmd, 0, 1, &viewport);
+                    VkRect2D scissor{ {0, 0}, extent }; vkCmdSetScissor(cmd, 0, 1, &scissor);
+                    simpleRenderSystem.renderEntities(frameInfo, registry, storageSet, textureSet, *cullingSystem, totalSubMeshCount);
+                    vkCmdEndRenderPass(cmd); });
+                renderPipeline.addPass("Hi-Z Pass", {RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
+                                       { hizSystem->compute(cmd, extent); });
+                renderPipeline.addPass("GTAO Pass", {RenderPipeline::createImageBarrier(gtaoOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [&](VkCommandBuffer cmd)
+                                       { gtaoSystem->compute(cmd, globalDescriptorSets[frameIndex], gtaoSet, extent.width, extent.height); });
+                renderPipeline.addPass("Compute Lighting", {RenderPipeline::createImageBarrier(gBuffer->getNormalRoughness()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getAlbedoMetallic()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getHeightAO()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
+                                       {
+                    std::vector<VkDescriptorSet> computeSets = { globalDescriptorSets[frameIndex], gBufferSet, shadowSet, lightSet, computeOutputSet, rcSystem->getIrradianceSet(), gtaoSet };
+                    lightingSystem->computeLighting(cmd, computeSets, extent.width, extent.height); });
+                renderPipeline.addPass("Radiance Cascades GI", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT)}, [&](VkCommandBuffer cmd)
+                                       {
+                    glm::vec3 sceneMin(-20.0f, -2.0f, -20.0f); glm::vec3 sceneMax( 20.0f, 10.0f,  20.0f);
+                    rcSystem->dispatch(cmd, globalDescriptorSets[frameIndex], gBufferSet, ubo.invViewProj, camera.Position, sceneMin, sceneMax, extent); });
+                VkImage swapChainImage = lveRenderer.getCurrentSwapChainImage();
+                renderPipeline.addPass("Blit and UI", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
+                                       {
+                    VkImageMemoryBarrier swapToDst = RenderPipeline::createImageBarrier(swapChainImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
+                    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &swapToDst);
+                    VkImageBlit blit{};
+                    blit.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 }; blit.srcOffsets[1] = { (int32_t)extent.width, (int32_t)extent.height, 1 };
+                    blit.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 }; blit.dstOffsets[1] = { (int32_t)extent.width, (int32_t)extent.height, 1 };
+                    vkCmdBlitImage(cmd, hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, swapChainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+                    VkImageMemoryBarrier swapToAttach = RenderPipeline::createImageBarrier(swapChainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+                    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &swapToAttach);
+                    lveRenderer.beginSwapChainRenderPass(cmd);
+                    ui.Draw(lveWindow, camera, registry, cmd);
+                    lveRenderer.endSwapChainRenderPass(cmd); });
+                renderPipeline.addPass("Reset Layouts", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [](VkCommandBuffer cmd) {});
+                renderPipeline.execute(commandBuffer);
                 lveRenderer.endFrame();
             }
         }

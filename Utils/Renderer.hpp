@@ -38,7 +38,6 @@ namespace burnhope
     bool wasSwapChainRecreated() const { return swapChainRecreated; }
     VkExtent2D getSwapChainExtent() const { return lveSwapChain->getSwapChainExtent(); }
     void recreateSwapChain();
-
   private:
     void createCommandBuffers();
     void freeCommandBuffers();

@@ -69,7 +69,6 @@ namespace burnhope
         uint32_t mipLevels = 1,
         uint32_t layerCount = 1);
     VkPhysicalDeviceProperties properties;
-
   private:
     void createInstance();
     void setupDebugMessenger();

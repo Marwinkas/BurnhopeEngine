@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include <glm/glm.hpp>
+#include "ComputeShader.hpp"
 namespace burnhope
 {
     class HiZSystem
@@ -29,7 +30,6 @@ namespace burnhope
         std::vector<VkDescriptorSet> mipSets;
         uint32_t mipLevels = 1;
         std::unique_ptr<BurnhopeDescriptorSetLayout> setLayout;
-        VkPipelineLayout pipelineLayout;
-        VkPipeline pipeline;
+        std::unique_ptr<ComputeShader> shader;
     };
 }

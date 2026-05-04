@@ -37,7 +37,6 @@ namespace burnhope
       return swapChain.swapChainDepthFormat == swapChainDepthFormat &&
              swapChain.swapChainImageFormat == swapChainImageFormat;
     }
-
   private:
     void init();
     void createSwapChain();

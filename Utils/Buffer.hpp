@@ -33,7 +33,6 @@ namespace burnhope
         VkBufferUsageFlags getUsageFlags() const { return usageFlags; }
         VkMemoryPropertyFlags getMemoryPropertyFlags() const { return memoryPropertyFlags; }
         VkDeviceSize getBufferSize() const { return bufferSize; }
-
     private:
         static VkDeviceSize getAlignment(VkDeviceSize instanceSize, VkDeviceSize minOffsetAlignment);
         BurnhopeDevice &lveDevice;

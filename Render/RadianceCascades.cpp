@@ -1,4 +1,5 @@
 #include "RadianceCascades.hpp"
+#include "ComputeShader.hpp"
 #include <stdexcept>
 #include <array>
 namespace burnhope
@@ -23,12 +24,7 @@ namespace burnhope
         createPipelines();
         createDescriptorSets(lightingImageView, lightingSampler);
     }
-    RadianceCascadesSystem::~RadianceCascadesSystem()
-    {
-        vkDestroyPipelineLayout(device.device(), probeUpdatePL, nullptr);
-        vkDestroyPipelineLayout(device.device(), mergePL, nullptr);
-        vkDestroyPipelineLayout(device.device(), samplePL, nullptr);
-    }
+    RadianceCascadesSystem::~RadianceCascadesSystem() = default;
     void RadianceCascadesSystem::createProbeTextures()
     {
         for (int c = 0; c < RCConfig::CASCADE_COUNT; c++)
@@ -104,53 +100,15 @@ namespace burnhope
     }
     void RadianceCascadesSystem::createPipelines()
     {
-        VkPushConstantRange pushRange{};
-        pushRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-        pushRange.offset = 0;
-        pushRange.size = sizeof(RCPushConstants);
-        {
-            std::vector<VkDescriptorSetLayout> layouts = {
-                globalLayoutRef,
-                gBufferLayoutRef,
-                probeWriteLayout->getDescriptorSetLayout()};
-            VkPipelineLayoutCreateInfo li{};
-            li.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-            li.setLayoutCount = (uint32_t)layouts.size();
-            li.pSetLayouts = layouts.data();
-            li.pushConstantRangeCount = 1;
-            li.pPushConstantRanges = &pushRange;
-            vkCreatePipelineLayout(device.device(), &li, nullptr, &probeUpdatePL);
-            probeUpdatePipeline = std::make_unique<BurnhopePipeline>(
-                device, "shaders/probe_update.comp.spv", probeUpdatePL);
-        }
-        {
-            std::vector<VkDescriptorSetLayout> layouts = {
-                mergeLayout->getDescriptorSetLayout()};
-            VkPipelineLayoutCreateInfo li{};
-            li.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-            li.setLayoutCount = (uint32_t)layouts.size();
-            li.pSetLayouts = layouts.data();
-            li.pushConstantRangeCount = 1;
-            li.pPushConstantRanges = &pushRange;
-            vkCreatePipelineLayout(device.device(), &li, nullptr, &mergePL);
-            mergePipeline = std::make_unique<BurnhopePipeline>(
-                device, "shaders/cascade_merge.comp.spv", mergePL);
-        }
-        {
-            std::vector<VkDescriptorSetLayout> layouts = {
-                globalLayoutRef,
-                gBufferLayoutRef,
-                sampleWriteLayout->getDescriptorSetLayout()};
-            VkPipelineLayoutCreateInfo li{};
-            li.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-            li.setLayoutCount = (uint32_t)layouts.size();
-            li.pSetLayouts = layouts.data();
-            li.pushConstantRangeCount = 1;
-            li.pPushConstantRanges = &pushRange;
-            vkCreatePipelineLayout(device.device(), &li, nullptr, &samplePL);
-            samplePipeline = std::make_unique<BurnhopePipeline>(
-                device, "shaders/irradiance_sample.comp.spv", samplePL);
-        }
+        std::vector<VkDescriptorSetLayout> updateLayouts = {globalLayoutRef, gBufferLayoutRef, probeWriteLayout->getDescriptorSetLayout()};
+        probeUpdateShader = std::make_unique<ComputeShader>(
+            device, "shaders/probe_update.comp.spv", updateLayouts, sizeof(RCPushConstants));
+        std::vector<VkDescriptorSetLayout> mergeLayouts = {mergeLayout->getDescriptorSetLayout()};
+        mergeShader = std::make_unique<ComputeShader>(
+            device, "shaders/cascade_merge.comp.spv", mergeLayouts, sizeof(RCPushConstants));
+        std::vector<VkDescriptorSetLayout> sampleLayouts = {globalLayoutRef, gBufferLayoutRef, sampleWriteLayout->getDescriptorSetLayout()};
+        sampleShader = std::make_unique<ComputeShader>(
+            device, "shaders/irradiance_sample.comp.spv", sampleLayouts, sizeof(RCPushConstants));
     }
     void RadianceCascadesSystem::createDescriptorSets(VkImageView lightingImageView, VkSampler lightingSampler)
     {
@@ -235,7 +193,7 @@ namespace burnhope
         const glm::vec3 &sceneMax,
         VkExtent2D extent)
     {
-        probeUpdatePipeline->bindCompute(cmd);
+        probeUpdateShader->bind(cmd);
         for (int c = RCConfig::CASCADE_COUNT - 1; c >= 0; c--)
         {
             RCPushConstants push{};
@@ -248,40 +206,35 @@ namespace burnhope
             push.cascadeIndex = (float)c;
             push.screenWidth = (float)extent.width;
             push.screenHeight = (float)extent.height;
-            vkCmdPushConstants(cmd, probeUpdatePL, VK_SHADER_STAGE_COMPUTE_BIT,
-                               0, sizeof(RCPushConstants), &push);
-            std::vector<VkDescriptorSet> sets = {globalSet, gBufferSet, probeWriteSets[c]};
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                    probeUpdatePL, 0, (uint32_t)sets.size(), sets.data(), 0, nullptr);
+            probeUpdateShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
+            probeUpdateShader->bindDescriptorSets(cmd, {globalSet, gBufferSet, probeWriteSets[c]});
             int px = cascadeProbeX(c);
             int pz = cascadeProbeZ(c);
             uint32_t w = px * RCConfig::OCTA_SIZE;
             uint32_t h = cascadeProbeY(c) * pz * RCConfig::OCTA_SIZE;
-            vkCmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
+            probeUpdateShader->dispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
             insertBarrier(cmd, probeTex[c]->getImage(),
                           VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
                           VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
         }
-        mergePipeline->bindCompute(cmd);
+        mergeShader->bind(cmd);
         for (int c = RCConfig::CASCADE_COUNT - 2; c >= 0; c--)
         {
             RCPushConstants push{};
             push.probeCount = glm::ivec4(cascadeProbeX(c), cascadeProbeY(c), cascadeProbeZ(c), c);
             push.cascadeIndex = (float)c;
-            vkCmdPushConstants(cmd, mergePL, VK_SHADER_STAGE_COMPUTE_BIT,
-                               0, sizeof(RCPushConstants), &push);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                    mergePL, 0, 1, &mergeReadSets[c], 0, nullptr);
+            mergeShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
+            mergeShader->bindDescriptorSets(cmd, {mergeReadSets[c]});
             uint32_t w = cascadeProbeX(c) * RCConfig::OCTA_SIZE;
             uint32_t h = cascadeProbeY(c) * cascadeProbeZ(c) * RCConfig::OCTA_SIZE;
-            vkCmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
+            mergeShader->dispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
             insertBarrier(cmd, probeTex[c]->getImage(),
                           VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
                           VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
         }
-        samplePipeline->bindCompute(cmd);
+        sampleShader->bind(cmd);
         RCPushConstants push{};
         push.invViewProj = invViewProj;
         push.cameraPos = glm::vec4(cameraPos, 1.0f);
@@ -290,12 +243,9 @@ namespace burnhope
         push.probeCount = glm::ivec4(cascadeProbeX(0), cascadeProbeY(0), cascadeProbeZ(0), 0);
         push.screenWidth = (float)extent.width;
         push.screenHeight = (float)extent.height;
-        vkCmdPushConstants(cmd, samplePL, VK_SHADER_STAGE_COMPUTE_BIT,
-                           0, sizeof(RCPushConstants), &push);
-        std::vector<VkDescriptorSet> sets = {globalSet, gBufferSet, irradianceWriteSet};
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                samplePL, 0, (uint32_t)sets.size(), sets.data(), 0, nullptr);
-        vkCmdDispatch(cmd, (extent.width + 15) / 16, (extent.height + 15) / 16, 1);
+        sampleShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
+        sampleShader->bindDescriptorSets(cmd, {globalSet, gBufferSet, irradianceWriteSet});
+        sampleShader->dispatch(cmd, (extent.width + 15) / 16, (extent.height + 15) / 16, 1);
     }
     void RadianceCascadesSystem::rebuildOnResize(VkExtent2D newExtent,
                                                  VkImageView lightingImageView,

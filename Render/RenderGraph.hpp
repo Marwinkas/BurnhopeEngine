@@ -11,14 +11,40 @@ namespace burnhope
         std::vector<VkImageMemoryBarrier> barriersBefore;
         std::function<void(VkCommandBuffer)> executeFunction;
     };
-    class RenderGraph
+    class RenderPipeline
     {
     public:
+        static VkImageMemoryBarrier createImageBarrier(
+            VkImage image,
+            VkImageLayout oldLayout,
+            VkImageLayout newLayout,
+            VkAccessFlags srcAccess,
+            VkAccessFlags dstAccess,
+            VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            uint32_t layerCount = 1,
+            uint32_t mipLevels = 1)
+        {
+            VkImageMemoryBarrier barrier{};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.oldLayout = oldLayout;
+            barrier.newLayout = newLayout;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = image;
+            barrier.subresourceRange = {aspectMask, 0, mipLevels, 0, layerCount};
+            barrier.srcAccessMask = srcAccess;
+            barrier.dstAccessMask = dstAccess;
+            return barrier;
+        }
         void addPass(const std::string &name,
                      const std::vector<VkImageMemoryBarrier> &barriers,
                      std::function<void(VkCommandBuffer)> execute)
         {
             passes.push_back({name, barriers, execute});
+        }
+        void addPass(const std::string &name, std::function<void(VkCommandBuffer)> execute)
+        {
+            passes.push_back({name, {}, execute});
         }
         void execute(VkCommandBuffer commandBuffer)
         {

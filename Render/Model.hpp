@@ -78,7 +78,6 @@ namespace burnhope
         bool hasIndexBuffer = false;
         std::unique_ptr<BurnhopeBuffer> indexBuffer;
         uint32_t indexCount;
-
     private:
         std::vector<SubMesh> subMeshes;
         void createVertexBuffers(const std::vector<Vertex> &vertices);

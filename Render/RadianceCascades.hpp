@@ -3,6 +3,7 @@
 #include "../Utils/Buffer.hpp"
 #include "../Utils/Descriptors.hpp"
 #include "Texture.hpp"
+#include "ComputeShader.hpp"
 #include "../Utils/Pipeline.hpp"
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -90,5 +91,8 @@ namespace burnhope
         VkDescriptorSet lightingReadSet = VK_NULL_HANDLE;
         VkDescriptorSetLayout globalLayoutRef = VK_NULL_HANDLE;
         VkDescriptorSetLayout gBufferLayoutRef = VK_NULL_HANDLE;
+        std::unique_ptr<ComputeShader> probeUpdateShader;
+        std::unique_ptr<ComputeShader> mergeShader;
+        std::unique_ptr<ComputeShader> sampleShader;
     };
 }
