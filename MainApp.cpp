@@ -1,5 +1,6 @@
 ﻿#include "MainApp.hpp"
 #include "Render/Camera.hpp"
+#include "Render/SceneManager.hpp"
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -651,71 +652,8 @@ namespace burnhope
             throw std::runtime_error("Failed to rebuild computeOutputSet!");
         }
     }
-    void FirstApp::loadGameObjects(entt::registry &registry)
+   void FirstApp::loadGameObjects(entt::registry &registry)
     {
-        std::shared_ptr<BurnhopeTexture> diffuseTexture =
-            BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/diffuse3.bhtex");
-        std::shared_ptr<BurnhopeTexture> normalTexture =
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/normal3.bhtex");
-        std::shared_ptr<BurnhopeTexture> rougnessTexture =
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/rougness3.bhtex");
-        std::shared_ptr<BurnhopeTexture> metallicTexture =
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/metallic3.bhtex");
-        std::shared_ptr<BurnhopeTexture> aoTexture =
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/ao3.bhtex");
-        std::shared_ptr<BurnhopeTexture> heightTexture =
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/height3.bhtex");
-        std::shared_ptr<BurnhopeModel> lveModel =
-            BurnhopeModel::createModelFromFile(lveDevice, "models/cube.bhmesh");
-        std::shared_ptr<Material> material = std::make_shared<Material>();
-        material->setAlbedo(diffuseTexture);
-        material->setAO(aoTexture);
-        material->setMetallic(metallicTexture);
-        material->setNormal(normalTexture);
-        material->setRoughness(rougnessTexture);
-        material->setHeight(heightTexture);
-        auto cubeEntity = registry.create();
-        registry.emplace<TagComponent>(cubeEntity, "Vulkan Cube");
-        auto &transform = registry.emplace<TransformComponent>(cubeEntity);
-        transform.transform.position = glm::vec3(0.0f, 0.0f, 0.0f);
-        transform.transform.scale = glm::vec3(5.0f, 0.5f, 5.0f);
-        glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
-        transform.transform.matrix = glm::scale(translation, transform.transform.scale);
-        auto &mesh = registry.emplace<MeshComponent>(cubeEntity);
-        mesh.model = lveModel;
-        mesh.materials.push_back(material);
-        mesh.materials.push_back(material);
-        auto cubeEntity2 = registry.create();
-        registry.emplace<TagComponent>(cubeEntity2, "Vulkan Cube");
-        auto &transform2 = registry.emplace<TransformComponent>(cubeEntity2);
-        transform2.transform.position = glm::vec3(0.0f, 3.0f, 0.0f);
-        transform2.transform.matrix = glm::translate(glm::mat4(1.0f), transform2.transform.position);
-        auto &mesh2 = registry.emplace<MeshComponent>(cubeEntity2);
-        mesh2.model = lveModel;
-        mesh2.materials.push_back(material);
-        mesh2.materials.push_back(material);
-        auto sunEntity = registry.create();
-        registry.emplace<TagComponent>(sunEntity, "Sun");
-        auto &sunTransform = registry.emplace<TransformComponent>(sunEntity);
-        sunTransform.transform.rotation = glm::vec3(-45.0f, 30.0f, 0.0f);
-        auto &sunLight = registry.emplace<LightComponent>(sunEntity);
-        sunLight.light.enable = true;
-        sunLight.light.type = LightType::Directional;
-        sunLight.light.color = glm::vec3(1.0f, 0.95f, 0.8f);
-        sunLight.light.intensity = 50.0f;
-        sunLight.light.castShadows = true;
-        sunLight.light.mobility = LightMobility::Movable;
-        auto pointEntity = registry.create();
-        registry.emplace<TagComponent>(pointEntity, "PointLight_1");
-        auto &ptTransform = registry.emplace<TransformComponent>(pointEntity);
-        ptTransform.transform.position = glm::vec3(2.0f, 1.0f, 0.0f);
-        auto &ptLight = registry.emplace<LightComponent>(pointEntity);
-        ptLight.light.enable = true;
-        ptLight.light.type = LightType::Point;
-        ptLight.light.color = glm::vec3(1.0f, 0.4f, 0.1f);
-        ptLight.light.intensity = 20.0f;
-        ptLight.light.radius = 500.0f;
-        ptLight.light.castShadows = true;
-        ptLight.light.mobility = LightMobility::Movable;
+        SceneManager::loadScene(lveDevice,registry, "level_1.json");
     }
 }

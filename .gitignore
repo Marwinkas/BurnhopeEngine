@@ -4,5 +4,3 @@ x64/
 imgui.ini
 Shaders/**.spv
 build/
-textures/
-models/

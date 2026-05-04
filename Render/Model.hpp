@@ -63,7 +63,6 @@ namespace burnhope
     class BurnhopeModel
     {
     public:
-        std::vector<std::shared_ptr<Material>> loadedMaterials;
         const std::vector<SubMesh> &getSubMeshes() const { return subMeshes; }
         BurnhopeModel(BurnhopeDevice &device, const Builder &builder);
         ~BurnhopeModel();

@@ -157,26 +157,14 @@ namespace burnhope
             if (registry.all_of<LightComponent>(source))
                 registry.emplace<LightComponent>(copy, registry.get<LightComponent>(source));
             auto &hc = registry.emplace<HierarchyComponent>(copy);
-            hc.parent = newParent;
-            if (registry.all_of<HierarchyComponent>(source))
-            {
-                for (entt::entity child : registry.get<HierarchyComponent>(source).children)
-                {
-                    entt::entity newChild = CloneHierarchy(registry, child, copy);
-                    hc.children.push_back(newChild);
-                }
-            }
+
             return copy;
         }
         void DeleteEntityRecursive(entt::registry &registry, entt::entity target)
         {
             if (registry.all_of<HierarchyComponent>(target))
             {
-                auto children = registry.get<HierarchyComponent>(target).children;
-                for (entt::entity child : children)
-                {
-                    DeleteEntityRecursive(registry, child);
-                }
+     
             }
             if (selectedEntity == target)
                 selectedEntity = entt::null;
@@ -187,12 +175,7 @@ namespace burnhope
             SaveState(registry);
             if (registry.all_of<HierarchyComponent>(target))
             {
-                entt::entity parent = registry.get<HierarchyComponent>(target).parent;
-                if (parent != entt::null && registry.all_of<HierarchyComponent>(parent))
-                {
-                    auto &siblings = registry.get<HierarchyComponent>(parent).children;
-                    siblings.erase(std::remove(siblings.begin(), siblings.end(), target), siblings.end());
-                }
+     
             }
             DeleteEntityRecursive(registry, target);
         }
@@ -203,7 +186,7 @@ namespace burnhope
             {
                 if (curr == potentialParent)
                     return true;
-                curr = registry.get<HierarchyComponent>(curr).parent;
+       
             }
             return false;
         }
@@ -516,8 +499,7 @@ namespace burnhope
             if (selectedEntity == entity)
                 nodeFlags |= ImGuiTreeNodeFlags_Selected;
             auto *hc = registry.try_get<HierarchyComponent>(entity);
-            if (!hc || hc->children.empty())
-                nodeFlags |= ImGuiTreeNodeFlags_Leaf;
+      
             bool nodeOpen = ImGui::TreeNodeEx((void *)(uintptr_t)entity, nodeFlags, tag.name.c_str());
             if (ImGui::IsItemClicked())
             {
@@ -534,10 +516,7 @@ namespace burnhope
                 if (ImGui::MenuItem("Duplicate", "Ctrl+D"))
                 {
                     SaveState(registry);
-                    entt::entity parent = hc ? hc->parent : entt::null;
-                    entt::entity newEnt = CloneHierarchy(registry, entity, parent);
-                    if (parent != entt::null)
-                        registry.get<HierarchyComponent>(parent).children.push_back(newEnt);
+
                 }
                 ImGui::Separator();
                 if (ImGui::BeginMenu("Create Child..."))
@@ -548,8 +527,7 @@ namespace burnhope
                         entt::entity newE = registry.create();
                         registry.emplace<TagComponent>(newE, "Empty");
                         registry.emplace<TransformComponent>(newE);
-                        registry.emplace<HierarchyComponent>(newE).parent = entity;
-                        registry.get_or_emplace<HierarchyComponent>(entity).children.push_back(newE);
+                      
                     }
                     ImGui::EndMenu();
                 }
@@ -571,18 +549,7 @@ namespace burnhope
                 if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("OUTLINER_NODE"))
                 {
                     entt::entity dragged = *(const entt::entity *)payload->Data;
-                    if (dragged != entity && !IsDescendant(registry, entity, dragged))
-                    {
-                        SaveState(registry);
-                        auto &draggedHc = registry.get_or_emplace<HierarchyComponent>(dragged);
-                        if (draggedHc.parent != entt::null)
-                        {
-                            auto &oldParentHc = registry.get<HierarchyComponent>(draggedHc.parent);
-                            oldParentHc.children.erase(std::remove(oldParentHc.children.begin(), oldParentHc.children.end(), dragged), oldParentHc.children.end());
-                        }
-                        draggedHc.parent = entity;
-                        registry.get_or_emplace<HierarchyComponent>(entity).children.push_back(dragged);
-                    }
+              
                 }
                 ImGui::EndDragDropTarget();
             }
@@ -590,9 +557,7 @@ namespace burnhope
             {
                 if (hc)
                 {
-                    auto children = hc->children;
-                    for (entt::entity child : children)
-                        DrawOutlinerNode(registry, child);
+                   
                 }
                 ImGui::TreePop();
             }
@@ -609,12 +574,7 @@ namespace burnhope
             {
                 SaveState(registry);
                 auto *hc = registry.try_get<HierarchyComponent>(selectedEntity);
-                if (hc && hc->parent != entt::null)
-                {
-                    auto &parentHc = registry.get<HierarchyComponent>(hc->parent);
-                    parentHc.children.erase(std::remove(parentHc.children.begin(), parentHc.children.end(), selectedEntity), parentHc.children.end());
-                    hc->parent = entt::null;
-                }
+            
             }
             if (ImGui::BeginPopup("GlobalCreateMenu"))
             {
@@ -648,9 +608,7 @@ namespace burnhope
             registry.view<TagComponent>().each([&](entt::entity entity, TagComponent &tag)
                                                {
             auto* hc = registry.try_get<HierarchyComponent>(entity);
-            if (!hc || hc->parent == entt::null) {
-                DrawOutlinerNode(registry, entity);
-            } });
+       });
             if (ImGui::BeginPopupContextWindow("EmptySpaceMenu", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
             {
                 if (ImGui::BeginMenu("Create..."))
@@ -674,12 +632,7 @@ namespace burnhope
                     entt::entity dragged = *(const entt::entity *)payload->Data;
                     SaveState(registry);
                     auto *hc = registry.try_get<HierarchyComponent>(dragged);
-                    if (hc && hc->parent != entt::null)
-                    {
-                        auto &parentHc = registry.get<HierarchyComponent>(hc->parent);
-                        parentHc.children.erase(std::remove(parentHc.children.begin(), parentHc.children.end(), dragged), parentHc.children.end());
-                        hc->parent = entt::null;
-                    }
+               
                 }
                 ImGui::EndDragDropTarget();
             }
@@ -694,7 +647,8 @@ namespace burnhope
             if (selectedEntity == entt::null || !registry.valid(selectedEntity))
             {
                 ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Select an object in the scene");
-                ImGui::End();
+                ImGui::
+                End();
                 return;
             }
             auto &tag = registry.get<TagComponent>(selectedEntity);
@@ -1731,11 +1685,7 @@ namespace burnhope
                 {
                     SaveState(registry);
                     entt::entity parent = entt::null;
-                    if (registry.all_of<HierarchyComponent>(selectedEntity))
-                        parent = registry.get<HierarchyComponent>(selectedEntity).parent;
                     entt::entity newEnt = CloneHierarchy(registry, selectedEntity, parent);
-                    if (parent != entt::null)
-                        registry.get<HierarchyComponent>(parent).children.push_back(newEnt);
                     selectedEntity = newEnt;
                 }
             }
@@ -1817,15 +1767,7 @@ namespace burnhope
                     glm::value_ptr(localMatrix));
                 glm::mat4 worldMatrix = localMatrix;
                 glm::mat4 parentWorldMatrix = glm::mat4(1.0f);
-                if (registry.all_of<HierarchyComponent>(selectedEntity))
-                {
-                    entt::entity parent = registry.get<HierarchyComponent>(selectedEntity).parent;
-                    if (parent != entt::null && registry.all_of<TransformComponent>(parent))
-                    {
-                        parentWorldMatrix = registry.get<TransformComponent>(parent).transform.matrix;
-                        worldMatrix = parentWorldMatrix * localMatrix;
-                    }
-                }
+     
                 if (ImGuizmo::IsUsing() && !wasUsingGizmo)
                     SaveState(registry);
                 wasUsingGizmo = ImGuizmo::IsUsing();
