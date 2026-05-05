@@ -14,14 +14,16 @@ namespace burnhope
         VkDescriptorSetLayout globalLayout,
         VkDescriptorSetLayout gBufferLayout,
         VkImageView lightingImageView,
-        VkSampler lightingSampler)
+        VkSampler lightingSampler,VkDescriptorSetLayout rtLayout,
+        VkDescriptorSetLayout storageLayout, // ДОБАВЛЕНО
+        VkDescriptorSetLayout textureLayout)
         : device(device), pool(pool), screenExtent(screenExtent),
           globalLayoutRef(globalLayout), gBufferLayoutRef(gBufferLayout)
     {
         createProbeTextures();
         createIrradianceTexture();
         createLayouts();
-        createPipelines();
+        createPipelines(rtLayout, storageLayout, textureLayout);
         createDescriptorSets(lightingImageView, lightingSampler);
     }
     RadianceCascadesSystem::~RadianceCascadesSystem() = default;
@@ -98,9 +100,17 @@ namespace burnhope
                                 .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                                 .build();
     }
-    void RadianceCascadesSystem::createPipelines()
+    void RadianceCascadesSystem::createPipelines(VkDescriptorSetLayout rtLayout,VkDescriptorSetLayout storageLayout, VkDescriptorSetLayout textureLayout)
     {
-        std::vector<VkDescriptorSetLayout> updateLayouts = {globalLayoutRef, gBufferLayoutRef, probeWriteLayout->getDescriptorSetLayout()};
+        // В createPipelines:
+        std::vector<VkDescriptorSetLayout> updateLayouts = {
+            globalLayoutRef, 
+            gBufferLayoutRef, 
+            probeWriteLayout->getDescriptorSetLayout(),
+            rtLayout,
+            storageLayout, // НОВОЕ: (Set = 4) renderSystem.getRenderSystemLayout()
+            textureLayout  // НОВОЕ: (Set = 5) renderSystem.getTextureLayout()
+        };
         probeUpdateShader = std::make_unique<ComputeShader>(
             device, "shaders/probe_update.comp.spv", updateLayouts, sizeof(RCPushConstants));
         std::vector<VkDescriptorSetLayout> mergeLayouts = {mergeLayout->getDescriptorSetLayout()};
@@ -115,7 +125,8 @@ namespace burnhope
         VkDescriptorImageInfo lightInfo{};
         lightInfo.imageView = lightingImageView;
         lightInfo.sampler = lightingSampler;
-        lightInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        // This image is sampled in probe_update.comp, so keep descriptor layout explicit.
+        lightInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         for (int c = 0; c < RCConfig::CASCADE_COUNT; c++)
         {
             VkDescriptorImageInfo probeWriteInfo{};
@@ -191,23 +202,26 @@ namespace burnhope
         const glm::vec3 &cameraPos,
         const glm::vec3 &sceneMin,
         const glm::vec3 &sceneMax,
-        VkExtent2D extent)
+        VkExtent2D extent,
+    VkDescriptorSet rtSet,
+        VkDescriptorSet storageSet, // ДОБАВЛЕНО
+        VkDescriptorSet textureSet)
     {
         probeUpdateShader->bind(cmd);
         for (int c = RCConfig::CASCADE_COUNT - 1; c >= 0; c--)
         {
             RCPushConstants push{};
-            push.invViewProj = invViewProj;
-            push.cameraPos = glm::vec4(cameraPos, 1.0f);
             push.probeGridMin = glm::vec4(sceneMin, 0.0f);
             push.probeGridMax = glm::vec4(sceneMax, 0.0f);
             push.probeCount = glm::ivec4(cascadeProbeX(c), cascadeProbeY(c), cascadeProbeZ(c), c);
-            push.rayLength = RCConfig::BASE_RAY_LENGTH * std::pow(2.0f, (float)c);
-            push.cascadeIndex = (float)c;
-            push.screenWidth = (float)extent.width;
-            push.screenHeight = (float)extent.height;
+            push.params = glm::vec4(
+                RCConfig::BASE_RAY_LENGTH * std::pow(2.0f, (float)c), // Это твой rayLength
+                (float)extent.width, 
+                (float)extent.height, 
+                0.0f
+            );
             probeUpdateShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
-            probeUpdateShader->bindDescriptorSets(cmd, {globalSet, gBufferSet, probeWriteSets[c]});
+            probeUpdateShader->bindDescriptorSets(cmd, {globalSet, gBufferSet, probeWriteSets[c], rtSet, storageSet, textureSet});
             int px = cascadeProbeX(c);
             int pz = cascadeProbeZ(c);
             uint32_t w = px * RCConfig::OCTA_SIZE;
@@ -223,7 +237,7 @@ namespace burnhope
         {
             RCPushConstants push{};
             push.probeCount = glm::ivec4(cascadeProbeX(c), cascadeProbeY(c), cascadeProbeZ(c), c);
-            push.cascadeIndex = (float)c;
+            push.params.w = (float)c;
             mergeShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
             mergeShader->bindDescriptorSets(cmd, {mergeReadSets[c]});
             uint32_t w = cascadeProbeX(c) * RCConfig::OCTA_SIZE;
@@ -236,16 +250,24 @@ namespace burnhope
         }
         sampleShader->bind(cmd);
         RCPushConstants push{};
-        push.invViewProj = invViewProj;
-        push.cameraPos = glm::vec4(cameraPos, 1.0f);
         push.probeGridMin = glm::vec4(sceneMin, 0.0f);
         push.probeGridMax = glm::vec4(sceneMax, 0.0f);
         push.probeCount = glm::ivec4(cascadeProbeX(0), cascadeProbeY(0), cascadeProbeZ(0), 0);
-        push.screenWidth = (float)extent.width;
-        push.screenHeight = (float)extent.height;
+        push.params = glm::vec4(
+            RCConfig::BASE_RAY_LENGTH * std::pow(2.0f, 1), // Это твой rayLength
+            (float)extent.width, 
+            (float)extent.height, 
+            0.0f
+        );
         sampleShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
         sampleShader->bindDescriptorSets(cmd, {globalSet, gBufferSet, irradianceWriteSet});
         sampleShader->dispatch(cmd, (extent.width + 15) / 16, (extent.height + 15) / 16, 1);
+
+        insertBarrier(cmd, irradianceTex->getImage(),
+    VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+    VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    
     }
     void RadianceCascadesSystem::rebuildOnResize(VkExtent2D newExtent,
                                                  VkImageView lightingImageView,

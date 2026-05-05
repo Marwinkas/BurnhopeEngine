@@ -77,10 +77,22 @@ namespace burnhope
         bool hasIndexBuffer = false;
         std::unique_ptr<BurnhopeBuffer> indexBuffer;
         uint32_t indexCount;
+        VkDeviceAddress getBLASAddress() const { return blasAddress; }
+        // Добавь эти поля в private или protected
+VkDeviceAddress getVertexBufferAddress() const { return vertexBufferAddress; }
+    VkDeviceAddress getIndexBufferAddress() const { return indexBufferAddress; }
+    // Добавь этот метод в public
+    void createBLAS();
+    VkAccelerationStructureKHR getBLAS() const { return blasHandle; }
     private:
         std::vector<SubMesh> subMeshes;
         void createVertexBuffers(const std::vector<Vertex> &vertices);
         void createIndexBuffers(const std::vector<uint32_t> &indices);
         BurnhopeDevice &lveDevice;
+        std::unique_ptr<BurnhopeBuffer> blasBuffer;
+        VkAccelerationStructureKHR blasHandle = VK_NULL_HANDLE;
+        VkDeviceAddress blasAddress = 0;
+VkDeviceAddress vertexBufferAddress = 0;
+    VkDeviceAddress indexBufferAddress = 0;
     };
 }

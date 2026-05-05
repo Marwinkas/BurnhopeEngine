@@ -1,4 +1,5 @@
 #version 450
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 layout (location = 2) in vec2 aTex;
@@ -12,24 +13,27 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     mat4 projection;
     mat4 invViewProj;
     mat4 view;
-    vec3 camPos;
+    vec3 camPos; 
     float zNear;
     vec3 sunDir;
     float zFar;
     vec4 screenSize;
     mat4 sunLightSpaceMatrices[4];
-    float cascadeSplits[4];
-    uint gridDimX;
+     vec4 cascadeSplits;
+    uint gridDimX; 
     uint gridDimY;
     uint gridDimZ;
     float lightSize;
+        vec3 sunColor;  
+    float sunIntensity; 
 } ubo;
 struct ObjectData {
     mat4 modelMatrix;
     uint materialID;
-    uint meshID;
-    uint padding1;
-    uint padding2;
+    uint pad0;
+    uint64_t vertexBufferAddress;
+    uint64_t indexBufferAddress;
+    uint64_t pad1; // ДОБАВИТЬ
 };
 layout(std430, set = 1, binding = 0) readonly buffer ObjectBuffer {
     ObjectData objects[];

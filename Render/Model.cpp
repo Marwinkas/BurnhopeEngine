@@ -13,9 +13,17 @@
 #include <filesystem>
 namespace burnhope
 {
-    BurnhopeModel::~BurnhopeModel() {}
+    BurnhopeModel::~BurnhopeModel() {
+        if (blasHandle != VK_NULL_HANDLE) {
+            auto pfnDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkDestroyAccelerationStructureKHR");
+            if (pfnDestroyAccelerationStructureKHR) {
+                pfnDestroyAccelerationStructureKHR(lveDevice.device(), blasHandle, nullptr);
+            }
+        }
+    }
     std::unique_ptr<BurnhopeModel> BurnhopeModel::createModelFromFile(BurnhopeDevice &device, const std::string &filepath)
     {
+        
         std::string finalPath = ENGINE_DIR + filepath;
         if (finalPath.ends_with(".obj") || finalPath.ends_with(".fbx") || finalPath.ends_with(".gltf"))
         {
@@ -36,7 +44,10 @@ namespace burnhope
     {
         createVertexBuffers(builder.vertices);
         createIndexBuffers(builder.indices);
+        
         this->subMeshes = builder.subMeshes;
+        createBLAS();
+       
     }
     void BurnhopeModel::createVertexBuffers(const std::vector<Vertex> &vertices)
     {
@@ -54,11 +65,12 @@ namespace burnhope
         stagingBuffer.map();
         stagingBuffer.writeToBuffer((void *)vertices.data());
         vertexBuffer = std::make_unique<BurnhopeBuffer>(
-            lveDevice,
-            vertexSize,
-            vertexCount,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        lveDevice,
+        vertexSize,
+        vertexCount,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | 
+        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         lveDevice.copyBuffer(stagingBuffer.getBuffer(), vertexBuffer->getBuffer(), bufferSize);
     }
     void BurnhopeModel::createIndexBuffers(const std::vector<uint32_t> &indices)
@@ -81,12 +93,140 @@ namespace burnhope
         stagingBuffer.map();
         stagingBuffer.writeToBuffer((void *)indices.data());
         indexBuffer = std::make_unique<BurnhopeBuffer>(
-            lveDevice,
-            indexSize,
-            indexCount,
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        lveDevice,
+        indexSize,
+        indexCount,
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | 
+        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         lveDevice.copyBuffer(stagingBuffer.getBuffer(), indexBuffer->getBuffer(), bufferSize);
+    }
+    void BurnhopeModel::createBLAS()
+    {
+        // 1. ПУЛЕНЕПРОБИВАЕМАЯ ЗАГРУЗКА ФУНКЦИЙ
+        auto pfnCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkCreateAccelerationStructureKHR");
+        auto pfnGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkGetAccelerationStructureBuildSizesKHR");
+        auto pfnCmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkCmdBuildAccelerationStructuresKHR");
+        auto pfnGetAccelerationStructureDeviceAddressKHR = (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkGetAccelerationStructureDeviceAddressKHR");
+
+        if (!pfnCreateAccelerationStructureKHR || !pfnGetAccelerationStructureBuildSizesKHR || 
+            !pfnCmdBuildAccelerationStructuresKHR || !pfnGetAccelerationStructureDeviceAddressKHR) {
+            throw std::runtime_error("[FATAL] Указатели на RT функции равны nullptr! Проверь, добавил ли ты расширения в deviceExtensions в Device.hpp");
+        }
+
+        // 2. Получаем адреса буферов (В Vulkan 1.3 это стандартная функция без KHR)
+        VkBufferDeviceAddressInfo vertexAddressInfo{};
+        vertexAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+        vertexAddressInfo.buffer = vertexBuffer->getBuffer();
+        vertexBufferAddress = vkGetBufferDeviceAddress(lveDevice.device(), &vertexAddressInfo);
+
+        indexBufferAddress = 0;
+        if (hasIndexBuffer) {
+            VkBufferDeviceAddressInfo indexAddressInfo{};
+            indexAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+            indexAddressInfo.buffer = indexBuffer->getBuffer();
+            indexBufferAddress = vkGetBufferDeviceAddress(lveDevice.device(), &indexAddressInfo);
+        }
+
+        if (vertexBufferAddress == 0) {
+            throw std::runtime_error("[FATAL] Адрес буфера вершин = 0!");
+        }
+
+        // 3. Подготавливаем описание геометрии
+        std::vector<VkAccelerationStructureGeometryKHR> geometries;
+        std::vector<VkAccelerationStructureBuildRangeInfoKHR> buildRanges;
+        std::vector<uint32_t> maxPrimitiveCounts;
+
+        for (const auto& sub : subMeshes) {
+            VkAccelerationStructureGeometryKHR geom{};
+            geom.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+            geom.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+            geom.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+            geom.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+            geom.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+            geom.geometry.triangles.vertexData.deviceAddress = vertexBufferAddress;
+            geom.geometry.triangles.vertexStride = sizeof(Vertex);
+            geom.geometry.triangles.maxVertex = vertexCount - 1;
+            geom.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
+            geom.geometry.triangles.indexData.deviceAddress = indexBufferAddress;
+
+            geometries.push_back(geom);
+
+            VkAccelerationStructureBuildRangeInfoKHR range{};
+            range.primitiveCount = sub.indexCounts[0] / 3; 
+            range.primitiveOffset = sub.firstIndices[0] * sizeof(uint32_t); 
+            range.firstVertex = 0;
+            range.transformOffset = 0;
+
+            buildRanges.push_back(range);
+            maxPrimitiveCounts.push_back(range.primitiveCount);
+        }
+
+        // 4. Узнаем размер памяти для BLAS
+        VkAccelerationStructureBuildGeometryInfoKHR buildInfo{};
+        buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+        buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+        buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+        buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+        buildInfo.geometryCount = static_cast<uint32_t>(geometries.size());
+        buildInfo.pGeometries = geometries.data();
+
+        VkAccelerationStructureBuildSizesInfoKHR sizeInfo{};
+        sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+        pfnGetAccelerationStructureBuildSizesKHR(lveDevice.device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, maxPrimitiveCounts.data(), &sizeInfo);
+
+        // 5. Создаем буфер для BLAS
+        blasBuffer = std::make_unique<BurnhopeBuffer>(
+            lveDevice,
+            sizeInfo.accelerationStructureSize,
+            1,
+            VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+
+        // 6. Создаем объект BLAS
+        VkAccelerationStructureCreateInfoKHR createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+        createInfo.buffer = blasBuffer->getBuffer();
+        createInfo.size = sizeInfo.accelerationStructureSize;
+        createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+        if (pfnCreateAccelerationStructureKHR(lveDevice.device(), &createInfo, nullptr, &blasHandle) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create BLAS!");
+        }
+
+        // 7. Scratch буфер
+        BurnhopeBuffer scratchBuffer(
+            lveDevice,
+            sizeInfo.buildScratchSize,
+            1,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+
+        VkBufferDeviceAddressInfo scratchAddressInfo{};
+        scratchAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+        scratchAddressInfo.buffer = scratchBuffer.getBuffer();
+        buildInfo.scratchData.deviceAddress = vkGetBufferDeviceAddress(lveDevice.device(), &scratchAddressInfo);
+
+        // 8. Билд на GPU
+        buildInfo.dstAccelerationStructure = blasHandle;
+        VkCommandBuffer commandBuffer = lveDevice.beginSingleTimeCommands();
+        
+        const VkAccelerationStructureBuildRangeInfoKHR* pBuildRanges = buildRanges.data();
+        pfnCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &buildInfo, &pBuildRanges);
+        
+        lveDevice.endSingleTimeCommands(commandBuffer);
+
+        // 9. Получаем адрес
+        VkAccelerationStructureDeviceAddressInfoKHR addressInfo{};
+        addressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+        addressInfo.accelerationStructure = blasHandle;
+        blasAddress = pfnGetAccelerationStructureDeviceAddressKHR(lveDevice.device(), &addressInfo);
+
+        std::cout << "[RT] Successfully built BLAS for model!" << std::endl;
+        std::cout << "[RT] BLAS built! VertexAddress: " << vertexBufferAddress 
+              << " | IndexAddress: " << indexBufferAddress 
+              << " | BLAS Address: " << blasAddress << std::endl;
     }
     void BurnhopeModel::bind(VkCommandBuffer commandBuffer)
     {

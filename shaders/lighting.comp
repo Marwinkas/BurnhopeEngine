@@ -17,6 +17,8 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     uint gridDimY;
     uint gridDimZ;
     float lightSize;
+        vec3 sunColor;  
+    float sunIntensity; 
 } ubo;
 layout(set = 1, binding = 0) uniform sampler2D gNormalRoughness;
 layout(set = 1, binding = 1) uniform sampler2D gAlbedoMetallic;
@@ -433,11 +435,48 @@ void main() {
     }
     else if (debugMode == 5) {
         vec3 gi = texture(giIrradiance, uv).rgb;
-        imageStore(outColor, pixelCoords, vec4(gi * 5.0, 1.0));
+        imageStore(outColor, pixelCoords, vec4(gi, 1.0));
         return;
     }
-    vec3 gi = texture(giIrradiance, uv).rgb;
-    vec3 ambientTotal = (ambient + gi * albedo * ao * cavity) * gtao;
-    vec3 finalColor = ambientTotal + resultRadiance;
+vec2 texelSize = 1.0 / textureSize(giIrradiance, 0);
+vec3 giSum = vec3(0.0);
+float weightSum = 0.0;
+
+// Читаем центральные данные (эталон)
+float centerDepth = depth;
+vec3 centerNormal = N;
+
+// Проходим квадратом 3x3 (можно увеличить до 5x5 для супер-гладкости)
+for(int x = -1; x <= 1; x++) {
+    for(int y = -1; y <= 1; y++) {
+        vec2 offsetUV = uv + vec2(x, y) * texelSize * 2.0; // * 2.0 расширяет радиус блюра
+        
+        // Читаем соседние пиксели
+        vec3 sampleGI = texture(giIrradiance, offsetUV).rgb;
+        vec3 sampleNormal = texture(gNormalRoughness, offsetUV).rgb;
+        float sampleDepth = texture(gDepth, offsetUV).r;
+        
+        // Считаем вес: если сосед слишком далеко по глубине или нормаль смотрит в другую сторону, не размываем с ним!
+        float depthDiff = abs(centerDepth - sampleDepth);
+        float normalDot = max(0.0, dot(centerNormal, sampleNormal));
+        
+        // Умный вес (чем больше разница, тем меньше вес)
+        float weight = exp(-depthDiff * 1000.0) * pow(normalDot, 8.0);
+        
+        giSum += sampleGI * weight;
+        weightSum += weight;
+    }
+}
+
+vec3 gi = giSum / max(weightSum, 0.0001); // Получили гладкий GI без сетки!
+
+    // GI — это отраженный свет, он должен зависеть от цвета поверхности (albedo) и затенения (ao)
+    // Увеличим влияние GI для наглядности
+    float giStrength = 2.0; 
+    vec3 indirectDiffuse = gi * albedo * ao * gtao * giStrength;
+
+    // Итоговый цвет: Прямой свет (resultRadiance) + Косвенный свет (indirectDiffuse)
+    vec3 finalColor = resultRadiance + indirectDiffuse;
+
     imageStore(outColor, pixelCoords, vec4(finalColor, 1.0));
 }

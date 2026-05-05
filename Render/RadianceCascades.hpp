@@ -15,24 +15,21 @@ namespace burnhope
     struct RCConfig
     {
         static constexpr int CASCADE_COUNT = 4;
-        static constexpr int PROBE_X = 24;
-        static constexpr int PROBE_Y = 12;
-        static constexpr int PROBE_Z = 24;
+        // Увеличиваем количество зондов (было 24-12-24)
+        static constexpr int PROBE_X = 48; 
+        static constexpr int PROBE_Y = 24;
+        static constexpr int PROBE_Z = 48;
         static constexpr int OCTA_SIZE = 8;
-        static constexpr float BASE_RAY_LENGTH = 10.0f;
+        static constexpr float BASE_RAY_LENGTH = 1.0f; // Уменьшим базу для четкости ближних теней
     };
     struct RCPushConstants
     {
-        glm::mat4 invViewProj;
-        glm::vec4 cameraPos;
-        glm::vec4 probeGridMin;
-        glm::vec4 probeGridMax;
-        glm::ivec4 probeCount;
-        float rayLength;
-        float cascadeIndex;
-        float screenWidth;
-        float screenHeight;
-    };
+        glm::vec4 probeGridMin; // 16 байт
+        glm::vec4 probeGridMax; // 16 байт
+        glm::ivec4 probeCount;  // 16 байт (x, y, z, cascadeIndex)
+        // x: rayLength, y: screenWidth, z: screenHeight, w: (резерв)
+        glm::vec4 params;       // 16 байт
+    }; // Итого: 64 байта — идеально!
     class RadianceCascadesSystem
     {
     public:
@@ -42,7 +39,9 @@ namespace burnhope
                                VkDescriptorSetLayout globalLayout,
                                VkDescriptorSetLayout gBufferLayout,
                                VkImageView lightingImageView,
-                               VkSampler lightingSampler);
+                               VkSampler lightingSampler,VkDescriptorSetLayout rtLayout,
+        VkDescriptorSetLayout storageLayout, // ДОБАВЛЕНО
+        VkDescriptorSetLayout textureLayout);
         ~RadianceCascadesSystem();
         RadianceCascadesSystem(const RadianceCascadesSystem &) = delete;
         RadianceCascadesSystem &operator=(const RadianceCascadesSystem &) = delete;
@@ -53,7 +52,9 @@ namespace burnhope
                       const glm::vec3 &cameraPos,
                       const glm::vec3 &sceneMin,
                       const glm::vec3 &sceneMax,
-                      VkExtent2D extent);
+                      VkExtent2D extent,VkDescriptorSet rtSet,
+        VkDescriptorSet storageSet, // ДОБАВЛЕНО
+        VkDescriptorSet textureSet);
         VkDescriptorSet getIrradianceSet() const { return irradianceSet; }
         void rebuildOnResize(VkExtent2D newExtent,
                              VkImageView lightingImageView,
@@ -63,7 +64,8 @@ namespace burnhope
         void createProbeTextures();
         void createIrradianceTexture();
         void createLayouts();
-        void createPipelines();
+        void createPipelines(VkDescriptorSetLayout rtLayout,VkDescriptorSetLayout storageLayout, VkDescriptorSetLayout textureLayout);
+        
         void createDescriptorSets(VkImageView lightingImageView, VkSampler lightingSampler);
         void insertBarrier(VkCommandBuffer cmd, VkImage image,
                            VkImageLayout oldLayout, VkImageLayout newLayout,

@@ -68,6 +68,7 @@ namespace burnhope
         VkImageLayout newLayout,
         uint32_t mipLevels = 1,
         uint32_t layerCount = 1);
+        VkDeviceAddress getBufferDeviceAddress(VkBuffer buffer);
     VkPhysicalDeviceProperties properties;
   private:
     void createInstance();
@@ -94,6 +95,12 @@ namespace burnhope
     VkQueue graphicsQueue_;
     VkQueue presentQueue_;
     const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
-    const std::vector<const char *> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    const std::vector<const char*> deviceExtensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        // --- Добавляем расширения для Raytracing ---
+        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+        VK_KHR_RAY_QUERY_EXTENSION_NAME,
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME // Обязательная зависимость для структур ускорения
+    };
   };
 }

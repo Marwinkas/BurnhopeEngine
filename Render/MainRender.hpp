@@ -20,14 +20,14 @@ namespace burnhope
         VkDeviceMemory depthImageMemory;
         VkImageView depthImageView;
     };
-    struct alignas(16) ObjectData
-    {
-        glm::mat4 modelMatrix;
-        uint32_t materialID;
-        uint32_t meshID;
-        uint32_t padding1;
-        uint32_t padding2;
-    };
+struct ObjectData {
+    glm::mat4 modelMatrix;   // 64 байта
+    uint32_t materialID;     // 4 байта
+    uint32_t pad0;           // 4 байта
+    uint64_t vertexBufferAddress; // 8 байт
+    uint64_t indexBufferAddress;  // 8 байт
+    uint64_t pad1;           // 8 БАЙТ ДОБАВИТЬ! Итого: 96 байт
+};
     struct alignas(16) MaterialData
     {
         int albedoIdx;

@@ -10,11 +10,13 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     float zFar;
     vec4 screenSize;
     mat4 sunLightSpaceMatrices[4];
-    float cascadeSplits[4];
+     vec4 cascadeSplits;
     uint gridDimX;
     uint gridDimY;
     uint gridDimZ;
     float lightSize;
+        vec3 sunColor;  
+    float sunIntensity; 
 } ubo;
 layout(set = 1, binding = 0) uniform sampler2D depthMap;
 layout(set = 1, binding = 1) uniform sampler2D normalRoughnessMap;

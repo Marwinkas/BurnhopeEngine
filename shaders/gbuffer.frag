@@ -17,11 +17,13 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     float zFar;
     vec4 screenSize;
     mat4 sunLightSpaceMatrices[4];
-    float cascadeSplits[4];
+     vec4 cascadeSplits;
     uint gridDimX;
     uint gridDimY;
     uint gridDimZ;
     float lightSize;
+        vec3 sunColor;  
+    float sunIntensity; 
 } ubo;
 struct MaterialData {
     int albedoIdx;
@@ -51,7 +53,7 @@ void main() {
     vec3 B = cross(N, T);
     mat3 finalTBN = mat3(T, B, N);
     float height    = 0.0;
-    vec3  albedo    = vec3(1.0);
+    vec3  albedo    = vec3(1.0); 
     float metallic  = 0.0;
     float roughness = 1.0;
     float ao        = 1.0;

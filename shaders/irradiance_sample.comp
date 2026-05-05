@@ -1,98 +1,129 @@
 #version 450
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
-layout(set = 0, binding = 0) uniform GlobalUbo {
+
+layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     mat4 projection;
     mat4 invViewProj;
     mat4 view;
-    vec3 camPos;
+    vec3 camPos; 
     float zNear;
     vec3 sunDir;
     float zFar;
     vec4 screenSize;
     mat4 sunLightSpaceMatrices[4];
-    vec4 cascadeSplits;
-    uint gridDimX; uint gridDimY; uint gridDimZ;
+    vec4 cascadeSplits; // Выровнено (16 байт)
+    uint gridDimX;
+    uint gridDimY;
+    uint gridDimZ;
     float lightSize;
+        vec3 sunColor;  
+    float sunIntensity; 
 } ubo;
+
 layout(set = 1, binding = 0) uniform sampler2D gNormalRoughness;
 layout(set = 1, binding = 1) uniform sampler2D gAlbedoMetallic;
-layout(set = 1, binding = 2) uniform sampler2D gHeightAO;
 layout(set = 1, binding = 3) uniform sampler2D gDepth;
 layout(set = 2, binding = 0, rgba16f) uniform image2D outIrradiance;
 layout(set = 2, binding = 1) uniform sampler2D cascade0;
+
 layout(push_constant) uniform RC {
-    mat4  invViewProj;
-    vec4  cameraPos;
     vec4  probeGridMin;
     vec4  probeGridMax;
-    ivec4 probeCount;
-    float rayLength;
-    float cascadeIndex;
-    float screenWidth;
-    float screenHeight;
+    ivec4 probeCount; 
+    vec4  params;     
 } rc;
+
 vec2 octaEncode(vec3 dir) {
     dir = normalize(dir);
     dir /= (abs(dir.x) + abs(dir.y) + abs(dir.z));
-    if (dir.z < 0.0)
-        dir.xy = (1.0 - abs(dir.yx)) * sign(dir.xy);
+    if (dir.z < 0.0) dir.xy = (1.0 - abs(dir.yx)) * sign(dir.xy);
     return dir.xy * 0.5 + 0.5;
 }
+
 vec3 sampleProbe(ivec3 probeIdx, vec3 dir) {
     const int octaSize = 8;
     ivec3 pCount = rc.probeCount.xyz;
     vec2 octaUV = octaEncode(dir);
+    
     int baseX = probeIdx.x * octaSize;
     int baseY = (probeIdx.z * pCount.y + probeIdx.y) * octaSize;
     ivec2 texSize = textureSize(cascade0, 0);
-    vec2 uv = (vec2(baseX, baseY) + octaUV * float(octaSize) + 0.5) / vec2(texSize);
-    uv = clamp(uv, vec2(0.001), vec2(0.999));
+    
+    // ИСПРАВЛЕНО: Зажимаем координаты от 0.5 до 7.5, чтобы избежать смешивания с соседними зондами!
+    vec2 localTexel = clamp(octaUV * float(octaSize), 0.5, float(octaSize) - 0.5);
+    vec2 uv = (vec2(baseX, baseY) + localTexel) / vec2(texSize);
+    
     return texture(cascade0, uv).rgb;
 }
+
+vec3 getOrthoVec(vec3 n) {
+    return abs(n.x) > 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0);
+}
+
 void main() {
     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
-    if (pixel.x >= int(rc.screenWidth) || pixel.y >= int(rc.screenHeight)) return;
-    vec2 uv = (vec2(pixel) + 0.5) / vec2(rc.screenWidth, rc.screenHeight);
+    if (pixel.x >= int(rc.params.y) || pixel.y >= int(rc.params.z)) return;
+    
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(rc.params.y, rc.params.z);
     float depth = texture(gDepth, uv).r;
-    if (depth >= 1.0) {
-        imageStore(outIrradiance, pixel, vec4(0.0));
-        return;
-    }
+    
+    // Если небо — не считаем GI
+    if (depth >= 1.0) { imageStore(outIrradiance, pixel, vec4(0.0)); return; }
+
     vec3 N = normalize(texture(gNormalRoughness, uv).rgb);
     vec4 ndc = vec4(uv * 2.0 - 1.0, depth, 1.0);
-    vec4 worldRaw = rc.invViewProj * ndc;
+    
+    // ИСПРАВЛЕНО: Матрица берется из UBO!
+    vec4 worldRaw = ubo.invViewProj * ndc;
     vec3 worldPos = worldRaw.xyz / worldRaw.w;
+
     vec3 gridSize = rc.probeGridMax.xyz - rc.probeGridMin.xyz;
     ivec3 pCount  = rc.probeCount.xyz;
     vec3 localPos = (worldPos - rc.probeGridMin.xyz) / gridSize;
-    localPos = clamp(localPos, vec3(0.001), vec3(0.999));
-    vec3 probeF   = localPos * vec3(pCount) - 0.5;
-    ivec3 p000    = clamp(ivec3(floor(probeF)), ivec3(0), pCount - 1);
-    ivec3 p111    = clamp(p000 + 1,             ivec3(0), pCount - 1);
-    vec3 t        = fract(probeF);
-    vec3 irradiance  = vec3(0.0);
-    float totalWeight = 0.0;
-    for (int ix = 0; ix < 2; ix++)
-    for (int iy = 0; iy < 2; iy++)
-    for (int iz = 0; iz < 2; iz++) {
-        ivec3 idx = ivec3(
-            ix == 0 ? p000.x : p111.x,
-            iy == 0 ? p000.y : p111.y,
-            iz == 0 ? p000.z : p111.z
-        );
-        float w =
-            (ix == 0 ? (1.0 - t.x) : t.x) *
-            (iy == 0 ? (1.0 - t.y) : t.y) *
-            (iz == 0 ? (1.0 - t.z) : t.z);
-        vec3 probeWorldPos = rc.probeGridMin.xyz + gridSize *
-            (vec3(idx) + 0.5) / vec3(pCount);
-        vec3 toProbe = normalize(probeWorldPos - worldPos);
-        float vis = max(0.05, dot(N, toProbe) * 0.5 + 0.5);
-        w *= vis;
-        irradiance  += sampleProbe(idx, N) * w;
-        totalWeight += w;
+    
+    vec3 probeF = localPos * vec3(pCount) - 0.5;
+    ivec3 p000 = clamp(ivec3(floor(probeF)), ivec3(0), pCount - 1);
+    ivec3 p111 = clamp(p000 + 1, ivec3(0), pCount - 1);
+    vec3 t = fract(probeF);
+
+    vec3 tangent = normalize(cross(N, getOrthoVec(N)));
+    vec3 bitangent = cross(N, tangent);
+    
+    vec3 dirs[5];
+    dirs[0] = N;
+    dirs[1] = normalize(N + tangent * 0.5);
+    dirs[2] = normalize(N - tangent * 0.5);
+    dirs[3] = normalize(N + bitangent * 0.5);
+    dirs[4] = normalize(N - bitangent * 0.5);
+
+    vec3 totalIrradiance = vec3(0.0);
+
+    for (int d = 0; d < 5; d++) {
+        vec3 dir = dirs[d];
+        vec3 dirLightAccum = vec3(0.0);
+        float weightSum = 0.0;
+
+        for (int ix = 0; ix < 2; ix++)
+        for (int iy = 0; iy < 2; iy++)
+        for (int iz = 0; iz < 2; iz++) {
+            ivec3 idx = ivec3(ix == 0 ? p000.x : p111.x, iy == 0 ? p000.y : p111.y, iz == 0 ? p000.z : p111.z);
+            
+            float lerpW = (ix == 0 ? (1.0 - t.x) : t.x) *
+                          (iy == 0 ? (1.0 - t.y) : t.y) *
+                          (iz == 0 ? (1.0 - t.z) : t.z);
+            
+            vec3 probeWorldPos = rc.probeGridMin.xyz + gridSize * (vec3(idx) + 0.5) / vec3(pCount);
+            vec3 toProbe = normalize(probeWorldPos - worldPos);
+            float NdotP = dot(N, toProbe);
+            
+            // ИСПРАВЛЕНО: Отсекаем зонды, которые находятся внутри или позади стен
+            float finalW = lerpW * max(0.01, NdotP);
+
+            dirLightAccum += sampleProbe(idx, dir) * finalW;
+            weightSum += finalW;
+        }
+        totalIrradiance += dirLightAccum / max(weightSum, 0.0001);
     }
-    if (totalWeight > 0.001)
-        irradiance /= totalWeight;
-    imageStore(outIrradiance, pixel, vec4(irradiance, 1.0));
+
+    imageStore(outIrradiance, pixel, vec4(totalIrradiance / 5.0, 1.0));
 }
