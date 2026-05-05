@@ -27,6 +27,7 @@ namespace burnhope
         shadowSystem = std::make_unique<BurnhopeShadowSystem>(lveDevice);
         defaultWhiteMaterial = std::make_shared<Material>();
         defaultWhiteMaterial->setAlbedo(defaultWhiteTex);
+        defaultWhiteMaterial->setNormal(defaultNormalTex);
         globalSetLayout = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                               .addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT)
                               .build();
@@ -261,40 +262,40 @@ namespace burnhope
             glfwPollEvents();
 
             bool transformsChanged = false;
-            
+
             // 1. Вычисляем новые локальные матрицы для всех, кто сдвинулся
-            registry.view<TransformComponent>().each([&](TransformComponent& tComp) {
+            registry.view<TransformComponent>().each([&](TransformComponent &tComp)
+                                                     {
                 if (tComp.transform.updatematrix) {
                     tComp.transform.updateMatrixIfNeeded();
                     transformsChanged = true;
-                }
-            });
+                } });
 
-            // 2. Если хоть кто-то сдвинулся — прокидываем новые матрицы в GPU
-            if (transformsChanged && objectBuffer) {
-                // Берем прямой указатель на память видеокарты
-                auto* mappedData = reinterpret_cast<ObjectData*>(objectBuffer->getMappedMemory());
-                
-                if (mappedData) {
+            if (transformsChanged && objectBuffer)
+            {
+                auto *mappedData = reinterpret_cast<ObjectData *>(objectBuffer->getMappedMemory());
+
+                if (mappedData)
+                {
                     uint32_t objIndex = 0;
                     auto meshView = registry.view<TransformComponent, MeshComponent>();
-                    
-                    for (auto [entity, transformComp, meshComp] : meshView.each()) {
-                        if (!meshComp.model || !meshComp.isVisible) continue;
-                        
-                        // В будущем здесь нужно будет получать Глобальную матрицу 
-                        // с учетом родителя. Пока берем локальную.
+
+                    for (auto [entity, transformComp, meshComp] : meshView.each())
+                    {
+                        if (!meshComp.model || !meshComp.isVisible)
+                            continue;
+
                         glm::mat4 worldMatrix = transformComp.transform.matrix;
-                        
-                        // Записываем матрицу для каждого саб-меша модели
-                        for (uint32_t i = 0; i < meshComp.model->getSubMeshes().size(); i++) {
-                            // Обновляем ТОЛЬКО матрицу! materialID остается нетронутым.
+
+                        for (uint32_t i = 0; i < meshComp.model->getSubMeshes().size(); i++)
+                        {
                             mappedData[objIndex].modelMatrix = worldMatrix;
                             objIndex++;
                         }
                     }
                 }
             }
+
             auto extent = lveWindow.getExtent();
             while (extent.width == 0 || extent.height == 0)
             {
@@ -881,7 +882,6 @@ namespace burnhope
     void FirstApp::loadGameObjects(entt::registry &registry)
 
     {
-
         std::shared_ptr<BurnhopeTexture> diffuseTexture =
 
             BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/diffuse3.png");
@@ -925,67 +925,59 @@ namespace burnhope
         material->setHeight(heightTexture);
 
         auto cubeEntity = registry.create();
-
-        registry.emplace<TagComponent>(cubeEntity, "Vulkan Cube");
+        registry.emplace<IDComponent>(cubeEntity);
+        registry.emplace<HierarchyComponent>(cubeEntity);
+        registry.emplace<TagComponent>(cubeEntity, "Plane");
 
         auto &transform = registry.emplace<TransformComponent>(cubeEntity);
-
         transform.transform.position = glm::vec3(0.0f, 0.0f, 0.0f);
-
         transform.transform.scale = glm::vec3(5.0f, 0.5f, 5.0f);
-
-        glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
-
-        transform.transform.matrix = glm::scale(translation, transform.transform.scale);
+        // glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
+        // transform.transform.matrix = glm::scale(translation, transform.transform.scale);
+        transform.transform.updateMatrixIfNeeded();
 
         auto &mesh = registry.emplace<MeshComponent>(cubeEntity);
-
         mesh.model = lveModel;
-
+        //mesh.modelPath = "models/cube.bhmesh";
         mesh.materials.push_back(material);
-
+        //mesh.materialPaths.push_back("materials/cube_material.json"); 
         mesh.materials.push_back(material);
+        //mesh.materialPaths.push_back("materials/cube_material.json"); 
 
         auto cubeEntity2 = registry.create();
-
-        registry.emplace<TagComponent>(cubeEntity2, "Vulkan Cube");
+        registry.emplace<IDComponent>(cubeEntity2);
+        registry.emplace<HierarchyComponent>(cubeEntity2);
+        registry.emplace<TagComponent>(cubeEntity2, "Cube");
 
         auto &transform2 = registry.emplace<TransformComponent>(cubeEntity2);
-
         transform2.transform.position = glm::vec3(0.0f, 1.5f, 0.0f);
-
-        transform2.transform.matrix = glm::translate(glm::mat4(1.0f), transform2.transform.position);
+        transform2.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
+        // transform2.transform.matrix = glm::translate(glm::mat4(1.0f), transform2.transform.position);
+        transform2.transform.updateMatrixIfNeeded();
 
         auto &mesh2 = registry.emplace<MeshComponent>(cubeEntity2);
-
         mesh2.model = lveModel;
-
+        //mesh2.modelPath = "models/cube.bhmesh";
         mesh2.materials.push_back(material);
-
+        //mesh2.materialPaths.push_back("materials/cube_material.json"); 
         mesh2.materials.push_back(material);
+        //mesh2.materialPaths.push_back("materials/cube_material.json"); 
 
         auto sunEntity = registry.create();
-
+        registry.emplace<IDComponent>(sunEntity);
+        registry.emplace<HierarchyComponent>(sunEntity);
         registry.emplace<TagComponent>(sunEntity, "Sun");
-
         auto &sunTransform = registry.emplace<TransformComponent>(sunEntity);
-
         sunTransform.transform.rotation = glm::vec3(45.0f, 0.0f, 45.0f);
+        sunTransform.transform.updateMatrixIfNeeded();
 
         auto &sunLight = registry.emplace<LightComponent>(sunEntity);
-
         sunLight.light.enable = true;
-
         sunLight.light.type = LightType::Directional;
-
         sunLight.light.color = glm::vec3(1.0f, 1.0f, 1.0f);
-
         sunLight.light.intensity = 50.0f;
-
-        sunLight.light.radius = 500.0f;
-
+        //sunLight.light.radius = 100.0f;
         sunLight.light.castShadows = true;
-
         sunLight.light.mobility = LightMobility::Movable;
     }
 }
