@@ -23,7 +23,7 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     uint gridDimZ;
     float lightSize;
         vec3 sunColor;  
-    float sunIntensity; 
+    float sunIntensity;  
 } ubo;
 struct MaterialData {
     int albedoIdx;

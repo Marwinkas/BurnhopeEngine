@@ -441,8 +441,10 @@ namespace burnhope
                         VK_ACCESS_SHADER_READ_BIT     // Кто будет читать (GI лучи)
                     )
                 }, [&](VkCommandBuffer cmd) {
-                    glm::vec3 sceneMin(-6.0f, 0.5f, -6.0f);
-                    glm::vec3 sceneMax( 6.0f,  4.0f,  6.0f);
+                    // Объем GI должен полностью покрывать сцену.
+                    // Слишком узкий volume приводит к clamp на границах сетки и видимой "клетке".
+                    glm::vec3 sceneMin(-12.0f, -2.0f, -12.0f);
+                    glm::vec3 sceneMax( 12.0f,  8.0f,  12.0f);
                     rcSystem->dispatch(cmd, globalDescriptorSets[frameIndex], gBufferSet, ubo.invViewProj, camera.Position, sceneMin, sceneMax, extent, rtSet, storageSet, textureSet); });
                 VkImage swapChainImage = lveRenderer.getCurrentSwapChainImage();
                 renderPipeline.addPass("Blit and UI", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
@@ -888,8 +890,8 @@ std::shared_ptr<BurnhopeTexture> diffuseTexture =
         transform2.transform.matrix = glm::translate(glm::mat4(1.0f), transform2.transform.position);
         auto &mesh2 = registry.emplace<MeshComponent>(cubeEntity2);
         mesh2.model = lveModel;
-        mesh2.materials.push_back(defaultWhiteMaterial);
-        mesh2.materials.push_back(defaultWhiteMaterial);
+        mesh2.materials.push_back(material);
+        mesh2.materials.push_back(material);
         auto sunEntity = registry.create();
         registry.emplace<TagComponent>(sunEntity, "Sun");
         auto &sunTransform = registry.emplace<TransformComponent>(sunEntity);
@@ -897,7 +899,7 @@ std::shared_ptr<BurnhopeTexture> diffuseTexture =
         auto &sunLight = registry.emplace<LightComponent>(sunEntity);
         sunLight.light.enable = true;
         sunLight.light.type = LightType::Directional;
-        sunLight.light.color = glm::vec3(1.0f, 0.5f, 1.0f);
+        sunLight.light.color = glm::vec3(1.0f, 1.0f, 1.0f);
         sunLight.light.intensity = 50.0f;
         sunLight.light.radius= 500.0f;
         sunLight.light.castShadows = true;

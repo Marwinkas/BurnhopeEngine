@@ -142,12 +142,12 @@ vec3 EvaluateHit(int instanceID, int primID, vec2 bary, vec3 hitPos) {
     float shadow = 1.0; 
     if (NdotL > 0.0) {
         rayQueryEXT shadowQuery;
-        vec3 shadowOrigin = hitPos + worldNormal * 0.02; // Смещение, чтобы не затенить самих себя
+       vec3 shadowOrigin = hitPos + worldNormal * 0.05; // Смещение, чтобы не затенить самих себя
         
         // БЫЛО: sunDir
         // СТАЛО: L
-        rayQueryInitializeEXT(shadowQuery, tlas, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT, 0xFFu, shadowOrigin, 0.0, L, 1000.0);
-        
+        rayQueryInitializeEXT(shadowQuery, tlas, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT, 0xFFu, shadowOrigin, 0.05, L, 1000.0);
+
         while(rayQueryProceedEXT(shadowQuery)) {}
         
         if (rayQueryGetIntersectionTypeEXT(shadowQuery, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
@@ -166,7 +166,7 @@ vec3 EvaluateHit(int instanceID, int primID, vec2 bary, vec3 hitPos) {
 
 vec4 rtRaymarch(vec3 origin, vec3 dir, float rayLen) {
     rayQueryEXT rayQuery;
-    rayQueryInitializeEXT(rayQuery, tlas, gl_RayFlagsOpaqueEXT, 0xFFu, origin, 0.01, dir, rayLen);
+   rayQueryInitializeEXT(rayQuery, tlas, gl_RayFlagsOpaqueEXT, 0xFFu, origin, 0.05, dir, rayLen);
     while(rayQueryProceedEXT(rayQuery)) {}
 
     if (rayQueryGetIntersectionTypeEXT(rayQuery, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
@@ -209,7 +209,7 @@ void main() {
     ivec2 probeTexSize = imageSize(outProbe);
     if (pixel.x >= probeTexSize.x || pixel.y >= probeTexSize.y) return;
 
-    int octaSize = 8;
+    int octaSize = 24;
     ivec3 pCount = rc.probeCount.xyz;
     
     int probeIdxX  = pixel.x / octaSize;
@@ -222,9 +222,10 @@ void main() {
     vec3 gridSize = rc.probeGridMax.xyz - rc.probeGridMin.xyz;
     vec3 probePos = rc.probeGridMin.xyz + gridSize * (vec3(probeIdxX, probeIdxY, probeIdxZ) + 0.5) / vec3(pCount);
 
-    vec2 localUV = (vec2(pixel % octaSize) + 0.5) / float(octaSize);
+    float jitter = fract(sin(dot(vec3(probeIdxX, probeIdxY, probeIdxZ), vec3(12.9898, 78.233, 45.164))) * 43758.5453);
+    
+    vec2 localUV = (vec2(pixel % octaSize) + jitter) / float(octaSize);
     vec3 rayDir = octaDecode(localUV);
-
     float startOffset = (rc.probeCount.w > 0) ? rc.params.x * 0.5 : 0.0;
     float currentRange = rc.params.x - startOffset;
 

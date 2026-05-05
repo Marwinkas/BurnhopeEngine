@@ -41,19 +41,33 @@ vec2 octaEncode(vec3 dir) {
 }
 
 vec3 sampleProbe(ivec3 probeIdx, vec3 dir) {
-    const int octaSize = 8;
+    const int octaSize = 24;
     ivec3 pCount = rc.probeCount.xyz;
     vec2 octaUV = octaEncode(dir);
     
     int baseX = probeIdx.x * octaSize;
     int baseY = (probeIdx.z * pCount.y + probeIdx.y) * octaSize;
-    ivec2 texSize = textureSize(cascade0, 0);
-    
-    // ИСПРАВЛЕНО: Зажимаем координаты от 0.5 до 7.5, чтобы избежать смешивания с соседними зондами!
-    vec2 localTexel = clamp(octaUV * float(octaSize), 0.5, float(octaSize) - 0.5);
-    vec2 uv = (vec2(baseX, baseY) + localTexel) / vec2(texSize);
-    
-    return texture(cascade0, uv).rgb;
+
+    // Ручной bilinear через texelFetch только внутри текущего tile.
+    // Это исключает bleed из соседних probe tiles.
+    vec2 p = clamp(octaUV * float(octaSize) - 0.5, vec2(0.0), vec2(float(octaSize - 1)));
+    ivec2 i0 = ivec2(floor(p));
+    ivec2 i1 = min(i0 + ivec2(1), ivec2(octaSize - 1));
+    vec2 f = fract(p);
+
+    ivec2 t00 = ivec2(baseX, baseY) + i0;
+    ivec2 t10 = ivec2(baseX, baseY) + ivec2(i1.x, i0.y);
+    ivec2 t01 = ivec2(baseX, baseY) + ivec2(i0.x, i1.y);
+    ivec2 t11 = ivec2(baseX, baseY) + i1;
+
+    vec3 c00 = texelFetch(cascade0, t00, 0).rgb;
+    vec3 c10 = texelFetch(cascade0, t10, 0).rgb;
+    vec3 c01 = texelFetch(cascade0, t01, 0).rgb;
+    vec3 c11 = texelFetch(cascade0, t11, 0).rgb;
+
+    vec3 cx0 = mix(c00, c10, f.x);
+    vec3 cx1 = mix(c01, c11, f.x);
+    return mix(cx0, cx1, f.y);
 }
 
 vec3 getOrthoVec(vec3 n) {

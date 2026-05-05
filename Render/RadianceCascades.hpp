@@ -19,7 +19,7 @@ namespace burnhope
         static constexpr int PROBE_X = 48; 
         static constexpr int PROBE_Y = 24;
         static constexpr int PROBE_Z = 48;
-        static constexpr int OCTA_SIZE = 8;
+        static constexpr int OCTA_SIZE = 24;
         static constexpr float BASE_RAY_LENGTH = 1.0f; // Уменьшим базу для четкости ближних теней
     };
     struct RCPushConstants

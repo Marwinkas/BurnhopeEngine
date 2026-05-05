@@ -1,5 +1,6 @@
 #version 450
 layout(local_size_x = 16, local_size_y = 16) in;
+
 layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     mat4 projection;
     mat4 invViewProj;
@@ -10,56 +11,72 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     float zFar;
     vec4 screenSize;
     mat4 sunLightSpaceMatrices[4];
-     vec4 cascadeSplits;
+    vec4 cascadeSplits;
     uint gridDimX;
     uint gridDimY;
     uint gridDimZ;
     float lightSize;
-        vec3 sunColor;  
+    vec3 sunColor;  
     float sunIntensity; 
 } ubo;
+
 layout(set = 1, binding = 0) uniform sampler2D depthMap;
 layout(set = 1, binding = 1) uniform sampler2D normalRoughnessMap;
 layout(set = 1, binding = 2, r8) uniform writeonly image2D outGTAO;
-const float RADIUS = 0.5;         
-const int   STEPS = 16;            
-const int   DIRECTIONS = 16;       
+
+const float RADIUS = 1.0;         // Немного увеличил радиус для сочных теней в углах
+const int   STEPS = 4;            // ОПТИМИЗАЦИЯ: 4 шага
+const int   DIRECTIONS = 8;       // ОПТИМИЗАЦИЯ: 8 направлений (итого 32 выборки, а не 256)
 const float PI = 3.14159265359;
+
 vec3 reconstructWorldPos(vec2 uv, float depth) {
     vec4 clipSpace = vec4(uv * 2.0 - 1.0, depth, 1.0);
     vec4 worldSpace = ubo.invViewProj * clipSpace;
     return worldSpace.xyz / worldSpace.w;
 }
+
 float interleavedGradientNoise(vec2 pixelCoord) {
     return fract(52.9829189 * fract(dot(pixelCoord, vec2(0.06711056, 0.00583715))));
 }
+
 void main() {
     ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
     ivec2 texSize = imageSize(outGTAO);
     if (pixelCoord.x >= texSize.x || pixelCoord.y >= texSize.y) return;
+    
     vec2 uv = (vec2(pixelCoord) + 0.5) / vec2(texSize);
     float depth = textureLod(depthMap, uv, 0.0).r;
+    
     if (depth >= 1.0) {
         imageStore(outGTAO, pixelCoord, vec4(1.0));
         return;
     }
+    
     vec3 viewPos = (ubo.view * vec4(reconstructWorldPos(uv, depth), 1.0)).xyz; 
     vec3 worldNormal = textureLod(normalRoughnessMap, uv, 0.0).rgb;
     vec3 viewNormal = normalize(mat3(ubo.view) * worldNormal);
+    
     float noise = interleavedGradientNoise(vec2(pixelCoord));
     float angleOffset = noise * PI;
     vec2 texelSize = 1.0 / vec2(texSize);
-    float screenRadius = (RADIUS / -viewPos.z) * ubo.projection[1][1]; 
+    
+    // ИСПРАВЛЕНИЕ БАГА: abs() спасает от перевернутой Y-оси Vulkan!
+    float screenRadius = (RADIUS / abs(viewPos.z)) * abs(ubo.projection[1][1]); 
     screenRadius = max(screenRadius, 2.0 * texelSize.y); 
+    
     float visibility = 0.0;
     for (int i = 0; i < DIRECTIONS; ++i) {
         float angle = angleOffset + (float(i) / float(DIRECTIONS)) * PI;
         vec2 dir = vec2(cos(angle), sin(angle));
-        float maxElevation1 = -1.0; 
-        float maxElevation2 = -1.0;
+        
+        float maxElevation1 = 0.0; 
+        float maxElevation2 = 0.0;
+        
         for (int j = 1; j <= STEPS; ++j) {
             float t = (float(j) - 0.5 + noise) / float(STEPS); 
             vec2 stepUV = dir * screenRadius * t;
+            
+            // Вперед
             vec2 uv1 = uv + stepUV;
             if (uv1.x > 0.0 && uv1.x < 1.0 && uv1.y > 0.0 && uv1.y < 1.0) {
                 float d1 = textureLod(depthMap, uv1, 0.0).r;
@@ -72,6 +89,8 @@ void main() {
                     maxElevation1 = max(maxElevation1, elevation * weight);
                 }
             }
+            
+            // Назад
             vec2 uv2 = uv - stepUV;
             if (uv2.x > 0.0 && uv2.x < 1.0 && uv2.y > 0.0 && uv2.y < 1.0) {
                 float d2 = textureLod(depthMap, uv2, 0.0).r;
@@ -85,9 +104,11 @@ void main() {
                 }
             }
         }
-        visibility += (1.0 - max(maxElevation1, 0.0)) * (1.0 - max(maxElevation2, 0.0));
+        visibility += (1.0 - maxElevation1) * (1.0 - maxElevation2);
     }
+    
     visibility /= float(DIRECTIONS);
-    visibility = pow(visibility, 1.5);
+    visibility = pow(visibility, 1.5); // Усиливаем контраст теней
+    
     imageStore(outGTAO, pixelCoord, vec4(visibility, visibility, visibility, 1.0));
 }
