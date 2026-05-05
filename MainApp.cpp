@@ -259,6 +259,42 @@ namespace burnhope
         while (!lveWindow.shouldClose())
         {
             glfwPollEvents();
+
+            bool transformsChanged = false;
+            
+            // 1. Вычисляем новые локальные матрицы для всех, кто сдвинулся
+            registry.view<TransformComponent>().each([&](TransformComponent& tComp) {
+                if (tComp.transform.updatematrix) {
+                    tComp.transform.updateMatrixIfNeeded();
+                    transformsChanged = true;
+                }
+            });
+
+            // 2. Если хоть кто-то сдвинулся — прокидываем новые матрицы в GPU
+            if (transformsChanged && objectBuffer) {
+                // Берем прямой указатель на память видеокарты
+                auto* mappedData = reinterpret_cast<ObjectData*>(objectBuffer->getMappedMemory());
+                
+                if (mappedData) {
+                    uint32_t objIndex = 0;
+                    auto meshView = registry.view<TransformComponent, MeshComponent>();
+                    
+                    for (auto [entity, transformComp, meshComp] : meshView.each()) {
+                        if (!meshComp.model || !meshComp.isVisible) continue;
+                        
+                        // В будущем здесь нужно будет получать Глобальную матрицу 
+                        // с учетом родителя. Пока берем локальную.
+                        glm::mat4 worldMatrix = transformComp.transform.matrix;
+                        
+                        // Записываем матрицу для каждого саб-меша модели
+                        for (uint32_t i = 0; i < meshComp.model->getSubMeshes().size(); i++) {
+                            // Обновляем ТОЛЬКО матрицу! materialID остается нетронутым.
+                            mappedData[objIndex].modelMatrix = worldMatrix;
+                            objIndex++;
+                        }
+                    }
+                }
+            }
             auto extent = lveWindow.getExtent();
             while (extent.width == 0 || extent.height == 0)
             {
