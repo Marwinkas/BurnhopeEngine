@@ -47,6 +47,38 @@ namespace burnhope
         
         this->subMeshes = builder.subMeshes;
         createBLAS();
+
+        for (const auto& paths : builder.materialPaths) {
+        auto mat = std::make_shared<Material>();
+        
+        // Загружаем основной цвет (Albedo)
+        if (!paths.albedo.empty()) {
+            std::string fullPath = builder.modelDir + paths.albedo;
+            mat->setAlbedo(BurnhopeTexture::createTextureFromFile(lveDevice, fullPath), paths.albedo);
+        }
+        
+        // Загружаем рельеф (Normal)
+        if (!paths.normal.empty()) {
+            std::string fullPath = builder.modelDir + paths.normal;
+            mat->setNormal(BurnhopeTexture::createDataTextureFromFile(lveDevice, fullPath), paths.normal);
+        }
+        
+        // Обрабатываем ORM (Occlusion, Roughness, Metallic)
+        if (!paths.orm.empty()) {
+            std::string fullPath = builder.modelDir + paths.orm;
+            
+            // Включаем флажок для шейдера
+            mat->isORM = true; 
+            
+            // Так как твой шейдер читает ORM из roughnessIdx, 
+            // мы бережно кладем нашу картинку именно в этот слот
+            mat->setRoughness(BurnhopeTexture::createDataTextureFromFile(lveDevice, fullPath), paths.orm);
+        }
+        
+        // Сохраняем собранный материал в нашу модель
+        materials.push_back(mat);
+    }
+    
        
     }
     void BurnhopeModel::createVertexBuffers(const std::vector<Vertex> &vertices)

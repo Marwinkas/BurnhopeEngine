@@ -77,6 +77,7 @@ namespace burnhope
         bool hasIndexBuffer = false;
         std::unique_ptr<BurnhopeBuffer> indexBuffer;
         uint32_t indexCount;
+        std::vector<std::shared_ptr<Material>> materials;
         VkDeviceAddress getBLASAddress() const { return blasAddress; }
         // Добавь эти поля в private или protected
 VkDeviceAddress getVertexBufferAddress() const { return vertexBufferAddress; }

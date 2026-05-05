@@ -91,12 +91,26 @@ namespace burnhope
             dst.clear();
             src.view<TagComponent>().each([&](entt::entity entity, TagComponent &tag)
                                           {
-            entt::entity newEnt = dst.create(entity); 
-            dst.emplace<TagComponent>(newEnt, tag);
-            if (src.all_of<TransformComponent>(entity)) dst.emplace<TransformComponent>(newEnt, src.get<TransformComponent>(entity));
-            if (src.all_of<MeshComponent>(entity)) dst.emplace<MeshComponent>(newEnt, src.get<MeshComponent>(entity));
-            if (src.all_of<LightComponent>(entity)) dst.emplace<LightComponent>(newEnt, src.get<LightComponent>(entity));
-            if (src.all_of<HierarchyComponent>(entity)) dst.emplace<HierarchyComponent>(newEnt, src.get<HierarchyComponent>(entity)); });
+        entt::entity newEnt = dst.create(entity); 
+        dst.emplace<TagComponent>(newEnt, tag);
+    
+        if (src.all_of<IDComponent>(entity)) 
+            dst.emplace<IDComponent>(newEnt, src.get<IDComponent>(entity));
+            
+        if (src.all_of<TransformComponent>(entity)) {
+            auto tComp = src.get<TransformComponent>(entity);
+            tComp.transform.updatematrix = true;
+            dst.emplace<TransformComponent>(newEnt, tComp);
+        }
+            
+        if (src.all_of<MeshComponent>(entity)) 
+            dst.emplace<MeshComponent>(newEnt, src.get<MeshComponent>(entity));
+            
+        if (src.all_of<LightComponent>(entity)) 
+            dst.emplace<LightComponent>(newEnt, src.get<LightComponent>(entity));
+            
+        if (src.all_of<HierarchyComponent>(entity)) 
+            dst.emplace<HierarchyComponent>(newEnt, src.get<HierarchyComponent>(entity)); });
         }
         void SaveState(entt::registry &registry)
         {
@@ -141,9 +155,100 @@ namespace burnhope
                 ImGuizmo::RecomposeMatrixFromComponents(glm::value_ptr(t.position), glm::value_ptr(t.rotation), glm::value_ptr(t.scale), glm::value_ptr(model));
             }
         }
+
+        entt::entity FindEntityByID(entt::registry &registry, uint64_t id)
+        {
+            if (id == 0)
+                return entt::null;
+            auto view = registry.view<IDComponent>();
+            for (auto e : view)
+            {
+                if (view.get<IDComponent>(e).ID == id)
+                    return e;
+            }
+            return entt::null;
+        }
+
+        glm::mat4 GetGlobalTransform(entt::registry &registry, entt::entity entity)
+        {
+            if (!registry.valid(entity) || !registry.all_of<TransformComponent>(entity))
+                return glm::mat4(1.0f);
+            auto &tComp = registry.get<TransformComponent>(entity);
+            tComp.transform.updateMatrixIfNeeded(); // Обновляем локальную перед чтением
+            glm::mat4 globalMat = tComp.transform.matrix;
+
+            if (registry.all_of<HierarchyComponent>(entity))
+            {
+                uint64_t parentID = registry.get<HierarchyComponent>(entity).parentID;
+                entt::entity parentEnt = FindEntityByID(registry, parentID);
+                if (parentEnt != entt::null)
+                {
+                    globalMat = GetGlobalTransform(registry, parentEnt) * globalMat;
+                }
+            }
+            return globalMat;
+        }
+
+        void DetachFromParent(entt::registry &registry, entt::entity child)
+        {
+            if (!registry.all_of<HierarchyComponent>(child) || !registry.all_of<IDComponent>(child))
+                return;
+            auto &hc = registry.get<HierarchyComponent>(child);
+            if (hc.parentID == 0)
+                return;
+
+            uint64_t myID = registry.get<IDComponent>(child).ID;
+            entt::entity parentEnt = FindEntityByID(registry, hc.parentID);
+            if (parentEnt != entt::null && registry.all_of<HierarchyComponent>(parentEnt))
+            {
+                auto &phc = registry.get<HierarchyComponent>(parentEnt);
+                phc.childrenIDs.erase(std::remove(phc.childrenIDs.begin(), phc.childrenIDs.end(), myID), phc.childrenIDs.end());
+            }
+            hc.parentID = 0;
+        }
+
+        void AttachToParent(entt::registry &registry, entt::entity child, entt::entity newParent)
+        {
+            if (child == newParent)
+                return;
+            DetachFromParent(registry, child);
+            if (newParent == entt::null)
+                return;
+
+            if (!registry.all_of<HierarchyComponent>(child))
+                registry.emplace<HierarchyComponent>(child);
+            if (!registry.all_of<HierarchyComponent>(newParent))
+                registry.emplace<HierarchyComponent>(newParent);
+            if (!registry.all_of<IDComponent>(child))
+                registry.emplace<IDComponent>(child);
+            if (!registry.all_of<IDComponent>(newParent))
+                registry.emplace<IDComponent>(newParent);
+
+            uint64_t myID = registry.get<IDComponent>(child).ID;
+            uint64_t pid = registry.get<IDComponent>(newParent).ID;
+
+            registry.get<HierarchyComponent>(child).parentID = pid;
+            registry.get<HierarchyComponent>(newParent).childrenIDs.push_back(myID);
+        }
+
+        // Супер-помощник для создания объектов (чтобы не забыть IDComponent)
+        entt::entity CreateBaseEntity(entt::registry &registry, const std::string &name)
+        {
+            entt::entity e = registry.create();
+            registry.emplace<IDComponent>(e); // ТЕПЕРЬ ОН ЕСТЬ ВСЕГДА!
+            registry.emplace<TagComponent>(e, name);
+            registry.emplace<TransformComponent>(e);
+            registry.emplace<HierarchyComponent>(e);
+            return e;
+        }
+
         entt::entity CloneHierarchy(entt::registry &registry, entt::entity source, entt::entity newParent)
         {
             entt::entity copy = registry.create();
+
+            // 🔥 ГЕНЕРИРУЕМ УНИКАЛЬНЫЙ ID ДЛЯ КОПИИ
+            registry.emplace<IDComponent>(copy);
+
             if (registry.all_of<TagComponent>(source))
             {
                 auto tag = registry.get<TagComponent>(source);
@@ -156,16 +261,38 @@ namespace burnhope
                 registry.emplace<MeshComponent>(copy, registry.get<MeshComponent>(source));
             if (registry.all_of<LightComponent>(source))
                 registry.emplace<LightComponent>(copy, registry.get<LightComponent>(source));
+
             auto &hc = registry.emplace<HierarchyComponent>(copy);
+
+            // Если мы передали родителя при дубликации, привязываем копию к нему
+            if (newParent != entt::null && registry.all_of<IDComponent>(newParent))
+            {
+                hc.parentID = registry.get<IDComponent>(newParent).ID;
+                registry.get<HierarchyComponent>(newParent).childrenIDs.push_back(registry.get<IDComponent>(copy).ID);
+            }
 
             return copy;
         }
         void DeleteEntityRecursive(entt::registry &registry, entt::entity target)
         {
+            if (!registry.valid(target))
+                return;
+
+            // 1. Сначала рекурсивно удаляем всех детей
             if (registry.all_of<HierarchyComponent>(target))
             {
-     
+                auto children = registry.get<HierarchyComponent>(target).childrenIDs; // Копируем!
+                for (uint64_t childID : children)
+                {
+                    entt::entity childEnt = FindEntityByID(registry, childID);
+                    DeleteEntityRecursive(registry, childEnt);
+                }
             }
+
+            // 2. Отвязываемся от родителя
+            DetachFromParent(registry, target);
+
+            // 3. Уничтожаем
             if (selectedEntity == target)
                 selectedEntity = entt::null;
             registry.destroy(target);
@@ -175,7 +302,6 @@ namespace burnhope
             SaveState(registry);
             if (registry.all_of<HierarchyComponent>(target))
             {
-     
             }
             DeleteEntityRecursive(registry, target);
         }
@@ -186,7 +312,6 @@ namespace burnhope
             {
                 if (curr == potentialParent)
                     return true;
-       
             }
             return false;
         }
@@ -495,49 +620,50 @@ namespace burnhope
             if (!registry.valid(entity))
                 return;
             auto &tag = registry.get<TagComponent>(entity);
+
+            bool isLeaf = true;
+            if (registry.all_of<HierarchyComponent>(entity))
+            {
+                isLeaf = registry.get<HierarchyComponent>(entity).childrenIDs.empty();
+            }
+
             ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap;
             if (selectedEntity == entity)
                 nodeFlags |= ImGuiTreeNodeFlags_Selected;
-            auto *hc = registry.try_get<HierarchyComponent>(entity);
-      
+            if (isLeaf)
+                nodeFlags |= ImGuiTreeNodeFlags_Leaf;
+
             bool nodeOpen = ImGui::TreeNodeEx((void *)(uintptr_t)entity, nodeFlags, tag.name.c_str());
+
             if (ImGui::IsItemClicked())
             {
                 selectedEntity = entity;
-                if (registry.all_of<TransformComponent>(entity))
-                {
-                    auto &t = registry.get<TransformComponent>(entity).transform;
-                    ImGuizmo::RecomposeMatrixFromComponents(glm::value_ptr(t.position), glm::value_ptr(t.rotation), glm::value_ptr(t.scale), glm::value_ptr(model));
-                }
             }
+
+            // Меню по правому клику
             if (ImGui::BeginPopupContextItem())
             {
                 selectedEntity = entity;
-                if (ImGui::MenuItem("Duplicate", "Ctrl+D"))
-                {
-                    SaveState(registry);
-
-                }
-                ImGui::Separator();
                 if (ImGui::BeginMenu("Create Child..."))
                 {
                     if (ImGui::MenuItem("Empty Object"))
                     {
                         SaveState(registry);
-                        entt::entity newE = registry.create();
-                        registry.emplace<TagComponent>(newE, "Empty");
-                        registry.emplace<TransformComponent>(newE);
-                      
+                        entt::entity newE = CreateBaseEntity(registry, "Empty");
+                        AttachToParent(registry, newE, entity);
                     }
+                    // Можешь добавить сюда Mesh и Light
                     ImGui::EndMenu();
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Delete", "Del"))
+                {
                     DeleteGameObject(registry, entity);
+                }
                 ImGui::EndPopup();
             }
-            float iconSize = 16.0f;
-            float iconX = ImGui::GetWindowContentRegionMax().x - iconSize - 5.0f;
+
+            // Drag & Drop
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
             {
                 ImGui::SetDragDropPayload("OUTLINER_NODE", &entity, sizeof(entt::entity));
@@ -549,15 +675,24 @@ namespace burnhope
                 if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("OUTLINER_NODE"))
                 {
                     entt::entity dragged = *(const entt::entity *)payload->Data;
-              
+                    SaveState(registry);
+                    AttachToParent(registry, dragged, entity);
                 }
                 ImGui::EndDragDropTarget();
             }
+
+            // Рекурсивная отрисовка детей
             if (nodeOpen)
             {
-                if (hc)
+                if (!isLeaf)
                 {
-                   
+                    auto children = registry.get<HierarchyComponent>(entity).childrenIDs;
+                    for (uint64_t childID : children)
+                    {
+                        entt::entity childEnt = FindEntityByID(registry, childID);
+                        if (childEnt != entt::null)
+                            DrawOutlinerNode(registry, childEnt);
+                    }
                 }
                 ImGui::TreePop();
             }
@@ -567,63 +702,55 @@ namespace burnhope
             if (!showOutliner)
                 return;
             ImGui::Begin("Scene Outliner", &showOutliner);
+
             if (ImGui::Button("+ Add", ImVec2(60, 25)))
                 ImGui::OpenPopup("GlobalCreateMenu");
             ImGui::SameLine();
             if (ImGui::Button("Unparent", ImVec2(80, 25)) && selectedEntity != entt::null)
             {
                 SaveState(registry);
-                auto *hc = registry.try_get<HierarchyComponent>(selectedEntity);
-            
+                DetachFromParent(registry, selectedEntity);
             }
+
             if (ImGui::BeginPopup("GlobalCreateMenu"))
             {
                 if (ImGui::MenuItem("Empty Object"))
                 {
                     SaveState(registry);
-                    entt::entity e = registry.create();
-                    registry.emplace<TagComponent>(e, "Empty");
-                    registry.emplace<TransformComponent>(e);
+                    CreateBaseEntity(registry, "Empty");
                 }
                 if (ImGui::MenuItem("Mesh Object"))
                 {
                     SaveState(registry);
-                    entt::entity e = registry.create();
-                    registry.emplace<TagComponent>(e, "Mesh");
-                    registry.emplace<TransformComponent>(e);
+                    entt::entity e = CreateBaseEntity(registry, "Mesh");
                     registry.emplace<MeshComponent>(e);
                 }
                 if (ImGui::MenuItem("Light Source"))
                 {
                     SaveState(registry);
-                    entt::entity e = registry.create();
-                    registry.emplace<TagComponent>(e, "Light");
-                    registry.emplace<TransformComponent>(e);
+                    entt::entity e = CreateBaseEntity(registry, "Light");
                     registry.emplace<LightComponent>(e);
                 }
                 ImGui::EndPopup();
             }
             ImGui::Separator();
+
             ImGui::BeginChild("OutlinerList", ImVec2(0, -20));
-            registry.view<TagComponent>().each([&](entt::entity entity, TagComponent &tag)
-                                               {
-            auto* hc = registry.try_get<HierarchyComponent>(entity);
-       });
-            if (ImGui::BeginPopupContextWindow("EmptySpaceMenu", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
+
+            // Отрисовываем ТОЛЬКО корневые объекты (у которых parentID == 0). Дети нарисуются сами.
+            auto view = registry.view<IDComponent, TagComponent>();
+            for (auto entity : view)
             {
-                if (ImGui::BeginMenu("Create..."))
+                bool isRoot = true;
+                if (registry.all_of<HierarchyComponent>(entity))
                 {
-                    if (ImGui::MenuItem("Empty Object"))
-                    {
-                        SaveState(registry);
-                        entt::entity e = registry.create();
-                        registry.emplace<TagComponent>(e, "Empty");
-                        registry.emplace<TransformComponent>(e);
-                    }
-                    ImGui::EndMenu();
+                    if (registry.get<HierarchyComponent>(entity).parentID != 0)
+                        isRoot = false;
                 }
-                ImGui::EndPopup();
+                if (isRoot)
+                    DrawOutlinerNode(registry, entity);
             }
+
             ImGui::Dummy(ImGui::GetContentRegionAvail());
             if (ImGui::BeginDragDropTarget())
             {
@@ -631,8 +758,7 @@ namespace burnhope
                 {
                     entt::entity dragged = *(const entt::entity *)payload->Data;
                     SaveState(registry);
-                    auto *hc = registry.try_get<HierarchyComponent>(dragged);
-               
+                    DetachFromParent(registry, dragged); // Бросили в пустоту = отвязали
                 }
                 ImGui::EndDragDropTarget();
             }
@@ -648,7 +774,7 @@ namespace burnhope
             {
                 ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Select an object in the scene");
                 ImGui::
-                End();
+                    End();
                 return;
             }
             auto &tag = registry.get<TagComponent>(selectedEntity);
@@ -1759,28 +1885,43 @@ namespace burnhope
             if (selectedEntity != entt::null && registry.valid(selectedEntity) && registry.all_of<TransformComponent>(selectedEntity))
             {
                 auto &tComp = registry.get<TransformComponent>(selectedEntity);
-                glm::mat4 localMatrix;
-                ImGuizmo::RecomposeMatrixFromComponents(
-                    glm::value_ptr(tComp.transform.position),
-                    glm::value_ptr(tComp.transform.rotation),
-                    glm::value_ptr(tComp.transform.scale),
-                    glm::value_ptr(localMatrix));
-                glm::mat4 worldMatrix = localMatrix;
+                tComp.transform.updateMatrixIfNeeded(); // ОБЯЗАТЕЛЬНО: актуализируем локальную матрицу
+
+                // 1. Вычисляем мировую матрицу РОДИТЕЛЯ (если он есть)
                 glm::mat4 parentWorldMatrix = glm::mat4(1.0f);
-     
+                if (registry.all_of<HierarchyComponent>(selectedEntity))
+                {
+                    uint64_t pid = registry.get<HierarchyComponent>(selectedEntity).parentID;
+                    entt::entity pEnt = FindEntityByID(registry, pid);
+                    if (pEnt != entt::null)
+                    {
+                        parentWorldMatrix = GetGlobalTransform(registry, pEnt);
+                    }
+                }
+
+                // 2. Итоговая мировая матрица этого объекта
+                glm::mat4 worldMatrix = parentWorldMatrix * tComp.transform.matrix;
+
                 if (ImGuizmo::IsUsing() && !wasUsingGizmo)
                     SaveState(registry);
                 wasUsingGizmo = ImGuizmo::IsUsing();
+
+                // 3. Отдаем Гизмо именно МИРОВУЮ матрицу для отрисовки и манипуляции
                 ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(gizmoProj), currentGizmoOperation, currentGizmoMode, glm::value_ptr(worldMatrix));
+
+                // 4. Если мы потянули за стрелочку:
                 if (ImGuizmo::IsUsing())
                 {
+                    // Вычитаем из новой мировой матрицы влияние родителя, чтобы получить новую ЛОКАЛЬНУЮ матрицу
                     glm::mat4 newLocalMatrix = glm::inverse(parentWorldMatrix) * worldMatrix;
+
+                    // Разбиваем локальную матрицу на компоненты
                     ImGuizmo::DecomposeMatrixToComponents(
                         glm::value_ptr(newLocalMatrix),
                         glm::value_ptr(tComp.transform.position),
                         glm::value_ptr(tComp.transform.rotation),
                         glm::value_ptr(tComp.transform.scale));
-                    tComp.transform.updatematrix = true;
+                    tComp.transform.updatematrix = true; // Ставим флаг, чтобы в следующем кадре матрица пересобралась
                 }
             }
             DrawSceneOutliner(registry, io);

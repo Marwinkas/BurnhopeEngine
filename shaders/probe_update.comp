@@ -155,7 +155,7 @@ vec3 EvaluateHit(int instanceID, int primID, vec2 bary, vec3 hitPos) {
         }
     }
     
-    vec3 ambient = albedo * 0.15; 
+    vec3 ambient = albedo * ubo.sunColor * (ubo.sunIntensity * 0.15);
     vec3 actualSunRadiance = ubo.sunColor *  ubo.sunIntensity ;
     
     vec3 finalColor = ambient + (albedo * actualSunRadiance * NdotL * shadow);
@@ -195,7 +195,7 @@ if (rc.probeCount.w >= 3) {
         
         // 3. Базовый цвет неба (чуть-чуть подсвечиваем общую полусферу цветом солнца)
         // Чтобы небо не было идеально черным в тени
-        vec3 ambientSky = ubo.sunColor * 0.01; 
+        vec3 ambientSky = ubo.sunColor * (ubo.sunIntensity * 0.15);
         
         vec3 finalSky = ambientSky + sunHalo + sunDisk;
         
@@ -209,7 +209,7 @@ void main() {
     ivec2 probeTexSize = imageSize(outProbe);
     if (pixel.x >= probeTexSize.x || pixel.y >= probeTexSize.y) return;
 
-    int octaSize = 24;
+    int octaSize = 8;
     ivec3 pCount = rc.probeCount.xyz;
     
     int probeIdxX  = pixel.x / octaSize;

@@ -28,22 +28,20 @@ namespace burnhope
         defaultWhiteMaterial = std::make_shared<Material>();
         defaultWhiteMaterial->setAlbedo(defaultWhiteTex);
         globalSetLayout = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                .addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT)
-                .build();
+                              .addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT)
+                              .build();
 
-            // 2. Создаем G-Buffer (нужен для системы рендера)
-            gBuffer = std::make_unique<BurnhopeGBuffer>(lveDevice, lveWindow.getExtent());
+        // 2. Создаем G-Buffer (нужен для системы рендера)
+        gBuffer = std::make_unique<BurnhopeGBuffer>(lveDevice, lveWindow.getExtent());
 
-            // 3. Инициализируем систему рендера (теперь она поле класса)
-            simpleRenderSystem = std::make_unique<GeometryRenderSystem>(
-                lveDevice, 
-                gBuffer->getRenderPass(), 
-                globalSetLayout->getDescriptorSetLayout()
-            );
+        // 3. Инициализируем систему рендера (теперь она поле класса)
+        simpleRenderSystem = std::make_unique<GeometryRenderSystem>(
+            lveDevice,
+            gBuffer->getRenderPass(),
+            globalSetLayout->getDescriptorSetLayout());
 
-            // 4. Теперь можно инициализировать вычисления (передаем лейауты из simpleRenderSystem)
-            initCompute(globalSetLayout->getDescriptorSetLayout());
-
+        // 4. Теперь можно инициализировать вычисления (передаем лейауты из simpleRenderSystem)
+        initCompute(globalSetLayout->getDescriptorSetLayout());
 
         loadGameObjects(registry);
     }
@@ -220,8 +218,7 @@ namespace burnhope
             uboBuffers[i] = std::make_unique<BurnhopeBuffer>(lveDevice, sizeof(GlobalUbo), 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
             uboBuffers[i]->map();
         }
-  
-       
+
         std::vector<VkDescriptorSet> globalDescriptorSets(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
         for (int i = 0; i < globalDescriptorSets.size(); i++)
         {
@@ -229,7 +226,6 @@ namespace burnhope
             BurnhopeDescriptorWriter(*globalSetLayout, *globalPool).writeBuffer(0, &bufferInfo).build(globalDescriptorSets[i]);
         }
 
-        
         RebuildBatches(registry, *simpleRenderSystem);
         buildTLAS(registry);
 
@@ -240,11 +236,11 @@ namespace burnhope
 
         VkWriteDescriptorSet descriptorWrite{};
         descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = rtSet; 
+        descriptorWrite.dstSet = rtSet;
         descriptorWrite.dstBinding = 0;
         descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
         descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pNext = &asInfo; 
+        descriptorWrite.pNext = &asInfo;
 
         vkUpdateDescriptorSets(lveDevice.device(), 1, &descriptorWrite, 0, nullptr);
 
@@ -324,11 +320,13 @@ namespace burnhope
 
                 ubo.sunColor = glm::vec3(1.0f, 0.95f, 0.8f); // Дефолт (на случай, если солнца нет)
                 ubo.sunIntensity = 5.0f;                     // Дефолт
-                
+
                 auto lightView = registry.view<LightComponent>();
-                for (auto entity : lightView) {
-                    auto& light = lightView.get<LightComponent>(entity).light;
-                    if (light.enable && light.type == LightType::Directional) {
+                for (auto entity : lightView)
+                {
+                    auto &light = lightView.get<LightComponent>(entity).light;
+                    if (light.enable && light.type == LightType::Directional)
+                    {
                         ubo.sunColor = light.color;
                         ubo.sunIntensity = light.intensity;
                         break; // Нам нужно только одно главное солнце
@@ -430,21 +428,18 @@ namespace burnhope
                                        {
                     std::vector<VkDescriptorSet> computeSets = { globalDescriptorSets[frameIndex], gBufferSet, shadowSet, lightSet, computeOutputSet, rcSystem->getIrradianceSet(), gtaoSet };
                     lightingSystem->computeLighting(cmd, computeSets, extent.width, extent.height); });
-                renderPipeline.addPass("Radiance Cascades GI", {
-                    // Гарантируем, что запись из Lighting Pass (Shader Write) завершена 
-                    // и данные стали видимы для чтения в GI Pass (Shader Read)
-                    RenderPipeline::createImageBarrier(
-                        hdrOutputTexture->getImage(), 
-                        VK_IMAGE_LAYOUT_GENERAL,
-                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                        VK_ACCESS_SHADER_WRITE_BIT,   // Кто писал (Lighting)
-                        VK_ACCESS_SHADER_READ_BIT     // Кто будет читать (GI лучи)
-                    )
-                }, [&](VkCommandBuffer cmd) {
+                renderPipeline.addPass("Radiance Cascades GI", {// Гарантируем, что запись из Lighting Pass (Shader Write) завершена
+                                                                // и данные стали видимы для чтения в GI Pass (Shader Read)
+                                                                RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                                                                                   VK_ACCESS_SHADER_WRITE_BIT, // Кто писал (Lighting)
+                                                                                                   VK_ACCESS_SHADER_READ_BIT   // Кто будет читать (GI лучи)
+                                                                                                   )},
+                                       [&](VkCommandBuffer cmd)
+                                       {
                     // Объем GI должен полностью покрывать сцену.
                     // Слишком узкий volume приводит к clamp на границах сетки и видимой "клетке".
-                    glm::vec3 sceneMin(-12.0f, -2.0f, -12.0f);
-                    glm::vec3 sceneMax( 12.0f,  8.0f,  12.0f);
+                    glm::vec3 sceneMin(-32.0f, -32.0f, -32.0f);
+                    glm::vec3 sceneMax( 32.0f,  32.0f,  32.0f);
                     rcSystem->dispatch(cmd, globalDescriptorSets[frameIndex], gBufferSet, ubo.invViewProj, camera.Position, sceneMin, sceneMax, extent, rtSet, storageSet, textureSet); });
                 VkImage swapChainImage = lveRenderer.getCurrentSwapChainImage();
                 renderPipeline.addPass("Blit and UI", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
@@ -519,8 +514,8 @@ namespace burnhope
                             .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
                             .build();
         rtLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-            .addBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_COMPUTE_BIT)
-            .build();
+                          .addBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_COMPUTE_BIT)
+                          .build();
         faceMatricesBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice,
             sizeof(PointFaceMatrices),
@@ -614,22 +609,20 @@ namespace burnhope
             lightLayoutPtr->getDescriptorSetLayout(),
             outputLayoutPtr->getDescriptorSetLayout(),
             irradianceLayoutPtr->getDescriptorSetLayout(),
-            gtaoLayoutPtr->getDescriptorSetLayout(),rtLayoutPtr->getDescriptorSetLayout()
-        };
+            gtaoLayoutPtr->getDescriptorSetLayout(), rtLayoutPtr->getDescriptorSetLayout()};
         lightingSystem = std::make_unique<DeferredLightingSystem>(lveDevice, computeLayouts);
         rcSystem = std::make_unique<RadianceCascadesSystem>(
-    lveDevice,
-    lveWindow.getExtent(),
-    *globalPool,
-    globalSetLayout->getDescriptorSetLayout(), // Добавь вызов геттера, если здесь тоже обертка
-    gBufferLayoutPtr->getDescriptorSetLayout(),
-    hdrOutputTexture->getImageView(),
-    hdrOutputTexture->getSampler(),
-    rtLayoutPtr->getDescriptorSetLayout(),
-    // ВОТ ЗДЕСЬ ИСПРАВЛЕНИЕ:
-    simpleRenderSystem->getRenderSystemLayout()->getDescriptorSetLayout(), 
-    simpleRenderSystem->getTextureLayout()->getDescriptorSetLayout()
-);
+            lveDevice,
+            lveWindow.getExtent(),
+            *globalPool,
+            globalSetLayout->getDescriptorSetLayout(), // Добавь вызов геттера, если здесь тоже обертка
+            gBufferLayoutPtr->getDescriptorSetLayout(),
+            hdrOutputTexture->getImageView(),
+            hdrOutputTexture->getSampler(),
+            rtLayoutPtr->getDescriptorSetLayout(),
+            // ВОТ ЗДЕСЬ ИСПРАВЛЕНИЕ:
+            simpleRenderSystem->getRenderSystemLayout()->getDescriptorSetLayout(),
+            simpleRenderSystem->getTextureLayout()->getDescriptorSetLayout());
         auto normalInfo = gBuffer->getNormalRoughness()->getImageInfo();
         VkDescriptorImageInfo gtaoOutInfo{};
         gtaoOutInfo.imageView = gtaoOutputTexture->getImageView();
@@ -643,7 +636,6 @@ namespace burnhope
             globalSetLayouts,
             gtaoLayoutPtr->getDescriptorSetLayout()};
 
- 
         // 2. Выделяем пустой дескриптор из твоего пула (запишем в него TLAS уже после сборки сцены)
         // В твоем движке BurnhopeDescriptorPool обычно умеет выделять сеты напрямую:
         globalPool->allocateDescriptor(rtLayoutPtr->getDescriptorSetLayout(), rtSet);
@@ -727,182 +719,237 @@ namespace burnhope
             throw std::runtime_error("Failed to rebuild computeOutputSet!");
         }
     }
-    void FirstApp::buildTLAS(entt::registry& registry) {
-    auto pfnCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkCreateAccelerationStructureKHR");
-    auto pfnGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkGetAccelerationStructureBuildSizesKHR");
-    auto pfnCmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkCmdBuildAccelerationStructuresKHR");
-    auto pfnGetBufferDeviceAddress = (PFN_vkGetBufferDeviceAddress)vkGetDeviceProcAddr(lveDevice.device(), "vkGetBufferDeviceAddress");
-
-    if (!pfnCreateAccelerationStructureKHR) {
-        throw std::runtime_error("[FATAL] Ошибка загрузки функций для TLAS");
-    }
-
-    // 1. Собираем инстансы из ECS
-    std::vector<VkAccelerationStructureInstanceKHR> instances;
-    
-    auto view = registry.view<TransformComponent, MeshComponent>();
-    uint32_t customIndex = 0; // Будем использовать для связи с materialBuffer
-
-    for (auto [entity, transformComp, meshComp] : view.each()) {
-        if (!meshComp.model || !meshComp.isVisible) continue;
-
-        VkAccelerationStructureInstanceKHR instance{};
-        instance.transform = toVkMatrix(transformComp.transform.matrix);
-        instance.instanceCustomIndex = customIndex++; // ID объекта (поможет узнать материал при попадании луча)
-        instance.mask = 0xFF; // Видим для всех лучей
-        instance.instanceShaderBindingTableRecordOffset = 0;
-        instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-        instance.accelerationStructureReference = meshComp.model->getBLASAddress();
-
-        instances.push_back(instance);
-    }
-
-    if (instances.empty()) return; // Сцена пуста
-
-    // 2. Создаем буфер для хранения инстансов (должен поддерживать адресацию!)
-    VkDeviceSize instancesBufferSize = instances.size() * sizeof(VkAccelerationStructureInstanceKHR);
-    instancesBuffer = std::make_unique<BurnhopeBuffer>(
-        lveDevice,
-        sizeof(VkAccelerationStructureInstanceKHR),
-        instances.size(),
-        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT // Лучше на устройстве для скорости
-    );
-
-    // Загружаем данные инстансов через staging (или маппинг, если память HOST_VISIBLE)
-    BurnhopeBuffer stagingBuffer{
-        lveDevice, sizeof(VkAccelerationStructureInstanceKHR), static_cast<uint32_t>(instances.size()),
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    };
-    stagingBuffer.map();
-    stagingBuffer.writeToBuffer((void*)instances.data());
-    lveDevice.copyBuffer(stagingBuffer.getBuffer(), instancesBuffer->getBuffer(), instancesBufferSize);
-
-    
-    // Получаем адрес буфера инстансов
-    VkBufferDeviceAddressInfo instanceAddressInfo{};
-    instanceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    instanceAddressInfo.buffer = instancesBuffer->getBuffer();
-    VkDeviceAddress instanceAddress = pfnGetBufferDeviceAddress(lveDevice.device(), &instanceAddressInfo);
-
-    // 3. Подготавливаем описание TLAS
-    VkAccelerationStructureGeometryKHR tlasGeometry{};
-    tlasGeometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-    tlasGeometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
-    tlasGeometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
-    tlasGeometry.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
-    tlasGeometry.geometry.instances.arrayOfPointers = VK_FALSE;
-    tlasGeometry.geometry.instances.data.deviceAddress = instanceAddress;
-
-    VkAccelerationStructureBuildGeometryInfoKHR buildInfo{};
-    buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-    buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-    buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-    buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-    buildInfo.geometryCount = 1;
-    buildInfo.pGeometries = &tlasGeometry;
-
-    uint32_t primitiveCount = static_cast<uint32_t>(instances.size());
-
-    VkAccelerationStructureBuildSizesInfoKHR sizeInfo{};
-    sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
-    pfnGetAccelerationStructureBuildSizesKHR(lveDevice.device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primitiveCount, &sizeInfo);
-
-    // 4. Создаем буфер для самого TLAS
-    tlasBuffer = std::make_unique<BurnhopeBuffer>(
-        lveDevice,
-        sizeInfo.accelerationStructureSize, 1,
-        VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    );
-
-    VkAccelerationStructureCreateInfoKHR createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-    createInfo.buffer = tlasBuffer->getBuffer();
-    createInfo.size = sizeInfo.accelerationStructureSize;
-    createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-    pfnCreateAccelerationStructureKHR(lveDevice.device(), &createInfo, nullptr, &tlasHandle);
-
-    // 5. Scratch буфер
-    BurnhopeBuffer scratchBuffer(
-        lveDevice, sizeInfo.buildScratchSize, 1,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    );
-    VkBufferDeviceAddressInfo scratchAddressInfo{};
-    scratchAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-    scratchAddressInfo.buffer = scratchBuffer.getBuffer();
-    buildInfo.scratchData.deviceAddress = pfnGetBufferDeviceAddress(lveDevice.device(), &scratchAddressInfo);
-    buildInfo.dstAccelerationStructure = tlasHandle;
-
-    // 6. ЗАПУСК БИЛДА TLAS!
-    VkAccelerationStructureBuildRangeInfoKHR buildRange{};
-    buildRange.primitiveCount = primitiveCount;
-    buildRange.primitiveOffset = 0;
-    buildRange.firstVertex = 0;
-    buildRange.transformOffset = 0;
-    const VkAccelerationStructureBuildRangeInfoKHR* pBuildRange = &buildRange;
-
-    VkCommandBuffer commandBuffer = lveDevice.beginSingleTimeCommands();
-    pfnCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &buildInfo, &pBuildRange);
-    lveDevice.endSingleTimeCommands(commandBuffer);
-
-    std::cout << "[RT] Successfully built TLAS with " << instances.size() << " instances!" << std::endl;
-}
-   void FirstApp::loadGameObjects(entt::registry &registry)
+    void FirstApp::buildTLAS(entt::registry &registry)
     {
-std::shared_ptr<BurnhopeTexture> diffuseTexture =
+        auto pfnCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkCreateAccelerationStructureKHR");
+        auto pfnGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkGetAccelerationStructureBuildSizesKHR");
+        auto pfnCmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkCmdBuildAccelerationStructuresKHR");
+        auto pfnGetBufferDeviceAddress = (PFN_vkGetBufferDeviceAddress)vkGetDeviceProcAddr(lveDevice.device(), "vkGetBufferDeviceAddress");
+
+        if (!pfnCreateAccelerationStructureKHR)
+        {
+            throw std::runtime_error("[FATAL] Ошибка загрузки функций для TLAS");
+        }
+
+        // 1. Собираем инстансы из ECS
+        std::vector<VkAccelerationStructureInstanceKHR> instances;
+
+        auto view = registry.view<TransformComponent, MeshComponent>();
+        uint32_t customIndex = 0; // Будем использовать для связи с materialBuffer
+
+        for (auto [entity, transformComp, meshComp] : view.each())
+        {
+            if (!meshComp.model || !meshComp.isVisible)
+                continue;
+
+            VkAccelerationStructureInstanceKHR instance{};
+            instance.transform = toVkMatrix(transformComp.transform.matrix);
+            instance.instanceCustomIndex = customIndex++; // ID объекта (поможет узнать материал при попадании луча)
+            instance.mask = 0xFF;                         // Видим для всех лучей
+            instance.instanceShaderBindingTableRecordOffset = 0;
+            instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+            instance.accelerationStructureReference = meshComp.model->getBLASAddress();
+
+            instances.push_back(instance);
+        }
+
+        if (instances.empty())
+            return; // Сцена пуста
+
+        // 2. Создаем буфер для хранения инстансов (должен поддерживать адресацию!)
+        VkDeviceSize instancesBufferSize = instances.size() * sizeof(VkAccelerationStructureInstanceKHR);
+        instancesBuffer = std::make_unique<BurnhopeBuffer>(
+            lveDevice,
+            sizeof(VkAccelerationStructureInstanceKHR),
+            instances.size(),
+            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT // Лучше на устройстве для скорости
+        );
+
+        // Загружаем данные инстансов через staging (или маппинг, если память HOST_VISIBLE)
+        BurnhopeBuffer stagingBuffer{
+            lveDevice, sizeof(VkAccelerationStructureInstanceKHR), static_cast<uint32_t>(instances.size()),
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT};
+        stagingBuffer.map();
+        stagingBuffer.writeToBuffer((void *)instances.data());
+        lveDevice.copyBuffer(stagingBuffer.getBuffer(), instancesBuffer->getBuffer(), instancesBufferSize);
+
+        // Получаем адрес буфера инстансов
+        VkBufferDeviceAddressInfo instanceAddressInfo{};
+        instanceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+        instanceAddressInfo.buffer = instancesBuffer->getBuffer();
+        VkDeviceAddress instanceAddress = pfnGetBufferDeviceAddress(lveDevice.device(), &instanceAddressInfo);
+
+        // 3. Подготавливаем описание TLAS
+        VkAccelerationStructureGeometryKHR tlasGeometry{};
+        tlasGeometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+        tlasGeometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+        tlasGeometry.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+        tlasGeometry.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+        tlasGeometry.geometry.instances.arrayOfPointers = VK_FALSE;
+        tlasGeometry.geometry.instances.data.deviceAddress = instanceAddress;
+
+        VkAccelerationStructureBuildGeometryInfoKHR buildInfo{};
+        buildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+        buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+        buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+        buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+        buildInfo.geometryCount = 1;
+        buildInfo.pGeometries = &tlasGeometry;
+
+        uint32_t primitiveCount = static_cast<uint32_t>(instances.size());
+
+        VkAccelerationStructureBuildSizesInfoKHR sizeInfo{};
+        sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+        pfnGetAccelerationStructureBuildSizesKHR(lveDevice.device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primitiveCount, &sizeInfo);
+
+        // 4. Создаем буфер для самого TLAS
+        tlasBuffer = std::make_unique<BurnhopeBuffer>(
+            lveDevice,
+            sizeInfo.accelerationStructureSize, 1,
+            VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+        VkAccelerationStructureCreateInfoKHR createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+        createInfo.buffer = tlasBuffer->getBuffer();
+        createInfo.size = sizeInfo.accelerationStructureSize;
+        createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+        pfnCreateAccelerationStructureKHR(lveDevice.device(), &createInfo, nullptr, &tlasHandle);
+
+        // 5. Scratch буфер
+        BurnhopeBuffer scratchBuffer(
+            lveDevice, sizeInfo.buildScratchSize, 1,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        VkBufferDeviceAddressInfo scratchAddressInfo{};
+        scratchAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+        scratchAddressInfo.buffer = scratchBuffer.getBuffer();
+        buildInfo.scratchData.deviceAddress = pfnGetBufferDeviceAddress(lveDevice.device(), &scratchAddressInfo);
+        buildInfo.dstAccelerationStructure = tlasHandle;
+
+        // 6. ЗАПУСК БИЛДА TLAS!
+        VkAccelerationStructureBuildRangeInfoKHR buildRange{};
+        buildRange.primitiveCount = primitiveCount;
+        buildRange.primitiveOffset = 0;
+        buildRange.firstVertex = 0;
+        buildRange.transformOffset = 0;
+        const VkAccelerationStructureBuildRangeInfoKHR *pBuildRange = &buildRange;
+
+        VkCommandBuffer commandBuffer = lveDevice.beginSingleTimeCommands();
+        pfnCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &buildInfo, &pBuildRange);
+        lveDevice.endSingleTimeCommands(commandBuffer);
+
+        std::cout << "[RT] Successfully built TLAS with " << instances.size() << " instances!" << std::endl;
+    }
+    void FirstApp::loadGameObjects(entt::registry &registry)
+
+    {
+
+        std::shared_ptr<BurnhopeTexture> diffuseTexture =
+
             BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/diffuse3.png");
+
         std::shared_ptr<BurnhopeTexture> normalTexture =
+
             BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/normal3.png");
+
         std::shared_ptr<BurnhopeTexture> rougnessTexture =
+
             BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/rougness3.png");
+
         std::shared_ptr<BurnhopeTexture> metallicTexture =
+
             BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/metallic3.png");
+
         std::shared_ptr<BurnhopeTexture> aoTexture =
+
             BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/ao3.png");
+
         std::shared_ptr<BurnhopeTexture> heightTexture =
+
             BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/height3.png");
+
         std::shared_ptr<BurnhopeModel> lveModel =
+
             BurnhopeModel::createModelFromFile(lveDevice, "models/cube.bhmesh");
+
         std::shared_ptr<Material> material = std::make_shared<Material>();
+
         material->setAlbedo(diffuseTexture);
+
         material->setAO(aoTexture);
+
         material->setMetallic(metallicTexture);
+
         material->setNormal(normalTexture);
+
         material->setRoughness(rougnessTexture);
+
         material->setHeight(heightTexture);
+
         auto cubeEntity = registry.create();
+
         registry.emplace<TagComponent>(cubeEntity, "Vulkan Cube");
+
         auto &transform = registry.emplace<TransformComponent>(cubeEntity);
+
         transform.transform.position = glm::vec3(0.0f, 0.0f, 0.0f);
+
         transform.transform.scale = glm::vec3(5.0f, 0.5f, 5.0f);
+
         glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
+
         transform.transform.matrix = glm::scale(translation, transform.transform.scale);
+
         auto &mesh = registry.emplace<MeshComponent>(cubeEntity);
+
         mesh.model = lveModel;
+
         mesh.materials.push_back(material);
+
         mesh.materials.push_back(material);
+
         auto cubeEntity2 = registry.create();
+
         registry.emplace<TagComponent>(cubeEntity2, "Vulkan Cube");
+
         auto &transform2 = registry.emplace<TransformComponent>(cubeEntity2);
+
         transform2.transform.position = glm::vec3(0.0f, 1.5f, 0.0f);
+
         transform2.transform.matrix = glm::translate(glm::mat4(1.0f), transform2.transform.position);
+
         auto &mesh2 = registry.emplace<MeshComponent>(cubeEntity2);
+
         mesh2.model = lveModel;
+
         mesh2.materials.push_back(material);
+
         mesh2.materials.push_back(material);
+
         auto sunEntity = registry.create();
+
         registry.emplace<TagComponent>(sunEntity, "Sun");
+
         auto &sunTransform = registry.emplace<TransformComponent>(sunEntity);
-        sunTransform.transform.rotation= glm::vec3(45.0f, 0.0f, 45.0f);
+
+        sunTransform.transform.rotation = glm::vec3(45.0f, 0.0f, 45.0f);
+
         auto &sunLight = registry.emplace<LightComponent>(sunEntity);
+
         sunLight.light.enable = true;
+
         sunLight.light.type = LightType::Directional;
+
         sunLight.light.color = glm::vec3(1.0f, 1.0f, 1.0f);
+
         sunLight.light.intensity = 50.0f;
-        sunLight.light.radius= 500.0f;
+
+        sunLight.light.radius = 500.0f;
+
         sunLight.light.castShadows = true;
+
         sunLight.light.mobility = LightMobility::Movable;
     }
 }

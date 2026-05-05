@@ -41,7 +41,7 @@ vec2 octaEncode(vec3 dir) {
 }
 
 vec3 sampleProbe(ivec3 probeIdx, vec3 dir) {
-    const int octaSize = 24;
+    const int octaSize = 8;
     ivec3 pCount = rc.probeCount.xyz;
     vec2 octaUV = octaEncode(dir);
     
