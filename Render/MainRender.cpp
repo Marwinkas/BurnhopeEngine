@@ -25,8 +25,8 @@ namespace burnhope
             textureLayout->getDescriptorSetLayout()};
         PipelineConfigInfo pipelineConfig{};
         BurnhopePipeline::defaultPipelineConfigInfo(pipelineConfig);
-        static std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(3);
-        for (int i = 0; i < 3; i++)
+        static std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(4);
+        for (int i = 0; i < 4; i++)
         {
             blendAttachments[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
             blendAttachments[i].blendEnable = VK_FALSE;

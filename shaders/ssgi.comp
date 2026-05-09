@@ -20,6 +20,16 @@ layout(set = 0, binding = 0) uniform GlobalUbo {
     float lightSize;
     vec3 sunColor;
     float sunIntensity;
+    vec4 sscsParams;
+    vec4 gtaoParams;
+    vec4 fogParams;
+    vec4 fogColor;
+    vec4 inscatterColor;
+    vec4 skyZenithColor;
+    vec4 skyHorizonColor;
+    vec4 skySunParams;
+    vec4 ssgiParams;
+    vec4 rtParams;
 } ubo;
 
 // SET 1: G-Buffer
@@ -34,12 +44,6 @@ layout(set = 2, binding = 2) uniform sampler2D noiseTexture; // Синий шу�
 // SET 3: SSGI Targets
 layout(set = 3, binding = 0, rgba16f) uniform readonly image2D hdrOutput; // Читаем прямой свет
 layout(set = 3, binding = 1, rgba16f) uniform writeonly image2D ssgiRaw;  // Пишем грязный GI
-
-// --- SSGI Settings ---
-#define SSGI_RAY_COUNT 8
-#define SSGI_STEP_COUNT 16
-#define SSGI_STEP_SIZE 0.25
-#define SSGI_THICKNESS 0.15
 
 // Reconstruct world position from depth
 vec3 getWorldPos(float depth, vec2 uv) {
@@ -64,10 +68,15 @@ void main() {
     vec2 uv = (vec2(pixelCoords) + 0.5) / ubo.screenSize.xy;
 
     float depth = texture(gDepth, uv).r;
-    if (depth >= 1.0) {
+    if (depth >= 1.0 || ubo.ssgiParams.x < 0.5) {
         imageStore(ssgiRaw, pixelCoords, vec4(0.0));
         return;
     }
+
+    int SSGI_RAY_COUNT = int(ubo.ssgiParams.y);
+    float SSGI_STEP_SIZE = ubo.ssgiParams.z;
+    float SSGI_THICKNESS = ubo.ssgiParams.w;
+    int SSGI_STEP_COUNT = 16;
 
     vec4 normalRoughness = texture(gNormalRoughness, uv);
     vec3 normal = normalize(normalRoughness.xyz);

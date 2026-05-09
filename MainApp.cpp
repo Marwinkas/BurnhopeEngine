@@ -39,7 +39,7 @@ namespace burnhope
 
         RTReflectionSystem(BurnhopeDevice& dev, BurnhopeDescriptorPool& pl) : device(dev), pool(pl) {}
 
-        void init(VkExtent2D extent, VkDescriptorSetLayout globalSetLayout, VkDescriptorSetLayout gBufferLayout, VkDescriptorSetLayout rtTLASLayout, VkDescriptorSetLayout storageLayout, VkDescriptorSetLayout textureLayout) {
+        void init(VkExtent2D extent, VkDescriptorSetLayout globalSetLayout, VkDescriptorSetLayout gBufferLayout, VkDescriptorSetLayout rtTLASLayout, VkDescriptorSetLayout storageLayout, VkDescriptorSetLayout textureLayout, VkDescriptorSetLayout giLayout) {
             rtReflectionsTexture = std::make_unique<BurnhopeTexture>(device, VK_FORMAT_R16G16B16A16_SFLOAT, VkExtent3D{extent.width, extent.height, 1}, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
             rtReflectionsTexture->transitionLayout(device.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
@@ -56,8 +56,8 @@ namespace burnhope
                 .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
                 .build();
 
-            std::vector<VkDescriptorSetLayout> rtLayouts = {globalSetLayout, gBufferLayout, rtTLASLayout, storageLayout, textureLayout, rtLayoutPtr->getDescriptorSetLayout()};
-            rtReflectionsShader = std::make_unique<ComputeShader>(device, "shaders/rt_reflections.comp.spv", rtLayouts, 0);
+            std::vector<VkDescriptorSetLayout> rtLayouts = {globalSetLayout, gBufferLayout, rtTLASLayout, storageLayout, textureLayout, rtLayoutPtr->getDescriptorSetLayout(), giLayout};
+            rtReflectionsShader = std::make_unique<ComputeShader>(device, "shaders/rt_reflections.comp.spv", rtLayouts, sizeof(RCPushConstants));
 
             std::vector<VkDescriptorSetLayout> probeLayouts = {globalSetLayout, rtTLASLayout, storageLayout, textureLayout, probeRenderLayoutPtr->getDescriptorSetLayout()};
             probeRenderShader = std::make_unique<ComputeShader>(device, "shaders/probe_render.comp.spv", probeLayouts, sizeof(glm::vec4) + sizeof(int));
@@ -147,6 +147,7 @@ namespace burnhope
         shadowSystem.reset();
         lightUboBuffer.reset();
         ssgiRawTexture.reset();
+        postProcessTexture.reset();
         gBuffer.reset();
         hdrOutputTexture.reset();
         objectBuffer.reset();
@@ -156,6 +157,7 @@ namespace burnhope
         gBufferLayoutPtr.reset();
         outputLayoutPtr.reset();
         ssgiLayoutPtr.reset();
+        postProcessLayoutPtr.reset();
         shadowLayoutPtr.reset();
         lightLayoutPtr.reset();
         dummyGridBuffer.reset();
@@ -227,12 +229,15 @@ namespace burnhope
                     matData.hasRoughness = currentMat->hasRoughness ? 1 : 0;
                     matData.hasMetallic = currentMat->hasMetallic ? 1 : 0;
                     matData.hasAO = currentMat->hasAO ? 1 : 0;
+                    matData.hasEmissive = currentMat->hasEmissive ? 1 : 0;
+                    matData.emissiveIntensity = currentMat->emissiveIntensity;
                     matData.useORM = currentMat->isORM ? 1 : 0;
                     matData.albedoIdx = getTexIndex(currentMat->albedoMap, defaultWhiteIdx);
                     matData.normalIdx = getTexIndex(currentMat->normalMap, defaultNormalIdx);
                     matData.roughnessIdx = getTexIndex(currentMat->roughnessMap, defaultWhiteIdx);
                     matData.metallicIdx = getTexIndex(currentMat->metallicMap, defaultWhiteIdx);
                     matData.aoIdx = getTexIndex(currentMat->aoMap, defaultWhiteIdx);
+                    matData.emissiveIdx = getTexIndex(currentMat->emissiveMap, defaultWhiteIdx);
                     matDataList.push_back(matData);
                 }
                 else
@@ -363,6 +368,8 @@ namespace burnhope
         int frameCount = 0;
         auto fpsTimer = currentTime;
         RenderPipeline renderPipeline;
+        glm::mat4 prevViewProj = glm::mat4(1.0f);
+        float timeAccumulator = 0.0f;
         while (!lveWindow.shouldClose())
         {
             glfwPollEvents();
@@ -500,6 +507,7 @@ namespace burnhope
             float frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
             currentTime = newTime;
             frameCount++;
+            timeAccumulator += frameTime;
             if (std::chrono::duration<float>(newTime - fpsTimer).count() >= 1.0f)
             {
                 std::cout << "FPS: " << frameCount << "\n";
@@ -544,6 +552,27 @@ namespace burnhope
                     }
                 }
                 ubo.lightSize = 1.0f;
+                ubo.sscsParams = glm::vec4(ui.renderSettings.enableContactShadows ? 1.0f : 0.0f, ui.renderSettings.contactShadowLength, (float)ui.renderSettings.contactShadowSteps, ui.renderSettings.contactShadowThickness);
+                ubo.gtaoParams = glm::vec4(ui.renderSettings.enableSSAO ? 1.0f : 0.0f, ui.renderSettings.ssaoRadius, ui.renderSettings.ssaoBias, ui.renderSettings.ssaoIntensity);
+                ubo.fogParams = glm::vec4(ui.renderSettings.enableFog ? 1.0f : 0.0f, ui.renderSettings.fogDensity, ui.renderSettings.fogHeightFalloff, ui.renderSettings.fogBaseHeight);
+                ubo.fogColor = glm::vec4(ui.renderSettings.fogColor[0], ui.renderSettings.fogColor[1], ui.renderSettings.fogColor[2], ui.renderSettings.inscatterIntensity);
+                ubo.inscatterColor = glm::vec4(ui.renderSettings.inscatterColor[0], ui.renderSettings.inscatterColor[1], ui.renderSettings.inscatterColor[2], ui.renderSettings.inscatterPower);
+                ubo.skyZenithColor = glm::vec4(ui.renderSettings.skyZenithColor[0], ui.renderSettings.skyZenithColor[1], ui.renderSettings.skyZenithColor[2], 1.0f);
+                ubo.skyHorizonColor = glm::vec4(ui.renderSettings.skyHorizonColor[0], ui.renderSettings.skyHorizonColor[1], ui.renderSettings.skyHorizonColor[2], 1.0f);
+                ubo.skySunParams = glm::vec4(ui.renderSettings.sunSize, ui.renderSettings.sunGlow, ui.renderSettings.sunGlowSize, 0.0f);
+                ubo.ssgiParams = glm::vec4(ui.renderSettings.enableSSGI ? 1.0f : 0.0f, (float)ui.renderSettings.ssgiRayCount, ui.renderSettings.ssgiStepSize, ui.renderSettings.ssgiThickness);
+                ubo.rtParams = glm::vec4(ui.renderSettings.enableRTReflections ? 1.0f : 0.0f, (float)ui.renderSettings.rtMaxBounces, ui.renderSettings.enableRadianceCascades ? 1.0f : 0.0f, 0.0f);
+
+                ubo.prevViewProj = prevViewProj;
+                ubo.ppExposureParams = glm::vec4(ui.renderSettings.autoExposure ? 1.0f : 0.0f, ui.renderSettings.manualExposure, ui.renderSettings.minBrightness, ui.renderSettings.maxBrightness);
+                ubo.ppColorBalance = glm::vec4(ui.renderSettings.temperature, ui.renderSettings.contrast, ui.renderSettings.saturation, ui.renderSettings.gamma);
+                ubo.ppBloomParams = glm::vec4(ui.renderSettings.enableBloom ? 1.0f : 0.0f, ui.renderSettings.bloomThreshold, ui.renderSettings.bloomIntensity, (float)ui.renderSettings.bloomBlurIterations);
+                ubo.ppDoFParams = glm::vec4(ui.renderSettings.enableDoF ? 1.0f : 0.0f, ui.renderSettings.focusDistance, ui.renderSettings.focusRange, ui.renderSettings.bokehSize);
+                ubo.ppVignetteGrain = glm::vec4(ui.renderSettings.enableVignette ? ui.renderSettings.vignetteIntensity : 0.0f, ui.renderSettings.enableFilmGrain ? ui.renderSettings.grainIntensity : 0.0f, ui.renderSettings.enableSharpen ? ui.renderSettings.sharpenIntensity : 0.0f, ui.renderSettings.enableChromaticAberration ? ui.renderSettings.caIntensity : 0.0f);
+                ubo.ppMotionBlur = glm::vec4(ui.renderSettings.enableMotionBlur ? 1.0f : 0.0f, ui.renderSettings.mbStrength, timeAccumulator, 0.0f);
+                ubo.ppLensFlare = glm::vec4(ui.renderSettings.enableLensFlares ? 1.0f : 0.0f, ui.renderSettings.flareIntensity, ui.renderSettings.ghostDispersal, (float)ui.renderSettings.ghosts);
+                prevViewProj = ubo.projection * ubo.view;
+
                 auto cascadeMats = shadowSystem->getCSM()->calculateMatrices(
                     camera, shadowSystem->getSunDir(),
                     {shadowSystem->cascadeSplits[0], shadowSystem->cascadeSplits[1], shadowSystem->cascadeSplits[2], shadowSystem->cascadeSplits[3]});
@@ -652,7 +681,7 @@ namespace burnhope
                     VkRenderPassBeginInfo renderPassInfo{};
                     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO; renderPassInfo.renderPass = gBuffer->getRenderPass();
                     renderPassInfo.framebuffer = gBuffer->getFramebuffer(); renderPassInfo.renderArea.extent = extent;
-                    std::array<VkClearValue, 4> clearValues{}; clearValues[3].depthStencil = { 1.0f, 0 };
+                    std::array<VkClearValue, 5> clearValues{}; clearValues[4].depthStencil = { 1.0f, 0 };
                     renderPassInfo.clearValueCount = (uint32_t)clearValues.size(); renderPassInfo.pClearValues = clearValues.data();
                     vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
                     VkViewport viewport{}; viewport.width = (float)extent.width; viewport.height = (float)extent.height; viewport.maxDepth = 1.0f;
@@ -697,15 +726,32 @@ namespace burnhope
                     RenderPipeline::createImageBarrier(globalRTReflectionSystem->rtReflectionsTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)
                 }, [&](VkCommandBuffer cmd) {
                     globalRTReflectionSystem->rtReflectionsShader->bind(cmd);
+                    
+                    glm::vec3 sceneMin(-8.0f, -8.0f, -8.0f);
+                    glm::vec3 sceneMax( 8.0f,  8.0f,  8.0f);
+                    
+                    RCPushConstants rcPush{};
+                    rcPush.probeGridMin = glm::vec4(sceneMin, 0.0f);
+                    rcPush.probeGridMax = glm::vec4(sceneMax, 0.0f);
+                    rcPush.probeCount   = glm::ivec4(ui.renderSettings.rcProbeGridX, ui.renderSettings.rcProbeGridY, ui.renderSettings.rcProbeGridZ, 0);
+                    rcPush.params = glm::vec4(
+                        ui.renderSettings.rcBaseRayLength, 
+                        (float)extent.width, 
+                        (float)extent.height, 
+                        (float)ui.renderSettings.rcOctaSize
+                    );
+                    
+                    globalRTReflectionSystem->rtReflectionsShader->pushConstants(cmd, &rcPush, sizeof(RCPushConstants));
+
                     globalRTReflectionSystem->rtReflectionsShader->bindDescriptorSets(cmd, {
-                        globalDescriptorSets[frameIndex], gBufferSet, rtSet, storageSet, textureSet, globalRTReflectionSystem->rtSet
+                        globalDescriptorSets[frameIndex], gBufferSet, rtSet, storageSet, textureSet, globalRTReflectionSystem->rtSet, rcSystem->getGISet()
                     });
                     globalRTReflectionSystem->rtReflectionsShader->dispatch(cmd, (extent.width + 7) / 8, (extent.height + 7) / 8, 1);
                 });
 
                 renderPipeline.addPass("Compute Lighting", {}, [&](VkCommandBuffer cmd)
                                        {
-                    std::vector<VkDescriptorSet> computeSets = { globalDescriptorSets[frameIndex], gBufferSet, shadowSet, lightSet, computeOutputSet, rcSystem->getIrradianceSet(), gtaoSet, rtSet, globalRTReflectionSystem->rtSet };
+                    std::vector<VkDescriptorSet> computeSets = { globalDescriptorSets[frameIndex], gBufferSet, shadowSet, lightSet, computeOutputSet, rcSystem->getGISet(), gtaoSet, rtSet, globalRTReflectionSystem->rtSet };
                     lightingSystem->computeLighting(cmd, computeSets, extent.width, extent.height); });
 
                 renderPipeline.addPass("SSGI Pass", {
@@ -719,21 +765,29 @@ namespace burnhope
                 }, [&](VkCommandBuffer cmd) {
                     ssgiSystem->computeDenoise(cmd, globalDescriptorSets[frameIndex], gBufferSet, ssgiSet, extent.width, extent.height);
                 });
+        renderPipeline.addPass("Post Processing Pass", {
+            RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+            RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)
+        }, [&](VkCommandBuffer cmd) {
+            postProcessShader->bind(cmd);
+            postProcessShader->bindDescriptorSets(cmd, { globalDescriptorSets[frameIndex], postProcessSet });
+            postProcessShader->dispatch(cmd, (extent.width + 15) / 16, (extent.height + 15) / 16, 1);
+        });
                 VkImage swapChainImage = lveRenderer.getCurrentSwapChainImage();
-                 renderPipeline.addPass("Blit and UI", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
+         renderPipeline.addPass("Blit and UI", {RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
                                        {
                     VkImageMemoryBarrier swapToDst = RenderPipeline::createImageBarrier(swapChainImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
                     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &swapToDst);
                     VkImageBlit blit{};
                     blit.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 }; blit.srcOffsets[1] = { (int32_t)extent.width, (int32_t)extent.height, 1 };
                     blit.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 }; blit.dstOffsets[1] = { (int32_t)extent.width, (int32_t)extent.height, 1 };
-                    vkCmdBlitImage(cmd, hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, swapChainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+            vkCmdBlitImage(cmd, postProcessTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, swapChainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
                     VkImageMemoryBarrier swapToAttach = RenderPipeline::createImageBarrier(swapChainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
                     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &swapToAttach);
                     lveRenderer.beginSwapChainRenderPass(cmd);
                     ui.Draw(lveWindow, camera, registry, cmd);
                     lveRenderer.endSwapChainRenderPass(cmd); });
-                renderPipeline.addPass("Reset Layouts", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [](VkCommandBuffer cmd) {});
+        renderPipeline.addPass("Reset Layouts", {RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [](VkCommandBuffer cmd) {});
                 renderPipeline.execute(commandBuffer);
                 lveRenderer.endFrame();
             }
@@ -769,14 +823,28 @@ namespace burnhope
             lveDevice.beginSingleTimeCommands(),
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_GENERAL);
+
+        postProcessTexture = std::make_unique<BurnhopeTexture>(lveDevice, VK_FORMAT_R16G16B16A16_SFLOAT, extent,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_SAMPLE_COUNT_1_BIT);
+        postProcessTexture->transitionLayout(
+            lveDevice.beginSingleTimeCommands(),
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_GENERAL);
+
         gBufferLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                                .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                                .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                                .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                                .addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
+                               .addBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) // Emissive
                                .build();
         outputLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                               .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+                              .build();
+        postProcessLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
+                              .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+                              .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
+                              .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                               .build();
         ssgiLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                               .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT) // hdrOutput
@@ -793,8 +861,10 @@ namespace burnhope
                              .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
                              .addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
                              .build();
-        irradianceLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                                  .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+        giLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
+                                  .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT) // Diffuse GI
+                                  .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT) // Specular GI
+                                  .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT) // cascade0
                                   .build();
         gtaoLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                             .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
@@ -818,11 +888,18 @@ namespace burnhope
         depthInfo.sampler = gBuffer->getDepth()->getSampler();
         depthInfo.imageView = gBuffer->getDepth()->getImageView();
         depthInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkDescriptorImageInfo emissiveInfo{};
+        emissiveInfo.sampler = gBuffer->getEmissive()->getSampler();
+        emissiveInfo.imageView = gBuffer->getEmissive()->getImageView();
+        emissiveInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
         BurnhopeDescriptorWriter(*gBufferLayoutPtr, *globalPool)
             .writeImage(0, &normInfo)
             .writeImage(1, &albInfo)
             .writeImage(2, &extraInfo)
             .writeImage(3, &depthInfo)
+            .writeImage(4, &emissiveInfo)
             .build(gBufferSet);
         VkDescriptorImageInfo outImgInfo{};
         outImgInfo.imageView = hdrOutputTexture->getImageView();
@@ -830,6 +907,19 @@ namespace burnhope
         BurnhopeDescriptorWriter(*outputLayoutPtr, *globalPool)
             .writeImage(0, &outImgInfo)
             .build(computeOutputSet);
+
+        VkDescriptorImageInfo ppOutInfo{};
+        ppOutInfo.imageView = postProcessTexture->getImageView();
+        ppOutInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        VkDescriptorImageInfo ppInInfo{};
+        ppInInfo.sampler = hdrOutputTexture->getSampler();
+        ppInInfo.imageView = hdrOutputTexture->getImageView();
+        ppInInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        BurnhopeDescriptorWriter(*postProcessLayoutPtr, *globalPool)
+            .writeImage(0, &ppOutInfo)
+            .writeImage(1, &ppInInfo)
+            .writeImage(2, &depthInfo)
+            .build(postProcessSet);
         lightUboBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice, sizeof(LightUBOData), 1,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -898,7 +988,7 @@ namespace burnhope
             .build(lightSet);
 
         globalRTReflectionSystem = std::make_unique<RTReflectionSystem>(lveDevice, *globalPool);
-        globalRTReflectionSystem->init(lveWindow.getExtent(), globalSetLayouts, gBufferLayoutPtr->getDescriptorSetLayout(), rtLayoutPtr->getDescriptorSetLayout(), simpleRenderSystem->getRenderSystemLayout()->getDescriptorSetLayout(), simpleRenderSystem->getTextureLayout()->getDescriptorSetLayout());
+        globalRTReflectionSystem->init(lveWindow.getExtent(), globalSetLayouts, gBufferLayoutPtr->getDescriptorSetLayout(), rtLayoutPtr->getDescriptorSetLayout(), simpleRenderSystem->getRenderSystemLayout()->getDescriptorSetLayout(), simpleRenderSystem->getTextureLayout()->getDescriptorSetLayout(), giLayoutPtr->getDescriptorSetLayout());
         globalRTReflectionSystem->updateDescriptors(lveWindow.getExtent(), defaultWhiteTex);
 
         std::vector<VkDescriptorSetLayout> computeLayouts = {
@@ -907,7 +997,7 @@ namespace burnhope
             shadowLayoutPtr->getDescriptorSetLayout(),
             lightLayoutPtr->getDescriptorSetLayout(),
             outputLayoutPtr->getDescriptorSetLayout(),
-            irradianceLayoutPtr->getDescriptorSetLayout(),
+            giLayoutPtr->getDescriptorSetLayout(),
             gtaoLayoutPtr->getDescriptorSetLayout(), rtLayoutPtr->getDescriptorSetLayout(),
             globalRTReflectionSystem->rtLayoutPtr->getDescriptorSetLayout()};
         lightingSystem = std::make_unique<DeferredLightingSystem>(lveDevice, computeLayouts);
@@ -924,6 +1014,9 @@ namespace burnhope
             // ВОТ ЗДЕСЬ ИСПРАВЛЕНИЕ:
             simpleRenderSystem->getRenderSystemLayout()->getDescriptorSetLayout(),
             simpleRenderSystem->getTextureLayout()->getDescriptorSetLayout());
+
+        std::vector<VkDescriptorSetLayout> ppLayouts = { globalSetLayouts, postProcessLayoutPtr->getDescriptorSetLayout() };
+        postProcessShader = std::make_unique<ComputeShader>(lveDevice, "shaders/post_process.comp.spv", ppLayouts);
 
         VkDescriptorImageInfo ssgiRawInfo{};
         ssgiRawInfo.imageView = ssgiRawTexture->getImageView();
@@ -982,6 +1075,11 @@ namespace burnhope
             globalPool->freeDescriptors(toFree);
             ssgiSet = VK_NULL_HANDLE;
         }
+        if (postProcessSet != VK_NULL_HANDLE)
+        {
+            std::vector<VkDescriptorSet> toFree = {postProcessSet};
+            globalPool->freeDescriptors(toFree);
+        }
         auto normInfo = gBuffer->getNormalRoughness()->getImageInfo();
         auto albInfo = gBuffer->getAlbedoMetallic()->getImageInfo();
         auto extraInfo = gBuffer->getHeightAO()->getImageInfo();
@@ -989,11 +1087,18 @@ namespace burnhope
         depthInfo.sampler = gBuffer->getDepth()->getSampler();
         depthInfo.imageView = gBuffer->getDepth()->getImageView();
         depthInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkDescriptorImageInfo emissiveInfo{};
+        emissiveInfo.sampler = gBuffer->getEmissive()->getSampler();
+        emissiveInfo.imageView = gBuffer->getEmissive()->getImageView();
+        emissiveInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
         bool ok = BurnhopeDescriptorWriter(*gBufferLayoutPtr, *globalPool)
                       .writeImage(0, &normInfo)
                       .writeImage(1, &albInfo)
                       .writeImage(2, &extraInfo)
                       .writeImage(3, &depthInfo)
+                      .writeImage(4, &emissiveInfo)
                       .build(gBufferSet);
         if (!ok || gBufferSet == VK_NULL_HANDLE)
         {
@@ -1041,6 +1146,16 @@ namespace burnhope
         {
             throw std::runtime_error("Failed to rebuild computeOutputSet!");
         }
+        
+        postProcessTexture = std::make_unique<BurnhopeTexture>(lveDevice, VK_FORMAT_R16G16B16A16_SFLOAT, extent, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_SAMPLE_COUNT_1_BIT);
+        postProcessTexture->transitionLayout(lveDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+        VkDescriptorImageInfo ppOutInfo{}; ppOutInfo.imageView = postProcessTexture->getImageView(); ppOutInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        VkDescriptorImageInfo ppInInfo{}; ppInInfo.sampler = hdrOutputTexture->getSampler(); ppInInfo.imageView = hdrOutputTexture->getImageView(); ppInInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        BurnhopeDescriptorWriter(*postProcessLayoutPtr, *globalPool)
+            .writeImage(0, &ppOutInfo)
+            .writeImage(1, &ppInInfo)
+            .writeImage(2, &depthInfo)
+            .build(postProcessSet);
         VkDescriptorImageInfo ssgiRawInfo{};
         ssgiRawInfo.imageView = ssgiRawTexture->getImageView();
         ssgiRawInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;

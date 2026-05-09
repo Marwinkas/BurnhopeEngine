@@ -58,16 +58,16 @@ namespace burnhope
                       const glm::vec3 &sceneMin,
                       const glm::vec3 &sceneMax,
                       VkExtent2D extent,VkDescriptorSet rtSet,
-        VkDescriptorSet storageSet, // ДОБАВЛЕНО
-        VkDescriptorSet textureSet);
-        VkDescriptorSet getIrradianceSet() const { return irradianceSet; }
+                      VkDescriptorSet storageSet,
+                      VkDescriptorSet textureSet);
+        VkDescriptorSet getGISet() const { return giSet; }
         void rebuildOnResize(VkExtent2D newExtent,
                              VkImageView lightingImageView,
                              VkSampler lightingSampler);
 
     private:
         void createProbeTextures();
-        void createIrradianceTexture();
+        void createGITextures();
         void createLayouts();
         void createPipelines(VkDescriptorSetLayout rtLayout,VkDescriptorSetLayout storageLayout, VkDescriptorSetLayout textureLayout);
         
@@ -80,7 +80,8 @@ namespace burnhope
         BurnhopeDescriptorPool &pool;
         VkExtent2D screenExtent;
         std::array<std::unique_ptr<BurnhopeTexture>, RCConfig::CASCADE_COUNT> probeTex;
-        std::unique_ptr<BurnhopeTexture> irradianceTex;
+        std::unique_ptr<BurnhopeTexture> diffuseGITex;
+        std::unique_ptr<BurnhopeTexture> specularGITex;
         std::unique_ptr<BurnhopeDescriptorSetLayout> probeWriteLayout;
         std::unique_ptr<BurnhopeDescriptorSetLayout> mergeLayout;
         std::unique_ptr<BurnhopeDescriptorSetLayout> sampleWriteLayout;
@@ -93,8 +94,8 @@ namespace burnhope
         std::unique_ptr<BurnhopePipeline> samplePipeline;
         std::array<VkDescriptorSet, RCConfig::CASCADE_COUNT> probeWriteSets{};
         std::array<VkDescriptorSet, RCConfig::CASCADE_COUNT> mergeReadSets{};
-        VkDescriptorSet irradianceWriteSet = VK_NULL_HANDLE;
-        VkDescriptorSet irradianceSet = VK_NULL_HANDLE;
+        VkDescriptorSet giWriteSet = VK_NULL_HANDLE;
+        VkDescriptorSet giSet = VK_NULL_HANDLE;
         VkDescriptorSet lightingReadSet = VK_NULL_HANDLE;
         VkDescriptorSetLayout globalLayoutRef = VK_NULL_HANDLE;
         VkDescriptorSetLayout gBufferLayoutRef = VK_NULL_HANDLE;

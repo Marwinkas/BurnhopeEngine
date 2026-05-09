@@ -36,12 +36,19 @@ struct ObjectData {
         int metallicIdx;
         int roughnessIdx;
         int aoIdx;
-        int hasAlbedo, hasNormal, hasHeight, hasMetallic, hasRoughness, hasAO;
+        int emissiveIdx;
+        int hasAlbedo;
+        int hasNormal;
+        int hasHeight;
+        int hasMetallic;
+        int hasRoughness;
+        int hasAO;
+        int hasEmissive;
         int useTriplanar;
         float triplanarScale;
         glm::vec2 uvScale;
+        float emissiveIntensity;
         int useORM;
-        int pad1, pad2, pad3;
     };
     class GeometryRenderSystem
     {

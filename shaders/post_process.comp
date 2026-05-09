@@ -1,0 +1,140 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) uniform GlobalUbo {
+    mat4 projection; mat4 invViewProj; mat4 view; vec3 camPos; float zNear;
+    vec3 sunDir; float zFar; vec4 screenSize; mat4 sunLightSpaceMatrices[4];
+    vec4 cascadeSplits; uint gridDimX; uint gridDimY; uint gridDimZ; float lightSize;
+    vec3 sunColor; float sunIntensity;
+    vec4 sscsParams; vec4 gtaoParams; vec4 fogParams; vec4 fogColor; vec4 inscatterColor;
+    vec4 skyZenithColor; vec4 skyHorizonColor; vec4 skySunParams;
+    vec4 ssgiParams;
+    vec4 rtParams;
+    
+    mat4 prevViewProj;
+    vec4 ppExposureParams;
+    vec4 ppColorBalance;
+    vec4 ppBloomParams;
+    vec4 ppDoFParams;
+    vec4 ppVignetteGrain;
+    vec4 ppMotionBlur;
+    vec4 ppLensFlare;
+} ubo;
+
+layout(set = 1, binding = 0, rgba16f) uniform image2D outImage;
+layout(set = 1, binding = 1) uniform sampler2D hdrInput;
+layout(set = 1, binding = 2) uniform sampler2D depthInput;
+
+vec3 ReadColor(vec2 uv) {
+    vec3 c;
+    if (ubo.ppVignetteGrain.w > 0.0) { // Chromatic Aberration
+        vec2 dir = (uv - 0.5) * ubo.ppVignetteGrain.w;
+        c.r = texture(hdrInput, uv - dir).r;
+        c.g = texture(hdrInput, uv).g;
+        c.b = texture(hdrInput, uv + dir).b;
+    } else {
+        c = texture(hdrInput, uv).rgb;
+    }
+    if (ubo.ppVignetteGrain.z > 0.0) { // Sharpening
+        vec2 texel = 1.0 / ubo.screenSize.xy;
+        vec3 n = texture(hdrInput, uv + vec2(0, -texel.y)).rgb;
+        vec3 s = texture(hdrInput, uv + vec2(0, texel.y)).rgb;
+        vec3 e = texture(hdrInput, uv + vec2(texel.x, 0)).rgb;
+        vec3 w = texture(hdrInput, uv + vec2(-texel.x, 0)).rgb;
+        c = c * (1.0 + 4.0 * ubo.ppVignetteGrain.z) - (n + s + e + w) * ubo.ppVignetteGrain.z;
+    }
+    return c;
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (pixel.x >= int(ubo.screenSize.x) || pixel.y >= int(ubo.screenSize.y)) return;
+    vec2 uv = (vec2(pixel) + 0.5) / ubo.screenSize.xy;
+    vec3 color = ReadColor(uv);
+    if (any(isnan(color)) || any(isinf(color))) color = vec3(0.0);
+
+    // Motion Blur (Camera Velocity)
+    if (ubo.ppMotionBlur.x > 0.5) {
+        float d = texture(depthInput, uv).r;
+        if (d < 1.0) {
+            vec4 ndc = vec4(uv * 2.0 - 1.0, d, 1.0);
+            vec4 worldPos = ubo.invViewProj * ndc; worldPos /= worldPos.w;
+            vec4 prevNdc = ubo.prevViewProj * worldPos; prevNdc /= prevNdc.w;
+            vec2 prevUv = prevNdc.xy * 0.5 + 0.5;
+            vec2 velocity = (uv - prevUv) * ubo.ppMotionBlur.y;
+            if (length(velocity) > 0.001) {
+                vec3 mbColor = color; int samples = 8;
+                for (int i = 1; i < samples; ++i) {
+                    vec2 offset = velocity * (float(i) / float(samples - 1) - 0.5);
+                    mbColor += ReadColor(uv + offset);
+                }
+                color = mbColor / float(samples);
+            }
+        }
+    }
+
+    // Depth of Field
+    if (ubo.ppDoFParams.x > 0.5) {
+        float d = texture(depthInput, uv).r;
+        float zN = ubo.zNear; float zF = ubo.zFar;
+        float linDepth = (zN * zF) / (zF + d * (zN - zF));
+        float coc = clamp(abs(linDepth - ubo.ppDoFParams.y) / ubo.ppDoFParams.z, 0.0, 1.0);
+        if (coc > 0.1) {
+            vec3 dofColor = color; float totW = 1.0;
+            float rad = ubo.ppDoFParams.w * coc * 0.01;
+            for (float ang = 0.0; ang < 6.28318; ang += 1.04719) {
+                vec2 off = vec2(cos(ang), sin(ang)) * rad;
+                dofColor += ReadColor(uv + off); totW += 1.0;
+            }
+            color = dofColor / totW;
+        }
+    }
+
+    // Bloom & Lens Flare
+    vec3 bloom = vec3(0.0); vec3 flare = vec3(0.0);
+    vec2 texel = 1.0 / ubo.screenSize.xy; float thresh = ubo.ppBloomParams.y;
+    if (ubo.ppBloomParams.x > 0.5) {
+        for(int x = -1; x <= 1; x++) for(int y = -1; y <= 1; y++) {
+            vec3 s = texture(hdrInput, uv + vec2(x, y) * texel * 4.0).rgb;
+            if(dot(s, vec3(0.2126, 0.7152, 0.0722)) > thresh) bloom += s;
+        }
+        color += (bloom / 9.0) * ubo.ppBloomParams.z;
+    }
+    if (ubo.ppLensFlare.x > 0.5) {
+        vec2 ghostVec = (vec2(0.5) - uv) * ubo.ppLensFlare.z; int ghosts = int(ubo.ppLensFlare.w);
+        for(int i = 0; i < ghosts; i++) {
+            vec3 s = texture(hdrInput, fract(uv + ghostVec * float(i))).rgb;
+            if(dot(s, vec3(0.2126, 0.7152, 0.0722)) > thresh) flare += s * pow(1.0 - float(i)/float(ghosts), 2.0);
+        }
+        color += flare * ubo.ppLensFlare.y;
+    }
+
+    // Color Grade & Tone Mapping
+    
+    // ЗАЩИТА: Если C++ не передал настройки (например, буфер состоит из нулей), gamma будет 0.
+    // В этом случае мы используем дефолтные значения, чтобы экран не становился черным или серым.
+    bool isUboInvalid = (ubo.ppColorBalance.w <= 0.001);
+    
+    float exposure = ubo.ppExposureParams.x > 0.5 ? 1.0 : max(ubo.ppExposureParams.y, 0.01);
+    if (isUboInvalid) exposure = 1.0;
+    color *= exposure;
+    
+    float temp = isUboInvalid ? 6500.0 : max(ubo.ppColorBalance.x, 1000.0); 
+    color *= vec3(temp > 6500.0 ? 6500.0 / temp : 1.0, 1.0, temp < 6500.0 ? temp / 6500.0 : 1.0);
+    color = color / (color + vec3(1.0)); // Reinhard
+    
+    float sat = isUboInvalid ? 1.0 : max(ubo.ppColorBalance.z, 0.0);
+    color = mix(vec3(dot(color, vec3(0.2126, 0.7152, 0.0722))), color, sat);
+    
+    float contrast = isUboInvalid ? 1.0 : max(ubo.ppColorBalance.y, 0.0);
+    color = clamp((color - 0.5) * contrast + 0.5, 0.0, 1.0);
+    
+    if (ubo.ppVignetteGrain.x > 0.0) color *= smoothstep(0.8, 0.8 - ubo.ppVignetteGrain.x, distance(uv, vec2(0.5)) * (0.5 + ubo.ppVignetteGrain.x));
+    if (ubo.ppVignetteGrain.y > 0.0) color += (fract(sin(dot(uv, vec2(12.9898, 78.233)) + ubo.ppMotionBlur.z) * 43758.5453) - 0.5) * ubo.ppVignetteGrain.y;
+    
+    float gamma = isUboInvalid ? 2.2 : max(ubo.ppColorBalance.w, 0.1);
+    color = pow(clamp(color, 0.0, 1.0), vec3(1.0 / gamma));
+    if (any(isnan(color)) || any(isinf(color))) color = vec3(0.0);
+    
+    imageStore(outImage, pixel, vec4(color, 1.0));
+}

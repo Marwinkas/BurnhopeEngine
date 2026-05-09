@@ -26,6 +26,8 @@ namespace burnhope
             lveDevice, VK_FORMAT_R8G8B8A8_UNORM, ext3D, colorUsage, VK_SAMPLE_COUNT_1_BIT);
         heightAO = std::make_unique<BurnhopeTexture>(
             lveDevice, VK_FORMAT_R16G16B16A16_SFLOAT, ext3D, colorUsage, VK_SAMPLE_COUNT_1_BIT);
+        gEmissive = std::make_unique<BurnhopeTexture>(
+            lveDevice, VK_FORMAT_R16G16B16A16_SFLOAT, ext3D, colorUsage, VK_SAMPLE_COUNT_1_BIT);
         VkFormat depthFormat = lveDevice.findSupportedFormat(
             {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
             VK_IMAGE_TILING_OPTIMAL,
@@ -51,8 +53,8 @@ namespace burnhope
     }
     void BurnhopeGBuffer::createRenderPass()
     {
-        std::array<VkAttachmentDescription, 4> attachments{};
-        for (int i = 0; i < 3; i++)
+        std::array<VkAttachmentDescription, 5> attachments{};
+        for (int i = 0; i < 4; i++)
         {
             attachments[i].format = (i == 1) ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R16G16B16A16_SFLOAT;
             attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
@@ -63,19 +65,20 @@ namespace burnhope
             attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             attachments[i].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
-        attachments[3].format = depthTexture->getFormat();
-        attachments[3].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachments[3].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attachments[3].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[3].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[3].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[3].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        attachments[3].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        std::array<VkAttachmentReference, 3> colorRefs{};
+        attachments[4].format = depthTexture->getFormat();
+        attachments[4].samples = VK_SAMPLE_COUNT_1_BIT;
+        attachments[4].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachments[4].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachments[4].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachments[4].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachments[4].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        attachments[4].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        std::array<VkAttachmentReference, 4> colorRefs{};
         colorRefs[0] = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
         colorRefs[1] = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
         colorRefs[2] = {2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-        VkAttachmentReference depthRef{3, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+        colorRefs[3] = {3, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        VkAttachmentReference depthRef{4, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
         VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = static_cast<uint32_t>(colorRefs.size());
@@ -103,10 +106,11 @@ namespace burnhope
     }
     void BurnhopeGBuffer::createFramebuffer()
     {
-        std::array<VkImageView, 4> attachments = {
+        std::array<VkImageView, 5> attachments = {
             normalRoughness->getImageView(),
             albedoMetallic->getImageView(),
             heightAO->getImageView(),
+            gEmissive->getImageView(),
             depthTexture->getImageView()};
         VkFramebufferCreateInfo fboInfo{};
         fboInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;

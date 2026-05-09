@@ -18,6 +18,7 @@ namespace burnhope
         glm::vec2 uvScale = glm::vec2(1.0f, 1.0f);
         
         // Добавляем память для путей к текстурам
+        std::string emissivePath = "";
         std::string albedoPath = "";
         std::string normalPath = "";
         std::string heightPath = "";
@@ -25,6 +26,7 @@ namespace burnhope
         std::string roughnessPath = "";
         std::string aoPath = "";
 
+        std::shared_ptr<BurnhopeTexture> emissiveMap = nullptr;
         std::shared_ptr<BurnhopeTexture> albedoMap = nullptr;
         std::shared_ptr<BurnhopeTexture> normalMap = nullptr;
         std::shared_ptr<BurnhopeTexture> heightMap = nullptr;
@@ -33,6 +35,8 @@ namespace burnhope
         std::shared_ptr<BurnhopeTexture> aoMap = nullptr;
         
         bool isORM = false;
+        bool hasEmissive = false;
+        float emissiveIntensity = 1.0f;
         bool hasAlbedo = false;
         bool hasNormal = false;
         bool hasHeight = false;
@@ -47,6 +51,13 @@ namespace burnhope
         }
 
         // Немного обновим методы, чтобы они запоминали путь
+        void setEmissive(std::shared_ptr<BurnhopeTexture> tex, const std::string& path = "")
+        {
+            emissiveMap = tex;
+            hasEmissive = (tex != nullptr);
+            if (!path.empty()) emissivePath = path;
+        }
+
         void setAlbedo(std::shared_ptr<BurnhopeTexture> tex, const std::string& path = "")
         {
             albedoMap = tex;
@@ -104,6 +115,8 @@ namespace burnhope
         {
             json j;
             j["uvScale"] = {uvScale.x, uvScale.y};
+            j["emissiveIntensity"] = emissiveIntensity;
+            j["emissivePath"] = emissivePath;
             j["isORM"] = isORM;
             j["albedoPath"] = albedoPath;
             j["normalPath"] = normalPath;
@@ -132,6 +145,8 @@ namespace burnhope
             if (j.contains("uvScale")) {
                 mat->uvScale = glm::vec2(j["uvScale"][0], j["uvScale"][1]);
             }
+            if (j.contains("emissiveIntensity")) mat->emissiveIntensity = j["emissiveIntensity"];
+            
             if (j.contains("isORM")) mat->isORM = j["isORM"];
 
             // Аккуратно достаем пути. Если они есть — загружаем картинку!
@@ -152,6 +167,9 @@ namespace burnhope
 
             std::string hPath = j.value("heightPath", "");
             if (!hPath.empty()) mat->setHeight(BurnhopeTexture::createDataTextureFromFile(device, hPath), hPath);
+
+            std::string ePath = j.value("emissivePath", "");
+            if (!ePath.empty()) mat->setEmissive(BurnhopeTexture::createTextureFromFile(device, ePath), ePath);
 
             return mat;
         }

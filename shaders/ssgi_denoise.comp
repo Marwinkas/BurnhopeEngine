@@ -10,7 +10,25 @@ layout(set = 0, binding = 0) uniform GlobalUbo {
     float zNear;
     vec3 sunDir;
     float zFar;
-    vec4 screenSize; 
+    vec4 screenSize;
+    mat4 sunLightSpaceMatrices[4];
+    vec4 cascadeSplits;
+    uint gridDimX;
+    uint gridDimY;
+    uint gridDimZ;
+    float lightSize;
+    vec3 sunColor;
+    float sunIntensity;
+    vec4 sscsParams;
+    vec4 gtaoParams;
+    vec4 fogParams;
+    vec4 fogColor;
+    vec4 inscatterColor;
+    vec4 skyZenithColor;
+    vec4 skyHorizonColor;
+    vec4 skySunParams;
+    vec4 ssgiParams;
+    vec4 rtParams;
 } ubo;
 
 // SET 1: G-Buffer

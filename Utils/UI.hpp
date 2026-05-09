@@ -70,6 +70,8 @@ namespace burnhope
         char editRoughness[256] = "";
         char editHeight[256] = "";
         char editAO[256] = "";
+        char editEmissive[256] = "";
+        float editEmissiveIntensity = 1.0f;
         std::unordered_map<std::string, GLuint> imageThumbnails;
         bool showOutliner = true;
         bool showInspector = true;
@@ -315,8 +317,18 @@ namespace burnhope
             }
             return false;
         }
-        struct PostProcessSettings
+        struct RenderSettings
         {
+            // --- Ray Tracing & GI ---
+            int rtMaxBounces = 1;
+            bool enableRTReflections = true;
+            bool enableRadianceCascades = true;
+            int rcProbeGridX = 16;
+            int rcProbeGridY = 9;
+            int rcProbeGridZ = 24;
+            float rcBaseRayLength = 1.0f;
+            int rcOctaSize = 8;
+
             bool enableSSAO = true;
             float ssaoRadius = 0.5f;
             float ssaoBias = 0.025f;
@@ -369,11 +381,16 @@ namespace burnhope
             float inscatterColor[3] = {1.0f, 0.8f, 0.5f};
             float inscatterPower = 8.0f;
             float inscatterIntensity = 1.0f;
+            float skyZenithColor[3] = {0.15f, 0.35f, 0.75f};
+            float skyHorizonColor[3] = {0.6f, 0.7f, 0.8f};
+            float sunSize = 0.005f;
+            float sunGlow = 1.5f;
+            float sunGlowSize = 0.1f;
             bool enableContactShadows = true;
             float contactShadowLength = 0.05f;
             float contactShadowThickness = 0.1f;
             int contactShadowSteps = 16;
-        } ppSettings;
+        } renderSettings;
         void SetupBurnhopeTheme()
         {
             ImGuiStyle &style = ImGui::GetStyle();
@@ -474,7 +491,7 @@ namespace burnhope
             ExeDirectory = exePath;
             dirHistory.push_back(currentDirectory);
             dirHistoryIndex = 0;
-            LoadPostProcessSettings();
+            LoadRenderSettings();
         }
         std::string TruncateText(const std::string &text, float maxWidth)
         {
@@ -586,6 +603,8 @@ namespace burnhope
             memset(editAO, 0, sizeof(editAO));
             memset(editMetallic, 0, sizeof(editMetallic));
             memset(editRoughness, 0, sizeof(editRoughness));
+            memset(editEmissive, 0, sizeof(editEmissive));
+            editEmissiveIntensity = 1.0f;
             std::ifstream file(path);
             if (file.is_open())
             {
@@ -612,6 +631,11 @@ namespace burnhope
                         strcpy_s(editMetallic, j["textures"]["metallic"].get<std::string>().c_str());
                     if (j["textures"].contains("roughness"))
                         strcpy_s(editRoughness, j["textures"]["roughness"].get<std::string>().c_str());
+                    if (j["textures"].contains("emissive"))
+                        strcpy_s(editEmissive, j["textures"]["emissive"].get<std::string>().c_str());
+                }
+                if (j.contains("emissiveIntensity")) {
+                    editEmissiveIntensity = j["emissiveIntensity"].get<float>();
                 }
             }
         }
@@ -1374,71 +1398,85 @@ namespace burnhope
             ImGui::Columns(1);
             ImGui::End();
         }
-        void SavePostProcessSettings()
+        void SaveRenderSettings()
         {
-            std::string path = projectDirectory.string() + "/postprocess.json";
+            std::string path = projectDirectory.string() + "/rendersettings.json";
             json j;
-            j["enableSSAO"] = ppSettings.enableSSAO;
-            j["ssaoRadius"] = ppSettings.ssaoRadius;
-            j["ssaoBias"] = ppSettings.ssaoBias;
-            j["ssaoIntensity"] = ppSettings.ssaoIntensity;
-            j["ssaoPower"] = ppSettings.ssaoPower;
-            j["enableSSGI"] = ppSettings.enableSSGI;
-            j["ssgiRayCount"] = ppSettings.ssgiRayCount;
-            j["ssgiStepSize"] = ppSettings.ssgiStepSize;
-            j["ssgiThickness"] = ppSettings.ssgiThickness;
-            j["blurRange"] = ppSettings.blurRange;
-            j["autoExposure"] = ppSettings.autoExposure;
-            j["manualExposure"] = ppSettings.manualExposure;
-            j["exposureCompensation"] = ppSettings.exposureCompensation;
-            j["minBrightness"] = ppSettings.minBrightness;
-            j["maxBrightness"] = ppSettings.maxBrightness;
-            j["contrast"] = ppSettings.contrast;
-            j["saturation"] = ppSettings.saturation;
-            j["temperature"] = ppSettings.temperature;
-            j["gamma"] = ppSettings.gamma;
-            j["enableVignette"] = ppSettings.enableVignette;
-            j["vignetteIntensity"] = ppSettings.vignetteIntensity;
-            j["enableChromaticAberration"] = ppSettings.enableChromaticAberration;
-            j["caIntensity"] = ppSettings.caIntensity;
-            j["enableBloom"] = ppSettings.enableBloom;
-            j["bloomThreshold"] = ppSettings.bloomThreshold;
-            j["bloomIntensity"] = ppSettings.bloomIntensity;
-            j["bloomBlurIterations"] = ppSettings.bloomBlurIterations;
-            j["enableLensFlares"] = ppSettings.enableLensFlares;
-            j["flareIntensity"] = ppSettings.flareIntensity;
-            j["ghostDispersal"] = ppSettings.ghostDispersal;
-            j["ghosts"] = ppSettings.ghosts;
-            j["enableGodRays"] = ppSettings.enableGodRays;
-            j["godRaysIntensity"] = ppSettings.godRaysIntensity;
-            j["enableFilmGrain"] = ppSettings.enableFilmGrain;
-            j["grainIntensity"] = ppSettings.grainIntensity;
-            j["enableSharpen"] = ppSettings.enableSharpen;
-            j["sharpenIntensity"] = ppSettings.sharpenIntensity;
-            j["enableDoF"] = ppSettings.enableDoF;
-            j["focusDistance"] = ppSettings.focusDistance;
-            j["focusRange"] = ppSettings.focusRange;
-            j["bokehSize"] = ppSettings.bokehSize;
-            j["enableMotionBlur"] = ppSettings.enableMotionBlur;
-            j["mbStrength"] = ppSettings.mbStrength;
-            j["enableFog"] = ppSettings.enableFog;
-            j["fogDensity"] = ppSettings.fogDensity;
-            j["fogHeightFalloff"] = ppSettings.fogHeightFalloff;
-            j["fogBaseHeight"] = ppSettings.fogBaseHeight;
-            j["inscatterPower"] = ppSettings.inscatterPower;
-            j["inscatterIntensity"] = ppSettings.inscatterIntensity;
-            j["fogColor"] = {ppSettings.fogColor[0], ppSettings.fogColor[1], ppSettings.fogColor[2]};
-            j["inscatterColor"] = {ppSettings.inscatterColor[0], ppSettings.inscatterColor[1], ppSettings.inscatterColor[2]};
+            j["rtMaxBounces"] = renderSettings.rtMaxBounces;
+            j["enableRTReflections"] = renderSettings.enableRTReflections;
+            j["enableRadianceCascades"] = renderSettings.enableRadianceCascades;
+            j["rcProbeGridX"] = renderSettings.rcProbeGridX;
+            j["rcProbeGridY"] = renderSettings.rcProbeGridY;
+            j["rcProbeGridZ"] = renderSettings.rcProbeGridZ;
+            j["rcBaseRayLength"] = renderSettings.rcBaseRayLength;
+            j["rcOctaSize"] = renderSettings.rcOctaSize;
+
+            j["enableSSAO"] = renderSettings.enableSSAO;
+            j["ssaoRadius"] = renderSettings.ssaoRadius;
+            j["ssaoBias"] = renderSettings.ssaoBias;
+            j["ssaoIntensity"] = renderSettings.ssaoIntensity;
+            j["ssaoPower"] = renderSettings.ssaoPower;
+            j["enableSSGI"] = renderSettings.enableSSGI;
+            j["ssgiRayCount"] = renderSettings.ssgiRayCount;
+            j["ssgiStepSize"] = renderSettings.ssgiStepSize;
+            j["ssgiThickness"] = renderSettings.ssgiThickness;
+            j["blurRange"] = renderSettings.blurRange;
+            j["autoExposure"] = renderSettings.autoExposure;
+            j["manualExposure"] = renderSettings.manualExposure;
+            j["exposureCompensation"] = renderSettings.exposureCompensation;
+            j["minBrightness"] = renderSettings.minBrightness;
+            j["maxBrightness"] = renderSettings.maxBrightness;
+            j["contrast"] = renderSettings.contrast;
+            j["saturation"] = renderSettings.saturation;
+            j["temperature"] = renderSettings.temperature;
+            j["gamma"] = renderSettings.gamma;
+            j["enableVignette"] = renderSettings.enableVignette;
+            j["vignetteIntensity"] = renderSettings.vignetteIntensity;
+            j["enableChromaticAberration"] = renderSettings.enableChromaticAberration;
+            j["caIntensity"] = renderSettings.caIntensity;
+            j["enableBloom"] = renderSettings.enableBloom;
+            j["bloomThreshold"] = renderSettings.bloomThreshold;
+            j["bloomIntensity"] = renderSettings.bloomIntensity;
+            j["bloomBlurIterations"] = renderSettings.bloomBlurIterations;
+            j["enableLensFlares"] = renderSettings.enableLensFlares;
+            j["flareIntensity"] = renderSettings.flareIntensity;
+            j["ghostDispersal"] = renderSettings.ghostDispersal;
+            j["ghosts"] = renderSettings.ghosts;
+            j["enableGodRays"] = renderSettings.enableGodRays;
+            j["godRaysIntensity"] = renderSettings.godRaysIntensity;
+            j["enableFilmGrain"] = renderSettings.enableFilmGrain;
+            j["grainIntensity"] = renderSettings.grainIntensity;
+            j["enableSharpen"] = renderSettings.enableSharpen;
+            j["sharpenIntensity"] = renderSettings.sharpenIntensity;
+            j["enableDoF"] = renderSettings.enableDoF;
+            j["focusDistance"] = renderSettings.focusDistance;
+            j["focusRange"] = renderSettings.focusRange;
+            j["bokehSize"] = renderSettings.bokehSize;
+            j["enableMotionBlur"] = renderSettings.enableMotionBlur;
+            j["mbStrength"] = renderSettings.mbStrength;
+            j["enableFog"] = renderSettings.enableFog;
+            j["fogDensity"] = renderSettings.fogDensity;
+            j["fogHeightFalloff"] = renderSettings.fogHeightFalloff;
+            j["fogBaseHeight"] = renderSettings.fogBaseHeight;
+            j["inscatterPower"] = renderSettings.inscatterPower;
+            j["inscatterIntensity"] = renderSettings.inscatterIntensity;
+            j["fogColor"] = {renderSettings.fogColor[0], renderSettings.fogColor[1], renderSettings.fogColor[2]};
+            j["inscatterColor"] = {renderSettings.inscatterColor[0], renderSettings.inscatterColor[1], renderSettings.inscatterColor[2]};
+            j["skyZenithColor"] = {renderSettings.skyZenithColor[0], renderSettings.skyZenithColor[1], renderSettings.skyZenithColor[2]};
+            j["skyHorizonColor"] = {renderSettings.skyHorizonColor[0], renderSettings.skyHorizonColor[1], renderSettings.skyHorizonColor[2]};
+            j["sunSize"] = renderSettings.sunSize;
+            j["sunGlow"] = renderSettings.sunGlow;
+            j["sunGlowSize"] = renderSettings.sunGlowSize;
             std::ofstream file(path);
             file << j.dump(4);
         }
-        void LoadPostProcessSettings()
+        void LoadRenderSettings()
         {
-            std::string path = projectDirectory.string() + "/postprocess.json";
+            std::string path = projectDirectory.string() + "/rendersettings.json";
             std::ifstream file(path);
             if (!file.is_open())
             {
-                SavePostProcessSettings();
+                SaveRenderSettings();
                 return;
             }
             json j;
@@ -1456,206 +1494,248 @@ namespace burnhope
             { if (j.contains(key)) val = j[key]; };
             auto loadBool = [&](const char *key, bool &val)
             { if (j.contains(key)) val = j[key]; };
-            loadBool("enableSSAO", ppSettings.enableSSAO);
-            loadFloat("ssaoRadius", ppSettings.ssaoRadius);
-            loadFloat("ssaoBias", ppSettings.ssaoBias);
-            loadFloat("ssaoIntensity", ppSettings.ssaoIntensity);
-            loadFloat("ssaoPower", ppSettings.ssaoPower);
-            loadBool("enableSSGI", ppSettings.enableSSGI);
-            loadInt("ssgiRayCount", ppSettings.ssgiRayCount);
-            loadFloat("ssgiStepSize", ppSettings.ssgiStepSize);
-            loadFloat("ssgiThickness", ppSettings.ssgiThickness);
-            loadInt("blurRange", ppSettings.blurRange);
-            loadBool("autoExposure", ppSettings.autoExposure);
-            loadFloat("manualExposure", ppSettings.manualExposure);
-            loadFloat("exposureCompensation", ppSettings.exposureCompensation);
-            loadFloat("minBrightness", ppSettings.minBrightness);
-            loadFloat("maxBrightness", ppSettings.maxBrightness);
-            loadFloat("contrast", ppSettings.contrast);
-            loadFloat("saturation", ppSettings.saturation);
-            loadFloat("temperature", ppSettings.temperature);
-            loadFloat("gamma", ppSettings.gamma);
-            loadBool("enableVignette", ppSettings.enableVignette);
-            loadFloat("vignetteIntensity", ppSettings.vignetteIntensity);
-            loadBool("enableChromaticAberration", ppSettings.enableChromaticAberration);
-            loadFloat("caIntensity", ppSettings.caIntensity);
-            loadBool("enableBloom", ppSettings.enableBloom);
-            loadFloat("bloomThreshold", ppSettings.bloomThreshold);
-            loadFloat("bloomIntensity", ppSettings.bloomIntensity);
-            loadInt("bloomBlurIterations", ppSettings.bloomBlurIterations);
-            loadBool("enableLensFlares", ppSettings.enableLensFlares);
-            loadFloat("flareIntensity", ppSettings.flareIntensity);
-            loadFloat("ghostDispersal", ppSettings.ghostDispersal);
-            loadInt("ghosts", ppSettings.ghosts);
-            loadBool("enableGodRays", ppSettings.enableGodRays);
-            loadFloat("godRaysIntensity", ppSettings.godRaysIntensity);
-            loadBool("enableFilmGrain", ppSettings.enableFilmGrain);
-            loadFloat("grainIntensity", ppSettings.grainIntensity);
-            loadBool("enableSharpen", ppSettings.enableSharpen);
-            loadFloat("sharpenIntensity", ppSettings.sharpenIntensity);
-            loadBool("enableDoF", ppSettings.enableDoF);
-            loadFloat("focusDistance", ppSettings.focusDistance);
-            loadFloat("focusRange", ppSettings.focusRange);
-            loadFloat("bokehSize", ppSettings.bokehSize);
-            loadBool("enableMotionBlur", ppSettings.enableMotionBlur);
-            loadFloat("mbStrength", ppSettings.mbStrength);
-            loadBool("enableFog", ppSettings.enableFog);
-            loadFloat("fogDensity", ppSettings.fogDensity);
-            loadFloat("fogHeightFalloff", ppSettings.fogHeightFalloff);
-            loadFloat("fogBaseHeight", ppSettings.fogBaseHeight);
-            loadFloat("inscatterPower", ppSettings.inscatterPower);
-            loadFloat("inscatterIntensity", ppSettings.inscatterIntensity);
+
+            loadInt("rtMaxBounces", renderSettings.rtMaxBounces);
+            loadBool("enableRTReflections", renderSettings.enableRTReflections);
+            loadBool("enableRadianceCascades", renderSettings.enableRadianceCascades);
+            loadInt("rcProbeGridX", renderSettings.rcProbeGridX);
+            loadInt("rcProbeGridY", renderSettings.rcProbeGridY);
+            loadInt("rcProbeGridZ", renderSettings.rcProbeGridZ);
+            loadFloat("rcBaseRayLength", renderSettings.rcBaseRayLength);
+            loadInt("rcOctaSize", renderSettings.rcOctaSize);
+
+            loadBool("enableSSAO", renderSettings.enableSSAO);
+            loadFloat("ssaoRadius", renderSettings.ssaoRadius);
+            loadFloat("ssaoBias", renderSettings.ssaoBias);
+            loadFloat("ssaoIntensity", renderSettings.ssaoIntensity);
+            loadFloat("ssaoPower", renderSettings.ssaoPower);
+            loadBool("enableSSGI", renderSettings.enableSSGI);
+            loadInt("ssgiRayCount", renderSettings.ssgiRayCount);
+            loadFloat("ssgiStepSize", renderSettings.ssgiStepSize);
+            loadFloat("ssgiThickness", renderSettings.ssgiThickness);
+            loadInt("blurRange", renderSettings.blurRange);
+            loadBool("autoExposure", renderSettings.autoExposure);
+            loadFloat("manualExposure", renderSettings.manualExposure);
+            loadFloat("exposureCompensation", renderSettings.exposureCompensation);
+            loadFloat("minBrightness", renderSettings.minBrightness);
+            loadFloat("maxBrightness", renderSettings.maxBrightness);
+            loadFloat("contrast", renderSettings.contrast);
+            loadFloat("saturation", renderSettings.saturation);
+            loadFloat("temperature", renderSettings.temperature);
+            loadFloat("gamma", renderSettings.gamma);
+            loadBool("enableVignette", renderSettings.enableVignette);
+            loadFloat("vignetteIntensity", renderSettings.vignetteIntensity);
+            loadBool("enableChromaticAberration", renderSettings.enableChromaticAberration);
+            loadFloat("caIntensity", renderSettings.caIntensity);
+            loadBool("enableBloom", renderSettings.enableBloom);
+            loadFloat("bloomThreshold", renderSettings.bloomThreshold);
+            loadFloat("bloomIntensity", renderSettings.bloomIntensity);
+            loadInt("bloomBlurIterations", renderSettings.bloomBlurIterations);
+            loadBool("enableLensFlares", renderSettings.enableLensFlares);
+            loadFloat("flareIntensity", renderSettings.flareIntensity);
+            loadFloat("ghostDispersal", renderSettings.ghostDispersal);
+            loadInt("ghosts", renderSettings.ghosts);
+            loadBool("enableGodRays", renderSettings.enableGodRays);
+            loadFloat("godRaysIntensity", renderSettings.godRaysIntensity);
+            loadBool("enableFilmGrain", renderSettings.enableFilmGrain);
+            loadFloat("grainIntensity", renderSettings.grainIntensity);
+            loadBool("enableSharpen", renderSettings.enableSharpen);
+            loadFloat("sharpenIntensity", renderSettings.sharpenIntensity);
+            loadBool("enableDoF", renderSettings.enableDoF);
+            loadFloat("focusDistance", renderSettings.focusDistance);
+            loadFloat("focusRange", renderSettings.focusRange);
+            loadFloat("bokehSize", renderSettings.bokehSize);
+            loadBool("enableMotionBlur", renderSettings.enableMotionBlur);
+            loadFloat("mbStrength", renderSettings.mbStrength);
+            loadBool("enableFog", renderSettings.enableFog);
+            loadFloat("fogDensity", renderSettings.fogDensity);
+            loadFloat("fogHeightFalloff", renderSettings.fogHeightFalloff);
+            loadFloat("fogBaseHeight", renderSettings.fogBaseHeight);
+            loadFloat("inscatterPower", renderSettings.inscatterPower);
+            loadFloat("inscatterIntensity", renderSettings.inscatterIntensity);
             if (j.contains("fogColor") && j["fogColor"].is_array())
             {
                 for (int i = 0; i < 3; i++)
-                    ppSettings.fogColor[i] = j["fogColor"][i];
+                    renderSettings.fogColor[i] = j["fogColor"][i];
             }
             if (j.contains("inscatterColor") && j["inscatterColor"].is_array())
             {
                 for (int i = 0; i < 3; i++)
-                    ppSettings.inscatterColor[i] = j["inscatterColor"][i];
+                    renderSettings.inscatterColor[i] = j["inscatterColor"][i];
             }
         }
-        void DrawPostProcessContent()
+        void DrawRenderContent()
         {
-            ImGui::TextColored(ImVec4(0.26f, 0.59f, 0.98f, 1.0f), "Post Processing Settings");
+            ImGui::TextColored(ImVec4(0.26f, 0.59f, 0.98f, 1.0f), "Render & Post-Processing Settings");
             ImGui::Separator();
             ImGui::Spacing();
             if (ImGui::BeginTabBar("PP_Tabs"))
             {
-                if (ImGui::BeginTabItem("Lighting"))
+                if (ImGui::BeginTabItem("Global Illumination"))
                 {
-                    if (ImGui::CollapsingHeader("SSAO (Ambient Occlusion)", ImGuiTreeNodeFlags_DefaultOpen))
-                    {
-                        ImGui::Checkbox("Enable SSAO", &ppSettings.enableSSAO);
-                        if (ppSettings.enableSSAO)
-                        {
-                            ImGui::SliderFloat("Radius##ssao", &ppSettings.ssaoRadius, 0.1f, 3.0f);
-                            ImGui::SliderFloat("Bias##ssao", &ppSettings.ssaoBias, 0.001f, 0.2f);
-                            ImGui::SliderFloat("Intensity##ssao", &ppSettings.ssaoIntensity, 0.1f, 10.0f);
-                            ImGui::SliderFloat("Power##ssao", &ppSettings.ssaoPower, 1.0f, 8.0f);
-                        }
-                    }
                     if (ImGui::CollapsingHeader("SSGI (Global Illumination)", ImGuiTreeNodeFlags_DefaultOpen))
                     {
-                        ImGui::Checkbox("Enable SSGI", &ppSettings.enableSSGI);
-                        if (ppSettings.enableSSGI)
+                        ImGui::Checkbox("Enable SSGI", &renderSettings.enableSSGI);
+                        if (renderSettings.enableSSGI)
                         {
-                            ImGui::SliderInt("Ray Count", &ppSettings.ssgiRayCount, 1, 32);
-                            ImGui::SliderFloat("Step Size", &ppSettings.ssgiStepSize, 0.05f, 2.0f);
-                            ImGui::SliderFloat("Thickness", &ppSettings.ssgiThickness, 0.01f, 2.0f);
-                            ImGui::SliderInt("Blur Range", &ppSettings.blurRange, 1, 10);
+                            ImGui::SliderInt("Ray Count", &renderSettings.ssgiRayCount, 1, 32);
+                            ImGui::SliderFloat("Step Size", &renderSettings.ssgiStepSize, 0.05f, 2.0f);
+                            ImGui::SliderFloat("Thickness", &renderSettings.ssgiThickness, 0.01f, 2.0f);
+                            ImGui::SliderInt("Blur Range", &renderSettings.blurRange, 1, 10);
+                        }
+                    }
+                    if (ImGui::CollapsingHeader("Radiance Cascades (RT GI)", ImGuiTreeNodeFlags_DefaultOpen))
+                    {
+                        ImGui::Checkbox("Enable RT GI", &renderSettings.enableRadianceCascades);
+                        if (renderSettings.enableRadianceCascades)
+                        {
+                            ImGui::SliderInt("Probe Grid X", &renderSettings.rcProbeGridX, 1, 32);
+                            ImGui::SliderInt("Probe Grid Y", &renderSettings.rcProbeGridY, 1, 32);
+                            ImGui::SliderInt("Probe Grid Z", &renderSettings.rcProbeGridZ, 1, 32);
+                            ImGui::SliderFloat("Ray Length", &renderSettings.rcBaseRayLength, 0.1f, 5.0f);
+                            ImGui::SliderInt("Octahedron Size", &renderSettings.rcOctaSize, 4, 16);
                         }
                     }
                     ImGui::EndTabItem();
                 }
-                if (ImGui::BeginTabItem("Shadows"))
+                if (ImGui::BeginTabItem("Reflections"))
                 {
+                    if (ImGui::CollapsingHeader("Ray Traced Reflections", ImGuiTreeNodeFlags_DefaultOpen))
+                    {
+                        ImGui::Checkbox("Enable RT Reflections", &renderSettings.enableRTReflections);
+                        if (renderSettings.enableRTReflections)
+                        {
+                            ImGui::SliderInt("Max Bounces", &renderSettings.rtMaxBounces, 1, 5);
+                        }
+                    }
+                    ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("Shadows & AO"))
+                {
+                    if (ImGui::CollapsingHeader("GTAO (Ambient Occlusion)", ImGuiTreeNodeFlags_DefaultOpen))
+                    {
+                        ImGui::Checkbox("Enable GTAO", &renderSettings.enableSSAO);
+                        if (renderSettings.enableSSAO)
+                        {
+                            ImGui::SliderFloat("Radius##ssao", &renderSettings.ssaoRadius, 0.1f, 3.0f);
+                            ImGui::SliderFloat("Bias##ssao", &renderSettings.ssaoBias, 0.001f, 0.2f);
+                            ImGui::SliderFloat("Intensity##ssao", &renderSettings.ssaoIntensity, 0.1f, 10.0f);
+                            ImGui::SliderFloat("Power##ssao", &renderSettings.ssaoPower, 1.0f, 8.0f);
+                        }
+                    }
                     if (ImGui::CollapsingHeader("SSCS (Contact Shadows)", ImGuiTreeNodeFlags_DefaultOpen))
                     {
-                        ImGui::Checkbox("Enable SSCS", &ppSettings.enableContactShadows);
-                        if (ppSettings.enableContactShadows)
+                        ImGui::Checkbox("Enable SSCS", &renderSettings.enableContactShadows);
+                        if (renderSettings.enableContactShadows)
                         {
-                            ImGui::SliderFloat("Ray Length", &ppSettings.contactShadowLength, 0.01f, 0.5f);
-                            ImGui::SliderInt("Ray Steps", &ppSettings.contactShadowSteps, 4, 64);
-                            ImGui::SliderFloat("Ray Thickness", &ppSettings.contactShadowThickness, 0.01f, 0.5f);
+                            ImGui::SliderFloat("Ray Length", &renderSettings.contactShadowLength, 0.01f, 0.5f);
+                            ImGui::SliderInt("Ray Steps", &renderSettings.contactShadowSteps, 4, 64);
+                            ImGui::SliderFloat("Ray Thickness", &renderSettings.contactShadowThickness, 0.01f, 0.5f);
                         }
-                        ImGui::EndTabItem();
-                    }
-                }
-                if (ImGui::BeginTabItem("Effects"))
-                {
-                    if (ImGui::CollapsingHeader("Bloom & Lens Flares", ImGuiTreeNodeFlags_DefaultOpen))
-                    {
-                        ImGui::Checkbox("Enable Bloom", &ppSettings.enableBloom);
-                        if (ppSettings.enableBloom)
-                        {
-                            ImGui::SliderFloat("Threshold##bloom", &ppSettings.bloomThreshold, 0.0f, 5.0f);
-                            ImGui::SliderFloat("Intensity##bloom", &ppSettings.bloomIntensity, 0.0f, 5.0f);
-                            ImGui::SliderInt("Blur Iterations", &ppSettings.bloomBlurIterations, 1, 15);
-                        }
-                        ImGui::Separator();
-                        ImGui::Checkbox("Enable Lens Flares", &ppSettings.enableLensFlares);
-                        if (ppSettings.enableLensFlares)
-                        {
-                            ImGui::SliderFloat("Flare Intensity", &ppSettings.flareIntensity, 0.0f, 5.0f);
-                            ImGui::SliderFloat("Ghost Dispersal", &ppSettings.ghostDispersal, 0.01f, 1.0f);
-                            ImGui::SliderInt("Ghosts Count", &ppSettings.ghosts, 1, 10);
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Screen FX", ImGuiTreeNodeFlags_DefaultOpen))
-                    {
-                        ImGui::Checkbox("God Rays", &ppSettings.enableGodRays);
-                        if (ppSettings.enableGodRays)
-                            ImGui::SliderFloat("Rays Power", &ppSettings.godRaysIntensity, 0.0f, 3.0f);
-                        ImGui::Checkbox("Film Grain", &ppSettings.enableFilmGrain);
-                        if (ppSettings.enableFilmGrain)
-                            ImGui::SliderFloat("Grain Strength", &ppSettings.grainIntensity, 0.0f, 0.2f);
-                        ImGui::Checkbox("Vignette", &ppSettings.enableVignette);
-                        if (ppSettings.enableVignette)
-                            ImGui::SliderFloat("Vignette Intensity", &ppSettings.vignetteIntensity, 0.1f, 2.0f);
-                        ImGui::Checkbox("Chromatic Aberration", &ppSettings.enableChromaticAberration);
-                        if (ppSettings.enableChromaticAberration)
-                            ImGui::SliderFloat("CA Intensity", &ppSettings.caIntensity, 0.001f, 0.55f);
                     }
                     ImGui::EndTabItem();
                 }
-                if (ImGui::BeginTabItem("Camera & Fog"))
+                if (ImGui::BeginTabItem("Camera & Lens"))
                 {
+                    if (ImGui::CollapsingHeader("Exposure", ImGuiTreeNodeFlags_DefaultOpen))
+                    {
+                        ImGui::Checkbox("Auto Exposure", &renderSettings.autoExposure);
+                        if (renderSettings.autoExposure)
+                        {
+                            ImGui::SliderFloat("Compensation", &renderSettings.exposureCompensation, 0.1f, 5.0f);
+                            ImGui::SliderFloat("Min Brightness", &renderSettings.minBrightness, 0.01f, 2.0f);
+                            ImGui::SliderFloat("Max Brightness", &renderSettings.maxBrightness, 1.0f, 10.0f);
+                        }
+                        else
+                        {
+                            ImGui::SliderFloat("Manual Exp", &renderSettings.manualExposure, 0.1f, 10.0f);
+                        }
+                    }
                     if (ImGui::CollapsingHeader("Depth of Field", ImGuiTreeNodeFlags_DefaultOpen))
                     {
-                        ImGui::Checkbox("Enable DoF", &ppSettings.enableDoF);
-                        if (ppSettings.enableDoF)
+                        ImGui::Checkbox("Enable DoF", &renderSettings.enableDoF);
+                        if (renderSettings.enableDoF)
                         {
-                            ImGui::SliderFloat("Focus Dist", &ppSettings.focusDistance, 0.1f, 100.0f);
-                            ImGui::SliderFloat("Focus Range", &ppSettings.focusRange, 0.1f, 50.0f);
-                            ImGui::SliderFloat("Bokeh Size", &ppSettings.bokehSize, 0.0f, 10.0f);
+                            ImGui::SliderFloat("Focus Dist", &renderSettings.focusDistance, 0.1f, 100.0f);
+                            ImGui::SliderFloat("Focus Range", &renderSettings.focusRange, 0.1f, 50.0f);
+                            ImGui::SliderFloat("Bokeh Size", &renderSettings.bokehSize, 0.0f, 10.0f);
                         }
+                    }
+                    if (ImGui::CollapsingHeader("Bloom & Lens Flares", ImGuiTreeNodeFlags_DefaultOpen))
+                    {
+                        ImGui::Checkbox("Enable Bloom", &renderSettings.enableBloom);
+                        if (renderSettings.enableBloom)
+                        {
+                            ImGui::SliderFloat("Threshold##bloom", &renderSettings.bloomThreshold, 0.0f, 5.0f);
+                            ImGui::SliderFloat("Intensity##bloom", &renderSettings.bloomIntensity, 0.0f, 5.0f);
+                            ImGui::SliderInt("Blur Iterations", &renderSettings.bloomBlurIterations, 1, 15);
+                        }
+                        ImGui::Separator();
+                        ImGui::Checkbox("Enable Lens Flares", &renderSettings.enableLensFlares);
+                        if (renderSettings.enableLensFlares)
+                        {
+                            ImGui::SliderFloat("Flare Intensity", &renderSettings.flareIntensity, 0.0f, 5.0f);
+                            ImGui::SliderFloat("Ghost Dispersal", &renderSettings.ghostDispersal, 0.01f, 1.0f);
+                            ImGui::SliderInt("Ghosts Count", &renderSettings.ghosts, 1, 10);
+                        }
+                    }
+                    if (ImGui::CollapsingHeader("Motion Blur", ImGuiTreeNodeFlags_DefaultOpen))
+                    {
+                        ImGui::Checkbox("Enable Motion Blur", &renderSettings.enableMotionBlur);
+                        if (renderSettings.enableMotionBlur)
+                            ImGui::SliderFloat("Strength", &renderSettings.mbStrength, 0.0f, 2.0f);
+                    }
+                    ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("Environment"))
+                {
+                    if (ImGui::CollapsingHeader("Procedural Sky", ImGuiTreeNodeFlags_DefaultOpen))
+                    {
+                        ImGui::ColorEdit3("Zenith Color", renderSettings.skyZenithColor);
+                        ImGui::ColorEdit3("Horizon Color", renderSettings.skyHorizonColor);
+                        ImGui::SliderFloat("Sun Size", &renderSettings.sunSize, 0.001f, 0.1f);
+                        ImGui::SliderFloat("Sun Glow", &renderSettings.sunGlow, 0.0f, 10.0f);
+                        ImGui::SliderFloat("Sun Glow Size", &renderSettings.sunGlowSize, 0.01f, 1.0f);
                     }
                     if (ImGui::CollapsingHeader("Atmospheric Fog", ImGuiTreeNodeFlags_DefaultOpen))
                     {
-                        ImGui::Checkbox("Enable Fog", &ppSettings.enableFog);
-                        if (ppSettings.enableFog)
+                        ImGui::Checkbox("Enable Fog", &renderSettings.enableFog);
+                        if (renderSettings.enableFog)
                         {
-                            ImGui::ColorEdit3("Fog Color", ppSettings.fogColor);
-                            ImGui::ColorEdit3("Sun Inscatter Color", ppSettings.inscatterColor);
-                            ImGui::SliderFloat("Density", &ppSettings.fogDensity, 0.001f, 0.2f);
-                            ImGui::SliderFloat("Height Falloff", &ppSettings.fogHeightFalloff, 0.01f, 1.0f);
-                            ImGui::SliderFloat("Base Height", &ppSettings.fogBaseHeight, -50.0f, 50.0f);
-                            ImGui::SliderFloat("Sun Inscatter Power", &ppSettings.inscatterPower, 1.0f, 32.0f);
-                            ImGui::SliderFloat("Sun Inscatter Int", &ppSettings.inscatterIntensity, 0.0f, 5.0f);
+                            ImGui::ColorEdit3("Fog Color", renderSettings.fogColor);
+                            ImGui::ColorEdit3("Sun Inscatter Color", renderSettings.inscatterColor);
+                            ImGui::SliderFloat("Density", &renderSettings.fogDensity, 0.001f, 0.2f);
+                            ImGui::SliderFloat("Height Falloff", &renderSettings.fogHeightFalloff, 0.01f, 1.0f);
+                            ImGui::SliderFloat("Base Height", &renderSettings.fogBaseHeight, -50.0f, 50.0f);
+                            ImGui::SliderFloat("Sun Inscatter Power", &renderSettings.inscatterPower, 1.0f, 32.0f);
+                            ImGui::SliderFloat("Sun Inscatter Int", &renderSettings.inscatterIntensity, 0.0f, 5.0f);
                         }
                     }
                     ImGui::EndTabItem();
                 }
                 if (ImGui::BeginTabItem("Color Grading"))
                 {
-                    if (ImGui::CollapsingHeader("Exposure", ImGuiTreeNodeFlags_DefaultOpen))
-                    {
-                        ImGui::Checkbox("Auto Exposure", &ppSettings.autoExposure);
-                        if (ppSettings.autoExposure)
-                        {
-                            ImGui::SliderFloat("Compensation", &ppSettings.exposureCompensation, 0.1f, 5.0f);
-                            ImGui::SliderFloat("Min Brightness", &ppSettings.minBrightness, 0.01f, 2.0f);
-                            ImGui::SliderFloat("Max Brightness", &ppSettings.maxBrightness, 1.0f, 10.0f);
-                        }
-                        else
-                        {
-                            ImGui::SliderFloat("Manual Exp", &ppSettings.manualExposure, 0.1f, 10.0f);
-                        }
-                    }
                     if (ImGui::CollapsingHeader("Color Corrections", ImGuiTreeNodeFlags_DefaultOpen))
                     {
-                        ImGui::SliderFloat("Contrast", &ppSettings.contrast, 0.5f, 2.0f);
-                        ImGui::SliderFloat("Saturation", &ppSettings.saturation, 0.0f, 2.0f);
-                        ImGui::SliderFloat("Color Temp (K)", &ppSettings.temperature, 2000.0f, 12000.0f);
-                        ImGui::SliderFloat("Gamma", &ppSettings.gamma, 1.0f, 2.8f);
+                        ImGui::SliderFloat("Contrast", &renderSettings.contrast, 0.5f, 2.0f);
+                        ImGui::SliderFloat("Saturation", &renderSettings.saturation, 0.0f, 2.0f);
+                        ImGui::SliderFloat("Color Temp (K)", &renderSettings.temperature, 2000.0f, 12000.0f);
+                        ImGui::SliderFloat("Gamma", &renderSettings.gamma, 1.0f, 2.8f);
                     }
-                    if (ImGui::CollapsingHeader("Sharpening", ImGuiTreeNodeFlags_DefaultOpen))
+                    if (ImGui::CollapsingHeader("Screen FX", ImGuiTreeNodeFlags_DefaultOpen))
                     {
-                        ImGui::Checkbox("Enable Sharpen", &ppSettings.enableSharpen);
-                        if (ppSettings.enableSharpen)
-                            ImGui::SliderFloat("Sharpness", &ppSettings.sharpenIntensity, 0.0f, 2.0f);
+                        ImGui::Checkbox("Film Grain", &renderSettings.enableFilmGrain);
+                        if (renderSettings.enableFilmGrain)
+                            ImGui::SliderFloat("Grain Strength", &renderSettings.grainIntensity, 0.0f, 0.2f);
+                        ImGui::Checkbox("Vignette", &renderSettings.enableVignette);
+                        if (renderSettings.enableVignette)
+                            ImGui::SliderFloat("Vignette Intensity", &renderSettings.vignetteIntensity, 0.1f, 2.0f);
+                        ImGui::Checkbox("Chromatic Aberration", &renderSettings.enableChromaticAberration);
+                        if (renderSettings.enableChromaticAberration)
+                            ImGui::SliderFloat("CA Intensity", &renderSettings.caIntensity, 0.001f, 0.55f);
+                        ImGui::Checkbox("Enable Sharpen", &renderSettings.enableSharpen);
+                        if (renderSettings.enableSharpen)
+                            ImGui::SliderFloat("Sharpness", &renderSettings.sharpenIntensity, 0.0f, 2.0f);
                     }
                     ImGui::EndTabItem();
                 }
@@ -1665,7 +1745,7 @@ namespace burnhope
             ImGui::Separator();
             ImGui::Spacing();
             if (ImGui::Button("💾 SAVE SETTINGS", ImVec2(-1, 40)))
-                SavePostProcessSettings();
+                SaveRenderSettings();
         }
         void DrawTextureProperty(const char *label, char *pathBuffer, size_t bufferSize)
         {
@@ -1704,6 +1784,17 @@ namespace burnhope
         }
         void DrawPropertiesWindow()
         {
+            if (!showProperties) return;
+            ImGui::Begin("Properties", &showProperties);
+            
+            if (ImGui::BeginTabBar("PropsTabs")) {
+                if (ImGui::BeginTabItem("Render")) {
+                    DrawRenderContent();
+                    ImGui::EndTabItem();
+                }
+                ImGui::EndTabBar();
+            }
+            ImGui::End();
         }
         bool DrawAssetPicker(const char *label, std::string &outPath, const std::vector<std::string> &extensions)
         {

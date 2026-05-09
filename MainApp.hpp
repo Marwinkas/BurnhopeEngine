@@ -90,7 +90,7 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         VkDescriptorSetLayout outputSetLayout;
         std::unique_ptr<BurnhopeDescriptorSetLayout> gBufferLayoutPtr;
         std::unique_ptr<BurnhopeDescriptorSetLayout> outputLayoutPtr;
-        std::unique_ptr<BurnhopeDescriptorSetLayout> irradianceLayoutPtr;
+        std::unique_ptr<BurnhopeDescriptorSetLayout> giLayoutPtr;
         std::unique_ptr<BurnhopeBuffer> dummyGridBuffer;
         std::unique_ptr<BurnhopeBuffer> dummyIndexBuffer;
         VkDescriptorSet gBufferSet;
@@ -98,6 +98,12 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         VkDescriptorSet lightDummySet;
         VkDescriptorSet computeOutputSet;
         std::unique_ptr<BurnhopeTexture> ssgiRawTexture;
+        
+        std::unique_ptr<BurnhopeTexture> postProcessTexture;
+        std::unique_ptr<BurnhopeDescriptorSetLayout> postProcessLayoutPtr;
+        VkDescriptorSet postProcessSet = VK_NULL_HANDLE;
+        std::unique_ptr<ComputeShader> postProcessShader;
+
         std::unique_ptr<BurnhopeDescriptorSetLayout> ssgiLayoutPtr;
         VkDescriptorSet ssgiSet = VK_NULL_HANDLE;
         std::unique_ptr<SSGISystem> ssgiSystem;

@@ -18,13 +18,22 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     float lightSize;
     vec3 sunColor;  
     float sunIntensity; 
+    vec4 sscsParams;
+    vec4 gtaoParams;
+    vec4 fogParams;
+    vec4 fogColor;
+    vec4 inscatterColor;
+    vec4 skyZenithColor;
+    vec4 skyHorizonColor;
+    vec4 skySunParams;
+    vec4 ssgiParams;
+    vec4 rtParams;
 } ubo;
 
 layout(set = 1, binding = 0) uniform sampler2D depthMap;
 layout(set = 1, binding = 1) uniform sampler2D normalRoughnessMap;
 layout(set = 1, binding = 2, r8) uniform writeonly image2D outGTAO;
 
-const float RADIUS = 1.0;         // Немного увеличил радиус для сочных теней в углах
 const int   STEPS = 4;            // ОПТИМИЗАЦИЯ: 4 шага
 const int   DIRECTIONS = 8;       // ОПТИМИЗАЦИЯ: 8 направлений (итого 32 выборки, а не 256)
 const float PI = 3.14159265359;
@@ -44,6 +53,11 @@ void main() {
     ivec2 texSize = imageSize(outGTAO);
     if (pixelCoord.x >= texSize.x || pixelCoord.y >= texSize.y) return;
     
+    if (ubo.gtaoParams.x < 0.5) {
+        imageStore(outGTAO, pixelCoord, vec4(1.0));
+        return;
+    }
+    
     vec2 uv = (vec2(pixelCoord) + 0.5) / vec2(texSize);
     float depth = textureLod(depthMap, uv, 0.0).r;
     
@@ -60,8 +74,9 @@ void main() {
     float angleOffset = noise * PI;
     vec2 texelSize = 1.0 / vec2(texSize);
     
-    // ИСПРАВЛЕНИЕ БАГА: abs() спасает от перевернутой Y-оси Vulkan!
-    float screenRadius = (RADIUS / abs(viewPos.z)) * abs(ubo.projection[1][1]); 
+    float radius = ubo.gtaoParams.y;
+    float bias = ubo.gtaoParams.z;
+    float screenRadius = (radius / abs(viewPos.z)) * abs(ubo.projection[1][1]); 
     screenRadius = max(screenRadius, 2.0 * texelSize.y); 
     
     float visibility = 0.0;
@@ -83,9 +98,9 @@ void main() {
                 vec3 p1 = (ubo.view * vec4(reconstructWorldPos(uv1, d1), 1.0)).xyz;
                 vec3 v1 = p1 - viewPos;
                 float lenV1 = length(v1);
-                float weight = max(0.0, 1.0 - (lenV1 * lenV1) / (RADIUS * RADIUS));
+                float weight = max(0.0, 1.0 - (lenV1 * lenV1) / (radius * radius));
                 if(lenV1 > 0.001) {
-                    float elevation = dot(v1 / lenV1, viewNormal);
+                    float elevation = dot(v1 / lenV1, viewNormal) - bias;
                     maxElevation1 = max(maxElevation1, elevation * weight);
                 }
             }
@@ -97,9 +112,9 @@ void main() {
                 vec3 p2 = (ubo.view * vec4(reconstructWorldPos(uv2, d2), 1.0)).xyz;
                 vec3 v2 = p2 - viewPos;
                 float lenV2 = length(v2);
-                float weight = max(0.0, 1.0 - (lenV2 * lenV2) / (RADIUS * RADIUS));
+                float weight = max(0.0, 1.0 - (lenV2 * lenV2) / (radius * radius));
                 if(lenV2 > 0.001) {
-                    float elevation = dot(v2 / lenV2, viewNormal);
+                    float elevation = dot(v2 / lenV2, viewNormal) - bias;
                     maxElevation2 = max(maxElevation2, elevation * weight);
                 }
             }
@@ -108,7 +123,7 @@ void main() {
     }
     
     visibility /= float(DIRECTIONS);
-    visibility = pow(visibility, 1.5); // Усиливаем контраст теней
+    visibility = pow(visibility, ubo.gtaoParams.w); // Усиливаем контраст теней
     
     imageStore(outGTAO, pixelCoord, vec4(visibility, visibility, visibility, 1.0));
 }

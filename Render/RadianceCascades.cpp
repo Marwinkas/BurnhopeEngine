@@ -24,7 +24,7 @@ namespace burnhope
           globalLayoutRef(globalLayout), gBufferLayoutRef(gBufferLayout)
     {
         createProbeTextures();
-        createIrradianceTexture();
+        createGITextures();
         createLayouts();
         createPipelines(rtLayout, storageLayout, textureLayout);
         createDescriptorSets(lightingImageView, lightingSampler);
@@ -68,9 +68,16 @@ namespace burnhope
         }
     }
 
-    void RadianceCascadesSystem::createIrradianceTexture()
+    void RadianceCascadesSystem::createGITextures()
     {
-        irradianceTex = std::make_unique<BurnhopeTexture>(
+        diffuseGITex = std::make_unique<BurnhopeTexture>(
+            device,
+            VK_FORMAT_R16G16B16A16_SFLOAT,
+            VkExtent3D{screenExtent.width, screenExtent.height, 1},
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_SAMPLE_COUNT_1_BIT);
+
+        specularGITex = std::make_unique<BurnhopeTexture>(
             device,
             VK_FORMAT_R16G16B16A16_SFLOAT,
             VkExtent3D{screenExtent.width, screenExtent.height, 1},
@@ -78,20 +85,24 @@ namespace burnhope
             VK_SAMPLE_COUNT_1_BIT);
 
         VkCommandBuffer cmd = device.beginSingleTimeCommands();
-        VkImageMemoryBarrier barrier{};
-        barrier.sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED;
-        barrier.newLayout        = VK_IMAGE_LAYOUT_GENERAL;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image            = irradianceTex->getImage();
-        barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        barrier.srcAccessMask    = 0;
-        barrier.dstAccessMask    = VK_ACCESS_SHADER_WRITE_BIT;
+        
+        std::array<VkImageMemoryBarrier, 2> barriers{};
+        for(int i = 0; i < 2; i++) {
+            barriers[i].sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barriers[i].oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED;
+            barriers[i].newLayout        = VK_IMAGE_LAYOUT_GENERAL;
+            barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barriers[i].image            = i == 0 ? diffuseGITex->getImage() : specularGITex->getImage();
+            barriers[i].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            barriers[i].srcAccessMask    = 0;
+            barriers[i].dstAccessMask    = VK_ACCESS_SHADER_WRITE_BIT;
+        }
+        
         vkCmdPipelineBarrier(cmd,
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &barrier);
+            0, 0, nullptr, 0, nullptr, 2, barriers.data());
         device.endSingleTimeCommands(cmd);
     }
 
@@ -113,12 +124,14 @@ namespace burnhope
             .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
             .build();
 
-        // Set(2) для irradiance_sample.comp:
-        //   binding 0 → outIrradiance (storage image, write)
-        //   binding 1 → cascade0      (sampler2D, read)
+        // Set(2) для gi_sample.comp:
+        //   binding 0 → outDiffuseGI  (storage image, write)
+        //   binding 1 → outSpecularGI (storage image, write)
+        //   binding 2 → cascade0      (sampler2D, read)
         sampleWriteLayout = BurnhopeDescriptorSetLayout::Builder(device)
             .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          VK_SHADER_STAGE_COMPUTE_BIT)
-            .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
+            .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          VK_SHADER_STAGE_COMPUTE_BIT)
+            .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
             .build();
     }
 
@@ -165,7 +178,7 @@ namespace burnhope
             sampleWriteLayout->getDescriptorSetLayout()
         };
         sampleShader = std::make_unique<ComputeShader>(
-            device, "shaders/irradiance_sample.comp.spv",
+            device, "shaders/gi_sample.comp.spv", // Изменено имя шейдера
             sampleLayouts, sizeof(RCPushConstants));
     }
 
@@ -220,13 +233,18 @@ namespace burnhope
                 .build(mergeReadSets[c]);
         }
 
-        // --- irradianceWriteSet: set 2 в irradiance_sample.comp ---
-        // binding 0 → irradianceTex (outIrradiance, storage image write)
-        // binding 1 → probeTex[0]   (cascade0, sampler2D read)
+        // --- giWriteSet: set 2 в gi_sample.comp ---
+        // binding 0 → diffuseGITex  (outDiffuseGI, storage image write)
+        // binding 1 → specularGITex (outSpecularGI, storage image write)
+        // binding 2 → probeTex[0]   (cascade0, sampler2D read)
         {
-            VkDescriptorImageInfo irWriteInfo{};
-            irWriteInfo.imageView   = irradianceTex->getImageView();
-            irWriteInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+            VkDescriptorImageInfo diffWriteInfo{};
+            diffWriteInfo.imageView   = diffuseGITex->getImageView();
+            diffWriteInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+            VkDescriptorImageInfo specWriteInfo{};
+            specWriteInfo.imageView   = specularGITex->getImageView();
+            specWriteInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
             VkDescriptorImageInfo cascade0ReadInfo{};
             cascade0ReadInfo.imageView   = probeTex[0]->getImageView();
@@ -234,26 +252,42 @@ namespace burnhope
             cascade0ReadInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
             BurnhopeDescriptorWriter(*sampleWriteLayout, pool)
-                .writeImage(0, &irWriteInfo)
-                .writeImage(1, &cascade0ReadInfo)
-                .build(irradianceWriteSet);
+                .writeImage(0, &diffWriteInfo)
+                .writeImage(1, &specWriteInfo)
+                .writeImage(2, &cascade0ReadInfo)
+                .build(giWriteSet);
         }
 
-        // --- irradianceSet: для финального composite шейдера ---
-        // binding 0 → irradianceTex (sampler2D read)
+        // --- giSet: для финального lighting шейдера ---
+        // binding 0 → diffuseGITex (sampler2D read)
+        // binding 1 → specularGITex (sampler2D read)
         {
             auto irReadLayout = BurnhopeDescriptorSetLayout::Builder(device)
                 .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+                .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+                .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
                 .build();
 
-            VkDescriptorImageInfo irReadInfo{};
-            irReadInfo.imageView   = irradianceTex->getImageView();
-            irReadInfo.sampler     = irradianceTex->getSampler();
-            irReadInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+            VkDescriptorImageInfo diffReadInfo{};
+            diffReadInfo.imageView   = diffuseGITex->getImageView();
+            diffReadInfo.sampler     = diffuseGITex->getSampler();
+            diffReadInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+            VkDescriptorImageInfo specReadInfo{};
+            specReadInfo.imageView   = specularGITex->getImageView();
+            specReadInfo.sampler     = specularGITex->getSampler();
+            specReadInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+            
+            VkDescriptorImageInfo cascade0ReadInfo{};
+            cascade0ReadInfo.imageView   = probeTex[0]->getImageView();
+            cascade0ReadInfo.sampler     = probeTex[0]->getSampler();
+            cascade0ReadInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
             BurnhopeDescriptorWriter(*irReadLayout, pool)
-                .writeImage(0, &irReadInfo)
-                .build(irradianceSet);
+                .writeImage(0, &diffReadInfo)
+                .writeImage(1, &specReadInfo)
+                .writeImage(2, &cascade0ReadInfo)
+                .build(giSet);
         }
     }
 
@@ -375,8 +409,8 @@ namespace burnhope
         }
 
         // =====================================================================
-        // PASS 3: Irradiance Sample
-        // Читает probeTex[0] (смёрженный каскад 0), пишет в irradianceTex.
+        // PASS 3: GI Sample (Diffuse + Specular)
+        // Читает probeTex[0] (смёрженный каскад 0), пишет в diffuseGITex и specularGITex.
         // =====================================================================
         sampleShader->bind(cmd);
 
@@ -399,7 +433,7 @@ namespace burnhope
             sampleShader->bindDescriptorSets(cmd, {
                 globalSet,          // set 0: GlobalSceneUbo (invViewProj и т.д.)
                 gBufferSet,         // set 1: gNormalRoughness, gAlbedo, gDepth
-                irradianceWriteSet  // set 2: outIrradiance(image) + cascade0(sampler probeTex[0])
+                giWriteSet          // set 2: outDiffuse, outSpecular + cascade0
             });
 
             sampleShader->dispatch(cmd,
@@ -407,8 +441,15 @@ namespace burnhope
                 (extent.height + 15) / 16, 1);
         }
 
-        // Финальный барьер: irradianceTex готова для чтения в composite/lighting шейдере
-        insertBarrier(cmd, irradianceTex->getImage(),
+        // Финальный барьер: текстуры готовы для чтения в lighting шейдере
+        insertBarrier(cmd, diffuseGITex->getImage(),
+            VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+            VK_ACCESS_SHADER_WRITE_BIT,
+            VK_ACCESS_SHADER_READ_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+            
+        insertBarrier(cmd, specularGITex->getImage(),
             VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
             VK_ACCESS_SHADER_WRITE_BIT,
             VK_ACCESS_SHADER_READ_BIT,
@@ -423,7 +464,7 @@ namespace burnhope
     {
         screenExtent = newExtent;
         vkDeviceWaitIdle(device.device());
-        createIrradianceTexture();
+        createGITextures();
         createDescriptorSets(lightingImageView, lightingSampler);
     }
 

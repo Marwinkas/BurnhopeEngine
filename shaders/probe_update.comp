@@ -25,6 +25,16 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
 
     vec3 sunColor;  
     float sunIntensity; 
+    vec4 sscsParams;
+    vec4 gtaoParams;
+    vec4 fogParams;
+    vec4 fogColor;
+    vec4 inscatterColor;
+    vec4 skyZenithColor;
+    vec4 skyHorizonColor;
+    vec4 skySunParams;
+    vec4 ssgiParams;
+    vec4 rtParams;
 
 } ubo;
 
@@ -58,18 +68,9 @@ struct ObjectData {
 };
 
 struct MaterialData {
-    int albedoIdx;
-    int normalIdx;
-    int heightIdx;
-    int metallicIdx;
-    int roughnessIdx;
-    int aoIdx;
-    int hasAlbedo, hasNormal, hasHeight, hasMetallic, hasRoughness, hasAO;
-    int useTriplanar;
-    float triplanarScale;
-    vec2 uvScale;
-    int useORM;
-    int pad0, pad1, pad2; 
+    int albedoIdx; int normalIdx; int heightIdx; int metallicIdx; int roughnessIdx; int aoIdx; int emissiveIdx;
+    int hasAlbedo; int hasNormal; int hasHeight; int hasMetallic; int hasRoughness; int hasAO; int hasEmissive;
+    int useTriplanar; float triplanarScale; vec2 uvScale; float emissiveIntensity; int useORM;
 };
 
 layout(set = 4, binding = 0, scalar) readonly buffer ObjectBuffer { ObjectData objects[]; } objBuf;
@@ -99,6 +100,24 @@ bool isNaN(float val) {
 }
 bool isAnyNaN(vec3 v) {
     return isNaN(v.x) || isNaN(v.y) || isNaN(v.z);
+}
+
+vec3 CalculateSky(vec3 viewDir) {
+    float t = max(viewDir.y, 0.0);
+    vec3 skyColor = mix(ubo.skyHorizonColor.rgb, ubo.skyZenithColor.rgb, pow(t, 0.5));
+    if (ubo.fogParams.x > 0.5) {
+        skyColor = mix(ubo.fogColor.rgb, skyColor, pow(t, 0.5));
+    }
+    float sunDot = dot(viewDir, -ubo.sunDir);
+    float sunSize = ubo.skySunParams.x;
+    float sunGlow = ubo.skySunParams.y;
+    float sunGlowSize = max(ubo.skySunParams.z, 0.001);
+    float sunDisk = smoothstep(1.0 - sunSize - 0.001, 1.0 - sunSize, sunDot);
+    float sunAura = pow(max(sunDot, 0.0), 1.0 / sunGlowSize) * sunGlow;
+    vec3 sunRenderColor = ubo.sunColor * ubo.sunIntensity;
+    skyColor += sunRenderColor * sunDisk;
+    skyColor += sunRenderColor * sunAura * 0.1;
+    return skyColor;
 }
 
 vec3 EvaluateHit(int objIndex, int primID, vec2 bary, vec3 hitPos) {
@@ -190,9 +209,7 @@ vec4 rtRaymarch(vec3 origin, vec3 dir, float rayLen) {
     // Мы рисуем небо ТОЛЬКО на самом последнем (самом длинном) каскаде!
     // Иначе короткие лучи будут плюсовать небо на каждом шаге, и вся комната станет синей и яркой.
     if (rc.params.y > 0.5) {
-        float skyGradient = max(0.0, dir.y);
-        vec3 skyColor = mix(vec3(0.2, 0.4, 0.8), vec3(0.5, 0.7, 1.0), skyGradient) * ubo.sunIntensity * 0.1;
-        return vec4(skyColor, 0.0);
+        return vec4(CalculateSky(dir), 0.0);
     }
     return vec4(0.0); 
 }

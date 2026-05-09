@@ -26,6 +26,16 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     float lightSize;
         vec3 sunColor;  
     float sunIntensity; 
+    vec4 sscsParams;
+    vec4 gtaoParams;
+    vec4 fogParams;
+    vec4 fogColor;
+    vec4 inscatterColor;
+    vec4 skyZenithColor;
+    vec4 skyHorizonColor;
+    vec4 skySunParams;
+    vec4 ssgiParams;
+    vec4 rtParams;
 } ubo;
 struct ObjectData {
     mat4 modelMatrix;

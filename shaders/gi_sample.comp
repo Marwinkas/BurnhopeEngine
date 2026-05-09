@@ -1,0 +1,207 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform GlobalSceneUbo {
+    mat4 projection;
+    mat4 invViewProj;
+    mat4 view;
+    vec3 camPos; 
+    float zNear;
+    vec3 sunDir;
+    float zFar;
+    vec4 screenSize;
+    mat4 sunLightSpaceMatrices[4];
+    vec4 cascadeSplits;
+    uint gridDimX;
+    uint gridDimY;
+    uint gridDimZ;
+    float lightSize;
+    vec3 sunColor;  
+    float sunIntensity; 
+    vec4 sscsParams;
+    vec4 gtaoParams;
+    vec4 fogParams;
+    vec4 fogColor;
+    vec4 inscatterColor;
+    vec4 skyZenithColor;
+    vec4 skyHorizonColor;
+    vec4 skySunParams;
+    vec4 ssgiParams;
+    vec4 rtParams;
+} ubo;
+
+layout(set = 1, binding = 0) uniform sampler2D gNormalRoughness;
+layout(set = 1, binding = 1) uniform sampler2D gAlbedoMetallic;
+layout(set = 1, binding = 3) uniform sampler2D gDepth;
+
+layout(set = 2, binding = 0, rgba16f) uniform writeonly image2D outDiffuseGI;
+layout(set = 2, binding = 1, rgba16f) uniform writeonly image2D outSpecularGI;
+layout(set = 2, binding = 2) uniform sampler2D cascade0;
+
+layout(push_constant) uniform RC {
+    vec4  probeGridMin;
+    vec4  probeGridMax;
+    ivec4 probeCount; 
+    vec4  params;     
+} rc;
+
+const float PI = 3.14159265359;
+
+vec2 octaEncode(vec3 dir) {
+    dir = normalize(dir);
+    dir /= (abs(dir.x) + abs(dir.y) + abs(dir.z));
+    if (dir.z < 0.0) dir.xy = (1.0 - abs(dir.yx)) * sign(dir.xy);
+    return dir.xy * 0.5 + 0.5;
+}
+
+vec3 sampleProbe(ivec3 probeIdx, vec3 dir) {
+    int octaSize = int(rc.params.w);
+    ivec3 pCount = rc.probeCount.xyz;
+    vec2 octaUV = octaEncode(dir);
+    
+    int baseX = probeIdx.x * octaSize;
+    int baseY = (probeIdx.z * pCount.y + probeIdx.y) * octaSize;
+
+    vec2 p = clamp(octaUV * float(octaSize) - 0.5, vec2(0.0), vec2(float(octaSize - 1)));
+    ivec2 i0 = ivec2(floor(p));
+    ivec2 i1 = min(i0 + ivec2(1), ivec2(octaSize - 1));
+    vec2 f = fract(p);
+
+    ivec2 t00 = ivec2(baseX, baseY) + i0;
+    ivec2 t10 = ivec2(baseX, baseY) + ivec2(i1.x, i0.y);
+    ivec2 t01 = ivec2(baseX, baseY) + ivec2(i0.x, i1.y);
+    ivec2 t11 = ivec2(baseX, baseY) + i1;
+
+    vec3 c00 = texelFetch(cascade0, t00, 0).rgb;
+    vec3 c10 = texelFetch(cascade0, t10, 0).rgb;
+    vec3 c01 = texelFetch(cascade0, t01, 0).rgb;
+    vec3 c11 = texelFetch(cascade0, t11, 0).rgb;
+
+    vec3 cx0 = mix(c00, c10, f.x);
+    vec3 cx1 = mix(c01, c11, f.x);
+    return mix(cx0, cx1, f.y);
+}
+
+vec3 sampleRadiance(vec3 worldPos, vec3 N, vec3 dir) {
+    vec3 gridSize = rc.probeGridMax.xyz - rc.probeGridMin.xyz;
+    ivec3 pCount  = rc.probeCount.xyz;
+    // Уменьшаем смещение с 0.5 до 0.1. Огромный bias "пробивал" тонкие стены насквозь!
+    vec3 biasedPos = worldPos + N * 0.1; 
+    vec3 localPos = (biasedPos - rc.probeGridMin.xyz) / gridSize;
+    
+    vec3 probeF = clamp(localPos * vec3(pCount) - 0.5, vec3(0.0), vec3(pCount - ivec3(1)));
+    ivec3 p000 = ivec3(floor(probeF));
+    ivec3 p111 = min(p000 + 1, pCount - ivec3(1));
+    vec3 t = fract(probeF);
+
+    vec3 radAccum = vec3(0.0);
+    float weightSum = 0.0;
+    
+    for (int ix = 0; ix < 2; ix++)
+    for (int iy = 0; iy < 2; iy++)
+    for (int iz = 0; iz < 2; iz++) {
+        ivec3 idx = ivec3(ix == 0 ? p000.x : p111.x, iy == 0 ? p000.y : p111.y, iz == 0 ? p000.z : p111.z);
+        
+        float lerpW = (ix == 0 ? (1.0 - t.x) : t.x) *
+                      (iy == 0 ? (1.0 - t.y) : t.y) *
+                      (iz == 0 ? (1.0 - t.z) : t.z);
+        
+        vec3 probeWorldPos = rc.probeGridMin.xyz + gridSize * (vec3(idx) + 0.5) / vec3(pCount);
+        vec3 toProbe = normalize(probeWorldPos - worldPos);
+        float NdotP = dot(N, toProbe);
+        
+        // Жестко отсекаем зонды, которые находятся "позади" поверхности (чтобы не тянуть свет с улицы)
+        float weight = max(0.00001, pow(max(0.0, NdotP), 4.0));
+        float finalW = lerpW * weight;
+
+        radAccum += sampleProbe(idx, dir) * finalW;
+        weightSum += finalW;
+    }
+    return radAccum / weightSum;
+}
+
+vec3 getOrthoVec(vec3 n) { return abs(n.x) > 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0); }
+
+vec2 hammersley(uint i, uint N) {
+    uint bits = (i << 16u) | (i >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    float rdi = float(bits) * 2.3283064365386963e-10;
+    return vec2(float(i)/float(N), rdi);
+}
+
+vec3 importanceSampleGGX(vec2 Xi, vec3 N, float roughness) {
+    float a = roughness * roughness;
+    float phi = 2.0 * PI * Xi.x;
+    float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (a*a - 1.0) * Xi.y));
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+    vec3 H = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+    vec3 up = abs(N.z) < 0.999 ? vec3(0, 0, 1) : vec3(1, 0, 0);
+    vec3 tangent = normalize(cross(up, N));
+    vec3 bitangent = cross(N, tangent);
+    return tangent * H.x + bitangent * H.y + N * H.z;
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (pixel.x >= int(rc.params.y) || pixel.y >= int(rc.params.z)) return;
+    
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(rc.params.y, rc.params.z);
+    float depth = texture(gDepth, uv).r;
+    
+    if (depth >= 1.0) { 
+        imageStore(outDiffuseGI, pixel, vec4(0.0)); 
+        imageStore(outSpecularGI, pixel, vec4(0.0)); 
+        return; 
+    }
+    if (ubo.rtParams.z < 0.5) {
+        imageStore(outDiffuseGI, pixel, vec4(0.0)); 
+        imageStore(outSpecularGI, pixel, vec4(0.0)); 
+        return; 
+    }
+
+    vec4 normRough = texture(gNormalRoughness, uv);
+    vec3 N = normalize(normRough.rgb);
+    float roughness = clamp(normRough.a, 0.05, 1.0);
+    vec4 ndc = vec4(uv * 2.0 - 1.0, depth, 1.0);
+    vec4 worldRaw = ubo.invViewProj * ndc;
+    vec3 worldPos = worldRaw.xyz / worldRaw.w;
+    vec3 V = normalize(ubo.camPos - worldPos);
+
+    vec3 tangent = normalize(cross(N, getOrthoVec(N)));
+    vec3 bitangent = cross(N, tangent);
+    
+    // --- 1. Diffuse GI (Hemisphere Cosine-weighted) ---
+    vec3 diffuseGI = vec3(0.0);
+    const int NUM_DIFFUSE = 8;
+    for (int d = 0; d < NUM_DIFFUSE; d++) {
+        float i_f = float(d) + 0.5;
+        float phi = 2.39996323 * i_f;
+        float cosTheta = sqrt(1.0 - i_f / float(NUM_DIFFUSE));
+        float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+        vec3 dir = (cos(phi) * sinTheta) * tangent + (sin(phi) * sinTheta) * bitangent + cosTheta * N;
+        diffuseGI += sampleRadiance(worldPos, N, dir);
+    }
+    diffuseGI /= float(NUM_DIFFUSE);
+
+    // --- 2. Specular GI (GGX Importance Sampling) ---
+    vec3 specularGI = vec3(0.0);
+    float specWeight = 0.0;
+    const uint NUM_SPECULAR = 8u;
+    for (uint i = 0u; i < NUM_SPECULAR; i++) {
+        vec2 Xi = hammersley(i, NUM_SPECULAR);
+        vec3 H = importanceSampleGGX(Xi, N, roughness);
+        vec3 L = normalize(reflect(-V, H));
+        float NdotL = max(dot(N, L), 0.0);
+        if (NdotL > 0.0) {
+            specularGI += sampleRadiance(worldPos, N, L) * NdotL;
+            specWeight += NdotL;
+        }
+    }
+    if (specWeight > 0.0) specularGI /= specWeight;
+
+    imageStore(outDiffuseGI, pixel, vec4(diffuseGI, 1.0));
+    imageStore(outSpecularGI, pixel, vec4(specularGI, 1.0));
+}

@@ -13,6 +13,16 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     vec3 sunDir; float zFar; vec4 screenSize; mat4 sunLightSpaceMatrices[4];
     vec4 cascadeSplits; uint gridDimX; uint gridDimY; uint gridDimZ;
     float lightSize; vec3 sunColor; float sunIntensity;
+    vec4 sscsParams;
+    vec4 gtaoParams;
+    vec4 fogParams;
+    vec4 fogColor;
+    vec4 inscatterColor;
+    vec4 skyZenithColor;
+    vec4 skyHorizonColor;
+    vec4 skySunParams;
+    vec4 ssgiParams;
+    vec4 rtParams;
 } ubo;
 
 layout(set = 1, binding = 0) uniform accelerationStructureEXT tlas;
@@ -27,9 +37,9 @@ struct ObjectData {
 };
 
 struct MaterialData {
-    int albedoIdx; int normalIdx; int heightIdx; int metallicIdx; int roughnessIdx; int aoIdx;
-    int hasAlbedo, hasNormal, hasHeight, hasMetallic, hasRoughness, hasAO;
-    int useTriplanar; float triplanarScale; vec2 uvScale; int useORM; int pad0, pad1, pad2;
+    int albedoIdx; int normalIdx; int heightIdx; int metallicIdx; int roughnessIdx; int aoIdx; int emissiveIdx;
+    int hasAlbedo; int hasNormal; int hasHeight; int hasMetallic; int hasRoughness; int hasAO; int hasEmissive;
+    int useTriplanar; float triplanarScale; vec2 uvScale; float emissiveIntensity; int useORM;
 };
 
 layout(set = 2, binding = 0, scalar) readonly buffer ObjectBuffer { ObjectData objects[]; } objBuf;
@@ -47,6 +57,24 @@ vec3 octaDecode(vec2 uv) {
     vec3 v = vec3(uv.x, uv.y, 1.0 - abs(uv.x) - abs(uv.y));
     if (v.z < 0.0) v.xy = (1.0 - abs(v.yx)) * sign(v.xy);
     return normalize(v);
+}
+
+vec3 CalculateSky(vec3 viewDir) {
+    float t = max(viewDir.y, 0.0);
+    vec3 skyColor = mix(ubo.skyHorizonColor.rgb, ubo.skyZenithColor.rgb, pow(t, 0.5));
+    if (ubo.fogParams.x > 0.5) {
+        skyColor = mix(ubo.fogColor.rgb, skyColor, pow(t, 0.5));
+    }
+    float sunDot = dot(viewDir, -ubo.sunDir);
+    float sunSize = ubo.skySunParams.x;
+    float sunGlow = ubo.skySunParams.y;
+    float sunGlowSize = max(ubo.skySunParams.z, 0.001);
+    float sunDisk = smoothstep(1.0 - sunSize - 0.001, 1.0 - sunSize, sunDot);
+    float sunAura = pow(max(sunDot, 0.0), 1.0 / sunGlowSize) * sunGlow;
+    vec3 sunRenderColor = ubo.sunColor * ubo.sunIntensity;
+    skyColor += sunRenderColor * sunDisk;
+    skyColor += sunRenderColor * sunAura * 0.1;
+    return skyColor;
 }
 
 const float PI = 3.14159265359;
@@ -108,12 +136,10 @@ void main() {
         }
         
         // Реалистичный мягкий Ambient от неба для запекания
-        float skyGradient = max(0.0, worldNormal.y);
-        vec3 skyAmbient = mix(vec3(0.2, 0.4, 0.8), vec3(0.5, 0.7, 1.0), skyGradient) * ubo.sunIntensity * 0.2;
+        vec3 skyAmbient = mix(ubo.skyHorizonColor.rgb, ubo.skyZenithColor.rgb, max(0.0, worldNormal.y)) * ubo.sunIntensity * 0.2;
         color = (albedo / PI) * ubo.sunColor * ubo.sunIntensity * (NdotL * shadow) + albedo * skyAmbient;
     } else {
-        float skyGradient = max(0.0, dir.y);
-        color = mix(vec3(0.2, 0.4, 0.8), vec3(0.5, 0.7, 1.0), skyGradient) * ubo.sunIntensity * 0.5;
+        color = CalculateSky(dir);
     }
 
     imageStore(outProbeTex, pixel, vec4(color, 1.0));

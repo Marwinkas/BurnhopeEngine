@@ -1,7 +1,8 @@
 #version 450
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 layout(set = 4, binding = 0, rgba16f) writeonly uniform image2D outColor;
-layout(set = 5, binding = 0) uniform sampler2D giIrradiance;
+layout(set = 5, binding = 0) uniform sampler2D diffuseGITex;
+layout(set = 5, binding = 1) uniform sampler2D specularGITex;
 layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     mat4 projection;
     mat4 invViewProj;
@@ -19,11 +20,22 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     float lightSize;
         vec3 sunColor;  
     float sunIntensity; 
+    vec4 sscsParams;      
+    vec4 gtaoParams;      
+    vec4 fogParams;       
+    vec4 fogColor;        
+    vec4 inscatterColor;  
+    vec4 skyZenithColor;
+    vec4 skyHorizonColor;
+    vec4 skySunParams;
+    vec4 ssgiParams;
+    vec4 rtParams;
 } ubo;
 layout(set = 1, binding = 0) uniform sampler2D gNormalRoughness;
 layout(set = 1, binding = 1) uniform sampler2D gAlbedoMetallic;
 layout(set = 1, binding = 2) uniform sampler2D gHeightAO;
 layout(set = 1, binding = 3) uniform sampler2D gDepth;
+layout(set = 1, binding = 4) uniform sampler2D gEmissive;
 layout(set = 6, binding = 2, r8) uniform readonly image2D gtaoMap;
 layout(set = 8, binding = 0, rgba16f) uniform readonly image2D rtReflectionsMap;
 layout(set = 2, binding = 0) uniform sampler2DArray sunShadowMap;
@@ -287,8 +299,10 @@ float SunShadowCalculation(vec3 fragPos, vec3 N, vec3 L) {
     return CalculateSingleCascadeShadow(fragPos, N, L, layer, depth);
 }
 float ContactShadows(vec3 worldPos, vec3 N, vec3 L) {
-    int steps = 24;                 // Больше шагов для плотности
-    float maxRayLength = 1.5;       // Увеличили длину луча (тень станет в 5 раз длиннее)
+    if (ubo.sscsParams.x < 0.5) return 1.0;
+    int steps = int(ubo.sscsParams.z);
+    float maxRayLength = ubo.sscsParams.y;
+    float thickness_limit = ubo.sscsParams.w;
     float stepSize = maxRayLength / float(steps);
 
     // Смещаем старт луча по нормали, чтобы поверхность не затеняла саму себя
@@ -322,7 +336,7 @@ float ContactShadows(vec3 worldPos, vec3 N, vec3 L) {
             // Проверяем толщину (чтобы луч не цеплялся за объекты далеко позади)
             float thickness = length(hitWorld - rayPos);
             
-            if (thickness < 0.3) { 
+            if (thickness < thickness_limit) { 
                 // Мягкое затухание: чем дальше от объекта, тем светлее тень
                 float fade = 1.0 - (float(i) / float(steps));
                 occlusion = 1.0 * fade;
@@ -332,13 +346,48 @@ float ContactShadows(vec3 worldPos, vec3 N, vec3 L) {
     }
     return 1.0 - occlusion; 
 }
+vec3 CalculateVolumetricFog(vec3 worldPos, vec3 V_dir) {
+    if (ubo.fogParams.x < 0.5) return vec3(0.0);
+    float cosTheta = max(dot(V_dir, ubo.sunDir), 0.0);
+    float inscatterFactor = pow(cosTheta, ubo.inscatterColor.a);
+    vec3 inscatter = ubo.inscatterColor.rgb * inscatterFactor * ubo.fogColor.a;
+    return ubo.fogColor.rgb + inscatter;
+}
+
+vec3 CalculateSky(vec3 viewDir) {
+    float t = max(viewDir.y, 0.0);
+    vec3 skyColor = mix(ubo.skyHorizonColor.rgb, ubo.skyZenithColor.rgb, pow(t, 0.5));
+    
+    // Мягко смешиваем небо с туманом на горизонте
+    if (ubo.fogParams.x > 0.5) {
+        skyColor = mix(ubo.fogColor.rgb, skyColor, pow(t, 0.5));
+    }
+    
+    float sunDot = dot(viewDir, -ubo.sunDir);
+    float sunSize = ubo.skySunParams.x;
+    float sunGlow = ubo.skySunParams.y;
+    float sunGlowSize = max(ubo.skySunParams.z, 0.001);
+    
+    float sunDisk = smoothstep(1.0 - sunSize - 0.001, 1.0 - sunSize, sunDot);
+    float sunAura = pow(max(sunDot, 0.0), 1.0 / sunGlowSize) * sunGlow;
+    
+    vec3 sunRenderColor = ubo.sunColor * ubo.sunIntensity;
+    skyColor += sunRenderColor * sunDisk;
+    skyColor += sunRenderColor * sunAura * 0.1;
+    return skyColor;
+}
+
 void main() {
     ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
     if (pixelCoords.x >= int(ubo.screenSize.x) || pixelCoords.y >= int(ubo.screenSize.y)) return;
     vec2 uv = (vec2(pixelCoords) + 0.5) / ubo.screenSize.xy;
     float depth = texelFetch(gDepth, pixelCoords, 0).r;
     if (depth >= 1.0) {
-        imageStore(outColor, pixelCoords, vec4(0.0, 0.0, 0.0, 1.0)); 
+        vec4 ndc = vec4(uv.x * 2.0 - 1.0, uv.y * 2.0 - 1.0, 1.0, 1.0);
+        vec4 worldPosRaw = ubo.invViewProj * ndc;
+        vec3 viewDir = normalize(worldPosRaw.xyz / worldPosRaw.w - ubo.camPos);
+        vec3 skyColor = CalculateSky(viewDir);
+        imageStore(outColor, pixelCoords, vec4(skyColor, 1.0)); 
         return; 
     }
     vec4 normRough = texelFetch(gNormalRoughness, pixelCoords, 0);
@@ -456,9 +505,11 @@ void main() {
         imageStore(outColor, pixelCoords, vec4(crntPos / 10.0, 1.0));
         return;
     }
-vec2 texelSize = 1.0 / textureSize(giIrradiance, 0);
-vec3 giSum = vec3(0.0);
-float weightSum = 0.0;
+vec2 texelSize = 1.0 / textureSize(diffuseGITex, 0);
+vec3 diffSum = vec3(0.0);
+vec3 specSum = vec3(0.0);
+float diffWeightSum = 0.0;
+float specWeightSum = 0.0;
 
 // Линеаризуем глубину для идеального размытия
 float centerDepthLin = (ubo.zNear * ubo.zFar) / (ubo.zFar + depth * (ubo.zNear - ubo.zFar));
@@ -470,7 +521,8 @@ for(int x = -1; x <= 1; x++) {
         vec2 offsetUV = uv + vec2(x, y) * texelSize * 2.0; // * 2.0 расширяет радиус блюра
         
         // Читаем соседние пиксели
-        vec3 sampleGI = texture(giIrradiance, offsetUV).rgb;
+        vec3 sampleDiff = texture(diffuseGITex, offsetUV).rgb;
+        vec3 sampleSpec = texture(specularGITex, offsetUV).rgb;
         vec3 sampleNormal = texture(gNormalRoughness, offsetUV).rgb;
         float sampleDepthRaw = texture(gDepth, offsetUV).r;
         float sampleDepthLin = (ubo.zNear * ubo.zFar) / (ubo.zFar + sampleDepthRaw * (ubo.zNear - ubo.zFar));
@@ -482,30 +534,56 @@ for(int x = -1; x <= 1; x++) {
         // Настроили веса под линейную глубину
         float weight = exp(-depthDiff * 10.0) * pow(normalDot, 8.0);
         
-        giSum += sampleGI * weight;
-        weightSum += weight;
+        diffSum += sampleDiff * weight;
+        diffWeightSum += weight;
+        
+        // Для Specular применяем меньшее пространственное размытие на гладких (Roughness -> 0) материалах
+        float specWeight = weight * exp(-float(x*x + y*y) / (max(roughness, 0.01) * 3.0));
+        specSum += sampleSpec * specWeight;
+        specWeightSum += specWeight;
     }
 }
 
-vec3 gi = giSum / max(weightSum, 0.0001); // Получили гладкий GI без сетки!
+vec3 diffuseGI = diffSum / max(diffWeightSum, 0.0001);
+vec3 specularGI = specSum / max(specWeightSum, 0.0001);
  
-    // GI — это отраженный свет, он должен зависеть от цвета поверхности (albedo) и затенения (ao)
-    // Устанавливаем разумную силу GI. Значение 2.0 дает сочный цвет без взрывов.
-    float giStrength = 2.0; 
-    vec3 indirectDiffuse = (ambient + gi * giStrength) * albedo * ao  * gtao * cavity;
-
-    vec3 reflections = imageLoad(rtReflectionsMap, pixelCoords).rgb;
+    // Сила GI = 2.0 давала двойную энергию и вытягивала весь синий цвет
+    float giStrength = 1.0; 
+    
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
     vec3 F = fresnelSchlick(max(dot(N, V), 0.0), F0);
+    
+    // Доля диффузного света. Металлы не имеют диффузного цвета (kD = 0)
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+
+    float rcEnable = ubo.rtParams.z;
+    vec3 indirectDiffuse = (ambient + diffuseGI * giStrength) * albedo * kD * ao * gtao * cavity * rcEnable;
+    vec3 indirectSpecular = specularGI * giStrength * F * ao * gtao * cavity * rcEnable;
+
+    float rtReflEnable = ubo.rtParams.x;
+    vec3 reflections = imageLoad(rtReflectionsMap, pixelCoords).rgb * rtReflEnable;
     float reflectionMask = smoothstep(0.6, 0.2, roughness); // Мягко скрываем зеркальность на матовых объектах
-    vec3 specularReflections = reflections * F * reflectionMask;
+    // Локальные RT отражения перекрывают Specular GI на гладких поверхностях
+    vec3 finalSpecular = mix(indirectSpecular, reflections * F, reflectionMask);
 
     // Итоговый цвет: Прямой свет + Косвенный свет + Отражения
-    vec3 finalColor = resultRadiance + indirectDiffuse + specularReflections;
+    vec3 finalColor = resultRadiance + indirectDiffuse + finalSpecular;
+
+    // Читаем Emissive из G-Buffer
+    vec3 emissive = texture(gEmissive, uv).rgb;
+    finalColor += emissive;
+
+    // Вычисляем и применяем объемный туман (должен быть в самом конце!)
+    if (ubo.fogParams.x > 0.5) {
+        vec3 fogColor = CalculateVolumetricFog(crntPos, V);
+        float fogAmount = clamp(exp(-distance(ubo.camPos, crntPos) * ubo.fogParams.y), 0.0, 1.0);
+        finalColor = mix(fogColor, finalColor, fogAmount);
+    }
+
+    if (any(isnan(finalColor)) || any(isinf(finalColor))) finalColor = vec3(0.0);
 
     if (debugMode == 5) {
-        // В дебаге нужно умножать GI на albedo, иначе кирпичи будут серыми!
-        vec3 debugGI = gi * giStrength * albedo * ao * gtao * cavity;
+        vec3 debugGI = (diffuseGI * albedo * kD + specularGI * F) * giStrength * ao * gtao * cavity;
         
         // Сжимаем яркие цвета (Tone mapping) и делаем гамму
         debugGI = debugGI / (debugGI + vec3(1.0));
@@ -514,10 +592,6 @@ vec3 gi = giSum / max(weightSum, 0.0001); // Получили гладкий GI 
         return;
     }
 
-    // Tone mapping (Рейнхард): мягко сжимает значения больше 1.0 (засветы) в диапазон монитора
-    finalColor = finalColor / (finalColor + vec3(1.0));
-    // Гамма-коррекция (перевод из линейного пространства в sRGB)
-    finalColor = pow(finalColor, vec3(1.0 / 2.2));
 
     // Выводим финальный цвет со всем светом и тенями!
     imageStore(outColor, pixelCoords, vec4(finalColor, 1.0));
