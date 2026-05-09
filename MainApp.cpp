@@ -64,7 +64,6 @@ namespace burnhope
         }
 
         void updateDescriptors(VkExtent2D extent, std::shared_ptr<BurnhopeTexture> defaultWhiteTex) {
-            // Пересоздаем текстуру только если изменился размер окна
             if (!rtReflectionsTexture || rtReflectionsTexture->getExtent().width != extent.width || rtReflectionsTexture->getExtent().height != extent.height) {
                 rtReflectionsTexture = std::make_unique<BurnhopeTexture>(device, VK_FORMAT_R16G16B16A16_SFLOAT, VkExtent3D{extent.width, extent.height, 1}, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
                 rtReflectionsTexture->transitionLayout(device.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
@@ -85,7 +84,6 @@ namespace burnhope
             imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
             auto bufInfo = probesBuffer->descriptorInfo();
 
-            // Ждем завершения работы GPU перед изменением дескрипторов
             vkDeviceWaitIdle(device.device());
 
             if (rtSet != VK_NULL_HANDLE) {
@@ -119,23 +117,28 @@ namespace burnhope
                               .addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT)
                               .build();
 
-        // 2. Создаем G-Buffer (нужен для системы рендера)
         gBuffer = std::make_unique<BurnhopeGBuffer>(lveDevice, lveWindow.getExtent());
 
-        // 3. Инициализируем систему рендера (теперь она поле класса)
         simpleRenderSystem = std::make_unique<GeometryRenderSystem>(
             lveDevice,
             gBuffer->getRenderPass(),
             globalSetLayout->getDescriptorSetLayout());
 
-        // 4. Теперь можно инициализировать вычисления (передаем лейауты из simpleRenderSystem)
         initCompute(globalSetLayout->getDescriptorSetLayout());
-
+uiManager = std::make_unique<UIManager>(
+            lveWindow, 
+            lveDevice, 
+            lveRenderer.getSwapChainRenderPass(), 
+            &registry, 
+            std::filesystem::current_path().string() // Путь к проекту
+        );
         loadGameObjects(registry);
     }
     FirstApp::~FirstApp()
     {
         vkDeviceWaitIdle(lveDevice.device());
+
+         uiManager.reset();
         ssgiSystem.reset();
         hizSystem.reset();
         rcSystem.reset();
@@ -374,7 +377,6 @@ namespace burnhope
         {
             glfwPollEvents();
             
-            // 0. Проверяем, добавились ли или удалились объекты
             uint32_t currentSubMeshCount = 0;
             registry.view<MeshComponent>().each([&](const MeshComponent &meshComp) {
                 if (meshComp.model && meshComp.isVisible) {
@@ -384,12 +386,11 @@ namespace burnhope
 
             if (currentSubMeshCount != totalSubMeshCount) {
                 vkDeviceWaitIdle(lveDevice.device());
-                if (cullingSystem) cullingSystem.reset(); // Удаляем старый куллинг
+                if (cullingSystem) cullingSystem.reset(); 
                 
-                RebuildBatches(registry, *simpleRenderSystem); // Пересоздаем буферы
-                buildTLAS(registry);                           // Пересобираем дерево для RT
+                RebuildBatches(registry, *simpleRenderSystem); 
+                buildTLAS(registry);                           
 
-                // Обновляем дескриптор трассировки лучей
                 VkWriteDescriptorSetAccelerationStructureKHR asInfo{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
                 asInfo.accelerationStructureCount = 1;
                 asInfo.pAccelerationStructures = &tlasHandle;
@@ -401,7 +402,6 @@ namespace burnhope
                 descriptorWrite.pNext = &asInfo;
                 vkUpdateDescriptorSets(lveDevice.device(), 1, &descriptorWrite, 0, nullptr);
 
-                // Обновляем дескриптор теней
                 if (shadowObjectSet != VK_NULL_HANDLE) {
                     std::vector<VkDescriptorSet> toFree = {shadowObjectSet};
                     globalPool->freeDescriptors(toFree);
@@ -414,7 +414,6 @@ namespace burnhope
 
             bool transformsChanged = false;
 
-            // 1. Вычисляем новые локальные матрицы для всех, кто сдвинулся
             registry.view<TransformComponent>().each([&](entt::entity entity, TransformComponent &tComp)
                                                      {
                 if (tComp.transform.updatematrix) {
@@ -449,8 +448,7 @@ namespace burnhope
                     }
                 }
                 
-                // Пересобираем TLAS, чтобы лучи видели новые позиции объектов
-                vkDeviceWaitIdle(lveDevice.device()); // Безопасное ожидание (для тестов сойдет)
+                vkDeviceWaitIdle(lveDevice.device()); 
                 buildTLAS(registry);
 
                 VkWriteDescriptorSetAccelerationStructureKHR asInfo{};
@@ -537,8 +535,8 @@ namespace burnhope
                 ubo.screenSize = glm::vec4(extent.width, extent.height, 0.f, 0.f);
                 ubo.sunDir = shadowSystem->getSunDir();
 
-                ubo.sunColor = glm::vec3(1.0f, 0.95f, 0.8f); // Дефолт (на случай, если солнца нет)
-                ubo.sunIntensity = 5.0f;                     // Дефолт
+                ubo.sunColor = glm::vec3(1.0f, 0.95f, 0.8f); 
+                ubo.sunIntensity = 5.0f;                     
 
                 auto lightView = registry.view<LightComponent>();
                 for (auto entity : lightView)
@@ -548,29 +546,33 @@ namespace burnhope
                     {
                         ubo.sunColor = light.color;
                         ubo.sunIntensity = light.intensity;
-                        break; // Нам нужно только одно главное солнце
+                        break; 
                     }
                 }
                 ubo.lightSize = 1.0f;
-                ubo.sscsParams = glm::vec4(ui.renderSettings.enableContactShadows ? 1.0f : 0.0f, ui.renderSettings.contactShadowLength, (float)ui.renderSettings.contactShadowSteps, ui.renderSettings.contactShadowThickness);
-                ubo.gtaoParams = glm::vec4(ui.renderSettings.enableSSAO ? 1.0f : 0.0f, ui.renderSettings.ssaoRadius, ui.renderSettings.ssaoBias, ui.renderSettings.ssaoIntensity);
-                ubo.fogParams = glm::vec4(ui.renderSettings.enableFog ? 1.0f : 0.0f, ui.renderSettings.fogDensity, ui.renderSettings.fogHeightFalloff, ui.renderSettings.fogBaseHeight);
-                ubo.fogColor = glm::vec4(ui.renderSettings.fogColor[0], ui.renderSettings.fogColor[1], ui.renderSettings.fogColor[2], ui.renderSettings.inscatterIntensity);
-                ubo.inscatterColor = glm::vec4(ui.renderSettings.inscatterColor[0], ui.renderSettings.inscatterColor[1], ui.renderSettings.inscatterColor[2], ui.renderSettings.inscatterPower);
-                ubo.skyZenithColor = glm::vec4(ui.renderSettings.skyZenithColor[0], ui.renderSettings.skyZenithColor[1], ui.renderSettings.skyZenithColor[2], 1.0f);
-                ubo.skyHorizonColor = glm::vec4(ui.renderSettings.skyHorizonColor[0], ui.renderSettings.skyHorizonColor[1], ui.renderSettings.skyHorizonColor[2], 1.0f);
-                ubo.skySunParams = glm::vec4(ui.renderSettings.sunSize, ui.renderSettings.sunGlow, ui.renderSettings.sunGlowSize, 0.0f);
-                ubo.ssgiParams = glm::vec4(ui.renderSettings.enableSSGI ? 1.0f : 0.0f, (float)ui.renderSettings.ssgiRayCount, ui.renderSettings.ssgiStepSize, ui.renderSettings.ssgiThickness);
-                ubo.rtParams = glm::vec4(ui.renderSettings.enableRTReflections ? 1.0f : 0.0f, (float)ui.renderSettings.rtMaxBounces, ui.renderSettings.enableRadianceCascades ? 1.0f : 0.0f, 0.0f);
+
+                // --- ЧИТАЕМ НАСТРОЙКИ ИЗ UIMANAGER ---
+                const auto& rs = uiManager->GetContext().renderSettings;
+
+                ubo.sscsParams = glm::vec4(rs.enableContactShadows ? 1.0f : 0.0f, rs.contactShadowLength, (float)rs.contactShadowSteps, rs.contactShadowThickness);
+                ubo.gtaoParams = glm::vec4(rs.enableSSAO ? 1.0f : 0.0f, rs.ssaoRadius, rs.ssaoBias, rs.ssaoIntensity);
+                ubo.fogParams = glm::vec4(rs.enableFog ? 1.0f : 0.0f, rs.fogDensity, rs.fogHeightFalloff, rs.fogBaseHeight);
+                ubo.fogColor = glm::vec4(rs.fogColor[0], rs.fogColor[1], rs.fogColor[2], rs.inscatterIntensity);
+                ubo.inscatterColor = glm::vec4(rs.inscatterColor[0], rs.inscatterColor[1], rs.inscatterColor[2], rs.inscatterPower);
+                ubo.skyZenithColor = glm::vec4(rs.skyZenithColor[0], rs.skyZenithColor[1], rs.skyZenithColor[2], 1.0f);
+                ubo.skyHorizonColor = glm::vec4(rs.skyHorizonColor[0], rs.skyHorizonColor[1], rs.skyHorizonColor[2], 1.0f);
+                ubo.skySunParams = glm::vec4(rs.sunSize, rs.sunGlow, rs.sunGlowSize, 0.0f);
+                ubo.ssgiParams = glm::vec4(rs.enableSSGI ? 1.0f : 0.0f, (float)rs.ssgiRayCount, rs.ssgiStepSize, rs.ssgiThickness);
+                ubo.rtParams = glm::vec4(rs.enableRTReflections ? 1.0f : 0.0f, (float)rs.rtMaxBounces, rs.enableRadianceCascades ? 1.0f : 0.0f, 0.0f);
 
                 ubo.prevViewProj = prevViewProj;
-                ubo.ppExposureParams = glm::vec4(ui.renderSettings.autoExposure ? 1.0f : 0.0f, ui.renderSettings.manualExposure, ui.renderSettings.minBrightness, ui.renderSettings.maxBrightness);
-                ubo.ppColorBalance = glm::vec4(ui.renderSettings.temperature, ui.renderSettings.contrast, ui.renderSettings.saturation, ui.renderSettings.gamma);
-                ubo.ppBloomParams = glm::vec4(ui.renderSettings.enableBloom ? 1.0f : 0.0f, ui.renderSettings.bloomThreshold, ui.renderSettings.bloomIntensity, (float)ui.renderSettings.bloomBlurIterations);
-                ubo.ppDoFParams = glm::vec4(ui.renderSettings.enableDoF ? 1.0f : 0.0f, ui.renderSettings.focusDistance, ui.renderSettings.focusRange, ui.renderSettings.bokehSize);
-                ubo.ppVignetteGrain = glm::vec4(ui.renderSettings.enableVignette ? ui.renderSettings.vignetteIntensity : 0.0f, ui.renderSettings.enableFilmGrain ? ui.renderSettings.grainIntensity : 0.0f, ui.renderSettings.enableSharpen ? ui.renderSettings.sharpenIntensity : 0.0f, ui.renderSettings.enableChromaticAberration ? ui.renderSettings.caIntensity : 0.0f);
-                ubo.ppMotionBlur = glm::vec4(ui.renderSettings.enableMotionBlur ? 1.0f : 0.0f, ui.renderSettings.mbStrength, timeAccumulator, 0.0f);
-                ubo.ppLensFlare = glm::vec4(ui.renderSettings.enableLensFlares ? 1.0f : 0.0f, ui.renderSettings.flareIntensity, ui.renderSettings.ghostDispersal, (float)ui.renderSettings.ghosts);
+                ubo.ppExposureParams = glm::vec4(rs.autoExposure ? 1.0f : 0.0f, rs.manualExposure, rs.minBrightness, rs.maxBrightness);
+                ubo.ppColorBalance = glm::vec4(rs.temperature, rs.contrast, rs.saturation, rs.gamma);
+                ubo.ppBloomParams = glm::vec4(rs.enableBloom ? 1.0f : 0.0f, rs.bloomThreshold, rs.bloomIntensity, (float)rs.bloomBlurIterations);
+                ubo.ppDoFParams = glm::vec4(rs.enableDoF ? 1.0f : 0.0f, rs.focusDistance, rs.focusRange, rs.bokehSize);
+                ubo.ppVignetteGrain = glm::vec4(rs.enableVignette ? rs.vignetteIntensity : 0.0f, rs.enableFilmGrain ? rs.grainIntensity : 0.0f, rs.enableSharpen ? rs.sharpenIntensity : 0.0f, rs.enableChromaticAberration ? rs.caIntensity : 0.0f);
+                ubo.ppMotionBlur = glm::vec4(rs.enableMotionBlur ? 1.0f : 0.0f, rs.mbStrength, timeAccumulator, 0.0f);
+                ubo.ppLensFlare = glm::vec4(rs.enableLensFlares ? 1.0f : 0.0f, rs.flareIntensity, rs.ghostDispersal, (float)rs.ghosts);
                 prevViewProj = ubo.projection * ubo.view;
 
                 auto cascadeMats = shadowSystem->getCSM()->calculateMatrices(
@@ -587,7 +589,7 @@ namespace burnhope
                 registry.view<TransformComponent, ReflectionProbeComponent>().each([&](entt::entity e, TransformComponent& t, ReflectionProbeComponent& p) {
                     if (pInfo.count >= 16) return;
                     if (p.textureIndex == -1) {
-                        vkDeviceWaitIdle(lveDevice.device()); // Страхуемся перед созданием новой пробы
+                        vkDeviceWaitIdle(lveDevice.device()); 
                         p.textureIndex = globalRTReflectionSystem->probeTextures.size();
                         auto tex = std::make_unique<BurnhopeTexture>(lveDevice, VK_FORMAT_R16G16B16A16_SFLOAT, VkExtent3D{(uint32_t)p.resolution, (uint32_t)p.resolution, 1}, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
                         tex->transitionLayout(lveDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
@@ -733,12 +735,12 @@ namespace burnhope
                     RCPushConstants rcPush{};
                     rcPush.probeGridMin = glm::vec4(sceneMin, 0.0f);
                     rcPush.probeGridMax = glm::vec4(sceneMax, 0.0f);
-                    rcPush.probeCount   = glm::ivec4(ui.renderSettings.rcProbeGridX, ui.renderSettings.rcProbeGridY, ui.renderSettings.rcProbeGridZ, 0);
+                    rcPush.probeCount   = glm::ivec4(rs.rcProbeGridX, rs.rcProbeGridY, rs.rcProbeGridZ, 0);
                     rcPush.params = glm::vec4(
-                        ui.renderSettings.rcBaseRayLength, 
+                        rs.rcBaseRayLength, 
                         (float)extent.width, 
                         (float)extent.height, 
-                        (float)ui.renderSettings.rcOctaSize
+                        (float)rs.rcOctaSize
                     );
                     
                     globalRTReflectionSystem->rtReflectionsShader->pushConstants(cmd, &rcPush, sizeof(RCPushConstants));
@@ -784,8 +786,10 @@ namespace burnhope
             vkCmdBlitImage(cmd, postProcessTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, swapChainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
                     VkImageMemoryBarrier swapToAttach = RenderPipeline::createImageBarrier(swapChainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
                     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &swapToAttach);
+                    
                     lveRenderer.beginSwapChainRenderPass(cmd);
-                    ui.Draw(lveWindow, camera, registry, cmd);
+                    // --- ОБНОВЛЕННЫЙ ВЫЗОВ UI ---
+                    uiManager->Draw(lveWindow, camera, cmd);
                     lveRenderer.endSwapChainRenderPass(cmd); });
         renderPipeline.addPass("Reset Layouts", {RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [](VkCommandBuffer cmd) {});
                 renderPipeline.execute(commandBuffer);
@@ -1006,12 +1010,11 @@ namespace burnhope
             lveDevice,
             lveWindow.getExtent(),
             *globalPool,
-            globalSetLayout->getDescriptorSetLayout(), // Добавь вызов геттера, если здесь тоже обертка
+            globalSetLayout->getDescriptorSetLayout(), 
             gBufferLayoutPtr->getDescriptorSetLayout(),
             hdrOutputTexture->getImageView(),
             hdrOutputTexture->getSampler(),
             rtLayoutPtr->getDescriptorSetLayout(),
-            // ВОТ ЗДЕСЬ ИСПРАВЛЕНИЕ:
             simpleRenderSystem->getRenderSystemLayout()->getDescriptorSetLayout(),
             simpleRenderSystem->getTextureLayout()->getDescriptorSetLayout());
 
@@ -1046,8 +1049,6 @@ namespace burnhope
             globalSetLayouts,
             gtaoLayoutPtr->getDescriptorSetLayout()};
 
-        // 2. Выделяем пустой дескриптор из твоего пула (запишем в него TLAS уже после сборки сцены)
-        // В твоем движке BurnhopeDescriptorPool обычно умеет выделять сеты напрямую:
         globalPool->allocateDescriptor(rtLayoutPtr->getDescriptorSetLayout(), rtSet);
 
         gtaoSystem = std::make_unique<GTAOSystem>(lveDevice, gtaoLayouts);
@@ -1176,11 +1177,10 @@ namespace burnhope
             throw std::runtime_error("[FATAL] Ошибка загрузки функций для TLAS");
         }
 
-        // 1. Собираем инстансы из ECS
         std::vector<VkAccelerationStructureInstanceKHR> instances;
 
         auto view = registry.view<TransformComponent, MeshComponent>();
-        uint32_t customIndex = 0; // Будем использовать для связи с materialBuffer
+        uint32_t customIndex = 0; 
 
         for (auto [entity, transformComp, meshComp] : view.each())
         {
@@ -1189,8 +1189,8 @@ namespace burnhope
 
             VkAccelerationStructureInstanceKHR instance{};
             instance.transform = toVkMatrix(transformComp.transform.matrix);
-            instance.instanceCustomIndex = customIndex;   // Базовый индекс первого сабмеша модели
-            instance.mask = 0xFF;                         // Видим для всех лучей
+            instance.instanceCustomIndex = customIndex;   
+            instance.mask = 0xFF;                         
             instance.instanceShaderBindingTableRecordOffset = 0;
             instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
             instance.accelerationStructureReference = meshComp.model->getBLASAddress();
@@ -1201,19 +1201,17 @@ namespace burnhope
         }
 
         if (instances.empty())
-            return; // Сцена пуста
+            return; 
 
-        // 2. Создаем буфер для хранения инстансов (должен поддерживать адресацию!)
         VkDeviceSize instancesBufferSize = instances.size() * sizeof(VkAccelerationStructureInstanceKHR);
         instancesBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice,
             sizeof(VkAccelerationStructureInstanceKHR),
             instances.size(),
             VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT // Лучше на устройстве для скорости
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT 
         );
 
-        // Загружаем данные инстансов через staging (или маппинг, если память HOST_VISIBLE)
         BurnhopeBuffer stagingBuffer{
             lveDevice, sizeof(VkAccelerationStructureInstanceKHR), static_cast<uint32_t>(instances.size()),
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT};
@@ -1221,13 +1219,11 @@ namespace burnhope
         stagingBuffer.writeToBuffer((void *)instances.data());
         lveDevice.copyBuffer(stagingBuffer.getBuffer(), instancesBuffer->getBuffer(), instancesBufferSize);
 
-        // Получаем адрес буфера инстансов
         VkBufferDeviceAddressInfo instanceAddressInfo{};
         instanceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
         instanceAddressInfo.buffer = instancesBuffer->getBuffer();
         VkDeviceAddress instanceAddress = pfnGetBufferDeviceAddress(lveDevice.device(), &instanceAddressInfo);
 
-        // 3. Подготавливаем описание TLAS
         VkAccelerationStructureGeometryKHR tlasGeometry{};
         tlasGeometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
         tlasGeometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
@@ -1250,7 +1246,6 @@ namespace burnhope
         sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
         pfnGetAccelerationStructureBuildSizesKHR(lveDevice.device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primitiveCount, &sizeInfo);
 
-        // 4. Создаем буфер для самого TLAS
         tlasBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice,
             sizeInfo.accelerationStructureSize, 1,
@@ -1264,7 +1259,6 @@ namespace burnhope
         createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
         pfnCreateAccelerationStructureKHR(lveDevice.device(), &createInfo, nullptr, &tlasHandle);
 
-        // 5. Scratch буфер
         BurnhopeBuffer scratchBuffer(
             lveDevice, sizeInfo.buildScratchSize, 1,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
@@ -1275,7 +1269,6 @@ namespace burnhope
         buildInfo.scratchData.deviceAddress = pfnGetBufferDeviceAddress(lveDevice.device(), &scratchAddressInfo);
         buildInfo.dstAccelerationStructure = tlasHandle;
 
-        // 6. ЗАПУСК БИЛДА TLAS!
         VkAccelerationStructureBuildRangeInfoKHR buildRange{};
         buildRange.primitiveCount = primitiveCount;
         buildRange.primitiveOffset = 0;
@@ -1291,7 +1284,6 @@ namespace burnhope
     }
     void FirstApp::loadGameObjects(entt::registry &registry)
     {
-        // Твои текстуры и модель
         std::shared_ptr<BurnhopeTexture> diffuseTexture = BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/diffuse3.png");
         std::shared_ptr<BurnhopeTexture> normalTexture = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/normal3.png");
         std::shared_ptr<BurnhopeTexture> rougnessTexture = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/rougness3.png");
@@ -1322,7 +1314,6 @@ namespace burnhope
         material2->setNormal(normalTexture2);
         material2->setRoughness(rougnessTexture2);
 
-        // Вспомогательная функция для создания стен, чтобы не дублировать код
         auto createBox = [&](glm::vec3 pos, glm::vec3 scale, std::string tag)
         {
             auto entity = registry.create();
@@ -1359,52 +1350,39 @@ namespace burnhope
             mesh.materials.push_back(material2);
             return entity;
         };
-        // 1. Пол
         createBox({0.0f, 0.0f, 0.0f}, {5.0f, 0.1f, 5.0f}, "Floor");
 
-        // 2. Потолок
         createBox({0.0f, 5.0f, 0.0f}, {5.0f, 0.1f, 5.0f}, "Ceiling");
 
-        // 3. Задняя стена
         createBox({0.0f, 2.5f, -5.0f}, {5.0f, 2.5f, 0.1f}, "BackWall");
 
-        // 4. Левая стена
         createBox({-5.0f, 2.5f, 0.0f}, {0.1f, 2.5f, 5.0f}, "LeftWall");
 
-        // 5. Правая стена
         createBox({5.0f, 2.5f, 0.0f}, {0.1f, 2.5f, 5.0f}, "RightWall");
 
-        // 6. Передняя стена с окном (состоит из двух частей)
-        // Левая часть стены
         createBox({-3.0f, 2.5f, 5.0f}, {2.0f, 2.5f, 0.1f}, "FrontWall_Left");
-        // Правая часть стены
         createBox({3.0f, 2.5f, 5.0f}, {2.0f, 2.5f, 0.1f}, "FrontWall_Right");
-        // Верхняя часть над окном
         createBox({0.0f, 4.0f, 5.0f}, {1.0f, 1.0f, 0.1f}, "FrontWall_Top");
 
-        // 7. Тестовый объект внутри комнаты
         auto testCube = createBox2({0.0f, 1.0f, 0.0f}, {0.5f, 0.5f, 0.5f}, "TestCube");
 
-        // 8. Солнце (Directional Light)
         auto sunEntity = registry.create();
         registry.emplace<IDComponent>(sunEntity);
         registry.emplace<HierarchyComponent>(sunEntity);
         registry.emplace<TagComponent>(sunEntity, "Sun");
 
         auto &sunTransform = registry.emplace<TransformComponent>(sunEntity);
-        // Поворачиваем солнце так, чтобы лучи светили прямо в наше окно под углом
         sunTransform.transform.rotation = glm::vec3(70, 0, 0.0f);
         sunTransform.transform.updateMatrixIfNeeded();
 
         auto &sunLight = registry.emplace<LightComponent>(sunEntity);
         sunLight.light.enable = true;
         sunLight.light.type = LightType::Directional;
-        sunLight.light.color = glm::vec3(1.0f, 0.95f, 0.8f); // Чуть теплый солнечный свет
-        sunLight.light.intensity = 1.0f;                     // Уменьшил интенсивность, чтобы не было пересвета
+        sunLight.light.color = glm::vec3(1.0f, 0.95f, 0.8f); 
+        sunLight.light.intensity = 1.0f;                     
         sunLight.light.castShadows = true;
         sunLight.light.mobility = LightMobility::Movable;
 
-        // 9. Отражательная проба по умолчанию
         auto probeEntity = registry.create();
         registry.emplace<IDComponent>(probeEntity);
         registry.emplace<HierarchyComponent>(probeEntity);

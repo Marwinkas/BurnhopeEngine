@@ -5,7 +5,7 @@
 #include "Utils/Descriptors.hpp"
 #include "Render/Material.hpp"
 #include "Utils/Components.hpp"
-#include "Utils/UI.hpp"
+#include "Utils/UIManager.h"
 #include "Render/Gbuffer.hpp"
 #include "Render/MainRender.hpp"
 #include "Render/ShadowRender.hpp"
@@ -134,8 +134,10 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
 #else
         std::string rootPath = fs::current_path().string();
 #endif
-        UI ui{lveWindow, lveDevice, lveRenderer.getSwapChainRenderPass(), rootPath, rootPath};
+        
         entt::registry registry;
+        std::unique_ptr<UIManager> uiManager;
+        
         std::unique_ptr<BurnhopeBuffer> objectBuffer;
         std::unique_ptr<BurnhopeBuffer> materialBuffer;
         std::unique_ptr<BurnhopeBuffer> faceMatricesBuffer;
