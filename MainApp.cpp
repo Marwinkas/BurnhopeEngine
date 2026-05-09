@@ -8,6 +8,7 @@
 #include <chrono>
 #include <stdexcept>
 #include <array>
+#include <thread>
 #include "Render/RenderGraph.hpp"
 namespace burnhope
 {
@@ -32,16 +33,44 @@ namespace burnhope
                               .addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT)
                               .build();
 
-        // 2. Создаем G-Buffer (нужен для системы рендера)
+        portalUboBuffers.resize(MAX_PORTALS);
+        portalDescriptorSets.resize(MAX_PORTALS);
+
+        for (int p = 0; p < MAX_PORTALS; p++)
+        {
+            // Резервируем место под кадры (обычно 2 или 3)
+            portalUboBuffers[p].resize(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
+            portalDescriptorSets[p].resize(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
+
+            for (int f = 0; f < BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT; f++)
+            {
+                portalUboBuffers[p][f] = std::make_unique<BurnhopeBuffer>(
+                    lveDevice,
+                    sizeof(GlobalUbo),
+                    1,
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+                portalUboBuffers[p][f]->map();
+
+                auto bufferInfo = portalUboBuffers[p][f]->descriptorInfo();
+                BurnhopeDescriptorWriter(*globalSetLayout, *globalPool)
+                    .writeBuffer(0, &bufferInfo)
+                    .build(portalDescriptorSets[p][f]);
+            }
+        }
+
         gBuffer = std::make_unique<BurnhopeGBuffer>(lveDevice, lveWindow.getExtent());
 
-        // 3. Инициализируем систему рендера (теперь она поле класса)
+        portalRenderSystem = std::make_unique<PortalRenderSystem>(
+            lveDevice,
+            gBuffer->getRenderPass(),
+            globalSetLayout->getDescriptorSetLayout());
+
         simpleRenderSystem = std::make_unique<GeometryRenderSystem>(
             lveDevice,
             gBuffer->getRenderPass(),
             globalSetLayout->getDescriptorSetLayout());
 
-        // 4. Теперь можно инициализировать вычисления (передаем лейауты из simpleRenderSystem)
         initCompute(globalSetLayout->getDescriptorSetLayout());
 
         loadGameObjects(registry);
@@ -65,12 +94,55 @@ namespace burnhope
         lightLayoutPtr.reset();
         dummyGridBuffer.reset();
         dummyIndexBuffer.reset();
+        for (auto &pBuffers : portalUboBuffers)
+        {
+            for (auto &buffer : pBuffers)
+            {
+                buffer.reset();
+            }
+        }
+        portalUboBuffers.clear();
+        portalDescriptorSets.clear();
     }
     glm::mat4 shadowPerspective(float fovY, float aspect, float zNear, float zFar)
     {
         glm::mat4 proj = glm::perspective(glm::radians(fovY), aspect, zNear, zFar);
         proj[1][1] *= -1.0f;
         return proj;
+    }
+    glm::mat4 computeObliqueProjection(const glm::mat4 &proj,
+                                       const glm::mat4 &view,
+                                       const glm::vec3 &planePos,
+                                       const glm::vec3 &planeNormal)
+    {
+        glm::vec3 normalView = glm::normalize(
+            glm::mat3(glm::transpose(glm::inverse(view))) * planeNormal);
+        glm::vec3 pointView = glm::vec3(view * glm::vec4(planePos, 1.0f));
+        float d = -glm::dot(normalView, pointView);
+        glm::vec4 clipPlane(normalView, d);
+
+        if (clipPlane.z > 0.0f)
+            clipPlane = -clipPlane;
+
+        glm::mat4 result = proj;
+
+        glm::vec4 q;
+        q.x = (glm::sign(clipPlane.x) + proj[2][0]) / proj[0][0];
+        q.y = (glm::sign(clipPlane.y) + proj[2][1]) / proj[1][1];
+        q.z = -1.0f;
+        q.w = (1.0f + proj[2][2]) / proj[3][2];
+
+        float dotProd = glm::dot(clipPlane, q);
+        if (glm::abs(dotProd) < 1e-6f)
+            return proj;
+        glm::vec4 c = clipPlane / dotProd;
+
+        result[0][2] = c.x;
+        result[1][2] = c.y;
+        result[2][2] = c.z;
+        result[3][2] = c.w;
+
+        return result;
     }
     void FirstApp::RebuildBatches(entt::registry &registry, GeometryRenderSystem &renderSystem)
     {
@@ -213,6 +285,7 @@ namespace burnhope
     }
     void FirstApp::run()
     {
+
         std::vector<std::unique_ptr<BurnhopeBuffer>> uboBuffers(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
         for (int i = 0; i < uboBuffers.size(); i++)
         {
@@ -226,6 +299,25 @@ namespace burnhope
             auto bufferInfo = uboBuffers[i]->descriptorInfo();
             BurnhopeDescriptorWriter(*globalSetLayout, *globalPool).writeBuffer(0, &bufferInfo).build(globalDescriptorSets[i]);
         }
+
+        // std::vector<std::unique_ptr<BurnhopeBuffer>> portalUboBuffers(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
+        // for (int i = 0; i < (int)portalUboBuffers.size(); i++)
+        //{
+        //      portalUboBuffers[i] = std::make_unique<BurnhopeBuffer>(
+        //          lveDevice, sizeof(GlobalUbo), 1,
+        //          VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        //          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        //      portalUboBuffers[i]->map();
+        //
+        //
+        // std::vector<VkDescriptorSet> portalDescriptorSets(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
+        // for (int i = 0; i < (int)portalDescriptorSets.size(); i++)
+        //{
+        //     auto bufferInfo = portalUboBuffers[i]->descriptorInfo();
+        //     BurnhopeDescriptorWriter(*globalSetLayout, *globalPool)
+        //         .writeBuffer(0, &bufferInfo)
+        //         .build(portalDescriptorSets[i]);
+        // }
 
         RebuildBatches(registry, *simpleRenderSystem);
         buildTLAS(registry);
@@ -257,13 +349,15 @@ namespace burnhope
         int frameCount = 0;
         auto fpsTimer = currentTime;
         RenderPipeline renderPipeline;
+        const double targetFPS = 60.0;
+        const double maxPeriod = 1.0 / targetFPS;
+
         while (!lveWindow.shouldClose())
         {
             glfwPollEvents();
 
             bool transformsChanged = false;
 
-            // 1. Вычисляем новые локальные матрицы для всех, кто сдвинулся
             registry.view<TransformComponent>().each([&](TransformComponent &tComp)
                                                      {
                 if (tComp.transform.updatematrix) {
@@ -324,6 +418,17 @@ namespace burnhope
             }
             auto newTime = std::chrono::high_resolution_clock::now();
             float frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
+
+            if (frameTime < maxPeriod)
+            {
+                double sleepTime = maxPeriod - frameTime;
+                std::this_thread::sleep_for(std::chrono::duration<double>(sleepTime));
+
+                // Пересчитываем время после сна для честного deltaTime
+                newTime = std::chrono::high_resolution_clock::now();
+                frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
+            }
+
             currentTime = newTime;
             frameCount++;
             if (std::chrono::duration<float>(newTime - fpsTimer).count() >= 1.0f)
@@ -355,8 +460,8 @@ namespace burnhope
                 ubo.screenSize = glm::vec4(extent.width, extent.height, 0.f, 0.f);
                 ubo.sunDir = shadowSystem->getSunDir();
 
-                ubo.sunColor = glm::vec3(1.0f, 0.95f, 0.8f); // Дефолт (на случай, если солнца нет)
-                ubo.sunIntensity = 5.0f;                     // Дефолт
+                ubo.sunColor = glm::vec3(1.0f, 0.95f, 0.8f);
+                ubo.sunIntensity = 5.0f;
 
                 auto lightView = registry.view<LightComponent>();
                 for (auto entity : lightView)
@@ -366,7 +471,7 @@ namespace burnhope
                     {
                         ubo.sunColor = light.color;
                         ubo.sunIntensity = light.intensity;
-                        break; // Нам нужно только одно главное солнце
+                        break;
                     }
                 }
                 ubo.lightSize = 1.0f;
@@ -379,7 +484,7 @@ namespace burnhope
                 uboBuffers[frameIndex]->writeToBuffer(&ubo);
                 uboBuffers[frameIndex]->flush();
                 renderPipeline.clear();
-                renderPipeline.addPass("Shadow Maps Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
+                renderPipeline.addPass("Shadow Maps Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 1)}, [&](VkCommandBuffer cmd)
                                        {
                     for (int i = 0; i < BurnhopeCSM::CASCADE_COUNT; i++) {
                         VkRenderPassBeginInfo rpInfo{};
@@ -444,42 +549,116 @@ namespace burnhope
                     auto vp = ubo.projection * ubo.view;
                     auto planes = CullingSystem::extractFrustumPlanes(vp);
                     cullingSystem->dispatchCulling(cmd, vp, ubo.camPos, planes, totalSubMeshCount); });
-                renderPipeline.addPass("G-Buffer Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
+                renderPipeline.addPass("G-Buffer Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 1)}, [&](VkCommandBuffer cmd)
                                        {
                     VkRenderPassBeginInfo renderPassInfo{};
-                    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO; renderPassInfo.renderPass = gBuffer->getRenderPass();
-                    renderPassInfo.framebuffer = gBuffer->getFramebuffer(); renderPassInfo.renderArea.extent = extent;
-                    std::array<VkClearValue, 4> clearValues{}; clearValues[3].depthStencil = { 1.0f, 0 };
-                    renderPassInfo.clearValueCount = (uint32_t)clearValues.size(); renderPassInfo.pClearValues = clearValues.data();
+                    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                    renderPassInfo.renderPass = gBuffer->getRenderPass();
+                    renderPassInfo.framebuffer = gBuffer->getFramebuffer();
+                    renderPassInfo.renderArea.extent = extent;
+                    std::array<VkClearValue, 4> clearValues{};
+                    clearValues[3].depthStencil = {1.0f, 0};
+                    renderPassInfo.clearValueCount = (uint32_t)clearValues.size();
+                    renderPassInfo.pClearValues = clearValues.data();
+
                     vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-                    VkViewport viewport{}; viewport.width = (float)extent.width; viewport.height = (float)extent.height; viewport.maxDepth = 1.0f;
+
+                    VkViewport viewport{};
+                    viewport.width = (float)extent.width;
+                    viewport.height = (float)extent.height;
+                    viewport.maxDepth = 1.0f;
                     vkCmdSetViewport(cmd, 0, 1, &viewport);
-                    VkRect2D scissor{ {0, 0}, extent }; vkCmdSetScissor(cmd, 0, 1, &scissor);
-                    simpleRenderSystem->renderEntities(frameInfo, registry, storageSet, textureSet, *cullingSystem, totalSubMeshCount);
+                    VkRect2D scissor{{0, 0}, extent};
+                    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+                    simpleRenderSystem->renderEntities(frameInfo, registry, storageSet, textureSet,
+                                                       *cullingSystem, totalSubMeshCount, false);
+
+                    {
+                        uint32_t idx = 0;
+                        for (auto entity : registry.view<PortalComponent, TransformComponent>()) {
+                            if (idx >= MAX_PORTALS) break;
+                            auto& transform = registry.get<TransformComponent>(entity);
+                            portalRenderSystem->drawMask(cmd, globalDescriptorSets[frameIndex],
+                                                         transform.transform.matrix, idx + 1);
+                            idx++;
+                        }
+                    }
+
+                    {
+                        uint32_t portalCounter = 0;
+                        for (auto entity : registry.view<PortalComponent, TransformComponent>()) {
+                            if (portalCounter >= MAX_PORTALS) break;
+                            auto& portal    = registry.get<PortalComponent>(entity);
+                            auto& transform = registry.get<TransformComponent>(entity);
+                        
+                            if (portal.targetPortal == entt::null) { portalCounter++; continue; }
+                        
+                            portalRenderSystem->drawDepthReset(cmd, globalDescriptorSets[frameIndex],
+                                                               transform.transform.matrix, portalCounter + 1);
+                            
+                            auto& targetTransform = registry.get<TransformComponent>(portal.targetPortal);
+                            glm::mat4 realCamWorld = glm::inverse(camera.GetViewMatrix());
+                            glm::mat4 mIn  = transform.transform.matrix;
+                            glm::mat4 mOut = targetTransform.transform.matrix;
+                            auto clean = [](glm::mat4 m) {
+                                m[0] = glm::vec4(glm::normalize(glm::vec3(m[0])), 0);
+                                m[1] = glm::vec4(glm::normalize(glm::vec3(m[1])), 0);
+                                m[2] = glm::vec4(glm::normalize(glm::vec3(m[2])), 0);
+                                return m;
+                            };
+                            static const glm::mat4 rot180 = glm::rotate(glm::mat4(1.f), glm::pi<float>(), {0, 1, 0});
+                            glm::mat4 portalTransition = clean(mOut) * rot180 * glm::inverse(clean(mIn));
+                            glm::mat4 virtualCamWorld  = portalTransition * realCamWorld;
+                        
+                            GlobalUbo portalUbo   = ubo;
+                            portalUbo.view        = glm::inverse(virtualCamWorld);
+                            portalUbo.invViewProj = glm::inverse(portalUbo.projection * portalUbo.view);
+                            portalUbo.camPos      = glm::vec3(virtualCamWorld[3]);
+                        
+                            glm::vec3 exitPortalPos    = glm::vec3(mOut[3]);
+                            glm::vec3 exitPortalNormal = -glm::normalize(glm::vec3(mOut[2]));
+                            // Знак минус: local +Z портала смотрит наружу (от сцены),
+                            // нам нужна нормаль внутрь. Если клипается не та сторона — убери минус.
+
+                            portalUbo.projection = computeObliqueProjection(
+                                portalUbo.projection, portalUbo.view,
+                                exitPortalPos, exitPortalNormal);
+                            
+                            // Обязательно пересчитать после модификации projection!
+                            portalUbo.invViewProj = glm::inverse(portalUbo.projection * portalUbo.view);
+                            
+                            portalUboBuffers[portalCounter][frameIndex]->writeToBuffer(&portalUbo);
+                            portalUboBuffers[portalCounter][frameIndex]->flush();
+                        
+                            FrameInfo portalFrameInfo  = frameInfo;
+                            portalFrameInfo.globalDescriptorSet = portalDescriptorSets[portalCounter][frameIndex];
+                        
+                            vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, portalCounter + 1);
+                            simpleRenderSystem->renderEntities(portalFrameInfo, registry, storageSet, textureSet,
+                                                               *cullingSystem, totalSubMeshCount, true);
+                            portalCounter++;
+                        }
+                    }
+
                     vkCmdEndRenderPass(cmd); });
-                renderPipeline.addPass("Hi-Z Pass", {RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
+
+                renderPipeline.addPass("Hi-Z Pass", {RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)}, [&](VkCommandBuffer cmd)
                                        { hizSystem->compute(cmd, extent); });
                 renderPipeline.addPass("GTAO Pass", {RenderPipeline::createImageBarrier(gtaoOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [&](VkCommandBuffer cmd)
                                        { gtaoSystem->compute(cmd, globalDescriptorSets[frameIndex], gtaoSet, extent.width, extent.height); });
-                renderPipeline.addPass("Compute Lighting", {RenderPipeline::createImageBarrier(gBuffer->getNormalRoughness()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getAlbedoMetallic()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getHeightAO()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
+                renderPipeline.addPass("Compute Lighting", {RenderPipeline::createImageBarrier(gBuffer->getNormalRoughness()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getAlbedoMetallic()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getHeightAO()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)}, [&](VkCommandBuffer cmd)
                                        {
                     std::vector<VkDescriptorSet> computeSets = { globalDescriptorSets[frameIndex], gBufferSet, shadowSet, lightSet, computeOutputSet, rcSystem->getIrradianceSet(), gtaoSet };
                     lightingSystem->computeLighting(cmd, computeSets, extent.width, extent.height); });
-                renderPipeline.addPass("Radiance Cascades GI", {// Гарантируем, что запись из Lighting Pass (Shader Write) завершена
-                                                                // и данные стали видимы для чтения в GI Pass (Shader Read)
-                                                                RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                                                                                   VK_ACCESS_SHADER_WRITE_BIT, // Кто писал (Lighting)
-                                                                                                   VK_ACCESS_SHADER_READ_BIT   // Кто будет читать (GI лучи)
-                                                                                                   )},
+                renderPipeline.addPass("Radiance Cascades GI", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT)},
                                        [&](VkCommandBuffer cmd)
                                        {
-                    // Объем GI должен полностью покрывать сцену.
-                    // Слишком узкий volume приводит к clamp на границах сетки и видимой "клетке".
                     glm::vec3 sceneMin(-32.0f, -32.0f, -32.0f);
                     glm::vec3 sceneMax( 32.0f,  32.0f,  32.0f);
                     rcSystem->dispatch(cmd, globalDescriptorSets[frameIndex], gBufferSet, ubo.invViewProj, camera.Position, sceneMin, sceneMax, extent, rtSet, storageSet, textureSet); });
                 VkImage swapChainImage = lveRenderer.getCurrentSwapChainImage();
-                renderPipeline.addPass("Blit and UI", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
+                renderPipeline.addPass("Blit and UI", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)}, [&](VkCommandBuffer cmd)
                                        {
                     VkImageMemoryBarrier swapToDst = RenderPipeline::createImageBarrier(swapChainImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
                     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &swapToDst);
@@ -652,12 +831,11 @@ namespace burnhope
             lveDevice,
             lveWindow.getExtent(),
             *globalPool,
-            globalSetLayout->getDescriptorSetLayout(), // Добавь вызов геттера, если здесь тоже обертка
+            globalSetLayout->getDescriptorSetLayout(),
             gBufferLayoutPtr->getDescriptorSetLayout(),
             hdrOutputTexture->getImageView(),
             hdrOutputTexture->getSampler(),
             rtLayoutPtr->getDescriptorSetLayout(),
-            // ВОТ ЗДЕСЬ ИСПРАВЛЕНИЕ:
             simpleRenderSystem->getRenderSystemLayout()->getDescriptorSetLayout(),
             simpleRenderSystem->getTextureLayout()->getDescriptorSetLayout());
         auto normalInfo = gBuffer->getNormalRoughness()->getImageInfo();
@@ -673,8 +851,6 @@ namespace burnhope
             globalSetLayouts,
             gtaoLayoutPtr->getDescriptorSetLayout()};
 
-        // 2. Выделяем пустой дескриптор из твоего пула (запишем в него TLAS уже после сборки сцены)
-        // В твоем движке BurnhopeDescriptorPool обычно умеет выделять сеты напрямую:
         globalPool->allocateDescriptor(rtLayoutPtr->getDescriptorSetLayout(), rtSet);
 
         gtaoSystem = std::make_unique<GTAOSystem>(lveDevice, gtaoLayouts);
@@ -768,11 +944,10 @@ namespace burnhope
             throw std::runtime_error("[FATAL] Ошибка загрузки функций для TLAS");
         }
 
-        // 1. Собираем инстансы из ECS
         std::vector<VkAccelerationStructureInstanceKHR> instances;
 
         auto view = registry.view<TransformComponent, MeshComponent>();
-        uint32_t customIndex = 0; // Будем использовать для связи с materialBuffer
+        uint32_t customIndex = 0;
 
         for (auto [entity, transformComp, meshComp] : view.each())
         {
@@ -781,8 +956,8 @@ namespace burnhope
 
             VkAccelerationStructureInstanceKHR instance{};
             instance.transform = toVkMatrix(transformComp.transform.matrix);
-            instance.instanceCustomIndex = customIndex++; // ID объекта (поможет узнать материал при попадании луча)
-            instance.mask = 0xFF;                         // Видим для всех лучей
+            instance.instanceCustomIndex = customIndex++;
+            instance.mask = 0xFF;
             instance.instanceShaderBindingTableRecordOffset = 0;
             instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
             instance.accelerationStructureReference = meshComp.model->getBLASAddress();
@@ -791,19 +966,16 @@ namespace burnhope
         }
 
         if (instances.empty())
-            return; // Сцена пуста
+            return;
 
-        // 2. Создаем буфер для хранения инстансов (должен поддерживать адресацию!)
         VkDeviceSize instancesBufferSize = instances.size() * sizeof(VkAccelerationStructureInstanceKHR);
         instancesBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice,
             sizeof(VkAccelerationStructureInstanceKHR),
             instances.size(),
             VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT // Лучше на устройстве для скорости
-        );
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-        // Загружаем данные инстансов через staging (или маппинг, если память HOST_VISIBLE)
         BurnhopeBuffer stagingBuffer{
             lveDevice, sizeof(VkAccelerationStructureInstanceKHR), static_cast<uint32_t>(instances.size()),
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT};
@@ -811,13 +983,11 @@ namespace burnhope
         stagingBuffer.writeToBuffer((void *)instances.data());
         lveDevice.copyBuffer(stagingBuffer.getBuffer(), instancesBuffer->getBuffer(), instancesBufferSize);
 
-        // Получаем адрес буфера инстансов
         VkBufferDeviceAddressInfo instanceAddressInfo{};
         instanceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
         instanceAddressInfo.buffer = instancesBuffer->getBuffer();
         VkDeviceAddress instanceAddress = pfnGetBufferDeviceAddress(lveDevice.device(), &instanceAddressInfo);
 
-        // 3. Подготавливаем описание TLAS
         VkAccelerationStructureGeometryKHR tlasGeometry{};
         tlasGeometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
         tlasGeometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
@@ -840,7 +1010,6 @@ namespace burnhope
         sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
         pfnGetAccelerationStructureBuildSizesKHR(lveDevice.device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primitiveCount, &sizeInfo);
 
-        // 4. Создаем буфер для самого TLAS
         tlasBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice,
             sizeInfo.accelerationStructureSize, 1,
@@ -854,7 +1023,6 @@ namespace burnhope
         createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
         pfnCreateAccelerationStructureKHR(lveDevice.device(), &createInfo, nullptr, &tlasHandle);
 
-        // 5. Scratch буфер
         BurnhopeBuffer scratchBuffer(
             lveDevice, sizeInfo.buildScratchSize, 1,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
@@ -865,7 +1033,6 @@ namespace burnhope
         buildInfo.scratchData.deviceAddress = pfnGetBufferDeviceAddress(lveDevice.device(), &scratchAddressInfo);
         buildInfo.dstAccelerationStructure = tlasHandle;
 
-        // 6. ЗАПУСК БИЛДА TLAS!
         VkAccelerationStructureBuildRangeInfoKHR buildRange{};
         buildRange.primitiveCount = primitiveCount;
         buildRange.primitiveOffset = 0;
@@ -880,104 +1047,148 @@ namespace burnhope
         std::cout << "[RT] Successfully built TLAS with " << instances.size() << " instances!" << std::endl;
     }
     void FirstApp::loadGameObjects(entt::registry &registry)
-
     {
-        std::shared_ptr<BurnhopeTexture> diffuseTexture =
-
-            BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/diffuse3.png");
-
-        std::shared_ptr<BurnhopeTexture> normalTexture =
-
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/normal3.png");
-
-        std::shared_ptr<BurnhopeTexture> rougnessTexture =
-
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/rougness3.png");
-
-        std::shared_ptr<BurnhopeTexture> metallicTexture =
-
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/metallic3.png");
-
-        std::shared_ptr<BurnhopeTexture> aoTexture =
-
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/ao3.png");
-
-        std::shared_ptr<BurnhopeTexture> heightTexture =
-
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/height3.png");
-
         std::shared_ptr<BurnhopeModel> lveModel =
+            BurnhopeModel::createModelFromFile(lveDevice, "models/PortalsPlaceholder1.gltf");
 
-            BurnhopeModel::createModelFromFile(lveDevice, "models/cube.bhmesh");
-
-        std::shared_ptr<Material> material = std::make_shared<Material>();
-
-        material->setAlbedo(diffuseTexture);
-
-        material->setAO(aoTexture);
-
-        material->setMetallic(metallicTexture);
-
-        material->setNormal(normalTexture);
-
-        material->setRoughness(rougnessTexture);
-
-        material->setHeight(heightTexture);
-
-        auto cubeEntity = registry.create();
-        registry.emplace<IDComponent>(cubeEntity);
-        registry.emplace<HierarchyComponent>(cubeEntity);
-        registry.emplace<TagComponent>(cubeEntity, "Plane");
-
-        auto &transform = registry.emplace<TransformComponent>(cubeEntity);
+        auto modelEntity = registry.create();
+        registry.emplace<TagComponent>(modelEntity, "Room1");
+        registry.emplace<IDComponent>(modelEntity);
+        registry.emplace<HierarchyComponent>(modelEntity);
+        auto &transform = registry.emplace<TransformComponent>(modelEntity);
         transform.transform.position = glm::vec3(0.0f, 0.0f, 0.0f);
-        transform.transform.scale = glm::vec3(5.0f, 0.5f, 5.0f);
+        transform.transform.rotation = glm::vec3(0.0f, 0.0f, 0.0f);
+        transform.transform.scale = glm::vec3(0.25f, 0.25f, 0.25f);
         // glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
         // transform.transform.matrix = glm::scale(translation, transform.transform.scale);
         transform.transform.updateMatrixIfNeeded();
-
-        auto &mesh = registry.emplace<MeshComponent>(cubeEntity);
+        auto &mesh = registry.emplace<MeshComponent>(modelEntity);
         mesh.model = lveModel;
-        //mesh.modelPath = "models/cube.bhmesh";
-        mesh.materials.push_back(material);
-        //mesh.materialPaths.push_back("materials/cube_material.json"); 
-        mesh.materials.push_back(material);
-        //mesh.materialPaths.push_back("materials/cube_material.json"); 
+        mesh.materials = lveModel->materials;
 
-        auto cubeEntity2 = registry.create();
-        registry.emplace<IDComponent>(cubeEntity2);
-        registry.emplace<HierarchyComponent>(cubeEntity2);
-        registry.emplace<TagComponent>(cubeEntity2, "Cube");
+        std::shared_ptr<BurnhopeModel> lveModel2 =
+            BurnhopeModel::createModelFromFile(lveDevice, "models/PortalsPlaceholder2.gltf");
 
-        auto &transform2 = registry.emplace<TransformComponent>(cubeEntity2);
-        transform2.transform.position = glm::vec3(0.0f, 1.5f, 0.0f);
-        transform2.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
-        // transform2.transform.matrix = glm::translate(glm::mat4(1.0f), transform2.transform.position);
+        auto modelEntity2 = registry.create();
+        registry.emplace<TagComponent>(modelEntity2, "Room2");
+        registry.emplace<IDComponent>(modelEntity2);
+        registry.emplace<HierarchyComponent>(modelEntity2);
+        auto &transform2 = registry.emplace<TransformComponent>(modelEntity2);
+        transform2.transform.position = glm::vec3(-15.0f, 0.0f, 0.0f);
+        transform2.transform.rotation = glm::vec3(0.0f, -90.0f, 0.0f);
+        transform2.transform.scale = glm::vec3(0.25f, 0.25f, 0.25f);
+        // glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
+        // transform.transform.matrix = glm::scale(translation, transform.transform.scale);
         transform2.transform.updateMatrixIfNeeded();
+        auto &mesh2 = registry.emplace<MeshComponent>(modelEntity2);
+        mesh2.model = lveModel2;
+        mesh2.materials = lveModel2->materials;
 
-        auto &mesh2 = registry.emplace<MeshComponent>(cubeEntity2);
-        mesh2.model = lveModel;
-        //mesh2.modelPath = "models/cube.bhmesh";
-        mesh2.materials.push_back(material);
-        //mesh2.materialPaths.push_back("materials/cube_material.json"); 
-        mesh2.materials.push_back(material);
-        //mesh2.materialPaths.push_back("materials/cube_material.json"); 
+        auto portalA = registry.create();
+        registry.emplace<TagComponent>(portalA, "Portal_A");
+        registry.emplace<IDComponent>(portalA);
+        auto &transA = registry.emplace<TransformComponent>(portalA);
+        transA.transform.position = {0.0f, 2.1f, -3.75f};
+        transA.transform.rotation = {0.0f, 0.0f, 0.0f};
+        transA.transform.scale = {2.0f, 2.0f, 2.0f};
+        transA.transform.updateMatrixIfNeeded();
 
+        registry.emplace<PortalComponent>(portalA);
+
+        auto portalB = registry.create();
+        registry.emplace<TagComponent>(portalB, "Portal_B");
+        registry.emplace<IDComponent>(portalB);
+        auto &transB = registry.emplace<TransformComponent>(portalB);
+        transB.transform.position = {-11.25f, 2.1f, 0.0f};
+        transB.transform.rotation = {0.0f, -90.0f, 0.0f};
+        transB.transform.scale = {2.0f, 2.0f, 2.0f};
+        transB.transform.updateMatrixIfNeeded();
+
+        registry.emplace<PortalComponent>(portalB);
+
+        auto portalC = registry.create();
+        registry.emplace<TagComponent>(portalC, "Portal_C");
+        registry.emplace<IDComponent>(portalC);
+        auto &transC = registry.emplace<TransformComponent>(portalC);
+        transC.transform.position = {-3.5f, 2.65f, -3.42f};
+        transC.transform.rotation = {0.0f, 0.0f, 0.0f};
+        transC.transform.scale = {1.0f, 1.0f, 1.0f};
+        transC.transform.updateMatrixIfNeeded();
+
+        registry.emplace<PortalComponent>(portalC);
+
+        auto portalD = registry.create();
+        registry.emplace<TagComponent>(portalD, "Portal_D");
+        registry.emplace<IDComponent>(portalD);
+        auto &transD = registry.emplace<TransformComponent>(portalD);
+        transD.transform.position = {-15.2f, 2.250f, 4.95f};
+        transD.transform.rotation = {0.0f, 180.0f, 0.0f};
+        transD.transform.scale = {1.0f, 1.0f, 1.0f};
+        transD.transform.updateMatrixIfNeeded();
+
+        registry.emplace<PortalComponent>(portalD);
+
+        registry.get<PortalComponent>(portalA).targetPortal = portalB;
+        registry.get<PortalComponent>(portalB).targetPortal = portalA;
+
+        registry.get<PortalComponent>(portalC).targetPortal = portalD;
+        registry.get<PortalComponent>(portalD).targetPortal = portalC;
+
+        /*
+                std::shared_ptr<BurnhopeModel> lveModel3 =
+                    BurnhopeModel::createModelFromFile(lveDevice, "models/PortalsPlaceholder3.gltf");
+
+                auto modelEntity3 = registry.create();
+                registry.emplace<TagComponent>(modelEntity3, "Cube");
+                registry.emplace<IDComponent>(modelEntity3);
+                registry.emplace<HierarchyComponent>(modelEntity3);
+                auto &transform3 = registry.emplace<TransformComponent>(modelEntity3);
+                transform3.transform.position = glm::vec3(-73.0f, 1.0f, 5.0f);
+                transform3.transform.rotation = glm::vec3(0.0f, 0.0f, 15.0f);
+                transform3.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
+                //glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
+                //transform.transform.matrix = glm::scale(translation, transform.transform.scale);
+                transform3.transform.updateMatrixIfNeeded();
+                auto &mesh3 = registry.emplace<MeshComponent>(modelEntity3);
+                mesh3.model = lveModel3;
+                mesh3.materials = lveModel3->materials;
+
+
+
+                std::shared_ptr<BurnhopeModel> lveModel4 =
+                    BurnhopeModel::createModelFromFile(lveDevice, "models/PortalsPlaceholder4.gltf");
+
+                auto modelEntity4 = registry.create();
+                registry.emplace<TagComponent>(modelEntity4, "Cube2");
+                registry.emplace<IDComponent>(modelEntity4);
+                registry.emplace<HierarchyComponent>(modelEntity4);
+                auto &transform4 = registry.emplace<TransformComponent>(modelEntity4);
+                transform4.transform.position = glm::vec3(-68.0f, -5.0f, 3.0f);
+                transform4.transform.rotation = glm::vec3(0.0f, 0.0f, -25.0f);
+                transform4.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
+                //glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
+                //transform.transform.matrix = glm::scale(translation, transform.transform.scale);
+                transform4.transform.updateMatrixIfNeeded();
+                auto &mesh4 = registry.emplace<MeshComponent>(modelEntity4);
+                mesh4.model = lveModel4;
+                mesh4.materials = lveModel4->materials;
+
+        */
         auto sunEntity = registry.create();
+        registry.emplace<TagComponent>(sunEntity, "Sun");
         registry.emplace<IDComponent>(sunEntity);
         registry.emplace<HierarchyComponent>(sunEntity);
-        registry.emplace<TagComponent>(sunEntity, "Sun");
         auto &sunTransform = registry.emplace<TransformComponent>(sunEntity);
-        sunTransform.transform.rotation = glm::vec3(45.0f, 0.0f, 45.0f);
-        sunTransform.transform.updateMatrixIfNeeded();
+        sunTransform.transform.rotation = glm::vec3(-45.0f, 0.0f, -35.0f);
 
         auto &sunLight = registry.emplace<LightComponent>(sunEntity);
         sunLight.light.enable = true;
         sunLight.light.type = LightType::Directional;
         sunLight.light.color = glm::vec3(1.0f, 1.0f, 1.0f);
-        sunLight.light.intensity = 50.0f;
-        //sunLight.light.radius = 100.0f;
+        sunLight.light.intensity = 1.0f;
+        sunLight.light.radius = 500.0f;
         sunLight.light.castShadows = true;
         sunLight.light.mobility = LightMobility::Movable;
     }
+
 }

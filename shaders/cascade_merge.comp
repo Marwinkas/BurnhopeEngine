@@ -23,7 +23,7 @@ void main() {
         return; 
     }
 
-    int octaSize = 8;
+    int octaSize = int(rc.params.w);
     ivec3 pCount = rc.probeCount.xyz;
 
     int probeIdxX  = pixel.x / octaSize;

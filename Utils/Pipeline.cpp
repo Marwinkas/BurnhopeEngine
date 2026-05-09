@@ -180,6 +180,19 @@ namespace burnhope
     configInfo.depthStencilInfo.stencilTestEnable = VK_FALSE;
     configInfo.depthStencilInfo.front = {};
     configInfo.depthStencilInfo.back = {};
+
+    // stensil
+    configInfo.depthStencilInfo.stencilTestEnable = VK_TRUE;
+    configInfo.depthStencilInfo.front.failOp = VK_STENCIL_OP_KEEP;
+    configInfo.depthStencilInfo.front.passOp = VK_STENCIL_OP_REPLACE;
+    configInfo.depthStencilInfo.front.depthFailOp = VK_STENCIL_OP_KEEP;
+    configInfo.depthStencilInfo.front.compareOp = VK_COMPARE_OP_ALWAYS;
+    configInfo.depthStencilInfo.front.compareMask = 0xff;
+    configInfo.depthStencilInfo.front.writeMask = 0xff;
+    configInfo.depthStencilInfo.front.reference = 1;
+    configInfo.depthStencilInfo.back = configInfo.depthStencilInfo.front;
+    //
+
     configInfo.dynamicStateEnables = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
     configInfo.dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
     configInfo.dynamicStateInfo.pDynamicStates = configInfo.dynamicStateEnables.data();

@@ -110,7 +110,10 @@ namespace burnhope
             dst.emplace<LightComponent>(newEnt, src.get<LightComponent>(entity));
             
         if (src.all_of<HierarchyComponent>(entity)) 
-            dst.emplace<HierarchyComponent>(newEnt, src.get<HierarchyComponent>(entity)); });
+            dst.emplace<HierarchyComponent>(newEnt, src.get<HierarchyComponent>(entity));
+        
+        if (src.all_of<PortalComponent>(entity)) 
+            dst.emplace<PortalComponent>(newEnt, src.get<PortalComponent>(entity)); });
         }
         void SaveState(entt::registry &registry)
         {
@@ -261,6 +264,8 @@ namespace burnhope
                 registry.emplace<MeshComponent>(copy, registry.get<MeshComponent>(source));
             if (registry.all_of<LightComponent>(source))
                 registry.emplace<LightComponent>(copy, registry.get<LightComponent>(source));
+            if (registry.all_of<PortalComponent>(source))
+                registry.emplace<PortalComponent>(copy, registry.get<PortalComponent>(source));
 
             auto &hc = registry.emplace<HierarchyComponent>(copy);
 
@@ -812,6 +817,27 @@ namespace burnhope
                     }
                 }
             }
+            /*
+            if (registry.all_of<PortalComponent>(selectedEntity))
+            {
+                auto &pComp = registry.get<PortalComponent>(selectedEntity);
+                if (ImGui::CollapsingHeader("Portal", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    static bool ScaleChanged = false;
+                    static int hui = 0;
+                    if (ImGui::DragFloat3("Size", glm::value_ptr(pComp.size), 1.0f))
+                        ScaleChanged = true;
+                    
+                    if (ImGui::DragInt("SiblingID", &hui, 0))
+                        (pComp.SiblingID) = glm::uint64_t(hui);
+                    
+                    if (ImGui::IsItemActivated())
+                        SaveState(registry);
+                }
+            }
+            */
+
+
             if (registry.all_of<LightComponent>(selectedEntity))
             {
                 auto &lComp = registry.get<LightComponent>(selectedEntity).light;
@@ -869,6 +895,11 @@ namespace burnhope
                 {
                     SaveState(registry);
                     registry.emplace<LightComponent>(selectedEntity);
+                }
+                if (!registry.all_of<PortalComponent>(selectedEntity) && ImGui::MenuItem("Portal Component"))
+                {
+                    SaveState(registry);
+                    registry.emplace<PortalComponent>(selectedEntity);
                 }
                 ImGui::EndPopup();
             }

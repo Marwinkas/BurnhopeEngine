@@ -145,44 +145,37 @@ namespace burnhope
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    // Базовые фичи
     VkPhysicalDeviceFeatures deviceFeatures = {};
     deviceFeatures.shaderInt64 = VK_TRUE;
     deviceFeatures.multiDrawIndirect = VK_TRUE;
     deviceFeatures.samplerAnisotropy = VK_TRUE;
 
-    // 1. Фичи для Buffer Device Address (КРИТИЧЕСКИ ВАЖНО ДЛЯ RT)
-    // 1. Конец цепочки
     VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{};
     bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
     bufferDeviceAddressFeatures.bufferDeviceAddress = VK_TRUE;
 
-    // 2. Скалярные лейауты (исправляем pNext)
     VkPhysicalDeviceScalarBlockLayoutFeatures scalarFeatures{};
     scalarFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
     scalarFeatures.scalarBlockLayout = VK_TRUE;
     scalarFeatures.pNext = &bufferDeviceAddressFeatures; 
 
-    // 3. Структуры ускорения (теперь ссылаются на scalarFeatures)
     VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
     accelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
     accelerationStructureFeatures.accelerationStructure = VK_TRUE;
-    accelerationStructureFeatures.pNext = &scalarFeatures; // ИСПРАВЛЕНО
+    accelerationStructureFeatures.pNext = &scalarFeatures;
 
-    // 4. Ray Query (без изменений)
     VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures{};
     rayQueryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
     rayQueryFeatures.rayQuery = VK_TRUE;
     rayQueryFeatures.pNext = &accelerationStructureFeatures;
 
-    // Твои текущие фичи индексации
     VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
     indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
     indexingFeatures.runtimeDescriptorArray = VK_TRUE;
     indexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
     indexingFeatures.descriptorBindingVariableDescriptorCount = VK_TRUE;
     indexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
-    indexingFeatures.pNext = &rayQueryFeatures; // Связываем цепочку!
+    indexingFeatures.pNext = &rayQueryFeatures;
 
     VkPhysicalDeviceFeatures2 deviceFeatures2{};
     deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -191,10 +184,10 @@ namespace burnhope
 
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    createInfo.pNext = &deviceFeatures2; // Передаем главную структуру с цепочкой
+    createInfo.pNext = &deviceFeatures2;
     createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
-    createInfo.pEnabledFeatures = nullptr; // Должен быть nullptr, так как мы используем deviceFeatures2 через pNext
+    createInfo.pEnabledFeatures = nullptr;
     createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
     createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
@@ -464,7 +457,7 @@ VkDeviceAddress BurnhopeDevice::getBufferDeviceAddress(VkBuffer buffer) {
     VkMemoryAllocateFlagsInfo allocFlagsInfo{};
     allocFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
     allocFlagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-    allocInfo.pNext = &allocFlagsInfo; // Связываем!
+    allocInfo.pNext = &allocFlagsInfo;
 
     if (vkAllocateMemory(device_, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS)
     {

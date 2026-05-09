@@ -22,8 +22,8 @@ namespace burnhope
         uint32_t gridDimZ{24};
         float lightSize{20.0f};
 
-        glm::vec3 sunColor;     // Цвет главного направленного света
-        float sunIntensity;     // Его интенсивность
+        glm::vec3 sunColor;
+        float sunIntensity;
 
     };
     struct FrameInfo

@@ -41,7 +41,7 @@ vec2 octaEncode(vec3 dir) {
 }
 
 vec3 sampleProbe(ivec3 probeIdx, vec3 dir) {
-    const int octaSize = 8;
+    int octaSize = int(rc.params.w);
     ivec3 pCount = rc.probeCount.xyz;
     vec2 octaUV = octaEncode(dir);
     
@@ -93,7 +93,8 @@ void main() {
 
     vec3 gridSize = rc.probeGridMax.xyz - rc.probeGridMin.xyz;
     ivec3 pCount  = rc.probeCount.xyz;
-    vec3 localPos = (worldPos - rc.probeGridMin.xyz) / gridSize;
+    vec3 biasedPos = worldPos + N * 0.3; 
+    vec3 localPos = (biasedPos - rc.probeGridMin.xyz) / gridSize;
     
     vec3 probeF = localPos * vec3(pCount) - 0.5;
     ivec3 p000 = clamp(ivec3(floor(probeF)), ivec3(0), pCount - 1);
@@ -131,7 +132,8 @@ void main() {
             float NdotP = dot(N, toProbe);
             
             // ИСПРАВЛЕНО: Отсекаем зонды, которые находятся внутри или позади стен
-            float finalW = lerpW * max(0.01, NdotP);
+            float weight = pow(max(0.0, NdotP), 2.0);
+            float finalW = lerpW * weight;
 
             dirLightAccum += sampleProbe(idx, dir) * finalW;
             weightSum += finalW;
