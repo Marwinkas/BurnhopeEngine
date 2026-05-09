@@ -11,6 +11,93 @@
 #include "Render/RenderGraph.hpp"
 namespace burnhope
 {
+    struct ProbeData {
+        glm::vec4 positionAndRadius;
+    };
+    struct ProbesInfo {
+        int count;
+        ProbeData data[16];
+    };
+
+    class RTReflectionSystem {
+    public:
+        std::unique_ptr<BurnhopeTexture> rtReflectionsTexture;
+        std::vector<std::unique_ptr<BurnhopeTexture>> probeTextures;
+        std::unique_ptr<BurnhopeBuffer> probesBuffer;
+        
+        std::unique_ptr<BurnhopeDescriptorSetLayout> rtLayoutPtr;
+        std::unique_ptr<BurnhopeDescriptorSetLayout> probeRenderLayoutPtr;
+        
+        VkDescriptorSet rtSet = VK_NULL_HANDLE;
+        std::vector<VkDescriptorSet> probeRenderSets;
+
+        std::unique_ptr<ComputeShader> rtReflectionsShader;
+        std::unique_ptr<ComputeShader> probeRenderShader;
+
+        BurnhopeDevice& device;
+        BurnhopeDescriptorPool& pool;
+
+        RTReflectionSystem(BurnhopeDevice& dev, BurnhopeDescriptorPool& pl) : device(dev), pool(pl) {}
+
+        void init(VkExtent2D extent, VkDescriptorSetLayout globalSetLayout, VkDescriptorSetLayout gBufferLayout, VkDescriptorSetLayout rtTLASLayout, VkDescriptorSetLayout storageLayout, VkDescriptorSetLayout textureLayout) {
+            rtReflectionsTexture = std::make_unique<BurnhopeTexture>(device, VK_FORMAT_R16G16B16A16_SFLOAT, VkExtent3D{extent.width, extent.height, 1}, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
+            rtReflectionsTexture->transitionLayout(device.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
+            probesBuffer = std::make_unique<BurnhopeBuffer>(device, sizeof(ProbesInfo), 1, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            probesBuffer->map();
+
+            rtLayoutPtr = BurnhopeDescriptorSetLayout::Builder(device)
+                .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+                .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 16)
+                .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
+                .build();
+
+            probeRenderLayoutPtr = BurnhopeDescriptorSetLayout::Builder(device)
+                .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+                .build();
+
+            std::vector<VkDescriptorSetLayout> rtLayouts = {globalSetLayout, gBufferLayout, rtTLASLayout, storageLayout, textureLayout, rtLayoutPtr->getDescriptorSetLayout()};
+            rtReflectionsShader = std::make_unique<ComputeShader>(device, "shaders/rt_reflections.comp.spv", rtLayouts, 0);
+
+            std::vector<VkDescriptorSetLayout> probeLayouts = {globalSetLayout, rtTLASLayout, storageLayout, textureLayout, probeRenderLayoutPtr->getDescriptorSetLayout()};
+            probeRenderShader = std::make_unique<ComputeShader>(device, "shaders/probe_render.comp.spv", probeLayouts, sizeof(glm::vec4) + sizeof(int));
+        }
+
+        void updateDescriptors(VkExtent2D extent, std::shared_ptr<BurnhopeTexture> defaultWhiteTex) {
+            // Пересоздаем текстуру только если изменился размер окна
+            if (!rtReflectionsTexture || rtReflectionsTexture->getExtent().width != extent.width || rtReflectionsTexture->getExtent().height != extent.height) {
+                rtReflectionsTexture = std::make_unique<BurnhopeTexture>(device, VK_FORMAT_R16G16B16A16_SFLOAT, VkExtent3D{extent.width, extent.height, 1}, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
+                rtReflectionsTexture->transitionLayout(device.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+            }
+
+            std::vector<VkDescriptorImageInfo> probeInfos;
+            for (int i = 0; i < 16; i++) {
+                if (i < probeTextures.size() && probeTextures[i]) {
+                    auto info = probeTextures[i]->getImageInfo();
+                    info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+                    probeInfos.push_back(info);
+                } else {
+                    probeInfos.push_back(defaultWhiteTex->getImageInfo());
+                }
+            }
+
+            auto imgInfo = rtReflectionsTexture->getImageInfo();
+            imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+            auto bufInfo = probesBuffer->descriptorInfo();
+
+            // Ждем завершения работы GPU перед изменением дескрипторов
+            vkDeviceWaitIdle(device.device());
+
+            if (rtSet != VK_NULL_HANDLE) {
+                std::vector<VkDescriptorSet> toFree = {rtSet};
+                pool.freeDescriptors(toFree);
+            }
+
+            BurnhopeDescriptorWriter(*rtLayoutPtr, pool).writeImage(0, &imgInfo).writeImageArray(1, probeInfos).writeBuffer(2, &bufInfo).build(rtSet);
+        }
+    };
+    std::unique_ptr<RTReflectionSystem> globalRTReflectionSystem;
+
     FirstApp::FirstApp()
     {
         globalPool = BurnhopeDescriptorPool::Builder(lveDevice)
@@ -49,10 +136,17 @@ namespace burnhope
     FirstApp::~FirstApp()
     {
         vkDeviceWaitIdle(lveDevice.device());
+        ssgiSystem.reset();
+        hizSystem.reset();
+        rcSystem.reset();
+        simpleRenderSystem.reset();
+        gtaoSystem.reset();
+        gtaoOutputTexture.reset();
         cullingSystem.reset();
         lightingSystem.reset();
         shadowSystem.reset();
         lightUboBuffer.reset();
+        ssgiRawTexture.reset();
         gBuffer.reset();
         hdrOutputTexture.reset();
         objectBuffer.reset();
@@ -61,10 +155,12 @@ namespace burnhope
         globalPool.reset();
         gBufferLayoutPtr.reset();
         outputLayoutPtr.reset();
+        ssgiLayoutPtr.reset();
         shadowLayoutPtr.reset();
         lightLayoutPtr.reset();
         dummyGridBuffer.reset();
         dummyIndexBuffer.reset();
+        globalRTReflectionSystem.reset();
     }
     glm::mat4 shadowPerspective(float fovY, float aspect, float zNear, float zFar)
     {
@@ -74,6 +170,16 @@ namespace burnhope
     }
     void FirstApp::RebuildBatches(entt::registry &registry, GeometryRenderSystem &renderSystem)
     {
+        if (storageSet != VK_NULL_HANDLE) {
+            std::vector<VkDescriptorSet> toFree = {storageSet};
+            globalPool->freeDescriptors(toFree);
+            storageSet = VK_NULL_HANDLE;
+        }
+        if (textureSet != VK_NULL_HANDLE) {
+            std::vector<VkDescriptorSet> toFree = {textureSet};
+            globalPool->freeDescriptors(toFree);
+            textureSet = VK_NULL_HANDLE;
+        }
         std::vector<ObjectData> objDataList;
         std::vector<MaterialData> matDataList;
         std::vector<VkDescriptorImageInfo> textureInfos;
@@ -137,7 +243,7 @@ namespace burnhope
                 obj.modelMatrix = transformComp.transform.matrix;
                 obj.materialID = currentMatID;
                 obj.vertexBufferAddress = meshComp.model->getVertexBufferAddress();
-                obj.indexBufferAddress = meshComp.model->getIndexBufferAddress();
+                obj.indexBufferAddress = meshComp.model->getIndexBufferAddress() + subMeshes[i].firstIndices[0] * sizeof(uint32_t);
                 objDataList.push_back(obj);
             }
         }
@@ -260,15 +366,56 @@ namespace burnhope
         while (!lveWindow.shouldClose())
         {
             glfwPollEvents();
+            
+            // 0. Проверяем, добавились ли или удалились объекты
+            uint32_t currentSubMeshCount = 0;
+            registry.view<MeshComponent>().each([&](const MeshComponent &meshComp) {
+                if (meshComp.model && meshComp.isVisible) {
+                    currentSubMeshCount += meshComp.model->getSubMeshes().size();
+                }
+            });
+
+            if (currentSubMeshCount != totalSubMeshCount) {
+                vkDeviceWaitIdle(lveDevice.device());
+                if (cullingSystem) cullingSystem.reset(); // Удаляем старый куллинг
+                
+                RebuildBatches(registry, *simpleRenderSystem); // Пересоздаем буферы
+                buildTLAS(registry);                           // Пересобираем дерево для RT
+
+                // Обновляем дескриптор трассировки лучей
+                VkWriteDescriptorSetAccelerationStructureKHR asInfo{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
+                asInfo.accelerationStructureCount = 1;
+                asInfo.pAccelerationStructures = &tlasHandle;
+                VkWriteDescriptorSet descriptorWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+                descriptorWrite.dstSet = rtSet;
+                descriptorWrite.dstBinding = 0;
+                descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+                descriptorWrite.descriptorCount = 1;
+                descriptorWrite.pNext = &asInfo;
+                vkUpdateDescriptorSets(lveDevice.device(), 1, &descriptorWrite, 0, nullptr);
+
+                // Обновляем дескриптор теней
+                if (shadowObjectSet != VK_NULL_HANDLE) {
+                    std::vector<VkDescriptorSet> toFree = {shadowObjectSet};
+                    globalPool->freeDescriptors(toFree);
+                }
+                if (objectBuffer) {
+                    auto objInfo = objectBuffer->descriptorInfo();
+                    BurnhopeDescriptorWriter(*shadowObjectLayoutPtr, *globalPool).writeBuffer(0, &objInfo).build(shadowObjectSet);
+                }
+            }
 
             bool transformsChanged = false;
 
             // 1. Вычисляем новые локальные матрицы для всех, кто сдвинулся
-            registry.view<TransformComponent>().each([&](TransformComponent &tComp)
+            registry.view<TransformComponent>().each([&](entt::entity entity, TransformComponent &tComp)
                                                      {
                 if (tComp.transform.updatematrix) {
                     tComp.transform.updateMatrixIfNeeded();
                     transformsChanged = true;
+                    if (registry.any_of<ReflectionProbeComponent>(entity)) {
+                        registry.get<ReflectionProbeComponent>(entity).updateNeeded = true;
+                    }
                 } });
 
             if (transformsChanged && objectBuffer)
@@ -294,6 +441,25 @@ namespace burnhope
                         }
                     }
                 }
+                
+                // Пересобираем TLAS, чтобы лучи видели новые позиции объектов
+                vkDeviceWaitIdle(lveDevice.device()); // Безопасное ожидание (для тестов сойдет)
+                buildTLAS(registry);
+
+                VkWriteDescriptorSetAccelerationStructureKHR asInfo{};
+                asInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+                asInfo.accelerationStructureCount = 1;
+                asInfo.pAccelerationStructures = &tlasHandle;
+
+                VkWriteDescriptorSet descriptorWrite{};
+                descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptorWrite.dstSet = rtSet;
+                descriptorWrite.dstBinding = 0;
+                descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+                descriptorWrite.descriptorCount = 1;
+                descriptorWrite.pNext = &asInfo;
+
+                vkUpdateDescriptorSets(lveDevice.device(), 1, &descriptorWrite, 0, nullptr);
             }
 
             auto extent = lveWindow.getExtent();
@@ -315,10 +481,18 @@ namespace burnhope
                                                                      VkExtent3D{newExtent.width, newExtent.height, 1},
                                                                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                                                                      VK_SAMPLE_COUNT_1_BIT);
+                ssgiRawTexture = std::make_unique<BurnhopeTexture>(lveDevice, VK_FORMAT_R16G16B16A16_SFLOAT,
+                                                                     VkExtent3D{newExtent.width, newExtent.height, 1},
+                                                                     VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                                                                     VK_SAMPLE_COUNT_1_BIT);
+                ssgiRawTexture->transitionLayout(lveDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
                 rebuildGBufferDescriptorSets();
                 if (rcSystem)
                 {
                     rcSystem->rebuildOnResize(newExtent, hdrOutputTexture->getImageView(), hdrOutputTexture->getSampler());
+                }
+                if (globalRTReflectionSystem) {
+                    globalRTReflectionSystem->updateDescriptors(newExtent, defaultWhiteTex);
                 }
                 continue;
             }
@@ -378,6 +552,35 @@ namespace burnhope
                 ubo.cascadeSplits = glm::vec4(shadowSystem->cascadeSplits[0], shadowSystem->cascadeSplits[1], shadowSystem->cascadeSplits[2], shadowSystem->cascadeSplits[3]);
                 uboBuffers[frameIndex]->writeToBuffer(&ubo);
                 uboBuffers[frameIndex]->flush();
+
+                ProbesInfo pInfo{};
+                pInfo.count = 0;
+                registry.view<TransformComponent, ReflectionProbeComponent>().each([&](entt::entity e, TransformComponent& t, ReflectionProbeComponent& p) {
+                    if (pInfo.count >= 16) return;
+                    if (p.textureIndex == -1) {
+                        vkDeviceWaitIdle(lveDevice.device()); // Страхуемся перед созданием новой пробы
+                        p.textureIndex = globalRTReflectionSystem->probeTextures.size();
+                        auto tex = std::make_unique<BurnhopeTexture>(lveDevice, VK_FORMAT_R16G16B16A16_SFLOAT, VkExtent3D{(uint32_t)p.resolution, (uint32_t)p.resolution, 1}, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
+                        tex->transitionLayout(lveDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+                        VkDescriptorSet newSet;
+                        auto imgInfo = tex->getImageInfo();
+                        imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+                        BurnhopeDescriptorWriter(*globalRTReflectionSystem->probeRenderLayoutPtr, *globalPool).writeImage(0, &imgInfo).build(newSet);
+                        globalRTReflectionSystem->probeTextures.push_back(std::move(tex));
+                        globalRTReflectionSystem->probeRenderSets.push_back(newSet);
+                        globalRTReflectionSystem->updateDescriptors(extent, defaultWhiteTex);
+                    }
+                    if (t.transform.updatematrix || p.updateNeeded) {
+                        p.updateNeeded = true; 
+                    }
+                    pInfo.data[pInfo.count].positionAndRadius = glm::vec4(t.transform.position, p.radius);
+                    pInfo.count++;
+                });
+                if (globalRTReflectionSystem->probesBuffer) {
+                    globalRTReflectionSystem->probesBuffer->writeToBuffer(&pInfo);
+                    globalRTReflectionSystem->probesBuffer->flush();
+                }
+
                 renderPipeline.clear();
                 renderPipeline.addPass("Shadow Maps Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
                                        {
@@ -461,25 +664,63 @@ namespace burnhope
                                        { hizSystem->compute(cmd, extent); });
                 renderPipeline.addPass("GTAO Pass", {RenderPipeline::createImageBarrier(gtaoOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [&](VkCommandBuffer cmd)
                                        { gtaoSystem->compute(cmd, globalDescriptorSets[frameIndex], gtaoSet, extent.width, extent.height); });
-                renderPipeline.addPass("Compute Lighting", {RenderPipeline::createImageBarrier(gBuffer->getNormalRoughness()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getAlbedoMetallic()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getHeightAO()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
-                                       {
-                    std::vector<VkDescriptorSet> computeSets = { globalDescriptorSets[frameIndex], gBufferSet, shadowSet, lightSet, computeOutputSet, rcSystem->getIrradianceSet(), gtaoSet };
-                    lightingSystem->computeLighting(cmd, computeSets, extent.width, extent.height); });
-                renderPipeline.addPass("Radiance Cascades GI", {// Гарантируем, что запись из Lighting Pass (Shader Write) завершена
-                                                                // и данные стали видимы для чтения в GI Pass (Shader Read)
-                                                                RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                                                                                   VK_ACCESS_SHADER_WRITE_BIT, // Кто писал (Lighting)
-                                                                                                   VK_ACCESS_SHADER_READ_BIT   // Кто будет читать (GI лучи)
-                                                                                                   )},
+                renderPipeline.addPass("Radiance Cascades GI", {
+                    RenderPipeline::createImageBarrier(gBuffer->getNormalRoughness()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+                    RenderPipeline::createImageBarrier(gBuffer->getAlbedoMetallic()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+                    RenderPipeline::createImageBarrier(gBuffer->getHeightAO()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+                    RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)
+                },
                                        [&](VkCommandBuffer cmd)
                                        {
-                    // Объем GI должен полностью покрывать сцену.
-                    // Слишком узкий volume приводит к clamp на границах сетки и видимой "клетке".
-                    glm::vec3 sceneMin(-32.0f, -32.0f, -32.0f);
-                    glm::vec3 sceneMax( 32.0f,  32.0f,  32.0f);
+                    glm::vec3 sceneMin(-8.0f, -8.0f, -8.0f);
+                    glm::vec3 sceneMax( 8.0f,  8.0f,  8.0f);
                     rcSystem->dispatch(cmd, globalDescriptorSets[frameIndex], gBufferSet, ubo.invViewProj, camera.Position, sceneMin, sceneMax, extent, rtSet, storageSet, textureSet); });
+
+                renderPipeline.addPass("Probe Update", {}, [&](VkCommandBuffer cmd) {
+                    registry.view<TransformComponent, ReflectionProbeComponent>().each([&](entt::entity e, TransformComponent& t, ReflectionProbeComponent& p) {
+                        if (p.updateNeeded && p.textureIndex != -1) {
+                            p.updateNeeded = false;
+                            globalRTReflectionSystem->probeRenderShader->bind(cmd);
+                            struct Push { glm::vec4 pos; int res; } pushData;
+                            pushData.pos = glm::vec4(t.transform.position, 1.0f);
+                            pushData.res = p.resolution;
+                            globalRTReflectionSystem->probeRenderShader->pushConstants(cmd, &pushData, sizeof(Push));
+                            globalRTReflectionSystem->probeRenderShader->bindDescriptorSets(cmd, {
+                                globalDescriptorSets[frameIndex], rtSet, storageSet, textureSet, globalRTReflectionSystem->probeRenderSets[p.textureIndex]
+                            });
+                            globalRTReflectionSystem->probeRenderShader->dispatch(cmd, (p.resolution + 7) / 8, (p.resolution + 7) / 8, 1);
+                        }
+                    });
+                });
+
+                renderPipeline.addPass("RT Reflections", {
+                    RenderPipeline::createImageBarrier(globalRTReflectionSystem->rtReflectionsTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)
+                }, [&](VkCommandBuffer cmd) {
+                    globalRTReflectionSystem->rtReflectionsShader->bind(cmd);
+                    globalRTReflectionSystem->rtReflectionsShader->bindDescriptorSets(cmd, {
+                        globalDescriptorSets[frameIndex], gBufferSet, rtSet, storageSet, textureSet, globalRTReflectionSystem->rtSet
+                    });
+                    globalRTReflectionSystem->rtReflectionsShader->dispatch(cmd, (extent.width + 7) / 8, (extent.height + 7) / 8, 1);
+                });
+
+                renderPipeline.addPass("Compute Lighting", {}, [&](VkCommandBuffer cmd)
+                                       {
+                    std::vector<VkDescriptorSet> computeSets = { globalDescriptorSets[frameIndex], gBufferSet, shadowSet, lightSet, computeOutputSet, rcSystem->getIrradianceSet(), gtaoSet, rtSet, globalRTReflectionSystem->rtSet };
+                    lightingSystem->computeLighting(cmd, computeSets, extent.width, extent.height); });
+
+                renderPipeline.addPass("SSGI Pass", {
+                    RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+                    RenderPipeline::createImageBarrier(ssgiRawTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)
+                }, [&](VkCommandBuffer cmd) {
+                    ssgiSystem->computeSSGI(cmd, globalDescriptorSets[frameIndex], gBufferSet, shadowSet, ssgiSet, extent.width, extent.height);
+                });
+                renderPipeline.addPass("SSGI Denoise Pass", {
+                    RenderPipeline::createImageBarrier(ssgiRawTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT)
+                }, [&](VkCommandBuffer cmd) {
+                    ssgiSystem->computeDenoise(cmd, globalDescriptorSets[frameIndex], gBufferSet, ssgiSet, extent.width, extent.height);
+                });
                 VkImage swapChainImage = lveRenderer.getCurrentSwapChainImage();
-                renderPipeline.addPass("Blit and UI", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
+                 renderPipeline.addPass("Blit and UI", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
                                        {
                     VkImageMemoryBarrier swapToDst = RenderPipeline::createImageBarrier(swapChainImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
                     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &swapToDst);
@@ -506,7 +747,7 @@ namespace burnhope
             lveDevice,
             VK_FORMAT_R16G16B16A16_SFLOAT,
             extent,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT| VK_IMAGE_USAGE_TRANSFER_DST_BIT,
             VK_SAMPLE_COUNT_1_BIT);
         hdrOutputTexture->transitionLayout(
             lveDevice.beginSingleTimeCommands(),
@@ -522,6 +763,12 @@ namespace burnhope
             lveDevice.beginSingleTimeCommands(),
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_GENERAL);
+        ssgiRawTexture = std::make_unique<BurnhopeTexture>(lveDevice, VK_FORMAT_R16G16B16A16_SFLOAT, extent,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
+        ssgiRawTexture->transitionLayout(
+            lveDevice.beginSingleTimeCommands(),
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_GENERAL);
         gBufferLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                                .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                                .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
@@ -530,6 +777,10 @@ namespace burnhope
                                .build();
         outputLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                               .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+                              .build();
+        ssgiLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
+                              .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT) // hdrOutput
+                              .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT) // ssgiRaw
                               .build();
         shadowLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                               .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
@@ -543,7 +794,7 @@ namespace burnhope
                              .addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
                              .build();
         irradianceLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                                  .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
+                                  .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
                                   .build();
         gtaoLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                             .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
@@ -599,12 +850,18 @@ namespace burnhope
         {
             throw std::runtime_error("Failed to create 2D Array View for CSM!");
         }
+        if (std::filesystem::exists("../textures/bluenoise.png")) {
+            blueNoiseTex = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/bluenoise.png");
+            std::cout << "yes";
+        } else {
+            blueNoiseTex = defaultWhiteTex;
+        }
         VkDescriptorImageInfo csmInfo{};
         csmInfo.sampler = shadowSystem->getCSM()->getTexture()->getSampler();
         csmInfo.imageView = csmArrayView;
         csmInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         auto atlasInfo = shadowSystem->getAtlas()->getTexture()->getImageInfo();
-        auto noiseInfo = defaultWhiteTex->getImageInfo();
+        auto noiseInfo = blueNoiseTex->getImageInfo();
         BurnhopeDescriptorWriter(*shadowLayoutPtr, *globalPool)
             .writeImage(0, &csmInfo)
             .writeImage(1, &atlasInfo)
@@ -639,6 +896,11 @@ namespace burnhope
             .writeBuffer(2, &indexInfo)
             .writeBuffer(3, &faceMatInfo)
             .build(lightSet);
+
+        globalRTReflectionSystem = std::make_unique<RTReflectionSystem>(lveDevice, *globalPool);
+        globalRTReflectionSystem->init(lveWindow.getExtent(), globalSetLayouts, gBufferLayoutPtr->getDescriptorSetLayout(), rtLayoutPtr->getDescriptorSetLayout(), simpleRenderSystem->getRenderSystemLayout()->getDescriptorSetLayout(), simpleRenderSystem->getTextureLayout()->getDescriptorSetLayout());
+        globalRTReflectionSystem->updateDescriptors(lveWindow.getExtent(), defaultWhiteTex);
+
         std::vector<VkDescriptorSetLayout> computeLayouts = {
             globalSetLayouts,
             gBufferLayoutPtr->getDescriptorSetLayout(),
@@ -646,8 +908,10 @@ namespace burnhope
             lightLayoutPtr->getDescriptorSetLayout(),
             outputLayoutPtr->getDescriptorSetLayout(),
             irradianceLayoutPtr->getDescriptorSetLayout(),
-            gtaoLayoutPtr->getDescriptorSetLayout(), rtLayoutPtr->getDescriptorSetLayout()};
+            gtaoLayoutPtr->getDescriptorSetLayout(), rtLayoutPtr->getDescriptorSetLayout(),
+            globalRTReflectionSystem->rtLayoutPtr->getDescriptorSetLayout()};
         lightingSystem = std::make_unique<DeferredLightingSystem>(lveDevice, computeLayouts);
+        
         rcSystem = std::make_unique<RadianceCascadesSystem>(
             lveDevice,
             lveWindow.getExtent(),
@@ -660,6 +924,22 @@ namespace burnhope
             // ВОТ ЗДЕСЬ ИСПРАВЛЕНИЕ:
             simpleRenderSystem->getRenderSystemLayout()->getDescriptorSetLayout(),
             simpleRenderSystem->getTextureLayout()->getDescriptorSetLayout());
+
+        VkDescriptorImageInfo ssgiRawInfo{};
+        ssgiRawInfo.imageView = ssgiRawTexture->getImageView();
+        ssgiRawInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        BurnhopeDescriptorWriter(*ssgiLayoutPtr, *globalPool)
+            .writeImage(0, &outImgInfo)
+            .writeImage(1, &ssgiRawInfo)
+            .build(ssgiSet);
+
+        ssgiSystem = std::make_unique<SSGISystem>(
+            lveDevice,
+            globalSetLayouts,
+            gBufferLayoutPtr->getDescriptorSetLayout(),
+            shadowLayoutPtr->getDescriptorSetLayout(),
+            ssgiLayoutPtr->getDescriptorSetLayout()
+        );
         auto normalInfo = gBuffer->getNormalRoughness()->getImageInfo();
         VkDescriptorImageInfo gtaoOutInfo{};
         gtaoOutInfo.imageView = gtaoOutputTexture->getImageView();
@@ -695,6 +975,12 @@ namespace burnhope
             std::vector<VkDescriptorSet> toFree = {computeOutputSet};
             globalPool->freeDescriptors(toFree);
             computeOutputSet = VK_NULL_HANDLE;
+        }
+        if (ssgiSet != VK_NULL_HANDLE)
+        {
+            std::vector<VkDescriptorSet> toFree = {ssgiSet};
+            globalPool->freeDescriptors(toFree);
+            ssgiSet = VK_NULL_HANDLE;
         }
         auto normInfo = gBuffer->getNormalRoughness()->getImageInfo();
         auto albInfo = gBuffer->getAlbedoMetallic()->getImageInfo();
@@ -755,6 +1041,13 @@ namespace burnhope
         {
             throw std::runtime_error("Failed to rebuild computeOutputSet!");
         }
+        VkDescriptorImageInfo ssgiRawInfo{};
+        ssgiRawInfo.imageView = ssgiRawTexture->getImageView();
+        ssgiRawInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        BurnhopeDescriptorWriter(*ssgiLayoutPtr, *globalPool)
+                 .writeImage(0, &outImgInfo)
+                 .writeImage(1, &ssgiRawInfo)
+                 .build(ssgiSet);
     }
     void FirstApp::buildTLAS(entt::registry &registry)
     {
@@ -781,13 +1074,15 @@ namespace burnhope
 
             VkAccelerationStructureInstanceKHR instance{};
             instance.transform = toVkMatrix(transformComp.transform.matrix);
-            instance.instanceCustomIndex = customIndex++; // ID объекта (поможет узнать материал при попадании луча)
+            instance.instanceCustomIndex = customIndex;   // Базовый индекс первого сабмеша модели
             instance.mask = 0xFF;                         // Видим для всех лучей
             instance.instanceShaderBindingTableRecordOffset = 0;
             instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
             instance.accelerationStructureReference = meshComp.model->getBLASAddress();
 
             instances.push_back(instance);
+            
+            customIndex += meshComp.model->getSubMeshes().size();
         }
 
         if (instances.empty())
@@ -880,104 +1175,128 @@ namespace burnhope
         std::cout << "[RT] Successfully built TLAS with " << instances.size() << " instances!" << std::endl;
     }
     void FirstApp::loadGameObjects(entt::registry &registry)
-
     {
-        std::shared_ptr<BurnhopeTexture> diffuseTexture =
+        // Твои текстуры и модель
+        std::shared_ptr<BurnhopeTexture> diffuseTexture = BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/diffuse3.png");
+        std::shared_ptr<BurnhopeTexture> normalTexture = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/normal3.png");
+        std::shared_ptr<BurnhopeTexture> rougnessTexture = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/rougness3.png");
+        std::shared_ptr<BurnhopeTexture> metallicTexture = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/metallic3.png");
+        std::shared_ptr<BurnhopeTexture> aoTexture = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/ao3.png");
+        std::shared_ptr<BurnhopeTexture> heightTexture = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/height3.png");
 
-            BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/diffuse3.png");
-
-        std::shared_ptr<BurnhopeTexture> normalTexture =
-
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/normal3.png");
-
-        std::shared_ptr<BurnhopeTexture> rougnessTexture =
-
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/rougness3.png");
-
-        std::shared_ptr<BurnhopeTexture> metallicTexture =
-
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/metallic3.png");
-
-        std::shared_ptr<BurnhopeTexture> aoTexture =
-
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/ao3.png");
-
-        std::shared_ptr<BurnhopeTexture> heightTexture =
-
-            BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/height3.png");
-
-        std::shared_ptr<BurnhopeModel> lveModel =
-
-            BurnhopeModel::createModelFromFile(lveDevice, "models/cube.bhmesh");
+        std::shared_ptr<BurnhopeModel> lveModel = BurnhopeModel::createModelFromFile(lveDevice, "models/cube.bhmesh");
 
         std::shared_ptr<Material> material = std::make_shared<Material>();
-
         material->setAlbedo(diffuseTexture);
-
         material->setAO(aoTexture);
-
         material->setMetallic(metallicTexture);
-
         material->setNormal(normalTexture);
-
         material->setRoughness(rougnessTexture);
-
         material->setHeight(heightTexture);
 
-        auto cubeEntity = registry.create();
-        registry.emplace<IDComponent>(cubeEntity);
-        registry.emplace<HierarchyComponent>(cubeEntity);
-        registry.emplace<TagComponent>(cubeEntity, "Plane");
 
-        auto &transform = registry.emplace<TransformComponent>(cubeEntity);
-        transform.transform.position = glm::vec3(0.0f, 0.0f, 0.0f);
-        transform.transform.scale = glm::vec3(5.0f, 0.5f, 5.0f);
-        // glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
-        // transform.transform.matrix = glm::scale(translation, transform.transform.scale);
-        transform.transform.updateMatrixIfNeeded();
+        std::shared_ptr<BurnhopeTexture> diffuseTexture2 = BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/Titanium-Scuffed_basecolor.png");
+        std::shared_ptr<BurnhopeTexture> normalTexture2 = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/Titanium-Scuffed_normal.png");
+        std::shared_ptr<BurnhopeTexture> rougnessTexture2 = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/Titanium-Scuffed_roughness.png");
+        std::shared_ptr<BurnhopeTexture> metallicTexture2 = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/Titanium-Scuffed_metallic.png");
 
-        auto &mesh = registry.emplace<MeshComponent>(cubeEntity);
-        mesh.model = lveModel;
-        //mesh.modelPath = "models/cube.bhmesh";
-        mesh.materials.push_back(material);
-        //mesh.materialPaths.push_back("materials/cube_material.json"); 
-        mesh.materials.push_back(material);
-        //mesh.materialPaths.push_back("materials/cube_material.json"); 
 
-        auto cubeEntity2 = registry.create();
-        registry.emplace<IDComponent>(cubeEntity2);
-        registry.emplace<HierarchyComponent>(cubeEntity2);
-        registry.emplace<TagComponent>(cubeEntity2, "Cube");
+        std::shared_ptr<Material> material2 = std::make_shared<Material>();
+        material2->setAlbedo(diffuseTexture2);
+        material2->setMetallic(metallicTexture2);
+        material2->setNormal(normalTexture2);
+        material2->setRoughness(rougnessTexture2);
 
-        auto &transform2 = registry.emplace<TransformComponent>(cubeEntity2);
-        transform2.transform.position = glm::vec3(0.0f, 1.5f, 0.0f);
-        transform2.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
-        // transform2.transform.matrix = glm::translate(glm::mat4(1.0f), transform2.transform.position);
-        transform2.transform.updateMatrixIfNeeded();
+        // Вспомогательная функция для создания стен, чтобы не дублировать код
+        auto createBox = [&](glm::vec3 pos, glm::vec3 scale, std::string tag)
+        {
+            auto entity = registry.create();
+            registry.emplace<IDComponent>(entity);
+            registry.emplace<HierarchyComponent>(entity);
+            registry.emplace<TagComponent>(entity, tag);
 
-        auto &mesh2 = registry.emplace<MeshComponent>(cubeEntity2);
-        mesh2.model = lveModel;
-        //mesh2.modelPath = "models/cube.bhmesh";
-        mesh2.materials.push_back(material);
-        //mesh2.materialPaths.push_back("materials/cube_material.json"); 
-        mesh2.materials.push_back(material);
-        //mesh2.materialPaths.push_back("materials/cube_material.json"); 
+            auto &transform = registry.emplace<TransformComponent>(entity);
+            transform.transform.position = pos;
+            transform.transform.scale = scale;
+            transform.transform.updateMatrixIfNeeded();
 
+            auto &mesh = registry.emplace<MeshComponent>(entity);
+            mesh.model = lveModel;
+            mesh.materials.push_back(material);
+            mesh.materials.push_back(material);
+            return entity;
+        };
+        auto createBox2 = [&](glm::vec3 pos, glm::vec3 scale, std::string tag)
+        {
+            auto entity = registry.create();
+            registry.emplace<IDComponent>(entity);
+            registry.emplace<HierarchyComponent>(entity);
+            registry.emplace<TagComponent>(entity, tag);
+
+            auto &transform = registry.emplace<TransformComponent>(entity);
+            transform.transform.position = pos;
+            transform.transform.scale = scale;
+            transform.transform.updateMatrixIfNeeded();
+
+            auto &mesh = registry.emplace<MeshComponent>(entity);
+            mesh.model = lveModel;
+            mesh.materials.push_back(material2);
+            mesh.materials.push_back(material2);
+            return entity;
+        };
+        // 1. Пол
+        createBox({0.0f, 0.0f, 0.0f}, {5.0f, 0.1f, 5.0f}, "Floor");
+
+        // 2. Потолок
+        createBox({0.0f, 5.0f, 0.0f}, {5.0f, 0.1f, 5.0f}, "Ceiling");
+
+        // 3. Задняя стена
+        createBox({0.0f, 2.5f, -5.0f}, {5.0f, 2.5f, 0.1f}, "BackWall");
+
+        // 4. Левая стена
+        createBox({-5.0f, 2.5f, 0.0f}, {0.1f, 2.5f, 5.0f}, "LeftWall");
+
+        // 5. Правая стена
+        createBox({5.0f, 2.5f, 0.0f}, {0.1f, 2.5f, 5.0f}, "RightWall");
+
+        // 6. Передняя стена с окном (состоит из двух частей)
+        // Левая часть стены
+        createBox({-3.0f, 2.5f, 5.0f}, {2.0f, 2.5f, 0.1f}, "FrontWall_Left");
+        // Правая часть стены
+        createBox({3.0f, 2.5f, 5.0f}, {2.0f, 2.5f, 0.1f}, "FrontWall_Right");
+        // Верхняя часть над окном
+        createBox({0.0f, 4.0f, 5.0f}, {1.0f, 1.0f, 0.1f}, "FrontWall_Top");
+
+        // 7. Тестовый объект внутри комнаты
+        auto testCube = createBox2({0.0f, 1.0f, 0.0f}, {0.5f, 0.5f, 0.5f}, "TestCube");
+
+        // 8. Солнце (Directional Light)
         auto sunEntity = registry.create();
         registry.emplace<IDComponent>(sunEntity);
         registry.emplace<HierarchyComponent>(sunEntity);
         registry.emplace<TagComponent>(sunEntity, "Sun");
+
         auto &sunTransform = registry.emplace<TransformComponent>(sunEntity);
-        sunTransform.transform.rotation = glm::vec3(45.0f, 0.0f, 45.0f);
+        // Поворачиваем солнце так, чтобы лучи светили прямо в наше окно под углом
+        sunTransform.transform.rotation = glm::vec3(70, 0, 0.0f);
         sunTransform.transform.updateMatrixIfNeeded();
 
         auto &sunLight = registry.emplace<LightComponent>(sunEntity);
         sunLight.light.enable = true;
         sunLight.light.type = LightType::Directional;
-        sunLight.light.color = glm::vec3(1.0f, 1.0f, 1.0f);
-        sunLight.light.intensity = 50.0f;
-        //sunLight.light.radius = 100.0f;
+        sunLight.light.color = glm::vec3(1.0f, 0.95f, 0.8f); // Чуть теплый солнечный свет
+        sunLight.light.intensity = 1.0f;                     // Уменьшил интенсивность, чтобы не было пересвета
         sunLight.light.castShadows = true;
         sunLight.light.mobility = LightMobility::Movable;
+
+        // 9. Отражательная проба по умолчанию
+        auto probeEntity = registry.create();
+        registry.emplace<IDComponent>(probeEntity);
+        registry.emplace<HierarchyComponent>(probeEntity);
+        registry.emplace<TagComponent>(probeEntity, "Reflection Probe");
+        auto& probeTrans = registry.emplace<TransformComponent>(probeEntity);
+        probeTrans.transform.position = glm::vec3(0.0f, 1.5f, 0.0f);
+        probeTrans.transform.updateMatrixIfNeeded();
+        registry.emplace<ReflectionProbeComponent>(probeEntity);
     }
 }

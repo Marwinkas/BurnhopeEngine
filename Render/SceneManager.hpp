@@ -82,6 +82,14 @@ namespace burnhope
                     };
                 }
 
+                if (registry.any_of<ReflectionProbeComponent>(entity)) {
+                    auto& pc = registry.get<ReflectionProbeComponent>(entity);
+                    eJson["probe"] = {
+                        {"radius", pc.radius},
+                        {"resolution", pc.resolution}
+                    };
+                }
+
                 entitiesArray.push_back(eJson);
             }
 
@@ -171,6 +179,13 @@ namespace burnhope
                         auto mat = Material::loadFromJson(device, path);
                         if (mat) mc.materials.push_back(mat);
                     }
+                }
+
+                if (eJson.contains("probe")) {
+                    auto& pc = registry.emplace<ReflectionProbeComponent>(entity);
+                    pc.radius = eJson["probe"].value("radius", 10.0f);
+                    pc.resolution = eJson["probe"].value("resolution", 256);
+                    pc.updateNeeded = true;
                 }
             }
             std::cout << "[SUCCESS] Сцена загружена: " << filePath << "\n";

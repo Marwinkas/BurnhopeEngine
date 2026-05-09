@@ -1,0 +1,74 @@
+#version 460
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// SET 0: Global UBO
+layout(set = 0, binding = 0) uniform GlobalUbo {
+    mat4 projection;
+    mat4 invViewProj;
+    mat4 view;
+    vec3 camPos;
+    float zNear;
+    vec3 sunDir;
+    float zFar;
+    vec4 screenSize; 
+} ubo;
+
+// SET 1: G-Buffer
+layout(set = 1, binding = 0) uniform sampler2D gNormalRoughness;
+layout(set = 1, binding = 3) uniform sampler2D gDepth;
+layout(set = 1, binding = 1) uniform sampler2D gAlbedoMetallic;
+// SET 2: Targets
+layout(set = 2, binding = 0, rgba16f) uniform image2D hdrOutput; // Читаем и дозаписываем!
+layout(set = 2, binding = 1, rgba16f) uniform readonly image2D ssgiRaw; // Наш шумный свет
+
+// Линеаризация глубины для правильных весов
+float getLinearDepth(float d) {
+    return ubo.zNear * ubo.zFar / (ubo.zFar + d * (ubo.zNear - ubo.zFar));
+}
+
+void main() {
+    ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
+    if (pixelCoords.x >= int(ubo.screenSize.x) || pixelCoords.y >= int(ubo.screenSize.y)) return;
+
+    vec2 uv = (vec2(pixelCoords) + 0.5) / ubo.screenSize.xy;
+    float centerDepthRaw = texture(gDepth, uv).r;
+    
+    if (centerDepthRaw >= 1.0) return; // Небо
+    
+    float centerDepth = getLinearDepth(centerDepthRaw);
+    vec3 centerNormal = normalize(texture(gNormalRoughness, uv).xyz);
+
+    vec3 sumColor = vec3(0.0);
+    float sumWeight = 0.0;
+
+    int radius = 2; // Ядро 5x5. Для более мощного блюра ставь 3 (7x7)
+    for (int x = -radius; x <= radius; x++) {
+        for (int y = -radius; y <= radius; y++) {
+            ivec2 sampleCoords = clamp(pixelCoords + ivec2(x, y), ivec2(0), ivec2(ubo.screenSize.xy) - 1);
+            vec2 sampleUv = (vec2(sampleCoords) + 0.5) / ubo.screenSize.xy;
+            
+            float sampleDepthRaw = texture(gDepth, sampleUv).r;
+            float sampleDepth = getLinearDepth(sampleDepthRaw);
+            vec3 sampleNormal = normalize(texture(gNormalRoughness, sampleUv).xyz);
+            vec3 sampleGI = imageLoad(ssgiRaw, sampleCoords).rgb;
+
+            // Считаем веса Билатерального фильтра
+            float wSpatial = exp(-float(x*x + y*y) / (2.0 * float(radius * radius)));
+            float wDepth = exp(-abs(centerDepth - sampleDepth) * 20.0); // Скачок глубины отсекает пиксель
+            float wNormal = pow(max(dot(centerNormal, sampleNormal), 0.0), 32.0); // Другой угол отсекает пиксель
+            
+            float weight = wSpatial * wDepth * wNormal;
+            sumColor += sampleGI * weight;
+            sumWeight += weight;
+        }
+    }
+
+    vec3 blurredGI = sumColor / max(sumWeight, 0.0001);
+    
+    vec3 albedo = texture(gAlbedoMetallic, uv).rgb; // Берем диффуз, чтобы покрасить отскоки
+    
+    vec3 directLight = imageLoad(hdrOutput, pixelCoords).rgb;
+    
+    // Добавляем очищенный непрямой свет к прямому свету сцены
+    imageStore(hdrOutput, pixelCoords, vec4(directLight + (blurredGI * albedo), 1.0));
+}

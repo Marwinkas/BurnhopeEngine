@@ -1,0 +1,217 @@
+#version 460
+#extension GL_EXT_shader_atomic_float : enable
+#extension GL_EXT_ray_query : require
+#extension GL_EXT_buffer_reference2 : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform GlobalSceneUbo {
+    mat4 projection; mat4 invViewProj; mat4 view; vec3 camPos; float zNear;
+    vec3 sunDir; float zFar; vec4 screenSize; mat4 sunLightSpaceMatrices[4];
+    vec4 cascadeSplits; uint gridDimX; uint gridDimY; uint gridDimZ;
+    float lightSize; vec3 sunColor; float sunIntensity;
+} ubo;
+
+layout(set = 1, binding = 0) uniform sampler2D gNormalRoughness;
+layout(set = 1, binding = 1) uniform sampler2D gAlbedoMetallic;
+layout(set = 1, binding = 2) uniform sampler2D gHeightAO;
+layout(set = 1, binding = 3) uniform sampler2D gDepth;
+
+layout(set = 2, binding = 0) uniform accelerationStructureEXT tlas;
+
+struct Vertex { vec3 position; vec3 normal; vec2 texUV; vec3 tangent; vec3 bitangent; };
+layout(buffer_reference, scalar) readonly buffer VertexBuffer { Vertex v[]; };
+layout(buffer_reference, scalar) readonly buffer IndexBuffer  { uint i[]; };
+
+struct ObjectData {
+    mat4 modelMatrix; uint materialID; uint pad0;
+    uint64_t vertexBufferAddress; uint64_t indexBufferAddress; uint64_t pad1;
+};
+
+struct MaterialData {
+    int albedoIdx; int normalIdx; int heightIdx; int metallicIdx; int roughnessIdx; int aoIdx;
+    int hasAlbedo, hasNormal, hasHeight, hasMetallic, hasRoughness, hasAO;
+    int useTriplanar; float triplanarScale; vec2 uvScale; int useORM; int pad0, pad1, pad2;
+};
+
+layout(set = 3, binding = 0, scalar) readonly buffer ObjectBuffer { ObjectData objects[]; } objBuf;
+layout(set = 3, binding = 1, scalar) readonly buffer MaterialBuffer { MaterialData materials[]; } matBuf;
+layout(set = 4, binding = 0) uniform sampler2D bindlessTextures[];
+
+layout(set = 5, binding = 0, rgba16f) uniform writeonly image2D outReflections;
+layout(set = 5, binding = 1) uniform sampler2D reflectionProbes[16];
+
+struct ProbeData {
+    vec4 positionAndRadius;
+};
+layout(set = 5, binding = 2, std430) readonly buffer ProbesInfo {
+    int count;
+    ProbeData data[16];
+} probes;
+
+const float PI = 3.14159265359;
+
+vec2 octaEncode(vec3 dir) {
+    dir = normalize(dir);
+    dir /= (abs(dir.x) + abs(dir.y) + abs(dir.z));
+    if (dir.z < 0.0) dir.xy = (1.0 - abs(dir.yx)) * sign(dir.xy);
+    return dir.xy * 0.5 + 0.5;
+}
+
+vec3 SampleProbe(vec3 pos, vec3 dir) {
+    int bestProbe = -1;
+    float bestDist = 1000000.0;
+    for(int i = 0; i < probes.count; i++) {
+        float d = distance(pos, probes.data[i].positionAndRadius.xyz);
+        if(d < probes.data[i].positionAndRadius.w && d < bestDist) {
+            bestDist = d;
+            bestProbe = i;
+        }
+    }
+    if (bestProbe != -1) {
+        vec2 uv = octaEncode(dir);
+        return texture(reflectionProbes[nonuniformEXT(bestProbe)], uv).rgb;
+    }
+    float skyGradient = max(0.0, dir.y);
+    return mix(vec3(0.2, 0.4, 0.8), vec3(0.5, 0.7, 1.0), skyGradient) * ubo.sunIntensity * 0.5;
+}
+
+vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (pixel.x >= int(ubo.screenSize.x) || pixel.y >= int(ubo.screenSize.y)) return;
+
+    vec2 uv = (vec2(pixel) + 0.5) / ubo.screenSize.xy;
+    float depth = texture(gDepth, uv).r;
+    if (depth >= 1.0) {
+        imageStore(outReflections, pixel, vec4(0.0));
+        return;
+    }
+
+    vec4 normRough = texture(gNormalRoughness, uv);
+    vec3 N = normalize(normRough.rgb);
+    float roughness = normRough.a;
+    vec4 albMet = texture(gAlbedoMetallic, uv);
+    float metallic = albMet.a;
+
+    // Трассируем лучи только для более-менее гладких или металлических объектов
+    if (roughness > 0.6 && metallic < 0.1) {
+        imageStore(outReflections, pixel, vec4(0.0));
+        return;
+    }
+
+    vec4 ndc = vec4(uv.x * 2.0 - 1.0, uv.y * 2.0 - 1.0, depth, 1.0);
+    vec4 worldPosRaw = ubo.invViewProj * ndc;
+    vec3 worldPos = worldPosRaw.xyz / worldPosRaw.w;
+    
+    vec3 V = normalize(ubo.camPos - worldPos);
+    vec3 R = reflect(-V, N);
+
+    vec3 rayOrigin = worldPos + N * 0.05;
+    vec3 rayDir = R;
+    vec3 accumulatedColor = vec3(0.0);
+    vec3 throughput = vec3(1.0);
+    const int MAX_BOUNCES = 20; // 1 первичное отражение + 1 отскок
+
+    for (int bounce = 0; bounce < MAX_BOUNCES; bounce++) {
+        rayQueryEXT rayQuery;
+        rayQueryInitializeEXT(rayQuery, tlas, gl_RayFlagsOpaqueEXT, 0xFFu, rayOrigin, 0.05, rayDir, 100.0);
+        while(rayQueryProceedEXT(rayQuery)) {}
+
+        if (rayQueryGetIntersectionTypeEXT(rayQuery, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
+            int instanceID = rayQueryGetIntersectionInstanceCustomIndexEXT(rayQuery, true);
+            int geomID = rayQueryGetIntersectionGeometryIndexEXT(rayQuery, true);
+            int primID = rayQueryGetIntersectionPrimitiveIndexEXT(rayQuery, true);
+            float t = rayQueryGetIntersectionTEXT(rayQuery, true);
+            vec2 barycentrics = rayQueryGetIntersectionBarycentricsEXT(rayQuery, true);
+            
+            float u = barycentrics.x;
+            float v = barycentrics.y;
+            float w = 1.0 - u - v;
+            
+            ObjectData obj = objBuf.objects[instanceID + geomID];
+            MaterialData mat = matBuf.materials[obj.materialID];
+            vec3 albedo = vec3(0.8);
+            
+            IndexBuffer indices = IndexBuffer(obj.indexBufferAddress);
+            VertexBuffer vertices = VertexBuffer(obj.vertexBufferAddress);
+            Vertex v0 = vertices.v[indices.i[primID * 3 + 0]];
+            Vertex v1 = vertices.v[indices.i[primID * 3 + 1]];
+            Vertex v2 = vertices.v[indices.i[primID * 3 + 2]];
+            
+            vec2 texUV = v0.texUV * w + v1.texUV * u + v2.texUV * v;
+            vec3 localNormal = v0.normal * w + v1.normal * u + v2.normal * v;
+            mat3 normalMatrix = transpose(inverse(mat3(obj.modelMatrix)));
+            vec3 worldNormal = normalize(normalMatrix * localNormal);
+            if (dot(worldNormal, rayDir) > 0.0) worldNormal = -worldNormal;
+
+            if (mat.hasAlbedo == 1 && mat.albedoIdx >= 0) {
+                albedo = texture(bindlessTextures[nonuniformEXT(mat.albedoIdx)], texUV * mat.uvScale).rgb;
+            }
+            
+            float hitRoughness = 1.0;
+            float hitMetallic = 0.0;
+           if (mat.useORM == 1) {
+                if (mat.hasRoughness == 1 && mat.roughnessIdx >= 0) {
+                    vec4 orm = texture(bindlessTextures[nonuniformEXT(mat.roughnessIdx)], texUV * mat.uvScale);
+                    hitRoughness = orm.g;
+                    hitMetallic = orm.b;
+                }
+            } else {
+                if (mat.hasRoughness == 1 && mat.roughnessIdx >= 0) hitRoughness = texture(bindlessTextures[nonuniformEXT(mat.roughnessIdx)], texUV * mat.uvScale).r;
+                if (mat.hasMetallic == 1 && mat.metallicIdx >= 0) hitMetallic = texture(bindlessTextures[nonuniformEXT(mat.metallicIdx)], texUV * mat.uvScale).r;
+            }
+            
+            vec3 hitPos = rayOrigin + rayDir * t;
+            vec3 L = normalize(-ubo.sunDir);
+            float NdotL = max(dot(worldNormal, L), 0.0);
+            float shadow = 1.0;
+            if (NdotL > 0.0) {
+                rayQueryEXT shadowQuery;
+                rayQueryInitializeEXT(shadowQuery, tlas, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT, 0xFFu, hitPos + worldNormal * 0.02 + L * 0.02, 0.01, L, 1000.0);
+                while(rayQueryProceedEXT(shadowQuery)) {}
+                if (rayQueryGetIntersectionTypeEXT(shadowQuery, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
+                    shadow = 0.0;
+                }
+            }
+            
+            // Берем запеченное GI из локальных проб для освещения точки в отражении!
+            vec3 ambientLight = SampleProbe(hitPos, worldNormal);
+            vec3 directLight = (albedo / PI) * ubo.sunColor * ubo.sunIntensity * (NdotL * shadow);
+             vec3 indirectLight = albedo * ambientLight * 0.15; 
+            vec3 hitColor = directLight + indirectLight;
+
+            // Если это зеркало и мы можем еще раз отскочить
+             if (hitRoughness < 0.4 && hitMetallic > 0.1) {
+                vec3 F0 = mix(vec3(0.04), albedo, hitMetallic);
+                vec3 F = fresnelSchlick(max(dot(worldNormal, -rayDir), 0.0), F0);
+                
+                accumulatedColor += throughput * hitColor * (1.0 - hitMetallic);
+                throughput *= F;
+                
+                if (bounce == MAX_BOUNCES - 1) {
+                    // Если это последний отскок - дальше трассировать не можем, берем цвет отражения из Local Probe
+                    accumulatedColor += throughput * SampleProbe(hitPos, reflect(rayDir, worldNormal));
+                } else {
+                    // Готовим следующий луч
+                    rayOrigin = hitPos + worldNormal * 0.02;
+                    rayDir = reflect(rayDir, worldNormal);
+                }
+            } else {
+                accumulatedColor += throughput * hitColor;
+                break;
+            }
+        } else {
+            accumulatedColor += throughput * SampleProbe(rayOrigin, rayDir);
+            break;
+        }
+    }
+
+    imageStore(outReflections, pixel, vec4(accumulatedColor, 1.0));
+}

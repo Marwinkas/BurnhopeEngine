@@ -1,0 +1,135 @@
+#version 460
+
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// SET 0: Global UBO
+layout(set = 0, binding = 0) uniform GlobalUbo {
+    mat4 projection;
+    mat4 invViewProj;
+    mat4 view;
+    vec3 camPos;
+    float zNear;
+    vec3 sunDir;
+    float zFar;
+    vec4 screenSize; // x: width, y: height
+    mat4 sunLightSpaceMatrices[4];
+    vec4 cascadeSplits;
+    uint gridDimX;
+    uint gridDimY;
+    uint gridDimZ;
+    float lightSize;
+    vec3 sunColor;
+    float sunIntensity;
+} ubo;
+
+// SET 1: G-Buffer
+layout(set = 1, binding = 0) uniform sampler2D gNormalRoughness;
+layout(set = 1, binding = 1) uniform sampler2D gAlbedoMetallic;
+layout(set = 1, binding = 2) uniform sampler2D gExtra; // Not used by SSGI
+layout(set = 1, binding = 3) uniform sampler2D gDepth;
+
+// SET 2: Shadow & Noise
+layout(set = 2, binding = 2) uniform sampler2D noiseTexture; // Синий шум!
+
+// SET 3: SSGI Targets
+layout(set = 3, binding = 0, rgba16f) uniform readonly image2D hdrOutput; // Читаем прямой свет
+layout(set = 3, binding = 1, rgba16f) uniform writeonly image2D ssgiRaw;  // Пишем грязный GI
+
+// --- SSGI Settings ---
+#define SSGI_RAY_COUNT 8
+#define SSGI_STEP_COUNT 16
+#define SSGI_STEP_SIZE 0.25
+#define SSGI_THICKNESS 0.15
+
+// Reconstruct world position from depth
+vec3 getWorldPos(float depth, vec2 uv) {
+    vec4 pos = vec4(uv * 2.0 - 1.0, depth, 1.0);
+    pos = ubo.invViewProj * pos;
+    return pos.xyz / pos.w;
+}
+
+float rand(vec2 co){
+    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+}
+
+// Create a TBN matrix to transform rays from tangent space to world space
+mat3 getTBN(vec3 normal) {
+    vec3 tangent = normalize(abs(normal.y) > 0.99 ? vec3(1,0,0) : cross(vec3(0,1,0), normal));
+    vec3 bitangent = cross(normal, tangent);
+    return mat3(tangent, bitangent, normal);
+}
+
+void main() {
+    ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
+    vec2 uv = (vec2(pixelCoords) + 0.5) / ubo.screenSize.xy;
+
+    float depth = texture(gDepth, uv).r;
+    if (depth >= 1.0) {
+        imageStore(ssgiRaw, pixelCoords, vec4(0.0));
+        return;
+    }
+
+    vec4 normalRoughness = texture(gNormalRoughness, uv);
+    vec3 normal = normalize(normalRoughness.xyz);
+
+    vec3 worldPos = getWorldPos(depth, uv);
+    
+    vec3 indirectLight = vec3(0.0);
+    mat3 tbn = getTBN(normal);
+
+    // Читаем текстуру шума. Если текстуры bluenoise.png нет - она белая. Мы страхуемся от этого хэшем.
+    vec2 noiseUV = vec2(pixelCoords % textureSize(noiseTexture, 0)) / vec2(textureSize(noiseTexture, 0));
+    vec4 blueNoise = texture(noiseTexture, noiseUV);
+
+    for (int i = 0; i < SSGI_RAY_COUNT; ++i) {
+        // Если шум белый (нет текстуры) — используем rand(), иначе крутой blue noise
+        float r1 = (blueNoise.r > 0.99 && blueNoise.g > 0.99) ? rand(uv + float(i)) : fract(blueNoise.r + float(i) * 0.618);
+        float r2 = (blueNoise.r > 0.99 && blueNoise.g > 0.99) ? rand(uv + float(i) * 2.345) : fract(blueNoise.g + float(i) * 0.382);
+        
+        // Cosine-weighted hemisphere sampling
+        float phi = 2.0 * 3.14159265 * r1;
+        float cosTheta = sqrt(1.0 - r2);
+        float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+        
+        vec3 tangentRay = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+        vec3 rayDir = normalize(tbn * tangentRay);
+
+        vec3 rayPos = worldPos + normal * 0.01; // Start slightly off the surface
+        
+        // Dither ray start via noise to hide banding
+        float stepJitter = fract(blueNoise.b + r1) * SSGI_STEP_SIZE;
+        rayPos += rayDir * stepJitter;
+
+        for (int j = 0; j < SSGI_STEP_COUNT; ++j) {
+            // Увеличиваем шаг с дистанцией
+            float currentStep = SSGI_STEP_SIZE * (1.0 + float(j) * 0.2); 
+            rayPos += rayDir * currentStep; 
+
+            // Project back to screen space
+            vec4 clipPos = ubo.projection * ubo.view * vec4(rayPos, 1.0);
+            vec2 sampleUv = (clipPos.xy / clipPos.w) * 0.5 + 0.5;
+
+            // Check if ray is off-screen
+            if (sampleUv.x < 0.0 || sampleUv.x > 1.0 || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
+                break; // Hit sky (or nothing)
+            }
+
+            float sceneDepth = texture(gDepth, sampleUv).r;
+            vec3 scenePos = getWorldPos(sceneDepth, sampleUv);
+
+            float rayDepthView = (ubo.view * vec4(rayPos, 1.0)).z;
+            float sceneDepthView = (ubo.view * vec4(scenePos, 1.0)).z;
+
+            // Проверяем толщину объекта, чтобы лучи не цеплялись за "заднюю" стенку стен
+            if (rayDepthView < sceneDepthView && sceneDepthView - rayDepthView < SSGI_THICKNESS * (1.0 + float(j)*0.5)) {
+                vec3 hitColor = imageLoad(hdrOutput, ivec2(sampleUv * ubo.screenSize.xy)).rgb;
+                float falloff = 1.0 / (1.0 + distance(worldPos, scenePos));
+                indirectLight += hitColor * falloff;
+                break;
+            }
+        }
+    }
+
+    indirectLight /= float(SSGI_RAY_COUNT);
+    imageStore(ssgiRaw, pixelCoords, vec4(indirectLight, 1.0));
+}

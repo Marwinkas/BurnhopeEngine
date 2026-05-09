@@ -41,7 +41,7 @@ vec2 octaEncode(vec3 dir) {
 }
 
 vec3 sampleProbe(ivec3 probeIdx, vec3 dir) {
-    const int octaSize = 8;
+    int octaSize = int(rc.params.w);
     ivec3 pCount = rc.probeCount.xyz;
     vec2 octaUV = octaEncode(dir);
     
@@ -93,27 +93,30 @@ void main() {
 
     vec3 gridSize = rc.probeGridMax.xyz - rc.probeGridMin.xyz;
     ivec3 pCount  = rc.probeCount.xyz;
-    vec3 localPos = (worldPos - rc.probeGridMin.xyz) / gridSize;
+    // Смещаем точку расчета сильнее, чтобы точно не зацепить зонды внутри геометрии (убирает артефакты)
+    vec3 biasedPos = worldPos + N * 0.5; 
+    vec3 localPos = (biasedPos - rc.probeGridMin.xyz) / gridSize;
     
-    vec3 probeF = localPos * vec3(pCount) - 0.5;
-    ivec3 p000 = clamp(ivec3(floor(probeF)), ivec3(0), pCount - 1);
-    ivec3 p111 = clamp(p000 + 1, ivec3(0), pCount - 1);
+    vec3 probeF = clamp(localPos * vec3(pCount) - 0.5, vec3(0.0), vec3(pCount - ivec3(1)));
+    ivec3 p000 = ivec3(floor(probeF));
+    ivec3 p111 = min(p000 + 1, pCount - ivec3(1));
     vec3 t = fract(probeF);
 
     vec3 tangent = normalize(cross(N, getOrthoVec(N)));
     vec3 bitangent = cross(N, tangent);
     
-    vec3 dirs[5];
-    dirs[0] = N;
-    dirs[1] = normalize(N + tangent * 0.5);
-    dirs[2] = normalize(N - tangent * 0.5);
-    dirs[3] = normalize(N + bitangent * 0.5);
-    dirs[4] = normalize(N - bitangent * 0.5);
-
     vec3 totalIrradiance = vec3(0.0);
+    const int NUM_SAMPLES = 12; // 12 лучей достаточно для плотного сбора света
 
-    for (int d = 0; d < 5; d++) {
-        vec3 dir = dirs[d];
+    for (int d = 0; d < NUM_SAMPLES; d++) {
+        // Равномерное сканирование полусферы (Fibonacci, Cosine-weighted)
+        // Это гарантирует, что мы захватим яркие пятна света под ЛЮБЫМ углом!
+        float i_f = float(d) + 0.5;
+        float phi = 2.39996323 * i_f;
+        float cosTheta = sqrt(1.0 - i_f / float(NUM_SAMPLES));
+        float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+        vec3 dir = (cos(phi) * sinTheta) * tangent + (sin(phi) * sinTheta) * bitangent + cosTheta * N;
+
         vec3 dirLightAccum = vec3(0.0);
         float weightSum = 0.0;
 
@@ -130,14 +133,16 @@ void main() {
             vec3 toProbe = normalize(probeWorldPos - worldPos);
             float NdotP = dot(N, toProbe);
             
-            // ИСПРАВЛЕНО: Отсекаем зонды, которые находятся внутри или позади стен
-            float finalW = lerpW * max(0.01, NdotP);
+            // max(0.001) нужен, чтобы не поймать деление на ноль, если зонд неудачно лег
+            float weight = max(0.001, pow(max(0.0, NdotP), 2.0));
+            float finalW = lerpW * weight;
 
             dirLightAccum += sampleProbe(idx, dir) * finalW;
             weightSum += finalW;
         }
-        totalIrradiance += dirLightAccum / max(weightSum, 0.0001);
+        totalIrradiance += dirLightAccum / weightSum;
     }
 
-    imageStore(outIrradiance, pixel, vec4(totalIrradiance / 5.0, 1.0));
+    // Усредняем и записываем
+    imageStore(outIrradiance, pixel, vec4(totalIrradiance / float(NUM_SAMPLES), 1.0));
 }

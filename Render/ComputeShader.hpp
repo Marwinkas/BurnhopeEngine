@@ -65,6 +65,10 @@ namespace burnhope
         void createPipeline(const std::string &shaderPath)
         {
             std::ifstream file(shaderPath, std::ios::binary);
+            if (!file.is_open())
+            {
+                throw std::runtime_error("[FATAL ERROR] Не удалось открыть шейдер: " + shaderPath + " (Возможно, он не скомпилировался!)");
+            }
             std::vector<char> code((std::istreambuf_iterator<char>(file)), {});
             VkShaderModuleCreateInfo shaderInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
             shaderInfo.codeSize = code.size();

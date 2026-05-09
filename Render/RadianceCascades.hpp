@@ -15,12 +15,17 @@ namespace burnhope
     struct RCConfig
     {
         static constexpr int CASCADE_COUNT = 4;
-        // Увеличиваем количество зондов (было 24-12-24)
-        static constexpr int PROBE_X = 48; 
-        static constexpr int PROBE_Y = 24;
-        static constexpr int PROBE_Z = 48;
-        static constexpr int OCTA_SIZE = 24;
-        static constexpr float BASE_RAY_LENGTH = 10.0f; // Уменьшим базу для четкости ближних теней
+        
+        // Плотная сетка для хорошего покрытия, но без фанатизма
+        static constexpr int PROBE_X = 32; 
+        static constexpr int PROBE_Y = 16;
+        static constexpr int PROBE_Z = 32;
+        
+        // 16x16 = 256 лучей на зонд. Этого более чем достаточно для диффузного GI!
+        static constexpr int OCTA_SIZE = 16; 
+        
+        // Длина луча 0-го каскада. (След. каскады будут 3.0, 6.0, 12.0)
+        static constexpr float BASE_RAY_LENGTH = 1.5f; 
     };
     struct RCPushConstants
     {

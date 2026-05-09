@@ -27,35 +27,50 @@ namespace burnhope
             config);
     }
     ShadowRenderSystem::~ShadowRenderSystem() = default;
-    void ShadowRenderSystem::renderShadow(
-        VkCommandBuffer commandBuffer,
-        const glm::mat4 &lightSpaceMatrix,
-        CullingSystem &cullingSystem,
-        entt::registry &registry,
-        VkDescriptorSet objectStorageSet)
+void ShadowRenderSystem::renderShadow(
+    VkCommandBuffer commandBuffer,
+    const glm::mat4 &lightSpaceMatrix,
+    CullingSystem &cullingSystem,
+    entt::registry &registry,
+    VkDescriptorSet objectStorageSet)
+{
+    if (objectStorageSet == VK_NULL_HANDLE)
+        return;
+
+    shader->bind(commandBuffer);
+    shader->bindDescriptorSets(commandBuffer, {objectStorageSet});
+
+    ShadowPushConstant push{lightSpaceMatrix};
+    shader->pushConstants(commandBuffer, VK_SHADER_STAGE_VERTEX_BIT, sizeof(ShadowPushConstant), &push);
+
+    auto view = registry.view<TransformComponent, MeshComponent>();
+    
+    // Очень важно: этот индекс должен совпадать с индексом объекта в твоем ObjectBuffer,
+    // чтобы шейдер взял правильную матрицу модели (modelMatrix).
+    uint32_t instanceIndex = 0; 
+
+    for (auto [entity, transformComp, meshComp] : view.each())
     {
-        if (objectStorageSet == VK_NULL_HANDLE)
-            return;
-        shader->bind(commandBuffer);
-        shader->bindDescriptorSets(commandBuffer, {objectStorageSet});
-        ShadowPushConstant push{lightSpaceMatrix};
-        shader->pushConstants(commandBuffer, VK_SHADER_STAGE_VERTEX_BIT, sizeof(ShadowPushConstant), &push);
-        auto view = registry.view<TransformComponent, MeshComponent>();
-        uint32_t instanceIndex = 0;
-        for (auto [entity, transformComp, meshComp] : view.each())
+        if (!meshComp.model) // Убираем проверку !meshComp.isVisible, если хотим видеть тени всегда
+            continue;
+
+        meshComp.model->bind(commandBuffer);
+        const auto &subMeshes = meshComp.model->getSubMeshes();
+
+        for (const auto &sub : subMeshes)
         {
-            if (!meshComp.model || !meshComp.isVisible)
-                continue;
-            meshComp.model->bind(commandBuffer);
-            const auto &subMeshes = meshComp.model->getSubMeshes();
-            uint32_t subMeshCount = static_cast<uint32_t>(subMeshes.size());
-            vkCmdDrawIndexedIndirect(
-                commandBuffer,
-                cullingSystem.getDrawCommandBuffer(),
-                instanceIndex * sizeof(VkDrawIndexedIndirectCommand),
-                subMeshCount,
-                sizeof(VkDrawIndexedIndirectCommand));
-            instanceIndex += subMeshCount;
+            // Вместо vkCmdDrawIndexedIndirect используем прямой вызов
+            vkCmdDrawIndexed(
+                commandBuffer, 
+                sub.indexCounts[0], // Количество индексов (LOD 0)
+                1,                  // Рисуем 1 экземпляр
+                sub.firstIndices[0],// Смещение индексов
+                0,                  // Смещение вершин
+                instanceIndex       // gl_InstanceIndex в шейдере
+            );
+            
+            instanceIndex++;
         }
     }
+}
 }

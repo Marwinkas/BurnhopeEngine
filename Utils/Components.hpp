@@ -83,4 +83,11 @@ struct IDComponent
         uint64_t parentID = 0; // Теперь храним не временный номер, а постоянный ID!
         std::vector<uint64_t> childrenIDs;
     };
+
+    struct ReflectionProbeComponent {
+        float radius = 10.0f;
+        int resolution = 256;
+        bool updateNeeded = true;
+        int textureIndex = -1; 
+    };
 }

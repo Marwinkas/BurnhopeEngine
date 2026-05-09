@@ -28,6 +28,7 @@
 #include "Render/Deferred.hpp"
 #include "Render/shadow.hpp"
 #include "Render/RadianceCascades.hpp"
+#include "Render/SSGISystem.hpp"
 namespace burnhope
 {
     namespace fs = std::filesystem;
@@ -96,6 +97,10 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         VkDescriptorSet shadowDummySet;
         VkDescriptorSet lightDummySet;
         VkDescriptorSet computeOutputSet;
+        std::unique_ptr<BurnhopeTexture> ssgiRawTexture;
+        std::unique_ptr<BurnhopeDescriptorSetLayout> ssgiLayoutPtr;
+        VkDescriptorSet ssgiSet = VK_NULL_HANDLE;
+        std::unique_ptr<SSGISystem> ssgiSystem;
         std::unique_ptr<GeometryRenderSystem> simpleRenderSystem;
         void RebuildBatches(entt::registry &registry, GeometryRenderSystem &renderSystem);
         std::unique_ptr<burnhope::RadianceCascadesSystem> rcSystem;
@@ -105,6 +110,7 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::shared_ptr<BurnhopeTexture> defaultWhiteTex;
         std::shared_ptr<BurnhopeTexture> defaultNormalTex;
         std::shared_ptr<Material> defaultWhiteMaterial;
+        std::shared_ptr<BurnhopeTexture> blueNoiseTex;
         std::unique_ptr<BurnhopeShadowSystem> shadowSystem;
         std::unique_ptr<BurnhopeBuffer> lightUboBuffer;
         std::unique_ptr<BurnhopeDescriptorSetLayout> shadowLayoutPtr;
