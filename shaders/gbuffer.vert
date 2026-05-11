@@ -23,6 +23,7 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     uint gridDimX; 
     uint gridDimY;
     uint gridDimZ;
+    uint portalID;
     float lightSize;
         vec3 sunColor;  
     float sunIntensity; 

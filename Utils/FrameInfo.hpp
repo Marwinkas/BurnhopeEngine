@@ -20,10 +20,11 @@ namespace burnhope
         uint32_t gridDimX{16};
         uint32_t gridDimY{9};
         uint32_t gridDimZ{24};
+        uint32_t portalID{0};
         float lightSize{20.0f};
 
-        glm::vec3 sunColor;
-        float sunIntensity;
+        alignas(16) glm::vec3 sunColor;     // Цвет главного направленного света
+        float sunIntensity;     // Его интенсивность
 
         // --- Post Process & Lighting Params ---
         // SSCS: x = enable, y = rayLength, z = steps, w = thickness

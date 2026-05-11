@@ -131,6 +131,7 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::unique_ptr<BurnhopeDescriptorSetLayout> vsmLayoutPtr;
         VkDescriptorSet shadowSet = VK_NULL_HANDLE;
         VkDescriptorSet lightSet = VK_NULL_HANDLE;
+        VkDescriptorSet portalInfoSet = VK_NULL_HANDLE;
         VkDescriptorSet vsmSet = VK_NULL_HANDLE;
         std::unique_ptr<HiZSystem> hizSystem;
         VkDescriptorSet gtaoSet = VK_NULL_HANDLE;
@@ -152,6 +153,8 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::unique_ptr<BurnhopeBuffer> materialBuffer;
         std::unique_ptr<BurnhopeBuffer> faceMatricesBuffer;
         std::unique_ptr<BurnhopeDescriptorSetLayout> globalSetLayout;
+        std::unique_ptr<BurnhopeDescriptorSetLayout> portalInfoLayoutPtr;
+        std::unique_ptr<BurnhopeBuffer> portalUbosBuffer;
         VkDescriptorSet storageSet;
         VkDescriptorSet textureSet;
         VkImageView csmArrayView = VK_NULL_HANDLE;

@@ -19,6 +19,7 @@ namespace burnhope
         BurnhopeTexture *getAlbedoMetallic() { return albedoMetallic.get(); }
         BurnhopeTexture *getHeightAO() { return heightAO.get(); }
         BurnhopeTexture *getEmissive() { return gEmissive.get(); }
+        BurnhopeTexture *getPortalID() { return gPortalID.get(); }
         BurnhopeTexture *getDepth() { return depthTexture.get(); }
 
     private:
@@ -31,6 +32,7 @@ namespace burnhope
         std::unique_ptr<BurnhopeTexture> albedoMetallic;
         std::unique_ptr<BurnhopeTexture> heightAO;
         std::unique_ptr<BurnhopeTexture> gEmissive;
+        std::unique_ptr<BurnhopeTexture> gPortalID;
         std::unique_ptr<BurnhopeTexture> depthTexture;
         VkRenderPass renderPass = VK_NULL_HANDLE;
         VkFramebuffer framebuffer = VK_NULL_HANDLE;

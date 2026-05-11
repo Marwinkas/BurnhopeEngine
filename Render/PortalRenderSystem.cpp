@@ -6,6 +6,7 @@ namespace burnhope
     struct PortalPushArgs
     {
         glm::mat4 modelMatrix{1.f};
+        uint32_t portalID;
     };
 
     PortalRenderSystem::PortalRenderSystem(BurnhopeDevice &device, VkRenderPass renderPass, VkDescriptorSetLayout globalSetLayout)
@@ -41,7 +42,7 @@ namespace burnhope
 
     void PortalRenderSystem::createPipelineLayout(VkDescriptorSetLayout globalSetLayout)
     {
-        VkPushConstantRange pushConstantRange{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PortalPushArgs)};
+        VkPushConstantRange pushConstantRange{VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PortalPushArgs)};
         VkPipelineLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
         layoutInfo.setLayoutCount = 1;
         layoutInfo.pSetLayouts = &globalSetLayout;
@@ -71,12 +72,14 @@ namespace burnhope
         config.renderPass = renderPass;
         config.pipelineLayout = pipelineLayout;
 
-        static std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(3);
-        for (int i = 0; i < 3; i++)
+        static std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(5);
+        for (int i = 0; i < 5; i++)
         {
             blendAttachments[i].blendEnable = VK_FALSE;
             blendAttachments[i].colorWriteMask = 0;
         }
+        // Enable writing to the 5th attachment (portalID)
+        blendAttachments[4].colorWriteMask = VK_COLOR_COMPONENT_R_BIT;
 
         config.colorBlendInfo.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
         config.colorBlendInfo.pAttachments = blendAttachments.data();
@@ -101,8 +104,8 @@ namespace burnhope
         PipelineConfigInfo config{};
         BurnhopePipeline::defaultPipelineConfigInfo(config);
 
-        static std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(3);
-        for (int i = 0; i < 3; i++) {
+        static std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(5);
+        for (int i = 0; i < 5; i++) {
             blendAttachments[i].blendEnable = VK_FALSE;
             blendAttachments[i].colorWriteMask = 0;
         }
@@ -138,8 +141,8 @@ namespace burnhope
         vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, ref);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &globalSet, 0, nullptr);
         
-        PortalPushArgs args{model};
-        vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PortalPushArgs), &args);
+        PortalPushArgs args{model, ref};
+        vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PortalPushArgs), &args);
         
         portalModel->bind(cmd);
         portalModel->draw(cmd);
@@ -150,8 +153,8 @@ namespace burnhope
         lvePipeline->bind(cmd);
         vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, ref);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &globalSet, 0, nullptr);
-        PortalPushArgs args{model};
-        vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PortalPushArgs), &args);
+        PortalPushArgs args{model, ref};
+        vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PortalPushArgs), &args);
         portalModel->bind(cmd);
         portalModel->draw(cmd);
     }

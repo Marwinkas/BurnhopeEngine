@@ -46,21 +46,37 @@ namespace burnhope
                 throw std::runtime_error("Failed to create depth render pass!");
             return renderPass;
         }
-        void transitionImageToDepth(BurnhopeDevice &device, VkImage image, uint32_t layerCount)
-        {
-            VkCommandBuffer cmd = device.beginSingleTimeCommands();
-            VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-            barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = image;
-            barrier.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, layerCount};
-            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-                                 0, 0, nullptr, 0, nullptr, 1, &barrier);
-            device.endSingleTimeCommands(cmd);
-        }
+        void transitionImageToDepth(BurnhopeDevice &device, VkImage image, uint32_t layerCount, VkFormat format)
+{
+    VkCommandBuffer cmd = device.beginSingleTimeCommands();
+    VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    
+    // По умолчанию берем глубину
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    
+    // Если формат содержит трафарет (Stencil), обязательно забираем и его!
+    if (format == VK_FORMAT_D32_SFLOAT_S8_UINT || 
+        format == VK_FORMAT_D24_UNORM_S8_UINT || 
+        format == VK_FORMAT_D16_UNORM_S8_UINT) 
+    {
+        barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+    }
+
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = layerCount;
+    
+    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                         0, 0, nullptr, 0, nullptr, 1, &barrier);
+    device.endSingleTimeCommands(cmd);
+}
     }
     BurnhopeShadowAtlas::BurnhopeShadowAtlas(BurnhopeDevice &dev) : device(dev)
     {
@@ -77,13 +93,13 @@ namespace burnhope
     {
         VkExtent3D ext{ATLAS_RESOLUTION, ATLAS_RESOLUTION, 1};
         VkFormat depthFmt = device.findSupportedFormat(
-            {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
+            {VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT},
             VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
         atlasTexture = std::make_unique<BurnhopeTexture>(
             device, depthFmt, ext,
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_SAMPLE_COUNT_1_BIT);
-        transitionImageToDepth(device, atlasTexture->getImage(), 1);
+        transitionImageToDepth(device, atlasTexture->getImage(), 1, depthFmt);
     }
     void BurnhopeShadowAtlas::createFramebuffer()
     {
@@ -134,13 +150,13 @@ namespace burnhope
         uint32_t physRes = 32 * PAGE_SIZE;
         VkExtent3D ext{physRes, physRes, 1};
         VkFormat depthFmt = device.findSupportedFormat(
-            {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
+            {VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT},
             VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
         physicalAtlas = std::make_unique<BurnhopeTexture>(
             device, depthFmt, ext,
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_SAMPLE_COUNT_1_BIT);
-        transitionImageToDepth(device, physicalAtlas->getImage(), 1);
+        transitionImageToDepth(device, physicalAtlas->getImage(), 1, depthFmt);
 
         pageTableBuffer = std::make_unique<BurnhopeBuffer>(
             device, sizeof(uint32_t), VIRTUAL_PAGES_X * VIRTUAL_PAGES_Y,
@@ -172,13 +188,13 @@ namespace burnhope
     {
         VkExtent3D ext{SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 1};
         VkFormat depthFmt = device.findSupportedFormat(
-            {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
+            {VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT},
             VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
         csmTexture = std::make_unique<BurnhopeTexture>(
             device, depthFmt, ext,
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_SAMPLE_COUNT_1_BIT, CASCADE_COUNT);
-        transitionImageToDepth(device, csmTexture->getImage(), CASCADE_COUNT);
+        transitionImageToDepth(device, csmTexture->getImage(), CASCADE_COUNT, depthFmt);
     }
     void BurnhopeCSM::createFramebuffers()
     {
@@ -188,7 +204,7 @@ namespace burnhope
             viewInfo.image = csmTexture->getImage();
             viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
             viewInfo.format = csmTexture->getFormat();
-            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT| VK_IMAGE_ASPECT_STENCIL_BIT;
             viewInfo.subresourceRange.levelCount = 1;
             viewInfo.subresourceRange.baseArrayLayer = i;
             viewInfo.subresourceRange.layerCount = 1;

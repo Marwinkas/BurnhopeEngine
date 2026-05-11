@@ -27,6 +27,7 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
 
 layout(push_constant) uniform Push {
     mat4 modelMatrix;
+    uint portalID;
 } push;
 
 void main() {

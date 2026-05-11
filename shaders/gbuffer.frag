@@ -5,6 +5,7 @@ layout (location = 0) out vec4 gNormalRoughness;
 layout (location = 1) out vec4 gAlbedoMetallic;
 layout (location = 2) out vec4 gHeightAO; 
 layout (location = 3) out vec4 gEmissive;
+layout (location = 4) out uint o_PortalID;
 
 layout (location = 0) in vec3 inCrntPos;
 layout (location = 1) in vec2 inTexCoord;
@@ -25,6 +26,7 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     uint gridDimX;
     uint gridDimY;
     uint gridDimZ;
+    uint portalID;
     float lightSize;
     vec3 sunColor;  
     float sunIntensity;  
@@ -224,6 +226,6 @@ void main() {
     gAlbedoMetallic  = vec4(albedo, metallic);
     gHeightAO        = vec4(height, ao, 0.0, 1.0);
     gEmissive        = vec4(emissive, 1.0);
-
+    o_PortalID = ubo.portalID;
     
 }

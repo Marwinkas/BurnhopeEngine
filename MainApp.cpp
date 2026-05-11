@@ -214,6 +214,7 @@ namespace burnhope
         faceMatricesBuffer.reset();
         globalPool.reset();
         gBufferLayoutPtr.reset();
+        portalInfoLayoutPtr.reset();
         outputLayoutPtr.reset();
         ssgiLayoutPtr.reset();
         postProcessLayoutPtr.reset();
@@ -223,6 +224,7 @@ namespace burnhope
         dummyGridBuffer.reset();
         dummyIndexBuffer.reset();
         globalRTReflectionSystem.reset();
+        portalUbosBuffer.reset();
         if (csmArrayView != VK_NULL_HANDLE)
         {
             vkDestroyImageView(lveDevice.device(), csmArrayView, nullptr);
@@ -766,6 +768,7 @@ namespace burnhope
                 ubo.sunIntensity = 5.0f;
 
                 auto lightView = registry.view<LightComponent>();
+                ubo.portalID = 0; // Main scene is portal 0
                 for (auto entity : lightView)
                 {
                     auto &light = lightView.get<LightComponent>(entity).light;
@@ -875,8 +878,12 @@ namespace burnhope
                     globalRTReflectionSystem->probesBuffer->flush();
                 }
 
+                // This buffer will be filled during the G-Buffer pass for use in the later lighting pass.
+                auto* mappedPortalUbos = reinterpret_cast<GlobalUbo*>(portalUbosBuffer->getMappedMemory());
+
+
                 renderPipeline.clear();
-                renderPipeline.addPass("Shadow Maps Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
+                renderPipeline.addPass("Shadow Maps Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 1)}, [&](VkCommandBuffer cmd)
                                        {
                     for (int i = 0; i < BurnhopeCSM::CASCADE_COUNT; i++) {
                         VkRenderPassBeginInfo rpInfo{};
@@ -1046,8 +1053,8 @@ namespace burnhope
                                        {
                     VkRenderPassBeginInfo renderPassInfo{};
                     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO; renderPassInfo.renderPass = gBuffer->getRenderPass();
-                    renderPassInfo.framebuffer = gBuffer->getFramebuffer(); renderPassInfo.renderArea.extent = extent;
-                    std::array<VkClearValue, 5> clearValues{}; clearValues[4].depthStencil = { 1.0f, 0 };
+                    renderPassInfo.framebuffer = gBuffer->getFramebuffer(); renderPassInfo.renderArea.extent = extent; 
+                    std::array<VkClearValue, 6> clearValues{}; clearValues[4].color.uint32[0] = 0; clearValues[5].depthStencil = { 1.0f, 0 };
                     renderPassInfo.clearValueCount = (uint32_t)clearValues.size(); renderPassInfo.pClearValues = clearValues.data();
                     vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -1103,6 +1110,7 @@ namespace burnhope
                             portalUbo.view        = glm::inverse(virtualCamWorld);
                             portalUbo.invViewProj = glm::inverse(portalUbo.projection * portalUbo.view);
                             portalUbo.camPos      = glm::vec3(virtualCamWorld[3]);
+                            portalUbo.portalID    = portalCounter + 1;
                         
                             glm::vec3 exitPortalPos    = glm::vec3(mOut[3]);
                             glm::vec3 exitPortalNormal = -glm::normalize(glm::vec3(mOut[2]));
@@ -1118,6 +1126,9 @@ namespace burnhope
                             
                             portalUboBuffers[portalCounter][frameIndex]->writeToBuffer(&portalUbo);
                             portalUboBuffers[portalCounter][frameIndex]->flush();
+
+                            // Also write to the big SSBO for the compute lighting pass
+                            if(portalCounter < MAX_PORTALS) mappedPortalUbos[portalCounter] = portalUbo;
                         
                             FrameInfo portalFrameInfo  = frameInfo;
                             portalFrameInfo.globalDescriptorSet = portalDescriptorSets[portalCounter][frameIndex];
@@ -1169,7 +1180,7 @@ namespace burnhope
                     vsmBarrier.size = VK_WHOLE_SIZE;
                     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &vsmBarrier, 0, nullptr); });
 
-                renderPipeline.addPass("VSM Geometry Render", {RenderPipeline::createImageBarrier(shadowSystem->getVSM()->getPhysicalAtlas()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
+                renderPipeline.addPass("VSM Geometry Render", {RenderPipeline::createImageBarrier(shadowSystem->getVSM()->getPhysicalAtlas()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 1)}, [&](VkCommandBuffer cmd)
                                        {
                     VkRenderPassBeginInfo rpInfo{};
                     rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO; 
@@ -1293,11 +1304,11 @@ namespace burnhope
                     }
                     vkCmdEndRenderPass(cmd); });
 
-                renderPipeline.addPass("Hi-Z Pass", {RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
+                renderPipeline.addPass("Hi-Z Pass", {RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)}, [&](VkCommandBuffer cmd)
                                        { hizSystem->compute(cmd, extent); });
                 renderPipeline.addPass("GTAO Pass", {RenderPipeline::createImageBarrier(gtaoOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [&](VkCommandBuffer cmd)
                                        { gtaoSystem->compute(cmd, globalDescriptorSets[frameIndex], gtaoSet, extent.width, extent.height); });
-                renderPipeline.addPass("Radiance Cascades GI", {RenderPipeline::createImageBarrier(gBuffer->getNormalRoughness()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getAlbedoMetallic()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getHeightAO()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)},
+                renderPipeline.addPass("Radiance Cascades GI", {RenderPipeline::createImageBarrier(gBuffer->getNormalRoughness()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getAlbedoMetallic()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getHeightAO()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)},
                                        [&](VkCommandBuffer cmd)
                                        {
                     glm::vec3 sceneMin(-8.0f, -8.0f, -8.0f);
@@ -1345,9 +1356,9 @@ namespace burnhope
                     });
                     globalRTReflectionSystem->rtReflectionsShader->dispatch(cmd, (extent.width + 7) / 8, (extent.height + 7) / 8, 1); });
 
-                renderPipeline.addPass("Compute Lighting", {RenderPipeline::createImageBarrier(shadowSystem->getVSM()->getPhysicalAtlas()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
+                renderPipeline.addPass("Compute Lighting", {RenderPipeline::createImageBarrier(shadowSystem->getVSM()->getPhysicalAtlas()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 1)}, [&](VkCommandBuffer cmd)
                                        {
-                    std::vector<VkDescriptorSet> computeSets = { globalDescriptorSets[frameIndex], gBufferSet, shadowSet, lightSet, computeOutputSet, rcSystem->getGISet(), gtaoSet, rtSet, globalRTReflectionSystem->rtSet, vsmSet };
+                    std::vector<VkDescriptorSet> computeSets = { globalDescriptorSets[frameIndex], gBufferSet, shadowSet, lightSet, computeOutputSet, rcSystem->getGISet(), gtaoSet, rtSet, globalRTReflectionSystem->rtSet, vsmSet, portalInfoSet };
                     lightingSystem->computeLighting(cmd, computeSets, extent.width, extent.height); });
 
                 renderPipeline.addPass("SSGI Pass", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(ssgiRawTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [&](VkCommandBuffer cmd)
@@ -1360,7 +1371,7 @@ namespace burnhope
             postProcessShader->bindDescriptorSets(cmd, { globalDescriptorSets[frameIndex], postProcessSet });
             postProcessShader->dispatch(cmd, (extent.width + 15) / 16, (extent.height + 15) / 16, 1); });
                 VkImage swapChainImage = lveRenderer.getCurrentSwapChainImage();
-                renderPipeline.addPass("Blit and UI", {RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
+                renderPipeline.addPass("Blit and UI", {RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)}, [&](VkCommandBuffer cmd)
                                        {
                     VkImageMemoryBarrier swapToDst = RenderPipeline::createImageBarrier(swapChainImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
                     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &swapToDst);
@@ -1425,6 +1436,7 @@ namespace burnhope
                                .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                                .addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                                .addBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) // Emissive
+                               .addBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT) // PortalID
                                .build();
         outputLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                               .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
@@ -1467,6 +1479,10 @@ namespace burnhope
         rtLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                           .addBinding(0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_COMPUTE_BIT)
                           .build();
+        portalInfoLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
+            .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
+            .build();
+
         faceMatricesBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice,
             sizeof(PointFaceMatrices),
@@ -1487,12 +1503,18 @@ namespace burnhope
         emissiveInfo.imageView = gBuffer->getEmissive()->getImageView();
         emissiveInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+        VkDescriptorImageInfo portalIdInfo{};
+        portalIdInfo.sampler = gBuffer->getPortalID()->getSampler();
+        portalIdInfo.imageView = gBuffer->getPortalID()->getImageView();
+        portalIdInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
         BurnhopeDescriptorWriter(*gBufferLayoutPtr, *globalPool)
             .writeImage(0, &normInfo)
             .writeImage(1, &albInfo)
             .writeImage(2, &extraInfo)
             .writeImage(3, &depthInfo)
             .writeImage(4, &emissiveInfo)
+            .writeImage(5, &portalIdInfo)
             .build(gBufferSet);
         VkDescriptorImageInfo outImgInfo{};
         outImgInfo.imageView = hdrOutputTexture->getImageView();
@@ -1582,6 +1604,17 @@ namespace burnhope
             .writeBuffer(3, &faceMatInfo)
             .build(lightSet);
 
+        portalUbosBuffer = std::make_unique<BurnhopeBuffer>(
+            lveDevice, sizeof(GlobalUbo), MAX_PORTALS,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        portalUbosBuffer->map();
+
+        auto portalUbosInfo = portalUbosBuffer->descriptorInfo();
+        BurnhopeDescriptorWriter(*portalInfoLayoutPtr, *globalPool)
+            .writeBuffer(0, &portalUbosInfo)
+            .build(portalInfoSet);
+
         globalRTReflectionSystem = std::make_unique<RTReflectionSystem>(lveDevice, *globalPool);
         globalRTReflectionSystem->init(lveWindow.getExtent(), globalSetLayouts, gBufferLayoutPtr->getDescriptorSetLayout(), rtLayoutPtr->getDescriptorSetLayout(), simpleRenderSystem->getRenderSystemLayout()->getDescriptorSetLayout(), simpleRenderSystem->getTextureLayout()->getDescriptorSetLayout(), giLayoutPtr->getDescriptorSetLayout());
         globalRTReflectionSystem->updateDescriptors(lveWindow.getExtent(), defaultWhiteTex);
@@ -1596,7 +1629,8 @@ namespace burnhope
             gtaoLayoutPtr->getDescriptorSetLayout(),
             rtLayoutPtr->getDescriptorSetLayout(),
             globalRTReflectionSystem->rtLayoutPtr->getDescriptorSetLayout(),
-            vsmLayoutPtr->getDescriptorSetLayout()};
+            vsmLayoutPtr->getDescriptorSetLayout(),
+            portalInfoLayoutPtr->getDescriptorSetLayout()};
         lightingSystem = std::make_unique<DeferredLightingSystem>(lveDevice, computeLayouts);
 
         rcSystem = std::make_unique<RadianceCascadesSystem>(
@@ -1702,12 +1736,18 @@ namespace burnhope
         emissiveInfo.imageView = gBuffer->getEmissive()->getImageView();
         emissiveInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+        VkDescriptorImageInfo portalIdInfo{};
+        portalIdInfo.sampler = gBuffer->getPortalID()->getSampler();
+        portalIdInfo.imageView = gBuffer->getPortalID()->getImageView();
+        portalIdInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
         bool ok = BurnhopeDescriptorWriter(*gBufferLayoutPtr, *globalPool)
                       .writeImage(0, &normInfo)
                       .writeImage(1, &albInfo)
                       .writeImage(2, &extraInfo)
                       .writeImage(3, &depthInfo)
                       .writeImage(4, &emissiveInfo)
+                      .writeImage(5, &portalIdInfo)
                       .build(gBufferSet);
         if (!ok || gBufferSet == VK_NULL_HANDLE)
         {
@@ -1907,7 +1947,146 @@ namespace burnhope
     }
     void FirstApp::loadGameObjects(entt::registry &registry)
     {
-       
+        std::shared_ptr<BurnhopeModel> lveModel =
+            BurnhopeModel::createModelFromFile(lveDevice, "models/PortalsPlaceholder1.gltf");
+             auto modelEntity = registry.create();
+        registry.emplace<TagComponent>(modelEntity, "Room1");
+        registry.emplace<IDComponent>(modelEntity);
+        registry.emplace<HierarchyComponent>(modelEntity);
+        auto &transform = registry.emplace<TransformComponent>(modelEntity);
+             transform.transform.position = glm::vec3(0.0f, 0.0f, 0.0f);
+         transform.transform.rotation = glm::vec3(0.0f, 0.0f, 0.0f);
+        transform.transform.scale = glm::vec3(0.25f, 0.25f, 0.25f);
+                transform.transform.updateMatrixIfNeeded();
+                  auto &mesh = registry.emplace<MeshComponent>(modelEntity);
+        mesh.model = lveModel;
+          mesh.materials = lveModel->materials;
+
+        std::shared_ptr<BurnhopeModel> lveModel2 =
+            BurnhopeModel::createModelFromFile(lveDevice, "models/PortalsPlaceholder2.gltf");
+
+        auto modelEntity2 = registry.create();
+        registry.emplace<TagComponent>(modelEntity2, "Room2");
+        registry.emplace<IDComponent>(modelEntity2);
+        registry.emplace<HierarchyComponent>(modelEntity2);
+        auto &transform2 = registry.emplace<TransformComponent>(modelEntity2);
+        transform2.transform.position = glm::vec3(-15.0f, 0.0f, 0.0f);
+        transform2.transform.rotation = glm::vec3(0.0f, -90.0f, 0.0f);
+        transform2.transform.scale = glm::vec3(0.25f, 0.25f, 0.25f);
+        // glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
+        // transform.transform.matrix = glm::scale(translation, transform.transform.scale);
+        transform2.transform.updateMatrixIfNeeded();
+        auto &mesh2 = registry.emplace<MeshComponent>(modelEntity2);
+        mesh2.model = lveModel2;
+        mesh2.materials = lveModel2->materials;
+
+        auto portalA = registry.create();
+        registry.emplace<TagComponent>(portalA, "Portal_A");
+        registry.emplace<IDComponent>(portalA);
+        auto &transA = registry.emplace<TransformComponent>(portalA);
+        transA.transform.position = {0.0f, 2.1f, -3.75f};
+        transA.transform.rotation = {0.0f, 0.0f, 0.0f};
+        transA.transform.scale = {2.0f, 2.0f, 2.0f};
+        transA.transform.updateMatrixIfNeeded();
+
+        registry.emplace<PortalComponent>(portalA);
+
+        auto portalB = registry.create();
+        registry.emplace<TagComponent>(portalB, "Portal_B");
+        registry.emplace<IDComponent>(portalB);
+        auto &transB = registry.emplace<TransformComponent>(portalB);
+        transB.transform.position = {-11.25f, 2.1f, 0.0f};
+        transB.transform.rotation = {0.0f, -90.0f, 0.0f};
+        transB.transform.scale = {2.0f, 2.0f, 2.0f};
+        transB.transform.updateMatrixIfNeeded();
+
+        registry.emplace<PortalComponent>(portalB);
+
+        auto portalC = registry.create();
+        registry.emplace<TagComponent>(portalC, "Portal_C");
+        registry.emplace<IDComponent>(portalC);
+        auto &transC = registry.emplace<TransformComponent>(portalC);
+        transC.transform.position = {-3.5f, 2.65f, -3.42f};
+        transC.transform.rotation = {0.0f, 0.0f, 0.0f};
+        transC.transform.scale = {1.0f, 1.0f, 1.0f};
+        transC.transform.updateMatrixIfNeeded();
+
+        registry.emplace<PortalComponent>(portalC);
+
+        auto portalD = registry.create();
+        registry.emplace<TagComponent>(portalD, "Portal_D");
+        registry.emplace<IDComponent>(portalD);
+        auto &transD = registry.emplace<TransformComponent>(portalD);
+        transD.transform.position = {-15.2f, 2.250f, 4.95f};
+        transD.transform.rotation = {0.0f, 180.0f, 0.0f};
+        transD.transform.scale = {1.0f, 1.0f, 1.0f};
+        transD.transform.updateMatrixIfNeeded();
+
+        registry.emplace<PortalComponent>(portalD);
+
+        registry.get<PortalComponent>(portalA).targetPortal = portalB;
+        registry.get<PortalComponent>(portalB).targetPortal = portalA;
+
+        registry.get<PortalComponent>(portalC).targetPortal = portalD;
+        registry.get<PortalComponent>(portalD).targetPortal = portalC;
+
+        /*
+                std::shared_ptr<BurnhopeModel> lveModel3 =
+                    BurnhopeModel::createModelFromFile(lveDevice, "models/PortalsPlaceholder3.gltf");
+
+                auto modelEntity3 = registry.create();
+                registry.emplace<TagComponent>(modelEntity3, "Cube");
+                registry.emplace<IDComponent>(modelEntity3);
+                registry.emplace<HierarchyComponent>(modelEntity3);
+                auto &transform3 = registry.emplace<TransformComponent>(modelEntity3);
+                transform3.transform.position = glm::vec3(-73.0f, 1.0f, 5.0f);
+                transform3.transform.rotation = glm::vec3(0.0f, 0.0f, 15.0f);
+                transform3.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
+                //glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
+                //transform.transform.matrix = glm::scale(translation, transform.transform.scale);
+                transform3.transform.updateMatrixIfNeeded();
+                auto &mesh3 = registry.emplace<MeshComponent>(modelEntity3);
+                mesh3.model = lveModel3;
+                mesh3.materials = lveModel3->materials;
+
+
+
+                std::shared_ptr<BurnhopeModel> lveModel4 =
+                    BurnhopeModel::createModelFromFile(lveDevice, "models/PortalsPlaceholder4.gltf");
+
+                auto modelEntity4 = registry.create();
+                registry.emplace<TagComponent>(modelEntity4, "Cube2");
+                registry.emplace<IDComponent>(modelEntity4);
+                registry.emplace<HierarchyComponent>(modelEntity4);
+                auto &transform4 = registry.emplace<TransformComponent>(modelEntity4);
+                transform4.transform.position = glm::vec3(-68.0f, -5.0f, 3.0f);
+                transform4.transform.rotation = glm::vec3(0.0f, 0.0f, -25.0f);
+                transform4.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
+                //glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
+                //transform.transform.matrix = glm::scale(translation, transform.transform.scale);
+                transform4.transform.updateMatrixIfNeeded();
+                auto &mesh4 = registry.emplace<MeshComponent>(modelEntity4);
+                mesh4.model = lveModel4;
+                mesh4.materials = lveModel4->materials;
+
+        */
+        auto sunEntity = registry.create();
+        registry.emplace<TagComponent>(sunEntity, "Sun");
+        registry.emplace<IDComponent>(sunEntity);
+        registry.emplace<HierarchyComponent>(sunEntity);
+
+        auto &sunTransform = registry.emplace<TransformComponent>(sunEntity);
+                sunTransform.transform.rotation = glm::vec3(-45.0f, 0.0f, -35.0f);
+
+        auto &sunLight = registry.emplace<LightComponent>(sunEntity);
+        sunLight.light.enable = true;
+        sunLight.light.type = LightType::Directional;
+        sunLight.light.color = glm::vec3(1.0f, 1.0f, 1.0f);
+          sunLight.light.intensity = 1.0f;
+        sunLight.light.radius = 500.0f;
+        sunLight.light.castShadows = true;
+        sunLight.light.mobility = LightMobility::Movable;
+
     }
 
 }
