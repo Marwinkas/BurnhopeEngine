@@ -61,8 +61,8 @@ namespace burnhope
     public:
         static constexpr uint32_t PAGE_SIZE = 128;
         static constexpr uint32_t MAX_PHYSICAL_PAGES = 1024; // 32x32 страницы = 4096x4096 физ. памяти
-        static constexpr uint32_t VIRTUAL_PAGES_X = 128; // Итоговое вирт. разрешение: 16384x16384
-        static constexpr uint32_t VIRTUAL_PAGES_Y = 128;
+        static constexpr uint32_t VIRTUAL_PAGES_X = 4096; // Поддержка сотен локальных светильников
+        static constexpr uint32_t VIRTUAL_PAGES_Y = 4096;
 
         VirtualShadowMap(BurnhopeDevice &device);
         ~VirtualShadowMap();

@@ -8,8 +8,8 @@ layout(set = 2, binding = 1, std430) readonly buffer VSMPageTable {
     uint virtualPages[];
 };
 
-const uint VIRTUAL_PAGES_X = 128;
-const uint VIRTUAL_PAGES_Y = 128;
+const uint VIRTUAL_PAGES_X = 4096;
+const uint VIRTUAL_PAGES_Y = 4096;
 const float PAGE_SIZE = 128.0;
 const float PHYSICAL_ATLAS_SIZE = 4096.0; // 32 страницы по 128 пикселей (32 * 128 = 4096)
 

@@ -204,6 +204,17 @@ namespace burnhope {
                     context.selectedAssets = { newPath.string() };
                     StartRename(context, newPath.string());
                 }
+                if (ImGui::MenuItem("Scene (.burnscene)")) {
+                    fs::path newPath = context.currentDirectory / "New Scene.burnscene";
+                    int count = 1;
+                    while (fs::exists(newPath)) { newPath = context.currentDirectory / ("New Scene " + std::to_string(count++) + ".burnscene"); }
+                    
+                    json j; j["Entities"] = json::array();
+                    std::ofstream file(newPath); file << j.dump(4);
+                    
+                    context.selectedAssets = { newPath.string() };
+                    StartRename(context, newPath.string());
+                }
                 ImGui::EndPopup();
             }
         }
@@ -296,8 +307,12 @@ namespace burnhope {
                     ImGui::EndDragDropSource();
                 }
 
-                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0) && isDir) {
-                    NavigateTo(context, path);
+                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+                    if (isDir) {
+                        NavigateTo(context, path);
+                    } else if (path.extension() == ".burnscene" || path.extension() == ".json") {
+                        context.pendingSceneLoadPath = pathStr;
+                    }
                 }
 
                 // Имя файла или инпут переименования

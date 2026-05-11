@@ -13,11 +13,15 @@ namespace burnhope
   }
   void BurnhopeWindow::initWindow()
   {
+      #ifdef GLFW_PLATFORM_X11
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+    #endif
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     window = glfwCreateWindow(width, height, windowName.c_str(), nullptr, nullptr);
     glfwSetWindowUserPointer(window, this);
+    
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
   }
   void BurnhopeWindow::createWindowSurface(VkInstance instance, VkSurfaceKHR *surface)

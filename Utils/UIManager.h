@@ -11,6 +11,9 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "ImGuizmo.h"
+#include <fstream>
+#include <nlohmann/json.hpp>
+#include <iostream>
 
 #include "UIContext.h"
 #include "IUIWindow.h"
@@ -30,6 +33,7 @@ namespace burnhope {
         BurnhopeDevice* m_Device;
         bool m_ResetLayout = true; // true, чтобы при первом запуске окна встали на свои места
         bool m_WasUsingGizmo = false;
+        bool m_OpenLoadScenePopup = false;
 
     public:
         UIContext& GetContext() { return m_Context; }
@@ -52,6 +56,8 @@ namespace burnhope {
         }
 
         ~UIManager() {
+            // Ждем завершения работы GPU перед выгрузкой ресурсов
+            vkDeviceWaitIdle(m_Device->device());
             // Очищаем окна (убивает превью текстуры и открытые материалы)
             m_Windows.clear();
             // Очищаем историю сцен (убивает закешированные модели и буферы)
@@ -87,6 +93,25 @@ namespace burnhope {
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
         }
 
+        void ProcessPendingActions() {
+            if (m_Context.pendingNewScene) {
+                vkDeviceWaitIdle(m_Device->device());
+                m_Context.registry->clear();
+                m_Context.undoStack.clear();
+                m_Context.redoStack.clear();
+                m_Context.safeDeleteQueue.clear();
+                m_Context.pendingDeletions.clear();
+                m_Context.selectedEntity = entt::null;
+                m_Context.needsRebuild = true;
+                m_Context.pendingNewScene = false;
+                m_Context.currentScenePath = "";
+            }
+            if (!m_Context.pendingSceneLoadPath.empty()) {
+                LoadScene(m_Context.pendingSceneLoadPath);
+                m_Context.pendingSceneLoadPath = "";
+            }
+        }
+
     private:
         void HandleGlobalHotkeys() {
             ImGuiIO& io = ImGui::GetIO();
@@ -102,6 +127,13 @@ namespace burnhope {
                     entt::entity newEnt = CloneHierarchy(m_Context.selectedEntity, parent);
                     m_Context.selectedEntity = newEnt;
                 }
+                
+                // Save / Load
+                if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
+                    std::string spath = m_Context.currentScenePath.empty() ? (m_Context.projectDirectory / "scene.burnscene").string() : m_Context.currentScenePath;
+                    SaveScene(spath);
+                }
+                if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O)) m_OpenLoadScenePopup = true;
             }
         }
 
@@ -246,6 +278,7 @@ namespace burnhope {
             if (m_Context.registry->all_of<TransformComponent>(source)) m_Context.registry->emplace<TransformComponent>(copy, m_Context.registry->get<TransformComponent>(source));
             if (m_Context.registry->all_of<MeshComponent>(source)) m_Context.registry->emplace<MeshComponent>(copy, m_Context.registry->get<MeshComponent>(source));
             if (m_Context.registry->all_of<LightComponent>(source)) m_Context.registry->emplace<LightComponent>(copy, m_Context.registry->get<LightComponent>(source));
+            if (m_Context.registry->all_of<ReflectionProbeComponent>(source)) m_Context.registry->emplace<ReflectionProbeComponent>(copy, m_Context.registry->get<ReflectionProbeComponent>(source));
 
             auto& hc = m_Context.registry->emplace<HierarchyComponent>(copy);
             if (newParent != entt::null && m_Context.registry->all_of<IDComponent>(newParent)) {
@@ -257,6 +290,7 @@ namespace burnhope {
 
         void Undo() {
             if (m_Context.undoStack.empty()) return;
+            vkDeviceWaitIdle(m_Device->device());
             auto snapReg = std::make_shared<entt::registry>();
             m_Context.CopyRegistry(*m_Context.registry, *snapReg);
             m_Context.redoStack.push_back({snapReg, m_Context.selectedEntity});
@@ -269,6 +303,7 @@ namespace burnhope {
 
         void Redo() {
             if (m_Context.redoStack.empty()) return;
+            vkDeviceWaitIdle(m_Device->device());
             auto snapReg = std::make_shared<entt::registry>();
             m_Context.CopyRegistry(*m_Context.registry, *snapReg);
             m_Context.undoStack.push_back({snapReg, m_Context.selectedEntity});
@@ -322,7 +357,14 @@ namespace burnhope {
         void DrawMainMenuBar() {
             if (ImGui::BeginMainMenuBar()) {
                 if (ImGui::BeginMenu("File")) {
-                    if (ImGui::MenuItem("New Scene")) m_Context.registry->clear();
+                    if (ImGui::MenuItem("New Scene")) {
+                        m_Context.pendingNewScene = true;
+                    }
+                    if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
+                        std::string spath = m_Context.currentScenePath.empty() ? (m_Context.projectDirectory / "scene.burnscene").string() : m_Context.currentScenePath;
+                        SaveScene(spath);
+                    }
+                    if (ImGui::MenuItem("Load Scene", "Ctrl+O")) m_OpenLoadScenePopup = true;
                     ImGui::EndMenu();
                 }
                 if (ImGui::BeginMenu("Edit")) {
@@ -339,6 +381,24 @@ namespace burnhope {
                     ImGui::EndMenu();
                 }
                 ImGui::EndMainMenuBar();
+            }
+
+            if (m_OpenLoadScenePopup) {
+                ImGui::OpenPopup("Load Scene");
+                m_OpenLoadScenePopup = false;
+            }
+            if (ImGui::BeginPopupModal("Load Scene", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+                auto scenes = m_Context.GetProjectAssets({".burnscene", ".json"});
+                if (scenes.empty()) ImGui::TextDisabled("No scenes found (.burnscene, .json)");
+                for (const auto& s : scenes) {
+                    if (ImGui::Selectable(std::filesystem::path(s).filename().string().c_str())) {
+                        m_Context.pendingSceneLoadPath = s;
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+                ImGui::Separator();
+                if (ImGui::Button("Cancel", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
+                ImGui::EndPopup();
             }
         }
 
@@ -480,6 +540,181 @@ namespace burnhope {
             colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
             colors[ImGuiCol_NavWindowingDimBg]     = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
             colors[ImGuiCol_ModalWindowDimBg]      = ImVec4(0.10f, 0.10f, 0.12f, 0.73f);
+        }
+
+    private:
+        void SaveScene(const std::string& filepath) {
+            nlohmann::json sceneJson;
+            sceneJson["Entities"] = nlohmann::json::array();
+
+            auto view = m_Context.registry->view<IDComponent>();
+            for (auto entity : view) {
+                nlohmann::json entityJson;
+                
+                if (m_Context.registry->all_of<IDComponent>(entity)) {
+                    entityJson["IDComponent"]["ID"] = m_Context.registry->get<IDComponent>(entity).ID;
+                }
+                
+                if (m_Context.registry->all_of<TagComponent>(entity)) {
+                    entityJson["TagComponent"]["Name"] = m_Context.registry->get<TagComponent>(entity).name;
+                }
+                
+                if (m_Context.registry->all_of<TransformComponent>(entity)) {
+                    auto& tc = m_Context.registry->get<TransformComponent>(entity);
+                    entityJson["TransformComponent"]["Position"] = {tc.transform.position.x, tc.transform.position.y, tc.transform.position.z};
+                    entityJson["TransformComponent"]["Rotation"] = {tc.transform.rotation.x, tc.transform.rotation.y, tc.transform.rotation.z};
+                    entityJson["TransformComponent"]["Scale"] = {tc.transform.scale.x, tc.transform.scale.y, tc.transform.scale.z};
+                }
+
+                if (m_Context.registry->all_of<HierarchyComponent>(entity)) {
+                    auto& hc = m_Context.registry->get<HierarchyComponent>(entity);
+                    entityJson["HierarchyComponent"]["ParentID"] = hc.parentID;
+                    entityJson["HierarchyComponent"]["ChildrenIDs"] = hc.childrenIDs;
+                }
+
+                if (m_Context.registry->all_of<MeshComponent>(entity)) {
+                    auto& mc = m_Context.registry->get<MeshComponent>(entity);
+                    entityJson["MeshComponent"]["ModelPath"] = mc.modelPath;
+                    entityJson["MeshComponent"]["MaterialPaths"] = mc.materialPaths;
+                    entityJson["MeshComponent"]["IsStatic"] = mc.isStatic;
+                    entityJson["MeshComponent"]["IsVisible"] = mc.isVisible;
+                    entityJson["MeshComponent"]["CastShadow"] = mc.castShadow;
+                }
+
+                if (m_Context.registry->all_of<LightComponent>(entity)) {
+                    auto& lc = m_Context.registry->get<LightComponent>(entity);
+                    entityJson["LightComponent"]["NeedsShadowUpdate"] = lc.needsShadowUpdate;
+                    entityJson["LightComponent"]["Enable"] = lc.light.enable;
+                    entityJson["LightComponent"]["Type"] = static_cast<int>(lc.light.type);
+                    entityJson["LightComponent"]["Color"] = {lc.light.color.x, lc.light.color.y, lc.light.color.z};
+                    entityJson["LightComponent"]["Intensity"] = lc.light.intensity;
+                    entityJson["LightComponent"]["Radius"] = lc.light.radius;
+                    entityJson["LightComponent"]["CastShadows"] = lc.light.castShadows;
+                    entityJson["LightComponent"]["Mobility"] = static_cast<int>(lc.light.mobility);
+                }
+
+                if (m_Context.registry->all_of<ReflectionProbeComponent>(entity)) {
+                    auto& rpc = m_Context.registry->get<ReflectionProbeComponent>(entity);
+                    entityJson["ReflectionProbeComponent"]["Radius"] = rpc.radius;
+                    entityJson["ReflectionProbeComponent"]["Resolution"] = rpc.resolution;
+                }
+
+                sceneJson["Entities"].push_back(entityJson);
+            }
+
+            std::ofstream file(filepath);
+            file << sceneJson.dump(4);
+        }
+
+        void LoadScene(const std::string& filepath) {
+            std::ifstream file(filepath);
+            if (!file.is_open()) return;
+
+            nlohmann::json sceneJson;
+            file >> sceneJson;
+
+            // Ждем, пока видеокарта закончит кадр, чтобы безопасно выгрузить старые модели
+            vkDeviceWaitIdle(m_Device->device());
+
+            m_Context.registry->clear();
+            m_Context.undoStack.clear();
+            m_Context.redoStack.clear();
+            m_Context.safeDeleteQueue.clear();
+            m_Context.pendingDeletions.clear();
+            m_Context.selectedEntity = entt::null;
+            m_Context.needsRebuild = true;
+            m_Context.currentScenePath = filepath;
+
+            for (const auto& entityJson : sceneJson["Entities"]) {
+                entt::entity entity = m_Context.registry->create();
+
+                if (entityJson.contains("IDComponent")) {
+                    m_Context.registry->emplace<IDComponent>(entity, entityJson["IDComponent"]["ID"].get<uint64_t>());
+                } else {
+                    m_Context.registry->emplace<IDComponent>(entity);
+                }
+
+                if (entityJson.contains("TagComponent")) {
+                    auto& tc = m_Context.registry->emplace<TagComponent>(entity);
+                    tc.name = entityJson["TagComponent"]["Name"];
+                }
+
+                if (entityJson.contains("TransformComponent")) {
+                    auto& tc = m_Context.registry->emplace<TransformComponent>(entity);
+                    tc.transform.position = glm::vec3(entityJson["TransformComponent"]["Position"][0], entityJson["TransformComponent"]["Position"][1], entityJson["TransformComponent"]["Position"][2]);
+                    tc.transform.rotation = glm::vec3(entityJson["TransformComponent"]["Rotation"][0], entityJson["TransformComponent"]["Rotation"][1], entityJson["TransformComponent"]["Rotation"][2]);
+                    tc.transform.scale = glm::vec3(entityJson["TransformComponent"]["Scale"][0], entityJson["TransformComponent"]["Scale"][1], entityJson["TransformComponent"]["Scale"][2]);
+                    tc.transform.updatematrix = true;
+                }
+
+                if (entityJson.contains("HierarchyComponent")) {
+                    auto& hc = m_Context.registry->emplace<HierarchyComponent>(entity);
+                    hc.parentID = entityJson["HierarchyComponent"]["ParentID"];
+                    for (const auto& childId : entityJson["HierarchyComponent"]["ChildrenIDs"]) {
+                        hc.childrenIDs.push_back(childId);
+                    }
+                }
+
+                if (entityJson.contains("MeshComponent")) {
+                    auto& mc = m_Context.registry->emplace<MeshComponent>(entity);
+                    mc.modelPath = entityJson["MeshComponent"].value("ModelPath", "");
+                    if (entityJson["MeshComponent"].contains("MaterialPaths")) {
+                        for (const auto& path : entityJson["MeshComponent"]["MaterialPaths"]) {
+                        std::string pathStr = path.get<std::string>();
+                        mc.materialPaths.push_back(pathStr);
+                        if (m_Device && !pathStr.empty()) {
+                            mc.materials.push_back(Material::loadFromJson(*m_Device, pathStr));
+                        } else {
+                            mc.materials.push_back(nullptr);
+                        }
+                        }
+                    }
+                    mc.isStatic = entityJson["MeshComponent"].value("IsStatic", false);
+                    mc.isVisible = entityJson["MeshComponent"].value("IsVisible", true);
+                    mc.castShadow = entityJson["MeshComponent"].value("CastShadow", true);
+                    
+                    // Если путь указан, сразу загружаем 3D-модель (инициализируем буферы)
+                    if (!mc.modelPath.empty() && m_Device) {
+                        try {
+                            mc.model = BurnhopeModel::createModelFromFile(*m_Device, mc.modelPath);
+                        // Защита от краша: выравниваем размер массива материалов под количество сабмешей
+                        if (mc.materials.size() < mc.model->getSubMeshes().size()) {
+                            mc.materials.resize(mc.model->getSubMeshes().size(), nullptr);
+                        }
+                        if (mc.materialPaths.size() < mc.model->getSubMeshes().size()) {
+                            mc.materialPaths.resize(mc.model->getSubMeshes().size(), "");
+                        }
+                        } catch (const std::exception& e) {
+                            std::cerr << "[ERROR] Failed to load model: " << e.what() << "\n";
+                        }
+                    }
+                }
+
+                if (entityJson.contains("LightComponent")) {
+                    auto& lc = m_Context.registry->emplace<LightComponent>(entity);
+                    lc.needsShadowUpdate = true; // Принудительное обновление теней при загрузке
+                    
+                    if (entityJson["LightComponent"].contains("Enable")) lc.light.enable = entityJson["LightComponent"]["Enable"].get<bool>();
+                    if (entityJson["LightComponent"].contains("Type")) lc.light.type = static_cast<LightType>(entityJson["LightComponent"]["Type"].get<int>());
+                    if (entityJson["LightComponent"].contains("Color")) {
+                        lc.light.color = glm::vec3(
+                            entityJson["LightComponent"]["Color"][0].get<float>(), 
+                            entityJson["LightComponent"]["Color"][1].get<float>(), 
+                            entityJson["LightComponent"]["Color"][2].get<float>());
+                    }
+                    if (entityJson["LightComponent"].contains("Intensity")) lc.light.intensity = entityJson["LightComponent"]["Intensity"].get<float>();
+                    if (entityJson["LightComponent"].contains("Radius")) lc.light.radius = entityJson["LightComponent"]["Radius"].get<float>();
+                    if (entityJson["LightComponent"].contains("CastShadows")) lc.light.castShadows = entityJson["LightComponent"]["CastShadows"].get<bool>();
+                    if (entityJson["LightComponent"].contains("Mobility")) lc.light.mobility = static_cast<LightMobility>(entityJson["LightComponent"]["Mobility"].get<int>());
+                }
+
+                if (entityJson.contains("ReflectionProbeComponent")) {
+                    auto& rpc = m_Context.registry->emplace<ReflectionProbeComponent>(entity);
+                    rpc.radius = entityJson["ReflectionProbeComponent"].value("Radius", 10.0f);
+                    rpc.resolution = entityJson["ReflectionProbeComponent"].value("Resolution", 256);
+                    rpc.updateNeeded = true;
+                }
+            }
         }
     };
 }

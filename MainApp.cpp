@@ -303,40 +303,40 @@ namespace burnhope
             }
         }
         totalSubMeshCount = static_cast<uint32_t>(objDataList.size());
+        
+        std::vector<ObjectData> uploadObjData = objDataList;
+        std::vector<MaterialData> uploadMatData = matDataList;
+        if (uploadObjData.empty()) uploadObjData.push_back(ObjectData{});
+        if (uploadMatData.empty()) uploadMatData.push_back(MaterialData{});
+
         if (!cullingSystem)
         {
-            cullingSystem = std::make_unique<CullingSystem>(lveDevice, totalSubMeshCount);
+            cullingSystem = std::make_unique<CullingSystem>(lveDevice, static_cast<uint32_t>(uploadObjData.size()));
         }
-        if (!objDataList.empty())
-        {
-            objectBuffer = std::make_unique<BurnhopeBuffer>(
-                lveDevice, sizeof(ObjectData), objDataList.size(),
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-            objectBuffer->map();
-            objectBuffer->writeToBuffer(objDataList.data());
-            cullingSystem->bindObjectBuffer(
-                objectBuffer->getBuffer(),
-                sizeof(ObjectData) * objDataList.size());
-        }
-        if (!matDataList.empty())
-        {
-            materialBuffer = std::make_unique<BurnhopeBuffer>(
-                lveDevice, sizeof(MaterialData), matDataList.size(),
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-            materialBuffer->map();
-            materialBuffer->writeToBuffer(matDataList.data());
-        }
-        if (objectBuffer && materialBuffer)
-        {
-            auto objInfo = objectBuffer->descriptorInfo();
-            auto matInfo = materialBuffer->descriptorInfo();
-            BurnhopeDescriptorWriter(*renderSystem.getRenderSystemLayout(), *globalPool)
-                .writeBuffer(0, &objInfo)
-                .writeBuffer(1, &matInfo)
-                .build(storageSet);
-        }
+        objectBuffer = std::make_unique<BurnhopeBuffer>(
+            lveDevice, sizeof(ObjectData), uploadObjData.size(),
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        objectBuffer->map();
+        objectBuffer->writeToBuffer(uploadObjData.data());
+        cullingSystem->bindObjectBuffer(
+            objectBuffer->getBuffer(),
+            sizeof(ObjectData) * uploadObjData.size());
+
+        materialBuffer = std::make_unique<BurnhopeBuffer>(
+            lveDevice, sizeof(MaterialData), uploadMatData.size(),
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        materialBuffer->map();
+        materialBuffer->writeToBuffer(uploadMatData.data());
+
+        auto objInfo = objectBuffer->descriptorInfo();
+        auto matInfo = materialBuffer->descriptorInfo();
+        BurnhopeDescriptorWriter(*renderSystem.getRenderSystemLayout(), *globalPool)
+            .writeBuffer(0, &objInfo)
+            .writeBuffer(1, &matInfo)
+            .build(storageSet);
+
         std::vector<SubMeshGPUInfo> subMeshInfos;
         auto view2 = registry.view<TransformComponent, MeshComponent>();
         for (auto [entity, transformComp, meshComp] : view2.each())
@@ -360,6 +360,9 @@ namespace burnhope
                 subMeshInfos.push_back(info);
             }
         }
+        
+        if (subMeshInfos.empty()) subMeshInfos.push_back(SubMeshGPUInfo{});
+        
         cullingSystem->uploadSubMeshData(subMeshInfos);
         if (hizSystem)
         {
@@ -425,6 +428,8 @@ namespace burnhope
         while (!lveWindow.shouldClose())
         {
             glfwPollEvents();
+
+            uiManager->ProcessPendingActions();
 
             uint32_t currentSubMeshCount = 0;
             registry.view<MeshComponent>().each([&](const MeshComponent &meshComp)
@@ -952,7 +957,7 @@ namespace burnhope
                         VkBufferMemoryBarrier barriers[2]{};
                         barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
                         barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                        barriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+                        barriers[0].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT; // Маркировщик будет сюда только писать
                         barriers[0].buffer = shadowSystem->getVSM()->getPageTable()->getBuffer();
                         barriers[0].size = VK_WHOLE_SIZE;
 
@@ -967,7 +972,18 @@ namespace burnhope
 
                     vsmMarkPagesShader->bind(cmd);
                     vsmMarkPagesShader->bindDescriptorSets(cmd, { globalDescriptorSets[frameIndex], gBufferSet, vsmSet, lightSet });
-                    vsmMarkPagesShader->dispatch(cmd, (extent.width + 15) / 16, (extent.height + 15) / 16, 1); });
+                    
+                    // Вызываем шейдер по количеству источников света (хватит 4 групп по 32 потока = 128)
+                    vsmMarkPagesShader->dispatch(cmd, 4, 1, 1); 
+                    
+                    // КРИТИЧЕСКИ ВАЖНО: Барьер, чтобы Compute Lighting увидел записанные страницы!
+                    VkBufferMemoryBarrier vsmBarrier{};
+                    vsmBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+                    vsmBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+                    vsmBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                    vsmBarrier.buffer = shadowSystem->getVSM()->getPageTable()->getBuffer();
+                    vsmBarrier.size = VK_WHOLE_SIZE;
+                    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &vsmBarrier, 0, nullptr); });
 
                 renderPipeline.addPass("VSM Geometry Render", {RenderPipeline::createImageBarrier(shadowSystem->getVSM()->getPhysicalAtlas()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
                                        {
@@ -989,28 +1005,56 @@ namespace burnhope
                         clearRect.baseArrayLayer = 0; clearRect.layerCount = 1;
                         vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
 
-                        VkViewport vp{}; vp.width = 4096.0f; vp.height = 4096.0f; vp.maxDepth = 1.0f;
-                        vkCmdSetViewport(cmd, 0, 1, &vp);
-                        VkRect2D sc{ {0,0}, {4096, 4096} };
-                        vkCmdSetScissor(cmd, 0, 1, &sc);
-                        
-                        auto lightView = registry.view<LightComponent>();
+                        auto lightView = registry.view<LightComponent, TransformComponent>();
                         for (auto entity : lightView) {
                             auto& light = lightView.get<LightComponent>(entity).light;
-                            if (light.enable && light.castShadows && light.type != LightType::Point) {
-                                
-                                // ФИКС: Для Солнца берем первую каскадную матрицу, для остальных - их собственную
-                                glm::mat4 lightMatrix = (light.type == LightType::Directional) ? cachedCascadeMats[0] : light.lightSpaceMatrix;
-                                
-                                shadowRenderSystem->renderShadow(cmd, lightMatrix, *cullingSystem, registry, shadowObjectSet);
+                            auto& trans = lightView.get<TransformComponent>(entity).transform;
+                            if (light.enable && light.castShadows && light.shadowSlot >= 0 && (light.type == LightType::Spot || light.type == LightType::Point)) {
+                                int encodedInt = light.shadowSlot;
+                                int realSlot = encodedInt / 10000;
+                                int tileSize = encodedInt % 10000;
+                                int pxX = (realSlot % 32) * 128;
+                                int pxY = (realSlot / 32) * 128;
+
+                                if (light.type == LightType::Spot) {
+                                    VkViewport vp{}; vp.x = pxX; vp.y = pxY; vp.width = tileSize; vp.height = tileSize; vp.maxDepth = 1.0f;
+                                    vkCmdSetViewport(cmd, 0, 1, &vp);
+                                    VkRect2D sc{ {pxX, pxY}, {(uint32_t)tileSize, (uint32_t)tileSize} };
+                                    vkCmdSetScissor(cmd, 0, 1, &sc);
+                                    shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, *cullingSystem, registry, shadowObjectSet);
+                                } else if (light.type == LightType::Point) {
+                                    glm::vec3 pos = trans.position;
+                                    const glm::vec3 dirs[6] = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}};
+                                    const glm::vec3 ups[6]  = {{0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}};  
+                                    for (int face = 0; face < 6; face++) {
+                                        int fx = pxX + face * tileSize; int fy = pxY;
+                                        if (fx + tileSize > 4096) { fx = fx % 4096; fy += tileSize; }
+                                        VkViewport vp{}; vp.x = fx; vp.y = fy; vp.width = tileSize; vp.height = tileSize; vp.maxDepth = 1.0f;
+                                        vkCmdSetViewport(cmd, 0, 1, &vp);
+                                        VkRect2D sc{ {fx, fy}, {(uint32_t)tileSize, (uint32_t)tileSize} };
+                                        vkCmdSetScissor(cmd, 0, 1, &sc);
+                                        // ФИКС: Используем shadowPerspective для переворота Y-оси!
+                                        glm::mat4 faceProj = shadowPerspective(90.0f, 1.0f, 0.1f, light.radius);
+                                        glm::mat4 faceView = glm::lookAt(pos, pos + dirs[face], ups[face]);
+                                        glm::mat4 faceMatrix = faceProj * faceView;
+                                        shadowRenderSystem->renderShadow(cmd, faceMatrix, *cullingSystem, registry, shadowObjectSet);
+                                    }
+                                }
                             }
                         }
                     } else if (hasDirtyRegion) {
-                        auto lightView = registry.view<LightComponent>();
+                        auto lightView = registry.view<LightComponent, TransformComponent>();
                         for (auto entity : lightView) {
                             auto& light = lightView.get<LightComponent>(entity).light;
-                            if (light.enable && light.castShadows && light.type != LightType::Point) {
-                                glm::mat4 lightMatrix = (light.type == LightType::Directional) ? cachedCascadeMats[0] : light.lightSpaceMatrix;
+                            auto& trans = lightView.get<TransformComponent>(entity).transform;
+                            if (light.enable && light.castShadows && light.shadowSlot >= 0 && (light.type == LightType::Spot || light.type == LightType::Point)) {
+                                int encodedInt = light.shadowSlot;
+                                int realSlot = encodedInt / 10000;
+                                int tileSize = encodedInt % 10000;
+                                int pxX = (realSlot % 32) * 128;
+                                int pxY = (realSlot / 32) * 128;
+
+                                glm::mat4 lightMatrix = light.lightSpaceMatrix;
                                 glm::vec3 corners[8] = {
                                     {dirtyMin.x, dirtyMin.y, dirtyMin.z}, {dirtyMax.x, dirtyMin.y, dirtyMin.z},
                                     {dirtyMin.x, dirtyMax.y, dirtyMin.z}, {dirtyMax.x, dirtyMax.y, dirtyMin.z},
@@ -1019,30 +1063,46 @@ namespace burnhope
                                 };
                                 float minX = 1.0f, minY = 1.0f, maxX = 0.0f, maxY = 0.0f;
                                 for(int k=0; k<8; k++) {
-                                    // ФИКС: Умножаем на правильную матрицу
                                     glm::vec4 pt = lightMatrix * glm::vec4(corners[k], 1.0f);
                                     glm::vec3 ndc = glm::vec3(pt) / pt.w;
                                     glm::vec2 uv = glm::vec2(ndc) * 0.5f + 0.5f;
                                     minX = std::min(minX, uv.x); minY = std::min(minY, uv.y);
                                     maxX = std::max(maxX, uv.x); maxY = std::max(maxY, uv.y);
                                 }
-                                int pxX = std::max(0, (int)(minX * 4096) - 5);
-                                int pxY = std::max(0, (int)(minY * 4096) - 5);
-                                int pW = std::min(4096, (int)(maxX * 4096) + 5) - pxX;
-                                int pH = std::min(4096, (int)(maxY * 4096) + 5) - pxY;
+                                int localPxX = std::max(0, (int)(minX * tileSize) - 5);
+                                int localPxY = std::max(0, (int)(minY * tileSize) - 5);
+                                int pW = std::min(tileSize, (int)(maxX * tileSize) + 5) - localPxX;
+                                int pH = std::min(tileSize, (int)(maxY * tileSize) + 5) - localPxY;
 
-                                if (pW > 0 && pH > 0 && pxX < 4096 && pxY < 4096) {
+                                if (pW > 0 && pH > 0) {
                                     VkClearRect clearRect{};
-                                    clearRect.rect.offset = { pxX, pxY };
+                                    clearRect.rect.offset = { pxX + localPxX, pxY + localPxY };
                                     clearRect.rect.extent = { (uint32_t)pW, (uint32_t)pH };
                                     clearRect.baseArrayLayer = 0; clearRect.layerCount = 1;
                                     vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
 
-                                    VkViewport vp{}; vp.width = 4096.0f; vp.height = 4096.0f; vp.maxDepth = 1.0f;
+                                    VkViewport vp{}; vp.x = pxX; vp.y = pxY; vp.width = tileSize; vp.height = tileSize; vp.maxDepth = 1.0f;
                                     vkCmdSetViewport(cmd, 0, 1, &vp);
-                                    VkRect2D sc{ {pxX, pxY}, {(uint32_t)pW, (uint32_t)pH} };
+                                    VkRect2D sc{ {pxX + localPxX, pxY + localPxY}, {(uint32_t)pW, (uint32_t)pH} };
                                     vkCmdSetScissor(cmd, 0, 1, &sc);
-                                    shadowRenderSystem->renderShadow(cmd, lightMatrix, *cullingSystem, registry, shadowObjectSet);
+                                    if (light.type == LightType::Spot) {
+                                        shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, *cullingSystem, registry, shadowObjectSet);
+                                    } else if (light.type == LightType::Point) {
+                                        glm::vec3 pos = trans.position;
+                                        const glm::vec3 dirs[6] = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}};
+                                        const glm::vec3 ups[6]  = {{0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}};  
+                                        for (int face = 0; face < 6; face++) {
+                                            int fx = pxX + face * tileSize; int fy = pxY;
+                                            if (fx + tileSize > 4096) { fx = fx % 4096; fy += tileSize; }
+                                            vp.x = fx; vp.y = fy; vkCmdSetViewport(cmd, 0, 1, &vp);
+                                            sc.offset = { fx + localPxX, fy + localPxY }; vkCmdSetScissor(cmd, 0, 1, &sc);
+                                            // ФИКС: Используем shadowPerspective!
+                                            glm::mat4 faceProj = shadowPerspective(90.0f, 1.0f, 0.1f, light.radius);
+                                            glm::mat4 faceView = glm::lookAt(pos, pos + dirs[face], ups[face]);
+                                            glm::mat4 faceMatrix = faceProj * faceView;
+                                            shadowRenderSystem->renderShadow(cmd, faceMatrix, *cullingSystem, registry, shadowObjectSet);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1570,23 +1630,25 @@ namespace burnhope
             customIndex += meshComp.model->getSubMeshes().size();
         }
 
-        if (instances.empty())
-            return;
+        uint32_t primitiveCount = static_cast<uint32_t>(instances.size());
+        uint32_t bufferInstanceCount = std::max(1u, primitiveCount);
+        VkDeviceSize instancesBufferSize = bufferInstanceCount * sizeof(VkAccelerationStructureInstanceKHR);
 
-        VkDeviceSize instancesBufferSize = instances.size() * sizeof(VkAccelerationStructureInstanceKHR);
         instancesBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice,
             sizeof(VkAccelerationStructureInstanceKHR),
-            instances.size(),
+            bufferInstanceCount,
             VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-        BurnhopeBuffer stagingBuffer{
-            lveDevice, sizeof(VkAccelerationStructureInstanceKHR), static_cast<uint32_t>(instances.size()),
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT};
-        stagingBuffer.map();
-        stagingBuffer.writeToBuffer((void *)instances.data());
-        lveDevice.copyBuffer(stagingBuffer.getBuffer(), instancesBuffer->getBuffer(), instancesBufferSize);
+        if (primitiveCount > 0) {
+            BurnhopeBuffer stagingBuffer{
+                lveDevice, sizeof(VkAccelerationStructureInstanceKHR), primitiveCount,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT};
+            stagingBuffer.map();
+            stagingBuffer.writeToBuffer((void *)instances.data());
+            lveDevice.copyBuffer(stagingBuffer.getBuffer(), instancesBuffer->getBuffer(), primitiveCount * sizeof(VkAccelerationStructureInstanceKHR));
+        }
 
         VkBufferDeviceAddressInfo instanceAddressInfo{};
         instanceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
@@ -1615,27 +1677,29 @@ namespace burnhope
             tlasHandle = VK_NULL_HANDLE;
         }
 
-        uint32_t primitiveCount = static_cast<uint32_t>(instances.size());
+
 
         VkAccelerationStructureBuildSizesInfoKHR sizeInfo{};
         sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
         pfnGetAccelerationStructureBuildSizesKHR(lveDevice.device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primitiveCount, &sizeInfo);
 
+        VkDeviceSize tlasSize = std::max<VkDeviceSize>(256, sizeInfo.accelerationStructureSize);
         tlasBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice,
-            sizeInfo.accelerationStructureSize, 1,
+            tlasSize, 1,
             VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
         VkAccelerationStructureCreateInfoKHR createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
         createInfo.buffer = tlasBuffer->getBuffer();
-        createInfo.size = sizeInfo.accelerationStructureSize;
+        createInfo.size = tlasSize;
         createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
         pfnCreateAccelerationStructureKHR(lveDevice.device(), &createInfo, nullptr, &tlasHandle);
 
+        VkDeviceSize scratchSize = std::max<VkDeviceSize>(256, sizeInfo.buildScratchSize);
         BurnhopeBuffer scratchBuffer(
-            lveDevice, sizeInfo.buildScratchSize, 1,
+            lveDevice, scratchSize, 1,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         VkBufferDeviceAddressInfo scratchAddressInfo{};
@@ -1659,108 +1723,6 @@ namespace burnhope
     }
     void FirstApp::loadGameObjects(entt::registry &registry)
     {
-        std::shared_ptr<BurnhopeTexture> diffuseTexture = BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/diffuse3.png");
-        std::shared_ptr<BurnhopeTexture> normalTexture = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/normal3.png");
-        std::shared_ptr<BurnhopeTexture> rougnessTexture = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/rougness3.png");
-        std::shared_ptr<BurnhopeTexture> metallicTexture = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/metallic3.png");
-        std::shared_ptr<BurnhopeTexture> aoTexture = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/ao3.png");
-        std::shared_ptr<BurnhopeTexture> heightTexture = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/height3.png");
-
-        std::shared_ptr<BurnhopeModel> lveModel = BurnhopeModel::createModelFromFile(lveDevice, "models/cube.bhmesh");
-
-        std::shared_ptr<Material> material = std::make_shared<Material>();
-        material->setAlbedo(diffuseTexture);
-        material->setAO(aoTexture);
-        material->setMetallic(metallicTexture);
-        material->setNormal(normalTexture);
-        material->setRoughness(rougnessTexture);
-        material->setHeight(heightTexture);
-
-        std::shared_ptr<BurnhopeTexture> diffuseTexture2 = BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/Titanium-Scuffed_basecolor.png");
-        std::shared_ptr<BurnhopeTexture> normalTexture2 = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/Titanium-Scuffed_normal.png");
-        std::shared_ptr<BurnhopeTexture> rougnessTexture2 = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/Titanium-Scuffed_roughness.png");
-        std::shared_ptr<BurnhopeTexture> metallicTexture2 = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/Titanium-Scuffed_metallic.png");
-
-        std::shared_ptr<Material> material2 = std::make_shared<Material>();
-        material2->setAlbedo(diffuseTexture2);
-        material2->setMetallic(metallicTexture2);
-        material2->setNormal(normalTexture2);
-        material2->setRoughness(rougnessTexture2);
-
-        auto createBox = [&](glm::vec3 pos, glm::vec3 scale, std::string tag)
-        {
-            auto entity = registry.create();
-            registry.emplace<IDComponent>(entity);
-            registry.emplace<HierarchyComponent>(entity);
-            registry.emplace<TagComponent>(entity, tag);
-
-            auto &transform = registry.emplace<TransformComponent>(entity);
-            transform.transform.position = pos;
-            transform.transform.scale = scale;
-            transform.transform.updateMatrixIfNeeded();
-
-            auto &mesh = registry.emplace<MeshComponent>(entity);
-            mesh.model = lveModel;
-            mesh.materials.push_back(material);
-            return entity;
-        };
-        auto createBox2 = [&](glm::vec3 pos, glm::vec3 scale, std::string tag)
-        {
-            auto entity = registry.create();
-            registry.emplace<IDComponent>(entity);
-            registry.emplace<HierarchyComponent>(entity);
-            registry.emplace<TagComponent>(entity, tag);
-
-            auto &transform = registry.emplace<TransformComponent>(entity);
-            transform.transform.position = pos;
-            transform.transform.scale = scale;
-            transform.transform.updateMatrixIfNeeded();
-
-            auto &mesh = registry.emplace<MeshComponent>(entity);
-            mesh.model = lveModel;
-            mesh.materials.push_back(material2);
-            return entity;
-        };
-        createBox({0.0f, 0.0f, 0.0f}, {5.0f, 0.1f, 5.0f}, "Floor");
-
-        createBox({0.0f, 5.0f, 0.0f}, {5.0f, 0.1f, 5.0f}, "Ceiling");
-
-        createBox({0.0f, 2.5f, -5.0f}, {5.0f, 2.5f, 0.1f}, "BackWall");
-
-        createBox({-5.0f, 2.5f, 0.0f}, {0.1f, 2.5f, 5.0f}, "LeftWall");
-
-        createBox({5.0f, 2.5f, 0.0f}, {0.1f, 2.5f, 5.0f}, "RightWall");
-
-        createBox({-3.0f, 2.5f, 5.0f}, {2.0f, 2.5f, 0.1f}, "FrontWall_Left");
-        createBox({3.0f, 2.5f, 5.0f}, {2.0f, 2.5f, 0.1f}, "FrontWall_Right");
-        createBox({0.0f, 4.0f, 5.0f}, {1.0f, 1.0f, 0.1f}, "FrontWall_Top");
-
-        auto testCube = createBox2({0.0f, 1.0f, 0.0f}, {0.5f, 0.5f, 0.5f}, "TestCube");
-
-        auto sunEntity = registry.create();
-        registry.emplace<IDComponent>(sunEntity);
-        registry.emplace<HierarchyComponent>(sunEntity);
-        registry.emplace<TagComponent>(sunEntity, "Sun");
-
-        auto &sunTransform = registry.emplace<TransformComponent>(sunEntity);
-        sunTransform.transform.rotation = glm::vec3(70, 0, 0.0f);
-        sunTransform.transform.updateMatrixIfNeeded();
-
-        auto &sunLight = registry.emplace<LightComponent>(sunEntity);
-        sunLight.light.enable = true;
-        sunLight.light.type = LightType::Directional;
-        sunLight.light.color = glm::vec3(1.0f, 0.95f, 0.8f);
-        sunLight.light.intensity = 1.0f;
-        sunLight.light.castShadows = true;
-        sunLight.light.mobility = LightMobility::Movable;
-
-        auto probeEntity = registry.create();
-        registry.emplace<IDComponent>(probeEntity);
-        registry.emplace<HierarchyComponent>(probeEntity);
-        registry.emplace<TagComponent>(probeEntity, "Reflection Probe");
-        auto &probeTrans = registry.emplace<TransformComponent>(probeEntity);
-        probeTrans.transform.position = glm::vec3(0.0f, 1.5f, 0.0f);
-        probeTrans.transform.updateMatrixIfNeeded();
-        registry.emplace<ReflectionProbeComponent>(probeEntity);
+       
     }
 }

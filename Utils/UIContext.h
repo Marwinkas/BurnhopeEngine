@@ -65,6 +65,7 @@ namespace burnhope {
         entt::registry* registry = nullptr;
         entt::entity selectedEntity = entt::null;
         glm::mat4 modelMatrix = glm::mat4(1.0f);
+        std::string currentScenePath = "";
 
         fs::path projectDirectory;
         fs::path exeDirectory;
@@ -79,6 +80,8 @@ namespace burnhope {
 
         RenderSettings renderSettings;
         bool needsRebuild = false;
+        bool pendingNewScene = false;
+        std::string pendingSceneLoadPath = "";
         std::vector<std::shared_ptr<void>> safeDeleteQueue;
         std::vector<PendingDeletion> pendingDeletions;
         std::vector<SceneSnapshot> undoStack;
@@ -123,6 +126,7 @@ namespace burnhope {
                 if (src.all_of<MeshComponent>(entity)) dst.emplace<MeshComponent>(newEnt, src.get<MeshComponent>(entity));
                 if (src.all_of<LightComponent>(entity)) dst.emplace<LightComponent>(newEnt, src.get<LightComponent>(entity));
                 if (src.all_of<HierarchyComponent>(entity)) dst.emplace<HierarchyComponent>(newEnt, src.get<HierarchyComponent>(entity)); 
+                if (src.all_of<ReflectionProbeComponent>(entity)) dst.emplace<ReflectionProbeComponent>(newEnt, src.get<ReflectionProbeComponent>(entity));
             });
         }
 
@@ -172,6 +176,9 @@ namespace burnhope {
 
         void DeleteEntityRecursive(entt::entity target) {
             if (!registry->valid(target)) return;
+            
+            if (device) vkDeviceWaitIdle(device->device());
+            
             if (registry->all_of<HierarchyComponent>(target)) {
                 auto children = registry->get<HierarchyComponent>(target).childrenIDs;
                 for (uint64_t childID : children) DeleteEntityRecursive(FindEntityByID(childID));

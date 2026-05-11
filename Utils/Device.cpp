@@ -468,6 +468,7 @@ VkDeviceAddress BurnhopeDevice::getBufferDeviceAddress(VkBuffer buffer) {
 
     if (vkAllocateMemory(device_, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS)
     {
+        vkDestroyBuffer(device_, buffer, nullptr);
         throw std::runtime_error("failed to allocate buffer memory!");
     }
     vkBindBufferMemory(device_, buffer, bufferMemory, 0);

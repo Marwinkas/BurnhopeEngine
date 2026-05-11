@@ -177,8 +177,15 @@ namespace burnhope
                         std::string path = matPath.get<std::string>();
                         mc.materialPaths.push_back(path);
                         auto mat = Material::loadFromJson(device, path);
-                        if (mat) mc.materials.push_back(mat);
-                    }
+                    mc.materials.push_back(mat); // добавляем даже если nullptr
+                }
+
+                if (mc.model && mc.materials.size() < mc.model->getSubMeshes().size()) {
+                    mc.materials.resize(mc.model->getSubMeshes().size(), nullptr);
+                }
+                if (mc.model && mc.materialPaths.size() < mc.model->getSubMeshes().size()) {
+                    mc.materialPaths.resize(mc.model->getSubMeshes().size(), "");
+                }
                 }
 
                 if (eJson.contains("probe")) {
