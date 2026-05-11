@@ -54,6 +54,34 @@ namespace burnhope
         VkRenderPass renderPass = VK_NULL_HANDLE;
         VkFramebuffer framebuffer = VK_NULL_HANDLE;
     };
+
+    // Виртуальные теневые карты (VSM) для оптимизации памяти
+    class VirtualShadowMap
+    {
+    public:
+        static constexpr uint32_t PAGE_SIZE = 128;
+        static constexpr uint32_t MAX_PHYSICAL_PAGES = 1024; // 32x32 страницы = 4096x4096 физ. памяти
+        static constexpr uint32_t VIRTUAL_PAGES_X = 128; // Итоговое вирт. разрешение: 16384x16384
+        static constexpr uint32_t VIRTUAL_PAGES_Y = 128;
+
+        VirtualShadowMap(BurnhopeDevice &device);
+        ~VirtualShadowMap();
+
+        BurnhopeTexture *getPhysicalAtlas() { return physicalAtlas.get(); }
+        BurnhopeBuffer *getPageTable() { return pageTableBuffer.get(); }
+        BurnhopeBuffer *getAllocator() { return physicalPageAllocator.get(); }
+        VkRenderPass getRenderPass() const { return renderPass; }
+        VkFramebuffer getFramebuffer() const { return framebuffer; }
+    private:
+        void createResources();
+        BurnhopeDevice &device;
+        std::unique_ptr<BurnhopeTexture> physicalAtlas;
+        std::unique_ptr<BurnhopeBuffer> pageTableBuffer;
+        std::unique_ptr<BurnhopeBuffer> physicalPageAllocator;
+        VkRenderPass renderPass = VK_NULL_HANDLE;
+        VkFramebuffer framebuffer = VK_NULL_HANDLE;
+    };
+
     class BurnhopeCSM
     {
     public:
@@ -101,12 +129,14 @@ namespace burnhope
         glm::vec3 getSunDir() const { return sunDir; }
         BurnhopeShadowAtlas *getAtlas() { return shadowAtlas.get(); }
         BurnhopeCSM *getCSM() { return csm.get(); }
+        VirtualShadowMap *getVSM() { return vsm.get(); }
         std::array<float, 4> cascadeSplits = {25.0f, 80.0f, 200.0f, 400.0f};
 
     private:
         BurnhopeDevice &device;
         std::unique_ptr<BurnhopeShadowAtlas> shadowAtlas;
         std::unique_ptr<BurnhopeCSM> csm;
+        std::unique_ptr<VirtualShadowMap> vsm;
         LightUBOData lightUBO{};
         std::array<glm::mat4, BurnhopeCSM::CASCADE_COUNT> cascadeMatrices{};
         glm::vec3 sunDir{0.0f, -1.0f, 0.0f};

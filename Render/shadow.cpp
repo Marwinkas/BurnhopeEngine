@@ -6,13 +6,13 @@ namespace burnhope
 {
     namespace
     {
-        VkRenderPass createDepthOnlyRenderPass(VkDevice device, VkFormat format)
+        VkRenderPass createDepthOnlyRenderPass(VkDevice device, VkFormat format, VkAttachmentLoadOp loadOp)
         {
             VkRenderPass renderPass;
             VkAttachmentDescription depth{};
             depth.format = format;
             depth.samples = VK_SAMPLE_COUNT_1_BIT;
-            depth.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            depth.loadOp = loadOp;
             depth.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             depth.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
             depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -51,7 +51,7 @@ namespace burnhope
             VkCommandBuffer cmd = device.beginSingleTimeCommands();
             VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
             barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.image = image;
@@ -65,7 +65,7 @@ namespace burnhope
     BurnhopeShadowAtlas::BurnhopeShadowAtlas(BurnhopeDevice &dev) : device(dev)
     {
         createResources();
-        renderPass = createDepthOnlyRenderPass(device.device(), atlasTexture->getFormat());
+        renderPass = createDepthOnlyRenderPass(device.device(), atlasTexture->getFormat(), VK_ATTACHMENT_LOAD_OP_LOAD);
         createFramebuffer();
     }
     BurnhopeShadowAtlas::~BurnhopeShadowAtlas()
@@ -105,10 +105,58 @@ namespace burnhope
         VkRect2D scissor{{pixelX, pixelY}, {(uint32_t)tileSize, (uint32_t)tileSize}};
         vkCmdSetScissor(cmd, 0, 1, &scissor);
     }
+
+    VirtualShadowMap::VirtualShadowMap(BurnhopeDevice &dev) : device(dev)
+    {
+        createResources();
+        renderPass = createDepthOnlyRenderPass(device.device(), physicalAtlas->getFormat(), VK_ATTACHMENT_LOAD_OP_LOAD);
+        
+        VkImageView view = physicalAtlas->getImageView();
+        VkFramebufferCreateInfo fbInfo{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+        fbInfo.renderPass = renderPass;
+        fbInfo.attachmentCount = 1;
+        fbInfo.pAttachments = &view;
+        fbInfo.width = 32 * PAGE_SIZE; // 32 * 128 = 4096
+        fbInfo.height = fbInfo.width;
+        fbInfo.layers = 1;
+        if (vkCreateFramebuffer(device.device(), &fbInfo, nullptr, &framebuffer) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create VSM framebuffer!");
+    }
+
+    VirtualShadowMap::~VirtualShadowMap()
+    {
+        vkDestroyFramebuffer(device.device(), framebuffer, nullptr);
+        vkDestroyRenderPass(device.device(), renderPass, nullptr);
+    }
+
+    void VirtualShadowMap::createResources()
+    {
+        uint32_t physRes = 32 * PAGE_SIZE;
+        VkExtent3D ext{physRes, physRes, 1};
+        VkFormat depthFmt = device.findSupportedFormat(
+            {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
+            VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        physicalAtlas = std::make_unique<BurnhopeTexture>(
+            device, depthFmt, ext,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_SAMPLE_COUNT_1_BIT);
+        transitionImageToDepth(device, physicalAtlas->getImage(), 1);
+
+        pageTableBuffer = std::make_unique<BurnhopeBuffer>(
+            device, sizeof(uint32_t), VIRTUAL_PAGES_X * VIRTUAL_PAGES_Y,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+        physicalPageAllocator = std::make_unique<BurnhopeBuffer>(
+            device, sizeof(uint32_t), MAX_PHYSICAL_PAGES + 1, // Индекс 0 выступает как atomic-счетчик
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    }
+
     BurnhopeCSM::BurnhopeCSM(BurnhopeDevice &dev) : device(dev)
     {
         createResources();
-        renderPass = createDepthOnlyRenderPass(device.device(), csmTexture->getFormat());
+        renderPass = createDepthOnlyRenderPass(device.device(), csmTexture->getFormat(), VK_ATTACHMENT_LOAD_OP_LOAD);
         createFramebuffers();
     }
     BurnhopeCSM::~BurnhopeCSM()
@@ -205,6 +253,7 @@ namespace burnhope
     {
         shadowAtlas = std::make_unique<BurnhopeShadowAtlas>(dev);
         csm = std::make_unique<BurnhopeCSM>(dev);
+        vsm = std::make_unique<VirtualShadowMap>(dev);
     }
     void BurnhopeShadowSystem::updateLights(entt::registry &registry, const glm::vec3 &camPos)
     {

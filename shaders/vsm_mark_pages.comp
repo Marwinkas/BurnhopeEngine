@@ -1,0 +1,92 @@
+#version 460
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Совпадает со структурой C++ GlobalUbo (FrameInfo.hpp)
+layout(set = 0, binding = 0) uniform GlobalUbo {
+    mat4 projection;
+    mat4 invViewProj;
+    mat4 view;
+    vec4 camPos_zNear; // vec3 camPos, float zNear
+    vec4 sunDir_zFar;  // vec3 sunDir, float zFar
+    vec4 screenSize;
+    mat4 sunLightSpaceMatrices[4];
+    vec4 cascadeSplits;
+    uvec4 gridDims_lightSize;
+    vec4 sunColor_Int;
+    vec4 sscsParams;
+    vec4 gtaoParams;
+    vec4 fogParams;
+    vec4 fogColor;
+    vec4 inscatterColor;
+    vec4 skyZenithColor;
+    vec4 skyHorizonColor;
+    vec4 skySunParams;
+    vec4 ssgiParams;
+    vec4 rtParams;
+    mat4 prevViewProj;
+    vec4 ppExposureParams;
+    vec4 ppColorBalance;
+    vec4 ppBloomParams;
+    vec4 ppDoFParams;
+    vec4 ppVignetteGrain;
+    vec4 ppMotionBlur;
+    vec4 ppLensFlare;
+} ubo;
+
+// G-Buffer
+layout(set = 1, binding = 3) uniform sampler2D gDepth;
+
+// VSM Structures
+layout(set = 2, binding = 1, std430) buffer PageTable {
+    uint virtualPages[]; 
+};
+
+layout(set = 2, binding = 2, std430) buffer Allocator {
+    uint allocatedCount;    // Индекс 0 в буфере используется как атомарный счетчик
+    uint physicalPageMap[]; // Отображает выделенные физ. страницы обратно на вирт. память
+};
+
+const uint VIRTUAL_PAGES_X = 128;
+const uint VIRTUAL_PAGES_Y = 128;
+const uint MAX_PHYSICAL_PAGES = 1024; // Атлас 4096x4096 / страница 128x128 = 32x32 = 1024
+
+void main() {
+    ivec2 uv = ivec2(gl_GlobalInvocationID.xy);
+    vec2 texSize = vec2(textureSize(gDepth, 0));
+    
+    if (uv.x >= texSize.x || uv.y >= texSize.y) return;
+
+    float depth = texelFetch(gDepth, uv, 0).r;
+    if (depth >= 1.0) return; // Игнорируем скайбокс
+
+    vec2 ndc = (vec2(uv) / texSize) * 2.0 - 1.0;
+    vec4 clip = vec4(ndc, depth, 1.0);
+    vec4 worldPosW = ubo.invViewProj * clip;
+    vec3 worldPos = worldPosW.xyz / worldPosW.w;
+
+    vec4 lightSpace = ubo.sunLightSpaceMatrices[0] * vec4(worldPos, 1.0);
+    vec3 projCoords = lightSpace.xyz / lightSpace.w;
+    projCoords.xy = projCoords.xy * 0.5 + 0.5;
+
+    if (projCoords.z >= 0.0 && projCoords.z <= 1.0 && 
+        projCoords.x >= 0.0 && projCoords.x <= 1.0 && 
+        projCoords.y >= 0.0 && projCoords.y <= 1.0) 
+    {
+        uint vPageX = uint(projCoords.x * float(VIRTUAL_PAGES_X));
+        uint vPageY = uint(projCoords.y * float(VIRTUAL_PAGES_Y));
+        uint vPageIdx = vPageY * VIRTUAL_PAGES_X + vPageX;
+
+        // Выделяем физическую страницу атомарно (0xFFFFFFFF = пустая страница)
+        uint current = atomicCompSwap(virtualPages[vPageIdx], 0xFFFFFFFF, 0xFFFFFFFE);
+        if (current == 0xFFFFFFFF) {
+            uint physIdx = atomicAdd(allocatedCount, 1);
+            if (physIdx < MAX_PHYSICAL_PAGES) {
+                virtualPages[vPageIdx] = physIdx;
+                physicalPageMap[physIdx] = vPageIdx;
+            } else {
+                virtualPages[vPageIdx] = 0; // Fallback, если закончилось место в атласе
+            }
+        }
+    }
+}

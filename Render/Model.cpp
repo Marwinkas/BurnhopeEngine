@@ -24,7 +24,10 @@ namespace burnhope
     std::unique_ptr<BurnhopeModel> BurnhopeModel::createModelFromFile(BurnhopeDevice &device, const std::string &filepath)
     {
         
-        std::string finalPath = ENGINE_DIR + filepath;
+        std::string finalPath = filepath;
+        if (!std::filesystem::exists(finalPath)) {
+            finalPath = std::string(ENGINE_DIR) + filepath;
+        }
         if (finalPath.ends_with(".obj") || finalPath.ends_with(".fbx") || finalPath.ends_with(".gltf"))
         {
             std::string bhmeshPath = finalPath.substr(0, finalPath.find_last_of('.')) + ".bhmesh";

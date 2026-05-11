@@ -77,6 +77,7 @@ struct IDComponent
     struct LightComponent
     {
         Light light;
+        bool needsShadowUpdate = true;
     };
     struct HierarchyComponent
     {

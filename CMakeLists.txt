@@ -112,7 +112,7 @@ foreach(SHADER ${SHADER_SOURCES})
 
     add_custom_command(
         OUTPUT ${SPIRV_OUTPUT}
-        COMMAND ${GLSLC_EXECUTABLE} ${SHADER} -o ${SPIRV_OUTPUT}
+        COMMAND ${GLSLC_EXECUTABLE}  --target-env=vulkan1.2 ${SHADER} -o ${SPIRV_OUTPUT}
         DEPENDS ${SHADER}
         COMMENT "Compiling shader ${SHADER_NAME} to SPIR-V"
     )

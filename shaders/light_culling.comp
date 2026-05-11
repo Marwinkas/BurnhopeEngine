@@ -1,0 +1,81 @@
+#version 450
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+layout(set = 0, binding = 0) uniform GlobalSceneUbo {
+    mat4 projection;
+    mat4 invViewProj;
+    mat4 view;
+    vec3 camPos;
+    float zNear;
+    vec3 sunDir;
+    float zFar;
+    vec4 screenSize;     
+    mat4 sunLightSpaceMatrices[4];
+    vec4 cascadeSplits;
+    uint gridDimX;
+    uint gridDimY;
+    uint gridDimZ;
+    float lightSize;
+    vec3 sunColor;  
+    float sunIntensity; 
+} ubo;
+
+struct PointLightData {
+    vec4 posType;
+    vec4 colorInt;
+    vec4 dirRadius;
+    vec4 shadowParams;
+    mat4 lightSpaceMatrix;
+};
+
+layout(std140, set = 1, binding = 0) uniform LightBlock {
+    int activeLightsCount;
+    PointLightData lights[100];
+} lightBlock;
+
+struct LightGrid { uint offset; uint count; };
+layout(std430, set = 1, binding = 1) writeonly buffer GridBuffer { LightGrid lightGrid[]; };
+layout(std430, set = 1, binding = 2) buffer IndexBuffer { 
+    uint globalIndexCount;
+    uint globalIndexList[]; 
+};
+
+void main() {
+    uint cx = gl_GlobalInvocationID.x;
+    uint cy = gl_GlobalInvocationID.y;
+    uint cz = gl_GlobalInvocationID.z;
+
+    if (cx >= ubo.gridDimX || cy >= ubo.gridDimY || cz >= ubo.gridDimZ) return;
+
+    // Логарифмическое разделение глубины
+    float zTileNear = ubo.zNear * pow(ubo.zFar / ubo.zNear, float(cz) / float(ubo.gridDimZ));
+    float zTileFar  = ubo.zNear * pow(ubo.zFar / ubo.zNear, float(cz + 1) / float(ubo.gridDimZ));
+
+    uint lightCount = 0;
+    uint localIndices[100];
+
+    for (int i = 0; i < lightBlock.activeLightsCount && i < 100; i++) {
+        PointLightData light = lightBlock.lights[i];
+        int type = int(light.posType.w);
+        
+        if (type == 0 || type == 4) { // Directional или Ambient видны всегда
+            localIndices[lightCount++] = i;
+            continue;
+        }
+
+        vec3 viewPos = (ubo.view * vec4(light.posType.xyz, 1.0)).xyz;
+        float radius = light.dirRadius.w;
+
+        // Грубая проверка по глубине (View Space Z смотрит в минус)
+        if (-viewPos.z + radius < zTileNear || -viewPos.z - radius > zTileFar) continue;
+
+        localIndices[lightCount++] = i;
+    }
+
+    uint offset = atomicAdd(globalIndexCount, lightCount);
+    for (uint i = 0; i < lightCount; i++) globalIndexList[offset + i] = localIndices[i];
+
+    uint clusterIdx = cx + cy * ubo.gridDimX + cz * ubo.gridDimX * ubo.gridDimY;
+    lightGrid[clusterIdx].offset = offset;
+    lightGrid[clusterIdx].count = lightCount;
+}

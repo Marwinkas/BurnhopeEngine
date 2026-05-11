@@ -1,0 +1,33 @@
+{
+    "albedoColor": [
+        1.0,
+        1.0,
+        1.0
+    ],
+    "albedoPath": "",
+    "aoFactor": 1.0,
+    "aoPath": "",
+    "emissiveColor": [
+        1.0,
+        1.0,
+        1.0
+    ],
+    "emissiveIntensity": 1.0,
+    "emissivePath": "",
+    "heightPath": "",
+    "heightStrength": 0.9269999861717224,
+    "isORM": false,
+    "metallicPath": "",
+    "metallicStrength": 1.0,
+    "normalPath": "",
+    "normalStrength": 0.9829999804496765,
+    "repeatTexture": true,
+    "roughnessPath": "",
+    "roughnessStrength": 1.0,
+    "triplanarScale": 1.0,
+    "useTriplanar": false,
+    "uvScale": [
+        1.0,
+        1.0
+    ]
+}

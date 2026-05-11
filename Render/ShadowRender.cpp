@@ -51,7 +51,7 @@ void ShadowRenderSystem::renderShadow(
 
     for (auto [entity, transformComp, meshComp] : view.each())
     {
-        if (!meshComp.model) // Убираем проверку !meshComp.isVisible, если хотим видеть тени всегда
+        if (!meshComp.model || !meshComp.isVisible)
             continue;
 
         meshComp.model->bind(commandBuffer);

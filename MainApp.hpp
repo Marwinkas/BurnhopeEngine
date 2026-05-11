@@ -75,6 +75,11 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         // Объявление функции сборки
         void buildTLAS(entt::registry& registry);
     private:
+        BurnhopeWindow lveWindow{WIDTH, HEIGHT, "BurnHope Engine"};
+        BurnhopeDevice lveDevice{lveWindow};
+        BurnhopeRenderer lveRenderer{lveWindow, lveDevice};
+        std::unique_ptr<BurnhopeDescriptorPool> globalPool{};
+
         void loadGameObjects(entt::registry &registry);
         void initCompute(VkDescriptorSetLayout globalSetLayout);
         void rebuildGBufferDescriptorSets();
@@ -103,6 +108,9 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::unique_ptr<BurnhopeDescriptorSetLayout> postProcessLayoutPtr;
         VkDescriptorSet postProcessSet = VK_NULL_HANDLE;
         std::unique_ptr<ComputeShader> postProcessShader;
+        
+        std::unique_ptr<ComputeShader> lightCullingShader;
+        std::unique_ptr<ComputeShader> vsmMarkPagesShader;
 
         std::unique_ptr<BurnhopeDescriptorSetLayout> ssgiLayoutPtr;
         VkDescriptorSet ssgiSet = VK_NULL_HANDLE;
@@ -110,9 +118,6 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::unique_ptr<GeometryRenderSystem> simpleRenderSystem;
         void RebuildBatches(entt::registry &registry, GeometryRenderSystem &renderSystem);
         std::unique_ptr<burnhope::RadianceCascadesSystem> rcSystem;
-        BurnhopeWindow lveWindow{WIDTH, HEIGHT, "BurnHope Engine"};
-        BurnhopeDevice lveDevice{lveWindow};
-        BurnhopeRenderer lveRenderer{lveWindow, lveDevice};
         std::shared_ptr<BurnhopeTexture> defaultWhiteTex;
         std::shared_ptr<BurnhopeTexture> defaultNormalTex;
         std::shared_ptr<Material> defaultWhiteMaterial;
@@ -123,8 +128,10 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::unique_ptr<BurnhopeDescriptorSetLayout> lightLayoutPtr;
         std::unique_ptr<BurnhopeDescriptorSetLayout> gtaoLayoutPtr;
         std::unique_ptr<BurnhopeDescriptorSetLayout> rtLayoutPtr;
+        std::unique_ptr<BurnhopeDescriptorSetLayout> vsmLayoutPtr;
         VkDescriptorSet shadowSet = VK_NULL_HANDLE;
         VkDescriptorSet lightSet = VK_NULL_HANDLE;
+        VkDescriptorSet vsmSet = VK_NULL_HANDLE;
         std::unique_ptr<HiZSystem> hizSystem;
         VkDescriptorSet gtaoSet = VK_NULL_HANDLE;
         VkDescriptorSet rtSet = VK_NULL_HANDLE;
@@ -144,7 +151,7 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::unique_ptr<BurnhopeDescriptorSetLayout> globalSetLayout;
         VkDescriptorSet storageSet;
         VkDescriptorSet textureSet;
+        VkImageView csmArrayView = VK_NULL_HANDLE;
         std::unique_ptr<BurnhopeGBuffer> gBuffer;
-        std::unique_ptr<BurnhopeDescriptorPool> globalPool{};
     };
 }

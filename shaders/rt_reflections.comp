@@ -42,9 +42,26 @@ struct ObjectData {
 };
 
 struct MaterialData {
-    int albedoIdx; int normalIdx; int heightIdx; int metallicIdx; int roughnessIdx; int aoIdx; int emissiveIdx;
-    int hasAlbedo; int hasNormal; int hasHeight; int hasMetallic; int hasRoughness; int hasAO; int hasEmissive;
-    int useTriplanar; float triplanarScale; vec2 uvScale; float emissiveIntensity; int useORM;
+    int albedoIdx; int normalIdx; int heightIdx; int metallicIdx;
+    int roughnessIdx; int aoIdx; int emissiveIdx; int hasAlbedo;
+    
+    int hasNormal; int hasHeight; int hasMetallic; int hasRoughness;
+    int hasAO; int hasEmissive; int useTriplanar; float triplanarScale;
+    
+    vec2 uvScale; float emissiveIntensity; int useORM;
+    
+    vec4 albedoColor;
+    vec4 emissiveColor;
+
+    float metallicStrength;
+    float roughnessStrength;
+    float normalStrength;
+    float heightStrength;
+
+    float aoStrength;
+    int repeatTexture;
+    int pad1;
+    int pad2;
 };
 
 layout(set = 3, binding = 0, scalar) readonly buffer ObjectBuffer { ObjectData objects[]; } objBuf;
@@ -232,7 +249,7 @@ void main() {
             if (dot(worldNormal, rayDir) > 0.0) worldNormal = -worldNormal;
 
             if (mat.hasAlbedo == 1 && mat.albedoIdx >= 0) {
-                albedo = texture(bindlessTextures[nonuniformEXT(mat.albedoIdx)], texUV * mat.uvScale).rgb;
+                albedo = textureLod(bindlessTextures[nonuniformEXT(mat.albedoIdx)], texUV * mat.uvScale, 0.0).rgb;
             }
             
             float hitRoughness = 1.0;
@@ -240,15 +257,15 @@ void main() {
             float hitAO = 1.0;
            if (mat.useORM == 1) {
                 if (mat.hasRoughness == 1 && mat.roughnessIdx >= 0) {
-                    vec4 orm = texture(bindlessTextures[nonuniformEXT(mat.roughnessIdx)], texUV * mat.uvScale);
+                    vec4 orm = textureLod(bindlessTextures[nonuniformEXT(mat.roughnessIdx)], texUV * mat.uvScale, 0.0);
                     hitAO = orm.r;
                     hitRoughness = orm.g;
                     hitMetallic = orm.b;
                 }
             } else {
-                if (mat.hasRoughness == 1 && mat.roughnessIdx >= 0) hitRoughness = texture(bindlessTextures[nonuniformEXT(mat.roughnessIdx)], texUV * mat.uvScale).r;
-                if (mat.hasMetallic == 1 && mat.metallicIdx >= 0) hitMetallic = texture(bindlessTextures[nonuniformEXT(mat.metallicIdx)], texUV * mat.uvScale).r;
-                if (mat.hasAO == 1 && mat.aoIdx >= 0) hitAO = texture(bindlessTextures[nonuniformEXT(mat.aoIdx)], texUV * mat.uvScale).r;
+                if (mat.hasRoughness == 1 && mat.roughnessIdx >= 0) hitRoughness = textureLod(bindlessTextures[nonuniformEXT(mat.roughnessIdx)], texUV * mat.uvScale, 0.0).r;
+                if (mat.hasMetallic == 1 && mat.metallicIdx >= 0) hitMetallic = textureLod(bindlessTextures[nonuniformEXT(mat.metallicIdx)], texUV * mat.uvScale, 0.0).r;
+                if (mat.hasAO == 1 && mat.aoIdx >= 0) hitAO = textureLod(bindlessTextures[nonuniformEXT(mat.aoIdx)], texUV * mat.uvScale, 0.0).r;
             }
             
             vec3 hitPos = rayOrigin + rayDir * t;

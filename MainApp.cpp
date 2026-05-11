@@ -11,35 +11,39 @@
 #include "Render/RenderGraph.hpp"
 namespace burnhope
 {
-    struct ProbeData {
+    struct ProbeData
+    {
         glm::vec4 positionAndRadius;
     };
-    struct ProbesInfo {
+    struct ProbesInfo
+    {
         int count;
         ProbeData data[16];
     };
 
-    class RTReflectionSystem {
+    class RTReflectionSystem
+    {
     public:
         std::unique_ptr<BurnhopeTexture> rtReflectionsTexture;
         std::vector<std::unique_ptr<BurnhopeTexture>> probeTextures;
         std::unique_ptr<BurnhopeBuffer> probesBuffer;
-        
+
         std::unique_ptr<BurnhopeDescriptorSetLayout> rtLayoutPtr;
         std::unique_ptr<BurnhopeDescriptorSetLayout> probeRenderLayoutPtr;
-        
+
         VkDescriptorSet rtSet = VK_NULL_HANDLE;
         std::vector<VkDescriptorSet> probeRenderSets;
 
         std::unique_ptr<ComputeShader> rtReflectionsShader;
         std::unique_ptr<ComputeShader> probeRenderShader;
 
-        BurnhopeDevice& device;
-        BurnhopeDescriptorPool& pool;
+        BurnhopeDevice &device;
+        BurnhopeDescriptorPool &pool;
 
-        RTReflectionSystem(BurnhopeDevice& dev, BurnhopeDescriptorPool& pl) : device(dev), pool(pl) {}
+        RTReflectionSystem(BurnhopeDevice &dev, BurnhopeDescriptorPool &pl) : device(dev), pool(pl) {}
 
-        void init(VkExtent2D extent, VkDescriptorSetLayout globalSetLayout, VkDescriptorSetLayout gBufferLayout, VkDescriptorSetLayout rtTLASLayout, VkDescriptorSetLayout storageLayout, VkDescriptorSetLayout textureLayout, VkDescriptorSetLayout giLayout) {
+        void init(VkExtent2D extent, VkDescriptorSetLayout globalSetLayout, VkDescriptorSetLayout gBufferLayout, VkDescriptorSetLayout rtTLASLayout, VkDescriptorSetLayout storageLayout, VkDescriptorSetLayout textureLayout, VkDescriptorSetLayout giLayout)
+        {
             rtReflectionsTexture = std::make_unique<BurnhopeTexture>(device, VK_FORMAT_R16G16B16A16_SFLOAT, VkExtent3D{extent.width, extent.height, 1}, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
             rtReflectionsTexture->transitionLayout(device.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
@@ -47,14 +51,14 @@ namespace burnhope
             probesBuffer->map();
 
             rtLayoutPtr = BurnhopeDescriptorSetLayout::Builder(device)
-                .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
-                .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 16)
-                .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
-                .build();
+                              .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+                              .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 16)
+                              .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
+                              .build();
 
             probeRenderLayoutPtr = BurnhopeDescriptorSetLayout::Builder(device)
-                .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
-                .build();
+                                       .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+                                       .build();
 
             std::vector<VkDescriptorSetLayout> rtLayouts = {globalSetLayout, gBufferLayout, rtTLASLayout, storageLayout, textureLayout, rtLayoutPtr->getDescriptorSetLayout(), giLayout};
             rtReflectionsShader = std::make_unique<ComputeShader>(device, "shaders/rt_reflections.comp.spv", rtLayouts, sizeof(RCPushConstants));
@@ -63,19 +67,25 @@ namespace burnhope
             probeRenderShader = std::make_unique<ComputeShader>(device, "shaders/probe_render.comp.spv", probeLayouts, sizeof(glm::vec4) + sizeof(int));
         }
 
-        void updateDescriptors(VkExtent2D extent, std::shared_ptr<BurnhopeTexture> defaultWhiteTex) {
-            if (!rtReflectionsTexture || rtReflectionsTexture->getExtent().width != extent.width || rtReflectionsTexture->getExtent().height != extent.height) {
+        void updateDescriptors(VkExtent2D extent, std::shared_ptr<BurnhopeTexture> defaultWhiteTex)
+        {
+            if (!rtReflectionsTexture || rtReflectionsTexture->getExtent().width != extent.width || rtReflectionsTexture->getExtent().height != extent.height)
+            {
                 rtReflectionsTexture = std::make_unique<BurnhopeTexture>(device, VK_FORMAT_R16G16B16A16_SFLOAT, VkExtent3D{extent.width, extent.height, 1}, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
                 rtReflectionsTexture->transitionLayout(device.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
             }
 
             std::vector<VkDescriptorImageInfo> probeInfos;
-            for (int i = 0; i < 16; i++) {
-                if (i < probeTextures.size() && probeTextures[i]) {
+            for (int i = 0; i < 16; i++)
+            {
+                if (i < probeTextures.size() && probeTextures[i])
+                {
                     auto info = probeTextures[i]->getImageInfo();
                     info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
                     probeInfos.push_back(info);
-                } else {
+                }
+                else
+                {
                     probeInfos.push_back(defaultWhiteTex->getImageInfo());
                 }
             }
@@ -86,7 +96,8 @@ namespace burnhope
 
             vkDeviceWaitIdle(device.device());
 
-            if (rtSet != VK_NULL_HANDLE) {
+            if (rtSet != VK_NULL_HANDLE)
+            {
                 std::vector<VkDescriptorSet> toFree = {rtSet};
                 pool.freeDescriptors(toFree);
             }
@@ -125,11 +136,11 @@ namespace burnhope
             globalSetLayout->getDescriptorSetLayout());
 
         initCompute(globalSetLayout->getDescriptorSetLayout());
-uiManager = std::make_unique<UIManager>(
-            lveWindow, 
-            lveDevice, 
-            lveRenderer.getSwapChainRenderPass(), 
-            &registry, 
+        uiManager = std::make_unique<UIManager>(
+            lveWindow,
+            lveDevice,
+            lveRenderer.getSwapChainRenderPass(),
+            &registry,
             std::filesystem::current_path().string() // Путь к проекту
         );
         loadGameObjects(registry);
@@ -138,12 +149,25 @@ uiManager = std::make_unique<UIManager>(
     {
         vkDeviceWaitIdle(lveDevice.device());
 
-         uiManager.reset();
+        if (tlasHandle != VK_NULL_HANDLE)
+        {
+            auto pfnDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkDestroyAccelerationStructureKHR");
+            if (pfnDestroyAccelerationStructureKHR)
+            {
+                pfnDestroyAccelerationStructureKHR(lveDevice.device(), tlasHandle, nullptr);
+            }
+        }
+        tlasBuffer.reset();
+        instancesBuffer.reset();
+
+        uiManager.reset();
         ssgiSystem.reset();
         hizSystem.reset();
         rcSystem.reset();
         simpleRenderSystem.reset();
         gtaoSystem.reset();
+        postProcessShader.reset();
+        shadowRenderSystem.reset();
         gtaoOutputTexture.reset();
         cullingSystem.reset();
         lightingSystem.reset();
@@ -163,9 +187,15 @@ uiManager = std::make_unique<UIManager>(
         postProcessLayoutPtr.reset();
         shadowLayoutPtr.reset();
         lightLayoutPtr.reset();
+        shadowObjectLayoutPtr.reset();
         dummyGridBuffer.reset();
         dummyIndexBuffer.reset();
         globalRTReflectionSystem.reset();
+        if (csmArrayView != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(lveDevice.device(), csmArrayView, nullptr);
+            csmArrayView = VK_NULL_HANDLE;
+        }
     }
     glm::mat4 shadowPerspective(float fovY, float aspect, float zNear, float zFar)
     {
@@ -175,12 +205,14 @@ uiManager = std::make_unique<UIManager>(
     }
     void FirstApp::RebuildBatches(entt::registry &registry, GeometryRenderSystem &renderSystem)
     {
-        if (storageSet != VK_NULL_HANDLE) {
+        if (storageSet != VK_NULL_HANDLE)
+        {
             std::vector<VkDescriptorSet> toFree = {storageSet};
             globalPool->freeDescriptors(toFree);
             storageSet = VK_NULL_HANDLE;
         }
-        if (textureSet != VK_NULL_HANDLE) {
+        if (textureSet != VK_NULL_HANDLE)
+        {
             std::vector<VkDescriptorSet> toFree = {textureSet};
             globalPool->freeDescriptors(toFree);
             textureSet = VK_NULL_HANDLE;
@@ -196,6 +228,7 @@ uiManager = std::make_unique<UIManager>(
         uint32_t defaultWhiteIdx = globalTexIndex++;
         textureInfos.push_back(defaultNormalTex->getImageInfo());
         uint32_t defaultNormalIdx = globalTexIndex++;
+
         auto getTexIndex = [&](std::shared_ptr<BurnhopeTexture> tex, uint32_t defaultIdx) -> uint32_t
         {
             if (!tex)
@@ -216,9 +249,8 @@ uiManager = std::make_unique<UIManager>(
             const auto &subMeshes = meshComp.model->getSubMeshes();
             for (uint32_t i = 0; i < subMeshes.size(); i++)
             {
-                uint32_t matIdx = subMeshes[i].materialIndex;
-                std::shared_ptr<Material> currentMat = (matIdx < meshComp.materials.size())
-                                                           ? meshComp.materials[matIdx]
+                std::shared_ptr<Material> currentMat = (i < meshComp.materials.size() && meshComp.materials[i])
+                                                           ? meshComp.materials[i]
                                                            : defaultWhiteMaterial;
                 uint32_t currentMatID = 0;
                 if (matToIndex.find(currentMat.get()) == matToIndex.end())
@@ -226,21 +258,36 @@ uiManager = std::make_unique<UIManager>(
                     currentMatID = globalMatIndex++;
                     matToIndex[currentMat.get()] = currentMatID;
                     MaterialData matData{};
-                    matData.uvScale = currentMat->uvScale;
-                    matData.hasAlbedo = currentMat->hasAlbedo ? 1 : 0;
-                    matData.hasNormal = currentMat->hasNormal ? 1 : 0;
-                    matData.hasRoughness = currentMat->hasRoughness ? 1 : 0;
-                    matData.hasMetallic = currentMat->hasMetallic ? 1 : 0;
-                    matData.hasAO = currentMat->hasAO ? 1 : 0;
-                    matData.hasEmissive = currentMat->hasEmissive ? 1 : 0;
-                    matData.emissiveIntensity = currentMat->emissiveIntensity;
-                    matData.useORM = currentMat->isORM ? 1 : 0;
                     matData.albedoIdx = getTexIndex(currentMat->albedoMap, defaultWhiteIdx);
                     matData.normalIdx = getTexIndex(currentMat->normalMap, defaultNormalIdx);
-                    matData.roughnessIdx = getTexIndex(currentMat->roughnessMap, defaultWhiteIdx);
+                    matData.heightIdx = getTexIndex(currentMat->heightMap, defaultWhiteIdx);
                     matData.metallicIdx = getTexIndex(currentMat->metallicMap, defaultWhiteIdx);
+                    matData.roughnessIdx = getTexIndex(currentMat->roughnessMap, defaultWhiteIdx);
                     matData.aoIdx = getTexIndex(currentMat->aoMap, defaultWhiteIdx);
                     matData.emissiveIdx = getTexIndex(currentMat->emissiveMap, defaultWhiteIdx);
+
+                    matData.hasAlbedo = currentMat->hasAlbedo ? 1 : 0;
+                    matData.hasNormal = currentMat->hasNormal ? 1 : 0;
+                    matData.hasHeight = currentMat->hasHeight ? 1 : 0;
+                    matData.hasMetallic = currentMat->hasMetallic ? 1 : 0;
+                    matData.hasRoughness = currentMat->hasRoughness ? 1 : 0;
+                    matData.hasAO = currentMat->hasAO ? 1 : 0;
+                    matData.hasEmissive = currentMat->hasEmissive ? 1 : 0;
+                    matData.useTriplanar = currentMat->useTriplanar ? 1 : 0;
+                    matData.triplanarScale = currentMat->triplanarScale;
+
+                    matData.uvScale = currentMat->uvScale;
+                    matData.emissiveIntensity = currentMat->emissiveIntensity;
+                    matData.useORM = currentMat->isORM ? 1 : 0;
+
+                    matData.albedoColor = glm::vec4(currentMat->albedoColor, 1.0f);
+                    matData.emissiveColor = glm::vec4(currentMat->emissiveColor, 1.0f);
+                    matData.metallicStrength = currentMat->metallicStrength;
+                    matData.roughnessStrength = currentMat->roughnessStrength;
+                    matData.normalStrength = currentMat->normalStrength;
+                    matData.heightStrength = currentMat->heightStrength;
+                    matData.aoStrength = currentMat->aoStrength; // Добавлено присвоение aoStrength
+                    matData.repeatTexture = currentMat->repeatTexture ? 1 : 0;
                     matDataList.push_back(matData);
                 }
                 else
@@ -373,23 +420,34 @@ uiManager = std::make_unique<UIManager>(
         RenderPipeline renderPipeline;
         glm::mat4 prevViewProj = glm::mat4(1.0f);
         float timeAccumulator = 0.0f;
+        static std::array<glm::mat4, 4> cachedCascadeMats;
+        static bool matricesCached = false;
         while (!lveWindow.shouldClose())
         {
             glfwPollEvents();
-            
+
             uint32_t currentSubMeshCount = 0;
-            registry.view<MeshComponent>().each([&](const MeshComponent &meshComp) {
+            registry.view<MeshComponent>().each([&](const MeshComponent &meshComp)
+                                                {
                 if (meshComp.model && meshComp.isVisible) {
                     currentSubMeshCount += meshComp.model->getSubMeshes().size();
-                }
-            });
+                } });
 
-            if (currentSubMeshCount != totalSubMeshCount) {
+            if (currentSubMeshCount != totalSubMeshCount || uiManager->GetContext().needsRebuild)
+            {
                 vkDeviceWaitIdle(lveDevice.device());
-                if (cullingSystem) cullingSystem.reset(); 
-                
-                RebuildBatches(registry, *simpleRenderSystem); 
-                buildTLAS(registry);                           
+                if (cullingSystem)
+                    cullingSystem.reset();
+
+                if (shadowObjectSet != VK_NULL_HANDLE)
+                {
+                    std::vector<VkDescriptorSet> toFree = {shadowObjectSet};
+                    globalPool->freeDescriptors(toFree);
+                    shadowObjectSet = VK_NULL_HANDLE;
+                }
+
+                RebuildBatches(registry, *simpleRenderSystem);
+                buildTLAS(registry);
 
                 VkWriteDescriptorSetAccelerationStructureKHR asInfo{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
                 asInfo.accelerationStructureCount = 1;
@@ -402,27 +460,59 @@ uiManager = std::make_unique<UIManager>(
                 descriptorWrite.pNext = &asInfo;
                 vkUpdateDescriptorSets(lveDevice.device(), 1, &descriptorWrite, 0, nullptr);
 
-                if (shadowObjectSet != VK_NULL_HANDLE) {
+                if (shadowObjectSet != VK_NULL_HANDLE)
+                {
                     std::vector<VkDescriptorSet> toFree = {shadowObjectSet};
                     globalPool->freeDescriptors(toFree);
                 }
-                if (objectBuffer) {
+                if (objectBuffer)
+                {
                     auto objInfo = objectBuffer->descriptorInfo();
                     BurnhopeDescriptorWriter(*shadowObjectLayoutPtr, *globalPool).writeBuffer(0, &objInfo).build(shadowObjectSet);
                 }
+                uiManager->GetContext().needsRebuild = false;
             }
 
             bool transformsChanged = false;
+            std::vector<glm::vec3> movedPositions;
+
+            // AABB всех сдвинутых объектов для локального обновления теней
+            glm::vec3 dirtyMin(std::numeric_limits<float>::max());
+            glm::vec3 dirtyMax(std::numeric_limits<float>::lowest());
+            bool hasDirtyRegion = false;
 
             registry.view<TransformComponent>().each([&](entt::entity entity, TransformComponent &tComp)
                                                      {
                 if (tComp.transform.updatematrix) {
                     tComp.transform.updateMatrixIfNeeded();
                     transformsChanged = true;
+                    movedPositions.push_back(tComp.transform.position); // Запоминаем где сдвинулись объекты
+
+                    // Расширяем "грязную зону" с запасом радиуса объекта (например 15.0f)
+                    dirtyMin = glm::min(dirtyMin, tComp.transform.position - glm::vec3(15.0f));
+                    dirtyMax = glm::max(dirtyMax, tComp.transform.position + glm::vec3(15.0f));
+                    hasDirtyRegion = true;
+
                     if (registry.any_of<ReflectionProbeComponent>(entity)) {
                         registry.get<ReflectionProbeComponent>(entity).updateNeeded = true;
                     }
                 } });
+
+            if (transformsChanged)
+            {
+                registry.view<LightComponent, TransformComponent>().each([&](auto entity, LightComponent &lightComp, TransformComponent &lightTrans)
+                                                                         {
+                    if (!lightComp.needsShadowUpdate) {
+                        // Проверяем, двигался ли какой-то объект в радиусе действия этого источника света
+                        for (const auto& pos : movedPositions) {
+                            // + 15.0f берем как примерный максимальный размер (bounding sphere) сдвинувшегося объекта
+                            if (glm::distance(pos, lightTrans.transform.position) <= lightComp.light.radius + 15.0f) {
+                                lightComp.needsShadowUpdate = true;
+                                break;
+                            }
+                        }
+                    } });
+            }
 
             if (transformsChanged && objectBuffer)
             {
@@ -447,8 +537,8 @@ uiManager = std::make_unique<UIManager>(
                         }
                     }
                 }
-                
-                vkDeviceWaitIdle(lveDevice.device()); 
+
+                vkDeviceWaitIdle(lveDevice.device());
                 buildTLAS(registry);
 
                 VkWriteDescriptorSetAccelerationStructureKHR asInfo{};
@@ -487,16 +577,17 @@ uiManager = std::make_unique<UIManager>(
                                                                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                                                                      VK_SAMPLE_COUNT_1_BIT);
                 ssgiRawTexture = std::make_unique<BurnhopeTexture>(lveDevice, VK_FORMAT_R16G16B16A16_SFLOAT,
-                                                                     VkExtent3D{newExtent.width, newExtent.height, 1},
-                                                                     VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                                                                     VK_SAMPLE_COUNT_1_BIT);
+                                                                   VkExtent3D{newExtent.width, newExtent.height, 1},
+                                                                   VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                                                                   VK_SAMPLE_COUNT_1_BIT);
                 ssgiRawTexture->transitionLayout(lveDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
                 rebuildGBufferDescriptorSets();
                 if (rcSystem)
                 {
                     rcSystem->rebuildOnResize(newExtent, hdrOutputTexture->getImageView(), hdrOutputTexture->getSampler());
                 }
-                if (globalRTReflectionSystem) {
+                if (globalRTReflectionSystem)
+                {
                     globalRTReflectionSystem->updateDescriptors(newExtent, defaultWhiteTex);
                 }
                 continue;
@@ -515,6 +606,24 @@ uiManager = std::make_unique<UIManager>(
             camera.Inputs(lveWindow.getGLFWwindow(), frameTime);
             if (auto commandBuffer = lveRenderer.beginFrame())
             {
+                auto &ctx = uiManager->GetContext();
+                for (auto it = ctx.pendingDeletions.begin(); it != ctx.pendingDeletions.end();)
+                {
+                    if (--it->framesRemaining <= 0)
+                    {
+                        it = ctx.pendingDeletions.erase(it);
+                    }
+                    else
+                    {
+                        ++it;
+                    }
+                }
+                if (!ctx.safeDeleteQueue.empty())
+                {
+                    ctx.pendingDeletions.push_back({ctx.safeDeleteQueue, 3});
+                    ctx.safeDeleteQueue.clear();
+                }
+
                 int frameIndex = lveRenderer.getFrameIndex();
                 FrameInfo frameInfo{frameIndex, frameTime, commandBuffer, camera, globalDescriptorSets[frameIndex], *globalPool};
                 shadowSystem->updateLights(registry, camera.Position);
@@ -535,8 +644,12 @@ uiManager = std::make_unique<UIManager>(
                 ubo.screenSize = glm::vec4(extent.width, extent.height, 0.f, 0.f);
                 ubo.sunDir = shadowSystem->getSunDir();
 
-                ubo.sunColor = glm::vec3(1.0f, 0.95f, 0.8f); 
-                ubo.sunIntensity = 5.0f;                     
+                ubo.gridDimX = 16;
+                ubo.gridDimY = 9;
+                ubo.gridDimZ = 24;
+
+                ubo.sunColor = glm::vec3(1.0f, 0.95f, 0.8f);
+                ubo.sunIntensity = 5.0f;
 
                 auto lightView = registry.view<LightComponent>();
                 for (auto entity : lightView)
@@ -546,13 +659,13 @@ uiManager = std::make_unique<UIManager>(
                     {
                         ubo.sunColor = light.color;
                         ubo.sunIntensity = light.intensity;
-                        break; 
+                        break;
                     }
                 }
                 ubo.lightSize = 1.0f;
 
                 // --- ЧИТАЕМ НАСТРОЙКИ ИЗ UIMANAGER ---
-                const auto& rs = uiManager->GetContext().renderSettings;
+                const auto &rs = uiManager->GetContext().renderSettings;
 
                 ubo.sscsParams = glm::vec4(rs.enableContactShadows ? 1.0f : 0.0f, rs.contactShadowLength, (float)rs.contactShadowSteps, rs.contactShadowThickness);
                 ubo.gtaoParams = glm::vec4(rs.enableSSAO ? 1.0f : 0.0f, rs.ssaoRadius, rs.ssaoBias, rs.ssaoIntensity);
@@ -575,18 +688,54 @@ uiManager = std::make_unique<UIManager>(
                 ubo.ppLensFlare = glm::vec4(rs.enableLensFlares ? 1.0f : 0.0f, rs.flareIntensity, rs.ghostDispersal, (float)rs.ghosts);
                 prevViewProj = ubo.projection * ubo.view;
 
-                auto cascadeMats = shadowSystem->getCSM()->calculateMatrices(
+                
+
+
+                static glm::vec3 prevCamPos = glm::vec3(0.0f);
+                static glm::mat4 prevView = glm::mat4(1.0f);
+                static glm::vec3 prevSunDir = glm::vec3(0.0f);
+                static bool firstFrame = true;
+
+                bool csmNeedsFullUpdate = false;
+                // Полное обновление только если двигался свет, или камера улетела далеко (>15 метров),
+                // иначе используем кэш статики!
+                if (firstFrame || prevSunDir != shadowSystem->getSunDir() || glm::distance(prevCamPos, camera.Position) > 15.0f)
+                {
+                    csmNeedsFullUpdate = true;
+                    firstFrame = false;
+                    prevCamPos = camera.Position;
+                }
+                prevView = ubo.view;
+                prevSunDir = shadowSystem->getSunDir();
+
+
+                                auto currentCascadeMats = shadowSystem->getCSM()->calculateMatrices(
                     camera, shadowSystem->getSunDir(),
                     {shadowSystem->cascadeSplits[0], shadowSystem->cascadeSplits[1], shadowSystem->cascadeSplits[2], shadowSystem->cascadeSplits[3]});
+
+                // 2. Если мы обновляем карту теней (камера улетела далеко или солнце сдвинулось),
+                // ТОЛЬКО ТОГДА мы обновляем наш кэш матриц!
+                if (csmNeedsFullUpdate || !matricesCached)
+                {
+                    for (int i = 0; i < 4; i++)
+                    {
+                        cachedCascadeMats[i] = currentCascadeMats[i];
+                    }
+                    matricesCached = true;
+                }
+
                 for (int i = 0; i < 4; i++)
-                    ubo.sunLightSpaceMatrices[i] = cascadeMats[i];
+                {
+                    ubo.sunLightSpaceMatrices[i] = cachedCascadeMats[i];
+                }
                 ubo.cascadeSplits = glm::vec4(shadowSystem->cascadeSplits[0], shadowSystem->cascadeSplits[1], shadowSystem->cascadeSplits[2], shadowSystem->cascadeSplits[3]);
                 uboBuffers[frameIndex]->writeToBuffer(&ubo);
                 uboBuffers[frameIndex]->flush();
-
+                
                 ProbesInfo pInfo{};
                 pInfo.count = 0;
-                registry.view<TransformComponent, ReflectionProbeComponent>().each([&](entt::entity e, TransformComponent& t, ReflectionProbeComponent& p) {
+                registry.view<TransformComponent, ReflectionProbeComponent>().each([&](entt::entity e, TransformComponent &t, ReflectionProbeComponent &p)
+                                                                                   {
                     if (pInfo.count >= 16) return;
                     if (p.textureIndex == -1) {
                         vkDeviceWaitIdle(lveDevice.device()); 
@@ -605,15 +754,15 @@ uiManager = std::make_unique<UIManager>(
                         p.updateNeeded = true; 
                     }
                     pInfo.data[pInfo.count].positionAndRadius = glm::vec4(t.transform.position, p.radius);
-                    pInfo.count++;
-                });
-                if (globalRTReflectionSystem->probesBuffer) {
+                    pInfo.count++; });
+                if (globalRTReflectionSystem->probesBuffer)
+                {
                     globalRTReflectionSystem->probesBuffer->writeToBuffer(&pInfo);
                     globalRTReflectionSystem->probesBuffer->flush();
                 }
 
                 renderPipeline.clear();
-                renderPipeline.addPass("Shadow Maps Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
+                renderPipeline.addPass("Shadow Maps Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
                                        {
                     for (int i = 0; i < BurnhopeCSM::CASCADE_COUNT; i++) {
                         VkRenderPassBeginInfo rpInfo{};
@@ -623,30 +772,98 @@ uiManager = std::make_unique<UIManager>(
                         VkClearValue clearVal{}; clearVal.depthStencil = { 1.0f, 0 };
                         rpInfo.clearValueCount = 1; rpInfo.pClearValues = &clearVal;
                         vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
-                        VkViewport vp{}; vp.width = vp.height = (float)BurnhopeCSM::SHADOW_MAP_SIZE; vp.maxDepth = 1.0f;
-                        vkCmdSetViewport(cmd, 0, 1, &vp);
-                        VkRect2D sc{ {0,0}, {BurnhopeCSM::SHADOW_MAP_SIZE, BurnhopeCSM::SHADOW_MAP_SIZE} };
-                        vkCmdSetScissor(cmd, 0, 1, &sc);
-                        shadowRenderSystem->renderShadow(cmd, cascadeMats[i], *cullingSystem, registry, shadowObjectSet);
+                        
+                        VkClearAttachment clearAttachment{};
+                        clearAttachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+                        clearAttachment.clearValue.depthStencil = { 1.0f, 0 };
+
+                        if (csmNeedsFullUpdate) {
+                            VkClearRect clearRect{};
+                            clearRect.rect.offset = { 0, 0 };
+                            clearRect.rect.extent = { BurnhopeCSM::SHADOW_MAP_SIZE, BurnhopeCSM::SHADOW_MAP_SIZE };
+                            clearRect.baseArrayLayer = 0;
+                            clearRect.layerCount = 1;
+                            vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
+
+                            VkViewport vp{}; vp.width = vp.height = (float)BurnhopeCSM::SHADOW_MAP_SIZE; vp.maxDepth = 1.0f;
+                            vkCmdSetViewport(cmd, 0, 1, &vp);
+                            VkRect2D sc{ {0,0}, {BurnhopeCSM::SHADOW_MAP_SIZE, BurnhopeCSM::SHADOW_MAP_SIZE} };
+                            vkCmdSetScissor(cmd, 0, 1, &sc);
+                            
+                            shadowRenderSystem->renderShadow(cmd, cachedCascadeMats[i], *cullingSystem, registry, shadowObjectSet);
+                        } else if (hasDirtyRegion) {
+                            // Локальное кэширование: Очищаем и рисуем только в том месте, где объекты двигались!
+                            glm::vec3 corners[8] = {
+                                {dirtyMin.x, dirtyMin.y, dirtyMin.z}, {dirtyMax.x, dirtyMin.y, dirtyMin.z},
+                                {dirtyMin.x, dirtyMax.y, dirtyMin.z}, {dirtyMax.x, dirtyMax.y, dirtyMin.z},
+                                {dirtyMin.x, dirtyMin.y, dirtyMax.z}, {dirtyMax.x, dirtyMin.y, dirtyMax.z},
+                                {dirtyMin.x, dirtyMax.y, dirtyMax.z}, {dirtyMax.x, dirtyMax.y, dirtyMax.z}
+                            };
+                            float minX = 1.0f, minY = 1.0f, maxX = 0.0f, maxY = 0.0f;
+                            for(int k=0; k<8; k++) {
+                                glm::vec4 pt = cachedCascadeMats[i] * glm::vec4(corners[k], 1.0f);
+                                glm::vec3 ndc = glm::vec3(pt) / pt.w;
+                                glm::vec2 uv = glm::vec2(ndc) * 0.5f + 0.5f;
+                                minX = std::min(minX, uv.x); minY = std::min(minY, uv.y);
+                                maxX = std::max(maxX, uv.x); maxY = std::max(maxY, uv.y);
+                            }
+                            int pxX = std::max(0, (int)(minX * BurnhopeCSM::SHADOW_MAP_SIZE) - 4);
+                            int pxY = std::max(0, (int)(minY * BurnhopeCSM::SHADOW_MAP_SIZE) - 4);
+                            int pW = std::min((int)BurnhopeCSM::SHADOW_MAP_SIZE, (int)(maxX * BurnhopeCSM::SHADOW_MAP_SIZE) + 4) - pxX;
+                            int pH = std::min((int)BurnhopeCSM::SHADOW_MAP_SIZE, (int)(maxY * BurnhopeCSM::SHADOW_MAP_SIZE) + 4) - pxY;
+
+                            if (pW > 0 && pH > 0 && pxX < BurnhopeCSM::SHADOW_MAP_SIZE && pxY < BurnhopeCSM::SHADOW_MAP_SIZE) {
+                                VkClearRect clearRect{};
+                                clearRect.rect.offset = { pxX, pxY };
+                                clearRect.rect.extent = { (uint32_t)pW, (uint32_t)pH };
+                                clearRect.baseArrayLayer = 0; clearRect.layerCount = 1;
+                                vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
+
+                                VkViewport vp{}; vp.width = vp.height = (float)BurnhopeCSM::SHADOW_MAP_SIZE; vp.maxDepth = 1.0f;
+                                vkCmdSetViewport(cmd, 0, 1, &vp);
+                                VkRect2D sc{ {pxX, pxY}, {(uint32_t)pW, (uint32_t)pH} };
+                                vkCmdSetScissor(cmd, 0, 1, &sc);
+
+                               shadowRenderSystem->renderShadow(cmd, cachedCascadeMats[i], *cullingSystem, registry, shadowObjectSet);
+                            }
+                        }
                         vkCmdEndRenderPass(cmd);
                     }
                     VkRenderPassBeginInfo clearPass{};
                     clearPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO; clearPass.renderPass = shadowSystem->getAtlas()->getRenderPass();
                     clearPass.framebuffer = shadowSystem->getAtlas()->getFramebuffer();
                     clearPass.renderArea.extent = { BurnhopeShadowAtlas::ATLAS_RESOLUTION, BurnhopeShadowAtlas::ATLAS_RESOLUTION };
-                    VkClearValue clearVal{}; clearVal.depthStencil = { 1.0f, 0 };
-                    clearPass.clearValueCount = 1; clearPass.pClearValues = &clearVal;
+                    
+                    // Возвращаем dummy clear value чтобы Vulkan Validation Layers не крашили приложение. 
+                    // Но чтобы кэш работал, в shadow.cpp обязательно нужно поменять VK_ATTACHMENT_LOAD_OP_CLEAR на VK_ATTACHMENT_LOAD_OP_LOAD.
+                    VkClearValue dummyClear{}; dummyClear.depthStencil = { 1.0f, 0 };
+                    clearPass.clearValueCount = 1; clearPass.pClearValues = &dummyClear;
+                    
                     vkCmdBeginRenderPass(cmd, &clearPass, VK_SUBPASS_CONTENTS_INLINE);
                     auto lightView = registry.view<LightComponent, TransformComponent>();
                     for (auto entity : lightView) {
-                        auto& light = lightView.get<LightComponent>(entity).light;
+                        auto& lightComp = lightView.get<LightComponent>(entity);
+                        auto& light = lightComp.light;
                         auto& trans = lightView.get<TransformComponent>(entity).transform;
-                        if (!light.enable || !light.castShadows || light.type == LightType::Directional || light.shadowSlot < 0) continue;
+                        
+                        if (!light.enable || !light.castShadows || light.type == LightType::Directional || light.shadowSlot < 0 || !lightComp.needsShadowUpdate) continue;
+
+                        VkClearAttachment clearAttachment{};
+                        clearAttachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+                        clearAttachment.clearValue.depthStencil = { 1.0f, 0 };
+
                         int tileSize = light.shadowTileSize;
                         int pxX = (light.shadowSlot % BurnhopeShadowAtlas::ATLAS_IN_UNITS) * BurnhopeShadowAtlas::MIN_TILE;
                         int pxY = (light.shadowSlot / BurnhopeShadowAtlas::ATLAS_IN_UNITS) * BurnhopeShadowAtlas::MIN_TILE;
                         if (light.type == LightType::Spot) {
                             shadowSystem->getAtlas()->setTileViewport(cmd, pxX, pxY, tileSize);
+                            
+                            VkClearRect clearRect{};
+                            clearRect.rect.offset = { pxX, pxY };
+                            clearRect.rect.extent = { (uint32_t)tileSize, (uint32_t)tileSize };
+                            clearRect.baseArrayLayer = 0; clearRect.layerCount = 1;
+                            vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
+
                             shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, *cullingSystem, registry, shadowObjectSet);
                         }
                         else if (light.type == LightType::Point) {
@@ -668,9 +885,17 @@ uiManager = std::make_unique<UIManager>(
                                     glm::mat4 faceView = glm::lookAt(pos, pos + dirs[face], ups[face]);
                                     glm::mat4 faceMatrix = faceProj * faceView;
                                 shadowSystem->getAtlas()->setTileViewport(cmd, fx, fy, tileSize);
+
+                                VkClearRect clearRect{};
+                                clearRect.rect.offset = { fx, fy };
+                                clearRect.rect.extent = { (uint32_t)tileSize, (uint32_t)tileSize };
+                                clearRect.baseArrayLayer = 0; clearRect.layerCount = 1;
+                                vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
+
                                 shadowRenderSystem->renderShadow(cmd, faceMatrix, *cullingSystem, registry, shadowObjectSet);
                             }
                         }
+                        lightComp.needsShadowUpdate = false; // Кэшируем до следующих изменений
                     }
                     vkCmdEndRenderPass(cmd); });
                 renderPipeline.addPass("Frustum Culling", [&](VkCommandBuffer cmd)
@@ -678,6 +903,31 @@ uiManager = std::make_unique<UIManager>(
                     auto vp = ubo.projection * ubo.view;
                     auto planes = CullingSystem::extractFrustumPlanes(vp);
                     cullingSystem->dispatchCulling(cmd, vp, ubo.camPos, planes, totalSubMeshCount); });
+
+                renderPipeline.addPass("Light Culling Pass", {}, [&](VkCommandBuffer cmd)
+                                       {
+                    // Очищаем счетчик globalIndexCount в начале кадра
+                    vkCmdFillBuffer(cmd, dummyIndexBuffer->getBuffer(), 0, 4, 0);
+                    
+                    VkBufferMemoryBarrier barrier{};
+                    barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+                    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+                    barrier.buffer = dummyIndexBuffer->getBuffer();
+                    barrier.size = 4;
+                    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &barrier, 0, nullptr);
+
+                    lightCullingShader->bind(cmd);
+                    lightCullingShader->bindDescriptorSets(cmd, { globalDescriptorSets[frameIndex], lightSet });
+                    lightCullingShader->dispatch(cmd, (16 + 7) / 8, (9 + 7) / 8, (24 + 7) / 8); 
+
+                    // Ожидаем завершения кластеризации перед освещением
+                    VkBufferMemoryBarrier gridBarriers[2];
+                    gridBarriers[0] = barrier; gridBarriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT; gridBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT; gridBarriers[0].buffer = dummyGridBuffer->getBuffer(); gridBarriers[0].size = VK_WHOLE_SIZE;
+                    gridBarriers[1] = barrier; gridBarriers[1].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT; gridBarriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT; gridBarriers[1].buffer = dummyIndexBuffer->getBuffer(); gridBarriers[1].size = VK_WHOLE_SIZE;
+
+                    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 2, gridBarriers, 0, nullptr); });
+
                 renderPipeline.addPass("G-Buffer Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
                                        {
                     VkRenderPassBeginInfo renderPassInfo{};
@@ -691,24 +941,128 @@ uiManager = std::make_unique<UIManager>(
                     VkRect2D scissor{ {0, 0}, extent }; vkCmdSetScissor(cmd, 0, 1, &scissor);
                     simpleRenderSystem->renderEntities(frameInfo, registry, storageSet, textureSet, *cullingSystem, totalSubMeshCount);
                     vkCmdEndRenderPass(cmd); });
+
+                renderPipeline.addPass("VSM Mark Pages", {}, [&](VkCommandBuffer cmd)
+                                       {
+                    if (csmNeedsFullUpdate) {
+                        // Очистка таблиц перед анализом только при полном обновлении
+                        vkCmdFillBuffer(cmd, shadowSystem->getVSM()->getPageTable()->getBuffer(), 0, VK_WHOLE_SIZE, 0xFFFFFFFF);
+                        vkCmdFillBuffer(cmd, shadowSystem->getVSM()->getAllocator()->getBuffer(), 0, 4, 0); // Обнуляем счетчик
+
+                        VkBufferMemoryBarrier barriers[2]{};
+                        barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+                        barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                        barriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+                        barriers[0].buffer = shadowSystem->getVSM()->getPageTable()->getBuffer();
+                        barriers[0].size = VK_WHOLE_SIZE;
+
+                        barriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+                        barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                        barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+                        barriers[1].buffer = shadowSystem->getVSM()->getAllocator()->getBuffer();
+                        barriers[1].size = VK_WHOLE_SIZE;
+
+                        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 2, barriers, 0, nullptr);
+                    }
+
+                    vsmMarkPagesShader->bind(cmd);
+                    vsmMarkPagesShader->bindDescriptorSets(cmd, { globalDescriptorSets[frameIndex], gBufferSet, vsmSet, lightSet });
+                    vsmMarkPagesShader->dispatch(cmd, (extent.width + 15) / 16, (extent.height + 15) / 16, 1); });
+
+                renderPipeline.addPass("VSM Geometry Render", {RenderPipeline::createImageBarrier(shadowSystem->getVSM()->getPhysicalAtlas()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
+                                       {
+                    VkRenderPassBeginInfo rpInfo{};
+                    rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO; 
+                    rpInfo.renderPass = shadowSystem->getVSM()->getRenderPass();
+                    rpInfo.framebuffer = shadowSystem->getVSM()->getFramebuffer();
+                    rpInfo.renderArea.extent = { 4096, 4096 };
+                    vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+                    VkClearAttachment clearAttachment{};
+                    clearAttachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+                    clearAttachment.clearValue.depthStencil = { 1.0f, 0 };
+
+                    if (csmNeedsFullUpdate) {
+                        VkClearRect clearRect{};
+                        clearRect.rect.offset = { 0, 0 };
+                        clearRect.rect.extent = { 4096, 4096 };
+                        clearRect.baseArrayLayer = 0; clearRect.layerCount = 1;
+                        vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
+
+                        VkViewport vp{}; vp.width = 4096.0f; vp.height = 4096.0f; vp.maxDepth = 1.0f;
+                        vkCmdSetViewport(cmd, 0, 1, &vp);
+                        VkRect2D sc{ {0,0}, {4096, 4096} };
+                        vkCmdSetScissor(cmd, 0, 1, &sc);
+                        
+                        auto lightView = registry.view<LightComponent>();
+                        for (auto entity : lightView) {
+                            auto& light = lightView.get<LightComponent>(entity).light;
+                            if (light.enable && light.castShadows && light.type != LightType::Point) {
+                                
+                                // ФИКС: Для Солнца берем первую каскадную матрицу, для остальных - их собственную
+                                glm::mat4 lightMatrix = (light.type == LightType::Directional) ? cachedCascadeMats[0] : light.lightSpaceMatrix;
+                                
+                                shadowRenderSystem->renderShadow(cmd, lightMatrix, *cullingSystem, registry, shadowObjectSet);
+                            }
+                        }
+                    } else if (hasDirtyRegion) {
+                        auto lightView = registry.view<LightComponent>();
+                        for (auto entity : lightView) {
+                            auto& light = lightView.get<LightComponent>(entity).light;
+                            if (light.enable && light.castShadows && light.type != LightType::Point) {
+                                glm::mat4 lightMatrix = (light.type == LightType::Directional) ? cachedCascadeMats[0] : light.lightSpaceMatrix;
+                                glm::vec3 corners[8] = {
+                                    {dirtyMin.x, dirtyMin.y, dirtyMin.z}, {dirtyMax.x, dirtyMin.y, dirtyMin.z},
+                                    {dirtyMin.x, dirtyMax.y, dirtyMin.z}, {dirtyMax.x, dirtyMax.y, dirtyMin.z},
+                                    {dirtyMin.x, dirtyMin.y, dirtyMax.z}, {dirtyMax.x, dirtyMin.y, dirtyMax.z},
+                                    {dirtyMin.x, dirtyMax.y, dirtyMax.z}, {dirtyMax.x, dirtyMax.y, dirtyMax.z}
+                                };
+                                float minX = 1.0f, minY = 1.0f, maxX = 0.0f, maxY = 0.0f;
+                                for(int k=0; k<8; k++) {
+                                    // ФИКС: Умножаем на правильную матрицу
+                                    glm::vec4 pt = lightMatrix * glm::vec4(corners[k], 1.0f);
+                                    glm::vec3 ndc = glm::vec3(pt) / pt.w;
+                                    glm::vec2 uv = glm::vec2(ndc) * 0.5f + 0.5f;
+                                    minX = std::min(minX, uv.x); minY = std::min(minY, uv.y);
+                                    maxX = std::max(maxX, uv.x); maxY = std::max(maxY, uv.y);
+                                }
+                                int pxX = std::max(0, (int)(minX * 4096) - 5);
+                                int pxY = std::max(0, (int)(minY * 4096) - 5);
+                                int pW = std::min(4096, (int)(maxX * 4096) + 5) - pxX;
+                                int pH = std::min(4096, (int)(maxY * 4096) + 5) - pxY;
+
+                                if (pW > 0 && pH > 0 && pxX < 4096 && pxY < 4096) {
+                                    VkClearRect clearRect{};
+                                    clearRect.rect.offset = { pxX, pxY };
+                                    clearRect.rect.extent = { (uint32_t)pW, (uint32_t)pH };
+                                    clearRect.baseArrayLayer = 0; clearRect.layerCount = 1;
+                                    vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
+
+                                    VkViewport vp{}; vp.width = 4096.0f; vp.height = 4096.0f; vp.maxDepth = 1.0f;
+                                    vkCmdSetViewport(cmd, 0, 1, &vp);
+                                    VkRect2D sc{ {pxX, pxY}, {(uint32_t)pW, (uint32_t)pH} };
+                                    vkCmdSetScissor(cmd, 0, 1, &sc);
+                                    shadowRenderSystem->renderShadow(cmd, lightMatrix, *cullingSystem, registry, shadowObjectSet);
+                                }
+                            }
+                        }
+                    }
+                    vkCmdEndRenderPass(cmd); });
+
                 renderPipeline.addPass("Hi-Z Pass", {RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
                                        { hizSystem->compute(cmd, extent); });
                 renderPipeline.addPass("GTAO Pass", {RenderPipeline::createImageBarrier(gtaoOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [&](VkCommandBuffer cmd)
                                        { gtaoSystem->compute(cmd, globalDescriptorSets[frameIndex], gtaoSet, extent.width, extent.height); });
-                renderPipeline.addPass("Radiance Cascades GI", {
-                    RenderPipeline::createImageBarrier(gBuffer->getNormalRoughness()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
-                    RenderPipeline::createImageBarrier(gBuffer->getAlbedoMetallic()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
-                    RenderPipeline::createImageBarrier(gBuffer->getHeightAO()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
-                    RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)
-                },
+                renderPipeline.addPass("Radiance Cascades GI", {RenderPipeline::createImageBarrier(gBuffer->getNormalRoughness()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getAlbedoMetallic()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getHeightAO()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)},
                                        [&](VkCommandBuffer cmd)
                                        {
                     glm::vec3 sceneMin(-8.0f, -8.0f, -8.0f);
                     glm::vec3 sceneMax( 8.0f,  8.0f,  8.0f);
                     rcSystem->dispatch(cmd, globalDescriptorSets[frameIndex], gBufferSet, ubo.invViewProj, camera.Position, sceneMin, sceneMax, extent, rtSet, storageSet, textureSet); });
 
-                renderPipeline.addPass("Probe Update", {}, [&](VkCommandBuffer cmd) {
-                    registry.view<TransformComponent, ReflectionProbeComponent>().each([&](entt::entity e, TransformComponent& t, ReflectionProbeComponent& p) {
+                renderPipeline.addPass("Probe Update", {}, [&](VkCommandBuffer cmd)
+                                       { registry.view<TransformComponent, ReflectionProbeComponent>().each([&](entt::entity e, TransformComponent &t, ReflectionProbeComponent &p)
+                                                                                                            {
                         if (p.updateNeeded && p.textureIndex != -1) {
                             p.updateNeeded = false;
                             globalRTReflectionSystem->probeRenderShader->bind(cmd);
@@ -720,13 +1074,10 @@ uiManager = std::make_unique<UIManager>(
                                 globalDescriptorSets[frameIndex], rtSet, storageSet, textureSet, globalRTReflectionSystem->probeRenderSets[p.textureIndex]
                             });
                             globalRTReflectionSystem->probeRenderShader->dispatch(cmd, (p.resolution + 7) / 8, (p.resolution + 7) / 8, 1);
-                        }
-                    });
-                });
+                        } }); });
 
-                renderPipeline.addPass("RT Reflections", {
-                    RenderPipeline::createImageBarrier(globalRTReflectionSystem->rtReflectionsTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)
-                }, [&](VkCommandBuffer cmd) {
+                renderPipeline.addPass("RT Reflections", {RenderPipeline::createImageBarrier(globalRTReflectionSystem->rtReflectionsTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [&](VkCommandBuffer cmd)
+                                       {
                     globalRTReflectionSystem->rtReflectionsShader->bind(cmd);
                     
                     glm::vec3 sceneMin(-8.0f, -8.0f, -8.0f);
@@ -748,35 +1099,24 @@ uiManager = std::make_unique<UIManager>(
                     globalRTReflectionSystem->rtReflectionsShader->bindDescriptorSets(cmd, {
                         globalDescriptorSets[frameIndex], gBufferSet, rtSet, storageSet, textureSet, globalRTReflectionSystem->rtSet, rcSystem->getGISet()
                     });
-                    globalRTReflectionSystem->rtReflectionsShader->dispatch(cmd, (extent.width + 7) / 8, (extent.height + 7) / 8, 1);
-                });
+                    globalRTReflectionSystem->rtReflectionsShader->dispatch(cmd, (extent.width + 7) / 8, (extent.height + 7) / 8, 1); });
 
-                renderPipeline.addPass("Compute Lighting", {}, [&](VkCommandBuffer cmd)
+                renderPipeline.addPass("Compute Lighting", {RenderPipeline::createImageBarrier(shadowSystem->getVSM()->getPhysicalAtlas()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
                                        {
-                    std::vector<VkDescriptorSet> computeSets = { globalDescriptorSets[frameIndex], gBufferSet, shadowSet, lightSet, computeOutputSet, rcSystem->getGISet(), gtaoSet, rtSet, globalRTReflectionSystem->rtSet };
+                    std::vector<VkDescriptorSet> computeSets = { globalDescriptorSets[frameIndex], gBufferSet, shadowSet, lightSet, computeOutputSet, rcSystem->getGISet(), gtaoSet, rtSet, globalRTReflectionSystem->rtSet, vsmSet };
                     lightingSystem->computeLighting(cmd, computeSets, extent.width, extent.height); });
 
-                renderPipeline.addPass("SSGI Pass", {
-                    RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
-                    RenderPipeline::createImageBarrier(ssgiRawTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)
-                }, [&](VkCommandBuffer cmd) {
-                    ssgiSystem->computeSSGI(cmd, globalDescriptorSets[frameIndex], gBufferSet, shadowSet, ssgiSet, extent.width, extent.height);
-                });
-                renderPipeline.addPass("SSGI Denoise Pass", {
-                    RenderPipeline::createImageBarrier(ssgiRawTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT)
-                }, [&](VkCommandBuffer cmd) {
-                    ssgiSystem->computeDenoise(cmd, globalDescriptorSets[frameIndex], gBufferSet, ssgiSet, extent.width, extent.height);
-                });
-        renderPipeline.addPass("Post Processing Pass", {
-            RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
-            RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)
-        }, [&](VkCommandBuffer cmd) {
+                renderPipeline.addPass("SSGI Pass", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(ssgiRawTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [&](VkCommandBuffer cmd)
+                                       { ssgiSystem->computeSSGI(cmd, globalDescriptorSets[frameIndex], gBufferSet, shadowSet, ssgiSet, extent.width, extent.height); });
+                renderPipeline.addPass("SSGI Denoise Pass", {RenderPipeline::createImageBarrier(ssgiRawTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT)}, [&](VkCommandBuffer cmd)
+                                       { ssgiSystem->computeDenoise(cmd, globalDescriptorSets[frameIndex], gBufferSet, ssgiSet, extent.width, extent.height); });
+                renderPipeline.addPass("Post Processing Pass", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [&](VkCommandBuffer cmd)
+                                       {
             postProcessShader->bind(cmd);
             postProcessShader->bindDescriptorSets(cmd, { globalDescriptorSets[frameIndex], postProcessSet });
-            postProcessShader->dispatch(cmd, (extent.width + 15) / 16, (extent.height + 15) / 16, 1);
-        });
+            postProcessShader->dispatch(cmd, (extent.width + 15) / 16, (extent.height + 15) / 16, 1); });
                 VkImage swapChainImage = lveRenderer.getCurrentSwapChainImage();
-         renderPipeline.addPass("Blit and UI", {RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
+                renderPipeline.addPass("Blit and UI", {RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(gBuffer->getDepth()->getImage(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)}, [&](VkCommandBuffer cmd)
                                        {
                     VkImageMemoryBarrier swapToDst = RenderPipeline::createImageBarrier(swapChainImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT);
                     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &swapToDst);
@@ -791,7 +1131,7 @@ uiManager = std::make_unique<UIManager>(
                     // --- ОБНОВЛЕННЫЙ ВЫЗОВ UI ---
                     uiManager->Draw(lveWindow, camera, cmd);
                     lveRenderer.endSwapChainRenderPass(cmd); });
-        renderPipeline.addPass("Reset Layouts", {RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [](VkCommandBuffer cmd) {});
+                renderPipeline.addPass("Reset Layouts", {RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [](VkCommandBuffer cmd) {});
                 renderPipeline.execute(commandBuffer);
                 lveRenderer.endFrame();
             }
@@ -805,7 +1145,7 @@ uiManager = std::make_unique<UIManager>(
             lveDevice,
             VK_FORMAT_R16G16B16A16_SFLOAT,
             extent,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT| VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
             VK_SAMPLE_COUNT_1_BIT);
         hdrOutputTexture->transitionLayout(
             lveDevice.beginSingleTimeCommands(),
@@ -822,14 +1162,14 @@ uiManager = std::make_unique<UIManager>(
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_GENERAL);
         ssgiRawTexture = std::make_unique<BurnhopeTexture>(lveDevice, VK_FORMAT_R16G16B16A16_SFLOAT, extent,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
+                                                           VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
         ssgiRawTexture->transitionLayout(
             lveDevice.beginSingleTimeCommands(),
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_GENERAL);
 
         postProcessTexture = std::make_unique<BurnhopeTexture>(lveDevice, VK_FORMAT_R16G16B16A16_SFLOAT, extent,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_SAMPLE_COUNT_1_BIT);
+                                                               VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_SAMPLE_COUNT_1_BIT);
         postProcessTexture->transitionLayout(
             lveDevice.beginSingleTimeCommands(),
             VK_IMAGE_LAYOUT_UNDEFINED,
@@ -846,14 +1186,14 @@ uiManager = std::make_unique<UIManager>(
                               .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
                               .build();
         postProcessLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                              .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
-                              .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
-                              .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
-                              .build();
+                                   .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+                                   .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
+                                   .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
+                                   .build();
         ssgiLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                              .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT) // hdrOutput
-                              .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT) // ssgiRaw
-                              .build();
+                            .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT) // hdrOutput
+                            .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT) // ssgiRaw
+                            .build();
         shadowLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                               .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                               .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
@@ -865,11 +1205,16 @@ uiManager = std::make_unique<UIManager>(
                              .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
                              .addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
                              .build();
+        vsmLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
+                           .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT) // Физ. Атлас
+                           .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)         // Page Table
+                           .addBinding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)         // Allocator
+                           .build();
         giLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                                  .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT) // Diffuse GI
-                                  .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT) // Specular GI
-                                  .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT) // cascade0
-                                  .build();
+                          .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT) // Diffuse GI
+                          .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT) // Specular GI
+                          .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT) // cascade0
+                          .build();
         gtaoLayoutPtr = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                             .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                             .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
@@ -939,15 +1284,17 @@ uiManager = std::make_unique<UIManager>(
         arrayViewInfo.subresourceRange.levelCount = 1;
         arrayViewInfo.subresourceRange.baseArrayLayer = 0;
         arrayViewInfo.subresourceRange.layerCount = BurnhopeCSM::CASCADE_COUNT;
-        VkImageView csmArrayView;
         if (vkCreateImageView(lveDevice.device(), &arrayViewInfo, nullptr, &csmArrayView) != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to create 2D Array View for CSM!");
         }
-        if (std::filesystem::exists("../textures/bluenoise.png")) {
+        if (std::filesystem::exists("../textures/bluenoise.png"))
+        {
             blueNoiseTex = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/bluenoise.png");
             std::cout << "yes";
-        } else {
+        }
+        else
+        {
             blueNoiseTex = defaultWhiteTex;
         }
         VkDescriptorImageInfo csmInfo{};
@@ -977,9 +1324,9 @@ uiManager = std::make_unique<UIManager>(
         dummyIndexBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice,
             sizeof(uint32_t),
-            1,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            16 * 9 * 24 * 100 + 1, // Размер: ячейки * макс свет + счетчик
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         auto gridInfo = dummyGridBuffer->descriptorInfo();
         auto indexInfo = dummyIndexBuffer->descriptorInfo();
         auto lightBufInfo = lightUboBuffer->descriptorInfo();
@@ -1002,15 +1349,17 @@ uiManager = std::make_unique<UIManager>(
             lightLayoutPtr->getDescriptorSetLayout(),
             outputLayoutPtr->getDescriptorSetLayout(),
             giLayoutPtr->getDescriptorSetLayout(),
-            gtaoLayoutPtr->getDescriptorSetLayout(), rtLayoutPtr->getDescriptorSetLayout(),
-            globalRTReflectionSystem->rtLayoutPtr->getDescriptorSetLayout()};
+            gtaoLayoutPtr->getDescriptorSetLayout(),
+            rtLayoutPtr->getDescriptorSetLayout(),
+            globalRTReflectionSystem->rtLayoutPtr->getDescriptorSetLayout(),
+            vsmLayoutPtr->getDescriptorSetLayout()};
         lightingSystem = std::make_unique<DeferredLightingSystem>(lveDevice, computeLayouts);
-        
+
         rcSystem = std::make_unique<RadianceCascadesSystem>(
             lveDevice,
             lveWindow.getExtent(),
             *globalPool,
-            globalSetLayout->getDescriptorSetLayout(), 
+            globalSetLayout->getDescriptorSetLayout(),
             gBufferLayoutPtr->getDescriptorSetLayout(),
             hdrOutputTexture->getImageView(),
             hdrOutputTexture->getSampler(),
@@ -1018,8 +1367,24 @@ uiManager = std::make_unique<UIManager>(
             simpleRenderSystem->getRenderSystemLayout()->getDescriptorSetLayout(),
             simpleRenderSystem->getTextureLayout()->getDescriptorSetLayout());
 
-        std::vector<VkDescriptorSetLayout> ppLayouts = { globalSetLayouts, postProcessLayoutPtr->getDescriptorSetLayout() };
+        std::vector<VkDescriptorSetLayout> ppLayouts = {globalSetLayouts, postProcessLayoutPtr->getDescriptorSetLayout()};
         postProcessShader = std::make_unique<ComputeShader>(lveDevice, "shaders/post_process.comp.spv", ppLayouts);
+
+        std::vector<VkDescriptorSetLayout> cullLayouts = {globalSetLayouts, lightLayoutPtr->getDescriptorSetLayout()};
+        lightCullingShader = std::make_unique<ComputeShader>(lveDevice, "shaders/light_culling.comp.spv", cullLayouts);
+
+        // Инициализация VSM дескрипторов и шейдера
+        auto vsmAtlasInfo = shadowSystem->getVSM()->getPhysicalAtlas()->getImageInfo();
+        auto vsmPageTableInfo = shadowSystem->getVSM()->getPageTable()->descriptorInfo();
+        auto vsmAllocInfo = shadowSystem->getVSM()->getAllocator()->descriptorInfo();
+        BurnhopeDescriptorWriter(*vsmLayoutPtr, *globalPool)
+            .writeImage(0, &vsmAtlasInfo)
+            .writeBuffer(1, &vsmPageTableInfo)
+            .writeBuffer(2, &vsmAllocInfo)
+            .build(vsmSet);
+
+        std::vector<VkDescriptorSetLayout> vsmMarkLayouts = {globalSetLayouts, gBufferLayoutPtr->getDescriptorSetLayout(), vsmLayoutPtr->getDescriptorSetLayout(), lightLayoutPtr->getDescriptorSetLayout()};
+        vsmMarkPagesShader = std::make_unique<ComputeShader>(lveDevice, "shaders/vsm_mark_pages.comp.spv", vsmMarkLayouts);
 
         VkDescriptorImageInfo ssgiRawInfo{};
         ssgiRawInfo.imageView = ssgiRawTexture->getImageView();
@@ -1034,8 +1399,7 @@ uiManager = std::make_unique<UIManager>(
             globalSetLayouts,
             gBufferLayoutPtr->getDescriptorSetLayout(),
             shadowLayoutPtr->getDescriptorSetLayout(),
-            ssgiLayoutPtr->getDescriptorSetLayout()
-        );
+            ssgiLayoutPtr->getDescriptorSetLayout());
         auto normalInfo = gBuffer->getNormalRoughness()->getImageInfo();
         VkDescriptorImageInfo gtaoOutInfo{};
         gtaoOutInfo.imageView = gtaoOutputTexture->getImageView();
@@ -1147,11 +1511,16 @@ uiManager = std::make_unique<UIManager>(
         {
             throw std::runtime_error("Failed to rebuild computeOutputSet!");
         }
-        
+
         postProcessTexture = std::make_unique<BurnhopeTexture>(lveDevice, VK_FORMAT_R16G16B16A16_SFLOAT, extent, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_SAMPLE_COUNT_1_BIT);
         postProcessTexture->transitionLayout(lveDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-        VkDescriptorImageInfo ppOutInfo{}; ppOutInfo.imageView = postProcessTexture->getImageView(); ppOutInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-        VkDescriptorImageInfo ppInInfo{}; ppInInfo.sampler = hdrOutputTexture->getSampler(); ppInInfo.imageView = hdrOutputTexture->getImageView(); ppInInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        VkDescriptorImageInfo ppOutInfo{};
+        ppOutInfo.imageView = postProcessTexture->getImageView();
+        ppOutInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        VkDescriptorImageInfo ppInInfo{};
+        ppInInfo.sampler = hdrOutputTexture->getSampler();
+        ppInInfo.imageView = hdrOutputTexture->getImageView();
+        ppInInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         BurnhopeDescriptorWriter(*postProcessLayoutPtr, *globalPool)
             .writeImage(0, &ppOutInfo)
             .writeImage(1, &ppInInfo)
@@ -1161,9 +1530,9 @@ uiManager = std::make_unique<UIManager>(
         ssgiRawInfo.imageView = ssgiRawTexture->getImageView();
         ssgiRawInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         BurnhopeDescriptorWriter(*ssgiLayoutPtr, *globalPool)
-                 .writeImage(0, &outImgInfo)
-                 .writeImage(1, &ssgiRawInfo)
-                 .build(ssgiSet);
+            .writeImage(0, &outImgInfo)
+            .writeImage(1, &ssgiRawInfo)
+            .build(ssgiSet);
     }
     void FirstApp::buildTLAS(entt::registry &registry)
     {
@@ -1171,6 +1540,7 @@ uiManager = std::make_unique<UIManager>(
         auto pfnGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkGetAccelerationStructureBuildSizesKHR");
         auto pfnCmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkCmdBuildAccelerationStructuresKHR");
         auto pfnGetBufferDeviceAddress = (PFN_vkGetBufferDeviceAddress)vkGetDeviceProcAddr(lveDevice.device(), "vkGetBufferDeviceAddress");
+        auto pfnDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkDestroyAccelerationStructureKHR");
 
         if (!pfnCreateAccelerationStructureKHR)
         {
@@ -1180,7 +1550,7 @@ uiManager = std::make_unique<UIManager>(
         std::vector<VkAccelerationStructureInstanceKHR> instances;
 
         auto view = registry.view<TransformComponent, MeshComponent>();
-        uint32_t customIndex = 0; 
+        uint32_t customIndex = 0;
 
         for (auto [entity, transformComp, meshComp] : view.each())
         {
@@ -1189,19 +1559,19 @@ uiManager = std::make_unique<UIManager>(
 
             VkAccelerationStructureInstanceKHR instance{};
             instance.transform = toVkMatrix(transformComp.transform.matrix);
-            instance.instanceCustomIndex = customIndex;   
-            instance.mask = 0xFF;                         
+            instance.instanceCustomIndex = customIndex;
+            instance.mask = 0xFF;
             instance.instanceShaderBindingTableRecordOffset = 0;
             instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
             instance.accelerationStructureReference = meshComp.model->getBLASAddress();
 
             instances.push_back(instance);
-            
+
             customIndex += meshComp.model->getSubMeshes().size();
         }
 
         if (instances.empty())
-            return; 
+            return;
 
         VkDeviceSize instancesBufferSize = instances.size() * sizeof(VkAccelerationStructureInstanceKHR);
         instancesBuffer = std::make_unique<BurnhopeBuffer>(
@@ -1209,8 +1579,7 @@ uiManager = std::make_unique<UIManager>(
             sizeof(VkAccelerationStructureInstanceKHR),
             instances.size(),
             VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT 
-        );
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
         BurnhopeBuffer stagingBuffer{
             lveDevice, sizeof(VkAccelerationStructureInstanceKHR), static_cast<uint32_t>(instances.size()),
@@ -1239,6 +1608,12 @@ uiManager = std::make_unique<UIManager>(
         buildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
         buildInfo.geometryCount = 1;
         buildInfo.pGeometries = &tlasGeometry;
+
+        if (tlasHandle != VK_NULL_HANDLE && pfnDestroyAccelerationStructureKHR)
+        {
+            pfnDestroyAccelerationStructureKHR(lveDevice.device(), tlasHandle, nullptr);
+            tlasHandle = VK_NULL_HANDLE;
+        }
 
         uint32_t primitiveCount = static_cast<uint32_t>(instances.size());
 
@@ -1301,12 +1676,10 @@ uiManager = std::make_unique<UIManager>(
         material->setRoughness(rougnessTexture);
         material->setHeight(heightTexture);
 
-
         std::shared_ptr<BurnhopeTexture> diffuseTexture2 = BurnhopeTexture::createTextureFromFile(lveDevice, "../textures/Titanium-Scuffed_basecolor.png");
         std::shared_ptr<BurnhopeTexture> normalTexture2 = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/Titanium-Scuffed_normal.png");
         std::shared_ptr<BurnhopeTexture> rougnessTexture2 = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/Titanium-Scuffed_roughness.png");
         std::shared_ptr<BurnhopeTexture> metallicTexture2 = BurnhopeTexture::createDataTextureFromFile(lveDevice, "../textures/Titanium-Scuffed_metallic.png");
-
 
         std::shared_ptr<Material> material2 = std::make_shared<Material>();
         material2->setAlbedo(diffuseTexture2);
@@ -1329,7 +1702,6 @@ uiManager = std::make_unique<UIManager>(
             auto &mesh = registry.emplace<MeshComponent>(entity);
             mesh.model = lveModel;
             mesh.materials.push_back(material);
-            mesh.materials.push_back(material);
             return entity;
         };
         auto createBox2 = [&](glm::vec3 pos, glm::vec3 scale, std::string tag)
@@ -1346,7 +1718,6 @@ uiManager = std::make_unique<UIManager>(
 
             auto &mesh = registry.emplace<MeshComponent>(entity);
             mesh.model = lveModel;
-            mesh.materials.push_back(material2);
             mesh.materials.push_back(material2);
             return entity;
         };
@@ -1378,8 +1749,8 @@ uiManager = std::make_unique<UIManager>(
         auto &sunLight = registry.emplace<LightComponent>(sunEntity);
         sunLight.light.enable = true;
         sunLight.light.type = LightType::Directional;
-        sunLight.light.color = glm::vec3(1.0f, 0.95f, 0.8f); 
-        sunLight.light.intensity = 1.0f;                     
+        sunLight.light.color = glm::vec3(1.0f, 0.95f, 0.8f);
+        sunLight.light.intensity = 1.0f;
         sunLight.light.castShadows = true;
         sunLight.light.mobility = LightMobility::Movable;
 
@@ -1387,7 +1758,7 @@ uiManager = std::make_unique<UIManager>(
         registry.emplace<IDComponent>(probeEntity);
         registry.emplace<HierarchyComponent>(probeEntity);
         registry.emplace<TagComponent>(probeEntity, "Reflection Probe");
-        auto& probeTrans = registry.emplace<TransformComponent>(probeEntity);
+        auto &probeTrans = registry.emplace<TransformComponent>(probeEntity);
         probeTrans.transform.position = glm::vec3(0.0f, 1.5f, 0.0f);
         probeTrans.transform.updateMatrixIfNeeded();
         registry.emplace<ReflectionProbeComponent>(probeEntity);

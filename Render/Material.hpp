@@ -16,7 +16,18 @@ namespace burnhope
     public:
         int ID;
         glm::vec2 uvScale = glm::vec2(1.0f, 1.0f);
+
+        glm::vec3 albedoColor = glm::vec3(1.0f, 1.0f, 1.0f);
+        glm::vec3 emissiveColor = glm::vec3(0.0f, 0.0f, 0.0f);
         
+        float metallicStrength = 0.0f;
+        float roughnessStrength = 1.0f;
+        float normalStrength = 1.0f;
+        float heightStrength = 1.0f;
+        bool repeatTexture = true;
+        bool useTriplanar = false;
+        float triplanarScale = 1.0f;
+        float aoStrength = 1.0f;
         // Добавляем память для путей к текстурам
         std::string emissivePath = "";
         std::string albedoPath = "";
@@ -36,7 +47,7 @@ namespace burnhope
         
         bool isORM = false;
         bool hasEmissive = false;
-        float emissiveIntensity = 1.0f;
+        float emissiveIntensity = 0.0f;
         bool hasAlbedo = false;
         bool hasNormal = false;
         bool hasHeight = false;
@@ -116,8 +127,18 @@ namespace burnhope
             json j;
             j["uvScale"] = {uvScale.x, uvScale.y};
             j["emissiveIntensity"] = emissiveIntensity;
+            j["emissiveColor"] = {emissiveColor.x, emissiveColor.y, emissiveColor.z};
             j["emissivePath"] = emissivePath;
             j["isORM"] = isORM;
+            j["albedoColor"] = {albedoColor.x, albedoColor.y, albedoColor.z};
+            j["metallicStrength"] = metallicStrength;
+            j["roughnessStrength"] = roughnessStrength;
+            j["normalStrength"] = normalStrength;
+            j["heightStrength"] = heightStrength;
+            j["aoStrength"] = aoStrength;
+            j["repeatTexture"] = repeatTexture;
+            j["useTriplanar"] = useTriplanar;
+            j["triplanarScale"] = triplanarScale;
             j["albedoPath"] = albedoPath;
             j["normalPath"] = normalPath;
             j["heightPath"] = heightPath;
@@ -138,10 +159,23 @@ namespace burnhope
             if (!file.is_open()) return nullptr;
 
             json j;
-            file >> j;
+            try { file >> j; } catch(...) { return nullptr; }
+            if (!j.is_object()) return nullptr;
 
             auto mat = std::make_shared<Material>();
             
+            if (j.contains("albedoColor")) mat->albedoColor = glm::vec3(j["albedoColor"][0], j["albedoColor"][1], j["albedoColor"][2]);
+            if (j.contains("emissiveColor")) mat->emissiveColor = glm::vec3(j["emissiveColor"][0], j["emissiveColor"][1], j["emissiveColor"][2]);
+            if (j.contains("metallicStrength")) mat->metallicStrength = j["metallicStrength"];
+            if (j.contains("roughnessStrength")) mat->roughnessStrength = j["roughnessStrength"];
+            if (j.contains("normalStrength")) mat->normalStrength = j["normalStrength"];
+            if (j.contains("heightStrength")) mat->heightStrength = j["heightStrength"];
+            if (j.contains("aoStrength")) mat->aoStrength = j["aoStrength"];
+            else if (j.contains("aoFactor")) mat->aoStrength = j["aoFactor"];
+            if (j.contains("repeatTexture")) mat->repeatTexture = j["repeatTexture"];
+            if (j.contains("useTriplanar")) mat->useTriplanar = j["useTriplanar"];
+            if (j.contains("triplanarScale")) mat->triplanarScale = j["triplanarScale"];
+
             if (j.contains("uvScale")) {
                 mat->uvScale = glm::vec2(j["uvScale"][0], j["uvScale"][1]);
             }

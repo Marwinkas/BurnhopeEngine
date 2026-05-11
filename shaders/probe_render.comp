@@ -37,10 +37,28 @@ struct ObjectData {
 };
 
 struct MaterialData {
-    int albedoIdx; int normalIdx; int heightIdx; int metallicIdx; int roughnessIdx; int aoIdx; int emissiveIdx;
-    int hasAlbedo; int hasNormal; int hasHeight; int hasMetallic; int hasRoughness; int hasAO; int hasEmissive;
-    int useTriplanar; float triplanarScale; vec2 uvScale; float emissiveIntensity; int useORM;
+    int albedoIdx; int normalIdx; int heightIdx; int metallicIdx;
+    int roughnessIdx; int aoIdx; int emissiveIdx; int hasAlbedo;
+    
+    int hasNormal; int hasHeight; int hasMetallic; int hasRoughness;
+    int hasAO; int hasEmissive; int useTriplanar; float triplanarScale;
+    
+    vec2 uvScale; float emissiveIntensity; int useORM;
+    
+    vec4 albedoColor;
+    vec4 emissiveColor;
+
+    float metallicStrength;
+    float roughnessStrength;
+    float normalStrength;
+    float heightStrength;
+
+    float aoStrength;
+    int repeatTexture;
+    int pad1;
+    int pad2;
 };
+
 
 layout(set = 2, binding = 0, scalar) readonly buffer ObjectBuffer { ObjectData objects[]; } objBuf;
 layout(set = 2, binding = 1, scalar) readonly buffer MaterialBuffer { MaterialData materials[]; } matBuf;
@@ -118,7 +136,7 @@ void main() {
         if (dot(worldNormal, dir) > 0.0) worldNormal = -worldNormal; // Двусторонняя геометрия
 
         if (mat.hasAlbedo == 1 && mat.albedoIdx >= 0) {
-            albedo = texture(bindlessTextures[nonuniformEXT(mat.albedoIdx)], texUV * mat.uvScale).rgb;
+            albedo = textureLod(bindlessTextures[nonuniformEXT(mat.albedoIdx)], texUV * mat.uvScale, 0.0).rgb;
         }
         
         vec3 L = normalize(-ubo.sunDir);

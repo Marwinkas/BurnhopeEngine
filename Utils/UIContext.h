@@ -54,8 +54,14 @@ namespace burnhope {
         entt::entity selectedEntity;
     };
 
+    struct PendingDeletion {
+        std::vector<std::shared_ptr<void>> objects;
+        int framesRemaining;
+    };
+
     class UIContext {
     public:
+        class BurnhopeDevice* device = nullptr;
         entt::registry* registry = nullptr;
         entt::entity selectedEntity = entt::null;
         glm::mat4 modelMatrix = glm::mat4(1.0f);
@@ -72,8 +78,31 @@ namespace burnhope {
         std::string renamingPath = "";
 
         RenderSettings renderSettings;
+        bool needsRebuild = false;
+        std::vector<std::shared_ptr<void>> safeDeleteQueue;
+        std::vector<PendingDeletion> pendingDeletions;
         std::vector<SceneSnapshot> undoStack;
         std::vector<SceneSnapshot> redoStack;
+
+        // Утилита для получения списка файлов нужного типа
+        std::vector<std::string> GetProjectAssets(const std::vector<std::string>& extensions) {
+            std::vector<std::string> result;
+            if (!fs::exists(projectDirectory)) return result;
+            
+            for (const auto& entry : fs::recursive_directory_iterator(projectDirectory)) {
+                if (entry.is_regular_file()) {
+                    std::string ext = entry.path().extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                    for (const auto& e : extensions) {
+                        if (ext == e) {
+                            result.push_back(entry.path().string());
+                            break;
+                        }
+                    }
+                }
+            }
+            return result;
+        }
 
         // Вспомогательные методы, перенесенные из твоего старого UI
         void SaveState() {

@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include <imgui_impl_vulkan.h>
+#include "../Render/Texture.hpp"
 // #include "../Render/ModelImporter.h" // Раскомментируй, если нужен импорт моделей
 
 namespace burnhope {
@@ -18,6 +20,12 @@ namespace burnhope {
         char inlineRenameBuf[256] = "";
         bool focusRename = false;
         int lastClickedIndex = -1;
+
+        struct PreviewData {
+            std::shared_ptr<BurnhopeTexture> texture;
+            VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        };
+        std::unordered_map<std::string, PreviewData> previewCache;
 
     public:
         ContentBrowserWindow() : IUIWindow("Content Browser") {}
@@ -52,6 +60,43 @@ namespace burnhope {
         }
 
     private:
+        VkDescriptorSet GetOrLoadPreview(UIContext& context, const std::string& path) {
+            if (previewCache.find(path) != previewCache.end()) return previewCache[path].descriptorSet;
+
+            std::string imageToLoad = path;
+            fs::path p(path);
+            std::string ext = p.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+            // Если это материал - пытаемся вытащить Albedo текстуру для превью
+            if (ext == ".bhmat" || ext == ".json") {
+                std::ifstream f(path);
+                if (f.is_open()) {
+                    json j;
+                    try { f >> j; } catch(...) { previewCache[path] = {nullptr, VK_NULL_HANDLE}; return VK_NULL_HANDLE; }
+                    if (j.is_object()) {
+                        std::string albedo = j.value("albedoPath", "");
+                        if (!albedo.empty() && fs::exists(albedo)) {
+                            imageToLoad = albedo;
+                        } else { previewCache[path] = {nullptr, VK_NULL_HANDLE}; return VK_NULL_HANDLE; }
+                    } else { previewCache[path] = {nullptr, VK_NULL_HANDLE}; return VK_NULL_HANDLE; }
+                } else { previewCache[path] = {nullptr, VK_NULL_HANDLE}; return VK_NULL_HANDLE; }
+            } else if (ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".tga") {
+                previewCache[path] = {nullptr, VK_NULL_HANDLE};
+                return VK_NULL_HANDLE;
+            }
+
+            try {
+                auto tex = std::make_shared<BurnhopeTexture>(*context.device, imageToLoad, true);
+                VkDescriptorSet ds = ImGui_ImplVulkan_AddTexture(tex->getSampler(), tex->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                previewCache[path] = {tex, ds};
+                return ds;
+            } catch (...) {
+                previewCache[path] = {nullptr, VK_NULL_HANDLE};
+                return VK_NULL_HANDLE;
+            }
+        }
+
         void NavigateTo(UIContext& context, const fs::path& target) {
             if (context.currentDirectory == target) return;
             if (context.dirHistoryIndex < context.dirHistory.size() - 1) {
@@ -229,11 +274,27 @@ namespace burnhope {
                 bool isSel = std::find(context.selectedAssets.begin(), context.selectedAssets.end(), pathStr) != context.selectedAssets.end();
                 
                 ImGui::PushStyleColor(ImGuiCol_Button, isSel ? ImVec4(0.2f, 0.4f, 0.8f, 1.0f) : ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
-                if (ImGui::Button(isDir ? "DIR" : "FILE", ImVec2(thumbnailSize, thumbnailSize))) {
-                    if (!ImGui::GetIO().KeyCtrl) context.selectedAssets.clear();
-                    context.selectedAssets.push_back(pathStr);
+                
+                VkDescriptorSet preview = isDir ? VK_NULL_HANDLE : GetOrLoadPreview(context, pathStr);
+                
+                if (preview != VK_NULL_HANDLE) {
+                    if (ImGui::ImageButton(pathStr.c_str(), (ImTextureID)preview, ImVec2(thumbnailSize, thumbnailSize))) {
+                        if (!ImGui::GetIO().KeyCtrl) context.selectedAssets.clear();
+                        context.selectedAssets.push_back(pathStr);
+                    }
+                } else {
+                    if (ImGui::Button(isDir ? "DIR" : "FILE", ImVec2(thumbnailSize, thumbnailSize))) {
+                        if (!ImGui::GetIO().KeyCtrl) context.selectedAssets.clear();
+                        context.selectedAssets.push_back(pathStr);
+                    }
                 }
                 ImGui::PopStyleColor();
+
+                if (ImGui::BeginDragDropSource()) {
+                    ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", pathStr.c_str(), pathStr.size() + 1);
+                    ImGui::Text("%s", path.filename().string().c_str());
+                    ImGui::EndDragDropSource();
+                }
 
                 if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0) && isDir) {
                     NavigateTo(context, path);

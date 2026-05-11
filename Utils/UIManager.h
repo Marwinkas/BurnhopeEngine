@@ -18,6 +18,7 @@
 #include "OutlinerWindow.h"
 #include "ContentBrowserWindow.h"
 #include "PropertiesWindow.h"
+#include "MaterialEditorWindow.h"
 
 namespace burnhope {
     class UIManager {
@@ -35,6 +36,7 @@ namespace burnhope {
         UIManager(BurnhopeWindow& window, BurnhopeDevice& device, VkRenderPass renderPass, entt::registry* registry, const std::string& projectPath) {
             m_Device = &device;
             m_Context.registry = registry;
+            m_Context.device = &device;
             m_Context.projectDirectory = projectPath;
             m_Context.currentDirectory = projectPath;
 
@@ -46,9 +48,16 @@ namespace burnhope {
             m_Windows.push_back(std::make_unique<InspectorWindow>());
             m_Windows.push_back(std::make_unique<ContentBrowserWindow>());
             m_Windows.push_back(std::make_unique<PropertiesWindow>());
+            m_Windows.push_back(std::make_unique<MaterialEditorWindow>());
         }
 
         ~UIManager() {
+            // Очищаем окна (убивает превью текстуры и открытые материалы)
+            m_Windows.clear();
+            // Очищаем историю сцен (убивает закешированные модели и буферы)
+            m_Context.undoStack.clear();
+            m_Context.redoStack.clear();
+
             ImGui_ImplVulkan_Shutdown();
             ImGui_ImplGlfw_Shutdown();
             ImGui::DestroyContext();
@@ -304,6 +313,7 @@ namespace burnhope {
                 ImGui::DockBuilderDockWindow("Content Browser", dock_bottom);
                 ImGui::DockBuilderDockWindow("Scene Inspector", dock_right);
                 ImGui::DockBuilderDockWindow("Properties", dock_right);
+                ImGui::DockBuilderDockWindow("Material Editor", dock_right);
                 ImGui::DockBuilderFinish(dockspace_id);
             }
             ImGui::End();
@@ -373,40 +383,103 @@ namespace burnhope {
         void SetupTheme() {
             ImGuiStyle &style = ImGui::GetStyle();
             ImVec4 *colors = style.Colors;
-            style.WindowRounding = 6.0f;
-            style.ChildRounding = 4.0f;
-            style.FrameRounding = 4.0f;
-            style.PopupRounding = 6.0f;
-            style.TabRounding = 6.0f;
-            style.WindowBorderSize = 1.0f;
-            style.FrameBorderSize = 0.0f;
-            style.PopupBorderSize = 1.0f;
-            style.ItemSpacing = ImVec2(8, 6);
-            colors[ImGuiCol_Text] = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
-            colors[ImGuiCol_WindowBg] = ImVec4(0.11f, 0.10f, 0.13f, 1.00f);
-            colors[ImGuiCol_ChildBg] = ImVec4(0.09f, 0.08f, 0.11f, 1.00f);
-            colors[ImGuiCol_PopupBg] = ImVec4(0.11f, 0.10f, 0.13f, 0.98f);
-            colors[ImGuiCol_Border] = ImVec4(0.24f, 0.18f, 0.32f, 1.00f);
-            colors[ImGuiCol_FrameBg] = ImVec4(0.16f, 0.14f, 0.20f, 1.00f);
-            colors[ImGuiCol_FrameBgHovered] = ImVec4(0.24f, 0.18f, 0.32f, 1.00f);
-            colors[ImGuiCol_FrameBgActive] = ImVec4(0.35f, 0.22f, 0.50f, 1.00f);
-            colors[ImGuiCol_Button] = ImVec4(0.24f, 0.18f, 0.32f, 1.00f);
-            colors[ImGuiCol_ButtonHovered] = ImVec4(0.35f, 0.22f, 0.50f, 1.00f);
-            colors[ImGuiCol_ButtonActive] = ImVec4(0.48f, 0.30f, 0.68f, 1.00f);
-            colors[ImGuiCol_Header] = ImVec4(0.20f, 0.16f, 0.26f, 1.00f);
-            colors[ImGuiCol_HeaderHovered] = ImVec4(0.28f, 0.20f, 0.38f, 1.00f);
-            colors[ImGuiCol_HeaderActive] = ImVec4(0.40f, 0.25f, 0.55f, 1.00f);
-            colors[ImGuiCol_Tab] = ImVec4(0.14f, 0.12f, 0.17f, 1.00f);
-            colors[ImGuiCol_TabHovered] = ImVec4(0.28f, 0.20f, 0.38f, 1.00f);
-            colors[ImGuiCol_TabActive] = ImVec4(0.24f, 0.18f, 0.32f, 1.00f);
-            colors[ImGuiCol_TabUnfocused] = ImVec4(0.11f, 0.10f, 0.13f, 1.00f);
-            colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.16f, 0.14f, 0.20f, 1.00f);
-            colors[ImGuiCol_CheckMark] = ImVec4(0.68f, 0.45f, 0.95f, 1.00f);
-            colors[ImGuiCol_SliderGrab] = ImVec4(0.55f, 0.35f, 0.85f, 1.00f);
-            colors[ImGuiCol_SliderGrabActive] = ImVec4(0.70f, 0.50f, 1.00f, 1.00f);
-            colors[ImGuiCol_TitleBg] = ImVec4(0.11f, 0.10f, 0.13f, 1.00f);
-            colors[ImGuiCol_TitleBgActive] = ImVec4(0.16f, 0.14f, 0.20f, 1.00f);
-            colors[ImGuiCol_MenuBarBg] = ImVec4(0.09f, 0.08f, 0.11f, 1.00f);
+
+            // --- Modern UI Styling ---
+            style.WindowPadding     = ImVec2(12.0f, 12.0f);
+            style.FramePadding      = ImVec2(8.0f, 6.0f);
+            style.ItemSpacing       = ImVec2(10.0f, 8.0f);
+            style.ItemInnerSpacing  = ImVec2(6.0f, 6.0f);
+            style.ScrollbarSize     = 14.0f;
+            style.GrabMinSize       = 12.0f;
+            
+            // Remove borders for a cleaner look
+            style.WindowBorderSize  = 0.0f;
+            style.ChildBorderSize   = 0.0f;
+            style.PopupBorderSize   = 0.0f;
+            style.FrameBorderSize   = 0.0f;
+            style.TabBorderSize     = 0.0f;
+            
+            // Rounding for a soft, modern look
+            style.WindowRounding    = 8.0f;
+            style.ChildRounding     = 6.0f;
+            style.FrameRounding     = 6.0f;
+            style.PopupRounding     = 8.0f;
+            style.ScrollbarRounding = 12.0f;
+            style.GrabRounding      = 6.0f;
+            style.TabRounding       = 6.0f;
+
+            // --- Purple-Grey Color Palette ---
+            // Backgrounds (Dark grey with slight purple tint)
+            ImVec4 bg_base          = ImVec4(0.13f, 0.12f, 0.15f, 1.00f);
+            ImVec4 bg_panel         = ImVec4(0.17f, 0.16f, 0.19f, 1.00f);
+            ImVec4 bg_popup         = ImVec4(0.15f, 0.14f, 0.17f, 0.98f);
+            
+            // Accents (Purple)
+            ImVec4 accent_base      = ImVec4(0.55f, 0.35f, 0.85f, 1.00f);
+            ImVec4 accent_hover     = ImVec4(0.65f, 0.45f, 0.95f, 1.00f);
+            ImVec4 accent_active    = ImVec4(0.75f, 0.55f, 1.00f, 1.00f);
+            
+            // Elements
+            ImVec4 frame_bg         = ImVec4(0.22f, 0.20f, 0.25f, 1.00f);
+            ImVec4 frame_hover      = ImVec4(0.30f, 0.26f, 0.35f, 1.00f);
+            
+            // Text
+            ImVec4 text_main        = ImVec4(0.92f, 0.92f, 0.95f, 1.00f);
+            ImVec4 text_muted       = ImVec4(0.65f, 0.65f, 0.70f, 1.00f);
+
+            colors[ImGuiCol_Text]                  = text_main;
+            colors[ImGuiCol_TextDisabled]          = text_muted;
+            colors[ImGuiCol_WindowBg]              = bg_base;
+            colors[ImGuiCol_ChildBg]               = bg_panel;
+            colors[ImGuiCol_PopupBg]               = bg_popup;
+            colors[ImGuiCol_Border]                = ImVec4(0.28f, 0.25f, 0.32f, 0.50f);
+            colors[ImGuiCol_BorderShadow]          = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+            colors[ImGuiCol_FrameBg]               = frame_bg;
+            colors[ImGuiCol_FrameBgHovered]        = frame_hover;
+            colors[ImGuiCol_FrameBgActive]         = accent_active;
+            colors[ImGuiCol_TitleBg]               = bg_base;
+            colors[ImGuiCol_TitleBgActive]         = bg_base;
+            colors[ImGuiCol_TitleBgCollapsed]      = bg_base;
+            colors[ImGuiCol_MenuBarBg]             = bg_panel;
+            colors[ImGuiCol_ScrollbarBg]           = ImVec4(0.05f, 0.05f, 0.06f, 0.54f);
+            colors[ImGuiCol_ScrollbarGrab]         = ImVec4(0.35f, 0.32f, 0.40f, 1.00f);
+            colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(0.45f, 0.42f, 0.50f, 1.00f);
+            colors[ImGuiCol_ScrollbarGrabActive]   = accent_active;
+            colors[ImGuiCol_CheckMark]             = accent_active;
+            colors[ImGuiCol_SliderGrab]            = accent_base;
+            colors[ImGuiCol_SliderGrabActive]      = accent_active;
+            colors[ImGuiCol_Button]                = accent_base;
+            colors[ImGuiCol_ButtonHovered]         = accent_hover;
+            colors[ImGuiCol_ButtonActive]          = accent_active;
+            colors[ImGuiCol_Header]                = frame_bg;
+            colors[ImGuiCol_HeaderHovered]         = frame_hover;
+            colors[ImGuiCol_HeaderActive]          = accent_active;
+            colors[ImGuiCol_Separator]             = colors[ImGuiCol_Border];
+            colors[ImGuiCol_SeparatorHovered]      = accent_hover;
+            colors[ImGuiCol_SeparatorActive]       = accent_active;
+            colors[ImGuiCol_ResizeGrip]            = ImVec4(0.55f, 0.35f, 0.85f, 0.20f);
+            colors[ImGuiCol_ResizeGripHovered]     = ImVec4(0.65f, 0.45f, 0.95f, 0.60f);
+            colors[ImGuiCol_ResizeGripActive]      = accent_active;
+            colors[ImGuiCol_Tab]                   = bg_panel;
+            colors[ImGuiCol_TabHovered]            = accent_hover;
+            colors[ImGuiCol_TabActive]             = accent_base;
+            colors[ImGuiCol_TabUnfocused]          = bg_base;
+            colors[ImGuiCol_TabUnfocusedActive]    = bg_panel;
+            colors[ImGuiCol_PlotLines]             = accent_base;
+            colors[ImGuiCol_PlotLinesHovered]      = accent_hover;
+            colors[ImGuiCol_PlotHistogram]         = accent_base;
+            colors[ImGuiCol_PlotHistogramHovered]  = accent_hover;
+            colors[ImGuiCol_TableHeaderBg]         = ImVec4(0.20f, 0.18f, 0.23f, 1.00f);
+            colors[ImGuiCol_TableBorderStrong]     = ImVec4(0.35f, 0.32f, 0.40f, 1.00f);
+            colors[ImGuiCol_TableBorderLight]      = ImVec4(0.28f, 0.25f, 0.32f, 1.00f);
+            colors[ImGuiCol_TableRowBg]            = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+            colors[ImGuiCol_TableRowBgAlt]         = ImVec4(1.00f, 1.00f, 1.00f, 0.05f);
+            colors[ImGuiCol_TextSelectedBg]        = ImVec4(0.55f, 0.35f, 0.85f, 0.35f);
+            colors[ImGuiCol_DragDropTarget]        = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+            colors[ImGuiCol_NavHighlight]          = accent_active;
+            colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+            colors[ImGuiCol_NavWindowingDimBg]     = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
+            colors[ImGuiCol_ModalWindowDimBg]      = ImVec4(0.10f, 0.10f, 0.12f, 0.73f);
         }
     };
 }
