@@ -1,4 +1,4 @@
-﻿#include "MainApp.hpp"
+#include "MainApp.hpp"
 #include "Render/Camera.hpp"
 #include "Render/SceneManager.hpp"
 #define GLM_FORCE_RADIANS
@@ -8,6 +8,7 @@
 #include <chrono>
 #include <stdexcept>
 #include <array>
+#include <thread>
 #include "Render/RenderGraph.hpp"
 namespace burnhope
 {
@@ -128,7 +129,38 @@ namespace burnhope
                               .addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT)
                               .build();
 
+        portalUboBuffers.resize(MAX_PORTALS);
+        portalDescriptorSets.resize(MAX_PORTALS);
+
+        for (int p = 0; p < MAX_PORTALS; p++)
+        {
+            // Резервируем место под кадры (обычно 2 или 3)
+            portalUboBuffers[p].resize(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
+            portalDescriptorSets[p].resize(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
+
+            for (int f = 0; f < BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT; f++)
+            {
+                portalUboBuffers[p][f] = std::make_unique<BurnhopeBuffer>(
+                    lveDevice,
+                    sizeof(GlobalUbo),
+                    1,
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+                portalUboBuffers[p][f]->map();
+
+                auto bufferInfo = portalUboBuffers[p][f]->descriptorInfo();
+                BurnhopeDescriptorWriter(*globalSetLayout, *globalPool)
+                    .writeBuffer(0, &bufferInfo)
+                    .build(portalDescriptorSets[p][f]);
+            }
+        }
+
         gBuffer = std::make_unique<BurnhopeGBuffer>(lveDevice, lveWindow.getExtent());
+
+        portalRenderSystem = std::make_unique<PortalRenderSystem>(
+            lveDevice,
+            gBuffer->getRenderPass(),
+            globalSetLayout->getDescriptorSetLayout());
 
         simpleRenderSystem = std::make_unique<GeometryRenderSystem>(
             lveDevice,
@@ -196,12 +228,55 @@ namespace burnhope
             vkDestroyImageView(lveDevice.device(), csmArrayView, nullptr);
             csmArrayView = VK_NULL_HANDLE;
         }
+        for (auto &pBuffers : portalUboBuffers)
+        {
+            for (auto &buffer : pBuffers)
+            {
+                buffer.reset();
+            }
+        }
+        portalUboBuffers.clear();
+        portalDescriptorSets.clear();
     }
     glm::mat4 shadowPerspective(float fovY, float aspect, float zNear, float zFar)
     {
         glm::mat4 proj = glm::perspective(glm::radians(fovY), aspect, zNear, zFar);
         proj[1][1] *= -1.0f;
         return proj;
+    }
+    glm::mat4 computeObliqueProjection(const glm::mat4 &proj,
+                                       const glm::mat4 &view,
+                                       const glm::vec3 &planePos,
+                                       const glm::vec3 &planeNormal)
+    {
+        glm::vec3 normalView = glm::normalize(
+            glm::mat3(glm::transpose(glm::inverse(view))) * planeNormal);
+        glm::vec3 pointView = glm::vec3(view * glm::vec4(planePos, 1.0f));
+        float d = -glm::dot(normalView, pointView);
+        glm::vec4 clipPlane(normalView, d);
+
+        if (clipPlane.z > 0.0f)
+            clipPlane = -clipPlane;
+
+        glm::mat4 result = proj;
+
+        glm::vec4 q;
+        q.x = (glm::sign(clipPlane.x) + proj[2][0]) / proj[0][0];
+        q.y = (glm::sign(clipPlane.y) + proj[2][1]) / proj[1][1];
+        q.z = -1.0f;
+        q.w = (1.0f + proj[2][2]) / proj[3][2];
+
+        float dotProd = glm::dot(clipPlane, q);
+        if (glm::abs(dotProd) < 1e-6f)
+            return proj;
+        glm::vec4 c = clipPlane / dotProd;
+
+        result[0][2] = c.x;
+        result[1][2] = c.y;
+        result[2][2] = c.z;
+        result[3][2] = c.w;
+
+        return result;
     }
     void FirstApp::RebuildBatches(entt::registry &registry, GeometryRenderSystem &renderSystem)
     {
@@ -377,6 +452,7 @@ namespace burnhope
     }
     void FirstApp::run()
     {
+
         std::vector<std::unique_ptr<BurnhopeBuffer>> uboBuffers(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
         for (int i = 0; i < uboBuffers.size(); i++)
         {
@@ -390,6 +466,25 @@ namespace burnhope
             auto bufferInfo = uboBuffers[i]->descriptorInfo();
             BurnhopeDescriptorWriter(*globalSetLayout, *globalPool).writeBuffer(0, &bufferInfo).build(globalDescriptorSets[i]);
         }
+
+        // std::vector<std::unique_ptr<BurnhopeBuffer>> portalUboBuffers(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
+        // for (int i = 0; i < (int)portalUboBuffers.size(); i++)
+        //{
+        //      portalUboBuffers[i] = std::make_unique<BurnhopeBuffer>(
+        //          lveDevice, sizeof(GlobalUbo), 1,
+        //          VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        //          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        //      portalUboBuffers[i]->map();
+        //
+        //
+        // std::vector<VkDescriptorSet> portalDescriptorSets(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
+        // for (int i = 0; i < (int)portalDescriptorSets.size(); i++)
+        //{
+        //     auto bufferInfo = portalUboBuffers[i]->descriptorInfo();
+        //     BurnhopeDescriptorWriter(*globalSetLayout, *globalPool)
+        //         .writeBuffer(0, &bufferInfo)
+        //         .build(portalDescriptorSets[i]);
+        // }
 
         RebuildBatches(registry, *simpleRenderSystem);
         buildTLAS(registry);
@@ -425,6 +520,9 @@ namespace burnhope
         float timeAccumulator = 0.0f;
         static std::array<glm::mat4, 4> cachedCascadeMats;
         static bool matricesCached = false;
+        const double targetFPS = 60.0;
+        const double maxPeriod = 1.0 / targetFPS;
+
         while (!lveWindow.shouldClose())
         {
             glfwPollEvents();
@@ -599,6 +697,17 @@ namespace burnhope
             }
             auto newTime = std::chrono::high_resolution_clock::now();
             float frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
+
+            if (frameTime < maxPeriod)
+            {
+                double sleepTime = maxPeriod - frameTime;
+                std::this_thread::sleep_for(std::chrono::duration<double>(sleepTime));
+
+                // Пересчитываем время после сна для честного deltaTime
+                newTime = std::chrono::high_resolution_clock::now();
+                frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
+            }
+
             currentTime = newTime;
             frameCount++;
             timeAccumulator += frameTime;
@@ -933,7 +1042,7 @@ namespace burnhope
 
                     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 2, gridBarriers, 0, nullptr); });
 
-                renderPipeline.addPass("G-Buffer Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, 1)}, [&](VkCommandBuffer cmd)
+                renderPipeline.addPass("G-Buffer Pass", {RenderPipeline::createImageBarrier(shadowSystem->getCSM()->getTexture()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT| VK_IMAGE_ASPECT_STENCIL_BIT, BurnhopeCSM::CASCADE_COUNT), RenderPipeline::createImageBarrier(shadowSystem->getAtlas()->getTexture()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 1)}, [&](VkCommandBuffer cmd)
                                        {
                     VkRenderPassBeginInfo renderPassInfo{};
                     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO; renderPassInfo.renderPass = gBuffer->getRenderPass();
@@ -941,10 +1050,85 @@ namespace burnhope
                     std::array<VkClearValue, 5> clearValues{}; clearValues[4].depthStencil = { 1.0f, 0 };
                     renderPassInfo.clearValueCount = (uint32_t)clearValues.size(); renderPassInfo.pClearValues = clearValues.data();
                     vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-                    VkViewport viewport{}; viewport.width = (float)extent.width; viewport.height = (float)extent.height; viewport.maxDepth = 1.0f;
+
+                    VkViewport viewport{};
+                    viewport.width = (float)extent.width;
+                    viewport.height = (float)extent.height;
+                    viewport.maxDepth = 1.0f;
                     vkCmdSetViewport(cmd, 0, 1, &viewport);
-                    VkRect2D scissor{ {0, 0}, extent }; vkCmdSetScissor(cmd, 0, 1, &scissor);
-                    simpleRenderSystem->renderEntities(frameInfo, registry, storageSet, textureSet, *cullingSystem, totalSubMeshCount);
+                    VkRect2D scissor{{0, 0}, extent};
+                    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+                    simpleRenderSystem->renderEntities(frameInfo, registry, storageSet, textureSet,
+                                                       *cullingSystem, totalSubMeshCount, false);
+
+                    {
+                        uint32_t idx = 0;
+                        for (auto entity : registry.view<PortalComponent, TransformComponent>()) {
+                            if (idx >= MAX_PORTALS) break;
+                            auto& transform = registry.get<TransformComponent>(entity);
+                            portalRenderSystem->drawMask(cmd, globalDescriptorSets[frameIndex],
+                                                         transform.transform.matrix, idx + 1);
+                            idx++;
+                        }
+                    }
+
+                    {
+                        uint32_t portalCounter = 0;
+                        for (auto entity : registry.view<PortalComponent, TransformComponent>()) {
+                            if (portalCounter >= MAX_PORTALS) break;
+                            auto& portal    = registry.get<PortalComponent>(entity);
+                            auto& transform = registry.get<TransformComponent>(entity);
+                        
+                            if (portal.targetPortal == entt::null) { portalCounter++; continue; }
+                        
+                            portalRenderSystem->drawDepthReset(cmd, globalDescriptorSets[frameIndex],
+                                                               transform.transform.matrix, portalCounter + 1);
+                            
+                            auto& targetTransform = registry.get<TransformComponent>(portal.targetPortal);
+                            glm::mat4 realCamWorld = glm::inverse(camera.GetViewMatrix());
+                            glm::mat4 mIn  = transform.transform.matrix;
+                            glm::mat4 mOut = targetTransform.transform.matrix;
+                            auto clean = [](glm::mat4 m) {
+                                m[0] = glm::vec4(glm::normalize(glm::vec3(m[0])), 0);
+                                m[1] = glm::vec4(glm::normalize(glm::vec3(m[1])), 0);
+                                m[2] = glm::vec4(glm::normalize(glm::vec3(m[2])), 0);
+                                return m;
+                            };
+                            static const glm::mat4 rot180 = glm::rotate(glm::mat4(1.f), glm::pi<float>(), {0, 1, 0});
+                            glm::mat4 portalTransition = clean(mOut) * rot180 * glm::inverse(clean(mIn));
+                            glm::mat4 virtualCamWorld  = portalTransition * realCamWorld;
+                        
+                            GlobalUbo portalUbo   = ubo;
+                            portalUbo.view        = glm::inverse(virtualCamWorld);
+                            portalUbo.invViewProj = glm::inverse(portalUbo.projection * portalUbo.view);
+                            portalUbo.camPos      = glm::vec3(virtualCamWorld[3]);
+                        
+                            glm::vec3 exitPortalPos    = glm::vec3(mOut[3]);
+                            glm::vec3 exitPortalNormal = -glm::normalize(glm::vec3(mOut[2]));
+                            // Знак минус: local +Z портала смотрит наружу (от сцены),
+                            // нам нужна нормаль внутрь. Если клипается не та сторона — убери минус.
+
+                            portalUbo.projection = computeObliqueProjection(
+                                portalUbo.projection, portalUbo.view,
+                                exitPortalPos, exitPortalNormal);
+                            
+                            // Обязательно пересчитать после модификации projection!
+                            portalUbo.invViewProj = glm::inverse(portalUbo.projection * portalUbo.view);
+                            
+                            portalUboBuffers[portalCounter][frameIndex]->writeToBuffer(&portalUbo);
+                            portalUboBuffers[portalCounter][frameIndex]->flush();
+                        
+                            FrameInfo portalFrameInfo  = frameInfo;
+                            portalFrameInfo.globalDescriptorSet = portalDescriptorSets[portalCounter][frameIndex];
+                        
+                            vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, portalCounter + 1);
+                            simpleRenderSystem->renderEntities(portalFrameInfo, registry, storageSet, textureSet,
+                                                               *cullingSystem, totalSubMeshCount, true);
+                            portalCounter++;
+                        }
+                    }
+
                     vkCmdEndRenderPass(cmd); });
 
                 renderPipeline.addPass("VSM Mark Pages", {}, [&](VkCommandBuffer cmd)
@@ -1725,4 +1909,5 @@ namespace burnhope
     {
        
     }
+
 }

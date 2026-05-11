@@ -8,6 +8,7 @@
 #include "Utils/UIManager.h"
 #include "Render/Gbuffer.hpp"
 #include "Render/MainRender.hpp"
+#include "Render/PortalRenderSystem.hpp"
 #include "Render/ShadowRender.hpp"
 #include "Render/GTAOSystem.hpp"
 #include "Render/HiZSystem.hpp"
@@ -51,7 +52,6 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
     VkTransformMatrixKHR out;
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 4; ++j) {
-            // Заметь: мы меняем индексы местами [j][i], чтобы перевернуть матрицу
             out.matrix[i][j] = m[j][i]; 
         }
     }
@@ -62,17 +62,16 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
     public:
         static constexpr int WIDTH = 800;
         static constexpr int HEIGHT = 600;
+        static constexpr int MAX_PORTALS = 10;
         FirstApp();
         ~FirstApp();
         FirstApp(const FirstApp &) = delete;
         FirstApp &operator=(const FirstApp &) = delete;
         void run();
-// Переменные для TLAS
         std::unique_ptr<BurnhopeBuffer> tlasBuffer;
         std::unique_ptr<BurnhopeBuffer> instancesBuffer;
         VkAccelerationStructureKHR tlasHandle = VK_NULL_HANDLE;
 
-        // Объявление функции сборки
         void buildTLAS(entt::registry& registry);
     private:
         BurnhopeWindow lveWindow{WIDTH, HEIGHT, "BurnHope Engine"};
@@ -116,6 +115,7 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         VkDescriptorSet ssgiSet = VK_NULL_HANDLE;
         std::unique_ptr<SSGISystem> ssgiSystem;
         std::unique_ptr<GeometryRenderSystem> simpleRenderSystem;
+        std::unique_ptr<PortalRenderSystem> portalRenderSystem;
         void RebuildBatches(entt::registry &registry, GeometryRenderSystem &renderSystem);
         std::unique_ptr<burnhope::RadianceCascadesSystem> rcSystem;
         std::shared_ptr<BurnhopeTexture> defaultWhiteTex;
@@ -136,6 +136,9 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         VkDescriptorSet gtaoSet = VK_NULL_HANDLE;
         VkDescriptorSet rtSet = VK_NULL_HANDLE;
         std::unique_ptr<GTAOSystem> gtaoSystem;
+        std::vector<std::vector<std::unique_ptr<BurnhopeBuffer>>> portalUboBuffers;
+        std::vector<std::vector<VkDescriptorSet>> portalDescriptorSets;
+        
 #ifdef _WIN32
         std::string rootPath = "C:/";
 #else

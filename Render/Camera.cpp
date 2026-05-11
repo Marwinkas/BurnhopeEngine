@@ -10,6 +10,18 @@ namespace burnhope
         Camera::height = height;
         Position = position;
     }
+
+    void Camera::setViewMatrix(const glm::mat4& viewMatrix)
+    {
+        glm::mat4 invView = glm::inverse(viewMatrix);
+
+        Position = glm::vec3(invView[3]);
+
+        Orientation = -glm::normalize(glm::vec3(invView[2]));
+
+        Up = glm::normalize(glm::vec3(invView[1]));
+    }
+
     void Camera::updateMatrix(float FOVdeg, float nearPlane, float farPlane)
     {
         glm::mat4 view = GetViewMatrix();

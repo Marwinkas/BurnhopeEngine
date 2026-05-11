@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <entt/entt.hpp>
 #include <memory>
 #include <string>
@@ -12,19 +12,20 @@
 #include "../Render/Material.hpp"
 namespace burnhope
 {
-inline uint64_t generateRandomID() {
+    inline uint64_t generateRandomID()
+    {
         static std::random_device rd;
         static std::mt19937_64 eng(rd());
-        static std::uniform_int_distribution<uint64_t> dist(1); // Начинаем с 1, чтобы 0 означал "нет ID"
+        static std::uniform_int_distribution<uint64_t> dist(1);
         return dist(eng);
     }
-        // Добавляем новый компонент!
-struct IDComponent
+
+    struct IDComponent
     {
         uint64_t ID;
-        
+
         IDComponent() : ID(generateRandomID()) {}
-        IDComponent(uint64_t id) : ID(id) {} // <--- ВОТ ЭТА СТРОЧКА СПАСЕТ ОТ ОШИБКИ!
+        IDComponent(uint64_t id) : ID(id) {}
     };
 
     class Transform
@@ -37,28 +38,28 @@ struct IDComponent
         bool updatematrix = true;
 
         void updateMatrixIfNeeded()
-    {
-        if (updatematrix)
         {
-            glm::mat4 transform = glm::translate(glm::mat4(1.0f), position);
-            
-            // Аккуратно поворачиваем (в радианах)
-            transform = glm::rotate(transform, glm::radians(rotation.x), {1.0f, 0.0f, 0.0f});
-            transform = glm::rotate(transform, glm::radians(rotation.y), {0.0f, 1.0f, 0.0f});
-            transform = glm::rotate(transform, glm::radians(rotation.z), {0.0f, 0.0f, 1.0f});
-            
-            transform = glm::scale(transform, scale);
-            matrix = transform;
-            
-            updatematrix = false; // Посчитали и выключили флажок!
+            if (updatematrix)
+            {
+                glm::mat4 transform = glm::translate(glm::mat4(1.0f), position);
+
+                transform = glm::rotate(transform, glm::radians(rotation.x), {1.0f, 0.0f, 0.0f});
+                transform = glm::rotate(transform, glm::radians(rotation.y), {0.0f, 1.0f, 0.0f});
+                transform = glm::rotate(transform, glm::radians(rotation.z), {0.0f, 0.0f, 1.0f});
+
+                transform = glm::scale(transform, scale);
+                matrix = transform;
+
+                updatematrix = false;
+            }
         }
-    }
     };
     struct TagComponent
     {
         std::string name = "Entity";
         std::vector<std::string> tags;
         std::vector<std::string> layers;
+        bool isPhantom = false;
     };
     struct TransformComponent
     {
@@ -81,7 +82,7 @@ struct IDComponent
     };
     struct HierarchyComponent
     {
-        uint64_t parentID = 0; // Теперь храним не временный номер, а постоянный ID!
+        uint64_t parentID = 0;
         std::vector<uint64_t> childrenIDs;
     };
 
@@ -91,4 +92,12 @@ struct IDComponent
         bool updateNeeded = true;
         int textureIndex = -1; 
     };
+    struct PortalComponent {
+    entt::entity targetPortal = entt::null;
+
+    static glm::mat4 getPortalTransform(const glm::mat4& srcMatrix, const glm::mat4& dstMatrix) {
+        glm::mat4 flipY = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0, 1, 0));
+        return dstMatrix * flipY * glm::inverse(srcMatrix);
+    }
+};
 }

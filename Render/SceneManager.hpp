@@ -5,7 +5,6 @@
 #include <fstream>
 #include <filesystem>
 #include <iostream>
-// Подключи свои компоненты
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -20,7 +19,6 @@ namespace burnhope
             json sceneJson;
             auto entitiesArray = json::array();
 
-            // Проходим по всем сущностям, у которых есть ID
             auto view = registry.view<IDComponent>();
             for (auto entity : view)
             {
@@ -62,10 +60,8 @@ namespace burnhope
                 if (registry.any_of<MeshComponent>(entity)) {
                     auto& mc = registry.get<MeshComponent>(entity);
                     
-                    // Создаем папку для материалов, если её нет
                     if (!fs::exists("materials")) fs::create_directory("materials");
 
-                    // Сохраняем каждый материал в файл (если у него еще нет пути, генерируем)
                     for (size_t i = 0; i < mc.materials.size(); ++i) {
                         if (i >= mc.materialPaths.size()) {
                             mc.materialPaths.push_back("materials/mat_" + std::to_string(mc.materials[i]->ID) + ".json");
@@ -112,22 +108,19 @@ namespace burnhope
 
             json sceneJson;
             file >> sceneJson;
-            registry.clear(); // Очищаем мир перед загрузкой
+            registry.clear();
 
             for (const auto& eJson : sceneJson["entities"])
             {
                 auto entity = registry.create();
 
-                // ID
                 uint64_t id = eJson.value("id", generateRandomID());
                 registry.emplace<IDComponent>(entity, id);
 
-                // Tag
                 if (eJson.contains("tag")) {
                     registry.emplace<TagComponent>(entity, eJson["tag"].get<std::string>());
                 }
 
-                // Transform
                 if (eJson.contains("transform")) {
                     auto& tc = registry.emplace<TransformComponent>(entity).transform;
                     auto& p = eJson["transform"]["pos"];
@@ -137,10 +130,9 @@ namespace burnhope
                     tc.rotation = {r[0], r[1], r[2]};
                     tc.scale = {s[0], s[1], s[2]};
                     tc.updatematrix = true;
-                    tc.updateMatrixIfNeeded(); // Сразу считаем матрицу!
+                    tc.updateMatrixIfNeeded();
                 }
 
-                // Hierarchy
                 if (eJson.contains("hierarchy")) {
                     auto& hc = registry.emplace<HierarchyComponent>(entity);
                     hc.parentID = eJson["hierarchy"].value("parentID", 0ULL);
@@ -149,7 +141,6 @@ namespace burnhope
                     }
                 }
 
-                // Light
                 if (eJson.contains("light")) {
                     auto& lc = registry.emplace<LightComponent>(entity).light;
                     auto& lData = eJson["light"];
@@ -161,7 +152,6 @@ namespace burnhope
                     lc.enable = true;
                 }
 
-                // Mesh & Materials
                 if (eJson.contains("mesh")) {
                     auto& mc = registry.emplace<MeshComponent>(entity);
                     mc.modelPath = eJson["mesh"].value("modelPath", "");

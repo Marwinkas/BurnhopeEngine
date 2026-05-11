@@ -77,9 +77,15 @@ static_assert(sizeof(MaterialData) % 16 == 0, "MaterialData size must be a multi
         BurnhopeDescriptorSetLayout *getTextureLayout() const { return textureLayout.get(); }
         GeometryRenderSystem(const GeometryRenderSystem &) = delete;
         GeometryRenderSystem &operator=(const GeometryRenderSystem &) = delete;
-        void renderEntities(FrameInfo &frameInfo, entt::registry &registry, VkDescriptorSet storageSet, VkDescriptorSet textureSet,
-                            CullingSystem &cullingSystem,
-                            uint32_t totalSubMeshCount);
+        void renderEntities(
+            FrameInfo &frameInfo,
+            entt::registry &registry,
+            VkDescriptorSet storageSet,
+            VkDescriptorSet textureSet,
+            CullingSystem &cullingSystem,
+            uint32_t totalSubMeshCount,
+            bool useStencil
+        );
 
     private:
         void createPipelineLayout(VkDescriptorSetLayout globalSetLayout);
@@ -90,5 +96,6 @@ static_assert(sizeof(MaterialData) % 16 == 0, "MaterialData size must be a multi
         std::unique_ptr<BurnhopeDescriptorSetLayout> renderSystemLayout;
         std::unique_ptr<BurnhopeDescriptorSetLayout> textureLayout;
         std::unique_ptr<GraphicsShader> shader;
+        std::unique_ptr<GraphicsShader> portalShader;
     };
 }

@@ -53,7 +53,7 @@ namespace burnhope
 
         for (const auto& paths : builder.materialPaths) {
         auto mat = std::make_shared<Material>();
-        /*
+        
         // Загружаем основной цвет (Albedo)
         if (!paths.albedo.empty()) {
             std::string fullPath = builder.modelDir + paths.albedo;
@@ -80,7 +80,7 @@ namespace burnhope
         
         // Сохраняем собранный материал в нашу модель
         materials.push_back(mat);
-        */
+        
     }
     
        

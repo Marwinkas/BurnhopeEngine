@@ -1,0 +1,13 @@
+{
+    "albedoPath": "../textures/diffuse3.bhtex",
+    "aoPath": "../textures/ao3.bhtex",
+    "heightPath": "../textures/height3.bhtex",
+    "isORM": false,
+    "metallicPath": "../textures/metallic3.bhtex",
+    "normalPath": "../textures/normal3.bhtex",
+    "roughnessPath": "../textures/rougness3.bhtex",
+    "uvScale": [
+        1.0,
+        1.0
+    ]
+}
