@@ -20,6 +20,7 @@ namespace burnhope {
         char inlineRenameBuf[256] = "";
         bool focusRename = false;
         int lastClickedIndex = -1;
+        float thumbnailSize = 80.0f;
 
         struct PreviewData {
             std::shared_ptr<BurnhopeTexture> texture;
@@ -39,27 +40,37 @@ namespace burnhope {
             
             ImGui::Separator();
 
-            // Разделяем экран на 2 колонки: Дерево папок и Сетка файлов
-            ImGui::Columns(2, "CB_Columns", true);
-            if (ImGui::GetColumnWidth() == ImGui::GetContentRegionAvail().x) ImGui::SetColumnWidth(0, 200.0f);
-            
-            // Левая панель
-            ImGui::BeginChild("LeftTreePanel");
-            DrawFolderTree(context, context.projectDirectory);
-            ImGui::EndChild();
-            
-            ImGui::NextColumn();
-
-            // Правая панель
-            ImGui::BeginChild("RightGridPanel");
-            DrawGrid(context);
-            ImGui::EndChild();
-
-            ImGui::Columns(1);
+            // Используем современные таблицы ImGui для изменяемого сплиттера
+            if (ImGui::BeginTable("CB_Layout", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) {
+                ImGui::TableSetupColumn("Tree", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+                ImGui::TableSetupColumn("Grid", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableNextRow();
+                
+                ImGui::TableSetColumnIndex(0);
+                ImGui::BeginChild("LeftTreePanel");
+                DrawFolderTree(context, context.projectDirectory);
+                ImGui::EndChild();
+                
+                ImGui::TableSetColumnIndex(1);
+                ImGui::BeginChild("RightGridPanel");
+                DrawGrid(context);
+                ImGui::EndChild();
+                
+                ImGui::EndTable();
+            }
             ImGui::End();
         }
 
     private:
+        void DeleteSelected(UIContext& context) {
+            if (context.selectedAssets.empty()) return;
+            for (const auto& path : context.selectedAssets) {
+                try { fs::remove_all(path); } catch (...) {}
+            }
+            context.selectedAssets.clear();
+            lastClickedIndex = -1;
+        }
+
         VkDescriptorSet GetOrLoadPreview(UIContext& context, const std::string& path) {
             if (previewCache.find(path) != previewCache.end()) return previewCache[path].descriptorSet;
 
@@ -115,11 +126,7 @@ namespace burnhope {
             ImGuiIO& io = ImGui::GetIO();
 
             if (ImGui::IsKeyPressed(ImGuiKey_Delete) && !context.selectedAssets.empty() && context.renamingPath.empty()) {
-                for (const auto& path : context.selectedAssets) {
-                    try { fs::remove_all(path); } catch (...) {}
-                }
-                context.selectedAssets.clear();
-                lastClickedIndex = -1;
+                DeleteSelected(context);
             }
             if (ImGui::IsKeyPressed(ImGuiKey_F2) && context.selectedAssets.size() == 1 && context.renamingPath.empty()) {
                 StartRename(context, context.selectedAssets[0]);
@@ -141,47 +148,55 @@ namespace burnhope {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
             
             if (context.dirHistoryIndex > 0) {
-                if (ImGui::Button("<")) {
+                if (ImGui::Button("◄")) {
                     context.dirHistoryIndex--;
                     context.currentDirectory = context.dirHistory[context.dirHistoryIndex];
                     context.selectedAssets.clear();
                 }
-            } else ImGui::TextDisabled("<");
+            } else ImGui::TextDisabled("◄");
             
             ImGui::SameLine();
             
             if (context.dirHistoryIndex < context.dirHistory.size() - 1) {
-                if (ImGui::Button(">")) {
+                if (ImGui::Button("►")) {
                     context.dirHistoryIndex++;
                     context.currentDirectory = context.dirHistory[context.dirHistoryIndex];
                     context.selectedAssets.clear();
                 }
-            } else ImGui::TextDisabled(">");
+            } else ImGui::TextDisabled("►");
 
             ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
             ImGui::PopStyleColor();
 
-            if (ImGui::Button(" + Create ")) ImGui::OpenPopup("CreateMenuPopup");
+            if (ImGui::Button("➕ Create ")) ImGui::OpenPopup("CreateMenuPopup");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(200.0f);
-            ImGui::InputTextWithHint("##Search", "Search...", searchBuffer, sizeof(searchBuffer));
+            ImGui::InputTextWithHint("##Search", "🔍 Search...", searchBuffer, sizeof(searchBuffer));
             
             ImGui::SameLine(); ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical); ImGui::SameLine();
 
             // Хлебные крошки (Breadcrumbs)
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-            if (ImGui::Button("All")) NavigateTo(context, context.projectDirectory);
+            if (ImGui::Button("🏠 All")) NavigateTo(context, context.projectDirectory);
             
             fs::path rel = fs::relative(context.currentDirectory, context.projectDirectory);
             fs::path accum = context.projectDirectory;
             if (rel.string() != ".") {
                 for (auto it = rel.begin(); it != rel.end(); ++it) {
-                    ImGui::SameLine(); ImGui::Text(">"); ImGui::SameLine();
+                    ImGui::SameLine(); ImGui::TextDisabled(">"); ImGui::SameLine();
                     accum /= *it;
                     if (ImGui::Button(it->string().c_str())) NavigateTo(context, accum);
                 }
             }
             ImGui::PopStyleColor();
+
+            ImGui::SameLine();
+            float avail = ImGui::GetContentRegionAvail().x;
+            if (avail > 100.0f) {
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - 100.0f);
+                ImGui::SetNextItemWidth(100.0f);
+                ImGui::SliderFloat("##IconSize", &thumbnailSize, 32.0f, 256.0f, "Zoom");
+            }
 
             // Меню создания
             if (ImGui::BeginPopup("CreateMenuPopup")) {
@@ -229,8 +244,10 @@ namespace burnhope {
             }
             if (isLeaf) flags |= ImGuiTreeNodeFlags_Leaf;
 
-            std::string nodeName = dir == context.projectDirectory ? "All (Project)" : dir.filename().string();
-            bool isOpen = ImGui::TreeNodeEx(nodeName.c_str(), flags);
+            std::string nodeName = dir == context.projectDirectory ? "📁 Project" : "📁 " + dir.filename().string();
+            
+            ImGui::PushID(dir.string().c_str());
+            bool isOpen = ImGui::TreeNodeEx("##node", flags, "%s", nodeName.c_str());
             
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) NavigateTo(context, dir);
 
@@ -240,6 +257,7 @@ namespace burnhope {
                 }
                 ImGui::TreePop();
             }
+            ImGui::PopID();
         }
 
         void DrawGrid(UIContext& context) {

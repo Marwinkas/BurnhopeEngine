@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "../Utils/Device.hpp"
 #include "../Utils/Pipeline.hpp"
 #include "../Utils/Descriptors.hpp"
@@ -30,42 +30,13 @@ struct alignas(16) ObjectData {
 };
  struct alignas(16) MaterialData
 {
-    // Блок 1
-    int albedoIdx; int normalIdx; int heightIdx; int metallicIdx;
-
-    // Блок 2
-    int roughnessIdx; int aoIdx; int emissiveIdx; int hasAlbedo;
-
-    // Блок 3
-    int hasNormal; int hasHeight; int hasMetallic; int hasRoughness;
-
-    // Блок 4
-    int hasAO; int hasEmissive; int useTriplanar; 
-    float triplanarScale;
-
-    // Блок 5 (8 + 4 + 4 = 16 байт)
-    // Используем alignas(8) для vec2, чтобы он точно встал в начало блока
-    alignas(8) glm::vec2 uvScale;
-    float emissiveIntensity;
-    int useORM;
-
-    // Блок 6
+    int albedoAlphaIdx; int normalIdx; int ormxIdx; int emissiveIdx;
+    int useTriplanar; int isTransparent; int repeatTexture; int pad1;
+    alignas(8) glm::vec2 uvScale; float triplanarScale; float emissiveIntensity;
     alignas(16) glm::vec4 albedoColor;
-
-    // Блок 7
     alignas(16) glm::vec4 emissiveColor;
-
-    // Блок 8
-    float metallicStrength;
-    float roughnessStrength;
-    float normalStrength;
-    float heightStrength;
-
-    // Блок 9
-    float aoStrength;
-    int repeatTexture;
-    int pad1;
-    int pad2;
+    float metallicStrength; float roughnessStrength; float normalStrength; float heightStrength;
+    float aoStrength; float pad2; float pad3; float pad4;
 };
 static_assert(sizeof(MaterialData) % 16 == 0, "MaterialData size must be a multiple of 16");
     class GeometryRenderSystem

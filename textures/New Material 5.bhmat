@@ -1,0 +1,37 @@
+{
+    "albedoColor": [
+        1.0,
+        1.0,
+        1.0,
+        0.5422885417938232
+    ],
+    "albedoPath": "/home/marwinka/Музыка/work/BurnhopeEngine/build/textures/diffuse3.png",
+    "aoPath": "/home/marwinka/Музыка/work/BurnhopeEngine/build/textures/ao3.png",
+    "aoStrength": 1.0,
+    "emissiveColor": [
+        1.0,
+        1.0,
+        1.0
+    ],
+    "emissiveIntensity": 0.0,
+    "emissivePath": "",
+    "heightPath": "/home/marwinka/Музыка/work/BurnhopeEngine/build/textures/height3.png",
+    "heightStrength": 1.0,
+    "isORM": false,
+    "isTransparent": true,
+    "lightMaskPath": "",
+    "metallicPath": "/home/marwinka/Музыка/work/BurnhopeEngine/build/textures/metallic3.png",
+    "metallicStrength": 1.0,
+    "normalPath": "/home/marwinka/Музыка/work/BurnhopeEngine/build/textures/normal3.png",
+    "normalStrength": 3.950000047683716,
+    "repeatTexture": true,
+    "rimMaskPath": "",
+    "roughnessPath": "/home/marwinka/Музыка/work/BurnhopeEngine/build/textures/rougness3.png",
+    "roughnessStrength": 1.0,
+    "triplanarScale": 2.4100000858306885,
+    "useTriplanar": false,
+    "uvScale": [
+        1.0,
+        1.0
+    ]
+}

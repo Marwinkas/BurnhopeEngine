@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <array>
 #include <thread>
+#include <iostream>
 #include "Render/RenderGraph.hpp"
 namespace burnhope
 {
@@ -370,7 +371,7 @@ namespace burnhope
         auto decalView = registry.view<DecalComponent>();
     
 
-        auto getTexIndex = [&](std::shared_ptr<BurnhopeTexture> tex, uint32_t defaultIdx) -> uint32_t
+        auto getTexIndex = [&](std::shared_ptr<BurnhopeTexture> tex, int32_t defaultIdx) -> int32_t
         {
             if (!tex)
                 return defaultIdx;
@@ -382,10 +383,15 @@ namespace burnhope
             }
             return texToIndex[tex.get()];
         };
-            for (auto [entity, decal] : decalView.each()) {
-            decal.albedoTexIdx = getTexIndex(decal.albedoTex, defaultWhiteIdx);
-            decal.normalTexIdx = getTexIndex(decal.normalTex, defaultNormalIdx);
+        for (auto [entity, decal] : decalView.each()) {
+            decal.albedoTexIdx = getTexIndex(decal.albedoTex, -1);
+            decal.normalTexIdx = getTexIndex(decal.normalTex, -1);
         }
+        
+        uiManager->GetContext().renderSettings.vectorTexIdx = getTexIndex(uiManager->GetContext().renderSettings.vectorTex, -1);
+        uiManager->GetContext().renderSettings.causticsTexIdx = getTexIndex(uiManager->GetContext().renderSettings.causticsTex, -1);
+        uiManager->GetContext().renderSettings.canvasTexIdx = getTexIndex(uiManager->GetContext().renderSettings.canvasTex, -1);
+
         auto view = registry.view<TransformComponent, MeshComponent>();
         for (auto [entity, transformComp, meshComp] : view.each())
         {
@@ -403,36 +409,28 @@ namespace burnhope
                     currentMatID = globalMatIndex++;
                     matToIndex[currentMat.get()] = currentMatID;
                     MaterialData matData{};
-                    matData.albedoIdx = getTexIndex(currentMat->albedoMap, defaultWhiteIdx);
-                    matData.normalIdx = getTexIndex(currentMat->normalMap, defaultNormalIdx);
-                    matData.heightIdx = getTexIndex(currentMat->heightMap, defaultWhiteIdx);
-                    matData.metallicIdx = getTexIndex(currentMat->metallicMap, defaultWhiteIdx);
-                    matData.roughnessIdx = getTexIndex(currentMat->roughnessMap, defaultWhiteIdx);
-                    matData.aoIdx = getTexIndex(currentMat->aoMap, defaultWhiteIdx);
-                    matData.emissiveIdx = getTexIndex(currentMat->emissiveMap, defaultWhiteIdx);
-
-                    matData.hasAlbedo = currentMat->hasAlbedo ? 1 : 0;
-                    matData.hasNormal = currentMat->hasNormal ? 1 : 0;
-                    matData.hasHeight = currentMat->hasHeight ? 1 : 0;
-                    matData.hasMetallic = currentMat->hasMetallic ? 1 : 0;
-                    matData.hasRoughness = currentMat->hasRoughness ? 1 : 0;
-                    matData.hasAO = currentMat->hasAO ? 1 : 0;
-                    matData.hasEmissive = currentMat->hasEmissive ? 1 : 0;
+                    matData.albedoAlphaIdx = currentMat->packedAlbedoAlpha ? getTexIndex(currentMat->packedAlbedoAlpha, -1) : getTexIndex(currentMat->albedoMap, -1);
+                    matData.normalIdx = currentMat->packedNormal ? getTexIndex(currentMat->packedNormal, -1) : getTexIndex(currentMat->normalMap, -1);
+                    matData.ormxIdx = currentMat->packedORMX ? getTexIndex(currentMat->packedORMX, -1) : getTexIndex(currentMat->ormMap, -1);
+                    matData.emissiveIdx = currentMat->packedEmissive ? getTexIndex(currentMat->packedEmissive, -1) : getTexIndex(currentMat->emissiveMap, -1);
                     matData.useTriplanar = currentMat->useTriplanar ? 1 : 0;
-                    matData.triplanarScale = currentMat->triplanarScale;
-
+                    matData.isTransparent = currentMat->isTransparent ? 1 : 0;
+                    matData.repeatTexture = currentMat->repeatTexture ? 1 : 0;
+                    matData.pad1 = 0;
+                    
                     matData.uvScale = currentMat->uvScale;
+                    matData.triplanarScale = currentMat->triplanarScale;
                     matData.emissiveIntensity = currentMat->emissiveIntensity;
-                    matData.useORM = currentMat->isORM ? 1 : 0;
 
-                    matData.albedoColor = glm::vec4(currentMat->albedoColor, 1.0f);
+                    // Берем оригинальный vec4 с учетом прозрачности
+                    matData.albedoColor = currentMat->albedoColor; 
                     matData.emissiveColor = glm::vec4(currentMat->emissiveColor, 1.0f);
                     matData.metallicStrength = currentMat->metallicStrength;
                     matData.roughnessStrength = currentMat->roughnessStrength;
                     matData.normalStrength = currentMat->normalStrength;
                     matData.heightStrength = currentMat->heightStrength;
-                    matData.aoStrength = currentMat->aoStrength; // Добавлено присвоение aoStrength
-                    matData.repeatTexture = currentMat->repeatTexture ? 1 : 0;
+                    matData.aoStrength = currentMat->aoStrength;
+                    matData.pad2 = matData.pad3 = matData.pad4 = 0.0f;
                     matDataList.push_back(matData);
                 }
                 else
@@ -598,6 +596,22 @@ namespace burnhope
             glfwPollEvents();
 
             uiManager->ProcessPendingActions();
+
+            bool anyMaterialReloaded = false;
+            registry.view<MeshComponent>().each([&](const MeshComponent &mc) {
+                for (auto& mat : mc.materials) {
+                    if (mat && mat->pendingReload) {
+                        if (!anyMaterialReloaded) vkDeviceWaitIdle(lveDevice.device());
+                        mat->packTextures(lveDevice, uiManager->GetContext().safeDeleteQueue);
+                        mat->pendingReload = false;
+                        anyMaterialReloaded = true;
+                        if (mat->needsAnotherPack) mat->packTexturesAsync(); // Если кидали текстуры пока шла упаковка
+                    }
+                }
+            });
+            if (anyMaterialReloaded) {
+                uiManager->GetContext().needsRebuild = true;
+            }
 
             uint32_t currentSubMeshCount = 0;
             registry.view<MeshComponent>().each([&](const MeshComponent &meshComp)
@@ -784,11 +798,22 @@ namespace burnhope
             auto newTime = std::chrono::high_resolution_clock::now();
             float frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
 
+        if (frameTime < maxPeriod)
+            {
+                double sleepTime = maxPeriod - frameTime;
+                std::this_thread::sleep_for(std::chrono::duration<double>(sleepTime));
+
+                // Пересчитываем время после сна для честного deltaTime
+                newTime = std::chrono::high_resolution_clock::now();
+                frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
+            }
 
 
             currentTime = newTime;
             frameCount++;
             timeAccumulator += frameTime;
+
+
             if (std::chrono::duration<float>(newTime - fpsTimer).count() >= 1.0f)
             {
                 std::cout << "FPS: " << frameCount << "\n";
@@ -827,7 +852,24 @@ namespace burnhope
                 faceMatricesBuffer->writeToBuffer(const_cast<PointFaceMatrices *>(shadowSystem->getFaceMatricesData()));
                 faceMatricesBuffer->flush();
                 GlobalUbo ubo{};
-                ubo.projection = camera.GetProjectionMatrix(45.0f, 0.1f, 1000.0f);
+
+float currentFov = 45.0f;
+                if (uiManager->GetContext().renderSettings.enableDollyZoom) {
+                    float direction = uiManager->GetContext().renderSettings.dollyZoomInvert ? -1.0f : 1.0f;
+                    currentFov = 45.0f + direction * sin(timeAccumulator * uiManager->GetContext().renderSettings.dollyZoomSpeed) * uiManager->GetContext().renderSettings.dollyZoomIntensity;
+                }
+                ubo.projection = camera.GetProjectionMatrix(currentFov, 0.1f, 1000.0f);
+                
+                // --- Micro-Nystagmus (Stress Eye Jitter) ---
+                if (rs.enableNystagmus) {
+                    float jitterSpeed = 150.0f;
+                    float jitterAmount = rs.nystagmusSeverity * 0.01f;
+                    float shakeX = sin(timeAccumulator * jitterSpeed) * cos(timeAccumulator * jitterSpeed * 0.8f) * jitterAmount;
+                    float shakeY = cos(timeAccumulator * jitterSpeed * 1.2f) * sin(timeAccumulator * jitterSpeed * 0.5f) * jitterAmount;
+                    ubo.projection[2][0] += shakeX;
+                    ubo.projection[2][1] += shakeY;
+                }
+           
                 ubo.view = camera.GetViewMatrix();
                 ubo.camPos = camera.Position;
                 ubo.zNear = 0.1f;
@@ -936,6 +978,62 @@ namespace burnhope
                 ubo.ppColorComp = glm::vec4(rs.enableColorComp ? 1.f : 0.f, rs.colorCompLevels, rs.enableCMAA ? 1.f : 0.f, rs.paletteTex ? 1.f : 0.f);
                 ubo.shadowRampColor1 = glm::vec4(rs.shadowRampColor1[0], rs.shadowRampColor1[1], rs.shadowRampColor1[2], rs.enableShadowRamp ? 1.f : 0.f);
                 ubo.shadowRampColor2 = glm::vec4(rs.shadowRampColor2[0], rs.shadowRampColor2[1], rs.shadowRampColor2[2], 1.f);
+                ubo.ppBleedMosh = glm::vec4(rs.enableOpticalSoup ? 1.f : 0.f, rs.opticalSoupRadius, rs.enableDatamosh ? 1.f : 0.f, rs.datamoshThreshold);
+                ubo.ppAsciiSort = glm::vec4(rs.enableAscii ? 1.f : 0.f, rs.asciiScale, rs.enablePixelSort ? 1.f : 0.f, rs.pixelSortThreshold);
+                ubo.ppImpact = glm::vec4(rs.enableImpactFrame ? 1.f : 0.f, rs.impactSize, rs.impactPower, rs.impactTime);
+                ubo.ppTrails = glm::vec4(rs.enableSmearTrails ? 1.f : 0.f, rs.smearLength, rs.smearThreshold, 0.f);
+                ubo.ppPixelSort = glm::vec4(rs.pixelSortAngle, rs.pixelSortLength, rs.pixelSortTime, (float)rs.asciiMode);
+                ubo.ppArtistic = glm::vec4(rs.enableRimLight ? 1.f : 0.f, rs.rimThickness, rs.rimPower, 0.f);
+                ubo.ppArtisticColor = glm::vec4(rs.rimColor[0], rs.rimColor[1], rs.rimColor[2], 1.f);
+                
+                ubo.ppStylized3 = glm::vec4(rs.enableScreentones ? 1.f : 0.f, rs.screentoneSize, rs.screentoneDarkness, rs.enableWatercolor ? 1.f : 0.f);
+                ubo.ppStylized4 = glm::vec4(rs.watercolorRadius, rs.enablePointillism ? 1.f : 0.f, rs.pointillismSize, rs.pointillismDensity);
+                ubo.ppLens3 = glm::vec4(rs.enableTiltShift ? 1.f : 0.f, rs.tiltShiftAmount, rs.tiltShiftFalloff, rs.enableLensBreathing ? 1.f : 0.f);
+                ubo.ppLens4 = glm::vec4(rs.lensBreathingScale, rs.enableStarFilter ? 1.f : 0.f, rs.starFilterThreshold, rs.starFilterLength);
+                ubo.ppGlitch3 = glm::vec4(rs.enableLightLeaks ? 1.f : 0.f, rs.lightLeakIntensity, rs.enableJpegArtifacts ? 1.f : 0.f, rs.jpegBlockSize);
+                ubo.ppGlitch4 = glm::vec4(rs.jpegQuality, rs.enableScreenTear ? 1.f : 0.f, rs.screenTearFrequency, rs.screenTearIntensity);
+                ubo.gbColor1 = glm::vec4(rs.gbColor1[0], rs.gbColor1[1], rs.gbColor1[2], rs.enableGameBoy ? 1.f : 0.f);
+                ubo.gbColor2 = glm::vec4(rs.gbColor2[0], rs.gbColor2[1], rs.gbColor2[2], 0.f);
+                ubo.gbColor3 = glm::vec4(rs.gbColor3[0], rs.gbColor3[1], rs.gbColor3[2], 0.f);
+                ubo.gbColor4 = glm::vec4(rs.gbColor4[0], rs.gbColor4[1], rs.gbColor4[2], 0.f);
+                
+                ubo.ppSpeedLines = glm::vec4(rs.enableSpeedLines ? 1.f : 0.f, rs.speedLinesIntensity, rs.enableColorSplash ? 1.f : 0.f, rs.splashHue);
+                ubo.ppColorSplash = glm::vec4(rs.splashRange, rs.enableHeatShimmer ? 1.f : 0.f, rs.heatIntensity, 0.f);
+                ubo.ppHeatFrost = glm::vec4(rs.enableFrost ? rs.frostIntensity : 0.f, rs.enableWaterDrops ? 1.f : 0.f, rs.dropRefraction, rs.enableTemporalEcho ? 1.f : 0.f);
+                ubo.ppDropsEcho = glm::vec4(rs.echoFade, rs.enableCanvas ? 1.f : 0.f, rs.canvasIntensity, rs.enableInkBleed ? 1.f : 0.f);
+                ubo.ppCanvasInk = glm::vec4(rs.inkRadius, rs.enableWorldCurve ? 1.f : 0.f, rs.curveAmount, rs.enableGlitter ? 1.f : 0.f);
+                ubo.ppWorldGlitter = glm::vec4(rs.glitterThreshold, rs.enableCaustics ? 1.f : 0.f, rs.causticsSpeed, rs.causticsScale);
+                ubo.ppCausticsBreath = glm::vec4(rs.causticsStrength, rs.enableBreathing ? 1.f : 0.f, rs.breathAmplitude, rs.breathSpeed);
+                
+              
+                
+                ubo.ppTransAnime = glm::vec4(rs.translucencyStrength, rs.enableAnimeSpecular ? 1.f : 0.f, rs.animeSpecBands, rs.enableAstigmatism ? 1.f : 0.f);
+                ubo.ppAstigDolly = glm::vec4(rs.astigmatismLength, rs.astigmatismAngle, rs.enableSaccadicMasking ? 1.f : 0.f, rs.saccadicThreshold);
+                ubo.ppSaccBurn = glm::vec4(rs.enableBurningFilm ? 1.f : 0.f, timeAccumulator * 0.1f, rs.enablePhosphor ? 1.f : 0.f, rs.phosphorFade);
+                ubo.ppPhosASCII = glm::vec4(rs.enableWorldASCII ? 1.f : 0.f, rs.worldAsciiScale, rs.enableGravityLensing ? 1.f : 0.f, rs.gravityMass);
+                ubo.ppGravVector = glm::vec4(rs.enableVectorFlow ? 1.f : 0.f, rs.vectorFlowStrength, rs.enableKMeans ? 1.f : 0.f, rs.kMeansColors);
+                ubo.ppKMeansFeed = glm::vec4(rs.enableRecursiveFeedback ? 1.f : 0.f, rs.feedbackZoom, rs.feedbackAngle, rs.enableCrosshatchLight ? 1.f : 0.f);
+                ubo.ppHatchAnalog = glm::vec4(rs.bayerWorldSpace ? 1.f : 0.f, rs.enableAnalogNoise ? 1.f : 0.f, rs.analogSyncLoss, rs.enableScanlineMoire ? 1.f : 0.f);
+                ubo.ppMoireTunnel = glm::vec4(rs.moireScale, rs.enableTunnelVision ? 1.f : 0.f, rs.tunnelIntensity, rs.enableAfterimage ? 1.f : 0.f);
+                ubo.ppAfterBleed = glm::vec4(rs.afterimageFade, rs.enableTemporalBleed ? 1.f : 0.f, rs.bleedSpeed, rs.enableFluidSim ? 1.f : 0.f);
+                ubo.ppFluidCMYK = glm::vec4(rs.fluidSpeed, rs.enableCMYK ? 1.f : 0.f, rs.cmykOffset, rs.enableCondensation ? 1.f : 0.f);
+                ubo.ppCondenDust = glm::vec4(rs.condensationAmount, rs.enableDustMotes ? 1.f : 0.f, rs.dustIntensity, rs.enableEctoplasm ? 1.f : 0.f);
+                ubo.ppEctoRolling = glm::vec4(rs.ectoplasmColor[0], rs.ectoplasmColor[1], rs.ectoplasmColor[2], rs.enableRollingShutter ? 1.f : 0.f);
+                ubo.ppPurkinjeSlit = glm::vec4(rs.rollingShutterSpeed, rs.enablePurkinje ? 1.f : 0.f, rs.purkinjeIntensity, rs.enableSlitScan ? 1.f : 0.f);
+                ubo.ppReactDroste = glm::vec4(rs.slitScanSpeed, rs.enableReactionDiffusion ? 1.f : 0.f, rs.rdSpeed, rs.enableDroste ? rs.drosteScale : 0.f);
+
+                ubo.ppPsych1 = glm::vec4(rs.enableBlinking ? rs.blinkFrequency : 0.f, rs.enableFloaters ? rs.floatersOpacity : 0.f, rs.enableTimeStutter ? rs.stutterSeverity : 0.f, rs.enableHollowFace ? 1.f : 0.f);
+                ubo.ppPsych2 = glm::vec4(rs.enableMelting ? rs.meltSpeed : 0.f, rs.enableAntiLight ? 1.f : 0.f, rs.enableTrypo ? rs.trypoScale : 0.f, rs.enableParallaxEye ? 1.f : 0.f);
+                ubo.ppPsych3 = glm::vec4(rs.enableInsideSmudges ? rs.smudgeIntensity : 0.f, rs.enableHaunting ? rs.hauntingTrail : 0.f, rs.enableNystagmus ? rs.nystagmusSeverity : 0.f, rs.enablePurkinje ? rs.purkinjeScale : 0.f);
+                ubo.ppPsych4 = glm::vec4(rs.enableRodCone ? 1.f : 0.f, rs.enableFluidLens ? rs.fluidViscosity : 0.f, rs.stutterSpeed, 0.f);
+
+                ubo.ppPsych5 = glm::vec4(rs.meltThreshold, rs.meltNoiseScale, rs.hollowFaceDepth, 0.f);
+                ubo.ppPsych6 = glm::vec4(rs.rodConeThreshold, rs.rodConeColor[0], rs.rodConeColor[1], rs.rodConeColor[2]);
+                ubo.ppPsych7 = glm::vec4(rs.purkinjeThickness, rs.purkinjeColor[0], rs.purkinjeColor[1], rs.purkinjeColor[2]);
+                ubo.ppPsych8 = glm::vec4(rs.purkinjeSpeed, rs.vectorFieldScale, rs.speedLinesCount, rs.speedLinesLength);
+                
+                ubo.ppCausticsScale = glm::vec4(rs.causticsScale, rs.enableTranslucency ? 1.f : 0.f, rs.vectorTexIdx, rs.canvasTexIdx);
+                ubo.ppTexIndices = glm::vec4(rs.vectorTexIdx, rs.causticsTexIdx, rs.canvasTexIdx, -1.0f);
 
                 // Сохраняем чистую проекцию ДО тряски для следующего кадра
                 glm::mat4 unjitteredProj = ubo.projection;
@@ -1521,6 +1619,7 @@ namespace burnhope
                     globalRTReflectionSystem->rtReflectionsShader->dispatch(cmd, (extent.width + 7) / 8, (extent.height + 7) / 8, 1); });
                     
                 renderPipeline.addPass("Volumetric Fog Pass", {
+                    RenderPipeline::createImageBarrier(shadowSystem->getVSM()->getPhysicalAtlas()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 1),
                     RenderPipeline::createImageBarrier(globalVolumetricSystem->volumetricTex->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)
                 }, [&](VkCommandBuffer cmd) {
                     globalVolumetricSystem->shader->bind(cmd);
@@ -1531,7 +1630,6 @@ namespace burnhope
                 });
 
                 renderPipeline.addPass("Compute Lighting", {
-                    RenderPipeline::createImageBarrier(shadowSystem->getVSM()->getPhysicalAtlas()->getImage(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 1), 
                     RenderPipeline::createImageBarrier(globalVolumetricSystem->volumetricTex->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
                     RenderPipeline::createImageBarrier(gtaoOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT)
                 }, [&](VkCommandBuffer cmd)
@@ -1560,7 +1658,7 @@ namespace burnhope
                 renderPipeline.addPass("Post Processing Pass", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [&](VkCommandBuffer cmd)
                                        {
             postProcessShader->bind(cmd);
-            postProcessShader->bindDescriptorSets(cmd, { globalDescriptorSets[frameIndex], postProcessSet });
+            postProcessShader->bindDescriptorSets(cmd, { globalDescriptorSets[frameIndex], postProcessSet, textureSet });
             postProcessShader->dispatch(cmd, (extent.width + 15) / 16, (extent.height + 15) / 16, 1); });
                 
                 renderPipeline.addPass("TAA History Update", {RenderPipeline::createImageBarrier(taaResolvedTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT), RenderPipeline::createImageBarrier(taaHistoryTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT)}, [&](VkCommandBuffer cmd)
@@ -1583,9 +1681,10 @@ namespace burnhope
                     VkImageMemoryBarrier swapToAttach = RenderPipeline::createImageBarrier(swapChainImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
                     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &swapToAttach);
                     
+                    uiManager->UpdateUI(lveWindow, camera, cmd);
+
                     lveRenderer.beginSwapChainRenderPass(cmd);
-                    // --- ОБНОВЛЕННЫЙ ВЫЗОВ UI ---
-                    uiManager->Draw(lveWindow, camera, cmd);
+                    uiManager->RenderUI(cmd);
                     lveRenderer.endSwapChainRenderPass(cmd); });
                 renderPipeline.addPass("Reset Layouts", {RenderPipeline::createImageBarrier(postProcessTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT), RenderPipeline::createImageBarrier(taaHistoryTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(taaResolvedTexture->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [](VkCommandBuffer cmd) {});
                 renderPipeline.execute(commandBuffer);
@@ -1941,7 +2040,7 @@ namespace burnhope
             simpleRenderSystem->getTextureLayout()->getDescriptorSetLayout(),
             16, 9, 24, 8, 1.0f);
 
-        std::vector<VkDescriptorSetLayout> ppLayouts = {globalSetLayouts, postProcessLayoutPtr->getDescriptorSetLayout()};
+        std::vector<VkDescriptorSetLayout> ppLayouts = {globalSetLayouts, postProcessLayoutPtr->getDescriptorSetLayout(), simpleRenderSystem->getTextureLayout()->getDescriptorSetLayout()};
         postProcessShader = std::make_unique<ComputeShader>(lveDevice, "shaders/post_process.comp.spv", ppLayouts);
 
         std::vector<VkDescriptorSetLayout> cullLayouts = {globalSetLayouts, lightLayoutPtr->getDescriptorSetLayout()};

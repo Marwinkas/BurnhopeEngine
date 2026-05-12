@@ -9,6 +9,7 @@ namespace burnhope
 {
     struct BHTexHeader
     {
+        char magic[4]; // "BHTX"
         uint32_t width;
         uint32_t height;
         uint32_t mipCount;
@@ -19,6 +20,14 @@ namespace burnhope
         uint32_t magFilter;
         float maxAnisotropy;
         bool isSRGB;
+        bool hasAlpha;
+        int packType; // 0=Raw, 1=AlbedoAlpha(BC7), 2=ORMX(BC7), 3=Normal(BC5), 4=Emissive(BC6H)
+        
+        // Храним пути к исходникам для пересоздания из UI
+        char srcPath1[256];
+        char srcPath2[256];
+        char srcPath3[256];
+        char srcPath4[256];
     };
     class BurnhopeTexture
     {
@@ -57,6 +66,13 @@ namespace burnhope
         static std::unique_ptr<BurnhopeTexture> createTextureFromFile(
             BurnhopeDevice &device, const std::string &filepath);
         static std::unique_ptr<BurnhopeTexture> createDataTextureFromFile(BurnhopeDevice &device, const std::string &filepath);
+
+        // Утилиты для паковки текстур
+        static void packORMX(const std::string& ao, const std::string& rough, const std::string& metal, const std::string& height, const std::string& outPath);
+        static void packAlbedoAlpha(const std::string& albedo, const std::string& alpha, const std::string& outPath);
+        static void packNormal(const std::string& normal, const std::string& outPath);
+        static void packEmissive(const std::string& emissive, const std::string& outPath);
+        static void rebuildFromHeader(const std::string& bhtexPath);
 
     private:
         void createTextureImage(const std::string &filepath, bool isSRGB = true);

@@ -13,7 +13,7 @@ namespace burnhope
         alignas(16) glm::vec3 camPos;
         float zNear{0.1f};
         alignas(16) glm::vec3 sunDir{0.0f, -1.0f, 0.0f};
-        float zFar{1000.0f};
+        float zFar{1000.0f}; 
         glm::vec4 screenSize;
         glm::mat4 sunLightSpaceMatrices[4];
         glm::vec4 cascadeSplits;
@@ -109,6 +109,58 @@ namespace burnhope
         glm::vec4 ppColorComp{0.f};
         glm::vec4 shadowRampColor1{0.f, 0.f, 0.2f, 1.f};
         glm::vec4 shadowRampColor2{0.8f, 0.1f, 0.1f, 1.f};
+        glm::vec4 ppBleedMosh{0.f};
+        glm::vec4 ppAsciiSort{0.f};
+        glm::vec4 ppImpact{0.f};
+        glm::vec4 ppTrails{0.f};
+        glm::vec4 ppPixelSort{0.f};
+        glm::vec4 ppArtistic{0.f};
+        glm::vec4 ppArtisticColor{1.f};
+        
+        glm::vec4 ppStylized3{0.f};
+        glm::vec4 ppStylized4{0.f};
+        glm::vec4 ppLens3{0.f};
+        glm::vec4 ppLens4{0.f};
+        glm::vec4 ppGlitch3{0.f};
+        glm::vec4 ppGlitch4{0.f};
+        glm::vec4 gbColor1{0.f};
+        glm::vec4 gbColor2{0.f};
+        glm::vec4 gbColor3{0.f};
+        glm::vec4 gbColor4{0.f};
+        
+        glm::vec4 ppSpeedLines{0.f};
+        glm::vec4 ppColorSplash{0.f};
+        glm::vec4 ppHeatFrost{0.f};
+        glm::vec4 ppDropsEcho{0.f};
+        glm::vec4 ppCanvasInk{0.f};
+        glm::vec4 ppWorldGlitter{0.f};
+        glm::vec4 ppCausticsBreath{0.f};
+        glm::vec4 ppCausticsScale{0.f};
+        
+        glm::vec4 ppTransAnime{0.f};
+        glm::vec4 ppAstigDolly{0.f};
+        glm::vec4 ppSaccBurn{0.f};
+        glm::vec4 ppPhosASCII{0.f};
+        glm::vec4 ppGravVector{0.f};
+        glm::vec4 ppKMeansFeed{0.f};
+        glm::vec4 ppHatchAnalog{0.f};
+        glm::vec4 ppMoireTunnel{0.f};
+        glm::vec4 ppAfterBleed{0.f};
+        glm::vec4 ppFluidCMYK{0.f};
+        glm::vec4 ppCondenDust{0.f};
+        glm::vec4 ppEctoRolling{0.f};
+        glm::vec4 ppPurkinjeSlit{0.f};
+        glm::vec4 ppReactDroste{0.f};
+       
+       glm::vec4 ppPsych1{0.f}; // x: Blink, y: Floaters, z: TimeStutter, w: HollowFace
+       glm::vec4 ppPsych2{0.f}; // x: Melting, y: AntiLight, z: Trypo, w: ParallaxEye
+       glm::vec4 ppPsych3{0.f}; // x: Smudges, y: Haunting, z: Nystagmus, w: Purkinje
+       glm::vec4 ppPsych4{0.f}; // x: RodCone, y: FluidLens, z: unused, w: unused
+       glm::vec4 ppPsych5{0.f}; 
+       glm::vec4 ppPsych6{0.f}; 
+       glm::vec4 ppPsych7{0.f}; 
+       glm::vec4 ppPsych8{0.f}; 
+       glm::vec4 ppTexIndices{0.f}; // x: VectorField Tex, y: Caustics Tex, z: Canvas Tex
     };
     struct FrameInfo
     {

@@ -96,26 +96,17 @@ struct ObjectData {
 };
 
 struct MaterialData {
-    int albedoIdx; int normalIdx; int heightIdx; int metallicIdx;
-    int roughnessIdx; int aoIdx; int emissiveIdx; int hasAlbedo;
-    
-    int hasNormal; int hasHeight; int hasMetallic; int hasRoughness;
-    int hasAO; int hasEmissive; int useTriplanar; float triplanarScale;
-    
-    vec2 uvScale; float emissiveIntensity; int useORM;
-    
+    int albedoAlphaIdx; int normalIdx; int ormxIdx; int emissiveIdx;
+    int useTriplanar; int isTransparent; int repeatTexture; int pad1;
+    vec2 uvScale; float triplanarScale; float emissiveIntensity;
     vec4 albedoColor;
     vec4 emissiveColor;
-
     float metallicStrength;
     float roughnessStrength;
     float normalStrength;
     float heightStrength;
-
     float aoStrength;
-    int repeatTexture;
-    int pad1;
-    int pad2;
+    float pad2; float pad3; float pad4;
 };
 
 
@@ -194,8 +185,10 @@ void main() {
         vec3 worldNormal = normalize(normalMatrix * localNormal);
         if (dot(worldNormal, dir) > 0.0) worldNormal = -worldNormal; // Двусторонняя геометрия
 
-        if (mat.hasAlbedo == 1 && mat.albedoIdx >= 0) {
-            albedo = textureLod(bindlessTextures[nonuniformEXT(mat.albedoIdx)], texUV * mat.uvScale, 0.0).rgb;
+        if (mat.albedoAlphaIdx >= 0) {
+            albedo = textureLod(bindlessTextures[nonuniformEXT(mat.albedoAlphaIdx)], texUV * mat.uvScale, 0.0).rgb * mat.albedoColor.rgb;
+        } else {
+            albedo = mat.albedoColor.rgb;
         }
         
         vec3 L = normalize(-ubo.sunDir);

@@ -7,6 +7,7 @@
 #include <iostream>
 #include <vector>
 #include <filesystem>
+#include <ispc_texcomp.h>
 namespace burnhope
 {
     float BurnhopeTexture::GlobalAnisotropy = 16.0f;
@@ -570,14 +571,21 @@ namespace burnhope
             mFormat = VK_FORMAT_BC5_UNORM_BLOCK;
         else if (header.format == 3)
             mFormat = header.isSRGB ? VK_FORMAT_BC7_SRGB_BLOCK : VK_FORMAT_BC7_UNORM_BLOCK;
+        else if (header.format == 4)
+            mFormat = VK_FORMAT_BC6H_UFLOAT_BLOCK;
         else
             mFormat = header.isSRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+        bool isCompressed = (header.format <= 4);
         std::vector<char> allMipData;
         std::vector<VkBufferImageCopy> bufferCopyRegions;
         uint32_t currentW = header.width;
         uint32_t currentH = header.height;
         for (uint32_t i = 0; i < mMipLevels; ++i)
         {
+            uint32_t alignW = isCompressed ? ((currentW + 3) & ~3) : 0;
+            uint32_t alignH = isCompressed ? ((currentH + 3) & ~3) : 0;
+
+
             uint32_t dataSize;
             file.read(reinterpret_cast<char *>(&dataSize), sizeof(uint32_t));
             size_t currentOffset = allMipData.size();
@@ -585,6 +593,8 @@ namespace burnhope
             file.read(allMipData.data() + currentOffset, dataSize);
             VkBufferImageCopy region{};
             region.bufferOffset = currentOffset;
+            region.bufferRowLength = alignW; // Обязательно указываем выровненный размер блоков для Vulkan
+            region.bufferImageHeight = alignH;
             region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             region.imageSubresource.mipLevel = i;
             region.imageSubresource.baseArrayLayer = 0;
@@ -639,7 +649,8 @@ namespace burnhope
         header.height = texHeight;
         header.mipCount = mipLevels;
         header.isSRGB = isSRGB;
-        header.format = 4;
+        header.format = 5;
+        memcpy(header.magic, "BHTX", 4);
         std::ofstream outFile(cachePath, std::ios::binary);
         outFile.write(reinterpret_cast<const char *>(&header), sizeof(BHTexHeader));
         int currentW = texWidth;
@@ -673,5 +684,243 @@ namespace burnhope
         outFile.close();
         stbi_image_free(pixels);
         std::cout << "[DONE] Кэш .bhtex создан для: " << srcPath << "\n";
+    }
+
+    static std::vector<stbi_uc> loadChannel(const std::string& path, int& w, int& h) {
+        if (path.empty() || !std::filesystem::exists(path)) { w = h = 0; return {}; }
+        int c;
+        stbi_uc* pixels = stbi_load(path.c_str(), &w, &h, &c, 4);
+        if (!pixels) { w = h = 0; return {}; }
+        std::vector<stbi_uc> res(pixels, pixels + w * h * 4);
+        stbi_image_free(pixels);
+        return res;
+    }
+
+     static std::vector<stbi_uc> resizeChannel(const std::vector<stbi_uc>& src, int inW, int inH, int outW, int outH, bool isSRGB) {
+        if (src.empty() || (inW == outW && inH == outH)) return src;
+        std::vector<stbi_uc> resized(outW * outH * 4);
+        if (isSRGB) {
+            // Для Albedo (цвета) альфа-смешивание это нормально
+            stbir_resize_uint8_srgb(src.data(), inW, inH, 0, resized.data(), outW, outH, 0, STBIR_RGBA);
+        } else {
+            // ДЛЯ ДАННЫХ (Normal, ORMX) ОТКЛЮЧАЕМ АЛЬФА-СМЕШИВАНИЕ!
+            stbir_resize_uint8_linear(src.data(), inW, inH, 0, resized.data(), outW, outH, 0, STBIR_4CHANNEL);
+        }
+        return resized;
+    }
+    // Утилита для конвертации float32 -> float16 (half)
+    static inline uint16_t float_to_half(float f) {
+        uint32_t x = *(uint32_t*)&f;
+        uint32_t sign = (uint16_t)(x >> 31);
+        uint32_t mantissa = x & 0x007fffff;
+        uint32_t exp = (x & 0x7f800000) >> 23;
+        if (exp == 0) return (sign << 15);
+        if (exp == 255) return (sign << 15) | 0x7c00 | (mantissa ? 1 : 0);
+        int e = exp - 127 + 15;
+        if (e >= 31) return (sign << 15) | 0x7c00;
+        if (e <= 0) return (sign << 15);
+        return (sign << 15) | (e << 10) | (mantissa >> 13);
+    }
+
+    static void writeBHTexPacked(const std::string& outPath, std::vector<stbi_uc>& packedData, int w, int h, BHTexHeader header) {
+        uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(w, h)))) + 1;
+        header.width = w; header.height = h; header.mipCount = mipLevels;
+        memcpy(header.magic, "BHTX", 4);
+
+        std::ofstream outFile(outPath, std::ios::binary);
+        outFile.write(reinterpret_cast<const char*>(&header), sizeof(BHTexHeader));
+
+        int currentW = w; int currentH = h;
+        std::vector<stbi_uc> currentMip = packedData;
+
+        for (uint32_t i = 0; i < mipLevels; ++i) {
+            int alignW = (currentW + 3) & ~3;
+            int alignH = (currentH + 3) & ~3;
+            int blocksX = alignW / 4;
+            int blocksY = alignH / 4;
+            int totalBlocks = blocksX * blocksY;
+
+            // Выравнивание и паддинг краев (критично для ISPC и BC форматов)
+            std::vector<stbi_uc> paddedMip(alignW * alignH * 4, 0);
+            for (int y = 0; y < alignH; y++) {
+                for (int x = 0; x < alignW; x++) {
+                    int srcX = std::min(x, currentW - 1);
+                    int srcY = std::min(y, currentH - 1);
+                    for (int c = 0; c < 4; c++) {
+                        paddedMip[(y * alignW + x) * 4 + c] = currentMip[(srcY * currentW + srcX) * 4 + c];
+                    }
+                }
+            }
+            
+            rgba_surface surface;
+            surface.ptr = paddedMip.data();
+            surface.width = alignW;
+            surface.height = alignH;
+            surface.stride = alignW * 4;
+
+            if (header.packType >= 1 && header.packType <= 4) {
+                std::vector<uint8_t> compressedData(totalBlocks * 16);
+
+                if (header.packType == 1 || header.packType == 2) {
+                    bc7_enc_settings settings;
+                    GetProfile_alpha_fast(&settings); 
+                    CompressBlocksBC7(&surface, compressedData.data(), &settings);
+                } else if (header.packType == 3) {
+                    CompressBlocksBC5(&surface, compressedData.data());
+                } else if (header.packType == 4) {
+                    std::vector<uint16_t> halfData(alignW * alignH * 4);
+                    for (size_t k = 0; k < alignW * alignH; k++) {
+                        float r = std::pow(paddedMip[k * 4 + 0] / 255.0f, 2.2f); 
+                        float g = std::pow(paddedMip[k * 4 + 1] / 255.0f, 2.2f);
+                        float b = std::pow(paddedMip[k * 4 + 2] / 255.0f, 2.2f);
+                        halfData[k * 4 + 0] = float_to_half(r);
+                        halfData[k * 4 + 1] = float_to_half(g);
+                        halfData[k * 4 + 2] = float_to_half(b);
+                        halfData[k * 4 + 3] = float_to_half(1.0f);
+                    }
+                    surface.ptr = (uint8_t*)halfData.data();
+                    surface.stride = alignW * 4 * 2; 
+                    
+                    bc6h_enc_settings settings;
+                    GetProfile_bc6h_basic(&settings);
+                    CompressBlocksBC6H(&surface, compressedData.data(), &settings);
+                }
+
+                uint32_t dataSize = compressedData.size();
+                outFile.write(reinterpret_cast<char*>(&dataSize), sizeof(uint32_t));
+                outFile.write(reinterpret_cast<char*>(compressedData.data()), dataSize);
+            } else {
+                // RAW (Сырые данные без сжатия)
+                uint32_t dataSize = currentW * currentH * 4;
+                outFile.write(reinterpret_cast<char*>(&dataSize), sizeof(uint32_t));
+                outFile.write(reinterpret_cast<char*>(currentMip.data()), dataSize);
+            }
+
+            if (i < mipLevels - 1) {
+                int nextW = std::max(1, currentW / 2);
+                int nextH = std::max(1, currentH / 2);
+                std::vector<stbi_uc> nextMip(nextW * nextH * 4);
+                if (header.isSRGB) {
+                    // Albedo
+                    stbir_resize_uint8_srgb(currentMip.data(), currentW, currentH, 0, nextMip.data(), nextW, nextH, 0, STBIR_RGBA);
+                } else {
+                    // Normal, ORMX, Emissive
+                    stbir_resize_uint8_linear(currentMip.data(), currentW, currentH, 0, nextMip.data(), nextW, nextH, 0, STBIR_4CHANNEL);
+                }
+                currentMip = std::move(nextMip);
+                currentW = nextW; currentH = nextH;
+            }
+        }
+        outFile.close();
+        std::cout << "[PACKER] Успешно запаковано и сгенерированы Lanczos-мипмапы: " << outPath << "\n";
+    }
+
+    void BurnhopeTexture::packORMX(const std::string& ao, const std::string& rough, const std::string& metal, const std::string& height, const std::string& outPath) {
+        int w1 = 0, h1 = 0, w2 = 0, h2 = 0, w3 = 0, h3 = 0, w4 = 0, h4 = 0;
+        auto d1 = loadChannel(ao, w1, h1);
+        auto d2 = loadChannel(rough, w2, h2);
+        auto d3 = loadChannel(metal, w3, h3);
+        auto d4 = loadChannel(height, w4, h4);
+
+        int maxW = std::max({w1, w2, w3, w4});
+        int maxH = std::max({h1, h2, h3, h4});
+
+        if (maxW == 0 || maxH == 0) return;
+
+        if (maxW > 2048 || maxH > 2048) {
+            float aspect = (float)maxW / maxH;
+            if (maxW > maxH) { maxW = 2048; maxH = 2048 / aspect; }
+            else { maxH = 2048; maxW = 2048 * aspect; }
+        }
+
+        d1 = resizeChannel(d1, w1, h1, maxW, maxH, false);
+        d2 = resizeChannel(d2, w2, h2, maxW, maxH, false);
+        d3 = resizeChannel(d3, w3, h3, maxW, maxH, false);
+        d4 = resizeChannel(d4, w4, h4, maxW, maxH, false);
+
+        std::vector<stbi_uc> packed(maxW * maxH * 4, 255);
+        for (size_t i = 0; i < maxW * maxH; ++i) {
+            packed[i * 4 + 0] = d1.empty() ? 255 : d1[i * 4 + 0]; // AO (1.0)
+            packed[i * 4 + 1] = d2.empty() ? 255 : d2[i * 4 + 0]; // Roughness (1.0)
+            packed[i * 4 + 2] = d3.empty() ? 255 : d3[i * 4 + 0]; // Metallic (1.0)
+            packed[i * 4 + 3] = d4.empty() ? 0   : d4[i * 4 + 0]; // Height (0.0)
+        }
+
+        BHTexHeader hdr{}; hdr.format = 3; hdr.isSRGB = false; hdr.hasAlpha = true; hdr.packType = 2; // ORMX -> BC7 UNORM
+        strncpy(hdr.srcPath1, ao.c_str(), 255); strncpy(hdr.srcPath2, rough.c_str(), 255);
+        strncpy(hdr.srcPath3, metal.c_str(), 255); strncpy(hdr.srcPath4, height.c_str(), 255);
+        writeBHTexPacked(outPath, packed, maxW, maxH, hdr);
+    }
+
+    void BurnhopeTexture::packAlbedoAlpha(const std::string& albedo, const std::string& alpha, const std::string& outPath) {
+        int w1 = 0, h1 = 0, w2 = 0, h2 = 0;
+        auto aData = loadChannel(albedo, w1, h1);
+        auto alphaData = loadChannel(alpha, w2, h2);
+        
+        int maxW = std::max(w1, w2);
+        int maxH = std::max(h1, h2);
+        if (maxW == 0 || maxH == 0) return;
+
+        if (maxW > 2048 || maxH > 2048) {
+            float aspect = (float)maxW / maxH;
+            if (maxW > maxH) { maxW = 2048; maxH = 2048 / aspect; }
+            else { maxH = 2048; maxW = 2048 * aspect; }
+        }
+
+        aData = resizeChannel(aData, w1, h1, maxW, maxH, true);
+        alphaData = resizeChannel(alphaData, w2, h2, maxW, maxH, false);
+
+        if (aData.empty() && !alphaData.empty()) aData.assign(maxW * maxH * 4, 255);
+
+        for (size_t i = 0; i < maxW * maxH; ++i) {
+            aData[i * 4 + 3] = alphaData.empty() ? 255 : alphaData[i * 4 + 0];
+        }
+        BHTexHeader hdr{}; hdr.format = 3; hdr.isSRGB = true; hdr.hasAlpha = !alphaData.empty(); hdr.packType = 1; // RGBA -> BC7 SRGB
+        strncpy(hdr.srcPath1, albedo.c_str(), 255); strncpy(hdr.srcPath2, alpha.c_str(), 255);
+        writeBHTexPacked(outPath, aData, maxW, maxH, hdr);
+    }
+
+    void BurnhopeTexture::packNormal(const std::string& normal, const std::string& outPath) {
+        int w = 0, h = 0; auto nData = loadChannel(normal, w, h);
+        if (nData.empty()) return;
+
+        int outW = w, outH = h;
+        if (w > 2048 || h > 2048) {
+            float aspect = (float)w / h;
+            if (w > h) { outW = 2048; outH = 2048 / aspect; }
+            else { outH = 2048; outW = 2048 * aspect; }
+            nData = resizeChannel(nData, w, h, outW, outH, false);
+        }
+
+        BHTexHeader hdr{}; hdr.format = 5; hdr.isSRGB = false; hdr.hasAlpha = false; hdr.packType = 0; // Normal -> RAW UNORM
+        strncpy(hdr.srcPath1, normal.c_str(), 255);
+        writeBHTexPacked(outPath, nData, outW, outH, hdr);
+    }
+
+    void BurnhopeTexture::packEmissive(const std::string& emissive, const std::string& outPath) {
+        int w = 0, h = 0; auto eData = loadChannel(emissive, w, h);
+        if (eData.empty()) return;
+        
+        int outW = w, outH = h;
+        if (w > 2048 || h > 2048) {
+            float aspect = (float)w / h;
+            if (w > h) { outW = 2048; outH = 2048 / aspect; }
+            else { outH = 2048; outW = 2048 * aspect; }
+            eData = resizeChannel(eData, w, h, outW, outH, true);
+        }
+
+        BHTexHeader hdr{}; hdr.format = 4; hdr.isSRGB = false; hdr.hasAlpha = false; hdr.packType = 4; // Emissive -> BC6H UFLOAT (hdr=linear)
+        strncpy(hdr.srcPath1, emissive.c_str(), 255);
+        writeBHTexPacked(outPath, eData, outW, outH, hdr);
+    }
+
+    void BurnhopeTexture::rebuildFromHeader(const std::string& bhtexPath) {
+        std::ifstream file(bhtexPath, std::ios::binary);
+        if (!file.is_open()) return;
+        BHTexHeader hdr; file.read(reinterpret_cast<char*>(&hdr), sizeof(BHTexHeader)); file.close();
+        if (hdr.packType == 1) packAlbedoAlpha(hdr.srcPath1, hdr.srcPath2, bhtexPath);
+        else if (hdr.packType == 2) packORMX(hdr.srcPath1, hdr.srcPath2, hdr.srcPath3, hdr.srcPath4, bhtexPath);
+        else if (hdr.packType == 3) packNormal(hdr.srcPath1, bhtexPath);
+        else if (hdr.packType == 4) packEmissive(hdr.srcPath1, bhtexPath);
     }
 }

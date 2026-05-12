@@ -83,6 +83,54 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     vec4 ppColorComp;
     vec4 shadowRampColor1;
     vec4 shadowRampColor2;
+    vec4 ppBleedMosh;
+    vec4 ppAsciiSort;
+    vec4 ppImpact;
+    vec4 ppTrails;
+    vec4 ppPixelSort;
+    vec4 ppArtistic;
+    vec4 ppArtisticColor;
+    vec4 ppStylized3;
+    vec4 ppStylized4;
+    vec4 ppLens3;
+    vec4 ppLens4;
+    vec4 ppGlitch3;
+    vec4 ppGlitch4;
+    vec4 gbColor1;
+    vec4 gbColor2;
+    vec4 gbColor3;
+    vec4 gbColor4;
+    vec4 ppSpeedLines;
+    vec4 ppColorSplash;
+    vec4 ppHeatFrost;
+    vec4 ppDropsEcho;
+    vec4 ppCanvasInk;
+    vec4 ppWorldGlitter;
+    vec4 ppCausticsBreath;
+    vec4 ppCausticsScale; 
+    vec4 ppTransAnime;
+    vec4 ppAstigDolly;
+    vec4 ppSaccBurn;
+    vec4 ppPhosASCII;
+    vec4 ppGravVector;
+    vec4 ppKMeansFeed;
+    vec4 ppHatchAnalog;
+    vec4 ppMoireTunnel;
+    vec4 ppAfterBleed;
+    vec4 ppFluidCMYK;
+    vec4 ppCondenDust;
+    vec4 ppEctoRolling;
+    vec4 ppPurkinjeSlit;
+    vec4 ppReactDroste; 
+    vec4 ppPsych1; 
+    vec4 ppPsych2; 
+    vec4 ppPsych3; 
+    vec4 ppPsych4; 
+       vec4 ppPsych5; 
+       vec4 ppPsych6; 
+       vec4 ppPsych7; 
+       vec4 ppPsych8; 
+       vec4 ppTexIndices;
 } ubo;
 struct ObjectData {
     mat4 modelMatrix;
@@ -109,7 +157,23 @@ ObjectData obj = objectBuffer.objects[globalIndex];
     T = normalize(T - dot(T, N) * N); 
     vec3 B = cross(N, T);
     outTBN = mat3(T, B, N);
+    
+    // Environment Breathing
+    if (ubo.ppCausticsBreath.y > 0.5) {
+        float time = ubo.ppMotionBlur.z * ubo.ppCausticsBreath.w;
+        float amp = ubo.ppCausticsBreath.z;
+        float wave = sin(worldPos.x * 2.0 + time) * cos(worldPos.z * 2.0 + time);
+        worldPos.xyz += N * wave * amp;
+    }
+    
     gl_Position = ubo.projection * ubo.view * worldPos;
+    
+    // World Curvature
+    if (ubo.ppCanvasInk.y > 0.5) {
+        float curve = ubo.ppCanvasInk.z;
+        float distSq = dot(gl_Position.xz, gl_Position.xz);
+        gl_Position.y -= distSq * curve;
+    }
 
     if (ubo.ppWarp.w > 0.5) {
         float time = ubo.ppMotionBlur.z * ubo.ppWarp2.y;

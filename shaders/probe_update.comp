@@ -113,13 +113,10 @@ struct ObjectData {
 };
 
 struct MaterialData {
-    int albedoIdx; int normalIdx; int heightIdx; int metallicIdx;
-    int roughnessIdx; int aoIdx; int emissiveIdx; int hasAlbedo;
+    int albedoAlphaIdx; int normalIdx; int ormxIdx; int emissiveIdx;
+    int useTriplanar; int isTransparent; int repeatTexture; int pad1;
     
-    int hasNormal; int hasHeight; int hasMetallic; int hasRoughness;
-    int hasAO; int hasEmissive; int useTriplanar; float triplanarScale;
-    
-    vec2 uvScale; float emissiveIntensity; int useORM;
+    vec2 uvScale; float triplanarScale; float emissiveIntensity;
     
     vec4 albedoColor;
     vec4 emissiveColor;
@@ -130,11 +127,8 @@ struct MaterialData {
     float heightStrength;
 
     float aoStrength;
-    int repeatTexture;
-    int pad1;
-    int pad2;
+    float pad2; float pad3; float pad4;
 };
-
 
 layout(set = 4, binding = 0, scalar) readonly buffer ObjectBuffer { ObjectData objects[]; } objBuf;
 layout(set = 4, binding = 1, scalar) readonly buffer MaterialBuffer { MaterialData materials[]; } matBuf;
@@ -213,8 +207,15 @@ const float PI = 3.14159265359;
 
     // 1. vec3(1.0) - это идеально белый (как снег). Серый - это 0.5 или 0.8
     vec3 albedo = vec3(0.8); 
-    if (mat.hasAlbedo == 1 && mat.albedoIdx >= 0) {
-        albedo = textureLod(bindlessTextures[nonuniformEXT(mat.albedoIdx)], finalUV * mat.uvScale, 0.0).rgb;
+    float hitAO = mat.aoStrength;
+    if (mat.albedoAlphaIdx >= 0) {
+        albedo = textureLod(bindlessTextures[nonuniformEXT(mat.albedoAlphaIdx)], finalUV * mat.uvScale, 0.0).rgb * mat.albedoColor.rgb;
+    } else {
+        albedo = mat.albedoColor.rgb;
+    }
+    if (mat.ormxIdx >= 0) {
+        vec4 ormx = textureLod(bindlessTextures[nonuniformEXT(mat.ormxIdx)], finalUV * mat.uvScale, 0.0);
+        hitAO *= ormx.r;
     }
 
     vec3 L = normalize(-ubo.sunDir); 
@@ -241,7 +242,7 @@ const float PI = 3.14159265359;
     vec3 actualSunRadiance = ubo.sunColor * ubo.sunIntensity;
     
     // 3. ФИЗИЧЕСКИ КОРРЕКТНЫЙ РАСЧЕТ (Делим albedo на PI)
-    vec3 directLight = (albedo / PI) * actualSunRadiance * NdotL * shadow;
+    vec3 directLight = (albedo / PI) * actualSunRadiance * NdotL * shadow * mix(1.0, hitAO, 0.3);
     
     vec3 finalColor = directLight;
     

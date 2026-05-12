@@ -86,43 +86,72 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     vec4 ppColorComp;
     vec4 shadowRampColor1;
     vec4 shadowRampColor2;
+    vec4 ppBleedMosh;
+    vec4 ppAsciiSort;
+    vec4 ppImpact;
+    vec4 ppTrails;
+    vec4 ppPixelSort;
+    vec4 ppArtistic;
+    vec4 ppArtisticColor;
+    vec4 ppStylized3;
+    vec4 ppStylized4;
+    vec4 ppLens3;
+    vec4 ppLens4;
+    vec4 ppGlitch3;
+    vec4 ppGlitch4;
+    vec4 gbColor1;
+    vec4 gbColor2;
+    vec4 gbColor3;
+    vec4 gbColor4;
+    vec4 ppSpeedLines;
+    vec4 ppColorSplash;
+    vec4 ppHeatFrost;
+    vec4 ppDropsEcho;
+    vec4 ppCanvasInk;
+    vec4 ppWorldGlitter;
+    vec4 ppCausticsBreath;
+    vec4 ppCausticsScale; 
+    vec4 ppTransAnime;
+    vec4 ppAstigDolly;
+    vec4 ppSaccBurn;
+    vec4 ppPhosASCII;
+    vec4 ppGravVector;
+    vec4 ppKMeansFeed;
+    vec4 ppHatchAnalog;
+    vec4 ppMoireTunnel;
+    vec4 ppAfterBleed;
+    vec4 ppFluidCMYK;
+    vec4 ppCondenDust;
+    vec4 ppEctoRolling;
+    vec4 ppPurkinjeSlit;
+    vec4 ppReactDroste; 
+    vec4 ppPsych1; 
+    vec4 ppPsych2; 
+    vec4 ppPsych3; 
+    vec4 ppPsych4; 
+           vec4 ppPsych5; 
+       vec4 ppPsych6; 
+       vec4 ppPsych7; 
+       vec4 ppPsych8; 
+       vec4 ppTexIndices;
 } ubo;
 
 struct MaterialData {
-    // Block 1: 16 bytes
-    int albedoIdx; int normalIdx; int heightIdx; int metallicIdx;
+    int albedoAlphaIdx; int normalIdx; int ormxIdx; int emissiveIdx;
+    int useTriplanar; int isTransparent; int repeatTexture; int pad1;
     
-    // Block 2: 16 bytes
-    int roughnessIdx; int aoIdx; int emissiveIdx; int hasAlbedo;
+    vec2 uvScale; float triplanarScale; float emissiveIntensity;
     
-    // Block 3: 16 bytes
-    int hasNormal; int hasHeight; int hasMetallic; int hasRoughness;
-    
-    // Block 4: 16 bytes
-    int hasAO; int hasEmissive; int useTriplanar; float triplanarScale;
-    
-    // Block 5: 16 bytes (vec2 = 8, float = 4, int = 4)
-    vec2 uvScale; 
-    float emissiveIntensity; 
-    int useORM;
-    
-    // Block 6: 16 bytes
     vec4 albedoColor;
-    
-    // Block 7: 16 bytes
     vec4 emissiveColor;
 
-    // Block 8: 16 bytes
     float metallicStrength;
     float roughnessStrength;
     float normalStrength;
     float heightStrength;
 
-    // Block 9: 16 bytes
     float aoStrength;
-    int repeatTexture;
-    int pad1;
-    int pad2;
+    float pad2; float pad3; float pad4;
 };
 
 layout(std430, set = 1, binding = 1) readonly buffer MaterialBlock {
@@ -163,6 +192,30 @@ void main() {
     vec2 dx = dFdx(scaledUV);
     vec2 dy = dFdy(scaledUV);
     
+    // --- Melting / Creeping Walls ---
+    if (ubo.ppPsych2.x > 0.0) {
+        vec2 screenUV = gl_FragCoord.xy / ubo.screenSize.xy;
+        float distFromCenter = distance(screenUV, vec2(0.5)) * 2.0; 
+        float threshold = ubo.ppPsych5.x;
+        
+        float meltFactor = 1.0;
+        if (threshold < 0.99) {
+            meltFactor = smoothstep(1.0 - threshold, 1.0 - threshold + 0.2, distFromCenter);
+        }
+
+        if (meltFactor > 0.001) {
+            float time = ubo.ppMotionBlur.z;
+            float speed = ubo.ppPsych2.x;
+            float noiseScale = max(ubo.ppPsych5.y, 0.1);
+            
+            float s = sin(inTexCoord.x * noiseScale * 15.0) * cos(inTexCoord.x * noiseScale * 5.0 + time * 0.5);
+            float stripSpeed = mix(0.2, 1.0, smoothstep(-1.0, 1.0, s)); 
+            
+            scaledUV.y -= speed * time * stripSpeed * meltFactor; 
+            scaledUV.x += sin(inTexCoord.y * noiseScale * 10.0 + time) * 0.01 * meltFactor * stripSpeed;
+        }
+    }
+
     vec3 posDdx = dFdx(inCrntPos);
     vec3 posDdy = dFdy(inCrntPos);
     
@@ -171,11 +224,9 @@ void main() {
     vec3 N = normalize(inTBN[2]);
     vec3 T = normalize(inTBN[0]);
     
-    // Защита от NaN при коллинеарности T и N (Грам-Шмидт)
     vec3 dp = T - dot(T, N) * N;
     if (dot(dp, dp) > 0.0001) T = normalize(dp);
     else T = normalize(cross(N, abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
-    
     vec3 B = cross(N, T);
     mat3 finalTBN = mat3(T, B, N);
 
@@ -185,72 +236,100 @@ void main() {
 
     float height    = 0.0;
     vec3  albedo    = mat.albedoColor.rgb; 
+    float alpha     = mat.albedoColor.a;
     vec3  emissive  = mat.emissiveColor.rgb * mat.emissiveIntensity;
     float metallic  = mat.metallicStrength;
     float roughness = mat.roughnessStrength; // Базовое значение шероховатости
     float ao        = mat.aoStrength;        // Базовая сила AO
     vec3  worldNormal = N;
     
-    // Parallax Mapping (Height Map)
-    if (mat.hasHeight == 1) {
-        if (mat.useTriplanar == 0) {
+    // --- Hollow-Face Illusion (Инверсия нормалей) ---
+    if (ubo.ppPsych1.w > 0.0) {
+        worldNormal = -worldNormal;
+        finalTBN[2] = -finalTBN[2];
+        // Также инвертируем высоту для Parallax Mapping, чтобы иллюзия глубины была правильной
+        mat.heightStrength = -mat.heightStrength * ubo.ppPsych5.z; 
+    }
+
+    // ORMX MAP (AO, Roughness, Metallic, Height)
+    if (mat.ormxIdx >= 0) {
+        vec4 ormx = sampleMatTex(mat.ormxIdx, finalUV, dx, dy, mat.useTriplanar, inCrntPos, posDdx, posDdy, blendWeights, mat.triplanarScale, mat.repeatTexture);
+        ao        *= ormx.r; 
+        roughness *= ormx.g;
+        metallic  *= ormx.b;
+        height     = ormx.a;
+        
+        // Parallax Mapping based on Height from ORMX
+        if (mat.useTriplanar == 0 && mat.heightStrength > 0.0) {
             vec3 viewDirWorld   = normalize(ubo.camPos - inCrntPos);
             vec3 viewDirTangent = normalize(transpose(finalTBN) * viewDirWorld);
             
             vec2 p = viewDirTangent.xy / max(viewDirTangent.z, 0.1);
-            height  = textureGrad(allTextures[nonuniformEXT(mat.heightIdx)], finalUV, dx, dy).r;
             finalUV = scaledUV - p * (height * 0.02 * mat.heightStrength);
-            
             if (mat.repeatTexture == 0) finalUV = clamp(finalUV, 0.0, 1.0);
             
-            height  = textureGrad(allTextures[nonuniformEXT(mat.heightIdx)], finalUV, dx, dy).r * mat.heightStrength; 
-        } else {
-            height = sampleMatTex(mat.heightIdx, finalUV, dx, dy, 1, inCrntPos, posDdx, posDdy, blendWeights, mat.triplanarScale, mat.repeatTexture).r * mat.heightStrength;
+            ormx = textureGrad(allTextures[nonuniformEXT(mat.ormxIdx)], finalUV, dx, dy);
+            ao *= ormx.r; roughness *= ormx.g; metallic *= ormx.b; height = ormx.a;
         }
     }
     
     // Albedo
-    if (mat.hasAlbedo == 1) {
-        albedo *= sampleMatTex(mat.albedoIdx, finalUV, dx, dy, mat.useTriplanar, inCrntPos, posDdx, posDdy, blendWeights, mat.triplanarScale, mat.repeatTexture).rgb;
+    if (mat.albedoAlphaIdx >= 0) {
+        vec4 texColor = sampleMatTex(mat.albedoAlphaIdx, finalUV, dx, dy, mat.useTriplanar, inCrntPos, posDdx, posDdy, blendWeights, mat.triplanarScale, mat.repeatTexture);
+        albedo *= texColor.rgb;
+        alpha *= texColor.a;
+    }
+
+    // --- Transparency (Screen-Door Dithering / Cutout) ---
+    if (mat.isTransparent == 1) {
+        if (alpha <= 0.01) discard; // Полностью прозрачный
+
+        // Матрица Байера 4x4 для красивого dithering (полупрозрачности) в Deferred 
+        int x = int(gl_FragCoord.x) % 4;
+        int y = int(gl_FragCoord.y) % 4;
+        const float bayer[16] = float[](
+            0.0625, 0.5625, 0.1875, 0.6875,
+            0.8125, 0.3125, 0.9375, 0.4375,
+            0.2500, 0.7500, 0.1250, 0.6250,
+            1.0000, 0.5000, 0.8750, 0.3750
+        );
+        
+        float threshold = bayer[y * 4 + x];
+        if (alpha < threshold) {
+            discard;
+        }
+    } else {
+        if (alpha < 0.5) discard;
     }
     
     // Emissive
-    if (mat.hasEmissive == 1) {
-        emissive = sampleMatTex(mat.emissiveIdx, finalUV, dx, dy, mat.useTriplanar, inCrntPos, posDdx, posDdy, blendWeights, mat.triplanarScale, mat.repeatTexture).rgb;
-    }
-    
-    // ORM Map / Separate Metallic, Roughness, AO
-    if (mat.useORM == 1) {
-        if (mat.hasRoughness == 1) { 
-            vec3 orm = sampleMatTex(mat.roughnessIdx, finalUV, dx, dy, mat.useTriplanar, inCrntPos, posDdx, posDdy, blendWeights, mat.triplanarScale, mat.repeatTexture).rgb;
-            ao        *= orm.r * mat.aoStrength; // Канал R из ORM - это AO, умножаем на силу
-            roughness *= orm.g * mat.roughnessStrength;
-            metallic  *= orm.b * mat.metallicStrength;
-        }
-    } else {
-        if (mat.hasMetallic == 1)  metallic  *= sampleMatTex(mat.metallicIdx, finalUV, dx, dy, mat.useTriplanar, inCrntPos, posDdx, posDdy, blendWeights, mat.triplanarScale, mat.repeatTexture).r;
-        if (mat.hasRoughness == 1) roughness *= sampleMatTex(mat.roughnessIdx, finalUV, dx, dy, mat.useTriplanar, inCrntPos, posDdx, posDdy, blendWeights, mat.triplanarScale, mat.repeatTexture).r;
-        if (mat.hasAO == 1)        ao         *= sampleMatTex(mat.aoIdx, finalUV, dx, dy, mat.useTriplanar, inCrntPos, posDdx, posDdy, blendWeights, mat.triplanarScale, mat.repeatTexture).r;
+    if (mat.emissiveIdx >= 0) {
+        emissive = sampleMatTex(mat.emissiveIdx, finalUV, dx, dy, mat.useTriplanar, inCrntPos, posDdx, posDdy, blendWeights, mat.triplanarScale, mat.repeatTexture).rgb * mat.emissiveColor.rgb * mat.emissiveIntensity;
     }
     
     // Normal Map
-    if (mat.hasNormal == 1) {
+    if (mat.normalIdx >= 0) {
         if (mat.useTriplanar == 1) {
             vec2 uvX = inCrntPos.zy * mat.triplanarScale;
             vec2 uvY = inCrntPos.xz * mat.triplanarScale;
             vec2 uvZ = inCrntPos.xy * mat.triplanarScale;
+            
+            vec2 dxX = posDdx.zy * mat.triplanarScale; vec2 dyX = posDdy.zy * mat.triplanarScale;
+            vec2 dxY = posDdx.xz * mat.triplanarScale; vec2 dyY = posDdy.xz * mat.triplanarScale;
+            vec2 dxZ = posDdx.xy * mat.triplanarScale; vec2 dyZ = posDdy.xy * mat.triplanarScale;
+            
             if (mat.repeatTexture == 0) {
                 uvX = clamp(uvX, 0.0, 1.0); uvY = clamp(uvY, 0.0, 1.0); uvZ = clamp(uvZ, 0.0, 1.0);
             }
             
-            vec3 rgbX = textureGrad(allTextures[nonuniformEXT(mat.normalIdx)], uvX, posDdx.zy * mat.triplanarScale, posDdy.zy * mat.triplanarScale).rgb;
-            vec3 rgbY = textureGrad(allTextures[nonuniformEXT(mat.normalIdx)], uvY, posDdx.xz * mat.triplanarScale, posDdy.xz * mat.triplanarScale).rgb;
-            vec3 rgbZ = textureGrad(allTextures[nonuniformEXT(mat.normalIdx)], uvZ, posDdx.xy * mat.triplanarScale, posDdy.xy * mat.triplanarScale).rgb;
+            vec3 rgbX = textureGrad(allTextures[nonuniformEXT(mat.normalIdx)], uvX, dxX, dyX).rgb;
+            vec3 rgbY = textureGrad(allTextures[nonuniformEXT(mat.normalIdx)], uvY, dxY, dyY).rgb;
+            vec3 rgbZ = textureGrad(allTextures[nonuniformEXT(mat.normalIdx)], uvZ, dxZ, dyZ).rgb;
             
-            vec3 tX = rgbX * 2.0 - 1.0; tX.xy *= mat.normalStrength; tX.z = sqrt(max(0.0, 1.0 - dot(tX.xy, tX.xy)));
-            vec3 tY = rgbY * 2.0 - 1.0; tY.xy *= mat.normalStrength; tY.z = sqrt(max(0.0, 1.0 - dot(tY.xy, tY.xy)));
-            vec3 tZ = rgbZ * 2.0 - 1.0; tZ.xy *= mat.normalStrength; tZ.z = sqrt(max(0.0, 1.0 - dot(tZ.xy, tZ.xy)));
-
+            vec3 tX = rgbX * 2.0 - 1.0; tX.xy *= mat.normalStrength; tX = normalize(tX);
+            vec3 tY = rgbY * 2.0 - 1.0; tY.xy *= mat.normalStrength; tY = normalize(tY);
+            vec3 tZ = rgbZ * 2.0 - 1.0; tZ.xy *= mat.normalStrength; tZ = normalize(tZ);
+            
             vec3 nX = vec3(tX.z * sign(N.x), tX.y, -tX.x);
             vec3 nY = vec3(tY.x, tY.z * sign(N.y), -tY.y);
             vec3 nZ = vec3(tZ.x, tZ.y, tZ.z * sign(N.z));
@@ -259,18 +338,48 @@ void main() {
         } else {
             vec3 rgb = textureGrad(allTextures[nonuniformEXT(mat.normalIdx)], finalUV, dx, dy).rgb;
             vec3 tangentNormal = rgb * 2.0 - 1.0;
+            
             tangentNormal.xy *= mat.normalStrength;
-            tangentNormal.z = sqrt(max(0.0, 1.0 - dot(tangentNormal.xy, tangentNormal.xy)));
+            tangentNormal = normalize(tangentNormal);
             worldNormal = normalize(finalTBN * tangentNormal);
         }
     }
     
     roughness = clamp(roughness, 0.04, 1.0);
     metallic = clamp(metallic, 0.0, 1.0);
+    
+    float lightMask = 0.5; float rimMask = 1.0; // Clean unused texture binds here for packed pipeline
+    // --- Micro-trypophobia ---
+    if (ubo.ppPsych2.z > 0.0) {
+        float scale = ubo.ppPsych2.z;
+        vec2 cell = fract(finalUV * scale) - 0.5;
+        float dist = length(cell);
+        if (dist < 0.3) {
+            height -= 0.5 * mat.heightStrength; 
+            vec3 holeNormal = normalize(vec3(-cell * 5.0, 1.0));
+            worldNormal = normalize(finalTBN * holeNormal);
+            albedo *= 0.2; 
+        }
+    }
+
+    // --- Depth Parallax Anomalies (Глаза под обоями) ---
+    if (ubo.ppPsych2.w > 0.0) {
+        vec3 viewDirWorld   = normalize(ubo.camPos - inCrntPos);
+        vec3 viewDirTangent = normalize(transpose(finalTBN) * viewDirWorld);
+        vec2 p = viewDirTangent.xy / max(viewDirTangent.z, 0.1);
+        vec2 deepUV = finalUV - p * 0.1; 
+        
+        float eyeShape = length(fract(deepUV * 5.0) - 0.5);
+        if (eyeShape < 0.15) {
+            albedo = mix(albedo, vec3(0.9, 0.1, 0.1), 0.8); 
+            emissive += vec3(0.8, 0.0, 0.0);
+        }
+    }
+
 
     gNormalRoughness = vec4(worldNormal, roughness);
     gAlbedoMetallic  = vec4(albedo, metallic);
-    gHeightAO        = vec4(height, ao, 0.0, 1.0);
+    gHeightAO        = vec4(height, ao, lightMask, rimMask);
     gEmissive        = vec4(emissive, 1.0);
     o_PortalID = ubo.portalID;
     

@@ -163,5 +163,6 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         VkDescriptorSet textureSet;
         VkImageView csmArrayView = VK_NULL_HANDLE;
         std::unique_ptr<BurnhopeGBuffer> gBuffer;
+        
     };
 }

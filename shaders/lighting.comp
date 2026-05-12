@@ -81,6 +81,55 @@ struct GlobalUboStruct {
     vec4 ppColorComp;
     vec4 shadowRampColor1;
     vec4 shadowRampColor2;
+    vec4 ppBleedMosh;
+    vec4 ppAsciiSort;
+    vec4 ppImpact;
+    vec4 ppTrails;
+    vec4 ppPixelSort;
+    vec4 ppArtistic;
+    vec4 ppArtisticColor;
+    vec4 ppStylized3;
+    vec4 ppStylized4;
+    vec4 ppLens3;
+    vec4 ppLens4;
+    vec4 ppGlitch3;
+    vec4 ppGlitch4;
+    vec4 gbColor1;
+    vec4 gbColor2;
+    vec4 gbColor3;
+    vec4 gbColor4;
+    vec4 ppSpeedLines;
+    vec4 ppColorSplash;
+    vec4 ppHeatFrost;
+    vec4 ppDropsEcho;
+    vec4 ppCanvasInk;
+    vec4 ppWorldGlitter;
+    vec4 ppCausticsBreath;
+    vec4 ppCausticsScale; 
+
+           vec4 ppTransAnime;
+        vec4 ppAstigDolly;
+        vec4 ppSaccBurn;
+        vec4 ppPhosASCII;
+        vec4 ppGravVector;
+        vec4 ppKMeansFeed;
+       vec4 ppHatchAnalog;
+       vec4 ppMoireTunnel;
+       vec4 ppAfterBleed;
+       vec4 ppFluidCMYK;
+       vec4 ppCondenDust;
+       vec4 ppEctoRolling;
+       vec4 ppPurkinjeSlit;
+       vec4 ppReactDroste; 
+       vec4 ppPsych1; 
+       vec4 ppPsych2; 
+       vec4 ppPsych3; 
+       vec4 ppPsych4; 
+              vec4 ppPsych5; 
+       vec4 ppPsych6; 
+       vec4 ppPsych7; 
+       vec4 ppPsych8; 
+       vec4 ppTexIndices;
 };
 
 layout(set = 0, binding = 0) uniform GlobalSceneUbo {
@@ -189,7 +238,7 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
 vec3 fresnelSchlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
-vec3 CalculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metallic, float roughness, vec3 radiance, float cavity, float celLevels) {
+vec3 CalculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metallic, float roughness, vec3 radiance, float cavity, float celLevels, GlobalUboStruct currentUbo, float ao) {
     vec3 H = normalize(V + L);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
     float NDF = DistributionGGX(N, H, roughness);
@@ -200,6 +249,14 @@ vec3 CalculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metallic, float rou
     vec3 numerator = NDF * G * F;
     float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001;
     vec3 specular = numerator / denominator;
+    
+    // --- ANIME SPECULAR BANDS ---
+    if (currentUbo.ppTransAnime.y > 0.5) {
+        float bands = currentUbo.ppTransAnime.z;
+        float specLuma = dot(specular, vec3(0.333));
+        float banded = floor(specLuma * bands + 0.5) / bands;
+        specular = mix(vec3(0.0), albedo * 2.0, step(0.5, banded));
+    }
     
     float NdotL = max(dot(N, L), 0.0);
     
@@ -212,7 +269,9 @@ vec3 CalculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metallic, float rou
         specular = step(0.5, specular) * 0.5;
     }
     
-    return (kD * albedo / 3.141592 + specular * cavity) * radiance * NdotL;
+    // Мягкое влияние AO на прямой свет (добавляет глубину и убирает плоскость на свету)
+    float directAO = mix(1.0, ao, 0.3);
+    return (kD * albedo / 3.141592 + specular * cavity) * radiance * NdotL * directAO;
 }
 float CalculatePCSS_Atlas(vec2 atlasUV, vec2 tileMin, vec2 tileMax, float currentDepth, float bias, mat2 rot, GlobalUboStruct currentUbo) {
     vec2 texelSize = vec2(1.0 / atlasResolution);
@@ -641,6 +700,8 @@ void main() {
     float metallic = albMet.a;
     float height   = heightAO.r; 
     float ao       = heightAO.g; 
+    float lightMask = heightAO.b;
+    float rimMask   = heightAO.a;
     
     vec4 ndc = vec4(uv * 2.0 - 1.0, depth, 1.0);
     vec4 worldPosRaw = currentUbo.invViewProj * ndc;
@@ -687,6 +748,7 @@ void main() {
     // Полностью убираем фейковый ambient. В закрытой комнате должна быть абсолютная темнота!
     vec3 ambient = vec3(0.0);
     vec3 resultRadiance = vec3(0.0);
+    float giAttenuation = 1.0;
     vec4 viewPos = currentUbo.view * vec4(crntPos, 1.0);
     float zView = max(-viewPos.z, currentUbo.zNear + 0.001); 
     uint clusterX = uint(float(pixelCoords.x) / (currentUbo.screenSize.x / float(currentUbo.gridDimX)));
@@ -749,17 +811,78 @@ void main() {
         attenuation *= angleFade;
         if (attenuation <= 0.001) continue; 
         
+        // --- ARTISTIC LIGHT MASKS ---
+        // Маска принудительно заставляет часть объекта быть освещенной (1.0) или в тени (0.0)
+        if (lightMask != 0.5) {
+            NdotL = clamp(NdotL + (lightMask - 0.5) * 2.0, 0.0, 1.0);
+        }
+        
         // --- OBJECT-SPACE HATCHING ---
         if (currentUbo.ppOutlineJitter.w > 0.0) {
             float hScale = currentUbo.ppOutlineJitter.w;
-            float pattern = sin((crntPos.x + crntPos.y - crntPos.z) * hScale);
-            NdotL *= smoothstep(-0.5, 0.5, pattern);
+            vec3 hatchDir = currentUbo.ppKMeansFeed.w > 0.5 ? L : vec3(1.0); // Directional Hatching
+            
+            float hatch1 = sin(dot(crntPos, hatchDir.xyy) * hScale);
+            float hatch2 = sin(dot(crntPos, hatchDir.yxy) * hScale);
+            float hatch3 = sin(dot(crntPos, hatchDir.yyx) * hScale);
+            float hatchFactor = 1.0;
+            if (NdotL < 0.7) hatchFactor *= smoothstep(-0.1, 0.1, hatch1);
+            if (NdotL < 0.4) hatchFactor *= smoothstep(-0.1, 0.1, hatch2);
+            if (NdotL < 0.2) hatchFactor *= smoothstep(-0.1, 0.1, hatch3);
+            NdotL *= mix(0.2, 1.0, hatchFactor);
+        }
+        
+        // --- 3D CAUSTICS (Сверху, снизу, по бокам + Custom Texture) ---
+        if (currentUbo.ppWorldGlitter.y > 0.5) {
+            float time = currentUbo.ppMotionBlur.z * currentUbo.ppWorldGlitter.z;
+            float scale = currentUbo.ppWorldGlitter.w;
+            
+            int texIdx = int(currentUbo.ppCausticsScale.z);
+            float c = 0.0;
+            if (texIdx >= 0) {
+                vec2 uvX = crntPos.zy * scale; vec2 uvY = crntPos.xz * scale; vec2 uvZ = crntPos.xy * scale;
+                vec3 blend = abs(N); blend /= (blend.x + blend.y + blend.z);
+                float tx = texture(bindlessTextures[nonuniformEXT(texIdx)], uvX + time*0.1).r;
+                float ty = texture(bindlessTextures[nonuniformEXT(texIdx)], uvY + time*0.1).r;
+                float tz = texture(bindlessTextures[nonuniformEXT(texIdx)], uvZ + time*0.1).r;
+                c = tx*blend.x + ty*blend.y + tz*blend.z;
+            } else {
+                c = sin((crntPos.x + crntPos.y) * scale + time) * cos((crntPos.z - crntPos.x) * scale + time * 0.8);
+                c = smoothstep(0.8, 1.0, c);
+            }
+            c *= currentUbo.ppCausticsBreath.x;
+            resultRadiance += light.color * c * attenuation;
+        }
+        
+        // --- MICRO-FACET GLITTER ---
+        if (currentUbo.ppCanvasInk.w > 0.5) {
+            float threshold = currentUbo.ppWorldGlitter.x;
+            float noise = fract(sin(dot(floor(crntPos * 100.0), vec3(12.989, 78.233, 45.164)) + currentUbo.ppMotionBlur.z) * 43758.5453);
+            float glitter = step(threshold, noise) * max(dot(N, L), 0.0);
+            resultRadiance += light.color * glitter * 10.0 * attenuation;
+        }
+                float shadow = 0.0;
+        // --- TRANSLUCENCY (Светопропускание) ---
+        vec3 translucency = vec3(0.0);
+        if (currentUbo.ppCausticsScale.w > 0.5) {
+            float scatter = pow(max(0.0, dot(V, -L)), 4.0) * currentUbo.ppTransAnime.x;
+            translucency = albedo * light.color * scatter * attenuation * (1.0 - shadow);
         }
         
         vec3 radiance = light.color * light.intensity * attenuation;
-        vec3 pbr = CalculatePBR(N, V, L, albedo, metallic, roughness, radiance, cavity, currentUbo.ppStylizedParams.z);
+        
+        // --- Negative / Anti-Light ---
+        if (currentUbo.ppPsych2.y > 0.0 && light.intensity < 0.0) {
+            // Отрицательная интенсивность высасывает свет
+            radiance = abs(radiance);
+            resultRadiance -= radiance * 2.0; 
+            giAttenuation *= 0.5; // Глушит глобальное освещение вокруг
+            continue;
+        }
+        
+        vec3 pbr = CalculatePBR(N, V, L, albedo, metallic, roughness, radiance, cavity, currentUbo.ppStylizedParams.z, currentUbo, ao);
 
-        float shadow = 0.0;
+
         if (light.castShadows == 1) {
             if (light.type == 0)      shadow = SunShadowCalculation(crntPos, N, L, currentUbo);
             else if (light.type == 1) shadow = PointShadowCalculation_VSM(crntPos, N, light, currentUbo);
@@ -774,15 +897,18 @@ void main() {
             float ramp = 1.0 - shadow;
             vec3 finalLight = mix(shadowColor, midColor, smoothstep(0.0, 0.2, ramp));
             finalLight = mix(finalLight, pbr, smoothstep(0.1, 0.5, ramp));
-            resultRadiance += finalLight;
+            resultRadiance += finalLight + translucency;
         } else {
-            resultRadiance += pbr * (1.0 - shadow);
+            resultRadiance += pbr * (1.0 - shadow) + translucency;
         }
     }
-    int debugMode = 0; 
+    
+    // --- ARTISTIC CONTOUR LIGHTING (RIM LIGHT) ---
+
+    int debugMode = 1; 
     if (debugMode == 1) {
         imageStore(outColor, pixelCoords, vec4(N * 0.5 + 0.5, 1.0));
-        return;
+    return;
     } 
     else if (debugMode == 2) {
         float d = pow(depth, 50.0); 
@@ -861,8 +987,10 @@ vec3 specularGI = specSum / max(specWeightSum, 0.0001);
     // FIX: Разделяем Ambient и GI, чтобы Ambient и GTAO работали даже если Radiance Cascades (GI) отключен
     vec3 indirectDiffuse = ambient * albedo * kD * ao * gtao * cavity;
     indirectDiffuse += (diffuseGI * giStrength) * albedo * kD * ao * gtao * cavity * rcEnable;
+    indirectDiffuse *= giAttenuation;
     
     vec3 indirectSpecular = specularGI * giStrength * F * ao * gtao * cavity * rcEnable;
+    indirectSpecular *= giAttenuation;
 
     float rtReflEnable = currentUbo.rtParams.x;
     vec3 reflections = imageLoad(rtReflectionsMap, pixelCoords).rgb * rtReflEnable;
@@ -872,7 +1000,13 @@ vec3 specularGI = specSum / max(specWeightSum, 0.0001);
 
     // Итоговый цвет: Прямой свет + Косвенный свет + Отражения
     vec3 finalColor = resultRadiance + indirectDiffuse + finalSpecular;
-
+    if (currentUbo.ppArtistic.x > 0.5) {
+        float rimThickness = currentUbo.ppArtistic.y;
+        float rimPower = currentUbo.ppArtistic.z;
+        float rimDot = 1.0 - max(dot(V, N), 0.0);
+        float rimIntensity = smoothstep(1.0 - rimThickness, 1.0, rimDot) * rimMask;
+        finalColor += currentUbo.ppArtisticColor.rgb * pow(rimIntensity, rimPower);
+    }
     // Читаем Emissive из G-Buffer
 
     finalColor += emissive;
@@ -880,6 +1014,16 @@ vec3 specularGI = specSum / max(specWeightSum, 0.0001);
     // Накладываем объемные лучи поверх сцены
     vec4 volFog = GetVolumetricFogBilateral(uv, depth, currentUbo);
     finalColor = finalColor * volFog.a + volFog.rgb;
+
+    // --- Dynamic Rod/Cone Transition (Scotopic Vision) ---
+    if (currentUbo.ppPsych4.x > 0.0) {
+        float luma = dot(finalColor, vec3(0.2126, 0.7152, 0.0722));
+        vec3 tint = currentUbo.ppPsych6.yzw; // Цвет, заданный в UI (Например, сине-серый)
+        vec3 nightVision = tint * luma * 2.0; 
+        float threshold = currentUbo.ppPsych6.x;
+        float darkness = 1.0 - smoothstep(threshold * 0.1, threshold, luma);
+        finalColor = mix(finalColor, nightVision, darkness); // Плавный переход
+    }
 
     if (any(isnan(finalColor)) || any(isinf(finalColor))) finalColor = vec3(0.0);
 

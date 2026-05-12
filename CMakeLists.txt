@@ -16,7 +16,6 @@ add_definitions(-DIMGUI_DEFINE_MATH_OPERATORS)
 
 find_package(Vulkan REQUIRED)
 find_package(Threads REQUIRED)
-# GLFW обычно ищется так, если он установлен в системе, 
 # либо подключается через add_subdirectory, если он в папке Libraries
 find_package(glfw3 CONFIG REQUIRED)
 find_package(meshoptimizer CONFIG REQUIRED)
@@ -51,6 +50,30 @@ include_directories(Libraries/assimp/contrib/unzip)
 add_subdirectory(Libraries/assimp)
 
 # --- 4. Заголовки (Include) ---
+# Подключение ispc_texcomp (Предполагается, что она лежит в системе или папке Libraries)
+# Включаем поддержку языка ISPC
+enable_language(ISPC)
+
+# Твой Ryzen 9950x поддерживает AVX2 и AVX512. 
+# Указываем ISPC собирать оптимизированные инструкции для максимальной скорости сжатия.
+set(CMAKE_ISPC_INSTRUCTION_SETS "avx2")
+
+# Указываем путь к папке (измени, если она лежит не в Libraries)
+set(ISPC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Libraries/ispc_texcomp")
+
+# Собираем исходники компрессора
+set(ISPC_TEXCOMP_SOURCES
+    "${ISPC_DIR}/ispc_texcomp.cpp"
+    "${ISPC_DIR}/ispc_texcomp_astc.cpp"
+    "${ISPC_DIR}/kernel.ispc"
+    "${ISPC_DIR}/kernel_astc.ispc"
+)
+
+# Создаем статичную библиотеку из этих файлов
+add_library(ispc_texcomp STATIC ${ISPC_TEXCOMP_SOURCES})
+set_target_properties(ispc_texcomp PROPERTIES POSITION_INDEPENDENT_CODE ON)
+# Делаем так, чтобы движок видел заголовок ispc_texcomp.h
+target_include_directories(ispc_texcomp PUBLIC "${ISPC_DIR}")
 
 include_directories(
     Libraries/include
@@ -122,6 +145,7 @@ endforeach()
 add_custom_target(ShadersTarget ALL DEPENDS ${SPIRV_SHADERS})
 add_dependencies(${PROJECT_NAME} ShadersTarget)
 
+
 # --- 8. Линковка библиотек ---
 
 target_link_libraries(${PROJECT_NAME} 
@@ -130,6 +154,7 @@ target_link_libraries(${PROJECT_NAME}
     assimp           # Ссылка на цель из add_subdirectory
     meshoptimizer::meshoptimizer
     Threads::Threads
+    ispc_texcomp
 )
 
 # --- 9. Копирование ресурсов (модели, текстуры, шейдеры) ---

@@ -4,6 +4,8 @@
 #include <filesystem>
 #include "../Render/Model.hpp"
 #include "../Render/Material.hpp"
+#include "../Render/Texture.hpp"
+#include "UIUtils.h"
 
 namespace burnhope {
     class InspectorWindow : public IUIWindow {
@@ -16,6 +18,8 @@ namespace burnhope {
 
             if (context.selectedEntity != entt::null && context.registry->valid(context.selectedEntity)) {
                 DrawComponents(context, context.selectedEntity);
+            } else if (context.selectedAssets.size() == 1 && context.selectedAssets[0].ends_with(".bhtex")) {
+                DrawBHTexSettings(context, context.selectedAssets[0]);
             } else {
                 ImGui::TextDisabled("No entity selected");
             }
@@ -24,6 +28,44 @@ namespace burnhope {
         }
 
     private:
+        void DrawBHTexSettings(UIContext& context, const std::string& path) {
+            std::ifstream file(path, std::ios::binary);
+            if (!file.is_open()) return;
+            BHTexHeader hdr; file.read(reinterpret_cast<char*>(&hdr), sizeof(BHTexHeader)); file.close();
+            
+            ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "Texture Properties (.bhtex)");
+            ImGui::Separator(); ImGui::Spacing();
+            
+            if (UIUtils::BeginPropertyGrid("Settings")) {
+                UIUtils::DrawProperty("Is sRGB", &hdr.isSRGB);
+                UIUtils::DrawProperty("Has Alpha", &hdr.hasAlpha);
+                
+                int filter = hdr.minFilter;
+                if (UIUtils::DrawPropertyCombo("Filter Mode", &filter, "Nearest\0Linear\0")) hdr.minFilter = hdr.magFilter = filter;
+                
+                int wrap = hdr.wrapS;
+                if (UIUtils::DrawPropertyCombo("Wrap Mode", &wrap, "Repeat\0Clamp To Edge\0")) hdr.wrapS = hdr.wrapT = wrap;
+                UIUtils::EndPropertyGrid();
+            }
+
+            ImGui::Spacing();
+            ImGui::TextDisabled("Max Resolution: 2048x2048 (Lanczos)");
+            ImGui::TextDisabled("Mipmaps: %d", hdr.mipCount);
+            ImGui::TextDisabled("Format Pack: %d", hdr.packType);
+            
+            ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+            
+            if (ImGui::Button("Apply & Rebuild", ImVec2(-1, 30))) {
+                // Сохраняем заголовок
+                std::fstream out(path, std::ios::in | std::ios::out | std::ios::binary);
+                out.write(reinterpret_cast<char*>(&hdr), sizeof(BHTexHeader));
+                out.close();
+                // Пересобираем
+                BurnhopeTexture::rebuildFromHeader(path);
+                context.needsRebuild = true;
+            }
+        }
+
         void DrawComponents(UIContext& context, entt::entity entity) {
             if (context.registry->all_of<TagComponent>(entity)) {
                 auto& tag = context.registry->get<TagComponent>(entity);
@@ -35,24 +77,29 @@ namespace burnhope {
             }
 
             if (context.registry->all_of<TransformComponent>(entity)) {
-                if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (UIUtils::BeginPropertyGrid("Transform")) {
                     auto& tc = context.registry->get<TransformComponent>(entity);
                     bool changed = false;
-                    changed |= ImGui::DragFloat3("Position", &tc.transform.position.x, 0.1f);
-                    changed |= ImGui::DragFloat3("Rotation", &tc.transform.rotation.x, 0.5f);
-                    changed |= ImGui::DragFloat3("Scale", &tc.transform.scale.x, 0.1f);
+                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Position"); ImGui::TableSetColumnIndex(1);
+                    changed |= UIUtils::DrawVec3Control("##Pos", tc.transform.position, 0.0f);
+                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Rotation"); ImGui::TableSetColumnIndex(1);
+                    changed |= UIUtils::DrawVec3Control("##Rot", tc.transform.rotation, 0.0f);
+                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Scale"); ImGui::TableSetColumnIndex(1);
+                    changed |= UIUtils::DrawVec3Control("##Scl", tc.transform.scale, 1.0f);
                     if (changed) tc.transform.updatematrix = true;
+                    UIUtils::EndPropertyGrid();
                 }
             }
 
             if (context.registry->all_of<MeshComponent>(entity)) {
-                if (ImGui::CollapsingHeader("Mesh Renderer", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (UIUtils::BeginPropertyGrid("Mesh Renderer")) {
                     auto& mc = context.registry->get<MeshComponent>(entity);
                     
-                    ImGui::Checkbox("Is Visible", &mc.isVisible);
-                    ImGui::Checkbox("Cast Shadow", &mc.castShadow);
+                    UIUtils::DrawProperty("Is Visible", &mc.isVisible);
+                    UIUtils::DrawProperty("Cast Shadow", &mc.castShadow);
 
-                    ImGui::Text("Model:"); ImGui::SameLine();
+                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Model:"); ImGui::TableSetColumnIndex(1);
+                    ImGui::SetNextItemWidth(-FLT_MIN);
                     std::string modelName = mc.modelPath.empty() ? "None" : std::filesystem::path(mc.modelPath).filename().string();
                     if (ImGui::Button((modelName + "##ModelBtn").c_str(), ImVec2(-1, 0))) {
                         ImGui::OpenPopup("SelectModelPopup");
@@ -101,8 +148,10 @@ namespace burnhope {
                     }
 
                     if (mc.model) {
-                        ImGui::Text("Materials:");
+                        ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Materials:");
                         for (size_t i = 0; i < mc.materialPaths.size(); i++) {
+                            ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("  Slot %zu:", i); ImGui::TableSetColumnIndex(1);
+                            ImGui::SetNextItemWidth(-FLT_MIN);
                             ImGui::PushID(i);
                             std::string matName = mc.materialPaths[i].empty() ? "None" : std::filesystem::path(mc.materialPaths[i]).filename().string();
                             if (ImGui::Button((matName + "##MatBtn").c_str(), ImVec2(-1, 0))) {
@@ -148,41 +197,44 @@ namespace burnhope {
                             ImGui::PopID();
                         }
                     }
+                    UIUtils::EndPropertyGrid();
                 }
             }
 
             if (context.registry->all_of<LightComponent>(entity)) {
-                if (ImGui::CollapsingHeader("Light", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (UIUtils::BeginPropertyGrid("Light")) {
                     auto& lc = context.registry->get<LightComponent>(entity);
-                    ImGui::Checkbox("Enable", &lc.light.enable);
+                    UIUtils::DrawProperty("Enable", &lc.light.enable);
                     
                     const char* lightTypes[] = { "Directional", "Point", "Spot" };
                     int currentType = (int)lc.light.type;
-                    if (ImGui::Combo("Type", &currentType, lightTypes, IM_COUNTOF(lightTypes))) {
+                    if (UIUtils::DrawPropertyCombo("Type", &currentType, "Directional\0Point\0Spot\0")) {
                         lc.light.type = (LightType)currentType;
                     }
 
-                    ImGui::ColorEdit3("Color", &lc.light.color.x);
-                    ImGui::DragFloat("Intensity", &lc.light.intensity, 0.1f, 0.0f, 1000.0f);
+                    UIUtils::DrawPropertyColor("Color", &lc.light.color.x);
+                    UIUtils::DrawProperty("Intensity", &lc.light.intensity, -1000.0f, 1000.0f);
                     
                     if (lc.light.type == LightType::Point || lc.light.type == LightType::Spot) {
-                        ImGui::DragFloat("Radius", &lc.light.radius, 0.5f, 0.0f);
+                        UIUtils::DrawProperty("Radius", &lc.light.radius, 0.0f, 500.0f);
                     }
                     if (lc.light.type == LightType::Spot) {
-                        ImGui::DragFloat("Inner Cone", &lc.light.innerCone, 0.1f, 0.0f, lc.light.outerCone);
-                        ImGui::DragFloat("Outer Cone", &lc.light.outerCone, 0.1f, lc.light.innerCone, 90.0f);
+                        UIUtils::DrawProperty("Inner Cone", &lc.light.innerCone, 0.0f, lc.light.outerCone);
+                        UIUtils::DrawProperty("Outer Cone", &lc.light.outerCone, lc.light.innerCone, 90.0f);
                     }
                     
-                    ImGui::Checkbox("Cast Shadows", &lc.light.castShadows);
+                    UIUtils::DrawProperty("Cast Shadows", &lc.light.castShadows);
+                    UIUtils::EndPropertyGrid();
                 }
             }
 
             if (context.registry->all_of<DecalComponent>(entity)) {
-                if (ImGui::CollapsingHeader("Screen Space Decal", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (UIUtils::BeginPropertyGrid("Screen Space Decal")) {
                     auto& dc = context.registry->get<DecalComponent>(entity);
-                    ImGui::SliderFloat("Opacity", &dc.opacity, 0.0f, 1.0f);
+                    UIUtils::DrawProperty("Opacity", &dc.opacity, 0.0f, 1.0f);
                     
-                    ImGui::Text("Albedo Texture:"); ImGui::SameLine();
+                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Albedo Texture:"); ImGui::TableSetColumnIndex(1);
+                    ImGui::SetNextItemWidth(-FLT_MIN);
                     std::string albName = dc.albedoPath.empty() ? "None" : std::filesystem::path(dc.albedoPath).filename().string();
                     ImGui::Button((albName + "##DecalAlb").c_str(), ImVec2(-1, 0));
                     if (ImGui::BeginDragDropTarget()) {
@@ -197,7 +249,8 @@ namespace burnhope {
                             }
                         } ImGui::EndDragDropTarget();
                     }
-                    ImGui::Text("Normal Texture:"); ImGui::SameLine();
+                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Normal Texture:"); ImGui::TableSetColumnIndex(1);
+                    ImGui::SetNextItemWidth(-FLT_MIN);
                     std::string normName = dc.normalPath.empty() ? "None" : std::filesystem::path(dc.normalPath).filename().string();
                     ImGui::Button((normName + "##DecalNorm").c_str(), ImVec2(-1, 0));
                     if (ImGui::BeginDragDropTarget()) {
@@ -212,17 +265,19 @@ namespace burnhope {
                             }
                         } ImGui::EndDragDropTarget();
                     }
+                    UIUtils::EndPropertyGrid();
                 }
             }
 
             if (context.registry->all_of<ReflectionProbeComponent>(entity)) {
-                if (ImGui::CollapsingHeader("Reflection Probe", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (UIUtils::BeginPropertyGrid("Reflection Probe")) {
                     auto& pc = context.registry->get<ReflectionProbeComponent>(entity);
-                    ImGui::DragFloat("Radius", &pc.radius, 0.5f, 0.1f);
+                    UIUtils::DrawProperty("Radius", &pc.radius, 0.1f, 500.0f);
                     int res = pc.resolution;
-                    if (ImGui::InputInt("Resolution", &res)) {
+                    if (UIUtils::DrawProperty("Resolution", &res, 64, 2048)) {
                         pc.resolution = std::max(64, res);
                     }
+                    UIUtils::EndPropertyGrid();
                 }
             }
 

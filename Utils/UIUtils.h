@@ -65,4 +65,61 @@ namespace burnhope::UIUtils {
     inline bool DrawVec2Control(const std::string& label, glm::vec2& values, float resetValue = 0.0f) {
         return DrawFloatControl(label, glm::value_ptr(values), 2, resetValue);
     }
+
+    // --- Compact Property Grid System ---
+    inline bool BeginPropertyGrid(const std::string& name) {
+        if (!ImGui::CollapsingHeader(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) return false;
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 2));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 4));
+        ImGui::BeginTable((name + "Table").c_str(), 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp);
+        ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 140.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        return true;
+    }
+
+    inline void EndPropertyGrid() {
+        ImGui::EndTable();
+        ImGui::PopStyleVar(2);
+        ImGui::Spacing();
+    }
+
+    inline bool DrawProperty(const std::string& label, bool* value) {
+        ImGui::TableNextRow(); ImGui::TableNextColumn();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label.c_str()); ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        return ImGui::Checkbox(("##" + label).c_str(), value);
+    }
+
+    inline bool DrawProperty(const std::string& label, float* value, float min = 0.0f, float max = 0.0f, const char* format = "%.3f") {
+        ImGui::TableNextRow(); ImGui::TableNextColumn();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label.c_str()); ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        return ImGui::SliderFloat(("##" + label).c_str(), value, min, max, format);
+    }
+
+    inline bool DrawProperty(const std::string& label, int* value, int min = 0, int max = 0) {
+        ImGui::TableNextRow(); ImGui::TableNextColumn();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label.c_str()); ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        return ImGui::SliderInt(("##" + label).c_str(), value, min, max);
+    }
+
+    inline bool DrawPropertyColor(const std::string& label, float* value) {
+        ImGui::TableNextRow(); ImGui::TableNextColumn();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label.c_str()); ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        return ImGui::ColorEdit3(("##" + label).c_str(), value);
+    }
+
+    inline bool DrawPropertyCombo(const std::string& label, int* current_item, const char* items_separated_by_zeros) {
+        ImGui::TableNextRow(); ImGui::TableNextColumn();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label.c_str()); ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        return ImGui::Combo(("##" + label).c_str(), current_item, items_separated_by_zeros);
+    }
 }
