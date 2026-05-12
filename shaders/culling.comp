@@ -101,7 +101,12 @@ void main() {
         worldMin = min(worldMin, corners[i]);
         worldMax = max(worldMax, corners[i]);
     }
-    bool visible = true; //isVisible(worldMin, worldMax);
+    
+    bool visible = isVisible(worldMin, worldMax);
+    if (visible) {
+        visible = !isOccluded(corners);
+    }
+
     uint drawIdx = idx; 
 uint selectedLod = 0;
     if (visible) {

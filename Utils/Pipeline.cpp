@@ -53,9 +53,7 @@ namespace burnhope
         configInfo.renderPass != VK_NULL_HANDLE &&
         "Cannot create graphics pipeline: no renderPass provided in configInfo");
     auto vertCode = readFile(vertFilepath);
-    auto fragCode = readFile(fragFilepath);
     createShaderModule(vertCode, &vertShaderModule);
-    createShaderModule(fragCode, &fragShaderModule);
     VkPipelineShaderStageCreateInfo shaderStages[2];
     shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -64,6 +62,10 @@ namespace burnhope
     shaderStages[0].flags = 0;
     shaderStages[0].pNext = nullptr;
     shaderStages[0].pSpecializationInfo = nullptr;
+    bool hasFrag = !fragFilepath.empty();
+    if (hasFrag) {
+        auto fragCode = readFile(fragFilepath);
+        createShaderModule(fragCode, &fragShaderModule);
     shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     shaderStages[1].module = fragShaderModule;
@@ -82,7 +84,10 @@ namespace burnhope
     vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions.data();
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.stageCount = 2;
+        pipelineInfo.stageCount = 2;
+    } else {
+        pipelineInfo.stageCount = 1;
+    }
     pipelineInfo.pStages = shaderStages;
     pipelineInfo.pVertexInputState = &vertexInputInfo;
     pipelineInfo.pInputAssemblyState = &configInfo.inputAssemblyInfo;

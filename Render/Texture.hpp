@@ -5,6 +5,7 @@
 #include <string>
 #include <fstream>
 #include <algorithm>
+#include <unordered_map>
 namespace burnhope
 {
     struct BHTexHeader
@@ -21,7 +22,7 @@ namespace burnhope
         float maxAnisotropy;
         bool isSRGB;
         bool hasAlpha;
-        int packType; // 0=Raw, 1=AlbedoAlpha(BC7), 2=ORMX(BC7), 3=Normal(BC5), 4=Emissive(BC6H)
+        int packType; // 0=Raw, 1=AlbedoAlpha/Normal(BC7), 2=ORMX(BC7), 3=Normal(BC5), 4=Emissive(BC6H)
         
         // Храним пути к исходникам для пересоздания из UI
         char srcPath1[256];
@@ -63,9 +64,8 @@ namespace burnhope
         void updateDescriptor();
         void transitionLayout(VkCommandBuffer commandBuffer, VkImageLayout oldLayout, VkImageLayout newLayout);
         void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
-        static std::unique_ptr<BurnhopeTexture> createTextureFromFile(
-            BurnhopeDevice &device, const std::string &filepath);
-        static std::unique_ptr<BurnhopeTexture> createDataTextureFromFile(BurnhopeDevice &device, const std::string &filepath);
+        static std::shared_ptr<BurnhopeTexture> createTextureFromFile(BurnhopeDevice &device, const std::string &filepath);
+        static std::shared_ptr<BurnhopeTexture> createDataTextureFromFile(BurnhopeDevice &device, const std::string &filepath);
 
         // Утилиты для паковки текстур
         static void packORMX(const std::string& ao, const std::string& rough, const std::string& metal, const std::string& height, const std::string& outPath);
@@ -80,10 +80,13 @@ namespace burnhope
         void createTextureSampler();
         bool loadFromBHTex(const std::string &filepath);
         void generateAndCacheBHTex(const std::string &srcPath, const std::string &cachePath, bool isSRGB);
+        
+        static std::unordered_map<std::string, std::weak_ptr<BurnhopeTexture>> textureCache;
+
         VkDescriptorImageInfo mDescriptor{};
         BurnhopeDevice &mDevice;
         VkImage mTextureImage = nullptr;
-        VkDeviceMemory mTextureImageMemory = nullptr;
+        VmaAllocation mTextureImageMemory = nullptr;
         VkImageView mTextureImageView = nullptr;
         VkSampler mTextureSampler = nullptr;
         VkFormat mFormat;

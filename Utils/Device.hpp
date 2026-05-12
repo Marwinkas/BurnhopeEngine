@@ -2,6 +2,7 @@
 #include "Window.hpp"
 #include <string>
 #include <vector>
+#include <vk_mem_alloc.h>
 namespace burnhope
 {
   struct SwapChainSupportDetails
@@ -50,7 +51,7 @@ namespace burnhope
         VkBufferUsageFlags usage,
         VkMemoryPropertyFlags properties,
         VkBuffer &buffer,
-        VkDeviceMemory &bufferMemory);
+        VmaAllocation &allocation);
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer commandBuffer);
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
@@ -60,7 +61,7 @@ namespace burnhope
         const VkImageCreateInfo &imageInfo,
         VkMemoryPropertyFlags properties,
         VkImage &image,
-        VkDeviceMemory &imageMemory);
+        VmaAllocation &allocation);
     void transitionImageLayout(
         VkImage image,
         VkFormat format,
@@ -69,6 +70,11 @@ namespace burnhope
         uint32_t mipLevels = 1,
         uint32_t layerCount = 1);
         VkDeviceAddress getBufferDeviceAddress(VkBuffer buffer);
+    VkPipelineCache getPipelineCache() const { return pipelineCache; }
+    VkSampler getLinearRepeatSampler() const { return linearRepeatSampler; }
+    VmaAllocator getAllocator() const { return allocator; }
+    VkSampler getLinearClampSampler() const { return linearClampSampler; }
+    VkSampler getNearestClampSampler() const { return nearestClampSampler; }
     VkPhysicalDeviceProperties properties;
   private:
     void createInstance();
@@ -77,6 +83,10 @@ namespace burnhope
     void pickPhysicalDevice();
     void createLogicalDevice();
     void createCommandPool();
+    void createGlobalSamplers();
+    void destroyGlobalSamplers();
+    void createPipelineCache();
+    void savePipelineCache();
     bool isDeviceSuitable(VkPhysicalDevice device);
     std::vector<const char *> getRequiredExtensions();
     bool checkValidationLayerSupport();
@@ -92,6 +102,11 @@ namespace burnhope
     VkCommandPool commandPool;
     VkDevice device_;
     VkSurfaceKHR surface_;
+    VkPipelineCache pipelineCache = VK_NULL_HANDLE;
+    VkSampler linearRepeatSampler = VK_NULL_HANDLE;
+    VkSampler linearClampSampler = VK_NULL_HANDLE;
+    VmaAllocator allocator;
+    VkSampler nearestClampSampler = VK_NULL_HANDLE;
     VkQueue graphicsQueue_;
     VkQueue presentQueue_;
     const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
@@ -100,7 +115,10 @@ namespace burnhope
         VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
         VK_KHR_RAY_QUERY_EXTENSION_NAME,
         VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-        VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME
+        VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME,
+        VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
+        VK_EXT_MESH_SHADER_EXTENSION_NAME,
+        VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME
     };
   };
 }

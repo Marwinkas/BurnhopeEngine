@@ -29,7 +29,8 @@ namespace burnhope
             const glm::mat4 &lightSpaceMatrix,
             CullingSystem &cullingSystem,
             entt::registry &registry,
-            VkDescriptorSet objectStorageSet);
+             VkDescriptorSet objectStorageSet,
+             bool renderDynamicOnly);
 
     private:
         void createPipelineLayout(VkDescriptorSetLayout objectSetLayout);

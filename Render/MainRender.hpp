@@ -17,7 +17,7 @@ namespace burnhope
         std::unique_ptr<BurnhopeTexture> gAlbedoMetallic;
         std::unique_ptr<BurnhopeTexture> gExtra;
         VkImage depthImage;
-        VkDeviceMemory depthImageMemory;
+          VmaAllocation depthImageMemory;
         VkImageView depthImageView;
     };
 struct alignas(16) ObjectData {
@@ -55,7 +55,9 @@ static_assert(sizeof(MaterialData) % 16 == 0, "MaterialData size must be a multi
             VkDescriptorSet textureSet,
             CullingSystem &cullingSystem,
             uint32_t totalSubMeshCount,
-            bool useStencil
+            bool useStencil,
+            uint32_t vrsMode = 0,
+            bool isZPrepass = false
         );
 
     private:
@@ -68,5 +70,7 @@ static_assert(sizeof(MaterialData) % 16 == 0, "MaterialData size must be a multi
         std::unique_ptr<BurnhopeDescriptorSetLayout> textureLayout;
         std::unique_ptr<GraphicsShader> shader;
         std::unique_ptr<GraphicsShader> portalShader;
+          std::unique_ptr<GraphicsShader> zPrepassShader;
+        std::unique_ptr<GraphicsShader> zPrepassPortalShader;
     };
 }

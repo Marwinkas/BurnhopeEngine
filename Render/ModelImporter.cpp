@@ -1,5 +1,6 @@
 ﻿#include "ModelImporter.h"
 #include "Model.hpp"
+#include <glm/gtc/packing.hpp>
 namespace fs = std::filesystem;
 namespace burnhope
 {
@@ -87,23 +88,27 @@ namespace burnhope
                 aabbMin = glm::min(aabbMin, v.position);
                 aabbMax = glm::max(aabbMax, v.position);
                 if (aimesh->HasNormals())
-                    v.normal = glm::normalize(glm::vec3(aimesh->mNormals[i].x, aimesh->mNormals[i].y, aimesh->mNormals[i].z));
+                    v.normal = glm::packSnorm3x10_1x2(glm::vec4(glm::normalize(glm::vec3(aimesh->mNormals[i].x, aimesh->mNormals[i].y, aimesh->mNormals[i].z)), 0.0f));
                 else
-                    v.normal = glm::vec3(0.0f, 1.0f, 0.0f);
+                    v.normal = glm::packSnorm3x10_1x2(glm::vec4(0.0f, 1.0f, 0.0f, 0.0f));
                 if (aimesh->HasTextureCoords(0))
-                    v.texUV = {aimesh->mTextureCoords[0][i].x, aimesh->mTextureCoords[0][i].y};
+                    v.texUV = glm::packHalf2x16(glm::vec2(aimesh->mTextureCoords[0][i].x, aimesh->mTextureCoords[0][i].y));
                 else
-                    v.texUV = {0.0f, 0.0f};
+                    v.texUV = glm::packHalf2x16(glm::vec2(0.0f, 0.0f));
                 if (aimesh->HasTangentsAndBitangents())
                 {
-                    v.tangent = glm::normalize(glm::vec3(aimesh->mTangents[i].x, aimesh->mTangents[i].y, aimesh->mTangents[i].z));
-                    v.bitangent = glm::normalize(glm::vec3(aimesh->mBitangents[i].x, aimesh->mBitangents[i].y, aimesh->mBitangents[i].z));
+                    glm::vec3 t = glm::normalize(glm::vec3(aimesh->mTangents[i].x, aimesh->mTangents[i].y, aimesh->mTangents[i].z));
+                    glm::vec3 n = glm::normalize(glm::vec3(aimesh->mNormals[i].x, aimesh->mNormals[i].y, aimesh->mNormals[i].z));
+                    glm::vec3 b = glm::normalize(glm::vec3(aimesh->mBitangents[i].x, aimesh->mBitangents[i].y, aimesh->mBitangents[i].z));
+                    float handedness = (glm::dot(glm::cross(n, t), b) < 0.0f) ? -1.0f : 1.0f;
+                    v.tangent = glm::packSnorm3x10_1x2(glm::vec4(t, handedness));
                 }
                 else
                 {
-                    glm::vec3 up = std::abs(v.normal.y) < 0.999f ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
-                    v.tangent = glm::normalize(glm::cross(up, v.normal));
-                    v.bitangent = glm::cross(v.normal, v.tangent);
+                    glm::vec3 n = aimesh->HasNormals() ? glm::normalize(glm::vec3(aimesh->mNormals[i].x, aimesh->mNormals[i].y, aimesh->mNormals[i].z)) : glm::vec3(0.0f, 1.0f, 0.0f);
+                    glm::vec3 up = std::abs(n.y) < 0.999f ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+                    glm::vec3 t = glm::normalize(glm::cross(up, n));
+                    v.tangent = glm::packSnorm3x10_1x2(glm::vec4(t, 1.0f));
                 }
             }
             for (unsigned int i = 0; i < aimesh->mNumFaces; i++)

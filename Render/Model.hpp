@@ -20,10 +20,26 @@ namespace burnhope
     struct Vertex
     {
         glm::vec3 position;
-        glm::vec3 normal;
-        glm::vec2 texUV;
-        glm::vec3 tangent;
-        glm::vec3 bitangent;
+        uint32_t normal;
+        uint32_t texUV;
+        uint32_t tangent;
+Vertex() 
+        : position(0.0f), normal(0), texUV(0), tangent(0) {}
+        Vertex(glm::vec3 p, glm::vec3 n, glm::vec2 uv) : position(p) {
+        // Упаковка нормали (0.0 - 1.0 в диапазон 0 - 1023)
+        uint32_t x = static_cast<uint32_t>((n.x * 0.5f + 0.5f) * 1023.0f);
+        uint32_t y = static_cast<uint32_t>((n.y * 0.5f + 0.5f) * 1023.0f);
+        uint32_t z = static_cast<uint32_t>((n.z * 0.5f + 0.5f) * 1023.0f);
+        normal = (x) | (y << 10) | (z << 20);
+
+        // Упаковка UV (простое приведение к half-float или fixed point)
+        uint32_t u = static_cast<uint16_t>(uv.x * 65535.0f);
+        uint32_t v = static_cast<uint16_t>(uv.y * 65535.0f);
+        texUV = u | (v << 16);
+        
+        tangent = 0; // Можно инициализировать позже
+    }
+
         static std::vector<VkVertexInputBindingDescription> getBindingDescriptions();
         static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
         bool operator==(const Vertex &other) const
@@ -31,8 +47,7 @@ namespace burnhope
             return position == other.position &&
                    normal == other.normal &&
                    texUV == other.texUV &&
-                   tangent == other.tangent &&
-                   bitangent == other.bitangent;
+                   tangent == other.tangent;
         }
     };
     struct SubMesh
@@ -79,6 +94,7 @@ namespace burnhope
         uint32_t indexCount;
         std::vector<std::shared_ptr<Material>> materials;
         VkDeviceAddress getBLASAddress() const { return blasAddress; }
+        VkIndexType indexType = VK_INDEX_TYPE_UINT32;
         // Добавь эти поля в private или protected
 VkDeviceAddress getVertexBufferAddress() const { return vertexBufferAddress; }
     VkDeviceAddress getIndexBufferAddress() const { return indexBufferAddress; }

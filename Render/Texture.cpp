@@ -11,6 +11,8 @@
 namespace burnhope
 {
     float BurnhopeTexture::GlobalAnisotropy = 16.0f;
+    std::unordered_map<std::string, std::weak_ptr<BurnhopeTexture>> BurnhopeTexture::textureCache;
+
     BurnhopeTexture::BurnhopeTexture(BurnhopeDevice &device, const std::string &textureFilepath, bool isSRGB) : mDevice{device}
     {
         createTextureImage(textureFilepath, isSRGB);
@@ -63,24 +65,11 @@ namespace burnhope
             throw std::runtime_error("failed to create array texture image view!");
         if (usage & VK_IMAGE_USAGE_SAMPLED_BIT)
         {
-            VkSamplerCreateInfo samplerInfo{};
-            samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
             if (format == VK_FORMAT_R8_UINT || format == VK_FORMAT_R16_UINT || format == VK_FORMAT_R32_UINT) {
-                samplerInfo.magFilter = VK_FILTER_NEAREST;
-                samplerInfo.minFilter = VK_FILTER_NEAREST;
-                samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+                mTextureSampler = mDevice.getNearestClampSampler();
             } else {
-                samplerInfo.magFilter = VK_FILTER_LINEAR;
-                samplerInfo.minFilter = VK_FILTER_LINEAR;
-                samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+                mTextureSampler = mDevice.getLinearClampSampler();
             }
-            samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-            samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-            samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-            samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-            samplerInfo.maxLod = 1.0f;
-            if (vkCreateSampler(device.device(), &samplerInfo, nullptr, &mTextureSampler) != VK_SUCCESS)
-                throw std::runtime_error("failed to create array texture sampler!");
             mDescriptor.sampler = mTextureSampler;
             mDescriptor.imageView = mTextureImageView;
             mDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -141,29 +130,10 @@ namespace burnhope
         }
         if (usage & VK_IMAGE_USAGE_SAMPLED_BIT)
         {
-            VkSamplerCreateInfo samplerInfo{};
-            samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
             if (format == VK_FORMAT_R8_UINT || format == VK_FORMAT_R16_UINT || format == VK_FORMAT_R32_UINT) {
-                samplerInfo.magFilter = VK_FILTER_NEAREST;
-                samplerInfo.minFilter = VK_FILTER_NEAREST;
-                samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+                mTextureSampler = mDevice.getNearestClampSampler();
             } else {
-                samplerInfo.magFilter = VK_FILTER_LINEAR;
-                samplerInfo.minFilter = VK_FILTER_LINEAR;
-                samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-            }
-            samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-            samplerInfo.addressModeV = samplerInfo.addressModeU;
-            samplerInfo.addressModeW = samplerInfo.addressModeU;
-            samplerInfo.anisotropyEnable = BurnhopeTexture::GlobalAnisotropy > 1.0f ? VK_TRUE : VK_FALSE;
-            samplerInfo.maxAnisotropy = BurnhopeTexture::GlobalAnisotropy;
-            samplerInfo.mipLodBias = 0.0f;
-            samplerInfo.minLod = 0.0f;
-            samplerInfo.maxLod = 1.0f;
-            samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-            if (vkCreateSampler(device.device(), &samplerInfo, nullptr, &mTextureSampler) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to create sampler!");
+                mTextureSampler = mDevice.getLinearClampSampler();
             }
             VkImageLayout samplerImageLayout = imageLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
                                                    ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
@@ -175,20 +145,29 @@ namespace burnhope
     }
     BurnhopeTexture::~BurnhopeTexture()
     {
-        vkDestroySampler(mDevice.device(), mTextureSampler, nullptr);
+        // vkDestroySampler(mDevice.device(), mTextureSampler, nullptr); // Теперь самплеры глобальные!
         vkDestroyImageView(mDevice.device(), mTextureImageView, nullptr);
-        vkDestroyImage(mDevice.device(), mTextureImage, nullptr);
-        vkFreeMemory(mDevice.device(), mTextureImageMemory, nullptr);
+        vmaDestroyImage(mDevice.getAllocator(), mTextureImage, mTextureImageMemory);
     }
-    std::unique_ptr<BurnhopeTexture> BurnhopeTexture::createTextureFromFile(
+    std::shared_ptr<BurnhopeTexture> BurnhopeTexture::createTextureFromFile(
         BurnhopeDevice &device, const std::string &filepath)
     {
-        return std::make_unique<BurnhopeTexture>(device, filepath, true);
+        if (auto tex = textureCache[filepath].lock()) {
+            return tex;
+        }
+        auto tex = std::make_shared<BurnhopeTexture>(device, filepath, true);
+        textureCache[filepath] = tex;
+        return tex;
     }
-    std::unique_ptr<BurnhopeTexture> BurnhopeTexture::createDataTextureFromFile(
+    std::shared_ptr<BurnhopeTexture> BurnhopeTexture::createDataTextureFromFile(
         BurnhopeDevice &device, const std::string &filepath)
     {
-        return std::make_unique<BurnhopeTexture>(device, filepath, false);
+        if (auto tex = textureCache[filepath].lock()) {
+            return tex;
+        }
+        auto tex = std::make_shared<BurnhopeTexture>(device, filepath, false);
+        textureCache[filepath] = tex;
+        return tex;
     }
     void BurnhopeTexture::updateDescriptor()
     {
@@ -271,7 +250,7 @@ namespace burnhope
             }
             file.close();
             VkBuffer stagingBuffer;
-            VkDeviceMemory stagingBufferMemory;
+            VmaAllocation stagingBufferMemory;
             mDevice.createBuffer(
                 allMipData.size(),
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -328,9 +307,9 @@ namespace burnhope
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuffer, stagingBufferMemory);
         void *data;
-        vkMapMemory(mDevice.device(), stagingBufferMemory, 0, imageSize, 0, &data);
+        vmaMapMemory(mDevice.getAllocator(), stagingBufferMemory, &data);
         memcpy(data, pixels, static_cast<size_t>(imageSize));
-        vkUnmapMemory(mDevice.device(), stagingBufferMemory);
+        vmaUnmapMemory(mDevice.getAllocator(), stagingBufferMemory);
         stbi_image_free(pixels);
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -349,8 +328,7 @@ namespace burnhope
         mDevice.copyBufferToImage(stagingBuffer, mTextureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), mLayerCount);
         generateMipmaps(mTextureImage, mFormat, texWidth, texHeight, mMipLevels);
         mTextureLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        vkDestroyBuffer(mDevice.device(), stagingBuffer, nullptr);
-        vkFreeMemory(mDevice.device(), stagingBufferMemory, nullptr);
+        vmaDestroyBuffer(mDevice.getAllocator(), stagingBuffer, stagingBufferMemory);
     }
     void BurnhopeTexture::createTextureImageView(VkImageViewType viewType)
     {
@@ -371,27 +349,8 @@ namespace burnhope
     }
     void BurnhopeTexture::createTextureSampler()
     {
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.anisotropyEnable = BurnhopeTexture::GlobalAnisotropy > 1.0f ? VK_TRUE : VK_FALSE;
-        samplerInfo.maxAnisotropy = BurnhopeTexture::GlobalAnisotropy;
-        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = static_cast<float>(mMipLevels);
-        if (vkCreateSampler(mDevice.device(), &samplerInfo, nullptr, &mTextureSampler) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create texture sampler!");
-        }
+        // Все обычные 2D PBR-текстуры с мипмапами используют Linear Repeat
+        mTextureSampler = mDevice.getLinearRepeatSampler();
     }
     void BurnhopeTexture::transitionLayout(VkCommandBuffer commandBuffer, VkImageLayout oldLayout, VkImageLayout newLayout)
     {
@@ -892,7 +851,7 @@ namespace burnhope
             nData = resizeChannel(nData, w, h, outW, outH, false);
         }
 
-        BHTexHeader hdr{}; hdr.format = 5; hdr.isSRGB = false; hdr.hasAlpha = false; hdr.packType = 0; // Normal -> RAW UNORM
+        BHTexHeader hdr{}; hdr.format = 3; hdr.isSRGB = false; hdr.hasAlpha = false; hdr.packType = 1; // Normal -> BC7 UNORM
         strncpy(hdr.srcPath1, normal.c_str(), 255);
         writeBHTexPacked(outPath, nData, outW, outH, hdr);
     }

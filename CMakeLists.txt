@@ -19,7 +19,16 @@ find_package(Threads REQUIRED)
 # либо подключается через add_subdirectory, если он в папке Libraries
 find_package(glfw3 CONFIG REQUIRED)
 find_package(meshoptimizer CONFIG REQUIRED)
-
+# --- Подключение Vulkan Memory Allocator ---
+include(FetchContent)
+# --- Подключение Vulkan Memory Allocator ---
+include(FetchContent)
+FetchContent_Declare(
+    vma
+    GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+    GIT_TAG        master  # Или конкретно v3.1.0, чтобы быть уверенным в фиксе
+)
+FetchContent_MakeAvailable(vma)
 # --- 3. Настройка Assimp (максимальная очистка) ---
 
 # Выключаем всё, что тянет лишние зависимости (DirectX, GUI, тесты)
@@ -127,6 +136,8 @@ file(GLOB SHADER_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.vert"
     "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.frag"
     "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.comp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.task"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.mesh"
 )
 
 foreach(SHADER ${SHADER_SOURCES})
@@ -155,6 +166,7 @@ target_link_libraries(${PROJECT_NAME}
     meshoptimizer::meshoptimizer
     Threads::Threads
     ispc_texcomp
+    VulkanMemoryAllocator
 )
 
 # --- 9. Копирование ресурсов (модели, текстуры, шейдеры) ---

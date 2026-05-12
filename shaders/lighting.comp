@@ -1,6 +1,7 @@
 #version 450
 #extension GL_EXT_nonuniform_qualifier : enable
 #extension GL_EXT_buffer_reference : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 layout(set = 4, binding = 0, rgba16f) writeonly uniform image2D outColor;
 layout(set = 5, binding = 0) uniform sampler2D diffuseGITex;
@@ -281,14 +282,14 @@ float CalculatePCSS_Atlas(vec2 atlasUV, vec2 tileMin, vec2 tileMax, float curren
     float searchRadius = min(currentUbo.lightSize * 2.0, maxRadius); 
     int blockers = 0;
     float avgBlockerDepth = 0.0;
-    float centerDepth = texture(shadowAtlas, clamp(atlasUV, tileMin, tileMax)).r;
+    float centerDepth = textureLod(shadowAtlas, clamp(atlasUV, tileMin, tileMax), 0.0).r;
     if (centerDepth < currentDepth - bias) {
         blockers++;
         avgBlockerDepth += centerDepth;
     }
     for (int i = 0; i < 8; i++) {
         vec2 offset = rot * poissonDisk[i] * searchRadius * texelSize;
-        float pcfDepth = texture(shadowAtlas, clamp(atlasUV + offset, tileMin, tileMax)).r;
+        float pcfDepth = textureLod(shadowAtlas, clamp(atlasUV + offset, tileMin, tileMax), 0.0).r;
         if (pcfDepth < currentDepth - bias) {
             blockers++;
             avgBlockerDepth += pcfDepth;
@@ -302,7 +303,7 @@ float CalculatePCSS_Atlas(vec2 atlasUV, vec2 tileMin, vec2 tileMax, float curren
     float shadow = 0.0;
     for (int i = 0; i < 16; ++i) {
         vec2 offset = rot * poissonDisk[i] * filterRadius * texelSize; 
-        float pcfDepth = texture(shadowAtlas, clamp(atlasUV + offset, tileMin, tileMax)).r;
+        float pcfDepth = textureLod(shadowAtlas, clamp(atlasUV + offset, tileMin, tileMax), 0.0).r;
         shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
     }
     return shadow / 16.0;
@@ -331,7 +332,7 @@ float AtlasShadowCalculation(vec3 fragPos, vec3 N, vec3 L, Light light, GlobalUb
     vec2 tileMax  = tileMin + vec2(uvScale) - vec2(1.0 / atlasResolution);
     vec2 atlasUV  = projCoords.xy * uvScale + tileMin;
     vec2 noiseUV = (gl_GlobalInvocationID.xy / 256.0) + vec2(float(light.shadowSlot) * 0.137);
-    float randomAngle = texture(noiseTexture, noiseUV).r * 6.2831853;
+    float randomAngle = textureLod(noiseTexture, noiseUV, 0.0).r * 6.2831853;
     float s = sin(randomAngle);
     float c = cos(randomAngle);
     mat2 rot = mat2(c, -s, s, c);
@@ -382,7 +383,7 @@ float PointShadowCalculation_Atlas(vec3 fragPos, vec3 N, Light light, GlobalUboS
     vec2 atlasUV   = uv * uvScale + vec2(float(faceX), float(faceY)) / atlasResolution;
     float bias = 0.002 + 0.005 * slope;
     vec2 noiseUV     = (gl_GlobalInvocationID.xy / 256.0) + vec2(float(light.shadowSlot + face) * 0.137);
-    float randomAngle = texture(noiseTexture, noiseUV).r * 6.2831853;
+    float randomAngle = textureLod(noiseTexture, noiseUV, 0.0).r * 6.2831853;
     float s = sin(randomAngle);
     float c = cos(randomAngle);
     mat2 rot = mat2(c, -s, s, c);
@@ -393,14 +394,14 @@ float SearchBlocker(vec3 projCoords, int layer, float zReceiver, vec2 texelSize,
     float avgBlockerDepth = 0.0;
     float searchRadius = currentUbo.lightSize * 3.0; 
     float blockerBias = 0.00001;
-    float centerDepth = texture(sunShadowMap, vec3(projCoords.xy, float(layer))).r;
+    float centerDepth = textureLod(sunShadowMap, vec3(projCoords.xy, float(layer)), 0.0).r;
     if (centerDepth < zReceiver - blockerBias) {
         blockers++;
         avgBlockerDepth += centerDepth;
     }
     for (int i = 0; i < 8; i++) {
         vec2 offset = rot * poissonDisk[i] * searchRadius;
-        float pcfDepth = texture(sunShadowMap, vec3(projCoords.xy + offset * texelSize, float(layer))).r;
+        float pcfDepth = textureLod(sunShadowMap, vec3(projCoords.xy + offset * texelSize, float(layer)), 0.0).r;
         if (pcfDepth < zReceiver - blockerBias) {
             blockers++;
             avgBlockerDepth += pcfDepth;
@@ -424,7 +425,7 @@ float CalculateSingleCascadeShadow(vec3 fragPos, vec3 N, vec3 L, int layer, floa
     float currentDepth = projCoords.z;
     float bias = max(0.0005 * (1.0 - NdotL), 0.0001) * (float(layer) + 1.0);
     vec2 noiseUV = (gl_GlobalInvocationID.xy / 256.0) + vec2(float(layer) * 0.137);
-    float randomAngle = texture(noiseTexture, noiseUV).r * 6.2831853;
+    float randomAngle = textureLod(noiseTexture, noiseUV, 0.0).r * 6.2831853;
     float s = sin(randomAngle); float c = cos(randomAngle);
     mat2 rot = mat2(c, -s, s, c);
     float avgBlockerDepth = SearchBlocker(projCoords, layer, currentDepth, texelSize, rot, currentUbo);
@@ -438,7 +439,7 @@ float CalculateSingleCascadeShadow(vec3 fragPos, vec3 N, vec3 L, int layer, floa
     float shadow = 0.0;
     for (int i = 0; i < 16; ++i) {
         vec2 offset = rot * poissonDisk[i] * filterRadius;
-        float pcfDepth = texture(sunShadowMap, vec3(projCoords.xy + offset * texelSize, float(layer))).r;
+        float pcfDepth = textureLod(sunShadowMap, vec3(projCoords.xy + offset * texelSize, float(layer)), 0.0).r;
         shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
     }
     return shadow / 16.0;
@@ -459,7 +460,7 @@ float SampleVirtualShadowMap(vec3 projCoords, uint lightIndex, uint face, int en
     
     vec2 texelSize = vec2(1.0 / PHYSICAL_ATLAS_SIZE);
     vec2 noiseUV = (gl_GlobalInvocationID.xy / 256.0) + vec2(float(encodedSlot + face) * 0.137);
-    float randomAngle = texture(noiseTexture, noiseUV).r * 6.2831853;
+    float randomAngle = textureLod(noiseTexture, noiseUV, 0.0).r * 6.2831853;
     float s = sin(randomAngle); float c = cos(randomAngle);
     mat2 rot = mat2(c, -s, s, c);
     
@@ -482,7 +483,7 @@ float SampleVirtualShadowMap(vec3 projCoords, uint lightIndex, uint face, int en
             uint pX = physPage % 32;
             uint pY = physPage / 32;
             vec2 physTexelCoord = vec2(pX * PAGE_SIZE, pY * PAGE_SIZE) + pUV * PAGE_SIZE;
-            float shadowDepth = texture(vsmPhysicalAtlas, physTexelCoord / PHYSICAL_ATLAS_SIZE).r;
+            float shadowDepth = textureLod(vsmPhysicalAtlas, physTexelCoord / PHYSICAL_ATLAS_SIZE, 0.0).r;
             shadow += (projCoords.z - bias > shadowDepth) ? 1.0 : 0.0;
         }
     }
@@ -735,7 +736,7 @@ void main() {
     float gtao     = GetGTAOBilateral(uv, depth, currentUbo); // Умное растягивание GTAO
     vec3 V = normalize(currentUbo.camPos - crntPos); 
     float cavity = clamp(height * 0.5 + 0.9, 0.0, 1.0);
-        vec3 emissive = texture(gEmissive, uv).rgb;
+        vec3 emissive = textureLod(gEmissive, uv, 0.0).rgb;
     // --- Software VRS (Adaptive Shading) ---
     if (currentUbo.ppSSSS.w > 0.5) {
         float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
@@ -842,9 +843,9 @@ void main() {
             if (texIdx >= 0) {
                 vec2 uvX = crntPos.zy * scale; vec2 uvY = crntPos.xz * scale; vec2 uvZ = crntPos.xy * scale;
                 vec3 blend = abs(N); blend /= (blend.x + blend.y + blend.z);
-                float tx = texture(bindlessTextures[nonuniformEXT(texIdx)], uvX + time*0.1).r;
-                float ty = texture(bindlessTextures[nonuniformEXT(texIdx)], uvY + time*0.1).r;
-                float tz = texture(bindlessTextures[nonuniformEXT(texIdx)], uvZ + time*0.1).r;
+                float tx = textureLod(bindlessTextures[nonuniformEXT(texIdx)], uvX + time*0.1, 0.0).r;
+                float ty = textureLod(bindlessTextures[nonuniformEXT(texIdx)], uvY + time*0.1, 0.0).r;
+                float tz = textureLod(bindlessTextures[nonuniformEXT(texIdx)], uvZ + time*0.1, 0.0).r;
                 c = tx*blend.x + ty*blend.y + tz*blend.z;
             } else {
                 c = sin((crntPos.x + crntPos.y) * scale + time) * cos((crntPos.z - crntPos.x) * scale + time * 0.8);
@@ -905,7 +906,7 @@ void main() {
     
     // --- ARTISTIC CONTOUR LIGHTING (RIM LIGHT) ---
 
-    int debugMode = 1; 
+    int debugMode = 0; 
     if (debugMode == 1) {
         imageStore(outColor, pixelCoords, vec4(N * 0.5 + 0.5, 1.0));
     return;
@@ -942,10 +943,10 @@ for(int x = -1; x <= 1; x++) {
         vec2 offsetUV = uv + vec2(x, y) * texelSize * 2.0; // * 2.0 расширяет радиус блюра
         
         // Читаем соседние пиксели
-        vec3 sampleDiff = texture(diffuseGITex, offsetUV).rgb;
-        vec3 sampleSpec = texture(specularGITex, offsetUV).rgb;
-        vec3 sampleNormal = texture(gNormalRoughness, offsetUV).rgb;
-        float sampleDepthRaw = texture(gDepth, offsetUV).r;
+        vec3 sampleDiff = textureLod(diffuseGITex, offsetUV, 0.0).rgb;
+        vec3 sampleSpec = textureLod(specularGITex, offsetUV, 0.0).rgb;
+        vec3 sampleNormal = textureLod(gNormalRoughness, offsetUV, 0.0).rgb;
+        float sampleDepthRaw = textureLod(gDepth, offsetUV, 0.0).r;
         float sampleDepthLin = (currentUbo.zNear * currentUbo.zFar) / (currentUbo.zFar + sampleDepthRaw * (currentUbo.zNear - currentUbo.zFar));
         
         // Считаем вес: если сосед слишком далеко по глубине или нормаль смотрит в другую сторону, не размываем с ним!

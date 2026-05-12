@@ -445,6 +445,13 @@ namespace burnhope
                 objDataList.push_back(obj);
             }
         }
+
+        // СОРТИРОВКА ДЛЯ МАКСИМАЛЬНОГО КЭШИРОВАНИЯ (Батчинг / Псевдо-Instancing)
+        std::sort(objDataList.begin(), objDataList.end(), [](const ObjectData& a, const ObjectData& b) {
+            if (a.vertexBufferAddress != b.vertexBufferAddress) return a.vertexBufferAddress < b.vertexBufferAddress;
+            return a.materialID < b.materialID;
+        });
+
         totalSubMeshCount = static_cast<uint32_t>(objDataList.size());
         
         std::vector<ObjectData> uploadObjData = objDataList;
@@ -798,15 +805,15 @@ namespace burnhope
             auto newTime = std::chrono::high_resolution_clock::now();
             float frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
 
-        if (frameTime < maxPeriod)
-            {
-                double sleepTime = maxPeriod - frameTime;
-                std::this_thread::sleep_for(std::chrono::duration<double>(sleepTime));
+            //if (frameTime < maxPeriod)
+            //{
+            //    double sleepTime = maxPeriod - frameTime;
+            //    std::this_thread::sleep_for(std::chrono::duration<double>(sleepTime));
 
                 // Пересчитываем время после сна для честного deltaTime
-                newTime = std::chrono::high_resolution_clock::now();
-                frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
-            }
+            //    newTime = std::chrono::high_resolution_clock::now();
+            //    frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
+            //}
 
 
             currentTime = newTime;
@@ -1328,9 +1335,13 @@ float currentFov = 45.0f;
                     vkCmdSetScissor(cmd, 0, 1, &scissor);
                     
 
+                    // 1. Z-Prepass (Считаем только глубину)
                     simpleRenderSystem->renderEntities(frameInfo, registry, storageSet, textureSet,
-                                                       *cullingSystem, totalSubMeshCount, false);
+                                                       *cullingSystem, totalSubMeshCount, false, (uint32_t)rs.vrsMode, true);
 
+                    // 2. G-Buffer Color (VK_COMPARE_OP_EQUAL)
+                    simpleRenderSystem->renderEntities(frameInfo, registry, storageSet, textureSet,
+                                                       *cullingSystem, totalSubMeshCount, false, (uint32_t)rs.vrsMode, false);
                     {
                         uint32_t idx = 0;
                         for (auto entity : registry.view<PortalComponent, TransformComponent>()) {
@@ -1397,8 +1408,9 @@ float currentFov = 45.0f;
                         
                             vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, portalCounter + 1);
                             simpleRenderSystem->renderEntities(portalFrameInfo, registry, storageSet, textureSet,
-                                                               *cullingSystem, totalSubMeshCount, true);
-                            portalCounter++;
+                                                               *cullingSystem, totalSubMeshCount, true, (uint32_t)rs.vrsMode, true);
+                            simpleRenderSystem->renderEntities(portalFrameInfo, registry, storageSet, textureSet,
+                                                               *cullingSystem, totalSubMeshCount, true, (uint32_t)rs.vrsMode, false);
                         }
                     }
 

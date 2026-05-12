@@ -46,8 +46,7 @@ namespace burnhope
   BurnhopeBuffer::~BurnhopeBuffer()
   {
     unmap();
-    vkDestroyBuffer(lveDevice.device(), buffer, nullptr);
-    vkFreeMemory(lveDevice.device(), memory, nullptr);
+    vmaDestroyBuffer(lveDevice.getAllocator(), buffer, memory);
   }
   /**
    * Map a memory range of this buffer. If successful, mapped points to the specified buffer range.
@@ -61,7 +60,7 @@ namespace burnhope
   VkResult BurnhopeBuffer::map(VkDeviceSize size, VkDeviceSize offset)
   {
     assert(buffer && memory && "Called map on buffer before create");
-    return vkMapMemory(lveDevice.device(), memory, offset, size, 0, &mapped);
+     return vmaMapMemory(lveDevice.getAllocator(), memory, &mapped);
   }
   /**
    * Unmap a mapped memory range
@@ -72,7 +71,7 @@ namespace burnhope
   {
     if (mapped)
     {
-      vkUnmapMemory(lveDevice.device(), memory);
+      vmaUnmapMemory(lveDevice.getAllocator(), memory);
       mapped = nullptr;
     }
   }

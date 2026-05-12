@@ -38,7 +38,7 @@ namespace burnhope
         BurnhopeDevice &lveDevice;
         void *mapped = nullptr;
         VkBuffer buffer = VK_NULL_HANDLE;
-        VkDeviceMemory memory = VK_NULL_HANDLE;
+        VmaAllocation memory = VK_NULL_HANDLE;
         VkDeviceSize bufferSize;
         uint32_t instanceCount;
         VkDeviceSize instanceSize;

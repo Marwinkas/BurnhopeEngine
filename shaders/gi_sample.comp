@@ -196,7 +196,7 @@ void main() {
     if (pixel.x >= int(rc.params.y) || pixel.y >= int(rc.params.z)) return;
     
     vec2 uv = (vec2(pixel) + 0.5) / vec2(rc.params.y, rc.params.z);
-    float depth = texture(gDepth, uv).r;
+    float depth = textureLod(gDepth, uv, 0.0).r;
     
     if (depth >= 1.0) { 
         imageStore(outDiffuseGI, pixel, vec4(0.0)); 
@@ -209,7 +209,7 @@ void main() {
         return; 
     }
 
-    vec4 normRough = texture(gNormalRoughness, uv);
+    vec4 normRough = textureLod(gNormalRoughness, uv, 0.0);
     vec3 N = normalize(normRough.rgb);
     float roughness = clamp(normRough.a, 0.05, 1.0);
     vec4 ndc = vec4(uv * 2.0 - 1.0, depth, 1.0);

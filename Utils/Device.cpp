@@ -1,7 +1,9 @@
-﻿#include "Device.hpp"
+﻿#define VMA_IMPLEMENTATION
+#include "Device.hpp"
 #include <cstring>
 #include <iostream>
 #include <set>
+#include <fstream>
 #include <unordered_set>
 namespace burnhope
 {
@@ -53,9 +55,15 @@ namespace burnhope
     pickPhysicalDevice();
     createLogicalDevice();
     createCommandPool();
+    createGlobalSamplers();
+    createPipelineCache();
   }
   BurnhopeDevice::~BurnhopeDevice()
   {
+    savePipelineCache();
+    vkDestroyPipelineCache(device_, pipelineCache, nullptr);
+    vmaDestroyAllocator(allocator);
+    destroyGlobalSamplers();
     vkDestroyCommandPool(device_, commandPool, nullptr);
     vkDestroyDevice(device_, nullptr);
     if (enableValidationLayers)
@@ -182,10 +190,26 @@ namespace burnhope
     vrsFeatures.pipelineFragmentShadingRate = VK_TRUE;
     vrsFeatures.pNext = &indexingFeatures;
 
+    VkPhysicalDeviceShaderFloat16Int8Features float16Features{};
+    float16Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
+    float16Features.shaderFloat16 = VK_TRUE;
+    float16Features.pNext = &vrsFeatures;
+
+    VkPhysicalDeviceDescriptorBufferFeaturesEXT descBufferFeatures{};
+    descBufferFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
+    descBufferFeatures.descriptorBuffer = VK_TRUE;
+    descBufferFeatures.pNext = &float16Features;
+
+    VkPhysicalDeviceMeshShaderFeaturesEXT meshFeatures{};
+    meshFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+    meshFeatures.meshShader = VK_TRUE;
+    meshFeatures.taskShader = VK_TRUE;
+    meshFeatures.pNext = &descBufferFeatures;
+
     VkPhysicalDeviceFeatures2 deviceFeatures2{};
     deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     deviceFeatures2.features = deviceFeatures;
-    deviceFeatures2.pNext = &vrsFeatures;
+    deviceFeatures2.pNext = &meshFeatures;
 
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -210,10 +234,89 @@ namespace burnhope
     {
         throw std::runtime_error("failed to create logical device!");
     }
+    VmaAllocatorCreateInfo allocatorInfo = {};
+    allocatorInfo.physicalDevice = physicalDevice;
+    allocatorInfo.device = device_;
+    allocatorInfo.instance = instance;
+    allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+    allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+    vmaCreateAllocator(&allocatorInfo, &allocator);
 
     vkGetDeviceQueue(device_, indices.graphicsFamily, 0, &graphicsQueue_);
     vkGetDeviceQueue(device_, indices.presentFamily, 0, &presentQueue_);
 }
+
+void BurnhopeDevice::createPipelineCache() {
+    VkPipelineCacheCreateInfo cacheInfo{};
+    cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    std::vector<char> cacheData;
+    std::ifstream file("pipeline_cache.bin", std::ios::ate | std::ios::binary);
+    if (file.is_open()) {
+        size_t fileSize = (size_t)file.tellg();
+        cacheData.resize(fileSize);
+        file.seekg(0);
+        file.read(cacheData.data(), fileSize);
+        file.close();
+        cacheInfo.initialDataSize = cacheData.size();
+        cacheInfo.pInitialData = cacheData.data();
+        std::cout << "[CACHE] Loaded pipeline cache (" << fileSize << " bytes)\n";
+    }
+    vkCreatePipelineCache(device_, &cacheInfo, nullptr, &pipelineCache);
+}
+
+void BurnhopeDevice::savePipelineCache() {
+    size_t dataSize = 0;
+    vkGetPipelineCacheData(device_, pipelineCache, &dataSize, nullptr);
+    if (dataSize > 0) {
+        std::vector<char> cacheData(dataSize);
+        vkGetPipelineCacheData(device_, pipelineCache, &dataSize, cacheData.data());
+        std::ofstream file("pipeline_cache.bin", std::ios::binary);
+        file.write(cacheData.data(), dataSize);
+    }
+}
+
+void BurnhopeDevice::createGlobalSamplers() {
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.maxAnisotropy = 16.0f;
+    samplerInfo.anisotropyEnable = VK_TRUE;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipLodBias = 0.0f;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 12.0f; // Max mips
+
+    // Linear Repeat (Обычные PBR текстуры)
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    vkCreateSampler(device_, &samplerInfo, nullptr, &linearRepeatSampler);
+
+    // Linear Clamp (UI, HDR, PostProcess)
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    vkCreateSampler(device_, &samplerInfo, nullptr, &linearClampSampler);
+
+    // Nearest Clamp (Глубина, ID, Маски)
+    samplerInfo.magFilter = VK_FILTER_NEAREST;
+    samplerInfo.minFilter = VK_FILTER_NEAREST;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    vkCreateSampler(device_, &samplerInfo, nullptr, &nearestClampSampler);
+}
+
+void BurnhopeDevice::destroyGlobalSamplers() {
+    vkDestroySampler(device_, linearRepeatSampler, nullptr);
+    vkDestroySampler(device_, linearClampSampler, nullptr);
+    vkDestroySampler(device_, nearestClampSampler, nullptr);
+}
+
 VkDeviceAddress BurnhopeDevice::getBufferDeviceAddress(VkBuffer buffer) {
     VkBufferDeviceAddressInfo info{};
     info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
@@ -441,35 +544,19 @@ VkDeviceAddress BurnhopeDevice::getBufferDeviceAddress(VkBuffer buffer) {
       VkBufferUsageFlags usage,
       VkMemoryPropertyFlags properties,
       VkBuffer &buffer,
-      VkDeviceMemory &bufferMemory)
+       VmaAllocation &allocation)
   {
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.size = size;
     bufferInfo.usage = usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    if (vkCreateBuffer(device_, &bufferInfo, nullptr, &buffer) != VK_SUCCESS)
-    {
-      throw std::runtime_error("failed to create vertex buffer!");
+    VmaAllocationCreateInfo allocInfo{};
+    allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+        allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
     }
-    VkMemoryRequirements memRequirements;
-    vkGetBufferMemoryRequirements(device_, buffer, &memRequirements);
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
-
-    VkMemoryAllocateFlagsInfo allocFlagsInfo{};
-    allocFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-    allocFlagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-    allocInfo.pNext = &allocFlagsInfo;
-
-    if (vkAllocateMemory(device_, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS)
-    {
-        vkDestroyBuffer(device_, buffer, nullptr);
-        throw std::runtime_error("failed to allocate buffer memory!");
-    }
-    vkBindBufferMemory(device_, buffer, bufferMemory, 0);
+    vmaCreateBuffer(allocator, &bufferInfo, &allocInfo, &buffer, &allocation, nullptr);
 }
   VkCommandBuffer BurnhopeDevice::beginSingleTimeCommands()
   {
@@ -534,26 +621,11 @@ VkDeviceAddress BurnhopeDevice::getBufferDeviceAddress(VkBuffer buffer) {
       const VkImageCreateInfo &imageInfo,
       VkMemoryPropertyFlags properties,
       VkImage &image,
-      VkDeviceMemory &imageMemory)
+      VmaAllocation &allocation)
   {
-    if (vkCreateImage(device_, &imageInfo, nullptr, &image) != VK_SUCCESS)
-    {
-      throw std::runtime_error("failed to create image!");
-    }
-    VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(device_, image, &memRequirements);
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
-    if (vkAllocateMemory(device_, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS)
-    {
-      throw std::runtime_error("failed to allocate image memory!");
-    }
-    if (vkBindImageMemory(device_, image, imageMemory, 0) != VK_SUCCESS)
-    {
-      throw std::runtime_error("failed to bind image memory!");
-    }
+      VmaAllocationCreateInfo allocInfo{};
+    allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    vmaCreateImage(allocator, &imageInfo, &allocInfo, &image, &allocation, nullptr);
   }
   void BurnhopeDevice::transitionImageLayout(
       VkImage image,

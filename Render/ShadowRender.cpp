@@ -32,7 +32,8 @@ void ShadowRenderSystem::renderShadow(
     const glm::mat4 &lightSpaceMatrix,
     CullingSystem &cullingSystem,
     entt::registry &registry,
-    VkDescriptorSet objectStorageSet)
+    VkDescriptorSet objectStorageSet,
+            bool renderDynamicOnly = false);
 {
     if (objectStorageSet == VK_NULL_HANDLE)
         return;
@@ -53,7 +54,8 @@ void ShadowRenderSystem::renderShadow(
     {
         if (!meshComp.model || !meshComp.isVisible)
             continue;
-
+        if (renderDynamicOnly && meshComp.isStatic) 
+            continue; // Пропускаем статические меши при локальном обновлении теней!
         meshComp.model->bind(commandBuffer);
         const auto &subMeshes = meshComp.model->getSubMeshes();
 

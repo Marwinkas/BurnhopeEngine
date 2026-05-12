@@ -126,9 +126,9 @@ void main() {
 
         if(hasNrm) {
             vec3 rgb = sampleTex(texNormal, p, n, texUV, useTri, repTex).rgb;
-            vec3 tNormal = rgb * 2.0 - 1.0;
-            tNormal.xy *= pc.matParams.z; 
-            tNormal = normalize(tNormal);
+            vec2 xy = rgb.xy * 2.0 - 1.0;
+            xy *= pc.matParams.z;
+            vec3 tNormal = vec3(xy, sqrt(max(1.0 - dot(xy, xy), 0.0)));
             vec3 up = abs(n.y)<0.999 ? vec3(0,1,0) : vec3(1,0,0); vec3 t = normalize(cross(up, n)); vec3 b = cross(n, t);
             n = normalize(mat3(t, b, n) * tNormal);
         }

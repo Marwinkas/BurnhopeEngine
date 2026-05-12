@@ -42,8 +42,7 @@ namespace burnhope
         mipViews.clear();
         vkDestroySampler(lveDevice.device(), hiZSampler, nullptr);
         vkDestroyImageView(lveDevice.device(), fullView, nullptr);
-        vkDestroyImage(lveDevice.device(), hiZImage, nullptr);
-        vkFreeMemory(lveDevice.device(), hiZMemory, nullptr);
+        vmaDestroyImage(lveDevice.getAllocator(), hiZImage, hiZMemory);
         hiZImage = VK_NULL_HANDLE;
     }
     void HiZSystem::rebuild(VkExtent2D extent, VkImageView gDepthView, VkSampler depthSampler)

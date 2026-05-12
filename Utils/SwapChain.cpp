@@ -44,8 +44,7 @@ namespace burnhope
     for (int i = 0; i < depthImages.size(); i++)
     {
       vkDestroyImageView(device.device(), depthImageViews[i], nullptr);
-      vkDestroyImage(device.device(), depthImages[i], nullptr);
-      vkFreeMemory(device.device(), depthImageMemorys[i], nullptr);
+      vmaDestroyImage(device.getAllocator(), depthImages[i], depthImageMemorys[i]);
     }
     for (auto framebuffer : swapChainFramebuffers)
     {

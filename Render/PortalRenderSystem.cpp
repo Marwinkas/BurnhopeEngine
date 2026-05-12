@@ -16,11 +16,12 @@ namespace burnhope
         createPipeline(renderPass);
         createDepthResetPipeline(renderPass);
 
-        std::vector<Vertex> vertices = {
-            {{-1.f, -1.f, 0.f}, {0.f, 0.f, 1.f}, {0.f, 0.f}},
-            {{1.f, -1.f, 0.f}, {0.f, 0.f, 1.f}, {1.f, 0.f}},
-            {{1.f, 1.f, 0.f}, {0.f, 0.f, 1.f}, {1.f, 1.f}},
-            {{-1.f, 1.f, 0.f}, {0.f, 0.f, 1.f}, {0.f, 1.f}}};
+      std::vector<Vertex> vertices = {
+    {{-1.f, -1.f, 0.f}, {0.f, 0.f, 1.f}, {0.f, 0.f}},
+    {{ 1.f, -1.f, 0.f}, {0.f, 0.f, 1.f}, {1.f, 0.f}},
+    {{ 1.f,  1.f, 0.f}, {0.f, 0.f, 1.f}, {1.f, 1.f}},
+    {{-1.f,  1.f, 0.f}, {0.f, 0.f, 1.f}, {0.f, 1.f}}
+};
         std::vector<uint32_t> indices = {0, 1, 2, 2, 3, 0};
 
         Builder builder;

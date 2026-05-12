@@ -1,0 +1,50 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_KHR_shader_subgroup_ballot : require
+
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+// Структура, которая передается из Task-шейдера в Mesh-шейдер
+struct TaskPayload {
+    uint meshletIndices[32]; // До 32 мешлетов в одной группе
+};
+taskPayloadSharedEXT TaskPayload payload;
+
+// Буфер с границами мешлетов, сгенерированных meshoptimizer
+struct Meshlet {
+    vec3 aabbMin;
+    vec3 aabbMax;
+    uint vertexOffset;
+    uint triangleOffset;
+    uint vertexCount;
+    uint triangleCount;
+};
+layout(std430, set = 1, binding = 2) readonly buffer MeshletBuffer {
+    Meshlet meshlets[];
+};
+
+void main() {
+    uint threadId = gl_LocalInvocationID.x;
+    uint meshletIdx = gl_WorkGroupID.x * 32 + threadId;
+    
+    bool visible = false;
+    
+    // ЗДЕСЬ МАГИЯ ТАСК-ШЕЙДЕРА: Culling на уровне крошечных кусочков
+    if (meshletIdx < meshlets.length()) {
+        Meshlet m = meshlets[meshletIdx];
+        // Здесь мы проверяем m.aabbMin / m.aabbMax с Frustum камерой
+        // Если мешлет за спиной или перекрыт -> visible = false;
+        visible = true; // Пока рисуем все
+    }
+    
+    // Subgroup Ballot: аппаратно подсчитываем, сколько мешлетов выжило
+    uvec4 vote = subgroupBallot(visible);
+    uint tasks = subgroupBallotBitCount(vote);
+    
+    // Запускаем ровно столько Mesh-шейдеров, сколько мешлетов мы видим!
+    if (threadId == 0) EmitMeshTasksEXT(tasks, 1, 1);
+    
+    // Пишем индексы выживших мешлетов в Payload
+    uint idxOffset = subgroupBallotExclusiveBitCount(vote);
+    if (visible) payload.meshletIndices[idxOffset] = meshletIdx;
+}

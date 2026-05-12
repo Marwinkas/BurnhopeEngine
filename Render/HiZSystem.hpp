@@ -23,7 +23,7 @@ namespace burnhope
         BurnhopeDevice &lveDevice;
         BurnhopeDescriptorPool &globalPool;
         VkImage hiZImage = VK_NULL_HANDLE;
-        VkDeviceMemory hiZMemory = VK_NULL_HANDLE;
+        VmaAllocation hiZMemory = VK_NULL_HANDLE;
         VkImageView fullView = VK_NULL_HANDLE;
         VkSampler hiZSampler = VK_NULL_HANDLE;
         std::vector<VkImageView> mipViews;

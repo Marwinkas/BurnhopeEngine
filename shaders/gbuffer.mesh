@@ -1,0 +1,62 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+// 64 вершины и 128 треугольников (максимум для meshoptimizer)
+layout(triangles, max_vertices = 64, max_primitives = 128) out;
+
+struct TaskPayload {
+    uint meshletIndices[32];
+};
+taskPayloadSharedEXT TaskPayload payload;
+struct Meshlet {
+    uint vertexOffset;
+    uint triangleOffset;
+    uint vertexCount;
+    uint triangleCount;
+    // Можно добавить еще данные, например, для Meshlet Culling (центр сферы, радиус)
+};
+
+// А теперь ты можешь использовать его в буфере
+layout(set = 0, binding = 0) readonly buffer MeshletBuffer {
+    Meshlet meshlets[];
+};
+// --- Здесь должны быть твои UBO и ObjectBuffer из старого gbuffer.vert ---
+
+// Буфер с вершинами и индексами
+layout(std430, set = 1, binding = 3) readonly buffer VertexBuffer { vec4 vPos[]; /* ... */ };
+layout(std430, set = 1, binding = 4) readonly buffer IndexBuffer { uint indices[]; };
+
+// Выходящие данные для gbuffer.frag
+layout(location = 0) out vec3 outCrntPos[];
+layout(location = 1) out vec2 outTexCoord[];
+layout(location = 2) out mat3 outTBN[];
+layout(location = 5) flat out uint outMatID[];
+
+void main() {
+    // Получаем индекс мешлета, который пережил Culling в Task Shader
+    uint meshletIdx = payload.meshletIndices[gl_WorkGroupID.x];
+    Meshlet m = meshlets[meshletIdx]; // Твоя структура мешлета
+    
+    SetMeshOutputsEXT(m.vertexCount, m.triangleCount);
+    
+    // 1 поток = 1 вершина
+    if (gl_LocalInvocationID.x < m.vertexCount) {
+        uint vIdx = m.vertexOffset + gl_LocalInvocationID.x;
+        
+        // Распаковка позиции и трансформация, как в gbuffer.vert
+        vec4 worldPos = vec4(vPos[vIdx].xyz, 1.0); 
+        gl_MeshVerticesEXT[gl_LocalInvocationID.x].gl_Position = worldPos; // проекция
+        outCrntPos[gl_LocalInvocationID.x] = worldPos.xyz;
+    }
+    
+    // 1 поток = 1 треугольник (собираем индексы)
+    if (gl_LocalInvocationID.x < m.triangleCount) {
+        uint tIdx = m.triangleOffset + gl_LocalInvocationID.x * 3;
+        gl_PrimitiveTriangleIndicesEXT[gl_LocalInvocationID.x] = uvec3(
+            indices[tIdx + 0],
+            indices[tIdx + 1],
+            indices[tIdx + 2]
+        );
+    }
+}

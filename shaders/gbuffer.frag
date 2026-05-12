@@ -326,9 +326,14 @@ void main() {
             vec3 rgbY = textureGrad(allTextures[nonuniformEXT(mat.normalIdx)], uvY, dxY, dyY).rgb;
             vec3 rgbZ = textureGrad(allTextures[nonuniformEXT(mat.normalIdx)], uvZ, dxZ, dyZ).rgb;
             
-            vec3 tX = rgbX * 2.0 - 1.0; tX.xy *= mat.normalStrength; tX = normalize(tX);
-            vec3 tY = rgbY * 2.0 - 1.0; tY.xy *= mat.normalStrength; tY = normalize(tY);
-            vec3 tZ = rgbZ * 2.0 - 1.0; tZ.xy *= mat.normalStrength; tZ = normalize(tZ);
+            vec2 tX_xy = rgbX.xy * 2.0 - 1.0; tX_xy *= mat.normalStrength;
+            vec3 tX = vec3(tX_xy, sqrt(max(1.0 - dot(tX_xy, tX_xy), 0.0)));
+            
+            vec2 tY_xy = rgbY.xy * 2.0 - 1.0; tY_xy *= mat.normalStrength;
+            vec3 tY = vec3(tY_xy, sqrt(max(1.0 - dot(tY_xy, tY_xy), 0.0)));
+            
+            vec2 tZ_xy = rgbZ.xy * 2.0 - 1.0; tZ_xy *= mat.normalStrength;
+            vec3 tZ = vec3(tZ_xy, sqrt(max(1.0 - dot(tZ_xy, tZ_xy), 0.0)));
             
             vec3 nX = vec3(tX.z * sign(N.x), tX.y, -tX.x);
             vec3 nY = vec3(tY.x, tY.z * sign(N.y), -tY.y);
@@ -337,10 +342,9 @@ void main() {
             worldNormal = normalize(nX * blendWeights.x + nY * blendWeights.y + nZ * blendWeights.z);
         } else {
             vec3 rgb = textureGrad(allTextures[nonuniformEXT(mat.normalIdx)], finalUV, dx, dy).rgb;
-            vec3 tangentNormal = rgb * 2.0 - 1.0;
-            
-            tangentNormal.xy *= mat.normalStrength;
-            tangentNormal = normalize(tangentNormal);
+            vec2 xy = rgb.xy * 2.0 - 1.0;
+            xy *= mat.normalStrength;
+            vec3 tangentNormal = vec3(xy, sqrt(max(1.0 - dot(xy, xy), 0.0)));
             worldNormal = normalize(finalTBN * tangentNormal);
         }
     }

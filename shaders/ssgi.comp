@@ -114,7 +114,7 @@ void main() {
     ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
     vec2 uv = (vec2(pixelCoords) + 0.5) / ubo.screenSize.xy;
 
-    float depth = texture(gDepth, uv).r;
+    float depth = textureLod(gDepth, uv, 0.0).r;
     if (depth >= 1.0 || ubo.ssgiParams.x < 0.5) {
         imageStore(ssgiRaw, pixelCoords, vec4(0.0));
         return;
@@ -125,7 +125,7 @@ void main() {
     float SSGI_THICKNESS = ubo.ssgiParams.w;
     int SSGI_STEP_COUNT = 16;
 
-    vec4 normalRoughness = texture(gNormalRoughness, uv);
+    vec4 normalRoughness = textureLod(gNormalRoughness, uv, 0.0);
     vec3 normal = normalize(normalRoughness.xyz);
 
     vec3 worldPos = getWorldPos(depth, uv);
@@ -170,7 +170,7 @@ void main() {
                 break; // Hit sky (or nothing)
             }
 
-            float sceneDepth = texture(gDepth, sampleUv).r;
+            float sceneDepth = textureLod(gDepth, sampleUv, 0.0).r;
             vec3 scenePos = getWorldPos(sceneDepth, sampleUv);
 
             float rayDepthView = (ubo.view * vec4(rayPos, 1.0)).z;
