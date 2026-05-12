@@ -31,6 +31,16 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     vec4 skySunParams;
     vec4 ssgiParams;
     vec4 rtParams;
+        mat4 prevViewProj;
+    vec4 ppExposureParams;
+    vec4 ppColorBalance;
+    vec4 ppBloomParams;
+    vec4 ppDoFParams;
+    vec4 ppVignetteGrain;
+    vec4 ppMotionBlur;
+    vec4 ppLensFlare;
+    vec4 ppTAA_CAS;       // ДОБАВЛЕНО
+    vec4 ppLensAdvanced;  // ДОБАВЛЕНО
 } ubo;
 
 layout(set = 1, binding = 3) uniform sampler2D gDepth;

@@ -176,11 +176,16 @@ namespace burnhope
     indexingFeatures.descriptorBindingVariableDescriptorCount = VK_TRUE;
     indexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
     indexingFeatures.pNext = &rayQueryFeatures;
+    
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR vrsFeatures{};
+    vrsFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+    vrsFeatures.pipelineFragmentShadingRate = VK_TRUE;
+    vrsFeatures.pNext = &indexingFeatures;
 
     VkPhysicalDeviceFeatures2 deviceFeatures2{};
     deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     deviceFeatures2.features = deviceFeatures;
-    deviceFeatures2.pNext = &indexingFeatures;
+    deviceFeatures2.pNext = &vrsFeatures;
 
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

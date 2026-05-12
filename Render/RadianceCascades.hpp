@@ -46,8 +46,17 @@ namespace burnhope
                                VkImageView lightingImageView,
                                VkSampler lightingSampler,VkDescriptorSetLayout rtLayout,
         VkDescriptorSetLayout storageLayout, // ДОБАВЛЕНО
-        VkDescriptorSetLayout textureLayout);
+                               VkDescriptorSetLayout textureLayout,
+                               int probeX, int probeY, int probeZ, int octaSize, float baseRayLength);
         ~RadianceCascadesSystem();
+        
+        bool needsRebuild(int pX, int pY, int pZ, int oSize, float bLen) const {
+            return probeX != pX || probeY != pY || probeZ != pZ || octaSize != oSize || baseRayLength != bLen;
+        }
+        void updateConfig(int pX, int pY, int pZ, int oSize, float bLen) {
+            probeX = pX; probeY = pY; probeZ = pZ; octaSize = oSize; baseRayLength = bLen;
+        }
+
         RadianceCascadesSystem(const RadianceCascadesSystem &) = delete;
         RadianceCascadesSystem &operator=(const RadianceCascadesSystem &) = delete;
         void dispatch(VkCommandBuffer cmd,
@@ -79,6 +88,12 @@ namespace burnhope
         BurnhopeDevice &device;
         BurnhopeDescriptorPool &pool;
         VkExtent2D screenExtent;
+        
+        int cascadeProbeX(int c) const { return std::max(1, probeX >> c); }
+        int cascadeProbeY(int c) const { return std::max(1, probeY >> c); }
+        int cascadeProbeZ(int c) const { return std::max(1, probeZ >> c); }
+        int probeX, probeY, probeZ, octaSize;
+        float baseRayLength;
         std::array<std::unique_ptr<BurnhopeTexture>, RCConfig::CASCADE_COUNT> probeTex;
         std::unique_ptr<BurnhopeTexture> diffuseGITex;
         std::unique_ptr<BurnhopeTexture> specularGITex;

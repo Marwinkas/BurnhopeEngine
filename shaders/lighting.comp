@@ -1,4 +1,6 @@
 #version 450
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_EXT_buffer_reference : enable
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 layout(set = 4, binding = 0, rgba16f) writeonly uniform image2D outColor;
 layout(set = 5, binding = 0) uniform sampler2D diffuseGITex;
@@ -6,33 +8,15 @@ layout(set = 5, binding = 1) uniform sampler2D specularGITex;
 
 // The struct must match the one in the main UBO block
 struct GlobalUboStruct {
-    mat4 projection;
-    mat4 invViewProj;
-    mat4 view;
-    vec3 camPos;
-    float zNear;
-    vec3 sunDir;
-    float zFar;
-    vec4 screenSize;     
-    mat4 sunLightSpaceMatrices[4];
-    vec4 cascadeSplits;
-    uint gridDimX;
-    uint gridDimY;
-    uint gridDimZ;
-    uint portalID;
-    float lightSize;
-    vec3 sunColor;  
-    float sunIntensity; 
-    vec4 sscsParams;      
-    vec4 gtaoParams;      
-    vec4 fogParams;       
-    vec4 fogColor;        
-    vec4 inscatterColor;  
-    vec4 skyZenithColor;
-    vec4 skyHorizonColor;
-    vec4 skySunParams;
+     mat4 projection; mat4 invViewProj; mat4 view; vec3 camPos; float zNear;
+    vec3 sunDir; float zFar; vec4 screenSize; mat4 sunLightSpaceMatrices[4];
+    vec4 cascadeSplits; uint gridDimX; uint gridDimY; uint gridDimZ; uint portalID; float lightSize;
+    vec3 sunColor; float sunIntensity;
+    vec4 sscsParams; vec4 gtaoParams; vec4 fogParams; vec4 fogColor; vec4 inscatterColor;
+    vec4 skyZenithColor; vec4 skyHorizonColor; vec4 skySunParams;
     vec4 ssgiParams;
     vec4 rtParams;
+    
     mat4 prevViewProj;
     vec4 ppExposureParams;
     vec4 ppColorBalance;
@@ -41,6 +25,22 @@ struct GlobalUboStruct {
     vec4 ppVignetteGrain;
     vec4 ppMotionBlur;
     vec4 ppLensFlare;
+    vec4 ppTAA_CAS;       // ДОБАВЛЕНО
+    vec4 ppLensAdvanced;  // x: halo, y: caDir, z: autoFocus, w: tonemapper
+    vec4 ppDistortionDirt;
+    vec4 ppDitherAniso;
+    vec4 cgShadows;
+    vec4 cgMidtones;
+    vec4 cgHighlights;
+    vec4 ppRetroParams;
+    vec4 ppRetroParams2;
+    vec4 ppStylizedParams;
+    vec4 ppOutlineParams;
+    vec4 ppOutlineColor;
+    vec4 ppOutlineJitter;
+       vec4 ppWeatherSSR;
+    vec4 ppSSSS;
+    vec4 ppWeatherParams;
 };
 
 layout(set = 0, binding = 0) uniform GlobalSceneUbo {
@@ -91,6 +91,14 @@ struct PointFaceMatrices {
 layout(std430, set = 3, binding = 3) readonly buffer FaceMatricesBlock {
     PointFaceMatrices faceMatrices[100];
 } faceMatricesBuffer;
+
+struct DecalDataGPU { mat4 invModelMatrix; vec4 params; };
+layout(std430, set = 3, binding = 4) readonly buffer DecalBlock {
+    int decalCount; int pad[3]; DecalDataGPU decals[];
+} decalBuffer;
+
+layout(set = 12, binding = 0) uniform sampler2D bindlessTextures[];
+
 struct Light {
     int type; 
     vec3 position;
@@ -111,6 +119,7 @@ layout(std430, set = 3, binding = 2) readonly buffer IndexBuffer {
     uint globalIndexCount;
     uint globalIndexList[]; 
 };
+layout(set = 11, binding = 0) uniform sampler2D volumetricFogTex;
 const float PI = 3.14159265359;
 const float atlasResolution = 4096.0;
 const vec2 poissonDisk[16] = vec2[](
@@ -140,7 +149,7 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
 vec3 fresnelSchlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
-vec3 CalculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metallic, float roughness, vec3 radiance, float cavity) {
+vec3 CalculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metallic, float roughness, vec3 radiance, float cavity, float celLevels) {
     vec3 H = normalize(V + L);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
     float NDF = DistributionGGX(N, H, roughness);
@@ -151,7 +160,17 @@ vec3 CalculatePBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metallic, float rou
     vec3 numerator = NDF * G * F;
     float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001;
     vec3 specular = numerator / denominator;
-    return (kD * albedo / 3.141592 + specular * cavity) * radiance * max(dot(N, L), 0.0);
+    
+    float NdotL = max(dot(N, L), 0.0);
+    
+    // Cel-Shading (Toon) Processing
+    if (celLevels > 0.0) {
+        NdotL = floor(NdotL * celLevels + 0.5) / celLevels;
+        // Жесткий срез для бликов
+        specular = step(0.1, specular) * 0.5;
+    }
+    
+    return (kD * albedo / 3.141592 + specular * cavity) * radiance * NdotL;
 }
 float CalculatePCSS_Atlas(vec2 atlasUV, vec2 tileMin, vec2 tileMax, float currentDepth, float bias, mat2 rot, GlobalUboStruct currentUbo) {
     vec2 texelSize = vec2(1.0 / atlasResolution);
@@ -421,8 +440,6 @@ float ContactShadows(vec3 worldPos, vec3 N, vec3 L, GlobalUboStruct currentUbo) 
     float dither = fract(sin(dot(gl_GlobalInvocationID.xy, vec2(12.9898, 78.233))) * 43758.5453);
     rayPos += L * stepSize * dither;
 
-    float occlusion = 0.0;
-
     for (int i = 0; i < steps; i++) {
         rayPos += L * stepSize;
 
@@ -442,25 +459,16 @@ float ContactShadows(vec3 worldPos, vec3 N, vec3 L, GlobalUboStruct currentUbo) 
             vec4 hitWorldRaw = currentUbo.invViewProj * hitClip;
             vec3 hitWorld = hitWorldRaw.xyz / hitWorldRaw.w;
             
-            // Проверяем толщину (чтобы луч не цеплялся за объекты далеко позади)
-            float thickness = length(hitWorld - rayPos);
+            float rayDist = distance(currentUbo.camPos, rayPos);
+            float hitDist = distance(currentUbo.camPos, hitWorld);
+            float thickness = rayDist - hitDist;
             
-            if (thickness < thickness_limit) { 
-                // Мягкое затухание: чем дальше от объекта, тем светлее тень
-                float fade = 1.0 - (float(i) / float(steps));
-                occlusion = 1.0 * fade;
-                break; 
+            if (thickness > 0.0 && thickness < thickness_limit) { 
+                return 0.0; // Тень полная при пересечении
             }
         }
     }
-    return 1.0 - occlusion; 
-}
-vec3 CalculateVolumetricFog(vec3 worldPos, vec3 V_dir, GlobalUboStruct currentUbo) {
-    if (currentUbo.fogParams.x < 0.5) return vec3(0.0);
-    float cosTheta = max(dot(V_dir, currentUbo.sunDir), 0.0);
-    float inscatterFactor = pow(cosTheta, currentUbo.inscatterColor.a);
-    vec3 inscatter = currentUbo.inscatterColor.rgb * inscatterFactor * currentUbo.fogColor.a;
-    return currentUbo.fogColor.rgb + inscatter;
+    return 1.0; 
 }
 
 vec3 CalculateSky(vec3 viewDir, GlobalUboStruct currentUbo) {
@@ -486,6 +494,73 @@ vec3 CalculateSky(vec3 viewDir, GlobalUboStruct currentUbo) {
     return skyColor;
 }
 
+// --- Bilateral Upsampling для GTAO (из 1/2 разрешения в 1/1) ---
+float GetGTAOBilateral(vec2 uv, float centerDepth, GlobalUboStruct currentUbo) {
+    if (currentUbo.gtaoParams.x < 0.5) return 1.0;
+    
+    ivec2 texSize = imageSize(gtaoMap);
+    vec2 p = uv * vec2(texSize) - 0.5;
+    ivec2 i = ivec2(p);
+    vec2 f = fract(p);
+
+    float cLin = (currentUbo.zNear * currentUbo.zFar) / (currentUbo.zFar + centerDepth * (currentUbo.zNear - currentUbo.zFar));
+
+    float sumW = 0.0;
+    float sumAO = 0.0;
+
+    ivec2 offsets[4] = ivec2[](ivec2(0,0), ivec2(1,0), ivec2(0,1), ivec2(1,1));
+    float weights[4] = float[]((1.0-f.x)*(1.0-f.y), f.x*(1.0-f.y), (1.0-f.x)*f.y, f.x*f.y);
+
+    for (int j = 0; j < 4; j++) {
+        ivec2 tapPos = clamp(i + offsets[j], ivec2(0), texSize - 1);
+        float ao = imageLoad(gtaoMap, tapPos).r;
+        ivec2 fullResPos = clamp(tapPos * 2, ivec2(0), ivec2(currentUbo.screenSize.xy)-1);
+        float d = texelFetch(gDepth, fullResPos, 0).r;
+        float dLin = (currentUbo.zNear * currentUbo.zFar) / (currentUbo.zFar + d * (currentUbo.zNear - currentUbo.zFar));
+        float depthDiff = abs(cLin - dLin);
+        float weight = weights[j] * exp(-depthDiff * 10.0);
+        sumW += weight;
+        sumAO += ao * weight;
+    }
+    if (sumW > 0.0001) return sumAO / sumW;
+    return imageLoad(gtaoMap, ivec2(uv * vec2(texSize))).r;
+}
+
+// --- Bilateral Upsampling для Volumetric Fog ---
+vec4 GetVolumetricFogBilateral(vec2 uv, float centerDepth, GlobalUboStruct currentUbo) {
+    if (currentUbo.fogParams.x < 0.5) return vec4(0.0, 0.0, 0.0, 1.0);
+    
+    vec2 texSize = vec2(textureSize(volumetricFogTex, 0));
+
+    float cLin = (currentUbo.zNear * currentUbo.zFar) / (currentUbo.zFar + centerDepth * (currentUbo.zNear - currentUbo.zFar));
+
+    float sumW = 0.0;
+    vec4 sumVol = vec4(0.0);
+
+    // Расширенный 3x3 фильтр с гауссовыми весами для устранения шума (dither)
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 offset = vec2(x, y) * 1.5; // Размываем шире для подавления шума
+            vec2 offsetUV = uv + offset / texSize;
+            vec4 vol = textureLod(volumetricFogTex, offsetUV, 0.0);
+        
+            ivec2 fullResPos = clamp(ivec2(offsetUV * currentUbo.screenSize.xy), ivec2(0), ivec2(currentUbo.screenSize.xy)-1);
+            float d = texelFetch(gDepth, fullResPos, 0).r;
+            float dLin = (currentUbo.zNear * currentUbo.zFar) / (currentUbo.zFar + d * (currentUbo.zNear - currentUbo.zFar));
+        
+            float depthDiff = abs(cLin - dLin);
+            float spatialWeight = exp(-float(x*x + y*y) * 0.6);
+            float depthWeight = exp(-depthDiff * 0.5); // Мягче реагируем на разницу глубины
+            float weight = spatialWeight * depthWeight;
+        
+            sumW += weight;
+            sumVol += vol * weight;
+        }
+    }
+    if (sumW > 0.0001) return sumVol / sumW;
+    return textureLod(volumetricFogTex, uv, 0.0);
+}
+
 void main() {
     ivec2 pixelCoords = ivec2(gl_GlobalInvocationID.xy);
 
@@ -504,6 +579,10 @@ void main() {
         vec4 worldPosRaw = currentUbo.invViewProj * ndc;
         vec3 viewDir = normalize(worldPosRaw.xyz / worldPosRaw.w - currentUbo.camPos);
         vec3 skyColor = CalculateSky(viewDir, currentUbo);
+        
+        vec4 volFog = GetVolumetricFogBilateral(uv, depth, currentUbo);
+        skyColor = skyColor * volFog.a + volFog.rgb;
+        
         imageStore(outColor, pixelCoords, vec4(skyColor, 1.0)); 
         return; 
     }
@@ -520,12 +599,49 @@ void main() {
     float metallic = albMet.a;
     float height   = heightAO.r; 
     float ao       = heightAO.g; 
-    float gtao = imageLoad(gtaoMap, pixelCoords).r;
+    
     vec4 ndc = vec4(uv * 2.0 - 1.0, depth, 1.0);
     vec4 worldPosRaw = currentUbo.invViewProj * ndc;
     vec3 crntPos = worldPosRaw.xyz / worldPosRaw.w;
+
+    // --- SCREEN SPACE DECALS ---
+    int maxDecals = min(decalBuffer.decalCount, 1000);
+    for (int i = 0; i < maxDecals; i++) {
+        DecalDataGPU decal = decalBuffer.decals[i];
+        vec4 localPosP = decal.invModelMatrix * vec4(crntPos, 1.0);
+        vec3 localPos = localPosP.xyz / localPosP.w;
+        if (abs(localPos.x) <= 0.5 && abs(localPos.y) <= 0.5 && abs(localPos.z) <= 0.5) {
+            vec2 decalUV = localPos.xy + 0.5; decalUV.y = 1.0 - decalUV.y;
+            float opacity = decal.params.z; int albedoIdx = int(decal.params.x); int normalIdx = int(decal.params.y);
+            if (albedoIdx >= 0) {
+                vec4 decalAlbedo = textureLod(bindlessTextures[nonuniformEXT(albedoIdx)], decalUV, 0.0);
+                if (decalAlbedo.a > 0.01) {
+                    float blend = decalAlbedo.a * opacity;
+                    albedo = mix(albedo, decalAlbedo.rgb, blend);
+                    roughness = mix(roughness, 0.8, blend);
+                    if (normalIdx >= 0) {
+                        vec3 dNorm = textureLod(bindlessTextures[nonuniformEXT(normalIdx)], decalUV, 0.0).rgb * 2.0 - 1.0;
+                        mat3 dRot = transpose(inverse(mat3(inverse(decal.invModelMatrix))));
+                        N = normalize(mix(N, normalize(dRot * dNorm), blend));
+                    }
+                }
+            }
+        }
+    }
+
+    float gtao     = GetGTAOBilateral(uv, depth, currentUbo); // Умное растягивание GTAO
     vec3 V = normalize(currentUbo.camPos - crntPos); 
     float cavity = clamp(height * 0.5 + 0.9, 0.0, 1.0);
+        vec3 emissive = texture(gEmissive, uv).rgb;
+    // --- Software VRS (Adaptive Shading) ---
+    if (currentUbo.ppSSSS.w > 0.5) {
+        float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+        if (luma < 0.03 && length(emissive) < 0.01) {
+            imageStore(outColor, pixelCoords, vec4(0.0, 0.0, 0.0, 1.0)); 
+            return; // Пропускаем тяжелый PBR для черных участков
+        }
+    }
+
     // Полностью убираем фейковый ambient. В закрытой комнате должна быть абсолютная темнота!
     vec3 ambient = vec3(0.0);
     vec3 resultRadiance = vec3(0.0);
@@ -599,7 +715,7 @@ void main() {
             }
         }
         vec3 radiance = light.color * light.intensity * attenuation;
-        resultRadiance += CalculatePBR(N, V, L, albedo, metallic, roughness, radiance, cavity);
+        resultRadiance += CalculatePBR(N, V, L, albedo, metallic, roughness, radiance, cavity, currentUbo.ppStylizedParams.z);
     }
     int debugMode = 0; 
     if (debugMode == 1) {
@@ -674,6 +790,12 @@ vec3 specularGI = specSum / max(specWeightSum, 0.0001);
     vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
 
     float rcEnable = currentUbo.rtParams.z;
+    
+    if (currentUbo.ppStylizedParams.z > 0.0) {
+        float celLevels = currentUbo.ppStylizedParams.z;
+        diffuseGI = floor(diffuseGI * celLevels + 0.5) / celLevels;
+    }
+    
     vec3 indirectDiffuse = (ambient + diffuseGI * giStrength) * albedo * kD * ao * gtao * cavity * rcEnable;
     vec3 indirectSpecular = specularGI * giStrength * F * ao * gtao * cavity * rcEnable;
 
@@ -687,15 +809,12 @@ vec3 specularGI = specSum / max(specWeightSum, 0.0001);
     vec3 finalColor = resultRadiance + indirectDiffuse + finalSpecular;
 
     // Читаем Emissive из G-Buffer
-    vec3 emissive = texture(gEmissive, uv).rgb;
+
     finalColor += emissive;
 
-    // Вычисляем и применяем объемный туман (должен быть в самом конце!)
-    if (currentUbo.fogParams.x > 0.5) {
-        vec3 fogColor = CalculateVolumetricFog(crntPos, V, currentUbo);
-        float fogAmount = clamp(exp(-distance(currentUbo.camPos, crntPos) * currentUbo.fogParams.y), 0.0, 1.0);
-        finalColor = mix(fogColor, finalColor, fogAmount);
-    }
+    // Накладываем объемные лучи поверх сцены
+    vec4 volFog = GetVolumetricFogBilateral(uv, depth, currentUbo);
+    finalColor = finalColor * volFog.a + volFog.rgb;
 
     if (any(isnan(finalColor)) || any(isinf(finalColor))) finalColor = vec3(0.0);
 

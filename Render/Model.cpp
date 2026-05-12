@@ -51,7 +51,7 @@ namespace burnhope
         this->subMeshes = builder.subMeshes;
         createBLAS();
 
-        for (const auto& paths : builder.materialPaths) {
+       /* for (const auto& paths : builder.materialPaths) {
         auto mat = std::make_shared<Material>();
         
         // Загружаем основной цвет (Albedo)
@@ -82,7 +82,7 @@ namespace burnhope
         materials.push_back(mat);
         
     }
-    
+    */
        
     }
     void BurnhopeModel::createVertexBuffers(const std::vector<Vertex> &vertices)

@@ -92,6 +92,16 @@ namespace burnhope
         bool updateNeeded = true;
         int textureIndex = -1; 
     };
+    
+    struct DecalComponent {
+        std::string albedoPath = "";
+        std::string normalPath = "";
+        std::shared_ptr<BurnhopeTexture> albedoTex;
+        std::shared_ptr<BurnhopeTexture> normalTex;
+        float opacity = 1.0f;
+        int albedoTexIdx = -1;
+        int normalTexIdx = -1;
+    };
     struct PortalComponent {
     entt::entity targetPortal = entt::null;
 

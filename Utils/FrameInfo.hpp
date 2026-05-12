@@ -6,7 +6,7 @@
 namespace burnhope
 {
     struct GlobalUbo
-    {
+    { 
         glm::mat4 projection{1.f};
         glm::mat4 invViewProj{1.f};
         glm::mat4 view{1.f};
@@ -53,6 +53,22 @@ namespace burnhope
         glm::vec4 ppVignetteGrain;  // x: vignetteInt, y: grainInt, z: sharpenInt, w: caInt
         glm::vec4 ppMotionBlur;     // x: enable, y: strength, z: time, w: padding
         glm::vec4 ppLensFlare;      // x: enable, y: intensity, z: dispersal, w: ghosts
+        glm::vec4 ppTAA_CAS;        // x: enableTAA, y: taaBlend, z: enableCAS, w: casSharpness
+        glm::vec4 ppLensAdvanced;   // x: haloWidth, y: chromaticDir, z: autoFocus, w: tonemapper
+        glm::vec4 ppDistortionDirt; // x: enableDistortion, y: distortionStrength, z: enableDirt, w: dirtIntensity
+        glm::vec4 ppDitherAniso;    // x: enableDithering, y: ditherStrength, z: enableScreenRefraction, w: refractionStrength
+        glm::vec4 cgShadows;
+        glm::vec4 cgMidtones;
+        glm::vec4 cgHighlights;
+    glm::vec4 ppRetroParams; // x: enable, y: scanlines, z: glitch, w: vhsNoise
+        glm::vec4 ppRetroParams2; // x: pixelation, y: jitterRes, zw: unused
+        glm::vec4 ppStylizedParams; // x: posterizationLevels, y: kuwaharaRadius, z: celShadingLevels, w: unused
+        glm::vec4 ppOutlineParams; // x: enable, y: thickness, z: depthThresh, w: normalThresh
+        glm::vec4 ppOutlineColor;  // rgb: color, w: unused
+        glm::vec4 ppOutlineJitter; // x: enable, y: speed, z: strength, w: unused
+        glm::vec4 ppWeatherSSR;    // x: weather, y: wIntens, z: ssr, w: ssrSteps
+        glm::vec4 ppSSSS;          // x: ssss, y: ssssWidth, z: ssrThick, w: vrsMode
+        glm::vec4 ppWeatherParams; // x: speed, y: size, z: density, w: distortion
     };
     struct FrameInfo
     {

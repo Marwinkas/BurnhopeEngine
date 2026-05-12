@@ -23,6 +23,7 @@ namespace burnhope
     class BurnhopeTexture
     {
     public:
+        static float GlobalAnisotropy;
         BurnhopeTexture(BurnhopeDevice &device, const std::string &textureFilepath, bool isSRGB = true);
         BurnhopeTexture(
             BurnhopeDevice &device,

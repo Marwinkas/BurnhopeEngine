@@ -22,7 +22,7 @@ namespace burnhope {
         bool enableSSAO = true;
         float ssaoRadius = 0.5f, ssaoBias = 0.025f, ssaoIntensity = 2.0f, ssaoPower = 2.0f;
         
-        bool enableSSGI = true;
+        bool enableSSGI = false;
         int ssgiRayCount = 8, blurRange = 4;
         float ssgiStepSize = 0.4f, ssgiThickness = 0.5f;
 
@@ -30,13 +30,66 @@ namespace burnhope {
         float manualExposure = 1.0f, exposureCompensation = 1.0f, minBrightness = 0.5f, maxBrightness = 3.0f;
         float contrast = 1.0f, saturation = 1.0f, gamma = 2.2f, temperature = 8000.0f;
 
-        bool enableVignette = false, enableChromaticAberration = false, enableBloom = true, enableLensFlares = true;
+        bool enableLensDistortion = false;
+        float lensDistortionStrength = 0.5f;
+        bool enableLensDirt = false;
+        float lensDirtIntensity = 1.0f;
+        bool enableScreenRefraction = false;
+        float refractionStrength = 0.05f;
+        float refractionSpeed = 1.0f;
+        bool enableDithering = true;
+        float ditherStrength = 1.0f;
+        
+        bool enableRetroCRT = false;
+        float crtScanlines = 1.0f;
+        float glitchIntensity = 1.0f;
+        float vhsNoise = 1.0f;
+        int pixelation = 1;
+        bool enableVertexJitter = false;
+        float vertexJitterResolution = 240.0f;
+        bool enablePosterization = false;
+        float posterizationLevels = 8.0f;
+        bool enableKuwahara = false;
+        int kuwaharaRadius = 4;
+        bool enableCelShading = false;
+        float celShadingLevels = 4.0f;
+        bool enableOutline = false;
+        int outlineMode = 0; // 0: Depth+Normal, 1: Silhouette, 2: Inner
+        float outlineThickness = 1.0f;
+        float outlineThresholdDepth = 0.05f;
+        float outlineThresholdNormal = 0.5f;
+        float outlineColor[3] = {0.0f, 0.0f, 0.0f};
+        bool enableOutlineJitter = false;
+        float outlineJitterSpeed = 12.0f;
+        float outlineJitterStrength = 1.5f;
+        bool enableSSR = false;
+        float ssrSteps = 32.0f, ssrThickness = 1.0f;
+        bool enableSSSS = false;
+        float ssssWidth = 0.015f;
+        bool enableWeather = false;
+        float weatherIntensity = 1.0f;
+        float weatherSpeed = 1.0f;
+        float weatherSize = 20.0f;
+        float weatherDensity = 0.6f;
+        float weatherDistortion = 0.1f;
+        bool enableVignette = false, enableChromaticAberration = false, enableBloom = true, enableLensFlares = false;
         float vignetteIntensity = 0.5f, caIntensity = 0.005f, bloomThreshold = 1.0f, bloomIntensity = 1.5f;
         int bloomBlurIterations = 10, ghosts = 4;
-        float flareIntensity = 0.5f, ghostDispersal = 0.3f;
+        float flareIntensity = 0.5f, ghostDispersal = 0.3f, flareHaloWidth = 0.2f, flareChromaticDir = 0.02f;
 
-        bool enableDoF = false, enableMotionBlur = false, enableFilmGrain = false, enableSharpen = false, enableFog = true;
-        float focusDistance = 10.0f, focusRange = 3.0f, bokehSize = 2.0f, mbStrength = 0.5f, grainIntensity = 0.05f, sharpenIntensity = 0.5f;
+        bool enableTAA = false, enableCAS = false;
+        
+        int vrsMode = 0; // 0: 1x1, 1: 2x2, 2: 4x4
+        float taaBlendFactor = 0.1f, casSharpness = 0.5f;
+
+        int tonemapper = 2; // 0: Linear, 1: Reinhard, 2: ACES
+        float cgShadows[3] = {1.0f, 1.0f, 1.0f};
+        float cgMidtones[3] = {1.0f, 1.0f, 1.0f};
+        float cgHighlights[3] = {1.0f, 1.0f, 1.0f};
+
+        bool enableDoF = false, enableMotionBlur = false, enableFilmGrain = false, enableFog = false;
+        bool autoFocus = false;
+        float focusDistance = 10.0f, focusRange = 3.0f, bokehSize = 2.0f, mbStrength = 0.5f, grainIntensity = 0.05f;
         float fogDensity = 0.02f, fogHeightFalloff = 0.2f, fogBaseHeight = 0.0f;
         float fogColor[3] = {0.5f, 0.6f, 0.7f}, inscatterColor[3] = {1.0f, 0.8f, 0.5f};
         float inscatterPower = 8.0f, inscatterIntensity = 1.0f;
@@ -47,6 +100,10 @@ namespace burnhope {
         bool enableContactShadows = true;
         float contactShadowLength = 0.05f, contactShadowThickness = 0.1f;
         int contactShadowSteps = 16;
+
+        float sharpenIntensity = 1.0f;
+        bool enableSharpen = false;
+        float anisotropicFiltering = 1.0f;
     };
 
     struct SceneSnapshot {

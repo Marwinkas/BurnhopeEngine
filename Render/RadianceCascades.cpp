@@ -5,10 +5,6 @@
 
 namespace burnhope
 {
-    static int cascadeProbeX(int cascade) { return std::max(1, RCConfig::PROBE_X >> cascade); }
-    static int cascadeProbeY(int cascade) { return std::max(1, RCConfig::PROBE_Y >> cascade); }
-    static int cascadeProbeZ(int cascade) { return std::max(1, RCConfig::PROBE_Z >> cascade); }
-
     RadianceCascadesSystem::RadianceCascadesSystem(
         BurnhopeDevice &device,
         VkExtent2D screenExtent,
@@ -19,9 +15,11 @@ namespace burnhope
         VkSampler lightingSampler,
         VkDescriptorSetLayout rtLayout,
         VkDescriptorSetLayout storageLayout,
-        VkDescriptorSetLayout textureLayout)
+        VkDescriptorSetLayout textureLayout,
+        int probeX, int probeY, int probeZ, int octaSize, float baseRayLength)
         : device(device), pool(pool), screenExtent(screenExtent),
-          globalLayoutRef(globalLayout), gBufferLayoutRef(gBufferLayout)
+          globalLayoutRef(globalLayout), gBufferLayoutRef(gBufferLayout),
+          probeX(probeX), probeY(probeY), probeZ(probeZ), octaSize(octaSize), baseRayLength(baseRayLength)
     {
         createProbeTextures();
         createGITextures();
@@ -39,8 +37,8 @@ namespace burnhope
             int px = cascadeProbeX(c);
             int py = cascadeProbeY(c);
             int pz = cascadeProbeZ(c);
-            uint32_t w = px * RCConfig::OCTA_SIZE;
-            uint32_t h = py * pz * RCConfig::OCTA_SIZE;
+            uint32_t w = px * octaSize;
+            uint32_t h = py * pz * octaSize;
 
             probeTex[c] = std::make_unique<BurnhopeTexture>(
                 device,
@@ -186,6 +184,13 @@ namespace burnhope
         VkImageView lightingImageView,
         VkSampler   lightingSampler)
     {
+        std::vector<VkDescriptorSet> oldSets;
+        if (giSet != VK_NULL_HANDLE) oldSets.push_back(giSet);
+        if (giWriteSet != VK_NULL_HANDLE) oldSets.push_back(giWriteSet);
+        for(auto& s : probeWriteSets) if(s != VK_NULL_HANDLE) oldSets.push_back(s);
+        for(auto& s : mergeReadSets) if(s != VK_NULL_HANDLE) oldSets.push_back(s);
+        if (!oldSets.empty()) pool.freeDescriptors(oldSets);
+
         VkDescriptorImageInfo lightInfo{};
         lightInfo.imageView   = lightingImageView;
         lightInfo.sampler     = lightingSampler;
@@ -338,10 +343,10 @@ namespace burnhope
                 c  // .w = индекс каскада (используется в шейдере для неба и startOffset)
             );
             push.params = glm::vec4(
-                RCConfig::BASE_RAY_LENGTH * std::pow(2.0f, (float)c), // x: длина луча
+                baseRayLength * std::pow(2.0f, (float)c), // x: длина луча
                 (c == RCConfig::CASCADE_COUNT - 1) ? 1.0f : 0.0f,     // y: 1.0 если это последний каскад
                 (float)extent.height,                                   // z: не используется в probe шейдере
-                (float)RCConfig::OCTA_SIZE                              // w: размер октаэдра тайла
+                (float)octaSize                              // w: размер октаэдра тайла
             );
 
             probeUpdateShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
@@ -354,8 +359,8 @@ namespace burnhope
                 textureSet          // set 5: bindlessTextures
             });
 
-            uint32_t w = (uint32_t)(cascadeProbeX(c) * RCConfig::OCTA_SIZE);
-            uint32_t h = (uint32_t)(cascadeProbeY(c) * cascadeProbeZ(c) * RCConfig::OCTA_SIZE);
+            uint32_t w = (uint32_t)(cascadeProbeX(c) * octaSize);
+            uint32_t h = (uint32_t)(cascadeProbeY(c) * cascadeProbeZ(c) * octaSize);
             probeUpdateShader->dispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
 
             // Барьер: запись завершена, дальше — чтение в merge
@@ -384,10 +389,10 @@ namespace burnhope
                 c  // .w = индекс текущего каскада
             );
             push.params = glm::vec4(
-                RCConfig::BASE_RAY_LENGTH * std::pow(2.0f, (float)c), // x: длина луча (для reference, merge не трассирует)
+                baseRayLength * std::pow(2.0f, (float)c), // x: длина луча (для reference, merge не трассирует)
                 (float)extent.width,
                 (float)extent.height,
-                (float)RCConfig::OCTA_SIZE                             // w: размер октаэдра — КРИТИЧНО для адресации тайлов
+                (float)octaSize                             // w: размер октаэдра — КРИТИЧНО для адресации тайлов
             );
 
             mergeShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
@@ -395,8 +400,8 @@ namespace burnhope
                 mergeReadSets[c]   // set 0: currentCascade(image c) + nextCascade(sampler c+1)
             });
 
-            uint32_t w = (uint32_t)(cascadeProbeX(c) * RCConfig::OCTA_SIZE);
-            uint32_t h = (uint32_t)(cascadeProbeY(c) * cascadeProbeZ(c) * RCConfig::OCTA_SIZE);
+            uint32_t w = (uint32_t)(cascadeProbeX(c) * octaSize);
+            uint32_t h = (uint32_t)(cascadeProbeY(c) * cascadeProbeZ(c) * octaSize);
             mergeShader->dispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
 
             // Барьер: merge записал в c, следующая итерация читает c как nextCascade
@@ -423,10 +428,10 @@ namespace burnhope
                 0  // каскад 0
             );
             push.params = glm::vec4(
-                RCConfig::BASE_RAY_LENGTH,  // x: длина луча каскада 0
+                baseRayLength,  // x: длина луча каскада 0
                 (float)extent.width,         // y: ширина экрана (для реконструкции позиции)
                 (float)extent.height,        // z: высота экрана
-                (float)RCConfig::OCTA_SIZE   // w: размер октаэдра
+                (float)octaSize   // w: размер октаэдра
             );
 
             sampleShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
@@ -464,6 +469,7 @@ namespace burnhope
     {
         screenExtent = newExtent;
         vkDeviceWaitIdle(device.device());
+        createProbeTextures();
         createGITextures();
         createDescriptorSets(lightingImageView, lightingSampler);
     }

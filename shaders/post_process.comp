@@ -19,56 +19,310 @@ layout(set = 0, binding = 0) uniform GlobalUbo {
     vec4 ppVignetteGrain;
     vec4 ppMotionBlur;
     vec4 ppLensFlare;
+    vec4 ppTAA_CAS;       // ДОБАВЛЕНО
+    vec4 ppLensAdvanced;  // x: halo, y: caDir, z: autoFocus, w: tonemapper
+    vec4 ppDistortionDirt;
+    vec4 ppDitherAniso;
+    vec4 cgShadows;
+    vec4 cgMidtones;
+    vec4 cgHighlights;
+    vec4 ppRetroParams;
+    vec4 ppRetroParams2;
+    vec4 ppStylizedParams;
+    vec4 ppOutlineParams;
+    vec4 ppOutlineColor;
+    vec4 ppOutlineJitter;
+
+           vec4 ppWeatherSSR;
+    vec4 ppSSSS;
+       vec4 ppWeatherParams;
 } ubo;
 
 layout(set = 1, binding = 0, rgba16f) uniform image2D outImage;
 layout(set = 1, binding = 1) uniform sampler2D hdrInput;
 layout(set = 1, binding = 2) uniform sampler2D depthInput;
+layout(set = 1, binding = 3) uniform sampler2D historyInput;
+layout(set = 1, binding = 4, rgba16f) uniform writeonly image2D outHistory;
+layout(set = 1, binding = 6) uniform sampler2D dirtInput;
+layout(set = 1, binding = 7) uniform sampler2D normalInput;
+layout(set = 1, binding = 5, std430) buffer ExposureBuffer {
+    float adaptedLuminance;
+};
+
+vec3 isolateBright(vec3 c, float thresh) {
+    float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    float contribution = max(0.0, luma - thresh);
+    contribution /= max(luma, 0.00001);
+    return min(c * contribution, vec3(5.0)); // Clamp maximum brightness
+}
+
+// Правильное физическое искажение линзы (Barrel Distortion)
+vec2 distCoords(vec2 uv, float strength) {
+    vec2 d = uv - 0.5;
+    float r2 = dot(d, d);
+    return uv + d * (strength * r2);
+}
+
+vec3 ReadRawColor(vec2 uv) {
+    return texture(hdrInput, uv).rgb;
+}
 
 vec3 ReadColor(vec2 uv) {
     vec3 c;
     if (ubo.ppVignetteGrain.w > 0.0) { // Chromatic Aberration
-        vec2 dir = (uv - 0.5) * ubo.ppVignetteGrain.w;
-        c.r = texture(hdrInput, uv - dir).r;
-        c.g = texture(hdrInput, uv).g;
-        c.b = texture(hdrInput, uv + dir).b;
+        float ca = ubo.ppVignetteGrain.w;
+        float dist = length(uv - 0.5);
+        vec2 offset = (uv - 0.5) * ca * dist;
+        c.r = ReadRawColor(uv + offset).r;
+        c.g = ReadRawColor(uv).g;
+        c.b = ReadRawColor(uv - offset).b;
     } else {
-        c = texture(hdrInput, uv).rgb;
-    }
-    if (ubo.ppVignetteGrain.z > 0.0) { // Sharpening
-        vec2 texel = 1.0 / ubo.screenSize.xy;
-        vec3 n = texture(hdrInput, uv + vec2(0, -texel.y)).rgb;
-        vec3 s = texture(hdrInput, uv + vec2(0, texel.y)).rgb;
-        vec3 e = texture(hdrInput, uv + vec2(texel.x, 0)).rgb;
-        vec3 w = texture(hdrInput, uv + vec2(-texel.x, 0)).rgb;
-        c = c * (1.0 + 4.0 * ubo.ppVignetteGrain.z) - (n + s + e + w) * ubo.ppVignetteGrain.z;
+        c = ReadRawColor(uv);
     }
     return c;
+}
+
+// Эффект картины маслом (Kuwahara Filter)
+vec3 ApplyKuwahara(vec2 uv, int radius) {
+    vec2 texel = 1.0 / ubo.screenSize.xy;
+    int offsetsX[4][2] = {{-radius, 0}, {0, radius}, {-radius, 0}, {0, radius}};
+    int offsetsY[4][2] = {{-radius, 0}, {-radius, 0}, {0, radius}, {0, radius}};
+    
+    float minVar = 1e6;
+    vec3 finalColor = vec3(0.0);
+    
+    for(int q = 0; q < 4; q++) {
+        vec3 sum = vec3(0.0);
+        vec3 sum2 = vec3(0.0);
+        float count = 0.0;
+        
+        for(int x = offsetsX[q][0]; x <= offsetsX[q][1]; x++) {
+            for(int y = offsetsY[q][0]; y <= offsetsY[q][1]; y++) {
+                vec3 c = ReadColor(uv + vec2(x, y) * texel);
+                sum += c;
+                sum2 += c * c;
+                count += 1.0;
+            }
+        }
+        vec3 mean = sum / count;
+        vec3 variance = abs((sum2 / count) - (mean * mean));
+        float totalVar = variance.r + variance.g + variance.b;
+        
+        if(totalVar < minVar) {
+            minVar = totalVar;
+            finalColor = mean;
+        }
+    }
+    return finalColor;
 }
 
 void main() {
     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
     if (pixel.x >= int(ubo.screenSize.x) || pixel.y >= int(ubo.screenSize.y)) return;
     vec2 uv = (vec2(pixel) + 0.5) / ubo.screenSize.xy;
-    vec3 color = ReadColor(uv);
+    
+    float pSize = 1.0;
+    // --- PIXELATION ---
+    if (ubo.ppRetroParams.x > 0.5 && ubo.ppRetroParams2.x > 1.1) {
+        pSize = floor(ubo.ppRetroParams2.x);
+        vec2 centerPixel = floor(vec2(pixel) / pSize) * pSize + (pSize * 0.5);
+        uv = centerPixel / ubo.screenSize.xy;
+    }
+    
+    // Distort UVs early (Barrel Distortion)
+    if (ubo.ppDistortionDirt.x > 0.5) {
+        vec2 d = uv - 0.5;
+        float r2 = dot(d, d);
+        uv = 0.5 + d * (1.0 + r2 * ubo.ppDistortionDirt.y);
+        
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+            imageStore(outImage, pixel, vec4(0.0, 0.0, 0.0, 1.0));
+            imageStore(outHistory, pixel, vec4(0.0));
+            return;
+        }
+    }
+    
+    // Screen Space Refraction (Heat Haze / Water)
+    if (ubo.ppDitherAniso.z > 0.5) {
+        float time = ubo.ppVignetteGrain.z; // time * speed
+        vec2 refr;
+        refr.x = sin(uv.y * 30.0 + time) * cos(uv.x * 20.0 + time);
+        refr.y = cos(uv.x * 25.0 + time) * sin(uv.y * 35.0 + time);
+        uv += refr * ubo.ppDitherAniso.w;
+        uv = clamp(uv, 0.0, 1.0);
+    }
+
+    // Retro Glitch UV displacement
+    if (ubo.ppRetroParams.x > 0.5 && ubo.ppRetroParams.z > 0.0) {
+        float t = ubo.ppMotionBlur.z * 10.0; // time
+        float glitchBand = step(0.95, fract(sin(floor(uv.y * 20.0) * 12.9898 + t) * 43758.5453));
+        float shift = (fract(sin(t * 123.456) * 789.123) - 0.5) * 0.1 * ubo.ppRetroParams.z;
+        uv.x += glitchBand * shift;
+        uv = clamp(uv, 0.0, 1.0);
+    }
+
+    // --- LENS WEATHER (Raindrops) ---
+    if (ubo.ppWeatherSSR.x > 0.5) {
+        float speed = ubo.ppWeatherParams.x;
+        float size = ubo.ppWeatherParams.y;
+        float densityThreshold = ubo.ppWeatherParams.z;
+        float distortion = ubo.ppWeatherParams.w;
+
+        float time = ubo.ppMotionBlur.z * speed;
+        vec2 grid = uv * vec2(size, size * 0.5);
+        vec2 id = floor(grid);
+        vec2 f = fract(grid) - 0.5;
+        float rnd = fract(sin(dot(id, vec2(12.9898, 78.233))) * 43758.5453);
+        if (rnd > (1.0 - densityThreshold)) {
+            float dropTime = fract(time * (0.5 + rnd) + rnd);
+            f.y -= dropTime * 2.0 - 1.0; // ФИКС: Вычитание заставляет UV спускаться, а каплю - падать ВНИЗ!
+            float dist = length(f);
+            if (dist < 0.3) {
+                uv += f * distortion * (0.3 - dist);
+                uv = clamp(uv, 0.0, 1.0);
+            }
+        }
+    }
+
+    vec3 color = vec3(0.0);
+    if (ubo.ppStylizedParams.y > 0.0) {
+        color = ApplyKuwahara(uv, int(ubo.ppStylizedParams.y));
+    } else {
+        color = ReadColor(uv);
+    }
+    
     if (any(isnan(color)) || any(isinf(color))) color = vec3(0.0);
+    
+    // --- SCREEN SPACE SUBSURFACE SCATTERING (SSSS) ---
+    if (ubo.ppSSSS.x > 0.5) {
+        float roughness = texture(normalInput, uv).a;
+        float cDepth = texture(depthInput, uv).r;
+        if (cDepth < 1.0 && roughness > 0.3 && roughness < 0.8) { 
+            vec3 sssColor = vec3(0.0); 
+            float totW = 0.0;
+            vec2 texel = 1.0 / ubo.screenSize.xy;
+            for(int x=-2; x<=2; x++) {
+                for(int y=-2; y<=2; y++) {
+                    vec2 off = vec2(x,y) * texel * ubo.ppSSSS.y * 100.0;
+                    vec2 sampleUV = clamp(uv + off, 0.0, 1.0);
+                    float sDepth = texture(depthInput, sampleUV).r;
+                    float w = exp(-abs(cDepth - sDepth) * 50.0) * exp(-float(x*x+y*y)*0.5);
+                    sssColor += textureLod(hdrInput, sampleUV, 0.0).rgb * w; 
+                    totW += w;
+                }
+            }
+            color = mix(color, sssColor / max(totW, 0.001), 0.6);
+        }
+    }
+
+    // --- STOCHASTIC SCREEN SPACE REFLECTIONS (SSSR) ---
+    if (ubo.ppWeatherSSR.z > 0.5) {
+        float roughness = texture(normalInput, uv).a;
+        if (roughness < 0.6 && roughness > 0.01) { 
+            vec3 N = texture(normalInput, uv).rgb;
+            if (length(N) > 0.1) {
+                N = normalize(N);
+                float d = texture(depthInput, uv).r;
+                if (d < 1.0) {
+                    vec4 worldPosRaw = ubo.invViewProj * vec4(uv * 2.0 - 1.0, d, 1.0);
+                    vec3 worldPos = worldPosRaw.xyz / worldPosRaw.w;
+                    vec3 V = normalize(worldPos - ubo.camPos);
+                    vec3 R = reflect(V, N);
+                    vec2 noise = fract(sin(dot(uv, vec2(12.9898, 78.233)) + ubo.ppMotionBlur.z) * vec2(43758.5453, 28001.8384));
+                    R = normalize(R + (vec3(noise, fract(noise.x + noise.y)) - 0.5) * roughness * 0.4);
+                    float stepSize = 0.1; float steps = ubo.ppWeatherSSR.w; float thickness = max(ubo.ppSSSS.z, 0.1);
+                    vec3 rayPos = worldPos + N * 0.1;
+                    vec3 reflColor = vec3(0.0); float hit = 0.0;
+                    for (int i = 0; i < int(steps); i++) {
+                        rayPos += R * stepSize;
+                        vec4 rClip = ubo.projection * ubo.view * vec4(rayPos, 1.0);
+                        if (rClip.w <= 0.0) break;
+                        vec3 rNdc = rClip.xyz / rClip.w; vec2 rUv = rNdc.xy * 0.5 + 0.5;
+                        if (rUv.x < 0.0 || rUv.x > 1.0 || rUv.y < 0.0 || rUv.y > 1.0) break;
+                        float sDepth = textureLod(depthInput, rUv, 0.0).r;
+                        if (sDepth < rNdc.z) {
+                            vec4 hitWorldRaw = ubo.invViewProj * vec4(rUv * 2.0 - 1.0, sDepth, 1.0);
+                            if (distance(hitWorldRaw.xyz / hitWorldRaw.w, rayPos) < thickness) {
+                                reflColor = textureLod(hdrInput, rUv, 0.0).rgb; hit = 1.0; break;
+                            }
+                        }
+                        stepSize *= 1.05; 
+                    }
+                    if (hit > 0.5) color = mix(color, reflColor, mix(0.1, 1.0, pow(1.0 - max(dot(N, -V), 0.0), 5.0)) * (1.0 - roughness));
+                }
+            }
+        }
+    }
+
+    // --- TAA (Temporal Anti-Aliasing) В САМОМ НАЧАЛЕ ---
+    if (ubo.ppTAA_CAS.x > 0.5) {
+        float d = texture(depthInput, uv).r;
+        vec2 velocity = vec2(0.0);
+        if (d < 1.0) {
+            vec4 ndc = vec4(uv * 2.0 - 1.0, d, 1.0);
+            vec4 worldPos = ubo.invViewProj * ndc; 
+            if (abs(worldPos.w) > 0.00001) {
+                worldPos /= worldPos.w;
+                vec4 prevNdc = ubo.prevViewProj * worldPos; 
+                if (abs(prevNdc.w) > 0.00001) {
+                    prevNdc /= prevNdc.w;
+                    vec2 prevUv = prevNdc.xy * 0.5 + 0.5;
+                    velocity = uv - prevUv;
+                }
+            }
+        }
+        
+        vec3 historyColor = texture(historyInput, uv - velocity).rgb;
+        
+        // Мягкий Neighborhood Clamping крестом (предотвращает гостинг)
+        vec3 cMin = color; vec3 cMax = color;
+        vec2 texel = 1.0 / ubo.screenSize.xy;
+        vec3 s1 = ReadRawColor(clamp(uv + vec2( texel.x, 0.0), 0.0, 1.0));
+        vec3 s2 = ReadRawColor(clamp(uv + vec2(-texel.x, 0.0), 0.0, 1.0));
+        vec3 s3 = ReadRawColor(clamp(uv + vec2(0.0,  texel.y), 0.0, 1.0));
+        vec3 s4 = ReadRawColor(clamp(uv + vec2(0.0, -texel.y), 0.0, 1.0));
+        cMin = min(cMin, min(s1, min(s2, min(s3, s4))));
+        cMax = max(cMax, max(s1, max(s2, max(s3, s4))));
+        
+        historyColor = clamp(historyColor, cMin, cMax);
+        float blend = clamp(ubo.ppTAA_CAS.y, 0.01, 0.99);
+        color = mix(historyColor, color, blend);
+    }
+    // Записываем чистый TAA результат в историю следующего кадра (БЕЗ Bloom, DoF, ToneMap!)
+    imageStore(outHistory, pixel, vec4(color, 1.0));
 
     // Motion Blur (Camera Velocity)
     if (ubo.ppMotionBlur.x > 0.5) {
         float d = texture(depthInput, uv).r;
         if (d < 1.0) {
             vec4 ndc = vec4(uv * 2.0 - 1.0, d, 1.0);
-            vec4 worldPos = ubo.invViewProj * ndc; worldPos /= worldPos.w;
-            vec4 prevNdc = ubo.prevViewProj * worldPos; prevNdc /= prevNdc.w;
-            vec2 prevUv = prevNdc.xy * 0.5 + 0.5;
-            vec2 velocity = (uv - prevUv) * ubo.ppMotionBlur.y;
-            if (length(velocity) > 0.001) {
-                vec3 mbColor = color; int samples = 8;
-                for (int i = 1; i < samples; ++i) {
-                    vec2 offset = velocity * (float(i) / float(samples - 1) - 0.5);
-                    mbColor += ReadColor(uv + offset);
+            vec4 worldPos = ubo.invViewProj * ndc; 
+            if (abs(worldPos.w) > 0.00001) {
+                worldPos /= worldPos.w;
+                vec4 prevNdc = ubo.prevViewProj * worldPos; 
+                if (abs(prevNdc.w) > 0.00001) {
+                    prevNdc /= prevNdc.w;
+                    vec2 prevUv = prevNdc.xy * 0.5 + 0.5;
+                    
+                    vec2 velocity = (uv - prevUv) + ubo.ppMotionBlur.zw; // Вычитаем TAA Jitter
+                    float maxVel = 0.05; // Ограничение размытия 5% экрана
+                    if (length(velocity) > maxVel) velocity = normalize(velocity) * maxVel;
+                    velocity *= ubo.ppMotionBlur.y;
+                    
+                    if (length(velocity) > 0.0005) {
+                        vec3 mbColor = color; float totalWeight = 1.0;
+                        int samples = 12;
+                        for (int i = 1; i < samples; ++i) {
+                            float t = (float(i) / float(samples - 1)) - 0.5;
+                            vec2 offsetUV = clamp(uv + velocity * t, 0.0, 1.0);
+                            float sampleD = texture(depthInput, offsetUV).r;
+                            float weight = (sampleD < d - 0.01) ? 0.0 : 1.0; 
+                            mbColor += ReadColor(offsetUV) * weight;
+                            totalWeight += weight;
+                        }
+                        color = mbColor / max(totalWeight, 0.001);
+                    }
                 }
-                color = mbColor / float(samples);
             }
         }
     }
@@ -78,15 +332,36 @@ void main() {
         float d = texture(depthInput, uv).r;
         float zN = ubo.zNear; float zF = ubo.zFar;
         float linDepth = (zN * zF) / (zF + d * (zN - zF));
-        float coc = clamp(abs(linDepth - ubo.ppDoFParams.y) / ubo.ppDoFParams.z, 0.0, 1.0);
-        if (coc > 0.1) {
-            vec3 dofColor = color; float totW = 1.0;
+        
+        float focusDist = ubo.ppDoFParams.y;
+        if (ubo.ppLensAdvanced.z > 0.5) { // Auto-Focus
+            float centerD = texture(depthInput, vec2(0.5, 0.5)).r;
+            focusDist = (zN * zF) / (zF + centerD * (zN - zF));
+        }
+        
+        float coc = clamp(abs(linDepth - focusDist) / max(ubo.ppDoFParams.z, 0.001), 0.0, 1.0);
+        if (coc > 0.05) {
+            vec3 dofColor = vec3(0.0); float totW = 0.0;
             float rad = ubo.ppDoFParams.w * coc * 0.01;
-            for (float ang = 0.0; ang < 6.28318; ang += 1.04719) {
-                vec2 off = vec2(cos(ang), sin(ang)) * rad;
-                dofColor += ReadColor(uv + off); totW += 1.0;
+            
+            // Оптимизация (Имитация полу-разрешения): Разреженный Bokeh-семплинг (Golden Ratio)
+            int samples = int(mix(4.0, 24.0, coc));
+            const float GOLDEN_ANGLE = 2.39996323;
+            for (int i = 0; i < samples; ++i) {
+                float r = sqrt(float(i) + 0.5) / sqrt(float(samples));
+                float theta = float(i) * GOLDEN_ANGLE;
+                vec2 off = vec2(cos(theta), sin(theta)) * (rad * r);
+                
+                vec2 sampUV = uv + off;
+                float sampD = texture(depthInput, sampUV).r;
+                float sampLin = (zN * zF) / (zF + sampD * (zN - zF));
+                float sampCoc = clamp(abs(sampLin - ubo.ppDoFParams.y) / ubo.ppDoFParams.z, 0.0, 1.0);
+                
+                float weight = (sampLin < linDepth) ? 1.0 : clamp(sampCoc / max(coc, 0.001), 0.0, 1.0);
+                dofColor += texture(hdrInput, sampUV).rgb * weight; // Прямое чтение (очень быстро)
+                totW += weight;
             }
-            color = dofColor / totW;
+            color = dofColor / max(totW, 0.001);
         }
     }
 
@@ -94,19 +369,63 @@ void main() {
     vec3 bloom = vec3(0.0); vec3 flare = vec3(0.0);
     vec2 texel = 1.0 / ubo.screenSize.xy; float thresh = ubo.ppBloomParams.y;
     if (ubo.ppBloomParams.x > 0.5) {
-        for(int x = -1; x <= 1; x++) for(int y = -1; y <= 1; y++) {
-            vec3 s = texture(hdrInput, uv + vec2(x, y) * texel * 4.0).rgb;
-            if(dot(s, vec3(0.2126, 0.7152, 0.0722)) > thresh) bloom += s;
+        float totalWeight = 0.0;
+        for(int x = -2; x <= 2; x+=2) {
+            for(int y = -2; y <= 2; y+=2) {
+                vec3 s = texture(hdrInput, uv + vec2(x, y) * texel * 2.0).rgb;
+                bloom += isolateBright(s, thresh);
+                totalWeight += 1.0;
+            }
         }
-        color += (bloom / 9.0) * ubo.ppBloomParams.z;
+        vec3 totalBloom = (bloom / max(totalWeight, 1.0)) * ubo.ppBloomParams.z;
+        if (ubo.ppDistortionDirt.z > 0.5) {
+            vec3 dirt = texture(dirtInput, uv).rgb;
+            float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+            vec3 dirtIllumination = totalBloom + vec3(luma * 0.2); // Also illuminated by general bright areas
+            color += dirt * dirtIllumination * ubo.ppDistortionDirt.w;
+        }
+        color += totalBloom;
     }
     if (ubo.ppLensFlare.x > 0.5) {
         vec2 ghostVec = (vec2(0.5) - uv) * ubo.ppLensFlare.z; int ghosts = int(ubo.ppLensFlare.w);
+        
+        // Хроматическая аберрация на бликах
+        vec2 dir = normalize(ghostVec) * ubo.ppLensAdvanced.y; 
         for(int i = 0; i < ghosts; i++) {
-            vec3 s = texture(hdrInput, fract(uv + ghostVec * float(i))).rgb;
-            if(dot(s, vec3(0.2126, 0.7152, 0.0722)) > thresh) flare += s * pow(1.0 - float(i)/float(ghosts), 2.0);
+            vec2 gUV = fract(uv + ghostVec * float(i));
+            float weight = pow(1.0 - float(i)/float(ghosts), 2.0);
+            vec3 s;
+            s.r = texture(hdrInput, gUV - dir).r;
+            s.g = texture(hdrInput, gUV).g;
+            s.b = texture(hdrInput, gUV + dir).b;
+            flare += isolateBright(s, thresh) * weight;
         }
+        
+        // Halo (Ореол)
+        if (ubo.ppLensAdvanced.x > 0.001) {
+            vec2 haloVec = normalize(ghostVec) * ubo.ppLensAdvanced.x;
+            vec2 haloUV = fract(uv + haloVec);
+            float haloWeight = length(vec2(0.5) - haloUV) / length(vec2(0.5));
+            haloWeight = pow(1.0 - clamp(haloWeight, 0.0, 1.0), 5.0);
+            flare += isolateBright(texture(hdrInput, haloUV).rgb, thresh) * haloWeight;
+        }
+        
         color += flare * ubo.ppLensFlare.y;
+    }
+
+    // --- CAS (Contrast Adaptive Sharpening) ДО Tonemapping ---
+    if (ubo.ppTAA_CAS.z > 0.5) {
+        vec2 texel = 1.0 / ubo.screenSize.xy;
+        vec3 a = ReadRawColor(clamp(uv + vec2(0, -texel.y), 0.0, 1.0));
+        vec3 b = ReadRawColor(clamp(uv + vec2(-texel.x, 0), 0.0, 1.0));
+        vec3 c = ReadRawColor(clamp(uv + vec2(texel.x, 0), 0.0, 1.0));
+        vec3 d = ReadRawColor(clamp(uv + vec2(0, texel.y), 0.0, 1.0));
+        
+        float w = -1.0 / max(8.0, ubo.ppTAA_CAS.w * 10.0 + 8.0);
+        vec3 sharpened = (color + (a + b + c + d) * w) / (1.0 + 4.0 * w);
+        
+        // Защита от отрицательных значений HDR
+        color = mix(color, max(sharpened, vec3(0.0)), ubo.ppTAA_CAS.w);
     }
 
     // Color Grade & Tone Mapping
@@ -115,13 +434,44 @@ void main() {
     // В этом случае мы используем дефолтные значения, чтобы экран не становился черным или серым.
     bool isUboInvalid = (ubo.ppColorBalance.w <= 0.001);
     
-    float exposure = ubo.ppExposureParams.x > 0.5 ? 1.0 : max(ubo.ppExposureParams.y, 0.01);
-    if (isUboInvalid) exposure = 1.0;
+    float currentAdapted = max(adaptedLuminance, 0.0001);
+    float exposure = 1.0;
+    if (!isUboInvalid && ubo.ppExposureParams.x > 0.5) {
+        exposure = (0.18 / currentAdapted) * ubo.ppExposureParams.y; // UE5 style adaptation + comp.
+    } else {
+        exposure = isUboInvalid ? 1.0 : max(ubo.ppExposureParams.y, 0.01);
+    }
     color *= exposure;
     
     float temp = isUboInvalid ? 6500.0 : max(ubo.ppColorBalance.x, 1000.0); 
     color *= vec3(temp > 6500.0 ? 6500.0 / temp : 1.0, 1.0, temp < 6500.0 ? temp / 6500.0 : 1.0);
-    color = color / (color + vec3(1.0)); // Reinhard
+    
+    // --- 3-Way Color Grading ---
+    if (!isUboInvalid) {
+        float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+        float shadowFactor = clamp(1.0 - (luma * 2.5), 0.0, 1.0);
+        float highlightFactor = clamp((luma - 0.5) * 2.0, 0.0, 1.0);
+        float midtoneFactor = 1.0 - shadowFactor - highlightFactor;
+        
+        vec3 cgColor = ubo.cgShadows.rgb * shadowFactor + 
+                    ubo.cgMidtones.rgb * midtoneFactor + 
+                    ubo.cgHighlights.rgb * highlightFactor;
+                    
+        // ЗАЩИТА: Применяем грейдинг только если он не равен (0,0,0)
+        if (length(ubo.cgShadows.rgb) + length(ubo.cgMidtones.rgb) + length(ubo.cgHighlights.rgb) > 0.01) {
+            color *= cgColor;
+        }
+    }
+
+    // --- Tone Mapping ---
+    int tonemapper = isUboInvalid ? 1 : int(ubo.ppLensAdvanced.w + 0.5);
+    if (tonemapper == 1) {
+        color = color / (color + vec3(1.0)); // Reinhard
+    } else if (tonemapper == 2) {
+        // ACES Film
+        float a = 2.51f; float b = 0.03f; float c = 2.43f; float d = 0.59f; float e = 0.14f;
+        color = clamp((color * (a * color + b)) / (color * (c * color + d) + e), 0.0, 1.0);
+    }
     
     float sat = isUboInvalid ? 1.0 : max(ubo.ppColorBalance.z, 0.0);
     color = mix(vec3(dot(color, vec3(0.2126, 0.7152, 0.0722))), color, sat);
@@ -134,7 +484,126 @@ void main() {
     
     float gamma = isUboInvalid ? 2.2 : max(ubo.ppColorBalance.w, 0.1);
     color = pow(clamp(color, 0.0, 1.0), vec3(1.0 / gamma));
+
+    // --- OUTLINE / EDGE DETECTION ---
+    if (!isUboInvalid && ubo.ppOutlineParams.x > 0.5) {
+        vec2 outUV = uv;
+        int outlineMode = int(ubo.ppOutlineColor.w + 0.5);
+        
+        // Outline Wobble/Jitter
+        if (ubo.ppOutlineJitter.x > 0.5) {
+            float t = ubo.ppMotionBlur.z * ubo.ppOutlineJitter.y;
+            float t_discrete = floor(t); // Stop-motion effect (FPS)
+            vec2 jitter = vec2(
+                fract(sin(dot(uv + t_discrete, vec2(12.9898, 78.233))) * 43758.5453),
+                fract(cos(dot(uv - t_discrete, vec2(39.346, 11.135))) * 43758.5453)
+            ) - 0.5;
+            outUV += jitter * (ubo.ppOutlineJitter.z / ubo.screenSize.xy);
+        }
+
+        float thickness = ubo.ppOutlineParams.y;
+        vec2 texel = 1.0 / ubo.screenSize.xy;
+        vec2 offsets[4] = vec2[]( vec2(thickness, 0.0)*texel, vec2(-thickness, 0.0)*texel, vec2(0.0, thickness)*texel, vec2(0.0, -thickness)*texel );
+
+        float d0 = texture(depthInput, outUV).r;
+        vec3 n0 = texture(normalInput, outUV).rgb;
+        if (length(n0) > 0.1) n0 = normalize(n0);
+
+        float zN = ubo.zNear; float zF = ubo.zFar;
+        float linD0 = (zN * zF) / (zF + d0 * (zN - zF));
+        float edgeDepth = 0.0, edgeNormal = 0.0;
+
+        for (int i = 0; i < 4; i++) {
+            vec2 sampUV = clamp(outUV + offsets[i], 0.0, 1.0);
+            float d1 = texture(depthInput, sampUV).r;
+            
+            if (outlineMode == 0 || outlineMode == 1) {
+                if (d0 >= 1.0 && d1 >= 1.0) continue; 
+                if ((d0 >= 1.0 && d1 < 1.0) || (d0 < 1.0 && d1 >= 1.0)) { edgeDepth = 1.0; continue; }
+                float linD1 = (zN * zF) / (zF + d1 * (zN - zF));
+                float depthDiff = abs(linD0 - linD1) / max(min(linD0, linD1), 0.0001);
+                if (depthDiff > ubo.ppOutlineParams.z) edgeDepth = 1.0;
+            }
+            
+            if (outlineMode == 0 || outlineMode == 2) {
+                if (d0 >= 1.0 || d1 >= 1.0) continue; // Don't draw internal lines on the sky
+                vec3 n1 = texture(normalInput, sampUV).rgb;
+                if (length(n1) > 0.1 && 1.0 - dot(n0, normalize(n1)) > ubo.ppOutlineParams.w) edgeNormal = 1.0;
+            }
+        }
+        float edge = max(edgeDepth, edgeNormal);
+        color = mix(color, ubo.ppOutlineColor.rgb, edge);
+    }
+
+    // Adaptive Posterization
+    if (!isUboInvalid && ubo.ppStylizedParams.x > 0.0) {
+        float levels = ubo.ppStylizedParams.x;
+        color = floor(color * levels + 0.5) / levels;
+    }
+
+    // Dithering to prevent color banding
+    if (!isUboInvalid && ubo.ppDitherAniso.x > 0.5) {
+        float ditherStrength = max(ubo.ppDitherAniso.y, 1.0);
+        
+        if (ditherStrength > 1.1) {
+            // Классический упорядоченный дизеринг (Bayer Matrix 4x4)
+            const int bayer4[16] = int[](
+                0, 8, 2, 10,
+                12, 4, 14, 6,
+                3, 11, 1, 9,
+                15, 7, 13, 5
+            );
+            int bx = int(floor(float(pixel.x) / pSize)) % 4;
+            int by = int(floor(float(pixel.y) / pSize)) % 4;
+            float ditherPattern = (float(bayer4[by * 4 + bx]) / 15.0) - 0.5; // [-0.5, 0.5]
+            
+            // Делаем эффект дизеринга более агрессивным для PS1-стиля
+            float levels = max(256.0 / (ditherStrength * 2.0), 2.0); 
+            color = color + (ditherPattern / levels) * 2.0;
+            color = floor(color * levels + 0.5) / levels;
+        } else {
+            // Invisible color banding fix
+            float randomDither = fract(sin(dot(uv, vec2(12.9898, 78.233)) + ubo.ppMotionBlur.z) * 43758.5453);
+            color += (randomDither - 0.5) / 255.0;
+        }
+    }
+
+    // CRT Scanlines & VHS Noise
+    if (!isUboInvalid && ubo.ppRetroParams.x > 0.5) {
+        if (ubo.ppRetroParams.y > 0.0) {
+            float scanlineY = (float(pixel.y) + 0.5) / pSize;
+            float scanline = sin(fract(scanlineY) * 3.14159265);
+            color *= mix(1.0, scanline, 0.5 * ubo.ppRetroParams.y);
+            
+            vec2 crtUV = uv * 2.0 - 1.0;
+            color *= mix(1.0, smoothstep(2.0, 0.8, dot(crtUV, crtUV)), 0.25 * ubo.ppRetroParams.y);
+        }
+        if (ubo.ppRetroParams.w > 0.0) {
+            float vhsNoise = fract(sin(dot(uv + fract(ubo.ppMotionBlur.z * 10.0), vec2(12.9898, 78.233))) * 43758.5453);
+            float tapeBand = step(0.98, fract(uv.y * 3.0 - ubo.ppMotionBlur.z * 1.5));
+            color += (vhsNoise - 0.5) * 0.15 * ubo.ppRetroParams.w;
+            color += tapeBand * (vhsNoise - 0.5) * 0.3 * ubo.ppRetroParams.w; 
+        }
+    }
     if (any(isnan(color)) || any(isinf(color))) color = vec3(0.0);
     
+
     imageStore(outImage, pixel, vec4(color, 1.0));
+
+    // --- Auto Exposure Adaptation (Выполняется в 1 потоке на весь кадр) ---
+    if (pixel == ivec2(0, 0) && !isUboInvalid && ubo.ppExposureParams.x > 0.5) {
+        float totalLogLuma = 0.0;
+        int steps = 16;
+        for(int x = 0; x < steps; x++) {
+            for(int y = 0; y < steps; y++) {
+                vec2 suv = vec2(x + 0.5, y + 0.5) / vec2(steps);
+                vec3 s = max(textureLod(hdrInput, suv, 0.0).rgb, vec3(0.0)); // Защита от отрицательных
+                float luma = dot(s, vec3(0.2126, 0.7152, 0.0722));
+                totalLogLuma += log2(clamp(luma, 0.0001, 10000.0)); // Защита от NaN/Inf
+            }
+        }
+        float avgLuma = exp2(totalLogLuma / float(steps * steps));
+        float targetLuma = clamp(avgLuma, ubo.ppExposureParams.z, ubo.ppExposureParams.w);
+        adaptedLuminance = mix(adaptedLuminance, targetLuma, 0.02); // Плавная киношная задержка адаптации
+    }
 }

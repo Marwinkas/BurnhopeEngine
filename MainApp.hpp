@@ -103,10 +103,13 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         VkDescriptorSet computeOutputSet;
         std::unique_ptr<BurnhopeTexture> ssgiRawTexture;
         
+        std::unique_ptr<BurnhopeTexture> taaHistoryTexture;
+        std::unique_ptr<BurnhopeTexture> taaResolvedTexture;
         std::unique_ptr<BurnhopeTexture> postProcessTexture;
         std::unique_ptr<BurnhopeDescriptorSetLayout> postProcessLayoutPtr;
         VkDescriptorSet postProcessSet = VK_NULL_HANDLE;
         std::unique_ptr<ComputeShader> postProcessShader;
+        std::unique_ptr<BurnhopeBuffer> exposureBuffer;
         
         std::unique_ptr<ComputeShader> lightCullingShader;
         std::unique_ptr<ComputeShader> vsmMarkPagesShader;
@@ -121,6 +124,7 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::shared_ptr<BurnhopeTexture> defaultWhiteTex;
         std::shared_ptr<BurnhopeTexture> defaultNormalTex;
         std::shared_ptr<Material> defaultWhiteMaterial;
+        std::shared_ptr<BurnhopeTexture> defaultDirtTex;
         std::shared_ptr<BurnhopeTexture> blueNoiseTex;
         std::unique_ptr<BurnhopeShadowSystem> shadowSystem;
         std::unique_ptr<BurnhopeBuffer> lightUboBuffer;

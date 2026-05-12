@@ -17,7 +17,7 @@ namespace burnhope {
             
             if (ImGui::BeginTabBar("PropsTabs")) {
                 if (ImGui::BeginTabItem("Render")) {
-                    DrawRenderSettings(context.renderSettings);
+                    DrawRenderSettings(context);
                     ImGui::EndTabItem();
                 }
                 ImGui::EndTabBar();
@@ -33,7 +33,8 @@ namespace burnhope {
         }
 
     private:
-        void DrawRenderSettings(RenderSettings& renderSettings) {
+        void DrawRenderSettings(UIContext& context) {
+            RenderSettings& renderSettings = context.renderSettings;
             ImGui::TextColored(ImVec4(0.26f, 0.59f, 0.98f, 1.0f), "Render & Post-Processing Settings");
             ImGui::Separator();
             ImGui::Spacing();
@@ -89,9 +90,9 @@ namespace burnhope {
                     if (ImGui::CollapsingHeader("SSCS (Contact Shadows)", ImGuiTreeNodeFlags_DefaultOpen)) {
                         ImGui::Checkbox("Enable SSCS", &renderSettings.enableContactShadows);
                         if (renderSettings.enableContactShadows) {
-                            ImGui::SliderFloat("Ray Length", &renderSettings.contactShadowLength, 0.01f, 0.5f);
-                            ImGui::SliderInt("Ray Steps", &renderSettings.contactShadowSteps, 4, 64);
-                            ImGui::SliderFloat("Ray Thickness", &renderSettings.contactShadowThickness, 0.01f, 0.5f);
+                            ImGui::SliderFloat("Ray Length", &renderSettings.contactShadowLength, 0.01f, 2.0f);
+                            ImGui::SliderInt("Ray Steps", &renderSettings.contactShadowSteps, 4, 128);
+                            ImGui::SliderFloat("Ray Thickness", &renderSettings.contactShadowThickness, 0.01f, 2.0f);
                         }
                     }
                     ImGui::EndTabItem();
@@ -113,7 +114,10 @@ namespace burnhope {
                     if (ImGui::CollapsingHeader("Depth of Field", ImGuiTreeNodeFlags_DefaultOpen)) {
                         ImGui::Checkbox("Enable DoF", &renderSettings.enableDoF);
                         if (renderSettings.enableDoF) {
-                            ImGui::SliderFloat("Focus Dist", &renderSettings.focusDistance, 0.1f, 100.0f);
+                            ImGui::Checkbox("Auto-Focus", &renderSettings.autoFocus);
+                            if (!renderSettings.autoFocus) {
+                                ImGui::SliderFloat("Focus Dist", &renderSettings.focusDistance, 0.1f, 100.0f);
+                            }
                             ImGui::SliderFloat("Focus Range", &renderSettings.focusRange, 0.1f, 50.0f);
                             ImGui::SliderFloat("Bokeh Size", &renderSettings.bokehSize, 0.0f, 10.0f);
                         }
@@ -131,6 +135,8 @@ namespace burnhope {
                             ImGui::SliderFloat("Flare Intensity", &renderSettings.flareIntensity, 0.0f, 5.0f);
                             ImGui::SliderFloat("Ghost Dispersal", &renderSettings.ghostDispersal, 0.01f, 1.0f);
                             ImGui::SliderInt("Ghosts Count", &renderSettings.ghosts, 1, 10);
+                            ImGui::SliderFloat("Halo Width", &renderSettings.flareHaloWidth, 0.0f, 1.0f);
+                            ImGui::SliderFloat("Chromatic Dispersal", &renderSettings.flareChromaticDir, 0.0f, 0.1f);
                         }
                     }
                     if (ImGui::CollapsingHeader("Motion Blur", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -168,27 +174,142 @@ namespace burnhope {
                 // --- COLOR GRADING ---
                 if (ImGui::BeginTabItem("Color Grading")) {
                     if (ImGui::CollapsingHeader("Color Corrections", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        const char* tonemappers[] = { "Linear", "Reinhard", "ACES Film" };
+                        ImGui::Combo("Tonemapper", &renderSettings.tonemapper, tonemappers, IM_COUNTOF(tonemappers));
+                        ImGui::Separator();
                         ImGui::SliderFloat("Contrast", &renderSettings.contrast, 0.5f, 2.0f);
                         ImGui::SliderFloat("Saturation", &renderSettings.saturation, 0.0f, 2.0f);
                         ImGui::SliderFloat("Color Temp (K)", &renderSettings.temperature, 2000.0f, 12000.0f);
                         ImGui::SliderFloat("Gamma", &renderSettings.gamma, 1.0f, 2.8f);
                     }
+                    if (ImGui::CollapsingHeader("3-Way Color Grading", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        ImGui::ColorEdit3("Shadows Tint", renderSettings.cgShadows);
+                        ImGui::ColorEdit3("Midtones Tint", renderSettings.cgMidtones);
+                        ImGui::ColorEdit3("Highlights Tint", renderSettings.cgHighlights);
+                    }
+                    if (ImGui::CollapsingHeader("Lens Distortion & Dirt", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        ImGui::Checkbox("Enable Lens Distortion", &renderSettings.enableLensDistortion);
+                        if (renderSettings.enableLensDistortion)
+                            ImGui::SliderFloat("Distortion Strength", &renderSettings.lensDistortionStrength, -1.0f, 1.0f);
+
+                        ImGui::Checkbox("Enable Lens Dirt", &renderSettings.enableLensDirt);
+                        if (renderSettings.enableLensDirt)
+                            ImGui::SliderFloat("Dirt Intensity", &renderSettings.lensDirtIntensity, 0.0f, 5.0f);
+                    }
+                    if (ImGui::CollapsingHeader("Screen Space Refraction", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        ImGui::Checkbox("Enable Screen Refraction", &renderSettings.enableScreenRefraction);
+                        if (renderSettings.enableScreenRefraction) {
+                            ImGui::SliderFloat("Refraction Strength", &renderSettings.refractionStrength, 0.001f, 0.2f);
+                            ImGui::SliderFloat("Refraction Speed", &renderSettings.refractionSpeed, 0.0f, 5.0f);
+                        }
+                    }
+                    if (ImGui::CollapsingHeader("Retro Effects (VHS/CRT/Glitch)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        ImGui::Checkbox("Enable Retro/CRT", &renderSettings.enableRetroCRT);
+                        if (renderSettings.enableRetroCRT) {
+                            ImGui::SliderFloat("Scanlines", &renderSettings.crtScanlines, 0.0f, 2.0f);
+                            ImGui::SliderFloat("Glitch", &renderSettings.glitchIntensity, 0.0f, 3.0f);
+                            ImGui::SliderFloat("VHS Noise", &renderSettings.vhsNoise, 0.0f, 2.0f);
+                            ImGui::SliderInt("Pixelation", &renderSettings.pixelation, 1, 16);
+                            ImGui::Checkbox("PS1 Vertex Jitter (Wobble)", &renderSettings.enableVertexJitter);
+                            if (renderSettings.enableVertexJitter) {
+                                ImGui::SliderFloat("Wobble Resolution", &renderSettings.vertexJitterResolution, 64.0f, 512.0f, "%.0f");
+                            }
+                        }
+                    }
+                    if (ImGui::CollapsingHeader("Stylized & Painterly", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        ImGui::Checkbox("Enable Cel-Shading (Toon)", &renderSettings.enableCelShading);
+                        if (renderSettings.enableCelShading) ImGui::SliderFloat("Cel Levels", &renderSettings.celShadingLevels, 2.0f, 16.0f, "%.0f");
+                        
+                        ImGui::Checkbox("Enable Kuwahara (Oil Paint)", &renderSettings.enableKuwahara);
+                        if (renderSettings.enableKuwahara) ImGui::SliderInt("Brush Radius", &renderSettings.kuwaharaRadius, 1, 8);
+                        
+                        ImGui::Checkbox("Enable Posterization (Palette)", &renderSettings.enablePosterization);
+                        if (renderSettings.enablePosterization) ImGui::SliderFloat("Color Levels", &renderSettings.posterizationLevels, 2.0f, 64.0f, "%.0f");
+                    }
+                    if (ImGui::CollapsingHeader("Outline (Edge Detection)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        ImGui::Checkbox("Enable Outline", &renderSettings.enableOutline);
+                        if (renderSettings.enableOutline) {
+                            const char* outlineModes[] = { "Depth + Normal (Both)", "Silhouette Only (Depth)", "Inner Details Only (Normal)" };
+                            ImGui::Combo("Outline Mode", &renderSettings.outlineMode, outlineModes, 3);
+                            ImGui::ColorEdit3("Outline Color", renderSettings.outlineColor);
+                            ImGui::SliderFloat("Thickness", &renderSettings.outlineThickness, 0.5f, 5.0f);
+                            ImGui::SliderFloat("Depth Threshold", &renderSettings.outlineThresholdDepth, 0.001f, 0.5f);
+                            ImGui::SliderFloat("Normal Threshold", &renderSettings.outlineThresholdNormal, 0.01f, 1.0f);
+                            ImGui::Checkbox("Enable Outline Jitter", &renderSettings.enableOutlineJitter);
+                            if (renderSettings.enableOutlineJitter) {
+                                ImGui::SliderFloat("Jitter FPS", &renderSettings.outlineJitterSpeed, 0.0f, 30.0f);
+                                ImGui::SliderFloat("Jitter Strength", &renderSettings.outlineJitterStrength, 0.1f, 5.0f);
+                            }
+                        }
+                    }
                     if (ImGui::CollapsingHeader("Screen FX", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        if (ImGui::CollapsingHeader("Screen Space Reflections (SSSR)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                            ImGui::Checkbox("Enable SSSR", &renderSettings.enableSSR);
+                            if (renderSettings.enableSSR) {
+                                ImGui::SliderFloat("Steps", &renderSettings.ssrSteps, 4.0f, 64.0f, "%.0f");
+                                ImGui::SliderFloat("Thickness", &renderSettings.ssrThickness, 0.1f, 5.0f);
+                            }
+                        }
+                        if (ImGui::CollapsingHeader("Subsurface Scattering (SSSS)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                            ImGui::Checkbox("Enable SSSS", &renderSettings.enableSSSS);
+                            if (renderSettings.enableSSSS) ImGui::SliderFloat("Scatter Width", &renderSettings.ssssWidth, 0.001f, 0.05f);
+                        }
+                        if (ImGui::CollapsingHeader("Lens Weather (Raindrops)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                            ImGui::Checkbox("Enable Weather", &renderSettings.enableWeather);
+                            if (renderSettings.enableWeather) {
+                                ImGui::SliderFloat("Intensity", &renderSettings.weatherIntensity, 0.1f, 3.0f);
+                                ImGui::SliderFloat("Speed", &renderSettings.weatherSpeed, 0.1f, 5.0f);
+                                ImGui::SliderFloat("Size", &renderSettings.weatherSize, 5.0f, 50.0f);
+                                ImGui::SliderFloat("Density", &renderSettings.weatherDensity, 0.1f, 0.99f);
+                                ImGui::SliderFloat("Distortion", &renderSettings.weatherDistortion, 0.01f, 0.5f);
+                            }
+                        }
+                        ImGui::SliderFloat("Anisotropic Filtering", &BurnhopeTexture::GlobalAnisotropy, 1.0f, 16.0f, "%.0fx");
+                        if (ImGui::IsItemDeactivatedAfterEdit()) {
+                            if (!context.currentScenePath.empty()) {
+                                context.pendingSceneLoadPath = context.currentScenePath;
+                            }
+                        }
+                        if (context.currentScenePath.empty()) {
+                            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "Save scene first to apply Anisotropy automatically!");
+                        } else {
+                            ImGui::TextDisabled("Scene will reload automatically to apply.");
+                        }
+                        ImGui::Checkbox("Enable Dithering", &renderSettings.enableDithering);
+                        if (renderSettings.enableDithering) {
+                            ImGui::SliderFloat("Dither Strength (Retro)", &renderSettings.ditherStrength, 1.0f, 32.0f, "%.1f");
+                        }
+                        ImGui::Separator();
+                        ImGui::Checkbox("Enable TAA", &renderSettings.enableTAA);
+                        if (renderSettings.enableTAA)
+                            ImGui::SliderFloat("TAA Blend Factor", &renderSettings.taaBlendFactor, 0.01f, 0.5f);
+                            
+                        ImGui::Checkbox("Enable CAS (Sharpen)", &renderSettings.enableCAS);
+                        if (renderSettings.enableCAS)
+                            ImGui::SliderFloat("CAS Sharpness", &renderSettings.casSharpness, 0.0f, 1.0f);
+
                         ImGui::Checkbox("Film Grain", &renderSettings.enableFilmGrain);
                         if (renderSettings.enableFilmGrain)
                             ImGui::SliderFloat("Grain Strength", &renderSettings.grainIntensity, 0.0f, 0.2f);
                         
                         ImGui::Checkbox("Vignette", &renderSettings.enableVignette);
-                        if (renderSettings.enableVignette)
+                        if (renderSettings.enableVignette) {
                             ImGui::SliderFloat("Vignette Intensity", &renderSettings.vignetteIntensity, 0.1f, 2.0f);
-                        
+                        }
                         ImGui::Checkbox("Chromatic Aberration", &renderSettings.enableChromaticAberration);
-                        if (renderSettings.enableChromaticAberration)
+                        if (renderSettings.enableChromaticAberration) {
                             ImGui::SliderFloat("CA Intensity", &renderSettings.caIntensity, 0.001f, 0.55f);
-                        
-                        ImGui::Checkbox("Enable Sharpen", &renderSettings.enableSharpen);
-                        if (renderSettings.enableSharpen)
-                            ImGui::SliderFloat("Sharpness", &renderSettings.sharpenIntensity, 0.0f, 2.0f);
+                        }
+                    }
+                    ImGui::EndTabItem();
+                }
+                
+                // --- OPTIMIZATION ---
+                if (ImGui::BeginTabItem("Optimization")) {
+                    if (ImGui::CollapsingHeader("Compute Adaptive Shading (VRS)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        const char* vrsModes[] = { "Off (Native Quality)", "Aggressive (Skip dark areas)" };
+                        ImGui::Combo("Adaptive Shading", &renderSettings.vrsMode, vrsModes, 2);
+                        ImGui::TextDisabled("Software-based VRS. Dynamically skips heavy PBR lighting in deep shadows to boost FPS without pixelation.");
                     }
                     ImGui::EndTabItem();
                 }
@@ -242,6 +363,42 @@ namespace burnhope {
             j["gamma"] = rs.gamma;
 
             // --- Screen FX ---
+            j["enableLensDistortion"] = rs.enableLensDistortion;
+            j["lensDistortionStrength"] = rs.lensDistortionStrength;
+            j["enableLensDirt"] = rs.enableLensDirt;
+            j["lensDirtIntensity"] = rs.lensDirtIntensity;
+            j["enableDithering"] = rs.enableDithering;
+            j["ditherStrength"] = rs.ditherStrength;
+            j["enableScreenRefraction"] = rs.enableScreenRefraction;
+            j["refractionStrength"] = rs.refractionStrength;
+            j["refractionSpeed"] = rs.refractionSpeed;
+            j["anisotropicFiltering"] = BurnhopeTexture::GlobalAnisotropy;
+            
+            j["enableRetroCRT"] = rs.enableRetroCRT;
+            j["crtScanlines"] = rs.crtScanlines;
+            j["glitchIntensity"] = rs.glitchIntensity;
+            j["vhsNoise"] = rs.vhsNoise;
+            j["pixelation"] = rs.pixelation;
+            j["enableVertexJitter"] = rs.enableVertexJitter;
+            j["vertexJitterResolution"] = rs.vertexJitterResolution;
+            j["enablePosterization"] = rs.enablePosterization;
+            j["posterizationLevels"] = rs.posterizationLevels;
+            j["enableKuwahara"] = rs.enableKuwahara;
+            j["kuwaharaRadius"] = rs.kuwaharaRadius;
+            j["enableCelShading"] = rs.enableCelShading;
+            j["celShadingLevels"] = rs.celShadingLevels;
+            
+            j["vrsMode"] = rs.vrsMode;
+            j["enableOutline"] = rs.enableOutline;
+            j["outlineMode"] = rs.outlineMode;
+            j["outlineThickness"] = rs.outlineThickness;
+            j["outlineThresholdDepth"] = rs.outlineThresholdDepth;
+            j["outlineThresholdNormal"] = rs.outlineThresholdNormal;
+            j["outlineColor"] = {rs.outlineColor[0], rs.outlineColor[1], rs.outlineColor[2]};
+            j["enableOutlineJitter"] = rs.enableOutlineJitter;
+            j["outlineJitterSpeed"] = rs.outlineJitterSpeed;
+            j["outlineJitterStrength"] = rs.outlineJitterStrength;
+
             j["enableVignette"] = rs.enableVignette;
             j["vignetteIntensity"] = rs.vignetteIntensity;
             j["enableChromaticAberration"] = rs.enableChromaticAberration;
@@ -261,6 +418,11 @@ namespace burnhope {
             j["grainIntensity"] = rs.grainIntensity;
             j["enableSharpen"] = rs.enableSharpen;
             j["sharpenIntensity"] = rs.sharpenIntensity;
+
+            j["tonemapper"] = rs.tonemapper;
+            j["cgShadows"] = {rs.cgShadows[0], rs.cgShadows[1], rs.cgShadows[2]};
+            j["cgMidtones"] = {rs.cgMidtones[0], rs.cgMidtones[1], rs.cgMidtones[2]};
+            j["cgHighlights"] = {rs.cgHighlights[0], rs.cgHighlights[1], rs.cgHighlights[2]};
 
             // --- Camera ---
             j["enableDoF"] = rs.enableDoF;

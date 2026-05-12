@@ -177,6 +177,44 @@ namespace burnhope {
                 }
             }
 
+            if (context.registry->all_of<DecalComponent>(entity)) {
+                if (ImGui::CollapsingHeader("Screen Space Decal", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    auto& dc = context.registry->get<DecalComponent>(entity);
+                    ImGui::SliderFloat("Opacity", &dc.opacity, 0.0f, 1.0f);
+                    
+                    ImGui::Text("Albedo Texture:"); ImGui::SameLine();
+                    std::string albName = dc.albedoPath.empty() ? "None" : std::filesystem::path(dc.albedoPath).filename().string();
+                    ImGui::Button((albName + "##DecalAlb").c_str(), ImVec2(-1, 0));
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                            const char* path = (const char*)payload->Data;
+                            std::filesystem::path p(path);
+                            if (p.extension() == ".png" || p.extension() == ".jpg" || p.extension() == ".jpeg") {
+                                vkDeviceWaitIdle(context.device->device());
+                                dc.albedoPath = p.string();
+                                dc.albedoTex = BurnhopeTexture::createTextureFromFile(*context.device, dc.albedoPath);
+                                context.needsRebuild = true;
+                            }
+                        } ImGui::EndDragDropTarget();
+                    }
+                    ImGui::Text("Normal Texture:"); ImGui::SameLine();
+                    std::string normName = dc.normalPath.empty() ? "None" : std::filesystem::path(dc.normalPath).filename().string();
+                    ImGui::Button((normName + "##DecalNorm").c_str(), ImVec2(-1, 0));
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                            const char* path = (const char*)payload->Data;
+                            std::filesystem::path p(path);
+                            if (p.extension() == ".png" || p.extension() == ".jpg" || p.extension() == ".jpeg") {
+                                vkDeviceWaitIdle(context.device->device());
+                                dc.normalPath = p.string();
+                                dc.normalTex = BurnhopeTexture::createDataTextureFromFile(*context.device, dc.normalPath);
+                                context.needsRebuild = true;
+                            }
+                        } ImGui::EndDragDropTarget();
+                    }
+                }
+            }
+
             if (context.registry->all_of<ReflectionProbeComponent>(entity)) {
                 if (ImGui::CollapsingHeader("Reflection Probe", ImGuiTreeNodeFlags_DefaultOpen)) {
                     auto& pc = context.registry->get<ReflectionProbeComponent>(entity);
@@ -201,6 +239,9 @@ namespace burnhope {
                 }
                 if (!context.registry->all_of<ReflectionProbeComponent>(entity) && ImGui::Selectable("Reflection Probe")) {
                     context.registry->emplace<ReflectionProbeComponent>(entity);
+                }
+                if (!context.registry->all_of<DecalComponent>(entity) && ImGui::Selectable("Decal Projector")) {
+                    context.registry->emplace<DecalComponent>(entity);
                 }
                 ImGui::EndPopup();
             }

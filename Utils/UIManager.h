@@ -599,6 +599,13 @@ namespace burnhope {
                     entityJson["ReflectionProbeComponent"]["Resolution"] = rpc.resolution;
                 }
 
+                if (m_Context.registry->all_of<DecalComponent>(entity)) {
+                    auto& dc = m_Context.registry->get<DecalComponent>(entity);
+                    entityJson["DecalComponent"]["AlbedoPath"] = dc.albedoPath;
+                    entityJson["DecalComponent"]["NormalPath"] = dc.normalPath;
+                    entityJson["DecalComponent"]["Opacity"] = dc.opacity;
+                }
+
                 sceneJson["Entities"].push_back(entityJson);
             }
 
@@ -713,6 +720,15 @@ namespace burnhope {
                     rpc.radius = entityJson["ReflectionProbeComponent"].value("Radius", 10.0f);
                     rpc.resolution = entityJson["ReflectionProbeComponent"].value("Resolution", 256);
                     rpc.updateNeeded = true;
+                }
+                
+                if (entityJson.contains("DecalComponent")) {
+                    auto& dc = m_Context.registry->emplace<DecalComponent>(entity);
+                    dc.albedoPath = entityJson["DecalComponent"].value("AlbedoPath", "");
+                    dc.normalPath = entityJson["DecalComponent"].value("NormalPath", "");
+                    dc.opacity = entityJson["DecalComponent"].value("Opacity", 1.0f);
+                    if (!dc.albedoPath.empty() && m_Device) dc.albedoTex = BurnhopeTexture::createTextureFromFile(*m_Device, dc.albedoPath);
+                    if (!dc.normalPath.empty() && m_Device) dc.normalTex = BurnhopeTexture::createDataTextureFromFile(*m_Device, dc.normalPath);
                 }
             }
         }

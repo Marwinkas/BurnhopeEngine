@@ -9,6 +9,7 @@
 #include <filesystem>
 namespace burnhope
 {
+    float BurnhopeTexture::GlobalAnisotropy = 16.0f;
     BurnhopeTexture::BurnhopeTexture(BurnhopeDevice &device, const std::string &textureFilepath, bool isSRGB) : mDevice{device}
     {
         createTextureImage(textureFilepath, isSRGB);
@@ -153,8 +154,9 @@ namespace burnhope
             samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
             samplerInfo.addressModeV = samplerInfo.addressModeU;
             samplerInfo.addressModeW = samplerInfo.addressModeU;
+            samplerInfo.anisotropyEnable = BurnhopeTexture::GlobalAnisotropy > 1.0f ? VK_TRUE : VK_FALSE;
+            samplerInfo.maxAnisotropy = BurnhopeTexture::GlobalAnisotropy;
             samplerInfo.mipLodBias = 0.0f;
-            samplerInfo.maxAnisotropy = 1.0f;
             samplerInfo.minLod = 0.0f;
             samplerInfo.maxLod = 1.0f;
             samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
@@ -375,8 +377,8 @@ namespace burnhope
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.anisotropyEnable = VK_TRUE;
-        samplerInfo.maxAnisotropy = 16.0f;
+        samplerInfo.anisotropyEnable = BurnhopeTexture::GlobalAnisotropy > 1.0f ? VK_TRUE : VK_FALSE;
+        samplerInfo.maxAnisotropy = BurnhopeTexture::GlobalAnisotropy;
         samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
         samplerInfo.compareEnable = VK_FALSE;
