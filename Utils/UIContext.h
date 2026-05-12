@@ -62,6 +62,10 @@ namespace burnhope {
         bool enableOutlineJitter = false;
         float outlineJitterSpeed = 12.0f;
         float outlineJitterStrength = 1.5f;
+        bool enableVoronoi = false;
+        float voronoiScale = 20.0f;
+        float objHatchingScale = 0.0f;
+        
         bool enableSSR = false;
         float ssrSteps = 32.0f, ssrThickness = 1.0f;
         bool enableSSSS = false;
@@ -73,6 +77,7 @@ namespace burnhope {
         float weatherDensity = 0.6f;
         float weatherDistortion = 0.1f;
         bool enableVignette = false, enableChromaticAberration = false, enableBloom = true, enableLensFlares = false;
+        bool enableAnamorphic = false;
         float vignetteIntensity = 0.5f, caIntensity = 0.005f, bloomThreshold = 1.0f, bloomIntensity = 1.5f;
         int bloomBlurIterations = 10, ghosts = 4;
         float flareIntensity = 0.5f, ghostDispersal = 0.3f, flareHaloWidth = 0.2f, flareChromaticDir = 0.02f;
@@ -90,6 +95,8 @@ namespace burnhope {
         bool enableDoF = false, enableMotionBlur = false, enableFilmGrain = false, enableFog = false;
         bool autoFocus = false;
         float focusDistance = 10.0f, focusRange = 3.0f, bokehSize = 2.0f, mbStrength = 0.5f, grainIntensity = 0.05f;
+        int bokehShape = 0; // 0: Circle, 1: Hexagon, 2: Octagon, 3: Triangle
+        float bokehAngle = 0.0f;
         float fogDensity = 0.02f, fogHeightFalloff = 0.2f, fogBaseHeight = 0.0f;
         float fogColor[3] = {0.5f, 0.6f, 0.7f}, inscatterColor[3] = {1.0f, 0.8f, 0.5f};
         float inscatterPower = 8.0f, inscatterIntensity = 1.0f;
@@ -104,6 +111,91 @@ namespace burnhope {
         float sharpenIntensity = 1.0f;
         bool enableSharpen = false;
         float anisotropicFiltering = 1.0f;
+
+        float cgGlobalLift[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        float cgGlobalGamma[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        float cgGlobalGain[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        float cgGlobalOffset[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        float cgShadowsLift[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        float cgShadowsGamma[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        float cgShadowsGain[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        float cgShadowsOffset[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        float cgMidtonesLift[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        float cgMidtonesGamma[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        float cgMidtonesGain[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        float cgMidtonesOffset[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        float cgHighlightsLift[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        float cgHighlightsGamma[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        float cgHighlightsGain[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        float cgHighlightsOffset[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        float cgRgbMixerRed[3] = {1.0f, 0.0f, 0.0f};
+        float cgRgbMixerGreen[3] = {0.0f, 1.0f, 0.0f};
+        float cgRgbMixerBlue[3] = {0.0f, 0.0f, 1.0f};
+
+        int blurMode = 0; 
+        float blurStrength = 1.0f;
+        float blurRadius = 5.0f;
+        float radialBlurCenter[2] = {0.5f, 0.5f};
+
+        bool enableColorInvert = false;
+        bool enableFalseColor = false;
+        bool enableDepthView = false;
+
+        bool enableFilmDamage = false;
+        float filmDamageIntensity = 1.0f;
+        float filmDamageScratches = 1.0f;
+
+        bool enableEdgeDetect = false;
+        float edgeWidth = 1.0f;
+        float edgeBrightness = 1.0f;
+        float edgeGamma = 1.0f;
+        float edgeBlur = 0.0f;
+        int edgeColorMode = 0;
+        float edgeCustomColor[3] = {1.0f, 1.0f, 1.0f};
+        bool enableEmboss = false;
+        float embossStrength = 1.0f;
+        float embossAngle = 45.0f;
+        int embossStyle = 0;
+        bool enableSketch = false;
+        float sketchStrokeStrength = 1.0f;
+        float sketchStrokeLength = 2.0f;
+        float sketchThreshold = 0.5f;
+        float sketchShadowLevel = 0.5f;
+        float sketchShadowsWeight = 1.0f;
+        float sketchMidtonesWeight = 1.0f;
+        float sketchHighlightsWeight = 1.0f;
+
+        float mbTrails = 0.0f;
+        std::string lensDirtPath = "";
+        std::shared_ptr<BurnhopeTexture> lensDirtTex = nullptr;
+        bool enableHalftone = false;
+        float halftoneScale = 1.0f;
+        float halftoneContrast = 1.0f;
+        std::string halftonePath = "";
+        std::shared_ptr<BurnhopeTexture> halftoneTex = nullptr;
+        int ditherMode = 0;
+        std::string ditherTexPath = "";
+        std::shared_ptr<BurnhopeTexture> ditherTex = nullptr;
+        float ditherScale = 1.0f;
+        float ditherShadowColor[3] = {0.0f, 0.0f, 0.0f};
+        float ditherMidColor[3] = {0.8f, 0.2f, 0.2f};
+        float ditherHighlightColor[3] = {1.0f, 0.8f, 0.8f};
+
+        bool enableTexWarp = false;
+        float texWarpStrength = 0.01f;
+        float texWarpSpeed = 1.0f;
+        bool enableVtxWarp = false;
+        float vtxWarpStrength = 0.1f;
+        float vtxWarpSpeed = 1.0f;
+        float vtxWarpScale = 1.0f;
+        bool enableColorComp = false;
+        float colorCompLevels = 16.0f;
+        bool enableCMAA = false;
+        std::string palettePath = "";
+        std::shared_ptr<BurnhopeTexture> paletteTex = nullptr;
+        bool enableShadowRamp = false;
+        float shadowRampColor1[3] = {0.0f, 0.0f, 0.2f};
+        float shadowRampColor2[3] = {0.8f, 0.1f, 0.1f};
     };
 
     struct SceneSnapshot {

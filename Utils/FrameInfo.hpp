@@ -69,6 +69,46 @@ namespace burnhope
         glm::vec4 ppWeatherSSR;    // x: weather, y: wIntens, z: ssr, w: ssrSteps
         glm::vec4 ppSSSS;          // x: ssss, y: ssssWidth, z: ssrThick, w: vrsMode
         glm::vec4 ppWeatherParams; // x: speed, y: size, z: density, w: distortion
+
+        glm::vec4 cgGlobalLift{0.f};
+        glm::vec4 cgGlobalGamma{1.f};
+        glm::vec4 cgGlobalGain{1.f};
+        glm::vec4 cgGlobalOffset{0.f};
+        glm::vec4 cgShadowsLift{0.f};
+        glm::vec4 cgShadowsGamma{1.f};
+        glm::vec4 cgShadowsGain{1.f};
+        glm::vec4 cgShadowsOffset{0.f};
+        glm::vec4 cgMidtonesLift{0.f};
+        glm::vec4 cgMidtonesGamma{1.f};
+        glm::vec4 cgMidtonesGain{1.f};
+        glm::vec4 cgMidtonesOffset{0.f};
+        glm::vec4 cgHighlightsLift{0.f};
+        glm::vec4 cgHighlightsGamma{1.f};
+        glm::vec4 cgHighlightsGain{1.f};
+        glm::vec4 cgHighlightsOffset{0.f};
+        glm::vec4 cgRgbMixerRed{1.f,0.f,0.f,0.f};
+        glm::vec4 cgRgbMixerGreen{0.f,1.f,0.f,0.f};
+        glm::vec4 cgRgbMixerBlue{0.f,0.f,1.f,0.f};
+        glm::vec4 ppBlurs{0.f};       
+        glm::vec4 ppBlurCenter{0.5f, 0.5f, 0.f, 0.f};  
+        glm::vec4 ppColorFX{0.f};     
+        glm::vec4 ppFilmDamage{0.f};  
+        glm::vec4 ppEdgeDetect{0.f};
+        glm::vec4 ppEdgeDetect2{0.f};
+        glm::vec4 ppEdgeColor{1.f};
+        glm::vec4 ppEmboss{0.f};
+        glm::vec4 ppSketch{0.f};
+        glm::vec4 ppSketch2{0.f};
+        glm::vec4 ppHalftone{0.f}; 
+        glm::vec4 ppDitherData{0.f};
+        glm::vec4 ditherShadow{0.f};
+        glm::vec4 ditherMid{0.f};
+        glm::vec4 ditherHighlight{0.f};
+        glm::vec4 ppWarp{0.f};
+        glm::vec4 ppWarp2{0.f};
+        glm::vec4 ppColorComp{0.f};
+        glm::vec4 shadowRampColor1{0.f, 0.f, 0.2f, 1.f};
+        glm::vec4 shadowRampColor2{0.8f, 0.1f, 0.1f, 1.f};
     };
     struct FrameInfo
     {

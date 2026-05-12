@@ -2,7 +2,7 @@
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 layout(set = 0, binding = 0) uniform GlobalSceneUbo {
-    mat4 projection; mat4 invViewProj; mat4 view; vec3 camPos; float zNear;
+     mat4 projection; mat4 invViewProj; mat4 view; vec3 camPos; float zNear;
     vec3 sunDir; float zFar; vec4 screenSize; mat4 sunLightSpaceMatrices[4];
     vec4 cascadeSplits; uint gridDimX; uint gridDimY; uint gridDimZ; uint portalID; float lightSize;
     vec3 sunColor; float sunIntensity;
@@ -15,7 +15,7 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     vec4 ppExposureParams;
     vec4 ppColorBalance;
     vec4 ppBloomParams;
-    vec4 ppDoFParams;
+    vec4 ppDoFParams; 
     vec4 ppVignetteGrain;
     vec4 ppMotionBlur;
     vec4 ppLensFlare;
@@ -32,6 +32,49 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
     vec4 ppOutlineParams;
     vec4 ppOutlineColor;
     vec4 ppOutlineJitter;
+       vec4 ppWeatherSSR;
+    vec4 ppSSSS;
+    vec4 ppWeatherParams;
+
+    vec4 cgGlobalLift;
+    vec4 cgGlobalGamma;
+    vec4 cgGlobalGain;
+    vec4 cgGlobalOffset;
+    vec4 cgShadowsLift;
+    vec4 cgShadowsGamma;
+    vec4 cgShadowsGain;
+    vec4 cgShadowsOffset;
+    vec4 cgMidtonesLift;
+    vec4 cgMidtonesGamma;
+    vec4 cgMidtonesGain;
+    vec4 cgMidtonesOffset;
+    vec4 cgHighlightsLift;
+    vec4 cgHighlightsGamma;
+    vec4 cgHighlightsGain;
+    vec4 cgHighlightsOffset;
+    vec4 cgRgbMixerRed;
+    vec4 cgRgbMixerGreen;
+    vec4 cgRgbMixerBlue;
+    vec4 ppBlurs;
+    vec4 ppBlurCenter;
+    vec4 ppColorFX;
+    vec4 ppFilmDamage;
+    vec4 ppEdgeDetect;
+    vec4 ppEdgeDetect2;
+    vec4 ppEdgeColor;
+    vec4 ppEmboss;
+    vec4 ppSketch;
+    vec4 ppSketch2;
+    vec4 ppHalftone; 
+    vec4 ppDitherData;
+    vec4 ditherShadow;
+    vec4 ditherMid;
+    vec4 ditherHighlight;
+    vec4 ppWarp;
+    vec4 ppWarp2;
+    vec4 ppColorComp;
+    vec4 shadowRampColor1;
+    vec4 shadowRampColor2;
 } ubo;
 
 layout(set = 1, binding = 0) uniform sampler2D gNormalRoughness;

@@ -109,6 +109,7 @@ namespace burnhope
             {
                 std::vector<VkDescriptorSet> toFree = {rtSet};
                 pool.freeDescriptors(toFree);
+                rtSet = VK_NULL_HANDLE;
             }
 
             BurnhopeDescriptorWriter(*rtLayoutPtr, pool).writeImage(0, &imgInfo).writeImageArray(1, probeInfos).writeBuffer(2, &bufInfo).build(rtSet);
@@ -145,7 +146,7 @@ namespace burnhope
                 volumetricTex->transitionLayout(device.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
             }
             auto imgInfo = volumetricTex->getImageInfo(); imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-            if (writeSet != VK_NULL_HANDLE) { std::vector<VkDescriptorSet> toFree = {writeSet}; pool.freeDescriptors(toFree); }
+            if (writeSet != VK_NULL_HANDLE) { std::vector<VkDescriptorSet> toFree = {writeSet}; pool.freeDescriptors(toFree); writeSet = VK_NULL_HANDLE;}
             BurnhopeDescriptorWriter(*writeLayoutPtr, pool).writeImage(0, &imgInfo).build(writeSet);
         }
     };
@@ -219,7 +220,7 @@ namespace burnhope
             gBuffer->getRenderPass(),
             globalSetLayout->getDescriptorSetLayout());
 
-        initCompute(globalSetLayout->getDescriptorSetLayout());
+       
         uiManager = std::make_unique<UIManager>(
             lveWindow,
             lveDevice,
@@ -227,6 +228,7 @@ namespace burnhope
             &registry,
             std::filesystem::current_path().string() // Путь к проекту
         );
+         initCompute(globalSetLayout->getDescriptorSetLayout());
         loadGameObjects(registry);
     }
     FirstApp::~FirstApp()
@@ -635,6 +637,7 @@ namespace burnhope
                 {
                     std::vector<VkDescriptorSet> toFree = {shadowObjectSet};
                     globalPool->freeDescriptors(toFree);
+                    shadowObjectSet = VK_NULL_HANDLE;
                 }
                 if (objectBuffer)
                 {
@@ -763,7 +766,7 @@ namespace burnhope
                 }
                 if (globalVolumetricSystem) {
                     globalVolumetricSystem->updateDescriptors(newExtent);
-                    if (globalVolumetricReadSet != VK_NULL_HANDLE) { std::vector<VkDescriptorSet> toFree = {globalVolumetricReadSet}; globalPool->freeDescriptors(toFree); }
+                    if (globalVolumetricReadSet != VK_NULL_HANDLE) { std::vector<VkDescriptorSet> toFree = {globalVolumetricReadSet}; globalPool->freeDescriptors(toFree); globalVolumetricReadSet = VK_NULL_HANDLE;}
                     VkDescriptorImageInfo volReadInfo{}; volReadInfo.imageView = globalVolumetricSystem->volumetricTex->getImageView();
                     volReadInfo.sampler = globalVolumetricSystem->volumetricTex->getSampler(); volReadInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
                     BurnhopeDescriptorWriter(*globalVolumetricReadLayout, *globalPool)
@@ -873,7 +876,7 @@ namespace burnhope
                 ubo.ppBloomParams = glm::vec4(rs.enableBloom ? 1.0f : 0.0f, rs.bloomThreshold, rs.bloomIntensity, (float)rs.bloomBlurIterations);
                 ubo.ppDoFParams = glm::vec4(rs.enableDoF ? 1.0f : 0.0f, rs.focusDistance, rs.focusRange, rs.bokehSize);
                 ubo.ppVignetteGrain = glm::vec4(rs.enableVignette ? rs.vignetteIntensity : 0.0f, rs.enableFilmGrain ? rs.grainIntensity : 0.0f, rs.refractionSpeed * timeAccumulator, rs.enableChromaticAberration ? rs.caIntensity : 0.0f);
-                ubo.ppMotionBlur = glm::vec4(rs.enableMotionBlur ? 1.0f : 0.0f, rs.mbStrength, timeAccumulator, 0.0f);
+                ubo.ppMotionBlur = glm::vec4(rs.enableMotionBlur ? 1.0f : 0.0f, rs.mbStrength, timeAccumulator, rs.mbTrails);
                 ubo.ppLensFlare = glm::vec4(rs.enableLensFlares ? 1.0f : 0.0f, rs.flareIntensity, rs.ghostDispersal, (float)rs.ghosts);
                 ubo.ppTAA_CAS = glm::vec4(rs.enableTAA ? 1.0f : 0.0f, rs.taaBlendFactor, rs.enableCAS ? 1.0f : 0.0f, rs.casSharpness);
                 ubo.ppLensAdvanced = glm::vec4(rs.flareHaloWidth, rs.flareChromaticDir, rs.autoFocus ? 1.0f : 0.0f, (float)rs.tonemapper);
@@ -883,16 +886,56 @@ namespace burnhope
                 ubo.cgMidtones = glm::vec4(rs.cgMidtones[0], rs.cgMidtones[1], rs.cgMidtones[2], 1.0f);
                 ubo.cgHighlights = glm::vec4(rs.cgHighlights[0], rs.cgHighlights[1], rs.cgHighlights[2], 1.0f);
                 ubo.ppRetroParams = glm::vec4(rs.enableRetroCRT ? 1.0f : 0.0f, rs.crtScanlines, rs.glitchIntensity, rs.vhsNoise);
-                ubo.ppRetroParams2 = glm::vec4((float)rs.pixelation, rs.enableVertexJitter ? rs.vertexJitterResolution : 0.0f, 0.0f, 0.0f);
+                ubo.ppRetroParams2 = glm::vec4((float)rs.pixelation, rs.enableVertexJitter ? rs.vertexJitterResolution : 0.0f, (float)rs.bokehShape, rs.bokehAngle);
                 
-                ubo.ppStylizedParams = glm::vec4(rs.enablePosterization ? rs.posterizationLevels : 0.0f, rs.enableKuwahara ? (float)rs.kuwaharaRadius : 0.0f, rs.enableCelShading ? rs.celShadingLevels : 0.0f, 0.0f);
+                ubo.ppStylizedParams = glm::vec4(rs.enablePosterization ? rs.posterizationLevels : 0.0f, rs.enableKuwahara ? (float)rs.kuwaharaRadius : 0.0f, rs.enableCelShading ? rs.celShadingLevels : 0.0f, rs.enableVoronoi ? rs.voronoiScale : 0.0f);
                 
                 ubo.ppOutlineParams = glm::vec4(rs.enableOutline ? 1.0f : 0.0f, rs.outlineThickness, rs.outlineThresholdDepth, rs.outlineThresholdNormal);
                 ubo.ppOutlineColor = glm::vec4(rs.outlineColor[0], rs.outlineColor[1], rs.outlineColor[2], (float)rs.outlineMode);
-                ubo.ppOutlineJitter = glm::vec4(rs.enableOutlineJitter ? 1.0f : 0.0f, rs.outlineJitterSpeed, rs.outlineJitterStrength, 0.0f);
+                ubo.ppOutlineJitter = glm::vec4(rs.enableOutlineJitter ? 1.0f : 0.0f, rs.outlineJitterSpeed, rs.outlineJitterStrength, rs.objHatchingScale);
                 ubo.ppWeatherSSR = glm::vec4(rs.enableWeather ? 1.0f : 0.0f, rs.weatherIntensity, rs.enableSSR ? 1.0f : 0.0f, rs.ssrSteps);
                 ubo.ppSSSS = glm::vec4(rs.enableSSSS ? 1.0f : 0.0f, rs.ssssWidth, rs.ssrThickness, (float)rs.vrsMode);
                 ubo.ppWeatherParams = glm::vec4(rs.weatherSpeed, rs.weatherSize, rs.weatherDensity, rs.weatherDistortion);
+
+                ubo.cgGlobalLift = glm::vec4(rs.cgGlobalLift[0], rs.cgGlobalLift[1], rs.cgGlobalLift[2], rs.cgGlobalLift[3]);
+                ubo.cgGlobalGamma = glm::vec4(rs.cgGlobalGamma[0], rs.cgGlobalGamma[1], rs.cgGlobalGamma[2], rs.cgGlobalGamma[3]);
+                ubo.cgGlobalGain = glm::vec4(rs.cgGlobalGain[0], rs.cgGlobalGain[1], rs.cgGlobalGain[2], rs.cgGlobalGain[3]);
+                ubo.cgGlobalOffset = glm::vec4(rs.cgGlobalOffset[0], rs.cgGlobalOffset[1], rs.cgGlobalOffset[2], rs.cgGlobalOffset[3]);
+                ubo.cgShadowsLift = glm::vec4(rs.cgShadowsLift[0], rs.cgShadowsLift[1], rs.cgShadowsLift[2], rs.cgShadowsLift[3]);
+                ubo.cgShadowsGamma = glm::vec4(rs.cgShadowsGamma[0], rs.cgShadowsGamma[1], rs.cgShadowsGamma[2], rs.cgShadowsGamma[3]);
+                ubo.cgShadowsGain = glm::vec4(rs.cgShadowsGain[0], rs.cgShadowsGain[1], rs.cgShadowsGain[2], rs.cgShadowsGain[3]);
+                ubo.cgShadowsOffset = glm::vec4(rs.cgShadowsOffset[0], rs.cgShadowsOffset[1], rs.cgShadowsOffset[2], rs.cgShadowsOffset[3]);
+                ubo.cgMidtonesLift = glm::vec4(rs.cgMidtonesLift[0], rs.cgMidtonesLift[1], rs.cgMidtonesLift[2], rs.cgMidtonesLift[3]);
+                ubo.cgMidtonesGamma = glm::vec4(rs.cgMidtonesGamma[0], rs.cgMidtonesGamma[1], rs.cgMidtonesGamma[2], rs.cgMidtonesGamma[3]);
+                ubo.cgMidtonesGain = glm::vec4(rs.cgMidtonesGain[0], rs.cgMidtonesGain[1], rs.cgMidtonesGain[2], rs.cgMidtonesGain[3]);
+                ubo.cgMidtonesOffset = glm::vec4(rs.cgMidtonesOffset[0], rs.cgMidtonesOffset[1], rs.cgMidtonesOffset[2], rs.cgMidtonesOffset[3]);
+                ubo.cgHighlightsLift = glm::vec4(rs.cgHighlightsLift[0], rs.cgHighlightsLift[1], rs.cgHighlightsLift[2], rs.cgHighlightsLift[3]);
+                ubo.cgHighlightsGamma = glm::vec4(rs.cgHighlightsGamma[0], rs.cgHighlightsGamma[1], rs.cgHighlightsGamma[2], rs.cgHighlightsGamma[3]);
+                ubo.cgHighlightsGain = glm::vec4(rs.cgHighlightsGain[0], rs.cgHighlightsGain[1], rs.cgHighlightsGain[2], rs.cgHighlightsGain[3]);
+                ubo.cgHighlightsOffset = glm::vec4(rs.cgHighlightsOffset[0], rs.cgHighlightsOffset[1], rs.cgHighlightsOffset[2], rs.cgHighlightsOffset[3]);
+                ubo.cgRgbMixerRed = glm::vec4(rs.cgRgbMixerRed[0], rs.cgRgbMixerRed[1], rs.cgRgbMixerRed[2], 0.0f);
+                ubo.cgRgbMixerGreen = glm::vec4(rs.cgRgbMixerGreen[0], rs.cgRgbMixerGreen[1], rs.cgRgbMixerGreen[2], 0.0f);
+                ubo.cgRgbMixerBlue = glm::vec4(rs.cgRgbMixerBlue[0], rs.cgRgbMixerBlue[1], rs.cgRgbMixerBlue[2], 0.0f);
+                ubo.ppBlurs = glm::vec4(rs.blurMode, rs.blurStrength, rs.blurRadius, 0.0f);
+                ubo.ppBlurCenter = glm::vec4(rs.radialBlurCenter[0], rs.radialBlurCenter[1], rs.enableAnamorphic ? 1.0f : 0.0f, 0.0f);
+                ubo.ppColorFX = glm::vec4(rs.enableColorInvert ? 1.0f : 0.0f, rs.enableFalseColor ? 1.0f : 0.0f, rs.enableDepthView ? 1.0f : 0.0f, rs.enableFilmDamage ? 1.0f : 0.0f);
+                ubo.ppFilmDamage = glm::vec4(rs.filmDamageIntensity, rs.filmDamageScratches, 0.0f, 0.0f);
+                ubo.ppEdgeDetect = glm::vec4(rs.enableEdgeDetect ? 1.0f : 0.0f, rs.edgeWidth, rs.edgeBrightness, rs.edgeGamma);
+                ubo.ppEdgeDetect2 = glm::vec4(rs.edgeBlur, (float)rs.edgeColorMode, 0.0f, 0.0f);
+                ubo.ppEdgeColor = glm::vec4(rs.edgeCustomColor[0], rs.edgeCustomColor[1], rs.edgeCustomColor[2], 1.0f);
+                ubo.ppEmboss = glm::vec4(rs.enableEmboss ? 1.0f : 0.0f, rs.embossStrength, rs.embossAngle, (float)rs.embossStyle);
+                ubo.ppSketch = glm::vec4(rs.enableSketch ? 1.0f : 0.0f, rs.sketchStrokeStrength, rs.sketchStrokeLength, rs.sketchThreshold);
+                ubo.ppSketch2 = glm::vec4(rs.sketchShadowLevel, rs.sketchShadowsWeight, rs.sketchMidtonesWeight, rs.sketchHighlightsWeight);
+                ubo.ppHalftone = glm::vec4(rs.enableHalftone ? 1.0f : 0.0f, rs.halftoneScale, rs.halftoneContrast, rs.halftoneTex ? 1.0f : 0.0f);
+                ubo.ppDitherData = glm::vec4((float)rs.ditherMode, rs.ditherScale, 0.0f, 0.0f);
+                ubo.ditherShadow = glm::vec4(rs.ditherShadowColor[0], rs.ditherShadowColor[1], rs.ditherShadowColor[2], 1.0f);
+                ubo.ditherMid = glm::vec4(rs.ditherMidColor[0], rs.ditherMidColor[1], rs.ditherMidColor[2], 1.0f);
+                ubo.ditherHighlight = glm::vec4(rs.ditherHighlightColor[0], rs.ditherHighlightColor[1], rs.ditherHighlightColor[2], 1.0f);
+                ubo.ppWarp = glm::vec4(rs.enableTexWarp ? 1.f : 0.f, rs.texWarpStrength, rs.texWarpSpeed, rs.enableVtxWarp ? 1.f : 0.f);
+                ubo.ppWarp2 = glm::vec4(rs.vtxWarpStrength, rs.vtxWarpSpeed, rs.vtxWarpScale, 0.f);
+                ubo.ppColorComp = glm::vec4(rs.enableColorComp ? 1.f : 0.f, rs.colorCompLevels, rs.enableCMAA ? 1.f : 0.f, rs.paletteTex ? 1.f : 0.f);
+                ubo.shadowRampColor1 = glm::vec4(rs.shadowRampColor1[0], rs.shadowRampColor1[1], rs.shadowRampColor1[2], rs.enableShadowRamp ? 1.f : 0.f);
+                ubo.shadowRampColor2 = glm::vec4(rs.shadowRampColor2[0], rs.shadowRampColor2[1], rs.shadowRampColor2[2], 1.f);
 
                 // Сохраняем чистую проекцию ДО тряски для следующего кадра
                 glm::mat4 unjitteredProj = ubo.projection;
@@ -927,6 +970,9 @@ namespace burnhope
                 }
                 prevView = ubo.view;
                 prevSunDir = shadowSystem->getSunDir();
+                
+                // FIX: Обновляем матрицу предыдущего кадра для правильной работы Motion Blur
+                prevViewProj = unjitteredProj * ubo.view; 
 
 
                                 auto currentCascadeMats = shadowSystem->getCSM()->calculateMatrices(
@@ -1490,7 +1536,21 @@ namespace burnhope
                     RenderPipeline::createImageBarrier(gtaoOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT)
                 }, [&](VkCommandBuffer cmd)
                                        {
-                    std::vector<VkDescriptorSet> computeSets = { globalDescriptorSets[frameIndex], gBufferSet, shadowSet, lightSet, computeOutputSet, rcSystem->getGISet(), gtaoSet, rtSet, globalRTReflectionSystem->rtSet, vsmSet, portalInfoSet, globalVolumetricReadSet };
+                    std::vector<VkDescriptorSet> computeSets = { 
+        globalDescriptorSets[frameIndex], 
+        gBufferSet, 
+        shadowSet, 
+        lightSet, 
+        computeOutputSet, 
+        rcSystem->getGISet(), 
+        gtaoSet, 
+        rtSet, 
+        globalRTReflectionSystem->rtSet, 
+        vsmSet, 
+        portalInfoSet, 
+        globalVolumetricReadSet,
+        textureSet // <--- Добавляем недостающий набор сюда!
+    };
                     lightingSystem->computeLighting(cmd, computeSets, extent.width, extent.height); });
 
                 renderPipeline.addPass("SSGI Pass", {RenderPipeline::createImageBarrier(hdrOutputTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT), RenderPipeline::createImageBarrier(ssgiRawTexture->getImage(), VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT)}, [&](VkCommandBuffer cmd)
@@ -1604,6 +1664,9 @@ namespace burnhope
                                    .addBinding(5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT)
                                    .addBinding(6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                                    .addBinding(7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
+                                   .addBinding(8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
+                                   .addBinding(9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
+                                   .addBinding(10, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
                                    .build();
         exposureBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice, sizeof(float), 1,
@@ -1714,9 +1777,28 @@ namespace burnhope
         auto exposureInfo = exposureBuffer->descriptorInfo();
 
         VkDescriptorImageInfo dirtInfo{};
-        dirtInfo.sampler = defaultDirtTex->getSampler();
-        dirtInfo.imageView = defaultDirtTex->getImageView();
+        auto actualDirtTex = uiManager->GetContext().renderSettings.lensDirtTex ? uiManager->GetContext().renderSettings.lensDirtTex : defaultDirtTex;
+        dirtInfo.sampler = actualDirtTex->getSampler();
+        dirtInfo.imageView = actualDirtTex->getImageView();
         dirtInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkDescriptorImageInfo halftoneInfo{};
+        auto actualHalftoneTex = uiManager->GetContext().renderSettings.halftoneTex ? uiManager->GetContext().renderSettings.halftoneTex : defaultWhiteTex;
+        halftoneInfo.sampler = actualHalftoneTex->getSampler();
+        halftoneInfo.imageView = actualHalftoneTex->getImageView();
+        halftoneInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkDescriptorImageInfo paletteInfo{};
+        auto actualPaletteTex = uiManager->GetContext().renderSettings.paletteTex ? uiManager->GetContext().renderSettings.paletteTex : defaultWhiteTex;
+        paletteInfo.sampler = actualPaletteTex->getSampler();
+        paletteInfo.imageView = actualPaletteTex->getImageView();
+        paletteInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        
+        VkDescriptorImageInfo ditherInfo{};
+        auto actualDitherTex = uiManager->GetContext().renderSettings.ditherTex ? uiManager->GetContext().renderSettings.ditherTex : defaultWhiteTex;
+        ditherInfo.sampler = actualDitherTex->getSampler();
+        ditherInfo.imageView = actualDitherTex->getImageView();
+        ditherInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         BurnhopeDescriptorWriter(*postProcessLayoutPtr, *globalPool)
             .writeImage(0, &ppOutInfo)
@@ -1727,6 +1809,9 @@ namespace burnhope
             .writeBuffer(5, &exposureInfo)
             .writeImage(6, &dirtInfo)
             .writeImage(7, &normInfo)
+            .writeImage(8, &halftoneInfo)
+            .writeImage(9, &paletteInfo)
+            .writeImage(10, &ditherInfo)
             .build(postProcessSet);
         lightUboBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice, sizeof(LightUBOData), 1,
@@ -1933,6 +2018,7 @@ namespace burnhope
         {
             std::vector<VkDescriptorSet> toFree = {postProcessSet};
             globalPool->freeDescriptors(toFree);
+            postProcessSet = VK_NULL_HANDLE;
         }
         auto normInfo = gBuffer->getNormalRoughness()->getImageInfo();
         auto albInfo = gBuffer->getAlbedoMetallic()->getImageInfo();
@@ -2011,6 +2097,7 @@ namespace burnhope
             if (globalVolumetricReadSet != VK_NULL_HANDLE) { 
                 std::vector<VkDescriptorSet> toFree = {globalVolumetricReadSet}; 
                 globalPool->freeDescriptors(toFree); 
+                globalVolumetricReadSet = VK_NULL_HANDLE;
             }
             
             VkDescriptorImageInfo volReadInfo{}; 
@@ -2049,9 +2136,28 @@ namespace burnhope
         resolvedInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         auto exposureInfo = exposureBuffer->descriptorInfo();
         VkDescriptorImageInfo dirtInfo{};
-        dirtInfo.sampler = defaultDirtTex->getSampler();
-        dirtInfo.imageView = defaultDirtTex->getImageView();
+        auto actualDirtTex = uiManager->GetContext().renderSettings.lensDirtTex ? uiManager->GetContext().renderSettings.lensDirtTex : defaultDirtTex;
+        dirtInfo.sampler = actualDirtTex->getSampler();
+        dirtInfo.imageView = actualDirtTex->getImageView();
         dirtInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkDescriptorImageInfo halftoneInfo{};
+        auto actualHalftoneTex = uiManager->GetContext().renderSettings.halftoneTex ? uiManager->GetContext().renderSettings.halftoneTex : defaultWhiteTex;
+        halftoneInfo.sampler = actualHalftoneTex->getSampler();
+        halftoneInfo.imageView = actualHalftoneTex->getImageView();
+        halftoneInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkDescriptorImageInfo paletteInfo{};
+        auto actualPaletteTex = uiManager->GetContext().renderSettings.paletteTex ? uiManager->GetContext().renderSettings.paletteTex : defaultWhiteTex;
+        paletteInfo.sampler = actualPaletteTex->getSampler();
+        paletteInfo.imageView = actualPaletteTex->getImageView();
+        paletteInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        
+        VkDescriptorImageInfo ditherInfo{};
+        auto actualDitherTex = uiManager->GetContext().renderSettings.ditherTex ? uiManager->GetContext().renderSettings.ditherTex : defaultWhiteTex;
+        ditherInfo.sampler = actualDitherTex->getSampler();
+        ditherInfo.imageView = actualDitherTex->getImageView();
+        ditherInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         BurnhopeDescriptorWriter(*postProcessLayoutPtr, *globalPool)
             .writeImage(0, &ppOutInfo)
@@ -2062,6 +2168,9 @@ namespace burnhope
             .writeBuffer(5, &exposureInfo)
             .writeImage(6, &dirtInfo)
             .writeImage(7, &normInfo)
+            .writeImage(8, &halftoneInfo)
+            .writeImage(9, &paletteInfo)
+            .writeImage(10, &ditherInfo)
             .build(postProcessSet);
         VkDescriptorImageInfo ssgiRawInfo{};
         ssgiRawInfo.imageView = ssgiRawTexture->getImageView();
