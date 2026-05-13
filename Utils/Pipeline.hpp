@@ -7,8 +7,6 @@ namespace burnhope
     struct PipelineConfigInfo
     {
         PipelineConfigInfo() = default;
-        PipelineConfigInfo(const PipelineConfigInfo &) = delete;
-        PipelineConfigInfo &operator=(const PipelineConfigInfo &) = delete;
         std::vector<VkVertexInputBindingDescription> bindingDescriptions{};
         std::vector<VkVertexInputAttributeDescription> attributeDescriptions{};
         VkPipelineViewportStateCreateInfo viewportInfo;
@@ -29,8 +27,7 @@ namespace burnhope
     public:
         BurnhopePipeline(
             BurnhopeDevice &device,
-            const std::string &vertFilepath,
-            const std::string &fragFilepath,
+            const std::vector<std::string>& shaderPaths,
             const PipelineConfigInfo &configInfo);
         ~BurnhopePipeline();
         BurnhopePipeline(
@@ -49,13 +46,11 @@ namespace burnhope
     private:
         static std::vector<char> readFile(const std::string &filepath);
         void createGraphicsPipeline(
-            const std::string &vertFilepath,
-            const std::string &fragFilepath,
+            const std::vector<std::string>& shaderPaths,
             const PipelineConfigInfo &configInfo);
         void createShaderModule(const std::vector<char> &code, VkShaderModule *shaderModule);
         BurnhopeDevice &lveDevice;
         VkPipeline graphicsPipeline;
-        VkShaderModule vertShaderModule;
-        VkShaderModule fragShaderModule;
+        std::vector<VkShaderModule> shaderModules;
     };
 }

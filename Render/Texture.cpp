@@ -20,6 +20,43 @@ namespace burnhope
         createTextureSampler();
         updateDescriptor();
     }
+        BurnhopeTexture::BurnhopeTexture(
+        BurnhopeDevice &device,
+        VmaAllocation aliasedMemory,
+        VkFormat format,
+        VkExtent3D extent,
+        VkImageUsageFlags usage,
+        VkSampleCountFlagBits sampleCount)
+        : mDevice{device}
+    {
+        mFormat = format;
+        mExtent = extent;
+        VkImageAspectFlags aspectMask = (format == VK_FORMAT_D32_SFLOAT || format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.format = format;
+        imageInfo.extent = extent;
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.samples = sampleCount;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.usage = usage;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+        // VMA Aliasing: Переиспользуем существующую память!
+        vmaCreateAliasingImage(mDevice.getAllocator(), aliasedMemory, &imageInfo, &mTextureImage);
+        mTextureImageMemory = VK_NULL_HANDLE; // Мы не владеем этой памятью, освобождать её не нужно
+
+        createTextureImageView(VK_IMAGE_VIEW_TYPE_2D);
+        if (usage & VK_IMAGE_USAGE_SAMPLED_BIT) {
+            mTextureSampler = mDevice.getLinearClampSampler();
+            mDescriptor.sampler = mTextureSampler;
+            mDescriptor.imageView = mTextureImageView;
+            mDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
+    }
     BurnhopeTexture::BurnhopeTexture(
         BurnhopeDevice &device,
         VkFormat format,
@@ -147,7 +184,11 @@ namespace burnhope
     {
         // vkDestroySampler(mDevice.device(), mTextureSampler, nullptr); // Теперь самплеры глобальные!
         vkDestroyImageView(mDevice.device(), mTextureImageView, nullptr);
-        vmaDestroyImage(mDevice.getAllocator(), mTextureImage, mTextureImageMemory);
+          if (mTextureImageMemory != VK_NULL_HANDLE) {
+            vmaDestroyImage(mDevice.getAllocator(), mTextureImage, mTextureImageMemory);
+        } else if (mTextureImage != VK_NULL_HANDLE) {
+            vkDestroyImage(mDevice.device(), mTextureImage, nullptr);
+        }
     }
     std::shared_ptr<BurnhopeTexture> BurnhopeTexture::createTextureFromFile(
         BurnhopeDevice &device, const std::string &filepath)
@@ -258,9 +299,9 @@ namespace burnhope
                 stagingBuffer,
                 stagingBufferMemory);
             void *data;
-            vkMapMemory(mDevice.device(), stagingBufferMemory, 0, allMipData.size(), 0, &data);
+            vmaMapMemory(mDevice.getAllocator(), stagingBufferMemory, &data);
             memcpy(data, allMipData.data(), allMipData.size());
-            vkUnmapMemory(mDevice.device(), stagingBufferMemory);
+            vmaUnmapMemory(mDevice.getAllocator(), stagingBufferMemory);
             VkImageCreateInfo imageInfo{};
             imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
             imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -286,8 +327,7 @@ namespace burnhope
             mDevice.endSingleTimeCommands(commandBuffer);
             transitionLayout(mDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
             mTextureLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            vkDestroyBuffer(mDevice.device(), stagingBuffer, nullptr);
-            vkFreeMemory(mDevice.device(), stagingBufferMemory, nullptr);
+            vmaDestroyBuffer(mDevice.getAllocator(), stagingBuffer, stagingBufferMemory);
             return;
         }
         int texWidth, texHeight, texChannels;
@@ -301,7 +341,7 @@ namespace burnhope
         mFormat = isSRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
         mExtent = {static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 1};
         VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
+        VmaAllocation stagingBufferMemory;
         mDevice.createBuffer(
             imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -565,14 +605,14 @@ namespace burnhope
         }
         file.close();
         VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
+        VmaAllocation stagingBufferMemory;
         mDevice.createBuffer(allMipData.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                              stagingBuffer, stagingBufferMemory);
         void *data;
-        vkMapMemory(mDevice.device(), stagingBufferMemory, 0, allMipData.size(), 0, &data);
+        vmaMapMemory(mDevice.getAllocator(), stagingBufferMemory, &data);
         memcpy(data, allMipData.data(), allMipData.size());
-        vkUnmapMemory(mDevice.device(), stagingBufferMemory);
+        vmaUnmapMemory(mDevice.getAllocator(), stagingBufferMemory);
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -592,8 +632,7 @@ namespace burnhope
         mDevice.endSingleTimeCommands(commandBuffer);
         transitionLayout(mDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         mTextureLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        vkDestroyBuffer(mDevice.device(), stagingBuffer, nullptr);
-        vkFreeMemory(mDevice.device(), stagingBufferMemory, nullptr);
+        vmaDestroyBuffer(mDevice.getAllocator(), stagingBuffer, stagingBufferMemory);
         return true;
     }
     void BurnhopeTexture::generateAndCacheBHTex(const std::string &srcPath, const std::string &cachePath, bool isSRGB)

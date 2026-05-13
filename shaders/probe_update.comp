@@ -95,21 +95,22 @@ layout(set = 3, binding = 0) uniform accelerationStructureEXT tlas;
 
 struct Vertex {
     vec3 position;
-    vec3 normal;
-    vec2 texUV;
-    vec3 tangent;
-    vec3 bitangent;
+    uint normal;
+    uint texUV;
+    uint tangent;
 };
-layout(buffer_reference, scalar) readonly buffer VertexBuffer { Vertex v[]; };
-layout(buffer_reference, scalar) readonly buffer IndexBuffer  { uint i[]; }; 
+layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer VertexBuffer { Vertex v[]; };
+layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer IndexBuffer  { uint i[]; }; 
 
 struct ObjectData {
     mat4 modelMatrix;
     uint materialID;
-    uint pad0;
+    uint indexCount;
+    uint pad[2];
     uint64_t vertexBufferAddress;
     uint64_t indexBufferAddress;
-    uint64_t pad1; 
+    vec4 aabbMin;
+    vec4 aabbMax;
 };
 
 struct MaterialData {
@@ -142,6 +143,18 @@ layout(push_constant) uniform RC {
     ivec4 probeCount; 
     vec4  params;     
 } rc;
+
+vec3 unpackNormal(uint n) {
+    vec3 norm;
+    norm.x = float(n & 0x3FF) / 1023.0 * 2.0 - 1.0;
+    norm.y = float((n >> 10) & 0x3FF) / 1023.0 * 2.0 - 1.0;
+    norm.z = float((n >> 20) & 0x3FF) / 1023.0 * 2.0 - 1.0;
+    return normalize(norm);
+}
+
+vec2 unpackUV(uint uvPacked) {
+    return unpackHalf2x16(uvPacked);
+}
 
 // Декодирование направления луча из октаэдра
 vec3 octaDecode(vec2 uv) {
@@ -187,16 +200,16 @@ vec3 EvaluateHit(int objIndex, int primID, vec2 bary, vec3 hitPos) {
     uint i1 = indices.i[primID * 3 + 1];
     uint i2 = indices.i[primID * 3 + 2];
     
-    Vertex v0 = vertices.v[i0];
-    Vertex v1 = vertices.v[i1];
-    Vertex v2 = vertices.v[i2];
+    Vertex v0_raw = vertices.v[i0];
+    Vertex v1_raw = vertices.v[i1];
+    Vertex v2_raw = vertices.v[i2];
     
     float u = bary.x;
     float v = bary.y;
     float w = clamp(1.0 - u - v, 0.0, 1.0); // Защита от выхода за пределы
     
-    vec2 finalUV = v0.texUV * w + v1.texUV * u + v2.texUV * v;
-    vec3 localNormal = v0.normal * w + v1.normal * u + v2.normal * v;
+    vec2 finalUV = unpackUV(v0_raw.texUV) * w + unpackUV(v1_raw.texUV) * u + unpackUV(v2_raw.texUV) * v;
+    vec3 localNormal = unpackNormal(v0_raw.normal) * w + unpackNormal(v1_raw.normal) * u + unpackNormal(v2_raw.normal) * v;
     
     mat3 normalMatrix = transpose(inverse(mat3(obj.modelMatrix)));
     vec3 worldNormal = normalize(normalMatrix * localNormal);

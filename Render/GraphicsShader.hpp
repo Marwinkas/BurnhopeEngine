@@ -12,8 +12,7 @@ namespace burnhope
     {
     public:
         GraphicsShader(BurnhopeDevice &device,
-                       const std::string &vertPath,
-                       const std::string &fragPath,
+                       const std::vector<std::string> &shaderPaths,
                        const std::vector<VkDescriptorSetLayout> &layouts,
                        const std::vector<VkPushConstantRange> &pushRanges,
                        PipelineConfigInfo &config)
@@ -30,7 +29,7 @@ namespace burnhope
                 throw std::runtime_error("Не удалось создать pipeline layout!");
             }
             config.pipelineLayout = pipelineLayout;
-            pipeline = std::make_unique<BurnhopePipeline>(device, vertPath, fragPath, config);
+            pipeline = std::make_unique<BurnhopePipeline>(device, shaderPaths, config);
         }
         ~GraphicsShader()
         {

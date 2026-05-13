@@ -117,17 +117,8 @@ namespace burnhope
             meshopt_optimizeVertexCache(indices.data(), indices.data(), indices.size(), vertices.size());
             meshopt_optimizeOverdraw(indices.data(), indices.data(), indices.size(), &vertices[0].position.x, vertices.size(), sizeof(Vertex), 1.05f);
             meshopt_optimizeVertexFetch(vertices.data(), indices.data(), indices.size(), vertices.data(), vertices.size(), sizeof(Vertex));
-            if (aimesh->mNumVertices > CLUSTER_SPLIT_THRESHOLD)
-            {
-                writeMeshAsCluster(outFile, vertices, indices,
-                                   aimesh, aabbMin, aabbMax,
-                                   modelHeader.meshCount);
-            }
-            else
-            {
-                writeMeshWithLODs(outFile, vertices, indices, aimesh, aabbMin, aabbMax);
-                modelHeader.meshCount++;
-            }
+            writeMeshWithLODs(outFile, vertices, indices, aimesh, aabbMin, aabbMax);
+            modelHeader.meshCount++;
         }
         outFile.seekp(0);
         outFile.write(reinterpret_cast<const char *>(&modelHeader), sizeof(BHModelHeader));
@@ -146,8 +137,8 @@ namespace burnhope
         lods.push_back(indices);
         if (!vertices.empty() && indices.size() >= 300)
         {
-            float thresholds[2] = {0.5f, 0.2f};
-            for (int i = 0; i < 2; i++)
+            float thresholds[4] = {0.5f, 0.25f, 0.1f, 0.05f}; // Агрессивные Cluster-level LODs
+            for (int i = 0; i < 4; i++)
             {
                 size_t target = size_t(lods[0].size() * thresholds[i]);
                 if (target < 30)

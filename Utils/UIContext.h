@@ -349,6 +349,11 @@ namespace burnhope {
         bool needsRebuild = false;
         bool pendingNewScene = false;
         std::string pendingSceneLoadPath = "";
+        std::string pendingModelLoadPath = "";
+        entt::entity pendingModelEntity = entt::null;
+        std::string pendingMatLoadPath = "";
+        uint32_t pendingMatSlot = 0;
+        entt::entity pendingMatEntity = entt::null;
         std::vector<std::shared_ptr<void>> safeDeleteQueue;
         std::vector<PendingDeletion> pendingDeletions;
         std::vector<SceneSnapshot> undoStack;

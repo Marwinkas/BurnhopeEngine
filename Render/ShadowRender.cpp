@@ -21,7 +21,7 @@ namespace burnhope
         VkPushConstantRange pushRange{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ShadowPushConstant)};
         shader = std::make_unique<GraphicsShader>(
             lveDevice,
-            "shaders/shadow.vert.spv", "shaders/shadow.frag.spv",
+            std::vector<std::string>{"shaders/shadow.vert.spv", "shaders/shadow.frag.spv"},
             std::vector<VkDescriptorSetLayout>{globalSetLayout},
             std::vector<VkPushConstantRange>{pushRange},
             config);
@@ -30,10 +30,9 @@ namespace burnhope
 void ShadowRenderSystem::renderShadow(
     VkCommandBuffer commandBuffer,
     const glm::mat4 &lightSpaceMatrix,
-    CullingSystem &cullingSystem,
     entt::registry &registry,
-    VkDescriptorSet objectStorageSet,
-            bool renderDynamicOnly = false);
+            VkDescriptorSet objectStorageSet,
+            bool renderDynamicOnly)
 {
     if (objectStorageSet == VK_NULL_HANDLE)
         return;

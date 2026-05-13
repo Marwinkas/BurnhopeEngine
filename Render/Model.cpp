@@ -45,6 +45,7 @@ namespace burnhope
     }
     BurnhopeModel::BurnhopeModel(BurnhopeDevice &device, const Builder &builder) : lveDevice{device}
     {
+        materialCount = static_cast<uint32_t>(builder.materialPaths.size());
         createVertexBuffers(builder.vertices);
         createIndexBuffers(builder.indices);
         
@@ -118,8 +119,8 @@ namespace burnhope
             return;
         }
         
-        indexType = (vertexCount <= 65535) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
-        uint32_t indexSize = (indexType == VK_INDEX_TYPE_UINT16) ? sizeof(uint16_t) : sizeof(uint32_t);
+        indexType = VK_INDEX_TYPE_UINT32; // Принудительно 32-бита для прямого доступа из Mesh/RT шейдеров
+        uint32_t indexSize = sizeof(uint32_t);
         VkDeviceSize bufferSize = indexSize * indexCount;
         
         BurnhopeBuffer stagingBuffer{
@@ -131,18 +132,7 @@ namespace burnhope
         };
         stagingBuffer.map();
         
-        if (indexType == VK_INDEX_TYPE_UINT16)
-        {
-            std::vector<uint16_t> indices16(indexCount);
-            for (size_t i = 0; i < indexCount; i++) {
-                indices16[i] = static_cast<uint16_t>(indices[i]);
-            }
-            stagingBuffer.writeToBuffer((void *)indices16.data());
-        }
-        else
-        {
-            stagingBuffer.writeToBuffer((void *)indices.data());
-        }
+        stagingBuffer.writeToBuffer((void *)indices.data());
         
         indexBuffer = std::make_unique<BurnhopeBuffer>(
         lveDevice,
@@ -227,6 +217,14 @@ namespace burnhope
         sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
         pfnGetAccelerationStructureBuildSizesKHR(lveDevice.device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, maxPrimitiveCounts.data(), &sizeInfo);
 
+        VkPhysicalDeviceAccelerationStructurePropertiesKHR asProps{};
+        asProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+        VkPhysicalDeviceProperties2 props2{};
+        props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        props2.pNext = &asProps;
+        vkGetPhysicalDeviceProperties2(lveDevice.getPhysicalDevice(), &props2);
+        uint32_t scratchAlignment = asProps.minAccelerationStructureScratchOffsetAlignment;
+
         // 5. Создаем буфер для BLAS
         blasBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice,
@@ -249,7 +247,7 @@ namespace burnhope
         // 7. Scratch буфер
         BurnhopeBuffer scratchBuffer(
             lveDevice,
-            sizeInfo.buildScratchSize,
+            sizeInfo.buildScratchSize + scratchAlignment,
             1,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
@@ -258,7 +256,8 @@ namespace burnhope
         VkBufferDeviceAddressInfo scratchAddressInfo{};
         scratchAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
         scratchAddressInfo.buffer = scratchBuffer.getBuffer();
-        buildInfo.scratchData.deviceAddress = vkGetBufferDeviceAddress(lveDevice.device(), &scratchAddressInfo);
+        VkDeviceAddress rawAddress = vkGetBufferDeviceAddress(lveDevice.device(), &scratchAddressInfo);
+        buildInfo.scratchData.deviceAddress = (rawAddress + scratchAlignment - 1) & ~(uint64_t(scratchAlignment) - 1);
 
         // 8. Билд на GPU
         buildInfo.dstAccelerationStructure = blasHandle;
@@ -322,7 +321,7 @@ namespace burnhope
         attributeDescriptions[1].offset = offsetof(Vertex, normal);
         attributeDescriptions[2].binding = 0;
         attributeDescriptions[2].location = 2;
-        attributeDescriptions[2].format = VK_FORMAT_R16G16_SFLOAT;
+        attributeDescriptions[2].format = VK_FORMAT_R16G16_UNORM;
         attributeDescriptions[2].offset = offsetof(Vertex, texUV);
         attributeDescriptions[3].binding = 0;
         attributeDescriptions[3].location = 3;

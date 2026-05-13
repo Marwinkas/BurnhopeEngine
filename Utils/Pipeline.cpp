@@ -11,17 +11,17 @@ namespace burnhope
 {
   BurnhopePipeline::BurnhopePipeline(
       BurnhopeDevice &device,
-      const std::string &vertFilepath,
-      const std::string &fragFilepath,
+      const std::vector<std::string> &shaderPaths,
       const PipelineConfigInfo &configInfo)
       : lveDevice{device}
   {
-    createGraphicsPipeline(vertFilepath, fragFilepath, configInfo);
+    createGraphicsPipeline(shaderPaths, configInfo);
   }
   BurnhopePipeline::~BurnhopePipeline()
   {
-    vkDestroyShaderModule(lveDevice.device(), vertShaderModule, nullptr);
-    vkDestroyShaderModule(lveDevice.device(), fragShaderModule, nullptr);
+    for (auto module : shaderModules) {
+        vkDestroyShaderModule(lveDevice.device(), module, nullptr);
+    }
     vkDestroyShaderModule(lveDevice.device(), compShaderModule, nullptr);
     vkDestroyPipeline(lveDevice.device(), graphicsPipeline, nullptr);
     vkDestroyPipeline(lveDevice.device(), computePipeline, nullptr);
@@ -42,8 +42,7 @@ namespace burnhope
     return buffer;
   }
   void BurnhopePipeline::createGraphicsPipeline(
-      const std::string &vertFilepath,
-      const std::string &fragFilepath,
+      const std::vector<std::string> &shaderPaths,
       const PipelineConfigInfo &configInfo)
   {
     assert(
@@ -52,27 +51,29 @@ namespace burnhope
     assert(
         configInfo.renderPass != VK_NULL_HANDLE &&
         "Cannot create graphics pipeline: no renderPass provided in configInfo");
-    auto vertCode = readFile(vertFilepath);
-    createShaderModule(vertCode, &vertShaderModule);
-    VkPipelineShaderStageCreateInfo shaderStages[2];
-    shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    shaderStages[0].module = vertShaderModule;
-    shaderStages[0].pName = "main";
-    shaderStages[0].flags = 0;
-    shaderStages[0].pNext = nullptr;
-    shaderStages[0].pSpecializationInfo = nullptr;
-    bool hasFrag = !fragFilepath.empty();
-    if (hasFrag) {
-        auto fragCode = readFile(fragFilepath);
-        createShaderModule(fragCode, &fragShaderModule);
-    shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    shaderStages[1].module = fragShaderModule;
-    shaderStages[1].pName = "main";
-    shaderStages[1].flags = 0;
-    shaderStages[1].pNext = nullptr;
-    shaderStages[1].pSpecializationInfo = nullptr;
+
+    std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
+    bool isMeshShader = false;
+
+    for (const auto& path : shaderPaths) {
+        if (path.empty()) continue;
+        auto code = readFile(path);
+        VkShaderModule module;
+        createShaderModule(code, &module);
+        shaderModules.push_back(module);
+
+        VkPipelineShaderStageCreateInfo stageInfo{};
+        stageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        if (path.find(".vert") != std::string::npos) stageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        else if (path.find(".frag") != std::string::npos) stageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        else if (path.find(".mesh") != std::string::npos) { stageInfo.stage = VK_SHADER_STAGE_MESH_BIT_EXT; isMeshShader = true; }
+        else if (path.find(".task") != std::string::npos) { stageInfo.stage = VK_SHADER_STAGE_TASK_BIT_EXT; isMeshShader = true; }
+        
+        stageInfo.module = module;
+        stageInfo.pName = "main";
+        shaderStages.push_back(stageInfo);
+    }
+
     auto &bindingDescriptions = configInfo.bindingDescriptions;
     auto &attributeDescriptions = configInfo.attributeDescriptions;
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
@@ -84,13 +85,17 @@ namespace burnhope
     vertexInputInfo.pVertexBindingDescriptions = bindingDescriptions.data();
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.stageCount = 2;
+    pipelineInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
+    pipelineInfo.pStages = shaderStages.data();
+
+    // Отключаем старый InputAssembly если используем Mesh Shaders!
+    if (isMeshShader) {
+        pipelineInfo.pVertexInputState = nullptr;
+        pipelineInfo.pInputAssemblyState = nullptr;
     } else {
-        pipelineInfo.stageCount = 1;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &configInfo.inputAssemblyInfo;
     }
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &configInfo.inputAssemblyInfo;
     pipelineInfo.pViewportState = &configInfo.viewportInfo;
     pipelineInfo.pRasterizationState = &configInfo.rasterizationInfo;
     pipelineInfo.pMultisampleState = &configInfo.multisampleInfo;
@@ -198,7 +203,7 @@ namespace burnhope
     configInfo.depthStencilInfo.back = configInfo.depthStencilInfo.front;
     //
 
-    configInfo.dynamicStateEnables = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    configInfo.dynamicStateEnables = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_BOUNDS};
     configInfo.dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
     configInfo.dynamicStateInfo.pDynamicStates = configInfo.dynamicStateEnables.data();
     configInfo.dynamicStateInfo.dynamicStateCount =

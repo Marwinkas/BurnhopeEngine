@@ -13,11 +13,12 @@ namespace burnhope
         : lveDevice{device}
     {
         renderSystemLayout = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                                 .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT)
-                                 .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT)
+                                 .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL)
+                                 .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL)
+                                 .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_TASK_BIT_EXT)
                                  .build();
         textureLayout = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                            .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT, 1000)
+                            .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_ALL, 1000)
                             .build();
         std::vector<VkDescriptorSetLayout> layouts = {
             globalSetLayout,
@@ -40,8 +41,7 @@ namespace burnhope
 
         shader = std::make_unique<GraphicsShader>(
             lveDevice,
-            "shaders/gbuffer.vert.spv",
-            "shaders/gbuffer.frag.spv",
+            std::vector<std::string>{"shaders/gbuffer.task.spv", "shaders/gbuffer.mesh.spv", "shaders/gbuffer.frag.spv"},
             layouts,
             std::vector<VkPushConstantRange>{pushConstantRange},
             pipelineConfig);
@@ -61,11 +61,17 @@ namespace burnhope
 
         // --- Z-PREPASS CONFIG ---
         PipelineConfigInfo zConfig = pipelineConfig;
-        zConfig.colorBlendInfo.attachmentCount = 0;
-        zConfig.colorBlendInfo.pAttachments = nullptr;
+        static std::vector<VkPipelineColorBlendAttachmentState> zBlendAttachments(5);
+        for (int i = 0; i < 5; i++)
+        {
+            zBlendAttachments[i].colorWriteMask = 0; // Строго запрещаем запись цвета!
+            zBlendAttachments[i].blendEnable = VK_FALSE;
+        }
+        zConfig.colorBlendInfo.attachmentCount = static_cast<uint32_t>(zBlendAttachments.size());
+        zConfig.colorBlendInfo.pAttachments = zBlendAttachments.data();
         zConfig.depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS;
         zConfig.depthStencilInfo.depthWriteEnable = VK_TRUE;
-        zPrepassShader = std::make_unique<GraphicsShader>(lveDevice, "shaders/gbuffer.vert.spv", "", layouts, std::vector<VkPushConstantRange>{pushConstantRange}, zConfig);
+        zPrepassShader = std::make_unique<GraphicsShader>(lveDevice, std::vector<std::string>{"shaders/gbuffer.task.spv", "shaders/gbuffer.mesh.spv"}, layouts, std::vector<VkPushConstantRange>{pushConstantRange}, zConfig);
 
         // --- G-BUFFER MAIN CONFIG ---
         pipelineConfig.depthStencilInfo.depthCompareOp = VK_COMPARE_OP_EQUAL;
@@ -80,12 +86,12 @@ namespace burnhope
         pipelineConfig.dynamicStateInfo.pDynamicStates = pipelineConfig.dynamicStateEnables.data();
 
         portalShader = std::make_unique<GraphicsShader>(
-            lveDevice, "shaders/gbuffer.vert.spv", "shaders/gbuffer.frag.spv",
+            lveDevice, std::vector<std::string>{"shaders/gbuffer.task.spv", "shaders/gbuffer.mesh.spv", "shaders/gbuffer.frag.spv"},
             layouts, std::vector<VkPushConstantRange>{pushConstantRange}, pipelineConfig);
         zConfig.dynamicStateEnables.push_back(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
         zConfig.dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(zConfig.dynamicStateEnables.size());
         zConfig.dynamicStateInfo.pDynamicStates = zConfig.dynamicStateEnables.data();
-        zPrepassPortalShader = std::make_unique<GraphicsShader>(lveDevice, "shaders/gbuffer.vert.spv", "", layouts, std::vector<VkPushConstantRange>{pushConstantRange}, zConfig);
+        zPrepassPortalShader = std::make_unique<GraphicsShader>(lveDevice, std::vector<std::string>{"shaders/gbuffer.task.spv", "shaders/gbuffer.mesh.spv"}, layouts, std::vector<VkPushConstantRange>{pushConstantRange}, zConfig);
     }
 
     void GeometryRenderSystem::renderEntities(
@@ -93,7 +99,6 @@ namespace burnhope
         entt::registry &registry,
         VkDescriptorSet storageSet,
         VkDescriptorSet textureSet,
-        CullingSystem &cullingSystem,
         uint32_t totalSubMeshCount,
         bool useStencil,
         uint32_t vrsMode,
@@ -125,26 +130,12 @@ namespace burnhope
         std::vector<VkDescriptorSet> sets = {frameInfo.globalDescriptorSet, storageSet, textureSet};
         currentShader->bindDescriptorSets(frameInfo.commandBuffer, sets);
 
-        auto view = registry.view<TransformComponent, MeshComponent>();
-        uint32_t instanceIndex = 0;
-
-        for (auto [entity, transformComp, meshComp] : view.each())
-        {
-            if (!meshComp.model || !meshComp.isVisible)
-                continue;
-
-            meshComp.model->bind(frameInfo.commandBuffer);
-            const auto &subMeshes = meshComp.model->getSubMeshes();
-            uint32_t subMeshCount = static_cast<uint32_t>(subMeshes.size());
-
-            vkCmdDrawIndexedIndirect(
-                frameInfo.commandBuffer,
-                cullingSystem.getDrawCommandBuffer(),
-                instanceIndex * sizeof(VkDrawIndexedIndirectCommand),
-                subMeshCount,
-                sizeof(VkDrawIndexedIndirectCommand));
-
-            instanceIndex += subMeshCount;
+        auto vkCmdDrawMeshTasksEXT = (PFN_vkCmdDrawMeshTasksEXT)vkGetDeviceProcAddr(lveDevice.device(), "vkCmdDrawMeshTasksEXT");
+        if (vkCmdDrawMeshTasksEXT) {
+            // 1 Task Workgroup = 1 объект сцены.
+            if (totalSubMeshCount > 0) {
+                vkCmdDrawMeshTasksEXT(frameInfo.commandBuffer, totalSubMeshCount, 1, 1);
+            }
         }
     }
 }

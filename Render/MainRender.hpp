@@ -4,7 +4,6 @@
 #include "../Utils/Descriptors.hpp"
 #include "../Utils/FrameInfo.hpp"
 #include "../Utils/Components.hpp"
-#include "CullingSystem.hpp"
 #include "GraphicsShader.hpp"
 #include <entt/entt.hpp>
 #include <memory>
@@ -23,11 +22,13 @@ namespace burnhope
 struct alignas(16) ObjectData {
     glm::mat4 modelMatrix;   // 64 байта
     uint32_t materialID;     // 4 байта
-    uint32_t pad0;           // 4 байта
+    uint32_t indexCount;     // 4 байта
+    uint32_t pad0[2];        // 8 байт
     uint64_t vertexBufferAddress; // 8 байт
     uint64_t indexBufferAddress;  // 8 байт
-    uint64_t pad1;           // 8 БАЙТ ДОБАВИТЬ! Итого: 96 байт
-};
+    glm::vec4 aabbMin;       // 16 байт
+    glm::vec4 aabbMax;       // 16 байт
+}; // Итого: 128 байт. Идеальное выравнивание.
  struct alignas(16) MaterialData
 {
     int albedoAlphaIdx; int normalIdx; int ormxIdx; int emissiveIdx;
@@ -53,7 +54,6 @@ static_assert(sizeof(MaterialData) % 16 == 0, "MaterialData size must be a multi
             entt::registry &registry,
             VkDescriptorSet storageSet,
             VkDescriptorSet textureSet,
-            CullingSystem &cullingSystem,
             uint32_t totalSubMeshCount,
             bool useStencil,
             uint32_t vrsMode = 0,

@@ -87,7 +87,6 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::unique_ptr<BurnhopeTexture> gtaoOutputTexture;
         std::unique_ptr<ShadowRenderSystem> shadowRenderSystem;
         std::unique_ptr<BurnhopeDescriptorSetLayout> shadowObjectLayoutPtr;
-        std::unique_ptr<CullingSystem> cullingSystem;
         uint32_t totalSubMeshCount = 0;
         VkDescriptorSet shadowObjectSet = VK_NULL_HANDLE;
         VkDescriptorSetLayout gBufferSetLayout;

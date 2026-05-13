@@ -80,8 +80,21 @@ set(ISPC_TEXCOMP_SOURCES
 
 # Создаем статичную библиотеку из этих файлов
 add_library(ispc_texcomp STATIC ${ISPC_TEXCOMP_SOURCES})
-set_target_properties(ispc_texcomp PROPERTIES POSITION_INDEPENDENT_CODE ON)
-# Делаем так, чтобы движок видел заголовок ispc_texcomp.h
+
+# Устанавливаем свойства корректно для компилятора ISPC
+set_target_properties(ispc_texcomp PROPERTIES 
+    POSITION_INDEPENDENT_CODE ON
+    # Используем только те флаги, которые понимает ISPC
+    # --nowarn отключает все предупреждения
+    ISPC_FLAGS "--arch=x86-64;--target=avx2;--nowarn"
+)
+
+# Если ты хочешь заглушить предупреждения в .cpp файлах (C++), 
+# которые линкуются в этой библиотеке, используй это отдельно:
+set_source_files_properties(${ISPC_DIR}/ispc_texcomp.cpp 
+                            ${ISPC_DIR}/ispc_texcomp_astc.cpp 
+                            PROPERTIES COMPILE_FLAGS "-w")
+
 target_include_directories(ispc_texcomp PUBLIC "${ISPC_DIR}")
 
 include_directories(

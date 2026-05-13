@@ -180,7 +180,7 @@ namespace burnhope
             defaultDirtTex = defaultWhiteTex;
         }
         globalSetLayout = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                              .addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT)
+                              .addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL)
                               .build();
 
         portalUboBuffers.resize(MAX_PORTALS);
@@ -258,7 +258,6 @@ namespace burnhope
         postProcessShader.reset();
         shadowRenderSystem.reset();
         gtaoOutputTexture.reset();
-        cullingSystem.reset();
         lightingSystem.reset();
         exposureBuffer.reset();
         shadowSystem.reset();
@@ -440,8 +439,12 @@ namespace burnhope
                 ObjectData obj{};
                 obj.modelMatrix = transformComp.transform.matrix;
                 obj.materialID = currentMatID;
+                obj.indexCount = subMeshes[i].indexCounts[0];
+                obj.pad0[0] = 0; obj.pad0[1] = 0;
                 obj.vertexBufferAddress = meshComp.model->getVertexBufferAddress();
                 obj.indexBufferAddress = meshComp.model->getIndexBufferAddress() + subMeshes[i].firstIndices[0] * sizeof(uint32_t);
+                obj.aabbMin = glm::vec4(subMeshes[i].aabbMin, 0.0f);
+                obj.aabbMax = glm::vec4(subMeshes[i].aabbMax, 0.0f);
                 objDataList.push_back(obj);
             }
         }
@@ -459,19 +462,12 @@ namespace burnhope
         if (uploadObjData.empty()) uploadObjData.push_back(ObjectData{});
         if (uploadMatData.empty()) uploadMatData.push_back(MaterialData{});
 
-        if (!cullingSystem)
-        {
-            cullingSystem = std::make_unique<CullingSystem>(lveDevice, static_cast<uint32_t>(uploadObjData.size()));
-        }
         objectBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice, sizeof(ObjectData), uploadObjData.size(),
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         objectBuffer->map();
         objectBuffer->writeToBuffer(uploadObjData.data());
-        cullingSystem->bindObjectBuffer(
-            objectBuffer->getBuffer(),
-            sizeof(ObjectData) * uploadObjData.size());
 
         materialBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice, sizeof(MaterialData), uploadMatData.size(),
@@ -482,42 +478,20 @@ namespace burnhope
 
         auto objInfo = objectBuffer->descriptorInfo();
         auto matInfo = materialBuffer->descriptorInfo();
+        VkDescriptorImageInfo hiZInfo{};
+        if (hizSystem) {
+            hiZInfo = hizSystem->getHiZImageInfo();
+        } else {
+            hiZInfo = defaultWhiteTex->getImageInfo();
+            hiZInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
+
         BurnhopeDescriptorWriter(*renderSystem.getRenderSystemLayout(), *globalPool)
             .writeBuffer(0, &objInfo)
             .writeBuffer(1, &matInfo)
+            .writeImage(2, &hiZInfo)
             .build(storageSet);
 
-        std::vector<SubMeshGPUInfo> subMeshInfos;
-        auto view2 = registry.view<TransformComponent, MeshComponent>();
-        for (auto [entity, transformComp, meshComp] : view2.each())
-        {
-            if (!meshComp.model || !meshComp.isVisible)
-                continue;
-            for (const auto &sub : meshComp.model->getSubMeshes())
-            {
-                SubMeshGPUInfo info{};
-                info.aabbMin = sub.aabbMin;
-                info.aabbMax = sub.aabbMax;
-                info.boundingRadius = sub.boundingRadius;
-                for (int j = 0; j < 4; j++)
-                {
-                    info.indexCounts[j] = sub.indexCounts[j];
-                    info.firstIndices[j] = sub.firstIndices[j];
-                }
-                info.lodCount = sub.lodCount;
-                info.materialIndex = sub.materialIndex;
-                info.pad1 = info.pad2 = 0;
-                subMeshInfos.push_back(info);
-            }
-        }
-        
-        if (subMeshInfos.empty()) subMeshInfos.push_back(SubMeshGPUInfo{});
-        
-        cullingSystem->uploadSubMeshData(subMeshInfos);
-        if (hizSystem)
-        {
-            cullingSystem->updateHiZDescriptor(hizSystem->getHiZImageInfo());
-        }
         if (!textureInfos.empty())
         {
             BurnhopeDescriptorWriter(*renderSystem.getTextureLayout(), *globalPool)
@@ -630,8 +604,6 @@ namespace burnhope
             if (currentSubMeshCount != totalSubMeshCount || uiManager->GetContext().needsRebuild)
             {
                 vkDeviceWaitIdle(lveDevice.device());
-                if (cullingSystem)
-                    cullingSystem.reset();
 
                 if (shadowObjectSet != VK_NULL_HANDLE)
                 {
@@ -1179,7 +1151,7 @@ float currentFov = 45.0f;
                             VkRect2D sc{ {0,0}, {BurnhopeCSM::SHADOW_MAP_SIZE, BurnhopeCSM::SHADOW_MAP_SIZE} };
                             vkCmdSetScissor(cmd, 0, 1, &sc);
                             
-                            shadowRenderSystem->renderShadow(cmd, cachedCascadeMats[i], *cullingSystem, registry, shadowObjectSet);
+                            shadowRenderSystem->renderShadow(cmd, cachedCascadeMats[i], registry, shadowObjectSet, false);
                         } else if (hasDirtyRegion) {
                             // Локальное кэширование: Очищаем и рисуем только в том месте, где объекты двигались!
                             glm::vec3 corners[8] = {
@@ -1213,7 +1185,7 @@ float currentFov = 45.0f;
                                 VkRect2D sc{ {pxX, pxY}, {(uint32_t)pW, (uint32_t)pH} };
                                 vkCmdSetScissor(cmd, 0, 1, &sc);
 
-                               shadowRenderSystem->renderShadow(cmd, cachedCascadeMats[i], *cullingSystem, registry, shadowObjectSet);
+                               shadowRenderSystem->renderShadow(cmd, cachedCascadeMats[i], registry, shadowObjectSet, false);
                             }
                         }
                         vkCmdEndRenderPass(cmd);
@@ -1253,7 +1225,7 @@ float currentFov = 45.0f;
                             clearRect.baseArrayLayer = 0; clearRect.layerCount = 1;
                             vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
 
-                            shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, *cullingSystem, registry, shadowObjectSet);
+                            shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, registry, shadowObjectSet, false);
                         }
                         else if (light.type == LightType::Point) {
                             glm::vec3 pos = trans.position;
@@ -1281,17 +1253,14 @@ float currentFov = 45.0f;
                                 clearRect.baseArrayLayer = 0; clearRect.layerCount = 1;
                                 vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
 
-                                shadowRenderSystem->renderShadow(cmd, faceMatrix, *cullingSystem, registry, shadowObjectSet);
+                                shadowRenderSystem->renderShadow(cmd, faceMatrix, registry, shadowObjectSet, false);
                             }
                         }
                         lightComp.needsShadowUpdate = false; // Кэшируем до следующих изменений
                     }
                     vkCmdEndRenderPass(cmd); });
-                renderPipeline.addPass("Frustum Culling", [&](VkCommandBuffer cmd)
-                                       {
-                    auto vp = ubo.projection * ubo.view;
-                    auto planes = CullingSystem::extractFrustumPlanes(vp);
-                    cullingSystem->dispatchCulling(cmd, vp, ubo.camPos, planes, totalSubMeshCount); });
+                // renderPipeline.addPass("Frustum Culling", [&](VkCommandBuffer cmd) { ... });
+                // Отключено: Culling теперь выполняется аппаратно в Task-шейдерах (VK_EXT_mesh_shader)
 
                 renderPipeline.addPass("Light Culling Pass", {}, [&](VkCommandBuffer cmd)
                                        {
@@ -1337,11 +1306,11 @@ float currentFov = 45.0f;
 
                     // 1. Z-Prepass (Считаем только глубину)
                     simpleRenderSystem->renderEntities(frameInfo, registry, storageSet, textureSet,
-                                                       *cullingSystem, totalSubMeshCount, false, (uint32_t)rs.vrsMode, true);
+                                                       totalSubMeshCount, false, (uint32_t)rs.vrsMode, true);
 
                     // 2. G-Buffer Color (VK_COMPARE_OP_EQUAL)
                     simpleRenderSystem->renderEntities(frameInfo, registry, storageSet, textureSet,
-                                                       *cullingSystem, totalSubMeshCount, false, (uint32_t)rs.vrsMode, false);
+                                                       totalSubMeshCount, false, (uint32_t)rs.vrsMode, false);
                     {
                         uint32_t idx = 0;
                         for (auto entity : registry.view<PortalComponent, TransformComponent>()) {
@@ -1408,9 +1377,9 @@ float currentFov = 45.0f;
                         
                             vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, portalCounter + 1);
                             simpleRenderSystem->renderEntities(portalFrameInfo, registry, storageSet, textureSet,
-                                                               *cullingSystem, totalSubMeshCount, true, (uint32_t)rs.vrsMode, true);
+                                                               totalSubMeshCount, true, (uint32_t)rs.vrsMode, true);
                             simpleRenderSystem->renderEntities(portalFrameInfo, registry, storageSet, textureSet,
-                                                               *cullingSystem, totalSubMeshCount, true, (uint32_t)rs.vrsMode, false);
+                                                               totalSubMeshCount, true, (uint32_t)rs.vrsMode, false);
                         }
                     }
 
@@ -1490,7 +1459,7 @@ float currentFov = 45.0f;
                                     vkCmdSetViewport(cmd, 0, 1, &vp);
                                     VkRect2D sc{ {pxX, pxY}, {(uint32_t)tileSize, (uint32_t)tileSize} };
                                     vkCmdSetScissor(cmd, 0, 1, &sc);
-                                    shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, *cullingSystem, registry, shadowObjectSet);
+                                    shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, registry, shadowObjectSet, false);
                                 } else if (light.type == LightType::Point) {
                                     glm::vec3 pos = trans.position;
                                     const glm::vec3 dirs[6] = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}};
@@ -1506,7 +1475,7 @@ float currentFov = 45.0f;
                                         glm::mat4 faceProj = shadowPerspective(90.0f, 1.0f, 0.1f, light.radius);
                                         glm::mat4 faceView = glm::lookAt(pos, pos + dirs[face], ups[face]);
                                         glm::mat4 faceMatrix = faceProj * faceView;
-                                        shadowRenderSystem->renderShadow(cmd, faceMatrix, *cullingSystem, registry, shadowObjectSet);
+                                            shadowRenderSystem->renderShadow(cmd, faceMatrix, registry, shadowObjectSet, false);
                                     }
                                 }
                             }
@@ -1555,7 +1524,7 @@ float currentFov = 45.0f;
                                     VkRect2D sc{ {pxX + localPxX, pxY + localPxY}, {(uint32_t)pW, (uint32_t)pH} };
                                     vkCmdSetScissor(cmd, 0, 1, &sc);
                                     if (light.type == LightType::Spot) {
-                                        shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, *cullingSystem, registry, shadowObjectSet);
+                                        shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, registry, shadowObjectSet, false);
                                     } else if (light.type == LightType::Point) {
                                         glm::vec3 pos = trans.position;
                                         const glm::vec3 dirs[6] = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}};
@@ -1569,7 +1538,7 @@ float currentFov = 45.0f;
                                             glm::mat4 faceProj = shadowPerspective(90.0f, 1.0f, 0.1f, light.radius);
                                             glm::mat4 faceView = glm::lookAt(pos, pos + dirs[face], ups[face]);
                                             glm::mat4 faceMatrix = faceProj * faceView;
-                                            shadowRenderSystem->renderShadow(cmd, faceMatrix, *cullingSystem, registry, shadowObjectSet);
+                                            shadowRenderSystem->renderShadow(cmd, faceMatrix, registry, shadowObjectSet, false);
                                         }
                                     }
                                 }
@@ -2185,9 +2154,12 @@ float currentFov = 45.0f;
         hizSystem = std::make_unique<HiZSystem>(
             lveDevice, lveWindow.getExtent(), *globalPool,
             gBuffer->getDepth()->getImageView(), gBuffer->getDepth()->getSampler());
-        if (hizSystem && cullingSystem)
-        {
-            cullingSystem->updateHiZDescriptor(hizSystem->getHiZImageInfo());
+        
+        if (storageSet != VK_NULL_HANDLE) {
+            auto hiZInfo = hizSystem->getHiZImageInfo();
+            BurnhopeDescriptorWriter(*simpleRenderSystem->getRenderSystemLayout(), *globalPool)
+                .writeImage(2, &hiZInfo)
+                .overwrite(storageSet);
         }
         BurnhopeDescriptorWriter(*gtaoLayoutPtr, *globalPool)
             .writeImage(0, &depthInfo)
@@ -2380,6 +2352,14 @@ float currentFov = 45.0f;
         sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
         pfnGetAccelerationStructureBuildSizesKHR(lveDevice.device(), VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &buildInfo, &primitiveCount, &sizeInfo);
 
+        VkPhysicalDeviceAccelerationStructurePropertiesKHR asProps{};
+        asProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+        VkPhysicalDeviceProperties2 props2{};
+        props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        props2.pNext = &asProps;
+        vkGetPhysicalDeviceProperties2(lveDevice.getPhysicalDevice(), &props2);
+        uint32_t scratchAlignment = asProps.minAccelerationStructureScratchOffsetAlignment;
+
         VkDeviceSize tlasSize = std::max<VkDeviceSize>(256, sizeInfo.accelerationStructureSize);
         tlasBuffer = std::make_unique<BurnhopeBuffer>(
             lveDevice,
@@ -2394,7 +2374,7 @@ float currentFov = 45.0f;
         createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
         pfnCreateAccelerationStructureKHR(lveDevice.device(), &createInfo, nullptr, &tlasHandle);
 
-        VkDeviceSize scratchSize = std::max<VkDeviceSize>(256, sizeInfo.buildScratchSize);
+        VkDeviceSize scratchSize = std::max<VkDeviceSize>(256, sizeInfo.buildScratchSize) + scratchAlignment;
         BurnhopeBuffer scratchBuffer(
             lveDevice, scratchSize, 1,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
@@ -2402,7 +2382,8 @@ float currentFov = 45.0f;
         VkBufferDeviceAddressInfo scratchAddressInfo{};
         scratchAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
         scratchAddressInfo.buffer = scratchBuffer.getBuffer();
-        buildInfo.scratchData.deviceAddress = pfnGetBufferDeviceAddress(lveDevice.device(), &scratchAddressInfo);
+        VkDeviceAddress rawAddress = pfnGetBufferDeviceAddress(lveDevice.device(), &scratchAddressInfo);
+        buildInfo.scratchData.deviceAddress = (rawAddress + scratchAlignment - 1) & ~(uint64_t(scratchAlignment) - 1);
         buildInfo.dstAccelerationStructure = tlasHandle;
 
         VkAccelerationStructureBuildRangeInfoKHR buildRange{};

@@ -1,50 +1,134 @@
 #version 460
 #extension GL_EXT_mesh_shader : require
-#extension GL_KHR_shader_subgroup_ballot : require
-
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_buffer_reference2 : require
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
-// Структура, которая передается из Task-шейдера в Mesh-шейдер
 struct TaskPayload {
-    uint meshletIndices[32]; // До 32 мешлетов в одной группе
+    uint objectID;
+       uint firstIndex;
+    uint lodTriCount;
 };
 taskPayloadSharedEXT TaskPayload payload;
 
-// Буфер с границами мешлетов, сгенерированных meshoptimizer
-struct Meshlet {
-    vec3 aabbMin;
-    vec3 aabbMax;
-    uint vertexOffset;
-    uint triangleOffset;
-    uint vertexCount;
-    uint triangleCount;
+struct ObjectData {
+    mat4 modelMatrix;
+    uint materialID;
+    uint indexCount;
+    uint pad[2];
+    uint64_t vertexBufferAddress;
+    uint64_t indexBufferAddress;
+    vec4 aabbMin;
+    vec4 aabbMax;
 };
-layout(std430, set = 1, binding = 2) readonly buffer MeshletBuffer {
-    Meshlet meshlets[];
+layout(std430, set = 1, binding = 0) readonly buffer ObjectBuffer {
+    ObjectData objects[];
 };
+struct SubMeshInfo {
+    vec3  aabbMin;
+    float boundingRadius;
+    vec3  aabbMax;
+    uint  lodCount;          
+    uint  indexCounts[4];    
+    uint  firstIndices[4];   
+    uint  materialIndex;
+    uint  pad1, pad2, pad3;
+};
+layout(std430, set = 1, binding = 1) readonly buffer SubMeshBuffer {
+    SubMeshInfo subMeshes[];
+};
+layout(set = 1, binding = 2) uniform sampler2D hiZBuffer;
+
+layout(set = 0, binding = 0) uniform GlobalSceneUbo {
+    mat4 projection; 
+    mat4 invViewProj; 
+    mat4 view; 
+    vec3 camPos; 
+    float zNear;
+    vec3 sunDir; 
+    float zFar; 
+    vec4 screenSize;
+} ubo;
+
+shared uint sharedMeshGroups;
+
+bool isVisible(uint objIdx) {
+    ObjectData obj = objects[objIdx];
+    vec3 aabbMin = obj.aabbMin.xyz;
+    vec3 aabbMax = obj.aabbMax.xyz;
+
+    vec3 corners[8];
+    corners[0] = (obj.modelMatrix * vec4(aabbMin.x, aabbMin.y, aabbMin.z, 1.0)).xyz;
+    corners[1] = (obj.modelMatrix * vec4(aabbMax.x, aabbMin.y, aabbMin.z, 1.0)).xyz;
+    corners[2] = (obj.modelMatrix * vec4(aabbMin.x, aabbMax.y, aabbMin.z, 1.0)).xyz;
+    corners[3] = (obj.modelMatrix * vec4(aabbMax.x, aabbMax.y, aabbMin.z, 1.0)).xyz;
+    corners[4] = (obj.modelMatrix * vec4(aabbMin.x, aabbMin.y, aabbMax.z, 1.0)).xyz;
+    corners[5] = (obj.modelMatrix * vec4(aabbMax.x, aabbMin.y, aabbMax.z, 1.0)).xyz;
+    corners[6] = (obj.modelMatrix * vec4(aabbMin.x, aabbMax.y, aabbMax.z, 1.0)).xyz;
+    corners[7] = (obj.modelMatrix * vec4(aabbMax.x, aabbMax.y, aabbMax.z, 1.0)).xyz;
+
+    vec2 minXY = vec2(1.0); vec2 maxXY = vec2(0.0); float minZ = 1.0;
+    mat4 viewProj = ubo.projection * ubo.view;
+
+    for(int i = 0; i < 8; i++) {
+        vec4 clip = viewProj * vec4(corners[i], 1.0);
+        if (clip.w > 0.0) {
+            vec3 ndc = clip.xyz / clip.w;
+            vec2 uv = ndc.xy * 0.5 + 0.5; 
+            minXY = min(minXY, uv); maxXY = max(maxXY, uv); minZ = min(minZ, ndc.z); 
+        } else {
+            return true; // Пересекает Near Plane - не отсекаем
+        }
+    }
+
+    if (minXY.x > 1.0 || maxXY.x < 0.0 || minXY.y > 1.0 || maxXY.y < 0.0 || minZ > 1.0) return false; // Frustum Cull
+
+    minXY = clamp(minXY, 0.0, 1.0); maxXY = clamp(maxXY, 0.0, 1.0);
+    vec2 size = (maxXY - minXY) * vec2(textureSize(hiZBuffer, 0));
+    float lod = max(0.0, ceil(log2(max(size.x, size.y))) + 1.0); 
+
+    float d1 = textureLod(hiZBuffer, vec2(minXY.x, minXY.y), lod).r;
+    float d2 = textureLod(hiZBuffer, vec2(maxXY.x, minXY.y), lod).r;
+    float d3 = textureLod(hiZBuffer, vec2(minXY.x, maxXY.y), lod).r;
+    float d4 = textureLod(hiZBuffer, vec2(maxXY.x, maxXY.y), lod).r;
+    return minZ <= max(max(d1, d2), max(d3, d4)); // Hi-Z Occlusion Cull
+}
 
 void main() {
-    uint threadId = gl_LocalInvocationID.x;
-    uint meshletIdx = gl_WorkGroupID.x * 32 + threadId;
+    uint objIdx = gl_WorkGroupID.x;
     
-    bool visible = false;
-    
-    // ЗДЕСЬ МАГИЯ ТАСК-ШЕЙДЕРА: Culling на уровне крошечных кусочков
-    if (meshletIdx < meshlets.length()) {
-        Meshlet m = meshlets[meshletIdx];
-        // Здесь мы проверяем m.aabbMin / m.aabbMax с Frustum камерой
-        // Если мешлет за спиной или перекрыт -> visible = false;
-        visible = true; // Пока рисуем все
+    if (gl_LocalInvocationID.x == 0) {
+
+        bool visible = isVisible(objIdx);
+        uint triCount = 0;
+        uint firstIdx = 0;
+        
+        if (visible) {
+            ObjectData obj = objects[objIdx];
+            SubMeshInfo sub = subMeshes[objIdx];
+            
+            vec3 center = (obj.modelMatrix * vec4((sub.aabbMin + sub.aabbMax) * 0.5, 1.0)).xyz;
+            float dist = distance(ubo.camPos, center);
+            
+            uint selectedLod = 0;
+            if (dist > 20.0) selectedLod = 1;
+            if (dist > 50.0) selectedLod = 2;
+            if (dist > 100.0) selectedLod = 3;
+            selectedLod = min(selectedLod, sub.lodCount - 1);
+            
+            triCount = sub.indexCounts[selectedLod] / 3;
+            firstIdx = sub.firstIndices[selectedLod];
+        }
+        
+        payload.objectID = objIdx;
+        payload.firstIndex = firstIdx;
+        payload.lodTriCount = triCount;
+        sharedMeshGroups = (triCount + 84) / 85; 
     }
     
-    // Subgroup Ballot: аппаратно подсчитываем, сколько мешлетов выжило
-    uvec4 vote = subgroupBallot(visible);
-    uint tasks = subgroupBallotBitCount(vote);
+    barrier(); // Ждем, пока 0-й поток вычислит видимость объекта
     
-    // Запускаем ровно столько Mesh-шейдеров, сколько мешлетов мы видим!
-    if (threadId == 0) EmitMeshTasksEXT(tasks, 1, 1);
-    
-    // Пишем индексы выживших мешлетов в Payload
-    uint idxOffset = subgroupBallotExclusiveBitCount(vote);
-    if (visible) payload.meshletIndices[idxOffset] = meshletIdx;
+    // Фикс краша и "сломанных треугольников":
+    // В Mesh Shaders команда EmitMeshTasksEXT обязана выполняться ВСЕМИ потоками группы одновременно!
+    EmitMeshTasksEXT(sharedMeshGroups, 1, 1);
 }

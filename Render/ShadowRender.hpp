@@ -4,7 +4,6 @@
 #include "../Utils/Descriptors.hpp"
 #include "../Utils/Components.hpp"
 #include "../Utils/Buffer.hpp"
-#include "CullingSystem.hpp"
 #include "GraphicsShader.hpp"
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -27,7 +26,6 @@ namespace burnhope
         void renderShadow(
             VkCommandBuffer commandBuffer,
             const glm::mat4 &lightSpaceMatrix,
-            CullingSystem &cullingSystem,
             entt::registry &registry,
              VkDescriptorSet objectStorageSet,
              bool renderDynamicOnly);

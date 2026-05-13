@@ -117,6 +117,44 @@ namespace burnhope {
                 LoadScene(m_Context.pendingSceneLoadPath);
                 m_Context.pendingSceneLoadPath = "";
             }
+            if (!m_Context.pendingModelLoadPath.empty() && m_Context.pendingModelEntity != entt::null) {
+                vkDeviceWaitIdle(m_Device->device());
+                if (m_Context.registry->valid(m_Context.pendingModelEntity) && m_Context.registry->all_of<MeshComponent>(m_Context.pendingModelEntity)) {
+                    auto& mc = m_Context.registry->get<MeshComponent>(m_Context.pendingModelEntity);
+                    m_Context.safeDeleteQueue.push_back(mc.model);
+                    if (m_Context.pendingModelLoadPath == "NONE") {
+                        mc.modelPath = "";
+                        mc.model = nullptr;
+                        mc.materialPaths.clear();
+                        mc.materials.clear();
+                    } else {
+                        mc.modelPath = m_Context.pendingModelLoadPath;
+                        mc.model = BurnhopeModel::createModelFromFile(*m_Device, mc.modelPath);
+                        mc.materialPaths.resize(mc.model->getSubMeshes().size(), "");
+                        mc.materials.resize(mc.model->getSubMeshes().size(), nullptr);
+                    }
+                    m_Context.needsRebuild = true;
+                }
+                m_Context.pendingModelLoadPath = "";
+                m_Context.pendingModelEntity = entt::null;
+            }
+            if (!m_Context.pendingMatLoadPath.empty() && m_Context.pendingMatEntity != entt::null) {
+                vkDeviceWaitIdle(m_Device->device());
+                if (m_Context.registry->valid(m_Context.pendingMatEntity) && m_Context.registry->all_of<MeshComponent>(m_Context.pendingMatEntity)) {
+                    auto& mc = m_Context.registry->get<MeshComponent>(m_Context.pendingMatEntity);
+                    auto newMat = (m_Context.pendingMatLoadPath == "NONE") ? nullptr : Material::loadFromJson(*m_Device, m_Context.pendingMatLoadPath);
+                    for(size_t i = 0; i < mc.model->getSubMeshes().size(); i++) {
+                        if (mc.model->getSubMeshes()[i].materialIndex == m_Context.pendingMatSlot) {
+                            m_Context.safeDeleteQueue.push_back(mc.materials[i]);
+                            mc.materialPaths[i] = (m_Context.pendingMatLoadPath == "NONE") ? "" : m_Context.pendingMatLoadPath;
+                            mc.materials[i] = newMat;
+                        }
+                    }
+                    m_Context.needsRebuild = true;
+                }
+                m_Context.pendingMatLoadPath = "";
+                m_Context.pendingMatEntity = entt::null;
+            }
         }
 
     private:

@@ -4,6 +4,7 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
+#include <glm/gtc/packing.hpp>
 #include "Material.hpp"
 #include <memory>
 #include <vector>
@@ -32,10 +33,8 @@ Vertex()
         uint32_t z = static_cast<uint32_t>((n.z * 0.5f + 0.5f) * 1023.0f);
         normal = (x) | (y << 10) | (z << 20);
 
-        // Упаковка UV (простое приведение к half-float или fixed point)
-        uint32_t u = static_cast<uint16_t>(uv.x * 65535.0f);
-        uint32_t v = static_cast<uint16_t>(uv.y * 65535.0f);
-        texUV = u | (v << 16);
+        // Правильная упаковка в 16-битные float (поддерживает значения > 1.0 для тайлинга)
+        texUV = glm::packHalf2x16(uv);
         
         tangent = 0; // Можно инициализировать позже
     }
@@ -78,6 +77,7 @@ Vertex()
     class BurnhopeModel
     {
     public:
+        uint32_t getMaterialCount() const { return materialCount; }
         const std::vector<SubMesh> &getSubMeshes() const { return subMeshes; }
         BurnhopeModel(BurnhopeDevice &device, const Builder &builder);
         ~BurnhopeModel();
@@ -102,6 +102,7 @@ VkDeviceAddress getVertexBufferAddress() const { return vertexBufferAddress; }
     void createBLAS();
     VkAccelerationStructureKHR getBLAS() const { return blasHandle; }
     private:
+        uint32_t materialCount = 0;
         std::vector<SubMesh> subMeshes;
         void createVertexBuffers(const std::vector<Vertex> &vertices);
         void createIndexBuffers(const std::vector<uint32_t> &indices);

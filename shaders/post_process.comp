@@ -2,6 +2,7 @@
 #extension GL_EXT_nonuniform_qualifier : enable
 #extension GL_KHR_shader_subgroup_arithmetic : enable
 #extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_KHR_shader_subgroup_quad : enable
 layout(local_size_x = 16, local_size_y = 16) in;
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 layout(set = 0, binding = 0) uniform GlobalUbo {
@@ -814,27 +815,42 @@ void main() {
                     vec4 worldPosRaw = ubo.invViewProj * vec4(uv * 2.0 - 1.0, d, 1.0);
                     vec3 worldPos = worldPosRaw.xyz / worldPosRaw.w;
                     vec3 V = normalize(worldPos - ubo.camPos);
-                    vec3 R = reflect(V, N);
-                    vec2 noise = fract(sin(dot(uv, vec2(12.9898, 78.233)) + ubo.ppMotionBlur.z) * vec2(43758.5453, 28001.8384));
-                    R = normalize(R + (vec3(noise, fract(noise.x + noise.y)) - 0.5) * roughness * 0.4);
-                    float stepSize = 0.1; float steps = ubo.ppWeatherSSR.w; float thickness = max(ubo.ppSSSS.z, 0.1);
-                    vec3 rayPos = worldPos + N * 0.1;
+                    
                     vec3 reflColor = vec3(0.0); float hit = 0.0;
-                    for (int i = 0; i < int(steps); i++) {
-                        rayPos += R * stepSize;
-                        vec4 rClip = ubo.projection * ubo.view * vec4(rayPos, 1.0);
-                        if (rClip.w <= 0.0) break;
-                        vec3 rNdc = rClip.xyz / rClip.w; vec2 rUv = rNdc.xy * 0.5 + 0.5;
-                        if (rUv.x < 0.0 || rUv.x > 1.0 || rUv.y < 0.0 || rUv.y > 1.0) break;
-                        float sDepth = textureLod(depthInput, rUv, 0.0).r;
-                        if (sDepth < rNdc.z) {
-                            vec4 hitWorldRaw = ubo.invViewProj * vec4(rUv * 2.0 - 1.0, sDepth, 1.0);
-                            if (distance(hitWorldRaw.xyz / hitWorldRaw.w, rayPos) < thickness) {
-                                reflColor = textureLod(hdrInput, rUv, 0.0).rgb; hit = 1.0; break;
+                    
+                    // --- Half-Resolution Subgroup Optimization ---
+                    // Выполняем дорогой raymarching только в 1 пикселе из блока 2x2
+                    bool isRaycaster = ((pixel.x % 2) == 0 && (pixel.y % 2) == 0);
+                    
+                    if (isRaycaster) {
+                        vec3 R = reflect(V, N);
+                        vec2 noise = fract(sin(dot(uv, vec2(12.9898, 78.233)) + ubo.ppMotionBlur.z) * vec2(43758.5453, 28001.8384));
+                        R = normalize(R + (vec3(noise, fract(noise.x + noise.y)) - 0.5) * roughness * 0.4);
+                        float stepSize = 0.1; float steps = ubo.ppWeatherSSR.w; float thickness = max(ubo.ppSSSS.z, 0.1);
+                        vec3 rayPos = worldPos + N * 0.1;
+                        for (int i = 0; i < int(steps); i++) {
+                            rayPos += R * stepSize;
+                            vec4 rClip = ubo.projection * ubo.view * vec4(rayPos, 1.0);
+                            if (rClip.w <= 0.0) break;
+                            vec3 rNdc = rClip.xyz / rClip.w; vec2 rUv = rNdc.xy * 0.5 + 0.5;
+                            if (rUv.x < 0.0 || rUv.x > 1.0 || rUv.y < 0.0 || rUv.y > 1.0) break;
+                            float sDepth = textureLod(depthInput, rUv, 0.0).r;
+                            if (sDepth < rNdc.z) {
+                                vec4 hitWorldRaw = ubo.invViewProj * vec4(rUv * 2.0 - 1.0, sDepth, 1.0);
+                                if (distance(hitWorldRaw.xyz / hitWorldRaw.w, rayPos) < thickness) {
+                                    reflColor = textureLod(hdrInput, rUv, 0.0).rgb; hit = 1.0; break;
+                                }
                             }
+                            stepSize *= 1.05; 
                         }
-                        stepSize *= 1.05; 
                     }
+                    
+                    // Мгновенно и аппаратно раздаем результаты вычислений соседям
+                    hit = subgroupQuadBroadcast(hit, 0);
+                    reflColor.r = subgroupQuadBroadcast(reflColor.r, 0);
+                    reflColor.g = subgroupQuadBroadcast(reflColor.g, 0);
+                    reflColor.b = subgroupQuadBroadcast(reflColor.b, 0);
+
                     if (hit > 0.5) color = mix(color, reflColor, mix(0.1, 1.0, pow(1.0 - max(dot(N, -V), 0.0), 5.0)) * (1.0 - roughness));
                 }
             }

@@ -4,10 +4,12 @@ layout(local_size_x = 64) in;
 struct ObjectData {
     mat4 modelMatrix;
     uint materialID;
-    uint pad0;
+    uint indexCount;
+    uint pad[2];
     uint64_t vertexBufferAddress;
     uint64_t indexBufferAddress;
-    uint64_t pad1; // ДОБАВИТЬ
+    vec4 aabbMin;
+    vec4 aabbMax;
 };
 struct SubMeshInfo {
     vec3  aabbMin;

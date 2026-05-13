@@ -29,10 +29,10 @@
     "rimMaskPath": "",
     "roughnessPath": "/home/marwinka/Музыка/work/BurnhopeEngine/build/textures/rougness3.png",
     "roughnessStrength": 1.0,
-    "triplanarScale": 2.24399995803833,
-    "useTriplanar": true,
+    "triplanarScale": 5.980000019073486,
+    "useTriplanar": false,
     "uvScale": [
-        1.0,
-        1.0
+        1.5800000429153442,
+        0.8199999928474426
     ]
 }

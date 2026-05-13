@@ -1,62 +1,111 @@
 #version 460
 #extension GL_EXT_mesh_shader : require
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_scalar_block_layout : require
 
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
-// 64 вершины и 128 треугольников (максимум для meshoptimizer)
-layout(triangles, max_vertices = 64, max_primitives = 128) out;
+layout(local_size_x = 85, local_size_y = 1, local_size_z = 1) in;
+// 85 треугольников * 3 = 255 вершин. Идеально влезает в аппаратный лимит 256!
+layout(triangles, max_vertices = 255, max_primitives = 85) out;
 
 struct TaskPayload {
-    uint meshletIndices[32];
+    uint objectID;
+    uint firstIndex;
+    uint lodTriCount;
 };
 taskPayloadSharedEXT TaskPayload payload;
-struct Meshlet {
-    uint vertexOffset;
-    uint triangleOffset;
-    uint vertexCount;
-    uint triangleCount;
-    // Можно добавить еще данные, например, для Meshlet Culling (центр сферы, радиус)
+struct ObjectData {
+    mat4 modelMatrix;
+    uint materialID;
+    uint indexCount;
+    uint pad[2];
+    uint64_t vertexBufferAddress;
+    uint64_t indexBufferAddress;
+    vec4 aabbMin;
+    vec4 aabbMax;
 };
 
 // А теперь ты можешь использовать его в буфере
-layout(set = 0, binding = 0) readonly buffer MeshletBuffer {
-    Meshlet meshlets[];
+layout(std430, set = 1, binding = 0) readonly buffer ObjectBuffer {
+    ObjectData objects[];
 };
 // --- Здесь должны быть твои UBO и ObjectBuffer из старого gbuffer.vert ---
 
-// Буфер с вершинами и индексами
-layout(std430, set = 1, binding = 3) readonly buffer VertexBuffer { vec4 vPos[]; /* ... */ };
-layout(std430, set = 1, binding = 4) readonly buffer IndexBuffer { uint indices[]; };
 
+struct Vertex {
+    vec3 position;
+    uint normal;
+    uint texUV;
+    uint tangent;
+};
+layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer VertexBuffer { Vertex v[]; };
+layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer IndexBuffer { uint i[]; };
+
+layout(set = 0, binding = 0) uniform GlobalSceneUbo {
+    mat4 projection; mat4 invViewProj; mat4 view; vec3 camPos;
+} ubo;
 // Выходящие данные для gbuffer.frag
 layout(location = 0) out vec3 outCrntPos[];
 layout(location = 1) out vec2 outTexCoord[];
 layout(location = 2) out mat3 outTBN[];
 layout(location = 5) flat out uint outMatID[];
-
+vec3 unpackNormal(uint n) {
+    vec3 norm;
+    norm.x = float(n & 0x3FF) / 1023.0 * 2.0 - 1.0;
+    norm.y = float((n >> 10) & 0x3FF) / 1023.0 * 2.0 - 1.0;
+    norm.z = float((n >> 20) & 0x3FF) / 1023.0 * 2.0 - 1.0;
+    return normalize(norm);
+}
 void main() {
     // Получаем индекс мешлета, который пережил Culling в Task Shader
-    uint meshletIdx = payload.meshletIndices[gl_WorkGroupID.x];
-    Meshlet m = meshlets[meshletIdx]; // Твоя структура мешлета
+  uint objIdx = payload.objectID;
+    ObjectData obj = objects[objIdx];
     
-    SetMeshOutputsEXT(m.vertexCount, m.triangleCount);
     
-    // 1 поток = 1 вершина
-    if (gl_LocalInvocationID.x < m.vertexCount) {
-        uint vIdx = m.vertexOffset + gl_LocalInvocationID.x;
+   VertexBuffer vb = VertexBuffer(obj.vertexBufferAddress);
+    IndexBuffer ib = IndexBuffer(obj.indexBufferAddress);
+    
+    
+     uint totalTriangles = payload.lodTriCount;
+    uint startTriangle = gl_WorkGroupID.x * 85;
+    uint localTriCount = min(85, totalTriangles - startTriangle);
+    
+    SetMeshOutputsEXT(localTriCount * 3, localTriCount);
+    
+    uint tid = gl_LocalInvocationID.x; 
+        if (tid < localTriCount) {
+        gl_PrimitiveTriangleIndicesEXT[tid] = uvec3(tid * 3, tid * 3 + 1, tid * 3 + 2);
+    }
+    if (tid < localTriCount) {
+        uint globalTriIdx = startTriangle + tid;
         
         // Распаковка позиции и трансформация, как в gbuffer.vert
-        vec4 worldPos = vec4(vPos[vIdx].xyz, 1.0); 
-        gl_MeshVerticesEXT[gl_LocalInvocationID.x].gl_Position = worldPos; // проекция
-        outCrntPos[gl_LocalInvocationID.x] = worldPos.xyz;
+        // 1 поток обрабатывает 1 треугольник (3 вершины)
+        for (int k = 0; k < 3; k++) {
+            uint vIdx = tid * 3 + k;
+             uint globalVtxIdx = ib.i[payload.firstIndex + globalTriIdx * 3 + k];
+            Vertex vtx = vb.v[globalVtxIdx];
+            
+            vec4 worldPos = obj.modelMatrix * vec4(vtx.position, 1.0);
+            gl_MeshVerticesEXT[vIdx].gl_Position = ubo.projection * ubo.view * worldPos;
+            
+            outCrntPos[vIdx] = worldPos.xyz;
+            outMatID[vIdx] = obj.materialID;
+            
+            vec2 uv = unpackHalf2x16(vtx.texUV);
+            outTexCoord[vIdx] = uv;
+            
+            mat3 normalMatrix = transpose(inverse(mat3(obj.modelMatrix)));
+            vec3 localN = unpackNormal(vtx.normal);
+            vec3 N = normalize(normalMatrix * localN);
+            
+            vec3 localT = normalize(cross(localN, abs(localN.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
+            vec3 T = normalize(normalMatrix * localT);
+            vec3 B = cross(N, T);
+            outTBN[vIdx] = mat3(T, B, N);
+        }
+        
+        gl_PrimitiveTriangleIndicesEXT[tid] = uvec3(tid * 3, tid * 3 + 1, tid * 3 + 2);
     }
     
-    // 1 поток = 1 треугольник (собираем индексы)
-    if (gl_LocalInvocationID.x < m.triangleCount) {
-        uint tIdx = m.triangleOffset + gl_LocalInvocationID.x * 3;
-        gl_PrimitiveTriangleIndicesEXT[gl_LocalInvocationID.x] = uvec3(
-            indices[tIdx + 0],
-            indices[tIdx + 1],
-            indices[tIdx + 2]
-        );
-    }
 }

@@ -98,7 +98,7 @@ namespace burnhope
         config.depthStencilInfo.back = config.depthStencilInfo.front;
 
         lvePipeline = std::make_unique<BurnhopePipeline>(
-            lveDevice, "shaders/portal.vert.spv", "shaders/portal.frag.spv", config);
+            lveDevice, std::vector<std::string>{"shaders/portal.vert.spv", "shaders/portal.frag.spv"}, config);
     }
 
     void PortalRenderSystem::createDepthResetPipeline(VkRenderPass renderPass) {
@@ -134,7 +134,7 @@ namespace burnhope
         config.pipelineLayout = pipelineLayout;
 
         depthResetPipeline = std::make_unique<BurnhopePipeline>(
-            lveDevice, "shaders/portal.vert.spv", "shaders/depth_reset.frag.spv", config);
+            lveDevice, std::vector<std::string>{"shaders/portal.vert.spv", "shaders/depth_reset.frag.spv"}, config);
     }
 
     void PortalRenderSystem::drawDepthReset(VkCommandBuffer cmd, VkDescriptorSet globalSet, const glm::mat4 &model, uint32_t ref) {

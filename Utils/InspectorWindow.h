@@ -110,13 +110,8 @@ namespace burnhope {
                             const char* path = (const char*)payload->Data;
                             std::filesystem::path p(path);
                             if (p.extension() == ".bhmesh" || p.extension() == ".obj" || p.extension() == ".fbx" || p.extension() == ".gltf") {
-                                vkDeviceWaitIdle(context.device->device());
-                                context.safeDeleteQueue.push_back(mc.model);
-                                mc.modelPath = p.string();
-                                mc.model = BurnhopeModel::createModelFromFile(*context.device, mc.modelPath);
-                                mc.materialPaths.resize(mc.model->getSubMeshes().size(), "");
-                                mc.materials.resize(mc.model->getSubMeshes().size(), nullptr);
-                                context.needsRebuild = true;
+                                context.pendingModelLoadPath = p.string();
+                                context.pendingModelEntity = entity;
                             }
                         }
                         ImGui::EndDragDropTarget();
@@ -125,23 +120,13 @@ namespace burnhope {
                     if (ImGui::BeginPopup("SelectModelPopup")) {
                         auto models = context.GetProjectAssets({".bhmesh", ".obj", ".fbx", ".gltf"});
                         if (ImGui::Selectable("None")) {
-                            vkDeviceWaitIdle(context.device->device());
-                            context.safeDeleteQueue.push_back(mc.model);
-                            mc.modelPath = "";
-                            mc.model = nullptr;
-                            mc.materialPaths.clear();
-                            mc.materials.clear();
-                            context.needsRebuild = true;
+                            context.pendingModelLoadPath = "NONE";
+                            context.pendingModelEntity = entity;
                         }
                         for (const auto& m : models) {
                             if (ImGui::Selectable(std::filesystem::path(m).filename().string().c_str())) {
-                                vkDeviceWaitIdle(context.device->device());
-                                context.safeDeleteQueue.push_back(mc.model);
-                                mc.modelPath = m;
-                                mc.model = BurnhopeModel::createModelFromFile(*context.device, m);
-                                mc.materialPaths.resize(mc.model->getSubMeshes().size(), "");
-                                mc.materials.resize(mc.model->getSubMeshes().size(), nullptr);
-                                context.needsRebuild = true;
+                                context.pendingModelLoadPath = m;
+                                context.pendingModelEntity = entity;
                             }
                         }
                         ImGui::EndPopup();
@@ -149,11 +134,18 @@ namespace burnhope {
 
                     if (mc.model) {
                         ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Materials:");
-                        for (size_t i = 0; i < mc.materialPaths.size(); i++) {
-                            ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("  Slot %zu:", i); ImGui::TableSetColumnIndex(1);
+                        uint32_t matCount = mc.model->getMaterialCount();
+                        for (uint32_t mId = 0; mId < matCount; mId++) {
+                            size_t firstIdx = (size_t)-1;
+                            for(size_t i = 0; i < mc.model->getSubMeshes().size(); i++) {
+                                if (mc.model->getSubMeshes()[i].materialIndex == mId) { firstIdx = i; break; }
+                            }
+                            if (firstIdx == (size_t)-1) continue;
+
+                            ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("  Slot %u:", mId); ImGui::TableSetColumnIndex(1);
                             ImGui::SetNextItemWidth(-FLT_MIN);
-                            ImGui::PushID(i);
-                            std::string matName = mc.materialPaths[i].empty() ? "None" : std::filesystem::path(mc.materialPaths[i]).filename().string();
+                            ImGui::PushID(mId);
+                            std::string matName = mc.materialPaths[firstIdx].empty() ? "None" : std::filesystem::path(mc.materialPaths[firstIdx]).filename().string();
                             if (ImGui::Button((matName + "##MatBtn").c_str(), ImVec2(-1, 0))) {
                                 ImGui::OpenPopup("SelectMatPopup");
                             }
@@ -163,12 +155,9 @@ namespace burnhope {
                                     const char* path = (const char*)payload->Data;
                                     std::filesystem::path p(path);
                                     if (p.extension() == ".bhmat" || p.extension() == ".json") {
-                                        vkDeviceWaitIdle(context.device->device());
-                                        context.safeDeleteQueue.push_back(mc.materials[i]);
-                                        mc.materialPaths[i] = p.string();
-                                        mc.materials[i] = Material::loadFromJson(*context.device, p.string());
-                                        
-                                        context.needsRebuild = true;
+                                        context.pendingMatLoadPath = p.string();
+                                        context.pendingMatSlot = mId;
+                                        context.pendingMatEntity = entity;
                                     }
                                 }
                                 ImGui::EndDragDropTarget();
@@ -177,19 +166,15 @@ namespace burnhope {
                             if (ImGui::BeginPopup("SelectMatPopup")) {
                                 auto mats = context.GetProjectAssets({".bhmat", ".json"});
                                 if (ImGui::Selectable("None")) {
-                                    vkDeviceWaitIdle(context.device->device());
-                                    context.safeDeleteQueue.push_back(mc.materials[i]);
-                                    mc.materialPaths[i] = "";
-                                    mc.materials[i] = nullptr;
-                                    context.needsRebuild = true;
+                                    context.pendingMatLoadPath = "NONE";
+                                    context.pendingMatSlot = mId;
+                                    context.pendingMatEntity = entity;
                                 }
                                 for (const auto& m : mats) {
                                     if (ImGui::Selectable(std::filesystem::path(m).filename().string().c_str())) {
-                                        vkDeviceWaitIdle(context.device->device());
-                                        context.safeDeleteQueue.push_back(mc.materials[i]);
-                                        mc.materialPaths[i] = m;
-                                        mc.materials[i] = Material::loadFromJson(*context.device, m);
-                                        context.needsRebuild = true;
+                                        context.pendingMatLoadPath = m;
+                                        context.pendingMatSlot = mId;
+                                        context.pendingMatEntity = entity;
                                     }
                                 }
                                 ImGui::EndPopup();

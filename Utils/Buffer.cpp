@@ -111,12 +111,7 @@ namespace burnhope
    */
   VkResult BurnhopeBuffer::flush(VkDeviceSize size, VkDeviceSize offset)
   {
-    VkMappedMemoryRange mappedRange = {};
-    mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    mappedRange.memory = memory;
-    mappedRange.offset = offset;
-    mappedRange.size = size;
-    return vkFlushMappedMemoryRanges(lveDevice.device(), 1, &mappedRange);
+    return vmaFlushAllocation(lveDevice.getAllocator(), memory, offset, size);
   }
   /**
    * Invalidate a memory range of the buffer to make it visible to the host
@@ -131,12 +126,7 @@ namespace burnhope
    */
   VkResult BurnhopeBuffer::invalidate(VkDeviceSize size, VkDeviceSize offset)
   {
-    VkMappedMemoryRange mappedRange = {};
-    mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    mappedRange.memory = memory;
-    mappedRange.offset = offset;
-    mappedRange.size = size;
-    return vkInvalidateMappedMemoryRanges(lveDevice.device(), 1, &mappedRange);
+    return vmaInvalidateAllocation(lveDevice.getAllocator(), memory, offset, size);
   }
   /**
    * Create a buffer info descriptor

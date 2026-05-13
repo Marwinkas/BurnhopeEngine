@@ -41,6 +41,13 @@ namespace burnhope
             VkExtent3D extent,
             VkImageUsageFlags usage,
             VkSampleCountFlagBits sampleCount);
+        BurnhopeTexture(
+            BurnhopeDevice &device,
+            VmaAllocation aliasedMemory,
+            VkFormat format,
+            VkExtent3D extent,
+            VkImageUsageFlags usage,
+            VkSampleCountFlagBits sampleCount);
         ~BurnhopeTexture();
         BurnhopeTexture(
             BurnhopeDevice &device,
@@ -58,6 +65,7 @@ namespace burnhope
         VkImageView getImageView() const { return mTextureImageView; }
         VkDescriptorImageInfo getImageInfo() const { return mDescriptor; }
         VkImageLayout getImageLayout() const { return mTextureLayout; }
+        VmaAllocation getMemory() const { return mTextureImageMemory; }
         VkExtent3D getExtent() const { return mExtent; }
         VkFormat getFormat() const { return mFormat; }
         uint32_t arrayLayers = 1;

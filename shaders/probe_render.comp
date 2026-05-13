@@ -86,9 +86,14 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
 
 layout(set = 1, binding = 0) uniform accelerationStructureEXT tlas;
 
-struct Vertex { vec3 position; vec3 normal; vec2 texUV; vec3 tangent; vec3 bitangent; };
-layout(buffer_reference, scalar) readonly buffer VertexBuffer { Vertex v[]; };
-layout(buffer_reference, scalar) readonly buffer IndexBuffer  { uint i[]; };
+struct Vertex {
+    vec3 position;
+    uint normal;
+    uint texUV;
+    uint tangent;
+};
+layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer VertexBuffer { Vertex v[]; };
+layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer IndexBuffer  { uint i[]; };
 
 struct ObjectData {
     mat4 modelMatrix; uint materialID; uint pad0;
@@ -119,6 +124,18 @@ layout(push_constant) uniform Push {
     vec4 probePos;
     int resolution;
 } push;
+
+vec3 unpackNormal(uint n) {
+    vec3 norm;
+    norm.x = float(n & 0x3FF) / 1023.0 * 2.0 - 1.0;
+    norm.y = float((n >> 10) & 0x3FF) / 1023.0 * 2.0 - 1.0;
+    norm.z = float((n >> 20) & 0x3FF) / 1023.0 * 2.0 - 1.0;
+    return normalize(norm);
+}
+
+vec2 unpackUV(uint uvPacked) {
+    return unpackHalf2x16(uvPacked);
+}
 
 vec3 octaDecode(vec2 uv) {
     uv = uv * 2.0 - 1.0;
@@ -175,12 +192,12 @@ void main() {
         
         IndexBuffer indices = IndexBuffer(obj.indexBufferAddress);
         VertexBuffer vertices = VertexBuffer(obj.vertexBufferAddress);
-        Vertex v0 = vertices.v[indices.i[primID * 3 + 0]];
-        Vertex v1 = vertices.v[indices.i[primID * 3 + 1]];
-        Vertex v2 = vertices.v[indices.i[primID * 3 + 2]];
+        Vertex v0_raw = vertices.v[indices.i[primID * 3 + 0]];
+        Vertex v1_raw = vertices.v[indices.i[primID * 3 + 1]];
+        Vertex v2_raw = vertices.v[indices.i[primID * 3 + 2]];
         
-        vec2 texUV = v0.texUV * w + v1.texUV * u + v2.texUV * v;
-        vec3 localNormal = v0.normal * w + v1.normal * u + v2.normal * v;
+        vec2 texUV = unpackUV(v0_raw.texUV) * w + unpackUV(v1_raw.texUV) * u + unpackUV(v2_raw.texUV) * v;
+        vec3 localNormal = unpackNormal(v0_raw.normal) * w + unpackNormal(v1_raw.normal) * u + unpackNormal(v2_raw.normal) * v;
         mat3 normalMatrix = transpose(inverse(mat3(obj.modelMatrix)));
         vec3 worldNormal = normalize(normalMatrix * localNormal);
         if (dot(worldNormal, dir) > 0.0) worldNormal = -worldNormal; // Двусторонняя геометрия

@@ -134,10 +134,12 @@ layout(set = 0, binding = 0) uniform GlobalSceneUbo {
 struct ObjectData {
     mat4 modelMatrix;
     uint materialID;
-    uint pad0;
+    uint indexCount;
+    uint pad[2];
     uint64_t vertexBufferAddress;
     uint64_t indexBufferAddress;
-    uint64_t pad1; // ДОБАВИТЬ
+    vec4 aabbMin;
+    vec4 aabbMax;
 };
 layout(std430, set = 1, binding = 0) readonly buffer ObjectBuffer {
     ObjectData objects[];

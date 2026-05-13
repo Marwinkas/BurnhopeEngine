@@ -5,7 +5,7 @@
 #include "Model.hpp"
 namespace burnhope
 {
-    static constexpr uint32_t CLUSTER_SPLIT_THRESHOLD = 1382236160;
+    static constexpr uint32_t CLUSTER_SPLIT_THRESHOLD = 2048;
     static constexpr uint32_t CLUSTER_MAX_TRIANGLES = 128;
     struct BHModelHeader
     {
