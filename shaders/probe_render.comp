@@ -5,7 +5,8 @@
 #extension GL_EXT_scalar_block_layout : require
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
-
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int32 : require
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout(set = 0, binding = 0) uniform GlobalSceneUbo {
@@ -92,12 +93,31 @@ struct Vertex {
     uint texUV;
     uint tangent;
 };
-layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer VertexBuffer { Vertex v[]; };
-layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer IndexBuffer  { uint i[]; };
+struct PackedVertexPos {
+    uint16_t x, y, z, pad;
+};
+struct PackedVertexAttr {
+    uint texUV;
+    uint qTangent;
+};
+layout(buffer_reference, scalar, buffer_reference_align = 8) readonly buffer PosBuffer { PackedVertexPos p[]; };
+layout(buffer_reference, scalar, buffer_reference_align = 8) readonly buffer AttrBuffer { PackedVertexAttr a[]; };
+layout(buffer_reference, scalar, buffer_reference_align = 4) readonly buffer IndexBuffer  { uint i[]; }; 
 
 struct ObjectData {
-    mat4 modelMatrix; uint materialID; uint pad0;
-    uint64_t vertexBufferAddress; uint64_t indexBufferAddress; uint64_t pad1;
+    mat4 modelMatrix;
+    uint materialID;
+    uint indexCount;
+    uint vrsRate;
+    uint boneOffset;
+    uint64_t posBufferAddress;
+    uint64_t attrBufferAddress;
+    uint64_t indexBufferAddress;
+    uint64_t colorBufferAddress;
+    uint64_t uv2BufferAddress;
+    uint64_t animBufferAddress;
+    vec4 aabbMin;
+    vec4 aabbMax;
 };
 
 struct MaterialData {
@@ -125,12 +145,21 @@ layout(push_constant) uniform Push {
     int resolution;
 } push;
 
-vec3 unpackNormal(uint n) {
-    vec3 norm;
-    norm.x = float(n & 0x3FF) / 1023.0 * 2.0 - 1.0;
-    norm.y = float((n >> 10) & 0x3FF) / 1023.0 * 2.0 - 1.0;
-    norm.z = float((n >> 20) & 0x3FF) / 1023.0 * 2.0 - 1.0;
-    return normalize(norm);
+vec4 unpackQTangent(uint packedVal) {
+    int ix = (int(packedVal) << 22) >> 22;
+    int iy = (int(packedVal) << 12) >> 22;
+    int iz = (int(packedVal) << 2)  >> 22;
+    int iw = (int(packedVal) >> 30);
+    return vec4(
+        max(float(ix) / 511.0, -1.0), max(float(iy) / 511.0, -1.0),
+        max(float(iz) / 511.0, -1.0), max(float(iw) / 1.0, -1.0)
+    );
+}
+vec3 getNormalFromQTangent(uint packedVal) {
+    vec4 q = unpackQTangent(packedVal);
+    float qx = q.x; float qy = q.y; float qz = q.z;
+    float qw = sqrt(max(0.0, 1.0 - qx*qx - qy*qy - qz*qz));
+    return vec3(2.0*qx*qz + 2.0*qy*qw, 2.0*qy*qz - 2.0*qx*qw, 1.0 - 2.0*qx*qx - 2.0*qy*qy);
 }
 
 vec2 unpackUV(uint uvPacked) {
@@ -191,15 +220,18 @@ void main() {
         vec3 albedo = vec3(0.8);
         
         IndexBuffer indices = IndexBuffer(obj.indexBufferAddress);
-        VertexBuffer vertices = VertexBuffer(obj.vertexBufferAddress);
-        Vertex v0_raw = vertices.v[indices.i[primID * 3 + 0]];
-        Vertex v1_raw = vertices.v[indices.i[primID * 3 + 1]];
-        Vertex v2_raw = vertices.v[indices.i[primID * 3 + 2]];
+        AttrBuffer attributes = AttrBuffer(obj.attrBufferAddress);
+        
+         PackedVertexAttr v0_raw = attributes.a[primID * 3 + 0];
+        PackedVertexAttr v1_raw = attributes.a[primID * 3 + 1];
+        PackedVertexAttr v2_raw = attributes.a[primID * 3 + 2];
         
         vec2 texUV = unpackUV(v0_raw.texUV) * w + unpackUV(v1_raw.texUV) * u + unpackUV(v2_raw.texUV) * v;
-        vec3 localNormal = unpackNormal(v0_raw.normal) * w + unpackNormal(v1_raw.normal) * u + unpackNormal(v2_raw.normal) * v;
+       vec3 localNormal = getNormalFromQTangent(v0_raw.qTangent) * w + getNormalFromQTangent(v1_raw.qTangent) * u + getNormalFromQTangent(v2_raw.qTangent) * v;
         mat3 normalMatrix = transpose(inverse(mat3(obj.modelMatrix)));
+         
         vec3 worldNormal = normalize(normalMatrix * localNormal);
+        
         if (dot(worldNormal, dir) > 0.0) worldNormal = -worldNormal; // Двусторонняя геометрия
 
         if (mat.albedoAlphaIdx >= 0) {

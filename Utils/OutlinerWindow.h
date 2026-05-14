@@ -33,6 +33,7 @@ namespace burnhope {
                     entt::entity e = context.CreateBaseEntity("Light");
                     context.registry->emplace<LightComponent>(e);
                 }
+
                 ImGui::EndPopup();
             }
 

@@ -60,7 +60,8 @@ namespace burnhope
   VkResult BurnhopeBuffer::map(VkDeviceSize size, VkDeviceSize offset)
   {
     assert(buffer && memory && "Called map on buffer before create");
-     return vmaMapMemory(lveDevice.getAllocator(), memory, &mapped);
+    if (!memory) return VK_ERROR_INITIALIZATION_FAILED;
+    return vmaMapMemory(lveDevice.getAllocator(), memory, &mapped);
   }
   /**
    * Unmap a mapped memory range
@@ -87,6 +88,7 @@ namespace burnhope
   void BurnhopeBuffer::writeToBuffer(void *data, VkDeviceSize size, VkDeviceSize offset)
   {
     assert(mapped && "Cannot copy to unmapped buffer");
+    if (!mapped) return;
     if (size == VK_WHOLE_SIZE)
     {
       memcpy(mapped, data, bufferSize);

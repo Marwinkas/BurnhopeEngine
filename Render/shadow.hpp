@@ -40,19 +40,13 @@ namespace burnhope
         ~BurnhopeShadowAtlas();
         BurnhopeShadowAtlas(const BurnhopeShadowAtlas &) = delete;
         BurnhopeShadowAtlas &operator=(const BurnhopeShadowAtlas &) = delete;
-        VkRenderPass getRenderPass() const { return renderPass; }
-        VkFramebuffer getFramebuffer() const { return framebuffer; }
         BurnhopeTexture *getTexture() { return atlasTexture.get(); }
         void setTileViewport(VkCommandBuffer cmd, int pixelX, int pixelY, int tileSize) const;
 
     private:
         void createResources();
-        void createRenderPass();
-        void createFramebuffer();
         BurnhopeDevice &device;
         std::unique_ptr<BurnhopeTexture> atlasTexture;
-        VkRenderPass renderPass = VK_NULL_HANDLE;
-        VkFramebuffer framebuffer = VK_NULL_HANDLE;
     };
 
     // Виртуальные теневые карты (VSM) для оптимизации памяти
@@ -70,16 +64,12 @@ namespace burnhope
         BurnhopeTexture *getPhysicalAtlas() { return physicalAtlas.get(); }
         BurnhopeBuffer *getPageTable() { return pageTableBuffer.get(); }
         BurnhopeBuffer *getAllocator() { return physicalPageAllocator.get(); }
-        VkRenderPass getRenderPass() const { return renderPass; }
-        VkFramebuffer getFramebuffer() const { return framebuffer; }
     private:
         void createResources();
         BurnhopeDevice &device;
         std::unique_ptr<BurnhopeTexture> physicalAtlas;
         std::unique_ptr<BurnhopeBuffer> pageTableBuffer;
         std::unique_ptr<BurnhopeBuffer> physicalPageAllocator;
-        VkRenderPass renderPass = VK_NULL_HANDLE;
-        VkFramebuffer framebuffer = VK_NULL_HANDLE;
     };
 
     class BurnhopeCSM
@@ -91,8 +81,7 @@ namespace burnhope
         ~BurnhopeCSM();
         BurnhopeCSM(const BurnhopeCSM &) = delete;
         BurnhopeCSM &operator=(const BurnhopeCSM &) = delete;
-        VkRenderPass getRenderPass() const { return renderPass; }
-        VkFramebuffer getFramebuffer(int cascade) const { return framebuffers[cascade]; }
+        VkImageView getCascadeView(int cascade) const { return cascadeViews[cascade]; }
         BurnhopeTexture *getTexture() { return csmTexture.get(); }
         std::array<glm::mat4, CASCADE_COUNT> calculateMatrices(
             const Camera &camera,
@@ -103,13 +92,9 @@ namespace burnhope
         glm::mat4 calculateCascadeMatrix(float nearP, float farP,
                                          const Camera &camera, glm::vec3 sunDir, float shadowSize) const;
         void createResources();
-        void createRenderPass();
-        void createFramebuffers();
         BurnhopeDevice &device;
         std::unique_ptr<BurnhopeTexture> csmTexture;
         std::array<VkImageView, CASCADE_COUNT> cascadeViews{};
-        std::array<VkFramebuffer, CASCADE_COUNT> framebuffers{};
-        VkRenderPass renderPass = VK_NULL_HANDLE;
     };
     class BurnhopeShadowSystem
     {

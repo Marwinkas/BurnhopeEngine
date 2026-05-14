@@ -20,15 +20,21 @@ namespace burnhope
         VkImageView depthImageView;
     };
 struct alignas(16) ObjectData {
-    glm::mat4 modelMatrix;   // 64 байта
-    uint32_t materialID;     // 4 байта
-    uint32_t indexCount;     // 4 байта
-    uint32_t pad0[2];        // 8 байт
-    uint64_t vertexBufferAddress; // 8 байт
-    uint64_t indexBufferAddress;  // 8 байт
-    glm::vec4 aabbMin;       // 16 байт
-    glm::vec4 aabbMax;       // 16 байт
-}; // Итого: 128 байт. Идеальное выравнивание.
+    glm::mat4 modelMatrix;       // 0
+    uint32_t materialID;         // 64
+    uint32_t indexCount;         // 68
+    uint32_t vrsRate;            // 72
+    uint32_t boneOffset;         // 76
+    uint64_t posBufferAddress;   // 80 (Perfectly aligned to 8)
+    uint64_t attrBufferAddress;  // 88
+    uint64_t indexBufferAddress; // 96
+    uint64_t colorBufferAddress; // 104
+    uint64_t uv2BufferAddress;   // 112
+    uint64_t animBufferAddress;  // 120
+    glm::vec4 aabbMin;           // 128 (Perfectly aligned to 16)
+    glm::vec4 aabbMax;           // 144
+}; // Total: 160 bytes.
+
  struct alignas(16) MaterialData
 {
     int albedoAlphaIdx; int normalIdx; int ormxIdx; int emissiveIdx;
@@ -43,7 +49,7 @@ static_assert(sizeof(MaterialData) % 16 == 0, "MaterialData size must be a multi
     class GeometryRenderSystem
     {
     public:
-        GeometryRenderSystem(BurnhopeDevice &device, VkRenderPass renderPass, VkDescriptorSetLayout globalSetLayout);
+        GeometryRenderSystem(BurnhopeDevice &device, VkDescriptorSetLayout globalSetLayout);
         ~GeometryRenderSystem() {}
         BurnhopeDescriptorSetLayout *getRenderSystemLayout() const { return renderSystemLayout.get(); }
         BurnhopeDescriptorSetLayout *getTextureLayout() const { return textureLayout.get(); }

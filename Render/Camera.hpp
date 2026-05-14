@@ -21,8 +21,8 @@ namespace burnhope
         glm::mat4 cleanViewProjectionMatrix = glm::mat4(1.0f);
         double lastMouseX = 0.0, lastMouseY = 0.0;
         bool firstClick = true;
-        int width;
-        int height;
+        int width = 800;
+        int height = 600;
         float speed = 0.01f;
         float sensitivity = 0.2f;
 

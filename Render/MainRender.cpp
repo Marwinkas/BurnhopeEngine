@@ -9,13 +9,14 @@ namespace burnhope
         glm::mat4 normalMatrix{1.f};
     };
     GeometryRenderSystem::GeometryRenderSystem(
-        BurnhopeDevice &device, VkRenderPass gBufferRenderPass, VkDescriptorSetLayout globalSetLayout)
+        BurnhopeDevice &device, VkDescriptorSetLayout globalSetLayout)
         : lveDevice{device}
     {
         renderSystemLayout = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                                  .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL)
                                  .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL)
                                  .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_TASK_BIT_EXT)
+                                 .addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL)
                                  .build();
         textureLayout = BurnhopeDescriptorSetLayout::Builder(lveDevice)
                             .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_ALL, 1000)
@@ -36,7 +37,12 @@ namespace burnhope
         }
         pipelineConfig.colorBlendInfo.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
         pipelineConfig.colorBlendInfo.pAttachments = blendAttachments.data();
-        pipelineConfig.renderPass = gBufferRenderPass;
+        pipelineConfig.colorAttachmentFormats = {
+            VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R8G8B8A8_UNORM,
+            VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_FORMAT_R8_UINT};
+        pipelineConfig.depthAttachmentFormat = lveDevice.findSupportedFormat({VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        pipelineConfig.stencilAttachmentFormat = pipelineConfig.depthAttachmentFormat;
         pipelineConfig.depthStencilInfo.stencilTestEnable = VK_FALSE;
 
         shader = std::make_unique<GraphicsShader>(
@@ -71,7 +77,7 @@ namespace burnhope
         zConfig.colorBlendInfo.pAttachments = zBlendAttachments.data();
         zConfig.depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS;
         zConfig.depthStencilInfo.depthWriteEnable = VK_TRUE;
-        zPrepassShader = std::make_unique<GraphicsShader>(lveDevice, std::vector<std::string>{"shaders/gbuffer.task.spv", "shaders/gbuffer.mesh.spv"}, layouts, std::vector<VkPushConstantRange>{pushConstantRange}, zConfig);
+        zPrepassShader = std::make_unique<GraphicsShader>(lveDevice, std::vector<std::string>{"shaders/gbuffer.task.spv", "shaders/gbuffer.mesh.spv", "shaders/gbuffer.frag.spv"}, layouts, std::vector<VkPushConstantRange>{pushConstantRange}, zConfig);
 
         // --- G-BUFFER MAIN CONFIG ---
         pipelineConfig.depthStencilInfo.depthCompareOp = VK_COMPARE_OP_EQUAL;
@@ -91,7 +97,7 @@ namespace burnhope
         zConfig.dynamicStateEnables.push_back(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
         zConfig.dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(zConfig.dynamicStateEnables.size());
         zConfig.dynamicStateInfo.pDynamicStates = zConfig.dynamicStateEnables.data();
-        zPrepassPortalShader = std::make_unique<GraphicsShader>(lveDevice, std::vector<std::string>{"shaders/gbuffer.task.spv", "shaders/gbuffer.mesh.spv"}, layouts, std::vector<VkPushConstantRange>{pushConstantRange}, zConfig);
+        zPrepassPortalShader = std::make_unique<GraphicsShader>(lveDevice, std::vector<std::string>{"shaders/gbuffer.task.spv", "shaders/gbuffer.mesh.spv", "shaders/gbuffer.frag.spv"}, layouts, std::vector<VkPushConstantRange>{pushConstantRange}, zConfig);
     }
 
     void GeometryRenderSystem::renderEntities(

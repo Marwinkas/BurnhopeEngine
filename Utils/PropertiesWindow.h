@@ -47,6 +47,18 @@ namespace burnhope {
             if (ImGui::BeginTabBar("PP_Tabs")) {
                 
                 if (ImGui::BeginTabItem("Lighting & GI")) {
+                    if (UIUtils::BeginPropertyGrid("RT Diagnostics")) {
+                        if (ImGui::Button("FORCE GLOBAL RT REBUILD", ImVec2(-1, 30))) {
+                            auto view = context.registry->view<MeshComponent>();
+                            for (auto entity : view) {
+                                auto& mc = view.get<MeshComponent>(entity);
+                                if (mc.model && !mc.model->storedPositions.empty())
+                                    mc.model->createBLAS(mc.model->storedPositions);
+                            }
+                            context.needsRTRebuild = true;
+                        }
+                        UIUtils::EndPropertyGrid();
+                    }
                     if (UIUtils::BeginPropertyGrid("SSGI")) {
                         UIUtils::DrawProperty("Enable SSGI", &renderSettings.enableSSGI);
                         if (renderSettings.enableSSGI) {

@@ -71,9 +71,12 @@ namespace burnhope
         std::vector<std::string> materialPaths;
         std::shared_ptr<BurnhopeModel> model;
         std::vector<std::shared_ptr<Material>> materials;
+        std::string skeletonPath = "";
+        std::string animationPath = "";
         bool isStatic = false;
         bool isVisible = true;
         bool castShadow = true;
+        float animationTime = 0.0f;
     };
     struct LightComponent
     {

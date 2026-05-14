@@ -8,7 +8,7 @@
 namespace burnhope {
     class PortalRenderSystem {
     public:
-        PortalRenderSystem(BurnhopeDevice& device, VkRenderPass renderPass, VkDescriptorSetLayout globalSetLayout);
+        PortalRenderSystem(BurnhopeDevice& device, VkDescriptorSetLayout globalSetLayout);
         ~PortalRenderSystem();
 
         void drawDepthReset(VkCommandBuffer cmd, VkDescriptorSet globalSet, const glm::mat4& model, uint32_t ref);

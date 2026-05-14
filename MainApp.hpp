@@ -110,6 +110,9 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::unique_ptr<ComputeShader> postProcessShader;
         std::unique_ptr<BurnhopeBuffer> exposureBuffer;
         
+        class AnimationSystem* animationSystem = nullptr;
+        std::unique_ptr<BurnhopeBuffer> boneMatricesBuffer;
+        
         std::unique_ptr<ComputeShader> lightCullingShader;
         std::unique_ptr<ComputeShader> vsmMarkPagesShader;
 

@@ -17,9 +17,8 @@ namespace burnhope
     ~BurnhopeSwapChain();
     BurnhopeSwapChain(const BurnhopeSwapChain &) = delete;
     BurnhopeSwapChain &operator=(const BurnhopeSwapChain &) = delete;
-    VkFramebuffer getFrameBuffer(int index) { return swapChainFramebuffers[index]; }
-    VkRenderPass getRenderPass() { return renderPass; }
     VkImageView getImageView(int index) { return swapChainImageViews[index]; }
+    VkImageView getDepthImageView(int index) { return depthImageViews[index]; }
     size_t imageCount() { return swapChainImages.size(); }
     VkFormat getSwapChainImageFormat() { return swapChainImageFormat; }
     VkExtent2D getSwapChainExtent() { return swapChainExtent; }
@@ -42,8 +41,6 @@ namespace burnhope
     void createSwapChain();
     void createImageViews();
     void createDepthResources();
-    void createRenderPass();
-    void createFramebuffers();
     void createSyncObjects();
     VkSurfaceFormatKHR chooseSwapSurfaceFormat(
         const std::vector<VkSurfaceFormatKHR> &availableFormats);
@@ -53,8 +50,6 @@ namespace burnhope
     VkFormat swapChainImageFormat;
     VkFormat swapChainDepthFormat;
     VkExtent2D swapChainExtent;
-    std::vector<VkFramebuffer> swapChainFramebuffers;
-    VkRenderPass renderPass;
     std::vector<VkImage> depthImages;
     std::vector<VmaAllocation> depthImageMemorys;
     std::vector<VkImageView> depthImageViews;

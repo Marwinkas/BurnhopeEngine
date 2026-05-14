@@ -9,28 +9,38 @@ namespace burnhope
         uint32_t portalID;
     };
 
-    PortalRenderSystem::PortalRenderSystem(BurnhopeDevice &device, VkRenderPass renderPass, VkDescriptorSetLayout globalSetLayout)
+    PortalRenderSystem::PortalRenderSystem(BurnhopeDevice &device, VkDescriptorSetLayout globalSetLayout)
         : lveDevice{device}
     {
         createPipelineLayout(globalSetLayout);
-        createPipeline(renderPass);
-        createDepthResetPipeline(renderPass);
+        std::vector<PackedVertexPos> positions = {
+            {0, 0, 0, 0},
+            {65535, 0, 0, 0},
+            {65535, 65535, 0, 0},
+            {0, 65535, 0, 0}
+        };
 
-      std::vector<Vertex> vertices = {
-    {{-1.f, -1.f, 0.f}, {0.f, 0.f, 1.f}, {0.f, 0.f}},
-    {{ 1.f, -1.f, 0.f}, {0.f, 0.f, 1.f}, {1.f, 0.f}},
-    {{ 1.f,  1.f, 0.f}, {0.f, 0.f, 1.f}, {1.f, 1.f}},
-    {{-1.f,  1.f, 0.f}, {0.f, 0.f, 1.f}, {0.f, 1.f}}
-};
+        uint32_t qTan = glm::packSnorm3x10_1x2(glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+        std::vector<PackedVertexAttr> attributes = {
+            {glm::packHalf2x16(glm::vec2(0.f, 0.f)), qTan},
+            {glm::packHalf2x16(glm::vec2(1.f, 0.f)), qTan},
+            {glm::packHalf2x16(glm::vec2(1.f, 1.f)), qTan},
+            {glm::packHalf2x16(glm::vec2(0.f, 1.f)), qTan}
+        };
+
         std::vector<uint32_t> indices = {0, 1, 2, 2, 3, 0};
 
         Builder builder;
-        builder.vertices = vertices;
+        builder.positions = positions;
+        builder.attributes = attributes;
         builder.indices = indices;
 
         SubMesh sub;
         sub.indexCounts[0] = static_cast<uint32_t>(indices.size());
         sub.firstIndices[0] = 0;
+        sub.aabbMin = glm::vec3(-1.f, -1.f, 0.f);
+        sub.aabbMax = glm::vec3(1.f, 1.f, 0.f);
+        sub.boundingRadius = glm::distance(sub.aabbMin, sub.aabbMax) * 0.5f;
         builder.subMeshes.push_back(sub);
 
         portalModel = std::make_unique<BurnhopeModel>(lveDevice, builder);
@@ -70,7 +80,12 @@ namespace burnhope
         config.bindingDescriptions = Vertex::getBindingDescriptions();
         config.attributeDescriptions = Vertex::getAttributeDescriptions();
 
-        config.renderPass = renderPass;
+        config.colorAttachmentFormats = {
+            VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R8G8B8A8_UNORM,
+            VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_FORMAT_R8_UINT};
+        config.depthAttachmentFormat = lveDevice.findSupportedFormat({VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        config.stencilAttachmentFormat = config.depthAttachmentFormat;
         config.pipelineLayout = pipelineLayout;
 
         static std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(5);
@@ -130,7 +145,12 @@ namespace burnhope
         config.dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(config.dynamicStateEnables.size());
         config.dynamicStateInfo.pDynamicStates = config.dynamicStateEnables.data();
 
-        config.renderPass = renderPass;
+        config.colorAttachmentFormats = {
+            VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R8G8B8A8_UNORM,
+            VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_FORMAT_R8_UINT};
+        config.depthAttachmentFormat = lveDevice.findSupportedFormat({VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        config.stencilAttachmentFormat = config.depthAttachmentFormat;
         config.pipelineLayout = pipelineLayout;
 
         depthResetPipeline = std::make_unique<BurnhopePipeline>(

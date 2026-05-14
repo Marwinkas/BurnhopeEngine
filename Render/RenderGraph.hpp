@@ -8,36 +8,40 @@ namespace burnhope
     struct RenderPassNode
     {
         std::string name;
-        std::vector<VkImageMemoryBarrier> barriersBefore;
+        std::vector<VkImageMemoryBarrier2> barriersBefore;
         std::function<void(VkCommandBuffer)> executeFunction;
     };
     class RenderPipeline
     {
     public:
-        static VkImageMemoryBarrier createImageBarrier(
+        static VkImageMemoryBarrier2 createImageBarrier(
             VkImage image,
             VkImageLayout oldLayout,
             VkImageLayout newLayout,
-            VkAccessFlags srcAccess,
-            VkAccessFlags dstAccess,
+            VkPipelineStageFlags2 srcStage,
+            VkAccessFlags2 srcAccess,
+            VkPipelineStageFlags2 dstStage,
+            VkAccessFlags2 dstAccess,
             VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
             uint32_t layerCount = 1,
             uint32_t mipLevels = 1)
         {
-            VkImageMemoryBarrier barrier{};
-            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            VkImageMemoryBarrier2 barrier{};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
             barrier.oldLayout = oldLayout;
             barrier.newLayout = newLayout;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.image = image;
             barrier.subresourceRange = {aspectMask, 0, mipLevels, 0, layerCount};
+            barrier.srcStageMask = srcStage;
             barrier.srcAccessMask = srcAccess;
+            barrier.dstStageMask = dstStage;
             barrier.dstAccessMask = dstAccess;
             return barrier;
         }
         void addPass(const std::string &name,
-                     const std::vector<VkImageMemoryBarrier> &barriers,
+                     const std::vector<VkImageMemoryBarrier2> &barriers,
                      std::function<void(VkCommandBuffer)> execute)
         {
             passes.push_back({name, barriers, execute});
@@ -52,15 +56,11 @@ namespace burnhope
             {
                 if (!pass.barriersBefore.empty())
                 {
-                    vkCmdPipelineBarrier(
-                        commandBuffer,
-                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                        0,
-                        0, nullptr,
-                        0, nullptr,
-                        static_cast<uint32_t>(pass.barriersBefore.size()),
-                        pass.barriersBefore.data());
+                    VkDependencyInfo depInfo{};
+                    depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+                    depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(pass.barriersBefore.size());
+                    depInfo.pImageMemoryBarriers = pass.barriersBefore.data();
+                    vkCmdPipelineBarrier2(commandBuffer, &depInfo);
                 }
                 if (pass.executeFunction)
                 {

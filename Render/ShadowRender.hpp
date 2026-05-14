@@ -18,7 +18,6 @@ namespace burnhope
     {
     public:
         ShadowRenderSystem(BurnhopeDevice &device,
-                           VkRenderPass shadowRenderPass,
                            VkDescriptorSetLayout globalSetLayout);
         ~ShadowRenderSystem();
         ShadowRenderSystem(const ShadowRenderSystem &) = delete;

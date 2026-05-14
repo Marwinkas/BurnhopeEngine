@@ -74,7 +74,10 @@ namespace burnhope
                         {"materialPaths", mc.materialPaths},
                         {"isStatic", mc.isStatic},
                         {"isVisible", mc.isVisible},
-                        {"castShadow", mc.castShadow}
+                        {"castShadow", mc.castShadow},
+                        {"skeletonPath", mc.skeletonPath},
+                        {"animationPath", mc.animationPath},
+                        {"animationTime", mc.animationTime}
                     };
                 }
 
@@ -85,6 +88,8 @@ namespace burnhope
                         {"resolution", pc.resolution}
                     };
                 }
+
+    
 
                 entitiesArray.push_back(eJson);
             }
@@ -155,12 +160,19 @@ namespace burnhope
                 if (eJson.contains("mesh")) {
                     auto& mc = registry.emplace<MeshComponent>(entity);
                     mc.modelPath = eJson["mesh"].value("modelPath", "");
+                    mc.skeletonPath = eJson["mesh"].value("skeletonPath", "");
+                    mc.animationPath = eJson["mesh"].value("animationPath", "");
+                    mc.animationTime = eJson["mesh"].value("animationTime", 0.0f);
                     mc.isStatic = eJson["mesh"].value("isStatic", false);
                     mc.isVisible = eJson["mesh"].value("isVisible", true);
                     mc.castShadow = eJson["mesh"].value("castShadow", true);
 
                     if (!mc.modelPath.empty()) {
-                        mc.model = BurnhopeModel::createModelFromFile(device, mc.modelPath);
+                        try {
+                            mc.model = BurnhopeModel::createModelFromFile(device, mc.modelPath);
+                        } catch (const std::exception& e) {
+                            std::cerr << "[ERROR] Failed to load model: " << mc.modelPath << " | " << e.what() << "\n";
+                        }
                     }
 
                     for (const auto& matPath : eJson["mesh"]["materialPaths"]) {
@@ -184,6 +196,8 @@ namespace burnhope
                     pc.resolution = eJson["probe"].value("resolution", 256);
                     pc.updateNeeded = true;
                 }
+                
+            
             }
             std::cout << "[SUCCESS] Сцена загружена: " << filePath << "\n";
         }

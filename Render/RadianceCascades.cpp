@@ -48,20 +48,24 @@ namespace burnhope
                 VK_SAMPLE_COUNT_1_BIT);
 
             VkCommandBuffer cmd = device.beginSingleTimeCommands();
-            VkImageMemoryBarrier barrier{};
-            barrier.sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            VkImageMemoryBarrier2 barrier{};
+            barrier.sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
             barrier.oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED;
             barrier.newLayout        = VK_IMAGE_LAYOUT_GENERAL;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.image            = probeTex[c]->getImage();
             barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            barrier.srcStageMask     = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
             barrier.srcAccessMask    = 0;
-            barrier.dstAccessMask    = VK_ACCESS_SHADER_WRITE_BIT;
-            vkCmdPipelineBarrier(cmd,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                0, 0, nullptr, 0, nullptr, 1, &barrier);
+            barrier.dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            barrier.dstAccessMask    = VK_ACCESS_2_SHADER_WRITE_BIT;
+            
+            VkDependencyInfo depInfo{};
+            depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+            depInfo.imageMemoryBarrierCount = 1;
+            depInfo.pImageMemoryBarriers = &barrier;
+            vkCmdPipelineBarrier2(cmd, &depInfo);
             device.endSingleTimeCommands(cmd);
         }
     }
@@ -84,23 +88,26 @@ namespace burnhope
 
         VkCommandBuffer cmd = device.beginSingleTimeCommands();
         
-        std::array<VkImageMemoryBarrier, 2> barriers{};
+        std::array<VkImageMemoryBarrier2, 2> barriers{};
         for(int i = 0; i < 2; i++) {
-            barriers[i].sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barriers[i].sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
             barriers[i].oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED;
             barriers[i].newLayout        = VK_IMAGE_LAYOUT_GENERAL;
             barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barriers[i].image            = i == 0 ? diffuseGITex->getImage() : specularGITex->getImage();
             barriers[i].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            barriers[i].srcStageMask     = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
             barriers[i].srcAccessMask    = 0;
-            barriers[i].dstAccessMask    = VK_ACCESS_SHADER_WRITE_BIT;
+            barriers[i].dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            barriers[i].dstAccessMask    = VK_ACCESS_2_SHADER_WRITE_BIT;
         }
         
-        vkCmdPipelineBarrier(cmd,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0, 0, nullptr, 0, nullptr, 2, barriers.data());
+        VkDependencyInfo depInfo{};
+        depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        depInfo.imageMemoryBarrierCount = 2;
+        depInfo.pImageMemoryBarriers = barriers.data();
+        vkCmdPipelineBarrier2(cmd, &depInfo);
         device.endSingleTimeCommands(cmd);
     }
 
@@ -267,11 +274,14 @@ namespace burnhope
         // binding 0 → diffuseGITex (sampler2D read)
         // binding 1 → specularGITex (sampler2D read)
         {
-            auto irReadLayout = BurnhopeDescriptorSetLayout::Builder(device)
-                .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
-                .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
-                .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
-                .build();
+            if (!lightingReadLayout) {
+                lightingReadLayout = BurnhopeDescriptorSetLayout::Builder(device)
+                    .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+                    .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+                    .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+                    .build();
+            }
+
 
             VkDescriptorImageInfo diffReadInfo{};
             diffReadInfo.imageView   = diffuseGITex->getImageView();
@@ -288,7 +298,7 @@ namespace burnhope
             cascade0ReadInfo.sampler     = probeTex[0]->getSampler();
             cascade0ReadInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
-            BurnhopeDescriptorWriter(*irReadLayout, pool)
+            BurnhopeDescriptorWriter(*lightingReadLayout, pool)
                 .writeImage(0, &diffReadInfo)
                 .writeImage(1, &specReadInfo)
                 .writeImage(2, &cascade0ReadInfo)
@@ -302,17 +312,24 @@ namespace burnhope
         VkAccessFlags src, VkAccessFlags dst,
         VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)
     {
-        VkImageMemoryBarrier b{};
-        b.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        VkImageMemoryBarrier2 b{};
+        b.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
         b.oldLayout           = oldLayout;
         b.newLayout           = newLayout;
         b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         b.image               = image;
         b.subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        b.srcStageMask        = srcStage;
         b.srcAccessMask       = src;
+        b.dstStageMask        = dstStage;
         b.dstAccessMask       = dst;
-        vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &b);
+        
+        VkDependencyInfo depInfo{};
+        depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        depInfo.imageMemoryBarrierCount = 1;
+        depInfo.pImageMemoryBarriers = &b;
+        vkCmdPipelineBarrier2(cmd, &depInfo);
     }
 
     void RadianceCascadesSystem::dispatch(

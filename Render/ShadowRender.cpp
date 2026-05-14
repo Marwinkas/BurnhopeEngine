@@ -5,13 +5,13 @@
 namespace burnhope
 {
     ShadowRenderSystem::ShadowRenderSystem(BurnhopeDevice &device,
-                                           VkRenderPass shadowRenderPass,
                                            VkDescriptorSetLayout globalSetLayout)
         : lveDevice(device)
     {
         PipelineConfigInfo config{};
         BurnhopePipeline::defaultPipelineConfigInfo(config);
-        config.renderPass = shadowRenderPass;
+        config.depthAttachmentFormat = lveDevice.findSupportedFormat({VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        config.stencilAttachmentFormat = config.depthAttachmentFormat;
         config.colorBlendInfo.attachmentCount = 0;
         config.colorBlendInfo.pAttachments = nullptr;
         config.rasterizationInfo.depthBiasEnable = VK_TRUE;

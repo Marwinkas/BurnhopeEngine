@@ -5,12 +5,18 @@ struct ObjectData {
     mat4 modelMatrix;
     uint materialID;
     uint indexCount;
-    uint pad[2];
-    uint64_t vertexBufferAddress;
+    uint vrsRate;
+    uint boneOffset;
+    uint64_t posBufferAddress;
+    uint64_t attrBufferAddress;
     uint64_t indexBufferAddress;
+    uint64_t colorBufferAddress;
+    uint64_t uv2BufferAddress;
+    uint64_t animBufferAddress;
     vec4 aabbMin;
     vec4 aabbMax;
 };
+
 struct SubMeshInfo {
     vec3  aabbMin;
     float boundingRadius;
@@ -21,6 +27,7 @@ struct SubMeshInfo {
     uint  materialIndex;
     uint  pad1, pad2, pad3;
 };
+
 struct DrawCommand {
     uint indexCount;
     uint instanceCount; 
@@ -28,16 +35,12 @@ struct DrawCommand {
     int  vertexOffset;
     uint firstInstance;
 };
-layout(std430, set = 0, binding = 0) readonly buffer ObjectBuffer {
-    ObjectData objects[];
-};
-layout(std430, set = 0, binding = 1) readonly buffer SubMeshBuffer {
-    SubMeshInfo subMeshes[];
-};
-layout(std430, set = 0, binding = 2) buffer DrawCommandBuffer {
-    DrawCommand drawCommands[];
-};
+
+layout(std430, set = 0, binding = 0) readonly buffer ObjectBuffer { ObjectData objects[]; };
+layout(std430, set = 0, binding = 1) readonly buffer SubMeshBuffer { SubMeshInfo subMeshes[]; };
+layout(std430, set = 0, binding = 2) buffer DrawCommandBuffer { DrawCommand drawCommands[]; };
 layout(set = 0, binding = 3) uniform sampler2D hiZBuffer; 
+
 layout(push_constant) uniform CullPushConstants {
     mat4  viewProj;
     vec4  frustumPlanes[6];
@@ -45,6 +48,7 @@ layout(push_constant) uniform CullPushConstants {
     uint  objectCount;
     float zNear;
 } push;
+
 bool isVisible(vec3 worldMin, vec3 worldMax) {
     for (int i = 0; i < 6; i++) {
         vec3 n = push.frustumPlanes[i].xyz;
@@ -58,32 +62,27 @@ bool isVisible(vec3 worldMin, vec3 worldMax) {
     }
     return true;
 }
+
 bool isOccluded(vec3 corners[8]) {
-    vec2 minXY = vec2(1.0);
-    vec2 maxXY = vec2(0.0);
-    float minZ = 1.0;
+    vec2 minXY = vec2(1.0); vec2 maxXY = vec2(0.0); float minZ = 1.0;
     for(int i = 0; i < 8; i++) {
         vec4 clip = push.viewProj * vec4(corners[i], 1.0);
         if (clip.w <= 0.0) return false; 
         vec3 ndc = clip.xyz / clip.w;
         vec2 uv = ndc.xy * 0.5 + 0.5; 
-        minXY = min(minXY, uv);
-        maxXY = max(maxXY, uv);
-        minZ = min(minZ, ndc.z); 
+        minXY = min(minXY, uv); maxXY = max(maxXY, uv); minZ = min(minZ, ndc.z); 
     }
     if (minXY.x > 1.0 || maxXY.x < 0.0 || minXY.y > 1.0 || maxXY.y < 0.0) return true;
-    minXY = clamp(minXY, 0.0, 1.0);
-    maxXY = clamp(maxXY, 0.0, 1.0);
+    minXY = clamp(minXY, 0.0, 1.0); maxXY = clamp(maxXY, 0.0, 1.0);
     vec2 size = (maxXY - minXY) * vec2(textureSize(hiZBuffer, 0));
-    float lod = ceil(log2(max(size.x, size.y)));
-    lod = max(0.0, lod + 1.0); 
+    float lod = max(0.0, ceil(log2(max(size.x, size.y))) + 1.0); 
     float d1 = textureLod(hiZBuffer, vec2(minXY.x, minXY.y), lod).r;
     float d2 = textureLod(hiZBuffer, vec2(maxXY.x, minXY.y), lod).r;
     float d3 = textureLod(hiZBuffer, vec2(minXY.x, maxXY.y), lod).r;
     float d4 = textureLod(hiZBuffer, vec2(maxXY.x, maxXY.y), lod).r;
-    float maxZ = max(max(d1, d2), max(d3, d4));
-    return minZ > maxZ; 
+    return minZ > max(max(d1, d2), max(d3, d4)); 
 }
+
 void main() {
     uint idx = gl_GlobalInvocationID.x;
     if (idx >= push.objectCount) return;
@@ -98,6 +97,7 @@ void main() {
     corners[5] = (obj.modelMatrix * vec4(sub.aabbMax.x, sub.aabbMin.y, sub.aabbMax.z, 1.0)).xyz;
     corners[6] = (obj.modelMatrix * vec4(sub.aabbMin.x, sub.aabbMax.y, sub.aabbMax.z, 1.0)).xyz;
     corners[7] = (obj.modelMatrix * vec4(sub.aabbMax.x, sub.aabbMax.y, sub.aabbMax.z, 1.0)).xyz;
+    
     vec3 worldMin = corners[0], worldMax = corners[0];
     for (int i = 1; i < 8; i++) {
         worldMin = min(worldMin, corners[i]);
@@ -105,12 +105,10 @@ void main() {
     }
     
     bool visible = isVisible(worldMin, worldMax);
-    if (visible) {
-        visible = !isOccluded(corners);
-    }
+    if (visible) visible = !isOccluded(corners);
 
     uint drawIdx = idx; 
-uint selectedLod = 0;
+    uint selectedLod = 0;
     if (visible) {
         vec3 center = (worldMin + worldMax) * 0.5;
         float dist = distance(push.camPos, center);

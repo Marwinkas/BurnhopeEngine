@@ -133,6 +133,44 @@ namespace burnhope {
                     }
 
                     if (mc.model) {
+                        ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Skeleton:"); ImGui::TableSetColumnIndex(1);
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        std::string skelName = mc.skeletonPath.empty() ? "None" : std::filesystem::path(mc.skeletonPath).filename().string();
+                        ImGui::Button((skelName + "##SkelBtn").c_str(), ImVec2(-1, 0));
+                        if (ImGui::BeginDragDropTarget()) {
+                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                                const char* path = (const char*)payload->Data;
+                                std::filesystem::path p(path);
+                                if (p.extension() == ".bhbone") {
+                                    mc.skeletonPath = p.string();
+                                    context.needsRebuild = true;
+                                }
+                            }
+                            ImGui::EndDragDropTarget();
+                        }
+
+                        ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Animation:"); ImGui::TableSetColumnIndex(1);
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        std::string animName = mc.animationPath.empty() ? "None" : std::filesystem::path(mc.animationPath).filename().string();
+                        ImGui::Button((animName + "##AnimBtn").c_str(), ImVec2(-1, 0));
+                        if (ImGui::BeginDragDropTarget()) {
+                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                                const char* path = (const char*)payload->Data;
+                                std::filesystem::path p(path);
+                                if (p.extension() == ".bhanim") {
+                                    mc.animationPath = p.string();
+                                    context.needsRebuild = true;
+                                }
+                            }
+                            ImGui::EndDragDropTarget();
+                        }
+                        
+                        if (!mc.animationPath.empty()) {
+                            ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Anim Time:"); ImGui::TableSetColumnIndex(1);
+                            ImGui::SetNextItemWidth(-FLT_MIN);
+                            ImGui::DragFloat("##AnimTime", &mc.animationTime, 0.01f);
+                        }
+
                         ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Materials:");
                         uint32_t matCount = mc.model->getMaterialCount();
                         for (uint32_t mId = 0; mId < matCount; mId++) {
@@ -145,7 +183,12 @@ namespace burnhope {
                             ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("  Slot %u:", mId); ImGui::TableSetColumnIndex(1);
                             ImGui::SetNextItemWidth(-FLT_MIN);
                             ImGui::PushID(mId);
-                            std::string matName = mc.materialPaths[firstIdx].empty() ? "None" : std::filesystem::path(mc.materialPaths[firstIdx]).filename().string();
+                            
+                            std::string matName = "None";
+                            if (firstIdx < mc.materialPaths.size() && !mc.materialPaths[firstIdx].empty()) {
+                                matName = std::filesystem::path(mc.materialPaths[firstIdx]).filename().string();
+                            }
+                            
                             if (ImGui::Button((matName + "##MatBtn").c_str(), ImVec2(-1, 0))) {
                                 ImGui::OpenPopup("SelectMatPopup");
                             }
@@ -180,6 +223,16 @@ namespace burnhope {
                                 ImGui::EndPopup();
                             }
                             ImGui::PopID();
+                        }
+
+                         ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0);
+                        ImGui::Text("Ray Tracing:"); ImGui::TableSetColumnIndex(1);
+                        if (ImGui::Button("FORCE REBUILD ALL", ImVec2(-1, 0))) {
+                            if (mc.model && mc.model->gpuDataReady && !mc.model->storedPositions.empty()) {
+                                mc.model->createBLAS(mc.model->storedPositions);
+                                context.needsRTRebuild = true;
+                                context.needsRebuild = true; // Для обновления ObjectData/MaterialData
+                            }
                         }
                     }
                     UIUtils::EndPropertyGrid();

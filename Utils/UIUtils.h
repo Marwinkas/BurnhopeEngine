@@ -65,7 +65,9 @@ namespace burnhope::UIUtils {
     inline bool DrawVec2Control(const std::string& label, glm::vec2& values, float resetValue = 0.0f) {
         return DrawFloatControl(label, glm::value_ptr(values), 2, resetValue);
     }
-
+ inline bool DrawVec4Control(const std::string& label, glm::vec4& values, float resetValue = 0.0f) {
+        return DrawFloatControl(label, glm::value_ptr(values), 4, resetValue);
+    }
     // --- Compact Property Grid System ---
     inline bool BeginPropertyGrid(const std::string& name) {
         if (!ImGui::CollapsingHeader(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) return false;

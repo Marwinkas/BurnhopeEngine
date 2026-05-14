@@ -6,50 +6,11 @@ namespace burnhope
 {
     namespace
     {
-        VkRenderPass createDepthOnlyRenderPass(VkDevice device, VkFormat format, VkAttachmentLoadOp loadOp)
-        {
-            VkRenderPass renderPass;
-            VkAttachmentDescription depth{};
-            depth.format = format;
-            depth.samples = VK_SAMPLE_COUNT_1_BIT;
-            depth.loadOp = loadOp;
-            depth.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            depth.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            depth.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            depth.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            VkAttachmentReference depthRef{0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
-            VkSubpassDescription subpass{};
-            subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-            subpass.pDepthStencilAttachment = &depthRef;
-            std::array<VkSubpassDependency, 2> deps{};
-            deps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-            deps[0].dstSubpass = 0;
-            deps[0].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-            deps[0].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            deps[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-            deps[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-            deps[1].srcSubpass = 0;
-            deps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-            deps[1].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-            deps[1].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            deps[1].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-            deps[1].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-            VkRenderPassCreateInfo rpInfo{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
-            rpInfo.attachmentCount = 1;
-            rpInfo.pAttachments = &depth;
-            rpInfo.subpassCount = 1;
-            rpInfo.pSubpasses = &subpass;
-            rpInfo.dependencyCount = (uint32_t)deps.size();
-            rpInfo.pDependencies = deps.data();
-            if (vkCreateRenderPass(device, &rpInfo, nullptr, &renderPass) != VK_SUCCESS)
-                throw std::runtime_error("Failed to create depth render pass!");
-            return renderPass;
-        }
+
         void transitionImageToDepth(BurnhopeDevice &device, VkImage image, uint32_t layerCount, VkFormat format)
 {
     VkCommandBuffer cmd = device.beginSingleTimeCommands();
-    VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    VkImageMemoryBarrier2 barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
     barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -72,22 +33,25 @@ namespace burnhope
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = layerCount;
     
-    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-                         0, 0, nullptr, 0, nullptr, 1, &barrier);
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    barrier.srcAccessMask = 0;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+    
+    VkDependencyInfo depInfo{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+    depInfo.imageMemoryBarrierCount = 1;
+    depInfo.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(cmd, &depInfo);
     device.endSingleTimeCommands(cmd);
 }
     }
     BurnhopeShadowAtlas::BurnhopeShadowAtlas(BurnhopeDevice &dev) : device(dev)
     {
         createResources();
-        renderPass = createDepthOnlyRenderPass(device.device(), atlasTexture->getFormat(), VK_ATTACHMENT_LOAD_OP_LOAD);
-        createFramebuffer();
+        
     }
     BurnhopeShadowAtlas::~BurnhopeShadowAtlas()
     {
-        vkDestroyFramebuffer(device.device(), framebuffer, nullptr);
-        vkDestroyRenderPass(device.device(), renderPass, nullptr);
     }
     void BurnhopeShadowAtlas::createResources()
     {
@@ -101,19 +65,7 @@ namespace burnhope
             VK_SAMPLE_COUNT_1_BIT);
         transitionImageToDepth(device, atlasTexture->getImage(), 1, depthFmt);
     }
-    void BurnhopeShadowAtlas::createFramebuffer()
-    {
-        VkImageView view = atlasTexture->getImageView();
-        VkFramebufferCreateInfo fbInfo{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-        fbInfo.renderPass = renderPass;
-        fbInfo.attachmentCount = 1;
-        fbInfo.pAttachments = &view;
-        fbInfo.width = ATLAS_RESOLUTION;
-        fbInfo.height = ATLAS_RESOLUTION;
-        fbInfo.layers = 1;
-        if (vkCreateFramebuffer(device.device(), &fbInfo, nullptr, &framebuffer) != VK_SUCCESS)
-            throw std::runtime_error("Failed to create shadow atlas framebuffer!");
-    }
+
     void BurnhopeShadowAtlas::setTileViewport(VkCommandBuffer cmd, int pixelX, int pixelY, int tileSize) const
     {
         VkViewport vp{(float)pixelX, (float)pixelY, (float)tileSize, (float)tileSize, 0.0f, 1.0f};
@@ -125,24 +77,10 @@ namespace burnhope
     VirtualShadowMap::VirtualShadowMap(BurnhopeDevice &dev) : device(dev)
     {
         createResources();
-        renderPass = createDepthOnlyRenderPass(device.device(), physicalAtlas->getFormat(), VK_ATTACHMENT_LOAD_OP_LOAD);
-        
-        VkImageView view = physicalAtlas->getImageView();
-        VkFramebufferCreateInfo fbInfo{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-        fbInfo.renderPass = renderPass;
-        fbInfo.attachmentCount = 1;
-        fbInfo.pAttachments = &view;
-        fbInfo.width = 32 * PAGE_SIZE; // 32 * 128 = 4096
-        fbInfo.height = fbInfo.width;
-        fbInfo.layers = 1;
-        if (vkCreateFramebuffer(device.device(), &fbInfo, nullptr, &framebuffer) != VK_SUCCESS)
-            throw std::runtime_error("Failed to create VSM framebuffer!");
     }
 
     VirtualShadowMap::~VirtualShadowMap()
     {
-        vkDestroyFramebuffer(device.device(), framebuffer, nullptr);
-        vkDestroyRenderPass(device.device(), renderPass, nullptr);
     }
 
     void VirtualShadowMap::createResources()
@@ -172,17 +110,15 @@ namespace burnhope
     BurnhopeCSM::BurnhopeCSM(BurnhopeDevice &dev) : device(dev)
     {
         createResources();
-        renderPass = createDepthOnlyRenderPass(device.device(), csmTexture->getFormat(), VK_ATTACHMENT_LOAD_OP_LOAD);
-        createFramebuffers();
+       
     }
     BurnhopeCSM::~BurnhopeCSM()
     {
         for (int i = 0; i < CASCADE_COUNT; i++)
         {
-            vkDestroyFramebuffer(device.device(), framebuffers[i], nullptr);
             vkDestroyImageView(device.device(), cascadeViews[i], nullptr);
         }
-        vkDestroyRenderPass(device.device(), renderPass, nullptr);
+      
     }
     void BurnhopeCSM::createResources()
     {
@@ -195,30 +131,20 @@ namespace burnhope
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_SAMPLE_COUNT_1_BIT, CASCADE_COUNT);
         transitionImageToDepth(device, csmTexture->getImage(), CASCADE_COUNT, depthFmt);
-    }
-    void BurnhopeCSM::createFramebuffers()
-    {
         for (int i = 0; i < CASCADE_COUNT; i++)
         {
             VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
             viewInfo.image = csmTexture->getImage();
             viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
             viewInfo.format = csmTexture->getFormat();
-            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT| VK_IMAGE_ASPECT_STENCIL_BIT;
+            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             viewInfo.subresourceRange.levelCount = 1;
             viewInfo.subresourceRange.baseArrayLayer = i;
             viewInfo.subresourceRange.layerCount = 1;
             vkCreateImageView(device.device(), &viewInfo, nullptr, &cascadeViews[i]);
-            VkFramebufferCreateInfo fbInfo{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-            fbInfo.renderPass = renderPass;
-            fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments = &cascadeViews[i];
-            fbInfo.width = SHADOW_MAP_SIZE;
-            fbInfo.height = SHADOW_MAP_SIZE;
-            fbInfo.layers = 1;
-            vkCreateFramebuffer(device.device(), &fbInfo, nullptr, &framebuffers[i]);
         }
     }
+
     std::array<glm::mat4, BurnhopeCSM::CASCADE_COUNT> BurnhopeCSM::calculateMatrices(
         const Camera &camera, glm::vec3 sunDir, const std::array<float, CASCADE_COUNT> &splits) const
     {

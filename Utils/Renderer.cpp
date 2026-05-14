@@ -104,24 +104,30 @@ namespace burnhope
     isFrameStarted = false;
     currentFrameIndex = (currentFrameIndex + 1) % BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT;
   }
-  void BurnhopeRenderer::beginSwapChainRenderPass(VkCommandBuffer commandBuffer)
+  void BurnhopeRenderer::beginSwapChainRendering(VkCommandBuffer commandBuffer)
   {
-    assert(isFrameStarted && "Can't call beginSwapChainRenderPass if frame is not in progress");
+    assert(isFrameStarted && "Can't call beginSwapChainRendering if frame is not in progress");
     assert(
         commandBuffer == getCurrentCommandBuffer() &&
-        "Can't begin render pass on command buffer from a different frame");
-    VkRenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = lveSwapChain->getRenderPass();
-    renderPassInfo.framebuffer = lveSwapChain->getFrameBuffer(currentImageIndex);
-    renderPassInfo.renderArea.offset = {0, 0};
-    renderPassInfo.renderArea.extent = lveSwapChain->getSwapChainExtent();
-    std::array<VkClearValue, 2> clearValues{};
-    clearValues[0].color = {0.01f, 0.01f, 0.01f, 1.0f};
-    clearValues[1].depthStencil = {1.0f, 0};
-    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-    renderPassInfo.pClearValues = clearValues.data();
-    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        "Can't begin rendering on command buffer from a different frame");
+
+    VkRenderingAttachmentInfo colorAttachment{};
+    colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    colorAttachment.imageView = lveSwapChain->getImageView(currentImageIndex);
+    colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.clearValue.color = {0.01f, 0.01f, 0.01f, 1.0f};
+
+    VkRenderingInfo renderingInfo{};
+    renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    renderingInfo.renderArea.offset = {0, 0};
+    renderingInfo.renderArea.extent = lveSwapChain->getSwapChainExtent();
+    renderingInfo.layerCount = 1;
+    renderingInfo.colorAttachmentCount = 1;
+    renderingInfo.pColorAttachments = &colorAttachment;
+
+    vkCmdBeginRendering(commandBuffer, &renderingInfo);
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -133,12 +139,30 @@ namespace burnhope
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
   }
-  void BurnhopeRenderer::endSwapChainRenderPass(VkCommandBuffer commandBuffer)
+  void BurnhopeRenderer::endSwapChainRendering(VkCommandBuffer commandBuffer)
   {
-    assert(isFrameStarted && "Can't call endSwapChainRenderPass if frame is not in progress");
+    assert(isFrameStarted && "Can't call endSwapChainRendering if frame is not in progress");
     assert(
         commandBuffer == getCurrentCommandBuffer() &&
-        "Can't end render pass on command buffer from a different frame");
-    vkCmdEndRenderPass(commandBuffer);
+        "Can't end rendering on command buffer from a different frame");
+    vkCmdEndRendering(commandBuffer);
+
+    VkImageMemoryBarrier2 barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = getCurrentSwapChainImage();
+    barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    barrier.dstAccessMask = 0;
+    VkDependencyInfo depInfo{};
+    depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    depInfo.imageMemoryBarrierCount = 1;
+    depInfo.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(commandBuffer, &depInfo);
   }
 }

@@ -196,9 +196,14 @@ namespace burnhope
         if (auto tex = textureCache[filepath].lock()) {
             return tex;
         }
-        auto tex = std::make_shared<BurnhopeTexture>(device, filepath, true);
-        textureCache[filepath] = tex;
-        return tex;
+        try {
+            auto tex = std::make_shared<BurnhopeTexture>(device, filepath, true);
+            textureCache[filepath] = tex;
+            return tex;
+        } catch (const std::exception& e) {
+            std::cerr << "[ERROR] Failed to load texture: " << filepath << " | " << e.what() << "\n";
+            return nullptr;
+        }
     }
     std::shared_ptr<BurnhopeTexture> BurnhopeTexture::createDataTextureFromFile(
         BurnhopeDevice &device, const std::string &filepath)
@@ -206,9 +211,14 @@ namespace burnhope
         if (auto tex = textureCache[filepath].lock()) {
             return tex;
         }
-        auto tex = std::make_shared<BurnhopeTexture>(device, filepath, false);
-        textureCache[filepath] = tex;
-        return tex;
+        try {
+            auto tex = std::make_shared<BurnhopeTexture>(device, filepath, false);
+            textureCache[filepath] = tex;
+            return tex;
+        } catch (const std::exception& e) {
+            std::cerr << "[ERROR] Failed to load data texture: " << filepath << " | " << e.what() << "\n";
+            return nullptr;
+        }
     }
     void BurnhopeTexture::updateDescriptor()
     {
@@ -234,100 +244,12 @@ namespace burnhope
             {
                 return;
             }
+            std::cout << "[CACHE] Кэш поврежден или устарел, пересоздаю...\n";
         }
         std::cout << "[BUILD] Создаю кэш .bhtex для: " << filepath << "\n";
         generateAndCacheBHTex(filepath, cachePath, isSRGB);
-        if (!loadFromBHTex(cachePath))
+        if (loadFromBHTex(cachePath))
         {
-            throw std::runtime_error("Failed to load generated .bhtex!");
-        }
-        if (filepath.ends_with(".bhtex"))
-        {
-            std::ifstream file(filepath, std::ios::binary);
-            if (!file.is_open())
-            {
-                throw std::runtime_error("Failed to open .bhtex file: " + filepath);
-            }
-            BHTexHeader header;
-            file.read(reinterpret_cast<char *>(&header), sizeof(BHTexHeader));
-            mMipLevels = header.mipCount;
-            mExtent = {header.width, header.height, 1};
-            if (header.format == 1)
-            {
-                mFormat = header.isSRGB ? VK_FORMAT_BC3_SRGB_BLOCK : VK_FORMAT_BC3_UNORM_BLOCK;
-            }
-            else if (header.format == 2)
-            {
-                mFormat = VK_FORMAT_BC5_UNORM_BLOCK;
-            }
-            else
-            {
-                mFormat = header.isSRGB ? VK_FORMAT_BC1_RGB_SRGB_BLOCK : VK_FORMAT_BC1_RGB_UNORM_BLOCK;
-            }
-            std::vector<char> allMipData;
-            std::vector<VkBufferImageCopy> bufferCopyRegions;
-            uint32_t currentW = header.width;
-            uint32_t currentH = header.height;
-            for (uint32_t i = 0; i < mMipLevels; ++i)
-            {
-                uint32_t dataSize;
-                file.read(reinterpret_cast<char *>(&dataSize), sizeof(uint32_t));
-                size_t currentOffset = allMipData.size();
-                allMipData.resize(currentOffset + dataSize);
-                file.read(allMipData.data() + currentOffset, dataSize);
-                VkBufferImageCopy region{};
-                region.bufferOffset = currentOffset;
-                region.bufferRowLength = 0;
-                region.bufferImageHeight = 0;
-                region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                region.imageSubresource.mipLevel = i;
-                region.imageSubresource.baseArrayLayer = 0;
-                region.imageSubresource.layerCount = 1;
-                region.imageOffset = {0, 0, 0};
-                region.imageExtent = {currentW, currentH, 1};
-                bufferCopyRegions.push_back(region);
-                currentW = std::max(1u, currentW / 2);
-                currentH = std::max(1u, currentH / 2);
-            }
-            file.close();
-            VkBuffer stagingBuffer;
-            VmaAllocation stagingBufferMemory;
-            mDevice.createBuffer(
-                allMipData.size(),
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                stagingBuffer,
-                stagingBufferMemory);
-            void *data;
-            vmaMapMemory(mDevice.getAllocator(), stagingBufferMemory, &data);
-            memcpy(data, allMipData.data(), allMipData.size());
-            vmaUnmapMemory(mDevice.getAllocator(), stagingBufferMemory);
-            VkImageCreateInfo imageInfo{};
-            imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-            imageInfo.imageType = VK_IMAGE_TYPE_2D;
-            imageInfo.extent = mExtent;
-            imageInfo.mipLevels = mMipLevels;
-            imageInfo.arrayLayers = mLayerCount;
-            imageInfo.format = mFormat;
-            imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-            imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-            imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-            imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            mDevice.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mTextureImage, mTextureImageMemory);
-            transitionLayout(mDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            VkCommandBuffer commandBuffer = mDevice.beginSingleTimeCommands();
-            vkCmdCopyBufferToImage(
-                commandBuffer,
-                stagingBuffer,
-                mTextureImage,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                static_cast<uint32_t>(bufferCopyRegions.size()),
-                bufferCopyRegions.data());
-            mDevice.endSingleTimeCommands(commandBuffer);
-            transitionLayout(mDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            mTextureLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            vmaDestroyBuffer(mDevice.getAllocator(), stagingBuffer, stagingBufferMemory);
             return;
         }
         int texWidth, texHeight, texChannels;
@@ -340,16 +262,16 @@ namespace burnhope
         mMipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
         mFormat = isSRGB ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
         mExtent = {static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 1};
-        VkBuffer stagingBuffer;
-        VmaAllocation stagingBufferMemory;
-        mDevice.createBuffer(
-            imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer, stagingBufferMemory);
-        void *data;
-        vmaMapMemory(mDevice.getAllocator(), stagingBufferMemory, &data);
-        memcpy(data, pixels, static_cast<size_t>(imageSize));
-        vmaUnmapMemory(mDevice.getAllocator(), stagingBufferMemory);
+        
+        BurnhopeBuffer stagingBuffer{
+            mDevice,
+            1,
+            static_cast<uint32_t>(imageSize),
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        };
+        stagingBuffer.map();
+        stagingBuffer.writeToBuffer(pixels);
         stbi_image_free(pixels);
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -365,10 +287,9 @@ namespace burnhope
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         mDevice.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mTextureImage, mTextureImageMemory);
         transitionLayout(mDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        mDevice.copyBufferToImage(stagingBuffer, mTextureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), mLayerCount);
+        mDevice.copyBufferToImage(stagingBuffer.getBuffer(), mTextureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), mLayerCount);
         generateMipmaps(mTextureImage, mFormat, texWidth, texHeight, mMipLevels);
         mTextureLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        vmaDestroyBuffer(mDevice.getAllocator(), stagingBuffer, stagingBufferMemory);
     }
     void BurnhopeTexture::createTextureImageView(VkImageViewType viewType)
     {
@@ -417,31 +338,31 @@ namespace burnhope
         {
             barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         }
-        VkPipelineStageFlags sourceStage;
-        VkPipelineStageFlags destinationStage;
+        VkPipelineStageFlags2 sourceStage;
+        VkPipelineStageFlags2 destinationStage;
         if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
         {
             barrier.srcAccessMask = 0;
-            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
         }
         else if (
             oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
         {
             barrier.srcAccessMask = 0;
-            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
         }
         else if (
             oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
             newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
         {
-            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+            sourceStage = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
         }
         else if (
             oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
@@ -449,38 +370,51 @@ namespace burnhope
         {
             barrier.srcAccessMask = 0;
             barrier.dstAccessMask =
-                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
         }
         else if (
             oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
             newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
         {
-            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            barrier.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
             barrier.dstAccessMask =
-                VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
-            sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+            sourceStage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
         }
         else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_GENERAL)
         {
             barrier.srcAccessMask = 0;
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            destinationStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
         }
         else
         {
             throw std::invalid_argument("unsupported layout transition!");
         }
-        vkCmdPipelineBarrier(
-            commandBuffer,
-            sourceStage, destinationStage,
-            0,
-            0, nullptr,
-            0, nullptr,
-            1, &barrier);
+        
+        VkImageMemoryBarrier2 barrier2{};
+        barrier2.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        barrier2.oldLayout = barrier.oldLayout;
+        barrier2.newLayout = barrier.newLayout;
+        barrier2.srcQueueFamilyIndex = barrier.srcQueueFamilyIndex;
+        barrier2.dstQueueFamilyIndex = barrier.dstQueueFamilyIndex;
+        barrier2.image = barrier.image;
+        barrier2.subresourceRange = barrier.subresourceRange;
+        barrier2.srcStageMask = sourceStage;
+        barrier2.srcAccessMask = barrier.srcAccessMask;
+        barrier2.dstStageMask = destinationStage;
+        barrier2.dstAccessMask = barrier.dstAccessMask;
+        
+        VkDependencyInfo depInfo{};
+        depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        depInfo.imageMemoryBarrierCount = 1;
+        depInfo.pImageMemoryBarriers = &barrier2;
+        
+        vkCmdPipelineBarrier2(commandBuffer, &depInfo);
         mDevice.endSingleTimeCommands(commandBuffer);
     }
     void BurnhopeTexture::generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels)
@@ -492,8 +426,8 @@ namespace burnhope
             throw std::runtime_error("Texture image format does not support linear blitting!");
         }
         VkCommandBuffer commandBuffer = mDevice.beginSingleTimeCommands();
-        VkImageMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        VkImageMemoryBarrier2 barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
         barrier.image = image;
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -508,11 +442,16 @@ namespace burnhope
             barrier.subresourceRange.baseMipLevel = i - 1;
             barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            vkCmdPipelineBarrier(commandBuffer,
-                                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-                                 0, nullptr, 0, nullptr, 1, &barrier);
+            barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+            barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+            barrier.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+            barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
+            
+            VkDependencyInfo depInfo{};
+            depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+            depInfo.imageMemoryBarrierCount = 1;
+            depInfo.pImageMemoryBarriers = &barrier;
+            vkCmdPipelineBarrier2(commandBuffer, &depInfo);
             VkImageBlit blit{};
             blit.srcOffsets[0] = {0, 0, 0};
             blit.srcOffsets[1] = {mipWidth, mipHeight, 1};
@@ -533,11 +472,16 @@ namespace burnhope
                            VK_FILTER_LINEAR);
             barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            vkCmdPipelineBarrier(commandBuffer,
-                                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-                                 0, nullptr, 0, nullptr, 1, &barrier);
+            barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+            barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
+            barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+            barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+            
+            VkDependencyInfo depInfo2{};
+            depInfo2.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+            depInfo2.imageMemoryBarrierCount = 1;
+            depInfo2.pImageMemoryBarriers = &barrier;
+            vkCmdPipelineBarrier2(commandBuffer, &depInfo2);
             if (mipWidth > 1)
                 mipWidth /= 2;
             if (mipHeight > 1)
@@ -546,11 +490,16 @@ namespace burnhope
         barrier.subresourceRange.baseMipLevel = mipLevels - 1;
         barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        vkCmdPipelineBarrier(commandBuffer,
-                             VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-                             0, nullptr, 0, nullptr, 1, &barrier);
+        barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+        barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+        barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+        barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+        
+        VkDependencyInfo depInfo3{};
+        depInfo3.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        depInfo3.imageMemoryBarrierCount = 1;
+        depInfo3.pImageMemoryBarriers = &barrier;
+        vkCmdPipelineBarrier2(commandBuffer, &depInfo3);
         mDevice.endSingleTimeCommands(commandBuffer);
     }
     bool BurnhopeTexture::loadFromBHTex(const std::string &filepath)
@@ -559,7 +508,9 @@ namespace burnhope
         if (!file.is_open())
             return false;
         BHTexHeader header;
-        file.read(reinterpret_cast<char *>(&header), sizeof(BHTexHeader));
+        if (!file.read(reinterpret_cast<char *>(&header), sizeof(BHTexHeader))) return false;
+        if (strncmp(header.magic, "BHTX", 4) != 0) return false;
+        if (header.mipCount == 0 || header.mipCount > 16) return false;
         mMipLevels = header.mipCount;
         mExtent = {header.width, header.height, 1};
         if (header.format == 0)
@@ -586,10 +537,12 @@ namespace burnhope
 
 
             uint32_t dataSize;
-            file.read(reinterpret_cast<char *>(&dataSize), sizeof(uint32_t));
+            if (!file.read(reinterpret_cast<char *>(&dataSize), sizeof(uint32_t))) return false;
+            if (dataSize == 0 || dataSize > 1024 * 1024 * 512) return false;
+
             size_t currentOffset = allMipData.size();
-            allMipData.resize(currentOffset + dataSize);
-            file.read(allMipData.data() + currentOffset, dataSize);
+            try { allMipData.resize(currentOffset + dataSize); } catch(...) { return false; }
+            if (!file.read(allMipData.data() + currentOffset, dataSize)) return false;
             VkBufferImageCopy region{};
             region.bufferOffset = currentOffset;
             region.bufferRowLength = alignW; // Обязательно указываем выровненный размер блоков для Vulkan
@@ -604,15 +557,21 @@ namespace burnhope
             currentH = std::max(1u, currentH / 2);
         }
         file.close();
-        VkBuffer stagingBuffer;
-        VmaAllocation stagingBufferMemory;
-        mDevice.createBuffer(allMipData.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                             stagingBuffer, stagingBufferMemory);
-        void *data;
-        vmaMapMemory(mDevice.getAllocator(), stagingBufferMemory, &data);
-        memcpy(data, allMipData.data(), allMipData.size());
-        vmaUnmapMemory(mDevice.getAllocator(), stagingBufferMemory);
+        
+        if (allMipData.empty()) {
+            return false;
+        }
+
+        BurnhopeBuffer stagingBuffer{
+            mDevice,
+            1,
+            static_cast<uint32_t>(allMipData.size()),
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        };
+        stagingBuffer.map();
+        stagingBuffer.writeToBuffer(allMipData.data());
+
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -627,12 +586,11 @@ namespace burnhope
         mDevice.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mTextureImage, mTextureImageMemory);
         transitionLayout(mDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
         VkCommandBuffer commandBuffer = mDevice.beginSingleTimeCommands();
-        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, mTextureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.getBuffer(), mTextureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                static_cast<uint32_t>(bufferCopyRegions.size()), bufferCopyRegions.data());
         mDevice.endSingleTimeCommands(commandBuffer);
         transitionLayout(mDevice.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         mTextureLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        vmaDestroyBuffer(mDevice.getAllocator(), stagingBuffer, stagingBufferMemory);
         return true;
     }
     void BurnhopeTexture::generateAndCacheBHTex(const std::string &srcPath, const std::string &cachePath, bool isSRGB)
@@ -731,6 +689,12 @@ namespace burnhope
         int currentW = w; int currentH = h;
         std::vector<stbi_uc> currentMip = packedData;
 
+        if (header.isNormalMap) {
+            for (size_t k = 0; k < w * h; k++) {
+                currentMip[k * 4 + 3] = 0; 
+            }
+        }
+
         for (uint32_t i = 0; i < mipLevels; ++i) {
             int alignW = (currentW + 3) & ~3;
             int alignH = (currentH + 3) & ~3;
@@ -805,6 +769,32 @@ namespace burnhope
                     // Normal, ORMX, Emissive
                     stbir_resize_uint8_linear(currentMip.data(), currentW, currentH, 0, nextMip.data(), nextW, nextH, 0, STBIR_4CHANNEL);
                 }
+
+                if (header.isNormalMap) {
+                    for (int y = 0; y < nextH; y++) {
+                        for (int x = 0; x < nextW; x++) {
+                            int idx = (y * nextW + x) * 4;
+                            float nx = (nextMip[idx + 0] / 255.0f) * 2.0f - 1.0f;
+                            float ny = (nextMip[idx + 1] / 255.0f) * 2.0f - 1.0f;
+                            float nz = (nextMip[idx + 2] / 255.0f) * 2.0f - 1.0f;
+                            float len = std::sqrt(nx*nx + ny*ny + nz*nz);
+                            float variance = std::clamp(1.0f - len, 0.0f, 1.0f);
+                            
+                            int p_x = std::min(x * 2, currentW - 1);
+                            int p_y = std::min(y * 2, currentH - 1);
+                            float prevVar = currentMip[(p_y * currentW + p_x) * 4 + 3] / 255.0f;
+                            float totalVar = std::clamp(prevVar + variance, 0.0f, 1.0f);
+                            nextMip[idx + 3] = static_cast<stbi_uc>(totalVar * 255.0f);
+
+                            if (len > 0.0001f) {
+                                nextMip[idx + 0] = static_cast<stbi_uc>(((nx / len) * 0.5f + 0.5f) * 255.0f);
+                                nextMip[idx + 1] = static_cast<stbi_uc>(((ny / len) * 0.5f + 0.5f) * 255.0f);
+                                nextMip[idx + 2] = static_cast<stbi_uc>(((nz / len) * 0.5f + 0.5f) * 255.0f);
+                            }
+                        }
+                    }
+                }
+
                 currentMip = std::move(nextMip);
                 currentW = nextW; currentH = nextH;
             }
@@ -890,7 +880,8 @@ namespace burnhope
             nData = resizeChannel(nData, w, h, outW, outH, false);
         }
 
-        BHTexHeader hdr{}; hdr.format = 3; hdr.isSRGB = false; hdr.hasAlpha = false; hdr.packType = 1; // Normal -> BC7 UNORM
+        BHTexHeader hdr{}; hdr.format = 3; hdr.isSRGB = false; hdr.hasAlpha = true; hdr.packType = 1; // Normal -> BC7 UNORM
+        hdr.isNormalMap = true;
         strncpy(hdr.srcPath1, normal.c_str(), 255);
         writeBHTexPacked(outPath, nData, outW, outH, hdr);
     }

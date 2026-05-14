@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "../Utils/Buffer.hpp"
 #include "../Utils/Device.hpp"
 #define GLM_FORCE_RADIANS
@@ -16,38 +16,28 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 #include <meshoptimizer.h>
+#include <atomic>
+#include <thread>
 namespace burnhope
 {
-    struct Vertex
-    {
-        glm::vec3 position;
-        uint32_t normal;
+    struct PackedVertexPos {
+        uint16_t x, y, z, pad;
+    };
+    struct PackedVertexAttr {
         uint32_t texUV;
-        uint32_t tangent;
-Vertex() 
-        : position(0.0f), normal(0), texUV(0), tangent(0) {}
-        Vertex(glm::vec3 p, glm::vec3 n, glm::vec2 uv) : position(p) {
-        // Упаковка нормали (0.0 - 1.0 в диапазон 0 - 1023)
-        uint32_t x = static_cast<uint32_t>((n.x * 0.5f + 0.5f) * 1023.0f);
-        uint32_t y = static_cast<uint32_t>((n.y * 0.5f + 0.5f) * 1023.0f);
-        uint32_t z = static_cast<uint32_t>((n.z * 0.5f + 0.5f) * 1023.0f);
-        normal = (x) | (y << 10) | (z << 20);
-
-        // Правильная упаковка в 16-битные float (поддерживает значения > 1.0 для тайлинга)
-        texUV = glm::packHalf2x16(uv);
-        
-        tangent = 0; // Можно инициализировать позже
-    }
-
+        uint32_t qTangent;
+    };
+    struct PackedVertexAnim {
+        uint16_t pivotX, pivotY, pivotZ; // Pivot Painter Data (16-bit unorm)
+        uint8_t clothMaxDistance;        // Max Distance Sphere for Cloth
+        uint8_t vertexAO;                // Baked Vertex Ambient Occlusion / Cavity
+        uint8_t localBoneIndices[4];     // Bone Palette local indices (0-7)
+        uint8_t boneWeights[4];          // Normalized 0-255
+    };
+    class Vertex {
+    public:
         static std::vector<VkVertexInputBindingDescription> getBindingDescriptions();
         static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
-        bool operator==(const Vertex &other) const
-        {
-            return position == other.position &&
-                   normal == other.normal &&
-                   texUV == other.texUV &&
-                   tangent == other.tangent;
-        }
     };
     struct SubMesh
     {
@@ -58,6 +48,7 @@ Vertex()
         glm::vec3 aabbMin = glm::vec3(0.0f);
         glm::vec3 aabbMax = glm::vec3(0.0f);
         float boundingRadius = 0.0f;
+        uint32_t vrsRate = 0;
     };
     struct MaterialPaths
     {
@@ -65,52 +56,203 @@ Vertex()
         std::string normal;
         std::string orm;
     };
+    struct PhysicsPrimitive {
+        uint32_t type;
+        glm::vec3 position;
+        glm::vec4 rotationQuat;
+        glm::vec3 dimensions;
+    };
+    struct DestructionBond {
+        uint32_t pieceA, pieceB;
+        float breakForce;
+    };
+    struct BHSocket {
+        char name[64];
+        glm::mat4 transform;
+    };
+    struct BHNavMeshCarver {
+        glm::vec2 points[4];
+    };
+    struct BHHairPoint {
+        uint16_t x, y, z, pad;
+    };
+    struct BHHairStrand {
+        glm::vec3 rootPosition;
+        float thickness;
+        uint32_t color; 
+        uint32_t pointCount;
+        uint32_t firstPoint;
+        uint32_t pad;
+    };
+    struct BHMorphDelta {
+        uint32_t vertexIndex;
+        uint32_t packedDelta; 
+    };
+    struct BHMorphTarget {
+        char name[64];
+        uint32_t deltaCount;
+        uint32_t firstDelta;
+    };
+    
+    // Ключевой кадр анимации
+    struct BHKeyframeCompressed {
+        float time;
+        uint32_t packedRotation; 
+        uint16_t posX, posY, posZ; 
+        uint16_t scaleX, scaleY, scaleZ;
+    };
+
+    struct BHRootMotionKey {
+        float time;
+        glm::vec3 deltaPosition;
+        glm::vec4 deltaRotation;
+    };
+
     struct Builder
     {
-        std::vector<Vertex> vertices{};
+        std::vector<PackedVertexPos> positions{};
+        std::vector<PackedVertexAttr> attributes{};
+        std::vector<PackedVertexAnim> animations{};
         std::vector<uint32_t> indices{};
         std::vector<SubMesh> subMeshes{};
         std::vector<MaterialPaths> materialPaths;
         std::string modelDir;
+        bool isDynamic = false;
+
+        std::vector<uint32_t> colors;
+        std::vector<uint32_t> uv2;
+        std::vector<float> cdfs;
+        std::vector<uint8_t> surfaceTags;
+        std::vector<BHHairStrand> hairStrands;
+        std::vector<BHHairPoint> hairPoints;
+        std::vector<BHMorphTarget> morphTargets;
+        std::vector<BHMorphDelta> morphDeltas;
+        bool buildRT = true;
+        float acousticAbsorption = 0.5f;
+        float acousticReflection = 0.5f;
+        uint32_t impostorOffset = 0;
+        float maxWindSway = 1.0f;
+        glm::vec3 centerOfMass = glm::vec3(0.0f);
+        float totalMass = 0.0f;
+        glm::vec3 centerOfBuoyancy = glm::vec3(0.0f);
+        float volume = 0.0f;
+        glm::mat3 inertiaTensor = glm::mat3(1.0f);
+        std::vector<PhysicsPrimitive> physicsPrimitives;
+        std::vector<DestructionBond> destructionBonds;
+        
+        std::vector<glm::vec3> probeAnchors;
+        std::vector<glm::vec4> tetraNodes; // xyz - pos, w - mass
+        std::vector<glm::uvec4> tetrahedrons; // indices
+        std::vector<BHSocket> sockets;
+        std::vector<BHNavMeshCarver> navMeshCarvers;
+        
+        std::string vatTexturePath = "";
+        uint32_t vatFrameCount = 0;
+        float vatDuration = 0.0f;
+        glm::vec3 vatMinBounds = glm::vec3(0.0f);
+        glm::vec3 vatMaxBounds = glm::vec3(0.0f);
+        glm::vec3 globalAabbMin = glm::vec3(0.0f);
+        glm::vec3 globalAabbMax = glm::vec3(0.0f);
+
         void loadModel(const std::string &filepath);
     };
     class BurnhopeModel
     {
     public:
+        BurnhopeModel(BurnhopeDevice &device);
         uint32_t getMaterialCount() const { return materialCount; }
         const std::vector<SubMesh> &getSubMeshes() const { return subMeshes; }
+        std::vector<SubMesh> &getSubMeshesModifiable() { return subMeshes; }
         BurnhopeModel(BurnhopeDevice &device, const Builder &builder);
         ~BurnhopeModel();
         BurnhopeModel(const BurnhopeModel &) = delete;
         BurnhopeModel &operator=(const BurnhopeModel &) = delete;
         static std::unique_ptr<BurnhopeModel> createModelFromFile(
             BurnhopeDevice &device, const std::string &filepath);
+        void finishGpuUpload();
+
+        std::atomic<bool> cpuDataReady{false};
+        std::atomic<bool> gpuDataReady{false};
+        std::unique_ptr<Builder> pendingBuilder;
+        std::thread loadThread;
         void bind(VkCommandBuffer commandBuffer);
         void draw(VkCommandBuffer commandBuffer);
-        std::unique_ptr<BurnhopeBuffer> vertexBuffer;
-        uint32_t vertexCount;
+        void updateVertices(const std::vector<PackedVertexPos>& newPos, const std::vector<PackedVertexAttr>& newAttr, const std::vector<PackedVertexAnim>& newAnim = {});
+        std::vector<PackedVertexPos> storedPositions;
+        std::unique_ptr<BurnhopeBuffer> posBuffer;
+        std::unique_ptr<BurnhopeBuffer> attrBuffer;
+        std::unique_ptr<BurnhopeBuffer> animBuffer;
+        uint32_t vertexCount = 0;
         bool hasIndexBuffer = false;
         std::unique_ptr<BurnhopeBuffer> indexBuffer;
-        uint32_t indexCount;
+        uint32_t indexCount = 0;
         std::vector<std::shared_ptr<Material>> materials;
         VkDeviceAddress getBLASAddress() const { return blasAddress; }
+        float acousticAbsorption = 0.5f;
+        float acousticReflection = 0.5f;
+        uint32_t impostorOffset = 0;
+        float maxWindSway = 1.0f;
+        glm::vec3 centerOfMass = glm::vec3(0.0f);
+        float totalMass = 0.0f;
+        glm::vec3 centerOfBuoyancy = glm::vec3(0.0f);
+        float volume = 0.0f;
+        glm::mat3 inertiaTensor = glm::mat3(1.0f);
+        std::vector<PhysicsPrimitive> physicsPrimitives;
+        std::vector<DestructionBond> destructionBonds;
+        
+        std::vector<glm::vec3> probeAnchors;
+        std::vector<glm::vec4> tetraNodes;
+        std::vector<glm::uvec4> tetrahedrons;
+        std::vector<BHSocket> sockets;
+        std::vector<BHNavMeshCarver> navMeshCarvers;
+        std::vector<BHMorphTarget> morphTargets;
+        std::vector<BHMorphDelta> morphDeltas;
+
+        glm::vec3 globalAabbMin = glm::vec3(0.0f);
+        glm::vec3 globalAabbMax = glm::vec3(0.0f);
+        std::unique_ptr<BurnhopeBuffer> colorBuffer;
+        std::unique_ptr<BurnhopeBuffer> uv2Buffer;
+        std::unique_ptr<BurnhopeBuffer> cdfBuffer;
+        std::unique_ptr<BurnhopeBuffer> surfaceTagsBuffer;
+        std::unique_ptr<BurnhopeBuffer> hairStrandsBuffer;
+        std::unique_ptr<BurnhopeBuffer> hairPointsBuffer;
+        
+        std::string vatTexturePath = "";
+        uint32_t vatFrameCount = 0;
+        float vatDuration = 0.0f;
+        glm::vec3 vatMinBounds = glm::vec3(0.0f);
+        glm::vec3 vatMaxBounds = glm::vec3(0.0f);
+
         VkIndexType indexType = VK_INDEX_TYPE_UINT32;
         // Добавь эти поля в private или protected
-VkDeviceAddress getVertexBufferAddress() const { return vertexBufferAddress; }
+VkDeviceAddress getPosBufferAddress() const { return posBufferAddress; }
+VkDeviceAddress getAttrBufferAddress() const { return attrBufferAddress; }
+VkDeviceAddress getAnimBufferAddress() const { return animBufferAddress; }
     VkDeviceAddress getIndexBufferAddress() const { return indexBufferAddress; }
+VkDeviceAddress getColorBufferAddress() const { return colorBufferAddress; }
+VkDeviceAddress getUV2BufferAddress() const { return uv2BufferAddress; }
+VkDeviceAddress getCdfBufferAddress() const { return cdfBufferAddress; }
+VkDeviceAddress getSurfaceTagsBufferAddress() const { return surfaceTagsBufferAddress; }
     // Добавь этот метод в public
-    void createBLAS();
+    void createBLAS(const std::vector<PackedVertexPos>& cpuPositions);
     VkAccelerationStructureKHR getBLAS() const { return blasHandle; }
+    std::unique_ptr<BurnhopeBuffer> rtPosBuffer;
     private:
         uint32_t materialCount = 0;
         std::vector<SubMesh> subMeshes;
-        void createVertexBuffers(const std::vector<Vertex> &vertices);
+        void createVertexBuffers(const std::vector<PackedVertexPos>& positions, const std::vector<PackedVertexAttr>& attributes, const std::vector<PackedVertexAnim>& animations, bool isDynamic);
         void createIndexBuffers(const std::vector<uint32_t> &indices);
         BurnhopeDevice &lveDevice;
         std::unique_ptr<BurnhopeBuffer> blasBuffer;
         VkAccelerationStructureKHR blasHandle = VK_NULL_HANDLE;
         VkDeviceAddress blasAddress = 0;
-VkDeviceAddress vertexBufferAddress = 0;
+VkDeviceAddress posBufferAddress = 0;
+VkDeviceAddress attrBufferAddress = 0;
+VkDeviceAddress animBufferAddress = 0;
     VkDeviceAddress indexBufferAddress = 0;
+VkDeviceAddress colorBufferAddress = 0;
+VkDeviceAddress uv2BufferAddress = 0;
+VkDeviceAddress cdfBufferAddress = 0;
+VkDeviceAddress surfaceTagsBufferAddress = 0;
     };
 }

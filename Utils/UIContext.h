@@ -347,6 +347,7 @@ namespace burnhope {
 
         RenderSettings renderSettings;
         bool needsRebuild = false;
+        bool needsRTRebuild = false;
         bool pendingNewScene = false;
         std::string pendingSceneLoadPath = "";
         std::string pendingModelLoadPath = "";

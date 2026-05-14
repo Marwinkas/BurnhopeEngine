@@ -48,9 +48,6 @@ namespace burnhope
     assert(
         configInfo.pipelineLayout != VK_NULL_HANDLE &&
         "Cannot create graphics pipeline: no pipelineLayout provided in configInfo");
-    assert(
-        configInfo.renderPass != VK_NULL_HANDLE &&
-        "Cannot create graphics pipeline: no renderPass provided in configInfo");
 
     std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
     bool isMeshShader = false;
@@ -103,8 +100,15 @@ namespace burnhope
     pipelineInfo.pDepthStencilState = &configInfo.depthStencilInfo;
     pipelineInfo.pDynamicState = &configInfo.dynamicStateInfo;
     pipelineInfo.layout = configInfo.pipelineLayout;
-    pipelineInfo.renderPass = configInfo.renderPass;
-    pipelineInfo.subpass = configInfo.subpass;
+    
+    VkPipelineRenderingCreateInfo renderingInfo{};
+    renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    renderingInfo.colorAttachmentCount = static_cast<uint32_t>(configInfo.colorAttachmentFormats.size());
+    renderingInfo.pColorAttachmentFormats = configInfo.colorAttachmentFormats.data();
+    renderingInfo.depthAttachmentFormat = configInfo.depthAttachmentFormat;
+    renderingInfo.stencilAttachmentFormat = configInfo.stencilAttachmentFormat;
+    pipelineInfo.pNext = &renderingInfo;
+
     pipelineInfo.basePipelineIndex = -1;
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
     if (vkCreateGraphicsPipelines(
@@ -203,7 +207,9 @@ namespace burnhope
     configInfo.depthStencilInfo.back = configInfo.depthStencilInfo.front;
     //
 
-    configInfo.dynamicStateEnables = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_BOUNDS};
+    configInfo.dynamicStateEnables = {
+        VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR
+    };
     configInfo.dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
     configInfo.dynamicStateInfo.pDynamicStates = configInfo.dynamicStateEnables.data();
     configInfo.dynamicStateInfo.dynamicStateCount =

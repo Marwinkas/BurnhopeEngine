@@ -6,6 +6,9 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <GLFW/glfw3.h>
 #include "../Render/Camera.hpp"
+#ifndef IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
+#define IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
+#endif
 #include "imgui_impl_vulkan.h"
 #include <imgui_impl_glfw.h>
 #include "imgui.h"
@@ -37,14 +40,14 @@ namespace burnhope {
 
     public:
         UIContext& GetContext() { return m_Context; }
-        UIManager(BurnhopeWindow& window, BurnhopeDevice& device, VkRenderPass renderPass, entt::registry* registry, const std::string& projectPath) {
+        UIManager(BurnhopeWindow& window, BurnhopeDevice& device, VkFormat swapChainFormat, entt::registry* registry, const std::string& projectPath) {
             m_Device = &device;
             m_Context.registry = registry;
             m_Context.device = &device;
             m_Context.projectDirectory = projectPath;
             m_Context.currentDirectory = projectPath;
 
-            InitImGui(window, device, renderPass);
+            InitImGui(window, device, swapChainFormat);
             SetupTheme();
 
             // ЗАГРУЗКА НАСТРОЕК
@@ -130,8 +133,6 @@ namespace burnhope {
                     } else {
                         mc.modelPath = m_Context.pendingModelLoadPath;
                         mc.model = BurnhopeModel::createModelFromFile(*m_Device, mc.modelPath);
-                        mc.materialPaths.resize(mc.model->getSubMeshes().size(), "");
-                        mc.materials.resize(mc.model->getSubMeshes().size(), nullptr);
                     }
                     m_Context.needsRebuild = true;
                 }
@@ -142,10 +143,20 @@ namespace burnhope {
                 vkDeviceWaitIdle(m_Device->device());
                 if (m_Context.registry->valid(m_Context.pendingMatEntity) && m_Context.registry->all_of<MeshComponent>(m_Context.pendingMatEntity)) {
                     auto& mc = m_Context.registry->get<MeshComponent>(m_Context.pendingMatEntity);
+
+                    if (mc.model && mc.materials.size() < mc.model->getSubMeshes().size()) {
+                        mc.materials.resize(mc.model->getSubMeshes().size(), nullptr);
+                    }
+                    if (mc.model && mc.materialPaths.size() < mc.model->getSubMeshes().size()) {
+                        mc.materialPaths.resize(mc.model->getSubMeshes().size(), "");
+                    }
+
                     auto newMat = (m_Context.pendingMatLoadPath == "NONE") ? nullptr : Material::loadFromJson(*m_Device, m_Context.pendingMatLoadPath);
                     for(size_t i = 0; i < mc.model->getSubMeshes().size(); i++) {
                         if (mc.model->getSubMeshes()[i].materialIndex == m_Context.pendingMatSlot) {
-                            m_Context.safeDeleteQueue.push_back(mc.materials[i]);
+                            if (mc.materials[i]) {
+                                m_Context.safeDeleteQueue.push_back(mc.materials[i]);
+                            }
                             mc.materialPaths[i] = (m_Context.pendingMatLoadPath == "NONE") ? "" : m_Context.pendingMatLoadPath;
                             mc.materials[i] = newMat;
                         }
@@ -257,6 +268,7 @@ namespace burnhope {
                         glm::value_ptr(tComp.transform.scale)
                     );
                     tComp.transform.updatematrix = true;
+                    m_Context.needsRTRebuild = true;
                 }
             }
         }
@@ -447,7 +459,7 @@ namespace burnhope {
             }
         }
 
-        void InitImGui(BurnhopeWindow& window, BurnhopeDevice& device, VkRenderPass renderPass) {
+        void InitImGui(BurnhopeWindow& window, BurnhopeDevice& device, VkFormat swapChainFormat) {
             IMGUI_CHECKVERSION();
             ImGui::CreateContext();
             ImGuizmo::Enable(true);
@@ -481,7 +493,14 @@ namespace burnhope {
             init_info.DescriptorPool = m_ImguiPool;
             init_info.MinImageCount = 2;
             init_info.ImageCount = 3;
-            init_info.PipelineInfoMain.RenderPass = renderPass;
+            
+            init_info.UseDynamicRendering = true;
+            
+            init_info.PipelineInfoMain.PipelineRenderingCreateInfo = {};
+            init_info.PipelineInfoMain.PipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
+            init_info.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+            init_info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &swapChainFormat;
+            
             ImGui_ImplVulkan_Init(&init_info);
         }
 

@@ -14,7 +14,7 @@ namespace burnhope
     ~BurnhopeRenderer();
     BurnhopeRenderer(const BurnhopeRenderer &) = delete;
     BurnhopeRenderer &operator=(const BurnhopeRenderer &) = delete;
-    VkRenderPass getSwapChainRenderPass() const { return lveSwapChain->getRenderPass(); }
+    VkFormat getSwapChainImageFormat() const { return lveSwapChain->getSwapChainImageFormat(); }
     float getAspectRatio() const { return lveSwapChain->extentAspectRatio(); }
     bool isFrameInProgress() const { return isFrameStarted; }
     VkCommandBuffer getCurrentCommandBuffer() const
@@ -29,8 +29,8 @@ namespace burnhope
     }
     VkCommandBuffer beginFrame();
     void endFrame();
-    void beginSwapChainRenderPass(VkCommandBuffer commandBuffer);
-    void endSwapChainRenderPass(VkCommandBuffer commandBuffer);
+    void beginSwapChainRendering(VkCommandBuffer commandBuffer);
+    void endSwapChainRendering(VkCommandBuffer commandBuffer);
     VkImage getCurrentSwapChainImage() const
     {
       return lveSwapChain->getImage(currentImageIndex);

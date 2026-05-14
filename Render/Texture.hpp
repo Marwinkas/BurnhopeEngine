@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "../Utils/Device.hpp"
+#include "../Utils/Buffer.hpp"
 #include <vulkan/vulkan.h>
 #include <memory>
 #include <string>
@@ -23,6 +24,8 @@ namespace burnhope
         bool isSRGB;
         bool hasAlpha;
         int packType; // 0=Raw, 1=AlbedoAlpha/Normal(BC7), 2=ORMX(BC7), 3=Normal(BC5), 4=Emissive(BC6H)
+        bool isNormalMap;
+        bool padding[3];
         
         // Храним пути к исходникам для пересоздания из UI
         char srcPath1[256];
@@ -97,8 +100,8 @@ namespace burnhope
         VmaAllocation mTextureImageMemory = nullptr;
         VkImageView mTextureImageView = nullptr;
         VkSampler mTextureSampler = nullptr;
-        VkFormat mFormat;
-        VkImageLayout mTextureLayout;
+        VkFormat mFormat = VK_FORMAT_UNDEFINED;
+        VkImageLayout mTextureLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         uint32_t mMipLevels{1};
         uint32_t mLayerCount{1};
         VkExtent3D mExtent{};

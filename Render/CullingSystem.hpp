@@ -17,7 +17,7 @@ namespace burnhope
         uint32_t indexCounts[4];
         uint32_t firstIndices[4];
         uint32_t materialIndex;
-        uint32_t pad1;
+        uint32_t vrsRate;
         uint32_t pad2;
         uint32_t pad3;
     };
