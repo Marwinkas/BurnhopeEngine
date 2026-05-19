@@ -29,10 +29,10 @@ namespace burnhope
     ShadowRenderSystem::~ShadowRenderSystem() = default;
 void ShadowRenderSystem::renderShadow(
     VkCommandBuffer commandBuffer,
-    const glm::mat4 &lightSpaceMatrix,
-    entt::registry &registry,
-            VkDescriptorSet objectStorageSet,
-            bool renderDynamicOnly)
+    const float4x4 &lightSpaceMatrix,
+    flecs::world &registry,
+    VkDescriptorSet objectStorageSet,
+    bool renderDynamicOnly)
 {
     if (objectStorageSet == VK_NULL_HANDLE)
         return;
@@ -43,24 +43,23 @@ void ShadowRenderSystem::renderShadow(
     ShadowPushConstant push{lightSpaceMatrix};
     shader->pushConstants(commandBuffer, VK_SHADER_STAGE_VERTEX_BIT, sizeof(ShadowPushConstant), &push);
 
-    auto view = registry.view<TransformComponent, MeshComponent>();
-    
-    // Очень важно: этот индекс должен совпадать с индексом объекта в твоем ObjectBuffer,
-    // чтобы шейдер взял правильную матрицу модели (modelMatrix).
+    // Этот индекс должен совпадать с индексом объекта в ObjectBuffer
     uint32_t instanceIndex = 0; 
 
-    for (auto [entity, transformComp, meshComp] : view.each())
-    {
+    // Создаем query для нескольких компонентов и сразу вызываем .each()
+    registry.query_builder<TransformComponent, MeshComponent>().build().each([&](flecs::entity entity, TransformComponent& transformComp, MeshComponent& meshComp) {
         if (!meshComp.model || !meshComp.isVisible)
-            continue;
+            return;
+            
         if (renderDynamicOnly && meshComp.isStatic) 
-            continue; // Пропускаем статические меши при локальном обновлении теней!
+            return; // Пропускаем статические меши при локальном обновлении теней
+
         meshComp.model->bind(commandBuffer);
         const auto &subMeshes = meshComp.model->getSubMeshes();
 
         for (const auto &sub : subMeshes)
         {
-            // Вместо vkCmdDrawIndexedIndirect используем прямой вызов
+            // Прямой вызов отрисовки для Vulkan
             vkCmdDrawIndexed(
                 commandBuffer, 
                 sub.indexCounts[0], // Количество индексов (LOD 0)
@@ -72,6 +71,6 @@ void ShadowRenderSystem::renderShadow(
             
             instanceIndex++;
         }
-    }
+    });
 }
 }

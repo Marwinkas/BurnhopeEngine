@@ -7,7 +7,7 @@ namespace burnhope
 {
     struct HiZPush
     {
-        glm::vec2 invSize;
+        float2 invSize;
     };
     HiZSystem::HiZSystem(BurnhopeDevice &device, VkExtent2D extent, BurnhopeDescriptorPool &pool,
                          VkImageView gDepthView, VkSampler depthSampler)

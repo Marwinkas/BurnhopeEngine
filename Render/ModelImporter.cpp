@@ -1,9 +1,21 @@
 ﻿#include "ModelImporter.h"
-#include "Model.hpp"
-#include <glm/gtc/packing.hpp>
-#include <glm/gtc/quaternion.hpp>
+#include "../Utils/DirectXMathCompat.hpp"
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <cstring>
+#include <map>
+#include <set>
 #include <algorithm>
+#include <filesystem>
+#include <meshoptimizer.h>
+#include <chrono>
+
 namespace fs = std::filesystem;
+
 namespace burnhope
 {
     // --- УТИЛИТЫ ДЛЯ СЖАТИЯ И ХЭШИРОВАНИЯ ---
@@ -17,7 +29,7 @@ namespace burnhope
     }
 
     // Сжатие Кватерниона в 32-бита (Smallest Three)
-    static uint32_t PackQuaternionSmallest3(glm::vec4 q) {
+    static uint32_t PackQuaternionSmallest3(float4 q) {
         // Ищем наибольшую компоненту
         int maxIndex = 0;
         float maxVal = std::abs(q.x);
@@ -26,7 +38,8 @@ namespace burnhope
         if (std::abs(q.w) > maxVal) { maxVal = std::abs(q.w); maxIndex = 3; }
 
         // Убеждаемся, что наибольшая компонента положительная
-        if (q[maxIndex] < 0.0f) q = -q;
+        float qMaxVal = (maxIndex == 0) ? q.x : (maxIndex == 1) ? q.y : (maxIndex == 2) ? q.z : q.w;
+        if (qMaxVal < 0.0f) q = -q;
 
         float scale = 1.0f / 0.70710678118f; // 1 / sqrt(2) (макс возможное значение для остальных компонент)
         uint32_t packed = maxIndex; // 2 бита под индекс (0-3)
@@ -35,26 +48,29 @@ namespace burnhope
         for (int i = 0; i < 4; i++) {
             if (i == maxIndex) continue;
             // Мапим от [-sqrt(2)/2, sqrt(2)/2] в [0, 1023] (10 бит)
-            float normalized = (q[i] * scale) * 0.5f + 0.5f;
-            uint32_t quantized = static_cast<uint32_t>(glm::clamp(normalized, 0.0f, 1.0f) * 1023.0f + 0.5f);
+            float qVal = (i == 0) ? q.x : (i == 1) ? q.y : (i == 2) ? q.z : q.w;
+            float normalized = (qVal * scale) * 0.5f + 0.5f;
+            uint32_t quantized = static_cast<uint32_t>(Clamp(normalized, 0.0f, 1.0f) * 1023.0f + 0.5f);
             packed |= (quantized << shift);
             shift += 10;
         }
         return packed;
     }
 
-    void ProcessNodeForSockets(aiNode* node, const glm::mat4& parentTransform, std::vector<BHSocket>& sockets) {
-        glm::mat4 localTransform;
-        for(int i=0; i<4; ++i)
-            for(int j=0; j<4; ++j)
-                localTransform[i][j] = node->mTransformation[j][i]; 
+    void ProcessNodeForSockets(aiNode* node, const float4x4& parentTransform, std::vector<BHSocket>& sockets) {
+        float4x4 localTransform;
+        localTransform._11 = node->mTransformation.a1; localTransform._12 = node->mTransformation.b1; localTransform._13 = node->mTransformation.c1; localTransform._14 = node->mTransformation.d1;
+        localTransform._21 = node->mTransformation.a2; localTransform._22 = node->mTransformation.b2; localTransform._23 = node->mTransformation.c2; localTransform._24 = node->mTransformation.d2;
+        localTransform._31 = node->mTransformation.a3; localTransform._32 = node->mTransformation.b3; localTransform._33 = node->mTransformation.c3; localTransform._34 = node->mTransformation.d3;
+        localTransform._41 = node->mTransformation.a4; localTransform._42 = node->mTransformation.b4; localTransform._43 = node->mTransformation.c4; localTransform._44 = node->mTransformation.d4; 
 
-        glm::mat4 globalTransform = parentTransform * localTransform;
+        float4x4 globalTransform = MatrixMultiply(parentTransform, localTransform);
         std::string nodeName = node->mName.C_Str();
         if (nodeName.find("Socket") != std::string::npos || nodeName.find("Anchor") != std::string::npos || nodeName.find("Point") != std::string::npos) {
             BHSocket socket{};
             strncpy(socket.name, nodeName.c_str(), 63);
             socket.transform = globalTransform;
+            std::cout << "[SOCKET] Found: " << nodeName << std::endl;
             sockets.push_back(socket);
         }
         for (unsigned int i = 0; i < node->mNumChildren; i++) {
@@ -188,16 +204,16 @@ namespace burnhope
             }
         }
 
-        glm::vec3 globalMin(1e9f), globalMax(-1e9f);
+        float3 globalMin{1e9f, 1e9f, 1e9f}, globalMax{-1e9f, -1e9f, -1e9f};
         for (unsigned int m = 0; m < scene->mNumMeshes; m++) {
             aiMesh* aimesh = scene->mMeshes[m];
             for (unsigned int i = 0; i < aimesh->mNumVertices; i++) {
-                glm::vec3 pos(aimesh->mVertices[i].x, aimesh->mVertices[i].y, aimesh->mVertices[i].z);
-                globalMin = glm::min(globalMin, pos);
-                globalMax = glm::max(globalMax, pos);
+                float3 pos{aimesh->mVertices[i].x, aimesh->mVertices[i].y, aimesh->mVertices[i].z};
+                globalMin = Min(globalMin, pos);
+                globalMax = Max(globalMax, pos);
             }
         }
-        glm::vec3 globalExtent = globalMax - globalMin;
+        float3 globalExtent = globalMax - globalMin;
         if(globalExtent.x == 0.0f) globalExtent.x = 1.0f;
         if(globalExtent.y == 0.0f) globalExtent.y = 1.0f;
         if(globalExtent.z == 0.0f) globalExtent.z = 1.0f;
@@ -222,7 +238,10 @@ namespace burnhope
                     if (boneMapping.find(boneName) == boneMapping.end()) {
                         BHBoneNode node{};
                         node.nameHash = HashStringFNV1a(boneName.c_str());
-                        for(int r=0; r<4; ++r) for(int c=0; c<4; ++c) node.inverseBindMatrix[c][r] = bone->mOffsetMatrix[r][c];
+                        node.inverseBindMatrix._11 = bone->mOffsetMatrix.a1; node.inverseBindMatrix._12 = bone->mOffsetMatrix.a2; node.inverseBindMatrix._13 = bone->mOffsetMatrix.a3; node.inverseBindMatrix._14 = bone->mOffsetMatrix.a4;
+                        node.inverseBindMatrix._21 = bone->mOffsetMatrix.b1; node.inverseBindMatrix._22 = bone->mOffsetMatrix.b2; node.inverseBindMatrix._23 = bone->mOffsetMatrix.b3; node.inverseBindMatrix._24 = bone->mOffsetMatrix.b4;
+                        node.inverseBindMatrix._31 = bone->mOffsetMatrix.c1; node.inverseBindMatrix._32 = bone->mOffsetMatrix.c2; node.inverseBindMatrix._33 = bone->mOffsetMatrix.c3; node.inverseBindMatrix._34 = bone->mOffsetMatrix.c4;
+                        node.inverseBindMatrix._41 = bone->mOffsetMatrix.d1; node.inverseBindMatrix._42 = bone->mOffsetMatrix.d2; node.inverseBindMatrix._43 = bone->mOffsetMatrix.d3; node.inverseBindMatrix._44 = bone->mOffsetMatrix.d4;
                         boneMapping[boneName] = bones.size();
                         
                         // Эвристика для масок LOD:
@@ -268,7 +287,7 @@ namespace burnhope
                         BHVirtualIK ik{};
                         ik.nameHash = HashStringFNV1a(name.c_str());
                         ik.sourceBoneIndex = boneMapping[sourceName];
-                        ik.localOffset = glm::vec3(0.0f);
+                        ik.localOffset = float3{0.0f, 0.0f, 0.0f};
                         virtualIks.push_back(ik);
                     }
                 };
@@ -322,13 +341,13 @@ namespace burnhope
                     track.keyframeCount = maxKeys;
                     
                     // Ищем AABB трека позиций для квантования
-                    track.posMin = glm::vec3(1e9f); track.posMax = glm::vec3(-1e9f);
+                    track.posMin = float3{1e9f, 1e9f, 1e9f}; track.posMax = float3{-1e9f, -1e9f, -1e9f};
                     for(uint32_t k = 0; k < channel->mNumPositionKeys; k++) {
-                        glm::vec3 p(channel->mPositionKeys[k].mValue.x, channel->mPositionKeys[k].mValue.y, channel->mPositionKeys[k].mValue.z);
-                        track.posMin = glm::min(track.posMin, p);
-                        track.posMax = glm::max(track.posMax, p);
+                        float3 p(channel->mPositionKeys[k].mValue.x, channel->mPositionKeys[k].mValue.y, channel->mPositionKeys[k].mValue.z);
+                        track.posMin = Min(track.posMin, p);
+                        track.posMax = Max(track.posMax, p);
                     }
-                    glm::vec3 posExtent = track.posMax - track.posMin;
+                    float3 posExtent = track.posMax - track.posMin;
                     if(posExtent.x == 0) posExtent.x = 0.001f; if(posExtent.y == 0) posExtent.y = 0.001f; if(posExtent.z == 0) posExtent.z = 0.001f;
 
                     // Если это Root-кость, извлекаем Root Motion
@@ -338,11 +357,11 @@ namespace burnhope
                         BHKeyframeCompressed kf{};
                         if (k < channel->mNumPositionKeys) {
                             kf.time = (float)channel->mPositionKeys[k].mTime;
-                            glm::vec3 p = {channel->mPositionKeys[k].mValue.x, channel->mPositionKeys[k].mValue.y, channel->mPositionKeys[k].mValue.z};
-                            glm::vec3 normPos = (p - track.posMin) / posExtent;
-                            kf.posX = static_cast<uint16_t>(glm::clamp(normPos.x, 0.0f, 1.0f) * 65535.0f + 0.5f);
-                            kf.posY = static_cast<uint16_t>(glm::clamp(normPos.y, 0.0f, 1.0f) * 65535.0f + 0.5f);
-                            kf.posZ = static_cast<uint16_t>(glm::clamp(normPos.z, 0.0f, 1.0f) * 65535.0f + 0.5f);
+                            float3 p = {channel->mPositionKeys[k].mValue.x, channel->mPositionKeys[k].mValue.y, channel->mPositionKeys[k].mValue.z};
+                            float3 normPos = (p - track.posMin) / posExtent;
+                            kf.posX = static_cast<uint16_t>(Clamp(normPos.x, 0.0f, 1.0f) * 65535.0f + 0.5f);
+                            kf.posY = static_cast<uint16_t>(Clamp(normPos.y, 0.0f, 1.0f) * 65535.0f + 0.5f);
+                            kf.posZ = static_cast<uint16_t>(Clamp(normPos.z, 0.0f, 1.0f) * 65535.0f + 0.5f);
                         }
                         if (k < channel->mNumRotationKeys) {
                             kf.time = (float)channel->mRotationKeys[k].mTime;
@@ -377,10 +396,10 @@ namespace burnhope
                         if (dt > 0.0f) {
                             traj.velocity = (rootMotionKeys[futureK].deltaPosition - rootMotionKeys[k].deltaPosition) / dt;
                         } else {
-                            traj.velocity = glm::vec3(0.0f);
+                            traj.velocity = float3{0.0f, 0.0f, 0.0f};
                         }
-                        glm::quat q(rootMotionKeys[k].deltaRotation.w, rootMotionKeys[k].deltaRotation.x, rootMotionKeys[k].deltaRotation.y, rootMotionKeys[k].deltaRotation.z);
-                        glm::vec3 forward = q * glm::vec3(0.0f, 0.0f, 1.0f);
+                        quat q(rootMotionKeys[k].deltaRotation.w, rootMotionKeys[k].deltaRotation.x, rootMotionKeys[k].deltaRotation.y, rootMotionKeys[k].deltaRotation.z);
+                        float3 forward = q * float3{0.0f, 0.0f, 1.0f};
                         traj.facingAngle = std::atan2(forward.x, forward.z);
                         trajectories.push_back(traj);
                     }
@@ -440,7 +459,7 @@ namespace burnhope
         std::vector<PackedVertexPos> globalPos;
         std::vector<PackedVertexAttr> globalAttr;
         std::vector<PackedVertexAnim> globalAnim;
-        std::vector<glm::vec3> globalOrigPos;
+        std::vector<float3> globalOrigPos;
         
         std::vector<uint32_t> globalColors;
         std::vector<uint32_t> globalUV2;
@@ -458,7 +477,7 @@ namespace burnhope
             std::vector<unsigned int> indices;
         };
         std::map<uint32_t, MatBatch> batches;
-    glm::vec3 center = globalMin + globalExtent * 0.5f;
+    float3 center = globalMin + globalExtent * 0.5f;
         for (aiMesh* aimesh : sortedMeshes) {
             uint32_t vertexBase = globalPos.size();
             
@@ -482,31 +501,31 @@ namespace burnhope
             }
 
             for (unsigned int i = 0; i < aimesh->mNumVertices; i++) {
-                glm::vec3 pos = {aimesh->mVertices[i].x, aimesh->mVertices[i].y, aimesh->mVertices[i].z};
+                float3 pos = {aimesh->mVertices[i].x, aimesh->mVertices[i].y, aimesh->mVertices[i].z};
                 globalOrigPos.push_back(pos);
 
                 // --- Этап 4. Опциональные потоки (Vertex Colors & Secondary UVs) ---
                 if (sceneHasColors) {
                     if (aimesh->HasVertexColors(0)) {
-                        glm::vec4 color(aimesh->mColors[0][i].r, aimesh->mColors[0][i].g, aimesh->mColors[0][i].b, aimesh->mColors[0][i].a);
-                        globalColors.push_back(glm::packUnorm4x8(color));
+                        float4 color{aimesh->mColors[0][i].r, aimesh->mColors[0][i].g, aimesh->mColors[0][i].b, aimesh->mColors[0][i].a};
+                        globalColors.push_back(PackUnorm4x8(color));
                     } else {
-                        globalColors.push_back(glm::packUnorm4x8(glm::vec4(1.0f))); // Default white
+                        globalColors.push_back(PackUnorm4x8(float4{1.0f, 1.0f, 1.0f, 1.0f})); // Default white
                     }
                 }
                 if (sceneHasUV2) {
                     if (aimesh->HasTextureCoords(1)) {
-                        globalUV2.push_back(glm::packHalf2x16(glm::vec2(aimesh->mTextureCoords[1][i].x, aimesh->mTextureCoords[1][i].y)));
+                        globalUV2.push_back(PackHalf2x16(float2{aimesh->mTextureCoords[1][i].x, aimesh->mTextureCoords[1][i].y}));
                     } else {
                         globalUV2.push_back(0);
                     }
                 }
 
-                glm::vec3 normPos = (pos - globalMin) / globalExtent;
+                float3 normPos = (pos - globalMin) / globalExtent;
                 PackedVertexPos pPos;
-                pPos.x = static_cast<uint16_t>(glm::clamp(normPos.x, 0.0f, 1.0f) * 65535.0f + 0.5f);
-                pPos.y = static_cast<uint16_t>(glm::clamp(normPos.y, 0.0f, 1.0f) * 65535.0f + 0.5f);
-                pPos.z = static_cast<uint16_t>(glm::clamp(normPos.z, 0.0f, 1.0f) * 65535.0f + 0.5f);
+                pPos.x = static_cast<uint16_t>(Clamp(normPos.x, 0.0f, 1.0f) * 65535.0f + 0.5f);
+                pPos.y = static_cast<uint16_t>(Clamp(normPos.y, 0.0f, 1.0f) * 65535.0f + 0.5f);
+                pPos.z = static_cast<uint16_t>(Clamp(normPos.z, 0.0f, 1.0f) * 65535.0f + 0.5f);
 
                 // --- Этап 3. Экстремальное Квантование Вершин (Vertex Squeezing) ---
                 // --- Этап 3. Веса процедурной анимации (Wind Stiffness) ---
@@ -516,61 +535,64 @@ namespace burnhope
                 } else {
                 windWeight = 0.0f; // Убираем автоматический ветер, чтобы обычные модели не "плавали"
                 }
-                uint8_t windW = static_cast<uint8_t>(glm::clamp(windWeight, 0.0f, 1.0f) * 255.0f);
+                uint8_t windW = static_cast<uint8_t>(Clamp(windWeight, 0.0f, 1.0f) * 255.0f);
 
                 // --- Этап 1. Толщина для SSS (Subsurface Scattering) ---
                 // Эвристика: чем ближе вершина к центру бокса, тем она толще. 
                 // Идеально работает для листвы, ушей монстров и свечей без тяжелого рейкастинга.
-                float distToCenter = glm::length(pos - (globalMin + globalExtent * 0.5f));
-                float maxDist = glm::length(globalExtent) * 0.5f;
-                uint8_t thickness = static_cast<uint8_t>(glm::clamp((1.0f - (distToCenter / maxDist)), 0.0f, 1.0f) * 255.0f);
+                float distToCenter = Length(pos - (globalMin + globalExtent * 0.5f));
+                float maxDist = Length(globalExtent) * 0.5f;
+                uint8_t thickness = static_cast<uint8_t>(Clamp((1.0f - (distToCenter / maxDist)), 0.0f, 1.0f) * 255.0f);
 
                 // Пакуем Ветер в младший байт, а Толщину в старший
                 pPos.pad = (static_cast<uint16_t>(thickness) << 8) | static_cast<uint16_t>(windW);
 
                 PackedVertexAttr pAttr;
-                pAttr.texUV = aimesh->HasTextureCoords(0) ? glm::packHalf2x16(glm::vec2(aimesh->mTextureCoords[0][i].x, aimesh->mTextureCoords[0][i].y)) : 0;
+                pAttr.texUV = aimesh->HasTextureCoords(0) ? PackHalf2x16(float2{aimesh->mTextureCoords[0][i].x, aimesh->mTextureCoords[0][i].y}) : 0;
 
                 if (aimesh->HasNormals()) {
-                    glm::vec3 n = glm::normalize(glm::vec3(aimesh->mNormals[i].x, aimesh->mNormals[i].y, aimesh->mNormals[i].z));
-                    glm::vec3 t = glm::vec3(1.0f, 0.0f, 0.0f);
+                    float3 n = Normalize(float3{aimesh->mNormals[i].x, aimesh->mNormals[i].y, aimesh->mNormals[i].z});
+                    float3 t = float3{1.0f, 0.0f, 0.0f};
                     float handedness = 1.0f;
                     if (aimesh->HasTangentsAndBitangents()) {
-                        t = glm::normalize(glm::vec3(aimesh->mTangents[i].x, aimesh->mTangents[i].y, aimesh->mTangents[i].z));
-                        glm::vec3 b = glm::normalize(glm::vec3(aimesh->mBitangents[i].x, aimesh->mBitangents[i].y, aimesh->mBitangents[i].z));
-                        handedness = (glm::dot(glm::cross(n, t), b) < 0.0f) ? -1.0f : 1.0f;
+                        t = Normalize(float3{aimesh->mTangents[i].x, aimesh->mTangents[i].y, aimesh->mTangents[i].z});
+                        float3 b = Normalize(float3{aimesh->mBitangents[i].x, aimesh->mBitangents[i].y, aimesh->mBitangents[i].z});
+                        handedness = (Dot(Cross(n, t), b) < 0.0f) ? -1.0f : 1.0f;
                     } else {
-                        glm::vec3 up = std::abs(n.y) < 0.999f ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
-                        t = glm::normalize(glm::cross(up, n));
+                        float3 up = std::abs(n.y) < 0.999f ? float3{0.0f, 1.0f, 0.0f} : float3{1.0f, 0.0f, 0.0f};
+                        t = Normalize(Cross(up, n));
                     }
-                    glm::vec3 b = glm::normalize(glm::cross(n, t) * handedness);
-                    glm::mat3 tbn(t, b, n);
-                    glm::quat q = glm::quat_cast(tbn);
-                    q = glm::normalize(q);
+                    float3 b = Normalize(Cross(n, t) * handedness);
+                    float4x4 tbn = MatrixIdentity();
+                    tbn._11 = t.x; tbn._12 = t.y; tbn._13 = t.z;
+                    tbn._21 = b.x; tbn._22 = b.y; tbn._23 = b.z;
+                    tbn._31 = n.x; tbn._32 = n.y; tbn._33 = n.z;
+                    quat q = quat_cast(tbn);
+                    q = Normalize(q);
                     if (q.w < 0.0f) q = -q;
-                    pAttr.qTangent = glm::packSnorm3x10_1x2(glm::vec4(q.x, q.y, q.z, handedness));
+                    pAttr.qTangent = PackSnorm3x10_1x2(float4{q.x, q.y, q.z, handedness});
                 } else {
-                    pAttr.qTangent = glm::packSnorm3x10_1x2(glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+                    pAttr.qTangent = PackSnorm3x10_1x2(float4{0.0f, 0.0f, 0.0f, 1.0f});
                 }
 
                 // --- Этап 2. Скелет, Pivot Painter и Ткань (Buffer C) ---
                 PackedVertexAnim pAnim{};
                 
                 // 1. Pivot Painter: Запекаем центр геометрии модели как корень (для листвы)
-                glm::vec3 pivotPos = (center - globalMin) / globalExtent;
-                pAnim.pivotX = static_cast<uint16_t>(glm::clamp(pivotPos.x, 0.0f, 1.0f) * 65535.0f + 0.5f);
-                pAnim.pivotY = static_cast<uint16_t>(glm::clamp(pivotPos.y, 0.0f, 1.0f) * 65535.0f + 0.5f);
-                pAnim.pivotZ = static_cast<uint16_t>(glm::clamp(pivotPos.z, 0.0f, 1.0f) * 65535.0f + 0.5f);
+                float3 pivotPos = (center - globalMin) / globalExtent;
+                pAnim.pivotX = static_cast<uint16_t>(Clamp(pivotPos.x, 0.0f, 1.0f) * 65535.0f + 0.5f);
+                pAnim.pivotY = static_cast<uint16_t>(Clamp(pivotPos.y, 0.0f, 1.0f) * 65535.0f + 0.5f);
+                pAnim.pivotZ = static_cast<uint16_t>(Clamp(pivotPos.z, 0.0f, 1.0f) * 65535.0f + 0.5f);
                 // 2. Cloth Max Distance (По умолчанию жестко привязано 0)
                 pAnim.clothMaxDistance = 0;
 
                 // --- ЭТАП 8. Запекание Ambient Occlusion (Cavity) ---
                 float ao = 1.0f;
                 if (aimesh->HasNormals()) {
-                    glm::vec3 n = glm::normalize(glm::vec3(aimesh->mNormals[i].x, aimesh->mNormals[i].y, aimesh->mNormals[i].z));
-                    glm::vec3 dirToCenter = glm::normalize((globalMin + globalExtent * 0.5f) - pos);
-                    float dotCenter = glm::dot(n, dirToCenter);
-                    if (dotCenter > 0.3f) ao = glm::clamp(1.0f - dotCenter, 0.0f, 1.0f); 
+                    float3 n = Normalize(float3{aimesh->mNormals[i].x, aimesh->mNormals[i].y, aimesh->mNormals[i].z});
+                    float3 dirToCenter = Normalize((globalMin + globalExtent * 0.5f) - pos);
+                    float dotCenter = Dot(n, dirToCenter);
+                    if (dotCenter > 0.3f) ao = Clamp(1.0f - dotCenter, 0.0f, 1.0f); 
                 }
                 pAnim.vertexAO = static_cast<uint8_t>(ao * 255.0f);
                 
@@ -637,12 +659,12 @@ namespace burnhope
         std::vector<PackedVertexPos> optGlobalPos(optVertexCount);
         std::vector<PackedVertexAttr> optGlobalAttr(optVertexCount);
         std::vector<PackedVertexAnim> optGlobalAnim(optVertexCount);
-        std::vector<glm::vec3> optGlobalOrigPos(optVertexCount);
+        std::vector<float3> optGlobalOrigPos(optVertexCount);
         
         meshopt_remapVertexBuffer(optGlobalPos.data(), globalPos.data(), globalPos.size(), sizeof(PackedVertexPos), remap.data());
         meshopt_remapVertexBuffer(optGlobalAttr.data(), globalAttr.data(), globalAttr.size(), sizeof(PackedVertexAttr), remap.data());
         meshopt_remapVertexBuffer(optGlobalAnim.data(), globalAnim.data(), globalAnim.size(), sizeof(PackedVertexAnim), remap.data());
-        meshopt_remapVertexBuffer(optGlobalOrigPos.data(), globalOrigPos.data(), globalOrigPos.size(), sizeof(glm::vec3), remap.data());
+        meshopt_remapVertexBuffer(optGlobalOrigPos.data(), globalOrigPos.data(), globalOrigPos.size(), sizeof(float3), remap.data());
 
         if (sceneHasColors) {
             std::vector<uint32_t> optColors(optVertexCount);
@@ -681,11 +703,11 @@ namespace burnhope
             meshopt_remapIndexBuffer(batch.indices.data(), batch.indices.data(), batch.indices.size(), remap.data());
             
             meshopt_optimizeVertexCache(batch.indices.data(), batch.indices.data(), batch.indices.size(), globalPos.size());
-            meshopt_optimizeOverdraw(batch.indices.data(), batch.indices.data(), batch.indices.size(), &globalOrigPos[0].x, globalOrigPos.size(), sizeof(glm::vec3), 1.05f);
+            meshopt_optimizeOverdraw(batch.indices.data(), batch.indices.data(), batch.indices.size(), &globalOrigPos[0].x, globalOrigPos.size(), sizeof(float3), 1.05f);
             
             std::vector<uint32_t> tempProxy(batch.indices.size());
             size_t targetProxyCount = std::min<size_t>(150, batch.indices.size());
-            size_t proxyCount = meshopt_simplify(tempProxy.data(), batch.indices.data(), batch.indices.size(), &globalOrigPos[0].x, globalOrigPos.size(), sizeof(glm::vec3), targetProxyCount, 0.1f);
+            size_t proxyCount = meshopt_simplify(tempProxy.data(), batch.indices.data(), batch.indices.size(), &globalOrigPos[0].x, globalOrigPos.size(), sizeof(float3), targetProxyCount, 0.1f);
             tempProxy.resize(proxyCount);
             proxyIndices.insert(proxyIndices.end(), tempProxy.begin(), tempProxy.end());
             float simplificationError = 0.01f; // Базовая метрика для Parent Error Bound
@@ -697,7 +719,7 @@ namespace burnhope
 
             size_t meshlet_count = meshopt_buildMeshlets(local_meshlets.data(), local_meshlet_vertices.data(), local_meshlet_triangles.data(),
                                                          batch.indices.data(), batch.indices.size(),
-                                                         &globalOrigPos[0].x, globalOrigPos.size(), sizeof(glm::vec3),
+                                                         &globalOrigPos[0].x, globalOrigPos.size(), sizeof(float3),
                                                          CLUSTER_MAX_VERTICES, CLUSTER_MAX_TRIANGLES, 0.0f);
 
             // Parent Error Bound (Метрика для бесшовных LOD'ов - ЭТАП 4)
@@ -724,7 +746,7 @@ namespace burnhope
                 meshopt_Bounds bounds = meshopt_computeMeshletBounds(
                     &local_meshlet_vertices[local_meshlets[i].vertex_offset],
                     &local_meshlet_triangles[local_meshlets[i].triangle_offset], local_meshlets[i].triangle_count,
-                    &globalOrigPos[0].x, globalOrigPos.size(), sizeof(glm::vec3));
+                    &globalOrigPos[0].x, globalOrigPos.size(), sizeof(float3));
                       float clusterError = simplificationError * bounds.radius * 0.01f;
                 // Строгая запись в SoA (Structure of Arrays) для идеального кэша GPU
                 m_bCenterX.push_back(bounds.center[0]);
@@ -748,18 +770,18 @@ namespace burnhope
             sm.indexCounts[0] = batch.indices.size();
             finalIndices.insert(finalIndices.end(), batch.indices.begin(), batch.indices.end());
             
-            glm::vec3 sMin(1e9f), sMax(-1e9f);
+            float3 sMin{1e9f, 1e9f, 1e9f}, sMax{-1e9f, -1e9f, -1e9f};
             for(uint32_t idx : batch.indices) {
-                sMin = glm::min(sMin, globalOrigPos[idx]);
-                sMax = glm::max(sMax, globalOrigPos[idx]);
+                sMin = Min(sMin, globalOrigPos[idx]);
+                sMax = Max(sMax, globalOrigPos[idx]);
             }
             sm.aabbMin = sMin;
             sm.aabbMax = sMax;
-            sm.boundingRadius = glm::distance(sMin, sMax) * 0.5f;
+            sm.boundingRadius = Distance(sMin, sMax) * 0.5f;
             
             // --- Этап 4. Эвристика VRS (Variable Rate Shading) ---
             // Если геометрия массивная, но низкополигональная (поверхность дороги/стены), её можно рендерить 2x2 пикселя
-            float density = batch.indices.size() / (glm::length(globalExtent) + 1e-5f);
+            float density = batch.indices.size() / (Length(globalExtent) + 1e-5f);
             sm.vrsRate = (density < 500.0f) ? 1 : 0; // 1 = 2x2 Coarse Shading, 0 = 1x1 Native
             finalSubMeshes.push_back(sm);
         }
@@ -777,11 +799,11 @@ namespace burnhope
                 uint32_t idx1 = finalIndices[sm.firstIndices[0] + t + 1];
                 uint32_t idx2 = finalIndices[sm.firstIndices[0] + t + 2];
                 
-                glm::vec3 v0 = globalOrigPos[idx0];
-                glm::vec3 v1 = globalOrigPos[idx1];
-                glm::vec3 v2 = globalOrigPos[idx2];
+                float3 v0 = globalOrigPos[idx0];
+                float3 v1 = globalOrigPos[idx1];
+                float3 v2 = globalOrigPos[idx2];
                 
-                float area = 0.5f * glm::length(glm::cross(v1 - v0, v2 - v0));
+                float area = 0.5f * Length(Cross(v1 - v0, v2 - v0));
                 currentAreaSum += area;
                 globalCDF.push_back(currentAreaSum);
                 globalSurfaceTags.push_back(tag);
@@ -813,26 +835,26 @@ namespace burnhope
         std::cout << "[IMPORT] Генерация Octahedral Impostor (Для массовки на горизонте)...\n";
         
 
-        float impRadius = glm::length(globalExtent) * 0.5f;
-        glm::vec3 p0 = center + glm::vec3(-impRadius, -impRadius, 0.0f);
-        glm::vec3 p1 = center + glm::vec3( impRadius, -impRadius, 0.0f);
-        glm::vec3 p2 = center + glm::vec3( impRadius,  impRadius, 0.0f);
-        glm::vec3 p3 = center + glm::vec3(-impRadius,  impRadius, 0.0f);
+        float impRadius = Length(globalExtent) * 0.5f;
+        float3 p0 = center + float3{-impRadius, -impRadius, 0.0f};
+        float3 p1 = center + float3{ impRadius, -impRadius, 0.0f};
+        float3 p2 = center + float3{ impRadius,  impRadius, 0.0f};
+        float3 p3 = center + float3{-impRadius,  impRadius, 0.0f};
         
-        auto packPos = [&](glm::vec3 p) {
-            glm::vec3 normPos = (p - globalMin) / globalExtent;
+        auto packPos = [&](float3 p) {
+            float3 normPos = (p - globalMin) / globalExtent;
             PackedVertexPos pp;
-            pp.x = static_cast<uint16_t>(glm::clamp(normPos.x, 0.0f, 1.0f) * 65535.0f + 0.5f);
-            pp.y = static_cast<uint16_t>(glm::clamp(normPos.y, 0.0f, 1.0f) * 65535.0f + 0.5f);
-            pp.z = static_cast<uint16_t>(glm::clamp(normPos.z, 0.0f, 1.0f) * 65535.0f + 0.5f);
+            pp.x = static_cast<uint16_t>(Clamp(normPos.x, 0.0f, 1.0f) * 65535.0f + 0.5f);
+            pp.y = static_cast<uint16_t>(Clamp(normPos.y, 0.0f, 1.0f) * 65535.0f + 0.5f);
+            pp.z = static_cast<uint16_t>(Clamp(normPos.z, 0.0f, 1.0f) * 65535.0f + 0.5f);
             pp.pad = 65535; return pp; // Для импостора выставляем максимальный вес ветра (он качается целиком)
         };
         globalPos.push_back(packPos(p0)); globalPos.push_back(packPos(p1));
         globalPos.push_back(packPos(p2)); globalPos.push_back(packPos(p3));
         
-        uint32_t qTan = glm::packSnorm3x10_1x2(glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
-        globalAttr.push_back({glm::packHalf2x16(glm::vec2(0,0)), qTan}); globalAttr.push_back({glm::packHalf2x16(glm::vec2(1,0)), qTan});
-        globalAttr.push_back({glm::packHalf2x16(glm::vec2(1,1)), qTan}); globalAttr.push_back({glm::packHalf2x16(glm::vec2(0,1)), qTan});
+        uint32_t qTan = PackSnorm3x10_1x2(float4{0.0f, 0.0f, 1.0f, 1.0f});
+        globalAttr.push_back({PackHalf2x16(float2{0,0}), qTan}); globalAttr.push_back({PackHalf2x16(float2{1,0}), qTan});
+        globalAttr.push_back({PackHalf2x16(float2{1,1}), qTan}); globalAttr.push_back({PackHalf2x16(float2{0,1}), qTan});
         
         for(int i=0; i<4; i++) globalAnim.push_back(PackedVertexAnim{});
 
@@ -861,38 +883,38 @@ namespace burnhope
 
         // --- Этап 1. Вычисление физических данных (Jolt Physics) ---
         std::cout << "[IMPORT] ЭТАП 9: Физика Jolt (Convex Hulls, Inertia Tensor, Soft Body)...\n";
-        glm::vec3 com(0.0f);
+        float3 com{0.0f, 0.0f, 0.0f};
         for (const auto& p : globalOrigPos) com += p;
         modelHeader.centerOfMass = com / (float)globalOrigPos.size();
         modelHeader.totalMass = 100.0f; // Дефолтная масса 100кг. Настраивается в эдиторе.
         
         // Тензор Инерции для параллелепипеда (AABB): I = m/12 * (a^2 + b^2)
-        glm::mat3 inertia(0.0f);
-        inertia[0][0] = (modelHeader.totalMass / 12.0f) * (globalExtent.y*globalExtent.y + globalExtent.z*globalExtent.z);
-        inertia[1][1] = (modelHeader.totalMass / 12.0f) * (globalExtent.x*globalExtent.x + globalExtent.z*globalExtent.z);
-        inertia[2][2] = (modelHeader.totalMass / 12.0f) * (globalExtent.x*globalExtent.x + globalExtent.y*globalExtent.y);
-        modelHeader.inertiaTensorRow0 = glm::vec4(inertia[0][0], inertia[0][1], inertia[0][2], 0.0f);
-        modelHeader.inertiaTensorRow1 = glm::vec4(inertia[1][0], inertia[1][1], inertia[1][2], 0.0f);
-        modelHeader.inertiaTensorRow2 = glm::vec4(inertia[2][0], inertia[2][1], inertia[2][2], 0.0f);
+        float4x4 inertiaTensor = MatrixIdentity();
+        inertiaTensor._11 = (modelHeader.totalMass / 12.0f) * (globalExtent.y*globalExtent.y + globalExtent.z*globalExtent.z);
+        inertiaTensor._22 = (modelHeader.totalMass / 12.0f) * (globalExtent.x*globalExtent.x + globalExtent.z*globalExtent.z);
+        inertiaTensor._33 = (modelHeader.totalMass / 12.0f) * (globalExtent.x*globalExtent.x + globalExtent.y*globalExtent.y);
+        modelHeader.inertiaTensorRow0 = float4(inertiaTensor._11, inertiaTensor._12, inertiaTensor._13, 0.0f);
+        modelHeader.inertiaTensorRow1 = float4(inertiaTensor._21, inertiaTensor._22, inertiaTensor._23, 0.0f);
+        modelHeader.inertiaTensorRow2 = float4(inertiaTensor._31, inertiaTensor._32, inertiaTensor._33, 0.0f);
 
         // Создаем дефолтный Box-примитив, если модель не разрезана (Compound Shapes)
         std::vector<BHPhysicsPrimitive> primitives;
-        primitives.push_back({1, center, glm::vec4(0,0,0,1), globalExtent * 0.5f});
+        primitives.push_back({1, center, float4(0,0,0,1), globalExtent * 0.5f});
         modelHeader.physicsPrimitiveCount = primitives.size();
         modelHeader.destructionBondCount = 0; // Нет разрушаемости по умолчанию
 
         // --- Блок 2. Вода: Объем и Центр Плавучести (Архимед) ---
         float totalVolume = 0.0f;
-        glm::vec3 centerOfBuoyancy(0.0f);
+        float3 centerOfBuoyancy{0.0f, 0.0f, 0.0f};
         for (unsigned int m = 0; m < scene->mNumMeshes; m++) {
             aiMesh *aimesh = scene->mMeshes[m];
             for (unsigned int i = 0; i < aimesh->mNumFaces; i++) {
                 if (aimesh->mFaces[i].mNumIndices == 3) {
-                    glm::vec3 p1(aimesh->mVertices[aimesh->mFaces[i].mIndices[0]].x, aimesh->mVertices[aimesh->mFaces[i].mIndices[0]].y, aimesh->mVertices[aimesh->mFaces[i].mIndices[0]].z);
-                    glm::vec3 p2(aimesh->mVertices[aimesh->mFaces[i].mIndices[1]].x, aimesh->mVertices[aimesh->mFaces[i].mIndices[1]].y, aimesh->mVertices[aimesh->mFaces[i].mIndices[1]].z);
-                    glm::vec3 p3(aimesh->mVertices[aimesh->mFaces[i].mIndices[2]].x, aimesh->mVertices[aimesh->mFaces[i].mIndices[2]].y, aimesh->mVertices[aimesh->mFaces[i].mIndices[2]].z);
+                    float3 p1(aimesh->mVertices[aimesh->mFaces[i].mIndices[0]].x, aimesh->mVertices[aimesh->mFaces[i].mIndices[0]].y, aimesh->mVertices[aimesh->mFaces[i].mIndices[0]].z);
+                    float3 p2(aimesh->mVertices[aimesh->mFaces[i].mIndices[1]].x, aimesh->mVertices[aimesh->mFaces[i].mIndices[1]].y, aimesh->mVertices[aimesh->mFaces[i].mIndices[1]].z);
+                    float3 p3(aimesh->mVertices[aimesh->mFaces[i].mIndices[2]].x, aimesh->mVertices[aimesh->mFaces[i].mIndices[2]].y, aimesh->mVertices[aimesh->mFaces[i].mIndices[2]].z);
                     // Объем тетраэдра
-                    float v = glm::dot(p1, glm::cross(p2, p3)) / 6.0f;
+                    float v = Dot(p1, Cross(p2, p3)) / 6.0f;
                     totalVolume += v;
                     centerOfBuoyancy += v * ((p1 + p2 + p3) / 4.0f);
                 }
@@ -908,38 +930,38 @@ namespace burnhope
 
         // --- Блок 2. GI Пробы (Anchors) ---
         std::cout << "[IMPORT] ЭТАП 6: Интеграция RT и GI (Генерация Probe Anchors)...\n";
-        std::vector<glm::vec3> probeAnchors;
+        std::vector<float3> probeAnchors;
         // Создаем cage (клетку) вокруг модели для захвата света
         for(int x = -1; x <= 1; x += 2)
             for(int y = -1; y <= 1; y += 2)
                 for(int z = -1; z <= 1; z += 2)
-                    probeAnchors.push_back(center + glm::vec3(x,y,z) * (globalExtent * 0.55f));
+                    probeAnchors.push_back(center + float3(x,y,z) * (globalExtent * 0.55f));
         modelHeader.probeAnchorCount = probeAnchors.size();
 
         // --- Блок 2. Тетраэдрическая сетка (Jolt SoftBody) ---
-        std::vector<glm::vec4> tetraNodes;
-        std::vector<glm::uvec4> tetrahedrons;
+        std::vector<float4> tetraNodes;
+        std::vector<ufloat4> tetrahedrons;
         // В качестве заглушки создаем простейший тетраэдрический бокс по границам модели
-        tetraNodes.push_back(glm::vec4(globalMin.x, globalMin.y, globalMin.z, 1.0f)); // mass = 1.0
-        tetraNodes.push_back(glm::vec4(globalMax.x, globalMin.y, globalMin.z, 1.0f));
-        tetraNodes.push_back(glm::vec4(globalMin.x, globalMax.y, globalMin.z, 1.0f));
-        tetraNodes.push_back(glm::vec4(globalMin.x, globalMin.y, globalMax.z, 1.0f));
-        tetrahedrons.push_back(glm::uvec4(0, 1, 2, 3));
+        tetraNodes.push_back(float4(globalMin.x, globalMin.y, globalMin.z, 1.0f)); // mass = 1.0
+        tetraNodes.push_back(float4(globalMax.x, globalMin.y, globalMin.z, 1.0f));
+        tetraNodes.push_back(float4(globalMin.x, globalMax.y, globalMin.z, 1.0f));
+        tetraNodes.push_back(float4(globalMin.x, globalMin.y, globalMax.z, 1.0f));
+        tetrahedrons.push_back(ufloat4{0, 1, 2, 3});
         
         modelHeader.tetraNodeCount = tetraNodes.size();
         modelHeader.tetraCount = tetrahedrons.size();
 
         std::cout << "[IMPORT] ЭТАП 10: Процедурная генерация и Навигация (Sockets, NavMesh Carvers)...\n";
         std::vector<BHSocket> sockets;
-        ProcessNodeForSockets(scene->mRootNode, glm::mat4(1.0f), sockets);
+        ProcessNodeForSockets(scene->mRootNode, MatrixIdentity(), sockets);
         modelHeader.socketCount = sockets.size();
 
         std::vector<BHNavMeshCarver> carvers;
         BHNavMeshCarver carver;
-        carver.points[0] = glm::vec2(globalMin.x, globalMin.z);
-        carver.points[1] = glm::vec2(globalMax.x, globalMin.z);
-        carver.points[2] = glm::vec2(globalMax.x, globalMax.z);
-        carver.points[3] = glm::vec2(globalMin.x, globalMax.z);
+        carver.points[0] = float2(globalMin.x, globalMin.z);
+        carver.points[1] = float2(globalMax.x, globalMin.z);
+        carver.points[2] = float2(globalMax.x, globalMax.z);
+        carver.points[3] = float2(globalMin.x, globalMax.z);
         carvers.push_back(carver);
         modelHeader.carverCount = carvers.size();
 
@@ -972,9 +994,9 @@ namespace burnhope
         uint64_t hotSize = (matDataArray.size() * sizeof(BHMaterialData)) + 
                            (finalSubMeshes.size() * (sizeof(BHMeshHeader) + sizeof(BHLodHeader))) +
                            (primitives.size() * sizeof(BHPhysicsPrimitive)) +
-                           (probeAnchors.size() * sizeof(glm::vec3)) +
-                           (tetraNodes.size() * sizeof(glm::vec4)) +
-                           (tetrahedrons.size() * sizeof(glm::uvec4)) +
+                           (probeAnchors.size() * sizeof(float3)) +
+                           (tetraNodes.size() * sizeof(float4)) +
+                           (tetrahedrons.size() * sizeof(ufloat4)) +
                            (proxyIndices.size() * sizeof(uint32_t)) +
                            (morphTargets.size() * sizeof(BHMorphTarget)) +
                            (sockets.size() * sizeof(BHSocket)) + 
@@ -1045,9 +1067,9 @@ namespace burnhope
         }
 
         outFile.write((char*)primitives.data(), primitives.size() * sizeof(BHPhysicsPrimitive));
-        outFile.write((char*)probeAnchors.data(), probeAnchors.size() * sizeof(glm::vec3));
-        outFile.write((char*)tetraNodes.data(), tetraNodes.size() * sizeof(glm::vec4));
-        outFile.write((char*)tetrahedrons.data(), tetrahedrons.size() * sizeof(glm::uvec4));
+        outFile.write((char*)probeAnchors.data(), probeAnchors.size() * sizeof(float3));
+        outFile.write((char*)tetraNodes.data(), tetraNodes.size() * sizeof(float4));
+        outFile.write((char*)tetrahedrons.data(), tetrahedrons.size() * sizeof(ufloat4));
         outFile.write((char*)proxyIndices.data(), proxyIndices.size() * sizeof(uint32_t));
         if (!morphTargets.empty()) outFile.write((char*)morphTargets.data(), morphTargets.size() * sizeof(BHMorphTarget));
         if (!sockets.empty()) outFile.write((char*)sockets.data(), sockets.size() * sizeof(BHSocket));

@@ -1,104 +1,129 @@
 ﻿#include "Camera.hpp"
 #include <cassert>
 #include <limits>
-#include <GLFW/glfw3.h>
+#include <SDL3/SDL.h>
 namespace burnhope
 {
-    Camera::Camera(int width, int height, glm::vec3 position)
+    Camera::Camera(int width, int height, float3 position)
     {
         Camera::width = width;
         Camera::height = height;
         Position = position;
     }
 
-    void Camera::setViewMatrix(const glm::mat4& viewMatrix)
+    void Camera::setViewMatrix(const float4x4& viewMatrix)
     {
-        glm::mat4 invView = glm::inverse(viewMatrix);
+        float4x4 invView = MatrixInverse(viewMatrix);
 
-        Position = glm::vec3(invView[3]);
+        Position = float3{invView._41, invView._42, invView._43};
 
-        Orientation = -glm::normalize(glm::vec3(invView[2]));
+        // Extract forward vector from view matrix (negated 3rd row)
+        float3 forward = float3{-invView._31, -invView._32, -invView._33};
+        Orientation = Normalize(forward);
 
-        Up = glm::normalize(glm::vec3(invView[1]));
+        // Extract up vector from view matrix (2nd row)
+        float3 up = float3{invView._21, invView._22, invView._23};
+        Up = Normalize(up);
     }
 
     void Camera::updateMatrix(float FOVdeg, float nearPlane, float farPlane)
     {
-        glm::mat4 view = GetViewMatrix();
-        glm::mat4 projJitter = GetProjectionMatrix(FOVdeg, nearPlane, farPlane);
-        viewProjectionMatrix = projJitter * view;
-        glm::mat4 projClean = GetProjectionMatrix(FOVdeg, nearPlane, farPlane);
-        cleanViewProjectionMatrix = projClean * view;
+        float4x4 view = GetViewMatrix();
+        float4x4 projJitter = GetProjectionMatrix(FOVdeg, nearPlane, farPlane);
+        viewProjectionMatrix = MatrixMultiply(projJitter, view);
+        float4x4 projClean = GetProjectionMatrix(FOVdeg, nearPlane, farPlane);
+        cleanViewProjectionMatrix = MatrixMultiply(projClean, view);
     }
-    bool Camera::IsSphereInFrustum(const glm::vec4 *planes, const glm::vec3 &center, float radius)
+
+    bool Camera::IsSphereInFrustum(const float4 *planes, const float3 &center, float radius)
     {
         for (int i = 0; i < 6; i++)
         {
-            if (glm::dot(glm::vec3(planes[i]), center) + planes[i].w < -radius)
+            float3 planeNormal{planes[i].x, planes[i].y, planes[i].z};
+            float dist = Dot(planeNormal, center) + planes[i].w;
+            if (dist < -radius)
             {
                 return false;
             }
         }
         return true;
     }
-    void Camera::Inputs(GLFWwindow *window, float deltaTime)
+
+    void Camera::Inputs(SDL_Window *window, float deltaTime)
     {
-        bool allowMouse = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
+        float relX, relY;
+        // В SDL3 GetRelativeMouseState возвращает дельту с момента последнего вызова и маску кнопок
+        SDL_MouseButtonFlags mouseState = SDL_GetRelativeMouseState(&relX, &relY);
+
+        bool allowMouse = (mouseState & SDL_BUTTON_RMASK) != 0;
         if (allowMouse)
         {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-            double mouseX, mouseY;
-            glfwGetCursorPos(window, &mouseX, &mouseY);
-            if (firstClick)
+            SDL_SetWindowRelativeMouseMode(window, true);
+            
+            // Используем дельты напрямую. firstClick больше не нужен для предотвращения скачков,
+            // так как GetRelativeMouseState при первом вызове после паузы сбросит аккумулятор.
+            float rotX = sensitivity * relY;
+            float rotY = -sensitivity * relX;
+
+            float3 right = Cross(Orientation, Up);
+            if (Length(right) < 0.001f)
             {
-                lastMouseX = mouseX;
-                lastMouseY = mouseY;
-                firstClick = false;
-            }
-            float rotX = sensitivity * float(mouseY - lastMouseY);
-            float rotY = sensitivity * float(mouseX - lastMouseX);
-            lastMouseX = mouseX;
-            lastMouseY = mouseY;
-            glm::vec3 right = glm::cross(Orientation, Up);
-            if (glm::length(right) < 0.001f)
-            {
-                right = glm::vec3(1.0f, 0.0f, 0.0f);
+                right = float3{1.0f, 0.0f, 0.0f};
             }
             else
             {
-                right = glm::normalize(right);
+                right = Normalize(right);
             }
-            glm::vec3 newOrientation = glm::rotate(Orientation, glm::radians(-rotX), right);
-            float dot = glm::dot(newOrientation, Up);
+
+            // Rotation around X axis (pitch)
+            float pitchAngle = Radians(-rotX);
+            float4x4 pitchRot = MatrixRotationAxis(right, pitchAngle);
+            float4 newOrient4 = TransformFloat4(float4{Orientation.x, Orientation.y, Orientation.z, 0.0f}, pitchRot);
+            float3 newOrientation{newOrient4.x, newOrient4.y, newOrient4.z};
+
+            float dot = Dot(newOrientation, Up);
             if (abs(dot) < 0.99f)
             {
                 Orientation = newOrientation;
             }
-            Orientation = glm::rotate(Orientation, glm::radians(-rotY), Up);
-            Orientation = glm::normalize(Orientation);
+
+            // Rotation around Y axis (yaw)
+            float yawAngle = Radians(-rotY);
+            float4x4 yawRot = MatrixRotationAxis(Up, yawAngle);
+            float4 orient4 = TransformFloat4(float4{Orientation.x, Orientation.y, Orientation.z, 0.0f}, yawRot);
+            float3 orient3{orient4.x, orient4.y, orient4.z};
+            Orientation = Normalize(orient3);
         }
         else
         {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            SDL_SetWindowRelativeMouseMode(window, false);
             firstClick = true;
         }
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+        // ОШИБКА: SDL_BUTTON_RIGHT — это индекс (3), а нам нужна маска (SDL_BUTTON_RMASK = 4)
+        if ((mouseState & SDL_BUTTON_RMASK) != 0)
         {
             float currentSpeed = speed;
-            if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+            const bool* keyboardState = SDL_GetKeyboardState(NULL);
+            if (keyboardState[SDL_SCANCODE_LSHIFT] || keyboardState[SDL_SCANCODE_RSHIFT])
                 currentSpeed *= 20.0f;
-            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-                Position += currentSpeed * Orientation;
-            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-                Position += currentSpeed * -Orientation;
-            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-                Position += currentSpeed * -glm::normalize(glm::cross(Orientation, Up));
-            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-                Position += currentSpeed * glm::normalize(glm::cross(Orientation, Up));
-            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-                Position += currentSpeed * Up;
-            if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-                Position += currentSpeed * -Up;
+            if (keyboardState[SDL_SCANCODE_W])
+                Position = float3{Position.x + currentSpeed * Orientation.x, Position.y + currentSpeed * Orientation.y, Position.z + currentSpeed * Orientation.z};
+            if (keyboardState[SDL_SCANCODE_S])
+                Position = float3{Position.x - currentSpeed * Orientation.x, Position.y - currentSpeed * Orientation.y, Position.z - currentSpeed * Orientation.z};
+            if (keyboardState[SDL_SCANCODE_A])
+            {
+                float3 right = Normalize(Cross(Orientation, Up));
+                Position = float3{Position.x + currentSpeed * right.x, Position.y - currentSpeed * right.y, Position.z - currentSpeed * right.z};
+            }
+            if (keyboardState[SDL_SCANCODE_D])
+            {
+                float3 right = Normalize(Cross(Orientation, Up));
+                Position = float3{Position.x - currentSpeed * right.x, Position.y + currentSpeed * right.y, Position.z + currentSpeed * right.z};
+            }
+            if (keyboardState[SDL_SCANCODE_E])
+                Position = float3{Position.x + currentSpeed * Up.x, Position.y + currentSpeed * Up.y, Position.z + currentSpeed * Up.z};
+            if (keyboardState[SDL_SCANCODE_Q])
+                Position = float3{Position.x - currentSpeed * Up.x, Position.y - currentSpeed * Up.y, Position.z - currentSpeed * Up.z};
         }
     }
 }

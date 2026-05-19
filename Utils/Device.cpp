@@ -239,16 +239,8 @@ namespace burnhope
     createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
     createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
-    if (enableValidationLayers)
-    {
-        createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-        createInfo.ppEnabledLayerNames = validationLayers.data();
-    }
-    else
-    {
-        createInfo.enabledLayerCount = 0;
-    }
-
+    createInfo.enabledLayerCount = 0;
+  createInfo.ppEnabledLayerNames = nullptr; 
     if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device_) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to create logical device!");
@@ -420,10 +412,10 @@ VkDeviceAddress BurnhopeDevice::getBufferDeviceAddress(VkBuffer buffer) {
   }
   std::vector<const char *> BurnhopeDevice::getRequiredExtensions()
   {
-    uint32_t glfwExtensionCount = 0;
-    const char **glfwExtensions;
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-    std::vector<const char *> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+    uint32_t sdlExtensionCount = 0;
+    const char *const *sdlExtensions;
+    sdlExtensions = SDL_Vulkan_GetInstanceExtensions(&sdlExtensionCount);
+    std::vector<const char *> extensions(sdlExtensions, sdlExtensions + sdlExtensionCount);
     if (enableValidationLayers)
     {
       extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -450,7 +442,7 @@ VkDeviceAddress BurnhopeDevice::getBufferDeviceAddress(VkBuffer buffer) {
       std::cout << "\t" << required << std::endl;
       if (available.find(required) == available.end())
       {
-        throw std::runtime_error("Missing required glfw extension");
+        throw std::runtime_error("Missing required SDL3 extension");
       }
     }
   }

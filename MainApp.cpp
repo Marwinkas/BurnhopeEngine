@@ -1,10 +1,7 @@
 #include "MainApp.hpp"
 #include "Render/Camera.hpp"
 #include "Render/SceneManager.hpp"
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/constants.hpp>
+#include "Utils/DirectXMathCompat.hpp"
 #include <chrono>
 #include <stdexcept>
 #include <array>
@@ -58,7 +55,7 @@ namespace burnhope
             return anim;
         }
 
-        static glm::quat unpackQuat(uint32_t packed) {
+        static quat unpackQuat(uint32_t packed) {
             int maxIndex = packed & 3;
             float scale = 0.70710678118f;
             float c[4] = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -73,24 +70,24 @@ namespace burnhope
                 shift += 10;
             }
             c[maxIndex] = std::sqrt(std::max(0.0f, 1.0f - sumSq));
-            return glm::quat(c[3], c[0], c[1], c[2]); // w, x, y, z
+            return quat{c[0], c[1], c[2], c[3]}; // x, y, z, w
         }
 
-        void evaluate(const SkeletonData& skel, const AnimationData& anim, float time, std::vector<glm::mat4>& outMatrices) {
-            outMatrices.resize(skel.bones.size(), glm::mat4(1.0f));
+        void evaluate(const SkeletonData& skel, const AnimationData& anim, float time, std::vector<float4x4>& outMatrices) {
+            outMatrices.resize(skel.bones.size(), MatrixIdentity());
             float duration = anim.header.duration;
             float tps = anim.header.ticksPerSecond;
             if (tps <= 0.0f) tps = 25.0f;
             float animTime = std::fmod(time * tps, duration);
 
-            std::vector<glm::mat4> localTransforms(skel.bones.size());
+            std::vector<float4x4> localTransforms(skel.bones.size());
             for (size_t i = 0; i < skel.bones.size(); i++) {
-                glm::mat4 globalBind = glm::inverse(skel.bones[i].inverseBindMatrix);
+                float4x4 globalBind = MatrixInverse(skel.bones[i].inverseBindMatrix);
                 if (skel.bones[i].parentIndex == -1) {
                     localTransforms[i] = globalBind;
                 } else {
-                    glm::mat4 parentGlobalBind = glm::inverse(skel.bones[skel.bones[i].parentIndex].inverseBindMatrix);
-                    localTransforms[i] = glm::inverse(parentGlobalBind) * globalBind;
+                    float4x4 parentGlobalBind = MatrixInverse(skel.bones[skel.bones[i].parentIndex].inverseBindMatrix);
+                    localTransforms[i] = MatrixMultiply(globalBind, MatrixInverse(parentGlobalBind));
                 }
             }
 
@@ -117,40 +114,41 @@ namespace burnhope
                 float factor = 0.0f;
                 if (kf1.time > kf0.time) factor = (animTime - kf0.time) / (kf1.time - kf0.time);
 
-                glm::vec3 p0 = track.posMin + glm::vec3(kf0.posX, kf0.posY, kf0.posZ) / 65535.0f * (track.posMax - track.posMin);
-                glm::vec3 p1 = track.posMin + glm::vec3(kf1.posX, kf1.posY, kf1.posZ) / 65535.0f * (track.posMax - track.posMin);
-                glm::vec3 pos = glm::mix(p0, p1, factor);
+                float3 p0 = track.posMin + float3{static_cast<float>(kf0.posX), static_cast<float>(kf0.posY), static_cast<float>(kf0.posZ)} / 65535.0f * (track.posMax - track.posMin);
+                float3 p1 = track.posMin + float3{static_cast<float>(kf1.posX), static_cast<float>(kf1.posY), static_cast<float>(kf1.posZ)} / 65535.0f * (track.posMax - track.posMin);
+                float3 pos = Lerp(p0, p1, factor);
 
-                glm::quat q0 = unpackQuat(kf0.packedRotation);
-                glm::quat q1 = unpackQuat(kf1.packedRotation);
-                glm::quat rot = glm::slerp(q0, q1, factor);
+                quat q0 = unpackQuat(kf0.packedRotation);
+                quat q1 = unpackQuat(kf1.packedRotation);
+                quat rot = QuaternionSlerp(q0, q1, factor);
 
-                localTransforms[boneIdx] = glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(rot);
+                localTransforms[boneIdx] = MatrixMultiply(MatrixTranslation(pos), QuaternionToMatrix(rot));
             }
 
-            std::vector<glm::mat4> globalTransforms(skel.bones.size(), glm::mat4(0.0f));
+            std::vector<float4x4> globalTransforms(skel.bones.size());
+            for (auto& m : globalTransforms) m = MatrixIdentity();
             std::vector<bool> computed(skel.bones.size(), false);
 
-            std::function<glm::mat4(int)> computeGlobal = [&](int boneIdx) -> glm::mat4 {
+            std::function<float4x4(int)> computeGlobal = [&](int boneIdx) -> float4x4 {
                 if (computed[boneIdx]) return globalTransforms[boneIdx];
-                glm::mat4 parentGlobal = glm::mat4(1.0f);
+                float4x4 parentGlobal = MatrixIdentity();
                 if (skel.bones[boneIdx].parentIndex != -1) {
                     parentGlobal = computeGlobal(skel.bones[boneIdx].parentIndex);
                 }
-                globalTransforms[boneIdx] = parentGlobal * localTransforms[boneIdx];
+                globalTransforms[boneIdx] = MatrixMultiply(parentGlobal, localTransforms[boneIdx]);
                 computed[boneIdx] = true;
                 return globalTransforms[boneIdx];
             };
 
             for (size_t i = 0; i < skel.bones.size(); i++) {
-                outMatrices[i] = computeGlobal((int)i) * skel.bones[i].inverseBindMatrix;
+                outMatrices[i] = MatrixMultiply(computeGlobal((int)i), skel.bones[i].inverseBindMatrix);
             }
         }
     };
 
     struct ProbeData
     {
-        glm::vec4 positionAndRadius;
+        float4 positionAndRadius;
     };
     struct ProbesInfo
     {
@@ -159,8 +157,8 @@ namespace burnhope
     };
 
     struct DecalDataGPU {
-        glm::mat4 invModelMatrix;
-        glm::vec4 params;
+        float4x4 invModelMatrix;
+        float4 params;
     };
     struct DecalBlock {
         int decalCount; int pad[3]; DecalDataGPU decals[1000];
@@ -209,7 +207,7 @@ namespace burnhope
             rtReflectionsShader = std::make_unique<ComputeShader>(device, "shaders/rt_reflections.comp.spv", rtLayouts, sizeof(RCPushConstants));
 
             std::vector<VkDescriptorSetLayout> probeLayouts = {globalSetLayout, rtTLASLayout, storageLayout, textureLayout, probeRenderLayoutPtr->getDescriptorSetLayout()};
-            probeRenderShader = std::make_unique<ComputeShader>(device, "shaders/probe_render.comp.spv", probeLayouts, sizeof(glm::vec4) + sizeof(int));
+            probeRenderShader = std::make_unique<ComputeShader>(device, "shaders/probe_render.comp.spv", probeLayouts, sizeof(float4) + sizeof(int));
         }
 
         void updateDescriptors(VkExtent2D extent, std::shared_ptr<BurnhopeTexture> defaultWhiteTex)
@@ -318,7 +316,7 @@ namespace burnhope
         
         animationSystem = new AnimationSystem();
         boneMatricesBuffer = std::make_unique<BurnhopeBuffer>(
-            lveDevice, sizeof(glm::mat4), 100000,
+            lveDevice, sizeof(float4x4), 100000,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         boneMatricesBuffer->map();
@@ -450,48 +448,49 @@ namespace burnhope
         
         if (animationSystem) delete animationSystem;
     }
-    glm::mat4 shadowPerspective(float fovY, float aspect, float zNear, float zFar)
+    float4x4 shadowPerspective(float fovY, float aspect, float zNear, float zFar)
     {
-        glm::mat4 proj = glm::perspective(glm::radians(fovY), aspect, zNear, zFar);
-        proj[1][1] *= -1.0f;
+        float4x4 proj = MatrixPerspectiveFovLH(Radians(fovY), aspect, zNear, zFar);
+        proj._22 *= -1.0f; // Vulkan Y-flip
         return proj;
     }
-    glm::mat4 computeObliqueProjection(const glm::mat4 &proj,
-                                       const glm::mat4 &view,
-                                       const glm::vec3 &planePos,
-                                       const glm::vec3 &planeNormal)
+    float4x4 computeObliqueProjection(const float4x4 &proj,
+                                       const float4x4 &view,
+                                       const float3 &planePos,
+                                       const float3 &planeNormal)
     {
-        glm::vec3 normalView = glm::normalize(
-            glm::mat3(glm::transpose(glm::inverse(view))) * planeNormal);
-        glm::vec3 pointView = glm::vec3(view * glm::vec4(planePos, 1.0f));
-        float d = -glm::dot(normalView, pointView);
-        glm::vec4 clipPlane(normalView, d);
+        float4x4 viewInv = MatrixInverse(view);
+        float4x4 viewInvT = MatrixTranspose(viewInv);
+        float3 normalView = Normalize(TransformVector(planeNormal, viewInvT));
+        float4 pointView = TransformFloat4(float4{planePos.x, planePos.y, planePos.z, 1.0f}, view);
+        float d = -Dot(normalView, float3{pointView.x, pointView.y, pointView.z});
+        float4 clipPlane{normalView.x, normalView.y, normalView.z, d};
 
         if (clipPlane.z > 0.0f)
             clipPlane = -clipPlane;
 
-        glm::mat4 result = proj;
+        float4x4 result = proj;
 
-        glm::vec4 q;
-        q.x = (glm::sign(clipPlane.x) + proj[2][0]) / proj[0][0];
-        q.y = (glm::sign(clipPlane.y) + proj[2][1]) / proj[1][1];
+        float4 q;
+        q.x = (Sign(clipPlane.x) + proj._31) / proj._11;
+        q.y = (Sign(clipPlane.y) + proj._32) / proj._22;
         q.z = -1.0f;
-        q.w = (1.0f + proj[2][2]) / proj[3][2];
+        q.w = (1.0f + proj._33) / proj._43;
 
-        float dotProd = glm::dot(clipPlane, q);
-        if (glm::abs(dotProd) < 1e-6f)
+        float dotProd = Dot(clipPlane, q);
+        if (std::abs(dotProd) < 1e-6f)
             return proj;
-        glm::vec4 c = clipPlane / dotProd;
+        float4 c = clipPlane / dotProd;
 
-        result[0][2] = c.x;
-        result[1][2] = c.y;
-        result[2][2] = c.z;
-        result[3][2] = c.w;
+        result._13 = c.x;
+        result._23 = c.y;
+        result._33 = c.z;
+        result._43 = c.w;
 
         return result;
     }
     
-    void FirstApp::RebuildBatches(entt::registry &registry, GeometryRenderSystem &renderSystem)
+    void FirstApp::RebuildBatches(flecs::world &registry, GeometryRenderSystem &renderSystem)
     {
         if (storageSet != VK_NULL_HANDLE)
         {
@@ -517,9 +516,6 @@ namespace burnhope
         textureInfos.push_back(defaultNormalTex->getImageInfo());
         uint32_t defaultNormalIdx = globalTexIndex++;
 
-        auto decalView = registry.view<DecalComponent>();
-    
-
         auto getTexIndex = [&](std::shared_ptr<BurnhopeTexture> tex, int32_t defaultIdx) -> int32_t
         {
             if (!tex)
@@ -532,20 +528,18 @@ namespace burnhope
             }
             return texToIndex[tex.get()];
         };
-        for (auto [entity, decal] : decalView.each()) {
+        registry.each([&](DecalComponent& decal) {
             decal.albedoTexIdx = getTexIndex(decal.albedoTex, -1);
             decal.normalTexIdx = getTexIndex(decal.normalTex, -1);
-        }
+        });
         
         uiManager->GetContext().renderSettings.vectorTexIdx = getTexIndex(uiManager->GetContext().renderSettings.vectorTex, -1);
         uiManager->GetContext().renderSettings.causticsTexIdx = getTexIndex(uiManager->GetContext().renderSettings.causticsTex, -1);
         uiManager->GetContext().renderSettings.canvasTexIdx = getTexIndex(uiManager->GetContext().renderSettings.canvasTex, -1);
 
-        auto view = registry.view<TransformComponent, MeshComponent>();
-        for (auto [entity, transformComp, meshComp] : view.each())
-        {
+        registry.each([&](TransformComponent& transformComp, MeshComponent& meshComp) {
             if (!meshComp.model || !meshComp.isVisible || !meshComp.model->gpuDataReady)
-                continue;
+                return;
             const auto &subMeshes = meshComp.model->getSubMeshes();
             for (uint32_t i = 0; i < subMeshes.size(); i++)
             {
@@ -573,7 +567,7 @@ namespace burnhope
 
                     // Берем оригинальный vec4 с учетом прозрачности
                     matData.albedoColor = currentMat->albedoColor; 
-                    matData.emissiveColor = glm::vec4(currentMat->emissiveColor, 1.0f);
+                    matData.emissiveColor = float4{currentMat->emissiveColor.x, currentMat->emissiveColor.y, currentMat->emissiveColor.z, 1.0f};
                     matData.metallicStrength = currentMat->metallicStrength;
                     matData.roughnessStrength = currentMat->roughnessStrength;
                     matData.normalStrength = currentMat->normalStrength;
@@ -598,11 +592,11 @@ namespace burnhope
                 obj.colorBufferAddress = meshComp.model->getColorBufferAddress();
                 obj.uv2BufferAddress = meshComp.model->getUV2BufferAddress();
                 obj.animBufferAddress = meshComp.model->getAnimBufferAddress();
-                obj.aabbMin = glm::vec4(meshComp.model->globalAabbMin, 0.0f);
-                obj.aabbMax = glm::vec4(meshComp.model->globalAabbMax, 0.0f);
+                obj.aabbMin = float4{meshComp.model->globalAabbMin.x, meshComp.model->globalAabbMin.y, meshComp.model->globalAabbMin.z, 0.0f};
+                obj.aabbMax = float4{meshComp.model->globalAabbMax.x, meshComp.model->globalAabbMax.y, meshComp.model->globalAabbMax.z, 0.0f};
                 objDataList.push_back(obj);
             }
-        }
+        });
 
         // СОРТИРОВКА ДЛЯ МАКСИМАЛЬНОГО КЭШИРОВАНИЯ (Батчинг / Псевдо-Instancing)
         // ВНИМАНИЕ: Сортировка отключена, так как она ломает синхронизацию customIndex
@@ -725,14 +719,14 @@ namespace burnhope
             auto boneInfo = boneMatricesBuffer->descriptorInfo();
             BurnhopeDescriptorWriter(*shadowObjectLayoutPtr, *globalPool).writeBuffer(0, &objInfo).writeBuffer(1, &boneInfo).build(shadowObjectSet);
         }
-        Camera camera(WIDTH, HEIGHT, glm::vec3(0.0f, 0.0f, 0.0f));
+        Camera camera(WIDTH, HEIGHT, float3{0.0f, 0.0f, 0.0f});
         auto currentTime = std::chrono::high_resolution_clock::now();
         int frameCount = 0;
         auto fpsTimer = currentTime;
         RenderPipeline renderPipeline;
-        glm::mat4 prevViewProj = glm::mat4(1.0f);
+        float4x4 prevViewProj = MatrixIdentity();
         float timeAccumulator = 0.0f;
-        static std::array<glm::mat4, 4> cachedCascadeMats;
+        static std::array<float4x4, 4> cachedCascadeMats;
         static bool matricesCached = false;
         const double targetFPS = 60.0;
         const double maxPeriod = 1.0 / targetFPS;
@@ -775,10 +769,10 @@ bool queuedGeometryRebuild = false;
         queuedGeometryRebuild = false; // Сбрасываем флаг
     }
 
-            glfwPollEvents();
+            lveWindow.pollEvents();
 
             bool modelsLoadedThisFrame = false;
-            registry.view<MeshComponent>().each([&](entt::entity e, MeshComponent &meshComp) {
+            registry.each([&](flecs::entity e, MeshComponent &meshComp) {
                 if (meshComp.model && meshComp.model->cpuDataReady && !meshComp.model->gpuDataReady) {
                     vkDeviceWaitIdle(lveDevice.device());
                     meshComp.model->finishGpuUpload();
@@ -800,7 +794,7 @@ bool queuedGeometryRebuild = false;
             uiManager->ProcessPendingActions();
 
             bool anyMaterialReloaded = false;
-            registry.view<MeshComponent>().each([&](const MeshComponent &mc) {
+            registry.each([&](flecs::entity e, MeshComponent &mc) {
                 for (auto& mat : mc.materials) {
                     if (mat && mat->pendingReload) {
                         if (!anyMaterialReloaded) vkDeviceWaitIdle(lveDevice.device());
@@ -816,12 +810,12 @@ bool queuedGeometryRebuild = false;
             }
 
             bool transformsChanged = false;
-            std::vector<glm::vec3> movedPositions;
-            glm::vec3 dirtyMin(std::numeric_limits<float>::max());
-            glm::vec3 dirtyMax(std::numeric_limits<float>::lowest());
+            std::vector<float3> movedPositions;
+            float3 dirtyMin{std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
+            float3 dirtyMax{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
             bool hasDirtyRegion = false;
 
-            std::vector<glm::mat4> allBoneMatrices;
+            std::vector<float4x4> allBoneMatrices;
             allBoneMatrices.reserve(10000); 
 
             ObjectData* objDataPtr = nullptr;
@@ -832,7 +826,7 @@ bool queuedGeometryRebuild = false;
             auto newTime = std::chrono::high_resolution_clock::now();
             float frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
 
-            registry.view<TransformComponent, MeshComponent>().each([&](entt::entity entity, TransformComponent &tComp, MeshComponent &meshComp) {
+            registry.each([&](flecs::entity entity, TransformComponent &tComp, MeshComponent &meshComp) {
                 if (!meshComp.model || !meshComp.isVisible || !meshComp.model->gpuDataReady) return;
                 
                 uint32_t currentBoneOffset = allBoneMatrices.size();
@@ -844,7 +838,7 @@ bool queuedGeometryRebuild = false;
                     auto skel = animationSystem->getSkeleton(meshComp.skeletonPath);
                     auto anim = animationSystem->getAnimation(meshComp.animationPath);
                     if (skel && anim && !skel->bones.empty()) {
-                        std::vector<glm::mat4> outMats;
+                        std::vector<float4x4> outMats;
                         animationSystem->evaluate(*skel, *anim, meshComp.animationTime, outMats);
                         if (allBoneMatrices.size() + outMats.size() <= 100000) {
                             allBoneMatrices.insert(allBoneMatrices.end(), outMats.begin(), outMats.end());
@@ -865,25 +859,25 @@ bool queuedGeometryRebuild = false;
                 }
             });
 
-            registry.view<TransformComponent>().each([&](entt::entity entity, TransformComponent &tComp) {
+            registry.each([&](flecs::entity entity, TransformComponent &tComp) {
                 if (tComp.transform.updatematrix) {
                     tComp.transform.updateMatrixIfNeeded();
                     transformsChanged = true;
                     movedPositions.push_back(tComp.transform.position);
-                    dirtyMin = glm::min(dirtyMin, tComp.transform.position - glm::vec3(15.0f));
-                    dirtyMax = glm::max(dirtyMax, tComp.transform.position + glm::vec3(15.0f));
+                    dirtyMin = Min(dirtyMin, tComp.transform.position - float3{15.0f, 15.0f, 15.0f});
+                    dirtyMax = Max(dirtyMax, tComp.transform.position + float3{15.0f, 15.0f, 15.0f});
                     hasDirtyRegion = true;
-                    if (registry.any_of<ReflectionProbeComponent>(entity)) {
-                        registry.get<ReflectionProbeComponent>(entity).updateNeeded = true;
+                    if (entity.has<ReflectionProbeComponent>()) {
+                        entity.get_mut<ReflectionProbeComponent>().updateNeeded = true;
                     }
                 } 
             });
 
             if (transformsChanged) {
-                registry.view<LightComponent, TransformComponent>().each([&](auto entity, LightComponent &lightComp, TransformComponent &lightTrans) {
+                registry.each([&](flecs::entity entity, LightComponent &lightComp, TransformComponent &lightTrans) {
                     if (!lightComp.needsShadowUpdate) {
                         for (const auto& pos : movedPositions) {
-                            if (glm::distance(pos, lightTrans.transform.position) <= lightComp.light.radius + 15.0f) {
+                            if (Length(pos - lightTrans.transform.position) <= lightComp.light.radius + 15.0f) {
                                 lightComp.needsShadowUpdate = true;
                                 break;
                             }
@@ -895,7 +889,7 @@ bool queuedGeometryRebuild = false;
 
             if (!allBoneMatrices.empty() && boneMatricesBuffer) {
                 size_t maxBytes = boneMatricesBuffer->getBufferSize();
-                size_t bytesToWrite = allBoneMatrices.size() * sizeof(glm::mat4);
+                size_t bytesToWrite = allBoneMatrices.size() * sizeof(float4x4);
                 if (bytesToWrite > maxBytes) bytesToWrite = maxBytes;
                 boneMatricesBuffer->writeToBuffer(allBoneMatrices.data(), bytesToWrite);
             }
@@ -906,14 +900,14 @@ bool queuedGeometryRebuild = false;
             while (extent.width == 0 || extent.height == 0)
             {
                 extent = lveWindow.getExtent();
-                glfwWaitEvents();
+                lveWindow.pollEvents();
             }
             camera.width = extent.width;
             camera.height = extent.height;
             VkExtent2D swapExtent = lveRenderer.getSwapChainExtent();
             
             // Проверяем, устарели ли наши текстуры относительно текущего SwapChain,
-            // либо был ли явный вызов изменения размера окна от GLFW
+            // либо был ли явный вызов изменения размера окна от SDL3
             if (hdrOutputTexture == nullptr || 
                 hdrOutputTexture->getExtent().width != swapExtent.width || 
                 hdrOutputTexture->getExtent().height != swapExtent.height || 
@@ -985,14 +979,13 @@ bool queuedGeometryRebuild = false;
                 frameCount = 0;
                 fpsTimer = newTime;
             }
-            camera.Inputs(lveWindow.getGLFWwindow(), frameTime);
+            camera.Inputs(lveWindow.getSDLWindow(), frameTime);
             auto commandBuffer = lveRenderer.beginFrame();
             if (commandBuffer == VK_NULL_HANDLE) continue;
             if (commandBuffer)
             {
-                registry.view<MeshComponent>().each([&](const MeshComponent &meshComp)
-                                                {
-            if (meshComp.model && meshComp.isVisible && meshComp.model->gpuDataReady) {
+                registry.each([&](const MeshComponent &meshComp) {
+                if (meshComp.model && meshComp.isVisible && meshComp.model->gpuDataReady) {
                     currentSubMeshCount += meshComp.model->getSubMeshes().size();
                 } });
 
@@ -1046,177 +1039,177 @@ float currentFov = 45.0f;
                     float jitterAmount = rs.nystagmusSeverity * 0.01f;
                     float shakeX = sin(timeAccumulator * jitterSpeed) * cos(timeAccumulator * jitterSpeed * 0.8f) * jitterAmount;
                     float shakeY = cos(timeAccumulator * jitterSpeed * 1.2f) * sin(timeAccumulator * jitterSpeed * 0.5f) * jitterAmount;
-                    ubo.projection[2][0] += shakeX;
-                    ubo.projection[2][1] += shakeY;
+                    ubo.projection._31 += shakeX;
+                    ubo.projection._32 += shakeY;
                 }
            
                 ubo.view = camera.GetViewMatrix();
                 ubo.camPos = camera.Position;
                 ubo.zNear = 0.1f;
                 ubo.zFar = 1000.0f;
-                ubo.screenSize = glm::vec4(extent.width, extent.height, 0.f, 0.f);
+                ubo.screenSize = float4(extent.width, extent.height, 0.f, 0.f);
                 ubo.sunDir = shadowSystem->getSunDir();
 
                 ubo.gridDimX = 16;
                 ubo.gridDimY = 9;
                 ubo.gridDimZ = 24;
 
-                ubo.sunColor = glm::vec3(1.0f, 0.95f, 0.8f);
+                ubo.sunColor = float3(1.0f, 0.95f, 0.8f);
                 ubo.sunIntensity = 5.0f;
 
-                auto lightView = registry.view<LightComponent>();
                 ubo.portalID = 0; // Main scene is portal 0
-                for (auto entity : lightView)
-                {
-                    auto &light = lightView.get<LightComponent>(entity).light;
+                bool foundDirLight = false;
+                registry.each([&](LightComponent &lightComp) {
+                    if (foundDirLight) return;
+                    auto &light = lightComp.light;
                     if (light.enable && light.type == LightType::Directional)
                     {
                         ubo.sunColor = light.color;
                         ubo.sunIntensity = light.intensity;
-                        break;
+                        foundDirLight = true;
                     }
-                }
+                });
                 ubo.lightSize = 1.0f;
 
                 // --- ЧИТАЕМ НАСТРОЙКИ ИЗ UIMANAGER ---
                 const auto &rs = uiManager->GetContext().renderSettings;
 
-                ubo.sscsParams = glm::vec4(rs.enableContactShadows ? 1.0f : 0.0f, rs.contactShadowLength, (float)rs.contactShadowSteps, rs.contactShadowThickness);
-                ubo.gtaoParams = glm::vec4(rs.enableSSAO ? 1.0f : 0.0f, rs.ssaoRadius, rs.ssaoBias, rs.ssaoIntensity);
-                ubo.fogParams = glm::vec4(rs.enableFog ? 1.0f : 0.0f, rs.fogDensity, rs.fogHeightFalloff, rs.fogBaseHeight);
-                ubo.fogColor = glm::vec4(rs.fogColor[0], rs.fogColor[1], rs.fogColor[2], rs.inscatterIntensity);
-                ubo.inscatterColor = glm::vec4(rs.inscatterColor[0], rs.inscatterColor[1], rs.inscatterColor[2], rs.inscatterPower);
-                ubo.skyZenithColor = glm::vec4(rs.skyZenithColor[0], rs.skyZenithColor[1], rs.skyZenithColor[2], 1.0f);
-                ubo.skyHorizonColor = glm::vec4(rs.skyHorizonColor[0], rs.skyHorizonColor[1], rs.skyHorizonColor[2], 1.0f);
-                ubo.skySunParams = glm::vec4(rs.sunSize, rs.sunGlow, rs.sunGlowSize, 0.0f);
-                ubo.ssgiParams = glm::vec4(rs.enableSSGI ? 1.0f : 0.0f, (float)rs.ssgiRayCount, rs.ssgiStepSize, rs.ssgiThickness);
-                ubo.rtParams = glm::vec4(rs.enableRTReflections ? 1.0f : 0.0f, (float)rs.rtMaxBounces, rs.enableRadianceCascades ? 1.0f : 0.0f, 0.0f);
+                ubo.sscsParams = float4(rs.enableContactShadows ? 1.0f : 0.0f, rs.contactShadowLength, (float)rs.contactShadowSteps, rs.contactShadowThickness);
+                ubo.gtaoParams = float4(rs.enableSSAO ? 1.0f : 0.0f, rs.ssaoRadius, rs.ssaoBias, rs.ssaoIntensity);
+                ubo.fogParams = float4(rs.enableFog ? 1.0f : 0.0f, rs.fogDensity, rs.fogHeightFalloff, rs.fogBaseHeight);
+                ubo.fogColor = float4(rs.fogColor[0], rs.fogColor[1], rs.fogColor[2], rs.inscatterIntensity);
+                ubo.inscatterColor = float4(rs.inscatterColor[0], rs.inscatterColor[1], rs.inscatterColor[2], rs.inscatterPower);
+                ubo.skyZenithColor = float4(rs.skyZenithColor[0], rs.skyZenithColor[1], rs.skyZenithColor[2], 1.0f);
+                ubo.skyHorizonColor = float4(rs.skyHorizonColor[0], rs.skyHorizonColor[1], rs.skyHorizonColor[2], 1.0f);
+                ubo.skySunParams = float4(rs.sunSize, rs.sunGlow, rs.sunGlowSize, 0.0f);
+                ubo.ssgiParams = float4(rs.enableSSGI ? 1.0f : 0.0f, (float)rs.ssgiRayCount, rs.ssgiStepSize, rs.ssgiThickness);
+                ubo.rtParams = float4(rs.enableRTReflections ? 1.0f : 0.0f, (float)rs.rtMaxBounces, rs.enableRadianceCascades ? 1.0f : 0.0f, 0.0f);
 
                 ubo.prevViewProj = prevViewProj;
-                ubo.ppExposureParams = glm::vec4(rs.autoExposure ? 1.0f : 0.0f, rs.manualExposure, rs.minBrightness, rs.maxBrightness);
-                ubo.ppColorBalance = glm::vec4(rs.temperature, rs.contrast, rs.saturation, rs.gamma);
-                ubo.ppBloomParams = glm::vec4(rs.enableBloom ? 1.0f : 0.0f, rs.bloomThreshold, rs.bloomIntensity, (float)rs.bloomBlurIterations);
-                ubo.ppDoFParams = glm::vec4(rs.enableDoF ? 1.0f : 0.0f, rs.focusDistance, rs.focusRange, rs.bokehSize);
-                ubo.ppVignetteGrain = glm::vec4(rs.enableVignette ? rs.vignetteIntensity : 0.0f, rs.enableFilmGrain ? rs.grainIntensity : 0.0f, rs.refractionSpeed * timeAccumulator, rs.enableChromaticAberration ? rs.caIntensity : 0.0f);
-                ubo.ppMotionBlur = glm::vec4(rs.enableMotionBlur ? 1.0f : 0.0f, rs.mbStrength, timeAccumulator, rs.mbTrails);
-                ubo.ppLensFlare = glm::vec4(rs.enableLensFlares ? 1.0f : 0.0f, rs.flareIntensity, rs.ghostDispersal, (float)rs.ghosts);
-                ubo.ppTAA_CAS = glm::vec4(rs.enableTAA ? 1.0f : 0.0f, rs.taaBlendFactor, rs.enableCAS ? 1.0f : 0.0f, rs.casSharpness);
-                ubo.ppLensAdvanced = glm::vec4(rs.flareHaloWidth, rs.flareChromaticDir, rs.autoFocus ? 1.0f : 0.0f, (float)rs.tonemapper);
-                ubo.ppDistortionDirt = glm::vec4(rs.enableLensDistortion ? 1.0f : 0.0f, rs.lensDistortionStrength, rs.enableLensDirt ? 1.0f : 0.0f, rs.lensDirtIntensity);
-                ubo.ppDitherAniso = glm::vec4(rs.enableDithering ? 1.0f : 0.0f, rs.ditherStrength, rs.enableScreenRefraction ? 1.0f : 0.0f, rs.refractionStrength);
-                ubo.cgShadows = glm::vec4(rs.cgShadows[0], rs.cgShadows[1], rs.cgShadows[2], 1.0f);
-                ubo.cgMidtones = glm::vec4(rs.cgMidtones[0], rs.cgMidtones[1], rs.cgMidtones[2], 1.0f);
-                ubo.cgHighlights = glm::vec4(rs.cgHighlights[0], rs.cgHighlights[1], rs.cgHighlights[2], 1.0f);
-                ubo.ppRetroParams = glm::vec4(rs.enableRetroCRT ? 1.0f : 0.0f, rs.crtScanlines, rs.glitchIntensity, rs.vhsNoise);
-                ubo.ppRetroParams2 = glm::vec4((float)rs.pixelation, rs.enableVertexJitter ? rs.vertexJitterResolution : 0.0f, (float)rs.bokehShape, rs.bokehAngle);
+                ubo.ppExposureParams = float4(rs.autoExposure ? 1.0f : 0.0f, rs.manualExposure, rs.minBrightness, rs.maxBrightness);
+                ubo.ppColorBalance = float4(rs.temperature, rs.contrast, rs.saturation, rs.gamma);
+                ubo.ppBloomParams = float4(rs.enableBloom ? 1.0f : 0.0f, rs.bloomThreshold, rs.bloomIntensity, (float)rs.bloomBlurIterations);
+                ubo.ppDoFParams = float4(rs.enableDoF ? 1.0f : 0.0f, rs.focusDistance, rs.focusRange, rs.bokehSize);
+                ubo.ppVignetteGrain = float4(rs.enableVignette ? rs.vignetteIntensity : 0.0f, rs.enableFilmGrain ? rs.grainIntensity : 0.0f, rs.refractionSpeed * timeAccumulator, rs.enableChromaticAberration ? rs.caIntensity : 0.0f);
+                ubo.ppMotionBlur = float4(rs.enableMotionBlur ? 1.0f : 0.0f, rs.mbStrength, timeAccumulator, rs.mbTrails);
+                ubo.ppLensFlare = float4(rs.enableLensFlares ? 1.0f : 0.0f, rs.flareIntensity, rs.ghostDispersal, (float)rs.ghosts);
+                ubo.ppTAA_CAS = float4(rs.enableTAA ? 1.0f : 0.0f, rs.taaBlendFactor, rs.enableCAS ? 1.0f : 0.0f, rs.casSharpness);
+                ubo.ppLensAdvanced = float4(rs.flareHaloWidth, rs.flareChromaticDir, rs.autoFocus ? 1.0f : 0.0f, (float)rs.tonemapper);
+                ubo.ppDistortionDirt = float4(rs.enableLensDistortion ? 1.0f : 0.0f, rs.lensDistortionStrength, rs.enableLensDirt ? 1.0f : 0.0f, rs.lensDirtIntensity);
+                ubo.ppDitherAniso = float4(rs.enableDithering ? 1.0f : 0.0f, rs.ditherStrength, rs.enableScreenRefraction ? 1.0f : 0.0f, rs.refractionStrength);
+                ubo.cgShadows = float4(rs.cgShadows[0], rs.cgShadows[1], rs.cgShadows[2], 1.0f);
+                ubo.cgMidtones = float4(rs.cgMidtones[0], rs.cgMidtones[1], rs.cgMidtones[2], 1.0f);
+                ubo.cgHighlights = float4(rs.cgHighlights[0], rs.cgHighlights[1], rs.cgHighlights[2], 1.0f);
+                ubo.ppRetroParams = float4(rs.enableRetroCRT ? 1.0f : 0.0f, rs.crtScanlines, rs.glitchIntensity, rs.vhsNoise);
+                ubo.ppRetroParams2 = float4((float)rs.pixelation, rs.enableVertexJitter ? rs.vertexJitterResolution : 0.0f, (float)rs.bokehShape, rs.bokehAngle);
                 
-                ubo.ppStylizedParams = glm::vec4(rs.enablePosterization ? rs.posterizationLevels : 0.0f, rs.enableKuwahara ? (float)rs.kuwaharaRadius : 0.0f, rs.enableCelShading ? rs.celShadingLevels : 0.0f, rs.enableVoronoi ? rs.voronoiScale : 0.0f);
+                ubo.ppStylizedParams = float4(rs.enablePosterization ? rs.posterizationLevels : 0.0f, rs.enableKuwahara ? (float)rs.kuwaharaRadius : 0.0f, rs.enableCelShading ? rs.celShadingLevels : 0.0f, rs.enableVoronoi ? rs.voronoiScale : 0.0f);
                 
-                ubo.ppOutlineParams = glm::vec4(rs.enableOutline ? 1.0f : 0.0f, rs.outlineThickness, rs.outlineThresholdDepth, rs.outlineThresholdNormal);
-                ubo.ppOutlineColor = glm::vec4(rs.outlineColor[0], rs.outlineColor[1], rs.outlineColor[2], (float)rs.outlineMode);
-                ubo.ppOutlineJitter = glm::vec4(rs.enableOutlineJitter ? 1.0f : 0.0f, rs.outlineJitterSpeed, rs.outlineJitterStrength, rs.objHatchingScale);
-                ubo.ppWeatherSSR = glm::vec4(rs.enableWeather ? 1.0f : 0.0f, rs.weatherIntensity, rs.enableSSR ? 1.0f : 0.0f, rs.ssrSteps);
-                ubo.ppSSSS = glm::vec4(rs.enableSSSS ? 1.0f : 0.0f, rs.ssssWidth, rs.ssrThickness, (float)rs.vrsMode);
-                ubo.ppWeatherParams = glm::vec4(rs.weatherSpeed, rs.weatherSize, rs.weatherDensity, rs.weatherDistortion);
+                ubo.ppOutlineParams = float4(rs.enableOutline ? 1.0f : 0.0f, rs.outlineThickness, rs.outlineThresholdDepth, rs.outlineThresholdNormal);
+                ubo.ppOutlineColor = float4(rs.outlineColor[0], rs.outlineColor[1], rs.outlineColor[2], (float)rs.outlineMode);
+                ubo.ppOutlineJitter = float4(rs.enableOutlineJitter ? 1.0f : 0.0f, rs.outlineJitterSpeed, rs.outlineJitterStrength, rs.objHatchingScale);
+                ubo.ppWeatherSSR = float4(rs.enableWeather ? 1.0f : 0.0f, rs.weatherIntensity, rs.enableSSR ? 1.0f : 0.0f, rs.ssrSteps);
+                ubo.ppSSSS = float4(rs.enableSSSS ? 1.0f : 0.0f, rs.ssssWidth, rs.ssrThickness, (float)rs.vrsMode);
+                ubo.ppWeatherParams = float4(rs.weatherSpeed, rs.weatherSize, rs.weatherDensity, rs.weatherDistortion);
 
-                ubo.cgGlobalLift = glm::vec4(rs.cgGlobalLift[0], rs.cgGlobalLift[1], rs.cgGlobalLift[2], rs.cgGlobalLift[3]);
-                ubo.cgGlobalGamma = glm::vec4(rs.cgGlobalGamma[0], rs.cgGlobalGamma[1], rs.cgGlobalGamma[2], rs.cgGlobalGamma[3]);
-                ubo.cgGlobalGain = glm::vec4(rs.cgGlobalGain[0], rs.cgGlobalGain[1], rs.cgGlobalGain[2], rs.cgGlobalGain[3]);
-                ubo.cgGlobalOffset = glm::vec4(rs.cgGlobalOffset[0], rs.cgGlobalOffset[1], rs.cgGlobalOffset[2], rs.cgGlobalOffset[3]);
-                ubo.cgShadowsLift = glm::vec4(rs.cgShadowsLift[0], rs.cgShadowsLift[1], rs.cgShadowsLift[2], rs.cgShadowsLift[3]);
-                ubo.cgShadowsGamma = glm::vec4(rs.cgShadowsGamma[0], rs.cgShadowsGamma[1], rs.cgShadowsGamma[2], rs.cgShadowsGamma[3]);
-                ubo.cgShadowsGain = glm::vec4(rs.cgShadowsGain[0], rs.cgShadowsGain[1], rs.cgShadowsGain[2], rs.cgShadowsGain[3]);
-                ubo.cgShadowsOffset = glm::vec4(rs.cgShadowsOffset[0], rs.cgShadowsOffset[1], rs.cgShadowsOffset[2], rs.cgShadowsOffset[3]);
-                ubo.cgMidtonesLift = glm::vec4(rs.cgMidtonesLift[0], rs.cgMidtonesLift[1], rs.cgMidtonesLift[2], rs.cgMidtonesLift[3]);
-                ubo.cgMidtonesGamma = glm::vec4(rs.cgMidtonesGamma[0], rs.cgMidtonesGamma[1], rs.cgMidtonesGamma[2], rs.cgMidtonesGamma[3]);
-                ubo.cgMidtonesGain = glm::vec4(rs.cgMidtonesGain[0], rs.cgMidtonesGain[1], rs.cgMidtonesGain[2], rs.cgMidtonesGain[3]);
-                ubo.cgMidtonesOffset = glm::vec4(rs.cgMidtonesOffset[0], rs.cgMidtonesOffset[1], rs.cgMidtonesOffset[2], rs.cgMidtonesOffset[3]);
-                ubo.cgHighlightsLift = glm::vec4(rs.cgHighlightsLift[0], rs.cgHighlightsLift[1], rs.cgHighlightsLift[2], rs.cgHighlightsLift[3]);
-                ubo.cgHighlightsGamma = glm::vec4(rs.cgHighlightsGamma[0], rs.cgHighlightsGamma[1], rs.cgHighlightsGamma[2], rs.cgHighlightsGamma[3]);
-                ubo.cgHighlightsGain = glm::vec4(rs.cgHighlightsGain[0], rs.cgHighlightsGain[1], rs.cgHighlightsGain[2], rs.cgHighlightsGain[3]);
-                ubo.cgHighlightsOffset = glm::vec4(rs.cgHighlightsOffset[0], rs.cgHighlightsOffset[1], rs.cgHighlightsOffset[2], rs.cgHighlightsOffset[3]);
-                ubo.cgRgbMixerRed = glm::vec4(rs.cgRgbMixerRed[0], rs.cgRgbMixerRed[1], rs.cgRgbMixerRed[2], 0.0f);
-                ubo.cgRgbMixerGreen = glm::vec4(rs.cgRgbMixerGreen[0], rs.cgRgbMixerGreen[1], rs.cgRgbMixerGreen[2], 0.0f);
-                ubo.cgRgbMixerBlue = glm::vec4(rs.cgRgbMixerBlue[0], rs.cgRgbMixerBlue[1], rs.cgRgbMixerBlue[2], 0.0f);
-                ubo.ppBlurs = glm::vec4(rs.blurMode, rs.blurStrength, rs.blurRadius, 0.0f);
-                ubo.ppBlurCenter = glm::vec4(rs.radialBlurCenter[0], rs.radialBlurCenter[1], rs.enableAnamorphic ? 1.0f : 0.0f, 0.0f);
-                ubo.ppColorFX = glm::vec4(rs.enableColorInvert ? 1.0f : 0.0f, rs.enableFalseColor ? 1.0f : 0.0f, rs.enableDepthView ? 1.0f : 0.0f, rs.enableFilmDamage ? 1.0f : 0.0f);
-                ubo.ppFilmDamage = glm::vec4(rs.filmDamageIntensity, rs.filmDamageScratches, 0.0f, 0.0f);
-                ubo.ppEdgeDetect = glm::vec4(rs.enableEdgeDetect ? 1.0f : 0.0f, rs.edgeWidth, rs.edgeBrightness, rs.edgeGamma);
-                ubo.ppEdgeDetect2 = glm::vec4(rs.edgeBlur, (float)rs.edgeColorMode, 0.0f, 0.0f);
-                ubo.ppEdgeColor = glm::vec4(rs.edgeCustomColor[0], rs.edgeCustomColor[1], rs.edgeCustomColor[2], 1.0f);
-                ubo.ppEmboss = glm::vec4(rs.enableEmboss ? 1.0f : 0.0f, rs.embossStrength, rs.embossAngle, (float)rs.embossStyle);
-                ubo.ppSketch = glm::vec4(rs.enableSketch ? 1.0f : 0.0f, rs.sketchStrokeStrength, rs.sketchStrokeLength, rs.sketchThreshold);
-                ubo.ppSketch2 = glm::vec4(rs.sketchShadowLevel, rs.sketchShadowsWeight, rs.sketchMidtonesWeight, rs.sketchHighlightsWeight);
-                ubo.ppHalftone = glm::vec4(rs.enableHalftone ? 1.0f : 0.0f, rs.halftoneScale, rs.halftoneContrast, rs.halftoneTex ? 1.0f : 0.0f);
-                ubo.ppDitherData = glm::vec4((float)rs.ditherMode, rs.ditherScale, 0.0f, 0.0f);
-                ubo.ditherShadow = glm::vec4(rs.ditherShadowColor[0], rs.ditherShadowColor[1], rs.ditherShadowColor[2], 1.0f);
-                ubo.ditherMid = glm::vec4(rs.ditherMidColor[0], rs.ditherMidColor[1], rs.ditherMidColor[2], 1.0f);
-                ubo.ditherHighlight = glm::vec4(rs.ditherHighlightColor[0], rs.ditherHighlightColor[1], rs.ditherHighlightColor[2], 1.0f);
-                ubo.ppWarp = glm::vec4(rs.enableTexWarp ? 1.f : 0.f, rs.texWarpStrength, rs.texWarpSpeed, rs.enableVtxWarp ? 1.f : 0.f);
-                ubo.ppWarp2 = glm::vec4(rs.vtxWarpStrength, rs.vtxWarpSpeed, rs.vtxWarpScale, 0.f);
-                ubo.ppColorComp = glm::vec4(rs.enableColorComp ? 1.f : 0.f, rs.colorCompLevels, rs.enableCMAA ? 1.f : 0.f, rs.paletteTex ? 1.f : 0.f);
-                ubo.shadowRampColor1 = glm::vec4(rs.shadowRampColor1[0], rs.shadowRampColor1[1], rs.shadowRampColor1[2], rs.enableShadowRamp ? 1.f : 0.f);
-                ubo.shadowRampColor2 = glm::vec4(rs.shadowRampColor2[0], rs.shadowRampColor2[1], rs.shadowRampColor2[2], 1.f);
-                ubo.ppBleedMosh = glm::vec4(rs.enableOpticalSoup ? 1.f : 0.f, rs.opticalSoupRadius, rs.enableDatamosh ? 1.f : 0.f, rs.datamoshThreshold);
-                ubo.ppAsciiSort = glm::vec4(rs.enableAscii ? 1.f : 0.f, rs.asciiScale, rs.enablePixelSort ? 1.f : 0.f, rs.pixelSortThreshold);
-                ubo.ppImpact = glm::vec4(rs.enableImpactFrame ? 1.f : 0.f, rs.impactSize, rs.impactPower, rs.impactTime);
-                ubo.ppTrails = glm::vec4(rs.enableSmearTrails ? 1.f : 0.f, rs.smearLength, rs.smearThreshold, 0.f);
-                ubo.ppPixelSort = glm::vec4(rs.pixelSortAngle, rs.pixelSortLength, rs.pixelSortTime, (float)rs.asciiMode);
-                ubo.ppArtistic = glm::vec4(rs.enableRimLight ? 1.f : 0.f, rs.rimThickness, rs.rimPower, 0.f);
-                ubo.ppArtisticColor = glm::vec4(rs.rimColor[0], rs.rimColor[1], rs.rimColor[2], 1.f);
+                ubo.cgGlobalLift = float4(rs.cgGlobalLift[0], rs.cgGlobalLift[1], rs.cgGlobalLift[2], rs.cgGlobalLift[3]);
+                ubo.cgGlobalGamma = float4(rs.cgGlobalGamma[0], rs.cgGlobalGamma[1], rs.cgGlobalGamma[2], rs.cgGlobalGamma[3]);
+                ubo.cgGlobalGain = float4(rs.cgGlobalGain[0], rs.cgGlobalGain[1], rs.cgGlobalGain[2], rs.cgGlobalGain[3]);
+                ubo.cgGlobalOffset = float4(rs.cgGlobalOffset[0], rs.cgGlobalOffset[1], rs.cgGlobalOffset[2], rs.cgGlobalOffset[3]);
+                ubo.cgShadowsLift = float4(rs.cgShadowsLift[0], rs.cgShadowsLift[1], rs.cgShadowsLift[2], rs.cgShadowsLift[3]);
+                ubo.cgShadowsGamma = float4(rs.cgShadowsGamma[0], rs.cgShadowsGamma[1], rs.cgShadowsGamma[2], rs.cgShadowsGamma[3]);
+                ubo.cgShadowsGain = float4(rs.cgShadowsGain[0], rs.cgShadowsGain[1], rs.cgShadowsGain[2], rs.cgShadowsGain[3]);
+                ubo.cgShadowsOffset = float4(rs.cgShadowsOffset[0], rs.cgShadowsOffset[1], rs.cgShadowsOffset[2], rs.cgShadowsOffset[3]);
+                ubo.cgMidtonesLift = float4(rs.cgMidtonesLift[0], rs.cgMidtonesLift[1], rs.cgMidtonesLift[2], rs.cgMidtonesLift[3]);
+                ubo.cgMidtonesGamma = float4(rs.cgMidtonesGamma[0], rs.cgMidtonesGamma[1], rs.cgMidtonesGamma[2], rs.cgMidtonesGamma[3]);
+                ubo.cgMidtonesGain = float4(rs.cgMidtonesGain[0], rs.cgMidtonesGain[1], rs.cgMidtonesGain[2], rs.cgMidtonesGain[3]);
+                ubo.cgMidtonesOffset = float4(rs.cgMidtonesOffset[0], rs.cgMidtonesOffset[1], rs.cgMidtonesOffset[2], rs.cgMidtonesOffset[3]);
+                ubo.cgHighlightsLift = float4(rs.cgHighlightsLift[0], rs.cgHighlightsLift[1], rs.cgHighlightsLift[2], rs.cgHighlightsLift[3]);
+                ubo.cgHighlightsGamma = float4(rs.cgHighlightsGamma[0], rs.cgHighlightsGamma[1], rs.cgHighlightsGamma[2], rs.cgHighlightsGamma[3]);
+                ubo.cgHighlightsGain = float4(rs.cgHighlightsGain[0], rs.cgHighlightsGain[1], rs.cgHighlightsGain[2], rs.cgHighlightsGain[3]);
+                ubo.cgHighlightsOffset = float4(rs.cgHighlightsOffset[0], rs.cgHighlightsOffset[1], rs.cgHighlightsOffset[2], rs.cgHighlightsOffset[3]);
+                ubo.cgRgbMixerRed = float4(rs.cgRgbMixerRed[0], rs.cgRgbMixerRed[1], rs.cgRgbMixerRed[2], 0.0f);
+                ubo.cgRgbMixerGreen = float4(rs.cgRgbMixerGreen[0], rs.cgRgbMixerGreen[1], rs.cgRgbMixerGreen[2], 0.0f);
+                ubo.cgRgbMixerBlue = float4(rs.cgRgbMixerBlue[0], rs.cgRgbMixerBlue[1], rs.cgRgbMixerBlue[2], 0.0f);
+                ubo.ppBlurs = float4(rs.blurMode, rs.blurStrength, rs.blurRadius, 0.0f);
+                ubo.ppBlurCenter = float4(rs.radialBlurCenter[0], rs.radialBlurCenter[1], rs.enableAnamorphic ? 1.0f : 0.0f, 0.0f);
+                ubo.ppColorFX = float4(rs.enableColorInvert ? 1.0f : 0.0f, rs.enableFalseColor ? 1.0f : 0.0f, rs.enableDepthView ? 1.0f : 0.0f, rs.enableFilmDamage ? 1.0f : 0.0f);
+                ubo.ppFilmDamage = float4(rs.filmDamageIntensity, rs.filmDamageScratches, 0.0f, 0.0f);
+                ubo.ppEdgeDetect = float4(rs.enableEdgeDetect ? 1.0f : 0.0f, rs.edgeWidth, rs.edgeBrightness, rs.edgeGamma);
+                ubo.ppEdgeDetect2 = float4(rs.edgeBlur, (float)rs.edgeColorMode, 0.0f, 0.0f);
+                ubo.ppEdgeColor = float4(rs.edgeCustomColor[0], rs.edgeCustomColor[1], rs.edgeCustomColor[2], 1.0f);
+                ubo.ppEmboss = float4(rs.enableEmboss ? 1.0f : 0.0f, rs.embossStrength, rs.embossAngle, (float)rs.embossStyle);
+                ubo.ppSketch = float4(rs.enableSketch ? 1.0f : 0.0f, rs.sketchStrokeStrength, rs.sketchStrokeLength, rs.sketchThreshold);
+                ubo.ppSketch2 = float4(rs.sketchShadowLevel, rs.sketchShadowsWeight, rs.sketchMidtonesWeight, rs.sketchHighlightsWeight);
+                ubo.ppHalftone = float4(rs.enableHalftone ? 1.0f : 0.0f, rs.halftoneScale, rs.halftoneContrast, rs.halftoneTex ? 1.0f : 0.0f);
+                ubo.ppDitherData = float4((float)rs.ditherMode, rs.ditherScale, 0.0f, 0.0f);
+                ubo.ditherShadow = float4(rs.ditherShadowColor[0], rs.ditherShadowColor[1], rs.ditherShadowColor[2], 1.0f);
+                ubo.ditherMid = float4(rs.ditherMidColor[0], rs.ditherMidColor[1], rs.ditherMidColor[2], 1.0f);
+                ubo.ditherHighlight = float4(rs.ditherHighlightColor[0], rs.ditherHighlightColor[1], rs.ditherHighlightColor[2], 1.0f);
+                ubo.ppWarp = float4(rs.enableTexWarp ? 1.f : 0.f, rs.texWarpStrength, rs.texWarpSpeed, rs.enableVtxWarp ? 1.f : 0.f);
+                ubo.ppWarp2 = float4(rs.vtxWarpStrength, rs.vtxWarpSpeed, rs.vtxWarpScale, 0.f);
+                ubo.ppColorComp = float4(rs.enableColorComp ? 1.f : 0.f, rs.colorCompLevels, rs.enableCMAA ? 1.f : 0.f, rs.paletteTex ? 1.f : 0.f);
+                ubo.shadowRampColor1 = float4(rs.shadowRampColor1[0], rs.shadowRampColor1[1], rs.shadowRampColor1[2], rs.enableShadowRamp ? 1.f : 0.f);
+                ubo.shadowRampColor2 = float4(rs.shadowRampColor2[0], rs.shadowRampColor2[1], rs.shadowRampColor2[2], 1.f);
+                ubo.ppBleedMosh = float4(rs.enableOpticalSoup ? 1.f : 0.f, rs.opticalSoupRadius, rs.enableDatamosh ? 1.f : 0.f, rs.datamoshThreshold);
+                ubo.ppAsciiSort = float4(rs.enableAscii ? 1.f : 0.f, rs.asciiScale, rs.enablePixelSort ? 1.f : 0.f, rs.pixelSortThreshold);
+                ubo.ppImpact = float4(rs.enableImpactFrame ? 1.f : 0.f, rs.impactSize, rs.impactPower, rs.impactTime);
+                ubo.ppTrails = float4(rs.enableSmearTrails ? 1.f : 0.f, rs.smearLength, rs.smearThreshold, 0.f);
+                ubo.ppPixelSort = float4(rs.pixelSortAngle, rs.pixelSortLength, rs.pixelSortTime, (float)rs.asciiMode);
+                ubo.ppArtistic = float4(rs.enableRimLight ? 1.f : 0.f, rs.rimThickness, rs.rimPower, 0.f);
+                ubo.ppArtisticColor = float4(rs.rimColor[0], rs.rimColor[1], rs.rimColor[2], 1.f);
                 
-                ubo.ppStylized3 = glm::vec4(rs.enableScreentones ? 1.f : 0.f, rs.screentoneSize, rs.screentoneDarkness, rs.enableWatercolor ? 1.f : 0.f);
-                ubo.ppStylized4 = glm::vec4(rs.watercolorRadius, rs.enablePointillism ? 1.f : 0.f, rs.pointillismSize, rs.pointillismDensity);
-                ubo.ppLens3 = glm::vec4(rs.enableTiltShift ? 1.f : 0.f, rs.tiltShiftAmount, rs.tiltShiftFalloff, rs.enableLensBreathing ? 1.f : 0.f);
-                ubo.ppLens4 = glm::vec4(rs.lensBreathingScale, rs.enableStarFilter ? 1.f : 0.f, rs.starFilterThreshold, rs.starFilterLength);
-                ubo.ppGlitch3 = glm::vec4(rs.enableLightLeaks ? 1.f : 0.f, rs.lightLeakIntensity, rs.enableJpegArtifacts ? 1.f : 0.f, rs.jpegBlockSize);
-                ubo.ppGlitch4 = glm::vec4(rs.jpegQuality, rs.enableScreenTear ? 1.f : 0.f, rs.screenTearFrequency, rs.screenTearIntensity);
-                ubo.gbColor1 = glm::vec4(rs.gbColor1[0], rs.gbColor1[1], rs.gbColor1[2], rs.enableGameBoy ? 1.f : 0.f);
-                ubo.gbColor2 = glm::vec4(rs.gbColor2[0], rs.gbColor2[1], rs.gbColor2[2], 0.f);
-                ubo.gbColor3 = glm::vec4(rs.gbColor3[0], rs.gbColor3[1], rs.gbColor3[2], 0.f);
-                ubo.gbColor4 = glm::vec4(rs.gbColor4[0], rs.gbColor4[1], rs.gbColor4[2], 0.f);
+                ubo.ppStylized3 = float4(rs.enableScreentones ? 1.f : 0.f, rs.screentoneSize, rs.screentoneDarkness, rs.enableWatercolor ? 1.f : 0.f);
+                ubo.ppStylized4 = float4(rs.watercolorRadius, rs.enablePointillism ? 1.f : 0.f, rs.pointillismSize, rs.pointillismDensity);
+                ubo.ppLens3 = float4(rs.enableTiltShift ? 1.f : 0.f, rs.tiltShiftAmount, rs.tiltShiftFalloff, rs.enableLensBreathing ? 1.f : 0.f);
+                ubo.ppLens4 = float4(rs.lensBreathingScale, rs.enableStarFilter ? 1.f : 0.f, rs.starFilterThreshold, rs.starFilterLength);
+                ubo.ppGlitch3 = float4(rs.enableLightLeaks ? 1.f : 0.f, rs.lightLeakIntensity, rs.enableJpegArtifacts ? 1.f : 0.f, rs.jpegBlockSize);
+                ubo.ppGlitch4 = float4(rs.jpegQuality, rs.enableScreenTear ? 1.f : 0.f, rs.screenTearFrequency, rs.screenTearIntensity);
+                ubo.gbColor1 = float4(rs.gbColor1[0], rs.gbColor1[1], rs.gbColor1[2], rs.enableGameBoy ? 1.f : 0.f);
+                ubo.gbColor2 = float4(rs.gbColor2[0], rs.gbColor2[1], rs.gbColor2[2], 0.f);
+                ubo.gbColor3 = float4(rs.gbColor3[0], rs.gbColor3[1], rs.gbColor3[2], 0.f);
+                ubo.gbColor4 = float4(rs.gbColor4[0], rs.gbColor4[1], rs.gbColor4[2], 0.f);
                 
-                ubo.ppSpeedLines = glm::vec4(rs.enableSpeedLines ? 1.f : 0.f, rs.speedLinesIntensity, rs.enableColorSplash ? 1.f : 0.f, rs.splashHue);
-                ubo.ppColorSplash = glm::vec4(rs.splashRange, rs.enableHeatShimmer ? 1.f : 0.f, rs.heatIntensity, 0.f);
-                ubo.ppHeatFrost = glm::vec4(rs.enableFrost ? rs.frostIntensity : 0.f, rs.enableWaterDrops ? 1.f : 0.f, rs.dropRefraction, rs.enableTemporalEcho ? 1.f : 0.f);
-                ubo.ppDropsEcho = glm::vec4(rs.echoFade, rs.enableCanvas ? 1.f : 0.f, rs.canvasIntensity, rs.enableInkBleed ? 1.f : 0.f);
-                ubo.ppCanvasInk = glm::vec4(rs.inkRadius, rs.enableWorldCurve ? 1.f : 0.f, rs.curveAmount, rs.enableGlitter ? 1.f : 0.f);
-                ubo.ppWorldGlitter = glm::vec4(rs.glitterThreshold, rs.enableCaustics ? 1.f : 0.f, rs.causticsSpeed, rs.causticsScale);
-                ubo.ppCausticsBreath = glm::vec4(rs.causticsStrength, rs.enableBreathing ? 1.f : 0.f, rs.breathAmplitude, rs.breathSpeed);
+                ubo.ppSpeedLines = float4(rs.enableSpeedLines ? 1.f : 0.f, rs.speedLinesIntensity, rs.enableColorSplash ? 1.f : 0.f, rs.splashHue);
+                ubo.ppColorSplash = float4(rs.splashRange, rs.enableHeatShimmer ? 1.f : 0.f, rs.heatIntensity, 0.f);
+                ubo.ppHeatFrost = float4(rs.enableFrost ? rs.frostIntensity : 0.f, rs.enableWaterDrops ? 1.f : 0.f, rs.dropRefraction, rs.enableTemporalEcho ? 1.f : 0.f);
+                ubo.ppDropsEcho = float4(rs.echoFade, rs.enableCanvas ? 1.f : 0.f, rs.canvasIntensity, rs.enableInkBleed ? 1.f : 0.f);
+                ubo.ppCanvasInk = float4(rs.inkRadius, rs.enableWorldCurve ? 1.f : 0.f, rs.curveAmount, rs.enableGlitter ? 1.f : 0.f);
+                ubo.ppWorldGlitter = float4(rs.glitterThreshold, rs.enableCaustics ? 1.f : 0.f, rs.causticsSpeed, rs.causticsScale);
+                ubo.ppCausticsBreath = float4(rs.causticsStrength, rs.enableBreathing ? 1.f : 0.f, rs.breathAmplitude, rs.breathSpeed);
                 
               
                 
-                ubo.ppTransAnime = glm::vec4(rs.translucencyStrength, rs.enableAnimeSpecular ? 1.f : 0.f, rs.animeSpecBands, rs.enableAstigmatism ? 1.f : 0.f);
-                ubo.ppAstigDolly = glm::vec4(rs.astigmatismLength, rs.astigmatismAngle, rs.enableSaccadicMasking ? 1.f : 0.f, rs.saccadicThreshold);
-                ubo.ppSaccBurn = glm::vec4(rs.enableBurningFilm ? 1.f : 0.f, timeAccumulator * 0.1f, rs.enablePhosphor ? 1.f : 0.f, rs.phosphorFade);
-                ubo.ppPhosASCII = glm::vec4(rs.enableWorldASCII ? 1.f : 0.f, rs.worldAsciiScale, rs.enableGravityLensing ? 1.f : 0.f, rs.gravityMass);
-                ubo.ppGravVector = glm::vec4(rs.enableVectorFlow ? 1.f : 0.f, rs.vectorFlowStrength, rs.enableKMeans ? 1.f : 0.f, rs.kMeansColors);
-                ubo.ppKMeansFeed = glm::vec4(rs.enableRecursiveFeedback ? 1.f : 0.f, rs.feedbackZoom, rs.feedbackAngle, rs.enableCrosshatchLight ? 1.f : 0.f);
-                ubo.ppHatchAnalog = glm::vec4(rs.bayerWorldSpace ? 1.f : 0.f, rs.enableAnalogNoise ? 1.f : 0.f, rs.analogSyncLoss, rs.enableScanlineMoire ? 1.f : 0.f);
-                ubo.ppMoireTunnel = glm::vec4(rs.moireScale, rs.enableTunnelVision ? 1.f : 0.f, rs.tunnelIntensity, rs.enableAfterimage ? 1.f : 0.f);
-                ubo.ppAfterBleed = glm::vec4(rs.afterimageFade, rs.enableTemporalBleed ? 1.f : 0.f, rs.bleedSpeed, rs.enableFluidSim ? 1.f : 0.f);
-                ubo.ppFluidCMYK = glm::vec4(rs.fluidSpeed, rs.enableCMYK ? 1.f : 0.f, rs.cmykOffset, rs.enableCondensation ? 1.f : 0.f);
-                ubo.ppCondenDust = glm::vec4(rs.condensationAmount, rs.enableDustMotes ? 1.f : 0.f, rs.dustIntensity, rs.enableEctoplasm ? 1.f : 0.f);
-                ubo.ppEctoRolling = glm::vec4(rs.ectoplasmColor[0], rs.ectoplasmColor[1], rs.ectoplasmColor[2], rs.enableRollingShutter ? 1.f : 0.f);
-                ubo.ppPurkinjeSlit = glm::vec4(rs.rollingShutterSpeed, rs.enablePurkinje ? 1.f : 0.f, rs.purkinjeIntensity, rs.enableSlitScan ? 1.f : 0.f);
-                ubo.ppReactDroste = glm::vec4(rs.slitScanSpeed, rs.enableReactionDiffusion ? 1.f : 0.f, rs.rdSpeed, rs.enableDroste ? rs.drosteScale : 0.f);
+                ubo.ppTransAnime = float4(rs.translucencyStrength, rs.enableAnimeSpecular ? 1.f : 0.f, rs.animeSpecBands, rs.enableAstigmatism ? 1.f : 0.f);
+                ubo.ppAstigDolly = float4(rs.astigmatismLength, rs.astigmatismAngle, rs.enableSaccadicMasking ? 1.f : 0.f, rs.saccadicThreshold);
+                ubo.ppSaccBurn = float4(rs.enableBurningFilm ? 1.f : 0.f, timeAccumulator * 0.1f, rs.enablePhosphor ? 1.f : 0.f, rs.phosphorFade);
+                ubo.ppPhosASCII = float4(rs.enableWorldASCII ? 1.f : 0.f, rs.worldAsciiScale, rs.enableGravityLensing ? 1.f : 0.f, rs.gravityMass);
+                ubo.ppGravVector = float4(rs.enableVectorFlow ? 1.f : 0.f, rs.vectorFlowStrength, rs.enableKMeans ? 1.f : 0.f, rs.kMeansColors);
+                ubo.ppKMeansFeed = float4(rs.enableRecursiveFeedback ? 1.f : 0.f, rs.feedbackZoom, rs.feedbackAngle, rs.enableCrosshatchLight ? 1.f : 0.f);
+                ubo.ppHatchAnalog = float4(rs.bayerWorldSpace ? 1.f : 0.f, rs.enableAnalogNoise ? 1.f : 0.f, rs.analogSyncLoss, rs.enableScanlineMoire ? 1.f : 0.f);
+                ubo.ppMoireTunnel = float4(rs.moireScale, rs.enableTunnelVision ? 1.f : 0.f, rs.tunnelIntensity, rs.enableAfterimage ? 1.f : 0.f);
+                ubo.ppAfterBleed = float4(rs.afterimageFade, rs.enableTemporalBleed ? 1.f : 0.f, rs.bleedSpeed, rs.enableFluidSim ? 1.f : 0.f);
+                ubo.ppFluidCMYK = float4(rs.fluidSpeed, rs.enableCMYK ? 1.f : 0.f, rs.cmykOffset, rs.enableCondensation ? 1.f : 0.f);
+                ubo.ppCondenDust = float4(rs.condensationAmount, rs.enableDustMotes ? 1.f : 0.f, rs.dustIntensity, rs.enableEctoplasm ? 1.f : 0.f);
+                ubo.ppEctoRolling = float4(rs.ectoplasmColor[0], rs.ectoplasmColor[1], rs.ectoplasmColor[2], rs.enableRollingShutter ? 1.f : 0.f);
+                ubo.ppPurkinjeSlit = float4(rs.rollingShutterSpeed, rs.enablePurkinje ? 1.f : 0.f, rs.purkinjeIntensity, rs.enableSlitScan ? 1.f : 0.f);
+                ubo.ppReactDroste = float4(rs.slitScanSpeed, rs.enableReactionDiffusion ? 1.f : 0.f, rs.rdSpeed, rs.enableDroste ? rs.drosteScale : 0.f);
 
-                ubo.ppPsych1 = glm::vec4(rs.enableBlinking ? rs.blinkFrequency : 0.f, rs.enableFloaters ? rs.floatersOpacity : 0.f, rs.enableTimeStutter ? rs.stutterSeverity : 0.f, rs.enableHollowFace ? 1.f : 0.f);
-                ubo.ppPsych2 = glm::vec4(rs.enableMelting ? rs.meltSpeed : 0.f, rs.enableAntiLight ? 1.f : 0.f, rs.enableTrypo ? rs.trypoScale : 0.f, rs.enableParallaxEye ? 1.f : 0.f);
-                ubo.ppPsych3 = glm::vec4(rs.enableInsideSmudges ? rs.smudgeIntensity : 0.f, rs.enableHaunting ? rs.hauntingTrail : 0.f, rs.enableNystagmus ? rs.nystagmusSeverity : 0.f, rs.enablePurkinje ? rs.purkinjeScale : 0.f);
-                ubo.ppPsych4 = glm::vec4(rs.enableRodCone ? 1.f : 0.f, rs.enableFluidLens ? rs.fluidViscosity : 0.f, rs.stutterSpeed, 0.f);
+                ubo.ppPsych1 = float4(rs.enableBlinking ? rs.blinkFrequency : 0.f, rs.enableFloaters ? rs.floatersOpacity : 0.f, rs.enableTimeStutter ? rs.stutterSeverity : 0.f, rs.enableHollowFace ? 1.f : 0.f);
+                ubo.ppPsych2 = float4(rs.enableMelting ? rs.meltSpeed : 0.f, rs.enableAntiLight ? 1.f : 0.f, rs.enableTrypo ? rs.trypoScale : 0.f, rs.enableParallaxEye ? 1.f : 0.f);
+                ubo.ppPsych3 = float4(rs.enableInsideSmudges ? rs.smudgeIntensity : 0.f, rs.enableHaunting ? rs.hauntingTrail : 0.f, rs.enableNystagmus ? rs.nystagmusSeverity : 0.f, rs.enablePurkinje ? rs.purkinjeScale : 0.f);
+                ubo.ppPsych4 = float4(rs.enableRodCone ? 1.f : 0.f, rs.enableFluidLens ? rs.fluidViscosity : 0.f, rs.stutterSpeed, 0.f);
 
-                ubo.ppPsych5 = glm::vec4(rs.meltThreshold, rs.meltNoiseScale, rs.hollowFaceDepth, 0.f);
-                ubo.ppPsych6 = glm::vec4(rs.rodConeThreshold, rs.rodConeColor[0], rs.rodConeColor[1], rs.rodConeColor[2]);
-                ubo.ppPsych7 = glm::vec4(rs.purkinjeThickness, rs.purkinjeColor[0], rs.purkinjeColor[1], rs.purkinjeColor[2]);
-                ubo.ppPsych8 = glm::vec4(rs.purkinjeSpeed, rs.vectorFieldScale, rs.speedLinesCount, rs.speedLinesLength);
+                ubo.ppPsych5 = float4(rs.meltThreshold, rs.meltNoiseScale, rs.hollowFaceDepth, 0.f);
+                ubo.ppPsych6 = float4(rs.rodConeThreshold, rs.rodConeColor[0], rs.rodConeColor[1], rs.rodConeColor[2]);
+                ubo.ppPsych7 = float4(rs.purkinjeThickness, rs.purkinjeColor[0], rs.purkinjeColor[1], rs.purkinjeColor[2]);
+                ubo.ppPsych8 = float4(rs.purkinjeSpeed, rs.vectorFieldScale, rs.speedLinesCount, rs.speedLinesLength);
                 
-                ubo.ppCausticsScale = glm::vec4(rs.causticsScale, rs.enableTranslucency ? 1.f : 0.f, rs.vectorTexIdx, rs.canvasTexIdx);
-                ubo.ppTexIndices = glm::vec4(rs.vectorTexIdx, rs.causticsTexIdx, rs.canvasTexIdx, -1.0f);
+                ubo.ppCausticsScale = float4(rs.causticsScale, rs.enableTranslucency ? 1.f : 0.f, rs.vectorTexIdx, rs.canvasTexIdx);
+                ubo.ppTexIndices = float4(rs.vectorTexIdx, rs.causticsTexIdx, rs.canvasTexIdx, -1.0f);
 
                 // Сохраняем чистую проекцию ДО тряски для следующего кадра
-                glm::mat4 unjitteredProj = ubo.projection;
+                float4x4 unjitteredProj = ubo.projection;
 
                 // Halton Jitter for TAA
                 if (rs.enableTAA) {
@@ -1224,22 +1217,22 @@ float currentFov = 45.0f;
                     float halton3[8] = {0.333f, 0.666f, 0.111f, 0.444f, 0.777f, 0.222f, 0.555f, 0.888f};
                     float jitterX = (halton2[frameCount % 8] - 0.5f) / (float)extent.width;
                     float jitterY = (halton3[frameCount % 8] - 0.5f) / (float)extent.height;
-                    ubo.projection[2][0] += jitterX * 2.0f;
-                    ubo.projection[2][1] += jitterY * 2.0f;
+                    ubo.projection._31 += jitterX * 2.0f;
+                    ubo.projection._32 += jitterY * 2.0f;
                 }
 
-                ubo.invViewProj = glm::inverse(ubo.projection * ubo.view);
+                ubo.invViewProj = MatrixInverse(MatrixMultiply(ubo.projection, ubo.view));
 
 
-                static glm::vec3 prevCamPos = glm::vec3(0.0f);
-                static glm::mat4 prevView = glm::mat4(1.0f);
-                static glm::vec3 prevSunDir = glm::vec3(0.0f);
-                static glm::vec3 prevCamDir = glm::vec3(0.0f);
+                static float3 prevCamPos = float3{0.0f, 0.0f, 0.0f};
+                static float4x4 prevView = MatrixIdentity();
+                static float3 prevSunDir = float3{0.0f, 0.0f, 0.0f};
+                static float3 prevCamDir = float3{0.0f, 0.0f, 0.0f};
                 static bool firstFrame = true;
 
                 bool csmNeedsFullUpdate = false;
                 // CSM жестко привязан к камере. Если камера двигается или вращается - обязательно обновляем тени!
-                if (firstFrame || prevSunDir != shadowSystem->getSunDir() || glm::distance(prevCamPos, camera.Position) > 0.05f || glm::distance(prevCamDir, camera.Orientation) > 0.005f)
+                if (firstFrame || prevSunDir != shadowSystem->getSunDir() || Length(prevCamPos - camera.Position) > 0.05f || Length(prevCamDir - camera.Orientation) > 0.005f)
                 {
                     csmNeedsFullUpdate = true;
                     firstFrame = false;
@@ -1272,17 +1265,17 @@ float currentFov = 45.0f;
                 {
                     ubo.sunLightSpaceMatrices[i] = cachedCascadeMats[i];
                 }
-                ubo.cascadeSplits = glm::vec4(shadowSystem->cascadeSplits[0], shadowSystem->cascadeSplits[1], shadowSystem->cascadeSplits[2], shadowSystem->cascadeSplits[3]);
+                ubo.cascadeSplits = float4(shadowSystem->cascadeSplits[0], shadowSystem->cascadeSplits[1], shadowSystem->cascadeSplits[2], shadowSystem->cascadeSplits[3]);
                 uboBuffers[frameIndex]->writeToBuffer(&ubo);
                 uboBuffers[frameIndex]->flush();
                 
                 if (globalDecalBuffer) {
                     DecalBlock db{}; db.decalCount = 0;
-                    registry.view<TransformComponent, DecalComponent>().each([&](auto entity, auto& trans, auto& decal) {
+                    registry.each([&](TransformComponent& trans, DecalComponent& decal) {
                         if (db.decalCount < 1000) {
                             trans.transform.updateMatrixIfNeeded();
-                            db.decals[db.decalCount].invModelMatrix = glm::inverse(trans.transform.matrix);
-                            db.decals[db.decalCount].params = glm::vec4((float)decal.albedoTexIdx, (float)decal.normalTexIdx, decal.opacity, 0.0f);
+                            db.decals[db.decalCount].invModelMatrix = MatrixInverse(trans.transform.matrix);
+                            db.decals[db.decalCount].params = float4((float)decal.albedoTexIdx, (float)decal.normalTexIdx, decal.opacity, 0.0f);
                             db.decalCount++;
                         }
                     });
@@ -1292,8 +1285,7 @@ float currentFov = 45.0f;
                 
                 ProbesInfo pInfo{};
                 pInfo.count = 0;
-                registry.view<TransformComponent, ReflectionProbeComponent>().each([&](entt::entity e, TransformComponent &t, ReflectionProbeComponent &p)
-                                                                                   {
+                registry.each([&](flecs::entity e, TransformComponent &t, ReflectionProbeComponent &p) {
                     if (pInfo.count >= 16) return;
                     if (p.textureIndex == -1) {
                         vkDeviceWaitIdle(lveDevice.device()); 
@@ -1311,7 +1303,7 @@ float currentFov = 45.0f;
                     if (t.transform.updatematrix || p.updateNeeded) {
                         p.updateNeeded = true; 
                     }
-                    pInfo.data[pInfo.count].positionAndRadius = glm::vec4(t.transform.position, p.radius);
+                    pInfo.data[pInfo.count].positionAndRadius = MakeFloat4(t.transform.position, p.radius);
                     pInfo.count++; });
                 if (globalRTReflectionSystem->probesBuffer)
                 {
@@ -1372,7 +1364,7 @@ float currentFov = 45.0f;
                             shadowRenderSystem->renderShadow(cmd, cachedCascadeMats[i], registry, shadowObjectSet, false);
                         } else if (hasDirtyRegion) {
                             // Локальное кэширование: Очищаем и рисуем только в том месте, где объекты двигались!
-                            glm::vec3 corners[8] = {
+                            float3 corners[8] = {
                                 {dirtyMin.x, dirtyMin.y, dirtyMin.z}, {dirtyMax.x, dirtyMin.y, dirtyMin.z},
                                 {dirtyMin.x, dirtyMax.y, dirtyMin.z}, {dirtyMax.x, dirtyMax.y, dirtyMin.z},
                                 {dirtyMin.x, dirtyMin.y, dirtyMax.z}, {dirtyMax.x, dirtyMin.y, dirtyMax.z},
@@ -1380,9 +1372,9 @@ float currentFov = 45.0f;
                             };
                             float minX = 1.0f, minY = 1.0f, maxX = 0.0f, maxY = 0.0f;
                             for(int k=0; k<8; k++) {
-                                glm::vec4 pt = cachedCascadeMats[i] * glm::vec4(corners[k], 1.0f);
-                                glm::vec3 ndc = glm::vec3(pt) / pt.w;
-                                glm::vec2 uv = glm::vec2(ndc) * 0.5f + 0.5f;
+                                float4 pt = cachedCascadeMats[i] * MakeFloat4(corners[k], 1.0f);
+                                float3 ndc = MakeFloat3(pt) / pt.w;
+                                float2 uv = MakeFloat2(ndc) * 0.5f + float2{0.5f, 0.5f};
                                 minX = std::min(minX, uv.x); minY = std::min(minY, uv.y);
                                 maxX = std::max(maxX, uv.x); maxY = std::max(maxY, uv.y);
                             }
@@ -1423,13 +1415,11 @@ float currentFov = 45.0f;
                     renderingAtlasInfo.pStencilAttachment = &atlasAttachment;
                     vkCmdBeginRendering(cmd, &renderingAtlasInfo);
                     
-                    auto lightView = registry.view<LightComponent, TransformComponent>();
-                    for (auto entity : lightView) {
-                        auto& lightComp = lightView.get<LightComponent>(entity);
+                    registry.each([&](LightComponent& lightComp, TransformComponent& transComp) {
                         auto& light = lightComp.light;
-                        auto& trans = lightView.get<TransformComponent>(entity).transform;
+                        auto& trans = transComp.transform;
                         
-                        if (!light.enable || !light.castShadows || light.type == LightType::Directional || light.shadowSlot < 0 || !lightComp.needsShadowUpdate) continue;
+                        if (!light.enable || !light.castShadows || light.type == LightType::Directional || light.shadowSlot < 0 || !lightComp.needsShadowUpdate) return;
 
                         VkClearAttachment clearAttachment{};
                         clearAttachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -1450,12 +1440,12 @@ float currentFov = 45.0f;
                             shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, registry, shadowObjectSet, false);
                         }
                         else if (light.type == LightType::Point) {
-                            glm::vec3 pos = trans.position;
-                            glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, light.radius);
-                            const glm::vec3 dirs[6] = {
+                            float3 pos = trans.position;
+                            float4x4 proj = MatrixPerspectiveFovLH(Radians(90.0f), 1.0f, 0.1f, light.radius);
+                            const float3 dirs[6] = {
                                 {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}
                             };
-                            const glm::vec3 ups[6] = {
+                            const float3 ups[6] = {
                                 {0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}
                             };  
                             for (int face = 0; face < 6; face++) {
@@ -1464,9 +1454,9 @@ float currentFov = 45.0f;
                                 if (fx + tileSize > BurnhopeShadowAtlas::ATLAS_RESOLUTION) {
                                     fx = fx % BurnhopeShadowAtlas::ATLAS_RESOLUTION; fy += tileSize;
                                 }
-                                    glm::mat4 faceProj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, light.radius);
-                                    glm::mat4 faceView = glm::lookAt(pos, pos + dirs[face], ups[face]);
-                                    glm::mat4 faceMatrix = faceProj * faceView;
+                                    float4x4 faceProj = MatrixPerspectiveFovLH(Radians(90.0f), 1.0f, 0.1f, light.radius);
+                                    float4x4 faceView = MatrixLookAtLH(pos, pos + dirs[face], ups[face]);
+                                    float4x4 faceMatrix = faceProj * faceView;
                                 shadowSystem->getAtlas()->setTileViewport(cmd, fx, fy, tileSize);
 
                                 VkClearRect clearRect{};
@@ -1479,7 +1469,7 @@ float currentFov = 45.0f;
                             }
                         }
                         lightComp.needsShadowUpdate = false; // Кэшируем до следующих изменений
-                    }
+                    });
                        vkCmdEndRendering(cmd); });
                 // renderPipeline.addPass("Frustum Culling", [&](VkCommandBuffer cmd) { ... });
                 // Отключено: Culling теперь выполняется аппаратно в Task-шейдерах (VK_EXT_mesh_shader)
@@ -1596,49 +1586,46 @@ float currentFov = 45.0f;
                                                        totalSubMeshCount, false, (uint32_t)rs.vrsMode, false);
                     {
                         uint32_t idx = 0;
-                        for (auto entity : registry.view<PortalComponent, TransformComponent>()) {
-                            if (idx >= MAX_PORTALS) break;
-                            auto& transform = registry.get<TransformComponent>(entity);
+                        registry.each([&](PortalComponent& portal, TransformComponent& transform) {
+                            if (idx >= MAX_PORTALS) return;
                             portalRenderSystem->drawMask(cmd, globalDescriptorSets[frameIndex],
                                                          transform.transform.matrix, idx + 1);
                             idx++;
-                        }
+                        });
                     }
 
                     {
                         uint32_t portalCounter = 0;
-                        for (auto entity : registry.view<PortalComponent, TransformComponent>()) {
-                            if (portalCounter >= MAX_PORTALS) break;
-                            auto& portal    = registry.get<PortalComponent>(entity);
-                            auto& transform = registry.get<TransformComponent>(entity);
+                        registry.each([&](PortalComponent& portal, TransformComponent& transform) {
+                            if (portalCounter >= MAX_PORTALS) return;
                         
-                            if (portal.targetPortal == entt::null) { portalCounter++; continue; }
+                            if (!portal.targetPortal.is_alive()) { portalCounter++; return; }
                         
                             portalRenderSystem->drawDepthReset(cmd, globalDescriptorSets[frameIndex],
                                                                transform.transform.matrix, portalCounter + 1);
                             
-                            auto& targetTransform = registry.get<TransformComponent>(portal.targetPortal);
-                            glm::mat4 realCamWorld = glm::inverse(camera.GetViewMatrix());
-                            glm::mat4 mIn  = transform.transform.matrix;
-                            glm::mat4 mOut = targetTransform.transform.matrix;
-                            auto clean = [](glm::mat4 m) {
-                                m[0] = glm::vec4(glm::normalize(glm::vec3(m[0])), 0);
-                                m[1] = glm::vec4(glm::normalize(glm::vec3(m[1])), 0);
-                                m[2] = glm::vec4(glm::normalize(glm::vec3(m[2])), 0);
+                            auto& targetTransform = portal.targetPortal.get_mut<TransformComponent>();
+                            float4x4 realCamWorld = MatrixInverse(camera.GetViewMatrix());
+                            float4x4 mIn  = transform.transform.matrix;
+                            float4x4 mOut = targetTransform.transform.matrix;
+                            auto clean = [](float4x4 m) {
+                                m._11 = Normalize(float3{m._11, m._12, m._13}).x; m._12 = Normalize(float3{m._11, m._12, m._13}).y; m._13 = Normalize(float3{m._11, m._12, m._13}).z;
+                                m._21 = Normalize(float3{m._21, m._22, m._23}).x; m._22 = Normalize(float3{m._21, m._22, m._23}).y; m._23 = Normalize(float3{m._21, m._22, m._23}).z;
+                                m._31 = Normalize(float3{m._31, m._32, m._33}).x; m._32 = Normalize(float3{m._31, m._32, m._33}).y; m._33 = Normalize(float3{m._31, m._32, m._33}).z;
                                 return m;
                             };
-                            static const glm::mat4 rot180 = glm::rotate(glm::mat4(1.f), glm::pi<float>(), {0, 1, 0});
-                            glm::mat4 portalTransition = clean(mOut) * rot180 * glm::inverse(clean(mIn));
-                            glm::mat4 virtualCamWorld  = portalTransition * realCamWorld;
+                            static const float4x4 rot180 = MatrixRotationY(3.14159265f);
+                            float4x4 portalTransition = MatrixMultiply(MatrixMultiply(clean(mOut), rot180), MatrixInverse(clean(mIn)));
+                            float4x4 virtualCamWorld  = portalTransition * realCamWorld;
                         
                             GlobalUbo portalUbo   = ubo;
-                            portalUbo.view        = glm::inverse(virtualCamWorld);
-                            portalUbo.invViewProj = glm::inverse(portalUbo.projection * portalUbo.view);
-                            portalUbo.camPos      = glm::vec3(virtualCamWorld[3]);
+                            portalUbo.view        = MatrixInverse(virtualCamWorld);
+                            portalUbo.invViewProj = MatrixInverse(MatrixMultiply(portalUbo.projection, portalUbo.view));
+                            portalUbo.camPos      = GetMatrixPosition(virtualCamWorld);
                             portalUbo.portalID    = portalCounter + 1;
                         
-                            glm::vec3 exitPortalPos    = glm::vec3(mOut[3]);
-                            glm::vec3 exitPortalNormal = -glm::normalize(glm::vec3(mOut[2]));
+                            float3 exitPortalPos    = GetMatrixPosition(mOut);
+                            float3 exitPortalNormal = -Normalize(float3{mOut._31, mOut._32, mOut._33});
                             // Знак минус: local +Z портала смотрит наружу (от сцены),
                             // нам нужна нормаль внутрь. Если клипается не та сторона — убери минус.
 
@@ -1647,7 +1634,7 @@ float currentFov = 45.0f;
                                 exitPortalPos, exitPortalNormal);
                             
                             // Обязательно пересчитать после модификации projection!
-                            portalUbo.invViewProj = glm::inverse(portalUbo.projection * portalUbo.view);
+                            portalUbo.invViewProj = MatrixInverse(MatrixMultiply(portalUbo.projection, portalUbo.view));
                             
                             portalUboBuffers[portalCounter][frameIndex]->writeToBuffer(&portalUbo);
                             portalUboBuffers[portalCounter][frameIndex]->flush();
@@ -1663,7 +1650,7 @@ float currentFov = 45.0f;
                                                                totalSubMeshCount, true, (uint32_t)rs.vrsMode, true);
                             simpleRenderSystem->renderEntities(portalFrameInfo, registry, storageSet, textureSet,
                                                                totalSubMeshCount, true, (uint32_t)rs.vrsMode, false);
-                        }
+                        });
                     }
 
                     vkCmdEndRendering(cmd); });
@@ -1757,10 +1744,9 @@ float currentFov = 45.0f;
                         clearRect.baseArrayLayer = 0; clearRect.layerCount = 1;
                         vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
 
-                        auto lightView = registry.view<LightComponent, TransformComponent>();
-                        for (auto entity : lightView) {
-                            auto& light = lightView.get<LightComponent>(entity).light;
-                            auto& trans = lightView.get<TransformComponent>(entity).transform;
+                        registry.each([&](LightComponent& lightComp, TransformComponent& transComp) {
+                            auto& light = lightComp.light;
+                            auto& trans = transComp.transform;
                             if (light.enable && light.castShadows && light.shadowSlot >= 0 && (light.type == LightType::Spot || light.type == LightType::Point)) {
                                 int encodedInt = light.shadowSlot;
                                 int realSlot = encodedInt / 10000;
@@ -1775,9 +1761,9 @@ float currentFov = 45.0f;
                                     vkCmdSetScissor(cmd, 0, 1, &sc);
                                     shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, registry, shadowObjectSet, false);
                                 } else if (light.type == LightType::Point) {
-                                    glm::vec3 pos = trans.position;
-                                    const glm::vec3 dirs[6] = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}};
-                                    const glm::vec3 ups[6]  = {{0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}};  
+                                    float3 pos = trans.position;
+                                    const float3 dirs[6] = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}};
+                                    const float3 ups[6]  = {{0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}};  
                                     for (int face = 0; face < 6; face++) {
                                         int fx = pxX + face * tileSize; int fy = pxY;
                                         if (fx + tileSize > 4096) { fx = fx % 4096; fy += tileSize; }
@@ -1786,19 +1772,18 @@ float currentFov = 45.0f;
                                         VkRect2D sc{ {fx, fy}, {(uint32_t)tileSize, (uint32_t)tileSize} };
                                         vkCmdSetScissor(cmd, 0, 1, &sc);
                                         // ФИКС: Используем shadowPerspective для переворота Y-оси!
-                                        glm::mat4 faceProj = shadowPerspective(90.0f, 1.0f, 0.1f, light.radius);
-                                        glm::mat4 faceView = glm::lookAt(pos, pos + dirs[face], ups[face]);
-                                        glm::mat4 faceMatrix = faceProj * faceView;
+                                        float4x4 faceProj = shadowPerspective(90.0f, 1.0f, 0.1f, light.radius);
+                                        float4x4 faceView = MatrixLookAtLH(pos, pos + dirs[face], ups[face]);
+                                        float4x4 faceMatrix = faceProj * faceView;
                                             shadowRenderSystem->renderShadow(cmd, faceMatrix, registry, shadowObjectSet, false);
                                     }
                                 }
                             }
-                        }
+                        });
                     } else if (hasDirtyRegion) {
-                        auto lightView = registry.view<LightComponent, TransformComponent>();
-                        for (auto entity : lightView) {
-                            auto& light = lightView.get<LightComponent>(entity).light;
-                            auto& trans = lightView.get<TransformComponent>(entity).transform;
+                        registry.each([&](LightComponent& lightComp, TransformComponent& transComp) {
+                            auto& light = lightComp.light;
+                            auto& trans = transComp.transform;
                             if (light.enable && light.castShadows && light.shadowSlot >= 0 && (light.type == LightType::Spot || light.type == LightType::Point)) {
                                 int encodedInt = light.shadowSlot;
                                 int realSlot = encodedInt / 10000;
@@ -1806,8 +1791,8 @@ float currentFov = 45.0f;
                                 int pxX = (realSlot % 32) * 128;
                                 int pxY = (realSlot / 32) * 128;
 
-                                glm::mat4 lightMatrix = light.lightSpaceMatrix;
-                                glm::vec3 corners[8] = {
+                                float4x4 lightMatrix = light.lightSpaceMatrix;
+                                float3 corners[8] = {
                                     {dirtyMin.x, dirtyMin.y, dirtyMin.z}, {dirtyMax.x, dirtyMin.y, dirtyMin.z},
                                     {dirtyMin.x, dirtyMax.y, dirtyMin.z}, {dirtyMax.x, dirtyMax.y, dirtyMin.z},
                                     {dirtyMin.x, dirtyMin.y, dirtyMax.z}, {dirtyMax.x, dirtyMin.y, dirtyMax.z},
@@ -1815,9 +1800,9 @@ float currentFov = 45.0f;
                                 };
                                 float minX = 1.0f, minY = 1.0f, maxX = 0.0f, maxY = 0.0f;
                                 for(int k=0; k<8; k++) {
-                                    glm::vec4 pt = lightMatrix * glm::vec4(corners[k], 1.0f);
-                                    glm::vec3 ndc = glm::vec3(pt) / pt.w;
-                                    glm::vec2 uv = glm::vec2(ndc) * 0.5f + 0.5f;
+                                    float4 pt = lightMatrix * MakeFloat4(corners[k], 1.0f);
+                                    float3 ndc = MakeFloat3(pt) / pt.w;
+                                    float2 uv = MakeFloat2(ndc) * 0.5f + float2{0.5f, 0.5f};
                                     minX = std::min(minX, uv.x); minY = std::min(minY, uv.y);
                                     maxX = std::max(maxX, uv.x); maxY = std::max(maxY, uv.y);
                                 }
@@ -1840,24 +1825,24 @@ float currentFov = 45.0f;
                                     if (light.type == LightType::Spot) {
                                         shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, registry, shadowObjectSet, false);
                                     } else if (light.type == LightType::Point) {
-                                        glm::vec3 pos = trans.position;
-                                        const glm::vec3 dirs[6] = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}};
-                                        const glm::vec3 ups[6]  = {{0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}};  
+                                        float3 pos = trans.position;
+                                        const float3 dirs[6] = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}};
+                                        const float3 ups[6]  = {{0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}};  
                                         for (int face = 0; face < 6; face++) {
                                             int fx = pxX + face * tileSize; int fy = pxY;
                                             if (fx + tileSize > 4096) { fx = fx % 4096; fy += tileSize; }
                                             vp.x = fx; vp.y = fy; vkCmdSetViewport(cmd, 0, 1, &vp);
                                             sc.offset = { fx + localPxX, fy + localPxY }; vkCmdSetScissor(cmd, 0, 1, &sc);
                                             // ФИКС: Используем shadowPerspective!
-                                            glm::mat4 faceProj = shadowPerspective(90.0f, 1.0f, 0.1f, light.radius);
-                                            glm::mat4 faceView = glm::lookAt(pos, pos + dirs[face], ups[face]);
-                                            glm::mat4 faceMatrix = faceProj * faceView;
+                                            float4x4 faceProj = shadowPerspective(90.0f, 1.0f, 0.1f, light.radius);
+                                            float4x4 faceView = MatrixLookAtLH(pos, pos + dirs[face], ups[face]);
+                                            float4x4 faceMatrix = faceProj * faceView;
                                             shadowRenderSystem->renderShadow(cmd, faceMatrix, registry, shadowObjectSet, false);
                                         }
                                     }
                                 }
                             }
-                        }
+                        });
                     }
                     vkCmdEndRendering(cmd); });
 
@@ -1868,18 +1853,17 @@ float currentFov = 45.0f;
                 renderPipeline.addPass("Radiance Cascades GI", {},
                                        [&](VkCommandBuffer cmd)
                                        {
-                    glm::vec3 sceneMin(-8.0f, -8.0f, -8.0f);
-                    glm::vec3 sceneMax( 8.0f,  8.0f,  8.0f);
+                    float3 sceneMin(-8.0f, -8.0f, -8.0f);
+                    float3 sceneMax( 8.0f,  8.0f,  8.0f);
                     rcSystem->dispatch(cmd, globalDescriptorSets[frameIndex], gBufferSet, ubo.invViewProj, camera.Position, sceneMin, sceneMax, extent, rtSet, storageSet, textureSet); });
 
                 renderPipeline.addPass("Probe Update", {}, [&](VkCommandBuffer cmd)
-                                       { registry.view<TransformComponent, ReflectionProbeComponent>().each([&](entt::entity e, TransformComponent &t, ReflectionProbeComponent &p)
-                                                                                                            {
+                                       { registry.each([&](flecs::entity e, TransformComponent &t, ReflectionProbeComponent &p) {
                         if (p.updateNeeded && p.textureIndex != -1) {
                             p.updateNeeded = false;
                             globalRTReflectionSystem->probeRenderShader->bind(cmd);
-                            struct Push { glm::vec4 pos; int res; } pushData;
-                            pushData.pos = glm::vec4(t.transform.position, 1.0f);
+                            struct Push { float4 pos; int res; } pushData;
+                            pushData.pos = MakeFloat4(t.transform.position, 1.0f);
                             pushData.res = p.resolution;
                             globalRTReflectionSystem->probeRenderShader->pushConstants(cmd, &pushData, sizeof(Push));
                             globalRTReflectionSystem->probeRenderShader->bindDescriptorSets(cmd, {
@@ -1892,14 +1876,16 @@ float currentFov = 45.0f;
                                        {
                     globalRTReflectionSystem->rtReflectionsShader->bind(cmd);
                     
-                    glm::vec3 sceneMin(-8.0f, -8.0f, -8.0f);
-                    glm::vec3 sceneMax( 8.0f,  8.0f,  8.0f);
+                    float3 sceneMin(-8.0f, -8.0f, -8.0f);
+                    float3 sceneMax( 8.0f,  8.0f,  8.0f);
                     
                     RCPushConstants rcPush{};
-                    rcPush.probeGridMin = glm::vec4(sceneMin, 0.0f);
-                    rcPush.probeGridMax = glm::vec4(sceneMax, 0.0f);
-                    rcPush.probeCount   = glm::ivec4(rs.rcProbeGridX, rs.rcProbeGridY, rs.rcProbeGridZ, 0);
-                    rcPush.params = glm::vec4(
+                    rcPush.probeGridMin = MakeFloat4(sceneMin, 0.0f);
+                    rcPush.probeGridMax = MakeFloat4(sceneMax, 0.0f);
+                    rcPush.probeCountX  = rs.rcProbeGridX;
+                    rcPush.probeCountY  = rs.rcProbeGridY;
+                    rcPush.probeCountZ  = rs.rcProbeGridZ;
+                    rcPush.params = float4(
                         rs.rcBaseRayLength, 
                         (float)extent.width, 
                         (float)extent.height, 
@@ -2585,7 +2571,7 @@ float currentFov = 45.0f;
             .writeImage(1, &ssgiRawInfo)
             .build(ssgiSet);
     }
-    void FirstApp::buildTLAS(entt::registry &registry)
+    void FirstApp::buildTLAS(flecs::world &registry)
     {
         auto pfnCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkCreateAccelerationStructureKHR");
         auto pfnGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkGetAccelerationStructureBuildSizesKHR");
@@ -2600,13 +2586,11 @@ float currentFov = 45.0f;
 
         std::vector<VkAccelerationStructureInstanceKHR> instances;
 
-        auto view = registry.view<TransformComponent, MeshComponent>();
         uint32_t customIndex = 0;
 
-        for (auto [entity, transformComp, meshComp] : view.each())
-        {
+        registry.each([&](TransformComponent& transformComp, MeshComponent& meshComp) {
             if (!meshComp.model || !meshComp.isVisible || !meshComp.model->gpuDataReady)
-                continue;
+                return;
 
             if (meshComp.model->getBLASAddress() != 0) {
                 VkAccelerationStructureInstanceKHR instance{};
@@ -2621,7 +2605,7 @@ float currentFov = 45.0f;
             }
 
             customIndex += meshComp.model->getSubMeshes().size();
-        }
+        });
 
         uint32_t primitiveCount = static_cast<uint32_t>(instances.size());
         uint32_t bufferInstanceCount = std::max(1u, primitiveCount);
@@ -2723,7 +2707,7 @@ float currentFov = 45.0f;
 
         std::cout << "[RT] Successfully built TLAS with " << instances.size() << " instances!" << std::endl;
     }
-    void FirstApp::loadGameObjects(entt::registry &registry)
+    void FirstApp::loadGameObjects(flecs::world &registry)
     {
         
         /*
@@ -2734,9 +2718,9 @@ float currentFov = 45.0f;
         registry.emplace<IDComponent>(modelEntity);
         registry.emplace<HierarchyComponent>(modelEntity);
         auto &transform = registry.emplace<TransformComponent>(modelEntity);
-             transform.transform.position = glm::vec3(0.0f, 0.0f, 0.0f);
-         transform.transform.rotation = glm::vec3(0.0f, 0.0f, 0.0f);
-        transform.transform.scale = glm::vec3(0.25f, 0.25f, 0.25f);
+             transform.transform.position = float3(0.0f, 0.0f, 0.0f);
+         transform.transform.rotation = float3(0.0f, 0.0f, 0.0f);
+        transform.transform.scale = float3(0.25f, 0.25f, 0.25f);
                 transform.transform.updateMatrixIfNeeded();
                   auto &mesh = registry.emplace<MeshComponent>(modelEntity);
         mesh.model = lveModel;
@@ -2750,11 +2734,11 @@ float currentFov = 45.0f;
         registry.emplace<IDComponent>(modelEntity2);
         registry.emplace<HierarchyComponent>(modelEntity2);
         auto &transform2 = registry.emplace<TransformComponent>(modelEntity2);
-        transform2.transform.position = glm::vec3(-15.0f, 0.0f, 0.0f);
-        transform2.transform.rotation = glm::vec3(0.0f, -90.0f, 0.0f);
-        transform2.transform.scale = glm::vec3(0.25f, 0.25f, 0.25f);
-        // glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
-        // transform.transform.matrix = glm::scale(translation, transform.transform.scale);
+        transform2.transform.position = float3(-15.0f, 0.0f, 0.0f);
+        transform2.transform.rotation = float3(0.0f, -90.0f, 0.0f);
+        transform2.transform.scale = float3(0.25f, 0.25f, 0.25f);
+        // float4x4 translation = MatrixTranslation(transform.transform.position);
+        // transform.transform.matrix = MatrixMultiply(translation, MatrixScaling(transform.transform.scale));
         transform2.transform.updateMatrixIfNeeded();
         auto &mesh2 = registry.emplace<MeshComponent>(modelEntity2);
         mesh2.model = lveModel2;
@@ -2819,11 +2803,11 @@ float currentFov = 45.0f;
                 registry.emplace<IDComponent>(modelEntity3);
                 registry.emplace<HierarchyComponent>(modelEntity3);
                 auto &transform3 = registry.emplace<TransformComponent>(modelEntity3);
-                transform3.transform.position = glm::vec3(-73.0f, 1.0f, 5.0f);
-                transform3.transform.rotation = glm::vec3(0.0f, 0.0f, 15.0f);
-                transform3.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
-                //glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
-                //transform.transform.matrix = glm::scale(translation, transform.transform.scale);
+                transform3.transform.position = float3(-73.0f, 1.0f, 5.0f);
+                transform3.transform.rotation = float3(0.0f, 0.0f, 15.0f);
+                transform3.transform.scale = float3(1.0f, 1.0f, 1.0f);
+                //float4x4 translation = MatrixTranslation(transform.transform.position);
+                //transform.transform.matrix = MatrixMultiply(translation, MatrixScaling(transform.transform.scale));
                 transform3.transform.updateMatrixIfNeeded();
                 auto &mesh3 = registry.emplace<MeshComponent>(modelEntity3);
                 mesh3.model = lveModel3;
@@ -2839,11 +2823,11 @@ float currentFov = 45.0f;
                 registry.emplace<IDComponent>(modelEntity4);
                 registry.emplace<HierarchyComponent>(modelEntity4);
                 auto &transform4 = registry.emplace<TransformComponent>(modelEntity4);
-                transform4.transform.position = glm::vec3(-68.0f, -5.0f, 3.0f);
-                transform4.transform.rotation = glm::vec3(0.0f, 0.0f, -25.0f);
-                transform4.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
-                //glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
-                //transform.transform.matrix = glm::scale(translation, transform.transform.scale);
+                transform4.transform.position = float3(-68.0f, -5.0f, 3.0f);
+                transform4.transform.rotation = float3(0.0f, 0.0f, -25.0f);
+                transform4.transform.scale = float3(1.0f, 1.0f, 1.0f);
+                //float4x4 translation = MatrixTranslation(transform.transform.position);
+                //transform.transform.matrix = MatrixMultiply(translation, MatrixScaling(transform.transform.scale));
                 transform4.transform.updateMatrixIfNeeded();
                 auto &mesh4 = registry.emplace<MeshComponent>(modelEntity4);
                 mesh4.model = lveModel4;
@@ -2857,12 +2841,12 @@ float currentFov = 45.0f;
         registry.emplace<HierarchyComponent>(sunEntity);
 
         auto &sunTransform = registry.emplace<TransformComponent>(sunEntity);
-                sunTransform.transform.rotation = glm::vec3(-45.0f, 0.0f, -35.0f);
+                sunTransform.transform.rotation = float3(-45.0f, 0.0f, -35.0f);
 
         auto &sunLight = registry.emplace<LightComponent>(sunEntity);
         sunLight.light.enable = true;
         sunLight.light.type = LightType::Directional;
-        sunLight.light.color = glm::vec3(1.0f, 1.0f, 1.0f);
+        sunLight.light.color = float3(1.0f, 1.0f, 1.0f);
           sunLight.light.intensity = 1.0f;
         sunLight.light.radius = 500.0f;
         sunLight.light.castShadows = true;

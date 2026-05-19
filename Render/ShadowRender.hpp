@@ -5,14 +5,13 @@
 #include "../Utils/Components.hpp"
 #include "../Utils/Buffer.hpp"
 #include "GraphicsShader.hpp"
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
+#include "../Utils/DirectXMathCompat.hpp"
 #include <memory>
 namespace burnhope
 {
     struct ShadowPushConstant
     {
-        glm::mat4 lightSpaceMatrix;
+        float4x4 lightSpaceMatrix;
     };
     class ShadowRenderSystem
     {
@@ -24,8 +23,8 @@ namespace burnhope
         ShadowRenderSystem &operator=(const ShadowRenderSystem &) = delete;
         void renderShadow(
             VkCommandBuffer commandBuffer,
-            const glm::mat4 &lightSpaceMatrix,
-            entt::registry &registry,
+            const float4x4 &lightSpaceMatrix,
+            flecs::world &registry,
              VkDescriptorSet objectStorageSet,
              bool renderDynamicOnly);
 

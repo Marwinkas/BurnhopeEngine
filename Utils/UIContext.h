@@ -1,11 +1,10 @@
 #pragma once
-#include <entt/entt.hpp>
+#include <flecs.h>
 #include <filesystem>
 #include <vector>
 #include <string>
 #include <memory>
 #include <unordered_map>
-#include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 #include "Components.hpp"
 
@@ -316,8 +315,8 @@ namespace burnhope {
     };
 
     struct SceneSnapshot {
-        std::shared_ptr<entt::registry> regCopy;
-        entt::entity selectedEntity;
+        std::shared_ptr<flecs::world> regCopy;
+        flecs::entity selectedEntity;
     };
 
     struct PendingDeletion {
@@ -329,9 +328,9 @@ namespace burnhope {
     public:
         class BurnhopeDevice* device = nullptr;
         VkCommandBuffer currentCommandBuffer = VK_NULL_HANDLE;
-        entt::registry* registry = nullptr;
-        entt::entity selectedEntity = entt::null;
-        glm::mat4 modelMatrix = glm::mat4(1.0f);
+        flecs::world* registry = nullptr;
+        flecs::entity selectedEntity;
+        float4x4 modelMatrix = MatrixIdentity();
         std::string currentScenePath = "";
 
         fs::path projectDirectory;
@@ -351,10 +350,10 @@ namespace burnhope {
         bool pendingNewScene = false;
         std::string pendingSceneLoadPath = "";
         std::string pendingModelLoadPath = "";
-        entt::entity pendingModelEntity = entt::null;
+        flecs::entity pendingModelEntity;
         std::string pendingMatLoadPath = "";
         uint32_t pendingMatSlot = 0;
-        entt::entity pendingMatEntity = entt::null;
+        flecs::entity pendingMatEntity;
         std::vector<std::shared_ptr<void>> safeDeleteQueue;
         std::vector<PendingDeletion> pendingDeletions;
         std::vector<SceneSnapshot> undoStack;
@@ -476,83 +475,96 @@ namespace burnhope {
 
         // Вспомогательные методы, перенесенные из твоего старого UI
         void SaveState() {
-            auto snapReg = std::make_shared<entt::registry>();
+            auto snapReg = std::make_shared<flecs::world>();
             CopyRegistry(*registry, *snapReg);
             undoStack.push_back({snapReg, selectedEntity});
             redoStack.clear();
             if (undoStack.size() > 50) undoStack.erase(undoStack.begin());
         }
 
-        void CopyRegistry(entt::registry& src, entt::registry& dst) {
-            dst.clear();
-            src.view<TagComponent>().each([&](entt::entity entity, TagComponent& tag) {
-                entt::entity newEnt = dst.create(entity); 
-                dst.emplace<TagComponent>(newEnt, tag);
-                if (src.all_of<IDComponent>(entity)) dst.emplace<IDComponent>(newEnt, src.get<IDComponent>(entity));
-                if (src.all_of<TransformComponent>(entity)) dst.emplace<TransformComponent>(newEnt, src.get<TransformComponent>(entity));
-                if (src.all_of<MeshComponent>(entity)) dst.emplace<MeshComponent>(newEnt, src.get<MeshComponent>(entity));
-                if (src.all_of<LightComponent>(entity)) dst.emplace<LightComponent>(newEnt, src.get<LightComponent>(entity));
-                if (src.all_of<HierarchyComponent>(entity)) dst.emplace<HierarchyComponent>(newEnt, src.get<HierarchyComponent>(entity)); 
-                if (src.all_of<ReflectionProbeComponent>(entity)) dst.emplace<ReflectionProbeComponent>(newEnt, src.get<ReflectionProbeComponent>(entity));
+        void CopyRegistry(flecs::world& src, flecs::world& dst) {
+            dst.each<IDComponent>([](flecs::entity e, IDComponent& id) { e.destruct(); });
+            src.each([&](flecs::entity entity, TagComponent& tag) {
+                flecs::entity newEnt = dst.entity(); 
+                newEnt.set<TagComponent>(tag);
+                if (entity.has<IDComponent>()) newEnt.set<IDComponent>(entity.get<IDComponent>());
+                if (entity.has<TransformComponent>()) newEnt.set<TransformComponent>(entity.get<TransformComponent>());
+                if (entity.has<MeshComponent>()) newEnt.set<MeshComponent>(entity.get<MeshComponent>());
+                if (entity.has<LightComponent>()) newEnt.set<LightComponent>(entity.get<LightComponent>());
+                if (entity.has<HierarchyComponent>()) newEnt.set<HierarchyComponent>(entity.get<HierarchyComponent>()); 
+                if (entity.has<ReflectionProbeComponent>()) newEnt.set<ReflectionProbeComponent>(entity.get<ReflectionProbeComponent>());
             });
         }
 
-        entt::entity FindEntityByID(uint64_t id) {
-            if (id == 0) return entt::null;
-            for (auto e : registry->view<IDComponent>()) {
-                if (registry->get<IDComponent>(e).ID == id) return e;
-            }
-            return entt::null;
+        flecs::entity FindEntityByID(uint64_t id) {
+            if (id == 0) return flecs::entity();
+            flecs::entity result;
+            registry->each([&](flecs::entity e, IDComponent& idComp) {
+                if (idComp.ID == id) result = e;
+            });
+            return result;
         }
 
-        void DetachFromParent(entt::entity child) {
-            if (!registry->all_of<HierarchyComponent>(child) || !registry->all_of<IDComponent>(child)) return;
-            auto& hc = registry->get<HierarchyComponent>(child);
-            if (hc.parentID == 0) return;
-            uint64_t myID = registry->get<IDComponent>(child).ID;
-            entt::entity parentEnt = FindEntityByID(hc.parentID);
-            if (parentEnt != entt::null && registry->all_of<HierarchyComponent>(parentEnt)) {
-                auto& phc = registry->get<HierarchyComponent>(parentEnt);
-                phc.childrenIDs.erase(std::remove(phc.childrenIDs.begin(), phc.childrenIDs.end(), myID), phc.childrenIDs.end());
-            }
-            hc.parentID = 0;
+void DetachFromParent(flecs::entity child) {
+    if (!child.has<HierarchyComponent>() || !child.has<IDComponent>()) return;
+    
+    // get_mut возвращает ref-обертку, работаем как с указателем через ->
+    auto hc = child.get_mut<HierarchyComponent>();
+    if (hc.parentID == 0) return;
+    
+    // get возвращает константный указатель, но Flecs требует точку
+    uint64_t myID = child.get<IDComponent>().ID; 
+    
+    flecs::entity parentEnt = FindEntityByID(hc.parentID);
+    if (parentEnt.is_alive() && parentEnt.has<HierarchyComponent>()) {
+        auto phc = parentEnt.get_mut<HierarchyComponent>();
+        if (!phc.parentID == 0) {
+            phc.childrenIDs.erase(
+                std::remove(phc.childrenIDs.begin(), phc.childrenIDs.end(), myID), 
+                phc.childrenIDs.end()
+            );
         }
+    }
+    hc.parentID = 0;
+}
 
-        void AttachToParent(entt::entity child, entt::entity newParent) {
-            if (child == newParent) return;
-            DetachFromParent(child);
-            if (newParent == entt::null) return;
-            if (!registry->all_of<HierarchyComponent>(child)) registry->emplace<HierarchyComponent>(child);
-            if (!registry->all_of<HierarchyComponent>(newParent)) registry->emplace<HierarchyComponent>(newParent);
-            
-            uint64_t myID = registry->get<IDComponent>(child).ID;
-            uint64_t pid = registry->get<IDComponent>(newParent).ID;
+void AttachToParent(flecs::entity child, flecs::entity newParent) {
+    if (child == newParent || !newParent.is_alive()) return;
+    DetachFromParent(child);
+    
+    if (!child.has<HierarchyComponent>()) child.add<HierarchyComponent>();
+    if (!newParent.has<HierarchyComponent>()) newParent.add<HierarchyComponent>();
+    
+    // Снова меняем . на . для обычного get
+    uint64_t myID = child.get<IDComponent>().ID;
+    uint64_t pid = newParent.get<IDComponent>().ID;
 
-            registry->get<HierarchyComponent>(child).parentID = pid;
-            registry->get<HierarchyComponent>(newParent).childrenIDs.push_back(myID);
-        }
+    // Для get_mut используем .
+    child.get_mut<HierarchyComponent>().parentID = pid;
+    newParent.get_mut<HierarchyComponent>().childrenIDs.push_back(myID);
+}
 
-        entt::entity CreateBaseEntity(const std::string& name) {
-            entt::entity e = registry->create();
-            registry->emplace<IDComponent>(e); 
-            registry->emplace<TagComponent>(e, name);
-            registry->emplace<TransformComponent>(e);
-            registry->emplace<HierarchyComponent>(e);
+        flecs::entity CreateBaseEntity(const std::string& name) {
+            flecs::entity e = registry->entity();
+            e.set<IDComponent>({}); 
+            e.set<TagComponent>({name});
+            e.set<TransformComponent>({});
+            e.set<HierarchyComponent>({});
             return e;
         }
 
-        void DeleteEntityRecursive(entt::entity target) {
-            if (!registry->valid(target)) return;
+        void DeleteEntityRecursive(flecs::entity target) {
+            if (!target.is_alive()) return;
             
             if (device) vkDeviceWaitIdle(device->device());
             
-            if (registry->all_of<HierarchyComponent>(target)) {
-                auto children = registry->get<HierarchyComponent>(target).childrenIDs;
+            if (target.has<HierarchyComponent>()) {
+                auto children = target.get<HierarchyComponent>().childrenIDs;
                 for (uint64_t childID : children) DeleteEntityRecursive(FindEntityByID(childID));
             }
             DetachFromParent(target);
-            if (selectedEntity == target) selectedEntity = entt::null;
-            registry->destroy(target);
+            if (selectedEntity == target) selectedEntity = flecs::entity();
+            target.destruct();
         }
     };
 }

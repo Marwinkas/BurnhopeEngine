@@ -3,7 +3,7 @@
 #ifndef BURNHOPE_MATERIAL_HPP
 #define BURNHOPE_MATERIAL_HPP
 #include "Texture.hpp"
-#include <glm/glm.hpp>
+#include "../Utils/DirectXMathCompat.hpp"
 #include <memory>
 #include <string>
 #include <fstream>
@@ -20,10 +20,10 @@ namespace burnhope
     {
     public:
         int ID;
-        glm::vec2 uvScale = glm::vec2(1.0f, 1.0f);
+        float2 uvScale = float2{1.0f, 1.0f};
 
-        glm::vec4 albedoColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        glm::vec3 emissiveColor = glm::vec3(0.0f, 0.0f, 0.0f);
+        float4 albedoColor = float4{1.0f, 1.0f, 1.0f, 1.0f};
+        float3 emissiveColor = float3{0.0f, 0.0f, 0.0f};
         
         float metallicStrength = 0.0f;
         float roughnessStrength = 1.0f;
@@ -296,11 +296,11 @@ namespace burnhope
             
             if (j.contains("albedoColor")) {
                 if (j["albedoColor"].size() == 4)
-                    mat->albedoColor = glm::vec4(j["albedoColor"][0], j["albedoColor"][1], j["albedoColor"][2], j["albedoColor"][3]);
+                    mat->albedoColor = float4{j["albedoColor"][0], j["albedoColor"][1], j["albedoColor"][2], j["albedoColor"][3]};
                 else
-                    mat->albedoColor = glm::vec4(j["albedoColor"][0], j["albedoColor"][1], j["albedoColor"][2], 1.0f);
+                    mat->albedoColor = float4{j["albedoColor"][0], j["albedoColor"][1], j["albedoColor"][2], 1.0f};
             }
-            if (j.contains("emissiveColor")) mat->emissiveColor = glm::vec3(j["emissiveColor"][0], j["emissiveColor"][1], j["emissiveColor"][2]);
+            if (j.contains("emissiveColor")) mat->emissiveColor = float3{j["emissiveColor"][0], j["emissiveColor"][1], j["emissiveColor"][2]};
             if (j.contains("metallicStrength")) mat->metallicStrength = j["metallicStrength"];
             if (j.contains("roughnessStrength")) mat->roughnessStrength = j["roughnessStrength"];
             if (j.contains("normalStrength")) mat->normalStrength = j["normalStrength"];
@@ -312,7 +312,7 @@ namespace burnhope
             if (j.contains("triplanarScale")) mat->triplanarScale = j["triplanarScale"];
 
             if (j.contains("uvScale")) {
-                mat->uvScale = glm::vec2(j["uvScale"][0], j["uvScale"][1]);
+                mat->uvScale = float2{j["uvScale"][0], j["uvScale"][1]};
             }
             if (j.contains("emissiveIntensity")) mat->emissiveIntensity = j["emissiveIntensity"];
             if (j.contains("isTransparent")) mat->isTransparent = j["isTransparent"];

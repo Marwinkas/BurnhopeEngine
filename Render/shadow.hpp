@@ -4,25 +4,25 @@
 #include "../Utils/Descriptors.hpp"
 #include "../Utils/Components.hpp"
 #include "Camera.hpp"
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include "../Utils/DirectXMathCompat.hpp"
+#include <array>
 #include <memory>
 #include <vector>
-#include <array>
+#include "../Utils/FrameInfo.hpp"
+
 namespace burnhope
 {
     struct LightGPUData
     {
-        glm::vec4 posType;
-        glm::vec4 colorInt;
-        glm::vec4 dirRadius;
-        glm::vec4 shadowParams;
-        glm::mat4 lightSpaceMatrix;
+        float4 posType;
+        float4 colorInt;
+        float4 dirRadius;
+        float4 shadowParams;
+        float4x4 lightSpaceMatrix;
     };
     struct PointFaceMatrices
     {
-        glm::mat4 faces[6];
+        float4x4 faces[6];
     };
     struct LightUBOData
     {
@@ -83,14 +83,14 @@ namespace burnhope
         BurnhopeCSM &operator=(const BurnhopeCSM &) = delete;
         VkImageView getCascadeView(int cascade) const { return cascadeViews[cascade]; }
         BurnhopeTexture *getTexture() { return csmTexture.get(); }
-        std::array<glm::mat4, CASCADE_COUNT> calculateMatrices(
+        std::array<float4x4, CASCADE_COUNT> calculateMatrices(
             const Camera &camera,
-            glm::vec3 sunDir,
+            float3 sunDir,
             const std::array<float, CASCADE_COUNT> &splits) const;
 
     private:
-        glm::mat4 calculateCascadeMatrix(float nearP, float farP,
-                                         const Camera &camera, glm::vec3 sunDir, float shadowSize) const;
+        float4x4 calculateCascadeMatrix(float nearP, float farP,
+                                         const Camera &camera, float3 sunDir, float shadowSize) const;
         void createResources();
         BurnhopeDevice &device;
         std::unique_ptr<BurnhopeTexture> csmTexture;
@@ -103,15 +103,15 @@ namespace burnhope
         ~BurnhopeShadowSystem() = default;
         BurnhopeShadowSystem(const BurnhopeShadowSystem &) = delete;
         BurnhopeShadowSystem &operator=(const BurnhopeShadowSystem &) = delete;
-        void updateLights(entt::registry &registry, const glm::vec3 &camPos);
+        void updateLights(flecs::world &registry, const float3 &camPos);
         const LightUBOData &getLightUBO() const { return lightUBO; }
-        const std::array<glm::mat4, BurnhopeCSM::CASCADE_COUNT> &getCascadeMatrices() const
+        const std::array<float4x4, BurnhopeCSM::CASCADE_COUNT> &getCascadeMatrices() const
         {
             return cascadeMatrices;
         }
         PointFaceMatrices faceMatricesData[100]{};
         const PointFaceMatrices *getFaceMatricesData() const { return faceMatricesData; }
-        glm::vec3 getSunDir() const { return sunDir; }
+        float3 getSunDir() const { return sunDir; }
         BurnhopeShadowAtlas *getAtlas() { return shadowAtlas.get(); }
         BurnhopeCSM *getCSM() { return csm.get(); }
         VirtualShadowMap *getVSM() { return vsm.get(); }
@@ -123,7 +123,7 @@ namespace burnhope
         std::unique_ptr<BurnhopeCSM> csm;
         std::unique_ptr<VirtualShadowMap> vsm;
         LightUBOData lightUBO{};
-        std::array<glm::mat4, BurnhopeCSM::CASCADE_COUNT> cascadeMatrices{};
-        glm::vec3 sunDir{0.0f, -1.0f, 0.0f};
+        std::array<float4x4, BurnhopeCSM::CASCADE_COUNT> cascadeMatrices{};
+        float3 sunDir{0.0f, -1.0f, 0.0f};
     };
 }

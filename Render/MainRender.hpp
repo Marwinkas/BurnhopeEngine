@@ -20,7 +20,7 @@ namespace burnhope
         VkImageView depthImageView;
     };
 struct alignas(16) ObjectData {
-    glm::mat4 modelMatrix;       // 0
+    float4x4 modelMatrix;       // 0
     uint32_t materialID;         // 64
     uint32_t indexCount;         // 68
     uint32_t vrsRate;            // 72
@@ -31,17 +31,17 @@ struct alignas(16) ObjectData {
     uint64_t colorBufferAddress; // 104
     uint64_t uv2BufferAddress;   // 112
     uint64_t animBufferAddress;  // 120
-    glm::vec4 aabbMin;           // 128 (Perfectly aligned to 16)
-    glm::vec4 aabbMax;           // 144
+    float4 aabbMin;           // 128 (Perfectly aligned to 16)
+    float4 aabbMax;           // 144
 }; // Total: 160 bytes.
 
  struct alignas(16) MaterialData
 {
     int albedoAlphaIdx; int normalIdx; int ormxIdx; int emissiveIdx;
     int useTriplanar; int isTransparent; int repeatTexture; int pad1;
-    alignas(8) glm::vec2 uvScale; float triplanarScale; float emissiveIntensity;
-    alignas(16) glm::vec4 albedoColor;
-    alignas(16) glm::vec4 emissiveColor;
+    alignas(8) float2 uvScale; float triplanarScale; float emissiveIntensity;
+    alignas(16) float4 albedoColor;
+    alignas(16) float4 emissiveColor;
     float metallicStrength; float roughnessStrength; float normalStrength; float heightStrength;
     float aoStrength; float pad2; float pad3; float pad4;
 };
@@ -57,7 +57,7 @@ static_assert(sizeof(MaterialData) % 16 == 0, "MaterialData size must be a multi
         GeometryRenderSystem &operator=(const GeometryRenderSystem &) = delete;
         void renderEntities(
             FrameInfo &frameInfo,
-            entt::registry &registry,
+            flecs::world &registry,
             VkDescriptorSet storageSet,
             VkDescriptorSet textureSet,
             uint32_t totalSubMeshCount,

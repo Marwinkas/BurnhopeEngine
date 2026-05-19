@@ -5,8 +5,9 @@ namespace burnhope
 {
     struct GeometryPushConstants
     {
-        glm::mat4 modelMatrix{1.f};
-        glm::mat4 normalMatrix{1.f};
+        float4x4 modelMatrix;
+        float4x4 normalMatrix;
+        GeometryPushConstants() { modelMatrix = MatrixIdentity(); normalMatrix = MatrixIdentity(); }
     };
     GeometryRenderSystem::GeometryRenderSystem(
         BurnhopeDevice &device, VkDescriptorSetLayout globalSetLayout)
@@ -102,7 +103,7 @@ namespace burnhope
 
     void GeometryRenderSystem::renderEntities(
         FrameInfo &frameInfo,
-        entt::registry &registry,
+        flecs::world &registry,
         VkDescriptorSet storageSet,
         VkDescriptorSet textureSet,
         uint32_t totalSubMeshCount,

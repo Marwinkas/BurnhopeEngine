@@ -11,9 +11,9 @@ namespace burnhope {
         PortalRenderSystem(BurnhopeDevice& device, VkDescriptorSetLayout globalSetLayout);
         ~PortalRenderSystem();
 
-        void drawDepthReset(VkCommandBuffer cmd, VkDescriptorSet globalSet, const glm::mat4& model, uint32_t ref);
+        void drawDepthReset(VkCommandBuffer cmd, VkDescriptorSet globalSet, const float4x4& model, uint32_t ref);
 
-        void drawMask(VkCommandBuffer cmd, VkDescriptorSet globalSet, const glm::mat4& modelMatrix, uint32_t refValue);
+        void drawMask(VkCommandBuffer cmd, VkDescriptorSet globalSet, const float4x4& modelMatrix, uint32_t refValue);
 
     private:
         BurnhopeDevice& lveDevice;

@@ -17,7 +17,7 @@ namespace burnhope
     while (extent.width == 0 || extent.height == 0)
     {
       extent = lveWindow.getExtent();
-      glfwWaitEvents();
+      lveWindow.pollEvents();
     }
     vkDeviceWaitIdle(lveDevice.device());
     if (lveSwapChain == nullptr)

@@ -1,7 +1,7 @@
 #include "shadow.hpp"
+#include "../Utils/DirectXMathCompat.hpp"
 #include <stdexcept>
 #include <algorithm>
-#include <glm/gtc/matrix_transform.hpp>
 namespace burnhope
 {
     namespace
@@ -145,10 +145,10 @@ namespace burnhope
         }
     }
 
-    std::array<glm::mat4, BurnhopeCSM::CASCADE_COUNT> BurnhopeCSM::calculateMatrices(
-        const Camera &camera, glm::vec3 sunDir, const std::array<float, CASCADE_COUNT> &splits) const
+    std::array<float4x4, BurnhopeCSM::CASCADE_COUNT> BurnhopeCSM::calculateMatrices(
+        const Camera &camera, float3 sunDir, const std::array<float, CASCADE_COUNT> &splits) const
     {
-        std::array<glm::mat4, CASCADE_COUNT> result{};
+        std::array<float4x4, CASCADE_COUNT> result{};
         float nearP = 0.1f;
         for (int i = 0; i < CASCADE_COUNT; i++)
         {
@@ -157,39 +157,46 @@ namespace burnhope
         }
         return result;
     }
-    glm::mat4 BurnhopeCSM::calculateCascadeMatrix(float nearP, float farP, const Camera &camera, glm::vec3 sunDir, float shadowSize) const
+    float4x4 BurnhopeCSM::calculateCascadeMatrix(float nearP, float farP, const Camera &camera, float3 sunDir, float shadowSize) const
     {
-        glm::mat4 proj = camera.GetProjectionMatrix(45.0f, nearP, farP);
-        glm::mat4 invCam = glm::inverse(proj * camera.GetViewMatrix());
-        std::vector<glm::vec4> corners;
+        float4x4 proj = camera.GetProjectionMatrix(45.0f, nearP, farP);
+        float4x4 view = camera.GetViewMatrix();
+        float4x4 viewProj = MatrixMultiply(proj, view);
+        float4x4 invCam = MatrixInverse(viewProj);
+        std::vector<float4> corners;
         for (int x = 0; x < 2; x++)
             for (int y = 0; y < 2; y++)
                 for (int z = 0; z < 2; z++)
                 {
-                    glm::vec4 pt = invCam * glm::vec4(2.0f * x - 1.0f, 2.0f * y - 1.0f, (float)z, 1.0f);
+                    float4 pt = TransformFloat4(float4{2.0f * x - 1.0f, 2.0f * y - 1.0f, (float)z, 1.0f}, invCam);
                     corners.push_back(pt / pt.w);
                 }
-        glm::vec3 center(0);
+        float3 center{0, 0, 0};
         for (auto &v : corners)
-            center += glm::vec3(v);
-        center /= 8.0f;
+            center += float3{v.x, v.y, v.z};
+        center = center / 8.0f;
         float radius = 0.0f;
         for (auto &v : corners)
-            radius = std::max(radius, glm::length(glm::vec3(v) - center));
+            radius = std::max(radius, Length(float3{v.x, v.y, v.z} - center));
         radius = std::ceil(radius * 16.0f) / 16.0f;
-        radius += glm::clamp(radius * 0.05f, 2.0f, 15.0f);
-        glm::vec3 up = (std::abs(sunDir.y) > 0.999f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+        radius += Clamp(radius * 0.05f, 2.0f, 15.0f);
+        float3 up = (std::abs(sunDir.y) > 0.999f) ? float3{0, 0, 1} : float3{0, 1, 0};
         float lightDistance = 2000.0f;
-        glm::mat4 lightView = glm::lookAt(center - sunDir * lightDistance, center, up);
+        float3 lightPos = center - sunDir * lightDistance;
+        float4x4 lightView = MatrixLookAtLH(lightPos, center, up);
         float wupt = (radius * 2.0f) / shadowSize;
-        glm::vec3 cls = glm::vec3(lightView * glm::vec4(center, 1.0f));
+        float4 cls = TransformFloat4(float4{center.x, center.y, center.z, 1.0f}, lightView);
         cls.x = std::floor(cls.x / wupt) * wupt;
         cls.y = std::floor(cls.y / wupt) * wupt;
-        center = glm::vec3(glm::inverse(lightView) * glm::vec4(cls, 1.0f));
-        lightView = glm::lookAt(center - sunDir * lightDistance, center, up);
-        glm::mat4 projs = glm::ortho(-radius, radius, -radius, radius, -2000.0f, lightDistance + radius + 500.0f);
-        projs[1][1] *= -1;
-        return projs * lightView;
+        float4x4 invLightView = MatrixInverse(lightView);
+        float4 centerTransformed = TransformFloat4(float4{cls.x, cls.y, cls.z, 1.0f}, invLightView);
+        center = float3{centerTransformed.x, centerTransformed.y, centerTransformed.z};
+        lightView = MatrixLookAtLH(center - sunDir * lightDistance, center, up);
+        float4x4 projs = MatrixOrthographicLH(radius * 2.0f, radius * 2.0f, -2000.0f, lightDistance + radius + 500.0f);
+        projs._31 = -radius;
+        projs._32 = -radius;
+        projs._22 *= -1; // Vulkan Y-flip
+        return MatrixMultiply(projs, lightView);
     }
     BurnhopeShadowSystem::BurnhopeShadowSystem(BurnhopeDevice &dev) : device(dev)
     {
@@ -197,31 +204,31 @@ namespace burnhope
         csm = std::make_unique<BurnhopeCSM>(dev);
         vsm = std::make_unique<VirtualShadowMap>(dev);
     }
-    void BurnhopeShadowSystem::updateLights(entt::registry &registry, const glm::vec3 &camPos)
+    void BurnhopeShadowSystem::updateLights(flecs::world &registry, const float3 &camPos)
     {
         lightUBO = {};
-        sunDir = glm::vec3(0, -1, 0);
+        sunDir = float3{0, -1, 0};
         int allocX = 0, allocY = 0;
         const int atlasInUnits = BurnhopeShadowAtlas::ATLAS_IN_UNITS;
         const int minTile = BurnhopeShadowAtlas::MIN_TILE;
-        auto lightView = registry.view<LightComponent, TransformComponent>();
-        for (auto entity : lightView)
+        
+        registry.each([&](flecs::entity entity, LightComponent& lc_comp, TransformComponent& tc_comp)
         {
             if (lightUBO.activeLightsCount >= 100)
-                break;
-            auto &lc = lightView.get<LightComponent>(entity).light;
-            auto &tc = lightView.get<TransformComponent>(entity).transform;
+                return;
+            auto &lc = lc_comp.light;
+            auto &tc = tc_comp.transform;
             if (!lc.enable || lc.type == LightType::None)
-                continue;
-            glm::quat q = glm::quat(glm::radians(tc.rotation));
-            glm::vec3 dir = glm::normalize(q * glm::vec3(0, -1, 0));
+                return;
+            quat q = QuaternionFromEuler(tc.rotation);
+            float3 dir = Normalize(TransformVector(float3{0, -1, 0}, QuaternionToMatrix(q)));
             if (lc.type == LightType::Directional)
             {
                 sunDir = dir;
             }
             if (lc.castShadows && lc.type != LightType::Directional)
             {
-                float dist = glm::length(tc.position - camPos);
+                float dist = Length(tc.position - camPos);
                 lc.shadowTileSize = (dist < 20.0f) ? 512 : (dist < 60.0f) ? 256
                                                                           : 128;
                 int unitsPerTile = lc.shadowTileSize / minTile;
@@ -243,36 +250,38 @@ namespace burnhope
             }
             if (lc.type == LightType::Spot)
             {
-                glm::vec3 up = (std::abs(dir.y) > 0.99f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
-                glm::vec3 safePos = tc.position;
+                float3 up = (std::abs(dir.y) > 0.99f) ? float3{0, 0, 1} : float3{0, 1, 0};
+                float3 safePos = tc.position;
                 if (std::abs(safePos.x) < 0.001f && std::abs(safePos.z) < 0.001f)
                     safePos.x += 0.001f;
-                glm::mat4 lp = glm::perspective(glm::radians(lc.outerCone * 2.0f), 1.0f, 0.1f, lc.radius);
-                lp[1][1] *= -1;
-                lc.lightSpaceMatrix = lp * glm::lookAt(safePos, safePos + dir, up);
+                float4x4 lp = MatrixPerspectiveFovLH(Radians(lc.outerCone * 2.0f), 1.0f, 0.1f, lc.radius);
+                lp._22 *= -1; // Vulkan Y-flip
+                float4x4 lookAt = MatrixLookAtLH(safePos, safePos + dir, up);
+                lc.lightSpaceMatrix = MatrixMultiply(lp, lookAt);
             }
             else if (lc.type == LightType::Point && lc.castShadows)
             {
-                glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, lc.radius);
-                const glm::vec3 dirs[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
-                const glm::vec3 ups[6] = {{0, -1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, -1, 0}};
+                float4x4 proj = MatrixPerspectiveFovLH(Radians(90.0f), 1.0f, 0.1f, lc.radius);
+                const float3 dirs[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+                const float3 ups[6] = {{0, -1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, -1, 0}};
                 for (int f = 0; f < 6; f++)
                 {
-                    faceMatricesData[lightUBO.activeLightsCount].faces[f] = proj * glm::lookAt(tc.position, tc.position + dirs[f], ups[f]);
+                    float4x4 lookAt = MatrixLookAtLH(tc.position, tc.position + dirs[f], ups[f]);
+                    faceMatricesData[lightUBO.activeLightsCount].faces[f] = MatrixMultiply(proj, lookAt);
                 }
             }
             LightGPUData &g = lightUBO.lights[lightUBO.activeLightsCount];
-            g.posType = glm::vec4(tc.position, (float)lc.type);
-            g.colorInt = glm::vec4(lc.color, lc.intensity);
-            g.dirRadius = glm::vec4(dir, lc.radius);
+            g.posType = float4(tc.position.x, tc.position.y, tc.position.z, (float)lc.type);
+            g.colorInt = float4(lc.color.x, lc.color.y, lc.color.z, lc.intensity);
+            g.dirRadius = float4(dir.x, dir.y, dir.z, lc.radius);
             g.lightSpaceMatrix = lc.lightSpaceMatrix;
             float encodedSlot = (float)(lc.shadowSlot * 10000 + lc.shadowTileSize);
-            g.shadowParams = glm::vec4(
-                glm::cos(glm::radians(lc.innerCone)),
-                glm::cos(glm::radians(lc.outerCone)),
+            g.shadowParams = float4(
+                std::cos(Radians(lc.innerCone)),
+                std::cos(Radians(lc.outerCone)),
                 lc.castShadows ? 1.0f : 0.0f,
                 encodedSlot);
             lightUBO.activeLightsCount++;
-        }
+        });
     }
 }

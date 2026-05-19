@@ -1,24 +1,18 @@
 ﻿#ifndef CAMERA_CLASS_H
 #define CAMERA_CLASS_H
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <glm/gtx/rotate_vector.hpp>
-#include <glm/gtx/vector_angle.hpp>
+#include "../Utils/DirectXMathCompat.hpp"
 #include <array>
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <SDL3/SDL.h>
 namespace burnhope
 {
     class Camera
     {
     public:
-        glm::vec3 Position;
-        glm::vec3 Orientation = glm::vec3(0.0f, 0.0f, -1.0f);
-        glm::vec3 Up = glm::vec3(0.0f, 1.0f, 0.0f);
-        glm::mat4 viewProjectionMatrix = glm::mat4(1.0f);
-        glm::mat4 cleanViewProjectionMatrix = glm::mat4(1.0f);
+        float3 Position;
+        float3 Orientation = float3{0.0f, 0.0f, -1.0f};
+        float3 Up = float3{0.0f, 1.0f, 0.0f};
+        float4x4 viewProjectionMatrix = MatrixIdentity();
+        float4x4 cleanViewProjectionMatrix = MatrixIdentity();
         double lastMouseX = 0.0, lastMouseY = 0.0;
         bool firstClick = true;
         int width = 800;
@@ -26,38 +20,40 @@ namespace burnhope
         float speed = 0.01f;
         float sensitivity = 0.2f;
 
-        Camera(int width, int height, glm::vec3 position);
+        Camera(int width, int height, float3 position);
 
-        void setViewMatrix(const glm::mat4& viewMatrix);
+        void setViewMatrix(const float4x4& viewMatrix);
 
-        bool IsSphereInFrustum(const glm::vec4 *planes, const glm::vec3 &center, float radius);
+        bool IsSphereInFrustum(const float4 *planes, const float3 &center, float radius);
         
-        glm::mat4 GetProjectionMatrix(float FOVdeg, float nearPlane, float farPlane) const
+        float4x4 GetProjectionMatrix(float FOVdeg, float nearPlane, float farPlane) const
         {
-            glm::mat4 proj = glm::perspective(glm::radians(FOVdeg), (float)width / (float)height, nearPlane, farPlane);
-            proj[1][1] *= -1;
+            float4x4 proj = MatrixPerspectiveFovLH(Radians(FOVdeg), (float)width / (float)height, nearPlane, farPlane);
+            // Vulkan Y-flip
+            proj._22 *= -1.0f;
             return proj;
         }
 
-        glm::mat4 GetProjectionMatrix(float FOVdeg, float nearPlane, float aspect, float farPlane) const
+        float4x4 GetProjectionMatrix(float FOVdeg, float nearPlane, float aspect, float farPlane) const
         {
-            glm::mat4 proj = glm::perspective(glm::radians(FOVdeg), aspect, nearPlane, farPlane);
-            proj[1][1] *= -1;
+            float4x4 proj = MatrixPerspectiveFovLH(Radians(FOVdeg), aspect, nearPlane, farPlane);
+            proj._22 *= -1.0f;
             return proj;
         }
 
-        glm::mat4 GetViewMatrix() const
+        float4x4 GetViewMatrix() const
         {
-            return glm::lookAt(Position, Position + Orientation, Up);
+            float3 at = float3{Position.x + Orientation.x, Position.y + Orientation.y, Position.z + Orientation.z};
+            return MatrixLookAtLH(Position, at, Up);
         }
 
-        glm::mat4 GetViewProjectionMatrix()
+        float4x4 GetViewProjectionMatrix()
         {
             return viewProjectionMatrix;
         }
         
         void updateMatrix(float FOVdeg, float nearPlane, float farPlane);
-        void Inputs(GLFWwindow *window, float deltaTime);
+        void Inputs(SDL_Window *window, float deltaTime);
     };
 }
 #endif

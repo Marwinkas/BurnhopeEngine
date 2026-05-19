@@ -1,5 +1,4 @@
 #pragma once
-#include <entt/entt.hpp>
 #include <nlohmann/json.hpp>
 #include "../Utils/Components.hpp"
 #include <fstream>
@@ -14,51 +13,50 @@ namespace burnhope
     class SceneManager
     {
     public:
-        static void saveScene(entt::registry& registry, const std::string& filePath)
+        static void saveScene(flecs::world &registry, const std::string& filePath)
         {
             json sceneJson;
             auto entitiesArray = json::array();
 
-            auto view = registry.view<IDComponent>();
-            for (auto entity : view)
+            registry.each([&](flecs::entity entity, IDComponent& idc)
             {
                 json eJson;
-                eJson["id"] = view.get<IDComponent>(entity).ID;
+                eJson["id"] = idc.ID;
 
-                if (registry.any_of<TagComponent>(entity)) {
-                    eJson["tag"] = registry.get<TagComponent>(entity).name;
+                if (entity.has<TagComponent>()) {
+                    eJson["tag"] = entity.get<TagComponent>().name;
                 }
 
-                if (registry.any_of<TransformComponent>(entity)) {
-                    auto& tc = registry.get<TransformComponent>(entity).transform;
-                    eJson["transform"] = {
-                        {"pos", {tc.position.x, tc.position.y, tc.position.z}},
-                        {"rot", {tc.rotation.x, tc.rotation.y, tc.rotation.z}},
-                        {"scale", {tc.scale.x, tc.scale.y, tc.scale.z}}
-                    };
+                if (entity.has<TransformComponent>()) {
+                    const TransformComponent tc = entity.get<TransformComponent>();
+                    eJson["transform"] = json::object({
+                        {"pos", {tc.transform.position.x, tc.transform.position.y, tc.transform.position.z}},
+                        {"rot", {tc.transform.rotation.x, tc.transform.rotation.y, tc.transform.rotation.z}},
+                        {"scale", {tc.transform.scale.x, tc.transform.scale.y, tc.transform.scale.z}}
+                    });
                 }
 
-                if (registry.any_of<HierarchyComponent>(entity)) {
-                    auto& hc = registry.get<HierarchyComponent>(entity);
-                    eJson["hierarchy"] = {
+                if (entity.has<HierarchyComponent>()) {
+                    const HierarchyComponent hc = entity.get<HierarchyComponent>();
+                    eJson["hierarchy"] = json::object({
                         {"parentID", hc.parentID},
                         {"childrenIDs", hc.childrenIDs}
-                    };
+                    });
                 }
 
-                if (registry.any_of<LightComponent>(entity)) {
-                    auto& lc = registry.get<LightComponent>(entity).light;
-                    eJson["light"] = {
-                        {"type", static_cast<int>(lc.type)},
-                        {"color", {lc.color.r, lc.color.g, lc.color.b}},
-                        {"intensity", lc.intensity},
-                        {"radius", lc.radius},
-                        {"castShadows", lc.castShadows}
-                    };
+                if (entity.has<LightComponent>()) {
+                    const LightComponent lc = entity.get<LightComponent>();
+                    eJson["light"] = json::object({
+                        {"type", static_cast<int>(lc.light.type)},
+                        {"color", {lc.light.color.x, lc.light.color.y, lc.light.color.z}},
+                        {"intensity", lc.light.intensity},
+                        {"radius", lc.light.radius},
+                        {"castShadows", lc.light.castShadows}
+                    });
                 }
 
-                if (registry.any_of<MeshComponent>(entity)) {
-                    auto& mc = registry.get<MeshComponent>(entity);
+                if (entity.has<MeshComponent>()) {
+                    MeshComponent mc = entity.get_mut<MeshComponent>();
                     
                     if (!fs::exists("materials")) fs::create_directory("materials");
 
@@ -69,7 +67,7 @@ namespace burnhope
                         mc.materials[i]->saveToJson(mc.materialPaths[i]);
                     }
 
-                    eJson["mesh"] = {
+                    eJson["mesh"] = json::object({
                         {"modelPath", mc.modelPath},
                         {"materialPaths", mc.materialPaths},
                         {"isStatic", mc.isStatic},
@@ -78,21 +76,19 @@ namespace burnhope
                         {"skeletonPath", mc.skeletonPath},
                         {"animationPath", mc.animationPath},
                         {"animationTime", mc.animationTime}
-                    };
+                    });
                 }
 
-                if (registry.any_of<ReflectionProbeComponent>(entity)) {
-                    auto& pc = registry.get<ReflectionProbeComponent>(entity);
-                    eJson["probe"] = {
+                if (entity.has<ReflectionProbeComponent>()) {
+                    const ReflectionProbeComponent pc = entity.get<ReflectionProbeComponent>();
+                    eJson["probe"] = json::object({
                         {"radius", pc.radius},
                         {"resolution", pc.resolution}
-                    };
+                    });
                 }
-
-    
-
+                
                 entitiesArray.push_back(eJson);
-            }
+            });
 
             sceneJson["entities"] = entitiesArray;
 
@@ -103,7 +99,7 @@ namespace burnhope
             }
         }
 
-        static void loadScene(BurnhopeDevice& device, entt::registry& registry, const std::string& filePath)
+        static void loadScene(BurnhopeDevice& device, flecs::world &registry, const std::string& filePath)
         {
             std::ifstream file(filePath);
             if (!file.is_open()) {
@@ -113,52 +109,56 @@ namespace burnhope
 
             json sceneJson;
             file >> sceneJson;
-            registry.clear();
+            registry.each([](flecs::entity e) { e.destruct(); });
 
             for (const auto& eJson : sceneJson["entities"])
             {
-                auto entity = registry.create();
+                auto entity = registry.entity();
 
                 uint64_t id = eJson.value("id", generateRandomID());
-                registry.emplace<IDComponent>(entity, id);
+                entity.set<IDComponent>({id});
 
                 if (eJson.contains("tag")) {
-                    registry.emplace<TagComponent>(entity, eJson["tag"].get<std::string>());
+                    entity.set<TagComponent>({eJson["tag"].get<std::string>()});
                 }
 
                 if (eJson.contains("transform")) {
-                    auto& tc = registry.emplace<TransformComponent>(entity).transform;
+                    TransformComponent tc;
                     auto& p = eJson["transform"]["pos"];
                     auto& r = eJson["transform"]["rot"];
                     auto& s = eJson["transform"]["scale"];
-                    tc.position = {p[0], p[1], p[2]};
-                    tc.rotation = {r[0], r[1], r[2]};
-                    tc.scale = {s[0], s[1], s[2]};
-                    tc.updatematrix = true;
-                    tc.updateMatrixIfNeeded();
+                    tc.transform.position = {p[0], p[1], p[2]};
+                    tc.transform.rotation = {r[0], r[1], r[2]};
+                    tc.transform.scale = {s[0], s[1], s[2]};
+                    tc.transform.updatematrix = true;
+                    tc.transform.updateMatrixIfNeeded();
+                    entity.set<TransformComponent>(tc);
                 }
 
                 if (eJson.contains("hierarchy")) {
-                    auto& hc = registry.emplace<HierarchyComponent>(entity);
+                    HierarchyComponent hc;
                     hc.parentID = eJson["hierarchy"].value("parentID", 0ULL);
                     for (auto& childId : eJson["hierarchy"]["childrenIDs"]) {
                         hc.childrenIDs.push_back(childId.get<uint64_t>());
                     }
+                    entity.set<HierarchyComponent>(hc);
                 }
 
                 if (eJson.contains("light")) {
-                    auto& lc = registry.emplace<LightComponent>(entity).light;
+                    
+                    LightComponent lc;
                     auto& lData = eJson["light"];
-                    lc.type = static_cast<LightType>(lData.value("type", 0));
-                    lc.color = {lData["color"][0], lData["color"][1], lData["color"][2]};
-                    lc.intensity = lData.value("intensity", 1.0f);
-                    lc.radius = lData.value("radius", 10.0f);
-                    lc.castShadows = lData.value("castShadows", true);
-                    lc.enable = true;
+                    lc.light.type = static_cast<LightType>(lData.value("type", 0));
+                    lc.light.color = {lData["color"][0], lData["color"][1], lData["color"][2]};
+                    lc.light.intensity = lData.value("intensity", 1.0f);
+                    lc.light.radius = lData.value("radius", 10.0f);
+                    lc.light.castShadows = lData.value("castShadows", true);
+                    lc.light.enable = true;
+                    entity.set<LightComponent>(lc);
                 }
 
                 if (eJson.contains("mesh")) {
-                    auto& mc = registry.emplace<MeshComponent>(entity);
+                    MeshComponent mc;
                     mc.modelPath = eJson["mesh"].value("modelPath", "");
                     mc.skeletonPath = eJson["mesh"].value("skeletonPath", "");
                     mc.animationPath = eJson["mesh"].value("animationPath", "");
@@ -166,7 +166,6 @@ namespace burnhope
                     mc.isStatic = eJson["mesh"].value("isStatic", false);
                     mc.isVisible = eJson["mesh"].value("isVisible", true);
                     mc.castShadow = eJson["mesh"].value("castShadow", true);
-
                     if (!mc.modelPath.empty()) {
                         try {
                             mc.model = BurnhopeModel::createModelFromFile(device, mc.modelPath);
@@ -179,22 +178,24 @@ namespace burnhope
                         std::string path = matPath.get<std::string>();
                         mc.materialPaths.push_back(path);
                         auto mat = Material::loadFromJson(device, path);
-                    mc.materials.push_back(mat); // добавляем даже если nullptr
+                     mc.materials.push_back(mat); // добавляем даже если nullptr
                 }
 
                 if (mc.model && mc.materials.size() < mc.model->getSubMeshes().size()) {
-                    mc.materials.resize(mc.model->getSubMeshes().size(), nullptr);
-                }
-                if (mc.model && mc.materialPaths.size() < mc.model->getSubMeshes().size()) {
-                    mc.materialPaths.resize(mc.model->getSubMeshes().size(), "");
-                }
+                        mc.materials.resize(mc.model->getSubMeshes().size(), nullptr);
+                    }
+                    if (mc.model && mc.materialPaths.size() < mc.model->getSubMeshes().size()) {
+                        mc.materialPaths.resize(mc.model->getSubMeshes().size(), "");
+                    }
+                    entity.set<MeshComponent>(mc);
                 }
 
                 if (eJson.contains("probe")) {
-                    auto& pc = registry.emplace<ReflectionProbeComponent>(entity);
+                     ReflectionProbeComponent pc;
                     pc.radius = eJson["probe"].value("radius", 10.0f);
                     pc.resolution = eJson["probe"].value("resolution", 256);
                     pc.updateNeeded = true;
+                    entity.set<ReflectionProbeComponent>(pc);
                 }
                 
             

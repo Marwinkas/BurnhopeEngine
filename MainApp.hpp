@@ -48,11 +48,12 @@ namespace burnhope
 #endif
     }
 
-inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
+inline VkTransformMatrixKHR toVkMatrix(const float4x4& m) {
     VkTransformMatrixKHR out;
+    float mData[16] = {m._11, m._12, m._13, m._14, m._21, m._22, m._23, m._24, m._31, m._32, m._33, m._34, m._41, m._42, m._43, m._44};
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 4; ++j) {
-            out.matrix[i][j] = m[j][i]; 
+            out.matrix[i][j] = mData[j * 4 + i];
         }
     }
     return out;
@@ -72,14 +73,14 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::unique_ptr<BurnhopeBuffer> instancesBuffer;
         VkAccelerationStructureKHR tlasHandle = VK_NULL_HANDLE;
 
-        void buildTLAS(entt::registry& registry);
+        void buildTLAS(flecs::world &registry);
     private:
         BurnhopeWindow lveWindow{WIDTH, HEIGHT, "BurnHope Engine"};
         BurnhopeDevice lveDevice{lveWindow};
         BurnhopeRenderer lveRenderer{lveWindow, lveDevice};
         std::unique_ptr<BurnhopeDescriptorPool> globalPool{};
 
-        void loadGameObjects(entt::registry &registry);
+        void loadGameObjects(flecs::world &registry);
         void initCompute(VkDescriptorSetLayout globalSetLayout);
         void rebuildGBufferDescriptorSets();
         std::unique_ptr<DeferredLightingSystem> lightingSystem;
@@ -121,7 +122,7 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::unique_ptr<SSGISystem> ssgiSystem;
         std::unique_ptr<GeometryRenderSystem> simpleRenderSystem;
         std::unique_ptr<PortalRenderSystem> portalRenderSystem;
-        void RebuildBatches(entt::registry &registry, GeometryRenderSystem &renderSystem);
+        void RebuildBatches(flecs::world &registry, GeometryRenderSystem &renderSystem);
         std::unique_ptr<burnhope::RadianceCascadesSystem> rcSystem;
         std::shared_ptr<BurnhopeTexture> defaultWhiteTex;
         std::shared_ptr<BurnhopeTexture> defaultNormalTex;
@@ -152,7 +153,7 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::string rootPath = fs::current_path().string();
 #endif
         
-        entt::registry registry;
+        flecs::world registry;
         std::unique_ptr<UIManager> uiManager;
         
         std::unique_ptr<BurnhopeBuffer> objectBuffer;

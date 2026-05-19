@@ -1,10 +1,7 @@
 #pragma once
 #include "../Utils/Buffer.hpp"
 #include "../Utils/Device.hpp"
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/packing.hpp>
+#include "../Utils/DirectXMathCompat.hpp"
 #include "Material.hpp"
 #include <memory>
 #include <vector>
@@ -45,8 +42,8 @@ namespace burnhope
         uint32_t indexCounts[4];
         uint32_t firstIndices[4];
         uint32_t materialIndex;
-        glm::vec3 aabbMin = glm::vec3(0.0f);
-        glm::vec3 aabbMax = glm::vec3(0.0f);
+        float3 aabbMin = float3{0.0f, 0.0f, 0.0f};
+        float3 aabbMax = float3{0.0f, 0.0f, 0.0f};
         float boundingRadius = 0.0f;
         uint32_t vrsRate = 0;
     };
@@ -58,9 +55,9 @@ namespace burnhope
     };
     struct PhysicsPrimitive {
         uint32_t type;
-        glm::vec3 position;
-        glm::vec4 rotationQuat;
-        glm::vec3 dimensions;
+        float3 position;
+        float4 rotationQuat;
+        float3 dimensions;
     };
     struct DestructionBond {
         uint32_t pieceA, pieceB;
@@ -68,16 +65,16 @@ namespace burnhope
     };
     struct BHSocket {
         char name[64];
-        glm::mat4 transform;
+        float4x4 transform;
     };
     struct BHNavMeshCarver {
-        glm::vec2 points[4];
+        float2 points[4];
     };
     struct BHHairPoint {
         uint16_t x, y, z, pad;
     };
     struct BHHairStrand {
-        glm::vec3 rootPosition;
+        float3 rootPosition;
         float thickness;
         uint32_t color; 
         uint32_t pointCount;
@@ -104,8 +101,8 @@ namespace burnhope
 
     struct BHRootMotionKey {
         float time;
-        glm::vec3 deltaPosition;
-        glm::vec4 deltaRotation;
+        float3 deltaPosition;
+        float4 deltaRotation;
     };
 
     struct Builder
@@ -132,27 +129,27 @@ namespace burnhope
         float acousticReflection = 0.5f;
         uint32_t impostorOffset = 0;
         float maxWindSway = 1.0f;
-        glm::vec3 centerOfMass = glm::vec3(0.0f);
+        float3 centerOfMass = float3{0.0f, 0.0f, 0.0f};
         float totalMass = 0.0f;
-        glm::vec3 centerOfBuoyancy = glm::vec3(0.0f);
+        float3 centerOfBuoyancy = float3{0.0f, 0.0f, 0.0f};
         float volume = 0.0f;
-        glm::mat3 inertiaTensor = glm::mat3(1.0f);
+        float4x4 inertiaTensor = MatrixIdentity();
         std::vector<PhysicsPrimitive> physicsPrimitives;
         std::vector<DestructionBond> destructionBonds;
         
-        std::vector<glm::vec3> probeAnchors;
-        std::vector<glm::vec4> tetraNodes; // xyz - pos, w - mass
-        std::vector<glm::uvec4> tetrahedrons; // indices
+        std::vector<float3> probeAnchors;
+        std::vector<float4> tetraNodes; // xyz - pos, w - mass
+        std::vector<ufloat4> tetrahedrons; // indices
         std::vector<BHSocket> sockets;
         std::vector<BHNavMeshCarver> navMeshCarvers;
         
         std::string vatTexturePath = "";
         uint32_t vatFrameCount = 0;
         float vatDuration = 0.0f;
-        glm::vec3 vatMinBounds = glm::vec3(0.0f);
-        glm::vec3 vatMaxBounds = glm::vec3(0.0f);
-        glm::vec3 globalAabbMin = glm::vec3(0.0f);
-        glm::vec3 globalAabbMax = glm::vec3(0.0f);
+        float3 vatMinBounds = float3{0.0f, 0.0f, 0.0f};
+        float3 vatMaxBounds = float3{0.0f, 0.0f, 0.0f};
+        float3 globalAabbMin = float3{0.0f, 0.0f, 0.0f};
+        float3 globalAabbMax = float3{0.0f, 0.0f, 0.0f};
 
         void loadModel(const std::string &filepath);
     };
@@ -192,24 +189,24 @@ namespace burnhope
         float acousticReflection = 0.5f;
         uint32_t impostorOffset = 0;
         float maxWindSway = 1.0f;
-        glm::vec3 centerOfMass = glm::vec3(0.0f);
+        float3 centerOfMass = float3{0.0f, 0.0f, 0.0f};
         float totalMass = 0.0f;
-        glm::vec3 centerOfBuoyancy = glm::vec3(0.0f);
+        float3 centerOfBuoyancy = float3{0.0f, 0.0f, 0.0f};
         float volume = 0.0f;
-        glm::mat3 inertiaTensor = glm::mat3(1.0f);
+        float4x4 inertiaTensor = MatrixIdentity();
         std::vector<PhysicsPrimitive> physicsPrimitives;
         std::vector<DestructionBond> destructionBonds;
         
-        std::vector<glm::vec3> probeAnchors;
-        std::vector<glm::vec4> tetraNodes;
-        std::vector<glm::uvec4> tetrahedrons;
+        std::vector<float3> probeAnchors;
+        std::vector<float4> tetraNodes;
+        std::vector<UInt4> tetrahedrons;
         std::vector<BHSocket> sockets;
         std::vector<BHNavMeshCarver> navMeshCarvers;
         std::vector<BHMorphTarget> morphTargets;
         std::vector<BHMorphDelta> morphDeltas;
 
-        glm::vec3 globalAabbMin = glm::vec3(0.0f);
-        glm::vec3 globalAabbMax = glm::vec3(0.0f);
+        float3 globalAabbMin = float3{0.0f, 0.0f, 0.0f};
+        float3 globalAabbMax = float3{0.0f, 0.0f, 0.0f};
         std::unique_ptr<BurnhopeBuffer> colorBuffer;
         std::unique_ptr<BurnhopeBuffer> uv2Buffer;
         std::unique_ptr<BurnhopeBuffer> cdfBuffer;
@@ -220,8 +217,8 @@ namespace burnhope
         std::string vatTexturePath = "";
         uint32_t vatFrameCount = 0;
         float vatDuration = 0.0f;
-        glm::vec3 vatMinBounds = glm::vec3(0.0f);
-        glm::vec3 vatMaxBounds = glm::vec3(0.0f);
+        float3 vatMinBounds = float3{0.0f, 0.0f, 0.0f};
+        float3 vatMaxBounds = float3{0.0f, 0.0f, 0.0f};
 
         VkIndexType indexType = VK_INDEX_TYPE_UINT32;
         // Добавь эти поля в private или protected

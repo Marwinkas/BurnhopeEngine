@@ -5,8 +5,10 @@ namespace burnhope
 {
     struct PortalPushArgs
     {
-        glm::mat4 modelMatrix{1.f};
+        float4x4 modelMatrix;
         uint32_t portalID;
+        PortalPushArgs() { modelMatrix = MatrixIdentity(); }
+        PortalPushArgs(const float4x4& model, uint32_t ref) : modelMatrix(model), portalID(ref) {}
     };
 
     PortalRenderSystem::PortalRenderSystem(BurnhopeDevice &device, VkDescriptorSetLayout globalSetLayout)
@@ -20,12 +22,12 @@ namespace burnhope
             {0, 65535, 0, 0}
         };
 
-        uint32_t qTan = glm::packSnorm3x10_1x2(glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+        uint32_t qTan = PackSnorm3x10_1x2(float4{0.0f, 0.0f, 0.0f, 1.0f});
         std::vector<PackedVertexAttr> attributes = {
-            {glm::packHalf2x16(glm::vec2(0.f, 0.f)), qTan},
-            {glm::packHalf2x16(glm::vec2(1.f, 0.f)), qTan},
-            {glm::packHalf2x16(glm::vec2(1.f, 1.f)), qTan},
-            {glm::packHalf2x16(glm::vec2(0.f, 1.f)), qTan}
+            {PackHalf2x16(float2{0.f, 0.f}), qTan},
+            {PackHalf2x16(float2{1.f, 0.f}), qTan},
+            {PackHalf2x16(float2{1.f, 1.f}), qTan},
+            {PackHalf2x16(float2{0.f, 1.f}), qTan}
         };
 
         std::vector<uint32_t> indices = {0, 1, 2, 2, 3, 0};
@@ -38,9 +40,9 @@ namespace burnhope
         SubMesh sub;
         sub.indexCounts[0] = static_cast<uint32_t>(indices.size());
         sub.firstIndices[0] = 0;
-        sub.aabbMin = glm::vec3(-1.f, -1.f, 0.f);
-        sub.aabbMax = glm::vec3(1.f, 1.f, 0.f);
-        sub.boundingRadius = glm::distance(sub.aabbMin, sub.aabbMax) * 0.5f;
+        sub.aabbMin = float3{-1.f, -1.f, 0.f};
+        sub.aabbMax = float3{1.f, 1.f, 0.f};
+        sub.boundingRadius = Length(sub.aabbMax - sub.aabbMin) * 0.5f;
         builder.subMeshes.push_back(sub);
 
         portalModel = std::make_unique<BurnhopeModel>(lveDevice, builder);
@@ -157,7 +159,7 @@ namespace burnhope
             lveDevice, std::vector<std::string>{"shaders/portal.vert.spv", "shaders/depth_reset.frag.spv"}, config);
     }
 
-    void PortalRenderSystem::drawDepthReset(VkCommandBuffer cmd, VkDescriptorSet globalSet, const glm::mat4 &model, uint32_t ref) {
+    void PortalRenderSystem::drawDepthReset(VkCommandBuffer cmd, VkDescriptorSet globalSet, const float4x4 &model, uint32_t ref) {
         depthResetPipeline->bind(cmd);
         vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, ref);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &globalSet, 0, nullptr);
@@ -169,7 +171,7 @@ namespace burnhope
         portalModel->draw(cmd);
     }
 
-    void PortalRenderSystem::drawMask(VkCommandBuffer cmd, VkDescriptorSet globalSet, const glm::mat4 &model, uint32_t ref)
+    void PortalRenderSystem::drawMask(VkCommandBuffer cmd, VkDescriptorSet globalSet, const float4x4 &model, uint32_t ref)
     {
         lvePipeline->bind(cmd);
         vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, ref);

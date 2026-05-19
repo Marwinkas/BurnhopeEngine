@@ -2,15 +2,15 @@
 #include <vector>
 #include <memory>
 #include <vulkan/vulkan.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <GLFW/glfw3.h>
+#include "DirectXMathCompat.hpp"
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
 #include "../Render/Camera.hpp"
 #ifndef IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
 #define IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
 #endif
 #include "imgui_impl_vulkan.h"
-#include <imgui_impl_glfw.h>
+#include <imgui_impl_sdl3.h>
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "ImGuizmo.h"
@@ -40,7 +40,7 @@ namespace burnhope {
 
     public:
         UIContext& GetContext() { return m_Context; }
-        UIManager(BurnhopeWindow& window, BurnhopeDevice& device, VkFormat swapChainFormat, entt::registry* registry, const std::string& projectPath) {
+        UIManager(BurnhopeWindow& window, BurnhopeDevice& device, VkFormat swapChainFormat, flecs::world* registry, const std::string& projectPath) {
             m_Device = &device;
             m_Context.registry = registry;
             m_Context.device = &device;
@@ -71,14 +71,14 @@ namespace burnhope {
             m_Context.redoStack.clear();
 
             ImGui_ImplVulkan_Shutdown();
-            ImGui_ImplGlfw_Shutdown();
+            ImGui_ImplSDL3_Shutdown();
             ImGui::DestroyContext();
             vkDestroyDescriptorPool(m_Device->device(), m_ImguiPool, nullptr);
         }
 
         void UpdateUI(BurnhopeWindow& window, Camera& camera, VkCommandBuffer commandBuffer) {
             ImGui_ImplVulkan_NewFrame();
-            ImGui_ImplGlfw_NewFrame();
+            ImGui_ImplSDL3_NewFrame();
             ImGui::NewFrame();
             ImGuizmo::BeginFrame();
             m_Context.currentCommandBuffer = commandBuffer;
@@ -106,12 +106,12 @@ namespace burnhope {
         void ProcessPendingActions() {
             if (m_Context.pendingNewScene) {
                 vkDeviceWaitIdle(m_Device->device());
-                m_Context.registry->clear();
+                m_Context.registry->each<IDComponent>([](flecs::entity e, IDComponent& id) { e.destruct(); });
                 m_Context.undoStack.clear();
                 m_Context.redoStack.clear();
                 m_Context.safeDeleteQueue.clear();
                 m_Context.pendingDeletions.clear();
-                m_Context.selectedEntity = entt::null;
+                m_Context.selectedEntity = flecs::entity();
                 m_Context.needsRebuild = true;
                 m_Context.pendingNewScene = false;
                 m_Context.currentScenePath = "";
@@ -120,10 +120,10 @@ namespace burnhope {
                 LoadScene(m_Context.pendingSceneLoadPath);
                 m_Context.pendingSceneLoadPath = "";
             }
-            if (!m_Context.pendingModelLoadPath.empty() && m_Context.pendingModelEntity != entt::null) {
+            if (!m_Context.pendingModelLoadPath.empty() && m_Context.pendingModelEntity.is_alive()) {
                 vkDeviceWaitIdle(m_Device->device());
-                if (m_Context.registry->valid(m_Context.pendingModelEntity) && m_Context.registry->all_of<MeshComponent>(m_Context.pendingModelEntity)) {
-                    auto& mc = m_Context.registry->get<MeshComponent>(m_Context.pendingModelEntity);
+                if (m_Context.pendingModelEntity.has<MeshComponent>()) {
+                    auto& mc = m_Context.pendingModelEntity.get_mut<MeshComponent>();
                     m_Context.safeDeleteQueue.push_back(mc.model);
                     if (m_Context.pendingModelLoadPath == "NONE") {
                         mc.modelPath = "";
@@ -137,12 +137,12 @@ namespace burnhope {
                     m_Context.needsRebuild = true;
                 }
                 m_Context.pendingModelLoadPath = "";
-                m_Context.pendingModelEntity = entt::null;
+                m_Context.pendingModelEntity = flecs::entity();
             }
-            if (!m_Context.pendingMatLoadPath.empty() && m_Context.pendingMatEntity != entt::null) {
+            if (!m_Context.pendingMatLoadPath.empty() && m_Context.pendingMatEntity.is_alive()) {
                 vkDeviceWaitIdle(m_Device->device());
-                if (m_Context.registry->valid(m_Context.pendingMatEntity) && m_Context.registry->all_of<MeshComponent>(m_Context.pendingMatEntity)) {
-                    auto& mc = m_Context.registry->get<MeshComponent>(m_Context.pendingMatEntity);
+                if (m_Context.pendingMatEntity.has<MeshComponent>()) {
+                    auto& mc = m_Context.pendingMatEntity.get_mut<MeshComponent>();
 
                     if (mc.model && mc.materials.size() < mc.model->getSubMeshes().size()) {
                         mc.materials.resize(mc.model->getSubMeshes().size(), nullptr);
@@ -164,7 +164,7 @@ namespace burnhope {
                     m_Context.needsRebuild = true;
                 }
                 m_Context.pendingMatLoadPath = "";
-                m_Context.pendingMatEntity = entt::null;
+                m_Context.pendingMatEntity = flecs::entity();
             }
         }
 
@@ -177,10 +177,10 @@ namespace burnhope {
                 if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) Redo();
                 
                 // Duplicate
-                if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && m_Context.selectedEntity != entt::null) {
+                if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && m_Context.selectedEntity.is_alive()) {
                     m_Context.SaveState();
-                    entt::entity parent = entt::null;
-                    entt::entity newEnt = CloneHierarchy(m_Context.selectedEntity, parent);
+                    flecs::entity parent;
+                    flecs::entity newEnt = CloneHierarchy(m_Context.selectedEntity, parent);
                     m_Context.selectedEntity = newEnt;
                 }
                 
@@ -209,63 +209,64 @@ namespace burnhope {
                 if (ImGui::IsKeyPressed(ImGuiKey_R)) currentGizmoOperation = ImGuizmo::SCALE;
             }
 
-            glm::mat4 view = camera.GetViewMatrix();
-            glm::mat4 proj = camera.GetProjectionMatrix(45.0f, 0.1f, 1000.0f);
-            glm::mat4 gizmoProj = proj;
-            gizmoProj[1][1] *= -1.0f; // Фикс для Vulkan
+            float4x4 view = camera.GetViewMatrix();
+            float4x4 proj = camera.GetProjectionMatrix(45.0f, 0.1f, 1000.0f);
+            float4x4 gizmoProj = proj;
+            gizmoProj._22 *= -1.0f; // Фикс для Vulkan
 
             // Выбор объекта мышкой (Raycasting)
             if (ImGui::IsMouseClicked(0) && !ImGui::IsAnyItemHovered() && !ImGuizmo::IsOver()) {
-                glm::vec3 rayOrigin = camera.Position;
-                glm::vec3 rayDir = GetMouseRay(window, camera);
+                float3 rayOrigin = camera.Position;
+                float3 rayDir = GetMouseRay(window, camera);
                 float closestT = 1000.0f;
-                entt::entity hitIndex = entt::null;
+                flecs::entity hitIndex;
 
-                auto pickView = m_Context.registry->view<TransformComponent>();
-                pickView.each([&](entt::entity entity, TransformComponent& tComp) {
+                m_Context.registry->each([&](flecs::entity entity, TransformComponent& tComp) {
                     float t;
                     if (TestRayOBB(rayOrigin, rayDir, tComp.transform.matrix, t)) {
                         if (t < closestT) { closestT = t; hitIndex = entity; }
                     }
                 });
 
-                if (hitIndex != entt::null) {
+                if (hitIndex.is_alive()) {
                     m_Context.selectedEntity = hitIndex;
                 }
             }
 
             // Отрисовка Гизмо и манипуляция
-            if (m_Context.selectedEntity != entt::null && m_Context.registry->valid(m_Context.selectedEntity) && m_Context.registry->all_of<TransformComponent>(m_Context.selectedEntity)) {
-                auto& tComp = m_Context.registry->get<TransformComponent>(m_Context.selectedEntity);
+            if (m_Context.selectedEntity.is_alive() && m_Context.selectedEntity.has<TransformComponent>()) {
+                auto& tComp = m_Context.selectedEntity.get_mut<TransformComponent>();
                 tComp.transform.updateMatrixIfNeeded();
 
                 // 1. Вычисляем мировую матрицу РОДИТЕЛЯ
-                glm::mat4 parentWorldMatrix = glm::mat4(1.0f);
-                if (m_Context.registry->all_of<HierarchyComponent>(m_Context.selectedEntity)) {
-                    uint64_t pid = m_Context.registry->get<HierarchyComponent>(m_Context.selectedEntity).parentID;
-                    entt::entity pEnt = m_Context.FindEntityByID(pid);
-                    if (pEnt != entt::null) parentWorldMatrix = GetGlobalTransform(pEnt);
+                float4x4 parentWorldMatrix = MatrixIdentity();
+                if (m_Context.selectedEntity.has<HierarchyComponent>()) {
+                    uint64_t pid = m_Context.selectedEntity.get<HierarchyComponent>().parentID;
+                    flecs::entity pEnt = m_Context.FindEntityByID(pid);
+                    if (pEnt.is_alive()) parentWorldMatrix = GetGlobalTransform(pEnt);
                 }
 
                 // 2. Итоговая мировая матрица этого объекта
-                glm::mat4 worldMatrix = parentWorldMatrix * tComp.transform.matrix;
+                float4x4 worldMatrix = MatrixMultiply(parentWorldMatrix, tComp.transform.matrix);
 
                 if (ImGuizmo::IsUsing() && !m_WasUsingGizmo) m_Context.SaveState();
                 m_WasUsingGizmo = ImGuizmo::IsUsing();
 
                 // 3. Отдаем Гизмо МИРОВУЮ матрицу для отрисовки
-                ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(gizmoProj), currentGizmoOperation, currentGizmoMode, glm::value_ptr(worldMatrix));
+                ImGuizmo::Manipulate(&view._11, &gizmoProj._11, currentGizmoOperation, currentGizmoMode, &worldMatrix._11);
 
                 // 4. Если мы потянули за стрелочку
                 if (ImGuizmo::IsUsing()) {
                     // Вычитаем из новой мировой матрицы влияние родителя, чтобы получить новую ЛОКАЛЬНУЮ
-                    glm::mat4 newLocalMatrix = glm::inverse(parentWorldMatrix) * worldMatrix;
+                    float4x4 newLocalMatrix = MatrixMultiply(worldMatrix, MatrixInverse(parentWorldMatrix));
 
+                    // Получаем обратную матрицу для разложения на компоненты
+                    float4x4 invLocal = MatrixInverse(newLocalMatrix);
                     ImGuizmo::DecomposeMatrixToComponents(
-                        glm::value_ptr(newLocalMatrix),
-                        glm::value_ptr(tComp.transform.position),
-                        glm::value_ptr(tComp.transform.rotation),
-                        glm::value_ptr(tComp.transform.scale)
+                        &newLocalMatrix._11,
+                        &tComp.transform.position.x,
+                        &tComp.transform.rotation.x,
+                        &tComp.transform.scale.x
                     );
                     tComp.transform.updatematrix = true;
                     m_Context.needsRTRebuild = true;
@@ -275,72 +276,77 @@ namespace burnhope {
 
         // --- УТИЛИТЫ ДЛЯ RAYCAST И МАТЕМАТИКИ ---
 
-        glm::vec3 GetMouseRay(BurnhopeWindow& window, Camera& camera) {
-            double mouseX, mouseY;
-            glfwGetCursorPos(window.getGLFWwindow(), &mouseX, &mouseY);
+        float3 GetMouseRay(BurnhopeWindow& window, Camera& camera) {
+            float mouseX, mouseY;
+            SDL_GetMouseState(&mouseX, &mouseY);
             auto extent = window.getExtent();
-            float x = (2.0f * (float)mouseX) / extent.width - 1.0f;
-            float y = 1.0f - (2.0f * (float)mouseY) / extent.height;
-            glm::mat4 invProj = glm::inverse(camera.GetProjectionMatrix(45.0f, 0.1f, 100.0f));
-            glm::mat4 invView = glm::inverse(glm::lookAt(camera.Position, camera.Position + camera.Orientation, camera.Up));
-            glm::vec4 rayClip = glm::vec4(x, y, -1.0f, 1.0f);
-            glm::vec4 rayEye = invProj * rayClip;
-            rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);
-            return glm::normalize(glm::vec3(invView * rayEye));
+            float x = (2.0f * mouseX) / extent.width - 1.0f;
+            float y = 1.0f - (2.0f * mouseY) / extent.height;
+            float4x4 invProj = MatrixInverse(camera.GetProjectionMatrix(45.0f, 0.1f, 100.0f));
+            float4x4 invView = MatrixInverse(MatrixLookAtLH(camera.Position, camera.Position + camera.Orientation, camera.Up));
+            float4 rayClip{x, y, -1.0f, 1.0f};
+            float4 rayEye = TransformFloat4(rayClip, invProj);
+            rayEye = float4{rayEye.x, rayEye.y, -1.0f, 0.0f};
+            return Normalize(float3{rayEye.x, rayEye.y, rayEye.z});
         }
 
-        bool TestRayOBB(glm::vec3 rayOrigin, glm::vec3 rayDir, glm::mat4 modelMatrix, float& tOutput) {
-            glm::mat4 invModel = glm::inverse(modelMatrix);
-            glm::vec3 localOrigin = glm::vec3(invModel * glm::vec4(rayOrigin, 1.0f));
-            glm::vec3 localDir = glm::normalize(glm::vec3(invModel * glm::vec4(rayDir, 0.0f)));
+        bool TestRayOBB(float3 rayOrigin, float3 rayDir, float4x4 modelMatrix, float& tOutput) {
+            float4x4 invModel = MatrixInverse(modelMatrix);
+            float4 localOrigin4 = TransformFloat4(float4{rayOrigin.x, rayOrigin.y, rayOrigin.z, 1.0f}, invModel);
+            float3 localOrigin = float3{localOrigin4.x, localOrigin4.y, localOrigin4.z};
+            float4 localDir4 = TransformFloat4(float4{rayDir.x, rayDir.y, rayDir.z, 0.0f}, invModel);
+            float3 localDir = Normalize(float3{localDir4.x, localDir4.y, localDir4.z});
             float tMin = -100000.0f, tMax = 100000.0f;
-            glm::vec3 boxMin = glm::vec3(-1.0f), boxMax = glm::vec3(1.0f);
+            float3 boxMin{-1.0f, -1.0f, -1.0f}, boxMax{1.0f, 1.0f, 1.0f};
             
             for (int i = 0; i < 3; i++) {
-                float invD = 1.0f / localDir[i];
-                float t1 = (boxMin[i] - localOrigin[i]) * invD;
-                float t2 = (boxMax[i] - localOrigin[i]) * invD;
+                float invD = 1.0f / (&localDir.x)[i];
+                float t1 = ((&boxMin.x)[i] - (&localOrigin.x)[i]) * invD;
+                float t2 = ((&boxMax.x)[i] - (&localOrigin.x)[i]) * invD;
                 if (invD < 0.0f) std::swap(t1, t2);
-                tMin = t1 > tMin ? t1 : tMin;
-                tMax = t2 < tMax ? t2 : tMax;
+                tMin = std::max(tMin, t1);
+                tMax = std::min(tMax, t2);
                 if (tMin > tMax) return false;
             }
             tOutput = tMin;
             return tMax > 0;
         }
 
-        glm::mat4 GetGlobalTransform(entt::entity entity) {
-            if (!m_Context.registry->valid(entity) || !m_Context.registry->all_of<TransformComponent>(entity)) return glm::mat4(1.0f);
-            auto& tComp = m_Context.registry->get<TransformComponent>(entity);
+        float4x4 GetGlobalTransform(flecs::entity entity) {
+            if (!entity.is_alive() || !entity.has<TransformComponent>()) return MatrixIdentity();
+            auto& tComp = entity.get_mut<TransformComponent>();
             tComp.transform.updateMatrixIfNeeded();
-            glm::mat4 globalMat = tComp.transform.matrix;
+            float4x4 globalMat = tComp.transform.matrix;
 
-            if (m_Context.registry->all_of<HierarchyComponent>(entity)) {
-                uint64_t parentID = m_Context.registry->get<HierarchyComponent>(entity).parentID;
-                entt::entity parentEnt = m_Context.FindEntityByID(parentID);
-                if (parentEnt != entt::null) globalMat = GetGlobalTransform(parentEnt) * globalMat;
+            if (entity.has<HierarchyComponent>()) {
+                uint64_t parentID = entity.get<HierarchyComponent>().parentID;
+                flecs::entity parentEntity = m_Context.FindEntityByID(parentID);
+                if (parentEntity.is_alive()) {
+                    globalMat = MatrixMultiply(GetGlobalTransform(parentEntity), globalMat);
+                }
             }
             return globalMat;
         }
 
-        entt::entity CloneHierarchy(entt::entity source, entt::entity newParent) {
-            entt::entity copy = m_Context.registry->create();
-            m_Context.registry->emplace<IDComponent>(copy); // Новый уникальный ID
+        flecs::entity CloneHierarchy(flecs::entity source, flecs::entity newParent) {
+            flecs::entity copy = m_Context.registry->entity();
+            copy.set<IDComponent>({}); // Новый уникальный ID
 
-            if (m_Context.registry->all_of<TagComponent>(source)) {
-                auto tag = m_Context.registry->get<TagComponent>(source);
+            if (source.has<TagComponent>()) {
+                auto tag = source.get<TagComponent>();
                 tag.name += " (Copy)";
-                m_Context.registry->emplace<TagComponent>(copy, tag);
+                copy.set<TagComponent>(tag);
             }
-            if (m_Context.registry->all_of<TransformComponent>(source)) m_Context.registry->emplace<TransformComponent>(copy, m_Context.registry->get<TransformComponent>(source));
-            if (m_Context.registry->all_of<MeshComponent>(source)) m_Context.registry->emplace<MeshComponent>(copy, m_Context.registry->get<MeshComponent>(source));
-            if (m_Context.registry->all_of<LightComponent>(source)) m_Context.registry->emplace<LightComponent>(copy, m_Context.registry->get<LightComponent>(source));
-            if (m_Context.registry->all_of<ReflectionProbeComponent>(source)) m_Context.registry->emplace<ReflectionProbeComponent>(copy, m_Context.registry->get<ReflectionProbeComponent>(source));
+            if (source.has<TransformComponent>()) copy.set<TransformComponent>(source.get<TransformComponent>());
+            if (source.has<MeshComponent>()) copy.set<MeshComponent>(source.get<MeshComponent>());
+            if (source.has<LightComponent>()) copy.set<LightComponent>(source.get<LightComponent>());
+            if (source.has<ReflectionProbeComponent>()) copy.set<ReflectionProbeComponent>(source.get<ReflectionProbeComponent>());
 
-            auto& hc = m_Context.registry->emplace<HierarchyComponent>(copy);
-            if (newParent != entt::null && m_Context.registry->all_of<IDComponent>(newParent)) {
-                hc.parentID = m_Context.registry->get<IDComponent>(newParent).ID;
-                m_Context.registry->get<HierarchyComponent>(newParent).childrenIDs.push_back(m_Context.registry->get<IDComponent>(copy).ID);
+            copy.set<HierarchyComponent>({});
+            auto& hc = copy.get_mut<HierarchyComponent>();
+            if (newParent.is_alive() && newParent.has<IDComponent>()) {
+                hc.parentID = newParent.get<IDComponent>().ID;
+                newParent.get_mut<HierarchyComponent>().childrenIDs.push_back(copy.get<IDComponent>().ID);
             }
             return copy;
         }
@@ -348,7 +354,7 @@ namespace burnhope {
         void Undo() {
             if (m_Context.undoStack.empty()) return;
             vkDeviceWaitIdle(m_Device->device());
-            auto snapReg = std::make_shared<entt::registry>();
+            auto snapReg = std::make_shared<flecs::world>();
             m_Context.CopyRegistry(*m_Context.registry, *snapReg);
             m_Context.redoStack.push_back({snapReg, m_Context.selectedEntity});
             
@@ -361,7 +367,7 @@ namespace burnhope {
         void Redo() {
             if (m_Context.redoStack.empty()) return;
             vkDeviceWaitIdle(m_Device->device());
-            auto snapReg = std::make_shared<entt::registry>();
+            auto snapReg = std::make_shared<flecs::world>();
             m_Context.CopyRegistry(*m_Context.registry, *snapReg);
             m_Context.undoStack.push_back({snapReg, m_Context.selectedEntity});
             
@@ -484,7 +490,7 @@ namespace burnhope {
             pool_info.pPoolSizes = pool_sizes;
             vkCreateDescriptorPool(device.device(), &pool_info, nullptr, &m_ImguiPool);
 
-            ImGui_ImplGlfw_InitForVulkan(window.getGLFWwindow(), true);
+            ImGui_ImplSDL3_InitForVulkan(window.getSDLWindow());
             ImGui_ImplVulkan_InitInfo init_info = {};
             init_info.Instance = device.getInstance();
             init_info.PhysicalDevice = device.getPhysicalDevice();
@@ -608,33 +614,32 @@ namespace burnhope {
             nlohmann::json sceneJson;
             sceneJson["Entities"] = nlohmann::json::array();
 
-            auto view = m_Context.registry->view<IDComponent>();
-            for (auto entity : view) {
+            m_Context.registry->each([&](flecs::entity entity, IDComponent& idc) {
                 nlohmann::json entityJson;
                 
-                if (m_Context.registry->all_of<IDComponent>(entity)) {
-                    entityJson["IDComponent"]["ID"] = m_Context.registry->get<IDComponent>(entity).ID;
+                if (entity.has<IDComponent>()) {
+                    entityJson["IDComponent"]["ID"] = entity.get<IDComponent>().ID;
                 }
                 
-                if (m_Context.registry->all_of<TagComponent>(entity)) {
-                    entityJson["TagComponent"]["Name"] = m_Context.registry->get<TagComponent>(entity).name;
+                if (entity.has<TagComponent>()) {
+                    entityJson["TagComponent"]["Name"] = entity.get<TagComponent>().name;
                 }
                 
-                if (m_Context.registry->all_of<TransformComponent>(entity)) {
-                    auto& tc = m_Context.registry->get<TransformComponent>(entity);
+                if (entity.has<TransformComponent>()) {
+                    auto& tc = entity.get<TransformComponent>();
                     entityJson["TransformComponent"]["Position"] = {tc.transform.position.x, tc.transform.position.y, tc.transform.position.z};
                     entityJson["TransformComponent"]["Rotation"] = {tc.transform.rotation.x, tc.transform.rotation.y, tc.transform.rotation.z};
                     entityJson["TransformComponent"]["Scale"] = {tc.transform.scale.x, tc.transform.scale.y, tc.transform.scale.z};
                 }
 
-                if (m_Context.registry->all_of<HierarchyComponent>(entity)) {
-                    auto& hc = m_Context.registry->get<HierarchyComponent>(entity);
+                if (entity.has<HierarchyComponent>()) {
+                    auto& hc = entity.get<HierarchyComponent>();
                     entityJson["HierarchyComponent"]["ParentID"] = hc.parentID;
                     entityJson["HierarchyComponent"]["ChildrenIDs"] = hc.childrenIDs;
                 }
 
-                if (m_Context.registry->all_of<MeshComponent>(entity)) {
-                    auto& mc = m_Context.registry->get<MeshComponent>(entity);
+                if (entity.has<MeshComponent>()) {
+                    auto& mc = entity.get<MeshComponent>();
                     entityJson["MeshComponent"]["ModelPath"] = mc.modelPath;
                     entityJson["MeshComponent"]["MaterialPaths"] = mc.materialPaths;
                     entityJson["MeshComponent"]["IsStatic"] = mc.isStatic;
@@ -642,8 +647,8 @@ namespace burnhope {
                     entityJson["MeshComponent"]["CastShadow"] = mc.castShadow;
                 }
 
-                if (m_Context.registry->all_of<LightComponent>(entity)) {
-                    auto& lc = m_Context.registry->get<LightComponent>(entity);
+                if (entity.has<LightComponent>()) {
+                    auto& lc = entity.get<LightComponent>();
                     entityJson["LightComponent"]["NeedsShadowUpdate"] = lc.needsShadowUpdate;
                     entityJson["LightComponent"]["Enable"] = lc.light.enable;
                     entityJson["LightComponent"]["Type"] = static_cast<int>(lc.light.type);
@@ -654,21 +659,21 @@ namespace burnhope {
                     entityJson["LightComponent"]["Mobility"] = static_cast<int>(lc.light.mobility);
                 }
 
-                if (m_Context.registry->all_of<ReflectionProbeComponent>(entity)) {
-                    auto& rpc = m_Context.registry->get<ReflectionProbeComponent>(entity);
+                if (entity.has<ReflectionProbeComponent>()) {
+                    auto& rpc = entity.get<ReflectionProbeComponent>();
                     entityJson["ReflectionProbeComponent"]["Radius"] = rpc.radius;
                     entityJson["ReflectionProbeComponent"]["Resolution"] = rpc.resolution;
                 }
 
-                if (m_Context.registry->all_of<DecalComponent>(entity)) {
-                    auto& dc = m_Context.registry->get<DecalComponent>(entity);
+                if (entity.has<DecalComponent>()) {
+                    auto& dc = entity.get<DecalComponent>();
                     entityJson["DecalComponent"]["AlbedoPath"] = dc.albedoPath;
                     entityJson["DecalComponent"]["NormalPath"] = dc.normalPath;
                     entityJson["DecalComponent"]["Opacity"] = dc.opacity;
                 }
 
                 sceneJson["Entities"].push_back(entityJson);
-            }
+            });
 
             std::ofstream file(filepath);
             file << sceneJson.dump(4);
@@ -684,47 +689,48 @@ namespace burnhope {
             // Ждем, пока видеокарта закончит кадр, чтобы безопасно выгрузить старые модели
             vkDeviceWaitIdle(m_Device->device());
 
-            m_Context.registry->clear();
+            m_Context.registry->each<IDComponent>([](flecs::entity e, IDComponent& id) { e.destruct(); });
             m_Context.undoStack.clear();
             m_Context.redoStack.clear();
             m_Context.safeDeleteQueue.clear();
             m_Context.pendingDeletions.clear();
-            m_Context.selectedEntity = entt::null;
+            m_Context.selectedEntity = flecs::entity();
             m_Context.needsRebuild = true;
             m_Context.currentScenePath = filepath;
 
             for (const auto& entityJson : sceneJson["Entities"]) {
-                entt::entity entity = m_Context.registry->create();
+                flecs::entity entity = m_Context.registry->entity();
 
                 if (entityJson.contains("IDComponent")) {
-                    m_Context.registry->emplace<IDComponent>(entity, entityJson["IDComponent"]["ID"].get<uint64_t>());
+                    entity.set<IDComponent>({entityJson["IDComponent"]["ID"].get<uint64_t>()});
                 } else {
-                    m_Context.registry->emplace<IDComponent>(entity);
+                    entity.set<IDComponent>({});
                 }
 
                 if (entityJson.contains("TagComponent")) {
-                    auto& tc = m_Context.registry->emplace<TagComponent>(entity);
-                    tc.name = entityJson["TagComponent"]["Name"];
+                    entity.set<TagComponent>({entityJson["TagComponent"]["Name"]});
                 }
 
                 if (entityJson.contains("TransformComponent")) {
-                    auto& tc = m_Context.registry->emplace<TransformComponent>(entity);
-                    tc.transform.position = glm::vec3(entityJson["TransformComponent"]["Position"][0], entityJson["TransformComponent"]["Position"][1], entityJson["TransformComponent"]["Position"][2]);
-                    tc.transform.rotation = glm::vec3(entityJson["TransformComponent"]["Rotation"][0], entityJson["TransformComponent"]["Rotation"][1], entityJson["TransformComponent"]["Rotation"][2]);
-                    tc.transform.scale = glm::vec3(entityJson["TransformComponent"]["Scale"][0], entityJson["TransformComponent"]["Scale"][1], entityJson["TransformComponent"]["Scale"][2]);
+                    TransformComponent tc;
+                    tc.transform.position = float3{entityJson["TransformComponent"]["Position"][0], entityJson["TransformComponent"]["Position"][1], entityJson["TransformComponent"]["Position"][2]};
+                    tc.transform.rotation = float3{entityJson["TransformComponent"]["Rotation"][0], entityJson["TransformComponent"]["Rotation"][1], entityJson["TransformComponent"]["Rotation"][2]};
+                    tc.transform.scale = float3{entityJson["TransformComponent"]["Scale"][0], entityJson["TransformComponent"]["Scale"][1], entityJson["TransformComponent"]["Scale"][2]};
                     tc.transform.updatematrix = true;
+                    entity.set<TransformComponent>(tc);
                 }
 
                 if (entityJson.contains("HierarchyComponent")) {
-                    auto& hc = m_Context.registry->emplace<HierarchyComponent>(entity);
+                    HierarchyComponent hc;
                     hc.parentID = entityJson["HierarchyComponent"]["ParentID"];
                     for (const auto& childId : entityJson["HierarchyComponent"]["ChildrenIDs"]) {
                         hc.childrenIDs.push_back(childId);
                     }
+                    entity.set<HierarchyComponent>(hc);
                 }
 
                 if (entityJson.contains("MeshComponent")) {
-                    auto& mc = m_Context.registry->emplace<MeshComponent>(entity);
+                    MeshComponent mc;
                     mc.modelPath = entityJson["MeshComponent"].value("ModelPath", "");
                     if (entityJson["MeshComponent"].contains("MaterialPaths")) {
                         for (const auto& path : entityJson["MeshComponent"]["MaterialPaths"]) {
@@ -756,40 +762,44 @@ namespace burnhope {
                             std::cerr << "[ERROR] Failed to load model: " << e.what() << "\n";
                         }
                     }
+                    entity.set<MeshComponent>(mc);
                 }
 
                 if (entityJson.contains("LightComponent")) {
-                    auto& lc = m_Context.registry->emplace<LightComponent>(entity);
+                    LightComponent lc;
                     lc.needsShadowUpdate = true; // Принудительное обновление теней при загрузке
                     
                     if (entityJson["LightComponent"].contains("Enable")) lc.light.enable = entityJson["LightComponent"]["Enable"].get<bool>();
                     if (entityJson["LightComponent"].contains("Type")) lc.light.type = static_cast<LightType>(entityJson["LightComponent"]["Type"].get<int>());
                     if (entityJson["LightComponent"].contains("Color")) {
-                        lc.light.color = glm::vec3(
-                            entityJson["LightComponent"]["Color"][0].get<float>(), 
-                            entityJson["LightComponent"]["Color"][1].get<float>(), 
-                            entityJson["LightComponent"]["Color"][2].get<float>());
+                        lc.light.color = float3{
+                            entityJson["LightComponent"]["Color"][0].get<float>(),
+                            entityJson["LightComponent"]["Color"][1].get<float>(),
+                            entityJson["LightComponent"]["Color"][2].get<float>()};
                     }
                     if (entityJson["LightComponent"].contains("Intensity")) lc.light.intensity = entityJson["LightComponent"]["Intensity"].get<float>();
                     if (entityJson["LightComponent"].contains("Radius")) lc.light.radius = entityJson["LightComponent"]["Radius"].get<float>();
                     if (entityJson["LightComponent"].contains("CastShadows")) lc.light.castShadows = entityJson["LightComponent"]["CastShadows"].get<bool>();
                     if (entityJson["LightComponent"].contains("Mobility")) lc.light.mobility = static_cast<LightMobility>(entityJson["LightComponent"]["Mobility"].get<int>());
+                    entity.set<LightComponent>(lc);
                 }
 
                 if (entityJson.contains("ReflectionProbeComponent")) {
-                    auto& rpc = m_Context.registry->emplace<ReflectionProbeComponent>(entity);
+                    ReflectionProbeComponent rpc;
                     rpc.radius = entityJson["ReflectionProbeComponent"].value("Radius", 10.0f);
                     rpc.resolution = entityJson["ReflectionProbeComponent"].value("Resolution", 256);
                     rpc.updateNeeded = true;
+                    entity.set<ReflectionProbeComponent>(rpc);
                 }
                 
                 if (entityJson.contains("DecalComponent")) {
-                    auto& dc = m_Context.registry->emplace<DecalComponent>(entity);
+                    DecalComponent dc;
                     dc.albedoPath = entityJson["DecalComponent"].value("AlbedoPath", "");
                     dc.normalPath = entityJson["DecalComponent"].value("NormalPath", "");
                     dc.opacity = entityJson["DecalComponent"].value("Opacity", 1.0f);
                     if (!dc.albedoPath.empty() && m_Device) dc.albedoTex = BurnhopeTexture::createTextureFromFile(*m_Device, dc.albedoPath);
                     if (!dc.normalPath.empty() && m_Device) dc.normalTex = BurnhopeTexture::createDataTextureFromFile(*m_Device, dc.normalPath);
+                    entity.set<DecalComponent>(dc);
                 }
             }
         }

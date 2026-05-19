@@ -1,11 +1,9 @@
 #include "CullingSystem.hpp"
 #include "ComputeShader.hpp"
+#include "../Utils/DirectXMathCompat.hpp"
 #include <stdexcept>
 #include <fstream>
 #include <array>
-#include <glm/glm.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/matrix_operation.hpp>
 namespace burnhope
 {
     CullingSystem::CullingSystem(BurnhopeDevice &device, uint32_t maxObjects)
@@ -82,9 +80,9 @@ namespace burnhope
             sizeof(CullPushConstants));
     }
     void CullingSystem::dispatchCulling(VkCommandBuffer cmd,
-                                        const glm::mat4 &viewProj,
-                                        const glm::vec3 &camPos,
-                                        const std::array<glm::vec4, 6> &planes,
+                                        const float4x4 &viewProj,
+                                        const float3 &camPos,
+                                        const std::array<float4, 6> &planes,
                                         uint32_t objectCount)
     {
         VkBufferMemoryBarrier barrier{};
@@ -101,11 +99,11 @@ namespace burnhope
         cullShader->bindDescriptorSets(cmd, {cullSet});
         CullPushConstants push{};
         push.viewProj = viewProj;
+        for (int i = 0; i < 6; i++)
+            push.frustumPlanes[i] = planes[i];
         push.camPos = camPos;
         push.objectCount = objectCount;
         push.zNear = 0.01f;
-        for (int i = 0; i < 6; i++)
-            push.frustumPlanes[i] = planes[i];
         cullShader->pushConstants(cmd, &push, sizeof(push));
         uint32_t groups = (objectCount + 63) / 64;
         cullShader->dispatch(cmd, groups, 1, 1);
@@ -116,23 +114,24 @@ namespace burnhope
                              VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
                              0, 0, nullptr, 1, &barrier, 0, nullptr);
     }
-    std::array<glm::vec4, 6> CullingSystem::extractFrustumPlanes(const glm::mat4 &vp)
+    std::array<float4, 6> CullingSystem::extractFrustumPlanes(const float4x4 &vp)
     {
-        std::array<glm::vec4, 6> planes;
-        glm::vec4 r0 = {vp[0][0], vp[1][0], vp[2][0], vp[3][0]};
-        glm::vec4 r1 = {vp[0][1], vp[1][1], vp[2][1], vp[3][1]};
-        glm::vec4 r2 = {vp[0][2], vp[1][2], vp[2][2], vp[3][2]};
-        glm::vec4 r3 = {vp[0][3], vp[1][3], vp[2][3], vp[3][3]};
+        std::array<float4, 6> planes;
+        float4 r0{vp._11, vp._21, vp._31, vp._41};
+        float4 r1{vp._12, vp._22, vp._32, vp._42};
+        float4 r2{vp._13, vp._23, vp._33, vp._43};
+        float4 r3{vp._14, vp._24, vp._34, vp._44};
         planes[0] = r3 + r0;
         planes[1] = r3 - r0;
         planes[2] = r3 + r1;
         planes[3] = r3 - r1;
-        planes[4] = r2;
+        planes[4] = r3 + r2;
         planes[5] = r3 - r2;
         for (int i = 0; i < 6; i++)
         {
-            float length = glm::length(glm::vec3(planes[i]));
-            planes[i] /= length;
+            float3 temp{planes[i].x, planes[i].y, planes[i].z};
+            float len = DirectX::XMVectorGetX(DirectX::XMVector3Length(DirectX::XMLoadFloat3(&temp)));
+            planes[i] = planes[i] / len;
         }
         return planes;
     }

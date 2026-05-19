@@ -336,10 +336,10 @@ namespace burnhope
         VkCommandBuffer cmd,
         VkDescriptorSet globalSet,
         VkDescriptorSet gBufferSet,
-        const glm::mat4 &invViewProj,
-        const glm::vec3 &cameraPos,
-        const glm::vec3 &sceneMin,
-        const glm::vec3 &sceneMax,
+        const float4x4 &invViewProj,
+        const float3 &cameraPos,
+        const float3 &sceneMin,
+        const float3 &sceneMax,
         VkExtent2D extent,
         VkDescriptorSet rtSet,
         VkDescriptorSet storageSet,
@@ -353,18 +353,18 @@ namespace burnhope
         for (int c = RCConfig::CASCADE_COUNT - 1; c >= 0; c--)
         {
             RCPushConstants push{};
-            push.probeGridMin = glm::vec4(sceneMin, 0.0f);
-            push.probeGridMax = glm::vec4(sceneMax, 0.0f);
-            push.probeCount   = glm::ivec4(
-                cascadeProbeX(c), cascadeProbeY(c), cascadeProbeZ(c),
-                c  // .w = индекс каскада (используется в шейдере для неба и startOffset)
-            );
-            push.params = glm::vec4(
+            push.probeGridMin = float4{sceneMin.x, sceneMin.y, sceneMin.z, 0.0f};
+            push.probeGridMax = float4{sceneMax.x, sceneMax.y, sceneMax.z, 0.0f};
+            push.probeCountX = cascadeProbeX(c);
+            push.probeCountY = cascadeProbeY(c);
+            push.probeCountZ = cascadeProbeZ(c);
+            push.cascadeIndex = c;
+            push.params = float4{
                 baseRayLength * std::pow(2.0f, (float)c), // x: длина луча
                 (c == RCConfig::CASCADE_COUNT - 1) ? 1.0f : 0.0f,     // y: 1.0 если это последний каскад
                 (float)extent.height,                                   // z: не используется в probe шейдере
                 (float)octaSize                              // w: размер октаэдра тайла
-            );
+            };
 
             probeUpdateShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
             probeUpdateShader->bindDescriptorSets(cmd, {
@@ -399,18 +399,18 @@ namespace burnhope
         for (int c = RCConfig::CASCADE_COUNT - 2; c >= 0; c--)
         {
             RCPushConstants push{};
-            push.probeGridMin = glm::vec4(sceneMin, 0.0f);   // нужны для позиций зондов в шейдере
-            push.probeGridMax = glm::vec4(sceneMax, 0.0f);
-            push.probeCount   = glm::ivec4(
-                cascadeProbeX(c), cascadeProbeY(c), cascadeProbeZ(c),
-                c  // .w = индекс текущего каскада
-            );
-            push.params = glm::vec4(
+            push.probeGridMin = float4{sceneMin.x, sceneMin.y, sceneMin.z, 0.0f};   // нужны для позиций зондов в шейдере
+            push.probeGridMax = float4{sceneMax.x, sceneMax.y, sceneMax.z, 0.0f};
+            push.probeCountX = cascadeProbeX(c);
+            push.probeCountY = cascadeProbeY(c);
+            push.probeCountZ = cascadeProbeZ(c);
+            push.cascadeIndex = c;
+            push.params = float4{
                 baseRayLength * std::pow(2.0f, (float)c), // x: длина луча (для reference, merge не трассирует)
                 (float)extent.width,
                 (float)extent.height,
                 (float)octaSize                             // w: размер октаэдра — КРИТИЧНО для адресации тайлов
-            );
+            };
 
             mergeShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
             mergeShader->bindDescriptorSets(cmd, {
@@ -438,18 +438,18 @@ namespace burnhope
 
         {
             RCPushConstants push{};
-            push.probeGridMin = glm::vec4(sceneMin, 0.0f);
-            push.probeGridMax = glm::vec4(sceneMax, 0.0f);
-            push.probeCount   = glm::ivec4(
-                cascadeProbeX(0), cascadeProbeY(0), cascadeProbeZ(0),
-                0  // каскад 0
-            );
-            push.params = glm::vec4(
+            push.probeGridMin = float4{sceneMin.x, sceneMin.y, sceneMin.z, 0.0f};
+            push.probeGridMax = float4{sceneMax.x, sceneMax.y, sceneMax.z, 0.0f};
+            push.probeCountX = cascadeProbeX(0);
+            push.probeCountY = cascadeProbeY(0);
+            push.probeCountZ = cascadeProbeZ(0);
+            push.cascadeIndex = 0;
+            push.params = float4{
                 baseRayLength,  // x: длина луча каскада 0
                 (float)extent.width,         // y: ширина экрана (для реконструкции позиции)
                 (float)extent.height,        // z: высота экрана
                 (float)octaSize   // w: размер октаэдра
-            );
+            };
 
             sampleShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
             sampleShader->bindDescriptorSets(cmd, {

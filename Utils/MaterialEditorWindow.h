@@ -7,7 +7,7 @@
 #include "../Render/Material.hpp"
 #include "../Render/Texture.hpp"
 #include "../Render/ComputeShader.hpp"
-#include <glm/gtc/matrix_transform.hpp>
+#include "DirectXMathCompat.hpp"
 
 namespace burnhope {
     struct PreviewRenderer {
@@ -27,12 +27,12 @@ namespace burnhope {
         std::shared_ptr<BurnhopeTexture> lastNorm;
 
         struct PushConsts {
-            glm::vec4 albedoColor;
-            glm::vec4 emissiveColor;
-            glm::vec4 matParams;
-            glm::vec4 uvScale_triSc;
-            glm::vec4 camPos_time;
-            glm::ivec4 flags;
+            float4 albedoColor;
+            float4 emissiveColor;
+            float4 matParams;
+            float4 uvScale_triSc;
+            float4 camPos_time;
+            int flags[4];
         };
 
         PreviewRenderer(BurnhopeDevice& dev) : device(dev) {
@@ -67,7 +67,7 @@ namespace burnhope {
 
         ~PreviewRenderer() { if (imguiSet) ImGui_ImplVulkan_RemoveTexture(imguiSet); }
 
-        void UpdateAndDispatch(VkCommandBuffer cmd, std::shared_ptr<Material> mat, int shape, const glm::vec3& cPos, float time) {
+        void UpdateAndDispatch(VkCommandBuffer cmd, std::shared_ptr<Material> mat, int shape, const float3& cPos, float time) {
             auto aaTex = mat->packedAlbedoAlpha ? mat->packedAlbedoAlpha : (mat->albedoMap ? mat->albedoMap : defaultWhite);
             auto ormxTex = mat->packedORMX ? mat->packedORMX : (mat->ormMap ? mat->ormMap : defaultWhite);
             auto normTex = mat->packedNormal ? mat->packedNormal : (mat->normalMap ? mat->normalMap : defaultNormal);
@@ -105,11 +105,14 @@ namespace burnhope {
 
             PushConsts pc{};
             pc.albedoColor = mat->albedoColor;
-            pc.emissiveColor = glm::vec4(mat->emissiveColor, mat->emissiveIntensity);
-            pc.matParams = glm::vec4(mat->metallicStrength, mat->roughnessStrength, mat->normalStrength, 0.0f);
-            pc.uvScale_triSc = glm::vec4(mat->uvScale.x, mat->uvScale.y, mat->triplanarScale, 0.0f);
-            pc.camPos_time = glm::vec4(cPos, time);
-            pc.flags = glm::ivec4(shape, bitmask, 0, 0);
+            pc.emissiveColor = float4{mat->emissiveColor.x, mat->emissiveColor.y, mat->emissiveColor.z, mat->emissiveIntensity};
+            pc.matParams = float4{mat->metallicStrength, mat->roughnessStrength, mat->normalStrength, 0.0f};
+            pc.uvScale_triSc = float4{mat->uvScale.x, mat->uvScale.y, mat->triplanarScale, 0.0f};
+            pc.camPos_time = float4{cPos.x, cPos.y, cPos.z, time};
+            pc.flags[0] = shape;
+            pc.flags[1] = bitmask;
+            pc.flags[2] = 0;
+            pc.flags[3] = 0;
             
             shader->pushConstants(cmd, &pc, sizeof(PushConsts));
             shader->dispatch(cmd, (256 + 15) / 16, (256 + 15) / 16, 1);
@@ -130,7 +133,7 @@ namespace burnhope {
         std::unordered_map<std::string, VkDescriptorSet> thumbnailCache;
         
         std::unique_ptr<PreviewRenderer> previewRenderer;
-        glm::vec2 previewAngles = glm::vec2(0.0f, 0.0f);
+        float2 previewAngles = float2{0.0f, 0.0f};
         float previewRadius = 4.0f;
         int previewShape = 0;
 
@@ -154,11 +157,11 @@ namespace burnhope {
             
             static float time = 0.0f; time += ImGui::GetIO().DeltaTime;
 
-            glm::vec3 camPos = glm::vec3(
+            float3 camPos = float3{
                 previewRadius * cos(previewAngles.y) * sin(previewAngles.x),
                 previewRadius * sin(previewAngles.y),
                 previewRadius * cos(previewAngles.y) * cos(previewAngles.x)
-            );
+            };
 
             previewRenderer->UpdateAndDispatch(context.currentCommandBuffer, currentMat, previewShape, camPos, time);
 
@@ -171,7 +174,7 @@ namespace burnhope {
                 float scroll = ImGui::GetIO().MouseWheel;
                 if (scroll != 0.0f) {
                     previewRadius -= scroll * 0.5f;
-                    previewRadius = glm::clamp(previewRadius, 1.5f, 15.0f);
+                    previewRadius = Clamp(previewRadius, 1.5f, 15.0f);
                 }
             }
 
@@ -179,7 +182,7 @@ namespace burnhope {
                 ImVec2 delta = ImGui::GetIO().MouseDelta;
                 previewAngles.x -= delta.x * 0.01f; // Инвертировано для правильного ощущения вращения объекта
                 previewAngles.y += delta.y * 0.01f;
-                previewAngles.y = glm::clamp(previewAngles.y, -1.5f, 1.5f);
+                previewAngles.y = Clamp(previewAngles.y, -1.5f, 1.5f);
             }
 
             ImGui::Spacing();
@@ -280,9 +283,7 @@ namespace burnhope {
         }
 
         void ReloadMaterialInScene(UIContext& context, const std::string& path, std::shared_ptr<Material> newMat) {
-            auto view = context.registry->view<MeshComponent>();
-            for (auto entity : view) {
-                auto& mc = view.get<MeshComponent>(entity);
+            context.registry->each([&](flecs::entity entity, MeshComponent& mc) {
                 for (size_t i = 0; i < mc.materialPaths.size(); i++) {
                     if (mc.materialPaths[i] == path) {
                         if (mc.materials[i] && mc.materials[i] != newMat) {
@@ -291,7 +292,7 @@ namespace burnhope {
                         mc.materials[i] = newMat;
                     }
                 }
-            }
+            });
         }
 
     public:

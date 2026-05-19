@@ -12,25 +12,47 @@ add_definitions(-DIMGUI_DEFINE_MATH_OPERATORS)
 
 
 
-# --- 2. Поиск системных пакетов ---
+# --- 2. Поиск системных пакетов и внешних библиотек ---
 
 find_package(Vulkan REQUIRED)
 find_package(Threads REQUIRED)
-# либо подключается через add_subdirectory, если он в папке Libraries
-find_package(glfw3 CONFIG REQUIRED)
+find_package(SDL3 CONFIG REQUIRED)
 find_package(meshoptimizer CONFIG REQUIRED)
-# --- Подключение Vulkan Memory Allocator ---
+
 include(FetchContent)
+
 # --- Подключение Vulkan Memory Allocator ---
-include(FetchContent)
 FetchContent_Declare(
     vma
     GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
     GIT_TAG        master  # Или конкретно v3.1.0, чтобы быть уверенным в фиксе
 )
 FetchContent_MakeAvailable(vma)
-# --- 3. Настройка Assimp (максимальная очистка) ---
 
+# --- Подключение DirectXMath ---
+FetchContent_Declare(
+    directxmath
+    GIT_REPOSITORY https://github.com/microsoft/DirectXMath.git
+    GIT_TAG        main
+)
+
+set(DIRECTXMATH_STANDALONE ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(directxmath)
+
+# --- Подключение Flecs ---
+FetchContent_Declare(
+    flecs
+    GIT_REPOSITORY https://github.com/SanderMertens/flecs.git
+    GIT_TAG        master
+)
+FetchContent_MakeAvailable(flecs)
+
+# Фикс sal.h для Linux: просто создаем пустой файл-заглушку
+set(SAL_DUMMY_DIR "${CMAKE_CURRENT_BINARY_DIR}/sal_compat")
+if(NOT EXISTS "${SAL_DUMMY_DIR}/sal.h")
+    file(MAKE_DIRECTORY "${SAL_DUMMY_DIR}")
+    file(WRITE "${SAL_DUMMY_DIR}/sal.h" "// Dummy sal.h for Linux compatibility\n")
+endif()
 # Выключаем всё, что тянет лишние зависимости (DirectX, GUI, тесты)
 set(ASSIMP_BUILD_ASSIMP_VIEW OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
@@ -58,12 +80,12 @@ include_directories(Libraries/assimp/contrib/unzip)
 # Подключаем Assimp
 add_subdirectory(Libraries/assimp)
 
-# --- 4. Заголовки (Include) ---
-# Подключение ispc_texcomp (Предполагается, что она лежит в системе или папке Libraries)
+
+# --- 4. Заголовки (Include) и сборка компрессора ---
+
 # Включаем поддержку языка ISPC
 enable_language(ISPC)
 
-# Твой Ryzen 9950x поддерживает AVX2 и AVX512. 
 # Указываем ISPC собирать оптимизированные инструкции для максимальной скорости сжатия.
 set(CMAKE_ISPC_INSTRUCTION_SETS "avx2")
 
@@ -106,7 +128,11 @@ include_directories(
     Libraries/include/nlohmann
     # Путь к заголовкам Assimp (публичный интерфейс)
     Libraries/assimp/include
+
+    ${directxmath_SOURCE_DIR}/Inc
+    ${SAL_DUMMY_DIR}
 )
+
 
 # --- 5. Сбор исходных файлов ---
 
@@ -125,17 +151,17 @@ file(GLOB_RECURSE IMGUI_SOURCES
     "Libraries/src/imgui/*.cpp"
     "Libraries/src/imguizmo/*.cpp"
     "Libraries/src/imgui/backends/imgui_impl_vulkan.cpp"
-    "Libraries/src/imgui/backends/imgui_impl_glfw.cpp"
+    "Libraries/src/imgui/backends/imgui_impl_sdl3.cpp"
 )
 
-# Объединяем всё в один список
+# Объединяем всё в один список (убран GLM)
 set(ALL_SOURCES 
     ${ENGINE_BASE_SOURCES} 
     ${RENDER_SOURCES} 
     ${UTILS_SOURCES} 
     ${IMGUI_SOURCES}
-    "Libraries/include/glm/detail/glm.cpp"
 )
+
 
 # --- 6. Создание исполняемого файла ---
 
@@ -173,14 +199,17 @@ add_dependencies(${PROJECT_NAME} ShadersTarget)
 # --- 8. Линковка библиотек ---
 
 target_link_libraries(${PROJECT_NAME} 
-    glfw 
+    SDL3::SDL3 
     Vulkan::Vulkan 
     assimp           # Ссылка на цель из add_subdirectory
     meshoptimizer::meshoptimizer
     Threads::Threads
     ispc_texcomp
     VulkanMemoryAllocator
+    DirectXMath # Добавлена цель DirectXMath
+    flecs::flecs_static
 )
+
 
 # --- 9. Копирование ресурсов (модели, текстуры, шейдеры) ---
 

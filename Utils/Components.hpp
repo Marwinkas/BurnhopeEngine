@@ -1,15 +1,16 @@
 #pragma once
-#include <entt/entt.hpp>
+#include <flecs.h>
 #include <memory>
 #include <string>
 #include <vector>
+#include <cstdint>
+#include <memory>
 #include <random>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
 #include "../Render/Light.hpp"
 #include "../Render/Model.hpp"
+#include "DirectXMathCompat.hpp"
 #include "../Render/Material.hpp"
+
 namespace burnhope
 {
     inline uint64_t generateRandomID()
@@ -31,24 +32,30 @@ namespace burnhope
     class Transform
     {
     public:
-        glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f);
-        glm::vec3 rotation = glm::vec3(0.0f, 0.0f, 0.0f);
-        glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
-        glm::mat4 matrix = glm::mat4(1.0f);
+        float3 position = float3{0.0f, 0.0f, 0.0f};
+        float3 rotation = float3{0.0f, 0.0f, 0.0f};
+        float3 scale = float3{1.0f, 1.0f, 1.0f};
+        float4x4 matrix = MatrixIdentity();
         bool updatematrix = true;
 
         void updateMatrixIfNeeded()
         {
             if (updatematrix)
             {
-                glm::mat4 transform = glm::translate(glm::mat4(1.0f), position);
+                // Build transform matrix: T * R * S
+                float4x4 trans = MatrixTranslation(position);
+                float4x4 rotX = MatrixRotationX(Radians(rotation.x));
+                float4x4 rotY = MatrixRotationY(Radians(rotation.y));
+                float4x4 rotZ = MatrixRotationZ(Radians(rotation.z));
+                float4x4 scl = MatrixScaling(scale);
 
-                transform = glm::rotate(transform, glm::radians(rotation.x), {1.0f, 0.0f, 0.0f});
-                transform = glm::rotate(transform, glm::radians(rotation.y), {0.0f, 1.0f, 0.0f});
-                transform = glm::rotate(transform, glm::radians(rotation.z), {0.0f, 0.0f, 1.0f});
+                // Combine rotations: rotX * rotY * rotZ
+                float4x4 rot = MatrixMultiply(rotX, rotY);
+                rot = MatrixMultiply(rot, rotZ);
 
-                transform = glm::scale(transform, scale);
-                matrix = transform;
+                // Combine all: trans * rot * scl
+                float4x4 transform = MatrixMultiply(trans, rot);
+                matrix = MatrixMultiply(transform, scl);
 
                 updatematrix = false;
             }
@@ -106,11 +113,11 @@ namespace burnhope
         int normalTexIdx = -1;
     };
     struct PortalComponent {
-    entt::entity targetPortal = entt::null;
+    flecs::entity targetPortal;
 
-    static glm::mat4 getPortalTransform(const glm::mat4& srcMatrix, const glm::mat4& dstMatrix) {
-        glm::mat4 flipY = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0, 1, 0));
-        return dstMatrix * flipY * glm::inverse(srcMatrix);
+    static float4x4 getPortalTransform(const float4x4& srcMatrix, const float4x4& dstMatrix) {
+        float4x4 flipY = MatrixRotationY(3.14159265f); // 180 degrees
+        return MatrixMultiply(dstMatrix, MatrixMultiply(flipY, MatrixInverse(srcMatrix)));
     }
 };
 }

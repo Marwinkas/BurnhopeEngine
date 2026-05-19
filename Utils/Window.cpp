@@ -1,4 +1,5 @@
 #include "Window.hpp"
+#include <imgui_impl_sdl3.h> // Include ImGui SDL3 backend header
 #include <stdexcept>
 namespace burnhope
 {
@@ -8,34 +9,51 @@ namespace burnhope
   }
   BurnhopeWindow::~BurnhopeWindow()
   {
-    glfwDestroyWindow(window);
-    glfwTerminate();
+    SDL_DestroyWindow(window);
+    SDL_Quit();
   }
   void BurnhopeWindow::initWindow()
   {
-      #ifdef GLFW_PLATFORM_X11
-    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
-    #endif
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    window = glfwCreateWindow(width, height, windowName.c_str(), nullptr, nullptr);
-    glfwSetWindowUserPointer(window, this);
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+      throw std::runtime_error("Failed to initialize SDL");
+    }
     
-    glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+    window = SDL_CreateWindow(
+      windowName.c_str(),
+      width,
+      height,
+      SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE
+    );
+    
+    if (!window)
+    {
+      throw std::runtime_error("Failed to create SDL window");
+    }
   }
   void BurnhopeWindow::createWindowSurface(VkInstance instance, VkSurfaceKHR *surface)
   {
-    if (glfwCreateWindowSurface(instance, window, nullptr, surface) != VK_SUCCESS)
+    if (!SDL_Vulkan_CreateSurface(window, instance, nullptr, surface))
     {
       throw std::runtime_error("failed to create window surface");
     }
   }
-  void BurnhopeWindow::framebufferResizeCallback(GLFWwindow *window, int width, int height)
+  void BurnhopeWindow::pollEvents()
   {
-    auto lveWindow = reinterpret_cast<BurnhopeWindow *>(glfwGetWindowUserPointer(window));
-    lveWindow->framebufferResized = true;
-    lveWindow->width = width;
-    lveWindow->height = height;
+    SDL_Event event;
+    while (SDL_PollEvent(&event))
+    {
+      if (event.type == SDL_EVENT_QUIT)
+      {
+        windowShouldClose = true;
+      }
+      else if (event.type == SDL_EVENT_WINDOW_RESIZED)
+      {
+        framebufferResized = true;
+        width = event.window.data1;
+        height = event.window.data2;
+      }
+      ImGui_ImplSDL3_ProcessEvent(&event); // Forward all events to ImGui
+    }
   }
 }

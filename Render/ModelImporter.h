@@ -1,7 +1,6 @@
 #pragma once
 #include <string>
 #include <vector>
-#include <glm/glm.hpp>
 #include "Model.hpp"
 namespace burnhope
 {
@@ -27,8 +26,8 @@ namespace burnhope
         uint32_t totalMeshletCount = 0;
         uint32_t meshletVerticesCount = 0;
         uint32_t meshletTrianglesCount = 0;
-        glm::vec3 globalAabbMin = glm::vec3(0.0f);
-        glm::vec3 globalAabbMax = glm::vec3(0.0f);
+        float3 globalAabbMin = float3{0.0f, 0.0f, 0.0f};
+        float3 globalAabbMax = float3{0.0f, 0.0f, 0.0f};
         uint32_t proxyVertexCount = 0;
         uint32_t proxyIndexCount = 0;
         uint32_t chunkCount = 0;
@@ -38,15 +37,15 @@ namespace burnhope
         float maxWindSway = 1.0f;
         
         // Jolt Physics Metadata
-        glm::vec3 centerOfMass = glm::vec3(0.0f);
+        float3 centerOfMass = float3{0.0f, 0.0f, 0.0f};
         float totalMass = 0.0f;
         
-        glm::vec3 centerOfBuoyancy = glm::vec3(0.0f);
+        float3 centerOfBuoyancy = float3{0.0f, 0.0f, 0.0f};
         float volume = 0.0f;
         
-        glm::vec4 inertiaTensorRow0 = glm::vec4(1,0,0,0);
-        glm::vec4 inertiaTensorRow1 = glm::vec4(0,1,0,0);
-        glm::vec4 inertiaTensorRow2 = glm::vec4(0,0,1,0);
+        float4 inertiaTensorRow0 = float4{1.0f, 0.0f, 0.0f, 0.0f};
+        float4 inertiaTensorRow1 = float4{0.0f, 1.0f, 0.0f, 0.0f};
+        float4 inertiaTensorRow2 = float4{0.0f, 0.0f, 1.0f, 0.0f};
         
         uint32_t physicsPrimitiveCount = 0;
         uint32_t destructionBondCount = 0;
@@ -59,8 +58,8 @@ namespace burnhope
         char vatTexturePath[128] = {0};
         uint32_t vatFrameCount = 0;
         float vatDuration = 0.0f;
-        glm::vec3 vatMinBounds = glm::vec3(0.0f);
-        glm::vec3 vatMaxBounds = glm::vec3(0.0f);
+        float3 vatMinBounds = float3{0.0f, 0.0f, 0.0f};
+        float3 vatMaxBounds = float3{0.0f, 0.0f, 0.0f};
         
         uint32_t socketCount = 0;
         uint32_t carverCount = 0;
@@ -88,8 +87,8 @@ namespace burnhope
     {
         char name[64] = {0};
         uint32_t materialIndex = 0;
-        glm::vec3 aabbMin = glm::vec3(0.0f);
-        glm::vec3 aabbMax = glm::vec3(0.0f);
+        float3 aabbMin = float3{0.0f, 0.0f, 0.0f};
+        float3 aabbMax = float3{0.0f, 0.0f, 0.0f};
         float boundingRadius = 0.0f;
         uint32_t lodCount = 0;
         uint32_t totalIndexCount = 0;
@@ -103,9 +102,9 @@ namespace burnhope
     };
     struct BHPhysicsPrimitive {
         uint32_t type; // 0 = Sphere, 1 = Box, 2 = Capsule
-        glm::vec3 position;
-        glm::vec4 rotationQuat;
-        glm::vec3 dimensions; // radius, halfExtents
+        float3 position;
+        float4 rotationQuat;
+        float3 dimensions; // radius, halfExtents
     };
     struct BHDestructionBond {
         uint32_t pieceA, pieceB;
@@ -128,14 +127,14 @@ namespace burnhope
         uint8_t isTwistBone = 0;      // 1 = Процедурная кость скручивания
         int16_t twistTarget = -1;     // Индекс кости, от которой берем вращение
         float twistWeight = 0.5f;
-        glm::mat4 inverseBindMatrix;
-        glm::mat4 localTransform;
+        float4x4 inverseBindMatrix;
+        float4x4 localTransform;
     };
 
     struct BHVirtualIK {
         uint64_t nameHash;
         int32_t sourceBoneIndex;
-        glm::vec3 localOffset;
+        float3 localOffset;
     };
 
     // --- СТРУКТУРЫ ДЛЯ .BHANIM ---
@@ -159,15 +158,15 @@ namespace burnhope
         uint64_t boneNameHash;
         uint32_t keyframeCount;
         uint32_t firstKeyframe;
-        glm::vec3 posMin; // Для 16-битного декодирования
-        glm::vec3 posMax;
+        float3 posMin; // Для 16-битного декодирования
+        float3 posMax;
     };
 
 
 
     struct BHTrajectoryData {
         float time;
-        glm::vec3 velocity;
+        float3 velocity;
         float facingAngle;
     };
 

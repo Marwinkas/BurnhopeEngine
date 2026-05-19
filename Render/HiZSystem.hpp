@@ -1,9 +1,9 @@
 #pragma once
 #include "../Utils/Device.hpp"
 #include "../Utils/Descriptors.hpp"
+#include "../Utils/DirectXMathCompat.hpp"
 #include <memory>
 #include <vector>
-#include <glm/glm.hpp>
 #include "ComputeShader.hpp"
 namespace burnhope
 {

@@ -1,7 +1,6 @@
 #include "Model.hpp"
 #include "../Utils/Utils.hpp"
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/hash.hpp>
+#include "../Utils/DirectXMathCompat.hpp"
 #include <cassert>
 #include <cstring>
 #include <fstream>
@@ -545,19 +544,19 @@ namespace burnhope
         }
 
         // FIX: Создаем Float32 буфер для RT, так как UNORM16 крашит аппаратное ускорение лучей!
-        std::vector<glm::vec3> rtPos(vertexCount);
-        glm::vec3 ext = globalAabbMax - globalAabbMin;
+        std::vector<float3> rtPos(vertexCount);
+        float3 ext = globalAabbMax - globalAabbMin;
         for(size_t i = 0; i < vertexCount; ++i) {
-            glm::vec3 normPos = glm::vec3(cpuPositions[i].x, cpuPositions[i].y, cpuPositions[i].z) / 65535.0f;
+            float3 normPos = float3(cpuPositions[i].x, cpuPositions[i].y, cpuPositions[i].z) / 65535.0f;
             rtPos[i] = normPos * ext + globalAabbMin;
         }
         rtPosBuffer = std::make_unique<BurnhopeBuffer>(
-            lveDevice, sizeof(glm::vec3), vertexCount,
+            lveDevice, sizeof(float3), vertexCount,
             VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        BurnhopeBuffer stg(lveDevice, sizeof(glm::vec3), vertexCount, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        BurnhopeBuffer stg(lveDevice, sizeof(float3), vertexCount, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         stg.map(); stg.writeToBuffer((void*)rtPos.data());
-        lveDevice.copyBuffer(stg.getBuffer(), rtPosBuffer->getBuffer(), vertexCount * sizeof(glm::vec3));
+        lveDevice.copyBuffer(stg.getBuffer(), rtPosBuffer->getBuffer(), vertexCount * sizeof(float3));
         VkBufferDeviceAddressInfo rtAddrInfo{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, rtPosBuffer->getBuffer()};
         VkDeviceAddress rtPosAddr = vkGetBufferDeviceAddress(lveDevice.device(), &rtAddrInfo);
 
@@ -574,7 +573,7 @@ namespace burnhope
             geom.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
             geom.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
             geom.geometry.triangles.vertexData.deviceAddress = rtPosAddr;
-            geom.geometry.triangles.vertexStride = sizeof(glm::vec3);
+            geom.geometry.triangles.vertexStride = sizeof(float3);
             geom.geometry.triangles.maxVertex = vertexCount - 1;
             geom.geometry.triangles.indexType = indexType;
             geom.geometry.triangles.indexData.deviceAddress = indexBufferAddress;
@@ -750,9 +749,9 @@ namespace burnhope
         totalMass = header.totalMass;
         centerOfBuoyancy = header.centerOfBuoyancy;
         volume = header.volume;
-        inertiaTensor[0] = glm::vec3(header.inertiaTensorRow0.x, header.inertiaTensorRow0.y, header.inertiaTensorRow0.z);
-        inertiaTensor[1] = glm::vec3(header.inertiaTensorRow1.x, header.inertiaTensorRow1.y, header.inertiaTensorRow1.z);
-        inertiaTensor[2] = glm::vec3(header.inertiaTensorRow2.x, header.inertiaTensorRow2.y, header.inertiaTensorRow2.z);
+        inertiaTensor._11 = header.inertiaTensorRow0.x; inertiaTensor._12 = header.inertiaTensorRow0.y; inertiaTensor._13 = header.inertiaTensorRow0.z;
+        inertiaTensor._21 = header.inertiaTensorRow1.x; inertiaTensor._22 = header.inertiaTensorRow1.y; inertiaTensor._23 = header.inertiaTensorRow1.z;
+        inertiaTensor._31 = header.inertiaTensorRow2.x; inertiaTensor._32 = header.inertiaTensorRow2.y; inertiaTensor._33 = header.inertiaTensorRow2.z;
         vatTexturePath = std::string(header.vatTexturePath);
         vatFrameCount = header.vatFrameCount;
         vatDuration = header.vatDuration;
@@ -811,15 +810,15 @@ namespace burnhope
         
         probeAnchors.resize(header.probeAnchorCount);
         if (header.probeAnchorCount > 0) {
-            file.read((char*)probeAnchors.data(), probeAnchors.size() * sizeof(glm::vec3));
+            file.read((char*)probeAnchors.data(), probeAnchors.size() * sizeof(float3));
         }
         tetraNodes.resize(header.tetraNodeCount);
         if (header.tetraNodeCount > 0) {
-            file.read((char*)tetraNodes.data(), tetraNodes.size() * sizeof(glm::vec4));
+            file.read((char*)tetraNodes.data(), tetraNodes.size() * sizeof(float4));
         }
         tetrahedrons.resize(header.tetraCount);
         if (header.tetraCount > 0) {
-            file.read((char*)tetrahedrons.data(), tetrahedrons.size() * sizeof(glm::uvec4));
+            file.read((char*)tetrahedrons.data(), tetrahedrons.size() * sizeof(UInt4));
         }
         
         file.seekg(header.proxyIndexCount * sizeof(uint32_t), std::ios::cur);

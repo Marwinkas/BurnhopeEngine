@@ -5,8 +5,7 @@
 #include "Texture.hpp"
 #include "ComputeShader.hpp"
 #include "../Utils/Pipeline.hpp"
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
+#include "../Utils/DirectXMathCompat.hpp"
 #include <array>
 #include <memory>
 #include <vector>
@@ -29,11 +28,11 @@ namespace burnhope
     };
     struct RCPushConstants
     {
-        glm::vec4 probeGridMin; // 16 байт
-        glm::vec4 probeGridMax; // 16 байт
-        glm::ivec4 probeCount;  // 16 байт (x, y, z, cascadeIndex)
+        float4 probeGridMin; // 16 байт
+        float4 probeGridMax; // 16 байт
+        int probeCountX, probeCountY, probeCountZ, cascadeIndex;  // 16 байт
         // x: rayLength, y: screenWidth, z: screenHeight, w: (резерв)
-        glm::vec4 params;       // 16 байт
+        float4 params;       // 16 байт
     }; // Итого: 64 байта — идеально!
     class RadianceCascadesSystem
     {
@@ -62,11 +61,12 @@ namespace burnhope
         void dispatch(VkCommandBuffer cmd,
                       VkDescriptorSet globalSet,
                       VkDescriptorSet gBufferSet,
-                      const glm::mat4 &invViewProj,
-                      const glm::vec3 &cameraPos,
-                      const glm::vec3 &sceneMin,
-                      const glm::vec3 &sceneMax,
-                      VkExtent2D extent,VkDescriptorSet rtSet,
+                      const float4x4& invViewProj,
+                      const float3& cameraPos,
+                      const float3& sceneMin,
+                      const float3& sceneMax,
+                      VkExtent2D extent,
+                      VkDescriptorSet rtSet,
                       VkDescriptorSet storageSet,
                       VkDescriptorSet textureSet);
         VkDescriptorSet getGISet() const { return giSet; }

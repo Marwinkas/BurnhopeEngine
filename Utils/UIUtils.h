@@ -1,9 +1,9 @@
 #pragma once
 #include <imgui.h>
-#include <imgui_internal.h>
+#include "DirectXMathCompat.hpp"
 #include <string>
-#include <glm/glm.hpp>
-#include <glm/gtc/type_ptr.hpp>
+#include <vector>
+#include "../Render/Material.hpp"
 
 namespace burnhope::UIUtils {
 
@@ -58,15 +58,24 @@ namespace burnhope::UIUtils {
     }
 
     // Готовые обертки:
-    inline bool DrawVec3Control(const std::string& label, glm::vec3& values, float resetValue = 0.0f) {
-        return DrawFloatControl(label, glm::value_ptr(values), 3, resetValue);
+    inline bool DrawVec3Control(const std::string& label, float3& values, float resetValue = 0.0f) {
+        float v[3] = {values.x, values.y, values.z};
+        bool changed = DrawFloatControl(label, v, 3, resetValue);
+        values.x = v[0]; values.y = v[1]; values.z = v[2];
+        return changed;
     }
     
-    inline bool DrawVec2Control(const std::string& label, glm::vec2& values, float resetValue = 0.0f) {
-        return DrawFloatControl(label, glm::value_ptr(values), 2, resetValue);
+    inline bool DrawVec2Control(const std::string& label, float2& values, float resetValue = 0.0f) {
+        float v[2] = {values.x, values.y};
+        bool changed = DrawFloatControl(label, v, 2, resetValue);
+        values.x = v[0]; values.y = v[1];
+        return changed;
     }
- inline bool DrawVec4Control(const std::string& label, glm::vec4& values, float resetValue = 0.0f) {
-        return DrawFloatControl(label, glm::value_ptr(values), 4, resetValue);
+    inline bool DrawVec4Control(const std::string& label, float4& values, float resetValue = 0.0f) {
+        float v[4] = {values.x, values.y, values.z, values.w};
+        bool changed = DrawFloatControl(label, v, 4, resetValue);
+        values.x = v[0]; values.y = v[1]; values.z = v[2]; values.w = v[3];
+        return changed;
     }
     // --- Compact Property Grid System ---
     inline bool BeginPropertyGrid(const std::string& name) {

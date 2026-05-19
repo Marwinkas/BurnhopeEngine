@@ -49,12 +49,10 @@ namespace burnhope {
                 if (ImGui::BeginTabItem("Lighting & GI")) {
                     if (UIUtils::BeginPropertyGrid("RT Diagnostics")) {
                         if (ImGui::Button("FORCE GLOBAL RT REBUILD", ImVec2(-1, 30))) {
-                            auto view = context.registry->view<MeshComponent>();
-                            for (auto entity : view) {
-                                auto& mc = view.get<MeshComponent>(entity);
+                            context.registry->each<MeshComponent>([&](flecs::entity entity, MeshComponent& mc) {
                                 if (mc.model && !mc.model->storedPositions.empty())
                                     mc.model->createBLAS(mc.model->storedPositions);
-                            }
+                            });
                             context.needsRTRebuild = true;
                         }
                         UIUtils::EndPropertyGrid();
