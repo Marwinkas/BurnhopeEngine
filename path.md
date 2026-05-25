@@ -1,8 +1,274 @@
-# ENGINE_SPEC_VULKAN_1.4 — CATEGORY-SORTED FOR AI
-# Format: Functional categories | Clear AI instructions | Implementation status
-# Reorganized from layer-based to task-based for AI workflow
+# BurnhopeEngine — Личный Roadmap (порядок реализации)
+# Стек: C++26 · Vulkan 1.4 · Flecs · Jolt · Slang · DoD
+# Правила для ИИ — только в rule.md (этот файл ИИ не получает)
 
 ---
+## ЦЕЛЬ И ПРОФИЛИ
+
+**Цель:** Unity-like workflow + UE5-like visuals, на DoD-ядре без легаси-оверхода.
+
+| Профиль | Когда | Память transform | Свет | FPS-цель |
+|---------|-------|------------------|------|----------|
+| **AAA** | Реализм, большие миры | int16/float32 по bake | Full ReSTIR GI + 4–6 cascades + VSM | Стабильный 60–120+ |
+| **Low-Poly** | Стилизация, арены | int8/uint8 (~12 B) | 2–3 cascades, ReSTIR M=8–16 | 300–1000+ |
+
+---
+## АРХИТЕКТУРА (ключевые решения)
+
+### Compute без ООП
+- Один `ComputePipeline` (POD: SPIR-V path, slot layout, push constants с индексами heap).
+- Flecs: компонент или система → `Dispatch()` по данным, без virtual.
+
+### Transform: Editor → Scene Baker → Runtime
+| Поле | Редактор | Bake (малый мир) | Bake (средний) | Bake (огромный) |
+|------|----------|------------------|----------------|-----------------|
+| Position | float32×3 | int8×3 (3 B) | int16/float16×3 | float32×3 |
+| Rotation | quat f32 | int16 Euler×3 (6 B) | float16 quat | float32 quat |
+| Scale | float32×3 | uint8×3 (0…128) | uint16/float16 | float32×3 |
+| **Итого** | ~40 B | **~12 B** | ~12–16 B | 40 B |
+
+- Jolt + Flecs логика: **float**; упаковка при записи в GPU / `.bhscene`.
+- `SceneBaker` сканирует max coord/scale → `WorldFormatConfig`; авто-апгрейд формата при превышении лимита.
+- GPU unpack в Slang; буферы: `VK_FORMAT_R8G8B8A8_SNORM`, `R16G16B16A16_SFLOAT`.
+
+### `.bhscene` (zero-copy)
+```
+Header(magic, version, WorldFormatConfig, counts)
+OffsetTable → SoA blocks (pos, rot, scale, matID, flags…)
+StringPool (null-terminated, offsets in components)
+```
+- Загрузка: `mmap` → Flecs SoA / staging → `vkCmdCopyBuffer`.
+- DDC: первый импорт тяжёлый, повторные — мгновенный mmap.
+
+### CPU↔GPU
+- `TransformHistory { current, previous }` — double-buffer, dirty = compare.
+- **Матрицы только в Compute** (Visibility Buffer rasterizer).
+- Motion vectors для ReSTIR temporal.
+- **Static** (галка): bake без history, вне dirty-систем.
+- **Dynamic**: auto-sleep если не двигался; wake от Jolt/скрипта.
+
+### Освещение (гибрид)
+| Задача | Решение | Не делать |
+|--------|---------|-----------|
+| Жёсткие тени | VSM 128×128 + dirty pages | ReSTIR/PT для теней |
+| Прямой свет | ReSTIR DI | Forward thousands lights |
+| GI | ReSTIR GI + Sparse **World-Space** Radiance Cascades | Screen-space GI primary |
+| Отражения | SSR (HZB) + RT ≤15–20 m | Full PT reflections |
+| Contact | 1–2 step stochastic | 8–12 step SS |
+
+- ReSTIR: Reservoir `{s, w_sum, M, W}` → temporal (motion) → spatial → **1 shadow ray**.
+- Lazy: статичный сектор / замершая камера — не пускать лучи, читать кэш.
+
+### Физика (слои)
+| Слой | Hz | Объекты |
+|------|-----|---------|
+| High | 60–120 | игрок, бой, raycast-пули |
+| Medium | 15–20 | декор, далёкие NPC |
+| Low | 2–3 | мусор, триггеры |
+| Sleep | 0 | velocity < ε |
+| Distance | broad/off | далёкие чанки |
+
+- Пули: **RayCast** (Jolt batch), визуал без collider.
+- Предпочесть **floating origin** вместо Jolt DP (если не космос).
+
+### Где это в roadmap (не перескакивать)
+| Задача | Фаза |
+|--------|------|
+| `shared_ptr` → handles | **4b** |
+| `.bhscene` / SceneBaker | **4b** |
+| VkRenderPass → dynamic rendering | **3** |
+| ComputePipeline + bindless | **3** + **5** |
+| ReSTIR / VSM / GI | **7–8** (только после VisBuffer) |
+
+---
+## C++26 (май 2026) — применение в движке
+
+| Фича | Где |
+|------|-----|
+| `std::mdspan` | SoA-колонки, froxels, cascade grids, mmap views |
+| `std::span` / `std::byte` | Zero-copy slices |
+| `std::expected` | Asset load, Vulkan init (no exceptions in hot path) |
+| Concepts | `requires Component<T>`, POD-only ECS |
+| `consteval` | Tag hashes, pack/unpack tables в Cooker |
+| `std::bit_cast` | float↔uint pack |
+| `popcount` / `countr_zero` | Dirty chunk / archetype bitmasks |
+| `[[likely]]` / `[[assume]]` | После Tracy, только hot queries |
+| `alignas(64)` | Cache lines, queue heads |
+| `enum class : uint8_t` | Flags, `WorldFormat`, physics tier |
+| Coroutines/fibers | Taskflow yield, не `sleep_for` |
+
+**Hot path запрет:** `shared_ptr`, `function`, `any`, `string`, virtual, RTTI, `vector::push_back` без pool, exceptions в systems.
+
+```cpp
+struct alignas(16) Transform12 {
+    int16_t px, py, pz, rx, ry, rz;
+    uint8_t sx, sy, sz;
+};
+// Cached once:
+static flecs::query<Transform12, const Visible> g_visQ = ...;
+```
+
+**Аллокаторы (упрощение):** mimalloc + FrameArena + TLSF pools; не плодить rpmalloc+mimalloc+TLSF без нужды.
+
+**Отладка DGC:** флаг `--use-classic-indirect` → `vkCmdDrawIndexedIndirect` вместо DGC.
+
+---
+## Flecs — практика
+
+- Components: trivially copyable, target `sizeof ≤ 64`.
+- Systems: free functions + `flecs::iter`, cached `flecs::query`.
+- Tags: `Static`, `Active`, `TransformChanged`, `LightChanged`, `PhysicsHigh`, `PhysicsLow`.
+- No `add/remove` inside query iteration; structural changes → deferred command buffer.
+- `ecs_changed()` / chunk bitmasks для dirty.
+- ReBAR: GPU-read components → `DEVICE_LOCAL | HOST_VISIBLE`.
+- Hierarchy: Flecs relationships, не CPU matrix chain.
+
+---
+## Краткий чеклист «не делать» (полный список в rule.md для ИИ)
+
+FORBIDDEN (кратко):
+  - OOP / virtual / vtables в game loop и ECS.
+  - std::shared_ptr в ресурсах и ECS (handles + pools).
+  - Наследование ComputeShader — только data-driven ComputePipeline.
+  - Pointers между entities (64-bit GUID).
+  - new/malloc/make_shared в game loop (FrameArena/TLSF).
+  - std::mutex, std::lock_guard between engine subsystems (Use Lock-Free MPMC Event Bus).
+  - Direct subsystem-to-subsystem function calls (e.g., Physics calling Audio). Send POD events.
+  - OS-level sleep (C++26 coroutine/fiber yield only).
+  - std::string operations, concatenation, or regex in the game loop.
+  - Using string paths (like "textures/grass.dds") at runtime (Use MurmurHash3 GUIDs).
+  - std::ostream / std::cout for logging (Use fmt / std::format / spdlog).
+  - Synchronous Disk I/O (All file reads MUST go through DirectStorage or async DMA queues).
+  - RTTI (dynamic_cast / typeid) (Use ECS component bitmasks or compile-time static reflection).
+  - VkPipeline (use Shader Objects)
+  - VkDescriptorSet (use BDA + Push Descriptors or VK_EXT_descriptor_heap)
+  - vkAllocateMemory in game loop
+  - pow/sin/cos in PBR shaders (use FMA approx)
+  - additive normal blending (n1+n2)
+  - 4×4 matrices in shaders
+  - #ifdef LOW_END in shaders (use Specialization Constants)
+  - monolithic vkCmdPipelineBarrier2
+  - texture() for 2×2 PCF (use textureGather/OpImageGather)
+  - sRGB pow(color,2.2) in ALU (mark texture VK_FORMAT_..._SRGB)
+  - CPU read of HOST_VISIBLE upload heap
+  - std::this_thread::sleep in main loop
+  - atomicAdd where subgroupBallot suffices
+  - two simultaneous ALU-bound queue tasks
+  - any per-frame string operations (use hashes)
+  - discard in alpha-test shaders (use demote, VK_EXT_shader_demote_to_helper_invocation)
+  - atomicAdd in culling loops (use subgroupBallot)
+  - loop with texture()/BDA access and runtime iteration count
+  - shared[] array without +32 padding (bank conflict)
+  - ADPCM/Opus decode on render thread (use Fiber Job audio chunks)
+  - physics transforms copied via CPU memcpy to VkBuffer (use ReBAR direct write)
+  - Jolt fixed-step on render thread (decouple, State Buffering + GPU interpolation)
+  - vkCreateShadersEXT during gameplay (warmup on load screen only)
+  - SoftBody at >30m (swap to RigidBody cylinder)
+  - CCD on all layers (restrict to LAYER_FAST_PROJECTILES only)
+  - per-object BLAS rebuild every frame for NPC > 50m
+  - OOP / Entity pointers in scripts (use GUIDs and Component arrays)
+  - vkAllocateMemory during structural changes (use VMA defrag / DMA bulk moves)
+  - If-else chains in Uber-Post stylization (use layout constant_id for dead code elimination)
+  - CPU Raycasts for AI vision (use Global SDF distance checks)
+  - Synchronous asset imports in editor (must be async / background cooked)
+  - Full object copying for Undo (use XOR Deltas in memory journal)
+  - Separate shader compilation for Low-End fallbacks (use specialization constants)
+  - Discard/demote in OIT hair shaders (use VK_KHR_fragment_shader_barycentric density)
+  
+  NEW 2026 SHADER FORBIDDEN PATTERNS:
+  - Standard trigonometric functions (sin, cos, atan) inside loops without 1D LUT or FMA polynomial check
+  - Heavy resource fetch followed by immediate use (always use ILP: fetch → 15 ALU → use)
+  - Manual LDS zero-initialization in loops (use VK_KHR_zero_initialize_workgroup_memory)
+  - Dynamic texture array indexing without nonuniformEXT (textures[nonuniformEXT(MaterialID)].sample())
+  - texture()/Sample() inside dynamic if/else branches (use textureLod with explicit LOD)
+  - groupMemoryBarrier() for intra-wave data (use subgroupBarrier())
+  - Scalar register duplication for per-wave data (use subgroupBroadcastFirst())
+  - bool flags as 32-bit variables in SSBO (pack into bitmasks, 32 flags per uint)
+  - Multiple reads of same SSBO variable in heavy loop (cache to local before loop)
+  - Structures with arbitrary alignment (use std430, 16-byte alignment, explicit padding)
+  - Mixing float and float16_t in same expression (causes implicit conversions)
+  - Division by variable inside loops (precompute 1.0/x, multiply inside loop)
+  - rayQueryProceedEXT() without max step limit (prevents infinite loops, GPU hangs)
+  - Ray Tracing for reflections/GI beyond 20m (use SSR + baked maps)
+  - Cloth/SoftBody simulation for HZB-culled objects (LOD tickrate or freeze)
+  - Honest shadows from small dynamic debris (use screen-space contact shadows only)
+  - VK_EXT_descriptor_buffer (→ VK_EXT_descriptor_heap)
+  - JSON/XML parse в runtime игры
+  - CPU Model matrices каждый кадр
+  - Screen-space как primary GI
+  - Collider на каждую пулю
+---
+## ГЛАВНЫЙ ПАТТЕРН
+
+1. Read SoA (Flecs archetype / mdspan).
+2. Compute: AVX-512 batch или Async Compute на GPU.
+3. Write: ReBAR или POD в lock-free queue.
+4. Zero: mutex, heap alloc, virtual в hot path.
+
+---
+## ШЕЙДЕРЫ (кратко, Slang + Vulkan 1.4)
+
+- Slang → SPIR-V 1.6+; Shader Objects, не VkPipeline.
+- `VK_EXT_descriptor_heap` + BDA; push constants = buffer/texture indices.
+- Bindless: `nonuniformEXT`; dynamic branches → `textureLod` + explicit LOD.
+- Subgroup: `subgroupBarrier`, `subgroupBroadcastFirst`, `subgroup_rotate`; не `groupMemoryBarrier`.
+- Flags: bitmasks; SSBO: cache locals before loop; std430 + 16-byte align.
+- Math: precompute `rcp`; no float/f16 mix; sin/cos → LUT/FMA; `float_controls2`.
+- `rayQueryProceedEXT`: max steps; RT >20 m → SSR+bake.
+- Bake максимум в Cooker.
+
+---
+# ЧАСТЬ II — РЕАЛИЗАЦИЯ (сверху вниз)
+
+Ниже — **единственный** порядок работ. Справочник выше не трогать при кодинге — только читать.
+
+# ПОРЯДОК РЕАЛИЗАЦИИ (идти строго сверху вниз)
+
+> Каждая фаза опирается на предыдущие. Не начинай GI до VisBuffer. Не начинай ассеты после рендера.
+> Статус: `[ ]` todo · `[~]` partial · `[x]` done — помечай сам.
+
+## Быстрый индекс фаз
+
+| # | Фаза | Зависит от | Ключевой результат |
+|---|------|------------|-------------------|
+| 0 | Справочник (выше) | — | Архитектура, C++26, запреты |
+| 1 | Фундамент | 0 | SDL, аллокаторы, math, GUID, логи |
+| 2 | Потоки + ECS | 1 | Flecs, queries, event bus, 3-stage frame |
+| 3 | Vulkan 1.4 | 2 | dynamic rendering, descriptor heap, shader objects |
+| 4 | Ассеты + форматы | 3 | .bhmesh, cooker, handles |
+| 4b | Сцена + bake | 4 | SceneBaker, .bhscene, Transform12 |
+| 5 | VisBuffer + cull | 4b | Hi-Z, meshlet cull, GPU matrices |
+| 6 | Материалы | 5 | .bhtex, .bhmat, shade |
+| 7 | Тени | 5–6 | VSM dirty pages |
+| 8 | Свет / GI | 7 | ReSTIR, Radiance Cascades |
+| 9 | Пост | 8 | tonemap, SSR, GTAO |
+| 10 | Физика | 2, 4b | Jolt tiers, raycast |
+| 11 | Анимация | 5, 10 | GPU skinning |
+| 12 | Virtual geom | 5–6 | terrain, streaming |
+| 13 | VFX / погода | 5 | particles, clouds |
+| 14 | AI / звук | 2, 10 | nav, audio |
+| 15 | Editor / UI | 1–4 | tools, export |
+| 16 | Deformables | 11 | hair, cloth |
+| A–C | Приложения | anytime | справочник |
+
+## ФАЗА 4b — СЦЕНА, BAKE, ZERO-COPY
+
+**После Фазы 4, до Фазы 5.**
+
+- [ ] `WorldFormatConfig` + `Transform12` pack/unpack
+- [ ] `SceneBaker` (scan extrema → format)
+- [ ] `.bhscene` + mmap → Flecs
+- [ ] `TransformHistory`, `Static` / `TransformChanged`
+- [ ] ResourceManager: handles вместо `shared_ptr`
+- [ ] `ComputePipeline` POD (без dispatch в рендере пока)
+
+---
+## ФАЗА 4b — ДЕТАЛИ (сцена)
+
+См. «АРХИТЕКТУРА» в справочнике: Transform bake, `.bhscene`, CPU↔GPU, Static/Dynamic.
+
+---
+# ФАЗА 1 — ФУНДАМЕНТ (ядро, память, математика, хеши)
 
 ## ЯДРО И ПЛАТФОРМА (CORE & PLATFORM)
 
@@ -28,40 +294,58 @@ MEMORY_ALLOCATORS:
 SAFETY_PTRS: GSL (owner<>, span<>, not_null<>). Raw pointers allowed only as non-owning observers. 
 CONTAINERS_COMPILETIME: Frozen (constexpr map/set, zero runtime overhead) 
 STRING_UNICODE: utf8-cpp, ICU (full locale/shaping) 
-
 ---
 
-## ECS И СИСТЕМЫ (ECS & SYSTEMS)
+## МАТЕМАТИКА И SIMD (MATH & SIMD)
 
-ECS: Flecs 
-  Layout: AoSoA (Array of Structures of Arrays), 16-float blocks
-  Alignment: alignas(16), AVX-512 vectorization
-  OOP/virtual_update: FORBIDDEN in game loop
-  Data_Layout: Archetype-Based SoA (Structure of Arrays) 
-  Alignment: alignas(64) for AVX-512 cache lines (prevents false sharing) 
-  Identifiers: 64-bit GUIDs (MurmurHash3). Pointers between entities: FORBIDDEN. 
-  GPU_Data_Bridge: Buffer Device Address (BDA) per component 
-  Dirty_Flags_Batching: CPU sets bit → System rebuilds RT/GPU structures in 1 batch 
-  Memory_Map: Persistent Mapping (ReBAR). CPU writes, GPU reads (zero memcpy). 
-  Structural_Changes: Deferred Command Buffering, DMA bulk memory move at frame end 
-  ChangeMask: Systems awake only if Observer bit == 1 
+MATH_LIB: DirectXMath (SSE/AVX/AVX-512, header-only) 
+  Replace: GLM
+  Usage: matrices, vectors, quaternions, SIMD intrinsics
 
-JOB_SYSTEM: Taskflow + C++20 coroutines (Fiber pool) 
-  Workers: 1 per physical CPU core 
-  Context_switch: OS-level thread sleep in game loop: FORBIDDEN. Coroutine-yield only. 
-  Queue_alignment: alignas(64) 
+FLOAT_PRECISION:
+  Editor/logic/physics: float32 (Jolt, Flecs)
+  GPU instance buffer: int8/int16/float16/float32 per WorldFormatConfig (bake)
+  Normals, UV, color, roughness: float16_t (half)
+  Large world: floating origin (предпочтительно); Jolt DP только если реально нужен
 
-EVENT_BUS (Lock-Free): 
-  Algorithm: MPMC (Multi-Producer Multi-Consumer) ring queue
-  Pattern: producer writes POD struct in 1ns; consumer batch-reads in next stage
-  Isolation: ECS, Physics, Audio, Renderer NEVER call each other directly (only POD via queue).
+PACKED_MATH:
+  OpDP4A: 8-bit dot product (normals/color packing)
+  FMA: fused multiply-add (replace sin/cos/pow in PBR)
+  packHalf2x16 / packSnorm2x16: register compression in shaders
 
+NORMAL_ENCODING: Octahedral projection → 1× uint32_t
+  Unpack: abs() only, no trig
+
+QUATERNION: Dual Quaternion, 16-bit half, 16 bytes/bone
+  Sign restore: real-part recovery on unpack
+  Antipodal_prebake: Cooker inverts hierarchy signs → removes if(dot<0) from GPU skinning
+
+NOISE: FastNoiseLite (Perlin, Simplex, Cellular)
+PCG_HASH: inline GLSL/HLSL (film grain, GI eviction)
 ---
+
+## ХЕШИРОВАНИЕ И СЕРИАЛИЗАЦИЯ (HASHING & SERIALIZATION)
+
+GUID_SYSTEM: 64-bit MurmurHash3. Filenames as identifiers at runtime: FORBIDDEN. 
+HASH_ASSET: xxHash (hot-reload, buffer diff, bindless lookup) 
+HASH_IO: Meow Hash (AES-NI, GB/s throughput for CAS - Content Addressable Storage) 
+HASH_SHADER_STRIP: MurmurHash3 → .bhsym file (strings completely stripped from runtime binary) 
+
+SERIALIZATION_FAST: FlatBuffers (zero-copy ECS state, prefabs, loading directly from NVMe) 
+SERIALIZATION_NETWORK: bitsery (bit-level packing) 
+SERIALIZATION_BINARY: FlatBuffers (runtime), bitsery (network packets) 
+
+CONFIG: simdjson (SIMD JSON parse, asset metadata), configuru (config files) 
+LOGGING: spdlog (thread-safe, async), fmt/std::format (string building, std::ostream FORBIDDEN) 
+---
+
+# ФАЗА 2 — ПОТОКИ, ECS, КАДР
 
 ## МНОГОПОТОЧНОСТЬ И СИНХРОНИЗАЦИЯ (CONCURRENCY & SYNC)
 
-JOB_SYSTEM: Taskflow + C++20 coroutines (Fiber pool) 
+JOB_SYSTEM: Taskflow + C++26 coroutines (Fiber pool) 
   Workers: 1 per physical CPU core
+  Thread-local event queues → periodic gather (избежать MPMC contention)
   Queue_alignment: alignas(64) (false-sharing prevention)
   Context_switch: OS-level forbidden, coroutine-only
 
@@ -82,272 +366,49 @@ MEMORY_SYNC:
   vkAllocateMemory in game loop: FORBIDDEN
   Use: VMA virtual aliasing + vkMapMemory
   Timeline_Semaphores for async GPU sync 
-
 ---
 
-## ХЕШИРОВАНИЕ И СЕРИАЛИЗАЦИЯ (HASHING & SERIALIZATION)
+## ECS И СИСТЕМЫ (ECS & SYSTEMS)
 
-GUID_SYSTEM: 64-bit MurmurHash3. Filenames as identifiers at runtime: FORBIDDEN. 
-HASH_ASSET: xxHash (hot-reload, buffer diff, bindless lookup) 
-HASH_IO: Meow Hash (AES-NI, GB/s throughput for CAS - Content Addressable Storage) 
-HASH_SHADER_STRIP: MurmurHash3 → .bhsym file (strings completely stripped from runtime binary) 
+ECS: Flecs (C++26 wrappers: mdspan views, concepts для components)
+  Layout: Archetype SoA; hot columns alignas(64)
+  Components: POD only, trivially copyable, target ≤64 B (Transform12 = 12 B baked)
+  Systems: cached flecs::query; free functions; tags Static/Active/TransformChanged
+  TransformHistory: current + previous (double-buffer, no mutex)
+  OOP/virtual: FORBIDDEN in game loop
+  GUIDs: MurmurHash3 64-bit; no entity pointers
+  GPU: BDA + ReBAR for GPU-read components
+  Dirty: ecs_changed() chunk bitmasks; VSM/ReSTIR invalidate on TransformChanged
+  Structural changes: deferred to frame end (DMA bulk)
+  Scene load: mmap .bhscene → register archetypes from WorldFormatConfig
 
-SERIALIZATION_FAST: FlatBuffers (zero-copy ECS state, prefabs, loading directly from NVMe) 
-SERIALIZATION_NETWORK: bitsery (bit-level packing) 
-SERIALIZATION_BINARY: FlatBuffers (runtime), bitsery (network packets) 
+JOB_SYSTEM: Taskflow + C++26 coroutines (Fiber pool) 
+  Workers: 1 per physical CPU core
+  Thread-local event queues → periodic gather (избежать MPMC contention) 
+  Context_switch: OS-level thread sleep in game loop: FORBIDDEN. Coroutine-yield only. 
+  Queue_alignment: alignas(64) 
 
-CONFIG: simdjson (SIMD JSON parse, asset metadata), configuru (config files) 
-LOGGING: spdlog (thread-safe, async), fmt/std::format (string building, std::ostream FORBIDDEN) 
-
+EVENT_BUS (Lock-Free): 
+  Algorithm: MPMC (Multi-Producer Multi-Consumer) ring queue
+  Pattern: producer writes POD struct in 1ns; consumer batch-reads in next stage
+  Isolation: ECS, Physics, Audio, Renderer NEVER call each other directly (only POD via queue).
 ---
 
-## МАТЕМАТИКА И SIMD (MATH & SIMD)
+# ФАЗА 3 — VULKAN 1.4 (устройство, bindless, шейдеры)
 
-MATH_LIB: DirectXMath (SSE/AVX/AVX-512, header-only) 
-  Replace: GLM
-  Usage: matrices, vectors, quaternions, SIMD intrinsics
-
-FLOAT_PRECISION:
-  World_position: float32
-  Normals, UV, color, roughness: float16_t (half)
-  Physics_large_world: double precision (Jolt DP mode)
-
-PACKED_MATH:
-  OpDP4A: 8-bit dot product (normals/color packing)
-  FMA: fused multiply-add (replace sin/cos/pow in PBR)
-  packHalf2x16 / packSnorm2x16: register compression in shaders
-
-NORMAL_ENCODING: Octahedral projection → 1× uint32_t
-  Unpack: abs() only, no trig
-
-QUATERNION: Dual Quaternion, 16-bit half, 16 bytes/bone
-  Sign restore: real-part recovery on unpack
-  Antipodal_prebake: Cooker inverts hierarchy signs → removes if(dot<0) from GPU skinning
-
-NOISE: FastNoiseLite (Perlin, Simplex, Cellular)
-PCG_HASH: inline GLSL/HLSL (film grain, GI eviction)
-
----
-
-## ФИЗИКА (PHYSICS)
-
-PHYSICS_ENGINE: Jolt Physics 
-  Mode: multi-thread, Double Precision (large worlds)
-  Compile_Targets: Jolt_SSE42, Jolt_AVX2, Jolt_AVX512 (separate static libs)
-  Dispatch: CPUID at runtime → load optimal branch
-  Fiber_Job_Bridge: inherit JPH::JobSystem, dispatch into engine Fiber coroutine pool
-  Temp_Allocator: FrameArenaAllocator replaces Jolt default
-  Zero_Copy_GPU_Sync: Jolt writes transforms to ReBAR memory (DEVICE_LOCAL | HOST_VISIBLE)
-  Broadphase_Layers: NON_MOVING, MOVING, DEBRIS, SENSOR, PROJECTILE
-    DEBRIS × DEBRIS: collision disabled
-  Tickrate_LOD: ≤50m: 60-120 Hz; 50-200m: 30 Hz; >200m: Put To Sleep
-  State_Interpolation: StatePrevious[], StateCurrent[] buffers; GPU interpolation shader
-  Solver_Scaling: High-End: mNumVelocitySteps=10, mNumPositionSteps=2; Low-End: 4/1
-  Character_Controller: JPH::CharacterVirtual (Stair Stepping, Moving Platforms, Sliding)
-  Vehicle: JPH::VehicleConstraint (wheeled), JPH::TrackedVehicleController (tank)
-  Soft_Bodies: Jolt v5.0+ native LBD; LOD_swap to RigidBody at >30m
-  Buoyancy: JPH::CalculateBuoyancy with FFT/Gerstner wave sync
-  Destruction: Rest state Box → On impact: remove Box → CompoundShape + impulse + breakable joints
-  Physical_Animation: Motorized Constraints on .bhbone joints (Euphoria-style)
-  Raycast_Batching: Accumulate all raycasts → single JPH::NarrowPhaseQuery batch
-  CCD: LAYER_FAST_PROJECTILES only; Sphere approximation for fast compound
-  Determinism: JPH_ENABLE_DETERMINISM flag + FMA disabled
-  State_Recorder: JPH::StateRecorder → binary dump for rollback
-  Debug: JPH_ENABLE_ASSERTS + DrawIndirect lines for visualization
-
-CAPSULE_SHADOWS: analytical cone-capsule intersection from .bhbone 
-PARTICLE_SDF_COLLISIONS: baked scene SDF (R8_UNORM 3D texture) 
-PBD_GPU: Position Based Dynamics in Compute Shader 
-
-NAVMESH: Recast (offline bake) 
-NAVMESH_RUNTIME: Detour (pathfinding) 
-PATHFIND_LIGHT: MicroPather (graph-based AI) 
-
----
-
-## МОДЕЛИ И ГЕОМЕТРИЯ (MODELS & GEOMETRY)
-
-GEOMETRY_IMPORT: 
-  glTF_2.0: fastgltf (SIMD, async read) 
-  FBX: OpenFBX (lightweight, no Autodesk SDK)
-  USD: OpenUSD/Pixar (layered scenes)
-  OBJ_batch: Assimp (cooker-only)
-  OBJ_fast: tinyobjloader
-
-MESH_OPTIMIZE: meshoptimizer 
-  Algorithms: Forsyth reorder, Overdraw Minimization, Vertex Fetch
-  Output: Meshlets, LODs, index buffer compression
-
-ASSET_FORMATS:
-
-.BHMESH — GPU-Driven Geometry 
-  HEADER: magic BHTX(4B) | uint64_t assetGUID | uint32_t contentHash | uint8_t averageColor
-  STRUCT_ALIGN: alignas(16), #pragma pack(push,1)
-  ACCESS: BDA only (layout buffer_reference), uvec4 128-bit reads
-  VERTEX_STREAMS:
-    Buffer_A: Positions (float32 world or uint8 UNORM local)
-    Buffer_B: Attributes (normals, UV, tangents, SH weights)
-    Buffer_C: R:Dirt G:Wetness B:Wear A:CustomBlend
-    Buffer_D: Topological_map (weld index for cloth GPU-skinning)
-  NORMAL_PACK: Q-Tangents, MikkTSpace → VK_FORMAT_A2B10G10R10_SNORM_PACK32
-  POSITION_LOCAL: uint8 UNORM×3 relative to meshlet local AABB
-  COLOR_SEMANTIC: R:Dirt G:Wetness B:Wear A:Custom
-  MESHLET_LIMITS: max 64 verts, 126 tris, uint8 indices
-  MESHLET_PAD: zero-pad to multiples of 32/64 for Wave group alignment
-  LOD_SYSTEM: Progressive Micro-Mesh Diffing; Base Mesh + vertex split deltas; Distant_LOD: 3D Gaussian Splats
-  MESHLET_META: Pre-baked MeshletDrawCommand buffer; Bounding_Sphere + OBB matrix; normal cone; edge equations; isDirty flag
-  MATERIAL_HISTOGRAM: bitmask of MaterialIDs present in meshlet
-  RT_DATA: Pre-clamped BLAS Input Block; RT Proxy Hull; OMM Data
-  LIGHTMAP_VERTS: 4× unorm8x4 SH weights per vertex
-  CURVATURE_BAKED: Convex/Concave per vertex → 8 free bits in Buffer_B
-  PRT_SH_BAKED: 3-band Spherical Harmonics per LOD vertex
-  BENT_NORMAL_BAKED: sky accessibility vector + AO scalar
-  AUDIO_VOXEL: sparse octree of absorption coefficients 
-  PREFETCH_BLOCK: dependency array at file head → DirectStorage queues
-  DESTRUCTION_RULES: ID swap table for GPU culling
-  MORTON_SORT: instances sorted by Morton Z-curve
-
-.BHBONE — Skeleton 
-  HIERARCHY: topological sort by depth → LevelOffsets array
-  GPU_FLATTEN: MatrixFlattenedParents[] → parent index into flat N-1 level matrix array
-  BONE_MATRIX: Dual Quaternion, half (FP16), 16 bytes/bone
-  BONE_SCALE: parallel half3 boneScales[]
-  BONE_SDF: VK_FORMAT_R8_UNORM 3D texture (cloth collision)
-  IK_DATA: pole vectors, hinge axis baked
-  PSD: delta-morph trigger table
-  RAGDOLL: Swing/Twist limits (Jolt), Stiffness/Damping
-  CAPSULES: exported to physics; analytical shadow math
-  ANTIPODAL_FIX: Cooker pre-flips DQ signs throughout hierarchy
-
-.BHANIM — Animation 
-  TIME: uniform quantization (fixed step e.g. 33.3ms)
-  CURVES: Hermite spline tangents + derivatives only
-  LAYOUT: temporal chunks (all bones frames 0–30 contiguous)
-  ACTIVE_MASK: uint64_t ActiveChannelsMask per bone
-  INERTIAL_BLEND: angular velocity + acceleration baked for first/last 5 frames
-  FACE_COMPRESS: PCA, 16 basis vectors
-  BODY_COMPRESS: procedural animation curves
-  MOTION_MATCH: DistanceToStop metric + spatial trajectory warp anchors
-  PHASE_SPACE: cyclic anims → FFT → 2D phase vector
-
-.BHTEX — Texture 
-  HEADER: BHTX(4B) | uint64_t assetGUID | uint32_t contentHash | uint8_t averageColor
-  CHUNK: 64 KB GDeflate (mips concatenated), shared .bhdict dictionary
-  SVT_TABLE: 128×128 tile indices
-  SVT_CDF: streaming probability table
-  STOCHASTIC_SEEDS: 16-byte aligned seed block
-  ANISO_FIELDS: micro-direction vectors Morton-curve aligned
-  FORMATS: BaseColor: BC7_SRGB; Normals/ORMH: BC5_UNORM; HDR: BC6H_UFLOAT; SDF/masks: BC4_UNORM
-  PREMULTIPLY_ALPHA: Cooker pre-multiplies RGB×Alpha on mip generation
-  MIPS_ANISO: normal map + roughness mips generated per fiber direction
-  PAGE_FAULT: sparseTextureReturnCode() → atomic write to page-request SSBO
-
-.BHMAT — Material 
-  BINDLESS: BDA pointers (byte offsets) to SAMPLED_IMAGE + SAMPLER in global pool
-  INSTANCE_OVERRIDE: 32-bit feature mask + parameter deltas only
-  FEATURE_MASK: Specialization Constant at shader bind → dead code eliminated
-  STRUCT: 128-bit memory coalescing (uvec4 OpLoad, 1 clock per read)
-  SHADING_MODELS: PBR, Cel/NPR, Unlit, SSS, Transmission, Clearcoat, Anisotropic, Cloth/Hair
-  DYNAMIC_PARAMS: marked; static params declared const → SPIR-V constant folding
-
-.BHPFAB — Prefab 
-  INSTANCES: flat array of DeviceAddress, Morton Z-curve sorted
-  DESTRUCTION: hardcoded ID swap rules
-  PREFETCH: dependency array at file head
-
-.BHSYM — Debug Symbols 
-  CONTENT: Hash→string mapping (MurmurHash3)
-  LOAD: Editor/Debug builds only; Runtime binary: hashes only
-
----
-
-## АНИМАЦИЯ (ANIMATION)
-
-SKELETAL_RUNTIME: Ozz-animation (DOD, no OOP) 
-MOCAP_SMOOTH: TinySoothe 
-GPU_SKINNING: Compute Shader, Dual Quaternion blend, level-based barrier 
-  Cooperative_Matrix_Skinning: VK_KHR_cooperative_matrix for matrix palette skinning (tensor cores) 
-MOTION_MATCH: phase-space FFT vectors, OpDot 2D match 
-
-GPU_DRIVEN_ANIMATION_PIPELINE:
-  PRINCIPLE: CPU sends only high-level state (direction, speed, state_tag). All bone math on GPU Async Compute.
-  VISIBILITY_DRIVEN_SKINNING: Meshlet Culling FIRST → Skinning Compute SECOND; Input: VisibleVertexList (not full VertexBuffer)
-  SPLINE_DECOMPRESSION: Wave of 32 threads splits read; subgroupBroadcast distributes; cubic polynomial via fma chain
-  MOTION_MATCHING_GPU: phase vectors + foot positions + velocities in VRAM SSBO; VK_KHR_cooperative_matrix matmul
-  INERTIALIZATION_BLENDING: Spring Damper applied to angular velocities from .bhbone
-  IK_COMPUTE: analytical triangle solve (law of cosines); Ground_normal from Depth buffer; Jolt ShapeCast ahead
-  CLOTH_HAIR_SIMULATION: Spring-Mass PBD in Compute Shader, Subgroup operations
-  BLAS_REFIT: VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR; Async Compute Queue; Distance_cull NPC > 50m
-
----
-
-## ОСНОВНОЙ РЕНДЕР (MAIN RENDER)
-
-CULLING_PASS: Compute Shader 
-  HZB: Hierarchical Z-Buffer pyramid 
-  Subgroup_ballot: subgroupBallot() → single atomicAdd per Wave for MeshletDrawCommand
-  Wave_size: Wave32/64 adaptive via gl_SubgroupSize
-  Subgroup_Uniform_Control_Flow: VK_KHR_shader_subgroup_uniform_control_flow (reduced divergence penalty) 
-  Early_Fragment_Tests: VK_EXT_early_fragment_tests (depth test before fragment shader) 
-  Two_Phase_Occlusion: Phase1 (prev frame HZB) → Render → Phase2 (new HZB) for hidden object check 
-
-MESH_SHADER_PATH (high-end): 
-  Task Shader → emitMeshTasksEXT(4,1,1) for displacement meshlets
-  Mesh Shader → analytical subdivision in registers + Height Map displacement
-  Payload: 16-byte uint32_t[4] (BaseMeshletIndex | LOD | CullingMask | Material), bit-packed
-  Multi_Draw_Amplification: VK_EXT_mesh_shader multi-draw (single task shader emits multiple workgroups) 
-  Workgroup_Control: explicit workgroup size control for optimal wave utilization 
-
-INDIRECT_DRAW (fallback, no Mesh Shader): 
-  Surviving meshlet indices → flat Index Buffer via OpAtomicAdd
-  Command: vkCmdDrawIndexedIndirectCount (single call)
-
-DGC: vkCmdExecuteGeneratedCommandsEXT — GPU self-generates command streams 
-  Device_Address_Commands: VK_KHR_device_address_commands (GPU command generation via direct memory addresses) 
-DRAW_SORT: Compute sorts Draw Commands by Morton Z-curve before submission 
-PORTAL_CULLING: 2D AABB portals (doorways/windows) 
-SOFTWARE_RASTER: if screen-space triangle area < 1.5 px → Compute AtomicMax 
-DEPTH_BOUNDS: vkCmdSetDepthBounds for local lights/decals 
-  Depth_Bias_Control: VK_EXT_depth_bias_control (programmable depth bias granularity for shadow acne elimination) 
-
-VISIBILITY_BUFFER: VK_FORMAT_R32_UINT 
-  Encoding: [10b InstanceID | 14b MeshletID | 8b TriangleID]
-  Early-Z: hardware, no depth write from frag shader
-  Conservative_raster: VK_EXT_conservative_rasterization enabled
-  Early_Fragment_Tests: VK_EXT_early_fragment_tests (depth test before fragment shader execution) 
-
-MATERIAL_BINNING (divergence elimination): 
-  MaterialBinner.comp: reads R32 buffer → OpAtomicAdd bins screen coords by MaterialID
-  Output: per-material Indirect Draw commands
-  Shading: each wave processes homogeneous material only
-  Color_Write_Enable: VK_EXT_color_write_enable (per-color-channel write masks for deferred passes) 
-
-CLUSTERED_LIGHT_GRID: Froxels 16×16×32 (logarithmic Z) 
-  Slice_formula: slice = log2(linearDepth) × scale + bias
-  Build: Compute Shader before shading pass
-  Output: LightIndexList SSBO
-
-SUBGROUP_LIGHT_CULL (low-end): 
-  Tile MinZ/MaxZ: subgroupMin/subgroupMax
-  Per-thread: 1 light check → subgroupBallot → uint64_t activeLightsMask
-
-PUSH_CONSTANTS: Camera matrix, Sun direction, Time → up to 256 bytes → SGPR/CB registers 
-SHADING_PASS: reads Froxel cluster index, iterates activeLights only 
-  Maximal_reconvergence: VK_KHR_shader_maximal_reconvergence
-
-FALLBACK_GEOMETRY_PATH (NO MESH SHADERS): 
-  Detection: query VkPhysicalDeviceMeshShaderFeaturesEXT at init
-  IndexCompactor.comp: Input: visibilityMask from HZB culling; Output: compacted triangle indices
-  DecalBaker.comp: imageStore to modify BaseColor SVT pages in background Compute Queue
-  Primitive_Topology_Restart: VK_EXT_primitive_topology_list_restart (triangle strip with restart index) 
-
----
+**Критичный рефакторинг существующего кода (сделать в начале фазы):**
+- [~] `Device` / `SwapChain` / `Renderer` — есть, проверить Vulkan 1.4
+- [ ] Удалить `VkRenderPass` / `VkFramebuffer` → `VK_KHR_dynamic_rendering`
+- [ ] `VkDescriptorSet` → `VK_EXT_descriptor_heap` + BDA
+- [ ] `Pipeline` класс → Shader Objects (`VK_EXT_shader_object`)
+- [~] `ComputeShader.hpp` — перевести на data-driven `ComputePipeline` POD
 
 ## ШЕЙДЕРЫ И GPU PIPELINE (SHADERS & GPU PIPELINE)
 
 BINDLESS: full. VkPipeline: FORBIDDEN. VkDescriptorSet: FORBIDDEN. 
-  Descriptor_Buffer: VK_EXT_descriptor_buffer (bindless without descriptor sets, BDA-only access) 
-  Descriptor_Indexing: VK_EXT_descriptor_indexing (partially bound, update-after-bind) 
+  Descriptor_Heap: VK_EXT_descriptor_heap (NOT descriptor_buffer — deprecated) 
+  Descriptor_Indexing: VK_EXT_descriptor_indexing (partially bound, update-after-bind)
+  ComputePipeline: data-driven; push constants = resource indices 
 API_FEATURES: 
   VK_EXT_shader_object (Shader Objects, Dynamic State)
   VK_KHR_buffer_device_address (BDA)
@@ -377,7 +438,7 @@ VULKAN_1.4_2026_EXTENSIONS:
   VK_EXT_shader_atomic_float (atomicAdd/sub/min/max on float16/float32/float64)
   VK_EXT_shader_image_atomic_int64 (64-bit atomic operations on images)
   VK_KHR_shader_expect_assume (branch prediction hints: __builtin_expect for GPU)
-  VK_EXT_descriptor_buffer (bindless without descriptor sets, BDA-only access - DEPRECATED by descriptor_heap)
+  ~~VK_EXT_descriptor_buffer~~ → VK_EXT_descriptor_heap only
   VK_NV_low_latency2 (NVIDIA Reflex integration, reduced input latency for 8000Hz mice)
   VK_KHR_cooperative_matrix 2.0 (matrix multiply accumulate, FP8/INT4 support)
   VK_EXT_mesh_shader extensions (multi-draw meshlet amplification, task shader workgroups)
@@ -507,8 +568,240 @@ SHADER_RULES:
   Matrix_size: 4×3 or quaternion only (no 4×4 matrices in shaders)
   Scope_limit: { } blocks for variable aliasing → register reuse
   Cooperative_matrix: VK_KHR_cooperative_matrix for skinning, FFT-water, cloth
-
 ---
+
+## КАМЕРА И ДИСПЛЕЙ (CAMERA & DISPLAY)
+
+PHYSICAL_CAMERA:
+  Parameters: Focal Length, T-Stops, Aperture Blades (Bokeh shape)
+  Auto_Exposure: Compute Histogram (Subgroup Reductions) → physical eye adaptation
+  Artifacts: Rolling Shutter (velocity based), ISO Noise (procedural grain)
+
+CAMERA_DYNAMICS:
+  Collision: Jolt Sphere Cast (prevents clipping)
+  Smoothing: Spring-Damper system (mass/stiffness parameters)
+  Shake: Blue Noise multi-frequency procedural jitter
+
+VIEWPORTS_&_MULTI-CAM:
+  Portals/Mirrors: VK_KHR_multiview (geometry duplicated at hardware level)
+  PiP (Picture-in-Picture): Rendered at lower resolution with VRS 2x2/4x4
+  Foveation: Eye-Tracked VRS (focus = 1x1, periphery = 4x4)
+  Prediction: Late Latching (Matrix update immediately before vkQueueSubmit)
+---
+
+# ФАЗА 4 — АССЕТЫ И ФОРМАТЫ (cooker → runtime)
+
+## АССЕТ ПАЙПЛАЙН (ASSET PIPELINE)
+
+COOKER_RULES:
+  All heavy compute: offline only
+  Runtime: zero-copy deserialization (mmap)
+  SceneBaker: scan min/max → WorldFormatConfig; context-aware uint8/16 IDs
+  Context pack: entity/meshlet/light IDs → min bit width; flags → uint8 bitmask
+  Chunk_size: 64 KB (GDeflate/Kraken dictionary in header)
+  GUID: 64-bit MurmurHash3, no filenames
+  Struct_alignment: alignas(16), std430/std140
+  CAS: Blake3 content-addressable dedup of micro-chunks
+  Shared_dict: .bhdict per material category (+20–30% compression)
+  RDO: rate-distortion optimization before BC block packing
+
+TEXTURE_COMPRESS: Basis Universal → KTX2/ETC/BC7 ⚠️ PARTIAL (placeholder в AssetCooker.cpp)
+TEXTURE_HDR: TinyEXR (OpenEXR, skyboxes, lightmaps) 
+TEXTURE_SIMPLE: stb_image / stb_image_write (editor icons, PNG/JPG/TGA) 
+TEXTURE_FORMATS_2026: 
+  ASTC_4x4/6x6/8x8: Adaptive Scalable Texture Compression (mobile/console optimized)
+  BC7_SRGB_FEATURE: High-quality sRGB compression with perceptual error metrics
+  ETC2/EAC: OpenGL ES standard formats
+  RDO_Compression: Rate-Distortion Optimization before BC block packing (perceptually optimal)
+  Texture_Compression_ASTC_HDR: HDR ASTC compression for HDR textures
+  UASTC_Compression: Ultra-high quality compression (replaces Basis Universal placeholder) 
+  Hardware_Decompression: VK_NV_memory_decompression (GPU decompresses UASTC, zero CPU) 
+  Image_Compression_Control: VK_EXT_image_compression_control (hardware compression control for HDR/shadow buffers) 
+FONT_RASTER: FreeType (cooker-side glyph prep) ⚠️ PARTIAL
+FONT_FIELD: msdfgen (MSDF glyphs → sharp at any scale) 
+COMPRESSION_CPU: Zstd, libdeflate, LZ4/Lizard (RAM-to-RAM) 
+COMPRESSION_GPU: GDeflate (NVIDIA/Microsoft reference, hardware GPU decompress) 
+COMPRESSION_FLOAT: ZFP (heightmaps, SDF fields, lossless float) 
+PCG_WORLDGEN: FastNoiseLite, LibWFC (Wave Function Collapse, tile-based levels) 
+
+ASSET_COOKER_UTILS: 
+  AssetCooker.cpp/hpp: cookModel() ✅, cookProceduralTerrain() ✅, cookTexture() placeholder ❌, cookNavMesh() placeholder ❌, cookConvexHulls() placeholder ❌
+---
+
+## МОДЕЛИ И ГЕОМЕТРИЯ (MODELS & GEOMETRY)
+
+GEOMETRY_IMPORT: 
+  glTF_2.0: fastgltf (SIMD, async read) 
+  FBX: OpenFBX (lightweight, no Autodesk SDK)
+  USD: OpenUSD/Pixar (layered scenes)
+  OBJ_batch: Assimp (cooker-only)
+  OBJ_fast: tinyobjloader
+
+MESH_OPTIMIZE: meshoptimizer 
+  Algorithms: Forsyth reorder, Overdraw Minimization, Vertex Fetch
+  Output: Meshlets, LODs, index buffer compression
+
+ASSET_FORMATS:
+
+.BHMESH — GPU-Driven Geometry 
+  HEADER: magic BHTX(4B) | uint64_t assetGUID | uint32_t contentHash | uint8_t averageColor
+  STRUCT_ALIGN: alignas(16), #pragma pack(push,1)
+  ACCESS: BDA only (layout buffer_reference), uvec4 128-bit reads
+  VERTEX_STREAMS:
+    Buffer_A: Positions (float32 world or uint8 UNORM local)
+    Buffer_B: Attributes (normals, UV, tangents, SH weights)
+    Buffer_C: R:Dirt G:Wetness B:Wear A:CustomBlend
+    Buffer_D: Topological_map (weld index for cloth GPU-skinning)
+  NORMAL_PACK: Q-Tangents, MikkTSpace → VK_FORMAT_A2B10G10R10_SNORM_PACK32
+  POSITION_LOCAL: uint8 UNORM×3 relative to meshlet local AABB
+  COLOR_SEMANTIC: R:Dirt G:Wetness B:Wear A:Custom
+  MESHLET_LIMITS: max 64 verts, 126 tris, uint8 indices
+  MESHLET_PAD: zero-pad to multiples of 32/64 for Wave group alignment
+  LOD_SYSTEM: Progressive Micro-Mesh Diffing; Base Mesh + vertex split deltas; Distant_LOD: 3D Gaussian Splats
+  MESHLET_META: Pre-baked MeshletDrawCommand buffer; Bounding_Sphere + OBB matrix; normal cone; edge equations; isDirty flag
+  MATERIAL_HISTOGRAM: bitmask of MaterialIDs present in meshlet
+  RT_DATA: Pre-clamped BLAS Input Block; RT Proxy Hull; OMM Data
+  LIGHTMAP_VERTS: 4× unorm8x4 SH weights per vertex
+  CURVATURE_BAKED: Convex/Concave per vertex → 8 free bits in Buffer_B
+  PRT_SH_BAKED: 3-band Spherical Harmonics per LOD vertex
+  BENT_NORMAL_BAKED: sky accessibility vector + AO scalar
+  AUDIO_VOXEL: sparse octree of absorption coefficients 
+  PREFETCH_BLOCK: dependency array at file head → DirectStorage queues
+  DESTRUCTION_RULES: ID swap table for GPU culling
+  MORTON_SORT: instances sorted by Morton Z-curve
+
+.BHBONE — Skeleton 
+  HIERARCHY: topological sort by depth → LevelOffsets array
+  GPU_FLATTEN: MatrixFlattenedParents[] → parent index into flat N-1 level matrix array
+  BONE_MATRIX: Dual Quaternion, half (FP16), 16 bytes/bone
+  BONE_SCALE: parallel half3 boneScales[]
+  BONE_SDF: VK_FORMAT_R8_UNORM 3D texture (cloth collision)
+  IK_DATA: pole vectors, hinge axis baked
+  PSD: delta-morph trigger table
+  RAGDOLL: Swing/Twist limits (Jolt), Stiffness/Damping
+  CAPSULES: exported to physics; analytical shadow math
+  ANTIPODAL_FIX: Cooker pre-flips DQ signs throughout hierarchy
+
+.BHANIM — Animation 
+  TIME: uniform quantization (fixed step e.g. 33.3ms)
+  CURVES: Hermite spline tangents + derivatives only
+  LAYOUT: temporal chunks (all bones frames 0–30 contiguous)
+  ACTIVE_MASK: uint64_t ActiveChannelsMask per bone
+  INERTIAL_BLEND: angular velocity + acceleration baked for first/last 5 frames
+  FACE_COMPRESS: PCA, 16 basis vectors
+  BODY_COMPRESS: procedural animation curves
+  MOTION_MATCH: DistanceToStop metric + spatial trajectory warp anchors
+  PHASE_SPACE: cyclic anims → FFT → 2D phase vector
+
+.BHTEX — Texture 
+  HEADER: BHTX(4B) | uint64_t assetGUID | uint32_t contentHash | uint8_t averageColor
+  CHUNK: 64 KB GDeflate (mips concatenated), shared .bhdict dictionary
+  SVT_TABLE: 128×128 tile indices
+  SVT_CDF: streaming probability table
+  STOCHASTIC_SEEDS: 16-byte aligned seed block
+  ANISO_FIELDS: micro-direction vectors Morton-curve aligned
+  FORMATS: BaseColor: BC7_SRGB; Normals/ORMH: BC5_UNORM; HDR: BC6H_UFLOAT; SDF/masks: BC4_UNORM
+  PREMULTIPLY_ALPHA: Cooker pre-multiplies RGB×Alpha on mip generation
+  MIPS_ANISO: normal map + roughness mips generated per fiber direction
+  PAGE_FAULT: sparseTextureReturnCode() → atomic write to page-request SSBO
+
+.BHMAT — Material 
+  BINDLESS: BDA pointers (byte offsets) to SAMPLED_IMAGE + SAMPLER in global pool
+  INSTANCE_OVERRIDE: 32-bit feature mask + parameter deltas only
+  FEATURE_MASK: Specialization Constant at shader bind → dead code eliminated
+  STRUCT: 128-bit memory coalescing (uvec4 OpLoad, 1 clock per read)
+  SHADING_MODELS: PBR, Cel/NPR, Unlit, SSS, Transmission, Clearcoat, Anisotropic, Cloth/Hair
+  DYNAMIC_PARAMS: marked; static params declared const → SPIR-V constant folding
+
+.BHPFAB — Prefab 
+  INSTANCES: flat array of DeviceAddress, Morton Z-curve sorted
+  DESTRUCTION: hardcoded ID swap rules
+  PREFETCH: dependency array at file head
+
+.BHSCENE — Level (zero-copy runtime)
+  HEADER: magic BHSC | version | WorldFormatConfig | entity/meshlet/light counts
+  OFFSET_TABLE → SoA: positions, rotations, scales, matIDs, flags (packed per config)
+  STRING_POOL: names/tags at file tail; runtime uint32 offset only
+  LOAD: mmap → Flecs bulk set / GPU instance buffer format from header
+
+.BHSYM — Debug Symbols 
+  CONTENT: Hash→string mapping (MurmurHash3)
+  LOAD: Editor/Debug builds only; Runtime binary: hashes only
+---
+
+# ФАЗА 5 — ОСНОВНОЙ РЕНДЕР (VisBuffer, cull, GPU transform)
+
+**Уже в проекте (доработать, не переписывать с нуля):** `HiZSystem`, `CullingSystem`, `Gbuffer`, `Deferred`, `MainRender`, `RadianceCascades` (рано — оставить до Фазы 8).
+
+**Порядок внутри фазы:**
+1. Hi-Z pyramid (SPD)
+2. Meshlet / instance cull → indirect
+3. Visibility Buffer R32
+4. Compute unpack + motion vectors
+5. GPU matrix из `Transform12` (не CPU)
+
+## ОСНОВНОЙ РЕНДЕР (MAIN RENDER)
+
+CULLING_PASS: Compute Shader 
+  HZB: Hierarchical Z-Buffer pyramid 
+  Subgroup_ballot: subgroupBallot() → single atomicAdd per Wave for MeshletDrawCommand
+  Wave_size: Wave32/64 adaptive via gl_SubgroupSize
+  Subgroup_Uniform_Control_Flow: VK_KHR_shader_subgroup_uniform_control_flow (reduced divergence penalty) 
+  Early_Fragment_Tests: VK_EXT_early_fragment_tests (depth test before fragment shader) 
+  Two_Phase_Occlusion: Phase1 (prev frame HZB) → Render → Phase2 (new HZB) for hidden object check 
+
+MESH_SHADER_PATH (high-end): 
+  Task Shader → emitMeshTasksEXT(4,1,1) for displacement meshlets
+  Mesh Shader → analytical subdivision in registers + Height Map displacement
+  Payload: 16-byte uint32_t[4] (BaseMeshletIndex | LOD | CullingMask | Material), bit-packed
+  Multi_Draw_Amplification: VK_EXT_mesh_shader multi-draw (single task shader emits multiple workgroups) 
+  Workgroup_Control: explicit workgroup size control for optimal wave utilization 
+
+INDIRECT_DRAW (fallback, no Mesh Shader): 
+  Surviving meshlet indices → flat Index Buffer via OpAtomicAdd
+  Command: vkCmdDrawIndexedIndirectCount (single call)
+
+DGC: vkCmdExecuteGeneratedCommandsEXT — GPU self-generates command streams 
+  Device_Address_Commands: VK_KHR_device_address_commands (GPU command generation via direct memory addresses) 
+DRAW_SORT: Compute sorts Draw Commands by Morton Z-curve before submission 
+PORTAL_CULLING: 2D AABB portals (doorways/windows) 
+SOFTWARE_RASTER: if screen-space triangle area < 1.5 px → Compute AtomicMax 
+DEPTH_BOUNDS: vkCmdSetDepthBounds for local lights/decals 
+  Depth_Bias_Control: VK_EXT_depth_bias_control (programmable depth bias granularity for shadow acne elimination) 
+
+VISIBILITY_BUFFER: VK_FORMAT_R32_UINT 
+  Encoding: [10b InstanceID | 14b MeshletID | 8b TriangleID]
+  Early-Z: hardware, no depth write from frag shader
+  Conservative_raster: VK_EXT_conservative_rasterization enabled
+  Early_Fragment_Tests: VK_EXT_early_fragment_tests (depth test before fragment shader execution) 
+
+MATERIAL_BINNING (divergence elimination): 
+  MaterialBinner.comp: reads R32 buffer → OpAtomicAdd bins screen coords by MaterialID
+  Output: per-material Indirect Draw commands
+  Shading: each wave processes homogeneous material only
+  Color_Write_Enable: VK_EXT_color_write_enable (per-color-channel write masks for deferred passes) 
+
+CLUSTERED_LIGHT_GRID: Froxels 16×16×32 (logarithmic Z) 
+  Slice_formula: slice = log2(linearDepth) × scale + bias
+  Build: Compute Shader before shading pass
+  Output: LightIndexList SSBO
+
+SUBGROUP_LIGHT_CULL (low-end): 
+  Tile MinZ/MaxZ: subgroupMin/subgroupMax
+  Per-thread: 1 light check → subgroupBallot → uint64_t activeLightsMask
+
+PUSH_CONSTANTS: Camera matrix, Sun direction, Time → up to 256 bytes → SGPR/CB registers 
+SHADING_PASS: reads Froxel cluster index, iterates activeLights only 
+  Maximal_reconvergence: VK_KHR_shader_maximal_reconvergence
+
+FALLBACK_GEOMETRY_PATH (NO MESH SHADERS): 
+  Detection: query VkPhysicalDeviceMeshShaderFeaturesEXT at init
+  IndexCompactor.comp: Input: visibilityMask from HZB culling; Output: compacted triangle indices
+  DecalBaker.comp: imageStore to modify BaseColor SVT pages in background Compute Queue
+  Primitive_Topology_Restart: VK_EXT_primitive_topology_list_restart (triangle strip with restart index) 
+---
+
+# ФАЗА 6 — МАТЕРИАЛЫ И ТЕКСТУРЫ
 
 ## МАТЕРИАЛЫ И BRDF (MATERIALS & BRDF)
 
@@ -529,10 +822,50 @@ LOW_END_FALLBACKS (Specialization Constant, not separate shaders):
   Multi_scatter → Albedo correction scalar
   BRDF_LUT → analytical curve: color*(F0*x + y)
   Detail_normal/Clearcoat/Anisotropy: skipped if distance > 15m
-
 ---
 
+# ФАЗА 7 — ТЕНИ (VSM, не RT)
+
+## ТЕНИ (SHADOWS)
+
+VSM (Virtual Shadow Maps): 
+  Page_size: 128×128 px
+  Allocation: Sparse Binding vkBindImageMemory2 (empty pages → null physical block)
+  Invalidation: Compute Shader projects dynamic object BoundingSpheres → atomic isDirty flag
+  Render: vkCmdDrawMeshTasksIndirectEXT for isDirty==1 pages only
+  Static_shadows: baked once, zero redraw cost
+
+SMRT (Shadow Map Ray Tracing on VSM): 
+  Technique: Ray Marching along light vector through VSM Clipmap mip hierarchy
+  Mip_skip: empty mip → jump large space in 1 clock
+  Result: contact-hardening soft shadows
+  Micro_Shadows: DMM micro-shadows for displacement micromaps (cracks, brick details) 
+
+RSM (Reflective Shadow Maps — no RT): 
+  Shadow_pass: simultaneously writes Flux (albedo) + Normal to extra RTs
+  Compute_VPLs: 16–32 Poisson-disk samples around projected pixel in shadow tex
+  Math: each sample = Virtual Point Light → additive GI contribution
+
+CAPSULE_SHADOWS (crowd/NPCs, no shadow maps): 
+  Input: .bhbone Jolt capsule data
+  Formula: analytical cone-capsule intersection in Compute lighting shader
+  Cost_geo: 0 polygons | Cost_VRAM: 0 bytes
+
+SCREEN_CONTACT_SHADOWS: ⚠️ PARTIAL
+  Target: 1–2 stochastic steps (not 8–12) + temporal filter
+  Direction: toward light source
+  Thickness_heuristic: prevents back-surface shadowing
+---
+
+# ФАЗА 8 — СВЕТ И GI (ReSTIR + Radiance Cascades)
+
+**Уже есть:** `RadianceCascades.cpp`, `SSGISystem` — встроить после VSM + VisBuffer shade, не раньше.
+
+**Порядок внутри фазы:** ReSTIR DI → froxels → ReSTIR GI → world-space cascades (`cascade_merge.comp`) → SSR/RT fallback.
+
 ## RAY TRACING И ГЛОБАЛЬНОЕ ОСВЕЩЕНИЕ (RT & GI)
+
+> **Политика:** тени = VSM (не RT). GI = ReSTIR GI + **Sparse World-Space Radiance Cascades** (не screen-space primary). Отражения = SSR + RT fallback ≤20 m.
 
 RT_INLINE: VK_KHR_ray_query from Compute Shader (no Any-Hit/Closest-Hit shaders) 
 RT_FLAGS: gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT (boolean shadow only) 
@@ -544,9 +877,16 @@ RESTIR_DI:
   Passes: Spatial reuse (4 neighbors) + Temporal reuse (prev frame)
   Result: 1 shadow ray/pixel supports 100k+ lights
 
-RESTIR_GI:  (spatiotemporal reservoir reuse for indirect illumination)
+RESTIR_GI: spatiotemporal reservoir reuse for indirect illumination
 
-HASH_GRID_GI (World-Space Radiance Cache): 
+RADIANCE_CASCADES (World-Space, sparse):
+  Clipmap/grid around player (not screen-space): dense probes near camera, sparse far
+  Cascade 0: per-pixel probes, few rays; Cascade N: sparse probes, many angles
+  Merge cascades → stable diffuse GI without heavy denoisers
+  ReSTIR inside probes: importance sample lights/paths, fix light leaks (shadow validation)
+  Lazy update: static sector / idle camera → reuse cached cascade textures
+
+HASH_GRID_GI (World-Space Radiance Cache — fallback/complement): 
   Storage: SSBO hash table (PCG Hash or MurmurHash3 on XYZ)
   Cache_hit: immediate read; cache_miss: compute + atomic write
   Eviction: FrameIndex-based decay
@@ -589,40 +929,9 @@ FULL_PATH_TRACING:
   Position_Fetch: VK_KHR_ray_tracing_position_fetch (accurate hit position without any-hit shader) 
   Ray_Tracing_Pipeline_Cache: VK_KHR_pipeline_library (cross-frame pipeline caching) 
   Adaptive_RT: Checkerboarding (0.5 rpp) + VRS-guided RT (2x2 in shadows/motion blur) 
-
 ---
 
-## ТЕНИ (SHADOWS)
-
-VSM (Virtual Shadow Maps): 
-  Page_size: 128×128 px
-  Allocation: Sparse Binding vkBindImageMemory2 (empty pages → null physical block)
-  Invalidation: Compute Shader projects dynamic object BoundingSpheres → atomic isDirty flag
-  Render: vkCmdDrawMeshTasksIndirectEXT for isDirty==1 pages only
-  Static_shadows: baked once, zero redraw cost
-
-SMRT (Shadow Map Ray Tracing on VSM): 
-  Technique: Ray Marching along light vector through VSM Clipmap mip hierarchy
-  Mip_skip: empty mip → jump large space in 1 clock
-  Result: contact-hardening soft shadows
-  Micro_Shadows: DMM micro-shadows for displacement micromaps (cracks, brick details) 
-
-RSM (Reflective Shadow Maps — no RT): 
-  Shadow_pass: simultaneously writes Flux (albedo) + Normal to extra RTs
-  Compute_VPLs: 16–32 Poisson-disk samples around projected pixel in shadow tex
-  Math: each sample = Virtual Point Light → additive GI contribution
-
-CAPSULE_SHADOWS (crowd/NPCs, no shadow maps): 
-  Input: .bhbone Jolt capsule data
-  Formula: analytical cone-capsule intersection in Compute lighting shader
-  Cost_geo: 0 polygons | Cost_VRAM: 0 bytes
-
-SCREEN_CONTACT_SHADOWS: ⚠️ PARTIAL (C++ обвязка готова, шейдер не готов)
-  Steps: 8–12 Ray March over linear depth buffer
-  Direction: toward light source
-  Thickness_heuristic: prevents back-surface shadowing
-
----
+# ФАЗА 9 — ПОСТОБРАБОТКА
 
 ## ПОСТОБРАБОТКА (POST-PROCESSING)
 
@@ -717,42 +1026,175 @@ STYLIZATION_&_NPR:
   Animation_Aesthetics: Step_Frame multiplier; Motion_Smear via Velocity Buffer
   Retro_Pixelation: Edge-Preserving Upscaling; Blue Noise Dithering
   Lens_Distortion_Math: uv + direction * (dist^2); Chromatic_Aberration: length(uv - 0.5) channel offset
-
 ---
 
-## UI И ТИПОГРАФИКА (UI & TYPOGRAPHY)
+# ФАЗА 10 — ФИЗИКА (Jolt, тиры, raycast)
 
-UI_FRAMEWORK: ImGui (Docking Branch) 
-GIZMOS: ImGuizmo (3D translate/rotate/scale manipulators) 
-FILE_DIALOG: nfd-extended (native OS open/save dialogs) 
-LAYOUT_ENGINE: Yoga/Meta (Flexbox C++, auto layout) 
-VECTOR_ANIM: Rive C++ Runtime (GPU vector animation via Vulkan) 
-TEXT_SHAPE: HarfBuzz (Arabic, CJK, ligatures) 
+## ФИЗИКА (PHYSICS)
 
-FONT_FORMAT: .BHFONT 
-  Technology: MSDF 2.0 (Multi-channel Signed Distance Field)
-  Shaping: HarfBuzz GPU (Compute Shader text layout)
-  Anti_aliasing: VK_KHR_fragment_shader_barycentric (subpixel edge reconstruction without TAA)
+PHYSICS_ENGINE: Jolt Physics 
+  Mode: multi-thread; floating origin для больших миров (DP — опционально)
+  Tick tiers: High (every frame) / Medium (15–20 Hz) / Low (2–3 Hz) via Flecs tags
+  Sleep: velocity < ε → remove active physics component
+  Projectiles: RayCast batch, no per-bullet RigidBody
+  Compile_Targets: Jolt_SSE42, Jolt_AVX2, Jolt_AVX512 (separate static libs)
+  Dispatch: CPUID at runtime → load optimal branch
+  Fiber_Job_Bridge: inherit JPH::JobSystem, dispatch into engine Fiber coroutine pool
+  Temp_Allocator: FrameArenaAllocator replaces Jolt default
+  Zero_Copy_GPU_Sync: Jolt writes transforms to ReBAR memory (DEVICE_LOCAL | HOST_VISIBLE)
+  Broadphase_Layers: NON_MOVING, MOVING, DEBRIS, SENSOR, PROJECTILE
+    DEBRIS × DEBRIS: collision disabled
+  Tickrate_LOD: ≤50m: 60-120 Hz; 50-200m: 30 Hz; >200m: Put To Sleep
+  State_Interpolation: StatePrevious[], StateCurrent[] buffers; GPU interpolation shader
+  Solver_Scaling: High-End: mNumVelocitySteps=10, mNumPositionSteps=2; Low-End: 4/1
+  Character_Controller: JPH::CharacterVirtual (Stair Stepping, Moving Platforms, Sliding)
+  Vehicle: JPH::VehicleConstraint (wheeled), JPH::TrackedVehicleController (tank)
+  Soft_Bodies: Jolt v5.0+ native LBD; LOD_swap to RigidBody at >30m
+  Buoyancy: JPH::CalculateBuoyancy with FFT/Gerstner wave sync
+  Destruction: Rest state Box → On impact: remove Box → CompoundShape + impulse + breakable joints
+  Physical_Animation: Motorized Constraints on .bhbone joints (Euphoria-style)
+  Raycast_Batching: Accumulate all raycasts → single JPH::NarrowPhaseQuery batch
+  CCD: LAYER_FAST_PROJECTILES only; Sphere approximation for fast compound
+  Determinism: JPH_ENABLE_DETERMINISM flag + FMA disabled
+  State_Recorder: JPH::StateRecorder → binary dump for rollback
+  Debug: JPH_ENABLE_ASSERTS + DrawIndirect lines for visualization
 
-UI_PRIMITIVES:
-  Storage: Bindless array of UIPrimitive structs (SSBO)
-  Draw_call: 1 DrawIndirect per UI layer
-  Shapes: Vector Bezier curves evaluated analytically in fragment shader
-  Clipping: Bitmask / AABB intersection in shader (no VkCmdSetScissor)
+CAPSULE_SHADOWS: analytical cone-capsule intersection from .bhbone 
+PARTICLE_SDF_COLLISIONS: baked scene SDF (R8_UNORM 3D texture) 
+PBD_GPU: Position Based Dynamics in Compute Shader 
 
-COMPOSITING:
-  Frosted_Glass: VK_KHR_dynamic_rendering_local_read (read L1 cache color directly)
-  Luma_Stealing: UI reads background Mip level → auto-inverts text color
-  Resolution_Scale: UI natively 4K; 3D scene scales dynamically via PID controller
-  Feedback_Loop_Layout: VK_EXT_attachment_feedback_loop_layout (feedback loops without separate passes) 
+NAVMESH: Recast (offline bake) 
+NAVMESH_RUNTIME: Detour (pathfinding) 
+PATHFIND_LIGHT: MicroPather (graph-based AI) 
+---
 
-LATENCY_OPTIMIZATION:
-  Cursor: Hardware Cursor Sync tied to VK_KHR_present_wait
-  Input_thread: High-priority OS thread → Shared Buffer (GPU reads at frame start)
-  Caching: Dirty Rect Cache via VK_EXT_host_image_copy
-  NVIDIA_Reflex: VK_NV_low_latency2 (reduced input latency, GPU sleep/wake optimization) 
-  Late_Latching: Matrix update immediately before vkQueueSubmit (reduces motion-to-photon latency) 
+# ФАЗА 11 — АНИМАЦИЯ
 
+## АНИМАЦИЯ (ANIMATION)
+
+SKELETAL_RUNTIME: Ozz-animation (DOD, no OOP) 
+MOCAP_SMOOTH: TinySoothe 
+GPU_SKINNING: Compute Shader, Dual Quaternion blend, level-based barrier 
+  Cooperative_Matrix_Skinning: VK_KHR_cooperative_matrix for matrix palette skinning (tensor cores) 
+MOTION_MATCH: phase-space FFT vectors, OpDot 2D match 
+
+GPU_DRIVEN_ANIMATION_PIPELINE:
+  PRINCIPLE: CPU sends only high-level state (direction, speed, state_tag). All bone math on GPU Async Compute.
+  VISIBILITY_DRIVEN_SKINNING: Meshlet Culling FIRST → Skinning Compute SECOND; Input: VisibleVertexList (not full VertexBuffer)
+  SPLINE_DECOMPRESSION: Wave of 32 threads splits read; subgroupBroadcast distributes; cubic polynomial via fma chain
+  MOTION_MATCHING_GPU: phase vectors + foot positions + velocities in VRAM SSBO; VK_KHR_cooperative_matrix matmul
+  INERTIALIZATION_BLENDING: Spring Damper applied to angular velocities from .bhbone
+  IK_COMPUTE: analytical triangle solve (law of cosines); Ground_normal from Depth buffer; Jolt ShapeCast ahead
+  CLOTH_HAIR_SIMULATION: Spring-Mass PBD in Compute Shader, Subgroup operations
+  BLAS_REFIT: VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR; Async Compute Queue; Distance_cull NPC > 50m
+---
+
+# ФАЗА 12 — ВИРТУАЛЬНАЯ ГЕОМЕТРИЯ И ТЕРРЕЙН
+
+## ВИРТУАЛЬНАЯ ГЕОМЕТРИЯ И ТЕРРЕЙН (VIRTUAL GEOMETRY & TERRAIN)
+
+VIRTUAL_GEOMETRY_DATA: .BHVIRT 
+  Structure: Directed Acyclic Graph (DAG) of Meshlet Clusters (128 triangles each)
+  Precision: 8/10/12-bit quantized local coordinates
+  Metric: Target projection error < 0.5 pixel
+
+LOD_SELECTION (Task Shader): 
+  Input: Camera matrix, HZB, DAG root
+  Evaluation: Wave32/64 evaluates 32 clusters/clock
+  Culling: Frustum + Backface cone + HZB Occlusion
+  Command_Gen: Device Generated Commands (DGC) writes to draw SSBO
+  Image_2D_View_of_3D: VK_EXT_image_2d_view_of_3d (2D view of 3D texture slice for terrain heightfield without copy) 
+
+HYBRID_RASTERIZATION: 
+  Hardware_Path: Triangle > 4 pixels → standard pipeline
+  Software_Path: Triangle < 4 pixels → Compute Shader Software Rasterizer
+  VisBuffer_Write: R64_UINT (32-bit Depth | 32-bit ID: Instance+Cluster+Triangle) via atomicMax
+
+STREAMING (GPU PAGE FAULTS): 
+  Cache_Miss: GPU writes ClusterID to Request SSBO
+  Bypass: DMA Queue reads SSBO → DirectStorage fetches from NVMe to VRAM
+
+TERRAIN_SYSTEM: .BHTER 
+  Geometry: Virtual Heightfield Mesh (VHM) + Clipmaps
+  Tessellation: Task Shader curvature analysis (flat = 1 tri, cliff = dense meshlets)
+  Texturing: Sparse Virtual Texturing (SVT) 128K x 128K; Triplanar Auto-Mapping
+
+FOLIAGE_INSTANCING: 
+  Placement: Compute Shader + Biome Seed → Matrix4x3 array
+  Culling: Biome Radius → Frustum → HZB
+  LOD: Distance > threshold → Shadow Impostors or 3D Gaussian Splats
+---
+
+# ФАЗА 13 — VFX И АТМОСФЕРА
+
+## VFX И ЧАСТИЦЫ (VFX & PARTICLES)
+
+GPU_PARTICLE_SYSTEM: 
+  Compute Shader, fixed-size arrays, bitwise AND for modulo
+  PBD_GPU: Position Based Dynamics in Compute Shader
+  Particle_SDF_Collisions: baked scene SDF (R8_UNORM 3D texture)
+  Atomic_Float_Particles: VK_EXT_shader_atomic_float for particle physics (atomic min/max on float positions) 
+
+VOLUMETRICS: NanoVDB/NVIDIA (sparse volumes, GPU ray march, R16F 3D tex) 
+NOISE_PCG: FastNoiseLite (terrain, clouds, destruction) 
+LEVEL_GEN: LibWFC (Wave Function Collapse, tile-logic) 
+---
+
+## ПОГОДА И АТМОСФЕРА (WEATHER & ATMOSPHERE)
+
+SKY_DOME: 
+  Scattering: Analytical Rayleigh/Mie via 32x128 LUTs
+  Multiple_Suns: Supported, each injects vector into ReSTIR DI
+  Stars: Compute Shader PCG generation + Perlin noise scintillation
+
+VOLUMETRIC_CLOUDS: .BHCLOUD 
+  Algorithm: Sparse Ray-Marching (1/4 or 1/16 screen res)
+  Optimization: Bitmask Culling (skips empty 3D space)
+  Upsampling: Temporal Reconstruction with velocity re-projection
+  Shadows: Asynchronous 2D Shadow Mask generation
+  Cooperative_Matrix_Lighting: VK_KHR_cooperative_matrix for cloud lighting (tensor cores) 
+
+WEATHER_SYSTEM: 
+  Wind: GVF (Global Vector Field) 3D Texture (3 frequencies)
+  Precipitation: Mesh Shader particles (lines/streaks), Global SDF collision
+  Fog: Froxel 3D grid, Subgroup Integration for light scattering
+
+FLUID_SIMULATION: .BHSIM 
+  Macro_Water: Shallow Water Equations (SWE) in Compute (2D surface, Jolt impulses)
+  Micro_Splash: Hybrid SPH (Smoothed Particle Hydrodynamics)
+  Gas/Fire: Sparse VDB (Sparse Volume Data), simulates only active voxels
+  Jolt_Coupling: Fluid velocity vectors written to Jolt ReBAR force maps
+  Cooperative_Matrix_Fluid: VK_KHR_cooperative_matrix for SPH neighbor lookups (tensor cores) 
+---
+
+# ФАЗА 14 — AI И ЗВУК
+
+## AI И НАВИГАЦИЯ (AI & NAVIGATION)
+
+NAVIGATION_DATA: .BHNAV 
+  Format: 3D Flow Fields (Morton ordered distance fields)
+  Pathfinding: Unit reads velocity vector from 3D texture based on WorldPos
+  Dynamic_obstacles: Jolt Physics writes AABB → Async Compute boolean subtract
+
+BEHAVIOR_GOAP (Vectorized): 
+  Structure: Bitmasks for world state and goals
+  Evaluation: subgroupBallot() + findMSB() (1000 agents processed in 1 Wave)
+  Logic_fallback: FSM (Finite State Machine) batched 64 units per Wave
+
+ 
+
+SENSORY_SYSTEM: 
+  Vision: SDF-Vision (Ray-less). Evaluates Global SDF distance at player coordinate
+  Occlusion_Cost: 1 texture read (0 physics raycasts)
+
+LOCAL_AVOIDANCE: 
+  Algorithm: GPU RVO (Reciprocal Velocity Obstacles)
+  Execution: Compute Shader analyzes neighbors in radius → output offset vector
+  Integration: Write directly to Jolt ReBAR kinematic targets
+
+LOD_SCALING: 
+  Visibility: Checked via HZB pyramid
+  Out_of_sight: Update frequency drops to 10 Hz; Animation disables
 ---
 
 ## ЗВУК (AUDIO)
@@ -787,172 +1229,42 @@ PHYSICS_AUDIO_SYNC:
   Trigger: Jolt ContactEvent → struct { Hash audioID; vec3 pos; float impactSpeed; } → Lock-Free Event Bus
   Processing: Audio system reads batch from queue; applies Pitch + Volume + Transient Shaper
   Animation_sync: sound cue hashes from .bhanim events
-
 ---
 
-## VFX И ЧАСТИЦЫ (VFX & PARTICLES)
+# ФАЗА 15 — РЕДАКТОР, UI, СЕТЬ, ДИАГНОСТИКА
 
-GPU_PARTICLE_SYSTEM: 
-  Compute Shader, fixed-size arrays, bitwise AND for modulo
-  PBD_GPU: Position Based Dynamics in Compute Shader
-  Particle_SDF_Collisions: baked scene SDF (R8_UNORM 3D texture)
-  Atomic_Float_Particles: VK_EXT_shader_atomic_float for particle physics (atomic min/max on float positions) 
+## UI И ТИПОГРАФИКА (UI & TYPOGRAPHY)
 
-VOLUMETRICS: NanoVDB/NVIDIA (sparse volumes, GPU ray march, R16F 3D tex) 
-NOISE_PCG: FastNoiseLite (terrain, clouds, destruction) 
-LEVEL_GEN: LibWFC (Wave Function Collapse, tile-logic) 
+UI_FRAMEWORK: ImGui (Docking Branch) 
+GIZMOS: ImGuizmo (3D translate/rotate/scale manipulators) 
+FILE_DIALOG: nfd-extended (native OS open/save dialogs) 
+LAYOUT_ENGINE: Yoga/Meta (Flexbox C++, auto layout) 
+VECTOR_ANIM: Rive C++ Runtime (GPU vector animation via Vulkan) 
+TEXT_SHAPE: HarfBuzz (Arabic, CJK, ligatures) 
 
----
+FONT_FORMAT: .BHFONT 
+  Technology: MSDF 2.0 (Multi-channel Signed Distance Field)
+  Shaping: HarfBuzz GPU (Compute Shader text layout)
+  Anti_aliasing: VK_KHR_fragment_shader_barycentric (subpixel edge reconstruction without TAA)
 
-## AI И НАВИГАЦИЯ (AI & NAVIGATION)
+UI_PRIMITIVES:
+  Storage: Bindless array of UIPrimitive structs (SSBO)
+  Draw_call: 1 DrawIndirect per UI layer
+  Shapes: Vector Bezier curves evaluated analytically in fragment shader
+  Clipping: Bitmask / AABB intersection in shader (no VkCmdSetScissor)
 
-NAVIGATION_DATA: .BHNAV 
-  Format: 3D Flow Fields (Morton ordered distance fields)
-  Pathfinding: Unit reads velocity vector from 3D texture based on WorldPos
-  Dynamic_obstacles: Jolt Physics writes AABB → Async Compute boolean subtract
+COMPOSITING:
+  Frosted_Glass: VK_KHR_dynamic_rendering_local_read (read L1 cache color directly)
+  Luma_Stealing: UI reads background Mip level → auto-inverts text color
+  Resolution_Scale: UI natively 4K; 3D scene scales dynamically via PID controller
+  Feedback_Loop_Layout: VK_EXT_attachment_feedback_loop_layout (feedback loops without separate passes) 
 
-BEHAVIOR_GOAP (Vectorized): 
-  Structure: Bitmasks for world state and goals
-  Evaluation: subgroupBallot() + findMSB() (1000 agents processed in 1 Wave)
-  Logic_fallback: FSM (Finite State Machine) batched 64 units per Wave
-
- 
-
-SENSORY_SYSTEM: 
-  Vision: SDF-Vision (Ray-less). Evaluates Global SDF distance at player coordinate
-  Occlusion_Cost: 1 texture read (0 physics raycasts)
-
-LOCAL_AVOIDANCE: 
-  Algorithm: GPU RVO (Reciprocal Velocity Obstacles)
-  Execution: Compute Shader analyzes neighbors in radius → output offset vector
-  Integration: Write directly to Jolt ReBAR kinematic targets
-
-LOD_SCALING: 
-  Visibility: Checked via HZB pyramid
-  Out_of_sight: Update frequency drops to 10 Hz; Animation disables
-
----
-
-## ВИРТУАЛЬНАЯ ГЕОМЕТРИЯ И ТЕРРЕЙН (VIRTUAL GEOMETRY & TERRAIN)
-
-VIRTUAL_GEOMETRY_DATA: .BHVIRT 
-  Structure: Directed Acyclic Graph (DAG) of Meshlet Clusters (128 triangles each)
-  Precision: 8/10/12-bit quantized local coordinates
-  Metric: Target projection error < 0.5 pixel
-
-LOD_SELECTION (Task Shader): 
-  Input: Camera matrix, HZB, DAG root
-  Evaluation: Wave32/64 evaluates 32 clusters/clock
-  Culling: Frustum + Backface cone + HZB Occlusion
-  Command_Gen: Device Generated Commands (DGC) writes to draw SSBO
-  Image_2D_View_of_3D: VK_EXT_image_2d_view_of_3d (2D view of 3D texture slice for terrain heightfield without copy) 
-
-HYBRID_RASTERIZATION: 
-  Hardware_Path: Triangle > 4 pixels → standard pipeline
-  Software_Path: Triangle < 4 pixels → Compute Shader Software Rasterizer
-  VisBuffer_Write: R64_UINT (32-bit Depth | 32-bit ID: Instance+Cluster+Triangle) via atomicMax
-
-STREAMING (GPU PAGE FAULTS): 
-  Cache_Miss: GPU writes ClusterID to Request SSBO
-  Bypass: DMA Queue reads SSBO → DirectStorage fetches from NVMe to VRAM
-
-TERRAIN_SYSTEM: .BHTER 
-  Geometry: Virtual Heightfield Mesh (VHM) + Clipmaps
-  Tessellation: Task Shader curvature analysis (flat = 1 tri, cliff = dense meshlets)
-  Texturing: Sparse Virtual Texturing (SVT) 128K x 128K; Triplanar Auto-Mapping
-
-FOLIAGE_INSTANCING: 
-  Placement: Compute Shader + Biome Seed → Matrix4x3 array
-  Culling: Biome Radius → Frustum → HZB
-  LOD: Distance > threshold → Shadow Impostors or 3D Gaussian Splats
-
----
-
-## ПОГОДА И АТМОСФЕРА (WEATHER & ATMOSPHERE)
-
-SKY_DOME: 
-  Scattering: Analytical Rayleigh/Mie via 32x128 LUTs
-  Multiple_Suns: Supported, each injects vector into ReSTIR DI
-  Stars: Compute Shader PCG generation + Perlin noise scintillation
-
-VOLUMETRIC_CLOUDS: .BHCLOUD 
-  Algorithm: Sparse Ray-Marching (1/4 or 1/16 screen res)
-  Optimization: Bitmask Culling (skips empty 3D space)
-  Upsampling: Temporal Reconstruction with velocity re-projection
-  Shadows: Asynchronous 2D Shadow Mask generation
-  Cooperative_Matrix_Lighting: VK_KHR_cooperative_matrix for cloud lighting (tensor cores) 
-
-WEATHER_SYSTEM: 
-  Wind: GVF (Global Vector Field) 3D Texture (3 frequencies)
-  Precipitation: Mesh Shader particles (lines/streaks), Global SDF collision
-  Fog: Froxel 3D grid, Subgroup Integration for light scattering
-
-FLUID_SIMULATION: .BHSIM 
-  Macro_Water: Shallow Water Equations (SWE) in Compute (2D surface, Jolt impulses)
-  Micro_Splash: Hybrid SPH (Smoothed Particle Hydrodynamics)
-  Gas/Fire: Sparse VDB (Sparse Volume Data), simulates only active voxels
-  Jolt_Coupling: Fluid velocity vectors written to Jolt ReBAR force maps
-  Cooperative_Matrix_Fluid: VK_KHR_cooperative_matrix for SPH neighbor lookups (tensor cores) 
-
----
-
-## ДЕФОРМИРУЕМЫЕ ОБЪЕКТЫ (DEFORMABLES)
-
-HAIR_STRANDS: .BHHAR 
-  Simulation: Guide Hair XPBD (Extended Position Based Dynamics) in Compute (1-5% guides)
-  Generation: Mesh Shader expands guides to ribbons/tubes based on LOD
-  Shading: Marschner BRDF (R + TRT scattering)
-  Transparency: OIT via VK_KHR_fragment_shader_barycentric + Fragment Density
-
-CLOTH_SIMULATION: 
-  Algorithm: Multi-Layer XPBD
-  Optimization: Tiled Constraint Solving (16x16 tiles in LDS + Subgroup Partitioning)
-  Collision: Global SDF (zero-penetration wrapper) + Spatial Hash self-collision
-  Wrinkles: Stress Map → dynamic normal map generation
-  Cooperative_Matrix_Constraints: VK_KHR_cooperative_matrix for constraint solving (tensor cores) 
-
-SOFT_BODIES: 
-  Algorithm: Cluster-Based PBD (Tetrahedral volume preservation)
-  Blend: Linear Blend Skinning (Base) + XPBD (Secondary Jiggle/Inertia)
-  Materials: Stiffness LUT in texture atlas
-  Cooperative_Matrix_SoftBody: VK_KHR_cooperative_matrix for tetrahedral volume constraints (tensor cores) 
-
----
-
-## АССЕТ ПАЙПЛАЙН (ASSET PIPELINE)
-
-COOKER_RULES:
-  All heavy compute: offline only
-  Runtime: zero-copy deserialization
-  Chunk_size: 64 KB (GDeflate/Kraken dictionary in header)
-  GUID: 64-bit MurmurHash3, no filenames
-  Struct_alignment: alignas(16), std430/std140
-  CAS: Blake3 content-addressable dedup of micro-chunks
-  Shared_dict: .bhdict per material category (+20–30% compression)
-  RDO: rate-distortion optimization before BC block packing
-
-TEXTURE_COMPRESS: Basis Universal → KTX2/ETC/BC7 ⚠️ PARTIAL (placeholder в AssetCooker.cpp)
-TEXTURE_HDR: TinyEXR (OpenEXR, skyboxes, lightmaps) 
-TEXTURE_SIMPLE: stb_image / stb_image_write (editor icons, PNG/JPG/TGA) 
-TEXTURE_FORMATS_2026: 
-  ASTC_4x4/6x6/8x8: Adaptive Scalable Texture Compression (mobile/console optimized)
-  BC7_SRGB_FEATURE: High-quality sRGB compression with perceptual error metrics
-  ETC2/EAC: OpenGL ES standard formats
-  RDO_Compression: Rate-Distortion Optimization before BC block packing (perceptually optimal)
-  Texture_Compression_ASTC_HDR: HDR ASTC compression for HDR textures
-  UASTC_Compression: Ultra-high quality compression (replaces Basis Universal placeholder) 
-  Hardware_Decompression: VK_NV_memory_decompression (GPU decompresses UASTC, zero CPU) 
-  Image_Compression_Control: VK_EXT_image_compression_control (hardware compression control for HDR/shadow buffers) 
-FONT_RASTER: FreeType (cooker-side glyph prep) ⚠️ PARTIAL
-FONT_FIELD: msdfgen (MSDF glyphs → sharp at any scale) 
-COMPRESSION_CPU: Zstd, libdeflate, LZ4/Lizard (RAM-to-RAM) 
-COMPRESSION_GPU: GDeflate (NVIDIA/Microsoft reference, hardware GPU decompress) 
-COMPRESSION_FLOAT: ZFP (heightmaps, SDF fields, lossless float) 
-PCG_WORLDGEN: FastNoiseLite, LibWFC (Wave Function Collapse, tile-based levels) 
-
-ASSET_COOKER_UTILS: 
-  AssetCooker.cpp/hpp: cookModel() ✅, cookProceduralTerrain() ✅, cookTexture() placeholder ❌, cookNavMesh() placeholder ❌, cookConvexHulls() placeholder ❌
-
+LATENCY_OPTIMIZATION:
+  Cursor: Hardware Cursor Sync tied to VK_KHR_present_wait
+  Input_thread: High-priority OS thread → Shared Buffer (GPU reads at frame start)
+  Caching: Dirty Rect Cache via VK_EXT_host_image_copy
+  NVIDIA_Reflex: VK_NV_low_latency2 (reduced input latency, GPU sleep/wake optimization) 
+  Late_Latching: Matrix update immediately before vkQueueSubmit (reduces motion-to-photon latency) 
 ---
 
 ## СЕТЬ И СКРИПТИНГ (NETWORK & SCRIPTING)
@@ -981,7 +1293,6 @@ HOT_RELOAD_PIPELINE:
 GPU_INTEGRATION:
   Compute_Hooks: Scripts can inject .hlsl/.glsl nodes into Render Graph
   Work_Graphs: Trampoline functions write directly to GPU Device Generated Commands
-
 ---
 
 ## РЕДАКТОР И ИНСТРУМЕНТЫ (EDITOR & TOOLS)
@@ -1016,7 +1327,6 @@ DEBUG_VISUALIZATION (Jolt & Render):
 
 PROFILER_VIEW: Tracy (CPU+GPU timeline, barriers, tasks, real-time) 
 TABLE_LOG: libfort (formatted console tables)
-
 ---
 
 ## ДИАГНОСТИКА И ТЕЛЕМЕТРИЯ (DIAGNOSTICS & TELEMETRY)
@@ -1043,27 +1353,6 @@ PROFILER (CPU+GPU):
 AUTOMATED_TESTING:
   Method: Snapshot Regression (Bit-Identical frame comparison)
   Safety: Symbolic Execution Pre-pass in Asset Cooker blocks infinite while-loops or div-by-zero
-
----
-
-## КАМЕРА И ДИСПЛЕЙ (CAMERA & DISPLAY)
-
-PHYSICAL_CAMERA:
-  Parameters: Focal Length, T-Stops, Aperture Blades (Bokeh shape)
-  Auto_Exposure: Compute Histogram (Subgroup Reductions) → physical eye adaptation
-  Artifacts: Rolling Shutter (velocity based), ISO Noise (procedural grain)
-
-CAMERA_DYNAMICS:
-  Collision: Jolt Sphere Cast (prevents clipping)
-  Smoothing: Spring-Damper system (mass/stiffness parameters)
-  Shake: Blue Noise multi-frequency procedural jitter
-
-VIEWPORTS_&_MULTI-CAM:
-  Portals/Mirrors: VK_KHR_multiview (geometry duplicated at hardware level)
-  PiP (Picture-in-Picture): Rendered at lower resolution with VRS 2x2/4x4
-  Foveation: Eye-Tracked VRS (focus = 1x1, periphery = 4x4)
-  Prediction: Late Latching (Matrix update immediately before vkQueueSubmit)
-
 ---
 
 ## РАЗВЕРТЫВАНИЕ И ДОСТУПНОСТЬ (DEPLOY & ACCESSIBILITY)
@@ -1081,149 +1370,33 @@ ACCESSIBILITY (GPU-DRIVEN):
   Colorblind: Uber-Post Spectral Shift filters
   Visibility: High-Contrast ID-based rendering mode (replaces complex PBR)
   Haptics: Synthesis derived from Jolt audio-physics events (Hz to controller motors)
-
 ---
 
-## ЗАПРЕЩЕННЫЕ ПАТТЕРНЫ (FORBIDDEN PATTERNS)
+# ФАЗА 16 — ДЕФОРМИРУЕМЫЕ (поздний этап)
 
-FORBIDDEN:
-  - OOP / Virtual functions / vtables in the game loop or ECS systems (Use Data-Oriented Design, SoA).
-  - Pointers between ECS entities (Use 64-bit GUIDs).
-  - new / malloc / std::make_shared in the game loop (Use Frame Arena or TLSF Pools).
-  - std::mutex, std::lock_guard between engine subsystems (Use Lock-Free MPMC Event Bus).
-  - Direct subsystem-to-subsystem function calls (e.g., Physics calling Audio). Send POD events.
-  - OS-level thread sleeping like std::this_thread::sleep_for (Use C++20 coroutine yields/Fibers).
-  - std::string operations, concatenation, or regex in the game loop.
-  - Using string paths (like "textures/grass.dds") at runtime (Use MurmurHash3 GUIDs).
-  - std::ostream / std::cout for logging (Use fmt / std::format / spdlog).
-  - Synchronous Disk I/O (All file reads MUST go through DirectStorage or async DMA queues).
-  - RTTI (dynamic_cast / typeid) (Use ECS component bitmasks or compile-time static reflection).
-  - VkPipeline (use Shader Objects)
-  - VkDescriptorSet (use BDA + Push Descriptors or VK_EXT_descriptor_heap)
-  - vkAllocateMemory in game loop
-  - pow/sin/cos in PBR shaders (use FMA approx)
-  - additive normal blending (n1+n2)
-  - 4×4 matrices in shaders
-  - #ifdef LOW_END in shaders (use Specialization Constants)
-  - monolithic vkCmdPipelineBarrier2
-  - texture() for 2×2 PCF (use textureGather/OpImageGather)
-  - sRGB pow(color,2.2) in ALU (mark texture VK_FORMAT_..._SRGB)
-  - CPU read of HOST_VISIBLE upload heap
-  - std::this_thread::sleep in main loop
-  - atomicAdd where subgroupBallot suffices
-  - two simultaneous ALU-bound queue tasks
-  - any per-frame string operations (use hashes)
-  - discard in alpha-test shaders (use demote, VK_EXT_shader_demote_to_helper_invocation)
-  - atomicAdd in culling loops (use subgroupBallot)
-  - loop with texture()/BDA access and runtime iteration count
-  - shared[] array without +32 padding (bank conflict)
-  - ADPCM/Opus decode on render thread (use Fiber Job audio chunks)
-  - physics transforms copied via CPU memcpy to VkBuffer (use ReBAR direct write)
-  - Jolt fixed-step on render thread (decouple, State Buffering + GPU interpolation)
-  - vkCreateShadersEXT during gameplay (warmup on load screen only)
-  - SoftBody at >30m (swap to RigidBody cylinder)
-  - CCD on all layers (restrict to LAYER_FAST_PROJECTILES only)
-  - per-object BLAS rebuild every frame for NPC > 50m
-  - OOP / Entity pointers in scripts (use GUIDs and Component arrays)
-  - vkAllocateMemory during structural changes (use VMA defrag / DMA bulk moves)
-  - If-else chains in Uber-Post stylization (use layout constant_id for dead code elimination)
-  - CPU Raycasts for AI vision (use Global SDF distance checks)
-  - Synchronous asset imports in editor (must be async / background cooked)
-  - Full object copying for Undo (use XOR Deltas in memory journal)
-  - Separate shader compilation for Low-End fallbacks (use specialization constants)
-  - Discard/demote in OIT hair shaders (use VK_KHR_fragment_shader_barycentric density)
-  
-  NEW 2026 SHADER FORBIDDEN PATTERNS:
-  - Standard trigonometric functions (sin, cos, atan) inside loops without 1D LUT or FMA polynomial check
-  - Heavy resource fetch followed by immediate use (always use ILP: fetch → 15 ALU → use)
-  - Manual LDS zero-initialization in loops (use VK_KHR_zero_initialize_workgroup_memory)
-  - Dynamic texture array indexing without nonuniformEXT (textures[nonuniformEXT(MaterialID)].sample())
-  - texture()/Sample() inside dynamic if/else branches (use textureLod with explicit LOD)
-  - groupMemoryBarrier() for intra-wave data (use subgroupBarrier())
-  - Scalar register duplication for per-wave data (use subgroupBroadcastFirst())
-  - bool flags as 32-bit variables in SSBO (pack into bitmasks, 32 flags per uint)
-  - Multiple reads of same SSBO variable in heavy loop (cache to local before loop)
-  - Structures with arbitrary alignment (use std430, 16-byte alignment, explicit padding)
-  - Mixing float and float16_t in same expression (causes implicit conversions)
-  - Division by variable inside loops (precompute 1.0/x, multiply inside loop)
-  - rayQueryProceedEXT() without max step limit (prevents infinite loops, GPU hangs)
-  - Ray Tracing for reflections/GI beyond 20m (use SSR + baked maps)
-  - Cloth/SoftBody simulation for HZB-culled objects (LOD tickrate or freeze)
-  - Honest shadows from small dynamic debris (use screen-space contact shadows only)
-  - VK_EXT_descriptor_buffer (DEPRECATED 2026 - use VK_EXT_descriptor_heap)
+## ДЕФОРМИРУЕМЫЕ ОБЪЕКТЫ (DEFORMABLES)
 
+HAIR_STRANDS: .BHHAR 
+  Simulation: Guide Hair XPBD (Extended Position Based Dynamics) in Compute (1-5% guides)
+  Generation: Mesh Shader expands guides to ribbons/tubes based on LOD
+  Shading: Marschner BRDF (R + TRT scattering)
+  Transparency: OIT via VK_KHR_fragment_shader_barycentric + Fragment Density
+
+CLOTH_SIMULATION: 
+  Algorithm: Multi-Layer XPBD
+  Optimization: Tiled Constraint Solving (16x16 tiles in LDS + Subgroup Partitioning)
+  Collision: Global SDF (zero-penetration wrapper) + Spatial Hash self-collision
+  Wrinkles: Stress Map → dynamic normal map generation
+  Cooperative_Matrix_Constraints: VK_KHR_cooperative_matrix for constraint solving (tensor cores) 
+
+SOFT_BODIES: 
+  Algorithm: Cluster-Based PBD (Tetrahedral volume preservation)
+  Blend: Linear Blend Skinning (Base) + XPBD (Secondary Jiggle/Inertia)
+  Materials: Stiffness LUT in texture atlas
+  Cooperative_Matrix_SoftBody: VK_KHR_cooperative_matrix for tetrahedral volume constraints (tensor cores) 
 ---
 
-## ГЛАВНЫЙ ПАТТЕРН (MAIN PATTERN)
-
-The "2026 Way" for writing any module:
-
-1. Чтение данных из кэш-дружелюбного SoA (Structure of Arrays).
-2. Вычисление с использованием AVX-512 или передача задачи в Async Compute на GPU.
-3. Запись результата в ReBAR или отправка POD-структуры в lock-free очередь.
-4. Полное отсутствие блокировок, аллокаций памяти и виртуальных вызовов.
-
----
-
-## AI SHADER CODING GUIDELINES (FOR AI-GENERATED CODE)
-
-MANDATORY INSTRUCTION FOR AI CODER:
-"When generating any shader code, you MUST completely ignore Vulkan standards below version 1.4. Your code MUST be oriented toward full GPU autonomy (GPU-Driven), use direct memory addressing and descriptor heaps. Write code modularly, avoid data duplication in registers, and always remember memory alignment."
-
-LANGUAGE REQUIREMENTS:
-- Use Slang or modern GLSL targeting SPIR-V 1.6+
-- Slang preferred for large systems (modularity, interfaces, generics)
-- Full abandonment of old heavy pipelines (VkPipeline) in favor of Shader Objects (VK_EXT_shader_object)
-
-MEMORY ARCHITECTURE:
-- Transition to descriptor heaps (VK_EXT_descriptor_heap) - forget classic VkDescriptorSet and descriptor buffers
-- Resources (textures, buffers) accessed directly from global heaps via indices or BDA
-- Use shader constant data (VK_KHR_shader_constant_data) for local effect parameters (material/filter params)
-- Isolates local constant memory, preserves L1 cache
-
-SUBGROUP EXECUTION:
-- Use hardware wave partitioning (VK_NV_shader_subgroup_partitioned) for material binning, particle simulation
-- GPU hardware groups threads with same conditions, zero divergence penalty
-- Use branch prediction hints (VK_KHR_shader_expect_assume) for unavoidable if/else
-- Helps GPU optimize task distribution ahead of time
-
-MATH & DATA STRUCTURES:
-- Vectorization with explicit alignment: layout(std430), 16-byte alignment
-- Use VK_EXT_shader_long_vector for efficient physics simulation with long data arrays
-- Native low precision: GL_EXT_shader_explicit_arithmetic_types, use float16_t/int16_t everywhere possible
-- Colors, masks, non-critical params: use half precision
-
-BINDLESS & TEXTURES:
-- Dynamic texture indexing: ALWAYS use nonuniformEXT (textures[nonuniformEXT(MaterialID)].sample())
-- Dynamic branches: use textureLod with explicit LOD level, precompute gradients
-- Never texture()/Sample() inside dynamic if/else
-
-SUBGROUP & EXECUTION:
-- Intra-wave data: use subgroupBarrier(), NEVER groupMemoryBarrier()
-- Per-wave scalars: use subgroupBroadcastFirst() for common data (sun position, camera params)
-- Subgroup rotate (VK_KHR_shader_subgroup_rotate): eliminates LDS for blur/neighbor operations
-
-MEMORY & BUFFERS:
-- Bool flags: pack into bitmasks (32 flags per uint), never 32-bit bool variables
-- Loop variables: cache SSBO reads to local before loop start
-- Alignment: strict std430, 16-byte alignment, explicit padding
-- Raw access chains (VK_NV_raw_access_chains): bypass complex addressing for SSBO
-
-MATHEMATICS:
-- Division: precompute 1.0/x before loop, multiply inside
-- Float mixing: avoid float/float16_t mixing in same expression
-- Trigonometry: sin/cos/atan in loops → 1D LUT or FMA polynomial
-- Float controls: VK_KHR_shader_float_controls2 for fast rounding in PBR
-
-RAY QUERY:
-- ALWAYS add max step limit to rayQueryProceedEXT() loops (prevents GPU hangs)
-- RT beyond 20m: use SSR + baked maps, never honest RT
-
-OFFLINE BAKING PRIORITY:
-- Maximum offline baking, minimum real-time computation
-- Heavy work in Cooker, runtime only assembles ready frames
-
----
+# ПРИЛОЖЕНИЕ A — Справочник Vulkan 1.4
 
 ## VULKAN 1.4 2026 OPTIMIZATIONS SUMMARY
 
@@ -1342,8 +1515,9 @@ New extensions and optimizations added for maximum performance in 2026:
 - Cloth/SoftBody simulation for HZB-culled objects (LOD tickrate or freeze)
 - Honest shadows from small dynamic debris (use screen-space contact shadows only)
 - VK_EXT_descriptor_buffer (DEPRECATED 2026 — use VK_EXT_descriptor_heap)
-
 ---
+
+# ПРИЛОЖЕНИЕ B — Концепты оптимизации 2026
 
 ## НОВЫЕ КОНЦЕПТЫ ОПТИМИЗАЦИИ 2026 (NEW 2026 OPTIMIZATION CONCEPTS)
 
@@ -1580,83 +1754,7 @@ FORBIDDEN В СИСТЕМЕ ИИ И НАВИГАЦИИ:
 - Blackboard как разделяемая память: Все переменные состояния агентов лежат в плоских массивах (Blackboards).
 - Асинхронные сенсорные очереди: Любые запросы ИИ к физике должны оформляться как POD-структуры и отправляться в lock-free очередь.
 
-### ГЛОБАЛЬНАЯ ОПТИМИЗАЦИЯ UI И ТИПОГРАФИКИ
-PRE-BAKED STATIC HUD (Тотальное запекание статического интерфейса): Cooker анализирует макет интерфейса еще на этапе сборки. Все неподвижные элементы намертво запекаются в единый статический .BHMESH.
-
-ZERO-CPU ASSET UPLOAD ДЛЯ ИНТЕРФЕЙСА: Текстуры интерфейса уходят сразу в видеопамять (VRAM), полностью минуя процессор, с использованием аппаратной декомпрессии.
-
-ANALYTICAL MESH SHADER PRIMITIVES (Аналитические примитивы без вершин): Процессор отправляет в SSBO только координаты центра, ширину, высоту и радиус скругления. Mesh Shader аппаратно разворачивает это в идеальную геометрию.
-
-PRE-SHAPED TEXT BATCHING (Предварительная формовка текста): Для всего статического текста Cooker выполняет формовку (Text Shaping) оффлайн и запекает готовые координаты глифов в бинарный блок.
-
-UI VISIBILITY CULLING (Отсечение 3D-мира под интерфейсом): Если игрок открывает полноэкранный инвентарь или карту, интерфейсная система устанавливает глобальный битмаск окклюзии. Графический конвейер мгновенно отсекает рендер всего 3D-мира.
-
-### ПРАВИЛА ГЕНЕРАЦИИ КОДА UI ДЛЯ ИИ
-FORBIDDEN В СИСТЕМЕ UI И ТИПОГРАФИКИ:
-- Immediate Mode (ImGui) для релизного HUD: Категорически запрещено использовать парадигму Immediate Mode для финального игрового интерфейса.
-- Форматирование строк в цикле рендера: Абсолютно запрещено использовать std::sprintf, std::to_string или std::format в горячем цикле.
-- Загрузка шрифтов в рантайме: Запрещен парсинг файлов .ttf или .otf во время игры.
-- Альфа-блендинг перекрытых окон: Запрещено рисовать слои интерфейса, которые на 100% перекрыты другими непрозрачными слоями.
-
-ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА:
-- Упаковка цвета и координат: Все координаты вершин UI должны быть упакованы в 16-битные half или int16_t. Цвета UI-элементов строго упаковываются в 32-битный целочисленный формат.
-- Единый Bindless Атлас: Все иконки, текстуры меню и глифы шрифтов должны лежать в одном глобальном Bindless-массиве.
-- Асинхронный векторный рендер (Rive): Любые сложные векторные анимации интерфейса должны вычисляться параллельно в фоне через Job System.
-
-### ГЛОБАЛЬНАЯ ОПТИМИЗАЦИЯ FLECS ECS
-REBAR-NATIVE COMPONENTS (Прямое размещение колонок ECS в VRAM): Для компонентов, которые ежекадров читает GPU (Transforms, Velocities, Colors), аллокатор колонок переопределяется так, чтобы они физически размещались в ReBAR-памяти.
-
-CUSTOM FIBER OS-API (Полный перехват многопоточности Flecs): Движок переопределяет ecs_os_api, подменяя функции создания потоков и мьютексов на твой Fiber Job System.
-
-COMPILE-TIME ARCHETYPE SEALING (Блокировка графа архетипов): Cooker анализирует все префабы на этапе сборки. При старте игры движок инициализирует и "запечатывает" граф архетипов.
-
-DECOUPLED SYSTEMS (Отказ от встроенных flecs::system в пользу flecs::query): Используются только закэшированные flecs::query. Твой Frame Pipeline сам решает, в какой момент дернуть query.iter().
-
-DIRTY CHUNK BITMASKS (Сверхбыстрое отслеживание изменений): Использование встроенного механизма flecs::query с фильтром ecs_changed(). Flecs аппаратно помечает измененные таблицы на уровне целых блоков памяти.
-
-### ПРАВИЛА ГЕНЕРАЦИИ КОДА FLECS ДЛЯ ИИ
-FORBIDDEN В СИСТЕМЕ ECS:
-- Структурные изменения в горячем цикле: Категорически запрещено вызывать entity.add<T>(), entity.remove<T>() или entity.destruct() внутри систем во время итерации.
-- Динамические контейнеры внутри компонентов: Компоненты ОБЯЗАНЫ быть тривиально копируемыми (POD). Абсолютно запрещено хранить std::vector, std::string или std::shared_ptr.
-- Наследование компонентов (Component OOP): Запрещено использовать наследование C++ в структурах компонентов.
-- Глубокая иерархия сущностей: Запрещено строить глубокие деревья entity.child_of(parent) для тысяч динамических объектов.
-
-ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА:
-- Отложенные команды (Deferred Operations): Все спавны сущностей, изменения архетипов или удаления должны происходить строго через flecs::defer.
-- Векторизация (AVX/SIMD): Внутри цикла итерации код должен быть написан так, чтобы компилятор мог выполнить автовекторизацию.
-- Разделение тегов и данных: Использовать пустые структуры-теги для фильтрации запросов.
-- Прямые указатели на GPU (Buffer Device Address): В каждом архетипе, который рисуется, должен лежать специальный компонент struct GPUAddress { uint64_t bda; }.
-
-### ГЛОБАЛЬНАЯ ОПТИМИЗАЦИЯ ПАМЯТИ
-NUMA-AWARE FIBER ALLOCATION (Топологически зависимая память): Пулы памяти (TLSF) жестко привязываются к воркерам (Taskflow). Поток, работающий на ядрах первого чиплета, выделяет память только из контроллера памяти этого же чиплета.
-
-VIRTUAL MEMORY ALIASING (Магия виртуальной памяти для кольцевых буферов): Использование системных вызовов ОС (VirtualAlloc / mmap), чтобы отобразить одни и те же физические страницы памяти по двум адресам подряд.
-
-ZERO-OVERHEAD TAGGED POINTERS (Аппаратная защита от Use-After-Free): В верхние 16 бит указателя записывается "Тэг Поколения" (Generation ID). При каждом обращении кастомный gsl::not_null сверяет тэг.
-
-GPU UNIFIED HEAP DEFRAGMENTATION (Фоновая дефрагментация VRAM): Использование Async DMA Queue для прозрачного для рендера сдвига блоков данных в фоновом режиме.
-
-### ГЛОБАЛЬНАЯ ОПТИМИЗАЦИЯ ПРОФИЛИРОВАНИЯ
-FLIGHT DATA RECORDER / BLACKBOX (Черный ящик на случай краша): Движок выделяет 50 МБ в оперативной памяти под циклический "Черный ящик". Туда сбрасываются последние 10,000 событий Event Bus и треки Tracy.
-
-HARDWARE PERFORMANCE COUNTERS (PMU TRACKING): Движок напрямую читает регистры процессора (Performance Monitoring Unit). Рядом с временем выполнения в профайлере появляются графики: Cache Misses и Branch Mispredictions.
-
-SHADER OCCUPANCY TELEMETRY (Телеметрия здоровья видеокарты): Движок использует расширения Vulkan для чтения статистики пайплайна. Выводится процент Wave Occupancy и счетчики расхождения потоков.
-
-### ПРАВИЛА ГЕНЕРАЦИИ КОДА ПАМЯТИ И ПРОФИЛИРОВАНИЯ ДЛЯ ИИ
-FORBIDDEN В УПРАВЛЕНИИ ПАМЯТЬЮ И ПРОФИЛИРОВАНИИ:
-- Глобальные аллокации в игровом цикле: Категорически запрещено использовать new, malloc или std::allocator внутри Update(), Tick() или любых систем ECS.
-- Форматирование строк в профайлере: Абсолютно запрещено передавать динамические строки в зоны профилирования.
-- Синхронный логгинг (File I/O Logging): Запрещено писать логи в файл через блокирующие вызовы std::ofstream.
-- Аллокации внутри lock-free структур: Запрещено использовать аллокаторы внутри многопоточных очередей Event Bus.
-
-ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА:
-- Передача контекста аллокатора (Allocator Injection): Любой класс или подсистема, требующая долгоживущей памяти, ОБЯЗАНА принимать указатель на Allocator* в конструкторе.
-- Выравнивание кэш-линий (Cache-Line Alignment): Все массивы данных, обрабатываемые в параллельных воркерах, должны быть строго выровнены: alignas(64).
-- Тотальное покрытие макросами (ZoneScoped): Каждая функция в ядре и подсистемах должна начинаться с макроса ZoneScoped (Tracy).
-- Vulkan Timestamp Wrappers: Каждый проход Render Graph должен быть автоматически обернут в vkCmdWriteTimestamp2.
-
----
+# ПРИЛОЖЕНИЕ C — Доп. архитектура и CPU/GPU тонкости
 
 ## ДОПОЛНИТЕЛЬНЫЕ АРХИТЕКТУРНЫЕ ТРЕБОВАНИЯ 2026
 
@@ -2096,12 +2194,11 @@ CPU тормозит из-за того, что кэши забиты данны
 Твое решение: Все данные (текстуры, модели) должны лежать в файлах в таком формате, чтобы их можно было "маппить" (mmap) напрямую в память GPU (через DirectStorage / VK_NV_memory_decompression).
 Итог: Данные из SSD попадают в VRAM, минуя системную оперативную память. Это в 10 раз быстрее обычного способа загрузки.
 
-### 51. C++26 (Standard Requirements)
+### 51. C++26 (детали — см. также раздел «C++26» в начале файла)
 
-- std::mdspan: Для работы с 3D-текстурами и вокселями без затрат на абстракции.
-- std::generator: Для создания высокоэффективных итераторов (например, по ECS компонентам), которые не требуют аллокаций.
-- Concepts: Для строгой проверки типов в коде (например, requires IsComponent).
-- Compile-Time Contracts: [[expects: pointer != nullptr]] для проверки на этапе компиляции.
+- std::mdspan: 3D-текстуры, воксели, SoA views.
+- std::generator: cold-path (editor), не game loop.
+- Concepts + Contracts: Cooker/API границы.
 
 ### 52. CORE RULES (ЗАКОНЫ ДВИЖКА)
 
@@ -2141,3 +2238,4 @@ CPU тормозит из-за того, что кэши забиты данны
 ---
 
 **КОНЕЦ ДОПОЛНИТЕЛЬНЫХ АРХИТЕКТУРНЫХ ТРЕБОВАНИЙ 2026**
+

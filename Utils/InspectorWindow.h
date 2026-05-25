@@ -86,7 +86,10 @@ namespace burnhope {
                     changed |= UIUtils::DrawVec3Control("##Rot", tc.transform.rotation, 0.0f);
                     ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Scale"); ImGui::TableSetColumnIndex(1);
                     changed |= UIUtils::DrawVec3Control("##Scl", tc.transform.scale, 1.0f);
-                    if (changed) tc.transform.updatematrix = true;
+                    if (changed) {
+                        tc.transform.updatematrix = true;
+                        tc.transform.updateMatrixIfNeeded();
+                    }
                     UIUtils::EndPropertyGrid();
                 }
             }

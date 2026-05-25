@@ -1,18 +1,21 @@
 ﻿#pragma once
 #include "../Render/Camera.hpp"
-#include "Descriptors.hpp"
+#include "DirectXMathCompat.hpp"
 #include <vulkan/vulkan.h>
 namespace burnhope
 {
+class BindlessRegistry;
     struct GlobalUbo
     { 
         float4x4 projection;
         float4x4 invViewProj;
         float4x4 view;
-        float3 camPos;
+        float3 camPos{};
         float zNear{0.1f};
+        float _uboPad0{};
+        float _std140PadSunDir[3]{}; // std140: float3 sunDir @ 224
         float3 sunDir{0.0f, -1.0f, 0.0f};
-        float zFar{1000.0f}; 
+        float zFar{1000.0f};
         float4 screenSize;
         float4x4 sunLightSpaceMatrices[4];
         float4 cascadeSplits;
@@ -21,9 +24,9 @@ namespace burnhope
         uint32_t gridDimZ{24};
         uint32_t portalID{0};
         float lightSize{20.0f};
-
-        alignas(16) float3 sunColor;     // Цвет главного направленного света
-        float sunIntensity;     // Его интенсивность
+        float _std140PadSunColor[3]{}; // std140: float3 sunColor @ 560
+        float3 sunColor;
+        float sunIntensity;
 
         // --- Post Process & Lighting Params ---
         // SSCS: x = enable, y = rayLength, z = steps, w = thickness
@@ -161,13 +164,14 @@ namespace burnhope
        float4 ppPsych8{0.f, 0.f, 0.f, 0.f};
        float4 ppTexIndices{0.f, 0.f, 0.f, 0.f}; // x: VectorField Tex, y: Caustics Tex, z: Canvas Tex
     };
-    struct FrameInfo
-    {
-        int frameIndex;
-        float frameTime;
-        VkCommandBuffer commandBuffer;
-        Camera &camera;
-        VkDescriptorSet globalDescriptorSet;
-        BurnhopeDescriptorPool &frameDescriptorPool;
-    };
-}
+
+struct FrameInfo final {
+  int frameIndex{0};
+  float frameTime{0.0f};
+  VkCommandBuffer commandBuffer{VK_NULL_HANDLE};
+  Camera& camera;
+  uint32_t globalUboHeap{0};
+  BindlessRegistry& bindless;
+};
+
+} // namespace burnhope

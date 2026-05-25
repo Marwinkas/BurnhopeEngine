@@ -1,76 +1,53 @@
 #include "ShadowRender.hpp"
-#include "GraphicsShader.hpp"
-#include <stdexcept>
-#include <iostream>
-namespace burnhope
-{
-    ShadowRenderSystem::ShadowRenderSystem(BurnhopeDevice &device,
-                                           VkDescriptorSetLayout globalSetLayout)
-        : lveDevice(device)
-    {
-        PipelineConfigInfo config{};
-        BurnhopePipeline::defaultPipelineConfigInfo(config);
-        config.depthAttachmentFormat = lveDevice.findSupportedFormat({VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
-        config.stencilAttachmentFormat = config.depthAttachmentFormat;
-        config.colorBlendInfo.attachmentCount = 0;
-        config.colorBlendInfo.pAttachments = nullptr;
-        config.rasterizationInfo.depthBiasEnable = VK_TRUE;
-        config.rasterizationInfo.depthBiasConstantFactor = 1.25f;
-        config.rasterizationInfo.depthBiasSlopeFactor = 1.75f;
-        config.rasterizationInfo.cullMode = VK_CULL_MODE_FRONT_BIT;
-        VkPushConstantRange pushRange{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ShadowPushConstant)};
-        shader = std::make_unique<GraphicsShader>(
-            lveDevice,
-            std::vector<std::string>{"shaders/shadow.vert.spv", "shaders/shadow.frag.spv"},
-            std::vector<VkDescriptorSetLayout>{globalSetLayout},
-            std::vector<VkPushConstantRange>{pushRange},
-            config);
-    }
-    ShadowRenderSystem::~ShadowRenderSystem() = default;
+#include "Model.hpp"
+#include "shadow.hpp"
+#include <array>
+#include <vector>
+
+namespace burnhope {
+
+ShadowRenderSystem::ShadowRenderSystem(BurnhopeDevice& device) : device_{device} {
+  PipelineConfigInfo cfg{};
+  BurnhopePipeline::defaultPipelineConfigInfo(cfg);
+  cfg.depthAttachmentFormat = device.findSupportedFormat(
+      {VK_FORMAT_D32_SFLOAT}, VK_IMAGE_TILING_OPTIMAL,
+      VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+  cfg.colorAttachmentFormats.clear();
+  cfg.depthStencilInfo.depthTestEnable = VK_TRUE;
+  cfg.depthStencilInfo.depthWriteEnable = VK_TRUE;
+  cfg.depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS;
+
+  VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ShadowVertPC)};
+  static const std::array<std::string, 2> kShaderPaths{
+      "shaders/shadow.vert.spv", "shaders/shadow.frag.spv"};
+  static const std::array<VkPushConstantRange, 1> kPushRanges{push};
+  shader_ = std::make_unique<GraphicsDispatch>(
+      device_, std::span<const std::string>{kShaderPaths},
+      std::span<const VkPushConstantRange>{kPushRanges}, cfg);
+}
+
 void ShadowRenderSystem::renderShadow(
     VkCommandBuffer commandBuffer,
-    const float4x4 &lightSpaceMatrix,
-    flecs::world &registry,
-    VkDescriptorSet objectStorageSet,
-    bool renderDynamicOnly)
-{
-    if (objectStorageSet == VK_NULL_HANDLE)
-        return;
+    const BindlessRegistry& bindless,
+    const ShadowVertPC& basePush,
+    const float4x4& lightSpaceMatrix,
+    flecs::world& registry,
+    bool renderDynamicOnly) {
+  ShadowVertPC push = basePush;
+  push.lightSpaceMatrix = lightSpaceMatrix;
+  shader_->bind(commandBuffer, {BurnhopeCSM::SHADOW_MAP_SIZE, BurnhopeCSM::SHADOW_MAP_SIZE});
+  shader_->pushConstants(commandBuffer, bindless, VK_SHADER_STAGE_VERTEX_BIT, sizeof(push), &push);
 
-    shader->bind(commandBuffer);
-    shader->bindDescriptorSets(commandBuffer, {objectStorageSet});
-
-    ShadowPushConstant push{lightSpaceMatrix};
-    shader->pushConstants(commandBuffer, VK_SHADER_STAGE_VERTEX_BIT, sizeof(ShadowPushConstant), &push);
-
-    // Этот индекс должен совпадать с индексом объекта в ObjectBuffer
-    uint32_t instanceIndex = 0; 
-
-    // Создаем query для нескольких компонентов и сразу вызываем .each()
-    registry.query_builder<TransformComponent, MeshComponent>().build().each([&](flecs::entity entity, TransformComponent& transformComp, MeshComponent& meshComp) {
-        if (!meshComp.model || !meshComp.isVisible)
-            return;
-            
-        if (renderDynamicOnly && meshComp.isStatic) 
-            return; // Пропускаем статические меши при локальном обновлении теней
-
-        meshComp.model->bind(commandBuffer);
-        const auto &subMeshes = meshComp.model->getSubMeshes();
-
-        for (const auto &sub : subMeshes)
-        {
-            // Прямой вызов отрисовки для Vulkan
-            vkCmdDrawIndexed(
-                commandBuffer, 
-                sub.indexCounts[0], // Количество индексов (LOD 0)
-                1,                  // Рисуем 1 экземпляр
-                sub.firstIndices[0],// Смещение индексов
-                0,                  // Смещение вершин
-                instanceIndex       // gl_InstanceIndex в шейдере
-            );
-            
-            instanceIndex++;
-        }
-    });
+  registry.each([&](flecs::entity, TransformComponent&, MeshComponent& mesh) {
+    if (!mesh.model || !mesh.isVisible || !mesh.model->gpuDataReady) {
+      return;
+    }
+    if (renderDynamicOnly && mesh.isStatic) {
+      return;
+    }
+    mesh.model->bind(commandBuffer);
+    mesh.model->draw(commandBuffer);
+  });
 }
-}
+
+} // namespace burnhope

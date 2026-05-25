@@ -1,0 +1,3 @@
+[shader("fragment")]
+void main() {}
+

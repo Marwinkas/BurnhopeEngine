@@ -2,31 +2,34 @@
 #include <flecs.h>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <cstdint>
-#include <memory>
-#include <random>
 #include "../Render/Light.hpp"
 #include "../Render/Model.hpp"
 #include "DirectXMathCompat.hpp"
+#include "Utils.hpp"
 #include "../Render/Material.hpp"
 
 namespace burnhope
 {
-    inline uint64_t generateRandomID()
-    {
-        static std::random_device rd;
-        static std::mt19937_64 eng(rd());
-        static std::uniform_int_distribution<uint64_t> dist(1);
-        return dist(eng);
+    /** MurmurHash3 64-bit entity GUID (editor may still use strings; runtime uses IDs only). */
+    [[nodiscard]] inline uint64_t makeEntityId(std::string_view seed = {}) {
+        if (seed.empty()) {
+            static uint64_t counter = 1;
+            return murmurHash3_64(std::span{reinterpret_cast<const std::byte*>(&counter), sizeof(counter)},
+                                  counter++);
+        }
+        return hashString64(seed);
     }
 
-    struct IDComponent
-    {
-        uint64_t ID;
+    [[nodiscard]] inline uint64_t generateRandomID() { return makeEntityId(); }
 
-        IDComponent() : ID(generateRandomID()) {}
+    struct alignas(8) IDComponent {
+        uint64_t ID{0};
+        IDComponent() : ID(makeEntityId()) {}
         IDComponent(uint64_t id) : ID(id) {}
+        IDComponent(std::string_view name) : ID(makeEntityId(name)) {}
     };
 
     class Transform

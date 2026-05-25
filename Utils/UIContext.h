@@ -13,12 +13,12 @@ namespace burnhope {
 
     struct RenderSettings {
         int rtMaxBounces = 1;
-        bool enableRTReflections = true;
-        bool enableRadianceCascades = true;
+        bool enableRTReflections = false;
+        bool enableRadianceCascades = false;
         int rcProbeGridX = 16, rcProbeGridY = 9, rcProbeGridZ = 24, rcOctaSize = 8;
         float rcBaseRayLength = 1.0f;
 
-        bool enableSSAO = true;
+        bool enableSSAO = false;
         float ssaoRadius = 0.5f, ssaoBias = 0.025f, ssaoIntensity = 2.0f, ssaoPower = 2.0f;
         
         bool enableSSGI = false;
@@ -355,6 +355,10 @@ namespace burnhope {
         uint32_t pendingMatSlot = 0;
         flecs::entity pendingMatEntity;
         std::vector<std::shared_ptr<void>> safeDeleteQueue;
+        std::vector<std::unique_ptr<class BurnhopeTexture>> textureDeleteQueue;
+        class TexturePool* texturePool = nullptr;
+        class BindlessRegistry* bindless = nullptr;
+        VkDescriptorSet sceneViewImguiSet = VK_NULL_HANDLE;
         std::vector<PendingDeletion> pendingDeletions;
         std::vector<SceneSnapshot> undoStack;
         std::vector<SceneSnapshot> redoStack;

@@ -3,7 +3,7 @@ project(BurnhopeEngine)
 
 # --- 1. Глобальные настройки проекта ---
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -137,10 +137,8 @@ include_directories(
 # --- 5. Сбор исходных файлов ---
 
 # Собираем файлы движка точечно, чтобы не захватить лишние Main.cpp из библиотек
-file(GLOB ENGINE_BASE_SOURCES 
-    "${CMAKE_CURRENT_SOURCE_DIR}/Main.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/MainApp.cpp"
-)
+file(GLOB ENGINE_BASE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Main.cpp")
+file(GLOB_RECURSE APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/App/*.cpp")
 
 # Рекурсивно собираем только твои папки с кодом
 file(GLOB_RECURSE RENDER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Render/*.cpp")
@@ -156,7 +154,8 @@ file(GLOB_RECURSE IMGUI_SOURCES
 
 # Объединяем всё в один список (убран GLM)
 set(ALL_SOURCES 
-    ${ENGINE_BASE_SOURCES} 
+    ${ENGINE_BASE_SOURCES}
+    ${APP_SOURCES}
     ${RENDER_SOURCES} 
     ${UTILS_SOURCES} 
     ${IMGUI_SOURCES}
@@ -167,27 +166,86 @@ set(ALL_SOURCES
 
 add_executable(${PROJECT_NAME} ${ALL_SOURCES})
 
-# --- 7. Компиляция шейдеров в SPIR-V ---
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_link_options("-fuse-ld=lld")
+    target_compile_options(${PROJECT_NAME} PRIVATE 
+        -Wall 
+        -Wextra 
+        -Wno-unused-parameter
+        # Раскомментируй строку ниже, если хочешь, чтобы компилятор предупреждал о паддингах в структурах:
+         -Wpadded
+    )
+endif()
 
-find_program(GLSLC_EXECUTABLE glslc)
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_26)
 
-file(GLOB SHADER_SOURCES 
-    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.vert"
-    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.frag"
-    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.comp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.task"
-    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.mesh"
+option(BURNHOPE_VULKAN_VALIDATION "Enable Vulkan validation layers (stderr)" ON)
+if(BURNHOPE_VULKAN_VALIDATION)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE BURNHOPE_VULKAN_VALIDATION=1)
+endif()
+
+# --- 7. Slang -> SPIR-V (VK_EXT_descriptor_heap / shader objects) ---
+
+find_program(SLANGC_EXECUTABLE slangc REQUIRED)
+
+file(GLOB SLANG_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.comp.slang"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.vert.slang"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.frag.slang"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.task.slang"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.mesh.slang"
 )
+file(GLOB SLANG_COMMON_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/common/*.slang")
 
-foreach(SHADER ${SHADER_SOURCES})
-    get_filename_component(SHADER_NAME ${SHADER} NAME)
-    set(SPIRV_OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${SHADER_NAME}.spv")
+foreach(SLANG ${SLANG_SOURCES})
+    get_filename_component(SLANG_NAME ${SLANG} NAME)
+    string(REPLACE ".slang" ".spv" SPIRV_NAME "${SLANG_NAME}")
+    set(SPIRV_OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${SPIRV_NAME}")
+
+    set(SLANG_STAGE "compute")
+    if(SLANG_NAME MATCHES "\\.vert\\.slang$")
+        set(SLANG_STAGE "vertex")
+    elseif(SLANG_NAME MATCHES "\\.frag\\.slang$")
+        set(SLANG_STAGE "fragment")
+    elseif(SLANG_NAME MATCHES "\\.task\\.slang$")
+        set(SLANG_STAGE "task")
+    elseif(SLANG_NAME MATCHES "\\.mesh\\.slang$")
+        set(SLANG_STAGE "mesh")
+    endif()
+
+    set(SLANG_PROFILE "spirv_1_6")
+    set(SLANG_EXTRA_FLAGS -Wno-38052)
+    if(SLANG_NAME MATCHES "^(probe_render|probe_update|rt_reflections)\\.comp\\.slang$")
+        set(SLANG_PROFILE "spirv_1_6+spvRayQueryKHR")
+    endif()
+    if(SLANG_NAME MATCHES "^lighting\\.comp\\.slang$")
+        # Slang codegen ICE on full optimization for this TU.
+        set(SLANG_EXTRA_FLAGS "-O0")
+        set(SLANG_PROFILE "spirv_1_6+spvImageQuery+spvImageGatherExtended+spvDerivativeControl+SPV_GOOGLE_user_type+spvSparseResidency+spvMinLod+spvFragmentFullyCoveredEXT")
+    endif()
+    if(SLANG_NAME MATCHES "^gbuffer\\.frag\\.slang$")
+        set(SLANG_PROFILE "spirv_1_6+spvImageQuery+spvImageGatherExtended+spvDerivativeControl+SPV_GOOGLE_user_type+spvSparseResidency+spvMinLod+spvFragmentFullyCoveredEXT")
+    endif()
+    if(SLANG_NAME MATCHES "^gbuffer\\.mesh\\.slang$")
+        # -O0: avoid NV driver SIGSEGV in vkCreateShadersEXT on some SPIR-V shapes.
+        # Mesh geometry uses BDA (PhysicalStorageBuffer64); spirv_1_6 enables capability.
+        set(SLANG_EXTRA_FLAGS -O0 -Wno-38052)
+    endif()
 
     add_custom_command(
         OUTPUT ${SPIRV_OUTPUT}
-        COMMAND ${GLSLC_EXECUTABLE}  --target-env=vulkan1.3 ${SHADER} -o ${SPIRV_OUTPUT}
-        DEPENDS ${SHADER}
-        COMMENT "Compiling shader ${SHADER_NAME} to SPIR-V"
+        COMMAND ${SLANGC_EXECUTABLE}
+            -lang slang
+            -target spirv
+            -profile ${SLANG_PROFILE}
+            ${SLANG_EXTRA_FLAGS}
+            -entry main
+            -stage ${SLANG_STAGE}
+            -I "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
+            ${SLANG}
+            -o ${SPIRV_OUTPUT}
+        DEPENDS ${SLANG} ${SLANG_COMMON_DEPS}
+        COMMENT "Slang ${SLANG_NAME} -> SPIR-V"
     )
     list(APPEND SPIRV_SHADERS ${SPIRV_OUTPUT})
 endforeach()

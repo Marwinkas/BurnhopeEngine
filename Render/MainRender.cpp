@@ -1,148 +1,137 @@
 ﻿#include "MainRender.hpp"
-#include "GraphicsShader.hpp"
+#include "RenderDebug.hpp"
+#include "../Utils/BindlessPush.hpp"
+#include <array>
 #include <iostream>
-namespace burnhope
-{
-    struct GeometryPushConstants
-    {
-        float4x4 modelMatrix;
-        float4x4 normalMatrix;
-        GeometryPushConstants() { modelMatrix = MatrixIdentity(); normalMatrix = MatrixIdentity(); }
-    };
-    GeometryRenderSystem::GeometryRenderSystem(
-        BurnhopeDevice &device, VkDescriptorSetLayout globalSetLayout)
-        : lveDevice{device}
-    {
-        renderSystemLayout = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                                 .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL)
-                                 .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL)
-                                 .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_TASK_BIT_EXT)
-                                 .addBinding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_ALL)
-                                 .build();
-        textureLayout = BurnhopeDescriptorSetLayout::Builder(lveDevice)
-                            .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_ALL, 1000)
-                            .build();
-        std::vector<VkDescriptorSetLayout> layouts = {
-            globalSetLayout,
-            renderSystemLayout->getDescriptorSetLayout(),
-            textureLayout->getDescriptorSetLayout()};
+#include <vector>
 
-        VkPushConstantRange pushConstantRange{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstants)};
-        PipelineConfigInfo pipelineConfig{};
-        BurnhopePipeline::defaultPipelineConfigInfo(pipelineConfig);
-        static std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(5);
-        for (int i = 0; i < 5; i++)
-        {
-            blendAttachments[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            blendAttachments[i].blendEnable = VK_FALSE;
-        }
-        pipelineConfig.colorBlendInfo.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
-        pipelineConfig.colorBlendInfo.pAttachments = blendAttachments.data();
-        pipelineConfig.colorAttachmentFormats = {
-            VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R8G8B8A8_UNORM,
-            VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R16G16B16A16_SFLOAT,
-            VK_FORMAT_R8_UINT};
-        pipelineConfig.depthAttachmentFormat = lveDevice.findSupportedFormat({VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
-        pipelineConfig.stencilAttachmentFormat = pipelineConfig.depthAttachmentFormat;
-        pipelineConfig.depthStencilInfo.stencilTestEnable = VK_FALSE;
+namespace burnhope {
 
-        shader = std::make_unique<GraphicsShader>(
-            lveDevice,
-            std::vector<std::string>{"shaders/gbuffer.task.spv", "shaders/gbuffer.mesh.spv", "shaders/gbuffer.frag.spv"},
-            layouts,
-            std::vector<VkPushConstantRange>{pushConstantRange},
-            pipelineConfig);
+namespace {
 
-
-        pipelineConfig.depthStencilInfo.stencilTestEnable = VK_TRUE;
-        pipelineConfig.depthStencilInfo.depthTestEnable = VK_TRUE;
-        pipelineConfig.depthStencilInfo.depthWriteEnable = VK_TRUE;
-        pipelineConfig.depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS;
-        pipelineConfig.depthStencilInfo.front.compareOp = VK_COMPARE_OP_EQUAL;
-        pipelineConfig.depthStencilInfo.front.failOp = VK_STENCIL_OP_KEEP;
-        pipelineConfig.depthStencilInfo.front.passOp = VK_STENCIL_OP_KEEP;
-        pipelineConfig.depthStencilInfo.front.depthFailOp = VK_STENCIL_OP_KEEP;
-        pipelineConfig.depthStencilInfo.front.compareMask = 0xFF;
-        pipelineConfig.depthStencilInfo.front.writeMask = 0x00;
-        pipelineConfig.depthStencilInfo.back = pipelineConfig.depthStencilInfo.front;
-
-        // --- Z-PREPASS CONFIG ---
-        PipelineConfigInfo zConfig = pipelineConfig;
-        static std::vector<VkPipelineColorBlendAttachmentState> zBlendAttachments(5);
-        for (int i = 0; i < 5; i++)
-        {
-            zBlendAttachments[i].colorWriteMask = 0; // Строго запрещаем запись цвета!
-            zBlendAttachments[i].blendEnable = VK_FALSE;
-        }
-        zConfig.colorBlendInfo.attachmentCount = static_cast<uint32_t>(zBlendAttachments.size());
-        zConfig.colorBlendInfo.pAttachments = zBlendAttachments.data();
-        zConfig.depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS;
-        zConfig.depthStencilInfo.depthWriteEnable = VK_TRUE;
-        zPrepassShader = std::make_unique<GraphicsShader>(lveDevice, std::vector<std::string>{"shaders/gbuffer.task.spv", "shaders/gbuffer.mesh.spv", "shaders/gbuffer.frag.spv"}, layouts, std::vector<VkPushConstantRange>{pushConstantRange}, zConfig);
-
-        // --- G-BUFFER MAIN CONFIG ---
-        pipelineConfig.depthStencilInfo.depthCompareOp = VK_COMPARE_OP_EQUAL;
-        pipelineConfig.depthStencilInfo.depthWriteEnable = VK_FALSE;
-
-
-
-        pipelineConfig.dynamicStateEnables.push_back(VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR);
-        pipelineConfig.dynamicStateEnables.push_back(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
-        pipelineConfig.dynamicStateInfo.dynamicStateCount =
-            static_cast<uint32_t>(pipelineConfig.dynamicStateEnables.size());
-        pipelineConfig.dynamicStateInfo.pDynamicStates = pipelineConfig.dynamicStateEnables.data();
-
-        portalShader = std::make_unique<GraphicsShader>(
-            lveDevice, std::vector<std::string>{"shaders/gbuffer.task.spv", "shaders/gbuffer.mesh.spv", "shaders/gbuffer.frag.spv"},
-            layouts, std::vector<VkPushConstantRange>{pushConstantRange}, pipelineConfig);
-        zConfig.dynamicStateEnables.push_back(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
-        zConfig.dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(zConfig.dynamicStateEnables.size());
-        zConfig.dynamicStateInfo.pDynamicStates = zConfig.dynamicStateEnables.data();
-        zPrepassPortalShader = std::make_unique<GraphicsShader>(lveDevice, std::vector<std::string>{"shaders/gbuffer.task.spv", "shaders/gbuffer.mesh.spv", "shaders/gbuffer.frag.spv"}, layouts, std::vector<VkPushConstantRange>{pushConstantRange}, zConfig);
-    }
-
-    void GeometryRenderSystem::renderEntities(
-        FrameInfo &frameInfo,
-        flecs::world &registry,
-        VkDescriptorSet storageSet,
-        VkDescriptorSet textureSet,
-        uint32_t totalSubMeshCount,
-        bool useStencil,
-        uint32_t vrsMode,
-        bool isZPrepass)
-    {
-        if (storageSet == VK_NULL_HANDLE || textureSet == VK_NULL_HANDLE)
-            return;
-
-        auto pfnCmdSetFragmentShadingRateKHR = (PFN_vkCmdSetFragmentShadingRateKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkCmdSetFragmentShadingRateKHR");
-        if (pfnCmdSetFragmentShadingRateKHR) {
-            VkExtent2D fragmentSize = {1, 1};
-            if (vrsMode == 1) fragmentSize = {2, 2}; // 2x2 пикселя считаются как 1
-            
-            VkFragmentShadingRateCombinerOpKHR combinerOps[2] = {
-                VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR, 
-                VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR
-            };
-            pfnCmdSetFragmentShadingRateKHR(frameInfo.commandBuffer, &fragmentSize, combinerOps);
-        }
-
-         GraphicsShader *currentShader;
-        if (isZPrepass) {
-            currentShader = useStencil ? zPrepassPortalShader.get() : zPrepassShader.get();
-        } else {
-            currentShader = useStencil ? portalShader.get() : shader.get();
-        }
-        currentShader->bind(frameInfo.commandBuffer);
-
-        std::vector<VkDescriptorSet> sets = {frameInfo.globalDescriptorSet, storageSet, textureSet};
-        currentShader->bindDescriptorSets(frameInfo.commandBuffer, sets);
-
-        auto vkCmdDrawMeshTasksEXT = (PFN_vkCmdDrawMeshTasksEXT)vkGetDeviceProcAddr(lveDevice.device(), "vkCmdDrawMeshTasksEXT");
-        if (vkCmdDrawMeshTasksEXT) {
-            // 1 Task Workgroup = 1 объект сцены.
-            if (totalSubMeshCount > 0) {
-                vkCmdDrawMeshTasksEXT(frameInfo.commandBuffer, totalSubMeshCount, 1, 1);
-            }
-        }
-    }
+PipelineConfigInfo makeGBufferConfig(BurnhopeDevice& device, bool stencil, bool zPrepass) {
+  PipelineConfigInfo cfg{};
+  BurnhopePipeline::defaultPipelineConfigInfo(cfg);
+  cfg.colorBlendAttachments.resize(5);
+  for (auto& a : cfg.colorBlendAttachments) {
+    a.colorWriteMask =
+        zPrepass ? 0u
+                 : (VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
+                    VK_COLOR_COMPONENT_A_BIT);
+    a.blendEnable = VK_FALSE;
+  }
+  cfg.colorBlendInfo.attachmentCount = static_cast<uint32_t>(cfg.colorBlendAttachments.size());
+  cfg.colorBlendInfo.pAttachments = cfg.colorBlendAttachments.data();
+  cfg.colorAttachmentFormats = {
+      VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16G16B16A16_SFLOAT,
+      VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R8_UINT};
+  cfg.depthAttachmentFormat = device.findSupportedFormat(
+      {VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL,
+      VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+  cfg.stencilAttachmentFormat = cfg.depthAttachmentFormat;
+  if constexpr (kMinimalRenderPath) {
+    cfg.rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+    cfg.depthStencilInfo.depthTestEnable = VK_TRUE;
+    cfg.depthStencilInfo.depthWriteEnable = VK_TRUE;
+    cfg.depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS;
+    cfg.flipViewportY = true;
+  } else {
+    cfg.depthStencilInfo.depthTestEnable = VK_TRUE;
+    cfg.depthStencilInfo.depthWriteEnable = zPrepass ? VK_TRUE : VK_FALSE;
+    cfg.depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS;
+  }
+  cfg.depthStencilInfo.stencilTestEnable = stencil ? VK_TRUE : VK_FALSE;
+  if (stencil) {
+    cfg.depthStencilInfo.front.compareOp = VK_COMPARE_OP_EQUAL;
+    cfg.depthStencilInfo.front.failOp = VK_STENCIL_OP_KEEP;
+    cfg.depthStencilInfo.front.passOp = VK_STENCIL_OP_KEEP;
+    cfg.depthStencilInfo.front.depthFailOp = VK_STENCIL_OP_KEEP;
+    cfg.depthStencilInfo.front.compareMask = 0xFF;
+    cfg.depthStencilInfo.front.writeMask = 0x00;
+    cfg.depthStencilInfo.back = cfg.depthStencilInfo.front;
+  }
+  cfg.dynamicStateEnables.push_back(VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR);
+  if (stencil) {
+    cfg.dynamicStateEnables.push_back(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
+  }
+  cfg.dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(cfg.dynamicStateEnables.size());
+  cfg.dynamicStateInfo.pDynamicStates = cfg.dynamicStateEnables.data();
+  return cfg;
 }
+
+std::unique_ptr<GraphicsDispatch> makeGBufferShader(
+    BurnhopeDevice& device,
+    bool stencil,
+    bool zPrepass) {
+  VkPushConstantRange push{VK_SHADER_STAGE_ALL, 0, kGfxHeapPushBytes};
+  auto cfg = makeGBufferConfig(device, stencil, zPrepass);
+  static const std::array<std::string, 3> kShaderPaths{
+      "shaders/gbuffer.task.spv", "shaders/gbuffer.mesh.spv", "shaders/gbuffer.frag.spv"};
+  static const std::array<VkPushConstantRange, 1> kPushRanges{push};
+  return std::make_unique<GraphicsDispatch>(
+      device, std::span<const std::string>{kShaderPaths},
+      std::span<const VkPushConstantRange>{kPushRanges}, cfg);
+}
+
+} // namespace
+
+GeometryRenderSystem::GeometryRenderSystem(BurnhopeDevice& device) : device_{device} {
+  shader_ = makeGBufferShader(device_, false, false);
+  zPrepassShader_ = makeGBufferShader(device_, false, true);
+  portalShader_ = makeGBufferShader(device_, true, false);
+  zPrepassPortalShader_ = makeGBufferShader(device_, true, true);
+}
+
+void GeometryRenderSystem::renderEntities(
+    FrameInfo& frameInfo,
+    const BindlessRegistry& bindless,
+    const GfxHeapPC& heapPush,
+    uint32_t totalSubMeshCount,
+    bool useStencil,
+    uint32_t vrsMode,
+    bool isZPrepass) {
+  GraphicsDispatch* pipe = shader_.get();
+  if (isZPrepass) {
+    pipe = useStencil ? zPrepassPortalShader_.get() : zPrepassShader_.get();
+  } else if (useStencil) {
+    pipe = portalShader_.get();
+  }
+
+  const VkExtent2D vp{static_cast<uint32_t>(frameInfo.camera.width),
+                      static_cast<uint32_t>(frameInfo.camera.height)};
+  alignas(16) uint8_t wirePush[kGfxHeapPushBytes]{};
+  packGfxHeapPush(wirePush, heapPush);
+  bindless.pushAndBind(frameInfo.commandBuffer, wirePush, kGfxHeapPushBytes);
+  pipe->bind(frameInfo.commandBuffer, vp, vrsMode);
+
+  auto pfnDraw = reinterpret_cast<PFN_vkCmdDrawMeshTasksEXT>(
+      vkGetDeviceProcAddr(device_.device(), "vkCmdDrawMeshTasksEXT"));
+  if (!pfnDraw) {
+    static bool logged = false;
+    if (!logged) {
+      std::cerr << "[G-Buffer] vkCmdDrawMeshTasksEXT unavailable — no geometry drawn.\n";
+      logged = true;
+    }
+    return;
+  }
+  if (totalSubMeshCount == 0) {
+    return;
+  }
+  pfnDraw(frameInfo.commandBuffer, totalSubMeshCount, 1, 1);
+  if constexpr (kMinimalRenderPath) {
+    static uint32_t lastCount = 0;
+    static bool pushLogOnce = false;
+    if (!pushLogOnce) {
+      std::cerr << "[G-Buffer] GfxHeapPC push bytes=" << kGfxHeapPushBytes
+                << " (SPIR-V push block, BDA geom+matrix)\n";
+      pushLogOnce = true;
+    }
+    if (totalSubMeshCount != lastCount) {
+      std::cerr << "[G-Buffer] DrawMeshTasksEXT groups=" << totalSubMeshCount
+                << " sceneBda=0x" << std::hex << heapPush.sceneAddressesBda << std::dec << '\n';
+      lastCount = totalSubMeshCount;
+    }
+  }
+}
+
+} // namespace burnhope

@@ -170,6 +170,7 @@ namespace burnhope
 
         std::atomic<bool> cpuDataReady{false};
         std::atomic<bool> gpuDataReady{false};
+        std::atomic<bool> blasBuildPending{false};
         std::unique_ptr<Builder> pendingBuilder;
         std::thread loadThread;
         void bind(VkCommandBuffer commandBuffer);
@@ -180,6 +181,16 @@ namespace burnhope
         std::unique_ptr<BurnhopeBuffer> attrBuffer;
         std::unique_ptr<BurnhopeBuffer> animBuffer;
         uint32_t vertexCount = 0;
+        [[nodiscard]] uint32_t getVertexCount() const { return vertexCount; }
+        [[nodiscard]] VkBuffer getPosVkBuffer() const {
+            return posBuffer ? posBuffer->getBuffer() : VK_NULL_HANDLE;
+        }
+        [[nodiscard]] VkBuffer getAttrVkBuffer() const {
+            return attrBuffer ? attrBuffer->getBuffer() : VK_NULL_HANDLE;
+        }
+        [[nodiscard]] VkBuffer getIndexVkBuffer() const {
+            return indexBuffer ? indexBuffer->getBuffer() : VK_NULL_HANDLE;
+        }
         bool hasIndexBuffer = false;
         std::unique_ptr<BurnhopeBuffer> indexBuffer;
         uint32_t indexCount = 0;
@@ -232,6 +243,7 @@ VkDeviceAddress getCdfBufferAddress() const { return cdfBufferAddress; }
 VkDeviceAddress getSurfaceTagsBufferAddress() const { return surfaceTagsBufferAddress; }
     // Добавь этот метод в public
     void createBLAS(const std::vector<PackedVertexPos>& cpuPositions);
+    bool consumeBlasBuildPending();
     VkAccelerationStructureKHR getBLAS() const { return blasHandle; }
     std::unique_ptr<BurnhopeBuffer> rtPosBuffer;
     private:

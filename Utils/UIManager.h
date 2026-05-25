@@ -25,6 +25,8 @@
 #include "ContentBrowserWindow.h"
 #include "PropertiesWindow.h"
 #include "MaterialEditorWindow.h"
+#include "SceneViewportWindow.h"
+#include "../Render/Texture.hpp"
 
 namespace burnhope {
     class UIManager {
@@ -37,9 +39,28 @@ namespace burnhope {
         bool m_ResetLayout = true; // true, чтобы при первом запуске окна встали на свои места
         bool m_WasUsingGizmo = false;
         bool m_OpenLoadScenePopup = false;
+        VkDescriptorSet m_SceneViewImguiSet = VK_NULL_HANDLE;
+        BurnhopeTexture* m_SceneViewSource = nullptr;
 
     public:
         UIContext& GetContext() { return m_Context; }
+
+        void setSceneViewTexture(BurnhopeTexture* tex) {
+            if (m_SceneViewSource == tex) {
+                m_Context.sceneViewImguiSet = m_SceneViewImguiSet;
+                return;
+            }
+            if (m_SceneViewImguiSet) {
+                ImGui_ImplVulkan_RemoveTexture(m_SceneViewImguiSet);
+                m_SceneViewImguiSet = VK_NULL_HANDLE;
+            }
+            m_SceneViewSource = tex;
+            if (tex) {
+                m_SceneViewImguiSet = ImGui_ImplVulkan_AddTexture(
+                    tex->getSampler(), tex->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            }
+            m_Context.sceneViewImguiSet = m_SceneViewImguiSet;
+        }
         UIManager(BurnhopeWindow& window, BurnhopeDevice& device, VkFormat swapChainFormat, flecs::world* registry, const std::string& projectPath) {
             m_Device = &device;
             m_Context.registry = registry;
@@ -54,6 +75,7 @@ namespace burnhope {
             m_Context.LoadRenderSettings(projectPath + "/rendersettings.json");
 
             // Регистрируем окна
+            m_Windows.push_back(std::make_unique<SceneViewportWindow>());
             m_Windows.push_back(std::make_unique<OutlinerWindow>());
             m_Windows.push_back(std::make_unique<InspectorWindow>());
             m_Windows.push_back(std::make_unique<ContentBrowserWindow>());
@@ -62,8 +84,12 @@ namespace burnhope {
         }
 
         ~UIManager() {
-            // Ждем завершения работы GPU перед выгрузкой ресурсов
             vkDeviceWaitIdle(m_Device->device());
+            if (m_SceneViewImguiSet) {
+                ImGui_ImplVulkan_RemoveTexture(m_SceneViewImguiSet);
+                m_SceneViewImguiSet = VK_NULL_HANDLE;
+                m_Context.sceneViewImguiSet = VK_NULL_HANDLE;
+            }
             // Очищаем окна (убивает превью текстуры и открытые материалы)
             m_Windows.clear();
             // Очищаем историю сцен (убивает закешированные модели и буферы)
@@ -151,7 +177,11 @@ namespace burnhope {
                         mc.materialPaths.resize(mc.model->getSubMeshes().size(), "");
                     }
 
-                    auto newMat = (m_Context.pendingMatLoadPath == "NONE") ? nullptr : Material::loadFromJson(*m_Device, m_Context.pendingMatLoadPath);
+                    auto newMat = (m_Context.pendingMatLoadPath == "NONE" || !m_Context.texturePool || !m_Context.bindless)
+                        ? nullptr
+                        : Material::loadFromJson(
+                              *m_Device, *m_Context.texturePool, *m_Context.bindless,
+                              m_Context.pendingMatLoadPath);
                     for(size_t i = 0; i < mc.model->getSubMeshes().size(); i++) {
                         if (mc.model->getSubMeshes()[i].materialIndex == m_Context.pendingMatSlot) {
                             if (mc.materials[i]) {
@@ -211,8 +241,6 @@ namespace burnhope {
 
             float4x4 view = camera.GetViewMatrix();
             float4x4 proj = camera.GetProjectionMatrix(45.0f, 0.1f, 1000.0f);
-            float4x4 gizmoProj = proj;
-            gizmoProj._22 *= -1.0f; // Фикс для Vulkan
 
             // Выбор объекта мышкой (Raycasting)
             if (ImGui::IsMouseClicked(0) && !ImGui::IsAnyItemHovered() && !ImGuizmo::IsOver()) {
@@ -252,23 +280,19 @@ namespace burnhope {
                 if (ImGuizmo::IsUsing() && !m_WasUsingGizmo) m_Context.SaveState();
                 m_WasUsingGizmo = ImGuizmo::IsUsing();
 
-                // 3. Отдаем Гизмо МИРОВУЮ матрицу для отрисовки
-                ImGuizmo::Manipulate(&view._11, &gizmoProj._11, currentGizmoOperation, currentGizmoMode, &worldMatrix._11);
+                ImGuizmo::Manipulate(
+                    &view._11, &proj._11, currentGizmoOperation, currentGizmoMode, &worldMatrix._11);
 
-                // 4. Если мы потянули за стрелочку
                 if (ImGuizmo::IsUsing()) {
-                    // Вычитаем из новой мировой матрицы влияние родителя, чтобы получить новую ЛОКАЛЬНУЮ
-                    float4x4 newLocalMatrix = MatrixMultiply(worldMatrix, MatrixInverse(parentWorldMatrix));
-
-                    // Получаем обратную матрицу для разложения на компоненты
-                    float4x4 invLocal = MatrixInverse(newLocalMatrix);
+                    float4x4 newLocalMatrix =
+                        MatrixMultiply(MatrixInverse(parentWorldMatrix), worldMatrix);
                     ImGuizmo::DecomposeMatrixToComponents(
                         &newLocalMatrix._11,
                         &tComp.transform.position.x,
                         &tComp.transform.rotation.x,
-                        &tComp.transform.scale.x
-                    );
+                        &tComp.transform.scale.x);
                     tComp.transform.updatematrix = true;
+                    tComp.transform.updateMatrixIfNeeded();
                     m_Context.needsRTRebuild = true;
                 }
             }
@@ -407,6 +431,7 @@ namespace burnhope {
                 auto dock_bottom = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.25f, nullptr, &dock_main);
                 auto dock_right = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.25f, nullptr, &dock_main);
                 
+                ImGui::DockBuilderDockWindow("Scene Viewport", dock_main);
                 ImGui::DockBuilderDockWindow("Scene Outliner", dock_left);
                 ImGui::DockBuilderDockWindow("Content Browser", dock_bottom);
                 ImGui::DockBuilderDockWindow("Scene Inspector", dock_right);
@@ -737,7 +762,10 @@ namespace burnhope {
                         std::string pathStr = path.get<std::string>();
                         mc.materialPaths.push_back(pathStr);
                         if (m_Device && !pathStr.empty()) {
-                            mc.materials.push_back(Material::loadFromJson(*m_Device, pathStr));
+                            if (m_Context.texturePool && m_Context.bindless) {
+                              mc.materials.push_back(Material::loadFromJson(
+                                  *m_Device, *m_Context.texturePool, *m_Context.bindless, pathStr));
+                            }
                         } else {
                             mc.materials.push_back(nullptr);
                         }

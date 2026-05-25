@@ -1,16 +1,20 @@
 ﻿#include "Renderer.hpp"
 #include <array>
 #include <cassert>
+#include <iostream>
 #include <stdexcept>
 namespace burnhope
 {
   BurnhopeRenderer::BurnhopeRenderer(BurnhopeWindow &window, BurnhopeDevice &device)
       : lveWindow{window}, lveDevice{device}
   {
-    recreateSwapChain();
+    recreateSwapChain(); // also creates inFlightFences_
     createCommandBuffers();
   }
-  BurnhopeRenderer::~BurnhopeRenderer() { freeCommandBuffers(); }
+  BurnhopeRenderer::~BurnhopeRenderer() {
+    destroyInFlightFences();
+    freeCommandBuffers();
+  }
   void BurnhopeRenderer::recreateSwapChain()
   {
     auto extent = lveWindow.getExtent();
@@ -20,6 +24,7 @@ namespace burnhope
       lveWindow.pollEvents();
     }
     vkDeviceWaitIdle(lveDevice.device());
+    destroyInFlightFences();
     if (lveSwapChain == nullptr)
     {
       lveSwapChain = std::make_unique<BurnhopeSwapChain>(lveDevice, extent);
@@ -33,6 +38,32 @@ namespace burnhope
         throw std::runtime_error("Swap chain image(or depth) format has changed!");
       }
     }
+    createInFlightFences();
+    currentFrameIndex = 0;
+  }
+  void BurnhopeRenderer::createInFlightFences() {
+    destroyInFlightFences();
+    inFlightFences_.resize(BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT);
+    VkFenceCreateInfo info{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    for (VkFence& fence : inFlightFences_) {
+      fence = VK_NULL_HANDLE;
+      if (vkCreateFence(lveDevice.device(), &info, nullptr, &fence) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create in-flight fence!");
+      }
+    }
+  }
+  void BurnhopeRenderer::destroyInFlightFences() {
+    if (gpuDeviceLost_) {
+      inFlightFences_.clear();
+      return;
+    }
+    for (VkFence fence : inFlightFences_) {
+      if (fence != VK_NULL_HANDLE) {
+        vkDestroyFence(lveDevice.device(), fence, nullptr);
+      }
+    }
+    inFlightFences_.clear();
   }
   void BurnhopeRenderer::createCommandBuffers()
   {
@@ -50,6 +81,9 @@ namespace burnhope
   }
   void BurnhopeRenderer::freeCommandBuffers()
   {
+    if (commandBuffers.empty()) {
+      return;
+    }
     vkFreeCommandBuffers(
         lveDevice.device(),
         lveDevice.getCommandPool(),
@@ -57,52 +91,122 @@ namespace burnhope
         commandBuffers.data());
     commandBuffers.clear();
   }
+  void BurnhopeRenderer::recoverFromGpuError()
+  {
+    std::cerr << "[GPU] recoverFromGpuError (failures=" << consecutiveGpuFailures_ << ")\n";
+    isFrameStarted = false;
+    freeCommandBuffers();
+    destroyInFlightFences();
+
+    const VkResult idle = vkDeviceWaitIdle(lveDevice.device());
+    if (idle == VK_ERROR_DEVICE_LOST) {
+      gpuDeviceLost_ = true;
+      std::cerr << "[GPU] VkDevice lost — fences/CBs cleared; stop submitting work.\n";
+      return;
+    }
+
+    gpuDeviceLost_ = false;
+    createCommandBuffers();
+    recreateSwapChain();
+  }
   VkCommandBuffer BurnhopeRenderer::beginFrame()
   {
     swapChainRecreated = false;
     assert(!isFrameStarted && "Can't call beginFrame while already in progress");
-    auto result = lveSwapChain->acquireNextImage(&currentImageIndex);
+
+    if (gpuDeviceLost_ || inFlightFences_.empty() || commandBuffers.empty()) {
+      ++consecutiveGpuFailures_;
+      return nullptr;
+    }
+    if (currentFrameIndex < 0 ||
+        static_cast<std::size_t>(currentFrameIndex) >= inFlightFences_.size()) {
+      currentFrameIndex = 0;
+    }
+
+    VkFence fence = inFlightFences_[static_cast<std::size_t>(currentFrameIndex)];
+    const VkResult fenceWait = vkWaitForFences(lveDevice.device(), 1, &fence, VK_TRUE, UINT64_MAX);
+    if (fenceWait == VK_ERROR_DEVICE_LOST) {
+      ++consecutiveGpuFailures_;
+      recoverFromGpuError();
+      return nullptr;
+    }
+    if (fenceWait != VK_SUCCESS) {
+      return nullptr;
+    }
+
+    auto result = lveSwapChain->acquireNextImage(
+        static_cast<uint32_t>(currentFrameIndex), &currentImageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
       recreateSwapChain();
       return nullptr;
     }
+    if (result == VK_ERROR_DEVICE_LOST || result == VK_ERROR_SURFACE_LOST_KHR)
+    {
+      ++consecutiveGpuFailures_;
+      recoverFromGpuError();
+      return nullptr;
+    }
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
     {
-      throw std::runtime_error("failed to acquire swap chain image!");
+      return nullptr;
     }
+
+    vkResetFences(lveDevice.device(), 1, &fence);
     isFrameStarted = true;
     auto commandBuffer = getCurrentCommandBuffer();
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
     {
-      throw std::runtime_error("failed to begin recording command buffer!");
+      return nullptr;
     }
     return commandBuffer;
   }
   void BurnhopeRenderer::endFrame()
   {
     assert(isFrameStarted && "Can't call endFrame while frame is not in progress");
+    const int frameIndex = currentFrameIndex;
+    if (gpuDeviceLost_ || inFlightFences_.empty() ||
+        static_cast<std::size_t>(frameIndex) >= inFlightFences_.size()) {
+      isFrameStarted = false;
+      ++consecutiveGpuFailures_;
+      return;
+    }
+    VkFence fence = inFlightFences_[static_cast<std::size_t>(frameIndex)];
     auto commandBuffer = getCurrentCommandBuffer();
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
     {
-      throw std::runtime_error("failed to record command buffer!");
+      return;
     }
-    auto result = lveSwapChain->submitCommandBuffers(&commandBuffer, &currentImageIndex);
+    auto result = lveSwapChain->submitAndPresent(
+        &commandBuffer,
+        static_cast<uint32_t>(frameIndex),
+        currentImageIndex,
+        fence);
+    isFrameStarted = false;
+
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
         lveWindow.wasWindowResized())
     {
       lveWindow.resetWindowResizedFlag();
       swapChainRecreated = true;
       recreateSwapChain();
+      return;
     }
-    else if (result != VK_SUCCESS)
+    if (result == VK_ERROR_DEVICE_LOST || result == VK_ERROR_SURFACE_LOST_KHR)
     {
-      throw std::runtime_error("failed to present swap chain image!");
+      ++consecutiveGpuFailures_;
+      recoverFromGpuError();
+      return;
     }
-    isFrameStarted = false;
-    currentFrameIndex = (currentFrameIndex + 1) % BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT;
+    if (result != VK_SUCCESS)
+    {
+      return;
+    }
+    hadSuccessfulPresent_ = true;
+    consecutiveGpuFailures_ = 0;
+    currentFrameIndex = (frameIndex + 1) % BurnhopeSwapChain::MAX_FRAMES_IN_FLIGHT;
   }
   void BurnhopeRenderer::beginSwapChainRendering(VkCommandBuffer commandBuffer)
   {

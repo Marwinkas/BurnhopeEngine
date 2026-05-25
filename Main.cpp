@@ -1,10 +1,10 @@
-﻿#include "MainApp.hpp"
+﻿#include "App/Engine.hpp"
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 int main()
 {
-    burnhope::FirstApp app{};
+    burnhope::Engine app{};
     try
     {
         app.run();

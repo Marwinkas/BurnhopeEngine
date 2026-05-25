@@ -1,6 +1,9 @@
 #pragma once
 #include <nlohmann/json.hpp>
+#include "../Utils/AssetPool.hpp"
+#include "../Utils/BindlessRegistry.hpp"
 #include "../Utils/Components.hpp"
+#include "Material.hpp"
 #include <fstream>
 #include <filesystem>
 #include <iostream>
@@ -99,7 +102,12 @@ namespace burnhope
             }
         }
 
-        static void loadScene(BurnhopeDevice& device, flecs::world &registry, const std::string& filePath)
+        static void loadScene(
+            BurnhopeDevice& device,
+            TexturePool& texturePool,
+            BindlessRegistry& bindlessRegistry,
+            flecs::world& registry,
+            const std::string& filePath)
         {
             std::ifstream file(filePath);
             if (!file.is_open()) {
@@ -177,7 +185,7 @@ namespace burnhope
                     for (const auto& matPath : eJson["mesh"]["materialPaths"]) {
                         std::string path = matPath.get<std::string>();
                         mc.materialPaths.push_back(path);
-                        auto mat = Material::loadFromJson(device, path);
+                        auto mat = Material::loadFromJson(device, texturePool, bindlessRegistry, path);
                      mc.materials.push_back(mat); // добавляем даже если nullptr
                 }
 

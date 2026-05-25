@@ -1,494 +1,68 @@
 #include "RadianceCascades.hpp"
-#include "ComputeShader.hpp"
-#include <stdexcept>
-#include <array>
+#include "Texture.hpp"
 
-namespace burnhope
-{
-    RadianceCascadesSystem::RadianceCascadesSystem(
-        BurnhopeDevice &device,
-        VkExtent2D screenExtent,
-        BurnhopeDescriptorPool &pool,
-        VkDescriptorSetLayout globalLayout,
-        VkDescriptorSetLayout gBufferLayout,
-        VkImageView lightingImageView,
-        VkSampler lightingSampler,
-        VkDescriptorSetLayout rtLayout,
-        VkDescriptorSetLayout storageLayout,
-        VkDescriptorSetLayout textureLayout,
-        int probeX, int probeY, int probeZ, int octaSize, float baseRayLength)
-        : device(device), pool(pool), screenExtent(screenExtent),
-          globalLayoutRef(globalLayout), gBufferLayoutRef(gBufferLayout),
-          probeX(probeX), probeY(probeY), probeZ(probeZ), octaSize(octaSize), baseRayLength(baseRayLength)
-    {
-        createProbeTextures();
-        createGITextures();
-        createLayouts();
-        createPipelines(rtLayout, storageLayout, textureLayout);
-        createDescriptorSets(lightingImageView, lightingSampler);
-    }
+namespace burnhope {
 
-    RadianceCascadesSystem::~RadianceCascadesSystem() = default;
+RadianceCascadesSystem::RadianceCascadesSystem(
+    BurnhopeDevice& device,
+    BindlessRegistry& bindless,
+    VkExtent2D extent)
+    : device_{device}, bindless_{bindless}, extent_{extent} {
+  mergeShader_ =
+      std::make_unique<ComputeDispatch>(device_, "shaders/cascade_merge.comp.spv", sizeof(CascadeMergePC));
+  sampleShader_ =
+      std::make_unique<ComputeDispatch>(device_, "shaders/gi_sample.comp.spv", sizeof(GiSampleHeapPC));
+  rebuildOnResize(extent);
+}
 
-    void RadianceCascadesSystem::createProbeTextures()
-    {
-        for (int c = 0; c < RCConfig::CASCADE_COUNT; c++)
-        {
-            int px = cascadeProbeX(c);
-            int py = cascadeProbeY(c);
-            int pz = cascadeProbeZ(c);
-            uint32_t w = px * octaSize;
-            uint32_t h = py * pz * octaSize;
+RadianceCascadesSystem::~RadianceCascadesSystem() = default;
 
-            probeTex[c] = std::make_unique<BurnhopeTexture>(
-                device,
-                VK_FORMAT_R16G16B16A16_SFLOAT,
-                VkExtent3D{w, h, 1},
-                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                VK_SAMPLE_COUNT_1_BIT);
+bool RadianceCascadesSystem::needsRebuild(int px, int py, int pz, int octa, float baseLen) const {
+  return probeX_ != px || probeY_ != py || probeZ_ != pz || octaSize_ != octa ||
+         baseRayLength_ != baseLen;
+}
 
-            VkCommandBuffer cmd = device.beginSingleTimeCommands();
-            VkImageMemoryBarrier2 barrier{};
-            barrier.sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            barrier.oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED;
-            barrier.newLayout        = VK_IMAGE_LAYOUT_GENERAL;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image            = probeTex[c]->getImage();
-            barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-            barrier.srcStageMask     = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-            barrier.srcAccessMask    = 0;
-            barrier.dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-            barrier.dstAccessMask    = VK_ACCESS_2_SHADER_WRITE_BIT;
-            
-            VkDependencyInfo depInfo{};
-            depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-            depInfo.imageMemoryBarrierCount = 1;
-            depInfo.pImageMemoryBarriers = &barrier;
-            vkCmdPipelineBarrier2(cmd, &depInfo);
-            device.endSingleTimeCommands(cmd);
-        }
-    }
+void RadianceCascadesSystem::updateConfig(int px, int py, int pz, int octa, float baseLen) {
+  probeX_ = px;
+  probeY_ = py;
+  probeZ_ = pz;
+  octaSize_ = octa;
+  baseRayLength_ = baseLen;
+}
 
-    void RadianceCascadesSystem::createGITextures()
-    {
-        diffuseGITex = std::make_unique<BurnhopeTexture>(
-            device,
-            VK_FORMAT_R16G16B16A16_SFLOAT,
-            VkExtent3D{screenExtent.width, screenExtent.height, 1},
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            VK_SAMPLE_COUNT_1_BIT);
+void RadianceCascadesSystem::rebuildOnResize(VkExtent2D extent) {
+  extent_ = extent;
+  const VkExtent3D giExtent{extent.width, extent.height, 1};
+  giDiffuseTex_ = std::make_unique<BurnhopeTexture>(
+      device_, VK_FORMAT_R16G16B16A16_SFLOAT, giExtent,
+      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
+  giDiffuseHeap_ = refreshGiHeapSlot(bindless_);
+  bindless_.slots().giDiffuse = giDiffuseHeap_;
+  bindless_.slots().giCascade0 = giDiffuseHeap_;
+}
 
-        specularGITex = std::make_unique<BurnhopeTexture>(
-            device,
-            VK_FORMAT_R16G16B16A16_SFLOAT,
-            VkExtent3D{screenExtent.width, screenExtent.height, 1},
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            VK_SAMPLE_COUNT_1_BIT);
+uint32_t RadianceCascadesSystem::refreshGiHeapSlot(BindlessRegistry& bindless) {
+  if (!giDiffuseTex_) {
+    return 0;
+  }
+  giDiffuseHeap_ = bindless.registerSampledImage(*giDiffuseTex_, VK_IMAGE_LAYOUT_GENERAL);
+  return giDiffuseHeap_;
+}
 
-        VkCommandBuffer cmd = device.beginSingleTimeCommands();
-        
-        std::array<VkImageMemoryBarrier2, 2> barriers{};
-        for(int i = 0; i < 2; i++) {
-            barriers[i].sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            barriers[i].oldLayout        = VK_IMAGE_LAYOUT_UNDEFINED;
-            barriers[i].newLayout        = VK_IMAGE_LAYOUT_GENERAL;
-            barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barriers[i].image            = i == 0 ? diffuseGITex->getImage() : specularGITex->getImage();
-            barriers[i].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-            barriers[i].srcStageMask     = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-            barriers[i].srcAccessMask    = 0;
-            barriers[i].dstStageMask     = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-            barriers[i].dstAccessMask    = VK_ACCESS_2_SHADER_WRITE_BIT;
-        }
-        
-        VkDependencyInfo depInfo{};
-        depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-        depInfo.imageMemoryBarrierCount = 2;
-        depInfo.pImageMemoryBarriers = barriers.data();
-        vkCmdPipelineBarrier2(cmd, &depInfo);
-        device.endSingleTimeCommands(cmd);
-    }
+void RadianceCascadesSystem::dispatch(
+    VkCommandBuffer cmd,
+    const BindlessRegistry& bindless,
+    const CascadeMergePC& mergePush,
+    const GiSampleHeapPC& samplePush,
+    VkExtent2D screenExtent) {
+  mergeShader_->bind(cmd);
+  mergeShader_->pushConstants(cmd, bindless, &mergePush, sizeof(mergePush));
+  mergeShader_->dispatch(cmd, 1, 1, 1);
 
-    void RadianceCascadesSystem::createLayouts()
-    {
-        // Set(2) для probe_update.comp:
-        //   binding 0 → outProbe    (storage image, write)
-        //   binding 1 → inLighting  (sampler2D, read) — не используется активно, но пусть будет
-        probeWriteLayout = BurnhopeDescriptorSetLayout::Builder(device)
-            .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          VK_SHADER_STAGE_COMPUTE_BIT)
-            .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
-            .build();
-
-        // Set(0) для cascade_merge.comp:
-        //   binding 0 → currentCascade (storage image, read+write)
-        //   binding 1 → nextCascade    (sampler2D, read)
-        mergeLayout = BurnhopeDescriptorSetLayout::Builder(device)
-            .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          VK_SHADER_STAGE_COMPUTE_BIT)
-            .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
-            .build();
-
-        // Set(2) для gi_sample.comp:
-        //   binding 0 → outDiffuseGI  (storage image, write)
-        //   binding 1 → outSpecularGI (storage image, write)
-        //   binding 2 → cascade0      (sampler2D, read)
-        sampleWriteLayout = BurnhopeDescriptorSetLayout::Builder(device)
-            .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          VK_SHADER_STAGE_COMPUTE_BIT)
-            .addBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          VK_SHADER_STAGE_COMPUTE_BIT)
-            .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
-            .build();
-    }
-
-    void RadianceCascadesSystem::createPipelines(
-        VkDescriptorSetLayout rtLayout,
-        VkDescriptorSetLayout storageLayout,
-        VkDescriptorSetLayout textureLayout)
-    {
-        // probe_update.comp layouts:
-        // set 0 → globalLayout
-        // set 1 → gBufferLayout
-        // set 2 → probeWriteLayout   (outProbe image + inLighting sampler)
-        // set 3 → rtLayout           (TLAS)
-        // set 4 → storageLayout      (ObjectBuffer + MaterialBuffer)
-        // set 5 → textureLayout      (bindlessTextures)
-        std::vector<VkDescriptorSetLayout> updateLayouts = {
-            globalLayoutRef,
-            gBufferLayoutRef,
-            probeWriteLayout->getDescriptorSetLayout(),
-            rtLayout,
-            storageLayout,
-            textureLayout
-        };
-        probeUpdateShader = std::make_unique<ComputeShader>(
-            device, "shaders/probe_update.comp.spv",
-            updateLayouts, sizeof(RCPushConstants));
-
-        // cascade_merge.comp layouts:
-        // set 0 → mergeLayout  (currentCascade storage image + nextCascade sampler)
-        std::vector<VkDescriptorSetLayout> mergeLayouts = {
-            mergeLayout->getDescriptorSetLayout()
-        };
-        mergeShader = std::make_unique<ComputeShader>(
-            device, "shaders/cascade_merge.comp.spv",
-            mergeLayouts, sizeof(RCPushConstants));
-
-        // irradiance_sample.comp layouts:
-        // set 0 → globalLayout
-        // set 1 → gBufferLayout
-        // set 2 → sampleWriteLayout  (outIrradiance image + cascade0 sampler)
-        std::vector<VkDescriptorSetLayout> sampleLayouts = {
-            globalLayoutRef,
-            gBufferLayoutRef,
-            sampleWriteLayout->getDescriptorSetLayout()
-        };
-        sampleShader = std::make_unique<ComputeShader>(
-            device, "shaders/gi_sample.comp.spv", // Изменено имя шейдера
-            sampleLayouts, sizeof(RCPushConstants));
-    }
-
-    void RadianceCascadesSystem::createDescriptorSets(
-        VkImageView lightingImageView,
-        VkSampler   lightingSampler)
-    {
-        std::vector<VkDescriptorSet> oldSets;
-        if (giSet != VK_NULL_HANDLE) oldSets.push_back(giSet);
-        if (giWriteSet != VK_NULL_HANDLE) oldSets.push_back(giWriteSet);
-        for(auto& s : probeWriteSets) if(s != VK_NULL_HANDLE) oldSets.push_back(s);
-        for(auto& s : mergeReadSets) if(s != VK_NULL_HANDLE) oldSets.push_back(s);
-        if (!oldSets.empty()) pool.freeDescriptors(oldSets);
-
-        VkDescriptorImageInfo lightInfo{};
-        lightInfo.imageView   = lightingImageView;
-        lightInfo.sampler     = lightingSampler;
-            lightInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL; // Исправлено: текстура остается в General с прошлого кадра
-
-        // --- probeWriteSets[c]: set 2 в probe_update.comp ---
-        // binding 0 → probeTex[c] (write, GENERAL)
-        // binding 1 → inLighting  (read, SHADER_READ_ONLY_OPTIMAL)
-        for (int c = 0; c < RCConfig::CASCADE_COUNT; c++)
-        {
-            VkDescriptorImageInfo probeWriteInfo{};
-            probeWriteInfo.imageView   = probeTex[c]->getImageView();
-            probeWriteInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-            BurnhopeDescriptorWriter(*probeWriteLayout, pool)
-                .writeImage(0, &probeWriteInfo)
-                .writeImage(1, &lightInfo)
-                .build(probeWriteSets[c]);
-        }
-
-        // --- mergeReadSets[c]: set 0 в cascade_merge.comp ---
-        // binding 0 → probeTex[c]     (currentCascade, storage image read+write)
-        // binding 1 → probeTex[c+1]   (nextCascade, sampler2D read)
-        //
-        // ВАЖНО: последний каскад (CASCADE_COUNT-1) не мержится,
-        // поэтому mergeReadSets[CASCADE_COUNT-1] не используется.
-        // Для c = 0..CASCADE_COUNT-2: nextC = c+1 (всегда валидный индекс)
-        for (int c = 0; c < RCConfig::CASCADE_COUNT; c++)
-        {
-            // nextC: для последнего каскада ставим его же (set не используется)
-            int nextC = (c + 1 < RCConfig::CASCADE_COUNT) ? c + 1 : c;
-
-            VkDescriptorImageInfo writeInfo{};
-            writeInfo.imageView   = probeTex[c]->getImageView();
-            writeInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-            VkDescriptorImageInfo readInfo{};
-            readInfo.imageView   = probeTex[nextC]->getImageView();
-            readInfo.sampler     = probeTex[nextC]->getSampler();
-            readInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-            BurnhopeDescriptorWriter(*mergeLayout, pool)
-                .writeImage(0, &writeInfo)
-                .writeImage(1, &readInfo)
-                .build(mergeReadSets[c]);
-        }
-
-        // --- giWriteSet: set 2 в gi_sample.comp ---
-        // binding 0 → diffuseGITex  (outDiffuseGI, storage image write)
-        // binding 1 → specularGITex (outSpecularGI, storage image write)
-        // binding 2 → probeTex[0]   (cascade0, sampler2D read)
-        {
-            VkDescriptorImageInfo diffWriteInfo{};
-            diffWriteInfo.imageView   = diffuseGITex->getImageView();
-            diffWriteInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-            VkDescriptorImageInfo specWriteInfo{};
-            specWriteInfo.imageView   = specularGITex->getImageView();
-            specWriteInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-            VkDescriptorImageInfo cascade0ReadInfo{};
-            cascade0ReadInfo.imageView   = probeTex[0]->getImageView();
-            cascade0ReadInfo.sampler     = probeTex[0]->getSampler();
-            cascade0ReadInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-            BurnhopeDescriptorWriter(*sampleWriteLayout, pool)
-                .writeImage(0, &diffWriteInfo)
-                .writeImage(1, &specWriteInfo)
-                .writeImage(2, &cascade0ReadInfo)
-                .build(giWriteSet);
-        }
-
-        // --- giSet: для финального lighting шейдера ---
-        // binding 0 → diffuseGITex (sampler2D read)
-        // binding 1 → specularGITex (sampler2D read)
-        {
-            if (!lightingReadLayout) {
-                lightingReadLayout = BurnhopeDescriptorSetLayout::Builder(device)
-                    .addBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
-                    .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
-                    .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
-                    .build();
-            }
-
-
-            VkDescriptorImageInfo diffReadInfo{};
-            diffReadInfo.imageView   = diffuseGITex->getImageView();
-            diffReadInfo.sampler     = diffuseGITex->getSampler();
-            diffReadInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-            VkDescriptorImageInfo specReadInfo{};
-            specReadInfo.imageView   = specularGITex->getImageView();
-            specReadInfo.sampler     = specularGITex->getSampler();
-            specReadInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-            
-            VkDescriptorImageInfo cascade0ReadInfo{};
-            cascade0ReadInfo.imageView   = probeTex[0]->getImageView();
-            cascade0ReadInfo.sampler     = probeTex[0]->getSampler();
-            cascade0ReadInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-            BurnhopeDescriptorWriter(*lightingReadLayout, pool)
-                .writeImage(0, &diffReadInfo)
-                .writeImage(1, &specReadInfo)
-                .writeImage(2, &cascade0ReadInfo)
-                .build(giSet);
-        }
-    }
-
-    void RadianceCascadesSystem::insertBarrier(
-        VkCommandBuffer cmd, VkImage image,
-        VkImageLayout oldLayout, VkImageLayout newLayout,
-        VkAccessFlags src, VkAccessFlags dst,
-        VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)
-    {
-        VkImageMemoryBarrier2 b{};
-        b.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-        b.oldLayout           = oldLayout;
-        b.newLayout           = newLayout;
-        b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        b.image               = image;
-        b.subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        b.srcStageMask        = srcStage;
-        b.srcAccessMask       = src;
-        b.dstStageMask        = dstStage;
-        b.dstAccessMask       = dst;
-        
-        VkDependencyInfo depInfo{};
-        depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-        depInfo.imageMemoryBarrierCount = 1;
-        depInfo.pImageMemoryBarriers = &b;
-        vkCmdPipelineBarrier2(cmd, &depInfo);
-    }
-
-    void RadianceCascadesSystem::dispatch(
-        VkCommandBuffer cmd,
-        VkDescriptorSet globalSet,
-        VkDescriptorSet gBufferSet,
-        const float4x4 &invViewProj,
-        const float3 &cameraPos,
-        const float3 &sceneMin,
-        const float3 &sceneMax,
-        VkExtent2D extent,
-        VkDescriptorSet rtSet,
-        VkDescriptorSet storageSet,
-        VkDescriptorSet textureSet)
-    {
-        // =====================================================================
-        // PASS 1: Probe Update (от дальних каскадов к ближним)
-        // =====================================================================
-        probeUpdateShader->bind(cmd);
-
-        for (int c = RCConfig::CASCADE_COUNT - 1; c >= 0; c--)
-        {
-            RCPushConstants push{};
-            push.probeGridMin = float4{sceneMin.x, sceneMin.y, sceneMin.z, 0.0f};
-            push.probeGridMax = float4{sceneMax.x, sceneMax.y, sceneMax.z, 0.0f};
-            push.probeCountX = cascadeProbeX(c);
-            push.probeCountY = cascadeProbeY(c);
-            push.probeCountZ = cascadeProbeZ(c);
-            push.cascadeIndex = c;
-            push.params = float4{
-                baseRayLength * std::pow(2.0f, (float)c), // x: длина луча
-                (c == RCConfig::CASCADE_COUNT - 1) ? 1.0f : 0.0f,     // y: 1.0 если это последний каскад
-                (float)extent.height,                                   // z: не используется в probe шейдере
-                (float)octaSize                              // w: размер октаэдра тайла
-            };
-
-            probeUpdateShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
-            probeUpdateShader->bindDescriptorSets(cmd, {
-                globalSet,          // set 0
-                gBufferSet,         // set 1
-                probeWriteSets[c],  // set 2: outProbe(image) + inLighting(sampler)
-                rtSet,              // set 3: TLAS
-                storageSet,         // set 4: ObjectBuffer + MaterialBuffer
-                textureSet          // set 5: bindlessTextures
-            });
-
-            uint32_t w = (uint32_t)(cascadeProbeX(c) * octaSize);
-            uint32_t h = (uint32_t)(cascadeProbeY(c) * cascadeProbeZ(c) * octaSize);
-            probeUpdateShader->dispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
-
-            // Барьер: запись завершена, дальше — чтение в merge
-            insertBarrier(cmd, probeTex[c]->getImage(),
-                VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
-                VK_ACCESS_SHADER_WRITE_BIT,
-                VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-        }
-
-        // =====================================================================
-        // PASS 2: Cascade Merge (от CASCADE_COUNT-2 до 0)
-        // Каскад c читает из c (currentCascade) и c+1 (nextCascade),
-        // пишет обратно в c.
-        // =====================================================================
-        mergeShader->bind(cmd);
-
-        for (int c = RCConfig::CASCADE_COUNT - 2; c >= 0; c--)
-        {
-            RCPushConstants push{};
-            push.probeGridMin = float4{sceneMin.x, sceneMin.y, sceneMin.z, 0.0f};   // нужны для позиций зондов в шейдере
-            push.probeGridMax = float4{sceneMax.x, sceneMax.y, sceneMax.z, 0.0f};
-            push.probeCountX = cascadeProbeX(c);
-            push.probeCountY = cascadeProbeY(c);
-            push.probeCountZ = cascadeProbeZ(c);
-            push.cascadeIndex = c;
-            push.params = float4{
-                baseRayLength * std::pow(2.0f, (float)c), // x: длина луча (для reference, merge не трассирует)
-                (float)extent.width,
-                (float)extent.height,
-                (float)octaSize                             // w: размер октаэдра — КРИТИЧНО для адресации тайлов
-            };
-
-            mergeShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
-            mergeShader->bindDescriptorSets(cmd, {
-                mergeReadSets[c]   // set 0: currentCascade(image c) + nextCascade(sampler c+1)
-            });
-
-            uint32_t w = (uint32_t)(cascadeProbeX(c) * octaSize);
-            uint32_t h = (uint32_t)(cascadeProbeY(c) * cascadeProbeZ(c) * octaSize);
-            mergeShader->dispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
-
-            // Барьер: merge записал в c, следующая итерация читает c как nextCascade
-            insertBarrier(cmd, probeTex[c]->getImage(),
-                VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
-                VK_ACCESS_SHADER_WRITE_BIT,
-                VK_ACCESS_SHADER_READ_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-        }
-
-        // =====================================================================
-        // PASS 3: GI Sample (Diffuse + Specular)
-        // Читает probeTex[0] (смёрженный каскад 0), пишет в diffuseGITex и specularGITex.
-        // =====================================================================
-        sampleShader->bind(cmd);
-
-        {
-            RCPushConstants push{};
-            push.probeGridMin = float4{sceneMin.x, sceneMin.y, sceneMin.z, 0.0f};
-            push.probeGridMax = float4{sceneMax.x, sceneMax.y, sceneMax.z, 0.0f};
-            push.probeCountX = cascadeProbeX(0);
-            push.probeCountY = cascadeProbeY(0);
-            push.probeCountZ = cascadeProbeZ(0);
-            push.cascadeIndex = 0;
-            push.params = float4{
-                baseRayLength,  // x: длина луча каскада 0
-                (float)extent.width,         // y: ширина экрана (для реконструкции позиции)
-                (float)extent.height,        // z: высота экрана
-                (float)octaSize   // w: размер октаэдра
-            };
-
-            sampleShader->pushConstants(cmd, &push, sizeof(RCPushConstants));
-            sampleShader->bindDescriptorSets(cmd, {
-                globalSet,          // set 0: GlobalSceneUbo (invViewProj и т.д.)
-                gBufferSet,         // set 1: gNormalRoughness, gAlbedo, gDepth
-                giWriteSet          // set 2: outDiffuse, outSpecular + cascade0
-            });
-
-            sampleShader->dispatch(cmd,
-                (extent.width  + 15) / 16,
-                (extent.height + 15) / 16, 1);
-        }
-
-        // Финальный барьер: текстуры готовы для чтения в lighting шейдере
-        insertBarrier(cmd, diffuseGITex->getImage(),
-            VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
-            VK_ACCESS_SHADER_WRITE_BIT,
-            VK_ACCESS_SHADER_READ_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-            
-        insertBarrier(cmd, specularGITex->getImage(),
-            VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
-            VK_ACCESS_SHADER_WRITE_BIT,
-            VK_ACCESS_SHADER_READ_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-    }
-
-    void RadianceCascadesSystem::rebuildOnResize(
-        VkExtent2D  newExtent,
-        VkImageView lightingImageView,
-        VkSampler   lightingSampler)
-    {
-        screenExtent = newExtent;
-        vkDeviceWaitIdle(device.device());
-        createProbeTextures();
-        createGITextures();
-        createDescriptorSets(lightingImageView, lightingSampler);
-    }
+  sampleShader_->bind(cmd);
+  sampleShader_->pushConstants(cmd, bindless, &samplePush, sizeof(samplePush));
+  sampleShader_->dispatch(
+      cmd, (screenExtent.width + 15) / 16, (screenExtent.height + 15) / 16, 1);
+}
 
 } // namespace burnhope

@@ -3,6 +3,7 @@
 #ifndef BURNHOPE_MATERIAL_HPP
 #define BURNHOPE_MATERIAL_HPP
 #include "Texture.hpp"
+#include "../Utils/AssetPool.hpp"
 #include "../Utils/DirectXMathCompat.hpp"
 #include <memory>
 #include <string>
@@ -46,22 +47,22 @@ namespace burnhope
         std::string lightMaskPath = "";
         std::string rimMaskPath = "";
 
-        std::shared_ptr<BurnhopeTexture> emissiveMap = nullptr;
-        std::shared_ptr<BurnhopeTexture> albedoMap = nullptr;
-        std::shared_ptr<BurnhopeTexture> normalMap = nullptr;
-        std::shared_ptr<BurnhopeTexture> heightMap = nullptr;
-        std::shared_ptr<BurnhopeTexture> metallicMap = nullptr;
-        std::shared_ptr<BurnhopeTexture> roughnessMap = nullptr;
-        std::shared_ptr<BurnhopeTexture> aoMap = nullptr;
-        std::shared_ptr<BurnhopeTexture> ormMap = nullptr;
-        std::shared_ptr<BurnhopeTexture> alphaMap = nullptr;
-        std::shared_ptr<BurnhopeTexture> lightMaskMap = nullptr;
-        std::shared_ptr<BurnhopeTexture> rimMaskMap = nullptr;
-        
-        std::shared_ptr<BurnhopeTexture> packedAlbedoAlpha = nullptr;
-        std::shared_ptr<BurnhopeTexture> packedNormal = nullptr;
-        std::shared_ptr<BurnhopeTexture> packedORMX = nullptr;
-        std::shared_ptr<BurnhopeTexture> packedEmissive = nullptr;
+        TextureHandle emissiveMap{kInvalidTextureHandle};
+        TextureHandle albedoMap{kInvalidTextureHandle};
+        TextureHandle normalMap{kInvalidTextureHandle};
+        TextureHandle heightMap{kInvalidTextureHandle};
+        TextureHandle metallicMap{kInvalidTextureHandle};
+        TextureHandle roughnessMap{kInvalidTextureHandle};
+        TextureHandle aoMap{kInvalidTextureHandle};
+        TextureHandle ormMap{kInvalidTextureHandle};
+        TextureHandle alphaMap{kInvalidTextureHandle};
+        TextureHandle lightMaskMap{kInvalidTextureHandle};
+        TextureHandle rimMaskMap{kInvalidTextureHandle};
+
+        TextureHandle packedAlbedoAlpha{kInvalidTextureHandle};
+        TextureHandle packedNormal{kInvalidTextureHandle};
+        TextureHandle packedORMX{kInvalidTextureHandle};
+        TextureHandle packedEmissive{kInvalidTextureHandle};
 
         bool hasEmissive = false;
         float emissiveIntensity = 0.0f;
@@ -88,84 +89,126 @@ namespace burnhope
         }
 
         // Немного обновим методы, чтобы они запоминали путь
-        void setEmissive(std::shared_ptr<BurnhopeTexture> tex, const std::string& path = "")
-        {
-            emissiveMap = tex;
-            hasEmissive = (tex != nullptr);
-            emissivePath = path;
+        static TextureHandle registerTexture(
+            TexturePool& pool,
+            BindlessRegistry& bindless,
+            std::unique_ptr<BurnhopeTexture> tex) {
+          if (!tex) {
+            return kInvalidTextureHandle;
+          }
+          return pool.emplace(std::move(tex), bindless);
         }
 
-        void setAlbedo(std::shared_ptr<BurnhopeTexture> tex, const std::string& path = "")
-        {
-            albedoMap = tex;
-            hasAlbedo = (tex != nullptr);
-            albedoPath = path;
+        void setEmissive(TexturePool& pool, BindlessRegistry& bindless, std::unique_ptr<BurnhopeTexture> tex,
+                         const std::string& path = "") {
+          emissiveMap = registerTexture(pool, bindless, std::move(tex));
+          hasEmissive = emissiveMap != kInvalidTextureHandle;
+          emissivePath = path;
         }
 
-        void setNormal(std::shared_ptr<BurnhopeTexture> tex, const std::string& path = "")
-        {
-            normalMap = tex;
-            hasNormal = (tex != nullptr);
-            normalPath = path;
+        void setAlbedo(TexturePool& pool, BindlessRegistry& bindless, std::unique_ptr<BurnhopeTexture> tex,
+                       const std::string& path = "") {
+          albedoMap = registerTexture(pool, bindless, std::move(tex));
+          hasAlbedo = albedoMap != kInvalidTextureHandle;
+          albedoPath = path;
         }
 
-        void setMetallic(std::shared_ptr<BurnhopeTexture> tex, const std::string& path = "")
-        {
-            metallicMap = tex;
-            hasMetallic = (tex != nullptr);
-            metallicPath = path;
+        void setNormal(TexturePool& pool, BindlessRegistry& bindless, std::unique_ptr<BurnhopeTexture> tex,
+                       const std::string& path = "") {
+          normalMap = registerTexture(pool, bindless, std::move(tex));
+          hasNormal = normalMap != kInvalidTextureHandle;
+          normalPath = path;
         }
 
-        void setRoughness(std::shared_ptr<BurnhopeTexture> tex, const std::string& path = "")
-        {
-            roughnessMap = tex;
-            hasRoughness = (tex != nullptr);
-            roughnessPath = path;
+        void setMetallic(TexturePool& pool, BindlessRegistry& bindless, std::unique_ptr<BurnhopeTexture> tex,
+                         const std::string& path = "") {
+          metallicMap = registerTexture(pool, bindless, std::move(tex));
+          hasMetallic = metallicMap != kInvalidTextureHandle;
+          metallicPath = path;
         }
 
-        void setAO(std::shared_ptr<BurnhopeTexture> tex, const std::string& path = "")
-        {
-            aoMap = tex;
-            hasAO = (tex != nullptr);
-            aoPath = path;
+        void setRoughness(TexturePool& pool, BindlessRegistry& bindless, std::unique_ptr<BurnhopeTexture> tex,
+                          const std::string& path = "") {
+          roughnessMap = registerTexture(pool, bindless, std::move(tex));
+          hasRoughness = roughnessMap != kInvalidTextureHandle;
+          roughnessPath = path;
         }
 
-        void setHeight(std::shared_ptr<BurnhopeTexture> tex, const std::string& path = "")
-        {
-            heightMap = tex;
-            hasHeight = (tex != nullptr);
-            heightPath = path;
-        }
-        void setORM(std::shared_ptr<BurnhopeTexture> tex, const std::string& path = "") {
-            ormMap = tex;
-            hasORM = (tex != nullptr);
-            ormPath = path;
-        }
-        void setAlpha(std::shared_ptr<BurnhopeTexture> tex, const std::string& path = "") {
-            alphaMap = tex;
-            hasAlpha = (tex != nullptr);
-            alphaPath = path;
-        }
-        void setLightMask(std::shared_ptr<BurnhopeTexture> tex, const std::string& path = "") {
-            lightMaskMap = tex;
-            hasLightMask = (tex != nullptr);
-            lightMaskPath = path;
-        }
-        void setRimMask(std::shared_ptr<BurnhopeTexture> tex, const std::string& path = "") {
-            rimMaskMap = tex;
-            hasRimMask = (tex != nullptr);
-            rimMaskPath = path;
+        void setAO(TexturePool& pool, BindlessRegistry& bindless, std::unique_ptr<BurnhopeTexture> tex,
+                   const std::string& path = "") {
+          aoMap = registerTexture(pool, bindless, std::move(tex));
+          hasAO = aoMap != kInvalidTextureHandle;
+          aoPath = path;
         }
 
-        std::shared_ptr<BurnhopeTexture> getAlbedoSafe(std::shared_ptr<BurnhopeTexture> defaultWhite)
-        {
-            return hasAlbedo ? albedoMap : defaultWhite;
+        void setHeight(TexturePool& pool, BindlessRegistry& bindless, std::unique_ptr<BurnhopeTexture> tex,
+                       const std::string& path = "") {
+          heightMap = registerTexture(pool, bindless, std::move(tex));
+          hasHeight = heightMap != kInvalidTextureHandle;
+          heightPath = path;
         }
 
-        std::shared_ptr<BurnhopeTexture> getNormalSafe(std::shared_ptr<BurnhopeTexture> defaultNormal)
-        {
-            return hasNormal ? normalMap : defaultNormal;
+        void setORM(TexturePool& pool, BindlessRegistry& bindless, std::unique_ptr<BurnhopeTexture> tex,
+                    const std::string& path = "") {
+          ormMap = registerTexture(pool, bindless, std::move(tex));
+          hasORM = ormMap != kInvalidTextureHandle;
+          ormPath = path;
         }
+
+        void setAlpha(TexturePool& pool, BindlessRegistry& bindless, std::unique_ptr<BurnhopeTexture> tex,
+                      const std::string& path = "") {
+          alphaMap = registerTexture(pool, bindless, std::move(tex));
+          hasAlpha = alphaMap != kInvalidTextureHandle;
+          alphaPath = path;
+        }
+
+        void setLightMask(TexturePool& pool, BindlessRegistry& bindless, std::unique_ptr<BurnhopeTexture> tex,
+                          const std::string& path = "") {
+          lightMaskMap = registerTexture(pool, bindless, std::move(tex));
+          hasLightMask = lightMaskMap != kInvalidTextureHandle;
+          lightMaskPath = path;
+        }
+
+        void setRimMask(TexturePool& pool, BindlessRegistry& bindless, std::unique_ptr<BurnhopeTexture> tex,
+                        const std::string& path = "") {
+          rimMaskMap = registerTexture(pool, bindless, std::move(tex));
+          hasRimMask = rimMaskMap != kInvalidTextureHandle;
+          rimMaskPath = path;
+        }
+
+        [[nodiscard]] TextureHandle getAlbedoHandle(TextureHandle defaultWhite) const {
+          return hasAlbedo ? albedoMap : defaultWhite;
+        }
+
+        [[nodiscard]] TextureHandle getNormalHandle(TextureHandle defaultNormal) const {
+          return hasNormal ? normalMap : defaultNormal;
+        }
+
+        /** Editor ImGui preview only (non-owning). */
+        [[nodiscard]] std::shared_ptr<BurnhopeTexture> albedoMapForEditor(TexturePool& pool) const {
+          if (auto* t = pool.resolve(albedoMap)) {
+            return std::shared_ptr<BurnhopeTexture>(t, [](BurnhopeTexture*) {});
+          }
+          return nullptr;
+        }
+        [[nodiscard]] std::shared_ptr<BurnhopeTexture> normalMapForEditor(TexturePool& pool) const {
+          if (auto* t = pool.resolve(normalMap)) {
+            return std::shared_ptr<BurnhopeTexture>(t, [](BurnhopeTexture*) {});
+          }
+          return nullptr;
+        }
+        [[nodiscard]] std::shared_ptr<BurnhopeTexture> packedAlbedoForEditor(TexturePool& pool) const {
+          if (auto* t = pool.resolve(packedAlbedoAlpha)) {
+            return std::shared_ptr<BurnhopeTexture>(t, [](BurnhopeTexture*) {});
+          }
+          return nullptr;
+        }
+
+        static std::shared_ptr<Material> loadFromJson(
+            BurnhopeDevice& device,
+            TexturePool& pool,
+            BindlessRegistry& bindless,
+            const std::string& filePath);
 
         void packTexturesAsync() {
             if (isPacking) {
@@ -209,7 +252,11 @@ namespace burnhope
             }).detach();
         }
 
-        void packTextures(BurnhopeDevice& device, std::vector<std::shared_ptr<void>>& safeDeleteQueue) {
+        void packTextures(
+            BurnhopeDevice& device,
+            TexturePool& pool,
+            BindlessRegistry& bindless,
+            std::vector<std::unique_ptr<BurnhopeTexture>>& safeDeleteQueue) {
             std::string cacheDir = "cache/";
             if (!std::filesystem::exists(cacheDir)) std::filesystem::create_directory(cacheDir);
 
@@ -217,34 +264,52 @@ namespace burnhope
                 return std::to_string(std::hash<std::string>{}(s1 + "|" + s2 + "|" + s3 + "|" + s4));
             };
 
+            auto replacePacked = [&](TextureHandle& slot, const std::string& outPath) {
+              if (slot != kInvalidTextureHandle) {
+                if (auto old = pool.release(slot)) {
+                  safeDeleteQueue.push_back(std::move(old));
+                }
+                slot = kInvalidTextureHandle;
+              }
+              if (!outPath.empty()) {
+                slot = registerTexture(
+                    pool, bindless,
+                    std::make_unique<BurnhopeTexture>(device, outPath));
+              }
+            };
+
             if (!albedoPath.empty() || !alphaPath.empty()) {
                 std::string out = cacheDir + "pack_rgba_" + getHash(albedoPath, alphaPath) + ".bhtex";
                 if (!std::filesystem::exists(out)) BurnhopeTexture::packAlbedoAlpha(albedoPath, alphaPath, out);
-                if (packedAlbedoAlpha) safeDeleteQueue.push_back(packedAlbedoAlpha);
-                packedAlbedoAlpha = BurnhopeTexture::createTextureFromFile(device, out);
-            } else { if (packedAlbedoAlpha) safeDeleteQueue.push_back(packedAlbedoAlpha); packedAlbedoAlpha = nullptr; }
+                replacePacked(packedAlbedoAlpha, out);
+            } else {
+                replacePacked(packedAlbedoAlpha, "");
+            }
 
             if (!normalPath.empty()) {
                 std::string out = cacheDir + "pack_norm_" + getHash(normalPath) + ".bhtex";
                 if (!std::filesystem::exists(out)) BurnhopeTexture::packNormal(normalPath, out);
-                if (packedNormal) safeDeleteQueue.push_back(packedNormal);
-                packedNormal = BurnhopeTexture::createTextureFromFile(device, out);
-            } else { if (packedNormal) safeDeleteQueue.push_back(packedNormal); packedNormal = nullptr; }
+                replacePacked(packedNormal, out);
+            } else {
+                replacePacked(packedNormal, "");
+            }
 
             if (!aoPath.empty() || !roughnessPath.empty() || !metallicPath.empty() || !heightPath.empty()) {
                 std::string out = cacheDir + "pack_ormx_" + getHash(aoPath, roughnessPath, metallicPath, heightPath) + ".bhtex";
                 if (!std::filesystem::exists(out)) BurnhopeTexture::packORMX(aoPath, roughnessPath, metallicPath, heightPath, out);
-                if (packedORMX) safeDeleteQueue.push_back(packedORMX);
-                packedORMX = BurnhopeTexture::createTextureFromFile(device, out);
-                hasORM = true; // Принудительно используем запакованный вариант
-            } else { if (packedORMX) safeDeleteQueue.push_back(packedORMX); packedORMX = nullptr; }
+                replacePacked(packedORMX, out);
+                hasORM = true;
+            } else {
+                replacePacked(packedORMX, "");
+            }
 
             if (!emissivePath.empty()) {
                 std::string out = cacheDir + "pack_emis_" + getHash(emissivePath) + ".bhtex";
                 if (!std::filesystem::exists(out)) BurnhopeTexture::packEmissive(emissivePath, out);
-                if (packedEmissive) safeDeleteQueue.push_back(packedEmissive);
-                packedEmissive = BurnhopeTexture::createTextureFromFile(device, out);
-            } else { if (packedEmissive) safeDeleteQueue.push_back(packedEmissive); packedEmissive = nullptr; }
+                replacePacked(packedEmissive, out);
+            } else {
+                replacePacked(packedEmissive, "");
+            }
         }
 
         // Записываем материал в красивый JSON файлик
@@ -282,80 +347,6 @@ namespace burnhope
             }
         }
 
-        // Читаем материал из файлика и сразу загружаем текстуры
-        static std::shared_ptr<Material> loadFromJson(BurnhopeDevice& device, const std::string& filePath)
-        {
-            std::ifstream file(filePath);
-            if (!file.is_open()) return nullptr;
-
-            json j;
-            try { file >> j; } catch(...) { return nullptr; }
-            if (!j.is_object()) return nullptr;
-
-            auto mat = std::make_shared<Material>();
-            
-            if (j.contains("albedoColor")) {
-                if (j["albedoColor"].size() == 4)
-                    mat->albedoColor = float4{j["albedoColor"][0], j["albedoColor"][1], j["albedoColor"][2], j["albedoColor"][3]};
-                else
-                    mat->albedoColor = float4{j["albedoColor"][0], j["albedoColor"][1], j["albedoColor"][2], 1.0f};
-            }
-            if (j.contains("emissiveColor")) mat->emissiveColor = float3{j["emissiveColor"][0], j["emissiveColor"][1], j["emissiveColor"][2]};
-            if (j.contains("metallicStrength")) mat->metallicStrength = j["metallicStrength"];
-            if (j.contains("roughnessStrength")) mat->roughnessStrength = j["roughnessStrength"];
-            if (j.contains("normalStrength")) mat->normalStrength = j["normalStrength"];
-            if (j.contains("heightStrength")) mat->heightStrength = j["heightStrength"];
-            if (j.contains("aoStrength")) mat->aoStrength = j["aoStrength"];
-            else if (j.contains("aoFactor")) mat->aoStrength = j["aoFactor"];
-            if (j.contains("repeatTexture")) mat->repeatTexture = j["repeatTexture"];
-            if (j.contains("useTriplanar")) mat->useTriplanar = j["useTriplanar"];
-            if (j.contains("triplanarScale")) mat->triplanarScale = j["triplanarScale"];
-
-            if (j.contains("uvScale")) {
-                mat->uvScale = float2{j["uvScale"][0], j["uvScale"][1]};
-            }
-            if (j.contains("emissiveIntensity")) mat->emissiveIntensity = j["emissiveIntensity"];
-            if (j.contains("isTransparent")) mat->isTransparent = j["isTransparent"];
-
-            // Аккуратно достаем пути. Если они есть — загружаем картинку!
-            std::string aPath = j.value("albedoPath", "");
-            if (!aPath.empty()) mat->setAlbedo(BurnhopeTexture::createTextureFromFile(device, aPath), aPath);
-
-            std::string nPath = j.value("normalPath", "");
-            if (!nPath.empty()) mat->setNormal(BurnhopeTexture::createDataTextureFromFile(device, nPath), nPath);
-
-            std::string rPath = j.value("roughnessPath", "");
-            if (!rPath.empty()) mat->setRoughness(BurnhopeTexture::createDataTextureFromFile(device, rPath), rPath);
-
-            std::string mPath = j.value("metallicPath", "");
-            if (!mPath.empty()) mat->setMetallic(BurnhopeTexture::createDataTextureFromFile(device, mPath), mPath);
-
-            std::string aoPath = j.value("aoPath", "");
-            if (!aoPath.empty()) mat->setAO(BurnhopeTexture::createDataTextureFromFile(device, aoPath), aoPath);
-
-            std::string hPath = j.value("heightPath", "");
-            if (!hPath.empty()) mat->setHeight(BurnhopeTexture::createDataTextureFromFile(device, hPath), hPath);
-
-            std::string ePath = j.value("emissivePath", "");
-            if (!ePath.empty()) mat->setEmissive(BurnhopeTexture::createTextureFromFile(device, ePath), ePath);
-            
-            std::string oPath = j.value("ormPath", "");
-            if (!oPath.empty()) mat->setORM(BurnhopeTexture::createDataTextureFromFile(device, oPath), oPath);
-            
-            std::string alphaP = j.value("alphaPath", "");
-            if (!alphaP.empty()) mat->setAlpha(BurnhopeTexture::createDataTextureFromFile(device, alphaP), alphaP);
-
-            std::string lmPath = j.value("lightMaskPath", "");
-            if (!lmPath.empty()) mat->setLightMask(BurnhopeTexture::createDataTextureFromFile(device, lmPath), lmPath);
-            
-            std::string rmPath = j.value("rimMaskPath", "");
-            if (!rmPath.empty()) mat->setRimMask(BurnhopeTexture::createDataTextureFromFile(device, rmPath), rmPath);
-
-            // Запускаем асинхронную упаковку при загрузке
-            mat->packTexturesAsync();
-
-            return mat;
-        }
     };
 }
 #endif

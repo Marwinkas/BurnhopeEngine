@@ -1,85 +1,102 @@
 #pragma once
+
 #include "Device.hpp"
+#include "ResourceHeap.hpp"
 #include <memory>
 #include <unordered_map>
 #include <vector>
-namespace burnhope
-{
-    class BurnhopeDescriptorSetLayout
-    {
-    public:
-        class Builder
-        {
-        public:
-            Builder(BurnhopeDevice &lveDevice) : lveDevice{lveDevice} {}
-            Builder &addBinding(
-                uint32_t binding,
-                VkDescriptorType descriptorType,
-                VkShaderStageFlags stageFlags,
-                uint32_t count = 1);
-            std::unique_ptr<BurnhopeDescriptorSetLayout> build() const;
-        private:
-            BurnhopeDevice &lveDevice;
-            std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings{};
-        };
-        BurnhopeDescriptorSetLayout(
-            BurnhopeDevice &lveDevice, std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings);
-        ~BurnhopeDescriptorSetLayout();
-        BurnhopeDescriptorSetLayout(const BurnhopeDescriptorSetLayout &) = delete;
-        BurnhopeDescriptorSetLayout &operator=(const BurnhopeDescriptorSetLayout &) = delete;
-        VkDescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
-    private:
-        BurnhopeDevice &lveDevice;
-        VkDescriptorSetLayout descriptorSetLayout;
-        std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings;
-        friend class BurnhopeDescriptorWriter;
-    };
-    class BurnhopeDescriptorPool
-    {
-    public:
-        class Builder
-        {
-        public:
-            Builder(BurnhopeDevice &lveDevice) : lveDevice{lveDevice} {}
-            Builder &addPoolSize(VkDescriptorType descriptorType, uint32_t count);
-            Builder &setPoolFlags(VkDescriptorPoolCreateFlags flags);
-            Builder &setMaxSets(uint32_t count);
-            std::unique_ptr<BurnhopeDescriptorPool> build() const;
-        private:
-            BurnhopeDevice &lveDevice;
-            std::vector<VkDescriptorPoolSize> poolSizes{};
-            uint32_t maxSets = 1000;
-            VkDescriptorPoolCreateFlags poolFlags = 0;
-        };
-        BurnhopeDescriptorPool(
-            BurnhopeDevice &lveDevice,
-            uint32_t maxSets,
-            VkDescriptorPoolCreateFlags poolFlags,
-            const std::vector<VkDescriptorPoolSize> &poolSizes);
-        ~BurnhopeDescriptorPool();
-        BurnhopeDescriptorPool(const BurnhopeDescriptorPool &) = delete;
-        BurnhopeDescriptorPool &operator=(const BurnhopeDescriptorPool &) = delete;
-        bool allocateDescriptor(
-            const VkDescriptorSetLayout descriptorSetLayout, VkDescriptorSet &descriptor) const;
-        void freeDescriptors(std::vector<VkDescriptorSet> &descriptors) const;
-        void resetPool();
-    private:
-        BurnhopeDevice &lveDevice;
-        VkDescriptorPool descriptorPool;
-        friend class BurnhopeDescriptorWriter;
-    };
-    class BurnhopeDescriptorWriter
-    {
-    public:
-        BurnhopeDescriptorWriter(BurnhopeDescriptorSetLayout &setLayout, BurnhopeDescriptorPool &pool);
-        BurnhopeDescriptorWriter &writeBuffer(uint32_t binding, VkDescriptorBufferInfo *bufferInfo);
-        BurnhopeDescriptorWriter &writeImage(uint32_t binding, VkDescriptorImageInfo *imageInfo);
-        BurnhopeDescriptorWriter &writeImageArray(uint32_t binding, const std::vector<VkDescriptorImageInfo> &imageInfos);
-        bool build(VkDescriptorSet &set);
-        void overwrite(VkDescriptorSet &set);
-    private:
-        BurnhopeDescriptorSetLayout &setLayout;
-        BurnhopeDescriptorPool &pool;
-        std::vector<VkWriteDescriptorSet> writes;
-    };
-}
+#include <vulkan/vulkan.h>
+
+namespace burnhope {
+
+/**
+ * Transitional VkDescriptorSet helpers for shader-object set layouts.
+ * New bindless data: ResourceHeap (always bind per frame).
+ * Migrate call sites to heap offsets + push constants; do not add new pools.
+ */
+class BurnhopeDescriptorSetLayout final : public NonCopyable {
+public:
+  class Builder {
+  public:
+    explicit Builder(BurnhopeDevice& device) : device_{device} {}
+    Builder& addBinding(
+        uint32_t binding,
+        VkDescriptorType type,
+        VkShaderStageFlags stages,
+        uint32_t count = 1);
+    [[nodiscard]] std::unique_ptr<BurnhopeDescriptorSetLayout> build() const;
+
+  private:
+    BurnhopeDevice& device_;
+    std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings_{};
+  };
+
+  BurnhopeDescriptorSetLayout(
+      BurnhopeDevice& device,
+      std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings);
+  ~BurnhopeDescriptorSetLayout();
+
+  [[nodiscard]] VkDescriptorSetLayout handle() const noexcept { return layout_; }
+  [[nodiscard]] VkDescriptorSetLayout getDescriptorSetLayout() const noexcept { return handle(); }
+
+private:
+  BurnhopeDevice& device_;
+  VkDescriptorSetLayout layout_{VK_NULL_HANDLE};
+  std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings_;
+  friend class BurnhopeDescriptorWriter;
+};
+
+class BurnhopeDescriptorPool final : public NonCopyable {
+public:
+  class Builder {
+  public:
+    explicit Builder(BurnhopeDevice& device) : device_{device} {}
+    Builder& addPoolSize(VkDescriptorType type, uint32_t count);
+    Builder& setPoolFlags(VkDescriptorPoolCreateFlags flags);
+    Builder& setMaxSets(uint32_t count);
+    [[nodiscard]] std::unique_ptr<BurnhopeDescriptorPool> build() const;
+
+  private:
+    BurnhopeDevice& device_;
+    std::vector<VkDescriptorPoolSize> poolSizes_{};
+    uint32_t maxSets_{1000};
+    VkDescriptorPoolCreateFlags flags_{0};
+  };
+
+  BurnhopeDescriptorPool(
+      BurnhopeDevice& device,
+      uint32_t maxSets,
+      VkDescriptorPoolCreateFlags flags,
+      std::vector<VkDescriptorPoolSize> poolSizes);
+  ~BurnhopeDescriptorPool();
+
+  [[nodiscard]] bool allocateDescriptor(VkDescriptorSetLayout layout, VkDescriptorSet& out) const;
+  void freeDescriptors(std::vector<VkDescriptorSet>& sets) const;
+  void resetPool();
+
+private:
+  BurnhopeDevice& device_;
+  VkDescriptorPool pool_{VK_NULL_HANDLE};
+  friend class BurnhopeDescriptorWriter;
+};
+
+class BurnhopeDescriptorWriter final {
+public:
+  BurnhopeDescriptorWriter(BurnhopeDescriptorSetLayout& layout, BurnhopeDescriptorPool& pool);
+
+  BurnhopeDescriptorWriter& writeBuffer(uint32_t binding, const VkDescriptorBufferInfo* info);
+  BurnhopeDescriptorWriter& writeImage(uint32_t binding, const VkDescriptorImageInfo* info);
+  BurnhopeDescriptorWriter& writeImageArray(
+      uint32_t binding,
+      const std::vector<VkDescriptorImageInfo>& infos);
+
+  [[nodiscard]] bool build(VkDescriptorSet& set);
+  void overwrite(VkDescriptorSet& set);
+
+private:
+  BurnhopeDescriptorSetLayout& layout_;
+  BurnhopeDescriptorPool& pool_;
+  std::vector<VkWriteDescriptorSet> writes_{};
+};
+
+} // namespace burnhope

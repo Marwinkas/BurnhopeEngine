@@ -69,8 +69,10 @@ namespace burnhope
     BurnhopeModel::BurnhopeModel(BurnhopeDevice &device) : lveDevice{device} {}
 
     void BurnhopeModel::finishGpuUpload() {
-        if (!cpuDataReady || gpuDataReady) return;
-        if (loadThread.joinable()) loadThread.join();
+        if (!cpuDataReady.load(std::memory_order_acquire) || gpuDataReady) return;
+        if (loadThread.joinable()) {
+            loadThread.join();
+        }
         if (!pendingBuilder) {
             gpuDataReady = true;
             return;
@@ -217,7 +219,7 @@ namespace burnhope
         globalAabbMax = builder.globalAabbMax;
 
         if (builder.buildRT) {
-            createBLAS(builder.positions);
+            blasBuildPending.store(true, std::memory_order_release);
         }
         pendingBuilder.reset();
         gpuDataReady = true;
@@ -425,7 +427,9 @@ namespace burnhope
                 lveDevice,
                 sizeof(positions[0]),
                 vertexCount,
-                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                    VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+                    VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
             posBuffer->map();
             posBuffer->writeToBuffer((void *)positions.data());
@@ -451,14 +455,18 @@ namespace burnhope
             BurnhopeBuffer stagingBufferPos{ lveDevice, sizeof(positions[0]), vertexCount, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
             stagingBufferPos.map(); stagingBufferPos.writeToBuffer((void *)positions.data());
             posBuffer = std::make_unique<BurnhopeBuffer>(lveDevice, sizeof(positions[0]), vertexCount,
-                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                    VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+                    VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
             lveDevice.copyBuffer(stagingBufferPos.getBuffer(), posBuffer->getBuffer(), posBufferSize);
 
             BurnhopeBuffer stagingBufferAttr{ lveDevice, sizeof(PackedVertexAttr), vertexCount, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
             stagingBufferAttr.map(); stagingBufferAttr.writeToBuffer((void *)attrData);
             attrBuffer = std::make_unique<BurnhopeBuffer>(lveDevice, sizeof(PackedVertexAttr), vertexCount,
-                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                    VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+                    VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
             lveDevice.copyBuffer(stagingBufferAttr.getBuffer(), attrBuffer->getBuffer(), attrBufferSize);
 
@@ -510,11 +518,16 @@ namespace burnhope
         lveDevice,
         indexSize,
         static_cast<uint32_t>(uploadIndices.size()),
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | 
-        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
+            VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         lveDevice.copyBuffer(stagingBuffer.getBuffer(), indexBuffer->getBuffer(), bufferSize);
     }
+    bool BurnhopeModel::consumeBlasBuildPending() {
+        return blasBuildPending.exchange(false, std::memory_order_acq_rel);
+    }
+
     void BurnhopeModel::createBLAS(const std::vector<PackedVertexPos>& cpuPositions)
     {
         // 1. ПУЛЕНЕПРОБИВАЕМАЯ ЗАГРУЗКА ФУНКЦИЙ
@@ -534,13 +547,12 @@ namespace burnhope
 
         // Очистка старых ресурсов RT и зануление адреса, чтобы рейтрейсер не читал битую память
         if (blasHandle != VK_NULL_HANDLE) {
-            vkDeviceWaitIdle(lveDevice.device());
             auto pfnDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkDestroyAccelerationStructureKHR");
-            blasAddress = 0; 
-            blasHandle = VK_NULL_HANDLE;
             if (pfnDestroyAccelerationStructureKHR) {
                 pfnDestroyAccelerationStructureKHR(lveDevice.device(), blasHandle, nullptr);
             }
+            blasAddress = 0;
+            blasHandle = VK_NULL_HANDLE;
         }
 
         // FIX: Создаем Float32 буфер для RT, так как UNORM16 крашит аппаратное ускорение лучей!

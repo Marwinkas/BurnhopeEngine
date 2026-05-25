@@ -6,123 +6,146 @@
 #include <unordered_map>
 #include "../Render/Material.hpp"
 #include "../Render/Texture.hpp"
-#include "../Render/ComputeShader.hpp"
+#include "../Render/Core/ComputeDispatch.hpp"
+#include "BindlessPush.hpp"
+#include "BindlessRegistry.hpp"
 #include "DirectXMathCompat.hpp"
 
 namespace burnhope {
+
+namespace {
+
+inline std::unique_ptr<BurnhopeTexture> adoptShared(std::shared_ptr<BurnhopeTexture> tex) {
+  if (!tex) {
+    return nullptr;
+  }
+  std::unique_ptr<BurnhopeTexture> owned(tex.get());
+  tex.reset();
+  return owned;
+}
+
+} // namespace
+
     struct PreviewRenderer {
         BurnhopeDevice& device;
-        std::unique_ptr<BurnhopeDescriptorPool> pool;
-        std::unique_ptr<BurnhopeDescriptorSetLayout> layout;
         std::unique_ptr<BurnhopeTexture> outputTex;
-        std::shared_ptr<BurnhopeTexture> defaultWhite;
-        std::shared_ptr<BurnhopeTexture> defaultNormal;
-        std::shared_ptr<BurnhopeTexture> hdrTex;
-        std::unique_ptr<ComputeShader> shader;
-        VkDescriptorSet descSet = VK_NULL_HANDLE;
+        std::unique_ptr<ComputeDispatch> shader;
         VkDescriptorSet imguiSet = VK_NULL_HANDLE;
-        
-        std::shared_ptr<BurnhopeTexture> lastAA;
-        std::shared_ptr<BurnhopeTexture> lastORMX;
-        std::shared_ptr<BurnhopeTexture> lastNorm;
+        uint32_t outImageHeap_{0};
+        uint32_t defaultWhiteHeap_{0};
+        uint32_t defaultNormalHeap_{0};
+        uint32_t hdrHeap_{0};
 
-        struct PushConsts {
-            float4 albedoColor;
-            float4 emissiveColor;
-            float4 matParams;
-            float4 uvScale_triSc;
-            float4 camPos_time;
-            int flags[4];
-        };
+        PreviewRenderer(BurnhopeDevice& dev, BindlessRegistry& bindless) : device(dev) {
+            outputTex = std::make_unique<BurnhopeTexture>(
+                device, VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{256, 256, 1},
+                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
+            outputTex->transitionLayout(
+                device.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+            outImageHeap_ = bindless.registerStorageImage(*outputTex, VK_IMAGE_LAYOUT_GENERAL);
 
-        PreviewRenderer(BurnhopeDevice& dev) : device(dev) {
-            pool = BurnhopeDescriptorPool::Builder(device).setMaxSets(10).setPoolFlags(VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT)
-                .addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1).addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9).build();
+            auto white = BurnhopeTexture::createTextureFromFile(device, "../textures/white.png");
+            defaultWhiteHeap_ = bindless.registerSampledImage(*white);
+            defaultNormalHeap_ = defaultWhiteHeap_;
 
-            layout = BurnhopeDescriptorSetLayout::Builder(device)
-                .addBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
-                .addBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
-                .addBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
-                .addBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT)
-                .addBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT).build();
+            auto hdr = std::filesystem::exists("../textures/hdr.jpg")
+                           ? BurnhopeTexture::createTextureFromFile(device, "../textures/hdr.jpg")
+                           : white;
+            hdrHeap_ = bindless.registerSampledImage(*hdr);
 
-            outputTex = std::make_unique<BurnhopeTexture>(device, VK_FORMAT_R8G8B8A8_UNORM, VkExtent3D{256, 256, 1}, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_SAMPLE_COUNT_1_BIT);
-            outputTex->transitionLayout(device.beginSingleTimeCommands(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-
-            std::vector<VkDescriptorSetLayout> layouts = {layout->getDescriptorSetLayout()};
-            shader = std::make_unique<ComputeShader>(device, "shaders/mat_preview.comp.spv", layouts, sizeof(PushConsts));
-
-            defaultWhite = BurnhopeTexture::createTextureFromFile(device, "../textures/white.png");
-            defaultNormal = BurnhopeTexture::createTextureFromFile(device, "../textures/white.png");
-            
-            if (std::filesystem::exists("../textures/hdr.jpg")) {
-                hdrTex = BurnhopeTexture::createTextureFromFile(device, "../textures/hdr.jpg");
-            } else {
-                hdrTex = defaultWhite;
-            }
-
-            pool->allocateDescriptor(layout->getDescriptorSetLayout(), descSet);
-            imguiSet = ImGui_ImplVulkan_AddTexture(outputTex->getSampler(), outputTex->getImageView(), VK_IMAGE_LAYOUT_GENERAL);
+            shader = std::make_unique<ComputeDispatch>(
+                device, "shaders/mat_preview.comp.spv", sizeof(MatPreviewPC));
+            imguiSet = ImGui_ImplVulkan_AddTexture(
+                outputTex->getSampler(), outputTex->getImageView(), VK_IMAGE_LAYOUT_GENERAL);
         }
 
         ~PreviewRenderer() { if (imguiSet) ImGui_ImplVulkan_RemoveTexture(imguiSet); }
 
-        void UpdateAndDispatch(VkCommandBuffer cmd, std::shared_ptr<Material> mat, int shape, const float3& cPos, float time) {
-            auto aaTex = mat->packedAlbedoAlpha ? mat->packedAlbedoAlpha : (mat->albedoMap ? mat->albedoMap : defaultWhite);
-            auto ormxTex = mat->packedORMX ? mat->packedORMX : (mat->ormMap ? mat->ormMap : defaultWhite);
-            auto normTex = mat->packedNormal ? mat->packedNormal : (mat->normalMap ? mat->normalMap : defaultNormal);
-
-            if (aaTex != lastAA || ormxTex != lastORMX || normTex != lastNorm) {
-                vkDeviceWaitIdle(device.device());
-
-                VkDescriptorImageInfo outInfo = outputTex->getImageInfo(); outInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-                VkDescriptorImageInfo aaInfo = aaTex->getImageInfo();
-                VkDescriptorImageInfo ormxInfo = ormxTex->getImageInfo();
-                VkDescriptorImageInfo normPackedInfo = normTex->getImageInfo();
-                VkDescriptorImageInfo hdrInfo = hdrTex ? hdrTex->getImageInfo() : defaultWhite->getImageInfo();
-
-                BurnhopeDescriptorWriter(*layout, *pool)
-                    .writeImage(0, &outInfo)
-                    .writeImage(1, &aaInfo)
-                    .writeImage(2, &ormxInfo)
-                    .writeImage(3, &normPackedInfo)
-                    .writeImage(4, &hdrInfo)
-                    .overwrite(descSet);
-
-                lastAA = aaTex; lastORMX = ormxTex; lastNorm = normTex;
+        void UpdateAndDispatch(
+            VkCommandBuffer cmd,
+            UIContext& context,
+            std::shared_ptr<Material> mat,
+            int shape,
+            const float3& cPos,
+            float time) {
+            if (!context.bindless) {
+              return;
             }
 
-            shader->bind(cmd);
-            shader->bindDescriptorSets(cmd, {descSet});
-            
+            auto texHeap = [&](TextureHandle handle, uint32_t fallback) -> uint32_t {
+              if (context.texturePool && handle != kInvalidTextureHandle) {
+                return context.texturePool->heapIndex(handle);
+              }
+              return fallback;
+            };
+
+            uint32_t albIdx = defaultWhiteHeap_;
+            if (mat->packedAlbedoAlpha != kInvalidTextureHandle) {
+              albIdx = texHeap(mat->packedAlbedoAlpha, albIdx);
+            } else if (mat->albedoMap != kInvalidTextureHandle) {
+              albIdx = texHeap(mat->albedoMap, albIdx);
+            }
+
+            uint32_t ormIdx = defaultWhiteHeap_;
+            if (mat->packedORMX != kInvalidTextureHandle) {
+              ormIdx = texHeap(mat->packedORMX, ormIdx);
+            } else if (mat->ormMap != kInvalidTextureHandle) {
+              ormIdx = texHeap(mat->ormMap, ormIdx);
+            }
+
+            uint32_t normIdx = defaultNormalHeap_;
+            if (mat->packedNormal != kInvalidTextureHandle) {
+              normIdx = texHeap(mat->packedNormal, normIdx);
+            } else if (mat->normalMap != kInvalidTextureHandle) {
+              normIdx = texHeap(mat->normalMap, normIdx);
+            }
+
             int bitmask = 0;
-            if (mat->packedAlbedoAlpha || mat->hasAlbedo) bitmask |= 1;
-            if (mat->packedORMX || mat->hasORM || mat->hasMetallic || mat->hasRoughness || mat->hasAO) bitmask |= 2;
-            if (mat->packedNormal || mat->hasNormal) bitmask |= 4;
+            if (mat->packedAlbedoAlpha != kInvalidTextureHandle || mat->hasAlbedo) bitmask |= 1;
+            if (mat->packedORMX != kInvalidTextureHandle || mat->hasORM || mat->hasMetallic ||
+                mat->hasRoughness || mat->hasAO) {
+              bitmask |= 2;
+            }
+            if (mat->packedNormal != kInvalidTextureHandle || mat->hasNormal) bitmask |= 4;
             if (mat->isTransparent) bitmask |= 8;
             if (mat->useTriplanar) bitmask |= 16;
             if (mat->repeatTexture) bitmask |= 32;
 
-            PushConsts pc{};
+            MatPreviewPC pc{};
             pc.albedoColor = mat->albedoColor;
-            pc.emissiveColor = float4{mat->emissiveColor.x, mat->emissiveColor.y, mat->emissiveColor.z, mat->emissiveIntensity};
-            pc.matParams = float4{mat->metallicStrength, mat->roughnessStrength, mat->normalStrength, 0.0f};
+            pc.emissiveColor = float4{
+                mat->emissiveColor.x, mat->emissiveColor.y, mat->emissiveColor.z,
+                mat->emissiveIntensity};
+            pc.matParams = float4{
+                mat->metallicStrength, mat->roughnessStrength, mat->normalStrength, 0.0f};
             pc.uvScale_triSc = float4{mat->uvScale.x, mat->uvScale.y, mat->triplanarScale, 0.0f};
             pc.camPos_time = float4{cPos.x, cPos.y, cPos.z, time};
             pc.flags[0] = shape;
             pc.flags[1] = bitmask;
-            pc.flags[2] = 0;
-            pc.flags[3] = 0;
-            
-            shader->pushConstants(cmd, &pc, sizeof(PushConsts));
+            pc.outImage = outImageHeap_;
+            pc.texAlbedo = albIdx;
+            pc.texORM = ormIdx;
+            pc.texNormal = normIdx;
+            pc.texHDR = hdrHeap_;
+            pc.defaultSampler = context.bindless->slots().defaultSampler;
+
+            shader->bind(cmd);
+            shader->pushConstants(cmd, *context.bindless, &pc, sizeof(pc));
             shader->dispatch(cmd, (256 + 15) / 16, (256 + 15) / 16, 1);
-            
-            VkImageMemoryBarrier barrier{}; barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL; barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = outputTex->getImage(); barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-            barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT; barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+            VkImageMemoryBarrier barrier{};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = outputTex->getImage();
+            barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(
+                cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                0, nullptr, 0, nullptr, 1, &barrier);
         }
     };
 
@@ -163,7 +186,7 @@ namespace burnhope {
                 previewRadius * cos(previewAngles.y) * cos(previewAngles.x)
             };
 
-            previewRenderer->UpdateAndDispatch(context.currentCommandBuffer, currentMat, previewShape, camPos, time);
+            previewRenderer->UpdateAndDispatch(context.currentCommandBuffer, context, currentMat, previewShape, camPos, time);
 
             ImVec2 p = ImGui::GetCursorScreenPos();
             ImGui::Image((ImTextureID)previewRenderer->imguiSet, ImVec2(256, 256));
@@ -307,7 +330,7 @@ namespace burnhope {
             ImGui::PopStyleVar();
 
             if (!previewRenderer && context.currentCommandBuffer != VK_NULL_HANDLE) {
-                previewRenderer = std::make_unique<PreviewRenderer>(*context.device);
+                previewRenderer = std::make_unique<PreviewRenderer>(*context.device, *context.bindless);
             }
 
             std::string selectedPath = "";
@@ -329,7 +352,12 @@ namespace burnhope {
                 ClearThumbnailCache();
                 currentPath = selectedPath;
                 if (currentMat) context.safeDeleteQueue.push_back(currentMat);
-                currentMat = Material::loadFromJson(*context.device, currentPath);
+                if (context.texturePool && context.bindless) {
+                  currentMat = Material::loadFromJson(
+                      *context.device, *context.texturePool, *context.bindless, currentPath);
+                } else {
+                  currentMat = std::make_shared<Material>();
+                }
                 if (!currentMat) currentMat = std::make_shared<Material>();
             }
 
@@ -394,27 +422,27 @@ namespace burnhope {
                     float* heightSlider = currentMat->heightPath.empty() ? nullptr : &currentMat->heightStrength;
 
                     ImGui::TableNextColumn();
-                    DrawMaterialProperty("Albedo (Base Color)", currentMat->albedoMap, currentMat->albedoPath, context, nullptr, 0, 0, &currentMat->albedoColor.x, true, false, true, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setAlbedo(nullptr, ""); else currentMat->setAlbedo(BurnhopeTexture::createTextureFromFile(*context.device, p), p); }, currentMat->albedoMap));
+                    DrawMaterialProperty("Albedo (Base Color)", currentMat->albedoMapForEditor(*context.texturePool), currentMat->albedoPath, context, nullptr, 0, 0, &currentMat->albedoColor.x, true, false, true, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setAlbedo(*context.texturePool, *context.bindless, nullptr, ""); else currentMat->setAlbedo(*context.texturePool, *context.bindless, adoptShared(BurnhopeTexture::createTextureFromFile(*context.device, p)), p); }, currentMat->albedoMapForEditor(*context.texturePool)));
                     ImGui::TableNextColumn();
-                    DrawMaterialProperty("Alpha / Opacity", currentMat->alphaMap, currentMat->alphaPath, context, &currentMat->albedoColor.w, 0.0f, 1.0f, nullptr, false, false, true, &currentMat->isTransparent, "Transparent Material", changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setAlpha(nullptr, ""); else currentMat->setAlpha(BurnhopeTexture::createDataTextureFromFile(*context.device, p), p); }, currentMat->alphaMap));
+                    DrawMaterialProperty("Alpha / Opacity", context.texturePool ? std::shared_ptr<BurnhopeTexture>(context.texturePool->resolve(currentMat->alphaMap), [](BurnhopeTexture*){}) : nullptr, currentMat->alphaPath, context, &currentMat->albedoColor.w, 0.0f, 1.0f, nullptr, false, false, true, &currentMat->isTransparent, "Transparent Material", changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setAlpha(*context.texturePool, *context.bindless, nullptr, ""); else currentMat->setAlpha(*context.texturePool, *context.bindless, adoptShared(BurnhopeTexture::createDataTextureFromFile(*context.device, p)), p); }, nullptr));
 
                     ImGui::TableNextColumn();
-                    DrawMaterialProperty("Metallic", currentMat->metallicMap, currentMat->metallicPath, context, &currentMat->metallicStrength, 0.0f, 1.0f, nullptr, false, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setMetallic(nullptr, ""); else { currentMat->setMetallic(BurnhopeTexture::createDataTextureFromFile(*context.device, p), p); currentMat->metallicStrength = 1.0f; } }, currentMat->metallicMap));
+                    DrawMaterialProperty("Metallic", context.texturePool ? std::shared_ptr<BurnhopeTexture>(context.texturePool->resolve(currentMat->metallicMap), [](BurnhopeTexture*){}) : nullptr, currentMat->metallicPath, context, &currentMat->metallicStrength, 0.0f, 1.0f, nullptr, false, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setMetallic(*context.texturePool, *context.bindless, nullptr, ""); else { currentMat->setMetallic(*context.texturePool, *context.bindless, adoptShared(BurnhopeTexture::createDataTextureFromFile(*context.device, p)), p); currentMat->metallicStrength = 1.0f; } }, nullptr));
                     ImGui::TableNextColumn();
-                    DrawMaterialProperty("Roughness", currentMat->roughnessMap, currentMat->roughnessPath, context, &currentMat->roughnessStrength, 0.0f, 1.0f, nullptr, false, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setRoughness(nullptr, ""); else { currentMat->setRoughness(BurnhopeTexture::createDataTextureFromFile(*context.device, p), p); currentMat->roughnessStrength = 1.0f; } }, currentMat->roughnessMap));
+                    DrawMaterialProperty("Roughness", context.texturePool ? std::shared_ptr<BurnhopeTexture>(context.texturePool->resolve(currentMat->roughnessMap), [](BurnhopeTexture*){}) : nullptr, currentMat->roughnessPath, context, &currentMat->roughnessStrength, 0.0f, 1.0f, nullptr, false, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setRoughness(*context.texturePool, *context.bindless, nullptr, ""); else { currentMat->setRoughness(*context.texturePool, *context.bindless, adoptShared(BurnhopeTexture::createDataTextureFromFile(*context.device, p)), p); currentMat->roughnessStrength = 1.0f; } }, nullptr));
 
                     ImGui::TableNextColumn();
-                    DrawMaterialProperty("Normal Map", currentMat->normalMap, currentMat->normalPath, context, normSlider, 0.0f, 5.0f, nullptr, false, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setNormal(nullptr, ""); else currentMat->setNormal(BurnhopeTexture::createDataTextureFromFile(*context.device, p), p); }, currentMat->normalMap));
+                    DrawMaterialProperty("Normal Map", currentMat->normalMapForEditor(*context.texturePool), currentMat->normalPath, context, normSlider, 0.0f, 5.0f, nullptr, false, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setNormal(*context.texturePool, *context.bindless, nullptr, ""); else currentMat->setNormal(*context.texturePool, *context.bindless, adoptShared(BurnhopeTexture::createDataTextureFromFile(*context.device, p)), p); }, currentMat->normalMapForEditor(*context.texturePool)));
                     ImGui::TableNextColumn();
-                    DrawMaterialProperty("Height Map", currentMat->heightMap, currentMat->heightPath, context, heightSlider, 0.0f, 2.0f, nullptr, false, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setHeight(nullptr, ""); else currentMat->setHeight(BurnhopeTexture::createDataTextureFromFile(*context.device, p), p); }, currentMat->heightMap));
+                    DrawMaterialProperty("Height Map", context.texturePool ? std::shared_ptr<BurnhopeTexture>(context.texturePool->resolve(currentMat->heightMap), [](BurnhopeTexture*){}) : nullptr, currentMat->heightPath, context, heightSlider, 0.0f, 2.0f, nullptr, false, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setHeight(*context.texturePool, *context.bindless, nullptr, ""); else currentMat->setHeight(*context.texturePool, *context.bindless, adoptShared(BurnhopeTexture::createDataTextureFromFile(*context.device, p)), p); }, nullptr));
 
                     ImGui::TableNextColumn();
-                    DrawMaterialProperty("Ambient Occlusion", currentMat->aoMap, currentMat->aoPath, context, &currentMat->aoStrength, 0.0f, 1.0f, nullptr, false, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setAO(nullptr, ""); else { currentMat->setAO(BurnhopeTexture::createDataTextureFromFile(*context.device, p), p); currentMat->aoStrength = 1.0f; } }, currentMat->aoMap));
+                    DrawMaterialProperty("Ambient Occlusion", context.texturePool ? std::shared_ptr<BurnhopeTexture>(context.texturePool->resolve(currentMat->aoMap), [](BurnhopeTexture*){}) : nullptr, currentMat->aoPath, context, &currentMat->aoStrength, 0.0f, 1.0f, nullptr, false, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setAO(*context.texturePool, *context.bindless, nullptr, ""); else { currentMat->setAO(*context.texturePool, *context.bindless, adoptShared(BurnhopeTexture::createDataTextureFromFile(*context.device, p)), p); currentMat->aoStrength = 1.0f; } }, nullptr));
                     ImGui::TableNextColumn();
-                    DrawMaterialProperty("ORM Map (AO/Rough/Metal)", currentMat->ormMap, currentMat->ormPath, context, nullptr, 0.0f, 0.0f, nullptr, false, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setORM(nullptr, ""); else { currentMat->setORM(BurnhopeTexture::createDataTextureFromFile(*context.device, p), p); currentMat->aoStrength = 1.0f; currentMat->roughnessStrength = 1.0f; currentMat->metallicStrength = 1.0f; } }, currentMat->ormMap));
+                    DrawMaterialProperty("ORM Map (AO/Rough/Metal)", context.texturePool ? std::shared_ptr<BurnhopeTexture>(context.texturePool->resolve(currentMat->ormMap), [](BurnhopeTexture*){}) : nullptr, currentMat->ormPath, context, nullptr, 0.0f, 0.0f, nullptr, false, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setORM(*context.texturePool, *context.bindless, nullptr, ""); else { currentMat->setORM(*context.texturePool, *context.bindless, adoptShared(BurnhopeTexture::createDataTextureFromFile(*context.device, p)), p); currentMat->aoStrength = 1.0f; currentMat->roughnessStrength = 1.0f; currentMat->metallicStrength = 1.0f; } }, nullptr));
 
                     ImGui::TableNextColumn();
-                    DrawMaterialProperty("Emission", currentMat->emissiveMap, currentMat->emissivePath, context, &currentMat->emissiveIntensity, 0.0f, 10.0f, &currentMat->emissiveColor.x, true, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setEmissive(nullptr, ""); else currentMat->setEmissive(BurnhopeTexture::createTextureFromFile(*context.device, p), p); }, currentMat->emissiveMap));
+                    DrawMaterialProperty("Emission", context.texturePool ? std::shared_ptr<BurnhopeTexture>(context.texturePool->resolve(currentMat->emissiveMap), [](BurnhopeTexture*){}) : nullptr, currentMat->emissivePath, context, &currentMat->emissiveIntensity, 0.0f, 10.0f, &currentMat->emissiveColor.x, true, false, false, nullptr, nullptr, changed, makeSetter([&](const std::string& p){ if(p.empty()) currentMat->setEmissive(*context.texturePool, *context.bindless, nullptr, ""); else currentMat->setEmissive(*context.texturePool, *context.bindless, adoptShared(BurnhopeTexture::createTextureFromFile(*context.device, p)), p); }, nullptr));
                     
                     ImGui::EndTable();
                 }

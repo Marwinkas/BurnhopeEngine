@@ -1,0 +1,12 @@
+textures/
+Libraries/
+models/
+materials/
+build/
+.cache/
+.vscode/
+*.spv
+path.md
+,gitignore
+compile.bat
+rule.md

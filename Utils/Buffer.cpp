@@ -1,198 +1,89 @@
-/*
- * Encapsulates a vulkan buffer
- *
- * Initially based off VulkanBuffer by Sascha Willems -
- * https:
- */
 #include "Buffer.hpp"
-#include <cassert>
 #include <cstring>
-namespace burnhope
-{
-  /**
-   * Returns the minimum instance size required to be compatible with devices minOffsetAlignment
-   *
-   * @param instanceSize The size of an instance
-   * @param minOffsetAlignment The minimum required alignment, in bytes, for the offset member (eg
-   * minUniformBufferOffsetAlignment)
-   *
-   * @return VkResult of the buffer mapping call
-   */
-  VkDeviceSize BurnhopeBuffer::getAlignment(VkDeviceSize instanceSize, VkDeviceSize minOffsetAlignment)
-  {
-    if (minOffsetAlignment > 0)
-    {
-      return (instanceSize + minOffsetAlignment - 1) & ~(minOffsetAlignment - 1);
-    }
+
+namespace burnhope {
+
+VkDeviceSize BurnhopeBuffer::alignInstance(VkDeviceSize instanceSize, VkDeviceSize minOffsetAlignment) {
+  if (minOffsetAlignment == 0) {
     return instanceSize;
   }
-  BurnhopeBuffer::BurnhopeBuffer(
-      BurnhopeDevice &device,
-      VkDeviceSize instanceSize,
-      uint32_t instanceCount,
-      VkBufferUsageFlags usageFlags,
-      VkMemoryPropertyFlags memoryPropertyFlags,
-      VkDeviceSize minOffsetAlignment)
-      : lveDevice{device},
-        instanceSize{instanceSize},
-        instanceCount{instanceCount},
-        usageFlags{usageFlags},
-        memoryPropertyFlags{memoryPropertyFlags}
-  {
-    alignmentSize = getAlignment(instanceSize, minOffsetAlignment);
-    bufferSize = alignmentSize * instanceCount;
-    device.createBuffer(bufferSize, usageFlags, memoryPropertyFlags, buffer, memory);
-  }
-  BurnhopeBuffer::~BurnhopeBuffer()
-  {
-    unmap();
-    vmaDestroyBuffer(lveDevice.getAllocator(), buffer, memory);
-  }
-  /**
-   * Map a memory range of this buffer. If successful, mapped points to the specified buffer range.
-   *
-   * @param size (Optional) Size of the memory range to map. Pass VK_WHOLE_SIZE to map the complete
-   * buffer range.
-   * @param offset (Optional) Byte offset from beginning
-   *
-   * @return VkResult of the buffer mapping call
-   */
-  VkResult BurnhopeBuffer::map(VkDeviceSize size, VkDeviceSize offset)
-  {
-    assert(buffer && memory && "Called map on buffer before create");
-    if (!memory) return VK_ERROR_INITIALIZATION_FAILED;
-    return vmaMapMemory(lveDevice.getAllocator(), memory, &mapped);
-  }
-  /**
-   * Unmap a mapped memory range
-   *
-   * @note Does not return a result as vkUnmapMemory can't fail
-   */
-  void BurnhopeBuffer::unmap()
-  {
-    if (mapped)
-    {
-      vmaUnmapMemory(lveDevice.getAllocator(), memory);
-      mapped = nullptr;
-    }
-  }
-  /**
-   * Copies the specified data to the mapped buffer. Default value writes whole buffer range
-   *
-   * @param data Pointer to the data to copy
-   * @param size (Optional) Size of the data to copy. Pass VK_WHOLE_SIZE to flush the complete buffer
-   * range.
-   * @param offset (Optional) Byte offset from beginning of mapped region
-   *
-   */
-  void BurnhopeBuffer::writeToBuffer(void *data, VkDeviceSize size, VkDeviceSize offset)
-  {
-    assert(mapped && "Cannot copy to unmapped buffer");
-    if (!mapped) return;
-    if (size == VK_WHOLE_SIZE)
-    {
-      memcpy(mapped, data, bufferSize);
-    }
-    else
-    {
-      char *memOffset = (char *)mapped;
-      memOffset += offset;
-      memcpy(memOffset, data, size);
-    }
-  }
-  /**
-   * Flush a memory range of the buffer to make it visible to the device
-   *
-   * @note Only required for non-coherent memory
-   *
-   * @param size (Optional) Size of the memory range to flush. Pass VK_WHOLE_SIZE to flush the
-   * complete buffer range.
-   * @param offset (Optional) Byte offset from beginning
-   *
-   * @return VkResult of the flush call
-   */
-  VkResult BurnhopeBuffer::flush(VkDeviceSize size, VkDeviceSize offset)
-  {
-    return vmaFlushAllocation(lveDevice.getAllocator(), memory, offset, size);
-  }
-  /**
-   * Invalidate a memory range of the buffer to make it visible to the host
-   *
-   * @note Only required for non-coherent memory
-   *
-   * @param size (Optional) Size of the memory range to invalidate. Pass VK_WHOLE_SIZE to invalidate
-   * the complete buffer range.
-   * @param offset (Optional) Byte offset from beginning
-   *
-   * @return VkResult of the invalidate call
-   */
-  VkResult BurnhopeBuffer::invalidate(VkDeviceSize size, VkDeviceSize offset)
-  {
-    return vmaInvalidateAllocation(lveDevice.getAllocator(), memory, offset, size);
-  }
-  /**
-   * Create a buffer info descriptor
-   *
-   * @param size (Optional) Size of the memory range of the descriptor
-   * @param offset (Optional) Byte offset from beginning
-   *
-   * @return VkDescriptorBufferInfo of specified offset and range
-   */
-  VkDescriptorBufferInfo BurnhopeBuffer::descriptorInfo(VkDeviceSize size, VkDeviceSize offset)
-  {
-    return VkDescriptorBufferInfo{
-        buffer,
-        offset,
-        size,
-    };
-  }
-  /**
-   * Copies "instanceSize" bytes of data to the mapped buffer at an offset of index * alignmentSize
-   *
-   * @param data Pointer to the data to copy
-   * @param index Used in offset calculation
-   *
-   */
-  void BurnhopeBuffer::writeToIndex(void *data, int index)
-  {
-    writeToBuffer(data, instanceSize, index * alignmentSize);
-  }
-  /**
-   *  Flush the memory range at index * alignmentSize of the buffer to make it visible to the device
-   *
-   * @param index Used in offset calculation
-   *
-   */
-  VkResult BurnhopeBuffer::flushIndex(int index)
-  {
-    assert(
-        alignmentSize % lveDevice.properties.limits.nonCoherentAtomSize == 0 &&
-        "Cannot use BurnhopeBuffer::flushIndex if alignmentSize isn't a multiple of Device Limits "
-        "nonCoherentAtomSize");
-    return flush(alignmentSize, index * alignmentSize);
-  }
-  /**
-   * Create a buffer info descriptor
-   *
-   * @param index Specifies the region given by index * alignmentSize
-   *
-   * @return VkDescriptorBufferInfo for instance at index
-   */
-  VkDescriptorBufferInfo BurnhopeBuffer::descriptorInfoForIndex(int index)
-  {
-    return descriptorInfo(alignmentSize, index * alignmentSize);
-  }
-  /**
-   * Invalidate a memory range of the buffer to make it visible to the host
-   *
-   * @note Only required for non-coherent memory
-   *
-   * @param index Specifies the region to invalidate: index * alignmentSize
-   *
-   * @return VkResult of the invalidate call
-   */
-  VkResult BurnhopeBuffer::invalidateIndex(int index)
-  {
-    return invalidate(alignmentSize, index * alignmentSize);
+  return static_cast<VkDeviceSize>(alignUp(instanceSize, minOffsetAlignment));
+}
+
+BurnhopeBuffer::BurnhopeBuffer(
+    BurnhopeDevice& device,
+    VkDeviceSize instanceSize,
+    uint32_t instanceCount,
+    VkBufferUsageFlags usageFlags,
+    VkMemoryPropertyFlags memoryPropertyFlags,
+    VkDeviceSize minOffsetAlignment)
+    : device_{device},
+      instanceSize_{instanceSize},
+      instanceCount_{instanceCount},
+      usageFlags_{usageFlags},
+      memoryPropertyFlags_{memoryPropertyFlags} {
+  alignmentSize_ = alignInstance(instanceSize, minOffsetAlignment);
+  bufferSize_ = alignmentSize_ * instanceCount;
+  device_.createBuffer(bufferSize_, usageFlags, memoryPropertyFlags, buffer_, memory_);
+}
+
+BurnhopeBuffer::~BurnhopeBuffer() {
+  unmap();
+  vmaDestroyBuffer(device_.allocator(), buffer_, memory_);
+}
+
+VkResult BurnhopeBuffer::map(VkDeviceSize, VkDeviceSize) {
+  return vmaMapMemory(device_.allocator(), memory_, &mapped_);
+}
+
+void BurnhopeBuffer::unmap() {
+  if (mapped_) {
+    vmaUnmapMemory(device_.allocator(), memory_);
+    mapped_ = nullptr;
   }
 }
+
+void BurnhopeBuffer::write(std::span<const std::byte> data, VkDeviceSize offset) {
+  if (!mapped_) {
+    return;
+  }
+  const VkDeviceSize size = data.size();
+  if (offset + size > bufferSize_) {
+    throwVkError("BurnhopeBuffer::write overflow");
+  }
+  std::memcpy(static_cast<std::byte*>(mapped_) + offset, data.data(), size);
+}
+
+void BurnhopeBuffer::writeToIndex(std::span<const std::byte> data, uint32_t index) {
+  write(data, index * alignmentSize_);
+}
+
+VkResult BurnhopeBuffer::flush(VkDeviceSize size, VkDeviceSize offset) {
+  return vmaFlushAllocation(device_.allocator(), memory_, offset, size);
+}
+
+VkResult BurnhopeBuffer::invalidate(VkDeviceSize size, VkDeviceSize offset) {
+  return vmaInvalidateAllocation(device_.allocator(), memory_, offset, size);
+}
+
+VkResult BurnhopeBuffer::flushIndex(uint32_t index) {
+  return flush(alignmentSize_, index * alignmentSize_);
+}
+
+VkResult BurnhopeBuffer::invalidateIndex(uint32_t index) {
+  return invalidate(alignmentSize_, index * alignmentSize_);
+}
+
+VkDescriptorBufferInfo BurnhopeBuffer::descriptorInfo(VkDeviceSize size, VkDeviceSize offset) const {
+  return {buffer_, offset, size};
+}
+
+VkDescriptorBufferInfo BurnhopeBuffer::descriptorInfoForIndex(uint32_t index) const {
+  return descriptorInfo(alignmentSize_, index * alignmentSize_);
+}
+
+VkDeviceAddress BurnhopeBuffer::deviceAddress() const {
+  return device_.bufferDeviceAddress(buffer_);
+}
+
+} // namespace burnhope

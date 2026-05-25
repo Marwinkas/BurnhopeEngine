@@ -1,29 +1,39 @@
 #pragma once
+
+#include "../Utils/BindlessPush.hpp"
+#include "../Utils/BindlessRegistry.hpp"
 #include "../Utils/Device.hpp"
-#include "../Utils/Pipeline.hpp"
-#include "../Utils/Components.hpp"
+#include "../Utils/DirectXMathCompat.hpp"
+#include "Core/GraphicsDispatch.hpp"
 #include "Model.hpp"
 #include <memory>
 
 namespace burnhope {
-    class PortalRenderSystem {
-    public:
-        PortalRenderSystem(BurnhopeDevice& device, VkDescriptorSetLayout globalSetLayout);
-        ~PortalRenderSystem();
 
-        void drawDepthReset(VkCommandBuffer cmd, VkDescriptorSet globalSet, const float4x4& model, uint32_t ref);
+class PortalRenderSystem final {
+public:
+  explicit PortalRenderSystem(BurnhopeDevice& device);
+  ~PortalRenderSystem() = default;
 
-        void drawMask(VkCommandBuffer cmd, VkDescriptorSet globalSet, const float4x4& modelMatrix, uint32_t refValue);
+  void drawDepthReset(
+      VkCommandBuffer cmd,
+      const BindlessRegistry& bindless,
+      const PortalVertPC& basePush,
+      const float4x4& model,
+      uint32_t ref);
 
-    private:
-        BurnhopeDevice& lveDevice;
-        VkPipelineLayout pipelineLayout;
-        std::unique_ptr<BurnhopePipeline> lvePipeline;
-        std::unique_ptr<BurnhopeModel> portalModel;
-        std::unique_ptr<BurnhopePipeline> depthResetPipeline;
+  void drawMask(
+      VkCommandBuffer cmd,
+      const BindlessRegistry& bindless,
+      const PortalVertPC& basePush,
+      const float4x4& modelMatrix,
+      uint32_t refValue);
 
-        void createPipelineLayout(VkDescriptorSetLayout globalSetLayout);
-        void createPipeline(VkRenderPass renderPass);
-        void createDepthResetPipeline(VkRenderPass renderPass);
-    };
-}
+private:
+  BurnhopeDevice& device_;
+  std::unique_ptr<BurnhopeModel> portalModel_;
+  std::unique_ptr<GraphicsDispatch> maskShader_;
+  std::unique_ptr<GraphicsDispatch> depthResetShader_;
+};
+
+} // namespace burnhope

@@ -11,6 +11,24 @@ namespace burnhope
         Position = position;
     }
 
+    float4x4 Camera::GetViewMatrix() const
+    {
+        return MatrixLookAtLH(Position, float3{Position.x + Orientation.x, Position.y + Orientation.y, Position.z + Orientation.z}, Up);
+    }
+
+    float4x4 Camera::GetProjectionMatrix(float fovDeg, float nearPlane, float farPlane) const
+    {
+        const float aspect = static_cast<float>(width) / static_cast<float>(height);
+        return GetProjectionMatrix(fovDeg, nearPlane, aspect, farPlane);
+    }
+
+    float4x4 Camera::GetProjectionMatrix(float fovDeg, float nearPlane, float aspect, float farPlane) const
+    {
+        float4x4 proj = MatrixPerspectiveFovLH(Radians(fovDeg), aspect, nearPlane, farPlane);
+        proj._22 *= -1.0f;
+        return proj;
+    }
+
     void Camera::setViewMatrix(const float4x4& viewMatrix)
     {
         float4x4 invView = MatrixInverse(viewMatrix);
@@ -35,7 +53,7 @@ namespace burnhope
         cleanViewProjectionMatrix = MatrixMultiply(projClean, view);
     }
 
-    bool Camera::IsSphereInFrustum(const float4 *planes, const float3 &center, float radius)
+    bool Camera::IsSphereInFrustum(const float4 *planes, const float3 &center, float radius) const
     {
         for (int i = 0; i < 6; i++)
         {

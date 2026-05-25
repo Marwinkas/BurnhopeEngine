@@ -22,7 +22,7 @@ namespace burnhope
 
     private:
         void createResources();
-        BurnhopeDevice &lveDevice;
+        BurnhopeDevice &device_;
         VkExtent2D extent;
         std::unique_ptr<BurnhopeTexture> normalRoughness;
         std::unique_ptr<BurnhopeTexture> albedoMetallic;

@@ -1,50 +1,36 @@
 #pragma once
 
+#include "../Utils/BindlessPush.hpp"
+#include "../Utils/BindlessRegistry.hpp"
 #include "../Utils/Device.hpp"
-#include "ComputeShader.hpp"
-#include "../Utils/Descriptors.hpp"
+#include "Core/ComputeDispatch.hpp"
 #include <memory>
-#include <vector>
 
 namespace burnhope {
 
-class SSGISystem {
+class SSGISystem final {
 public:
-    SSGISystem(
-        BurnhopeDevice& device,
-        VkDescriptorSetLayout globalSetLayout,
-        VkDescriptorSetLayout gBufferLayout,
-        VkDescriptorSetLayout shadowLayout,
-        VkDescriptorSetLayout ssgiLayout
-    );
-    ~SSGISystem();
+  SSGISystem(BurnhopeDevice& device);
+  ~SSGISystem();
 
-    SSGISystem(const SSGISystem&) = delete;
-    SSGISystem& operator=(const SSGISystem&) = delete;
+  void computeSSGI(
+      VkCommandBuffer cmd,
+      const BindlessRegistry& bindless,
+      const SsgiHeapPC& pc,
+      uint32_t width,
+      uint32_t height);
 
-    void computeSSGI(
-        VkCommandBuffer cmd,
-        VkDescriptorSet globalSet,
-        VkDescriptorSet gBufferSet,
-        VkDescriptorSet shadowSet,
-        VkDescriptorSet ssgiSet,
-        uint32_t width,
-        uint32_t height
-    );
-    
-    void computeDenoise(
-        VkCommandBuffer cmd,
-        VkDescriptorSet globalSet,
-        VkDescriptorSet gBufferSet,
-        VkDescriptorSet ssgiSet,
-        uint32_t width,
-        uint32_t height
-    );
+  void computeDenoise(
+      VkCommandBuffer cmd,
+      const BindlessRegistry& bindless,
+      const SsgiDenoiseHeapPC& pc,
+      uint32_t width,
+      uint32_t height);
 
 private:
-    BurnhopeDevice& lveDevice;
-    std::unique_ptr<ComputeShader> ssgiShader;
-    std::unique_ptr<ComputeShader> denoiseShader;
+  BurnhopeDevice& device_;
+  std::unique_ptr<ComputeDispatch> ssgiShader_;
+  std::unique_ptr<ComputeDispatch> denoiseShader_;
 };
 
 } // namespace burnhope
