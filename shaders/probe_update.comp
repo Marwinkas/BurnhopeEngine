@@ -156,14 +156,11 @@ layout(push_constant) uniform RC {
 } rc;
 
 vec4 unpackQTangent(uint packedVal) {
-    int ix = (int(packedVal) << 22) >> 22;
-    int iy = (int(packedVal) << 12) >> 22;
-    int iz = (int(packedVal) << 2)  >> 22;
-    int iw = (int(packedVal) >> 30);
-    return vec4(
-        max(float(ix) / 511.0, -1.0), max(float(iy) / 511.0, -1.0),
-        max(float(iz) / 511.0, -1.0), max(float(iw) / 1.0, -1.0)
-    );
+    int ix = int(packedVal << 22) >> 22;
+    int iy = int(packedVal << 12) >> 22;
+    int iz = int(packedVal <<  2) >> 22;
+    int iw = int(packedVal << 30) >> 30;
+    return clamp(vec4(ix, iy, iz, iw) / vec4(511.0, 511.0, 511.0, 1.0), vec4(-1.0), vec4(1.0));
 }
 vec3 getNormalFromQTangent(uint packedVal) {
     vec4 q = unpackQTangent(packedVal);

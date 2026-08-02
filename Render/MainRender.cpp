@@ -29,6 +29,9 @@ namespace burnhope
         VkPushConstantRange pushConstantRange{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GeometryPushConstants)};
         PipelineConfigInfo pipelineConfig{};
         BurnhopePipeline::defaultPipelineConfigInfo(pipelineConfig);
+        // Mesh shader path: geometry comes from SSBO/BDA, not vertex attributes.
+        pipelineConfig.bindingDescriptions.clear();
+        pipelineConfig.attributeDescriptions.clear();
         static std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(5);
         for (int i = 0; i < 5; i++)
         {

@@ -14,6 +14,7 @@ layout (location = 5) flat in uint inMatID;
 layout (location = 6) in vec4 inColor;
 layout (location = 7) in vec2 inUV2;
 layout (location = 8) in float inThickness;
+layout (location = 9) in vec3 inWorldNormal;
 
 struct GlobalUboStruct {
     mat4 projection; mat4 invViewProj; mat4 view; vec3 camPos; float zNear;
@@ -129,7 +130,7 @@ void main() {
     vec3 posDdy = dFdy(inCrntPos);
     vec2 finalUV = mat.repeatTexture == 1 ? scaledUV : clamp(scaledUV, 0.0, 1.0);
     
-    vec3 N = normalize(inTBN[2]);
+    vec3 N = normalize(inWorldNormal);
     vec3 T = normalize(inTBN[0]);
     vec3 dp = T - dot(T, N) * N;
     if (dot(dp, dp) > 0.0001) T = normalize(dp);

@@ -33,6 +33,7 @@ layout (location = 5) flat out uint outMatID;
 layout (location = 6) out vec4 outColor;
 layout (location = 7) out vec2 outUV2;
 layout (location = 8) out float outThickness;
+layout (location = 9) out vec3 outWorldNormal;
 
 struct GlobalUboStruct {
     mat4 projection; mat4 invViewProj; mat4 view; vec3 camPos; float zNear;
@@ -173,6 +174,7 @@ void main() {
     B = normalize(normalMatrix * B);
     N = normalize(normalMatrix * N);
     outTBN = mat3(T, B, N);
+    outWorldNormal = N;
     
     // Environment Breathing
     if (ubo.ppCausticsBreath.y > 0.5) {

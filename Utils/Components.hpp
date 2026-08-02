@@ -37,19 +37,27 @@ namespace burnhope
         glm::mat4 matrix = glm::mat4(1.0f);
         bool updatematrix = true;
 
+        [[nodiscard]] glm::mat4 rotationMatrix() const noexcept
+        {
+            glm::mat4 rot = glm::mat4(1.0f);
+            rot = glm::rotate(rot, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+            rot = glm::rotate(rot, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+            rot = glm::rotate(rot, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+            return rot;
+        }
+
+        [[nodiscard]] glm::vec3 rotateVector(glm::vec3 localDir) const noexcept
+        {
+            return glm::normalize(glm::vec3(rotationMatrix() * glm::vec4(localDir, 0.0f)));
+        }
+
         void updateMatrixIfNeeded()
         {
             if (updatematrix)
             {
-                glm::mat4 transform = glm::translate(glm::mat4(1.0f), position);
-
-                transform = glm::rotate(transform, glm::radians(rotation.x), {1.0f, 0.0f, 0.0f});
-                transform = glm::rotate(transform, glm::radians(rotation.y), {0.0f, 1.0f, 0.0f});
-                transform = glm::rotate(transform, glm::radians(rotation.z), {0.0f, 0.0f, 1.0f});
-
-                transform = glm::scale(transform, scale);
-                matrix = transform;
-
+                matrix = glm::translate(glm::mat4(1.0f), position)
+                       * rotationMatrix()
+                       * glm::scale(glm::mat4(1.0f), scale);
                 updatematrix = false;
             }
         }

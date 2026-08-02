@@ -830,7 +830,7 @@ namespace burnhope
         globalPos.push_back(packPos(p0)); globalPos.push_back(packPos(p1));
         globalPos.push_back(packPos(p2)); globalPos.push_back(packPos(p3));
         
-        uint32_t qTan = glm::packSnorm3x10_1x2(glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
+        uint32_t qTan = glm::packSnorm3x10_1x2(glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
         globalAttr.push_back({glm::packHalf2x16(glm::vec2(0,0)), qTan}); globalAttr.push_back({glm::packHalf2x16(glm::vec2(1,0)), qTan});
         globalAttr.push_back({glm::packHalf2x16(glm::vec2(1,1)), qTan}); globalAttr.push_back({glm::packHalf2x16(glm::vec2(0,1)), qTan});
         

@@ -213,8 +213,8 @@ namespace burnhope
             auto &tc = lightView.get<TransformComponent>(entity).transform;
             if (!lc.enable || lc.type == LightType::None)
                 continue;
-            glm::quat q = glm::quat(glm::radians(tc.rotation));
-            glm::vec3 dir = glm::normalize(q * glm::vec3(0, -1, 0));
+            // Must match Transform::rotationMatrix() (XYZ Euler), not glm::quat(euler) (YXZ).
+            glm::vec3 dir = tc.rotateVector(glm::vec3(0.0f, -1.0f, 0.0f));
             if (lc.type == LightType::Directional)
             {
                 sunDir = dir;
