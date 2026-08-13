@@ -1,7 +1,8 @@
 ﻿#include "Camera.hpp"
+#include <SDL3/SDL.h>
 #include <cassert>
 #include <limits>
-#include <GLFW/glfw3.h>
+
 namespace burnhope
 {
     Camera::Camera(int width, int height, glm::vec3 position)
@@ -41,14 +42,15 @@ namespace burnhope
         }
         return true;
     }
-    void Camera::Inputs(GLFWwindow *window, float deltaTime)
+    void Camera::Inputs(SDL_Window *window, float deltaTime)
     {
-        bool allowMouse = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
+        float mouseX = 0.0f;
+        float mouseY = 0.0f;
+        const SDL_MouseButtonFlags mouseState = SDL_GetMouseState(&mouseX, &mouseY);
+        const bool allowMouse = (mouseState & SDL_BUTTON_MASK(SDL_BUTTON_RIGHT)) != 0;
         if (allowMouse)
         {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-            double mouseX, mouseY;
-            glfwGetCursorPos(window, &mouseX, &mouseY);
+            SDL_SetWindowRelativeMouseMode(window, true);
             if (firstClick)
             {
                 lastMouseX = mouseX;
@@ -79,25 +81,26 @@ namespace burnhope
         }
         else
         {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            SDL_SetWindowRelativeMouseMode(window, false);
             firstClick = true;
         }
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+        if (allowMouse)
         {
+            const bool *keys = SDL_GetKeyboardState(nullptr);
             float currentSpeed = speed;
-            if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+            if (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT])
                 currentSpeed *= 20.0f;
-            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            if (keys[SDL_SCANCODE_W])
                 Position += currentSpeed * Orientation;
-            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            if (keys[SDL_SCANCODE_S])
                 Position += currentSpeed * -Orientation;
-            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            if (keys[SDL_SCANCODE_A])
                 Position += currentSpeed * -glm::normalize(glm::cross(Orientation, Up));
-            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            if (keys[SDL_SCANCODE_D])
                 Position += currentSpeed * glm::normalize(glm::cross(Orientation, Up));
-            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+            if (keys[SDL_SCANCODE_E])
                 Position += currentSpeed * Up;
-            if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+            if (keys[SDL_SCANCODE_Q])
                 Position += currentSpeed * -Up;
         }
     }

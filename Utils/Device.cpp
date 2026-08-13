@@ -109,7 +109,7 @@ namespace burnhope
     {
       throw std::runtime_error("failed to create instance!");
     }
-    hasGflwRequiredInstanceExtensions();
+    hasSdlRequiredInstanceExtensions();
   }
   void BurnhopeDevice::pickPhysicalDevice()
   {
@@ -414,17 +414,20 @@ VkDeviceAddress BurnhopeDevice::getBufferDeviceAddress(VkBuffer buffer) {
   }
   std::vector<const char *> BurnhopeDevice::getRequiredExtensions()
   {
-    uint32_t glfwExtensionCount = 0;
-    const char **glfwExtensions;
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-    std::vector<const char *> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+    Uint32 sdlExtensionCount = 0;
+    const char *const *sdlExtensions = SDL_Vulkan_GetInstanceExtensions(&sdlExtensionCount);
+    if (sdlExtensions == nullptr || sdlExtensionCount == 0)
+    {
+      throw std::runtime_error(std::string("failed to get SDL3 Vulkan extensions: ") + SDL_GetError());
+    }
+    std::vector<const char *> extensions(sdlExtensions, sdlExtensions + sdlExtensionCount);
     if (enableValidationLayers)
     {
       extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
     return extensions;
   }
-  void BurnhopeDevice::hasGflwRequiredInstanceExtensions()
+  void BurnhopeDevice::hasSdlRequiredInstanceExtensions()
   {
     uint32_t extensionCount = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
@@ -444,7 +447,7 @@ VkDeviceAddress BurnhopeDevice::getBufferDeviceAddress(VkBuffer buffer) {
       std::cout << "\t" << required << std::endl;
       if (available.find(required) == available.end())
       {
-        throw std::runtime_error("Missing required glfw extension");
+        throw std::runtime_error("Missing required SDL3 Vulkan extension");
       }
     }
   }

@@ -17,7 +17,7 @@ add_definitions(-DIMGUI_DEFINE_MATH_OPERATORS)
 find_package(Vulkan REQUIRED)
 find_package(Threads REQUIRED)
 # либо подключается через add_subdirectory, если он в папке Libraries
-find_package(glfw3 CONFIG REQUIRED)
+find_package(SDL3 CONFIG REQUIRED)
 find_package(meshoptimizer CONFIG REQUIRED)
 # --- Подключение Vulkan Memory Allocator ---
 include(FetchContent)
@@ -125,7 +125,7 @@ file(GLOB_RECURSE IMGUI_SOURCES
     "Libraries/src/imgui/*.cpp"
     "Libraries/src/imguizmo/*.cpp"
     "Libraries/src/imgui/backends/imgui_impl_vulkan.cpp"
-    "Libraries/src/imgui/backends/imgui_impl_glfw.cpp"
+    "Libraries/src/imgui/backends/imgui_impl_sdl3.cpp"
 )
 
 # Объединяем всё в один список
@@ -173,7 +173,7 @@ add_dependencies(${PROJECT_NAME} ShadersTarget)
 # --- 8. Линковка библиотек ---
 
 target_link_libraries(${PROJECT_NAME} 
-    glfw 
+    SDL3::SDL3
     Vulkan::Vulkan 
     assimp           # Ссылка на цель из add_subdirectory
     meshoptimizer::meshoptimizer

@@ -7,8 +7,7 @@
 #include <glm/gtx/rotate_vector.hpp>
 #include <glm/gtx/vector_angle.hpp>
 #include <array>
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+struct SDL_Window;
 namespace burnhope
 {
     class Camera
@@ -57,7 +56,7 @@ namespace burnhope
         }
         
         void updateMatrix(float FOVdeg, float nearPlane, float farPlane);
-        void Inputs(GLFWwindow *window, float deltaTime);
+        void Inputs(SDL_Window *window, float deltaTime);
     };
 }
 #endif

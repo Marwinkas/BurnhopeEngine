@@ -775,7 +775,12 @@ bool queuedGeometryRebuild = false;
         queuedGeometryRebuild = false; // Сбрасываем флаг
     }
 
-            glfwPollEvents();
+            SDL_Event event{};
+            while (lveWindow.popEvent(event))
+            {
+                uiManager->ProcessSDLEvent(event);
+                lveWindow.handleSDLEvent(event);
+            }
 
             bool modelsLoadedThisFrame = false;
             registry.view<MeshComponent>().each([&](entt::entity e, MeshComponent &meshComp) {
@@ -906,14 +911,14 @@ bool queuedGeometryRebuild = false;
             while (extent.width == 0 || extent.height == 0)
             {
                 extent = lveWindow.getExtent();
-                glfwWaitEvents();
+                lveWindow.waitForEvents();
             }
             camera.width = extent.width;
             camera.height = extent.height;
             VkExtent2D swapExtent = lveRenderer.getSwapChainExtent();
             
             // Проверяем, устарели ли наши текстуры относительно текущего SwapChain,
-            // либо был ли явный вызов изменения размера окна от GLFW
+            // либо был ли явный вызов изменения размера окна от SDL
             if (hdrOutputTexture == nullptr || 
                 hdrOutputTexture->getExtent().width != swapExtent.width || 
                 hdrOutputTexture->getExtent().height != swapExtent.height || 
@@ -985,7 +990,7 @@ bool queuedGeometryRebuild = false;
                 frameCount = 0;
                 fpsTimer = newTime;
             }
-            camera.Inputs(lveWindow.getGLFWwindow(), frameTime);
+            camera.Inputs(lveWindow.getSDLWindow(), frameTime);
             auto commandBuffer = lveRenderer.beginFrame();
             if (commandBuffer == VK_NULL_HANDLE) continue;
             if (commandBuffer)

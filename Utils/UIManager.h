@@ -4,13 +4,13 @@
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <GLFW/glfw3.h>
+#include <SDL3/SDL.h>
 #include "../Render/Camera.hpp"
 #ifndef IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
 #define IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
 #endif
 #include "imgui_impl_vulkan.h"
-#include <imgui_impl_glfw.h>
+#include <imgui_impl_sdl3.h>
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "ImGuizmo.h"
@@ -71,14 +71,18 @@ namespace burnhope {
             m_Context.redoStack.clear();
 
             ImGui_ImplVulkan_Shutdown();
-            ImGui_ImplGlfw_Shutdown();
+            ImGui_ImplSDL3_Shutdown();
             ImGui::DestroyContext();
             vkDestroyDescriptorPool(m_Device->device(), m_ImguiPool, nullptr);
         }
 
+        void ProcessSDLEvent(const SDL_Event& event) {
+            ImGui_ImplSDL3_ProcessEvent(&event);
+        }
+
         void UpdateUI(BurnhopeWindow& window, Camera& camera, VkCommandBuffer commandBuffer) {
             ImGui_ImplVulkan_NewFrame();
-            ImGui_ImplGlfw_NewFrame();
+            ImGui_ImplSDL3_NewFrame();
             ImGui::NewFrame();
             ImGuizmo::BeginFrame();
             m_Context.currentCommandBuffer = commandBuffer;
@@ -276,8 +280,9 @@ namespace burnhope {
         // --- УТИЛИТЫ ДЛЯ RAYCAST И МАТЕМАТИКИ ---
 
         glm::vec3 GetMouseRay(BurnhopeWindow& window, Camera& camera) {
-            double mouseX, mouseY;
-            glfwGetCursorPos(window.getGLFWwindow(), &mouseX, &mouseY);
+            float mouseX = 0.0f;
+            float mouseY = 0.0f;
+            SDL_GetMouseState(&mouseX, &mouseY);
             auto extent = window.getExtent();
             float x = (2.0f * (float)mouseX) / extent.width - 1.0f;
             float y = 1.0f - (2.0f * (float)mouseY) / extent.height;
@@ -484,7 +489,7 @@ namespace burnhope {
             pool_info.pPoolSizes = pool_sizes;
             vkCreateDescriptorPool(device.device(), &pool_info, nullptr, &m_ImguiPool);
 
-            ImGui_ImplGlfw_InitForVulkan(window.getGLFWwindow(), true);
+            ImGui_ImplSDL3_InitForVulkan(window.getSDLWindow());
             ImGui_ImplVulkan_InitInfo init_info = {};
             init_info.Instance = device.getInstance();
             init_info.PhysicalDevice = device.getPhysicalDevice();
