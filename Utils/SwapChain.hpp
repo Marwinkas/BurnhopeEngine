@@ -10,6 +10,8 @@ namespace burnhope
   {
   public:
     static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+    static void setVSyncEnabled(bool enabled) { vsyncEnabled = enabled; }
+    static bool isVSyncEnabled() { return vsyncEnabled; }
     VkImage getImage(int index) { return swapChainImages[index]; }
     BurnhopeSwapChain(BurnhopeDevice &deviceRef, VkExtent2D windowExtent);
     BurnhopeSwapChain(
@@ -64,5 +66,6 @@ namespace burnhope
     std::vector<VkFence> inFlightFences;
     std::vector<VkFence> imagesInFlight;
     size_t currentFrame = 0;
+    static inline bool vsyncEnabled = true;
   };
 }

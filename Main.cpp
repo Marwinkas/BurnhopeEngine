@@ -1,9 +1,18 @@
 ﻿#include "MainApp.hpp"
+#include "Utils/SwapChain.hpp"
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
-int main()
+#include <string>
+int main(int argc, char *argv[])
 {
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::string(argv[i]) == "--no-vsync")
+        {
+            burnhope::BurnhopeSwapChain::setVSyncEnabled(false);
+        }
+    }
     burnhope::FirstApp app{};
     try
     {

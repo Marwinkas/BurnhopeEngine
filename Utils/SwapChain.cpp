@@ -293,15 +293,37 @@ namespace burnhope
   VkPresentModeKHR BurnhopeSwapChain::chooseSwapPresentMode(
       const std::vector<VkPresentModeKHR> &availablePresentModes)
   {
-    for (const auto &availablePresentMode : availablePresentModes)
+    if (vsyncEnabled)
     {
-      if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+      for (const auto &availablePresentMode : availablePresentModes)
       {
-        std::cout << "Present mode: Mailbox" << std::endl;
-        return availablePresentMode;
+        if (availablePresentMode == VK_PRESENT_MODE_FIFO_KHR)
+        {
+          std::cout << "Present mode: V-Sync (FIFO)" << std::endl;
+          return availablePresentMode;
+        }
       }
     }
-    std::cout << "Present mode: V-Sync" << std::endl;
+    else
+    {
+      for (const auto &availablePresentMode : availablePresentModes)
+      {
+        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+        {
+          std::cout << "Present mode: Mailbox (no V-Sync)" << std::endl;
+          return availablePresentMode;
+        }
+      }
+      for (const auto &availablePresentMode : availablePresentModes)
+      {
+        if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR)
+        {
+          std::cout << "Present mode: Immediate (no V-Sync)" << std::endl;
+          return availablePresentMode;
+        }
+      }
+    }
+    std::cout << "Present mode: V-Sync (FIFO fallback)" << std::endl;
     return VK_PRESENT_MODE_FIFO_KHR;
   }
   VkExtent2D BurnhopeSwapChain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities)
