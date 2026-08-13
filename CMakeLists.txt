@@ -29,6 +29,15 @@ FetchContent_Declare(
     GIT_TAG        master  # Или конкретно v3.1.0, чтобы быть уверенным в фиксе
 )
 FetchContent_MakeAvailable(vma)
+
+FetchContent_Declare(
+    flecs
+    GIT_REPOSITORY https://github.com/SanderMertens/flecs.git
+    GIT_TAG        v3.2.12
+)
+set(FLECS_STATIC ON CACHE BOOL "" FORCE)
+set(FLECS_TESTS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(flecs)
 # --- 3. Настройка Assimp (максимальная очистка) ---
 
 # Выключаем всё, что тянет лишние зависимости (DirectX, GUI, тесты)
@@ -180,6 +189,7 @@ target_link_libraries(${PROJECT_NAME}
     Threads::Threads
     ispc_texcomp
     VulkanMemoryAllocator
+    flecs_static
 )
 
 # --- 9. Копирование ресурсов (модели, текстуры, шейдеры) ---

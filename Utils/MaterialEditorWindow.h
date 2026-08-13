@@ -280,9 +280,7 @@ namespace burnhope {
         }
 
         void ReloadMaterialInScene(UIContext& context, const std::string& path, std::shared_ptr<Material> newMat) {
-            auto view = context.registry->view<MeshComponent>();
-            for (auto entity : view) {
-                auto& mc = view.get<MeshComponent>(entity);
+            context.world->each<MeshComponent>([&](flecs::entity, MeshComponent& mc) {
                 for (size_t i = 0; i < mc.materialPaths.size(); i++) {
                     if (mc.materialPaths[i] == path) {
                         if (mc.materials[i] && mc.materials[i] != newMat) {
@@ -291,7 +289,7 @@ namespace burnhope {
                         mc.materials[i] = newMat;
                     }
                 }
-            }
+            });
         }
 
     public:

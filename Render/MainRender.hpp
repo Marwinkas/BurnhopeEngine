@@ -5,7 +5,6 @@
 #include "../Utils/FrameInfo.hpp"
 #include "../Utils/Components.hpp"
 #include "GraphicsShader.hpp"
-#include <entt/entt.hpp>
 #include <memory>
 #include <vector>
 namespace burnhope
@@ -57,7 +56,7 @@ static_assert(sizeof(MaterialData) % 16 == 0, "MaterialData size must be a multi
         GeometryRenderSystem &operator=(const GeometryRenderSystem &) = delete;
         void renderEntities(
             FrameInfo &frameInfo,
-            entt::registry &registry,
+            flecs::world &world,
             VkDescriptorSet storageSet,
             VkDescriptorSet textureSet,
             uint32_t totalSubMeshCount,

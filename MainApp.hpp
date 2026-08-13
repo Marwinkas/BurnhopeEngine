@@ -72,14 +72,14 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::unique_ptr<BurnhopeBuffer> instancesBuffer;
         VkAccelerationStructureKHR tlasHandle = VK_NULL_HANDLE;
 
-        void buildTLAS(entt::registry& registry);
+        void buildTLAS(flecs::world& world);
     private:
         BurnhopeWindow lveWindow{WIDTH, HEIGHT, "BurnHope Engine"};
         BurnhopeDevice lveDevice{lveWindow};
         BurnhopeRenderer lveRenderer{lveWindow, lveDevice};
         std::unique_ptr<BurnhopeDescriptorPool> globalPool{};
 
-        void loadGameObjects(entt::registry &registry);
+        void loadGameObjects(flecs::world &world);
         void initCompute(VkDescriptorSetLayout globalSetLayout);
         void rebuildGBufferDescriptorSets();
         std::unique_ptr<DeferredLightingSystem> lightingSystem;
@@ -121,7 +121,7 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::unique_ptr<SSGISystem> ssgiSystem;
         std::unique_ptr<GeometryRenderSystem> simpleRenderSystem;
         std::unique_ptr<PortalRenderSystem> portalRenderSystem;
-        void RebuildBatches(entt::registry &registry, GeometryRenderSystem &renderSystem);
+        void RebuildBatches(flecs::world &world, GeometryRenderSystem &renderSystem);
         std::unique_ptr<burnhope::RadianceCascadesSystem> rcSystem;
         std::shared_ptr<BurnhopeTexture> defaultWhiteTex;
         std::shared_ptr<BurnhopeTexture> defaultNormalTex;
@@ -152,7 +152,7 @@ inline VkTransformMatrixKHR toVkMatrix(const glm::mat4& m) {
         std::string rootPath = fs::current_path().string();
 #endif
         
-        entt::registry registry;
+        flecs::world world;
         std::unique_ptr<UIManager> uiManager;
         
         std::unique_ptr<BurnhopeBuffer> objectBuffer;

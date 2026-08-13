@@ -105,7 +105,7 @@ namespace burnhope
 
     void GeometryRenderSystem::renderEntities(
         FrameInfo &frameInfo,
-        entt::registry &registry,
+        flecs::world &world,
         VkDescriptorSet storageSet,
         VkDescriptorSet textureSet,
         uint32_t totalSubMeshCount,

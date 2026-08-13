@@ -25,7 +25,7 @@ namespace burnhope
         void renderShadow(
             VkCommandBuffer commandBuffer,
             const glm::mat4 &lightSpaceMatrix,
-            entt::registry &registry,
+            flecs::world &world,
              VkDescriptorSet objectStorageSet,
              bool renderDynamicOnly);
 

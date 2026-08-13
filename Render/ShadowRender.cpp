@@ -30,7 +30,7 @@ namespace burnhope
 void ShadowRenderSystem::renderShadow(
     VkCommandBuffer commandBuffer,
     const glm::mat4 &lightSpaceMatrix,
-    entt::registry &registry,
+    flecs::world &world,
             VkDescriptorSet objectStorageSet,
             bool renderDynamicOnly)
 {
@@ -43,18 +43,17 @@ void ShadowRenderSystem::renderShadow(
     ShadowPushConstant push{lightSpaceMatrix};
     shader->pushConstants(commandBuffer, VK_SHADER_STAGE_VERTEX_BIT, sizeof(ShadowPushConstant), &push);
 
-    auto view = registry.view<TransformComponent, MeshComponent>();
-    
     // Очень важно: этот индекс должен совпадать с индексом объекта в твоем ObjectBuffer,
     // чтобы шейдер взял правильную матрицу модели (modelMatrix).
-    uint32_t instanceIndex = 0; 
+    uint32_t instanceIndex = 0;
 
-    for (auto [entity, transformComp, meshComp] : view.each())
+    world.query<Position3, RotationEuler, Scale3, LocalMatrix, MeshComponent>().each(
+        [&](flecs::entity, Position3 &, RotationEuler &, Scale3 &, LocalMatrix &, MeshComponent &meshComp)
     {
         if (!meshComp.model || !meshComp.isVisible)
-            continue;
-        if (renderDynamicOnly && meshComp.isStatic) 
-            continue; // Пропускаем статические меши при локальном обновлении теней!
+            return;
+        if (renderDynamicOnly && meshComp.isStatic)
+            return; // Пропускаем статические меши при локальном обновлении теней!
         meshComp.model->bind(commandBuffer);
         const auto &subMeshes = meshComp.model->getSubMeshes();
 
@@ -72,6 +71,6 @@ void ShadowRenderSystem::renderShadow(
             
             instanceIndex++;
         }
-    }
+    });
 }
 }

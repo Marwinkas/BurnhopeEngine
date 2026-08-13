@@ -1,4 +1,5 @@
 #include "MainApp.hpp"
+#include "Utils/EcsRegistration.hpp"
 #include "Render/Camera.hpp"
 #include "Render/SceneManager.hpp"
 #define GLM_FORCE_RADIANS
@@ -300,6 +301,7 @@ namespace burnhope
 
     FirstApp::FirstApp()
     {
+        registerBurnhopeComponents(world);
         globalPool = BurnhopeDescriptorPool::Builder(lveDevice)
                          .setMaxSets(100)
                          .setPoolFlags(VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT)
@@ -373,11 +375,11 @@ namespace burnhope
             lveWindow,
             lveDevice,
             lveRenderer.getSwapChainImageFormat(),
-            &registry,
+            &world,
             std::filesystem::current_path().string() // Путь к проекту
         );
          initCompute(globalSetLayout->getDescriptorSetLayout());
-        loadGameObjects(registry);
+        loadGameObjects(world);
     }
     FirstApp::~FirstApp()
     {
@@ -491,7 +493,7 @@ namespace burnhope
         return result;
     }
     
-    void FirstApp::RebuildBatches(entt::registry &registry, GeometryRenderSystem &renderSystem)
+    void FirstApp::RebuildBatches(flecs::world &world, GeometryRenderSystem &renderSystem)
     {
         if (storageSet != VK_NULL_HANDLE)
         {
@@ -517,9 +519,6 @@ namespace burnhope
         textureInfos.push_back(defaultNormalTex->getImageInfo());
         uint32_t defaultNormalIdx = globalTexIndex++;
 
-        auto decalView = registry.view<DecalComponent>();
-    
-
         auto getTexIndex = [&](std::shared_ptr<BurnhopeTexture> tex, int32_t defaultIdx) -> int32_t
         {
             if (!tex)
@@ -532,20 +531,20 @@ namespace burnhope
             }
             return texToIndex[tex.get()];
         };
-        for (auto [entity, decal] : decalView.each()) {
+        world.each<DecalComponent>([&](flecs::entity entity, DecalComponent &decal) {
             decal.albedoTexIdx = getTexIndex(decal.albedoTex, -1);
             decal.normalTexIdx = getTexIndex(decal.normalTex, -1);
-        }
+        });
         
         uiManager->GetContext().renderSettings.vectorTexIdx = getTexIndex(uiManager->GetContext().renderSettings.vectorTex, -1);
         uiManager->GetContext().renderSettings.causticsTexIdx = getTexIndex(uiManager->GetContext().renderSettings.causticsTex, -1);
         uiManager->GetContext().renderSettings.canvasTexIdx = getTexIndex(uiManager->GetContext().renderSettings.canvasTex, -1);
 
-        auto view = registry.view<TransformComponent, MeshComponent>();
-        for (auto [entity, transformComp, meshComp] : view.each())
+        world.each([&](flecs::entity entity, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat, MeshComponent &meshComp)
         {
             if (!meshComp.model || !meshComp.isVisible || !meshComp.model->gpuDataReady)
-                continue;
+                return;
+            transform::updateMatrixIfNeeded(pos, rot, scale, localMat);
             const auto &subMeshes = meshComp.model->getSubMeshes();
             for (uint32_t i = 0; i < subMeshes.size(); i++)
             {
@@ -587,7 +586,7 @@ namespace burnhope
                     currentMatID = matToIndex[currentMat.get()];
                 }
                 ObjectData obj{};
-                obj.modelMatrix = transformComp.transform.matrix;
+                obj.modelMatrix = localMat.value;
                 obj.materialID = currentMatID;
                 obj.indexCount = subMeshes[i].indexCounts[0];
                 obj.vrsRate = subMeshes[i].vrsRate;
@@ -602,7 +601,7 @@ namespace burnhope
                 obj.aabbMax = glm::vec4(meshComp.model->globalAabbMax, 0.0f);
                 objDataList.push_back(obj);
             }
-        }
+        });
 
         // СОРТИРОВКА ДЛЯ МАКСИМАЛЬНОГО КЭШИРОВАНИЯ (Батчинг / Псевдо-Instancing)
         // ВНИМАНИЕ: Сортировка отключена, так как она ломает синхронизацию customIndex
@@ -696,8 +695,8 @@ namespace burnhope
         //         .build(portalDescriptorSets[i]);
         // }
 
-        RebuildBatches(registry, *simpleRenderSystem);
-        buildTLAS(registry);
+        RebuildBatches(world, *simpleRenderSystem);
+        buildTLAS(world);
 
         VkWriteDescriptorSetAccelerationStructureKHR asInfo{};
         asInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
@@ -750,8 +749,8 @@ bool queuedGeometryRebuild = false;
             shadowObjectSet = VK_NULL_HANDLE;
         }
 
-        RebuildBatches(registry, *simpleRenderSystem);
-        buildTLAS(registry);
+        RebuildBatches(world, *simpleRenderSystem);
+        buildTLAS(world);
 
         // Обновление дескрипторов
         VkWriteDescriptorSetAccelerationStructureKHR asInfo{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
@@ -783,7 +782,7 @@ bool queuedGeometryRebuild = false;
             }
 
             bool modelsLoadedThisFrame = false;
-            registry.view<MeshComponent>().each([&](entt::entity e, MeshComponent &meshComp) {
+            world.each<MeshComponent>([&](flecs::entity e, MeshComponent &meshComp) {
                 if (meshComp.model && meshComp.model->cpuDataReady && !meshComp.model->gpuDataReady) {
                     vkDeviceWaitIdle(lveDevice.device());
                     meshComp.model->finishGpuUpload();
@@ -805,7 +804,7 @@ bool queuedGeometryRebuild = false;
             uiManager->ProcessPendingActions();
 
             bool anyMaterialReloaded = false;
-            registry.view<MeshComponent>().each([&](const MeshComponent &mc) {
+            world.each<MeshComponent>([&](flecs::entity e, const MeshComponent &mc) {
                 for (auto& mat : mc.materials) {
                     if (mat && mat->pendingReload) {
                         if (!anyMaterialReloaded) vkDeviceWaitIdle(lveDevice.device());
@@ -837,7 +836,7 @@ bool queuedGeometryRebuild = false;
             auto newTime = std::chrono::high_resolution_clock::now();
             float frameTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
 
-            registry.view<TransformComponent, MeshComponent>().each([&](entt::entity entity, TransformComponent &tComp, MeshComponent &meshComp) {
+            world.each([&](flecs::entity entity, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat, MeshComponent &meshComp) {
                 if (!meshComp.model || !meshComp.isVisible || !meshComp.model->gpuDataReady) return;
                 
                 uint32_t currentBoneOffset = allBoneMatrices.size();
@@ -870,25 +869,27 @@ bool queuedGeometryRebuild = false;
                 }
             });
 
-            registry.view<TransformComponent>().each([&](entt::entity entity, TransformComponent &tComp) {
-                if (tComp.transform.updatematrix) {
-                    tComp.transform.updateMatrixIfNeeded();
+            world.each([&](flecs::entity entity, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat) {
+                if (localMat.dirty) {
+                    transform::updateMatrixIfNeeded(pos, rot, scale, localMat);
                     transformsChanged = true;
-                    movedPositions.push_back(tComp.transform.position);
-                    dirtyMin = glm::min(dirtyMin, tComp.transform.position - glm::vec3(15.0f));
-                    dirtyMax = glm::max(dirtyMax, tComp.transform.position + glm::vec3(15.0f));
+                    const glm::vec3 position = transform::asVec3(pos);
+                    movedPositions.push_back(position);
+                    dirtyMin = glm::min(dirtyMin, position - glm::vec3(15.0f));
+                    dirtyMax = glm::max(dirtyMax, position + glm::vec3(15.0f));
                     hasDirtyRegion = true;
-                    if (registry.any_of<ReflectionProbeComponent>(entity)) {
-                        registry.get<ReflectionProbeComponent>(entity).updateNeeded = true;
+                    if (entity.has<ReflectionProbeComponent>()) {
+                        entity.get_mut<ReflectionProbeComponent>()->updateNeeded = true;
                     }
                 } 
             });
 
             if (transformsChanged) {
-                registry.view<LightComponent, TransformComponent>().each([&](auto entity, LightComponent &lightComp, TransformComponent &lightTrans) {
+                world.each([&](flecs::entity entity, LightComponent &lightComp, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat) {
                     if (!lightComp.needsShadowUpdate) {
-                        for (const auto& pos : movedPositions) {
-                            if (glm::distance(pos, lightTrans.transform.position) <= lightComp.light.radius + 15.0f) {
+                        const glm::vec3 lightPos = transform::asVec3(pos);
+                        for (const auto& movedPos : movedPositions) {
+                            if (glm::distance(movedPos, lightPos) <= lightComp.light.radius + 15.0f) {
                                 lightComp.needsShadowUpdate = true;
                                 break;
                             }
@@ -995,7 +996,7 @@ bool queuedGeometryRebuild = false;
             if (commandBuffer == VK_NULL_HANDLE) continue;
             if (commandBuffer)
             {
-                registry.view<MeshComponent>().each([&](const MeshComponent &meshComp)
+                world.each<MeshComponent>([&](flecs::entity entity, const MeshComponent &meshComp)
                                                 {
             if (meshComp.model && meshComp.isVisible && meshComp.model->gpuDataReady) {
                     currentSubMeshCount += meshComp.model->getSubMeshes().size();
@@ -1028,7 +1029,7 @@ bool queuedGeometryRebuild = false;
 
                 int frameIndex = lveRenderer.getFrameIndex();
                 FrameInfo frameInfo{frameIndex, frameTime, commandBuffer, camera, globalDescriptorSets[frameIndex], *globalPool};
-                shadowSystem->updateLights(registry, camera.Position);
+                shadowSystem->updateLights(world, camera.Position);
                 {
                     const auto &uboData = shadowSystem->getLightUBO();
                     lightUboBuffer->writeToBuffer((void *)&uboData);
@@ -1069,18 +1070,18 @@ float currentFov = 45.0f;
                 ubo.sunColor = glm::vec3(1.0f, 0.95f, 0.8f);
                 ubo.sunIntensity = 5.0f;
 
-                auto lightView = registry.view<LightComponent>();
-                ubo.portalID = 0; // Main scene is portal 0
-                for (auto entity : lightView)
-                {
-                    auto &light = lightView.get<LightComponent>(entity).light;
+                bool directionalLightFound = false;
+                world.each<LightComponent>([&](flecs::entity entity, LightComponent &lightComp) {
+                    if (directionalLightFound) return;
+                    auto &light = lightComp.light;
                     if (light.enable && light.type == LightType::Directional)
                     {
                         ubo.sunColor = light.color;
                         ubo.sunIntensity = light.intensity;
-                        break;
+                        directionalLightFound = true;
                     }
-                }
+                });
+                ubo.portalID = 0; // Main scene is portal 0
                 ubo.lightSize = 1.0f;
 
                 // --- ЧИТАЕМ НАСТРОЙКИ ИЗ UIMANAGER ---
@@ -1283,10 +1284,10 @@ float currentFov = 45.0f;
                 
                 if (globalDecalBuffer) {
                     DecalBlock db{}; db.decalCount = 0;
-                    registry.view<TransformComponent, DecalComponent>().each([&](auto entity, auto& trans, auto& decal) {
+                    world.each([&](flecs::entity entity, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat, DecalComponent &decal) {
                         if (db.decalCount < 1000) {
-                            trans.transform.updateMatrixIfNeeded();
-                            db.decals[db.decalCount].invModelMatrix = glm::inverse(trans.transform.matrix);
+                            transform::updateMatrixIfNeeded(pos, rot, scale, localMat);
+                            db.decals[db.decalCount].invModelMatrix = glm::inverse(localMat.value);
                             db.decals[db.decalCount].params = glm::vec4((float)decal.albedoTexIdx, (float)decal.normalTexIdx, decal.opacity, 0.0f);
                             db.decalCount++;
                         }
@@ -1297,7 +1298,7 @@ float currentFov = 45.0f;
                 
                 ProbesInfo pInfo{};
                 pInfo.count = 0;
-                registry.view<TransformComponent, ReflectionProbeComponent>().each([&](entt::entity e, TransformComponent &t, ReflectionProbeComponent &p)
+                world.each([&](flecs::entity e, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat, ReflectionProbeComponent &p)
                                                                                    {
                     if (pInfo.count >= 16) return;
                     if (p.textureIndex == -1) {
@@ -1313,10 +1314,10 @@ float currentFov = 45.0f;
                         globalRTReflectionSystem->probeRenderSets.push_back(newSet);
                         globalRTReflectionSystem->updateDescriptors(extent, defaultWhiteTex);
                     }
-                    if (t.transform.updatematrix || p.updateNeeded) {
+                    if (localMat.dirty || p.updateNeeded) {
                         p.updateNeeded = true; 
                     }
-                    pInfo.data[pInfo.count].positionAndRadius = glm::vec4(t.transform.position, p.radius);
+                    pInfo.data[pInfo.count].positionAndRadius = glm::vec4(transform::asVec3(pos), p.radius);
                     pInfo.count++; });
                 if (globalRTReflectionSystem->probesBuffer)
                 {
@@ -1374,7 +1375,7 @@ float currentFov = 45.0f;
                             VkRect2D sc{ {0,0}, {BurnhopeCSM::SHADOW_MAP_SIZE, BurnhopeCSM::SHADOW_MAP_SIZE} };
                             vkCmdSetScissor(cmd, 0, 1, &sc);
                             
-                            shadowRenderSystem->renderShadow(cmd, cachedCascadeMats[i], registry, shadowObjectSet, false);
+                            shadowRenderSystem->renderShadow(cmd, cachedCascadeMats[i], world, shadowObjectSet, false);
                         } else if (hasDirtyRegion) {
                             // Локальное кэширование: Очищаем и рисуем только в том месте, где объекты двигались!
                             glm::vec3 corners[8] = {
@@ -1408,7 +1409,7 @@ float currentFov = 45.0f;
                                 VkRect2D sc{ {pxX, pxY}, {(uint32_t)pW, (uint32_t)pH} };
                                 vkCmdSetScissor(cmd, 0, 1, &sc);
 
-                               shadowRenderSystem->renderShadow(cmd, cachedCascadeMats[i], registry, shadowObjectSet, false);
+                               shadowRenderSystem->renderShadow(cmd, cachedCascadeMats[i], world, shadowObjectSet, false);
                             }
                         }
                         vkCmdEndRendering(cmd);
@@ -1428,13 +1429,11 @@ float currentFov = 45.0f;
                     renderingAtlasInfo.pStencilAttachment = &atlasAttachment;
                     vkCmdBeginRendering(cmd, &renderingAtlasInfo);
                     
-                    auto lightView = registry.view<LightComponent, TransformComponent>();
-                    for (auto entity : lightView) {
-                        auto& lightComp = lightView.get<LightComponent>(entity);
+                    world.each([&](flecs::entity entity, LightComponent &lightComp, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat) {
                         auto& light = lightComp.light;
-                        auto& trans = lightView.get<TransformComponent>(entity).transform;
+                        const glm::vec3 lightPos = transform::asVec3(pos);
                         
-                        if (!light.enable || !light.castShadows || light.type == LightType::Directional || light.shadowSlot < 0 || !lightComp.needsShadowUpdate) continue;
+                        if (!light.enable || !light.castShadows || light.type == LightType::Directional || light.shadowSlot < 0 || !lightComp.needsShadowUpdate) return;
 
                         VkClearAttachment clearAttachment{};
                         clearAttachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -1452,11 +1451,9 @@ float currentFov = 45.0f;
                             clearRect.baseArrayLayer = 0; clearRect.layerCount = 1;
                             vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
 
-                            shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, registry, shadowObjectSet, false);
+                            shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, world, shadowObjectSet, false);
                         }
                         else if (light.type == LightType::Point) {
-                            glm::vec3 pos = trans.position;
-                            glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, light.radius);
                             const glm::vec3 dirs[6] = {
                                 {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}
                             };
@@ -1470,7 +1467,7 @@ float currentFov = 45.0f;
                                     fx = fx % BurnhopeShadowAtlas::ATLAS_RESOLUTION; fy += tileSize;
                                 }
                                     glm::mat4 faceProj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, light.radius);
-                                    glm::mat4 faceView = glm::lookAt(pos, pos + dirs[face], ups[face]);
+                                    glm::mat4 faceView = glm::lookAt(lightPos, lightPos + dirs[face], ups[face]);
                                     glm::mat4 faceMatrix = faceProj * faceView;
                                 shadowSystem->getAtlas()->setTileViewport(cmd, fx, fy, tileSize);
 
@@ -1480,11 +1477,11 @@ float currentFov = 45.0f;
                                 clearRect.baseArrayLayer = 0; clearRect.layerCount = 1;
                                 vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
 
-                                shadowRenderSystem->renderShadow(cmd, faceMatrix, registry, shadowObjectSet, false);
+                                shadowRenderSystem->renderShadow(cmd, faceMatrix, world, shadowObjectSet, false);
                             }
                         }
                         lightComp.needsShadowUpdate = false; // Кэшируем до следующих изменений
-                    }
+                    });
                        vkCmdEndRendering(cmd); });
                 // renderPipeline.addPass("Frustum Culling", [&](VkCommandBuffer cmd) { ... });
                 // Отключено: Culling теперь выполняется аппаратно в Task-шейдерах (VK_EXT_mesh_shader)
@@ -1593,39 +1590,43 @@ float currentFov = 45.0f;
                     
 
                     // 1. Z-Prepass (Считаем только глубину)
-                    simpleRenderSystem->renderEntities(frameInfo, registry, storageSet, textureSet,
+                    simpleRenderSystem->renderEntities(frameInfo, world, storageSet, textureSet,
                                                        totalSubMeshCount, false, (uint32_t)rs.vrsMode, true);
 
                     // 2. G-Buffer Color (VK_COMPARE_OP_EQUAL)
-                    simpleRenderSystem->renderEntities(frameInfo, registry, storageSet, textureSet,
+                    simpleRenderSystem->renderEntities(frameInfo, world, storageSet, textureSet,
                                                        totalSubMeshCount, false, (uint32_t)rs.vrsMode, false);
                     {
                         uint32_t idx = 0;
-                        for (auto entity : registry.view<PortalComponent, TransformComponent>()) {
-                            if (idx >= MAX_PORTALS) break;
-                            auto& transform = registry.get<TransformComponent>(entity);
+                        world.each([&](flecs::entity entity, PortalComponent &portal, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat) {
+                            if (idx >= MAX_PORTALS) return;
+                            transform::updateMatrixIfNeeded(pos, rot, scale, localMat);
                             portalRenderSystem->drawMask(cmd, globalDescriptorSets[frameIndex],
-                                                         transform.transform.matrix, idx + 1);
+                                                         localMat.value, idx + 1);
                             idx++;
-                        }
+                        });
                     }
 
                     {
                         uint32_t portalCounter = 0;
-                        for (auto entity : registry.view<PortalComponent, TransformComponent>()) {
-                            if (portalCounter >= MAX_PORTALS) break;
-                            auto& portal    = registry.get<PortalComponent>(entity);
-                            auto& transform = registry.get<TransformComponent>(entity);
+                        world.each([&](flecs::entity entity, PortalComponent &portal, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat) {
+                            if (portalCounter >= MAX_PORTALS) return;
                         
-                            if (portal.targetPortal == entt::null) { portalCounter++; continue; }
+                            if (portal.targetPortal == flecs::entity()) { portalCounter++; return; }
                         
+                            transform::updateMatrixIfNeeded(pos, rot, scale, localMat);
                             portalRenderSystem->drawDepthReset(cmd, globalDescriptorSets[frameIndex],
-                                                               transform.transform.matrix, portalCounter + 1);
+                                                               localMat.value, portalCounter + 1);
                             
-                            auto& targetTransform = registry.get<TransformComponent>(portal.targetPortal);
+                            Position3 *targetPos = portal.targetPortal.get_mut<Position3>();
+                            RotationEuler *targetRot = portal.targetPortal.get_mut<RotationEuler>();
+                            Scale3 *targetScale = portal.targetPortal.get_mut<Scale3>();
+                            LocalMatrix *targetLocalMat = portal.targetPortal.get_mut<LocalMatrix>();
+                            if (!targetPos || !targetRot || !targetScale || !targetLocalMat) { portalCounter++; return; }
+                            transform::updateMatrixIfNeeded(*targetPos, *targetRot, *targetScale, *targetLocalMat);
                             glm::mat4 realCamWorld = glm::inverse(camera.GetViewMatrix());
-                            glm::mat4 mIn  = transform.transform.matrix;
-                            glm::mat4 mOut = targetTransform.transform.matrix;
+                            glm::mat4 mIn  = localMat.value;
+                            glm::mat4 mOut = targetLocalMat->value;
                             auto clean = [](glm::mat4 m) {
                                 m[0] = glm::vec4(glm::normalize(glm::vec3(m[0])), 0);
                                 m[1] = glm::vec4(glm::normalize(glm::vec3(m[1])), 0);
@@ -1664,11 +1665,12 @@ float currentFov = 45.0f;
                             portalFrameInfo.globalDescriptorSet = portalDescriptorSets[portalCounter][frameIndex];
                         
                             vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, portalCounter + 1);
-                            simpleRenderSystem->renderEntities(portalFrameInfo, registry, storageSet, textureSet,
+                            simpleRenderSystem->renderEntities(portalFrameInfo, world, storageSet, textureSet,
                                                                totalSubMeshCount, true, (uint32_t)rs.vrsMode, true);
-                            simpleRenderSystem->renderEntities(portalFrameInfo, registry, storageSet, textureSet,
+                            simpleRenderSystem->renderEntities(portalFrameInfo, world, storageSet, textureSet,
                                                                totalSubMeshCount, true, (uint32_t)rs.vrsMode, false);
-                        }
+                            portalCounter++;
+                        });
                     }
 
                     vkCmdEndRendering(cmd); });
@@ -1762,10 +1764,9 @@ float currentFov = 45.0f;
                         clearRect.baseArrayLayer = 0; clearRect.layerCount = 1;
                         vkCmdClearAttachments(cmd, 1, &clearAttachment, 1, &clearRect);
 
-                        auto lightView = registry.view<LightComponent, TransformComponent>();
-                        for (auto entity : lightView) {
-                            auto& light = lightView.get<LightComponent>(entity).light;
-                            auto& trans = lightView.get<TransformComponent>(entity).transform;
+                        world.each([&](flecs::entity entity, LightComponent &lightComp, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat) {
+                            auto& light = lightComp.light;
+                            const glm::vec3 lightPos = transform::asVec3(pos);
                             if (light.enable && light.castShadows && light.shadowSlot >= 0 && (light.type == LightType::Spot || light.type == LightType::Point)) {
                                 int encodedInt = light.shadowSlot;
                                 int realSlot = encodedInt / 10000;
@@ -1778,9 +1779,8 @@ float currentFov = 45.0f;
                                     vkCmdSetViewport(cmd, 0, 1, &vp);
                                     VkRect2D sc{ {pxX, pxY}, {(uint32_t)tileSize, (uint32_t)tileSize} };
                                     vkCmdSetScissor(cmd, 0, 1, &sc);
-                                    shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, registry, shadowObjectSet, false);
+                                    shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, world, shadowObjectSet, false);
                                 } else if (light.type == LightType::Point) {
-                                    glm::vec3 pos = trans.position;
                                     const glm::vec3 dirs[6] = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}};
                                     const glm::vec3 ups[6]  = {{0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}};  
                                     for (int face = 0; face < 6; face++) {
@@ -1792,18 +1792,17 @@ float currentFov = 45.0f;
                                         vkCmdSetScissor(cmd, 0, 1, &sc);
                                         // ФИКС: Используем shadowPerspective для переворота Y-оси!
                                         glm::mat4 faceProj = shadowPerspective(90.0f, 1.0f, 0.1f, light.radius);
-                                        glm::mat4 faceView = glm::lookAt(pos, pos + dirs[face], ups[face]);
+                                        glm::mat4 faceView = glm::lookAt(lightPos, lightPos + dirs[face], ups[face]);
                                         glm::mat4 faceMatrix = faceProj * faceView;
-                                            shadowRenderSystem->renderShadow(cmd, faceMatrix, registry, shadowObjectSet, false);
+                                            shadowRenderSystem->renderShadow(cmd, faceMatrix, world, shadowObjectSet, false);
                                     }
                                 }
                             }
-                        }
+                        });
                     } else if (hasDirtyRegion) {
-                        auto lightView = registry.view<LightComponent, TransformComponent>();
-                        for (auto entity : lightView) {
-                            auto& light = lightView.get<LightComponent>(entity).light;
-                            auto& trans = lightView.get<TransformComponent>(entity).transform;
+                        world.each([&](flecs::entity entity, LightComponent &lightComp, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat) {
+                            auto& light = lightComp.light;
+                            const glm::vec3 lightPos = transform::asVec3(pos);
                             if (light.enable && light.castShadows && light.shadowSlot >= 0 && (light.type == LightType::Spot || light.type == LightType::Point)) {
                                 int encodedInt = light.shadowSlot;
                                 int realSlot = encodedInt / 10000;
@@ -1843,9 +1842,8 @@ float currentFov = 45.0f;
                                     VkRect2D sc{ {pxX + localPxX, pxY + localPxY}, {(uint32_t)pW, (uint32_t)pH} };
                                     vkCmdSetScissor(cmd, 0, 1, &sc);
                                     if (light.type == LightType::Spot) {
-                                        shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, registry, shadowObjectSet, false);
+                                        shadowRenderSystem->renderShadow(cmd, light.lightSpaceMatrix, world, shadowObjectSet, false);
                                     } else if (light.type == LightType::Point) {
-                                        glm::vec3 pos = trans.position;
                                         const glm::vec3 dirs[6] = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}};
                                         const glm::vec3 ups[6]  = {{0,-1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}, {0,-1,0}, {0,-1,0}};  
                                         for (int face = 0; face < 6; face++) {
@@ -1855,14 +1853,14 @@ float currentFov = 45.0f;
                                             sc.offset = { fx + localPxX, fy + localPxY }; vkCmdSetScissor(cmd, 0, 1, &sc);
                                             // ФИКС: Используем shadowPerspective!
                                             glm::mat4 faceProj = shadowPerspective(90.0f, 1.0f, 0.1f, light.radius);
-                                            glm::mat4 faceView = glm::lookAt(pos, pos + dirs[face], ups[face]);
+                                            glm::mat4 faceView = glm::lookAt(lightPos, lightPos + dirs[face], ups[face]);
                                             glm::mat4 faceMatrix = faceProj * faceView;
-                                            shadowRenderSystem->renderShadow(cmd, faceMatrix, registry, shadowObjectSet, false);
+                                            shadowRenderSystem->renderShadow(cmd, faceMatrix, world, shadowObjectSet, false);
                                         }
                                     }
                                 }
                             }
-                        }
+                        });
                     }
                     vkCmdEndRendering(cmd); });
 
@@ -1878,13 +1876,13 @@ float currentFov = 45.0f;
                     rcSystem->dispatch(cmd, globalDescriptorSets[frameIndex], gBufferSet, ubo.invViewProj, camera.Position, sceneMin, sceneMax, extent, rtSet, storageSet, textureSet); });
 
                 renderPipeline.addPass("Probe Update", {}, [&](VkCommandBuffer cmd)
-                                       { registry.view<TransformComponent, ReflectionProbeComponent>().each([&](entt::entity e, TransformComponent &t, ReflectionProbeComponent &p)
+                                       { world.each([&](flecs::entity e, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat, ReflectionProbeComponent &p)
                                                                                                             {
                         if (p.updateNeeded && p.textureIndex != -1) {
                             p.updateNeeded = false;
                             globalRTReflectionSystem->probeRenderShader->bind(cmd);
                             struct Push { glm::vec4 pos; int res; } pushData;
-                            pushData.pos = glm::vec4(t.transform.position, 1.0f);
+                            pushData.pos = glm::vec4(transform::asVec3(pos), 1.0f);
                             pushData.res = p.resolution;
                             globalRTReflectionSystem->probeRenderShader->pushConstants(cmd, &pushData, sizeof(Push));
                             globalRTReflectionSystem->probeRenderShader->bindDescriptorSets(cmd, {
@@ -2590,7 +2588,7 @@ float currentFov = 45.0f;
             .writeImage(1, &ssgiRawInfo)
             .build(ssgiSet);
     }
-    void FirstApp::buildTLAS(entt::registry &registry)
+    void FirstApp::buildTLAS(flecs::world &world)
     {
         auto pfnCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkCreateAccelerationStructureKHR");
         auto pfnGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(lveDevice.device(), "vkGetAccelerationStructureBuildSizesKHR");
@@ -2605,17 +2603,17 @@ float currentFov = 45.0f;
 
         std::vector<VkAccelerationStructureInstanceKHR> instances;
 
-        auto view = registry.view<TransformComponent, MeshComponent>();
         uint32_t customIndex = 0;
-
-        for (auto [entity, transformComp, meshComp] : view.each())
+        world.each([&](flecs::entity entity, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat, MeshComponent &meshComp)
         {
             if (!meshComp.model || !meshComp.isVisible || !meshComp.model->gpuDataReady)
-                continue;
+                return;
+
+            transform::updateMatrixIfNeeded(pos, rot, scale, localMat);
 
             if (meshComp.model->getBLASAddress() != 0) {
                 VkAccelerationStructureInstanceKHR instance{};
-                instance.transform = toVkMatrix(transformComp.transform.matrix);
+                instance.transform = toVkMatrix(localMat.value);
                 instance.instanceCustomIndex = customIndex;
                 instance.mask = 0xFF;
                 instance.instanceShaderBindingTableRecordOffset = 0;
@@ -2626,7 +2624,7 @@ float currentFov = 45.0f;
             }
 
             customIndex += meshComp.model->getSubMeshes().size();
-        }
+        });
 
         uint32_t primitiveCount = static_cast<uint32_t>(instances.size());
         uint32_t bufferInstanceCount = std::max(1u, primitiveCount);
@@ -2728,109 +2726,108 @@ float currentFov = 45.0f;
 
         std::cout << "[RT] Successfully built TLAS with " << instances.size() << " instances!" << std::endl;
     }
-    void FirstApp::loadGameObjects(entt::registry &registry)
+    void FirstApp::loadGameObjects(flecs::world &world)
     {
         
         /*
         std::shared_ptr<BurnhopeModel> lveModel =
             BurnhopeModel::createModelFromFile(lveDevice, "models/PortalsPlaceholder1.gltf");
-             auto modelEntity = registry.create();
-        registry.emplace<TagComponent>(modelEntity, "Room1");
-        registry.emplace<IDComponent>(modelEntity);
-        registry.emplace<HierarchyComponent>(modelEntity);
-        auto &transform = registry.emplace<TransformComponent>(modelEntity);
-             transform.transform.position = glm::vec3(0.0f, 0.0f, 0.0f);
-         transform.transform.rotation = glm::vec3(0.0f, 0.0f, 0.0f);
-        transform.transform.scale = glm::vec3(0.25f, 0.25f, 0.25f);
-                transform.transform.updateMatrixIfNeeded();
-                  auto &mesh = registry.emplace<MeshComponent>(modelEntity);
+             auto modelEntity = world.entity();
+        modelEntity.set<TagComponent>({"Room1"});
+        modelEntity.set<IDComponent>({});
+        modelEntity.set<HierarchyComponent>({});
+        transform::addBundle(modelEntity);
+        transform::asVec3Mut(*modelEntity.get_mut<Position3>()) = glm::vec3(0.0f, 0.0f, 0.0f);
+        transform::asVec3Mut(*modelEntity.get_mut<RotationEuler>()) = glm::vec3(0.0f, 0.0f, 0.0f);
+        transform::asVec3Mut(*modelEntity.get_mut<Scale3>()) = glm::vec3(0.25f, 0.25f, 0.25f);
+        transform::updateMatrixIfNeeded(*modelEntity.get_mut<Position3>(), *modelEntity.get_mut<RotationEuler>(), *modelEntity.get_mut<Scale3>(), *modelEntity.get_mut<LocalMatrix>());
+        modelEntity.set<MeshComponent>({});
+                  auto &mesh = *modelEntity.get_mut<MeshComponent>();
         mesh.model = lveModel;
           mesh.materials = lveModel->materials;
 
         std::shared_ptr<BurnhopeModel> lveModel2 =
             BurnhopeModel::createModelFromFile(lveDevice, "models/PortalsPlaceholder2.gltf");
 
-        auto modelEntity2 = registry.create();
-        registry.emplace<TagComponent>(modelEntity2, "Room2");
-        registry.emplace<IDComponent>(modelEntity2);
-        registry.emplace<HierarchyComponent>(modelEntity2);
-        auto &transform2 = registry.emplace<TransformComponent>(modelEntity2);
-        transform2.transform.position = glm::vec3(-15.0f, 0.0f, 0.0f);
-        transform2.transform.rotation = glm::vec3(0.0f, -90.0f, 0.0f);
-        transform2.transform.scale = glm::vec3(0.25f, 0.25f, 0.25f);
-        // glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
-        // transform.transform.matrix = glm::scale(translation, transform.transform.scale);
-        transform2.transform.updateMatrixIfNeeded();
-        auto &mesh2 = registry.emplace<MeshComponent>(modelEntity2);
+        auto modelEntity2 = world.entity();
+        modelEntity2.set<TagComponent>({"Room2"});
+        modelEntity2.set<IDComponent>({});
+        modelEntity2.set<HierarchyComponent>({});
+        transform::addBundle(modelEntity2);
+        transform::asVec3Mut(*modelEntity2.get_mut<Position3>()) = glm::vec3(-15.0f, 0.0f, 0.0f);
+        transform::asVec3Mut(*modelEntity2.get_mut<RotationEuler>()) = glm::vec3(0.0f, -90.0f, 0.0f);
+        transform::asVec3Mut(*modelEntity2.get_mut<Scale3>()) = glm::vec3(0.25f, 0.25f, 0.25f);
+        transform::updateMatrixIfNeeded(*modelEntity2.get_mut<Position3>(), *modelEntity2.get_mut<RotationEuler>(), *modelEntity2.get_mut<Scale3>(), *modelEntity2.get_mut<LocalMatrix>());
+        modelEntity2.set<MeshComponent>({});
+        auto &mesh2 = *modelEntity2.get_mut<MeshComponent>();
         mesh2.model = lveModel2;
         mesh2.materials = lveModel2->materials;
 
-        auto portalA = registry.create();
-        registry.emplace<TagComponent>(portalA, "Portal_A");
-        registry.emplace<IDComponent>(portalA);
-        auto &transA = registry.emplace<TransformComponent>(portalA);
-        transA.transform.position = {0.0f, 2.1f, -3.75f};
-        transA.transform.rotation = {0.0f, 0.0f, 0.0f};
-        transA.transform.scale = {2.0f, 2.0f, 2.0f};
-        transA.transform.updateMatrixIfNeeded();
+        auto portalA = world.entity();
+        portalA.set<TagComponent>({"Portal_A"});
+        portalA.set<IDComponent>({});
+        transform::addBundle(portalA);
+        transform::asVec3Mut(*portalA.get_mut<Position3>()) = glm::vec3(0.0f, 2.1f, -3.75f);
+        transform::asVec3Mut(*portalA.get_mut<RotationEuler>()) = glm::vec3(0.0f, 0.0f, 0.0f);
+        transform::asVec3Mut(*portalA.get_mut<Scale3>()) = glm::vec3(2.0f, 2.0f, 2.0f);
+        transform::updateMatrixIfNeeded(*portalA.get_mut<Position3>(), *portalA.get_mut<RotationEuler>(), *portalA.get_mut<Scale3>(), *portalA.get_mut<LocalMatrix>());
 
-        registry.emplace<PortalComponent>(portalA);
+        portalA.set<PortalComponent>({});
 
-        auto portalB = registry.create();
-        registry.emplace<TagComponent>(portalB, "Portal_B");
-        registry.emplace<IDComponent>(portalB);
-        auto &transB = registry.emplace<TransformComponent>(portalB);
-        transB.transform.position = {-11.25f, 2.1f, 0.0f};
-        transB.transform.rotation = {0.0f, -90.0f, 0.0f};
-        transB.transform.scale = {2.0f, 2.0f, 2.0f};
-        transB.transform.updateMatrixIfNeeded();
+        auto portalB = world.entity();
+        portalB.set<TagComponent>({"Portal_B"});
+        portalB.set<IDComponent>({});
+        transform::addBundle(portalB);
+        transform::asVec3Mut(*portalB.get_mut<Position3>()) = glm::vec3(-11.25f, 2.1f, 0.0f);
+        transform::asVec3Mut(*portalB.get_mut<RotationEuler>()) = glm::vec3(0.0f, -90.0f, 0.0f);
+        transform::asVec3Mut(*portalB.get_mut<Scale3>()) = glm::vec3(2.0f, 2.0f, 2.0f);
+        transform::updateMatrixIfNeeded(*portalB.get_mut<Position3>(), *portalB.get_mut<RotationEuler>(), *portalB.get_mut<Scale3>(), *portalB.get_mut<LocalMatrix>());
 
-        registry.emplace<PortalComponent>(portalB);
+        portalB.set<PortalComponent>({});
 
-        auto portalC = registry.create();
-        registry.emplace<TagComponent>(portalC, "Portal_C");
-        registry.emplace<IDComponent>(portalC);
-        auto &transC = registry.emplace<TransformComponent>(portalC);
-        transC.transform.position = {-3.5f, 2.65f, -3.42f};
-        transC.transform.rotation = {0.0f, 0.0f, 0.0f};
-        transC.transform.scale = {1.0f, 1.0f, 1.0f};
-        transC.transform.updateMatrixIfNeeded();
+        auto portalC = world.entity();
+        portalC.set<TagComponent>({"Portal_C"});
+        portalC.set<IDComponent>({});
+        transform::addBundle(portalC);
+        transform::asVec3Mut(*portalC.get_mut<Position3>()) = glm::vec3(-3.5f, 2.65f, -3.42f);
+        transform::asVec3Mut(*portalC.get_mut<RotationEuler>()) = glm::vec3(0.0f, 0.0f, 0.0f);
+        transform::asVec3Mut(*portalC.get_mut<Scale3>()) = glm::vec3(1.0f, 1.0f, 1.0f);
+        transform::updateMatrixIfNeeded(*portalC.get_mut<Position3>(), *portalC.get_mut<RotationEuler>(), *portalC.get_mut<Scale3>(), *portalC.get_mut<LocalMatrix>());
 
-        registry.emplace<PortalComponent>(portalC);
+        portalC.set<PortalComponent>({});
 
-        auto portalD = registry.create();
-        registry.emplace<TagComponent>(portalD, "Portal_D");
-        registry.emplace<IDComponent>(portalD);
-        auto &transD = registry.emplace<TransformComponent>(portalD);
-        transD.transform.position = {-15.2f, 2.250f, 4.95f};
-        transD.transform.rotation = {0.0f, 180.0f, 0.0f};
-        transD.transform.scale = {1.0f, 1.0f, 1.0f};
-        transD.transform.updateMatrixIfNeeded();
+        auto portalD = world.entity();
+        portalD.set<TagComponent>({"Portal_D"});
+        portalD.set<IDComponent>({});
+        transform::addBundle(portalD);
+        transform::asVec3Mut(*portalD.get_mut<Position3>()) = glm::vec3(-15.2f, 2.250f, 4.95f);
+        transform::asVec3Mut(*portalD.get_mut<RotationEuler>()) = glm::vec3(0.0f, 180.0f, 0.0f);
+        transform::asVec3Mut(*portalD.get_mut<Scale3>()) = glm::vec3(1.0f, 1.0f, 1.0f);
+        transform::updateMatrixIfNeeded(*portalD.get_mut<Position3>(), *portalD.get_mut<RotationEuler>(), *portalD.get_mut<Scale3>(), *portalD.get_mut<LocalMatrix>());
 
-        registry.emplace<PortalComponent>(portalD);
+        portalD.set<PortalComponent>({});
 
-        registry.get<PortalComponent>(portalA).targetPortal = portalB;
-        registry.get<PortalComponent>(portalB).targetPortal = portalA;
+        portalA.get_mut<PortalComponent>()->targetPortal = portalB;
+        portalB.get_mut<PortalComponent>()->targetPortal = portalA;
 
-        registry.get<PortalComponent>(portalC).targetPortal = portalD;
-        registry.get<PortalComponent>(portalD).targetPortal = portalC;
+        portalC.get_mut<PortalComponent>()->targetPortal = portalD;
+        portalD.get_mut<PortalComponent>()->targetPortal = portalC;
 
         /*
                 std::shared_ptr<BurnhopeModel> lveModel3 =
                     BurnhopeModel::createModelFromFile(lveDevice, "models/PortalsPlaceholder3.gltf");
 
-                auto modelEntity3 = registry.create();
-                registry.emplace<TagComponent>(modelEntity3, "Cube");
-                registry.emplace<IDComponent>(modelEntity3);
-                registry.emplace<HierarchyComponent>(modelEntity3);
-                auto &transform3 = registry.emplace<TransformComponent>(modelEntity3);
-                transform3.transform.position = glm::vec3(-73.0f, 1.0f, 5.0f);
-                transform3.transform.rotation = glm::vec3(0.0f, 0.0f, 15.0f);
-                transform3.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
-                //glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
-                //transform.transform.matrix = glm::scale(translation, transform.transform.scale);
-                transform3.transform.updateMatrixIfNeeded();
-                auto &mesh3 = registry.emplace<MeshComponent>(modelEntity3);
+                auto modelEntity3 = world.entity();
+                modelEntity3.set<TagComponent>({"Cube"});
+                modelEntity3.set<IDComponent>({});
+                modelEntity3.set<HierarchyComponent>({});
+                transform::addBundle(modelEntity3);
+                transform::asVec3Mut(*modelEntity3.get_mut<Position3>()) = glm::vec3(-73.0f, 1.0f, 5.0f);
+                transform::asVec3Mut(*modelEntity3.get_mut<RotationEuler>()) = glm::vec3(0.0f, 0.0f, 15.0f);
+                transform::asVec3Mut(*modelEntity3.get_mut<Scale3>()) = glm::vec3(1.0f, 1.0f, 1.0f);
+                transform::updateMatrixIfNeeded(*modelEntity3.get_mut<Position3>(), *modelEntity3.get_mut<RotationEuler>(), *modelEntity3.get_mut<Scale3>(), *modelEntity3.get_mut<LocalMatrix>());
+                modelEntity3.set<MeshComponent>({});
+                auto &mesh3 = *modelEntity3.get_mut<MeshComponent>();
                 mesh3.model = lveModel3;
                 mesh3.materials = lveModel3->materials;
 
@@ -2839,32 +2836,32 @@ float currentFov = 45.0f;
                 std::shared_ptr<BurnhopeModel> lveModel4 =
                     BurnhopeModel::createModelFromFile(lveDevice, "models/PortalsPlaceholder4.gltf");
 
-                auto modelEntity4 = registry.create();
-                registry.emplace<TagComponent>(modelEntity4, "Cube2");
-                registry.emplace<IDComponent>(modelEntity4);
-                registry.emplace<HierarchyComponent>(modelEntity4);
-                auto &transform4 = registry.emplace<TransformComponent>(modelEntity4);
-                transform4.transform.position = glm::vec3(-68.0f, -5.0f, 3.0f);
-                transform4.transform.rotation = glm::vec3(0.0f, 0.0f, -25.0f);
-                transform4.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
-                //glm::mat4 translation = glm::translate(glm::mat4(1.0f), transform.transform.position);
-                //transform.transform.matrix = glm::scale(translation, transform.transform.scale);
-                transform4.transform.updateMatrixIfNeeded();
-                auto &mesh4 = registry.emplace<MeshComponent>(modelEntity4);
+                auto modelEntity4 = world.entity();
+                modelEntity4.set<TagComponent>({"Cube2"});
+                modelEntity4.set<IDComponent>({});
+                modelEntity4.set<HierarchyComponent>({});
+                transform::addBundle(modelEntity4);
+                transform::asVec3Mut(*modelEntity4.get_mut<Position3>()) = glm::vec3(-68.0f, -5.0f, 3.0f);
+                transform::asVec3Mut(*modelEntity4.get_mut<RotationEuler>()) = glm::vec3(0.0f, 0.0f, -25.0f);
+                transform::asVec3Mut(*modelEntity4.get_mut<Scale3>()) = glm::vec3(1.0f, 1.0f, 1.0f);
+                transform::updateMatrixIfNeeded(*modelEntity4.get_mut<Position3>(), *modelEntity4.get_mut<RotationEuler>(), *modelEntity4.get_mut<Scale3>(), *modelEntity4.get_mut<LocalMatrix>());
+                modelEntity4.set<MeshComponent>({});
+                auto &mesh4 = *modelEntity4.get_mut<MeshComponent>();
                 mesh4.model = lveModel4;
                 mesh4.materials = lveModel4->materials;
 
         */
         /*
-        auto sunEntity = registry.create();
-        registry.emplace<TagComponent>(sunEntity, "Sun");
-        registry.emplace<IDComponent>(sunEntity);
-        registry.emplace<HierarchyComponent>(sunEntity);
+        auto sunEntity = world.entity();
+        sunEntity.set<TagComponent>({"Sun"});
+        sunEntity.set<IDComponent>({});
+        sunEntity.set<HierarchyComponent>({});
+        transform::addBundle(sunEntity);
+        transform::asVec3Mut(*sunEntity.get_mut<RotationEuler>()) = glm::vec3(-45.0f, 0.0f, -35.0f);
+        transform::updateMatrixIfNeeded(*sunEntity.get_mut<Position3>(), *sunEntity.get_mut<RotationEuler>(), *sunEntity.get_mut<Scale3>(), *sunEntity.get_mut<LocalMatrix>());
 
-        auto &sunTransform = registry.emplace<TransformComponent>(sunEntity);
-                sunTransform.transform.rotation = glm::vec3(-45.0f, 0.0f, -35.0f);
-
-        auto &sunLight = registry.emplace<LightComponent>(sunEntity);
+        sunEntity.set<LightComponent>({});
+        auto &sunLight = *sunEntity.get_mut<LightComponent>();
         sunLight.light.enable = true;
         sunLight.light.type = LightType::Directional;
         sunLight.light.color = glm::vec3(1.0f, 1.0f, 1.0f);

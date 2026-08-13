@@ -16,7 +16,7 @@ namespace burnhope {
             if (!m_IsOpen) return;
             ImGui::Begin(m_Name.c_str(), &m_IsOpen);
 
-            if (context.selectedEntity != entt::null && context.registry->valid(context.selectedEntity)) {
+            if (context.selectedEntity.is_alive()) {
                 DrawComponents(context, context.selectedEntity);
             } else if (context.selectedAssets.size() == 1 && context.selectedAssets[0].ends_with(".bhtex")) {
                 DrawBHTexSettings(context, context.selectedAssets[0]);
@@ -66,9 +66,9 @@ namespace burnhope {
             }
         }
 
-        void DrawComponents(UIContext& context, entt::entity entity) {
-            if (context.registry->all_of<TagComponent>(entity)) {
-                auto& tag = context.registry->get<TagComponent>(entity);
+        void DrawComponents(UIContext& context, flecs::entity entity) {
+            if (entity.has<TagComponent>()) {
+                auto& tag = *entity.get_mut<TagComponent>();
                 char buffer[256];
                 strncpy(buffer, tag.name.c_str(), sizeof(buffer));
                 if (ImGui::InputText("Name", buffer, sizeof(buffer))) {
@@ -76,24 +76,27 @@ namespace burnhope {
                 }
             }
 
-            if (context.registry->all_of<TransformComponent>(entity)) {
+            if (transform::hasBundle(entity)) {
                 if (UIUtils::BeginPropertyGrid("Transform")) {
-                    auto& tc = context.registry->get<TransformComponent>(entity);
+                    auto* position = entity.get_mut<Position3>();
+                    auto* rotation = entity.get_mut<RotationEuler>();
+                    auto* scale = entity.get_mut<Scale3>();
+                    auto* matrix = entity.get_mut<LocalMatrix>();
                     bool changed = false;
                     ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Position"); ImGui::TableSetColumnIndex(1);
-                    changed |= UIUtils::DrawVec3Control("##Pos", tc.transform.position, 0.0f);
+                    changed |= UIUtils::DrawVec3Control("##Pos", transform::asVec3Mut(*position), 0.0f);
                     ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Rotation"); ImGui::TableSetColumnIndex(1);
-                    changed |= UIUtils::DrawVec3Control("##Rot", tc.transform.rotation, 0.0f);
+                    changed |= UIUtils::DrawVec3Control("##Rot", transform::asVec3Mut(*rotation), 0.0f);
                     ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Scale"); ImGui::TableSetColumnIndex(1);
-                    changed |= UIUtils::DrawVec3Control("##Scl", tc.transform.scale, 1.0f);
-                    if (changed) tc.transform.updatematrix = true;
+                    changed |= UIUtils::DrawVec3Control("##Scl", transform::asVec3Mut(*scale), 1.0f);
+                    if (changed) transform::markDirty(*matrix);
                     UIUtils::EndPropertyGrid();
                 }
             }
 
-            if (context.registry->all_of<MeshComponent>(entity)) {
+            if (entity.has<MeshComponent>()) {
                 if (UIUtils::BeginPropertyGrid("Mesh Renderer")) {
-                    auto& mc = context.registry->get<MeshComponent>(entity);
+                    auto& mc = *entity.get_mut<MeshComponent>();
                     
                     UIUtils::DrawProperty("Is Visible", &mc.isVisible);
                     UIUtils::DrawProperty("Cast Shadow", &mc.castShadow);
@@ -239,9 +242,9 @@ namespace burnhope {
                 }
             }
 
-            if (context.registry->all_of<LightComponent>(entity)) {
+            if (entity.has<LightComponent>()) {
                 if (UIUtils::BeginPropertyGrid("Light")) {
-                    auto& lc = context.registry->get<LightComponent>(entity);
+                    auto& lc = *entity.get_mut<LightComponent>();
                     UIUtils::DrawProperty("Enable", &lc.light.enable);
                     
                     const char* lightTypes[] = { "Directional", "Point", "Spot" };
@@ -266,9 +269,9 @@ namespace burnhope {
                 }
             }
 
-            if (context.registry->all_of<DecalComponent>(entity)) {
+            if (entity.has<DecalComponent>()) {
                 if (UIUtils::BeginPropertyGrid("Screen Space Decal")) {
-                    auto& dc = context.registry->get<DecalComponent>(entity);
+                    auto& dc = *entity.get_mut<DecalComponent>();
                     UIUtils::DrawProperty("Opacity", &dc.opacity, 0.0f, 1.0f);
                     
                     ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Albedo Texture:"); ImGui::TableSetColumnIndex(1);
@@ -307,9 +310,9 @@ namespace burnhope {
                 }
             }
 
-            if (context.registry->all_of<ReflectionProbeComponent>(entity)) {
+            if (entity.has<ReflectionProbeComponent>()) {
                 if (UIUtils::BeginPropertyGrid("Reflection Probe")) {
-                    auto& pc = context.registry->get<ReflectionProbeComponent>(entity);
+                    auto& pc = *entity.get_mut<ReflectionProbeComponent>();
                     UIUtils::DrawProperty("Radius", &pc.radius, 0.1f, 500.0f);
                     int res = pc.resolution;
                     if (UIUtils::DrawProperty("Resolution", &res, 64, 2048)) {
@@ -324,17 +327,19 @@ namespace burnhope {
                 ImGui::OpenPopup("AddComponentPopup");
             }
             if (ImGui::BeginPopup("AddComponentPopup")) {
-                if (!context.registry->all_of<MeshComponent>(entity) && ImGui::Selectable("Mesh Renderer")) {
-                    context.registry->emplace<MeshComponent>(entity);
+                if (!entity.has<MeshComponent>() && ImGui::Selectable("Mesh Renderer")) {
+                    entity.set<MeshComponent>({});
                 }
-                if (!context.registry->all_of<LightComponent>(entity) && ImGui::Selectable("Light")) {
-                    context.registry->emplace<LightComponent>(entity).light.enable = true;
+                if (!entity.has<LightComponent>() && ImGui::Selectable("Light")) {
+                    LightComponent lc;
+                    lc.light.enable = true;
+                    entity.set<LightComponent>(lc);
                 }
-                if (!context.registry->all_of<ReflectionProbeComponent>(entity) && ImGui::Selectable("Reflection Probe")) {
-                    context.registry->emplace<ReflectionProbeComponent>(entity);
+                if (!entity.has<ReflectionProbeComponent>() && ImGui::Selectable("Reflection Probe")) {
+                    entity.set<ReflectionProbeComponent>({});
                 }
-                if (!context.registry->all_of<DecalComponent>(entity) && ImGui::Selectable("Decal Projector")) {
-                    context.registry->emplace<DecalComponent>(entity);
+                if (!entity.has<DecalComponent>() && ImGui::Selectable("Decal Projector")) {
+                    entity.set<DecalComponent>({});
                 }
                 ImGui::EndPopup();
             }

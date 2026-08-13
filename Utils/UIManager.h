@@ -40,9 +40,9 @@ namespace burnhope {
 
     public:
         UIContext& GetContext() { return m_Context; }
-        UIManager(BurnhopeWindow& window, BurnhopeDevice& device, VkFormat swapChainFormat, entt::registry* registry, const std::string& projectPath) {
+        UIManager(BurnhopeWindow& window, BurnhopeDevice& device, VkFormat swapChainFormat, flecs::world* world, const std::string& projectPath) {
             m_Device = &device;
-            m_Context.registry = registry;
+            m_Context.world = world;
             m_Context.device = &device;
             m_Context.projectDirectory = projectPath;
             m_Context.currentDirectory = projectPath;
@@ -110,12 +110,12 @@ namespace burnhope {
         void ProcessPendingActions() {
             if (m_Context.pendingNewScene) {
                 vkDeviceWaitIdle(m_Device->device());
-                m_Context.registry->clear();
+                m_Context.world->reset();
                 m_Context.undoStack.clear();
                 m_Context.redoStack.clear();
                 m_Context.safeDeleteQueue.clear();
                 m_Context.pendingDeletions.clear();
-                m_Context.selectedEntity = entt::null;
+                m_Context.selectedEntity = flecs::entity();
                 m_Context.needsRebuild = true;
                 m_Context.pendingNewScene = false;
                 m_Context.currentScenePath = "";
@@ -124,10 +124,10 @@ namespace burnhope {
                 LoadScene(m_Context.pendingSceneLoadPath);
                 m_Context.pendingSceneLoadPath = "";
             }
-            if (!m_Context.pendingModelLoadPath.empty() && m_Context.pendingModelEntity != entt::null) {
+            if (!m_Context.pendingModelLoadPath.empty() && m_Context.pendingModelEntity.is_alive()) {
                 vkDeviceWaitIdle(m_Device->device());
-                if (m_Context.registry->valid(m_Context.pendingModelEntity) && m_Context.registry->all_of<MeshComponent>(m_Context.pendingModelEntity)) {
-                    auto& mc = m_Context.registry->get<MeshComponent>(m_Context.pendingModelEntity);
+                if (m_Context.pendingModelEntity.has<MeshComponent>()) {
+                    auto& mc = *m_Context.pendingModelEntity.get_mut<MeshComponent>();
                     m_Context.safeDeleteQueue.push_back(mc.model);
                     if (m_Context.pendingModelLoadPath == "NONE") {
                         mc.modelPath = "";
@@ -141,12 +141,12 @@ namespace burnhope {
                     m_Context.needsRebuild = true;
                 }
                 m_Context.pendingModelLoadPath = "";
-                m_Context.pendingModelEntity = entt::null;
+                m_Context.pendingModelEntity = flecs::entity();
             }
-            if (!m_Context.pendingMatLoadPath.empty() && m_Context.pendingMatEntity != entt::null) {
+            if (!m_Context.pendingMatLoadPath.empty() && m_Context.pendingMatEntity.is_alive()) {
                 vkDeviceWaitIdle(m_Device->device());
-                if (m_Context.registry->valid(m_Context.pendingMatEntity) && m_Context.registry->all_of<MeshComponent>(m_Context.pendingMatEntity)) {
-                    auto& mc = m_Context.registry->get<MeshComponent>(m_Context.pendingMatEntity);
+                if (m_Context.pendingMatEntity.has<MeshComponent>()) {
+                    auto& mc = *m_Context.pendingMatEntity.get_mut<MeshComponent>();
 
                     if (mc.model && mc.materials.size() < mc.model->getSubMeshes().size()) {
                         mc.materials.resize(mc.model->getSubMeshes().size(), nullptr);
@@ -168,7 +168,7 @@ namespace burnhope {
                     m_Context.needsRebuild = true;
                 }
                 m_Context.pendingMatLoadPath = "";
-                m_Context.pendingMatEntity = entt::null;
+                m_Context.pendingMatEntity = flecs::entity();
             }
         }
 
@@ -181,10 +181,10 @@ namespace burnhope {
                 if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) Redo();
                 
                 // Duplicate
-                if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && m_Context.selectedEntity != entt::null) {
+                if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && m_Context.selectedEntity.is_alive()) {
                     m_Context.SaveState();
-                    entt::entity parent = entt::null;
-                    entt::entity newEnt = CloneHierarchy(m_Context.selectedEntity, parent);
+                    flecs::entity parent = flecs::entity();
+                    flecs::entity newEnt = CloneHierarchy(m_Context.selectedEntity, parent);
                     m_Context.selectedEntity = newEnt;
                 }
                 
@@ -223,55 +223,57 @@ namespace burnhope {
                 glm::vec3 rayOrigin = camera.Position;
                 glm::vec3 rayDir = GetMouseRay(window, camera);
                 float closestT = 1000.0f;
-                entt::entity hitIndex = entt::null;
+                flecs::entity hitIndex = flecs::entity();
 
-                auto pickView = m_Context.registry->view<TransformComponent>();
-                pickView.each([&](entt::entity entity, TransformComponent& tComp) {
+                m_Context.world->each<Position3>([&](flecs::entity entity, Position3& pos) {
+                    if (!transform::hasBundle(entity)) return;
+                    RotationEuler& rot = *entity.get_mut<RotationEuler>();
+                    Scale3& scale = *entity.get_mut<Scale3>();
+                    LocalMatrix& localMat = *entity.get_mut<LocalMatrix>();
+                    transform::updateMatrixIfNeeded(pos, rot, scale, localMat);
                     float t;
-                    if (TestRayOBB(rayOrigin, rayDir, tComp.transform.matrix, t)) {
+                    if (TestRayOBB(rayOrigin, rayDir, localMat.value, t)) {
                         if (t < closestT) { closestT = t; hitIndex = entity; }
                     }
                 });
 
-                if (hitIndex != entt::null) {
+                if (hitIndex.is_alive()) {
                     m_Context.selectedEntity = hitIndex;
                 }
             }
 
             // Отрисовка Гизмо и манипуляция
-            if (m_Context.selectedEntity != entt::null && m_Context.registry->valid(m_Context.selectedEntity) && m_Context.registry->all_of<TransformComponent>(m_Context.selectedEntity)) {
-                auto& tComp = m_Context.registry->get<TransformComponent>(m_Context.selectedEntity);
-                tComp.transform.updateMatrixIfNeeded();
+            if (m_Context.selectedEntity.is_alive() && transform::hasBundle(m_Context.selectedEntity)) {
+                Position3& pos = *m_Context.selectedEntity.get_mut<Position3>();
+                RotationEuler& rot = *m_Context.selectedEntity.get_mut<RotationEuler>();
+                Scale3& scale = *m_Context.selectedEntity.get_mut<Scale3>();
+                LocalMatrix& localMat = *m_Context.selectedEntity.get_mut<LocalMatrix>();
+                transform::updateMatrixIfNeeded(pos, rot, scale, localMat);
 
-                // 1. Вычисляем мировую матрицу РОДИТЕЛЯ
                 glm::mat4 parentWorldMatrix = glm::mat4(1.0f);
-                if (m_Context.registry->all_of<HierarchyComponent>(m_Context.selectedEntity)) {
-                    uint64_t pid = m_Context.registry->get<HierarchyComponent>(m_Context.selectedEntity).parentID;
-                    entt::entity pEnt = m_Context.FindEntityByID(pid);
-                    if (pEnt != entt::null) parentWorldMatrix = GetGlobalTransform(pEnt);
+                if (m_Context.selectedEntity.has<HierarchyComponent>()) {
+                    uint64_t pid = m_Context.selectedEntity.get<HierarchyComponent>()->parentID;
+                    flecs::entity pEnt = m_Context.FindEntityByID(pid);
+                    if (pEnt.is_alive()) parentWorldMatrix = GetGlobalTransform(pEnt);
                 }
 
-                // 2. Итоговая мировая матрица этого объекта
-                glm::mat4 worldMatrix = parentWorldMatrix * tComp.transform.matrix;
+                glm::mat4 worldMatrix = parentWorldMatrix * localMat.value;
 
                 if (ImGuizmo::IsUsing() && !m_WasUsingGizmo) m_Context.SaveState();
                 m_WasUsingGizmo = ImGuizmo::IsUsing();
 
-                // 3. Отдаем Гизмо МИРОВУЮ матрицу для отрисовки
                 ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(gizmoProj), currentGizmoOperation, currentGizmoMode, glm::value_ptr(worldMatrix));
 
-                // 4. Если мы потянули за стрелочку
                 if (ImGuizmo::IsUsing()) {
-                    // Вычитаем из новой мировой матрицы влияние родителя, чтобы получить новую ЛОКАЛЬНУЮ
                     glm::mat4 newLocalMatrix = glm::inverse(parentWorldMatrix) * worldMatrix;
 
                     ImGuizmo::DecomposeMatrixToComponents(
                         glm::value_ptr(newLocalMatrix),
-                        glm::value_ptr(tComp.transform.position),
-                        glm::value_ptr(tComp.transform.rotation),
-                        glm::value_ptr(tComp.transform.scale)
+                        glm::value_ptr(transform::asVec3Mut(pos)),
+                        glm::value_ptr(transform::asVec3Mut(rot)),
+                        glm::value_ptr(transform::asVec3Mut(scale))
                     );
-                    tComp.transform.updatematrix = true;
+                    transform::markDirty(localMat);
                     m_Context.needsRTRebuild = true;
                 }
             }
@@ -314,38 +316,42 @@ namespace burnhope {
             return tMax > 0;
         }
 
-        glm::mat4 GetGlobalTransform(entt::entity entity) {
-            if (!m_Context.registry->valid(entity) || !m_Context.registry->all_of<TransformComponent>(entity)) return glm::mat4(1.0f);
-            auto& tComp = m_Context.registry->get<TransformComponent>(entity);
-            tComp.transform.updateMatrixIfNeeded();
-            glm::mat4 globalMat = tComp.transform.matrix;
+        glm::mat4 GetGlobalTransform(flecs::entity entity) {
+            if (!entity.is_alive() || !transform::hasBundle(entity)) return glm::mat4(1.0f);
+            Position3& pos = *entity.get_mut<Position3>();
+            RotationEuler& rot = *entity.get_mut<RotationEuler>();
+            Scale3& scale = *entity.get_mut<Scale3>();
+            LocalMatrix& localMat = *entity.get_mut<LocalMatrix>();
+            transform::updateMatrixIfNeeded(pos, rot, scale, localMat);
+            glm::mat4 globalMat = localMat.value;
 
-            if (m_Context.registry->all_of<HierarchyComponent>(entity)) {
-                uint64_t parentID = m_Context.registry->get<HierarchyComponent>(entity).parentID;
-                entt::entity parentEnt = m_Context.FindEntityByID(parentID);
-                if (parentEnt != entt::null) globalMat = GetGlobalTransform(parentEnt) * globalMat;
+            if (entity.has<HierarchyComponent>()) {
+                uint64_t parentID = entity.get<HierarchyComponent>()->parentID;
+                flecs::entity parentEnt = m_Context.FindEntityByID(parentID);
+                if (parentEnt.is_alive()) globalMat = GetGlobalTransform(parentEnt) * globalMat;
             }
             return globalMat;
         }
 
-        entt::entity CloneHierarchy(entt::entity source, entt::entity newParent) {
-            entt::entity copy = m_Context.registry->create();
-            m_Context.registry->emplace<IDComponent>(copy); // Новый уникальный ID
+        flecs::entity CloneHierarchy(flecs::entity source, flecs::entity newParent) {
+            flecs::entity copy = m_Context.world->entity();
+            copy.set<IDComponent>({});
 
-            if (m_Context.registry->all_of<TagComponent>(source)) {
-                auto tag = m_Context.registry->get<TagComponent>(source);
+            if (source.has<TagComponent>()) {
+                TagComponent tag = *source.get<TagComponent>();
                 tag.name += " (Copy)";
-                m_Context.registry->emplace<TagComponent>(copy, tag);
+                copy.set<TagComponent>(tag);
             }
-            if (m_Context.registry->all_of<TransformComponent>(source)) m_Context.registry->emplace<TransformComponent>(copy, m_Context.registry->get<TransformComponent>(source));
-            if (m_Context.registry->all_of<MeshComponent>(source)) m_Context.registry->emplace<MeshComponent>(copy, m_Context.registry->get<MeshComponent>(source));
-            if (m_Context.registry->all_of<LightComponent>(source)) m_Context.registry->emplace<LightComponent>(copy, m_Context.registry->get<LightComponent>(source));
-            if (m_Context.registry->all_of<ReflectionProbeComponent>(source)) m_Context.registry->emplace<ReflectionProbeComponent>(copy, m_Context.registry->get<ReflectionProbeComponent>(source));
+            transform::copyBundle(source, copy);
+            if (source.has<MeshComponent>()) copy.set<MeshComponent>(*source.get<MeshComponent>());
+            if (source.has<LightComponent>()) copy.set<LightComponent>(*source.get<LightComponent>());
+            if (source.has<ReflectionProbeComponent>()) copy.set<ReflectionProbeComponent>(*source.get<ReflectionProbeComponent>());
 
-            auto& hc = m_Context.registry->emplace<HierarchyComponent>(copy);
-            if (newParent != entt::null && m_Context.registry->all_of<IDComponent>(newParent)) {
-                hc.parentID = m_Context.registry->get<IDComponent>(newParent).ID;
-                m_Context.registry->get<HierarchyComponent>(newParent).childrenIDs.push_back(m_Context.registry->get<IDComponent>(copy).ID);
+            copy.set<HierarchyComponent>({});
+            HierarchyComponent& hc = *copy.get_mut<HierarchyComponent>();
+            if (newParent.is_alive() && newParent.has<IDComponent>()) {
+                hc.parentID = newParent.get<IDComponent>()->ID;
+                newParent.get_mut<HierarchyComponent>()->childrenIDs.push_back(copy.get<IDComponent>()->ID);
             }
             return copy;
         }
@@ -353,27 +359,29 @@ namespace burnhope {
         void Undo() {
             if (m_Context.undoStack.empty()) return;
             vkDeviceWaitIdle(m_Device->device());
-            auto snapReg = std::make_shared<entt::registry>();
-            m_Context.CopyRegistry(*m_Context.registry, *snapReg);
-            m_Context.redoStack.push_back({snapReg, m_Context.selectedEntity});
-            
-            SceneSnapshot snap = m_Context.undoStack.back();
+            flecs::snapshot redoSnap(*m_Context.world);
+            redoSnap.take();
+            m_Context.redoStack.push_back({std::move(redoSnap), m_Context.selectedEntity});
+
+            SceneSnapshot snap = std::move(m_Context.undoStack.back());
             m_Context.undoStack.pop_back();
-            m_Context.CopyRegistry(*snap.regCopy, *m_Context.registry);
+            snap.snapshot.restore();
             m_Context.selectedEntity = snap.selectedEntity;
+            m_Context.needsRebuild = true;
         }
 
         void Redo() {
             if (m_Context.redoStack.empty()) return;
             vkDeviceWaitIdle(m_Device->device());
-            auto snapReg = std::make_shared<entt::registry>();
-            m_Context.CopyRegistry(*m_Context.registry, *snapReg);
-            m_Context.undoStack.push_back({snapReg, m_Context.selectedEntity});
-            
-            SceneSnapshot snap = m_Context.redoStack.back();
+            flecs::snapshot undoSnap(*m_Context.world);
+            undoSnap.take();
+            m_Context.undoStack.push_back({std::move(undoSnap), m_Context.selectedEntity});
+
+            SceneSnapshot snap = std::move(m_Context.redoStack.back());
             m_Context.redoStack.pop_back();
-            m_Context.CopyRegistry(*snap.regCopy, *m_Context.registry);
+            snap.snapshot.restore();
             m_Context.selectedEntity = snap.selectedEntity;
+            m_Context.needsRebuild = true;
         }
 
         // --- ИНИЦИАЛИЗАЦИЯ И ОТРИСОВКА БАЗОВОГО UI ---
@@ -613,33 +621,32 @@ namespace burnhope {
             nlohmann::json sceneJson;
             sceneJson["Entities"] = nlohmann::json::array();
 
-            auto view = m_Context.registry->view<IDComponent>();
-            for (auto entity : view) {
+            m_Context.world->each<IDComponent>([&](flecs::entity entity, IDComponent& idComp) {
                 nlohmann::json entityJson;
-                
-                if (m_Context.registry->all_of<IDComponent>(entity)) {
-                    entityJson["IDComponent"]["ID"] = m_Context.registry->get<IDComponent>(entity).ID;
-                }
-                
-                if (m_Context.registry->all_of<TagComponent>(entity)) {
-                    entityJson["TagComponent"]["Name"] = m_Context.registry->get<TagComponent>(entity).name;
-                }
-                
-                if (m_Context.registry->all_of<TransformComponent>(entity)) {
-                    auto& tc = m_Context.registry->get<TransformComponent>(entity);
-                    entityJson["TransformComponent"]["Position"] = {tc.transform.position.x, tc.transform.position.y, tc.transform.position.z};
-                    entityJson["TransformComponent"]["Rotation"] = {tc.transform.rotation.x, tc.transform.rotation.y, tc.transform.rotation.z};
-                    entityJson["TransformComponent"]["Scale"] = {tc.transform.scale.x, tc.transform.scale.y, tc.transform.scale.z};
+
+                entityJson["IDComponent"]["ID"] = idComp.ID;
+
+                if (entity.has<TagComponent>()) {
+                    entityJson["TagComponent"]["Name"] = entity.get<TagComponent>()->name;
                 }
 
-                if (m_Context.registry->all_of<HierarchyComponent>(entity)) {
-                    auto& hc = m_Context.registry->get<HierarchyComponent>(entity);
+                if (entity.has<Position3>() && entity.has<RotationEuler>() && entity.has<Scale3>()) {
+                    const Position3& pos = *entity.get<Position3>();
+                    const RotationEuler& rot = *entity.get<RotationEuler>();
+                    const Scale3& scale = *entity.get<Scale3>();
+                    entityJson["TransformComponent"]["Position"] = {pos.x, pos.y, pos.z};
+                    entityJson["TransformComponent"]["Rotation"] = {rot.x, rot.y, rot.z};
+                    entityJson["TransformComponent"]["Scale"] = {scale.x, scale.y, scale.z};
+                }
+
+                if (entity.has<HierarchyComponent>()) {
+                    const HierarchyComponent& hc = *entity.get<HierarchyComponent>();
                     entityJson["HierarchyComponent"]["ParentID"] = hc.parentID;
                     entityJson["HierarchyComponent"]["ChildrenIDs"] = hc.childrenIDs;
                 }
 
-                if (m_Context.registry->all_of<MeshComponent>(entity)) {
-                    auto& mc = m_Context.registry->get<MeshComponent>(entity);
+                if (entity.has<MeshComponent>()) {
+                    const MeshComponent& mc = *entity.get<MeshComponent>();
                     entityJson["MeshComponent"]["ModelPath"] = mc.modelPath;
                     entityJson["MeshComponent"]["MaterialPaths"] = mc.materialPaths;
                     entityJson["MeshComponent"]["IsStatic"] = mc.isStatic;
@@ -647,8 +654,8 @@ namespace burnhope {
                     entityJson["MeshComponent"]["CastShadow"] = mc.castShadow;
                 }
 
-                if (m_Context.registry->all_of<LightComponent>(entity)) {
-                    auto& lc = m_Context.registry->get<LightComponent>(entity);
+                if (entity.has<LightComponent>()) {
+                    const LightComponent& lc = *entity.get<LightComponent>();
                     entityJson["LightComponent"]["NeedsShadowUpdate"] = lc.needsShadowUpdate;
                     entityJson["LightComponent"]["Enable"] = lc.light.enable;
                     entityJson["LightComponent"]["Type"] = static_cast<int>(lc.light.type);
@@ -659,21 +666,21 @@ namespace burnhope {
                     entityJson["LightComponent"]["Mobility"] = static_cast<int>(lc.light.mobility);
                 }
 
-                if (m_Context.registry->all_of<ReflectionProbeComponent>(entity)) {
-                    auto& rpc = m_Context.registry->get<ReflectionProbeComponent>(entity);
+                if (entity.has<ReflectionProbeComponent>()) {
+                    const ReflectionProbeComponent& rpc = *entity.get<ReflectionProbeComponent>();
                     entityJson["ReflectionProbeComponent"]["Radius"] = rpc.radius;
                     entityJson["ReflectionProbeComponent"]["Resolution"] = rpc.resolution;
                 }
 
-                if (m_Context.registry->all_of<DecalComponent>(entity)) {
-                    auto& dc = m_Context.registry->get<DecalComponent>(entity);
+                if (entity.has<DecalComponent>()) {
+                    const DecalComponent& dc = *entity.get<DecalComponent>();
                     entityJson["DecalComponent"]["AlbedoPath"] = dc.albedoPath;
                     entityJson["DecalComponent"]["NormalPath"] = dc.normalPath;
                     entityJson["DecalComponent"]["Opacity"] = dc.opacity;
                 }
 
                 sceneJson["Entities"].push_back(entityJson);
-            }
+            });
 
             std::ofstream file(filepath);
             file << sceneJson.dump(4);
@@ -689,47 +696,60 @@ namespace burnhope {
             // Ждем, пока видеокарта закончит кадр, чтобы безопасно выгрузить старые модели
             vkDeviceWaitIdle(m_Device->device());
 
-            m_Context.registry->clear();
+            m_Context.world->reset();
             m_Context.undoStack.clear();
             m_Context.redoStack.clear();
             m_Context.safeDeleteQueue.clear();
             m_Context.pendingDeletions.clear();
-            m_Context.selectedEntity = entt::null;
+            m_Context.selectedEntity = flecs::entity();
             m_Context.needsRebuild = true;
             m_Context.currentScenePath = filepath;
 
             for (const auto& entityJson : sceneJson["Entities"]) {
-                entt::entity entity = m_Context.registry->create();
+                flecs::entity entity = m_Context.world->entity();
 
                 if (entityJson.contains("IDComponent")) {
-                    m_Context.registry->emplace<IDComponent>(entity, entityJson["IDComponent"]["ID"].get<uint64_t>());
+                    entity.set<IDComponent>(IDComponent(entityJson["IDComponent"]["ID"].get<uint64_t>()));
                 } else {
-                    m_Context.registry->emplace<IDComponent>(entity);
+                    entity.set<IDComponent>({});
                 }
 
                 if (entityJson.contains("TagComponent")) {
-                    auto& tc = m_Context.registry->emplace<TagComponent>(entity);
-                    tc.name = entityJson["TagComponent"]["Name"];
+                    entity.set<TagComponent>({entityJson["TagComponent"]["Name"].get<std::string>()});
                 }
 
                 if (entityJson.contains("TransformComponent")) {
-                    auto& tc = m_Context.registry->emplace<TransformComponent>(entity);
-                    tc.transform.position = glm::vec3(entityJson["TransformComponent"]["Position"][0], entityJson["TransformComponent"]["Position"][1], entityJson["TransformComponent"]["Position"][2]);
-                    tc.transform.rotation = glm::vec3(entityJson["TransformComponent"]["Rotation"][0], entityJson["TransformComponent"]["Rotation"][1], entityJson["TransformComponent"]["Rotation"][2]);
-                    tc.transform.scale = glm::vec3(entityJson["TransformComponent"]["Scale"][0], entityJson["TransformComponent"]["Scale"][1], entityJson["TransformComponent"]["Scale"][2]);
-                    tc.transform.updatematrix = true;
+                    entity.set<Position3>({
+                        entityJson["TransformComponent"]["Position"][0].get<float>(),
+                        entityJson["TransformComponent"]["Position"][1].get<float>(),
+                        entityJson["TransformComponent"]["Position"][2].get<float>()
+                    });
+                    entity.set<RotationEuler>({
+                        entityJson["TransformComponent"]["Rotation"][0].get<float>(),
+                        entityJson["TransformComponent"]["Rotation"][1].get<float>(),
+                        entityJson["TransformComponent"]["Rotation"][2].get<float>()
+                    });
+                    entity.set<Scale3>({
+                        entityJson["TransformComponent"]["Scale"][0].get<float>(),
+                        entityJson["TransformComponent"]["Scale"][1].get<float>(),
+                        entityJson["TransformComponent"]["Scale"][2].get<float>()
+                    });
+                    LocalMatrix localMat{};
+                    localMat.dirty = 1;
+                    entity.set<LocalMatrix>(localMat);
                 }
 
                 if (entityJson.contains("HierarchyComponent")) {
-                    auto& hc = m_Context.registry->emplace<HierarchyComponent>(entity);
+                    HierarchyComponent hc;
                     hc.parentID = entityJson["HierarchyComponent"]["ParentID"];
                     for (const auto& childId : entityJson["HierarchyComponent"]["ChildrenIDs"]) {
                         hc.childrenIDs.push_back(childId);
                     }
+                    entity.set<HierarchyComponent>(hc);
                 }
 
                 if (entityJson.contains("MeshComponent")) {
-                    auto& mc = m_Context.registry->emplace<MeshComponent>(entity);
+                    MeshComponent mc;
                     mc.modelPath = entityJson["MeshComponent"].value("ModelPath", "");
                     if (entityJson["MeshComponent"].contains("MaterialPaths")) {
                         for (const auto& path : entityJson["MeshComponent"]["MaterialPaths"]) {
@@ -745,56 +765,58 @@ namespace burnhope {
                     mc.isStatic = entityJson["MeshComponent"].value("IsStatic", false);
                     mc.isVisible = entityJson["MeshComponent"].value("IsVisible", true);
                     mc.castShadow = entityJson["MeshComponent"].value("CastShadow", true);
-                    
-                    // Если путь указан, сразу загружаем 3D-модель (инициализируем буферы)
+
                     if (!mc.modelPath.empty() && m_Device) {
                         try {
                             mc.model = BurnhopeModel::createModelFromFile(*m_Device, mc.modelPath);
-                        // Защита от краша: выравниваем размер массива материалов под количество сабмешей
-                        if (mc.materials.size() < mc.model->getSubMeshes().size()) {
-                            mc.materials.resize(mc.model->getSubMeshes().size(), nullptr);
-                        }
-                        if (mc.materialPaths.size() < mc.model->getSubMeshes().size()) {
-                            mc.materialPaths.resize(mc.model->getSubMeshes().size(), "");
-                        }
+                            if (mc.materials.size() < mc.model->getSubMeshes().size()) {
+                                mc.materials.resize(mc.model->getSubMeshes().size(), nullptr);
+                            }
+                            if (mc.materialPaths.size() < mc.model->getSubMeshes().size()) {
+                                mc.materialPaths.resize(mc.model->getSubMeshes().size(), "");
+                            }
                         } catch (const std::exception& e) {
                             std::cerr << "[ERROR] Failed to load model: " << e.what() << "\n";
                         }
                     }
+                    entity.set<MeshComponent>(std::move(mc));
                 }
 
                 if (entityJson.contains("LightComponent")) {
-                    auto& lc = m_Context.registry->emplace<LightComponent>(entity);
-                    lc.needsShadowUpdate = true; // Принудительное обновление теней при загрузке
-                    
+                    LightComponent lc;
+                    lc.needsShadowUpdate = true;
+
                     if (entityJson["LightComponent"].contains("Enable")) lc.light.enable = entityJson["LightComponent"]["Enable"].get<bool>();
                     if (entityJson["LightComponent"].contains("Type")) lc.light.type = static_cast<LightType>(entityJson["LightComponent"]["Type"].get<int>());
                     if (entityJson["LightComponent"].contains("Color")) {
                         lc.light.color = glm::vec3(
-                            entityJson["LightComponent"]["Color"][0].get<float>(), 
-                            entityJson["LightComponent"]["Color"][1].get<float>(), 
+                            entityJson["LightComponent"]["Color"][0].get<float>(),
+                            entityJson["LightComponent"]["Color"][1].get<float>(),
                             entityJson["LightComponent"]["Color"][2].get<float>());
                     }
                     if (entityJson["LightComponent"].contains("Intensity")) lc.light.intensity = entityJson["LightComponent"]["Intensity"].get<float>();
                     if (entityJson["LightComponent"].contains("Radius")) lc.light.radius = entityJson["LightComponent"]["Radius"].get<float>();
                     if (entityJson["LightComponent"].contains("CastShadows")) lc.light.castShadows = entityJson["LightComponent"]["CastShadows"].get<bool>();
                     if (entityJson["LightComponent"].contains("Mobility")) lc.light.mobility = static_cast<LightMobility>(entityJson["LightComponent"]["Mobility"].get<int>());
+                    entity.set<LightComponent>(std::move(lc));
                 }
 
                 if (entityJson.contains("ReflectionProbeComponent")) {
-                    auto& rpc = m_Context.registry->emplace<ReflectionProbeComponent>(entity);
+                    ReflectionProbeComponent rpc;
                     rpc.radius = entityJson["ReflectionProbeComponent"].value("Radius", 10.0f);
                     rpc.resolution = entityJson["ReflectionProbeComponent"].value("Resolution", 256);
                     rpc.updateNeeded = true;
+                    entity.set<ReflectionProbeComponent>(std::move(rpc));
                 }
-                
+
                 if (entityJson.contains("DecalComponent")) {
-                    auto& dc = m_Context.registry->emplace<DecalComponent>(entity);
+                    DecalComponent dc;
                     dc.albedoPath = entityJson["DecalComponent"].value("AlbedoPath", "");
                     dc.normalPath = entityJson["DecalComponent"].value("NormalPath", "");
                     dc.opacity = entityJson["DecalComponent"].value("Opacity", 1.0f);
                     if (!dc.albedoPath.empty() && m_Device) dc.albedoTex = BurnhopeTexture::createTextureFromFile(*m_Device, dc.albedoPath);
                     if (!dc.normalPath.empty() && m_Device) dc.normalTex = BurnhopeTexture::createDataTextureFromFile(*m_Device, dc.normalPath);
+                    entity.set<DecalComponent>(std::move(dc));
                 }
             }
         }

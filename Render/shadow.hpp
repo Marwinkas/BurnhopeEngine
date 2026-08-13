@@ -103,7 +103,7 @@ namespace burnhope
         ~BurnhopeShadowSystem() = default;
         BurnhopeShadowSystem(const BurnhopeShadowSystem &) = delete;
         BurnhopeShadowSystem &operator=(const BurnhopeShadowSystem &) = delete;
-        void updateLights(entt::registry &registry, const glm::vec3 &camPos);
+        void updateLights(flecs::world &world, const glm::vec3 &camPos);
         const LightUBOData &getLightUBO() const { return lightUBO; }
         const std::array<glm::mat4, BurnhopeCSM::CASCADE_COUNT> &getCascadeMatrices() const
         {

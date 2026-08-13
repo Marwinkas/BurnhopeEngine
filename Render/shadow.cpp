@@ -197,31 +197,33 @@ namespace burnhope
         csm = std::make_unique<BurnhopeCSM>(dev);
         vsm = std::make_unique<VirtualShadowMap>(dev);
     }
-    void BurnhopeShadowSystem::updateLights(entt::registry &registry, const glm::vec3 &camPos)
+    void BurnhopeShadowSystem::updateLights(flecs::world &world, const glm::vec3 &camPos)
     {
         lightUBO = {};
         sunDir = glm::vec3(0, -1, 0);
         int allocX = 0, allocY = 0;
         const int atlasInUnits = BurnhopeShadowAtlas::ATLAS_IN_UNITS;
         const int minTile = BurnhopeShadowAtlas::MIN_TILE;
-        auto lightView = registry.view<LightComponent, TransformComponent>();
-        for (auto entity : lightView)
+        world.query<LightComponent, Position3, RotationEuler, Scale3, LocalMatrix>().each(
+            [&](flecs::entity entity, LightComponent &lightComp, Position3 &position, RotationEuler &rotation, Scale3 &scale, LocalMatrix &localMatrix)
         {
             if (lightUBO.activeLightsCount >= 100)
-                break;
-            auto &lc = lightView.get<LightComponent>(entity).light;
-            auto &tc = lightView.get<TransformComponent>(entity).transform;
+                return;
+            auto &lc = lightComp.light;
+            transform::updateMatrixIfNeeded(position, rotation, scale, localMatrix);
+            const glm::vec3 pos = transform::asVec3(*entity.get<Position3>());
+            const RotationEuler *rot = entity.get<RotationEuler>();
             if (!lc.enable || lc.type == LightType::None)
-                continue;
+                return;
             // Must match Transform::rotationMatrix() (XYZ Euler), not glm::quat(euler) (YXZ).
-            glm::vec3 dir = tc.rotateVector(glm::vec3(0.0f, -1.0f, 0.0f));
+            glm::vec3 dir = transform::rotateVector(*rot, glm::vec3(0.0f, -1.0f, 0.0f));
             if (lc.type == LightType::Directional)
             {
                 sunDir = dir;
             }
             if (lc.castShadows && lc.type != LightType::Directional)
             {
-                float dist = glm::length(tc.position - camPos);
+                float dist = glm::length(pos - camPos);
                 lc.shadowTileSize = (dist < 20.0f) ? 512 : (dist < 60.0f) ? 256
                                                                           : 128;
                 int unitsPerTile = lc.shadowTileSize / minTile;
@@ -244,7 +246,7 @@ namespace burnhope
             if (lc.type == LightType::Spot)
             {
                 glm::vec3 up = (std::abs(dir.y) > 0.99f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
-                glm::vec3 safePos = tc.position;
+                glm::vec3 safePos = pos;
                 if (std::abs(safePos.x) < 0.001f && std::abs(safePos.z) < 0.001f)
                     safePos.x += 0.001f;
                 glm::mat4 lp = glm::perspective(glm::radians(lc.outerCone * 2.0f), 1.0f, 0.1f, lc.radius);
@@ -258,11 +260,11 @@ namespace burnhope
                 const glm::vec3 ups[6] = {{0, -1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, -1, 0}};
                 for (int f = 0; f < 6; f++)
                 {
-                    faceMatricesData[lightUBO.activeLightsCount].faces[f] = proj * glm::lookAt(tc.position, tc.position + dirs[f], ups[f]);
+                    faceMatricesData[lightUBO.activeLightsCount].faces[f] = proj * glm::lookAt(pos, pos + dirs[f], ups[f]);
                 }
             }
             LightGPUData &g = lightUBO.lights[lightUBO.activeLightsCount];
-            g.posType = glm::vec4(tc.position, (float)lc.type);
+            g.posType = glm::vec4(pos, (float)lc.type);
             g.colorInt = glm::vec4(lc.color, lc.intensity);
             g.dirRadius = glm::vec4(dir, lc.radius);
             g.lightSpaceMatrix = lc.lightSpaceMatrix;
@@ -273,6 +275,6 @@ namespace burnhope
                 lc.castShadows ? 1.0f : 0.0f,
                 encodedSlot);
             lightUBO.activeLightsCount++;
-        }
+        });
     }
 }
