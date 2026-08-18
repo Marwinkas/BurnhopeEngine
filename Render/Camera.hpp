@@ -56,7 +56,7 @@ namespace burnhope
         }
         
         void updateMatrix(float FOVdeg, float nearPlane, float farPlane);
-        void Inputs(SDL_Window *window, float deltaTime);
+        void Inputs(SDL_Window *window, float deltaTime, bool allowLook = true);
     };
 }
 #endif

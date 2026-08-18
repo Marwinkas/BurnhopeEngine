@@ -84,6 +84,7 @@ namespace burnhope
             return;
         }
         this->storedPositions = builder.positions;
+        this->storedIndices = builder.indices;
 
         materialCount = static_cast<uint32_t>(builder.materialPaths.size());
         createVertexBuffers(builder.positions, builder.attributes, builder.animations, builder.isDynamic);
@@ -229,6 +230,7 @@ namespace burnhope
         cpuDataReady = true;
         gpuDataReady = true;
         this->storedPositions = builder.positions;
+        this->storedIndices = builder.indices;
         materialCount = static_cast<uint32_t>(builder.materialPaths.size());
         createVertexBuffers(builder.positions, builder.attributes, builder.animations, builder.isDynamic);
         createIndexBuffers(builder.indices);

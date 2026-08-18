@@ -3,10 +3,10 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <random>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "MurmurHash3.hpp"
 #include "../Render/Light.hpp"
 #include "../Render/Model.hpp"
 #include "../Render/Material.hpp"
@@ -17,12 +17,11 @@ namespace burnhope
     using World = flecs::world;
     inline constexpr flecs::entity_t kNullEntity = 0;
 
+    // 64-bit GUID generation, per engine rules: MurmurHash3-based identity,
+    // no runtime paths/pointers used as entity handles.
     inline uint64_t generateRandomID()
     {
-        static std::random_device rd;
-        static std::mt19937_64 eng(rd());
-        static std::uniform_int_distribution<uint64_t> dist(1);
-        return dist(eng);
+        return burnhope::hash::GenerateGUID();
     }
 
     struct alignas(16) Position3

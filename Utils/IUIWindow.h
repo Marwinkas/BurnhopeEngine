@@ -1,5 +1,6 @@
 #pragma once
 #include "UIContext.h"
+#include "UI/UI.hpp"
 #include <string>
 
 namespace burnhope {
@@ -11,6 +12,8 @@ namespace burnhope {
         IUIWindow(const std::string& name) : m_Name(name) {}
         virtual ~IUIWindow() = default;
 
-        virtual void Draw(UIContext& context) = 0;
+        // `contentRect` is the panel's content area, computed by UIDockspace
+        // for whichever dock slot this panel is the active tab of.
+        virtual void Draw(UIContext& context, ui::UIWidgets& widgets, ui::Rect contentRect) = 0;
     };
 }

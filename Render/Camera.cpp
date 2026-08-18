@@ -42,12 +42,12 @@ namespace burnhope
         }
         return true;
     }
-    void Camera::Inputs(SDL_Window *window, float deltaTime)
+    void Camera::Inputs(SDL_Window *window, float deltaTime, bool allowLook)
     {
         float mouseX = 0.0f;
         float mouseY = 0.0f;
         const SDL_MouseButtonFlags mouseState = SDL_GetMouseState(&mouseX, &mouseY);
-        const bool allowMouse = (mouseState & SDL_BUTTON_MASK(SDL_BUTTON_RIGHT)) != 0;
+        const bool allowMouse = allowLook && (mouseState & SDL_BUTTON_MASK(SDL_BUTTON_RIGHT)) != 0;
         if (allowMouse)
         {
             SDL_SetWindowRelativeMouseMode(window, true);

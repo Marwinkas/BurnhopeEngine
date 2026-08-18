@@ -1,7 +1,6 @@
 #include "MainApp.hpp"
 #include "Utils/EcsRegistration.hpp"
 #include "Render/Camera.hpp"
-#include "Render/SceneManager.hpp"
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -991,7 +990,7 @@ bool queuedGeometryRebuild = false;
                 frameCount = 0;
                 fpsTimer = newTime;
             }
-            camera.Inputs(lveWindow.getSDLWindow(), frameTime);
+            camera.Inputs(lveWindow.getSDLWindow(), frameTime, !uiManager->WantCaptureMouse());
             auto commandBuffer = lveRenderer.beginFrame();
             if (commandBuffer == VK_NULL_HANDLE) continue;
             if (commandBuffer)

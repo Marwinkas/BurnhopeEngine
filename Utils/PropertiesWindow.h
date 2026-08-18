@@ -1,10 +1,18 @@
 #pragma once
 #include "IUIWindow.h"
-#include <imgui.h>
 #include <fstream>
 #include <nlohmann/json.hpp>
-#include "UIUtils.h"
+#include <filesystem>
+#include <glm/glm.hpp>
 
+// Mechanical port from ImGui: tabs/CollapsingHeader flatten into TreeNode
+// section rows (UIWidgets::TreeNode always renders expanded — there is no
+// per-frame collapse state in this widget set, matching the old
+// `ImGuiTreeNodeFlags_DefaultOpen` sections which is the overwhelming
+// majority of this panel anyway). Slider min/max clamps from the ImGui
+// version are dropped in favor of UIWidgets' drag-float semantics
+// (DrawFloatControl/DrawIntControl), consistent with every other ported
+// panel in this pass.
 namespace burnhope {
     using json = nlohmann::json;
 
@@ -12,693 +20,238 @@ namespace burnhope {
     public:
         PropertiesWindow() : IUIWindow("Properties") {}
 
-        void Draw(UIContext& context) override {
+        void Draw(UIContext& context, ui::UIWidgets& widgets, ui::Rect contentRect) override {
             if (!m_IsOpen) return;
-            ImGui::Begin(m_Name.c_str(), &m_IsOpen);
-            
-            if (ImGui::BeginTabBar("PropsTabs")) {
-                if (ImGui::BeginTabItem("Render")) {
-                    DrawRenderSettings(context);
-                    ImGui::EndTabItem();
-                }
-                ImGui::EndTabBar();
-            }
-
-            ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
-
-            if (ImGui::Button("💾 SAVE SETTINGS", ImVec2(-1, 40))) {
-                SaveRenderSettings(context);
-            }
-
-            ImGui::End();
+            ui::Panel panel(widgets, m_Name, contentRect);
+            DrawRenderSettings(context, widgets);
+            widgets.Separator();
+            if (widgets.Button("SAVE SETTINGS", {200, 34})) SaveRenderSettings(context);
         }
 
     private:
-        void DrawRenderSettings(UIContext& context) {
-            RenderSettings& renderSettings = context.renderSettings;
-            ImGui::TextColored(ImVec4(0.00f, 0.45f, 0.85f, 1.0f), "Render & Post-Processing Settings");
-            ImGui::Separator();
-            ImGui::Spacing();
+        static glm::vec3& Col3(float* a) { return *reinterpret_cast<glm::vec3*>(a); }
+        static glm::vec2& Vec2(float* a) { return *reinterpret_cast<glm::vec2*>(a); }
 
-            // Делаем все остальные элементы компактнее и удобнее на глобальном уровне для этой секции
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 6));
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 3));
+        void Header(ui::UIWidgets& w, const std::string& name) {
+            w.Separator();
+            w.Text(name, {0.0f, 0.62f, 0.95f, 1.0f});
+        }
 
-            if (ImGui::BeginTabBar("PP_Tabs")) {
-                
-                if (ImGui::BeginTabItem("Lighting & GI")) {
-                    if (UIUtils::BeginPropertyGrid("RT Diagnostics")) {
-                        if (ImGui::Button("FORCE GLOBAL RT REBUILD", ImVec2(-1, 30))) {
-                            context.world->each<MeshComponent>([&](flecs::entity, MeshComponent& mc) {
-                                if (mc.model && !mc.model->storedPositions.empty())
-                                    mc.model->createBLAS(mc.model->storedPositions);
-                            });
-                            context.needsRTRebuild = true;
-                        }
-                        UIUtils::EndPropertyGrid();
-                    }
-                    if (UIUtils::BeginPropertyGrid("SSGI")) {
-                        UIUtils::DrawProperty("Enable SSGI", &renderSettings.enableSSGI);
-                        if (renderSettings.enableSSGI) {
-                            UIUtils::DrawProperty("Ray Count", &renderSettings.ssgiRayCount, 1, 32);
-                            UIUtils::DrawProperty("Step Size", &renderSettings.ssgiStepSize, 0.05f, 2.0f);
-                            UIUtils::DrawProperty("Thickness", &renderSettings.ssgiThickness, 0.01f, 2.0f);
-                            UIUtils::DrawProperty("Blur Range", &renderSettings.blurRange, 1, 10);
-                        }
-                        UIUtils::EndPropertyGrid();
-                    }
-                    if (UIUtils::BeginPropertyGrid("Radiance Cascades (RT GI)")) {
-                        UIUtils::DrawProperty("Enable RT GI", &renderSettings.enableRadianceCascades);
-                        if (renderSettings.enableRadianceCascades) {
-                            UIUtils::DrawProperty("Probe Grid X", &renderSettings.rcProbeGridX, 1, 32);
-                            UIUtils::DrawProperty("Probe Grid Y", &renderSettings.rcProbeGridY, 1, 32);
-                            UIUtils::DrawProperty("Probe Grid Z", &renderSettings.rcProbeGridZ, 1, 32);
-                            UIUtils::DrawProperty("Ray Length", &renderSettings.rcBaseRayLength, 0.1f, 5.0f);
-                            UIUtils::DrawProperty("Octahedron Size", &renderSettings.rcOctaSize, 4, 16);
-                        }
-                        UIUtils::EndPropertyGrid();
-                    }
-                    if (UIUtils::BeginPropertyGrid("Subsurface Scattering (SSSS)")) {
-                        UIUtils::DrawProperty("Enable SSSS", &renderSettings.enableSSSS);
-                        if (renderSettings.enableSSSS) UIUtils::DrawProperty("Scatter Width", &renderSettings.ssssWidth, 0.001f, 0.05f);
-                        UIUtils::EndPropertyGrid();
-                    }
-                    if (UIUtils::BeginPropertyGrid("Stylized Shadows")) {
-                        UIUtils::DrawProperty("Enable Shadow Ramp", &renderSettings.enableShadowRamp);
-                        if (renderSettings.enableShadowRamp) {
-                            UIUtils::DrawPropertyColor("Shadow Color", renderSettings.shadowRampColor1);
-                            UIUtils::DrawPropertyColor("Light-Transition Color", renderSettings.shadowRampColor2);
-                        }
-                        UIUtils::EndPropertyGrid();
-                    }
-                    ImGui::EndTabItem();
-                }
+        void DrawRenderSettings(UIContext& context, ui::UIWidgets& w) {
+            RenderSettings& rs = context.renderSettings;
+            w.Text("Render & Post-Processing Settings", {0.0f, 0.45f, 0.85f, 1.0f});
 
-                if (ImGui::BeginTabItem("Reflections & AO")) {
-                    if (ImGui::CollapsingHeader("Ray Traced Reflections", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::Checkbox("Enable RT Reflections", &renderSettings.enableRTReflections);
-                        if (renderSettings.enableRTReflections) {
-                            ImGui::SliderInt("Max Bounces", &renderSettings.rtMaxBounces, 1, 5);
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("GTAO (Ambient Occlusion)", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::Checkbox("Enable GTAO", &renderSettings.enableSSAO);
-                        if (renderSettings.enableSSAO) {
-                            ImGui::SliderFloat("Radius##ssao", &renderSettings.ssaoRadius, 0.1f, 3.0f);
-                            ImGui::SliderFloat("Bias##ssao", &renderSettings.ssaoBias, 0.001f, 0.2f);
-                            ImGui::SliderFloat("Intensity##ssao", &renderSettings.ssaoIntensity, 0.1f, 10.0f);
-                            ImGui::SliderFloat("Power##ssao", &renderSettings.ssaoPower, 1.0f, 8.0f);
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Contact Shadows (SSCS)")) {
-                        ImGui::Checkbox("Enable SSCS", &renderSettings.enableContactShadows);
-                        if (renderSettings.enableContactShadows) {
-                            ImGui::SliderFloat("Ray Length", &renderSettings.contactShadowLength, 0.01f, 2.0f);
-                            ImGui::SliderInt("Ray Steps", &renderSettings.contactShadowSteps, 4, 128);
-                            ImGui::SliderFloat("Ray Thickness", &renderSettings.contactShadowThickness, 0.01f, 2.0f);
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Screen Space Reflections (SSSR)")) {
-                        ImGui::Checkbox("Enable SSSR", &renderSettings.enableSSR);
-                        if (renderSettings.enableSSR) {
-                            ImGui::SliderFloat("Steps", &renderSettings.ssrSteps, 4.0f, 64.0f, "%.0f");
-                            ImGui::SliderFloat("Thickness", &renderSettings.ssrThickness, 0.1f, 5.0f);
-                        }
-                    }
-                    ImGui::EndTabItem();
-                }
-
-                if (ImGui::BeginTabItem("Environment")) {
-                    if (ImGui::CollapsingHeader("Procedural Sky", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::ColorEdit3("Zenith Color", renderSettings.skyZenithColor);
-                        ImGui::ColorEdit3("Horizon Color", renderSettings.skyHorizonColor);
-                        ImGui::SliderFloat("Sun Size", &renderSettings.sunSize, 0.001f, 0.1f);
-                        ImGui::SliderFloat("Sun Glow", &renderSettings.sunGlow, 0.0f, 10.0f);
-                        ImGui::SliderFloat("Sun Glow Size", &renderSettings.sunGlowSize, 0.01f, 1.0f);
-                    }
-                    if (ImGui::CollapsingHeader("Atmospheric Fog", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::Checkbox("Enable Fog", &renderSettings.enableFog);
-                        if (renderSettings.enableFog) {
-                            ImGui::ColorEdit3("Fog Color", renderSettings.fogColor);
-                            ImGui::ColorEdit3("Sun Inscatter Color", renderSettings.inscatterColor);
-                            ImGui::SliderFloat("Density", &renderSettings.fogDensity, 0.001f, 0.2f);
-                            ImGui::SliderFloat("Height Falloff", &renderSettings.fogHeightFalloff, 0.01f, 1.0f);
-                            ImGui::SliderFloat("Base Height", &renderSettings.fogBaseHeight, -50.0f, 50.0f);
-                            ImGui::SliderFloat("Sun Inscatter Power", &renderSettings.inscatterPower, 1.0f, 32.0f);
-                            ImGui::SliderFloat("Sun Inscatter Int", &renderSettings.inscatterIntensity, 0.0f, 5.0f);
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Lens Weather & Condensation")) {
-                        ImGui::Checkbox("Enable Rain Weather", &renderSettings.enableWeather);
-                        if (renderSettings.enableWeather) {
-                            ImGui::SliderFloat("Intensity", &renderSettings.weatherIntensity, 0.1f, 3.0f);
-                            ImGui::SliderFloat("Speed", &renderSettings.weatherSpeed, 0.1f, 5.0f);
-                            ImGui::SliderFloat("Size", &renderSettings.weatherSize, 5.0f, 50.0f);
-                            ImGui::SliderFloat("Density", &renderSettings.weatherDensity, 0.1f, 0.99f);
-                            ImGui::SliderFloat("Distortion", &renderSettings.weatherDistortion, 0.01f, 0.5f);
-                        }
-                        ImGui::Checkbox("Enable Water Drops", &renderSettings.enableWaterDrops);
-                        if (renderSettings.enableWaterDrops) {
-                            ImGui::SliderFloat("Drop Refraction", &renderSettings.dropRefraction, 0.01f, 2.0f);
-                        }
-                        ImGui::Checkbox("Lens Condensation / Humidity", &renderSettings.enableCondensation);
-                        if (renderSettings.enableCondensation) ImGui::SliderFloat("Condensation Amount", &renderSettings.condensationAmount, 0.0f, 1.0f);
-                    }
-                    ImGui::EndTabItem();
-                }
-
-                if (ImGui::BeginTabItem("Camera & Lens")) {
-                    if (ImGui::CollapsingHeader("Exposure", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::Checkbox("Auto Exposure", &renderSettings.autoExposure);
-                        if (renderSettings.autoExposure) {
-                            ImGui::SliderFloat("Compensation", &renderSettings.exposureCompensation, 0.1f, 5.0f);
-                            ImGui::SliderFloat("Min Brightness", &renderSettings.minBrightness, 0.01f, 2.0f);
-                            ImGui::SliderFloat("Max Brightness", &renderSettings.maxBrightness, 1.0f, 10.0f);
-                        } else {
-                            ImGui::SliderFloat("Manual Exp", &renderSettings.manualExposure, 0.1f, 10.0f);
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Depth of Field", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::Checkbox("Enable DoF", &renderSettings.enableDoF);
-                        if (renderSettings.enableDoF) {
-                            ImGui::Checkbox("Auto-Focus", &renderSettings.autoFocus);
-                            if (!renderSettings.autoFocus) ImGui::SliderFloat("Focus Dist", &renderSettings.focusDistance, 0.1f, 100.0f);
-                            ImGui::SliderFloat("Focus Range", &renderSettings.focusRange, 0.1f, 50.0f);
-                            ImGui::SliderFloat("Bokeh Size", &renderSettings.bokehSize, 0.0f, 10.0f);
-                            ImGui::Combo("Bokeh Shape", &renderSettings.bokehShape, "Circle\0Hexagon\0Octagon\0Triangle\0");
-                            if (renderSettings.bokehShape > 0) {
-                                ImGui::SliderFloat("Bokeh Rotation", &renderSettings.bokehAngle, 0.0f, 360.0f);
-                            }
-                            ImGui::Checkbox("Lens Breathing", &renderSettings.enableLensBreathing);
-                            if (renderSettings.enableLensBreathing) ImGui::SliderFloat("Breathing Scale", &renderSettings.lensBreathingScale, 0.1f, 5.0f);
-                        }
-                        ImGui::Checkbox("Enable Tilt-Shift (Miniature Effect)", &renderSettings.enableTiltShift);
-                        if (renderSettings.enableTiltShift) {
-                            ImGui::Combo("Tilt-Shift Mode", &renderSettings.tiltShiftMode, "Top & Bottom\0Left & Right\0Radial (All Sides)\0");
-                            ImGui::SliderFloat("Tilt Amount", &renderSettings.tiltShiftAmount, 1.0f, 10.0f);
-                            ImGui::SliderFloat("Tilt Falloff", &renderSettings.tiltShiftFalloff, 0.0f, 1.0f);
-                        }
-                        ImGui::Checkbox("Dolly Zoom (Vertigo)", &renderSettings.enableDollyZoom);
-                        if (renderSettings.enableDollyZoom) {
-                            ImGui::Checkbox("Invert Direction", &renderSettings.dollyZoomInvert);
-                            ImGui::SliderFloat("Zoom Speed", &renderSettings.dollyZoomSpeed, 0.1f, 5.0f);
-                            ImGui::SliderFloat("Zoom Intensity", &renderSettings.dollyZoomIntensity, 5.0f, 50.0f);
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Bloom & Lens Flares", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::Checkbox("Enable Bloom", &renderSettings.enableBloom);
-                        if (renderSettings.enableBloom) {
-                            ImGui::SliderFloat("Threshold##bloom", &renderSettings.bloomThreshold, 0.0f, 5.0f);
-                            ImGui::SliderFloat("Intensity##bloom", &renderSettings.bloomIntensity, 0.0f, 5.0f);
-                            ImGui::SliderInt("Blur Iterations", &renderSettings.bloomBlurIterations, 1, 15);
-                        }
-                        ImGui::Separator();
-                        ImGui::Checkbox("Enable Lens Flares", &renderSettings.enableLensFlares);
-                        if (renderSettings.enableLensFlares) {
-                            ImGui::SliderFloat("Flare Intensity", &renderSettings.flareIntensity, 0.0f, 5.0f);
-                            ImGui::SliderFloat("Ghost Dispersal", &renderSettings.ghostDispersal, 0.01f, 1.0f);
-                            ImGui::SliderInt("Ghosts Count", &renderSettings.ghosts, 1, 10);
-                            ImGui::SliderFloat("Halo Width", &renderSettings.flareHaloWidth, 0.0f, 1.0f);
-                            ImGui::SliderFloat("Chromatic Dispersal", &renderSettings.flareChromaticDir, 0.0f, 0.1f);
-                            ImGui::Checkbox("Anamorphic Blue Flares", &renderSettings.enableAnamorphic);
-                        }
-                        ImGui::Checkbox("Enable Star Filter / Cross Screen", &renderSettings.enableStarFilter);
-                        if (renderSettings.enableStarFilter) {
-                            ImGui::SliderFloat("Star Threshold", &renderSettings.starFilterThreshold, 0.5f, 10.0f);
-                            ImGui::SliderFloat("Star Length", &renderSettings.starFilterLength, 0.1f, 5.0f);
-                        }
-                    }
-                    ImGui::EndTabItem();
-                }
-
-                if (ImGui::BeginTabItem("Color Grading")) {
-                    if (ImGui::CollapsingHeader("Color Corrections", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        const char* tonemappers[] = { "Linear", "Reinhard", "ACES Film" };
-                        ImGui::Combo("Tonemapper", &renderSettings.tonemapper, tonemappers, IM_COUNTOF(tonemappers));
-                        ImGui::Separator();
-                        ImGui::SliderFloat("Contrast", &renderSettings.contrast, 0.5f, 2.0f);
-                        ImGui::SliderFloat("Saturation", &renderSettings.saturation, 0.0f, 2.0f);
-                        ImGui::SliderFloat("Color Temp (K)", &renderSettings.temperature, 2000.0f, 12000.0f);
-                        ImGui::SliderFloat("Gamma", &renderSettings.gamma, 1.0f, 2.8f);
-                    }
-                    if (ImGui::CollapsingHeader("ASC CDL Color Grading", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        auto drawCDL = [](const char* label, float* lift, float* gamma, float* gain, float* offset) {
-                            if (ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_DefaultOpen)) {
-                                ImGui::DragFloat4("Lift", lift, 0.01f);
-                                ImGui::DragFloat4("Gamma", gamma, 0.01f);
-                                ImGui::DragFloat4("Gain", gain, 0.01f);
-                                ImGui::DragFloat4("Offset", offset, 0.01f);
-                                ImGui::TreePop();
-                            }
-                        };
-                        drawCDL("Global", renderSettings.cgGlobalLift, renderSettings.cgGlobalGamma, renderSettings.cgGlobalGain, renderSettings.cgGlobalOffset);
-                        drawCDL("Shadows", renderSettings.cgShadowsLift, renderSettings.cgShadowsGamma, renderSettings.cgShadowsGain, renderSettings.cgShadowsOffset);
-                        drawCDL("Midtones", renderSettings.cgMidtonesLift, renderSettings.cgMidtonesGamma, renderSettings.cgMidtonesGain, renderSettings.cgMidtonesOffset);
-                        drawCDL("Highlights", renderSettings.cgHighlightsLift, renderSettings.cgHighlightsGamma, renderSettings.cgHighlightsGain, renderSettings.cgHighlightsOffset);
-                        
-                        if (ImGui::TreeNodeEx("Legacy Tints", ImGuiTreeNodeFlags_DefaultOpen)) {
-                            ImGui::ColorEdit3("Shadows Tint", renderSettings.cgShadows);
-                            ImGui::ColorEdit3("Midtones Tint", renderSettings.cgMidtones);
-                            ImGui::ColorEdit3("Highlights Tint", renderSettings.cgHighlights);
-                            ImGui::TreePop();
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("RGB Mixer", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::ColorEdit3("Red Channel", renderSettings.cgRgbMixerRed, ImGuiColorEditFlags_Float);
-                        ImGui::ColorEdit3("Green Channel", renderSettings.cgRgbMixerGreen, ImGuiColorEditFlags_Float);
-                        ImGui::ColorEdit3("Blue Channel", renderSettings.cgRgbMixerBlue, ImGuiColorEditFlags_Float);
-                    }
-                    if (ImGui::CollapsingHeader("Palette & Compression")) {
-                        ImGui::Checkbox("Enable Color Compression", &renderSettings.enableColorComp);
-                        if (renderSettings.enableColorComp) {
-                            ImGui::SliderFloat("Color Levels", &renderSettings.colorCompLevels, 2.f, 256.f, "%.0f");
-                        }
-                        ImGui::Checkbox("Selective Color (Splash)", &renderSettings.enableColorSplash);
-                        if (renderSettings.enableColorSplash) {
-                            ImGui::SliderFloat("Target Hue", &renderSettings.splashHue, 0.0f, 1.0f);
-                            ImGui::SliderFloat("Hue Range", &renderSettings.splashRange, 0.01f, 0.5f);
-                        }
-                        ImGui::Text("Standard 3D LUT (256x16):"); ImGui::SameLine();
-                        std::string palName = renderSettings.palettePath.empty() ? "None" : std::filesystem::path(renderSettings.palettePath).filename().string();
-                        ImGui::Button((palName + "##palTex").c_str(), ImVec2(-1, 0));
-                        if (ImGui::BeginDragDropTarget()) {
-                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                                const char* path = (const char*)payload->Data; std::filesystem::path p(path);
-                                if (p.extension() == ".png" || p.extension() == ".jpg" || p.extension() == ".jpeg") {
-                                    if(renderSettings.paletteTex) context.safeDeleteQueue.push_back(renderSettings.paletteTex);
-                                    renderSettings.palettePath = p.string();
-                                    renderSettings.paletteTex = BurnhopeTexture::createDataTextureFromFile(*context.device, renderSettings.palettePath);
-                                    context.needsRebuild = true;
-                                }
-                            } ImGui::EndDragDropTarget();
-                        }
-                    }
-                    ImGui::EndTabItem();
-                }
-
-                if (ImGui::BeginTabItem("Filters & FX")) {
-                    if (ImGui::CollapsingHeader("Blurs", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        const char* blurModes[] = { "Off", "Box Blur", "Gaussian Blur", "Radial/Zoom Blur", "Mosaic Blur" };
-                        ImGui::Combo("Blur Mode", &renderSettings.blurMode, blurModes, 5);
-                        if (renderSettings.blurMode != 0) {
-                            ImGui::SliderFloat("Blur Strength", &renderSettings.blurStrength, 0.0f, 1.0f);
-                            ImGui::SliderFloat("Blur Radius/Size", &renderSettings.blurRadius, 1.0f, 30.0f);
-                            if (renderSettings.blurMode == 3) {
-                                ImGui::SliderFloat2("Radial Center", renderSettings.radialBlurCenter, 0.0f, 1.0f);
-                            }
-                        }
-                    }
-                    
-                    if (ImGui::CollapsingHeader("Lens Distortion & Dirt")) {
-                        ImGui::Checkbox("Enable Lens Distortion", &renderSettings.enableLensDistortion);
-                        if (renderSettings.enableLensDistortion) ImGui::SliderFloat("Distortion Strength", &renderSettings.lensDistortionStrength, -1.0f, 1.0f);
-                        ImGui::Checkbox("Enable Lens Dirt", &renderSettings.enableLensDirt);
-                        if (renderSettings.enableLensDirt) {
-                            ImGui::SliderFloat("Dirt Intensity", &renderSettings.lensDirtIntensity, 0.0f, 5.0f);
-                            ImGui::Text("Dirt Texture:"); ImGui::SameLine();
-                            std::string dirtName = renderSettings.lensDirtPath.empty() ? "Default" : std::filesystem::path(renderSettings.lensDirtPath).filename().string();
-                            ImGui::Button((dirtName + "##dirtTex").c_str(), ImVec2(-1, 0));
-                            if (ImGui::BeginDragDropTarget()) {
-                                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                                    const char* path = (const char*)payload->Data; std::filesystem::path p(path);
-                                    if (p.extension() == ".png" || p.extension() == ".jpg" || p.extension() == ".jpeg") {
-                                        if(renderSettings.lensDirtTex) context.safeDeleteQueue.push_back(renderSettings.lensDirtTex);
-                                        renderSettings.lensDirtPath = p.string();
-                                        renderSettings.lensDirtTex = BurnhopeTexture::createDataTextureFromFile(*context.device, renderSettings.lensDirtPath);
-                                        context.needsRebuild = true;
-                                    }
-                                } ImGui::EndDragDropTarget();
-                            }
-                        }
-                    }
-                    
-                    if (ImGui::CollapsingHeader("Retro Effects (VHS/CRT/Glitch)", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::Checkbox("Enable Retro/CRT", &renderSettings.enableRetroCRT);
-                        if (renderSettings.enableRetroCRT) {
-                            ImGui::SliderFloat("Scanlines", &renderSettings.crtScanlines, 0.0f, 2.0f);
-                            ImGui::SliderFloat("Glitch", &renderSettings.glitchIntensity, 0.0f, 3.0f);
-                            ImGui::SliderFloat("VHS Noise", &renderSettings.vhsNoise, 0.0f, 2.0f);
-                            ImGui::SliderInt("Pixelation", &renderSettings.pixelation, 1, 16);
-                            ImGui::Checkbox("PS1 Vertex Jitter (Wobble)", &renderSettings.enableVertexJitter);
-                            if (renderSettings.enableVertexJitter) {
-                                ImGui::SliderFloat("Wobble Resolution", &renderSettings.vertexJitterResolution, 64.0f, 512.0f, "%.0f");
-                            }
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Film Damage & Overlays", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::Checkbox("Enable Film Damage", &renderSettings.enableFilmDamage);
-                        if (renderSettings.enableFilmDamage) {
-                            ImGui::SliderFloat("Yellowing Intensity", &renderSettings.filmDamageIntensity, 0.0f, 1.0f);
-                            ImGui::SliderFloat("Scratches", &renderSettings.filmDamageScratches, 0.0f, 1.0f);
-                        }
-                        ImGui::Separator();
-                        ImGui::Checkbox("Film Grain", &renderSettings.enableFilmGrain);
-                        if (renderSettings.enableFilmGrain) ImGui::SliderFloat("Grain Strength", &renderSettings.grainIntensity, 0.0f, 0.2f);
-                        ImGui::Checkbox("Vignette", &renderSettings.enableVignette);
-                        if (renderSettings.enableVignette) ImGui::SliderFloat("Vignette Intensity", &renderSettings.vignetteIntensity, 0.1f, 2.0f);
-                        ImGui::Checkbox("Chromatic Aberration", &renderSettings.enableChromaticAberration);
-                        if (renderSettings.enableChromaticAberration) ImGui::SliderFloat("CA Intensity", &renderSettings.caIntensity, 0.001f, 0.55f);
-                        ImGui::Checkbox("Film Light Leaks", &renderSettings.enableLightLeaks);
-                        if (renderSettings.enableLightLeaks) ImGui::SliderFloat("Leaks Intensity", &renderSettings.lightLeakIntensity, 0.1f, 3.0f);
-                    }
-                    if (ImGui::CollapsingHeader("Warping & Distortion")) {
-                        ImGui::Checkbox("Enable Texture Warping", &renderSettings.enableTexWarp);
-                        if (renderSettings.enableTexWarp) {
-                            ImGui::SliderFloat("Warp Strength", &renderSettings.texWarpStrength, 0.f, 0.1f);
-                            ImGui::SliderFloat("Warp Speed", &renderSettings.texWarpSpeed, 0.f, 5.f);
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Edge Detection (Neon/Line Art)")) {
-                        ImGui::Checkbox("Enable Edge Detect", &renderSettings.enableEdgeDetect);
-                        if (renderSettings.enableEdgeDetect) {
-                            ImGui::SliderFloat("Width", &renderSettings.edgeWidth, 0.1f, 5.0f);
-                            ImGui::SliderFloat("Brightness", &renderSettings.edgeBrightness, 0.1f, 10.0f);
-                            ImGui::SliderFloat("Gamma", &renderSettings.edgeGamma, 0.1f, 3.0f);
-                            ImGui::SliderFloat("Edge Blur", &renderSettings.edgeBlur, 0.0f, 5.0f);
-                            ImGui::Combo("Color Mode", &renderSettings.edgeColorMode, "RGB Edges\0Custom Color\0");
-                            if (renderSettings.edgeColorMode == 1) ImGui::ColorEdit3("Custom Color", renderSettings.edgeCustomColor);
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Emboss")) {
-                        ImGui::Checkbox("Enable Emboss", &renderSettings.enableEmboss);
-                        if (renderSettings.enableEmboss) {
-                            ImGui::SliderFloat("Strength##emboss", &renderSettings.embossStrength, 0.1f, 10.0f);
-                            ImGui::SliderFloat("Angle", &renderSettings.embossAngle, 0.0f, 360.0f);
-                            ImGui::Combo("Style", &renderSettings.embossStyle, "Relief (Grey)\0Emboss Over (Color)\0");
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Pencil Sketch")) {
-                        ImGui::Checkbox("Enable Pencil Sketch", &renderSettings.enableSketch);
-                        if (renderSettings.enableSketch) {
-                            ImGui::SliderFloat("Stroke Strength", &renderSettings.sketchStrokeStrength, 0.0f, 1.0f);
-                            ImGui::SliderFloat("Stroke Length", &renderSettings.sketchStrokeLength, 0.1f, 10.0f);
-                            ImGui::SliderFloat("Threshold", &renderSettings.sketchThreshold, 0.0f, 1.0f);
-                            ImGui::SliderFloat("Shadow Level", &renderSettings.sketchShadowLevel, 0.1f, 1.0f);
-                            ImGui::SliderFloat("Shadows Weight", &renderSettings.sketchShadowsWeight, 0.0f, 2.0f);
-                            ImGui::SliderFloat("Midtones Weight", &renderSettings.sketchMidtonesWeight, 0.0f, 2.0f);
-                            ImGui::SliderFloat("Highlights Weight", &renderSettings.sketchHighlightsWeight, 0.0f, 2.0f);
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Halftone / Cross-Hatching")) {
-                        ImGui::Checkbox("Enable Halftone", &renderSettings.enableHalftone);
-                        if (renderSettings.enableHalftone) {
-                            ImGui::SliderFloat("Scale", &renderSettings.halftoneScale, 0.1f, 10.0f);
-                            ImGui::SliderFloat("Contrast", &renderSettings.halftoneContrast, 0.1f, 5.0f);
-                            ImGui::Text("Pattern Texture:"); ImGui::SameLine();
-                            std::string halfName = renderSettings.halftonePath.empty() ? "Default" : std::filesystem::path(renderSettings.halftonePath).filename().string();
-                            ImGui::Button((halfName + "##halfTex").c_str(), ImVec2(-1, 0));
-                            if (ImGui::BeginDragDropTarget()) {
-                                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                                    const char* path = (const char*)payload->Data; std::filesystem::path p(path);
-                                    if (p.extension() == ".png" || p.extension() == ".jpg" || p.extension() == ".jpeg") {
-                                        if(renderSettings.halftoneTex) context.safeDeleteQueue.push_back(renderSettings.halftoneTex);
-                                        renderSettings.halftonePath = p.string();
-                                        renderSettings.halftoneTex = BurnhopeTexture::createDataTextureFromFile(*context.device, renderSettings.halftonePath);
-                                        context.needsRebuild = true;
-                                    }
-                                } ImGui::EndDragDropTarget();
-                            }
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Screen Space Refraction")) {
-                        ImGui::Checkbox("Enable Screen Refraction", &renderSettings.enableScreenRefraction);
-                        if (renderSettings.enableScreenRefraction) {
-                            ImGui::SliderFloat("Refraction Strength", &renderSettings.refractionStrength, 0.001f, 0.2f);
-                            ImGui::SliderFloat("Refraction Speed", &renderSettings.refractionSpeed, 0.0f, 5.0f);
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Outline (Edge Detection)")) {
-                        ImGui::Checkbox("Enable Outline", &renderSettings.enableOutline);
-                        if (renderSettings.enableOutline) {
-                            const char* outlineModes[] = { "Depth + Normal (Both)", "Silhouette Only (Depth)", "Inner Details Only (Normal)" };
-                            ImGui::Combo("Outline Mode", &renderSettings.outlineMode, outlineModes, 3);
-                            ImGui::ColorEdit3("Outline Color", renderSettings.outlineColor);
-                            ImGui::SliderFloat("Thickness", &renderSettings.outlineThickness, 0.5f, 5.0f);
-                            ImGui::SliderFloat("Depth Threshold", &renderSettings.outlineThresholdDepth, 0.001f, 0.5f);
-                            ImGui::SliderFloat("Normal Threshold", &renderSettings.outlineThresholdNormal, 0.01f, 1.0f);
-                            ImGui::Checkbox("Enable Outline Jitter", &renderSettings.enableOutlineJitter);
-                            if (renderSettings.enableOutlineJitter) {
-                                ImGui::SliderFloat("Jitter FPS", &renderSettings.outlineJitterSpeed, 0.0f, 30.0f);
-                                ImGui::SliderFloat("Jitter Strength", &renderSettings.outlineJitterStrength, 0.1f, 5.0f);
-                            }
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Stylized & Painterly")) {
-                        ImGui::Checkbox("Enable Cel-Shading (Toon)", &renderSettings.enableCelShading);
-                        if (renderSettings.enableCelShading) ImGui::SliderFloat("Cel Levels", &renderSettings.celShadingLevels, 2.0f, 16.0f, "%.0f");
-                        ImGui::Checkbox("Enable Kuwahara (Oil Paint)", &renderSettings.enableKuwahara);
-                        if (renderSettings.enableKuwahara) ImGui::SliderInt("Brush Radius", &renderSettings.kuwaharaRadius, 1, 8);
-                        ImGui::Checkbox("Enable Posterization (Palette)", &renderSettings.enablePosterization);
-                        if (renderSettings.enablePosterization) ImGui::SliderFloat("Color Levels", &renderSettings.posterizationLevels, 2.0f, 64.0f, "%.0f");
-                        ImGui::Checkbox("Enable Watercolor Filter", &renderSettings.enableWatercolor);
-                        if (renderSettings.enableWatercolor) ImGui::SliderFloat("Watercolor Radius", &renderSettings.watercolorRadius, 1.0f, 8.0f, "%.0f");
-                        ImGui::Checkbox("Enable Pointillism", &renderSettings.enablePointillism);
-                        if (renderSettings.enablePointillism) {
-                            ImGui::SliderFloat("Point Size", &renderSettings.pointillismSize, 1.0f, 16.0f);
-                            ImGui::SliderFloat("Point Density", &renderSettings.pointillismDensity, 0.1f, 2.0f);
-                        }
-                        ImGui::Checkbox("Enable Manga Screentones", &renderSettings.enableScreentones);
-                        if (renderSettings.enableScreentones) {
-                            ImGui::SliderFloat("Screentone Size", &renderSettings.screentoneSize, 1.0f, 16.0f);
-                            ImGui::SliderFloat("Screentone Darkness", &renderSettings.screentoneDarkness, 0.1f, 3.0f);
-                        }
-                        ImGui::Checkbox("Enable Voronoi Stained Glass", &renderSettings.enableVoronoi);
-                        if (renderSettings.enableVoronoi) ImGui::SliderFloat("Voronoi Scale", &renderSettings.voronoiScale, 5.0f, 100.0f);
-                        ImGui::SliderFloat("Object-Space Hatching Scale", &renderSettings.objHatchingScale, 0.0f, 50.0f);
-                        ImGui::Separator();
-                        ImGui::Checkbox("Artistic Contour (Rim Light)", &renderSettings.enableRimLight);
-                        if (renderSettings.enableRimLight) {
-                            ImGui::ColorEdit3("Rim Color", renderSettings.rimColor);
-                            ImGui::SliderFloat("Rim Power (Sharpness)", &renderSettings.rimPower, 0.1f, 16.0f);
-                            ImGui::SliderFloat("Rim Thickness", &renderSettings.rimThickness, 0.01f, 1.0f);
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Experimental & Glitch FX", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::Checkbox("Game Boy / 8-bit Palette", &renderSettings.enableGameBoy);
-                        if (renderSettings.enableGameBoy) {
-                            ImGui::ColorEdit3("Color 1 (Shadow)", renderSettings.gbColor1);
-                            ImGui::ColorEdit3("Color 2", renderSettings.gbColor2);
-                            ImGui::ColorEdit3("Color 3", renderSettings.gbColor3);
-                            ImGui::ColorEdit3("Color 4 (Highlight)", renderSettings.gbColor4);
-                        }
-                        ImGui::Checkbox("JPEG/MPEG Compression Artifacts", &renderSettings.enableJpegArtifacts);
-                        if (renderSettings.enableJpegArtifacts) {
-                            ImGui::SliderFloat("Block Size", &renderSettings.jpegBlockSize, 2.0f, 32.0f, "%.0f");
-                            ImGui::SliderFloat("Quality", &renderSettings.jpegQuality, 1.0f, 32.0f, "%.0f");
-                        }
-                        ImGui::Checkbox("Screen Tear / Glitch Slice", &renderSettings.enableScreenTear);
-                        if (renderSettings.enableScreenTear) {
-                            ImGui::SliderFloat("Tear Frequency", &renderSettings.screenTearFrequency, 0.1f, 50.0f);
-                            ImGui::SliderFloat("Tear Intensity", &renderSettings.screenTearIntensity, 0.01f, 0.5f);
-                        }
-                        ImGui::Checkbox("Speed Lines (Anime)", &renderSettings.enableSpeedLines);
-                        if (renderSettings.enableSpeedLines) ImGui::SliderFloat("Speed Intensity", &renderSettings.speedLinesIntensity, 0.1f, 5.0f);
-                        ImGui::Checkbox("Heat Shimmer (Mirage)", &renderSettings.enableHeatShimmer);
-                        if (renderSettings.enableHeatShimmer) ImGui::SliderFloat("Heat Intensity", &renderSettings.heatIntensity, 0.001f, 0.1f, "%.3f");
-                        
-                        ImGui::Checkbox("Vector Field Flow (Predator Camo)", &renderSettings.enableVectorFlow);
-                        if (renderSettings.enableVectorFlow) {
-                            ImGui::SliderFloat("Flow Strength", &renderSettings.vectorFlowStrength, 0.01f, 0.5f);
-                            ImGui::SliderFloat("Texture Scale", &renderSettings.vectorFieldScale, 0.1f, 10.0f);
-                            ImGui::Text("Vector Texture:"); ImGui::SameLine();
-                            std::string vecName = renderSettings.vectorTexPath.empty() ? "None" : std::filesystem::path(renderSettings.vectorTexPath).filename().string();
-                            ImGui::Button((vecName + "##vecTex").c_str(), ImVec2(-1, 0));
-                            if (ImGui::BeginDragDropTarget()) {
-                                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                                    const char* path = (const char*)payload->Data; std::filesystem::path p(path);
-                                    if (p.extension() == ".png" || p.extension() == ".jpg" || p.extension() == ".jpeg") {
-                                        renderSettings.vectorTexPath = p.string();
-                                        renderSettings.vectorTex = BurnhopeTexture::createDataTextureFromFile(*context.device, renderSettings.vectorTexPath);
-                                        context.needsRebuild = true;
-                                    }
-                                } ImGui::EndDragDropTarget();
-                            }
-                        }
-
-                        ImGui::Checkbox("Temporal Echo (Psychedelic)", &renderSettings.enableTemporalEcho);
-                        if (renderSettings.enableTemporalEcho) ImGui::SliderFloat("Echo Fade Speed", &renderSettings.echoFade, 0.01f, 0.5f);
-                        
-                        ImGui::Checkbox("Screen-Space Canvas", &renderSettings.enableCanvas);
-                        if (renderSettings.enableCanvas) {
-                            ImGui::SliderFloat("Canvas Bump", &renderSettings.canvasIntensity, 0.1f, 5.0f);
-                            // Texture Drag&Drop for Canvas and Caustics similar to Dither... (Опущено для краткости, добавь кнопки загрузки как у Dither)
-                        }
-                        ImGui::Checkbox("Ink Bleed", &renderSettings.enableInkBleed);
-                        if (renderSettings.enableInkBleed) ImGui::SliderFloat("Ink Radius", &renderSettings.inkRadius, 1.0f, 10.0f);
-                        
-                        ImGui::Checkbox("ASCII Art", &renderSettings.enableAscii);
-                        if (renderSettings.enableAscii) {
-                            ImGui::Combo("ASCII Pattern", &renderSettings.asciiMode, "Standard Chars\0Blocks\0Binary Matrix\0");
-                            ImGui::SliderFloat("ASCII Scale", &renderSettings.asciiScale, 2.0f, 32.0f, "%.0f");
-                        }
-                        ImGui::Checkbox("Optical Soup (Edge Bleed)", &renderSettings.enableOpticalSoup);
-                        if (renderSettings.enableOpticalSoup) ImGui::SliderFloat("Bleed Radius", &renderSettings.opticalSoupRadius, 1.0f, 20.0f);
-                        ImGui::Checkbox("Pixel Sorting", &renderSettings.enablePixelSort);
-                        if (renderSettings.enablePixelSort) {
-                            ImGui::SliderFloat("Sort Luma Threshold", &renderSettings.pixelSortThreshold, 0.0f, 1.0f);
-                            ImGui::SliderFloat("Sort Angle", &renderSettings.pixelSortAngle, 0.0f, 360.0f);
-                            ImGui::SliderFloat("Sort Length", &renderSettings.pixelSortLength, 0.01f, 1.0f);
-                            ImGui::SliderFloat("Sort Speed", &renderSettings.pixelSortTime, 0.0f, 5.0f);
-                        }
-                        ImGui::Checkbox("Datamoshing", &renderSettings.enableDatamosh);
-                        if (renderSettings.enableDatamosh) ImGui::SliderFloat("Mosh Tolerance", &renderSettings.datamoshThreshold, 0.0001f, 0.1f, "%.4f");
-                        ImGui::Checkbox("Impact Frame", &renderSettings.enableImpactFrame);
-                        if (renderSettings.enableImpactFrame) {
-                            ImGui::SliderFloat("Impact Lines", &renderSettings.impactSize, 1.0f, 50.0f);
-                            ImGui::SliderFloat("Impact Power", &renderSettings.impactPower, 0.1f, 5.0f);
-                            ImGui::SliderFloat("Impact Speed", &renderSettings.impactTime, 1.0f, 50.0f);
-                        }
-                        ImGui::Checkbox("Smear / Ribbon Trails", &renderSettings.enableSmearTrails);
-                        if (renderSettings.enableSmearTrails) {
-                            ImGui::SliderFloat("Smear Length", &renderSettings.smearLength, 0.1f, 0.99f);
-                            ImGui::SliderFloat("Smear Luma Threshold", &renderSettings.smearThreshold, 0.0f, 1.0f);
-                        }
-                        ImGui::Separator();
-                        ImGui::TextColored(ImVec4(1, 0.8f, 0.2f, 1.0f), "World / Geometry FX");
-                        ImGui::Checkbox("World Curvature (Inception)", &renderSettings.enableWorldCurve);
-                        if (renderSettings.enableWorldCurve) ImGui::SliderFloat("Curve Amount", &renderSettings.curveAmount, -0.05f, 0.05f, "%.4f");
-                        ImGui::Checkbox("Environment Breathing", &renderSettings.enableBreathing);
-                        if (renderSettings.enableBreathing) {
-                            ImGui::SliderFloat("Breath Amplitude", &renderSettings.breathAmplitude, 0.01f, 1.0f);
-                            ImGui::SliderFloat("Breath Speed", &renderSettings.breathSpeed, 0.1f, 5.0f);
-                        }
-                        ImGui::Checkbox("Gravitational Lensing (Black Hole)", &renderSettings.enableGravityLensing);
-                        if (renderSettings.enableGravityLensing) ImGui::SliderFloat("Mass", &renderSettings.gravityMass, 0.01f, 1.0f);
-                        ImGui::Checkbox("Micro-facet Glitter", &renderSettings.enableGlitter);
-                        if (renderSettings.enableGlitter) ImGui::SliderFloat("Glitter Threshold", &renderSettings.glitterThreshold, 0.5f, 0.99f);
-                        ImGui::Checkbox("Caustics", &renderSettings.enableCaustics);
-                        if (renderSettings.enableCaustics) {
-                            ImGui::SliderFloat("Caustics Speed", &renderSettings.causticsSpeed, 0.1f, 5.0f);
-                            ImGui::SliderFloat("Caustics Scale", &renderSettings.causticsScale, 1.0f, 50.0f);
-                            ImGui::SliderFloat("Caustics Strength", &renderSettings.causticsStrength, 0.1f, 5.0f);
-                            ImGui::Text("Caustics Texture:"); ImGui::SameLine();
-                            std::string cstName = renderSettings.causticsTexPath.empty() ? "Procedural" : std::filesystem::path(renderSettings.causticsTexPath).filename().string();
-                            ImGui::Button((cstName + "##cstTex").c_str(), ImVec2(-1, 0));
-                            if (ImGui::BeginDragDropTarget()) {
-                                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                                    const char* path = (const char*)payload->Data; std::filesystem::path p(path);
-                                    if (p.extension() == ".png" || p.extension() == ".jpg" || p.extension() == ".jpeg") {
-                                        renderSettings.causticsTexPath = p.string();
-                                        renderSettings.causticsTex = BurnhopeTexture::createDataTextureFromFile(*context.device, renderSettings.causticsTexPath);
-                                        context.needsRebuild = true;
-                                    }
-                                } ImGui::EndDragDropTarget();
-                            }
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Color FX & Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::Checkbox("Invert Colors", &renderSettings.enableColorInvert);
-                        ImGui::Checkbox("False Color (Luma)", &renderSettings.enableFalseColor);
-                        ImGui::Checkbox("Depth View", &renderSettings.enableDepthView);
-                    }
-                    ImGui::EndTabItem();
-                }
-                
-                if (ImGui::BeginTabItem("Optimization")) {
-                    if (ImGui::CollapsingHeader("Compute Adaptive Shading (VRS)", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        const char* vrsModes[] = { "Off (Native Quality)", "Aggressive (Skip dark areas)" };
-                        ImGui::Combo("Adaptive Shading", &renderSettings.vrsMode, vrsModes, 2);
-                        ImGui::TextDisabled("Software-based VRS. Dynamically skips heavy PBR lighting in deep shadows to boost FPS without pixelation.");
-                    }
-                    if (ImGui::CollapsingHeader("Anisotropic Filtering", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::SliderFloat("Anisotropy", &BurnhopeTexture::GlobalAnisotropy, 1.0f, 16.0f, "%.0fx");
-                        if (ImGui::IsItemDeactivatedAfterEdit() && !context.currentScenePath.empty()) context.pendingSceneLoadPath = context.currentScenePath;
-                        if (context.currentScenePath.empty()) ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "Save scene first to apply!");
-                    }
-                    if (ImGui::CollapsingHeader("Anti-Aliasing", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::Checkbox("Enable TAA", &renderSettings.enableTAA);
-                        if (renderSettings.enableTAA) ImGui::SliderFloat("TAA Blend Factor", &renderSettings.taaBlendFactor, 0.01f, 0.5f);
-                        ImGui::Checkbox("Enable CAS (Sharpen)", &renderSettings.enableCAS);
-                        if (renderSettings.enableCAS) ImGui::SliderFloat("CAS Sharpness", &renderSettings.casSharpness, 0.0f, 1.0f);
-                        ImGui::Checkbox("Enable CMAA (Morphological)", &renderSettings.enableCMAA);
-                    }
-                    if (ImGui::CollapsingHeader("Dithering", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::Checkbox("Enable Dithering", &renderSettings.enableDithering);
-                        if (renderSettings.enableDithering) {
-                            ImGui::Combo("Mode", &renderSettings.ditherMode, "Classic (Noise/Bayer)\0Custom Palette (Shadow/Mid/High)\0Custom Pattern Texture\0");
-                            ImGui::SliderFloat("Pixel Scale", &renderSettings.ditherScale, 1.0f, 16.0f, "%.0f");
-                            if (renderSettings.ditherMode == 0) {
-                                ImGui::SliderFloat("Dither Strength", &renderSettings.ditherStrength, 1.0f, 32.0f, "%.1f");
-                            } else {
-                                if (renderSettings.ditherMode == 2) {
-                                    ImGui::Text("Dither Pattern:"); ImGui::SameLine();
-                                    std::string ditName = renderSettings.ditherTexPath.empty() ? "None" : std::filesystem::path(renderSettings.ditherTexPath).filename().string();
-                                    ImGui::Button((ditName + "##ditTex").c_str(), ImVec2(-1, 0));
-                                    if (ImGui::BeginDragDropTarget()) {
-                                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                                            const char* path = (const char*)payload->Data; std::filesystem::path p(path);
-                                            if (p.extension() == ".png" || p.extension() == ".jpg" || p.extension() == ".jpeg") {
-                                                if(renderSettings.ditherTex) context.safeDeleteQueue.push_back(renderSettings.ditherTex);
-                                                renderSettings.ditherTexPath = p.string();
-                                                renderSettings.ditherTex = BurnhopeTexture::createDataTextureFromFile(*context.device, renderSettings.ditherTexPath);
-                                                context.needsRebuild = true;
-                                            }
-                                        } ImGui::EndDragDropTarget();
-                                    }
-                                }
-                                ImGui::ColorEdit3("Shadow Color", renderSettings.ditherShadowColor);
-                                ImGui::ColorEdit3("Midtone Color", renderSettings.ditherMidColor);
-                                ImGui::ColorEdit3("Highlight Color", renderSettings.ditherHighlightColor);
-                            }
-                        }
-                    }
-                    if (ImGui::CollapsingHeader("Motion Blur", ImGuiTreeNodeFlags_DefaultOpen)) {
-                        ImGui::Checkbox("Enable Motion Blur", &renderSettings.enableMotionBlur);
-                        if (renderSettings.enableMotionBlur) {
-                            ImGui::SliderFloat("MB Strength", &renderSettings.mbStrength, 0.0f, 2.0f);
-                            ImGui::SliderFloat("Artistic Trails", &renderSettings.mbTrails, 0.0f, 0.99f);
-                        }
-                    }
-                    ImGui::EndTabItem();
-                }
-                
-                if (ImGui::BeginTabItem("Psychological & Horror")) {
-                    ImGui::TextColored(ImVec4(0.8f, 0.1f, 0.1f, 1.0f), "Physiological Anomalies");
-                    ImGui::Checkbox("Eye Blinking", &renderSettings.enableBlinking);
-                    if (renderSettings.enableBlinking) ImGui::SliderFloat("Blink Freq", &renderSettings.blinkFrequency, 0.1f, 5.0f);
-                    ImGui::Checkbox("Eye Floaters", &renderSettings.enableFloaters);
-                    if (renderSettings.enableFloaters) ImGui::SliderFloat("Opacity##floaters", &renderSettings.floatersOpacity, 0.01f, 1.0f);
-                    ImGui::Checkbox("Stress Eye Jitter (Nystagmus)", &renderSettings.enableNystagmus);
-                    if (renderSettings.enableNystagmus) ImGui::SliderFloat("Severity##nystag", &renderSettings.nystagmusSeverity, 0.01f, 0.2f);
-                    ImGui::Checkbox("Purkinje Tree (Veins)", &renderSettings.enablePurkinje);
-                    if (renderSettings.enablePurkinje) {
-                        ImGui::SliderFloat("Veins Scale", &renderSettings.purkinjeScale, 0.1f, 5.0f);
-                        ImGui::SliderFloat("Thickness##purk", &renderSettings.purkinjeThickness, 0.01f, 0.5f);
-                        ImGui::SliderFloat("Speed##purk", &renderSettings.purkinjeSpeed, 0.1f, 5.0f);
-                        ImGui::ColorEdit3("Blood Color", renderSettings.purkinjeColor);
-                    }
-                    ImGui::Checkbox("Rod/Cone Transition (Scotopic)", &renderSettings.enableRodCone);
-                    if (renderSettings.enableRodCone) {
-                        ImGui::SliderFloat("Darkness Threshold", &renderSettings.rodConeThreshold, 0.05f, 0.5f);
-                        ImGui::ColorEdit3("Night Vision Tint", renderSettings.rodConeColor);
-                    }
-                    
-                    ImGui::Separator(); ImGui::TextColored(ImVec4(0.8f, 0.1f, 0.1f, 1.0f), "Spatial Anomalies");
-                    ImGui::Checkbox("Time Stutter", &renderSettings.enableTimeStutter);
-                    if (renderSettings.enableTimeStutter) { ImGui::SliderFloat("Severity##stutter", &renderSettings.stutterSeverity, 0.01f, 1.0f); ImGui::SliderFloat("Speed##stutspd", &renderSettings.stutterSpeed, 0.1f, 5.0f); }
-                    ImGui::Checkbox("Melting Walls", &renderSettings.enableMelting);
-                    if (renderSettings.enableMelting) { ImGui::SliderFloat("Melt Speed", &renderSettings.meltSpeed, 0.1f, 5.0f); ImGui::SliderFloat("Threshold##melt", &renderSettings.meltThreshold, 0.1f, 1.0f); ImGui::SliderFloat("Noise Scale##melt", &renderSettings.meltNoiseScale, 1.0f, 50.0f); }
-                    ImGui::Checkbox("Hollow-Face Illusion", &renderSettings.enableHollowFace);
-                    if (renderSettings.enableHollowFace) ImGui::SliderFloat("Depth Amount", &renderSettings.hollowFaceDepth, 0.1f, 5.0f);
-                    ImGui::Checkbox("Trypophobia Generator", &renderSettings.enableTrypo);
-                    if (renderSettings.enableTrypo) ImGui::SliderFloat("Hole Scale", &renderSettings.trypoScale, 10.0f, 200.0f);
-                    ImGui::Checkbox("Depth Parallax Eyes", &renderSettings.enableParallaxEye);
-                    ImGui::Checkbox("Negative Light (Anti-Light)", &renderSettings.enableAntiLight);
-                    
-                    ImGui::Separator(); ImGui::TextColored(ImVec4(0.8f, 0.1f, 0.1f, 1.0f), "Screen Anomalies");
-                    ImGui::Checkbox("Inside Screen Smudges", &renderSettings.enableInsideSmudges);
-                    if (renderSettings.enableInsideSmudges) ImGui::SliderFloat("Intensity##smudge", &renderSettings.smudgeIntensity, 0.1f, 2.0f);
-                    ImGui::Checkbox("Frame Buffer Haunting", &renderSettings.enableHaunting);
-                    if (renderSettings.enableHaunting) ImGui::SliderFloat("Trail Length", &renderSettings.hauntingTrail, 0.1f, 1.0f);
-                    ImGui::Checkbox("Navier-Stokes Fluid Drops", &renderSettings.enableFluidLens);
-                    if (renderSettings.enableFluidLens) ImGui::SliderFloat("Viscosity", &renderSettings.fluidViscosity, 0.1f, 5.0f);
-                    ImGui::EndTabItem();
-                }
-
-                ImGui::EndTabBar();
+            // ---------------- Lighting & GI ----------------
+            Header(w, "Lighting & GI");
+            if (w.Button("FORCE GLOBAL RT REBUILD", {260, 28})) {
+                context.world->each<MeshComponent>([&](flecs::entity, MeshComponent& mc) {
+                    if (mc.model && !mc.model->storedPositions.empty()) mc.model->createBLAS(mc.model->storedPositions);
+                });
+                context.needsRTRebuild = true;
             }
-            
-            ImGui::PopStyleVar(2);
+            w.DrawCheckboxControl("Enable SSGI", &rs.enableSSGI);
+            if (rs.enableSSGI) { w.DrawIntControl("Ray Count", &rs.ssgiRayCount); w.DrawFloatControl("Step Size", &rs.ssgiStepSize); w.DrawFloatControl("Thickness", &rs.ssgiThickness); w.DrawIntControl("Blur Range", &rs.blurRange); }
+            w.DrawCheckboxControl("Enable RT GI (Radiance Cascades)", &rs.enableRadianceCascades);
+            if (rs.enableRadianceCascades) { w.DrawIntControl("Probe Grid X", &rs.rcProbeGridX); w.DrawIntControl("Probe Grid Y", &rs.rcProbeGridY); w.DrawIntControl("Probe Grid Z", &rs.rcProbeGridZ); w.DrawFloatControl("Ray Length", &rs.rcBaseRayLength); w.DrawIntControl("Octahedron Size", &rs.rcOctaSize); }
+            w.DrawCheckboxControl("Enable SSSS (Subsurface)", &rs.enableSSSS);
+            if (rs.enableSSSS) w.DrawFloatControl("Scatter Width", &rs.ssssWidth);
+            w.DrawCheckboxControl("Enable Shadow Ramp", &rs.enableShadowRamp);
+            if (rs.enableShadowRamp) { w.DrawColorControl("Shadow Color", Col3(rs.shadowRampColor1)); w.DrawColorControl("Light-Transition Color", Col3(rs.shadowRampColor2)); }
+
+            // ---------------- Reflections & AO ----------------
+            Header(w, "Reflections & AO");
+            w.DrawCheckboxControl("Enable RT Reflections", &rs.enableRTReflections);
+            if (rs.enableRTReflections) w.DrawIntControl("Max Bounces", &rs.rtMaxBounces);
+            w.DrawCheckboxControl("Enable GTAO", &rs.enableSSAO);
+            if (rs.enableSSAO) { w.DrawFloatControl("AO Radius", &rs.ssaoRadius); w.DrawFloatControl("AO Bias", &rs.ssaoBias); w.DrawFloatControl("AO Intensity", &rs.ssaoIntensity); w.DrawFloatControl("AO Power", &rs.ssaoPower); }
+            w.DrawCheckboxControl("Enable Contact Shadows", &rs.enableContactShadows);
+            if (rs.enableContactShadows) { w.DrawFloatControl("Ray Length", &rs.contactShadowLength); w.DrawIntControl("Ray Steps", &rs.contactShadowSteps); w.DrawFloatControl("Ray Thickness", &rs.contactShadowThickness); }
+            w.DrawCheckboxControl("Enable SSR", &rs.enableSSR);
+            if (rs.enableSSR) { w.DrawFloatControl("SSR Steps", &rs.ssrSteps); w.DrawFloatControl("SSR Thickness", &rs.ssrThickness); }
+
+            // ---------------- Environment ----------------
+            Header(w, "Environment");
+            w.DrawColorControl("Sky Zenith Color", Col3(rs.skyZenithColor));
+            w.DrawColorControl("Sky Horizon Color", Col3(rs.skyHorizonColor));
+            w.DrawFloatControl("Sun Size", &rs.sunSize); w.DrawFloatControl("Sun Glow", &rs.sunGlow); w.DrawFloatControl("Sun Glow Size", &rs.sunGlowSize);
+            w.DrawCheckboxControl("Enable Fog", &rs.enableFog);
+            if (rs.enableFog) {
+                w.DrawColorControl("Fog Color", Col3(rs.fogColor)); w.DrawColorControl("Sun Inscatter Color", Col3(rs.inscatterColor));
+                w.DrawFloatControl("Density", &rs.fogDensity); w.DrawFloatControl("Height Falloff", &rs.fogHeightFalloff); w.DrawFloatControl("Base Height", &rs.fogBaseHeight);
+                w.DrawFloatControl("Sun Inscatter Power", &rs.inscatterPower); w.DrawFloatControl("Sun Inscatter Int", &rs.inscatterIntensity);
+            }
+            w.DrawCheckboxControl("Enable Rain Weather", &rs.enableWeather);
+            if (rs.enableWeather) { w.DrawFloatControl("Weather Intensity", &rs.weatherIntensity); w.DrawFloatControl("Weather Speed", &rs.weatherSpeed); w.DrawFloatControl("Weather Size", &rs.weatherSize); w.DrawFloatControl("Weather Density", &rs.weatherDensity); w.DrawFloatControl("Weather Distortion", &rs.weatherDistortion); }
+            w.DrawCheckboxControl("Enable Water Drops", &rs.enableWaterDrops);
+            if (rs.enableWaterDrops) w.DrawFloatControl("Drop Refraction", &rs.dropRefraction);
+            w.DrawCheckboxControl("Lens Condensation / Humidity", &rs.enableCondensation);
+            if (rs.enableCondensation) w.DrawFloatControl("Condensation Amount", &rs.condensationAmount);
+
+            // ---------------- Camera & Lens ----------------
+            Header(w, "Camera & Lens");
+            w.DrawCheckboxControl("Auto Exposure", &rs.autoExposure);
+            if (rs.autoExposure) { w.DrawFloatControl("Exposure Compensation", &rs.exposureCompensation); w.DrawFloatControl("Min Brightness", &rs.minBrightness); w.DrawFloatControl("Max Brightness", &rs.maxBrightness); }
+            else w.DrawFloatControl("Manual Exposure", &rs.manualExposure);
+            w.DrawCheckboxControl("Enable DoF", &rs.enableDoF);
+            if (rs.enableDoF) {
+                w.DrawCheckboxControl("Auto-Focus", &rs.autoFocus);
+                if (!rs.autoFocus) w.DrawFloatControl("Focus Distance", &rs.focusDistance);
+                w.DrawFloatControl("Focus Range", &rs.focusRange); w.DrawFloatControl("Bokeh Size", &rs.bokehSize); w.DrawIntControl("Bokeh Shape", &rs.bokehShape);
+                if (rs.bokehShape > 0) w.DrawFloatControl("Bokeh Rotation", &rs.bokehAngle);
+                w.DrawCheckboxControl("Lens Breathing", &rs.enableLensBreathing);
+                if (rs.enableLensBreathing) w.DrawFloatControl("Breathing Scale", &rs.lensBreathingScale);
+            }
+            w.DrawCheckboxControl("Enable Tilt-Shift", &rs.enableTiltShift);
+            if (rs.enableTiltShift) { w.DrawIntControl("Tilt-Shift Mode", &rs.tiltShiftMode); w.DrawFloatControl("Tilt Amount", &rs.tiltShiftAmount); w.DrawFloatControl("Tilt Falloff", &rs.tiltShiftFalloff); }
+            w.DrawCheckboxControl("Dolly Zoom (Vertigo)", &rs.enableDollyZoom);
+            if (rs.enableDollyZoom) { w.DrawCheckboxControl("Invert Direction", &rs.dollyZoomInvert); w.DrawFloatControl("Zoom Speed", &rs.dollyZoomSpeed); w.DrawFloatControl("Zoom Intensity", &rs.dollyZoomIntensity); }
+            w.DrawCheckboxControl("Enable Bloom", &rs.enableBloom);
+            if (rs.enableBloom) { w.DrawFloatControl("Bloom Threshold", &rs.bloomThreshold); w.DrawFloatControl("Bloom Intensity", &rs.bloomIntensity); w.DrawIntControl("Blur Iterations", &rs.bloomBlurIterations); }
+            w.DrawCheckboxControl("Enable Lens Flares", &rs.enableLensFlares);
+            if (rs.enableLensFlares) { w.DrawFloatControl("Flare Intensity", &rs.flareIntensity); w.DrawFloatControl("Ghost Dispersal", &rs.ghostDispersal); w.DrawIntControl("Ghosts Count", &rs.ghosts); w.DrawFloatControl("Halo Width", &rs.flareHaloWidth); w.DrawFloatControl("Chromatic Dispersal", &rs.flareChromaticDir); w.DrawCheckboxControl("Anamorphic Blue Flares", &rs.enableAnamorphic); }
+            w.DrawCheckboxControl("Enable Star Filter", &rs.enableStarFilter);
+            if (rs.enableStarFilter) { w.DrawFloatControl("Star Threshold", &rs.starFilterThreshold); w.DrawFloatControl("Star Length", &rs.starFilterLength); }
+
+            // ---------------- Color Grading ----------------
+            Header(w, "Color Grading");
+            w.DrawIntControl("Tonemapper (0=Linear 1=Reinhard 2=ACES)", &rs.tonemapper);
+            w.DrawFloatControl("Contrast", &rs.contrast); w.DrawFloatControl("Saturation", &rs.saturation); w.DrawFloatControl("Color Temp (K)", &rs.temperature); w.DrawFloatControl("Gamma", &rs.gamma);
+            w.DrawVec4Control("Global Lift", *reinterpret_cast<glm::vec4*>(rs.cgGlobalLift)); w.DrawVec4Control("Global Gamma", *reinterpret_cast<glm::vec4*>(rs.cgGlobalGamma)); w.DrawVec4Control("Global Gain", *reinterpret_cast<glm::vec4*>(rs.cgGlobalGain)); w.DrawVec4Control("Global Offset", *reinterpret_cast<glm::vec4*>(rs.cgGlobalOffset));
+            w.DrawColorControl("Shadows Tint", Col3(rs.cgShadows)); w.DrawColorControl("Midtones Tint", Col3(rs.cgMidtones)); w.DrawColorControl("Highlights Tint", Col3(rs.cgHighlights));
+            w.DrawColorControl("Red Channel Mixer", Col3(rs.cgRgbMixerRed)); w.DrawColorControl("Green Channel Mixer", Col3(rs.cgRgbMixerGreen)); w.DrawColorControl("Blue Channel Mixer", Col3(rs.cgRgbMixerBlue));
+            w.DrawCheckboxControl("Enable Color Compression", &rs.enableColorComp);
+            if (rs.enableColorComp) w.DrawFloatControl("Color Levels", &rs.colorCompLevels);
+            w.DrawCheckboxControl("Selective Color (Splash)", &rs.enableColorSplash);
+            if (rs.enableColorSplash) { w.DrawFloatControl("Target Hue", &rs.splashHue); w.DrawFloatControl("Hue Range", &rs.splashRange); }
+            TexPicker(context, w, "Standard 3D LUT", rs.palettePath, [&](const std::string& p) { if (rs.paletteTex) context.safeDeleteQueue.push_back(rs.paletteTex); rs.palettePath = p; rs.paletteTex = p.empty() ? nullptr : BurnhopeTexture::createDataTextureFromFile(*context.device, p); context.needsRebuild = true; });
+
+            // ---------------- Filters & FX ----------------
+            Header(w, "Filters & FX");
+            w.DrawIntControl("Blur Mode (0=Off 1=Box 2=Gauss 3=Radial 4=Mosaic)", &rs.blurMode);
+            if (rs.blurMode != 0) { w.DrawFloatControl("Blur Strength", &rs.blurStrength); w.DrawFloatControl("Blur Radius", &rs.blurRadius); if (rs.blurMode == 3) w.DrawVec2Control("Radial Center", Vec2(rs.radialBlurCenter)); }
+            w.DrawCheckboxControl("Enable Lens Distortion", &rs.enableLensDistortion);
+            if (rs.enableLensDistortion) w.DrawFloatControl("Distortion Strength", &rs.lensDistortionStrength);
+            w.DrawCheckboxControl("Enable Lens Dirt", &rs.enableLensDirt);
+            if (rs.enableLensDirt) { w.DrawFloatControl("Dirt Intensity", &rs.lensDirtIntensity); TexPicker(context, w, "Dirt Texture", rs.lensDirtPath, [&](const std::string& p) { if (rs.lensDirtTex) context.safeDeleteQueue.push_back(rs.lensDirtTex); rs.lensDirtPath = p; rs.lensDirtTex = p.empty() ? nullptr : BurnhopeTexture::createDataTextureFromFile(*context.device, p); context.needsRebuild = true; }); }
+            w.DrawCheckboxControl("Enable Retro/CRT", &rs.enableRetroCRT);
+            if (rs.enableRetroCRT) { w.DrawFloatControl("Scanlines", &rs.crtScanlines); w.DrawFloatControl("Glitch", &rs.glitchIntensity); w.DrawFloatControl("VHS Noise", &rs.vhsNoise); w.DrawIntControl("Pixelation", &rs.pixelation); w.DrawCheckboxControl("PS1 Vertex Jitter", &rs.enableVertexJitter); if (rs.enableVertexJitter) w.DrawFloatControl("Wobble Resolution", &rs.vertexJitterResolution); }
+            w.DrawCheckboxControl("Enable Film Damage", &rs.enableFilmDamage);
+            if (rs.enableFilmDamage) { w.DrawFloatControl("Yellowing Intensity", &rs.filmDamageIntensity); w.DrawFloatControl("Scratches", &rs.filmDamageScratches); }
+            w.DrawCheckboxControl("Film Grain", &rs.enableFilmGrain); if (rs.enableFilmGrain) w.DrawFloatControl("Grain Strength", &rs.grainIntensity);
+            w.DrawCheckboxControl("Vignette", &rs.enableVignette); if (rs.enableVignette) w.DrawFloatControl("Vignette Intensity", &rs.vignetteIntensity);
+            w.DrawCheckboxControl("Chromatic Aberration", &rs.enableChromaticAberration); if (rs.enableChromaticAberration) w.DrawFloatControl("CA Intensity", &rs.caIntensity);
+            w.DrawCheckboxControl("Film Light Leaks", &rs.enableLightLeaks); if (rs.enableLightLeaks) w.DrawFloatControl("Leaks Intensity", &rs.lightLeakIntensity);
+            w.DrawCheckboxControl("Enable Texture Warping", &rs.enableTexWarp);
+            if (rs.enableTexWarp) { w.DrawFloatControl("Warp Strength", &rs.texWarpStrength); w.DrawFloatControl("Warp Speed", &rs.texWarpSpeed); }
+            w.DrawCheckboxControl("Enable Edge Detect", &rs.enableEdgeDetect);
+            if (rs.enableEdgeDetect) { w.DrawFloatControl("Width", &rs.edgeWidth); w.DrawFloatControl("Brightness", &rs.edgeBrightness); w.DrawFloatControl("Gamma", &rs.edgeGamma); w.DrawFloatControl("Edge Blur", &rs.edgeBlur); w.DrawIntControl("Color Mode", &rs.edgeColorMode); if (rs.edgeColorMode == 1) w.DrawColorControl("Custom Color", Col3(rs.edgeCustomColor)); }
+            w.DrawCheckboxControl("Enable Emboss", &rs.enableEmboss);
+            if (rs.enableEmboss) { w.DrawFloatControl("Strength", &rs.embossStrength); w.DrawFloatControl("Angle", &rs.embossAngle); w.DrawIntControl("Style", &rs.embossStyle); }
+            w.DrawCheckboxControl("Enable Pencil Sketch", &rs.enableSketch);
+            if (rs.enableSketch) { w.DrawFloatControl("Stroke Strength", &rs.sketchStrokeStrength); w.DrawFloatControl("Stroke Length", &rs.sketchStrokeLength); w.DrawFloatControl("Threshold", &rs.sketchThreshold); w.DrawFloatControl("Shadow Level", &rs.sketchShadowLevel); w.DrawFloatControl("Shadows Weight", &rs.sketchShadowsWeight); w.DrawFloatControl("Midtones Weight", &rs.sketchMidtonesWeight); w.DrawFloatControl("Highlights Weight", &rs.sketchHighlightsWeight); }
+            w.DrawCheckboxControl("Enable Halftone", &rs.enableHalftone);
+            if (rs.enableHalftone) { w.DrawFloatControl("Scale", &rs.halftoneScale); w.DrawFloatControl("Contrast", &rs.halftoneContrast); TexPicker(context, w, "Pattern Texture", rs.halftonePath, [&](const std::string& p) { if (rs.halftoneTex) context.safeDeleteQueue.push_back(rs.halftoneTex); rs.halftonePath = p; rs.halftoneTex = p.empty() ? nullptr : BurnhopeTexture::createDataTextureFromFile(*context.device, p); context.needsRebuild = true; }); }
+            w.DrawCheckboxControl("Enable Screen Refraction", &rs.enableScreenRefraction);
+            if (rs.enableScreenRefraction) { w.DrawFloatControl("Refraction Strength", &rs.refractionStrength); w.DrawFloatControl("Refraction Speed", &rs.refractionSpeed); }
+            w.DrawCheckboxControl("Enable Outline", &rs.enableOutline);
+            if (rs.enableOutline) {
+                w.DrawIntControl("Outline Mode", &rs.outlineMode); w.DrawColorControl("Outline Color", Col3(rs.outlineColor)); w.DrawFloatControl("Thickness", &rs.outlineThickness);
+                w.DrawFloatControl("Depth Threshold", &rs.outlineThresholdDepth); w.DrawFloatControl("Normal Threshold", &rs.outlineThresholdNormal);
+                w.DrawCheckboxControl("Enable Outline Jitter", &rs.enableOutlineJitter);
+                if (rs.enableOutlineJitter) { w.DrawFloatControl("Jitter FPS", &rs.outlineJitterSpeed); w.DrawFloatControl("Jitter Strength", &rs.outlineJitterStrength); }
+            }
+            w.DrawCheckboxControl("Enable Cel-Shading (Toon)", &rs.enableCelShading); if (rs.enableCelShading) w.DrawFloatControl("Cel Levels", &rs.celShadingLevels);
+            w.DrawCheckboxControl("Enable Kuwahara (Oil Paint)", &rs.enableKuwahara); if (rs.enableKuwahara) w.DrawIntControl("Brush Radius", &rs.kuwaharaRadius);
+            w.DrawCheckboxControl("Enable Posterization", &rs.enablePosterization); if (rs.enablePosterization) w.DrawFloatControl("Color Levels", &rs.posterizationLevels);
+            w.DrawCheckboxControl("Enable Watercolor Filter", &rs.enableWatercolor); if (rs.enableWatercolor) w.DrawFloatControl("Watercolor Radius", &rs.watercolorRadius);
+            w.DrawCheckboxControl("Enable Pointillism", &rs.enablePointillism); if (rs.enablePointillism) { w.DrawFloatControl("Point Size", &rs.pointillismSize); w.DrawFloatControl("Point Density", &rs.pointillismDensity); }
+            w.DrawCheckboxControl("Enable Manga Screentones", &rs.enableScreentones); if (rs.enableScreentones) { w.DrawFloatControl("Screentone Size", &rs.screentoneSize); w.DrawFloatControl("Screentone Darkness", &rs.screentoneDarkness); }
+            w.DrawCheckboxControl("Enable Voronoi Stained Glass", &rs.enableVoronoi); if (rs.enableVoronoi) w.DrawFloatControl("Voronoi Scale", &rs.voronoiScale);
+            w.DrawFloatControl("Object-Space Hatching Scale", &rs.objHatchingScale);
+            w.DrawCheckboxControl("Artistic Contour (Rim Light)", &rs.enableRimLight);
+            if (rs.enableRimLight) { w.DrawColorControl("Rim Color", Col3(rs.rimColor)); w.DrawFloatControl("Rim Power", &rs.rimPower); w.DrawFloatControl("Rim Thickness", &rs.rimThickness); }
+            w.DrawCheckboxControl("Game Boy / 8-bit Palette", &rs.enableGameBoy);
+            if (rs.enableGameBoy) { w.DrawColorControl("Color 1", Col3(rs.gbColor1)); w.DrawColorControl("Color 2", Col3(rs.gbColor2)); w.DrawColorControl("Color 3", Col3(rs.gbColor3)); w.DrawColorControl("Color 4", Col3(rs.gbColor4)); }
+            w.DrawCheckboxControl("JPEG/MPEG Compression Artifacts", &rs.enableJpegArtifacts); if (rs.enableJpegArtifacts) { w.DrawFloatControl("Block Size", &rs.jpegBlockSize); w.DrawFloatControl("Quality", &rs.jpegQuality); }
+            w.DrawCheckboxControl("Screen Tear / Glitch Slice", &rs.enableScreenTear); if (rs.enableScreenTear) { w.DrawFloatControl("Tear Frequency", &rs.screenTearFrequency); w.DrawFloatControl("Tear Intensity", &rs.screenTearIntensity); }
+            w.DrawCheckboxControl("Speed Lines (Anime)", &rs.enableSpeedLines); if (rs.enableSpeedLines) w.DrawFloatControl("Speed Intensity", &rs.speedLinesIntensity);
+            w.DrawCheckboxControl("Heat Shimmer (Mirage)", &rs.enableHeatShimmer); if (rs.enableHeatShimmer) w.DrawFloatControl("Heat Intensity", &rs.heatIntensity);
+            w.DrawCheckboxControl("Vector Field Flow", &rs.enableVectorFlow);
+            if (rs.enableVectorFlow) { w.DrawFloatControl("Flow Strength", &rs.vectorFlowStrength); w.DrawFloatControl("Texture Scale", &rs.vectorFieldScale); TexPicker(context, w, "Vector Texture", rs.vectorTexPath, [&](const std::string& p) { rs.vectorTexPath = p; rs.vectorTex = p.empty() ? nullptr : BurnhopeTexture::createDataTextureFromFile(*context.device, p); context.needsRebuild = true; }); }
+            w.DrawCheckboxControl("Temporal Echo (Psychedelic)", &rs.enableTemporalEcho); if (rs.enableTemporalEcho) w.DrawFloatControl("Echo Fade Speed", &rs.echoFade);
+            w.DrawCheckboxControl("Screen-Space Canvas", &rs.enableCanvas); if (rs.enableCanvas) w.DrawFloatControl("Canvas Bump", &rs.canvasIntensity);
+            w.DrawCheckboxControl("Ink Bleed", &rs.enableInkBleed); if (rs.enableInkBleed) w.DrawFloatControl("Ink Radius", &rs.inkRadius);
+            w.DrawCheckboxControl("ASCII Art", &rs.enableAscii); if (rs.enableAscii) { w.DrawIntControl("ASCII Pattern", &rs.asciiMode); w.DrawFloatControl("ASCII Scale", &rs.asciiScale); }
+            w.DrawCheckboxControl("Optical Soup (Edge Bleed)", &rs.enableOpticalSoup); if (rs.enableOpticalSoup) w.DrawFloatControl("Bleed Radius", &rs.opticalSoupRadius);
+            w.DrawCheckboxControl("Pixel Sorting", &rs.enablePixelSort);
+            if (rs.enablePixelSort) { w.DrawFloatControl("Sort Luma Threshold", &rs.pixelSortThreshold); w.DrawFloatControl("Sort Angle", &rs.pixelSortAngle); w.DrawFloatControl("Sort Length", &rs.pixelSortLength); w.DrawFloatControl("Sort Speed", &rs.pixelSortTime); }
+            w.DrawCheckboxControl("Datamoshing", &rs.enableDatamosh); if (rs.enableDatamosh) w.DrawFloatControl("Mosh Tolerance", &rs.datamoshThreshold);
+            w.DrawCheckboxControl("Impact Frame", &rs.enableImpactFrame);
+            if (rs.enableImpactFrame) { w.DrawFloatControl("Impact Lines", &rs.impactSize); w.DrawFloatControl("Impact Power", &rs.impactPower); w.DrawFloatControl("Impact Speed", &rs.impactTime); }
+            w.DrawCheckboxControl("Smear / Ribbon Trails", &rs.enableSmearTrails); if (rs.enableSmearTrails) { w.DrawFloatControl("Smear Length", &rs.smearLength); w.DrawFloatControl("Smear Luma Threshold", &rs.smearThreshold); }
+            w.DrawCheckboxControl("World Curvature (Inception)", &rs.enableWorldCurve); if (rs.enableWorldCurve) w.DrawFloatControl("Curve Amount", &rs.curveAmount);
+            w.DrawCheckboxControl("Environment Breathing", &rs.enableBreathing); if (rs.enableBreathing) { w.DrawFloatControl("Breath Amplitude", &rs.breathAmplitude); w.DrawFloatControl("Breath Speed", &rs.breathSpeed); }
+            w.DrawCheckboxControl("Gravitational Lensing", &rs.enableGravityLensing); if (rs.enableGravityLensing) w.DrawFloatControl("Mass", &rs.gravityMass);
+            w.DrawCheckboxControl("Micro-facet Glitter", &rs.enableGlitter); if (rs.enableGlitter) w.DrawFloatControl("Glitter Threshold", &rs.glitterThreshold);
+            w.DrawCheckboxControl("Caustics", &rs.enableCaustics);
+            if (rs.enableCaustics) { w.DrawFloatControl("Caustics Speed", &rs.causticsSpeed); w.DrawFloatControl("Caustics Scale", &rs.causticsScale); w.DrawFloatControl("Caustics Strength", &rs.causticsStrength); TexPicker(context, w, "Caustics Texture", rs.causticsTexPath, [&](const std::string& p) { rs.causticsTexPath = p; rs.causticsTex = p.empty() ? nullptr : BurnhopeTexture::createDataTextureFromFile(*context.device, p); context.needsRebuild = true; }); }
+            w.DrawCheckboxControl("Invert Colors", &rs.enableColorInvert);
+            w.DrawCheckboxControl("False Color (Luma)", &rs.enableFalseColor);
+            w.DrawCheckboxControl("Depth View", &rs.enableDepthView);
+
+            // ---------------- Optimization ----------------
+            Header(w, "Optimization");
+            w.DrawIntControl("Adaptive Shading (VRS)", &rs.vrsMode);
+            w.DrawFloatControl("Anisotropy", &BurnhopeTexture::GlobalAnisotropy);
+            if (context.currentScenePath.empty()) w.Text("Save scene first to apply anisotropy!", {1.0f, 0.6f, 0.0f, 1.0f});
+            w.DrawCheckboxControl("Enable TAA", &rs.enableTAA); if (rs.enableTAA) w.DrawFloatControl("TAA Blend Factor", &rs.taaBlendFactor);
+            w.DrawCheckboxControl("Enable CAS (Sharpen)", &rs.enableCAS); if (rs.enableCAS) w.DrawFloatControl("CAS Sharpness", &rs.casSharpness);
+            w.DrawCheckboxControl("Enable CMAA", &rs.enableCMAA);
+            w.DrawCheckboxControl("Enable Dithering", &rs.enableDithering);
+            if (rs.enableDithering) {
+                w.DrawIntControl("Dither Mode", &rs.ditherMode); w.DrawFloatControl("Pixel Scale", &rs.ditherScale);
+                if (rs.ditherMode == 0) w.DrawFloatControl("Dither Strength", &rs.ditherStrength);
+                else {
+                    if (rs.ditherMode == 2) TexPicker(context, w, "Dither Pattern", rs.ditherTexPath, [&](const std::string& p) { if (rs.ditherTex) context.safeDeleteQueue.push_back(rs.ditherTex); rs.ditherTexPath = p; rs.ditherTex = p.empty() ? nullptr : BurnhopeTexture::createDataTextureFromFile(*context.device, p); context.needsRebuild = true; });
+                    w.DrawColorControl("Shadow Color", Col3(rs.ditherShadowColor)); w.DrawColorControl("Midtone Color", Col3(rs.ditherMidColor)); w.DrawColorControl("Highlight Color", Col3(rs.ditherHighlightColor));
+                }
+            }
+            w.DrawCheckboxControl("Enable Motion Blur", &rs.enableMotionBlur);
+            if (rs.enableMotionBlur) { w.DrawFloatControl("MB Strength", &rs.mbStrength); w.DrawFloatControl("Artistic Trails", &rs.mbTrails); }
+
+            // ---------------- Psychological & Horror ----------------
+            Header(w, "Psychological & Horror");
+            w.DrawCheckboxControl("Eye Blinking", &rs.enableBlinking); if (rs.enableBlinking) w.DrawFloatControl("Blink Freq", &rs.blinkFrequency);
+            w.DrawCheckboxControl("Eye Floaters", &rs.enableFloaters); if (rs.enableFloaters) w.DrawFloatControl("Floaters Opacity", &rs.floatersOpacity);
+            w.DrawCheckboxControl("Stress Eye Jitter (Nystagmus)", &rs.enableNystagmus); if (rs.enableNystagmus) w.DrawFloatControl("Severity", &rs.nystagmusSeverity);
+            w.DrawCheckboxControl("Purkinje Tree (Veins)", &rs.enablePurkinje);
+            if (rs.enablePurkinje) { w.DrawFloatControl("Veins Scale", &rs.purkinjeScale); w.DrawFloatControl("Thickness", &rs.purkinjeThickness); w.DrawFloatControl("Speed", &rs.purkinjeSpeed); w.DrawColorControl("Blood Color", Col3(rs.purkinjeColor)); }
+            w.DrawCheckboxControl("Rod/Cone Transition", &rs.enableRodCone); if (rs.enableRodCone) { w.DrawFloatControl("Darkness Threshold", &rs.rodConeThreshold); w.DrawColorControl("Night Vision Tint", Col3(rs.rodConeColor)); }
+            w.DrawCheckboxControl("Time Stutter", &rs.enableTimeStutter); if (rs.enableTimeStutter) { w.DrawFloatControl("Severity", &rs.stutterSeverity); w.DrawFloatControl("Speed", &rs.stutterSpeed); }
+            w.DrawCheckboxControl("Melting Walls", &rs.enableMelting); if (rs.enableMelting) { w.DrawFloatControl("Melt Speed", &rs.meltSpeed); w.DrawFloatControl("Threshold", &rs.meltThreshold); w.DrawFloatControl("Noise Scale", &rs.meltNoiseScale); }
+            w.DrawCheckboxControl("Hollow-Face Illusion", &rs.enableHollowFace); if (rs.enableHollowFace) w.DrawFloatControl("Depth Amount", &rs.hollowFaceDepth);
+            w.DrawCheckboxControl("Trypophobia Generator", &rs.enableTrypo); if (rs.enableTrypo) w.DrawFloatControl("Hole Scale", &rs.trypoScale);
+            w.DrawCheckboxControl("Depth Parallax Eyes", &rs.enableParallaxEye);
+            w.DrawCheckboxControl("Negative Light (Anti-Light)", &rs.enableAntiLight);
+            w.DrawCheckboxControl("Inside Screen Smudges", &rs.enableInsideSmudges); if (rs.enableInsideSmudges) w.DrawFloatControl("Intensity", &rs.smudgeIntensity);
+            w.DrawCheckboxControl("Frame Buffer Haunting", &rs.enableHaunting); if (rs.enableHaunting) w.DrawFloatControl("Trail Length", &rs.hauntingTrail);
+            w.DrawCheckboxControl("Navier-Stokes Fluid Drops", &rs.enableFluidLens); if (rs.enableFluidLens) w.DrawFloatControl("Viscosity", &rs.fluidViscosity);
+        }
+
+        template <typename Setter>
+        void TexPicker(UIContext& context, ui::UIWidgets& w, const std::string& label, const std::string& currentPath, Setter setter) {
+            w.PushID(label);
+            w.Text(label);
+            std::string btnLabel = currentPath.empty() ? "None" : std::filesystem::path(currentPath).filename().string();
+            if (w.Button(btnLabel, {220, 24})) w.OpenPopup("TexPickerPopup");
+            if (w.BeginPopup("TexPickerPopup")) {
+                if (w.Selectable("None", false)) { setter(""); w.CloseCurrentPopup(); }
+                for (const auto& t : context.GetProjectAssets({".png", ".jpg", ".jpeg"})) {
+                    if (w.Selectable(std::filesystem::path(t).filename().string(), false)) { setter(t); w.CloseCurrentPopup(); }
+                }
+                w.EndPopup();
+            }
+            w.PopID();
         }
 
         void SaveRenderSettings(UIContext& context) {
@@ -706,7 +259,6 @@ namespace burnhope {
             json j;
             auto& rs = context.renderSettings;
 
-            // --- Ray Tracing & GI ---
             j["rtMaxBounces"] = rs.rtMaxBounces;
             j["enableRTReflections"] = rs.enableRTReflections;
             j["enableRadianceCascades"] = rs.enableRadianceCascades;
@@ -716,13 +268,12 @@ namespace burnhope {
             j["rcBaseRayLength"] = rs.rcBaseRayLength;
             j["rcOctaSize"] = rs.rcOctaSize;
 
-            // --- Shadows & AO ---
             j["enableSSAO"] = rs.enableSSAO;
             j["ssaoRadius"] = rs.ssaoRadius;
             j["ssaoBias"] = rs.ssaoBias;
             j["ssaoIntensity"] = rs.ssaoIntensity;
             j["ssaoPower"] = rs.ssaoPower;
-            
+
             j["enableSSGI"] = rs.enableSSGI;
             j["ssgiRayCount"] = rs.ssgiRayCount;
             j["ssgiStepSize"] = rs.ssgiStepSize;
@@ -734,7 +285,6 @@ namespace burnhope {
             j["contactShadowThickness"] = rs.contactShadowThickness;
             j["contactShadowSteps"] = rs.contactShadowSteps;
 
-            // --- Exposure & Color ---
             j["autoExposure"] = rs.autoExposure;
             j["manualExposure"] = rs.manualExposure;
             j["exposureCompensation"] = rs.exposureCompensation;
@@ -745,7 +295,6 @@ namespace burnhope {
             j["temperature"] = rs.temperature;
             j["gamma"] = rs.gamma;
 
-            // --- Screen FX ---
             j["enableLensDistortion"] = rs.enableLensDistortion;
             j["lensDistortionStrength"] = rs.lensDistortionStrength;
             j["enableLensDirt"] = rs.enableLensDirt;
@@ -756,7 +305,7 @@ namespace burnhope {
             j["refractionStrength"] = rs.refractionStrength;
             j["refractionSpeed"] = rs.refractionSpeed;
             j["anisotropicFiltering"] = BurnhopeTexture::GlobalAnisotropy;
-            
+
             j["enableRetroCRT"] = rs.enableRetroCRT;
             j["crtScanlines"] = rs.crtScanlines;
             j["glitchIntensity"] = rs.glitchIntensity;
@@ -773,7 +322,7 @@ namespace burnhope {
             j["enableVoronoi"] = rs.enableVoronoi;
             j["voronoiScale"] = rs.voronoiScale;
             j["objHatchingScale"] = rs.objHatchingScale;
-            
+
             j["vrsMode"] = rs.vrsMode;
             j["enableOutline"] = rs.enableOutline;
             j["outlineMode"] = rs.outlineMode;
@@ -789,7 +338,7 @@ namespace burnhope {
             j["vignetteIntensity"] = rs.vignetteIntensity;
             j["enableChromaticAberration"] = rs.enableChromaticAberration;
             j["caIntensity"] = rs.caIntensity;
-            
+
             j["enableEdgeDetect"] = rs.enableEdgeDetect;
             j["edgeWidth"] = rs.edgeWidth;
             j["edgeBrightness"] = rs.edgeBrightness;
@@ -836,7 +385,7 @@ namespace burnhope {
             j["enableShadowRamp"] = rs.enableShadowRamp;
             j["shadowRampColor1"] = {rs.shadowRampColor1[0], rs.shadowRampColor1[1], rs.shadowRampColor1[2]};
             j["shadowRampColor2"] = {rs.shadowRampColor2[0], rs.shadowRampColor2[1], rs.shadowRampColor2[2]};
-            
+
             j["enableOpticalSoup"] = rs.enableOpticalSoup;
             j["opticalSoupRadius"] = rs.opticalSoupRadius;
             j["enableDatamosh"] = rs.enableDatamosh;
@@ -869,7 +418,7 @@ namespace burnhope {
             j["gbColor1"] = {rs.gbColor1[0], rs.gbColor1[1], rs.gbColor1[2]}; j["gbColor2"] = {rs.gbColor2[0], rs.gbColor2[1], rs.gbColor2[2]};
             j["gbColor3"] = {rs.gbColor3[0], rs.gbColor3[1], rs.gbColor3[2]}; j["gbColor4"] = {rs.gbColor4[0], rs.gbColor4[1], rs.gbColor4[2]};
             j["enableScreenTear"] = rs.enableScreenTear; j["screenTearFrequency"] = rs.screenTearFrequency; j["screenTearIntensity"] = rs.screenTearIntensity;
-            
+
             j["enableSpeedLines"] = rs.enableSpeedLines; j["speedLinesIntensity"] = rs.speedLinesIntensity;
             j["enableColorSplash"] = rs.enableColorSplash; j["splashHue"] = rs.splashHue; j["splashRange"] = rs.splashRange;
             j["enableHeatShimmer"] = rs.enableHeatShimmer; j["heatIntensity"] = rs.heatIntensity;
@@ -887,7 +436,7 @@ namespace burnhope {
             j["bloomThreshold"] = rs.bloomThreshold;
             j["bloomIntensity"] = rs.bloomIntensity;
             j["bloomBlurIterations"] = rs.bloomBlurIterations;
-            
+
             j["enableBlinking"] = rs.enableBlinking; j["blinkFrequency"] = rs.blinkFrequency;
             j["enableFloaters"] = rs.enableFloaters; j["floatersOpacity"] = rs.floatersOpacity;
             j["enableTimeStutter"] = rs.enableTimeStutter; j["stutterSeverity"] = rs.stutterSeverity; j["stutterSpeed"] = rs.stutterSpeed;
@@ -904,7 +453,7 @@ namespace burnhope {
             j["enableFluidLens"] = rs.enableFluidLens; j["fluidViscosity"] = rs.fluidViscosity;
             j["purkinjeIntensity"] = rs.purkinjeIntensity; j["purkinjeColor"] = {rs.purkinjeColor[0], rs.purkinjeColor[1], rs.purkinjeColor[2]}; j["purkinjeThickness"] = rs.purkinjeThickness; j["purkinjeSpeed"] = rs.purkinjeSpeed;
             j["speedLinesCount"] = rs.speedLinesCount; j["speedLinesLength"] = rs.speedLinesLength;
-            
+
             j["enableRecursiveFeedback"] = rs.enableRecursiveFeedback; j["feedbackZoom"] = rs.feedbackZoom; j["feedbackAngle"] = rs.feedbackAngle;
             j["enableAnalogNoise"] = rs.enableAnalogNoise; j["analogSyncLoss"] = rs.analogSyncLoss;
             j["enableScanlineMoire"] = rs.enableScanlineMoire; j["moireScale"] = rs.moireScale;
@@ -940,30 +489,28 @@ namespace burnhope {
             j["cgMidtones"] = {rs.cgMidtones[0], rs.cgMidtones[1], rs.cgMidtones[2]};
             j["cgHighlights"] = {rs.cgHighlights[0], rs.cgHighlights[1], rs.cgHighlights[2]};
 
-            // --- Camera ---
             j["enableDoF"] = rs.enableDoF;
             j["focusDistance"] = rs.focusDistance;
             j["focusRange"] = rs.focusRange;
             j["bokehSize"] = rs.bokehSize;
             j["bokehShape"] = rs.bokehShape;
             j["bokehAngle"] = rs.bokehAngle;
-            
+
             j["enableMotionBlur"] = rs.enableMotionBlur;
             j["mbStrength"] = rs.mbStrength;
 
-            // --- Environment ---
             j["enableFog"] = rs.enableFog;
             j["fogDensity"] = rs.fogDensity;
             j["fogHeightFalloff"] = rs.fogHeightFalloff;
             j["fogBaseHeight"] = rs.fogBaseHeight;
             j["inscatterPower"] = rs.inscatterPower;
             j["inscatterIntensity"] = rs.inscatterIntensity;
-            
+
             j["fogColor"] = { rs.fogColor[0], rs.fogColor[1], rs.fogColor[2] };
             j["inscatterColor"] = { rs.inscatterColor[0], rs.inscatterColor[1], rs.inscatterColor[2] };
             j["skyZenithColor"] = { rs.skyZenithColor[0], rs.skyZenithColor[1], rs.skyZenithColor[2] };
             j["skyHorizonColor"] = { rs.skyHorizonColor[0], rs.skyHorizonColor[1], rs.skyHorizonColor[2] };
-            
+
             j["sunSize"] = rs.sunSize;
             j["sunGlow"] = rs.sunGlow;
             j["sunGlowSize"] = rs.sunGlowSize;

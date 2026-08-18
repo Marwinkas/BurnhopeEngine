@@ -4,6 +4,7 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include <algorithm>
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 #include "Components.hpp"
@@ -324,12 +325,16 @@ namespace burnhope {
         int framesRemaining;
     };
 
+    namespace ui { class MaterialPreview; }
+
     class UIContext {
     public:
         class BurnhopeDevice* device = nullptr;
+        class ui::MaterialPreview* materialPreview = nullptr;
         VkCommandBuffer currentCommandBuffer = VK_NULL_HANDLE;
         flecs::world* world = nullptr;
         flecs::entity selectedEntity;
+        std::vector<flecs::entity> selectedEntities;
         glm::mat4 modelMatrix = glm::mat4(1.0f);
         std::string currentScenePath = "";
 
@@ -343,6 +348,61 @@ namespace burnhope {
         std::vector<std::string> clipboardPaths;
         bool isCut = false;
         std::string renamingPath = "";
+        std::string requestActivateWindow;
+        // Last material opened in the editor. Selecting textures/meshes in
+        // Content Browser must not unload it — only another .bhmat/.json does.
+        std::string activeMaterialPath;
+
+        static bool IsMaterialAsset(const std::string& path) {
+            const std::string ext = fs::path(path).extension().string();
+            return ext == ".bhmat" || ext == ".json";
+        }
+
+        void PinMaterialFromSelection() {
+            if (selectedAssets.size() == 1 && IsMaterialAsset(selectedAssets.front())) {
+                activeMaterialPath = selectedAssets.front();
+            }
+        }
+
+        bool IsSelected(flecs::entity e) const {
+            if (!e.is_alive()) return false;
+            if (selectedEntity == e) return true;
+            for (auto s : selectedEntities) if (s == e) return true;
+            return false;
+        }
+
+        void ClearSelection() {
+            selectedEntity = flecs::entity();
+            selectedEntities.clear();
+        }
+
+        void SelectOnly(flecs::entity e) {
+            selectedEntities.clear();
+            selectedEntity = e;
+            if (e.is_alive()) selectedEntities.push_back(e);
+        }
+
+        void ToggleSelect(flecs::entity e) {
+            if (!e.is_alive()) return;
+            auto it = std::find(selectedEntities.begin(), selectedEntities.end(), e);
+            if (it != selectedEntities.end()) {
+                selectedEntities.erase(it);
+            } else {
+                selectedEntities.push_back(e);
+            }
+            selectedEntity = selectedEntities.empty() ? flecs::entity() : selectedEntities.back();
+        }
+
+        void PruneSelection() {
+            selectedEntities.erase(std::remove_if(selectedEntities.begin(), selectedEntities.end(),
+                [](flecs::entity e) { return !e.is_alive(); }), selectedEntities.end());
+            if (selectedEntity.is_alive()) {
+                if (!IsSelected(selectedEntity) && !selectedEntities.empty())
+                    selectedEntities.push_back(selectedEntity);
+            } else {
+                selectedEntity = selectedEntities.empty() ? flecs::entity() : selectedEntities.back();
+            }
+        }
 
         RenderSettings renderSettings;
         bool needsRebuild = false;
@@ -537,7 +597,10 @@ namespace burnhope {
                 for (uint64_t childID : children) DeleteEntityRecursive(FindEntityByID(childID));
             }
             DetachFromParent(target);
-            if (selectedEntity == target) selectedEntity = flecs::entity();
+            selectedEntities.erase(std::remove(selectedEntities.begin(), selectedEntities.end(), target),
+                                   selectedEntities.end());
+            if (selectedEntity == target)
+                selectedEntity = selectedEntities.empty() ? flecs::entity() : selectedEntities.back();
             target.destruct();
         }
     };

@@ -38,6 +38,36 @@ FetchContent_Declare(
 set(FLECS_STATIC ON CACHE BOOL "" FORCE)
 set(FLECS_TESTS OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(flecs)
+
+# --- New editor UI stack: Yoga (flexbox layout) + nfd-extended (native file
+# dialogs). HarfBuzz is resolved via the system package (already installed)
+# through pkg-config instead of being rebuilt from source.
+set(YG_ENABLE_EVENTS OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    yoga
+    GIT_REPOSITORY https://github.com/facebook/yoga.git
+    GIT_TAG        v3.2.1
+)
+FetchContent_GetProperties(yoga)
+if(NOT yoga_POPULATED)
+    FetchContent_Populate(yoga)
+    # Only build the `yoga` library subdirectory — skip the superproject's
+    # gtest-based test suite/fuzz targets entirely (not needed to embed the
+    # layout engine, and they roughly double configure/build time).
+    add_subdirectory(${yoga_SOURCE_DIR}/yoga ${yoga_BINARY_DIR}/yoga)
+endif()
+
+set(NFD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    nfd_extended
+    GIT_REPOSITORY https://github.com/btzy/nativefiledialog-extended.git
+    GIT_TAG        v1.2.1
+)
+FetchContent_MakeAvailable(nfd_extended)
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
+pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
 # --- 3. Настройка Assimp (максимальная очистка) ---
 
 # Выключаем всё, что тянет лишние зависимости (DirectX, GUI, тесты)
@@ -190,6 +220,10 @@ target_link_libraries(${PROJECT_NAME}
     ispc_texcomp
     VulkanMemoryAllocator
     flecs_static
+    yogacore
+    nfd
+    PkgConfig::HARFBUZZ
+    PkgConfig::FREETYPE
 )
 
 # --- 9. Копирование ресурсов (модели, текстуры, шейдеры) ---

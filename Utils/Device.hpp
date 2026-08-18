@@ -2,6 +2,7 @@
 #include "Window.hpp"
 #include <string>
 #include <vector>
+#include <mutex>
 #include <vk_mem_alloc.h>
 namespace burnhope
 {
@@ -100,6 +101,18 @@ namespace burnhope
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     BurnhopeWindow &window;
     VkCommandPool commandPool;
+    // Guards single-time command recording/submission and the persistent
+    // buffer below: asset loading (models/textures/UI init) can happen from
+    // background loader threads while the main thread is also uploading via
+    // the same pool/queue, which is illegal per the Vulkan spec without
+    // external synchronization. Off the render hot path (load-time only).
+    std::mutex m_SingleTimeCommandMutex;
+    // Reused via vkResetCommandBuffer rather than allocated/freed per call.
+    // Rapid alloc+free of a VkCommandBuffer from the same pool was observed
+    // to trip an internal validation-layer bug (stale per-handle tracking
+    // state reused at the same address); resetting one persistent buffer
+    // sidesteps that and is also cheaper for load-time uploads.
+    VkCommandBuffer m_SingleTimeCommandBuffer = VK_NULL_HANDLE;
     VkDevice device_;
     VkSurfaceKHR surface_;
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;

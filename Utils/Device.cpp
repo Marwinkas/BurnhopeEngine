@@ -583,18 +583,30 @@ VkDeviceAddress BurnhopeDevice::getBufferDeviceAddress(VkBuffer buffer) {
 }
   VkCommandBuffer BurnhopeDevice::beginSingleTimeCommands()
   {
-    VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandPool = commandPool;
-    allocInfo.commandBufferCount = 1;
-    VkCommandBuffer commandBuffer;
-    vkAllocateCommandBuffers(device_, &allocInfo, &commandBuffer);
+    // Held across begin..end (see m_SingleTimeCommandMutex declaration):
+    // background loader threads and the main thread can both reach this
+    // path (e.g. async model/BLAS uploads racing UI/material init), and
+    // the shared commandPool + graphicsQueue_ are not externally
+    // synchronized by Vulkan otherwise.
+    m_SingleTimeCommandMutex.lock();
+    if (m_SingleTimeCommandBuffer == VK_NULL_HANDLE)
+    {
+      VkCommandBufferAllocateInfo allocInfo{};
+      allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+      allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+      allocInfo.commandPool = commandPool;
+      allocInfo.commandBufferCount = 1;
+      vkAllocateCommandBuffers(device_, &allocInfo, &m_SingleTimeCommandBuffer);
+    }
+    else
+    {
+      vkResetCommandBuffer(m_SingleTimeCommandBuffer, 0);
+    }
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
-    return commandBuffer;
+    vkBeginCommandBuffer(m_SingleTimeCommandBuffer, &beginInfo);
+    return m_SingleTimeCommandBuffer;
   }
   void BurnhopeDevice::endSingleTimeCommands(VkCommandBuffer commandBuffer)
   {
@@ -605,7 +617,7 @@ VkDeviceAddress BurnhopeDevice::getBufferDeviceAddress(VkBuffer buffer) {
     submitInfo.pCommandBuffers = &commandBuffer;
     vkQueueSubmit(graphicsQueue_, 1, &submitInfo, VK_NULL_HANDLE);
     vkQueueWaitIdle(graphicsQueue_);
-    vkFreeCommandBuffers(device_, commandPool, 1, &commandBuffer);
+    m_SingleTimeCommandMutex.unlock(); // paired with the lock in beginSingleTimeCommands()
   }
   void BurnhopeDevice::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
   {

@@ -179,6 +179,7 @@ namespace burnhope
         void draw(VkCommandBuffer commandBuffer);
         void updateVertices(const std::vector<PackedVertexPos>& newPos, const std::vector<PackedVertexAttr>& newAttr, const std::vector<PackedVertexAnim>& newAnim = {});
         std::vector<PackedVertexPos> storedPositions;
+        std::vector<uint32_t> storedIndices;
         std::unique_ptr<BurnhopeBuffer> posBuffer;
         std::unique_ptr<BurnhopeBuffer> attrBuffer;
         std::unique_ptr<BurnhopeBuffer> animBuffer;

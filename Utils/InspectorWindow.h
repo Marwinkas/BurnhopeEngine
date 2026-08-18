@@ -1,347 +1,241 @@
 #pragma once
 #include "IUIWindow.h"
-#include <imgui.h>
 #include <filesystem>
+#include <fstream>
+#include <any>
+#include <algorithm>
 #include "../Render/Model.hpp"
 #include "../Render/Material.hpp"
 #include "../Render/Texture.hpp"
-#include "UIUtils.h"
 
 namespace burnhope {
     class InspectorWindow : public IUIWindow {
     public:
         InspectorWindow() : IUIWindow("Scene Inspector") {}
 
-        void Draw(UIContext& context) override {
+        void Draw(UIContext& context, ui::UIWidgets& widgets, ui::Rect contentRect) override {
             if (!m_IsOpen) return;
-            ImGui::Begin(m_Name.c_str(), &m_IsOpen);
+            ui::Panel panel(widgets, m_Name, contentRect);
 
             if (context.selectedEntity.is_alive()) {
-                DrawComponents(context, context.selectedEntity);
-            } else if (context.selectedAssets.size() == 1 && context.selectedAssets[0].ends_with(".bhtex")) {
-                DrawBHTexSettings(context, context.selectedAssets[0]);
+                DrawComponents(context, widgets, context.selectedEntity);
+            } else if (context.selectedAssets.size() == 1 &&
+                       std::filesystem::path(context.selectedAssets.front()).extension() == ".bhtex") {
+                DrawTextureSettings(context, widgets, context.selectedAssets.front());
             } else {
-                ImGui::TextDisabled("No entity selected");
+                widgets.Text("No entity selected", ui::kTheme.textMuted);
             }
-
-            ImGui::End();
         }
 
     private:
-        void DrawBHTexSettings(UIContext& context, const std::string& path) {
+        void DrawTextureSettings(UIContext& context, ui::UIWidgets& widgets, const std::string& path) {
             std::ifstream file(path, std::ios::binary);
-            if (!file.is_open()) return;
-            BHTexHeader hdr; file.read(reinterpret_cast<char*>(&hdr), sizeof(BHTexHeader)); file.close();
-            
-            ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "Texture Properties (.bhtex)");
-            ImGui::Separator(); ImGui::Spacing();
-            
-            if (UIUtils::BeginPropertyGrid("Settings")) {
-                UIUtils::DrawProperty("Is sRGB", &hdr.isSRGB);
-                UIUtils::DrawProperty("Has Alpha", &hdr.hasAlpha);
-                
-                int filter = hdr.minFilter;
-                if (UIUtils::DrawPropertyCombo("Filter Mode", &filter, "Nearest\0Linear\0")) hdr.minFilter = hdr.magFilter = filter;
-                
-                int wrap = hdr.wrapS;
-                if (UIUtils::DrawPropertyCombo("Wrap Mode", &wrap, "Repeat\0Clamp To Edge\0")) hdr.wrapS = hdr.wrapT = wrap;
-                UIUtils::EndPropertyGrid();
-            }
-
-            ImGui::Spacing();
-            ImGui::TextDisabled("Max Resolution: 2048x2048 (Lanczos)");
-            ImGui::TextDisabled("Mipmaps: %d", hdr.mipCount);
-            ImGui::TextDisabled("Format Pack: %d", hdr.packType);
-            
-            ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
-            
-            if (ImGui::Button("Apply & Rebuild", ImVec2(-1, 30))) {
-                // Сохраняем заголовок
+            BHTexHeader header{};
+            if (!file.read(reinterpret_cast<char*>(&header), sizeof(header))) return;
+            widgets.Text("Texture Properties (.bhtex)", {0.3f, 0.8f, 0.3f, 1.0f});
+            widgets.Separator();
+            widgets.DrawCheckboxControl("sRGB", &header.isSRGB);
+            widgets.DrawCheckboxControl("Has Alpha", &header.hasAlpha);
+            widgets.Text("Mipmaps: " + std::to_string(header.mipCount));
+            widgets.Text("Format Pack: " + std::to_string(header.packType),
+                         {0.55f, 0.55f, 0.55f, 1.0f});
+            if (widgets.Button("Apply & Rebuild", {0, 28})) {
                 std::fstream out(path, std::ios::in | std::ios::out | std::ios::binary);
-                out.write(reinterpret_cast<char*>(&hdr), sizeof(BHTexHeader));
+                out.write(reinterpret_cast<const char*>(&header), sizeof(header));
                 out.close();
-                // Пересобираем
                 BurnhopeTexture::rebuildFromHeader(path);
                 context.needsRebuild = true;
             }
         }
 
-        void DrawComponents(UIContext& context, flecs::entity entity) {
+        // Selects an asset path via a simple popup listing every project
+        // asset matching `extensions` (used instead of ImGui drag/drop
+        // combined with a fallback popup — kept as a popup-only picker here
+        // to stay within the immediate-mode widget set built for this pass).
+        bool AssetPicker(ui::UIWidgets& widgets, UIContext& context, const std::string& label,
+                          const std::string& currentPath, const std::vector<std::string>& extensions,
+                          std::string& outPath) {
+            widgets.PushID(label);
+            widgets.Text(label);
+            std::string btnLabel = currentPath.empty() ? "None" : std::filesystem::path(currentPath).filename().string();
+            bool clicked = widgets.Button(btnLabel, {200, 24});
+            if (clicked) widgets.OpenPopup("AssetPickerPopup");
+            bool picked = false;
+            if (widgets.BeginDragDropTarget()) {
+                if (const auto* payload = widgets.AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
+                    const std::string* path = std::any_cast<std::string>(payload);
+                    if (path) {
+                        const std::string ext = std::filesystem::path(*path).extension().string();
+                        if (std::find(extensions.begin(), extensions.end(), ext) != extensions.end()) {
+                            outPath = *path;
+                            picked = true;
+                        }
+                    }
+                }
+                widgets.EndDragDropTarget();
+            }
+            if (widgets.BeginPopup("AssetPickerPopup")) {
+                if (widgets.Selectable("None", false)) { outPath = "NONE"; picked = true; widgets.CloseCurrentPopup(); }
+                for (const auto& a : context.GetProjectAssets(extensions)) {
+                    if (widgets.Selectable(std::filesystem::path(a).filename().string(), false)) {
+                        outPath = a;
+                        picked = true;
+                        widgets.CloseCurrentPopup();
+                    }
+                }
+                widgets.EndPopup();
+            }
+            widgets.PopID();
+            return picked;
+        }
+
+        void DrawComponents(UIContext& context, ui::UIWidgets& widgets, flecs::entity entity) {
             if (entity.has<TagComponent>()) {
                 auto& tag = *entity.get_mut<TagComponent>();
-                char buffer[256];
-                strncpy(buffer, tag.name.c_str(), sizeof(buffer));
-                if (ImGui::InputText("Name", buffer, sizeof(buffer))) {
-                    tag.name = buffer;
-                }
+                widgets.InputText("Name", tag.name, 256);
+                widgets.Separator();
             }
 
             if (transform::hasBundle(entity)) {
-                if (UIUtils::BeginPropertyGrid("Transform")) {
-                    auto* position = entity.get_mut<Position3>();
-                    auto* rotation = entity.get_mut<RotationEuler>();
-                    auto* scale = entity.get_mut<Scale3>();
-                    auto* matrix = entity.get_mut<LocalMatrix>();
-                    bool changed = false;
-                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Position"); ImGui::TableSetColumnIndex(1);
-                    changed |= UIUtils::DrawVec3Control("##Pos", transform::asVec3Mut(*position), 0.0f);
-                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Rotation"); ImGui::TableSetColumnIndex(1);
-                    changed |= UIUtils::DrawVec3Control("##Rot", transform::asVec3Mut(*rotation), 0.0f);
-                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Scale"); ImGui::TableSetColumnIndex(1);
-                    changed |= UIUtils::DrawVec3Control("##Scl", transform::asVec3Mut(*scale), 1.0f);
-                    if (changed) transform::markDirty(*matrix);
-                    UIUtils::EndPropertyGrid();
-                }
+                widgets.Text("Transform");
+                auto* position = entity.get_mut<Position3>();
+                auto* rotation = entity.get_mut<RotationEuler>();
+                auto* scale = entity.get_mut<Scale3>();
+                auto* matrix = entity.get_mut<LocalMatrix>();
+                bool changed = false;
+                changed |= widgets.DrawVec3Control("Position", transform::asVec3Mut(*position), 0.0f);
+                changed |= widgets.DrawVec3Control("Rotation", transform::asVec3Mut(*rotation), 0.0f);
+                changed |= widgets.DrawVec3Control("Scale", transform::asVec3Mut(*scale), 1.0f);
+                if (changed) transform::markDirty(*matrix);
+                widgets.Separator();
             }
 
             if (entity.has<MeshComponent>()) {
-                if (UIUtils::BeginPropertyGrid("Mesh Renderer")) {
-                    auto& mc = *entity.get_mut<MeshComponent>();
-                    
-                    UIUtils::DrawProperty("Is Visible", &mc.isVisible);
-                    UIUtils::DrawProperty("Cast Shadow", &mc.castShadow);
+                widgets.Text("Mesh Renderer");
+                auto& mc = *entity.get_mut<MeshComponent>();
+                widgets.DrawCheckboxControl("Is Visible", &mc.isVisible);
+                widgets.DrawCheckboxControl("Cast Shadow", &mc.castShadow);
 
-                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Model:"); ImGui::TableSetColumnIndex(1);
-                    ImGui::SetNextItemWidth(-FLT_MIN);
-                    std::string modelName = mc.modelPath.empty() ? "None" : std::filesystem::path(mc.modelPath).filename().string();
-                    if (ImGui::Button((modelName + "##ModelBtn").c_str(), ImVec2(-1, 0))) {
-                        ImGui::OpenPopup("SelectModelPopup");
-                    }
-                    
-                    if (ImGui::BeginDragDropTarget()) {
-                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                            const char* path = (const char*)payload->Data;
-                            std::filesystem::path p(path);
-                            if (p.extension() == ".bhmesh" || p.extension() == ".obj" || p.extension() == ".fbx" || p.extension() == ".gltf") {
-                                context.pendingModelLoadPath = p.string();
-                                context.pendingModelEntity = entity;
-                            }
-                        }
-                        ImGui::EndDragDropTarget();
-                    }
-
-                    if (ImGui::BeginPopup("SelectModelPopup")) {
-                        auto models = context.GetProjectAssets({".bhmesh", ".obj", ".fbx", ".gltf"});
-                        if (ImGui::Selectable("None")) {
-                            context.pendingModelLoadPath = "NONE";
-                            context.pendingModelEntity = entity;
-                        }
-                        for (const auto& m : models) {
-                            if (ImGui::Selectable(std::filesystem::path(m).filename().string().c_str())) {
-                                context.pendingModelLoadPath = m;
-                                context.pendingModelEntity = entity;
-                            }
-                        }
-                        ImGui::EndPopup();
-                    }
-
-                    if (mc.model) {
-                        ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Skeleton:"); ImGui::TableSetColumnIndex(1);
-                        ImGui::SetNextItemWidth(-FLT_MIN);
-                        std::string skelName = mc.skeletonPath.empty() ? "None" : std::filesystem::path(mc.skeletonPath).filename().string();
-                        ImGui::Button((skelName + "##SkelBtn").c_str(), ImVec2(-1, 0));
-                        if (ImGui::BeginDragDropTarget()) {
-                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                                const char* path = (const char*)payload->Data;
-                                std::filesystem::path p(path);
-                                if (p.extension() == ".bhbone") {
-                                    mc.skeletonPath = p.string();
-                                    context.needsRebuild = true;
-                                }
-                            }
-                            ImGui::EndDragDropTarget();
-                        }
-
-                        ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Animation:"); ImGui::TableSetColumnIndex(1);
-                        ImGui::SetNextItemWidth(-FLT_MIN);
-                        std::string animName = mc.animationPath.empty() ? "None" : std::filesystem::path(mc.animationPath).filename().string();
-                        ImGui::Button((animName + "##AnimBtn").c_str(), ImVec2(-1, 0));
-                        if (ImGui::BeginDragDropTarget()) {
-                            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                                const char* path = (const char*)payload->Data;
-                                std::filesystem::path p(path);
-                                if (p.extension() == ".bhanim") {
-                                    mc.animationPath = p.string();
-                                    context.needsRebuild = true;
-                                }
-                            }
-                            ImGui::EndDragDropTarget();
-                        }
-                        
-                        if (!mc.animationPath.empty()) {
-                            ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Anim Time:"); ImGui::TableSetColumnIndex(1);
-                            ImGui::SetNextItemWidth(-FLT_MIN);
-                            ImGui::DragFloat("##AnimTime", &mc.animationTime, 0.01f);
-                        }
-
-                        ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Materials:");
-                        uint32_t matCount = mc.model->getMaterialCount();
-                        for (uint32_t mId = 0; mId < matCount; mId++) {
-                            size_t firstIdx = (size_t)-1;
-                            for(size_t i = 0; i < mc.model->getSubMeshes().size(); i++) {
-                                if (mc.model->getSubMeshes()[i].materialIndex == mId) { firstIdx = i; break; }
-                            }
-                            if (firstIdx == (size_t)-1) continue;
-
-                            ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("  Slot %u:", mId); ImGui::TableSetColumnIndex(1);
-                            ImGui::SetNextItemWidth(-FLT_MIN);
-                            ImGui::PushID(mId);
-                            
-                            std::string matName = "None";
-                            if (firstIdx < mc.materialPaths.size() && !mc.materialPaths[firstIdx].empty()) {
-                                matName = std::filesystem::path(mc.materialPaths[firstIdx]).filename().string();
-                            }
-                            
-                            if (ImGui::Button((matName + "##MatBtn").c_str(), ImVec2(-1, 0))) {
-                                ImGui::OpenPopup("SelectMatPopup");
-                            }
-                            
-                            if (ImGui::BeginDragDropTarget()) {
-                                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                                    const char* path = (const char*)payload->Data;
-                                    std::filesystem::path p(path);
-                                    if (p.extension() == ".bhmat" || p.extension() == ".json") {
-                                        context.pendingMatLoadPath = p.string();
-                                        context.pendingMatSlot = mId;
-                                        context.pendingMatEntity = entity;
-                                    }
-                                }
-                                ImGui::EndDragDropTarget();
-                            }
-
-                            if (ImGui::BeginPopup("SelectMatPopup")) {
-                                auto mats = context.GetProjectAssets({".bhmat", ".json"});
-                                if (ImGui::Selectable("None")) {
-                                    context.pendingMatLoadPath = "NONE";
-                                    context.pendingMatSlot = mId;
-                                    context.pendingMatEntity = entity;
-                                }
-                                for (const auto& m : mats) {
-                                    if (ImGui::Selectable(std::filesystem::path(m).filename().string().c_str())) {
-                                        context.pendingMatLoadPath = m;
-                                        context.pendingMatSlot = mId;
-                                        context.pendingMatEntity = entity;
-                                    }
-                                }
-                                ImGui::EndPopup();
-                            }
-                            ImGui::PopID();
-                        }
-
-                         ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0);
-                        ImGui::Text("Ray Tracing:"); ImGui::TableSetColumnIndex(1);
-                        if (ImGui::Button("FORCE REBUILD ALL", ImVec2(-1, 0))) {
-                            if (mc.model && mc.model->gpuDataReady && !mc.model->storedPositions.empty()) {
-                                mc.model->createBLAS(mc.model->storedPositions);
-                                context.needsRTRebuild = true;
-                                context.needsRebuild = true; // Для обновления ObjectData/MaterialData
-                            }
-                        }
-                    }
-                    UIUtils::EndPropertyGrid();
+                std::string modelPick;
+                if (AssetPicker(widgets, context, "Model", mc.modelPath, {".bhmesh", ".obj", ".fbx", ".gltf"}, modelPick)) {
+                    context.pendingModelLoadPath = modelPick;
+                    context.pendingModelEntity = entity;
                 }
+
+                if (mc.model) {
+                    std::string skeletonPick;
+                    if (AssetPicker(widgets, context, "Skeleton", mc.skeletonPath, {".bhbone"}, skeletonPick)) {
+                        mc.skeletonPath = skeletonPick == "NONE" ? "" : skeletonPick;
+                        context.needsRebuild = true;
+                    }
+                    std::string animationPick;
+                    if (AssetPicker(widgets, context, "Animation", mc.animationPath, {".bhanim"}, animationPick)) {
+                        mc.animationPath = animationPick == "NONE" ? "" : animationPick;
+                        context.needsRebuild = true;
+                    }
+                    if (!mc.animationPath.empty()) {
+                        widgets.DrawFloatControl("Animation Time", &mc.animationTime, 0.0f, 0.01f);
+                    }
+                    uint32_t matCount = mc.model->getMaterialCount();
+                    for (uint32_t mId = 0; mId < matCount; mId++) {
+                        size_t firstIdx = static_cast<size_t>(-1);
+                        for (size_t i = 0; i < mc.model->getSubMeshes().size(); i++) {
+                            if (mc.model->getSubMeshes()[i].materialIndex == mId) { firstIdx = i; break; }
+                        }
+                        if (firstIdx == static_cast<size_t>(-1)) continue;
+
+                        widgets.PushIDInt(mId);
+                        std::string curMat = (firstIdx < mc.materialPaths.size()) ? mc.materialPaths[firstIdx] : "";
+                        std::string matPick;
+                        if (AssetPicker(widgets, context, "Material Slot " + std::to_string(mId), curMat, {".bhmat", ".json"}, matPick)) {
+                            context.pendingMatLoadPath = matPick;
+                            context.pendingMatSlot = mId;
+                            context.pendingMatEntity = entity;
+                        }
+                        widgets.PopID();
+                    }
+
+                    if (widgets.Button("Force Rebuild RT (BLAS)", {220, 24})) {
+                        if (mc.model->gpuDataReady && !mc.model->storedPositions.empty()) {
+                            mc.model->createBLAS(mc.model->storedPositions);
+                            context.needsRTRebuild = true;
+                            context.needsRebuild = true;
+                        }
+                    }
+                }
+                widgets.Separator();
             }
 
             if (entity.has<LightComponent>()) {
-                if (UIUtils::BeginPropertyGrid("Light")) {
-                    auto& lc = *entity.get_mut<LightComponent>();
-                    UIUtils::DrawProperty("Enable", &lc.light.enable);
-                    
-                    const char* lightTypes[] = { "Directional", "Point", "Spot" };
-                    int currentType = (int)lc.light.type;
-                    if (UIUtils::DrawPropertyCombo("Type", &currentType, "Directional\0Point\0Spot\0")) {
-                        lc.light.type = (LightType)currentType;
-                    }
+                widgets.Text("Light");
+                auto& lc = *entity.get_mut<LightComponent>();
+                widgets.DrawCheckboxControl("Enable", &lc.light.enable);
 
-                    UIUtils::DrawPropertyColor("Color", &lc.light.color.x);
-                    UIUtils::DrawProperty("Intensity", &lc.light.intensity, -1000.0f, 1000.0f);
-                    
-                    if (lc.light.type == LightType::Point || lc.light.type == LightType::Spot) {
-                        UIUtils::DrawProperty("Radius", &lc.light.radius, 0.0f, 500.0f);
+                const char* lightTypeNames[] = {"Directional", "Point", "Spot"};
+                std::string preview = lightTypeNames[std::clamp(static_cast<int>(lc.light.type), 0, 2)];
+                if (ui::Combo type(widgets, "Type", preview); type) {
+                    for (int i = 0; i < 3; ++i) {
+                        if (widgets.ComboItem(lightTypeNames[i], static_cast<int>(lc.light.type) == i)) {
+                            lc.light.type = static_cast<LightType>(i);
+                        }
                     }
-                    if (lc.light.type == LightType::Spot) {
-                        UIUtils::DrawProperty("Inner Cone", &lc.light.innerCone, 0.0f, lc.light.outerCone);
-                        UIUtils::DrawProperty("Outer Cone", &lc.light.outerCone, lc.light.innerCone, 90.0f);
-                    }
-                    
-                    UIUtils::DrawProperty("Cast Shadows", &lc.light.castShadows);
-                    UIUtils::EndPropertyGrid();
                 }
+
+                widgets.DrawColorControl("Color", lc.light.color);
+                widgets.DrawFloatControl("Intensity", &lc.light.intensity);
+                if (lc.light.type == LightType::Point || lc.light.type == LightType::Spot) {
+                    widgets.DrawFloatControl("Radius", &lc.light.radius);
+                }
+                if (lc.light.type == LightType::Spot) {
+                    widgets.DrawFloatControl("Inner Cone", &lc.light.innerCone, 0.0f, 0.1f);
+                    widgets.DrawFloatControl("Outer Cone", &lc.light.outerCone, lc.light.innerCone, 0.1f);
+                    lc.light.innerCone = std::clamp(lc.light.innerCone, 0.0f, lc.light.outerCone);
+                    lc.light.outerCone = std::clamp(lc.light.outerCone, lc.light.innerCone, 90.0f);
+                }
+                widgets.DrawCheckboxControl("Cast Shadows", &lc.light.castShadows);
+                widgets.Separator();
             }
 
             if (entity.has<DecalComponent>()) {
-                if (UIUtils::BeginPropertyGrid("Screen Space Decal")) {
-                    auto& dc = *entity.get_mut<DecalComponent>();
-                    UIUtils::DrawProperty("Opacity", &dc.opacity, 0.0f, 1.0f);
-                    
-                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Albedo Texture:"); ImGui::TableSetColumnIndex(1);
-                    ImGui::SetNextItemWidth(-FLT_MIN);
-                    std::string albName = dc.albedoPath.empty() ? "None" : std::filesystem::path(dc.albedoPath).filename().string();
-                    ImGui::Button((albName + "##DecalAlb").c_str(), ImVec2(-1, 0));
-                    if (ImGui::BeginDragDropTarget()) {
-                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                            const char* path = (const char*)payload->Data;
-                            std::filesystem::path p(path);
-                            if (p.extension() == ".png" || p.extension() == ".jpg" || p.extension() == ".jpeg") {
-                                vkDeviceWaitIdle(context.device->device());
-                                dc.albedoPath = p.string();
-                                dc.albedoTex = BurnhopeTexture::createTextureFromFile(*context.device, dc.albedoPath);
-                                context.needsRebuild = true;
-                            }
-                        } ImGui::EndDragDropTarget();
-                    }
-                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::Text("Normal Texture:"); ImGui::TableSetColumnIndex(1);
-                    ImGui::SetNextItemWidth(-FLT_MIN);
-                    std::string normName = dc.normalPath.empty() ? "None" : std::filesystem::path(dc.normalPath).filename().string();
-                    ImGui::Button((normName + "##DecalNorm").c_str(), ImVec2(-1, 0));
-                    if (ImGui::BeginDragDropTarget()) {
-                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM")) {
-                            const char* path = (const char*)payload->Data;
-                            std::filesystem::path p(path);
-                            if (p.extension() == ".png" || p.extension() == ".jpg" || p.extension() == ".jpeg") {
-                                vkDeviceWaitIdle(context.device->device());
-                                dc.normalPath = p.string();
-                                dc.normalTex = BurnhopeTexture::createDataTextureFromFile(*context.device, dc.normalPath);
-                                context.needsRebuild = true;
-                            }
-                        } ImGui::EndDragDropTarget();
-                    }
-                    UIUtils::EndPropertyGrid();
+                widgets.Text("Screen Space Decal");
+                auto& dc = *entity.get_mut<DecalComponent>();
+                widgets.DrawFloatControl("Opacity", &dc.opacity);
+
+                std::string albedoPick;
+                if (AssetPicker(widgets, context, "Albedo Texture", dc.albedoPath, {".png", ".jpg", ".jpeg"}, albedoPick)) {
+                    vkDeviceWaitIdle(context.device->device());
+                    dc.albedoPath = albedoPick == "NONE" ? "" : albedoPick;
+                    dc.albedoTex = dc.albedoPath.empty() ? nullptr : BurnhopeTexture::createTextureFromFile(*context.device, dc.albedoPath);
+                    context.needsRebuild = true;
                 }
+                std::string normalPick;
+                if (AssetPicker(widgets, context, "Normal Texture", dc.normalPath, {".png", ".jpg", ".jpeg"}, normalPick)) {
+                    vkDeviceWaitIdle(context.device->device());
+                    dc.normalPath = normalPick == "NONE" ? "" : normalPick;
+                    dc.normalTex = dc.normalPath.empty() ? nullptr : BurnhopeTexture::createDataTextureFromFile(*context.device, dc.normalPath);
+                    context.needsRebuild = true;
+                }
+                widgets.Separator();
             }
 
             if (entity.has<ReflectionProbeComponent>()) {
-                if (UIUtils::BeginPropertyGrid("Reflection Probe")) {
-                    auto& pc = *entity.get_mut<ReflectionProbeComponent>();
-                    UIUtils::DrawProperty("Radius", &pc.radius, 0.1f, 500.0f);
-                    int res = pc.resolution;
-                    if (UIUtils::DrawProperty("Resolution", &res, 64, 2048)) {
-                        pc.resolution = std::max(64, res);
-                    }
-                    UIUtils::EndPropertyGrid();
-                }
+                widgets.Text("Reflection Probe");
+                auto& pc = *entity.get_mut<ReflectionProbeComponent>();
+                widgets.DrawFloatControl("Radius", &pc.radius);
+                widgets.DrawIntControl("Resolution", &pc.resolution);
+                widgets.Separator();
             }
 
-            ImGui::Separator();
-            if (ImGui::Button("Add Component")) {
-                ImGui::OpenPopup("AddComponentPopup");
-            }
-            if (ImGui::BeginPopup("AddComponentPopup")) {
-                if (!entity.has<MeshComponent>() && ImGui::Selectable("Mesh Renderer")) {
-                    entity.set<MeshComponent>({});
+            if (widgets.Button("Add Component", {150, 26})) widgets.OpenPopup("AddComponentPopup");
+            if (widgets.BeginPopup("AddComponentPopup")) {
+                if (!entity.has<MeshComponent>() && widgets.MenuItem("Mesh Renderer")) { entity.set<MeshComponent>({}); widgets.CloseCurrentPopup(); }
+                if (!entity.has<LightComponent>() && widgets.MenuItem("Light")) {
+                    LightComponent lc; lc.light.enable = true; entity.set<LightComponent>(lc);
+                    widgets.CloseCurrentPopup();
                 }
-                if (!entity.has<LightComponent>() && ImGui::Selectable("Light")) {
-                    LightComponent lc;
-                    lc.light.enable = true;
-                    entity.set<LightComponent>(lc);
-                }
-                if (!entity.has<ReflectionProbeComponent>() && ImGui::Selectable("Reflection Probe")) {
-                    entity.set<ReflectionProbeComponent>({});
-                }
-                if (!entity.has<DecalComponent>() && ImGui::Selectable("Decal Projector")) {
-                    entity.set<DecalComponent>({});
-                }
-                ImGui::EndPopup();
+                if (!entity.has<ReflectionProbeComponent>() && widgets.MenuItem("Reflection Probe")) { entity.set<ReflectionProbeComponent>({}); widgets.CloseCurrentPopup(); }
+                if (!entity.has<DecalComponent>() && widgets.MenuItem("Decal Projector")) { entity.set<DecalComponent>({}); widgets.CloseCurrentPopup(); }
+                widgets.EndPopup();
             }
         }
     };

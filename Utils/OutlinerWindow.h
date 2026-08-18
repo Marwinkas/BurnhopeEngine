@@ -1,136 +1,119 @@
 #pragma once
 #include "IUIWindow.h"
-#include <imgui.h>
 
 namespace burnhope {
     class OutlinerWindow : public IUIWindow {
     public:
         OutlinerWindow() : IUIWindow("Scene Outliner") {}
 
-        void Draw(UIContext& context) override {
+        void Draw(UIContext& context, ui::UIWidgets& widgets, ui::Rect contentRect) override {
             if (!m_IsOpen) return;
-            ImGui::Begin(m_Name.c_str(), &m_IsOpen);
+            ui::Panel panel(widgets, m_Name, contentRect);
 
-            if (ImGui::Button("+ Add", ImVec2(60, 25))) ImGui::OpenPopup("GlobalCreateMenu");
-            ImGui::SameLine();
-            if (ImGui::Button("Unparent", ImVec2(80, 25)) && context.selectedEntity.is_alive()) {
+            if (widgets.Button("+ Add", {72, 24})) widgets.OpenPopup("GlobalCreateMenu");
+            widgets.SameLine();
+            if (widgets.Button("Unparent", {86, 24}) && context.selectedEntity.is_alive()) {
                 context.SaveState();
                 context.DetachFromParent(context.selectedEntity);
             }
 
-            if (ImGui::BeginPopup("GlobalCreateMenu")) {
-                if (ImGui::MenuItem("Empty Object")) { 
-                    context.SaveState(); 
-                    context.CreateBaseEntity("Empty"); 
+            if (ui::Popup add(widgets, "GlobalCreateMenu"); add) {
+                if (widgets.MenuItem("Empty Object")) {
+                    context.SaveState();
+                    context.SelectOnly(context.CreateBaseEntity("Empty"));
+                    widgets.CloseCurrentPopup();
                 }
-                if (ImGui::MenuItem("Mesh Object")) {
+                if (widgets.MenuItem("Mesh Object")) {
                     context.SaveState();
                     flecs::entity e = context.CreateBaseEntity("Mesh");
                     e.set<MeshComponent>({});
+                    context.SelectOnly(e);
+                    widgets.CloseCurrentPopup();
                 }
-                if (ImGui::MenuItem("Light Source")) {
+                if (widgets.MenuItem("Light Source")) {
                     context.SaveState();
                     flecs::entity e = context.CreateBaseEntity("Light");
                     e.set<LightComponent>({});
+                    context.SelectOnly(e);
+                    widgets.CloseCurrentPopup();
                 }
-
-                ImGui::EndPopup();
             }
 
-            ImGui::Separator();
-            ImGui::BeginChild("OutlinerList", ImVec2(0, -20));
+            widgets.Separator();
 
-            // Отрисовываем ТОЛЬКО корневые объекты
             context.world->each<IDComponent>([&](flecs::entity entity, IDComponent&) {
                 if (!entity.has<TagComponent>()) return;
                 bool isRoot = true;
                 if (entity.has<HierarchyComponent>()) {
                     if (entity.get<HierarchyComponent>()->parentID != 0) isRoot = false;
                 }
-                if (isRoot) DrawNode(context, entity);
+                if (isRoot) DrawNode(context, widgets, entity);
             });
 
-            // Dummy зона в самом низу окна для сброса родителя (Drag & Drop в пустоту)
-            ImGui::Dummy(ImGui::GetContentRegionAvail());
-            if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("OUTLINER_NODE")) {
-                    flecs::entity dragged = *(const flecs::entity*)payload->Data;
-                    context.SaveState();
-                    context.DetachFromParent(dragged); // Бросили в пустоту = отвязали
-                }
-                ImGui::EndDragDropTarget();
+            // A real drop target at the bottom mirrors ImGui's empty-child
+            // target: dropping a node here removes its parent.
+            if (widgets.Selectable("Drop here to unparent", false, {0, 22}) &&
+                context.selectedEntity.is_alive()) {
+                context.SaveState();
+                context.DetachFromParent(context.selectedEntity);
             }
-
-            ImGui::EndChild();
-            ImGui::End();
         }
 
     private:
-        void DrawNode(UIContext& context, flecs::entity entity) {
+        void DrawNode(UIContext& context, ui::UIWidgets& widgets, flecs::entity entity) {
             if (!entity.is_alive()) return;
             auto& tag = *entity.get_mut<TagComponent>();
-            
+
             bool isLeaf = true;
             if (entity.has<HierarchyComponent>()) {
                 isLeaf = entity.get<HierarchyComponent>()->childrenIDs.empty();
             }
 
-            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap;
-            if (context.selectedEntity == entity) flags |= ImGuiTreeNodeFlags_Selected;
-            if (isLeaf) flags |= ImGuiTreeNodeFlags_Leaf;
-
-            bool nodeOpen = ImGui::TreeNodeEx((void*)(uintptr_t)entity.id(), flags, tag.name.c_str());
-
-            if (ImGui::IsItemClicked()) {
-                context.selectedEntity = entity;
+            ui::ID nodeId(widgets, entity.id());
+            bool selected = context.IsSelected(entity);
+            ui::Tree tree(widgets, tag.name, selected, isLeaf);
+            if (widgets.WasItemClicked()) {
+                if (widgets.Ctrl()) context.ToggleSelect(entity);
+                else context.SelectOnly(entity);
+            }
+            if (widgets.WasItemRightClicked()) {
+                context.SelectOnly(entity);
+                widgets.OpenPopup("NodeContext");
             }
 
-            // Меню по правому клику
-            if (ImGui::BeginPopupContextItem()) {
-                context.selectedEntity = entity;
-                if (ImGui::BeginMenu("Create Child...")) {
-                    if (ImGui::MenuItem("Empty Object")) {
-                        context.SaveState();
-                        flecs::entity newE = context.CreateBaseEntity("Empty");
-                        context.AttachToParent(newE, entity);
-                    }
-                    ImGui::EndMenu();
-                }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Delete", "Del")) { 
-                    context.SaveState(); 
-                    context.DeleteEntityRecursive(entity); 
-                }
-                ImGui::EndPopup();
+            if (widgets.BeginDragDropSource()) {
+                widgets.SetDragDropPayload("OUTLINER_NODE", entity);
+                widgets.EndDragDropSource();
             }
-
-            // Drag & Drop Source
-            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                ImGui::SetDragDropPayload("OUTLINER_NODE", &entity, sizeof(flecs::entity));
-                ImGui::Text("Move %s", tag.name.c_str());
-                ImGui::EndDragDropSource();
-            }
-            
-            // Drag & Drop Target
-            if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("OUTLINER_NODE")) {
-                    flecs::entity dragged = *(const flecs::entity*)payload->Data;
+            if (widgets.BeginDragDropTarget()) {
+                if (const auto* payload = widgets.AcceptDragDropPayload("OUTLINER_NODE")) {
+                    flecs::entity dragged = std::any_cast<flecs::entity>(*payload);
                     context.SaveState();
                     context.AttachToParent(dragged, entity);
                 }
-                ImGui::EndDragDropTarget();
+                widgets.EndDragDropTarget();
             }
 
-            // Рекурсивная отрисовка детей
-            if (nodeOpen) {
-                if (!isLeaf) {
-                    auto children = entity.get<HierarchyComponent>()->childrenIDs;
-                    for (uint64_t childID : children) {
-                        flecs::entity childEnt = context.FindEntityByID(childID);
-                        if (childEnt.is_alive()) DrawNode(context, childEnt);
-                    }
+            if (ui::Popup ctx(widgets, "NodeContext"); ctx) {
+                if (widgets.MenuItem("Create Child")) {
+                    context.SaveState();
+                    flecs::entity child = context.CreateBaseEntity("Empty");
+                    context.AttachToParent(child, entity);
+                    widgets.CloseCurrentPopup();
                 }
-                ImGui::TreePop();
+                if (widgets.MenuItem("Delete")) {
+                    context.SaveState();
+                    context.DeleteEntityRecursive(entity);
+                    widgets.CloseCurrentPopup();
+                }
+            }
+
+            if (tree) {
+                auto children = entity.get<HierarchyComponent>()->childrenIDs;
+                for (uint64_t childID : children) {
+                    flecs::entity childEnt = context.FindEntityByID(childID);
+                    if (childEnt.is_alive()) DrawNode(context, widgets, childEnt);
+                }
             }
         }
     };
