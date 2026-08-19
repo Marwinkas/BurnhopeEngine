@@ -28,6 +28,7 @@ void UIWidgets::BeginFrame(glm::vec2 screenSize) {
     m_InOverlay = false;
     m_OverlayHitBlock = {};
     m_LineMaxH = 0.0f;
+    m_EditBegan = false;
     m_WheelAbsorbed = false;
     m_CursorRequest = MouseCursor::Arrow;
     m_Tooltip.clear();
@@ -612,6 +613,7 @@ void UIWidgets::EndCombo() {
 bool UIWidgets::DragFloatAt(uint64_t id, float* value, float speed, Rect rect, Color badge, std::string_view badgeText) {
     bool hovered = MouseOver(rect);
     if (hovered && m_Input.MouseClicked(0)) {
+        m_EditBegan = true;
         m_Input.SetActive(id);
         m_DragActiveFieldId = id;
         m_DragLastMouse = m_Input.MousePos();

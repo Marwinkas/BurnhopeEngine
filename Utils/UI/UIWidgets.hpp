@@ -80,6 +80,7 @@ namespace burnhope::ui {
         float CalcTextWidth(std::string_view text) { return TextWidth(text); }
         bool IsPopupOpen() const { return m_OpenPopupId != 0 || m_OpenMenuId != 0; }
         bool HasTextFocus() const { return m_ActiveTextId != 0; }
+        bool EditBegan() const { return m_EditBegan; }
         bool HoveringOverlay() const {
             const glm::vec2 m = m_Input.MousePos();
             return m_OverlayHitBlock.w > 0.0f && m_OverlayHitBlock.Contains(m.x, m.y);
@@ -241,6 +242,7 @@ namespace burnhope::ui {
 
         uint64_t m_DragActiveFieldId = 0;
         glm::vec2 m_DragLastMouse{0, 0};
+        bool m_EditBegan = false;
         uint64_t m_DragSourceId = 0;
         glm::vec2 m_DragStartMouse{0, 0};
         std::string m_DragPreview;

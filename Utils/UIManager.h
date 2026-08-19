@@ -32,7 +32,6 @@
 #include "UI/UIWidgets.hpp"
 #include "UI/UIDockspace.hpp"
 #include "UI/NativeDialogs.hpp"
-#include "UI/GizmoBridge.hpp"
 #include "UI/MaterialPreview.hpp"
 #include "UI/SceneBrowserModal.hpp"
 
@@ -40,11 +39,10 @@
 #include "Project/RecentFilesStore.hpp"
 #include "Project/SceneController.hpp"
 
-// New editor UI orchestrator: replaces ImGui_Impl*/ImGuizmo-direct usage
-// with UIInput -> UIWidgets -> UIDockspace -> UIRenderer, plus GizmoBridge
-// (the one remaining hidden-ImGui island) composited as a thin overlay pass.
+// New editor UI orchestrator: UIInput -> UIWidgets -> UIDockspace -> UIRenderer.
+// Viewport gizmos are screen-space quads; transforms go through ApplyXform.
 // Scene/project lifecycle is delegated to SceneController/ProjectFile/
-// RecentFilesStore instead of ad-hoc JSON read/write in this class.
+// RecentFilesStore.
 namespace burnhope {
 
     class UIManager {
@@ -52,13 +50,12 @@ namespace burnhope {
         UIContext& GetContext() { return m_Context; }
         bool WantCaptureMouse() const { return m_WantCaptureMouse; }
 
-        UIManager(BurnhopeWindow& window, BurnhopeDevice& device, VkFormat swapChainFormat, flecs::world* world, const std::string& projectPath)
+        UIManager([[maybe_unused]] BurnhopeWindow& window, BurnhopeDevice& device, VkFormat swapChainFormat, flecs::world* world, const std::string& projectPath)
             : m_Device(&device),
               m_Recent(),
               m_Renderer(device, swapChainFormat),
               m_Text(),
               m_Widgets(m_Input, m_Renderer, m_Text, device),
-              m_GizmoBridge(window, device, swapChainFormat),
               m_SceneController(m_Context, m_Project, m_Recent)
         {
             ui::NativeDialogs::Init();
@@ -124,7 +121,6 @@ namespace burnhope {
 
         void ProcessSDLEvent(const SDL_Event& event) {
             m_Input.ProcessEvent(event);
-            m_GizmoBridge.ProcessSDLEvent(event);
         }
 
         void UpdateUI(BurnhopeWindow& window, Camera& camera, VkCommandBuffer commandBuffer) {
@@ -133,7 +129,6 @@ namespace burnhope {
 
             m_Widgets.BeginFrame({(float)extent.width, (float)extent.height});
             m_Renderer.BeginFrame({(float)extent.width, (float)extent.height});
-            m_GizmoBridge.BeginFrame(window);
             if (!SDL_TextInputActive(window.getSDLWindow())) {
                 SDL_StartTextInput(window.getSDLWindow());
             }
@@ -180,7 +175,6 @@ namespace burnhope {
             }
 
             m_Widgets.EndFrame();
-            m_GizmoBridge.EndFrame();
 
             const glm::vec2 mouse = m_Input.MousePos();
             m_LastViewport = layout.viewport;
@@ -196,7 +190,6 @@ namespace burnhope {
 
         void RenderUI(VkCommandBuffer commandBuffer) {
             m_Renderer.Render(commandBuffer);
-            m_GizmoBridge.RenderOverlay(commandBuffer);
         }
 
         void ProcessPendingActions() {
@@ -290,7 +283,6 @@ namespace burnhope {
             glm::vec3 viewRight{1, 0, 0};
             glm::vec3 viewUp{0, 1, 0};
             glm::vec3 viewFwd{0, 0, -1};
-            glm::mat4 gizmoBase{1.0f};
             std::vector<XformSnap> snaps;
         };
 
@@ -317,16 +309,43 @@ namespace burnhope {
             if (m_Input.Ctrl() && !m_Input.Shift() && m_Input.KeyPressed(SDL_SCANCODE_Z)) Undo();
             if (m_Input.Ctrl() && m_Input.Shift() && m_Input.KeyPressed(SDL_SCANCODE_Z)) Redo();
 
+            const bool textFocus = m_Widgets.HasTextFocus();
+            if (!textFocus && m_Input.Ctrl() && m_Input.KeyPressed(SDL_SCANCODE_C)
+                && !m_Context.selectedEntities.empty()) {
+                m_Context.CopySelection();
+            }
+            if (!textFocus && m_Input.Ctrl() && m_Input.KeyPressed(SDL_SCANCODE_X)
+                && !m_Context.selectedEntities.empty()) {
+                m_Context.SaveState();
+                m_Context.CopySelection();
+                auto toDelete = m_Context.selectedEntities;
+                for (flecs::entity e : toDelete) {
+                    if (e.is_alive() && !m_Context.HasSelectedAncestor(e))
+                        m_Context.DeleteEntityRecursive(e);
+                }
+                m_Context.needsRebuild = true;
+            }
+            if (!textFocus && m_Input.Ctrl() && m_Input.KeyPressed(SDL_SCANCODE_V)
+                && !m_Context.entityClipboard.empty()) {
+                auto created = m_Context.PasteClipboard();
+                m_Context.ClearSelection();
+                for (flecs::entity c : created) {
+                    if (c.is_alive() && transform::parentId(c) == 0) m_Context.ToggleSelect(c);
+                }
+            }
+
             if (m_Input.Ctrl() && m_Input.KeyPressed(SDL_SCANCODE_D) && !m_Context.selectedEntities.empty()) {
                 m_Context.SaveState();
                 std::vector<flecs::entity> clones;
                 clones.reserve(m_Context.selectedEntities.size());
                 for (flecs::entity src : m_Context.selectedEntities) {
                     if (!src.is_alive()) continue;
+                    if (m_Context.HasSelectedAncestor(src)) continue;
                     clones.push_back(CloneHierarchy(src, flecs::entity()));
                 }
                 m_Context.ClearSelection();
                 for (flecs::entity c : clones) m_Context.ToggleSelect(c);
+                m_Context.needsRebuild = true;
             }
 
             if (m_Input.Ctrl() && m_Input.KeyPressed(SDL_SCANCODE_S)) m_SceneController.SaveScene();
@@ -356,6 +375,25 @@ namespace burnhope {
                 if (ui::Menu edit(m_Widgets, "Edit"); edit) {
                     if (m_Widgets.MenuItem("Undo", "Ctrl+Z", !m_Context.undoStack.empty())) Undo();
                     if (m_Widgets.MenuItem("Redo", "Ctrl+Shift+Z", !m_Context.redoStack.empty())) Redo();
+                    if (m_Widgets.MenuItem("Copy", "Ctrl+C", !m_Context.selectedEntities.empty()))
+                        m_Context.CopySelection();
+                    if (m_Widgets.MenuItem("Cut", "Ctrl+X", !m_Context.selectedEntities.empty())) {
+                        m_Context.SaveState();
+                        m_Context.CopySelection();
+                        auto toDelete = m_Context.selectedEntities;
+                        for (flecs::entity e : toDelete) {
+                            if (e.is_alive() && !m_Context.HasSelectedAncestor(e))
+                                m_Context.DeleteEntityRecursive(e);
+                        }
+                        m_Context.needsRebuild = true;
+                    }
+                    if (m_Widgets.MenuItem("Paste", "Ctrl+V", !m_Context.entityClipboard.empty())) {
+                        auto created = m_Context.PasteClipboard();
+                        m_Context.ClearSelection();
+                        for (flecs::entity c : created) {
+                            if (c.is_alive() && transform::parentId(c) == 0) m_Context.ToggleSelect(c);
+                        }
+                    }
                 }
                 if (ui::Menu window(m_Widgets, "Window"); window) {
                     for (auto& win : m_Windows) {
@@ -374,11 +412,7 @@ namespace burnhope {
         }
 
         void HandleGizmosAndSelection(BurnhopeWindow& window, Camera& camera, ui::Rect viewport) {
-            m_GizmoBridge.SetMode(m_GizmoLocal ? ui::GizmoMode::Local : ui::GizmoMode::World);
             m_Context.PruneSelection();
-
-            glm::mat4 view = camera.GetViewMatrix();
-            glm::mat4 proj = camera.GetProjectionMatrix(45.0f, 0.1f, 1000.0f);
 
             const bool looking = m_Input.MouseDown(2);
             const bool uiBusy = m_Widgets.IsPopupOpen() || m_Widgets.IsDragDropActive() || m_Widgets.HasTextFocus();
@@ -391,22 +425,35 @@ namespace burnhope {
             flecs::entity lightHover = flecs::entity();
             const bool iconHit = DrawLightIcons(window, camera, viewport, lightHover);
 
-            if (m_Xform.active && !m_Xform.fromGizmo) {
+            XformAxis gizmoHitAxis = XformAxis::All;
+            bool gizmoHit = false;
+            if (m_Context.selectedEntity.is_alive() && transform::hasBundle(m_Context.selectedEntity)) {
+                gizmoHit = DrawTransformGizmo(camera, viewport, gizmoHitAxis);
+            }
+
+            if (m_Xform.active) {
                 if (m_Input.KeyPressed(SDL_SCANCODE_X)) ToggleXformAxis(XformAxis::X);
                 if (m_Input.KeyPressed(SDL_SCANCODE_Y)) ToggleXformAxis(XformAxis::Y);
                 if (m_Input.KeyPressed(SDL_SCANCODE_Z)) ToggleXformAxis(XformAxis::Z);
+                if (m_Xform.axis != XformAxis::All)
+                    DrawConstraintAxis(camera, viewport, m_Xform.op, m_Xform.axis);
 
                 m_Xform.accum += m_Input.MouseDelta();
                 WrapMouse(window);
                 ApplyXform(camera);
 
                 const bool cancel = m_Input.MouseRightClicked() || m_Input.KeyPressed(SDL_SCANCODE_ESCAPE);
-                const bool confirm = m_Input.MouseClicked(0) || m_Input.KeyPressed(SDL_SCANCODE_RETURN);
+                const bool confirm = m_Xform.fromGizmo
+                    ? m_Input.MouseReleased(0)
+                    : (m_Input.MouseClicked(0) || m_Input.KeyPressed(SDL_SCANCODE_RETURN));
                 if (cancel) CancelXform();
                 else if (confirm) EndXform(true);
+            } else if (!uiBusy && !looking && gizmoHit && m_Input.MouseClicked(0) && !iconHit) {
+                BeginXform(m_GizmoOp, true, camera);
+                m_Xform.axis = gizmoHitAxis;
             }
 
-            if (!m_Xform.active && !m_GizmoBridge.WantsMouseCapture() && !uiBusy
+            if (!m_Xform.active && !gizmoHit && !uiBusy
                 && viewport.Contains(m_Input.MousePos().x, m_Input.MousePos().y)) {
                 flecs::entity hover = lightHover;
                 if (!hover.is_alive() && !iconHit) hover = PickEntityUnderMouse(window, camera, viewport);
@@ -420,30 +467,6 @@ namespace burnhope {
                     } else if (!m_Input.Ctrl()) {
                         m_Context.ClearSelection();
                     }
-                }
-            }
-
-            if (m_Context.selectedEntity.is_alive() && transform::hasBundle(m_Context.selectedEntity)
-                && (!m_Xform.active || m_Xform.fromGizmo)) {
-                glm::mat4 gizmoMat = m_Xform.active ? m_Xform.gizmoBase : MakeGizmoMatrix(m_Context.selectedEntity);
-                const bool usingNow = m_GizmoBridge.Manipulate(view, proj, gizmoMat, nullptr);
-                if (!usingNow) m_IgnoreGizmo = false;
-
-                if (m_Xform.active && m_Xform.fromGizmo) {
-                    if (m_Input.KeyPressed(SDL_SCANCODE_X)) ToggleXformAxis(XformAxis::X);
-                    if (m_Input.KeyPressed(SDL_SCANCODE_Y)) ToggleXformAxis(XformAxis::Y);
-                    if (m_Input.KeyPressed(SDL_SCANCODE_Z)) ToggleXformAxis(XformAxis::Z);
-                    ApplyFromGizmo(gizmoMat);
-                    if (m_Input.MouseRightClicked() || m_Input.KeyPressed(SDL_SCANCODE_ESCAPE)) CancelXform();
-                    else if (m_Input.MouseReleased(0) || !usingNow) EndXform(true);
-                } else if (!m_Xform.active && usingNow && !m_IgnoreGizmo && !looking) {
-                    ui::GizmoOperation gop = m_GizmoBridge.Operation();
-                    XformOp op = gop == ui::GizmoOperation::Rotate ? XformOp::Rotate
-                               : gop == ui::GizmoOperation::Scale ? XformOp::Scale
-                                                                  : XformOp::Translate;
-                    BeginXform(op, true, camera);
-                    m_Xform.axis = DetectGizmoAxis(camera, m_Context.selectedEntity, op);
-                    ApplyFromGizmo(gizmoMat);
                 }
             }
         }
@@ -462,9 +485,9 @@ namespace burnhope {
         }
 
         float CurrentSnap() const {
-            switch (m_GizmoBridge.Operation()) {
-                case ui::GizmoOperation::Rotate: return m_SnapRotate;
-                case ui::GizmoOperation::Scale: return m_SnapScale;
+            switch (m_GizmoOp) {
+                case XformOp::Rotate: return m_SnapRotate;
+                case XformOp::Scale: return m_SnapScale;
                 default: return m_SnapTranslate;
             }
         }
@@ -495,12 +518,12 @@ namespace burnhope {
             const float h = 22.0f;
             const float toolW = 610.0f;
             m_Widgets.SetCursor({std::max(210.0f, fullRect.w - toolW), 3.0f});
-            if (ToolBtn("Move", m_GizmoBridge.Operation() == ui::GizmoOperation::Translate, {48, h}))
-                m_GizmoBridge.SetOperation(ui::GizmoOperation::Translate);
-            if (ToolBtn("Rotate", m_GizmoBridge.Operation() == ui::GizmoOperation::Rotate, {56, h}))
-                m_GizmoBridge.SetOperation(ui::GizmoOperation::Rotate);
-            if (ToolBtn("Scale", m_GizmoBridge.Operation() == ui::GizmoOperation::Scale, {50, h}))
-                m_GizmoBridge.SetOperation(ui::GizmoOperation::Scale);
+            if (ToolBtn("Move", m_GizmoOp == XformOp::Translate, {48, h}))
+                m_GizmoOp = XformOp::Translate;
+            if (ToolBtn("Rotate", m_GizmoOp == XformOp::Rotate, {56, h}))
+                m_GizmoOp = XformOp::Rotate;
+            if (ToolBtn("Scale", m_GizmoOp == XformOp::Scale, {50, h}))
+                m_GizmoOp = XformOp::Scale;
 
             m_Widgets.SetCursor({m_Widgets.GetCursor().x + 6.0f, 3.0f});
             if (ToolBtn("World", !m_GizmoLocal, {52, h})) m_GizmoLocal = false;
@@ -536,6 +559,18 @@ namespace burnhope {
             }
         }
 
+        bool ProjectToScreen(const Camera& camera, const glm::vec3& world, glm::vec2& out) const {
+            glm::mat4 vp = camera.GetProjectionMatrix(45.0f, 0.1f, 1000.0f) * camera.GetViewMatrix();
+            glm::vec4 clip = vp * glm::vec4(world, 1.0f);
+            if (clip.w <= 0.001f) return false;
+            glm::vec3 ndc = glm::vec3(clip) / clip.w;
+            float w = camera.width > 0 ? (float)camera.width : 1.0f;
+            float h = camera.height > 0 ? (float)camera.height : 1.0f;
+            out.x = (ndc.x * 0.5f + 0.5f) * w;
+            out.y = (ndc.y * 0.5f + 0.5f) * h;
+            return true;
+        }
+
         bool WorldToScreen(const Camera& camera, const glm::vec3& world, glm::vec2& out) const {
             glm::mat4 vp = camera.GetProjectionMatrix(45.0f, 0.1f, 1000.0f) * camera.GetViewMatrix();
             glm::vec4 clip = vp * glm::vec4(world, 1.0f);
@@ -546,6 +581,234 @@ namespace burnhope {
             out.x = (ndc.x * 0.5f + 0.5f) * w;
             out.y = (ndc.y * 0.5f + 0.5f) * h;
             return ndc.z >= 0.0f && ndc.z <= 1.0f;
+        }
+
+        static bool ClipLineToRect(glm::vec2& a, glm::vec2& b, ui::Rect r) {
+            const float x0 = a.x, y0 = a.y;
+            const float dx = b.x - a.x, dy = b.y - a.y;
+            float t0 = 0.0f, t1 = 1.0f;
+            auto clip = [&](float p, float q) {
+                if (std::abs(p) < 1e-8f) return q >= 0.0f;
+                const float t = q / p;
+                if (p < 0.0f) {
+                    if (t > t1) return false;
+                    if (t > t0) t0 = t;
+                } else {
+                    if (t < t0) return false;
+                    if (t < t1) t1 = t;
+                }
+                return true;
+            };
+            if (!clip(-dx, x0 - r.x)) return false;
+            if (!clip(dx, r.x + r.w - x0)) return false;
+            if (!clip(-dy, y0 - r.y)) return false;
+            if (!clip(dy, r.y + r.h - y0)) return false;
+            a = {x0 + t0 * dx, y0 + t0 * dy};
+            b = {x0 + t1 * dx, y0 + t1 * dy};
+            return true;
+        }
+
+        bool ProjectWorldLine(const Camera& camera, glm::vec3 wa, glm::vec3 wb, glm::vec2& sa, glm::vec2& sb) const {
+            bool ha = ProjectToScreen(camera, wa, sa);
+            bool hb = ProjectToScreen(camera, wb, sb);
+            if (ha && hb) return true;
+            if (!ha && !hb) return false;
+            glm::vec3 vis = ha ? wa : wb;
+            glm::vec3 hid = ha ? wb : wa;
+            for (int i = 0; i < 24; ++i) {
+                glm::vec3 mid = (vis + hid) * 0.5f;
+                glm::vec2 sm;
+                if (ProjectToScreen(camera, mid, sm)) vis = mid;
+                else hid = mid;
+            }
+            if (ha) return ProjectToScreen(camera, vis, sb);
+            return ProjectToScreen(camera, vis, sa);
+        }
+
+        void DrawScreenDot(glm::vec2 p, float size, ui::Color color, ui::Rect viewport) {
+            ui::Rect r{p.x - size * 0.5f, p.y - size * 0.5f, size, size};
+            r = r.Intersect(viewport);
+            if (r.w > 0.4f && r.h > 0.4f) m_Widgets.Background(r, color);
+        }
+
+        void DrawScreenLine(glm::vec2 a, glm::vec2 b, float thickness, ui::Color color, ui::Rect viewport) {
+            if (!ClipLineToRect(a, b, viewport)) return;
+            glm::vec2 d = b - a;
+            float len = glm::length(d);
+            if (len < 0.5f) {
+                DrawScreenDot(a, thickness, color, viewport);
+                return;
+            }
+            glm::vec2 n = d / len;
+            const float step = std::max(1.4f, thickness * 0.8f);
+            for (float t = 0.0f; t <= len; t += step)
+                DrawScreenDot(a + n * t, thickness, color, viewport);
+        }
+
+        static ui::Color AxisColor(int i, bool hot) {
+            ui::Color c = (i == 0) ? ui::kTheme.axisX : (i == 1) ? ui::kTheme.axisY : ui::kTheme.axisZ;
+            if (!hot) return c;
+            return {std::min(1.0f, c.r * 1.35f + 0.2f),
+                    std::min(1.0f, c.g * 1.35f + 0.2f),
+                    std::min(1.0f, c.b * 1.35f + 0.2f), 1.0f};
+        }
+
+        static float DistToSeg(glm::vec2 p, glm::vec2 a, glm::vec2 b) {
+            glm::vec2 ab = b - a;
+            float l2 = glm::dot(ab, ab);
+            if (l2 < 1e-6f) return glm::length(p - a);
+            float t = glm::clamp(glm::dot(p - a, ab) / l2, 0.0f, 1.0f);
+            return glm::length(p - (a + ab * t));
+        }
+
+        glm::mat3 GizmoAxes(flecs::entity entity) {
+            if (m_GizmoLocal) return glm::mat3(GetGlobalRotation(entity));
+            return glm::mat3(1.0f);
+        }
+
+        glm::vec3 GizmoPivot(flecs::entity entity) {
+            if (m_Xform.active && m_Xform.op != XformOp::Translate) return m_Xform.pivot;
+            return EntityPivotWorld(entity);
+        }
+
+        void DrawConstraintAxis(const Camera& camera, ui::Rect viewport, XformOp op, XformAxis axis) {
+            if (axis == XformAxis::All) return;
+            const int i = static_cast<int>(axis) - 1;
+            glm::vec3 dir = XformAxisWorld();
+            if (glm::length(dir) < 1e-6f) return;
+            dir = glm::normalize(dir);
+            glm::vec3 origin = m_Xform.pivot;
+            if (op == XformOp::Translate && m_Context.selectedEntity.is_alive())
+                origin = EntityPivotWorld(m_Context.selectedEntity);
+            constexpr float kInf = 5000.0f;
+            glm::vec3 a = (op == XformOp::Translate) ? origin : (origin - dir * kInf);
+            glm::vec3 b = origin + dir * kInf;
+            glm::vec2 sa, sb;
+            if (!ProjectWorldLine(camera, a, b, sa, sb)) return;
+            DrawScreenLine(sa, sb, 3.0f, AxisColor(i, true), viewport);
+        }
+
+        bool DrawTransformGizmo(const Camera& camera, ui::Rect viewport, XformAxis& outAxis) {
+            outAxis = XformAxis::All;
+            flecs::entity entity = m_Context.selectedEntity;
+            if (!entity.is_alive() || !transform::hasBundle(entity)) return false;
+
+            glm::vec3 pivot = GizmoPivot(entity);
+            glm::mat3 axes = (m_Xform.active && m_GizmoLocal && !m_Xform.snaps.empty())
+                ? glm::mat3_cast(m_Xform.snaps.front().worldRot)
+                : GizmoAxes(entity);
+
+            glm::vec2 origin;
+            if (!WorldToScreen(camera, pivot, origin)) return false;
+
+            const XformOp op = m_Xform.active ? m_Xform.op : m_GizmoOp;
+            const glm::vec2 mouse = m_Input.MousePos();
+            const bool mouseIn = viewport.Contains(mouse.x, mouse.y);
+            const float dist = std::max(0.15f, glm::length(camera.Position - pivot));
+            const float worldLen = dist * 0.15f;
+            const float handlePx = 80.0f;
+            const float hitPad = 12.0f;
+            const int segs = 48;
+            const float worldR = dist * 0.11f;
+
+            glm::vec2 axisEnd[3]{};
+            bool axisOk[3] = {false, false, false};
+            glm::vec2 ringPt[3][49]{};
+            bool ringVis[3][49]{};
+            int ringCount[3] = {0, 0, 0};
+
+            float best = hitPad;
+            int hit = -1;
+
+            if (op == XformOp::Rotate) {
+                for (int i = 0; i < 3; ++i) {
+                    glm::vec3 n = axes[i];
+                    float nlen = glm::length(n);
+                    if (nlen < 1e-6f) continue;
+                    n /= nlen;
+                    glm::vec3 ref = (std::abs(n.y) < 0.9f) ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
+                    glm::vec3 u = glm::normalize(glm::cross(n, ref));
+                    glm::vec3 v = glm::cross(n, u);
+                    glm::vec2 prev{};
+                    bool prevOk = false;
+                    float minD = 1.0e8f;
+                    for (int s = 0; s <= segs; ++s) {
+                        float ang = (static_cast<float>(s) / static_cast<float>(segs)) * 6.2831853f;
+                        glm::vec3 p = pivot + (u * std::cos(ang) + v * std::sin(ang)) * worldR;
+                        glm::vec2 sp;
+                        const bool vis = WorldToScreen(camera, p, sp);
+                        const int idx = ringCount[i]++;
+                        ringPt[i][idx] = sp;
+                        ringVis[i][idx] = vis;
+                        if (vis && prevOk) minD = std::min(minD, DistToSeg(mouse, prev, sp));
+                        prev = sp;
+                        prevOk = vis;
+                    }
+                    if (mouseIn && minD < best) { best = minD; hit = i; }
+                }
+            } else {
+                for (int i = 0; i < 3; ++i) {
+                    glm::vec2 ep;
+                    if (!WorldToScreen(camera, pivot + axes[i] * worldLen, ep)) continue;
+                    glm::vec2 dir = ep - origin;
+                    float len = glm::length(dir);
+                    if (len < 4.0f) continue;
+                    axisEnd[i] = origin + (dir / len) * handlePx;
+                    axisOk[i] = true;
+                    if (mouseIn) {
+                        float d = DistToSeg(mouse, origin, axisEnd[i]);
+                        if (d < best) { best = d; hit = i; }
+                    }
+                }
+                const float centerSize = (op == XformOp::Scale) ? 12.0f : 8.0f;
+                if (mouseIn) {
+                    float cd = glm::length(mouse - origin);
+                    if (cd < centerSize + 4.0f && cd < best) { best = cd; hit = -2; }
+                }
+            }
+
+            const XformAxis hover = (hit == -2) ? XformAxis::All
+                : (hit >= 0) ? static_cast<XformAxis>(hit + 1) : XformAxis::All;
+            const XformAxis hl = m_Xform.active ? m_Xform.axis : hover;
+
+            if (op == XformOp::Rotate) {
+                for (int i = 0; i < 3; ++i) {
+                    const bool hot = hl == static_cast<XformAxis>(i + 1);
+                    ui::Color col = AxisColor(i, hot);
+                    for (int s = 1; s < ringCount[i]; ++s) {
+                        if (ringVis[i][s - 1] && ringVis[i][s])
+                            DrawScreenLine(ringPt[i][s - 1], ringPt[i][s], hot ? 3.4f : 2.2f, col, viewport);
+                    }
+                }
+            } else {
+                for (int i = 0; i < 3; ++i) {
+                    if (!axisOk[i]) continue;
+                    const bool hot = hl == static_cast<XformAxis>(i + 1)
+                        || (hl == XformAxis::All && hit == -2 && op == XformOp::Scale);
+                    ui::Color col = AxisColor(i, hot);
+                    glm::vec2 dir = axisEnd[i] - origin;
+                    float len = glm::length(dir);
+                    if (len < 1.0f) continue;
+                    dir /= len;
+                    DrawScreenLine(origin, axisEnd[i], hot ? 3.6f : 2.6f, col, viewport);
+                    if (op == XformOp::Translate) {
+                        glm::vec2 perp{-dir.y, dir.x};
+                        DrawScreenLine(axisEnd[i], axisEnd[i] - dir * 12.0f + perp * 6.0f, 2.4f, col, viewport);
+                        DrawScreenLine(axisEnd[i], axisEnd[i] - dir * 12.0f - perp * 6.0f, 2.4f, col, viewport);
+                    } else {
+                        DrawScreenDot(axisEnd[i], hot ? 11.0f : 9.0f, col, viewport);
+                    }
+                }
+                const float centerSize = (op == XformOp::Scale) ? 12.0f : 8.0f;
+                const bool centerHot = hit == -2 || (m_Xform.active && m_Xform.axis == XformAxis::All);
+                DrawScreenDot(origin, centerHot ? centerSize + 2.0f : centerSize,
+                              centerHot ? ui::Color::RGBA8(255, 255, 255) : ui::Color::RGBA8(230, 230, 234),
+                              viewport);
+            }
+
+            if (hit == -1) return false;
+            outAxis = hover;
+            return true;
         }
 
         bool DrawLightIcons(BurnhopeWindow& window, Camera& camera, ui::Rect viewport, flecs::entity& outHover) {
@@ -608,13 +871,6 @@ namespace burnhope {
             return r;
         }
 
-        glm::mat4 MakeGizmoMatrix(flecs::entity entity) {
-            glm::mat4 m = GetGlobalRotation(entity);
-            glm::vec3 pivot = EntityPivotWorld(entity);
-            m[3] = glm::vec4(pivot, 1.0f);
-            return m;
-        }
-
         static glm::vec3 MatrixEulerDeg(const glm::mat4& m) {
             glm::vec3 sx = glm::vec3(m[0]);
             glm::vec3 sy = glm::vec3(m[1]);
@@ -624,7 +880,7 @@ namespace burnhope {
                 lx > 1e-8f ? sx / lx : glm::vec3(1, 0, 0),
                 ly > 1e-8f ? sy / ly : glm::vec3(0, 1, 0),
                 lz > 1e-8f ? sz / lz : glm::vec3(0, 0, 1));
-            // Same Rx*Ry*Rz convention as transform::rotationMatrix / ImGuizmo, in degrees.
+            // Same Rx*Ry*Rz convention as transform::rotationMatrix, in degrees.
             float x = glm::degrees(std::atan2(R[1][2], R[2][2]));
             float y = glm::degrees(std::atan2(-R[0][2], std::sqrt(R[1][2] * R[1][2] + R[2][2] * R[2][2])));
             float z = glm::degrees(std::atan2(R[0][1], R[0][0]));
@@ -723,16 +979,7 @@ namespace burnhope {
                 s.worldRot = glm::quat_cast(GetGlobalRotation(e));
                 m_Xform.snaps.push_back(s);
             }
-            m_Xform.gizmoBase = glm::mat4(1.0f);
-            if (!m_Xform.snaps.empty()) {
-                m_Xform.gizmoBase = glm::mat4_cast(m_Xform.snaps.front().worldRot);
-                m_Xform.gizmoBase[3] = glm::vec4(m_Xform.pivot, 1.0f);
-            }
-            switch (op) {
-                case XformOp::Rotate: m_GizmoBridge.SetOperation(ui::GizmoOperation::Rotate); break;
-                case XformOp::Scale: m_GizmoBridge.SetOperation(ui::GizmoOperation::Scale); break;
-                default: m_GizmoBridge.SetOperation(ui::GizmoOperation::Translate); break;
-            }
+            m_GizmoOp = op;
         }
 
         void ToggleXformAxis(XformAxis axis) {
@@ -753,7 +1000,6 @@ namespace burnhope {
             RestoreXformSnaps();
             if (!m_Context.undoStack.empty()) m_Context.undoStack.pop_back();
             m_Xform = {};
-            m_IgnoreGizmo = true;
             m_Context.needsRebuild = true;
             m_Context.needsRTRebuild = true;
         }
@@ -772,52 +1018,6 @@ namespace burnhope {
             transform::markDirty(*s.e.get_mut<LocalMatrix>());
         }
 
-        static glm::vec3 MatrixScale(const glm::mat4& m) {
-            return {
-                glm::length(glm::vec3(m[0])),
-                glm::length(glm::vec3(m[1])),
-                glm::length(glm::vec3(m[2]))
-            };
-        }
-
-        void ApplyFromGizmo(const glm::mat4& gizmoNow) {
-            const glm::vec3 move = glm::vec3(gizmoNow[3]) - glm::vec3(m_Xform.gizmoBase[3]);
-            const glm::quat q0 = glm::normalize(glm::quat_cast(m_Xform.gizmoBase));
-            const glm::quat q1 = glm::normalize(glm::quat_cast(gizmoNow));
-            const glm::quat dq = q1 * glm::inverse(q0);
-            glm::vec3 addScale = MatrixScale(gizmoNow) - glm::vec3(1.0f);
-            for (int i = 0; i < 3; ++i) {
-                if (std::abs(addScale[i]) < 0.0005f) addScale[i] = 0.0f;
-            }
-
-            for (const XformSnap& s : m_Xform.snaps) {
-                glm::vec3 pos = s.pos;
-                glm::vec3 euler = s.euler;
-                glm::vec3 scale = s.scale;
-                if (m_Xform.op == XformOp::Translate) {
-                    glm::vec3 worldMove = move;
-                    if (m_Xform.axis != XformAxis::All) {
-                        glm::vec3 axis = XformAxisWorld();
-                        worldMove = axis * glm::dot(worldMove, axis);
-                    }
-                    pos = WorldToLocalPos(s.e, s.worldPos + worldMove);
-                } else if (m_Xform.op == XformOp::Rotate) {
-                    glm::vec3 rel = s.worldPos - m_Xform.pivot;
-                    pos = WorldToLocalPos(s.e, m_Xform.pivot + dq * rel);
-                    euler = WorldQuatToLocalEuler(s.e, dq * s.worldRot, s.euler);
-                } else {
-                    if (m_Xform.axis == XformAxis::All) scale = s.scale + addScale;
-                    else {
-                        int i = static_cast<int>(m_Xform.axis) - 1;
-                        scale[i] = s.scale[i] + addScale[i];
-                    }
-                }
-                WriteSnapTransform(s, pos, euler, scale);
-            }
-            m_Context.needsRebuild = true;
-            m_Context.needsRTRebuild = true;
-        }
-
         void WrapMouse(BurnhopeWindow& window) {
             auto ext = window.getExtent();
             glm::vec2 p = m_Input.MousePos();
@@ -834,39 +1034,33 @@ namespace burnhope {
             }
         }
 
-        XformAxis DetectGizmoAxis(const Camera& camera, flecs::entity entity, XformOp op) {
-            (void)op;
-            glm::vec2 mouse = m_Input.MousePos();
-            glm::vec3 pivot = EntityPivotWorld(entity);
-            glm::vec2 sp;
-            if (!WorldToScreen(camera, pivot, sp)) return XformAxis::All;
-            glm::mat3 axes = m_GizmoLocal ? glm::mat3(GetGlobalRotation(entity)) : glm::mat3(1.0f);
-            float best = 16.0f;
-            int hit = -1;
-            for (int i = 0; i < 3; ++i) {
-                glm::vec2 ep;
-                if (!WorldToScreen(camera, pivot + axes[i], ep)) continue;
-                glm::vec2 d = ep - sp;
-                float len = glm::length(d);
-                if (len < 1.0f) continue;
-                d /= len;
-                glm::vec2 end = sp + d * 90.0f;
-                glm::vec2 a = mouse - sp;
-                glm::vec2 b = end - sp;
-                float t = glm::clamp(glm::dot(a, b) / glm::dot(b, b), 0.0f, 1.0f);
-                float dist = glm::length(mouse - (sp + b * t));
-                if (dist < best) { best = dist; hit = i; }
-            }
-            if (hit == 0) return XformAxis::X;
-            if (hit == 1) return XformAxis::Y;
-            if (hit == 2) return XformAxis::Z;
-            return XformAxis::All;
-        }
-
         void ApplyXform(const Camera& camera) {
             const float snap = ActiveSnap();
             const glm::vec2 d = m_Xform.accum;
             const float dist = std::max(0.15f, glm::length(camera.Position - m_Xform.pivot));
+
+            float axisAlong = 0.0f;
+            glm::vec3 axisDir(0.0f);
+            if (m_Xform.axis != XformAxis::All) {
+                axisDir = XformAxisWorld();
+                glm::vec2 sp, ep;
+                if (glm::length(axisDir) > 1e-6f
+                    && WorldToScreen(camera, m_Xform.pivot, sp)
+                    && WorldToScreen(camera, m_Xform.pivot + axisDir, ep)) {
+                    glm::vec2 sa = ep - sp;
+                    float sl = glm::length(sa);
+                    if (sl > 1.0f) axisAlong = glm::dot(d, sa / sl);
+                    else {
+                        glm::vec3 move = m_Xform.viewRight * (d.x * dist * 0.0025f)
+                                       + m_Xform.viewUp * (-d.y * dist * 0.0025f);
+                        axisAlong = glm::dot(move, axisDir) / std::max(1e-6f, dist * 0.0025f);
+                    }
+                } else {
+                    glm::vec3 move = m_Xform.viewRight * (d.x * dist * 0.0025f)
+                                   + m_Xform.viewUp * (-d.y * dist * 0.0025f);
+                    axisAlong = glm::dot(move, axisDir) / std::max(1e-6f, dist * 0.0025f);
+                }
+            }
 
             for (const XformSnap& s : m_Xform.snaps) {
                 if (!s.e.is_alive() || !transform::hasBundle(s.e)) continue;
@@ -875,19 +1069,21 @@ namespace burnhope {
                 glm::vec3 scale = s.scale;
 
                 if (m_Xform.op == XformOp::Translate) {
-                    glm::vec3 move = m_Xform.viewRight * (d.x * dist * 0.0025f)
-                                   + m_Xform.viewUp * (-d.y * dist * 0.0025f);
+                    glm::vec3 move;
                     if (m_Xform.axis != XformAxis::All) {
-                        glm::vec3 axis = XformAxisWorld();
-                        move = axis * glm::dot(move, axis);
-                        if (snap > 0.0f) move = axis * SnapF(glm::dot(move, axis), snap);
-                    } else if (snap > 0.0f) {
-                        move = {SnapF(move.x, snap), SnapF(move.y, snap), SnapF(move.z, snap)};
+                        float along = axisAlong * dist * 0.0025f;
+                        if (snap > 0.0f) along = SnapF(along, snap);
+                        move = axisDir * along;
+                    } else {
+                        move = m_Xform.viewRight * (d.x * dist * 0.0025f)
+                             + m_Xform.viewUp * (-d.y * dist * 0.0025f);
+                        if (snap > 0.0f)
+                            move = {SnapF(move.x, snap), SnapF(move.y, snap), SnapF(move.z, snap)};
                     }
                     pos = WorldToLocalPos(s.e, s.worldPos + move);
                 } else if (m_Xform.op == XformOp::Rotate) {
                     float deg = d.x * 0.35f;
-                    glm::vec3 axis = (m_Xform.axis == XformAxis::All) ? m_Xform.viewFwd : XformAxisWorld();
+                    glm::vec3 axis = (m_Xform.axis == XformAxis::All) ? m_Xform.viewFwd : axisDir;
                     if (glm::length(axis) < 1e-6f) axis = m_Xform.viewFwd;
                     axis = glm::normalize(axis);
                     if (snap > 0.0f) deg = SnapF(deg, snap);
@@ -898,7 +1094,7 @@ namespace burnhope {
                     pos = WorldToLocalPos(s.e, newWorldP);
                     euler = WorldQuatToLocalEuler(s.e, newWorldR, s.euler);
                 } else {
-                    float add = d.x * 0.01f;
+                    float add = (m_Xform.axis == XformAxis::All) ? (d.x * 0.01f) : (axisAlong * 0.01f);
                     if (snap > 0.0f) add = SnapF(add, snap);
                     if (m_Xform.axis == XformAxis::All) scale = s.scale + glm::vec3(add);
                     else {
@@ -1091,69 +1287,70 @@ namespace burnhope {
         }
 
         glm::mat4 GetGlobalTransform(flecs::entity entity) {
-            if (!entity.is_alive() || !transform::hasBundle(entity)) return glm::mat4(1.0f);
-            // Do not call updateMatrixIfNeeded here: that clears LocalMatrix.dirty
-            // before the render loop sees it, so the GPU instance buffer never updates.
-            glm::mat4 globalMat = glm::translate(glm::mat4(1.0f), transform::asVec3(*entity.get<Position3>()))
-                * transform::rotationMatrix(*entity.get<RotationEuler>())
-                * glm::scale(glm::mat4(1.0f), transform::asVec3(*entity.get<Scale3>()));
-            if (entity.has<HierarchyComponent>()) {
-                uint64_t parentID = entity.get<HierarchyComponent>()->parentID;
-                flecs::entity parentEnt = m_Context.FindEntityByID(parentID);
-                if (parentEnt.is_alive()) globalMat = GetGlobalTransform(parentEnt) * globalMat;
-            }
-            return globalMat;
+            return transform::worldMatrix(entity);
         }
 
         flecs::entity CloneHierarchy(flecs::entity source, flecs::entity newParent) {
+            if (!source.is_alive()) return flecs::entity();
             flecs::entity copy = m_Context.world->entity();
             copy.set<IDComponent>({});
 
             if (source.has<TagComponent>()) {
                 TagComponent tag = *source.get<TagComponent>();
-                tag.name += " (Copy)";
+                if (!newParent.is_alive()) tag.name += " (Copy)";
                 copy.set<TagComponent>(tag);
             }
             transform::copyBundle(source, copy);
+            if (!newParent.is_alive() && transform::hasBundle(source))
+                transform::writeLocal(copy, transform::decompose(transform::worldMatrix(source)));
             if (source.has<MeshComponent>()) copy.set<MeshComponent>(*source.get<MeshComponent>());
             if (source.has<LightComponent>()) copy.set<LightComponent>(*source.get<LightComponent>());
             if (source.has<ReflectionProbeComponent>()) copy.set<ReflectionProbeComponent>(*source.get<ReflectionProbeComponent>());
+            if (source.has<DecalComponent>()) copy.set<DecalComponent>(*source.get<DecalComponent>());
 
             copy.set<HierarchyComponent>({});
-            HierarchyComponent& hc = *copy.get_mut<HierarchyComponent>();
-            if (newParent.is_alive() && newParent.has<IDComponent>()) {
+            if (newParent.is_alive() && newParent.has<IDComponent>() && copy.has<IDComponent>()) {
+                HierarchyComponent& hc = *copy.get_mut<HierarchyComponent>();
                 hc.parentID = newParent.get<IDComponent>()->ID;
+                if (!newParent.has<HierarchyComponent>()) newParent.set<HierarchyComponent>({});
                 newParent.get_mut<HierarchyComponent>()->childrenIDs.push_back(copy.get<IDComponent>()->ID);
+            } else if (transform::hasBundle(copy)) {
+                glm::vec3 p = transform::asVec3(*copy.get<Position3>());
+                p.x += 1.0f;
+                transform::writeLocal(copy, p, transform::asVec3(*copy.get<RotationEuler>()),
+                                      transform::asVec3(*copy.get<Scale3>()));
+            }
+
+            if (source.has<HierarchyComponent>()) {
+                auto children = source.get<HierarchyComponent>()->childrenIDs;
+                for (uint64_t cid : children) {
+                    flecs::entity child = m_Context.FindEntityByID(cid);
+                    if (child.is_alive()) CloneHierarchy(child, copy);
+                }
             }
             return copy;
         }
 
         void Undo() {
+            if (m_Xform.active) {
+                CancelXform();
+                return;
+            }
             if (m_Context.undoStack.empty()) return;
-            vkDeviceWaitIdle(m_Device->device());
-            flecs::snapshot redoSnap(*m_Context.world);
-            redoSnap.take();
-            m_Context.redoStack.push_back({std::move(redoSnap), m_Context.selectedEntity});
-
+            if (m_Device) vkDeviceWaitIdle(m_Device->device());
+            m_Context.redoStack.push_back(m_Context.CaptureScene());
             SceneSnapshot snap = std::move(m_Context.undoStack.back());
             m_Context.undoStack.pop_back();
-            snap.snapshot.restore();
-            m_Context.SelectOnly(snap.selectedEntity);
-            m_Context.needsRebuild = true;
+            m_Context.RestoreScene(snap);
         }
 
         void Redo() {
             if (m_Context.redoStack.empty()) return;
-            vkDeviceWaitIdle(m_Device->device());
-            flecs::snapshot undoSnap(*m_Context.world);
-            undoSnap.take();
-            m_Context.undoStack.push_back({std::move(undoSnap), m_Context.selectedEntity});
-
+            if (m_Device) vkDeviceWaitIdle(m_Device->device());
+            m_Context.undoStack.push_back(m_Context.CaptureScene());
             SceneSnapshot snap = std::move(m_Context.redoStack.back());
             m_Context.redoStack.pop_back();
-            snap.snapshot.restore();
-            m_Context.SelectOnly(snap.selectedEntity);
-            m_Context.needsRebuild = true;
+            m_Context.RestoreScene(snap);
         }
 
         void RestoreMatHoverPreview() {
@@ -1304,13 +1501,12 @@ namespace burnhope {
         ui::UIText m_Text;
         ui::UIWidgets m_Widgets;
         ui::UIDockspace m_Dockspace;
-        ui::GizmoBridge m_GizmoBridge;
         ui::SceneBrowserModal m_SceneBrowser;
         project::SceneController m_SceneController;
         std::unique_ptr<ui::MaterialPreview> m_MatPreview;
 
         bool m_WantCaptureMouse = false;
-        bool m_IgnoreGizmo = false;
+        XformOp m_GizmoOp = XformOp::Translate;
         bool m_GizmoLocal = false;
         bool m_PivotCenter = false;
         float m_SnapTranslate = 0.0f;

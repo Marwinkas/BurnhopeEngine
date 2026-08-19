@@ -7,11 +7,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Математика для ImGui
-add_definitions(-DIMGUI_DEFINE_MATH_OPERATORS)
-
-
-
 # --- 2. Поиск системных пакетов ---
 
 find_package(Vulkan REQUIRED)
@@ -138,9 +133,6 @@ target_include_directories(ispc_texcomp PUBLIC "${ISPC_DIR}")
 
 include_directories(
     Libraries/include
-    Libraries/include/imgui
-    Libraries/include/imguizmo
-    Libraries/include/imgui/backends
     Libraries/include/stb
     Libraries/include/nlohmann
     # Путь к заголовкам Assimp (публичный интерфейс)
@@ -159,20 +151,11 @@ file(GLOB ENGINE_BASE_SOURCES
 file(GLOB_RECURSE RENDER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Render/*.cpp")
 file(GLOB_RECURSE UTILS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Utils/*.cpp")
 
-# Собираем ImGui
-file(GLOB_RECURSE IMGUI_SOURCES 
-    "Libraries/src/imgui/*.cpp"
-    "Libraries/src/imguizmo/*.cpp"
-    "Libraries/src/imgui/backends/imgui_impl_vulkan.cpp"
-    "Libraries/src/imgui/backends/imgui_impl_sdl3.cpp"
-)
-
 # Объединяем всё в один список
 set(ALL_SOURCES 
     ${ENGINE_BASE_SOURCES} 
     ${RENDER_SOURCES} 
     ${UTILS_SOURCES} 
-    ${IMGUI_SOURCES}
     "Libraries/include/glm/detail/glm.cpp"
 )
 

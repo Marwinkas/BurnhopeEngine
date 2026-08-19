@@ -106,7 +106,10 @@ namespace burnhope {
                 changed |= widgets.DrawVec3Control("Position", transform::asVec3Mut(*position), 0.0f);
                 changed |= widgets.DrawVec3Control("Rotation", transform::asVec3Mut(*rotation), 0.0f);
                 changed |= widgets.DrawVec3Control("Scale", transform::asVec3Mut(*scale), 1.0f);
-                if (changed) transform::markDirty(*matrix);
+                if (changed) {
+                    transform::markDirty(*matrix);
+                    context.needsRebuild = true;
+                }
                 widgets.Separator();
             }
 
@@ -228,15 +231,29 @@ namespace burnhope {
 
             if (widgets.Button("Add Component", {150, 26})) widgets.OpenPopup("AddComponentPopup");
             if (widgets.BeginPopup("AddComponentPopup")) {
-                if (!entity.has<MeshComponent>() && widgets.MenuItem("Mesh Renderer")) { entity.set<MeshComponent>({}); widgets.CloseCurrentPopup(); }
+                if (!entity.has<MeshComponent>() && widgets.MenuItem("Mesh Renderer")) {
+                    context.SaveState();
+                    entity.set<MeshComponent>({});
+                    widgets.CloseCurrentPopup();
+                }
                 if (!entity.has<LightComponent>() && widgets.MenuItem("Light")) {
+                    context.SaveState();
                     LightComponent lc; lc.light.enable = true; entity.set<LightComponent>(lc);
                     widgets.CloseCurrentPopup();
                 }
-                if (!entity.has<ReflectionProbeComponent>() && widgets.MenuItem("Reflection Probe")) { entity.set<ReflectionProbeComponent>({}); widgets.CloseCurrentPopup(); }
-                if (!entity.has<DecalComponent>() && widgets.MenuItem("Decal Projector")) { entity.set<DecalComponent>({}); widgets.CloseCurrentPopup(); }
+                if (!entity.has<ReflectionProbeComponent>() && widgets.MenuItem("Reflection Probe")) {
+                    context.SaveState();
+                    entity.set<ReflectionProbeComponent>({});
+                    widgets.CloseCurrentPopup();
+                }
+                if (!entity.has<DecalComponent>() && widgets.MenuItem("Decal Projector")) {
+                    context.SaveState();
+                    entity.set<DecalComponent>({});
+                    widgets.CloseCurrentPopup();
+                }
                 widgets.EndPopup();
             }
+            if (widgets.EditBegan()) context.SaveState();
         }
     };
 }

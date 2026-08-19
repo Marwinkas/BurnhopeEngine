@@ -4,10 +4,12 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <algorithm>
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
 #include "Components.hpp"
+#include "Device.hpp"
 
 namespace burnhope {
     namespace fs = std::filesystem;
@@ -315,9 +317,42 @@ namespace burnhope {
     int canvasTexIdx = 0;
     };
 
+    struct EditorEntitySnap {
+        uint64_t id = 0;
+        std::string name = "Entity";
+        glm::vec3 pos{0.0f};
+        glm::vec3 euler{0.0f};
+        glm::vec3 scale{1.0f};
+        uint64_t parentID = 0;
+        std::vector<uint64_t> childrenIDs;
+
+        bool hasMesh = false;
+        std::string modelPath;
+        std::vector<std::string> materialPaths;
+        std::string skeletonPath;
+        std::string animationPath;
+        bool meshStatic = false;
+        bool meshVisible = true;
+        bool meshCastShadow = true;
+        float animationTime = 0.0f;
+
+        bool hasLight = false;
+        Light light;
+
+        bool hasProbe = false;
+        float probeRadius = 10.0f;
+        int probeResolution = 256;
+
+        bool hasDecal = false;
+        std::string decalAlbedo;
+        std::string decalNormal;
+        float decalOpacity = 1.0f;
+    };
+
     struct SceneSnapshot {
-        flecs::snapshot snapshot;
-        flecs::entity selectedEntity;
+        std::vector<EditorEntitySnap> entities;
+        std::vector<uint64_t> selectedIDs;
+        uint64_t primaryID = 0;
     };
 
     struct PendingDeletion {
@@ -346,6 +381,7 @@ namespace burnhope {
 
         std::vector<std::string> selectedAssets;
         std::vector<std::string> clipboardPaths;
+        std::vector<EditorEntitySnap> entityClipboard;
         bool isCut = false;
         std::string renamingPath = "";
         std::string requestActivateWindow;
@@ -534,16 +570,197 @@ namespace burnhope {
         }
 
         // Вспомогательные методы, перенесенные из твоего старого UI
+        EditorEntitySnap CaptureEntity(flecs::entity e) const {
+            EditorEntitySnap s;
+            if (!e.is_alive() || !e.has<IDComponent>()) return s;
+            s.id = e.get<IDComponent>()->ID;
+            if (e.has<TagComponent>()) s.name = e.get<TagComponent>()->name;
+            if (transform::hasBundle(e)) {
+                s.pos = transform::asVec3(*e.get<Position3>());
+                s.euler = transform::asVec3(*e.get<RotationEuler>());
+                s.scale = transform::asVec3(*e.get<Scale3>());
+            }
+            if (e.has<HierarchyComponent>()) {
+                const auto* hc = e.get<HierarchyComponent>();
+                s.parentID = hc->parentID;
+                s.childrenIDs = hc->childrenIDs;
+            }
+            if (e.has<MeshComponent>()) {
+                const auto* mc = e.get<MeshComponent>();
+                s.hasMesh = true;
+                s.modelPath = mc->modelPath;
+                s.materialPaths = mc->materialPaths;
+                s.skeletonPath = mc->skeletonPath;
+                s.animationPath = mc->animationPath;
+                s.meshStatic = mc->isStatic;
+                s.meshVisible = mc->isVisible;
+                s.meshCastShadow = mc->castShadow;
+                s.animationTime = mc->animationTime;
+            }
+            if (e.has<LightComponent>()) {
+                s.hasLight = true;
+                s.light = e.get<LightComponent>()->light;
+            }
+            if (e.has<ReflectionProbeComponent>()) {
+                const auto* p = e.get<ReflectionProbeComponent>();
+                s.hasProbe = true;
+                s.probeRadius = p->radius;
+                s.probeResolution = p->resolution;
+            }
+            if (e.has<DecalComponent>()) {
+                const auto* d = e.get<DecalComponent>();
+                s.hasDecal = true;
+                s.decalAlbedo = d->albedoPath;
+                s.decalNormal = d->normalPath;
+                s.decalOpacity = d->opacity;
+            }
+            return s;
+        }
+
+        SceneSnapshot CaptureScene() const {
+            SceneSnapshot snap;
+            if (!world) return snap;
+            world->each<IDComponent>([&](flecs::entity e, IDComponent&) {
+                snap.entities.push_back(CaptureEntity(e));
+            });
+            snap.primaryID = (selectedEntity.is_alive() && selectedEntity.has<IDComponent>())
+                ? selectedEntity.get<IDComponent>()->ID : 0;
+            snap.selectedIDs.reserve(selectedEntities.size());
+            for (flecs::entity e : selectedEntities) {
+                if (e.is_alive() && e.has<IDComponent>())
+                    snap.selectedIDs.push_back(e.get<IDComponent>()->ID);
+            }
+            return snap;
+        }
+
+        void ApplyEntitySnap(flecs::entity e, const EditorEntitySnap& s, bool reloadAssets) {
+            if (!e.is_alive()) return;
+            e.set<IDComponent>(IDComponent{s.id});
+            e.set<TagComponent>({s.name});
+            if (!transform::hasBundle(e)) transform::addBundle(e);
+            transform::writeLocal(e, s.pos, s.euler, s.scale);
+            HierarchyComponent hc;
+            hc.parentID = s.parentID;
+            hc.childrenIDs = s.childrenIDs;
+            e.set<HierarchyComponent>(std::move(hc));
+
+            if (s.hasMesh) {
+                MeshComponent mc = e.has<MeshComponent>() ? *e.get<MeshComponent>() : MeshComponent{};
+                const bool pathChanged = mc.modelPath != s.modelPath || !mc.model;
+                mc.modelPath = s.modelPath;
+                mc.skeletonPath = s.skeletonPath;
+                mc.animationPath = s.animationPath;
+                mc.isStatic = s.meshStatic;
+                mc.isVisible = s.meshVisible;
+                mc.castShadow = s.meshCastShadow;
+                mc.animationTime = s.animationTime;
+                if (reloadAssets && device && pathChanged) {
+                    mc.model = s.modelPath.empty() ? nullptr
+                        : BurnhopeModel::createModelFromFile(*device, s.modelPath);
+                }
+                if (s.materialPaths != mc.materialPaths) {
+                    mc.materialPaths = s.materialPaths;
+                    mc.materials.assign(s.materialPaths.size(), nullptr);
+                    if (reloadAssets && device) {
+                        for (size_t i = 0; i < s.materialPaths.size(); ++i) {
+                            if (!s.materialPaths[i].empty())
+                                mc.materials[i] = Material::loadFromJson(*device, s.materialPaths[i]);
+                        }
+                    }
+                }
+                e.set<MeshComponent>(std::move(mc));
+            } else if (e.has<MeshComponent>()) {
+                e.remove<MeshComponent>();
+            }
+
+            if (s.hasLight) {
+                LightComponent lc = e.has<LightComponent>() ? *e.get<LightComponent>() : LightComponent{};
+                lc.light = s.light;
+                lc.needsShadowUpdate = true;
+                e.set<LightComponent>(std::move(lc));
+            } else if (e.has<LightComponent>()) {
+                e.remove<LightComponent>();
+            }
+
+            if (s.hasProbe) {
+                ReflectionProbeComponent p = e.has<ReflectionProbeComponent>()
+                    ? *e.get<ReflectionProbeComponent>() : ReflectionProbeComponent{};
+                p.radius = s.probeRadius;
+                p.resolution = s.probeResolution;
+                p.updateNeeded = true;
+                e.set<ReflectionProbeComponent>(p);
+            } else if (e.has<ReflectionProbeComponent>()) {
+                e.remove<ReflectionProbeComponent>();
+            }
+
+            if (s.hasDecal) {
+                DecalComponent d = e.has<DecalComponent>() ? *e.get<DecalComponent>() : DecalComponent{};
+                d.albedoPath = s.decalAlbedo;
+                d.normalPath = s.decalNormal;
+                d.opacity = s.decalOpacity;
+                if (reloadAssets && device) {
+                    d.albedoTex = d.albedoPath.empty() ? nullptr
+                        : BurnhopeTexture::createTextureFromFile(*device, d.albedoPath);
+                    d.normalTex = d.normalPath.empty() ? nullptr
+                        : BurnhopeTexture::createDataTextureFromFile(*device, d.normalPath);
+                }
+                e.set<DecalComponent>(std::move(d));
+            } else if (e.has<DecalComponent>()) {
+                e.remove<DecalComponent>();
+            }
+        }
+
+        void RestoreScene(const SceneSnapshot& snap) {
+            if (!world) return;
+            if (device) vkDeviceWaitIdle(device->device());
+
+            std::unordered_map<uint64_t, flecs::entity> cur;
+            world->each<IDComponent>([&](flecs::entity e, IDComponent& id) { cur[id.ID] = e; });
+
+            std::unordered_set<uint64_t> keep;
+            keep.reserve(snap.entities.size());
+            for (const auto& rec : snap.entities) keep.insert(rec.id);
+
+            std::vector<flecs::entity> toDelete;
+            for (const auto& [id, e] : cur) {
+                if (!keep.count(id) && e.is_alive()) toDelete.push_back(e);
+            }
+            for (flecs::entity e : toDelete) {
+                if (e.is_alive()) e.destruct();
+            }
+
+            cur.clear();
+            world->each<IDComponent>([&](flecs::entity e, IDComponent& id) { cur[id.ID] = e; });
+
+            for (const auto& rec : snap.entities) {
+                flecs::entity e = cur.count(rec.id) ? cur[rec.id] : world->entity();
+                ApplyEntitySnap(e, rec, true);
+                cur[rec.id] = e;
+            }
+
+            ClearSelection();
+            for (uint64_t id : snap.selectedIDs) {
+                flecs::entity e = FindEntityByID(id);
+                if (e.is_alive()) selectedEntities.push_back(e);
+            }
+            selectedEntity = FindEntityByID(snap.primaryID);
+            if (!selectedEntity.is_alive() && !selectedEntities.empty())
+                selectedEntity = selectedEntities.back();
+            else if (selectedEntity.is_alive() && !IsSelected(selectedEntity))
+                selectedEntities.push_back(selectedEntity);
+
+            needsRebuild = true;
+            needsRTRebuild = true;
+        }
+
         void SaveState() {
-            flecs::snapshot snap(*world);
-            snap.take();
-            undoStack.push_back({std::move(snap), selectedEntity});
+            undoStack.push_back(CaptureScene());
             redoStack.clear();
             if (undoStack.size() > 50) undoStack.erase(undoStack.begin());
         }
 
         flecs::entity FindEntityByID(uint64_t id) {
-            if (id == 0) return flecs::entity();
+            if (id == 0 || !world) return flecs::entity();
             flecs::entity result;
             world->each<IDComponent>([&](flecs::entity e, IDComponent& idComp) {
                 if (idComp.ID == id) result = e;
@@ -551,7 +768,18 @@ namespace burnhope {
             return result;
         }
 
-        void DetachFromParent(flecs::entity child) {
+        bool WouldCreateCycle(flecs::entity child, flecs::entity newParent) {
+            flecs::entity e = newParent;
+            for (int i = 0; i < 64 && e.is_alive(); ++i) {
+                if (e == child) return true;
+                uint64_t pid = transform::parentId(e);
+                if (pid == 0) break;
+                e = FindEntityByID(pid);
+            }
+            return false;
+        }
+
+        void UnlinkParent(flecs::entity child) {
             if (!child.has<HierarchyComponent>() || !child.has<IDComponent>()) return;
             HierarchyComponent& hc = *child.get_mut<HierarchyComponent>();
             if (hc.parentID == 0) return;
@@ -564,18 +792,129 @@ namespace burnhope {
             hc.parentID = 0;
         }
 
+        void DetachFromParent(flecs::entity child) {
+            if (!child.has<HierarchyComponent>() || !child.has<IDComponent>()) return;
+            HierarchyComponent& hc = *child.get_mut<HierarchyComponent>();
+            if (hc.parentID == 0) return;
+            transform::TRS world = transform::decompose(transform::worldMatrix(child));
+            UnlinkParent(child);
+            transform::writeLocal(child, world);
+            needsRebuild = true;
+        }
+
         void AttachToParent(flecs::entity child, flecs::entity newParent) {
-            if (child == newParent) return;
-            DetachFromParent(child);
-            if (!newParent.is_alive()) return;
+            if (!child.is_alive() || child == newParent) return;
+            if (newParent.is_alive() && WouldCreateCycle(child, newParent)) return;
+            transform::TRS world = transform::decompose(transform::worldMatrix(child));
+            UnlinkParent(child);
+            if (!newParent.is_alive()) {
+                transform::writeLocal(child, world);
+                needsRebuild = true;
+                return;
+            }
             if (!child.has<HierarchyComponent>()) child.set<HierarchyComponent>({});
             if (!newParent.has<HierarchyComponent>()) newParent.set<HierarchyComponent>({});
-            
+            if (!child.has<IDComponent>() || !newParent.has<IDComponent>()) return;
+
             uint64_t myID = child.get<IDComponent>()->ID;
             uint64_t pid = newParent.get<IDComponent>()->ID;
-
             child.get_mut<HierarchyComponent>()->parentID = pid;
             newParent.get_mut<HierarchyComponent>()->childrenIDs.push_back(myID);
+
+            glm::mat4 local = glm::inverse(transform::worldMatrix(newParent)) * glm::translate(glm::mat4(1.0f), world.pos)
+                * transform::rotationMatrix(RotationEuler{world.euler.x, world.euler.y, world.euler.z})
+                * glm::scale(glm::mat4(1.0f), world.scale);
+            transform::writeLocal(child, transform::decompose(local));
+            needsRebuild = true;
+        }
+
+        bool HasSelectedAncestor(flecs::entity entity) const {
+            flecs::entity e = entity;
+            for (int i = 0; i < 64 && e.is_alive(); ++i) {
+                uint64_t pid = transform::parentId(e);
+                if (pid == 0) break;
+                flecs::entity parent = transform::findEntityById(e, pid);
+                if (!parent.is_alive()) break;
+                if (IsSelected(parent)) return true;
+                e = parent;
+            }
+            return false;
+        }
+
+        void CaptureSubtree(flecs::entity e, std::vector<EditorEntitySnap>& out, bool asRoot) {
+            if (!e.is_alive()) return;
+            EditorEntitySnap s = CaptureEntity(e);
+            if (asRoot && transform::hasBundle(e)) {
+                transform::TRS world = transform::decompose(transform::worldMatrix(e));
+                s.pos = world.pos;
+                s.euler = world.euler;
+                s.scale = world.scale;
+                s.parentID = 0;
+            }
+            out.push_back(std::move(s));
+            if (!e.has<HierarchyComponent>()) return;
+            auto children = e.get<HierarchyComponent>()->childrenIDs;
+            for (uint64_t cid : children) {
+                flecs::entity child = FindEntityByID(cid);
+                if (child.is_alive()) CaptureSubtree(child, out, false);
+            }
+        }
+
+        void CopySelection() {
+            entityClipboard.clear();
+            PruneSelection();
+            for (flecs::entity e : selectedEntities) {
+                if (!e.is_alive()) continue;
+                if (HasSelectedAncestor(e)) continue;
+                CaptureSubtree(e, entityClipboard, true);
+            }
+        }
+
+        std::vector<flecs::entity> PasteClipboard() {
+            std::vector<flecs::entity> created;
+            if (entityClipboard.empty() || !world) return created;
+            if (device) vkDeviceWaitIdle(device->device());
+            SaveState();
+            std::unordered_map<uint64_t, uint64_t> remap;
+            std::unordered_set<uint64_t> copied;
+            for (const auto& rec : entityClipboard) copied.insert(rec.id);
+
+            for (const auto& rec : entityClipboard) {
+                flecs::entity e = CreateBaseEntity(rec.name + " (Copy)");
+                uint64_t newId = e.get<IDComponent>()->ID;
+                remap[rec.id] = newId;
+                EditorEntitySnap applied = rec;
+                applied.id = newId;
+                applied.parentID = (rec.parentID != 0 && copied.count(rec.parentID)) ? rec.parentID : 0;
+                applied.childrenIDs.clear();
+                ApplyEntitySnap(e, applied, true);
+                e.set<IDComponent>(IDComponent{newId});
+                created.push_back(e);
+            }
+
+            for (size_t i = 0; i < entityClipboard.size(); ++i) {
+                const auto& rec = entityClipboard[i];
+                flecs::entity e = created[i];
+                HierarchyComponent hc;
+                uint64_t oldParent = rec.parentID;
+                hc.parentID = (oldParent != 0 && remap.count(oldParent)) ? remap[oldParent] : 0;
+                hc.childrenIDs.clear();
+                hc.childrenIDs.reserve(rec.childrenIDs.size());
+                for (uint64_t cid : rec.childrenIDs) {
+                    if (remap.count(cid)) hc.childrenIDs.push_back(remap[cid]);
+                }
+                e.set<HierarchyComponent>(std::move(hc));
+                if (hc.parentID == 0 && transform::hasBundle(e)) {
+                    glm::vec3 p = transform::asVec3(*e.get<Position3>());
+                    p.x += 1.0f;
+                    transform::writeLocal(e, p, transform::asVec3(*e.get<RotationEuler>()),
+                                          transform::asVec3(*e.get<Scale3>()));
+                }
+            }
+
+            needsRebuild = true;
+            needsRTRebuild = true;
+            return created;
         }
 
         flecs::entity CreateBaseEntity(const std::string& name) {

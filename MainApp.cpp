@@ -585,7 +585,7 @@ namespace burnhope
                     currentMatID = matToIndex[currentMat.get()];
                 }
                 ObjectData obj{};
-                obj.modelMatrix = localMat.value;
+                obj.modelMatrix = transform::worldMatrix(entity);
                 obj.materialID = currentMatID;
                 obj.indexCount = subMeshes[i].indexCounts[0];
                 obj.vrsRate = subMeshes[i].vrsRate;
@@ -872,7 +872,7 @@ bool queuedGeometryRebuild = false;
                 if (localMat.dirty) {
                     transform::updateMatrixIfNeeded(pos, rot, scale, localMat);
                     transformsChanged = true;
-                    const glm::vec3 position = transform::asVec3(pos);
+                    const glm::vec3 position = glm::vec3(transform::worldMatrix(entity)[3]);
                     movedPositions.push_back(position);
                     dirtyMin = glm::min(dirtyMin, position - glm::vec3(15.0f));
                     dirtyMax = glm::max(dirtyMax, position + glm::vec3(15.0f));
@@ -1286,7 +1286,7 @@ float currentFov = 45.0f;
                     world.each([&](flecs::entity entity, Position3 &pos, RotationEuler &rot, Scale3 &scale, LocalMatrix &localMat, DecalComponent &decal) {
                         if (db.decalCount < 1000) {
                             transform::updateMatrixIfNeeded(pos, rot, scale, localMat);
-                            db.decals[db.decalCount].invModelMatrix = glm::inverse(localMat.value);
+                            db.decals[db.decalCount].invModelMatrix = glm::inverse(transform::worldMatrix(entity));
                             db.decals[db.decalCount].params = glm::vec4((float)decal.albedoTexIdx, (float)decal.normalTexIdx, decal.opacity, 0.0f);
                             db.decalCount++;
                         }
@@ -1316,7 +1316,7 @@ float currentFov = 45.0f;
                     if (localMat.dirty || p.updateNeeded) {
                         p.updateNeeded = true; 
                     }
-                    pInfo.data[pInfo.count].positionAndRadius = glm::vec4(transform::asVec3(pos), p.radius);
+                    pInfo.data[pInfo.count].positionAndRadius = glm::vec4(glm::vec3(transform::worldMatrix(e)[3]), p.radius);
                     pInfo.count++; });
                 if (globalRTReflectionSystem->probesBuffer)
                 {
@@ -1601,7 +1601,7 @@ float currentFov = 45.0f;
                             if (idx >= MAX_PORTALS) return;
                             transform::updateMatrixIfNeeded(pos, rot, scale, localMat);
                             portalRenderSystem->drawMask(cmd, globalDescriptorSets[frameIndex],
-                                                         localMat.value, idx + 1);
+                                                         transform::worldMatrix(entity), idx + 1);
                             idx++;
                         });
                     }
@@ -1615,7 +1615,7 @@ float currentFov = 45.0f;
                         
                             transform::updateMatrixIfNeeded(pos, rot, scale, localMat);
                             portalRenderSystem->drawDepthReset(cmd, globalDescriptorSets[frameIndex],
-                                                               localMat.value, portalCounter + 1);
+                                                               transform::worldMatrix(entity), portalCounter + 1);
                             
                             Position3 *targetPos = portal.targetPortal.get_mut<Position3>();
                             RotationEuler *targetRot = portal.targetPortal.get_mut<RotationEuler>();
@@ -1624,8 +1624,8 @@ float currentFov = 45.0f;
                             if (!targetPos || !targetRot || !targetScale || !targetLocalMat) { portalCounter++; return; }
                             transform::updateMatrixIfNeeded(*targetPos, *targetRot, *targetScale, *targetLocalMat);
                             glm::mat4 realCamWorld = glm::inverse(camera.GetViewMatrix());
-                            glm::mat4 mIn  = localMat.value;
-                            glm::mat4 mOut = targetLocalMat->value;
+                            glm::mat4 mIn  = transform::worldMatrix(entity);
+                            glm::mat4 mOut = transform::worldMatrix(portal.targetPortal);
                             auto clean = [](glm::mat4 m) {
                                 m[0] = glm::vec4(glm::normalize(glm::vec3(m[0])), 0);
                                 m[1] = glm::vec4(glm::normalize(glm::vec3(m[1])), 0);
@@ -2612,7 +2612,7 @@ float currentFov = 45.0f;
 
             if (meshComp.model->getBLASAddress() != 0) {
                 VkAccelerationStructureInstanceKHR instance{};
-                instance.transform = toVkMatrix(localMat.value);
+                instance.transform = toVkMatrix(transform::worldMatrix(entity));
                 instance.instanceCustomIndex = customIndex;
                 instance.mask = 0xFF;
                 instance.instanceShaderBindingTableRecordOffset = 0;

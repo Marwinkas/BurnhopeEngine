@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <cmath>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -216,6 +217,97 @@ namespace burnhope
             {
                 updateMatrixIfNeeded(*position, *rotation, *scale, *matrix);
             }
+        }
+
+        inline glm::mat4 composeLocal(const Position3 &position, const RotationEuler &rotation, const Scale3 &scale) noexcept
+        {
+            return glm::translate(glm::mat4(1.0f), asVec3(position))
+                 * rotationMatrix(rotation)
+                 * glm::scale(glm::mat4(1.0f), asVec3(scale));
+        }
+
+        inline glm::mat4 composeLocal(flecs::entity entity) noexcept
+        {
+            if (!hasBundle(entity)) return glm::mat4(1.0f);
+            return composeLocal(*entity.get<Position3>(), *entity.get<RotationEuler>(), *entity.get<Scale3>());
+        }
+
+        inline flecs::entity findEntityById(flecs::entity any, uint64_t id)
+        {
+            if (id == 0 || !any.is_alive()) return flecs::entity();
+            flecs::entity result;
+            any.world().each<IDComponent>([&](flecs::entity e, IDComponent &idComp) {
+                if (idComp.ID == id) result = e;
+            });
+            return result;
+        }
+
+        inline glm::vec3 eulerDegFromMatrix(const glm::mat4 &m) noexcept
+        {
+            glm::vec3 sx = glm::vec3(m[0]);
+            glm::vec3 sy = glm::vec3(m[1]);
+            glm::vec3 sz = glm::vec3(m[2]);
+            float lx = glm::length(sx), ly = glm::length(sy), lz = glm::length(sz);
+            glm::mat3 R(
+                lx > 1e-8f ? sx / lx : glm::vec3(1, 0, 0),
+                ly > 1e-8f ? sy / ly : glm::vec3(0, 1, 0),
+                lz > 1e-8f ? sz / lz : glm::vec3(0, 0, 1));
+            float x = glm::degrees(std::atan2(R[1][2], R[2][2]));
+            float y = glm::degrees(std::atan2(-R[0][2], std::sqrt(R[1][2] * R[1][2] + R[2][2] * R[2][2])));
+            float z = glm::degrees(std::atan2(R[0][1], R[0][0]));
+            return {x, y, z};
+        }
+
+        struct TRS
+        {
+            glm::vec3 pos{0.0f};
+            glm::vec3 euler{0.0f};
+            glm::vec3 scale{1.0f};
+        };
+
+        inline TRS decompose(const glm::mat4 &m) noexcept
+        {
+            TRS t;
+            t.pos = glm::vec3(m[3]);
+            t.scale = {
+                glm::length(glm::vec3(m[0])),
+                glm::length(glm::vec3(m[1])),
+                glm::length(glm::vec3(m[2]))
+            };
+            t.euler = eulerDegFromMatrix(m);
+            return t;
+        }
+
+        inline void writeLocal(flecs::entity entity, const glm::vec3 &pos, const glm::vec3 &euler, const glm::vec3 &scale)
+        {
+            if (!hasBundle(entity)) return;
+            asVec3Mut(*entity.get_mut<Position3>()) = pos;
+            asVec3Mut(*entity.get_mut<RotationEuler>()) = euler;
+            asVec3Mut(*entity.get_mut<Scale3>()) = scale;
+            markDirty(*entity.get_mut<LocalMatrix>());
+        }
+
+        inline void writeLocal(flecs::entity entity, const TRS &t)
+        {
+            writeLocal(entity, t.pos, t.euler, t.scale);
+        }
+
+        inline uint64_t parentId(flecs::entity entity) noexcept
+        {
+            if (!entity.is_alive() || !entity.has<HierarchyComponent>()) return 0;
+            return entity.get<HierarchyComponent>()->parentID;
+        }
+
+        inline glm::mat4 worldMatrix(flecs::entity entity, int depth = 0)
+        {
+            glm::mat4 local = composeLocal(entity);
+            if (depth > 64 || !entity.is_alive()) return local;
+            uint64_t pid = parentId(entity);
+            if (pid == 0) return local;
+            if (entity.has<IDComponent>() && entity.get<IDComponent>()->ID == pid) return local;
+            flecs::entity parent = findEntityById(entity, pid);
+            if (!parent.is_alive()) return local;
+            return worldMatrix(parent, depth + 1) * local;
         }
     }
 }
