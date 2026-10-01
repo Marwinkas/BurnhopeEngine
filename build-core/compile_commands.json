@@ -1,0 +1,146 @@
+[
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_platform.dir/engine/platform/Window.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/platform/Window.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/platform/Window.cpp",
+  "output": "CMakeFiles/bh_platform.dir/engine/platform/Window.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_memory.dir/engine/memory/FrameArena.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/memory/FrameArena.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/memory/FrameArena.cpp",
+  "output": "CMakeFiles/bh_memory.dir/engine/memory/FrameArena.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_rhi.dir/engine/rhi/Device.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/rhi/Device.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/rhi/Device.cpp",
+  "output": "CMakeFiles/bh_rhi.dir/engine/rhi/Device.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_rhi.dir/engine/rhi/Swapchain.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/rhi/Swapchain.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/rhi/Swapchain.cpp",
+  "output": "CMakeFiles/bh_rhi.dir/engine/rhi/Swapchain.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_rhi.dir/engine/rhi/GpuImage.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/rhi/GpuImage.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/rhi/GpuImage.cpp",
+  "output": "CMakeFiles/bh_rhi.dir/engine/rhi/GpuImage.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_rhi.dir/engine/rhi/GpuBuffer.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/rhi/GpuBuffer.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/rhi/GpuBuffer.cpp",
+  "output": "CMakeFiles/bh_rhi.dir/engine/rhi/GpuBuffer.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_rhi.dir/engine/rhi/DescriptorHeap.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/rhi/DescriptorHeap.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/rhi/DescriptorHeap.cpp",
+  "output": "CMakeFiles/bh_rhi.dir/engine/rhi/DescriptorHeap.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_rhi.dir/engine/rhi/ShaderObject.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/rhi/ShaderObject.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/rhi/ShaderObject.cpp",
+  "output": "CMakeFiles/bh_rhi.dir/engine/rhi/ShaderObject.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -w -o CMakeFiles/bh_rhi.dir/engine/rhi/VolkVma.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/rhi/VolkVma.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/rhi/VolkVma.cpp",
+  "output": "CMakeFiles/bh_rhi.dir/engine/rhi/VolkVma.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_gpu_scene.dir/engine/gpu_scene/MeshletGpu.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/gpu_scene/MeshletGpu.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/gpu_scene/MeshletGpu.cpp",
+  "output": "CMakeFiles/bh_gpu_scene.dir/engine/gpu_scene/MeshletGpu.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_render.dir/engine/render/Visbuffer.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/render/Visbuffer.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/render/Visbuffer.cpp",
+  "output": "CMakeFiles/bh_render.dir/engine/render/Visbuffer.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_render.dir/engine/render/Shade.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/render/Shade.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/render/Shade.cpp",
+  "output": "CMakeFiles/bh_render.dir/engine/render/Shade.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_render.dir/engine/render/SSR.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/render/SSR.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/render/SSR.cpp",
+  "output": "CMakeFiles/bh_render.dir/engine/render/SSR.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_render.dir/engine/render/Tonemap.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/render/Tonemap.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/render/Tonemap.cpp",
+  "output": "CMakeFiles/bh_render.dir/engine/render/Tonemap.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/bh_app.dir/engine/app/Engine.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/app/Engine.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/app/Engine.cpp",
+  "output": "CMakeFiles/bh_app.dir/engine/app/Engine.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core",
+  "command": "/usr/bin/c++ -DFMT_EXCEPTIONS=0 -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_NO_EXCEPTIONS -DVK_NO_PROTOTYPES -DVMA_DYNAMIC_VULKAN_FUNCTIONS=1 -DVMA_STATIC_VULKAN_FUNCTIONS=0 -I/home/marwinka/Музыка/BurnhopeEngine/engine -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/vma-src/include -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers -o CMakeFiles/BurnhopeEngine.dir/engine/app/Main.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/engine/app/Main.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/engine/app/Main.cpp",
+  "output": "CMakeFiles/BurnhopeEngine.dir/engine/app/Main.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-build",
+  "command": "/usr/bin/cc  -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src -g -o CMakeFiles/volk.dir/volk.c.o -c /home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src/volk.c",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/volk-src/volk.c",
+  "output": "_deps/volk-build/CMakeFiles/volk.dir/volk.c.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-build",
+  "command": "/usr/bin/c++ -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FWRITE_UNLOCKED -DSPDLOG_NO_EXCEPTIONS -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -fno-exceptions -o CMakeFiles/spdlog.dir/src/spdlog.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/spdlog.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/spdlog.cpp",
+  "output": "_deps/spdlog-build/CMakeFiles/spdlog.dir/src/spdlog.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-build",
+  "command": "/usr/bin/c++ -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FWRITE_UNLOCKED -DSPDLOG_NO_EXCEPTIONS -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -fno-exceptions -o CMakeFiles/spdlog.dir/src/stdout_sinks.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/stdout_sinks.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/stdout_sinks.cpp",
+  "output": "_deps/spdlog-build/CMakeFiles/spdlog.dir/src/stdout_sinks.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-build",
+  "command": "/usr/bin/c++ -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FWRITE_UNLOCKED -DSPDLOG_NO_EXCEPTIONS -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -fno-exceptions -o CMakeFiles/spdlog.dir/src/color_sinks.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/color_sinks.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/color_sinks.cpp",
+  "output": "_deps/spdlog-build/CMakeFiles/spdlog.dir/src/color_sinks.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-build",
+  "command": "/usr/bin/c++ -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FWRITE_UNLOCKED -DSPDLOG_NO_EXCEPTIONS -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -fno-exceptions -o CMakeFiles/spdlog.dir/src/file_sinks.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/file_sinks.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/file_sinks.cpp",
+  "output": "_deps/spdlog-build/CMakeFiles/spdlog.dir/src/file_sinks.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-build",
+  "command": "/usr/bin/c++ -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FWRITE_UNLOCKED -DSPDLOG_NO_EXCEPTIONS -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -fno-exceptions -o CMakeFiles/spdlog.dir/src/async.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/async.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/async.cpp",
+  "output": "_deps/spdlog-build/CMakeFiles/spdlog.dir/src/async.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-build",
+  "command": "/usr/bin/c++ -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FWRITE_UNLOCKED -DSPDLOG_NO_EXCEPTIONS -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -fno-exceptions -o CMakeFiles/spdlog.dir/src/cfg.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/cfg.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/cfg.cpp",
+  "output": "_deps/spdlog-build/CMakeFiles/spdlog.dir/src/cfg.cpp.o"
+},
+{
+  "directory": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-build",
+  "command": "/usr/bin/c++ -DFMT_USE_EXCEPTIONS=0 -DSPDLOG_COMPILED_LIB -DSPDLOG_FWRITE_UNLOCKED -DSPDLOG_NO_EXCEPTIONS -I/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/include -g -std=c++23 -fno-exceptions -o CMakeFiles/spdlog.dir/src/bundled_fmtlib_format.cpp.o -c /home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/bundled_fmtlib_format.cpp",
+  "file": "/home/marwinka/Музыка/BurnhopeEngine/build-core/_deps/spdlog-src/src/bundled_fmtlib_format.cpp",
+  "output": "_deps/spdlog-build/CMakeFiles/spdlog.dir/src/bundled_fmtlib_format.cpp.o"
+}
+]

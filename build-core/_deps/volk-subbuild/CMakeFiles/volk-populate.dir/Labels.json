@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/volk-subbuild/CMakeFiles/volk-populate"
+		},
+		{
+			"file" : "/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/volk-subbuild/CMakeFiles/volk-populate.rule"
+		},
+		{
+			"file" : "/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/volk-subbuild/CMakeFiles/volk-populate-complete.rule"
+		},
+		{
+			"file" : "/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/volk-subbuild/volk-populate-prefix/src/volk-populate-stamp/volk-populate-build.rule"
+		},
+		{
+			"file" : "/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/volk-subbuild/volk-populate-prefix/src/volk-populate-stamp/volk-populate-configure.rule"
+		},
+		{
+			"file" : "/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/volk-subbuild/volk-populate-prefix/src/volk-populate-stamp/volk-populate-download.rule"
+		},
+		{
+			"file" : "/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/volk-subbuild/volk-populate-prefix/src/volk-populate-stamp/volk-populate-install.rule"
+		},
+		{
+			"file" : "/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/volk-subbuild/volk-populate-prefix/src/volk-populate-stamp/volk-populate-mkdir.rule"
+		},
+		{
+			"file" : "/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/volk-subbuild/volk-populate-prefix/src/volk-populate-stamp/volk-populate-patch.rule"
+		},
+		{
+			"file" : "/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/volk-subbuild/volk-populate-prefix/src/volk-populate-stamp/volk-populate-test.rule"
+		},
+		{
+			"file" : "/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/volk-subbuild/volk-populate-prefix/src/volk-populate-stamp/volk-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"volk-populate"
+		],
+		"name" : "volk-populate"
+	}
+}

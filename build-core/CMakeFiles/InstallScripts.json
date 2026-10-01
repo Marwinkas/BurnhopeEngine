@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/cmake_install.cmake",
+		"/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/volk-build/cmake_install.cmake",
+		"/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/vma-build/cmake_install.cmake",
+		"/home/marwinka/\u041c\u0443\u0437\u044b\u043a\u0430/BurnhopeEngine/build-core/_deps/spdlog-build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

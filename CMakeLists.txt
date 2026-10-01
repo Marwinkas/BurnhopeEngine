@@ -1,230 +1,129 @@
-cmake_minimum_required(VERSION 3.10)
-project(BurnhopeEngine)
+cmake_minimum_required(VERSION 3.28)
+project(BurnhopeEngine LANGUAGES CXX)
 
-# --- 1. Глобальные настройки проекта ---
+# Core rewrite (path-2026). Old deferred editor: cmake/LegacyEngine.cmake
+option(BURNHOPE_LEGACY "Build pre-2026 G-Buffer editor" OFF)
+if(BURNHOPE_LEGACY)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LegacyEngine.cmake)
+    return()
+endif()
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# --- 2. Поиск системных пакетов ---
-
 find_package(Vulkan REQUIRED)
-find_package(Threads REQUIRED)
-# либо подключается через add_subdirectory, если он в папке Libraries
 find_package(SDL3 CONFIG REQUIRED)
-find_package(meshoptimizer CONFIG REQUIRED)
-# --- Подключение Vulkan Memory Allocator ---
+find_package(Threads REQUIRED)
+
 include(FetchContent)
-# --- Подключение Vulkan Memory Allocator ---
-include(FetchContent)
-FetchContent_Declare(
-    vma
+
+FetchContent_Declare(volk
+    GIT_REPOSITORY https://github.com/zeux/volk.git
+    GIT_TAG vulkan-sdk-1.4.309.0
+)
+set(VOLK_PULL_IN_VULKAN ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(volk)
+
+FetchContent_Declare(vma
     GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
-    GIT_TAG        master  # Или конкретно v3.1.0, чтобы быть уверенным в фиксе
+    GIT_TAG v3.3.0
 )
 FetchContent_MakeAvailable(vma)
 
-FetchContent_Declare(
-    flecs
-    GIT_REPOSITORY https://github.com/SanderMertens/flecs.git
-    GIT_TAG        v3.2.12
+FetchContent_Declare(spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG v1.15.3
 )
-set(FLECS_STATIC ON CACHE BOOL "" FORCE)
-set(FLECS_TESTS OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(flecs)
+set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
+set(SPDLOG_NO_EXCEPTIONS ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(spdlog)
 
-# --- New editor UI stack: Yoga (flexbox layout) + nfd-extended (native file
-# dialogs). HarfBuzz is resolved via the system package (already installed)
-# through pkg-config instead of being rebuilt from source.
-set(YG_ENABLE_EVENTS OFF CACHE BOOL "" FORCE)
-FetchContent_Declare(
-    yoga
-    GIT_REPOSITORY https://github.com/facebook/yoga.git
-    GIT_TAG        v3.2.1
+set(BH_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/engine ${vma_SOURCE_DIR}/include)
+set(BH_DEFS
+    VK_NO_PROTOTYPES
+    VMA_STATIC_VULKAN_FUNCTIONS=0
+    VMA_DYNAMIC_VULKAN_FUNCTIONS=1
+    SPDLOG_NO_EXCEPTIONS
+    FMT_EXCEPTIONS=0
 )
-FetchContent_GetProperties(yoga)
-if(NOT yoga_POPULATED)
-    FetchContent_Populate(yoga)
-    # Only build the `yoga` library subdirectory — skip the superproject's
-    # gtest-based test suite/fuzz targets entirely (not needed to embed the
-    # layout engine, and they roughly double configure/build time).
-    add_subdirectory(${yoga_SOURCE_DIR}/yoga ${yoga_BINARY_DIR}/yoga)
-endif()
+set(BH_OPTS -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers)
 
-set(NFD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-FetchContent_Declare(
-    nfd_extended
-    GIT_REPOSITORY https://github.com/btzy/nativefiledialog-extended.git
-    GIT_TAG        v1.2.1
+function(bh_module name)
+    add_library(bh_${name} OBJECT ${ARGN})
+    target_include_directories(bh_${name} PUBLIC ${BH_INCLUDES})
+    target_compile_definitions(bh_${name} PUBLIC ${BH_DEFS})
+    target_compile_options(bh_${name} PRIVATE ${BH_OPTS})
+    target_link_libraries(bh_${name} PUBLIC volk spdlog::spdlog)
+endfunction()
+
+bh_module(platform engine/platform/Window.cpp)
+bh_module(memory   engine/memory/FrameArena.cpp)
+bh_module(rhi
+    engine/rhi/Device.cpp
+    engine/rhi/Swapchain.cpp
+    engine/rhi/GpuImage.cpp
+    engine/rhi/GpuBuffer.cpp
+    engine/rhi/DescriptorHeap.cpp
+    engine/rhi/ShaderObject.cpp
+    engine/rhi/VolkVma.cpp
 )
-FetchContent_MakeAvailable(nfd_extended)
-
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
-pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
-# --- 3. Настройка Assimp (максимальная очистка) ---
-
-# Выключаем всё, что тянет лишние зависимости (DirectX, GUI, тесты)
-set(ASSIMP_BUILD_ASSIMP_VIEW OFF CACHE BOOL "" FORCE)
-set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
-set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(ASSIMP_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
-set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
-set(ASSIMP_NO_EXPORT ON CACHE BOOL "" FORCE)
-
-# Собираем статически, чтобы не таскать .dll/.so
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-
-# Оставляем только нужные форматы (OBJ, FBX, GLTF)
-set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
-set(ASSIMP_BUILD_OBJ_IMPORTER ON CACHE BOOL "" FORCE)
-set(ASSIMP_BUILD_FBX_IMPORTER ON CACHE BOOL "" FORCE)
-set(ASSIMP_BUILD_GLTF_IMPORTER ON CACHE BOOL "" FORCE)
-
-# Принудительно используем внутренний zlib и minizip (для работы с архивами внутри FBX/GLTF)
-set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
-set(ASSIMP_FORCE_ZLIB ON CACHE BOOL "" FORCE)
-
-# Фикс ошибки unzip.h: явно указываем путь к папке с заголовками архиватора
-include_directories(Libraries/assimp/contrib/unzip)
-
-# Подключаем Assimp
-add_subdirectory(Libraries/assimp)
-
-# --- 4. Заголовки (Include) ---
-# Подключение ispc_texcomp (Предполагается, что она лежит в системе или папке Libraries)
-# Включаем поддержку языка ISPC
-enable_language(ISPC)
-
-# Твой Ryzen 9950x поддерживает AVX2 и AVX512. 
-# Указываем ISPC собирать оптимизированные инструкции для максимальной скорости сжатия.
-set(CMAKE_ISPC_INSTRUCTION_SETS "avx2")
-
-# Указываем путь к папке (измени, если она лежит не в Libraries)
-set(ISPC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Libraries/ispc_texcomp")
-
-# Собираем исходники компрессора
-set(ISPC_TEXCOMP_SOURCES
-    "${ISPC_DIR}/ispc_texcomp.cpp"
-    "${ISPC_DIR}/ispc_texcomp_astc.cpp"
-    "${ISPC_DIR}/kernel.ispc"
-    "${ISPC_DIR}/kernel_astc.ispc"
+bh_module(gpu_scene engine/gpu_scene/MeshletGpu.cpp)
+bh_module(render
+    engine/render/Visbuffer.cpp
+    engine/render/Shade.cpp
+    engine/render/SSR.cpp
+    engine/render/Tonemap.cpp
 )
+bh_module(app    engine/app/Engine.cpp)
 
-# Создаем статичную библиотеку из этих файлов
-add_library(ispc_texcomp STATIC ${ISPC_TEXCOMP_SOURCES})
+set_source_files_properties(engine/rhi/VolkVma.cpp PROPERTIES COMPILE_OPTIONS "-w")
+target_link_libraries(bh_rhi PUBLIC Vulkan::Vulkan)
+target_link_libraries(bh_platform PUBLIC SDL3::SDL3)
+target_link_libraries(bh_app PUBLIC SDL3::SDL3)
 
-# Устанавливаем свойства корректно для компилятора ISPC
-set_target_properties(ispc_texcomp PROPERTIES 
-    POSITION_INDEPENDENT_CODE ON
-    # Используем только те флаги, которые понимает ISPC
-    # --nowarn отключает все предупреждения
-    ISPC_FLAGS "--arch=x86-64;--target=avx2;--nowarn"
+find_program(SLANGC_EXECUTABLE slangc REQUIRED)
+set(SHADER_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
+file(MAKE_DIRECTORY ${SHADER_OUT_DIR})
+set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/engine/render)
+
+add_custom_command(
+    OUTPUT
+        ${SHADER_OUT_DIR}/visbuffer.mesh.spv
+        ${SHADER_OUT_DIR}/visbuffer.frag.spv
+        ${SHADER_OUT_DIR}/shade.comp.spv
+        ${SHADER_OUT_DIR}/ssr.comp.spv
+        ${SHADER_OUT_DIR}/tonemap.mesh.spv
+        ${SHADER_OUT_DIR}/tonemap.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -target spirv -profile spirv_1_6 -stage mesh -entry visMesh -o ${SHADER_OUT_DIR}/visbuffer.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -target spirv -profile spirv_1_6 -stage fragment -entry visFs -o ${SHADER_OUT_DIR}/visbuffer.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade.slang -target spirv -profile spirv_1_6 -stage compute -entry shadeCs -o ${SHADER_OUT_DIR}/shade.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/ssr.slang -target spirv -profile spirv_1_6 -stage compute -entry ssrCs -o ${SHADER_OUT_DIR}/ssr.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -target spirv -profile spirv_1_6 -stage mesh -entry tonemapMesh -o ${SHADER_OUT_DIR}/tonemap.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -target spirv -profile spirv_1_6 -stage fragment -entry tonemapFs -o ${SHADER_OUT_DIR}/tonemap.frag.spv
+    DEPENDS
+        ${SHADER_DIR}/visbuffer.slang
+        ${SHADER_DIR}/shade.slang
+        ${SHADER_DIR}/ssr.slang
+        ${SHADER_DIR}/tonemap.slang
+    COMMENT "slangc vis/shade/ssr/tonemap → SPIR-V 1.6"
+)
+add_custom_target(BurnhopeSpv ALL DEPENDS
+    ${SHADER_OUT_DIR}/visbuffer.mesh.spv
+    ${SHADER_OUT_DIR}/visbuffer.frag.spv
+    ${SHADER_OUT_DIR}/shade.comp.spv
+    ${SHADER_OUT_DIR}/ssr.comp.spv
+    ${SHADER_OUT_DIR}/tonemap.mesh.spv
+    ${SHADER_OUT_DIR}/tonemap.frag.spv
 )
 
-# Если ты хочешь заглушить предупреждения в .cpp файлах (C++), 
-# которые линкуются в этой библиотеке, используй это отдельно:
-set_source_files_properties(${ISPC_DIR}/ispc_texcomp.cpp 
-                            ${ISPC_DIR}/ispc_texcomp_astc.cpp 
-                            PROPERTIES COMPILE_FLAGS "-w")
-
-target_include_directories(ispc_texcomp PUBLIC "${ISPC_DIR}")
-
-include_directories(
-    Libraries/include
-    Libraries/include/stb
-    Libraries/include/nlohmann
-    # Путь к заголовкам Assimp (публичный интерфейс)
-    Libraries/assimp/include
+add_executable(BurnhopeEngine engine/app/Main.cpp)
+target_link_libraries(BurnhopeEngine PRIVATE
+    bh_app bh_render bh_gpu_scene bh_rhi bh_memory bh_platform
+    SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
-
-# --- 5. Сбор исходных файлов ---
-
-# Собираем файлы движка точечно, чтобы не захватить лишние Main.cpp из библиотек
-file(GLOB ENGINE_BASE_SOURCES 
-    "${CMAKE_CURRENT_SOURCE_DIR}/Main.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/MainApp.cpp"
-)
-
-# Рекурсивно собираем только твои папки с кодом
-file(GLOB_RECURSE RENDER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Render/*.cpp")
-file(GLOB_RECURSE UTILS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Utils/*.cpp")
-
-# Объединяем всё в один список
-set(ALL_SOURCES 
-    ${ENGINE_BASE_SOURCES} 
-    ${RENDER_SOURCES} 
-    ${UTILS_SOURCES} 
-    "Libraries/include/glm/detail/glm.cpp"
-)
-
-# --- 6. Создание исполняемого файла ---
-
-add_executable(${PROJECT_NAME} ${ALL_SOURCES})
-
-# --- 7. Компиляция шейдеров в SPIR-V ---
-
-find_program(GLSLC_EXECUTABLE glslc)
-
-file(GLOB SHADER_SOURCES 
-    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.vert"
-    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.frag"
-    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.comp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.task"
-    "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.mesh"
-)
-
-foreach(SHADER ${SHADER_SOURCES})
-    get_filename_component(SHADER_NAME ${SHADER} NAME)
-    set(SPIRV_OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${SHADER_NAME}.spv")
-
-    add_custom_command(
-        OUTPUT ${SPIRV_OUTPUT}
-        COMMAND ${GLSLC_EXECUTABLE}  --target-env=vulkan1.3 ${SHADER} -o ${SPIRV_OUTPUT}
-        DEPENDS ${SHADER}
-        COMMENT "Compiling shader ${SHADER_NAME} to SPIR-V"
-    )
-    list(APPEND SPIRV_SHADERS ${SPIRV_OUTPUT})
-endforeach()
-
-add_custom_target(ShadersTarget ALL DEPENDS ${SPIRV_SHADERS})
-add_dependencies(${PROJECT_NAME} ShadersTarget)
-
-
-# --- 8. Линковка библиотек ---
-
-target_link_libraries(${PROJECT_NAME} 
-    SDL3::SDL3
-    Vulkan::Vulkan 
-    assimp           # Ссылка на цель из add_subdirectory
-    meshoptimizer::meshoptimizer
-    Threads::Threads
-    ispc_texcomp
-    VulkanMemoryAllocator
-    flecs_static
-    yogacore
-    nfd
-    PkgConfig::HARFBUZZ
-    PkgConfig::FREETYPE
-)
-
-# --- 9. Копирование ресурсов (модели, текстуры, шейдеры) ---
-
-if(UNIX)
-    # На Linux создаем символические ссылки (экономим место)
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/shaders ${CMAKE_CURRENT_BINARY_DIR}/shaders
-        COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/models ${CMAKE_CURRENT_BINARY_DIR}/models
-        COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/textures ${CMAKE_CURRENT_BINARY_DIR}/textures
-        COMMENT "Creating symlinks for assets"
-    )
-else()
-    # На Windows копируем папки целиком в build/Release или build/Debug
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/shaders ${CMAKE_CURRENT_BINARY_DIR}/Debug/shaders
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/models ${CMAKE_CURRENT_BINARY_DIR}/models
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/textures ${CMAKE_CURRENT_BINARY_DIR}/textures
-        COMMENT "Copying assets to build directory"
-    )
-endif()
+target_include_directories(BurnhopeEngine PRIVATE ${BH_INCLUDES})
+target_compile_definitions(BurnhopeEngine PRIVATE ${BH_DEFS})
+target_compile_options(BurnhopeEngine PRIVATE ${BH_OPTS})
+add_dependencies(BurnhopeEngine BurnhopeSpv)

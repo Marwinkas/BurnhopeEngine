@@ -1,0 +1,24 @@
+#pragma once
+
+#include "rhi/Device.hpp"
+
+namespace burnhope {
+
+struct GpuBuffer {
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VmaAllocation alloc = VK_NULL_HANDLE;
+    VkDeviceAddress address = 0;
+    void* mapped = nullptr;
+    VkDeviceSize size = 0;
+};
+
+[[nodiscard]] bool gpuBufferCreate(
+    GpuBuffer& b,
+    Device& d,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    bool hostVisible);
+
+void gpuBufferDestroy(GpuBuffer& b, Device& d);
+
+} // namespace burnhope
