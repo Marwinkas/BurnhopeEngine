@@ -20,7 +20,8 @@ struct GpuImage {
     VkExtent2D extent,
     VkFormat format,
     VkImageUsageFlags usage,
-    VkImageAspectFlags aspect);
+    VkImageAspectFlags aspect,
+    uint32_t mipLevels = 1);
 
 void gpuImageDestroy(GpuImage& img, Device& d);
 

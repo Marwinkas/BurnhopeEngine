@@ -1,0 +1,51 @@
+---
+description: Read docs/now.md before any Burnhope work and update it when the running frame changes
+alwaysApply: true
+---
+
+# Burnhope now
+
+Before editing this repo, read `docs/now.md`, then `docs/widgets.md`. The first section of `docs/now.md` is the law. `docs/widgets.md` is the list of what already exists. Follow both. Do not reimplement a feature that file already names. After a change to the running frame (`core/rhi`, `core/ui`, `core/platform`, `core/image`, `core/files`), update `docs/now.md` in the same turn and add the new piece to `docs/widgets.md`.
+
+New code does only the piece that does not exist yet. Everything else is a call to the layer below. A layer does not copy the one under it and does not know the task above it.
+
+Folders are the build law. Core compiles alone. Demo and the game engine link core from outside and live their own life. Core must not include `demo/`, `engine/`, or `old/`. CMake rejects that include. Do not add `demo`, `engine`, or `old` to a core target's include path.
+
+`old/` is the previous editor, its shaders, models, and libraries. Do not read it, do not import it, and do not edit it. Do not port a pipeline, shader, or window out of it. Live code is only `core/`, `demo/`, and `engine/`.
+
+Layers inside `core/`, bottom to top:
+1. `core/platform` — window and one frame of input.
+2. `core/rhi` — GPU draw. No widgets, files, or scenes.
+3. `core/image` — decode and compress, then hand the texture to `rhi`.
+4. `core/ui/widget` — one file per widget. It draws through the shared draw and writes its own data.
+5. `core/ui/widget/TextEdit.cpp` — UTF-8 insert, erase, caret. It does not draw.
+6. `core/ui/Json.cpp` — data document.
+7. `core/ui/kit` — color and calendar. Core kits, a tree of widgets plus their own policy.
+8. `core/files` — file manager built from those widgets. The frame reaches it through `filesAttach`.
+
+Outside core:
+- `demo/` — the sample application. It decides what a click does.
+- `engine/` — the game renderer (visbuffer, shade, scene). It is not this executable.
+
+Core components do not know the application. They only emit events (click, change, focus) and accept actions from outside. No application logic hard-coded inside a widget. No theme-screen colors and no window-close policy inside a core widget.
+
+Before writing code, answer: does this already exist, which layer owns it, and what is the only missing piece? Add only that piece. A widget draws itself and emits an event. The meaning of the event is written where the widget is created (`uiBind`, `uiDrag`, `uiEdit`, `canvasListen`, `canvasOnFocus`). A screen is a tree of widgets that already exist plus the one function that was missing.
+
+After a structural change, write the decision in `docs/now.md`: what was already there, and the only piece that was added. If the structure was wrong, append `docs/mistakes.md` before finishing: what was built, why that shape cannot be repeated, and the shape that replaces it. Read `docs/mistakes.md` before the next similar change. Do not ship a second copy of a job a lower layer already does.
+
+Right, the input is the example:
+- The background is the panel fill. The field does not draw its own rectangle.
+- The letters are a separate `Label` entity. `uiTextId` returns it. `uiText` sets the string on the owner; the frame copies those bytes onto the label and does not overwrite style. Alignment, wrap, ellipsis, decoration, spacing, indent, case, and size live in `textRun` (`core/ui/widget/Text.cpp`). A button does not center glyphs itself. A file list does not cut "..." itself.
+- A button, a close control, a check, a menu item, and a list row do not draw glyphs. Each owns a `Label` child. The button adds the icon and the contrast color. The check adds the mark. The menu and the list are those buttons inside a panel.
+- A widget does not know the screen that created it. A click calls `UiAction` from `uiBind` at the creation site. A drag calls `UiDrag`. A field edit calls `UiEdit`. Do not add a tag branch inside `Button.cpp` or `Input.cpp`.
+- A slider stores a number, draws a track and a thumb, and if `ramp` is set draws that ramp with the paint color. It does not read color-picker tags.
+- The field itself adds only the caret, the selection, the clear icon, and the focus or error border.
+- Byte editing lives in `TextEdit.cpp`. The field calls it.
+- A slider stores a number and notifies. The owner (Shell) changes the preview. A file button notifies. The shell calls `filesClick`.
+
+Wrong:
+- Drawing your own text, button, or background inside a feature when label, button, and panel already exist.
+- Putting a task inside a widget. A slider does not resize a preview. A field does not open a file.
+- Starting a second renderer, image decoder, or directory walk. Add the missing piece to `rhi`, `image`, or `files`, then call it.
+- Mixing layers in one file. Text editing does not live in the draw code. The file manager does not live in `Input.cpp`.
+- Building a screen from scratch. A screen is a tree of existing widgets plus the one function that was missing.

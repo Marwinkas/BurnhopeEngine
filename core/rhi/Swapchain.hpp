@@ -9,6 +9,7 @@ namespace burnhope {
 constexpr uint32_t kFramesInFlight = 2;
 
 struct Swapchain {
+    VkSurfaceKHR surface = VK_NULL_HANDLE;
     VkSwapchainKHR handle = VK_NULL_HANDLE;
     VkFormat format = VK_FORMAT_B8G8R8A8_UNORM;
     VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
@@ -32,6 +33,7 @@ struct FrameContext {
 };
 
 [[nodiscard]] bool swapchainCreate(Swapchain& sc, Device& d, uint32_t w, uint32_t h);
+[[nodiscard]] bool swapchainCreate(Swapchain& sc, Device& d, VkSurfaceKHR surface, uint32_t w, uint32_t h);
 void swapchainDestroy(Swapchain& sc, Device& d);
 [[nodiscard]] bool swapchainRecreate(Swapchain& sc, Device& d, uint32_t w, uint32_t h);
 

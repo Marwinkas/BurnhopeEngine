@@ -1,7 +1,13 @@
-BurnHopeEngine/
+# Старый редактор. На диске остаётся, в репозиторий не входит.
+old/
+
+# Сборки и кэш инструментов
+build/
+build-core/
+.cache/
 x64/
 .vs/
+BurnHopeEngine/
+
 imgui.ini
-Shaders/**.spv
-build/
-models/
+*.spv

@@ -1,5 +1,6 @@
 #include "rhi/DescriptorHeap.hpp"
 
+#include <cassert>
 #include <cstddef>
 #include <spdlog/spdlog.h>
 
@@ -12,16 +13,19 @@ VkDeviceSize heapAlign(VkDeviceSize value, VkDeviceSize alignment) {
     return (value + alignment - 1) & ~(alignment - 1);
 }
 
-uint32_t heapBufOffset(const DescriptorHeaps& h, HeapBuf slot) {
+uint32_t heapBufOffset(const DescriptorHeaps& h, uint32_t slot) {
+    assert(slot < h.layout.buffers);
     return static_cast<uint32_t>(h.bufferDescSize * static_cast<VkDeviceSize>(slot));
 }
 
-uint32_t heapImgOffset(const DescriptorHeaps& h, HeapImg slot) {
+uint32_t heapImgOffset(const DescriptorHeaps& h, uint32_t slot) {
+    assert(slot < h.layout.images);
     return static_cast<uint32_t>(
         h.imageHeapOffset + h.imageDescSize * static_cast<VkDeviceSize>(slot));
 }
 
-uint32_t heapSampOffset(const DescriptorHeaps& h, HeapSamp slot) {
+uint32_t heapSampOffset(const DescriptorHeaps& h, uint32_t slot) {
+    assert(slot < h.layout.samplers);
     return static_cast<uint32_t>(h.samplerDescSize * static_cast<VkDeviceSize>(slot));
 }
 
@@ -43,8 +47,9 @@ VkDescriptorSetAndBindingMappingEXT heapMap(
     return m;
 }
 
-bool descriptorHeapsCreate(DescriptorHeaps& h, Device& d) {
+bool descriptorHeapsCreate(DescriptorHeaps& h, Device& d, HeapLayout layout) {
     descriptorHeapsDestroy(h, d);
+    h.layout = layout;
     h.props = d.heapProps;
     h.writeResources = reinterpret_cast<PFN_vkWriteResourceDescriptorsEXT>(
         vkGetDeviceProcAddr(d.device, "vkWriteResourceDescriptorsEXT"));
@@ -64,19 +69,25 @@ bool descriptorHeapsCreate(DescriptorHeaps& h, Device& d) {
     h.imageDescSize = heapAlign(h.props.imageDescriptorSize, h.props.imageDescriptorAlignment);
     h.samplerDescSize = heapAlign(h.props.samplerDescriptorSize, h.props.samplerDescriptorAlignment);
     h.imageHeapOffset = heapAlign(
-        h.bufferDescSize * static_cast<VkDeviceSize>(HeapBuf::Count),
+        h.bufferDescSize * static_cast<VkDeviceSize>(layout.buffers),
         h.props.imageDescriptorAlignment);
 
     const VkDeviceSize resourcePayload = h.imageHeapOffset
-        + h.imageDescSize * static_cast<VkDeviceSize>(HeapImg::Count);
-    const VkDeviceSize resourceSize = heapAlign(
+        + h.imageDescSize * static_cast<VkDeviceSize>(layout.images);
+    VkDeviceSize resourceSize = heapAlign(
         resourcePayload + h.props.minResourceHeapReservedRange,
         h.props.resourceHeapAlignment);
     const VkDeviceSize samplerPayload =
-        h.samplerDescSize * static_cast<VkDeviceSize>(HeapSamp::Count);
-    const VkDeviceSize samplerSize = heapAlign(
+        h.samplerDescSize * static_cast<VkDeviceSize>(layout.samplers);
+    VkDeviceSize samplerSize = heapAlign(
         samplerPayload + h.props.minSamplerHeapReservedRange,
         h.props.samplerHeapAlignment);
+    if (resourceSize == 0) {
+        resourceSize = 256;
+    }
+    if (samplerSize == 0) {
+        samplerSize = 256;
+    }
 
     const VkBufferUsageFlags heapUsage =
         VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
@@ -110,7 +121,7 @@ void descriptorHeapsDestroy(DescriptorHeaps& h, Device& d) {
 bool heapWriteBuffer(
     DescriptorHeaps& h,
     Device& d,
-    HeapBuf slot,
+    uint32_t slot,
     VkDescriptorType type,
     VkDeviceAddress address,
     VkDeviceSize size) {
@@ -138,7 +149,7 @@ bool heapWriteBuffer(
 bool heapWriteImage(
     DescriptorHeaps& h,
     Device& d,
-    HeapImg slot,
+    uint32_t slot,
     VkDescriptorType type,
     const GpuImage& img,
     VkImageLayout layout,
@@ -178,7 +189,7 @@ bool heapWriteImage(
 bool heapWriteSampler(
     DescriptorHeaps& h,
     Device& d,
-    HeapSamp slot,
+    uint32_t slot,
     const VkSamplerCreateInfo& ci) {
     if (h.samplers.mapped == nullptr || h.writeSamplers == nullptr) {
         return false;

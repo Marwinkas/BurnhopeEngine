@@ -51,4 +51,11 @@ void gpuBufferDestroy(GpuBuffer& b, Device& d) {
     b = {};
 }
 
+void gpuBufferFlush(const GpuBuffer& b, Device& d, VkDeviceSize offset, VkDeviceSize size) {
+    if (b.alloc == VK_NULL_HANDLE || d.allocator == VK_NULL_HANDLE || size == 0) {
+        return;
+    }
+    vmaFlushAllocation(d.allocator, b.alloc, offset, size);
+}
+
 } // namespace burnhope

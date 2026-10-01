@@ -283,7 +283,7 @@ bool deviceCreate(Device& d, Window& window) {
         return false;
     }
     if (!d.caps.descriptorHeap) {
-        spdlog::error("M2 requires VK_EXT_descriptor_heap (not descriptor sets)");
+        spdlog::error("VK_EXT_descriptor_heap is required");
         return false;
     }
 
@@ -338,6 +338,7 @@ bool deviceCreate(Device& d, Window& window) {
     VkPhysicalDeviceVulkan11Features f11{};
     f11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
     f11.pNext = &f12;
+    f11.shaderDrawParameters = VK_TRUE;
 
     VkPhysicalDeviceVulkan14Features f14{};
     f14.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;

@@ -38,10 +38,15 @@ VkPresentModeKHR pickPresent(VkPhysicalDevice pd, VkSurfaceKHR surface) {
 } // namespace
 
 bool swapchainCreate(Swapchain& sc, Device& d, uint32_t w, uint32_t h) {
-    VkSurfaceCapabilitiesKHR caps{};
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(d.physical, d.surface, &caps);
+    return swapchainCreate(sc, d, d.surface, w, h);
+}
 
-    const VkSurfaceFormatKHR fmt = pickFormat(d.physical, d.surface);
+bool swapchainCreate(Swapchain& sc, Device& d, VkSurfaceKHR surface, uint32_t w, uint32_t h) {
+    sc.surface = surface;
+    VkSurfaceCapabilitiesKHR caps{};
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(d.physical, surface, &caps);
+
+    const VkSurfaceFormatKHR fmt = pickFormat(d.physical, surface);
     sc.format = fmt.format;
     sc.colorSpace = fmt.colorSpace;
 
@@ -65,7 +70,7 @@ bool swapchainCreate(Swapchain& sc, Device& d, uint32_t w, uint32_t h) {
 
     VkSwapchainCreateInfoKHR ci{
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-        .surface = d.surface,
+        .surface = surface,
         .minImageCount = imgCount,
         .imageFormat = sc.format,
         .imageColorSpace = sc.colorSpace,
@@ -77,7 +82,7 @@ bool swapchainCreate(Swapchain& sc, Device& d, uint32_t w, uint32_t h) {
         .pQueueFamilyIndices = exclusive ? nullptr : families,
         .preTransform = caps.currentTransform,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = pickPresent(d.physical, d.surface),
+        .presentMode = pickPresent(d.physical, surface),
         .clipped = VK_TRUE,
     };
 
@@ -176,8 +181,9 @@ void swapchainDestroy(Swapchain& sc, Device& d) {
 }
 
 bool swapchainRecreate(Swapchain& sc, Device& d, uint32_t w, uint32_t h) {
+    const VkSurfaceKHR surface = sc.surface != VK_NULL_HANDLE ? sc.surface : d.surface;
     swapchainDestroy(sc, d);
-    return swapchainCreate(sc, d, w, h);
+    return swapchainCreate(sc, d, surface, w, h);
 }
 
 bool swapchainBegin(Swapchain& sc, Device& d, FrameContext& fc) {

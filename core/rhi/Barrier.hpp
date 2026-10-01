@@ -35,4 +35,33 @@ inline void rhiImageBarrier(
     vkCmdPipelineBarrier2(cmd, &dep);
 }
 
+inline void rhiBufferBarrier(
+    VkCommandBuffer cmd,
+    VkBuffer buffer,
+    VkDeviceSize offset,
+    VkDeviceSize size,
+    VkPipelineStageFlags2 srcStage,
+    VkAccessFlags2 srcAccess,
+    VkPipelineStageFlags2 dstStage,
+    VkAccessFlags2 dstAccess) {
+    VkBufferMemoryBarrier2 b{
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+        .srcStageMask = srcStage,
+        .srcAccessMask = srcAccess,
+        .dstStageMask = dstStage,
+        .dstAccessMask = dstAccess,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .buffer = buffer,
+        .offset = offset,
+        .size = size,
+    };
+    VkDependencyInfo dep{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .bufferMemoryBarrierCount = 1,
+        .pBufferMemoryBarriers = &b,
+    };
+    vkCmdPipelineBarrier2(cmd, &dep);
+}
+
 } // namespace burnhope

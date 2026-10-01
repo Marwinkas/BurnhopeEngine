@@ -1,0 +1,14 @@
+{
+  "id": "json_card",
+  "dir": "column",
+  "pad": 10,
+  "gap": 6,
+  "radius": 8,
+  "w": "100%",
+  "fill": [0.16, 0.18, 0.24, 1],
+  "children": [
+    {"id": "json_title", "role": "label", "text": "JSON LAYOUT"},
+    {"id": "json_note", "role": "label", "text": "from assets/ui/sample.json"},
+    {"id": "json_go", "role": "button", "text": "JSON BTN", "w": 140, "h": 28, "fill": [0.28, 0.36, 0.52, 1]}
+  ]
+}

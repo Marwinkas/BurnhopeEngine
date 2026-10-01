@@ -16,6 +16,7 @@ struct ShaderCreateDesc {
     VkShaderCreateFlagsEXT extraFlags = 0;
     uint32_t mappingCount = 0;
     const VkDescriptorSetAndBindingMappingEXT* mappings = nullptr;
+    const char* entry = nullptr;
 };
 
 [[nodiscard]] bool shaderCreate(Device& d, const ShaderCreateDesc& desc, ShaderExt& out);
@@ -30,11 +31,13 @@ struct ShaderCreateDesc {
 void shaderDestroy(Device& d, ShaderExt& s);
 
 void cmdBindMeshFrag(VkCommandBuffer cmd, VkShaderEXT mesh, VkShaderEXT frag);
+void cmdBindVertFrag(VkCommandBuffer cmd, VkShaderEXT vert, VkShaderEXT frag, bool nullMesh);
 void cmdBindCompute(VkCommandBuffer cmd, VkShaderEXT cs);
 void cmdSetGraphicsDynamic(
     VkCommandBuffer cmd,
     VkExtent2D extent,
     uint32_t colorAttCount,
-    bool depthTest);
+    bool depthTest,
+    bool alphaBlend = false);
 
 } // namespace burnhope

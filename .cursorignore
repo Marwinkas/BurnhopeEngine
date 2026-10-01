@@ -1,1 +1,8 @@
-# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+# Старый редактор, сборки и кэш. Не индексировать и не читать.
+old/
+build/
+build-core/
+.cache/
+x64/
+.vs/
+*.spv

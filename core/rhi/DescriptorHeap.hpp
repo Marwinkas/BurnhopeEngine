@@ -6,31 +6,15 @@
 
 namespace burnhope {
 
-// Resource heap slots. Buffers packed first, then images (Sascha / spec layout).
-enum class HeapBuf : uint32_t {
-    Frame = 0,
-    Verts = 1,
-    Indices = 2,
-    Count = 3,
-};
-
-enum class HeapImg : uint32_t {
-    Vis = 0,
-    Depth = 1,
-    HdrAStorage = 2,
-    HdrASampled = 3,
-    HdrBStorage = 4,
-    HdrBSampled = 5,
-    Count = 6,
-};
-
-enum class HeapSamp : uint32_t {
-    Nearest = 0,
-    Linear = 1,
-    Count = 2,
+// Slot counts are the caller's. RHI does not name passes (vis, UI, …).
+struct HeapLayout {
+    uint32_t buffers = 1;
+    uint32_t images = 0;
+    uint32_t samplers = 0;
 };
 
 struct DescriptorHeaps {
+    HeapLayout layout{};
     GpuBuffer resources;
     GpuBuffer samplers;
     VkDeviceSize bufferDescSize = 0;
@@ -47,13 +31,13 @@ struct DescriptorHeaps {
 
 [[nodiscard]] VkDeviceSize heapAlign(VkDeviceSize value, VkDeviceSize alignment);
 
-[[nodiscard]] bool descriptorHeapsCreate(DescriptorHeaps& h, Device& d);
+[[nodiscard]] bool descriptorHeapsCreate(DescriptorHeaps& h, Device& d, HeapLayout layout);
 void descriptorHeapsDestroy(DescriptorHeaps& h, Device& d);
 
 [[nodiscard]] bool heapWriteBuffer(
     DescriptorHeaps& h,
     Device& d,
-    HeapBuf slot,
+    uint32_t slot,
     VkDescriptorType type,
     VkDeviceAddress address,
     VkDeviceSize size);
@@ -61,7 +45,7 @@ void descriptorHeapsDestroy(DescriptorHeaps& h, Device& d);
 [[nodiscard]] bool heapWriteImage(
     DescriptorHeaps& h,
     Device& d,
-    HeapImg slot,
+    uint32_t slot,
     VkDescriptorType type,
     const GpuImage& img,
     VkImageLayout layout,
@@ -70,14 +54,14 @@ void descriptorHeapsDestroy(DescriptorHeaps& h, Device& d);
 [[nodiscard]] bool heapWriteSampler(
     DescriptorHeaps& h,
     Device& d,
-    HeapSamp slot,
+    uint32_t slot,
     const VkSamplerCreateInfo& ci);
 
 void heapBind(VkCommandBuffer cmd, const DescriptorHeaps& h);
 
-[[nodiscard]] uint32_t heapBufOffset(const DescriptorHeaps& h, HeapBuf slot);
-[[nodiscard]] uint32_t heapImgOffset(const DescriptorHeaps& h, HeapImg slot);
-[[nodiscard]] uint32_t heapSampOffset(const DescriptorHeaps& h, HeapSamp slot);
+[[nodiscard]] uint32_t heapBufOffset(const DescriptorHeaps& h, uint32_t slot);
+[[nodiscard]] uint32_t heapImgOffset(const DescriptorHeaps& h, uint32_t slot);
+[[nodiscard]] uint32_t heapSampOffset(const DescriptorHeaps& h, uint32_t slot);
 
 [[nodiscard]] VkDescriptorSetAndBindingMappingEXT heapMap(
     uint32_t set,

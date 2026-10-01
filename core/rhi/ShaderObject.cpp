@@ -58,7 +58,7 @@ bool shaderCreate(Device& d, const ShaderCreateDesc& desc, ShaderExt& out) {
         .codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT,
         .codeSize = spirv.size() * sizeof(uint32_t),
         .pCode = spirv.data(),
-        .pName = "main",
+        .pName = desc.entry != nullptr ? desc.entry : "main",
     };
 
     const VkResult r = vkCreateShadersEXT(d.device, 1, &ci, nullptr, &out.handle);
@@ -96,6 +96,25 @@ void cmdBindCompute(VkCommandBuffer cmd, VkShaderEXT cs) {
     vkCmdBindShadersEXT(cmd, 1, &stage, &cs);
 }
 
+void cmdBindVertFrag(VkCommandBuffer cmd, VkShaderEXT vert, VkShaderEXT frag, bool nullMesh) {
+    if (nullMesh) {
+        const VkShaderStageFlagBits stages[] = {
+            VK_SHADER_STAGE_VERTEX_BIT,
+            VK_SHADER_STAGE_MESH_BIT_EXT,
+            VK_SHADER_STAGE_FRAGMENT_BIT,
+        };
+        const VkShaderEXT shaders[] = {vert, VK_NULL_HANDLE, frag};
+        vkCmdBindShadersEXT(cmd, 3, stages, shaders);
+        return;
+    }
+    const VkShaderStageFlagBits stages[] = {
+        VK_SHADER_STAGE_VERTEX_BIT,
+        VK_SHADER_STAGE_FRAGMENT_BIT,
+    };
+    const VkShaderEXT shaders[] = {vert, frag};
+    vkCmdBindShadersEXT(cmd, 2, stages, shaders);
+}
+
 void cmdBindMeshFrag(VkCommandBuffer cmd, VkShaderEXT mesh, VkShaderEXT frag) {
     const VkShaderStageFlagBits stages[] = {
         VK_SHADER_STAGE_VERTEX_BIT,
@@ -116,7 +135,8 @@ void cmdSetGraphicsDynamic(
     VkCommandBuffer cmd,
     VkExtent2D extent,
     uint32_t colorAttCount,
-    bool depthTest) {
+    bool depthTest,
+    bool alphaBlend) {
     const VkViewport vp{
         .x = 0.0f,
         .y = 0.0f,
@@ -149,14 +169,14 @@ void cmdSetGraphicsDynamic(
     vkCmdSetPrimitiveTopology(cmd, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     vkCmdSetVertexInputEXT(cmd, 0, nullptr, 0, nullptr);
 
-    VkBool32 blend[2]{VK_FALSE, VK_FALSE};
+    VkBool32 blend[2]{alphaBlend ? VK_TRUE : VK_FALSE, VK_FALSE};
     vkCmdSetColorBlendEnableEXT(cmd, 0, colorAttCount, blend);
     VkColorBlendEquationEXT eq{};
-    eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    eq.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    eq.srcColorBlendFactor = alphaBlend ? VK_BLEND_FACTOR_SRC_ALPHA : VK_BLEND_FACTOR_ONE;
+    eq.dstColorBlendFactor = alphaBlend ? VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA : VK_BLEND_FACTOR_ZERO;
     eq.colorBlendOp = VK_BLEND_OP_ADD;
-    eq.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    eq.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    eq.srcAlphaBlendFactor = alphaBlend ? VK_BLEND_FACTOR_SRC_ALPHA : VK_BLEND_FACTOR_ONE;
+    eq.dstAlphaBlendFactor = alphaBlend ? VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA : VK_BLEND_FACTOR_ZERO;
     eq.alphaBlendOp = VK_BLEND_OP_ADD;
     VkColorBlendEquationEXT eqs[2]{eq, eq};
     vkCmdSetColorBlendEquationEXT(cmd, 0, colorAttCount, eqs);

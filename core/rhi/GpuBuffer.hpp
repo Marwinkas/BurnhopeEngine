@@ -20,5 +20,6 @@ struct GpuBuffer {
     bool hostVisible);
 
 void gpuBufferDestroy(GpuBuffer& b, Device& d);
+void gpuBufferFlush(const GpuBuffer& b, Device& d, VkDeviceSize offset, VkDeviceSize size);
 
 } // namespace burnhope
