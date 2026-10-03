@@ -4,6 +4,7 @@ old/
 # Сборки и кэш инструментов
 build/
 build-core/
+build-asan/
 .cache/
 x64/
 .vs/

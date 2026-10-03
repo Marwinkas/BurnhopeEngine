@@ -1,6 +1,7 @@
 #include "render/Tonemap.hpp"
 #include "render/HeapMaps.hpp"
 #include "rhi/Barrier.hpp"
+#include "rhi/MeshDraw.hpp"
 #include "rhi/ShaderObject.hpp"
 
 #include <spdlog/spdlog.h>
@@ -65,9 +66,8 @@ void tonemapPassRecord(
         .pColorAttachments = &color,
     };
     vkCmdBeginRendering(cmd, &ri);
-    cmdBindMeshFrag(cmd, p.mesh.handle, p.frag.handle);
     cmdSetGraphicsDynamic(cmd, sc.extent, 1, false);
-    vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
+    meshDrawRecord(cmd, MeshDrawDesc{.mesh = p.mesh.handle, .frag = p.frag.handle, .groupCount = 1});
     vkCmdEndRendering(cmd);
 }
 

@@ -1,0 +1,253 @@
+{
+  "name": "root",
+  "dir": "column",
+  "shrink": 1,
+  "fill": [0.102, 0.106, 0.122, 1],
+  "children": [
+    {
+      "name": "title",
+      "dir": "row",
+      "h": 40,
+      "shrink": 0,
+      "align": 1,
+      "fill": [0.145, 0.153, 0.176, 1],
+      "children": [
+        {"name": "brand", "role": "label", "text": "BURNHOPE", "fill": [0.36, 0.55, 0.92, 1]},
+        {"role": "hidden", "grow": 1, "shrink": 1, "h": 1},
+        {"role": "chrome"}
+      ]
+    },
+    {
+      "name": "menu_bar",
+      "dir": "row",
+      "h": 30,
+      "shrink": 0,
+      "align": 1,
+      "pad": 8,
+      "gap": 16,
+      "fill": [0.12, 0.13, 0.16, 1],
+      "children": [
+        {"name": "menu_file", "role": "button", "text": "FILE", "h": 22, "shrink": 0, "fill": [0.93, 0.94, 0.96, 0], "tag": -7},
+        {"name": "menu_edit", "role": "button", "text": "EDIT", "h": 22, "shrink": 0, "fill": [0.93, 0.94, 0.96, 0], "tag": -7}
+      ]
+    },
+    {
+      "name": "body",
+      "dir": "row",
+      "grow": 1,
+      "shrink": 1,
+      "role": "hidden",
+      "children": [
+        {
+          "name": "side",
+          "dir": "column",
+          "w": 220,
+          "shrink": 0,
+          "pad": 10,
+          "gap": 8,
+          "fill": [0.118, 0.125, 0.145, 1],
+          "children": [
+            {"name": "btn_scene", "role": "button", "text": "SCENE", "h": 36, "shrink": 0, "align": 1, "justify": 1, "fill": [0.20, 0.24, 0.32, 1], "radius": 6, "tag": 0},
+            {"name": "btn_look", "role": "button", "text": "LOOK", "h": 36, "shrink": 0, "align": 1, "justify": 1, "fill": [0.20, 0.28, 0.24, 1], "radius": 6, "tag": 1},
+            {"name": "btn_input", "role": "button", "text": "INPUT", "h": 36, "shrink": 0, "align": 1, "justify": 1, "fill": [0.30, 0.24, 0.20, 1], "radius": 6, "tag": 2},
+            {"role": "hidden", "grow": 1}
+          ]
+        },
+        {"role": "panel", "w": 6, "shrink": 0, "fill": [0.28, 0.32, 0.40, 1], "tag": -5},
+        {
+          "name": "content",
+          "dir": "column",
+          "grow": 1,
+          "shrink": 1,
+          "pad": 16,
+          "gap": 12,
+          "fill": [0.086, 0.090, 0.106, 1],
+          "children": [
+            {"name": "page_label", "role": "label", "text": "SCENE", "fill": [0.93, 0.94, 0.96, 1]},
+            {
+              "name": "page_scene",
+              "dir": "column",
+              "grow": 1,
+              "shrink": 1,
+              "gap": 10,
+              "fill": [0, 0, 0, 0],
+              "children": [
+                {"name": "compact", "role": "check", "text": "COMPACT", "h": 32, "shrink": 0, "align": 1, "gap": 10, "pad": 6, "fill": [0.16, 0.17, 0.21, 1], "radius": 6},
+                {
+                  "name": "scene_scroll",
+                  "role": "scroll",
+                  "dir": "column",
+                  "grow": 1,
+                  "shrink": 1,
+                  "fill": [0.07, 0.075, 0.09, 1],
+                  "radius": 8,
+                  "children": [
+                    {
+                      "name": "list_inner",
+                      "dir": "column",
+                      "gap": 8,
+                      "pad": 8,
+                      "shrink": 0,
+                      "fill": [0, 0, 0, 0],
+                      "children": [
+                        {"role": "panel", "h": 36, "shrink": 0, "align": 1, "pad": 8, "fill": [0.16, 0.17, 0.21, 1], "radius": 6, "children": [{"role": "label", "text": "ITEM 00", "fill": [0.86, 0.88, 0.92, 1]}]},
+                        {"role": "panel", "h": 36, "shrink": 0, "align": 1, "pad": 8, "fill": [0.16, 0.17, 0.21, 1], "radius": 6, "children": [{"role": "label", "text": "ITEM 01", "fill": [0.86, 0.88, 0.92, 1]}]},
+                        {"role": "panel", "h": 36, "shrink": 0, "align": 1, "pad": 8, "fill": [0.16, 0.17, 0.21, 1], "radius": 6, "children": [{"role": "label", "text": "ITEM 02", "fill": [0.86, 0.88, 0.92, 1]}]},
+                        {"role": "panel", "h": 36, "shrink": 0, "align": 1, "pad": 8, "fill": [0.16, 0.17, 0.21, 1], "radius": 6, "children": [{"role": "label", "text": "ITEM 03", "fill": [0.86, 0.88, 0.92, 1]}]},
+                        {"role": "panel", "h": 36, "shrink": 0, "align": 1, "pad": 8, "fill": [0.16, 0.17, 0.21, 1], "radius": 6, "children": [{"role": "label", "text": "ITEM 04", "fill": [0.86, 0.88, 0.92, 1]}]},
+                        {"role": "panel", "h": 36, "shrink": 0, "align": 1, "pad": 8, "fill": [0.16, 0.17, 0.21, 1], "radius": 6, "children": [{"role": "label", "text": "ITEM 05", "fill": [0.86, 0.88, 0.92, 1]}]},
+                        {"role": "panel", "h": 36, "shrink": 0, "align": 1, "pad": 8, "fill": [0.16, 0.17, 0.21, 1], "radius": 6, "children": [{"role": "label", "text": "ITEM 06", "fill": [0.86, 0.88, 0.92, 1]}]},
+                        {"role": "panel", "h": 36, "shrink": 0, "align": 1, "pad": 8, "fill": [0.16, 0.17, 0.21, 1], "radius": 6, "children": [{"role": "label", "text": "ITEM 07", "fill": [0.86, 0.88, 0.92, 1]}]}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "page_look",
+              "dir": "column",
+              "grow": 1,
+              "shrink": 1,
+              "gap": 10,
+              "show": false,
+              "fill": [0, 0, 0, 0],
+              "children": [
+                {
+                  "dir": "row",
+                  "h": 28,
+                  "shrink": 0,
+                  "align": 1,
+                  "gap": 10,
+                  "role": "hidden",
+                  "children": [
+                    {"role": "label", "text": "SCALE", "fill": [0.75, 0.78, 0.84, 1]},
+                    {"name": "scale", "role": "slider", "grow": 1, "shrink": 1, "h": 22, "fill": [0.18, 0.20, 0.26, 1], "radius": 8, "min": 0.5, "maxv": 2, "value": 1}
+                  ]
+                },
+                {"name": "preview", "role": "panel", "w": "100%", "h": 126, "shrink": 0, "fill": [0.36, 0.42, 0.55, 1], "radius": 10},
+                {
+                  "role": "panel",
+                  "w": "100%",
+                  "h": 78,
+                  "shrink": 0,
+                  "pad": 10,
+                  "fill": [0.16, 0.18, 0.24, 1],
+                  "radius": 8,
+                  "shadow": 14,
+                  "border": 1.5,
+                  "br": 0.45,
+                  "bg": 0.62,
+                  "bb": 0.95,
+                  "children": [
+                    {"name": "look_note", "role": "label", "text": "Text wraps inside the parent, can underline, and clips to the box.", "w": "100%", "h": 52, "shrink": 1, "textWrap": 1, "ellipsis": 1, "deco": 1, "leading": 2, "fill": [0.90, 0.92, 0.96, 1]}
+                  ]
+                },
+                {
+                  "dir": "row",
+                  "h": 36,
+                  "shrink": 0,
+                  "align": 1,
+                  "gap": 10,
+                  "role": "hidden",
+                  "children": [
+                    {"role": "label", "text": "LOAD", "fill": [0.75, 0.78, 0.84, 1]},
+                    {"role": "progress", "grow": 1, "shrink": 1, "h": 12, "fill": [0.14, 0.15, 0.19, 1], "radius": 6, "min": 0, "maxv": 1, "value": 0.62}
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "page_input",
+              "dir": "column",
+              "grow": 1,
+              "shrink": 1,
+              "show": false,
+              "fill": [0, 0, 0, 0],
+              "children": [
+                {
+                  "name": "input_scroll",
+                  "role": "scroll",
+                  "dir": "column",
+                  "grow": 1,
+                  "shrink": 1,
+                  "fill": [0.07, 0.075, 0.09, 1],
+                  "radius": 8,
+                  "children": [
+                    {
+                      "name": "input_host",
+                      "dir": "column",
+                      "gap": 8,
+                      "pad": 4,
+                      "shrink": 0,
+                      "role": "hidden",
+                      "children": [
+                        {"role": "label", "text": "NAME  required", "fill": [0.75, 0.78, 0.84, 1]},
+                        {"name": "field_name", "role": "field", "w": "100%", "h": 36, "shrink": 0, "fill": [0.14, 0.15, 0.19, 1], "radius": 6, "border": 1, "hint": "Name", "max": 24, "required": 1, "clear": 1, "form": 1},
+                        {"role": "label", "text": "EMAIL  name@host", "fill": [0.75, 0.78, 0.84, 1]},
+                        {"name": "field_email", "role": "field", "text": "bad", "w": "100%", "h": 36, "shrink": 0, "fill": [0.14, 0.15, 0.19, 1], "radius": 6, "border": 1, "hint": "name@host", "filter": 3, "required": 1, "clear": 1, "form": 1},
+                        {"role": "label", "text": "TEL  6 digits", "fill": [0.75, 0.78, 0.84, 1]},
+                        {"name": "field_tel", "role": "field", "text": "12", "w": "100%", "h": 36, "shrink": 0, "fill": [0.14, 0.15, 0.19, 1], "radius": 6, "border": 1, "hint": "+7", "filter": 4, "max": 16, "required": 1, "clear": 1, "form": 1},
+                        {"role": "label", "text": "URL  needs a dot", "fill": [0.75, 0.78, 0.84, 1]},
+                        {"name": "field_url", "role": "field", "text": "nope", "w": "100%", "h": 36, "shrink": 0, "fill": [0.14, 0.15, 0.19, 1], "radius": 6, "border": 1, "hint": "https://", "filter": 5, "required": 1, "clear": 1, "form": 1},
+                        {"role": "label", "text": "READONLY", "fill": [0.75, 0.78, 0.84, 1]},
+                        {"role": "field", "text": "cannot edit", "w": "100%", "h": 36, "shrink": 0, "fill": [0.09, 0.09, 0.11, 1], "radius": 6, "readonly": 1},
+                        {"role": "label", "text": "PAD / COLOR", "fill": [0.75, 0.78, 0.84, 1]},
+                        {"role": "field", "text": "inside", "w": "100%", "h": 36, "shrink": 0, "fill": [0.08, 0.16, 0.13, 1], "radius": 6, "padL": 22, "padR": 22},
+                        {"role": "label", "text": "PASSWORD", "fill": [0.75, 0.78, 0.84, 1]},
+                        {"role": "field", "text": "secret", "w": "100%", "h": 36, "shrink": 0, "fill": [0.14, 0.15, 0.19, 1], "radius": 6, "password": 1, "clear": 1},
+                        {"role": "label", "text": "FILE", "fill": [0.75, 0.78, 0.84, 1]},
+                        {"name": "field_file", "role": "field", "w": "100%", "h": 36, "shrink": 0, "fill": [0.14, 0.15, 0.19, 1], "radius": 6, "hint": "choose a file", "readonly": 1, "form": 1},
+                        {"role": "label", "text": "DATE", "fill": [0.75, 0.78, 0.84, 1]},
+                        {"name": "field_date", "role": "field", "w": "100%", "h": 36, "shrink": 0, "fill": [0.14, 0.15, 0.19, 1], "radius": 6, "hint": "YYYY-MM-DD", "readonly": 1, "required": 1, "form": 1},
+                        {"role": "label", "text": "COLOR", "fill": [0.75, 0.78, 0.84, 1]},
+                        {"name": "field_color", "role": "field", "w": "100%", "h": 36, "shrink": 0, "fill": [0.14, 0.15, 0.19, 1], "radius": 6, "hint": "#RRGGBB", "readonly": 1, "form": 1},
+                        {
+                          "dir": "row",
+                          "h": 36,
+                          "shrink": 0,
+                          "gap": 8,
+                          "role": "hidden",
+                          "children": [
+                            {"name": "btn_file", "role": "button", "text": "FILE", "w": 76, "h": 32, "shrink": 0, "fill": [0.20, 0.28, 0.40, 1], "radius": 6, "tag": -59},
+                            {"name": "btn_date", "role": "button", "text": "DATE", "w": 80, "h": 32, "shrink": 0, "fill": [0.20, 0.32, 0.28, 1], "radius": 6, "tag": -60},
+                            {"name": "btn_color", "role": "button", "text": "COLOR", "w": 88, "h": 32, "shrink": 0, "fill": [0.36, 0.28, 0.42, 1], "radius": 6, "tag": -61},
+                            {"name": "btn_send", "role": "button", "text": "SEND", "w": 80, "h": 32, "shrink": 0, "fill": [0.45, 0.32, 0.22, 1], "radius": 6, "tag": -36}
+                          ]
+                        },
+                        {"name": "form_note", "role": "label", "text": "form idle", "fill": [0.95, 0.72, 0.45, 1]},
+                        {"role": "label", "text": "IMAGE", "fill": [0.75, 0.78, 0.84, 1]},
+                        {"name": "photo", "role": "image", "w": "100%", "h": 220, "shrink": 0, "fill": [0.05, 0.05, 0.06, 1], "radius": 8, "tag": -90, "minimap": 1},
+                        {"role": "check", "text": "CHECK", "w": "100%", "h": 32, "shrink": 0, "align": 1, "fill": [0.16, 0.17, 0.21, 1], "radius": 6},
+                        {"role": "check", "text": "RADIO A", "w": "100%", "h": 32, "shrink": 0, "align": 1, "fill": [0.16, 0.17, 0.21, 1], "radius": 6, "kind": 1, "group": 1, "on": 1},
+                        {"role": "check", "text": "RADIO B", "w": "100%", "h": 32, "shrink": 0, "align": 1, "fill": [0.16, 0.17, 0.21, 1], "radius": 6, "kind": 1, "group": 1}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "status",
+      "dir": "row",
+      "h": 26,
+      "shrink": 0,
+      "align": 1,
+      "pad": 10,
+      "fill": [0.078, 0.082, 0.098, 1],
+      "children": [
+        {"name": "scale_text", "role": "label", "text": "SCALE 1.00", "fill": [0.62, 0.66, 0.74, 1]}
+      ]
+    },
+    {"name": "menu_main", "role": "menu", "w": 180, "pad": 6, "gap": 4, "fill": [0.11, 0.12, 0.15, 1], "radius": 8},
+    {"name": "menu_file_pop", "role": "menu", "w": 180, "pad": 6, "gap": 4, "fill": [0.11, 0.12, 0.15, 1], "radius": 8},
+    {"name": "menu_edit_pop", "role": "menu", "w": 180, "pad": 6, "gap": 4, "fill": [0.11, 0.12, 0.15, 1], "radius": 8},
+    {"name": "field_menu", "role": "menu", "w": 220, "pad": 6, "gap": 4, "fill": [0.11, 0.12, 0.15, 1], "radius": 8},
+    {"name": "cal_panel", "role": "calendar", "x": 440, "y": 80, "w": 300, "h": 420},
+    {"name": "color_panel", "role": "color", "x": 360, "y": 70, "w": 500, "h": 720}
+  ]
+}

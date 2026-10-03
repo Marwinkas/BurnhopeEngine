@@ -24,10 +24,30 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         s.pasteBuf[i] = in.paste[i];
     }
     s.pasteBuf[s.pasteBufLen] = '\0';
+    s.imeLen = in.editingLen < 63 ? in.editingLen : 63;
+    for (uint8_t i = 0; i < s.imeLen; ++i) {
+        s.ime[i] = in.editing[i];
+    }
+    s.ime[s.imeLen] = '\0';
     const uint16_t hit = hitTest(s, in.pointer.x, in.pointer.y);
     if (hit != s.hovered) {
         s.hovered = hit;
         s.visualDirty = true;
+    }
+    if (in.escape) {
+        if (s.openedMenu != kUiNone) {
+            uiShow(s, s.openedMenu, false);
+            s.openedMenu = kUiNone;
+            s.menuOpen = false;
+            s.layoutDirty = true;
+        }
+        if (s.dropBus.active != 0 || s.dragId != kUiNone) {
+            uiDragEnd(s, kUiNone);
+            s.dragId = kUiNone;
+        }
+        s.capture = kUiNone;
+        s.relative = 0;
+        uiFocus(s, kUiNone);
     }
 
     auto edgeAt = [&](const UiBox& b, float x, float y) -> int {
@@ -100,6 +120,14 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         cursor = 7;
     }
     s.cursor = cursor;
+    if (s.cursorN == 0 && cursor != 0) {
+        uiCursorPush(s, cursor);
+    } else if (s.cursorN == 1) {
+        s.cursorStack[0] = cursor;
+        if (cursor == 0) {
+            s.cursorN = 0;
+        }
+    }
     const uint8_t wasEdge = s.edgeOn;
     s.edgeOn = 0;
     if (hoverEdge != 0 && frame != kUiNone && frame < s.count) {
@@ -121,6 +149,12 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
 
     const bool filesAte = s.plug.handle != nullptr && s.plug.handle(s, in);
     const bool press = (in.pointer.pressed & kPointerLeft) != 0;
+    if (inputKeyEdge(in, kScanF3)) {
+        s.dumpLayout = 1;
+    }
+    if (press) {
+        uiTrace(s, filesAte ? "press-eaten" : "press", hit);
+    }
     const bool down = (in.pointer.down & kPointerLeft) != 0;
     const bool release = (in.pointer.released & kPointerLeft) != 0;
     const bool right = (in.pointer.pressed & kPointerRight) != 0;
@@ -227,10 +261,10 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
 
     if (press && hit != kUiNone && !filesAte) {
         const UiPaint* p = s.ent[hit].try_get<UiPaint>();
-        if (p != nullptr && p->role == static_cast<uint8_t>(UiRole::Close)) {
+        if (p != nullptr && p->disabled != 0) {
+        } else if (p != nullptr && p->role == static_cast<uint8_t>(UiRole::Close)) {
             return UiEvent::Close;
-        }
-        if (press && hoverEdge != 0 && frame != kUiNone) {
+        } else if (press && hoverEdge != 0 && frame != kUiNone) {
             s.capture = frame;
             s.resizeId = frame;
             s.resizeEdge = static_cast<uint8_t>(hoverEdge);
@@ -281,13 +315,21 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
                     field->scroll = 0.0f;
                     field->bytes[0] = '\0';
                     s.visualDirty = true;
+                } else if (in.clicks >= 3) {
+                    field->anchor = 0;
+                    field->caret = field->len;
+                    s.visualDirty = true;
                 } else if (in.clicks >= 2) {
-                    const float local = in.pointer.x - (s.box[hit].x + field->padL) + field->scroll;
-                    fieldSelectWord(*field, fieldCaretAt(s, *field, local));
+                    const float local = in.pointer.x - (s.box[hit].x + field->padL) + (field->multi == 0 ? field->scroll : 0.0f);
+                    const float localY = in.pointer.y - s.box[hit].y + (field->multi != 0 ? field->scroll : 0.0f);
+                    const float viewW = s.box[hit].w - field->padL - field->padR;
+                    fieldSelectWord(*field, field->multi != 0 ? fieldCaretAt2(s, *field, local, localY, viewW) : fieldCaretAt(s, *field, local));
                     s.visualDirty = true;
                 } else {
-                    const float local = in.pointer.x - (s.box[hit].x + field->padL) + field->scroll;
-                    field->caret = fieldCaretAt(s, *field, local);
+                    const float local = in.pointer.x - (s.box[hit].x + field->padL) + (field->multi == 0 ? field->scroll : 0.0f);
+                    const float localY = in.pointer.y - s.box[hit].y + (field->multi != 0 ? field->scroll : 0.0f);
+                    const float viewW = s.box[hit].w - field->padL - field->padR;
+                    field->caret = field->multi != 0 ? fieldCaretAt2(s, *field, local, localY, viewW) : fieldCaretAt(s, *field, local);
                     field->anchor = field->caret;
                     s.capture = hit;
                     const float view = s.box[hit].w - field->padL - field->padR - clearW;
@@ -295,7 +337,14 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
                     s.visualDirty = true;
                 }
             } else {
-                activate(s, hit);
+                const UiRange* range = s.ent[hit].try_get<UiRange>();
+                if (range != nullptr && range->step > 0.0f) {
+                    s.capture = hit;
+                    s.grabX = in.pointer.x;
+                    s.relative = 1;
+                } else {
+                    activate(s, hit);
+                }
             }
         } else {
             uiFocus(s, kUiNone);
@@ -411,10 +460,18 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
                 flex->width = w;
                 s.layoutDirty = true;
             }
+        } else if (cap != nullptr && cap->role == static_cast<uint8_t>(UiRole::Button)) {
+            const UiRange* range = s.ent[s.capture].try_get<UiRange>();
+            if (range != nullptr && range->step > 0.0f) {
+                const float x = s.relative != 0 ? s.grabX + in.pointer.dx : in.pointer.x;
+                dragSpin(s, s.capture, x);
+            }
         } else if (s.ent[s.capture].try_get<UiField>() != nullptr) {
             auto* field = s.ent[s.capture].try_get_mut<UiField>();
-            const float local = in.pointer.x - (s.box[s.capture].x + field->padL) + field->scroll;
-            field->caret = fieldCaretAt(s, *field, local);
+            const float local = in.pointer.x - (s.box[s.capture].x + field->padL) + (field->multi == 0 ? field->scroll : 0.0f);
+            const float localY = in.pointer.y - s.box[s.capture].y + (field->multi != 0 ? field->scroll : 0.0f);
+            const float viewW = s.box[s.capture].w - field->padL - field->padR;
+            field->caret = field->multi != 0 ? fieldCaretAt2(s, *field, local, localY, viewW) : fieldCaretAt(s, *field, local);
             const float clearW = field->clear != 0 && field->len > 0 ? 22.0f : 0.0f;
             fieldReveal(s, *field, s.box[s.capture].w - field->padL - field->padR - clearW);
             s.visualDirty = true;
@@ -427,6 +484,10 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
     if (press) {
         const uint16_t item = listItemOf(s, hit);
         s.dragId = item;
+        if (item != kUiNone) {
+            s.grabX = in.pointer.x;
+            s.grabY = in.pointer.y;
+        }
         if (item != kUiNone && s.statusLabel != kUiNone) {
             const char* name = "ITEM";
             uint8_t nameLen = 4;
@@ -475,11 +536,18 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         }
     }
     if (down && s.dragId != kUiNone && s.capture == kUiNone) {
-        const uint16_t over = listItemOf(s, hit);
-        if (over != kUiNone && over != s.dragId) {
-            const UiBox& b = s.box[over];
-            const bool after = in.pointer.y > b.y + b.h * 0.5f;
-            moveListItem(s, s.dragId, over, after);
+        const float dx = in.pointer.x - s.grabX;
+        const float dy = in.pointer.y - s.grabY;
+        if (dx * dx + dy * dy >= 16.0f) {
+            if (s.dropBus.active == 0) {
+                uiDragBegin(s, s.dragId, "item", nullptr);
+            }
+            const uint16_t over = listItemOf(s, hit);
+            if (over != kUiNone && over != s.dragId) {
+                const UiBox& b = s.box[over];
+                const bool after = in.pointer.y > b.y + b.h * 0.5f;
+                moveListItem(s, s.dragId, over, after);
+            }
         }
     }
     if (release) {
@@ -487,6 +555,10 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             uiDockTo(s, s.dockEdge);
         }
         s.capture = kUiNone;
+        s.relative = 0;
+        if (s.dragId != kUiNone) {
+            uiDragEnd(s, hit);
+        }
         s.dragId = kUiNone;
         s.floatWin = kUiNone;
         s.resizeId = kUiNone;
@@ -527,19 +599,18 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
     }
 
     if (in.tab != 0 && s.count > 0) {
-        uint16_t start = s.focused == kUiNone ? 0 : static_cast<uint16_t>(s.focused + 1);
-        for (uint16_t n = 0; n < s.count; ++n) {
-            const uint16_t id = static_cast<uint16_t>((start + n) % s.count);
-            const UiPaint* p = s.ent[id].try_get<UiPaint>();
-            if (p != nullptr && p->disabled == 0 && focusable(p->role)) {
-                uiFocus(s, id);
-                break;
-            }
-        }
+        uiFocusStep(s, in.shift != 0 ? -1 : 1);
     }
 
     if (s.focused != kUiNone && in.enter != 0) {
-        activate(s, s.focused);
+        auto* field = s.ent[s.focused].try_get_mut<UiField>();
+        if (field != nullptr && field->multi != 0 && field->len < 95 && field->readOnly == 0) {
+            fieldRemember(s, s.focused, *field);
+            fieldInsert(*field, "\n", 1);
+            s.visualDirty = true;
+        } else {
+            activate(s, s.focused);
+        }
     }
 
     if (s.focused != kUiNone && s.ent[s.focused].try_get<UiField>() != nullptr) {
@@ -549,6 +620,16 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             return UiEvent::None;
         }
         bool edited = false;
+        if (in.undo != 0) {
+            edited = fieldUndo(s);
+        } else if (in.redo != 0) {
+            edited = fieldRedo(s);
+        } else {
+        const bool typing = in.selectAll != 0 || in.cut != 0 || (in.pasteOn != 0 && in.pasteLen > 0) || (in.ctrl == 0 && in.textLen > 0)
+            || in.backspace != 0 || in.del != 0;
+        if (typing) {
+            fieldRemember(s, s.focused, *field);
+        }
         auto move = [&](int dir) {
             if (in.shift == 0 && field->anchor != field->caret) {
                 const uint8_t edge = dir < 0
@@ -609,6 +690,32 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             move(1);
             edited = true;
         }
+        if (field->multi != 0 && (in.up != 0 || in.down != 0)) {
+            const float viewW = s.box[s.focused].w - field->padL - field->padR;
+            FieldRow rows[16]{};
+            const int rn = fieldRows(s, *field, viewW, rows, 16);
+            const float lineH = s.look.glyphH > 1.0f ? s.look.glyphH : 18.0f;
+            int line = 0;
+            for (int li = 0; li < rn; ++li) {
+                if (field->caret >= rows[li].begin && field->caret <= rows[li].end) {
+                    line = li;
+                }
+            }
+            const float x = fieldOffset(s, *field, rows[line].begin, field->caret);
+            line += in.up != 0 ? -1 : 1;
+            if (line < 0) {
+                line = 0;
+            }
+            if (line >= rn) {
+                line = rn - 1;
+            }
+            field->caret = fieldCaretAt2(s, *field, x, static_cast<float>(line) * lineH + 1.0f, viewW);
+            if (in.shift == 0) {
+                field->anchor = field->caret;
+            }
+            edited = true;
+        }
+        }
         if (edited) {
             const float clearW = field->clear != 0 && field->len > 0 ? 22.0f : 0.0f;
             fieldReveal(s, *field, s.box[s.focused].w - field->padL - field->padR - clearW);
@@ -626,6 +733,16 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             s.visualDirty = true;
         }
     }
+    if (s.capture != kUiNone) {
+        const UiPaint* cap = s.ent[s.capture].try_get<UiPaint>();
+        if (cap != nullptr && cap->tag == -5 && s.laidW > 1.0f && s.laidH > 1.0f) {
+            s.clipOn = 1;
+            s.clipBox = {0, 0, s.laidW, s.laidH};
+        }
+    } else {
+        s.clipOn = 0;
+    }
+    uiSyncInput(s);
     return UiEvent::None;
 }
 

@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Burnhope now
 
-Before editing this repo, read `docs/now.md`, then `docs/widgets.md`. The first section of `docs/now.md` is the law. `docs/widgets.md` is the list of what already exists. Follow both. Do not reimplement a feature that file already names. After a change to the running frame (`core/rhi`, `core/ui`, `core/platform`, `core/image`, `core/files`), update `docs/now.md` in the same turn and add the new piece to `docs/widgets.md`.
+Before editing this repo, read `docs/now.md`, then `docs/widgets.md`, then `docs/api.md`, then `docs/tests.md` if the task is a bug, a test, or a run of the demo. The first section of `docs/now.md` is the law. `docs/widgets.md` is the list of what already exists. `docs/api.md` is every public function and the knobs that configure it. Follow all three. Do not reimplement a feature that file already names. After a change to the running frame (`core/rhi`, `core/ui`, `core/platform`, `core/host`, `core/image`, `core/files`), update `docs/now.md` in the same turn, add the new piece to `docs/widgets.md`, and add every new public function, field, and mode to `docs/api.md`. A function that is not in `docs/api.md` is not done.
 
 New code does only the piece that does not exist yet. Everything else is a call to the layer below. A layer does not copy the one under it and does not know the task above it.
 
@@ -14,24 +14,35 @@ Folders are the build law. Core compiles alone. Demo and the game engine link co
 `old/` is the previous editor, its shaders, models, and libraries. Do not read it, do not import it, and do not edit it. Do not port a pipeline, shader, or window out of it. Live code is only `core/`, `demo/`, and `engine/`.
 
 Layers inside `core/`, bottom to top:
-1. `core/platform` — window and one frame of input.
-2. `core/rhi` — GPU draw. No widgets, files, or scenes.
+1. `core/platform` — all SDL: window, input, clipboard, file dialog. No widgets.
+2. `core/rhi` — GPU draw. No widgets, files, or scenes. The Vulkan surface is the only SDL call outside platform.
 3. `core/image` — decode and compress, then hand the texture to `rhi`.
 4. `core/ui/widget` — one file per widget. It draws through the shared draw and writes its own data.
 5. `core/ui/widget/TextEdit.cpp` — UTF-8 insert, erase, caret. It does not draw.
 6. `core/ui/Json.cpp` — data document.
-7. `core/ui/kit` — color and calendar. Core kits, a tree of widgets plus their own policy.
-8. `core/files` — file manager built from those widgets. The frame reaches it through `filesAttach`.
+7. `core/ui/Layout.cpp` — static screen is JSON, baked to a flat blob (BHUI v2, 204-byte nodes). The frame reads the blob. The loader calls `spawn`. Chrome, calendar, and color expand from a role.
+8. `core/ui/Panel.hpp` and `spawn` — the C++ way to create nodes. Do not remove it. Procedural widgets, graphs, and quick sketches use `child`, `button`, `label`, `field`. `Panel::find` enters a node loaded from the blob, then C++ adds children.
+9. `core/ui/kit` — color and calendar. Core kits, a tree of widgets plus their own policy.
+10. `core/files` — file manager built from those widgets. The frame reaches it through `filesAttach`.
+11. `core/host` — the running window: swapchain, canvas, present. An app passes size, title, and a builder. It does not open a surface or call SDL.
+
+Hard contract. The C++ build API is the foundation. The blob loader is a client of it. Do not delete or hide `Panel`, `spawn`, `child`, `button`, `slider`, `label`, `field`, or `spin`.
+- Static screens, settings, menus, and panel layout are `assets/ui/*.json` baked offline to `.uib`. `uiImportBin` calls `spawn`.
+- Procedural widgets (timelines, graphs, variable lists, quick tests) are written with that same C++ API. `Panel::find` enters a baked node, then `child` and `button` add to it.
+- A baked node is reached only by name: `uiFindName`, `canvasFind`, `uiBindName`, `canvasBindName`, `Panel::find`. Do not store raw entity ids across reloads.
+- Chrome, calendar, color, menu, and image live in core and expand from a role. Do not spawn their internals in the demo.
+- No font path outside `canvasUseFont`, except `canvasSetFont` when the user picked a file at runtime.
+- Do not rebuild clip, focus, dock, split, virtual rows, spin, or field undo. They already exist. See `docs/now.md`.
 
 Outside core:
-- `demo/` — the sample application. It decides what a click does.
+- `demo/` — the sample application. It decides what a click does and which windows to open. It does not implement a window or a frame.
 - `engine/` — the game renderer (visbuffer, shade, scene). It is not this executable.
 
 Core components do not know the application. They only emit events (click, change, focus) and accept actions from outside. No application logic hard-coded inside a widget. No theme-screen colors and no window-close policy inside a core widget.
 
 Before writing code, answer: does this already exist, which layer owns it, and what is the only missing piece? Add only that piece. A widget draws itself and emits an event. The meaning of the event is written where the widget is created (`uiBind`, `uiDrag`, `uiEdit`, `canvasListen`, `canvasOnFocus`). A screen is a tree of widgets that already exist plus the one function that was missing.
 
-After a structural change, write the decision in `docs/now.md`: what was already there, and the only piece that was added. If the structure was wrong, append `docs/mistakes.md` before finishing: what was built, why that shape cannot be repeated, and the shape that replaces it. Read `docs/mistakes.md` before the next similar change. Do not ship a second copy of a job a lower layer already does.
+After a structural change, write the decision in `docs/now.md`: what was already there, and the only piece that was added. Put each new public function in `docs/api.md` in that same turn. If the structure was wrong, append `docs/mistakes.md` before finishing: what was built, why that shape cannot be repeated, and the shape that replaces it. Read `docs/mistakes.md` before the next similar change. Do not ship a second copy of a job a lower layer already does.
 
 Right, the input is the example:
 - The background is the panel fill. The field does not draw its own rectangle.
@@ -48,4 +59,83 @@ Wrong:
 - Putting a task inside a widget. A slider does not resize a preview. A field does not open a file.
 - Starting a second renderer, image decoder, or directory walk. Add the missing piece to `rhi`, `image`, or `files`, then call it.
 - Mixing layers in one file. Text editing does not live in the draw code. The file manager does not live in `Input.cpp`.
-- Building a screen from scratch. A screen is a tree of existing widgets plus the one function that was missing.
+- Building a screen from scratch when the widgets already exist. A static screen is JSON. A procedural piece is `Panel` and `spawn` inside a node that already exists.
+- Deleting `Panel` or `spawn` because a blob loader exists.
+- Hardcoding a font file path outside `canvasUseFont`.
+- Binding a baked node by a raw entity id. Use the name.
+
+Tests and logs live in `docs/tests.md`. Follow that file when adding a test or judging a run. Do not use doctest `REQUIRE` (`DOCTEST_CONFIG_NO_EXCEPTIONS`). A widget bug is first a headless `CHECK` on `UiBox`, `UiRange`, or the hit, then `./build-core/BurnhopeTest`. The demo log lines `ui fn`, `ui box`, `ui miss`, and `ui draw` are the evidence; do not guess a position from a screenshot description. F3 dumps layout again. Build and run from the repo root. CMake and the executables need to run outside the sandbox because `build-core/_deps/yoga-src/.vscode` fails to mount.
+
+# Архитектурный манифест: Стандарты Vulkan 1.4, DOD и C++26
+
+Этот документ фиксирует обязательные инженерные правила кодовой базы ядра. Любое отклонение в коде считается архитектурной ошибкой.
+
+---
+
+## 1. Чёрный список Vulkan (Строго ЗАПРЕЩЕНО)
+
+| Запрещённый API / Паттерн | Причина запрета | Что использовать взамен |
+| :--- | :--- | :--- |
+| **`VkRenderPass` / `VkFramebuffer`** | Раздувает бойлерплейт, связывает проходы зависимостями | **Dynamic Rendering** (`vkCmdBeginRendering` / `vkCmdEndRendering`) |
+| **`VkPipeline` (в рантайме)** | Комбинаторный взрыв состояний, лаги компиляции | **Shader Objects** (`VK_EXT_shader_object` + `vkCmdBindShadersEXT`) |
+| **Classic Descriptor Sets (`VkDescriptorSet`)** | Оверхед на CPU при перебиндинге дескрипторов | **`VK_EXT_descriptor_heap` (Bindless)** + **Buffer Device Address (BDA)**[cite: 1] |
+| **`vkCmdPipelineBarrier` (устаревший)** | Грубая синхронизация, блокирует конвейер[cite: 1] | **`vkCmdPipelineBarrier2`** (`VK_KHR_synchronization2`)[cite: 1] |
+| **`vkDeviceWaitIdle` в цикле кадра** | Стопорит очереди GPU и CPU, вызывает фризы окон[cite: 1] | **Timeline Semaphores** + ожидание ресурсов конкретного окна[cite: 1] |
+| **`vkResetCommandBuffer` поштучно** | Фрагментирует системную память пула команд | **`vkResetCommandPool`** (один вызов на весь поток в начале кадра) |
+| **Бинарные `VkFence` на каждый проход** | Перегружает вызовы ядра ОС | **`VkSemaphore` (тип Timeline)** с монотонным счётчиком кадра[cite: 1] |
+| **Несуществующие расширения** | Отсутствуют в спецификации Khronos | Запрещён `VK_KHR_mesh_shader` — использовать **`VK_EXT_mesh_shader`**[cite: 1] |
+
+---
+
+## 2. Инженерные контракты многопоточности и очередей (Фаза 1.5)
+
+* **Единый мьютекс очереди (`Device::queueMutex`):**
+  * В Vulkan вызовы `vkQueueSubmit2` и `vkQueuePresentKHR` обращаются к одной и той же `VkQueue`[cite: 1].
+  * Запрещено вызывать `vkQueuePresentKHR` параллельно без синхронизации[cite: 1]. 
+  * Контракт: `queueMutex` захватывается как на этапе сабмита батча (`vkQueueSubmit2`), так и на этапе презента каждого окна (`vkQueuePresentKHR`)[cite: 1]. Презент всех окон выполняется строго пачкой после завершения записи и сабмита[cite: 1].
+* **Жизненный цикл `VkCommandPool`:**
+  * Каждому воркеру в пуле задач (`Jobs.hpp`) и каждому окну выделяется собственный `VkCommandPool`[cite: 1].
+  * Флаг создания: `0` (без `VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT`).
+  * Командные буферы не пересоздаются и не сбрасываются поштучно. В начале каждого кадра поток вызывает один атомарный `vkResetCommandPool(device, pool, 0)`.
+* **Потокобезопасный `DescriptorHeap`:**
+  * Запрещены глобальные атомики на каждый draw.
+  * Память кучи на кадр делится на фиксированные чанки (Thread-Local Chunks, например по 256–512 слотов на поток/окно). Поток пишет в свой чанк локальным инкрементом.
+
+---
+
+## 3. Защита от Device Lost и сбоев GPU
+
+* **Аппаратный Robustness:**
+  * При создании устройства (`Device::init`) обязательна активация `robustBufferAccess` и расширения `VK_EXT_robustness2` (`robustBufferAccess2`, `robustImageAccess2`, `nullDescriptor`).
+  * Чтение за границами BDA обязано возвращать `0`, а запись — отбрасываться без падения видеокарты в TDR или `VK_ERROR_DEVICE_LOST`.
+* **Протокол обработки `VK_ERROR_DEVICE_LOST`:**
+  * Ни один вызов Vulkan не должен аварийно завершать процесс (`abort()`) при получении ошибки устройства.
+  * Порядок восстановления:
+    1. Немедленно глушится очередь пула задач (`Jobs`).
+    2. Все вызовы отрисовки текущего кадра переводятся в No-Op.
+    3. `Device::recover()` корректно освобождает ресурсы, пересоздаёт логическое устройство, инициализирует `core/rhi` и восстанавливает бинарные кэши ресурсов без потери состояния окон.
+* **Свопчейн и изменение размера окон:**
+  * Коды `VK_ERROR_OUT_OF_DATE_KHR` и `VK_SUBOPTIMAL_KHR` не являются фатальными.
+  * Окно помечается флагом `needsRecreate = true`.
+  * Пересоздание свопчейна выполняется строго в начале следующего тика хоста в сериализованной секции перед фазой записи команд[cite: 1].
+
+---
+
+## 4. Память и Data-Oriented Design (DOD)
+
+* **Нулевой malloc на горячем пути (Zero malloc in frame):**
+  * Запрещены вызовы `malloc`, `new`, `std::vector::push_back` с реаллокацией, `std::string` или `std::make_shared` внутри функций `Tick`, `Layout`, `Emit`, `Draw`[cite: 1].
+  * Вся память кадра выделяется последовательным смещением через циклические буферы или `FrameArena`[cite: 1].
+* **Линейные Staging-буферы:**
+  * Запрещены вызовы аллокаций памяти устройства (`vkAllocateMemory` / VMA) внутри цикла кадра.
+  * Все динамические вершины UI пишутся в циклический кольцевой буфер (`Host-Visible | Host-Coherent`).
+* **Структура SoA вместо AoS:**
+  * Данные разделяются по частоте обращения (горячие координаты отдельно от редких параметров стиля).
+* **Работа с Flecs ECS:**
+  * Запрещено вызывать `entity.get<T>()` или `entity.try_get<T>()` внутри горячего цикла по элементам кадра[cite: 1].
+  * Доступ организуется строго через прямые указатели на массивы колонок архетипа (`flecs::column<T>`)[cite: 1].
+* **Trivially Copyable компоненты:**
+  * Все UI-примитивы и структуры данных обязаны быть POD-типами[cite: 1]:
+  ```cpp
+  static_assert(std::is_trivially_copyable_v<UiPrimitive>, "UiPrimitive обязан быть POD!");[cite: 1]
+  static_assert(sizeof(UiPrimitive) % 16 == 0, "Выравнивание под GPU обязано быть кратно 16 байтам!");

@@ -35,6 +35,8 @@ struct UiState {
     uint8_t tight[kUiCap]{};
     uint16_t count = 0;
     uint16_t hovered = kUiNone;
+    uint8_t cursorStack[8]{};
+    uint8_t cursorN = 0;
     uint16_t focused = kUiNone;
     uint16_t capture = kUiNone;
     uint16_t pageLabel = kUiNone;
@@ -176,12 +178,43 @@ struct UiState {
     float laidH = -1.0f;
     bool layoutDirty = true;
     bool visualDirty = true;
+    uint8_t dumpLayout = 1;
+    uint16_t layoutFrom = kUiNone;
+    UiDrop dropBus{};
+    char ime[64]{};
+    uint8_t imeLen = 0;
+    uint8_t relative = 0;
+    float dpi = 1;
+    uint8_t clipOn = 0;
+    UiBox clipBox{};
+    struct {
+        uint16_t id = kUiNone;
+        char bytes[96]{};
+        uint8_t len = 0;
+        uint8_t caret = 0;
+        uint8_t anchor = 0;
+    } undoSnap[8]{};
+    uint8_t undoN = 0;
+    uint8_t undoAt = 0;
 
     UiState();
+    ~UiState();
+    UiState(const UiState&) = delete;
+    UiState& operator=(const UiState&) = delete;
 };
 
 void uiFocus(UiState& s, uint16_t id);
+void uiFocusStep(UiState& s, int dir);
+void uiTab(UiState& s, uint16_t id, uint16_t index);
+void uiCursorPush(UiState& s, uint8_t kind);
+void uiCursorPop(UiState& s);
+void uiSyncInput(UiState& s);
+void uiMarkLayout(UiState& s, uint16_t id);
+void uiShowOnly(UiState& s, uint16_t id);
+void uiDragBegin(UiState& s, uint16_t source, const char* kind, const char* bytes);
+void uiDragEnd(UiState& s, uint16_t target);
 void uiBind(UiState& s, uint16_t id, UiClickFn fn, void* user);
+void uiBindName(UiState& s, const char* name, UiClickFn fn, void* user);
 void uiDrag(UiState& s, uint16_t id, UiDragFn fn, void* user);
 void uiEdit(UiState& s, uint16_t id, UiEditFn fn, void* user);
 void uiFold(UiState& s, uint16_t id);
@@ -189,6 +222,9 @@ bool uiCommandAdd(UiState& s, const char* name, UiCommandFn fn, void* user);
 bool uiCommandAddTo(UiState& s, uint16_t menu, const char* name, UiCommandFn fn, void* user);
 void uiShow(UiState& s, uint16_t id, bool visible);
 void uiReparent(UiState& s, uint16_t id, uint16_t parent);
+void uiDrop(UiState& s, uint16_t id);
+void uiTrace(const UiState& s, const char* fn, uint16_t id);
+void uiDumpLayout(const UiState& s);
 void uiPlace(UiState& s, uint16_t id, bool absolute, float x, float y, float w, float h);
 void uiGrow(UiState& s, uint16_t id, float extraW, float h);
 void uiDockTo(UiState& s, uint8_t edge);
@@ -196,7 +232,19 @@ void uiBuildShell(UiState& s);
 void uiBuildColor(UiState& s);
 [[nodiscard]] uint16_t uiImportJson(UiState& s, uint16_t parent, const char* text);
 [[nodiscard]] uint16_t uiImportJsonFile(UiState& s, uint16_t parent, const char* path);
+[[nodiscard]] uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t size);
+[[nodiscard]] uint16_t uiImportBinFile(UiState& s, uint16_t parent, const char* path);
 [[nodiscard]] uint16_t uiFindName(const UiState& s, const char* name);
+void uiName(UiState& s, uint16_t id, const char* name);
+uint16_t uiWindowChrome(UiState& s, uint16_t parent);
+void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, float h);
+[[nodiscard]] uint16_t uiVirtual(UiState& s, uint16_t parent, float rowH);
+void uiVirtualSource(UiState& s, uint16_t id, uint32_t count, void (*fill)(void*, uint32_t, char*, uint8_t), void (*click)(void*, uint32_t), void* user);
+void uiVirtualRefresh(UiState& s, uint16_t id);
+[[nodiscard]] uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV, float step);
+[[nodiscard]] uint16_t uiCurve(UiState& s, uint16_t parent);
+[[nodiscard]] uint16_t uiGradient(UiState& s, uint16_t parent);
+[[nodiscard]] uint16_t uiTreeRow(UiState& s, uint16_t parent, const char* text);
 
 // General JSON document. Nodes live in Flecs; string bytes live in UiState::jsonArena.
 enum class JsonKind : uint8_t { Null = 0, Bool = 1, Number = 2, String = 3, Array = 4, Object = 5 };
@@ -273,6 +321,17 @@ void uiTipAt(UiState& s, uint16_t id, const char* text, float x, float y);
 void dragScroll(UiState& s, uint16_t id, float y);
 void textInk(float r, float g, float b, bool hot, float& tr, float& tg, float& tb);
 [[nodiscard]] UiBox fieldInset(const UiState& s, uint16_t id, const UiField& field);
+
+struct FieldRow {
+    uint8_t begin = 0;
+    uint8_t end = 0;
+    float width = 0;
+};
+
+int fieldRows(const UiState& s, const UiField& field, float viewW, FieldRow* rows, int cap);
+float fieldOffset(const UiState& s, const UiField& field, uint8_t from, uint8_t to);
+uint8_t fieldCaretAt2(const UiState& s, const UiField& field, float localX, float localY, float viewW);
+void uiFieldMulti(UiState& s, uint16_t id);
 
 inline float uiAdvance(const UiState& s, uint32_t cp) {
     int gi = uiGlyphIndex(cp);

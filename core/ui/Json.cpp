@@ -153,28 +153,7 @@ bool same(const char* key, const char* name) {
 }
 
 void bindName(UiState& s, uint16_t id, const char* name) {
-    if (id == kUiNone || name == nullptr || name[0] == '\0') {
-        return;
-    }
-    UiName stored{};
-    uint8_t n = 0;
-    bool plain = true;
-    while (name[n] != '\0' && n < 31) {
-        const char ch = name[n];
-        stored.bytes[n] = ch;
-        const bool ok = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_';
-        if (!ok) {
-            plain = false;
-        }
-        ++n;
-    }
-    stored.bytes[n] = '\0';
-    stored.len = n;
-    s.ent[id].set<UiName>(stored);
-    if (plain) {
-        s.ent[id].set_name(stored.bytes);
-        ecs_set_symbol(s.world, s.ent[id], stored.bytes);
-    }
+    uiName(s, id, name);
 }
 
 void readSize(Cur& c, uint8_t& mode, float& value) {

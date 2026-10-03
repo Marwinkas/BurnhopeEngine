@@ -52,6 +52,8 @@ bool uploadAtlas(Device& device, DescriptorHeaps& heaps, GpuImage& atlas, const 
     std::memcpy(staging.mapped, pixels.data(), static_cast<size_t>(bytes));
     gpuBufferFlush(staging, device, 0, bytes);
 
+    // Общий пул/очередь device.commandPool — см. комментарий у Device::queueMutex (Device.hpp).
+    std::lock_guard<std::mutex> uploadLock(device.queueMutex);
     VkCommandBuffer cmd = VK_NULL_HANDLE;
     VkCommandBufferAllocateInfo alloc{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,

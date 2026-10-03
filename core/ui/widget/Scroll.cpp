@@ -11,8 +11,9 @@ void scrollBy(UiState& s, uint16_t id, float wheel) {
     if (scroll == nullptr || scroll->inner == kUiNone) {
         return;
     }
+    const UiVirtual* virt = s.ent[id].try_get<UiVirtual>();
     const float viewH = s.box[id].h;
-    const float contentH = s.box[scroll->inner].h;
+    const float contentH = virt != nullptr ? virt->count * virt->rowH : s.box[scroll->inner].h;
     float maxOff = contentH - viewH;
     if (maxOff < 0.0f) {
         maxOff = 0.0f;
@@ -24,9 +25,14 @@ void scrollBy(UiState& s, uint16_t id, float wheel) {
     if (scroll->offset > maxOff) {
         scroll->offset = maxOff;
     }
+    if (virt != nullptr) {
+        uiVirtualRefresh(s, id);
+        return;
+    }
     auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>();
     flex->marginT = -scroll->offset;
-    s.layoutDirty = true;
+    uiMarkLayout(s, id);
+    uiTrace(s, "scroll", id);
 }
 
 bool scrollThumb(const UiState& s, uint16_t id, UiBox& thumb) {
@@ -38,7 +44,8 @@ bool scrollThumb(const UiState& s, uint16_t id, UiBox& thumb) {
         return false;
     }
     const float viewH = s.box[id].h;
-    const float contentH = s.box[scroll->inner].h;
+    const UiVirtual* virtThumb = s.ent[id].try_get<UiVirtual>();
+    const float contentH = virtThumb != nullptr ? virtThumb->count * virtThumb->rowH : s.box[scroll->inner].h;
     if (viewH < 8.0f || contentH <= viewH + 1.0f) {
         return false;
     }
@@ -71,7 +78,8 @@ void dragScroll(UiState& s, uint16_t id, float y) {
         return;
     }
     const float viewH = s.box[id].h;
-    const float contentH = s.box[scroll->inner].h;
+    const UiVirtual* virtDrag = s.ent[id].try_get<UiVirtual>();
+    const float contentH = virtDrag != nullptr ? virtDrag->count * virtDrag->rowH : s.box[scroll->inner].h;
     const float maxOff = contentH - viewH;
     if (maxOff <= 0.0f || viewH < 8.0f) {
         return;
@@ -92,10 +100,14 @@ void dragScroll(UiState& s, uint16_t id, float y) {
         t = 1.0f;
     }
     scroll->offset = t * maxOff;
+    if (s.ent[id].try_get<UiVirtual>() != nullptr) {
+        uiVirtualRefresh(s, id);
+        return;
+    }
     if (auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>()) {
         flex->marginT = -scroll->offset;
     }
-    s.layoutDirty = true;
+    uiMarkLayout(s, id);
     s.visualDirty = true;
 }
 

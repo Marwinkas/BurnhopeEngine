@@ -21,5 +21,8 @@ struct GpuBuffer {
 
 void gpuBufferDestroy(GpuBuffer& b, Device& d);
 void gpuBufferFlush(const GpuBuffer& b, Device& d, VkDeviceSize offset, VkDeviceSize size);
+// Зеркало gpuBufferFlush для чтения: вызывать перед CPU-чтением mapped-памяти, которую писал
+// GPU (compute readback) — память host-visible не обязана быть host-coherent.
+void gpuBufferInvalidate(const GpuBuffer& b, Device& d, VkDeviceSize offset, VkDeviceSize size);
 
 } // namespace burnhope

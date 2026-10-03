@@ -19,6 +19,12 @@ namespace {
 
 namespace fs = std::filesystem;
 
+void clickFile(UiState& s, uint16_t id);
+
+void fileButton(void* user, uint16_t id, int16_t) {
+    clickFile(*static_cast<UiState*>(user), id);
+}
+
 constexpr int kFileCap = 256;
 constexpr int kClipCap = 12;
 constexpr int kFavCap = 8;
@@ -724,8 +730,10 @@ void newFolder(UiState& s, Browser& b) {
     fs::create_directory(fs::path(dst), ec);
     if (ec) {
         setStatus(b, "create failed");
+        uiTrace(s, "folder-fail", s.fileFrame);
         return;
     }
+    uiTrace(s, "folder", s.fileFrame);
     reload(b);
     const char* name = std::strrchr(dst, '/');
     name = name != nullptr ? name + 1 : dst;
@@ -872,6 +880,52 @@ void layout(const UiState& s, const Browser& b, Lay& lay) {
     if (b.confirm != 0) {
         lay.yes = {lay.foot.x + lay.foot.w - 132.0f, lay.foot.y, 60.0f, 22.0f};
         lay.no = {lay.foot.x + lay.foot.w - 66.0f, lay.foot.y, 60.0f, 22.0f};
+    }
+    auto zoneOf = [&](uint16_t id) -> Zone {
+        if (id >= s.count) {
+            return {};
+        }
+        const UiBox& box = s.box[id];
+        return {box.x, box.y, box.w, box.h};
+    };
+    for (int i = 0; i < 7; ++i) {
+        lay.tools[i] = zoneOf(b.wTool[i]);
+    }
+    lay.zoom = zoneOf(b.wZoom);
+    lay.search = zoneOf(b.wSearch);
+    for (int i = 0; i < 5; ++i) {
+        lay.chips[i] = zoneOf(b.wChip[i]);
+    }
+    lay.crumbN = 0;
+    for (int i = 0; i < 8; ++i) {
+        const Zone crumb = zoneOf(b.wCrumb[i]);
+        if (crumb.w < 1.0f || crumb.h < 1.0f) {
+            continue;
+        }
+        lay.crumbs[lay.crumbN] = crumb;
+        lay.crumbAt[lay.crumbN] = b.crumbPart[i];
+        ++lay.crumbN;
+    }
+    lay.split = zoneOf(b.wSide != kUiNone ? b.wSide : kUiNone);
+    if (b.wSide < s.count) {
+        const UiBox& side = s.box[b.wSide];
+        lay.split = {side.x + side.w, side.y, 8.0f, side.h};
+        lay.sideN = 0;
+        if (b.wRoot < s.count && lay.sideN < 32) {
+            lay.sides[lay.sideN] = zoneOf(b.wRoot);
+            lay.sideId[lay.sideN] = -3;
+            ++lay.sideN;
+        }
+        for (int i = 0; i < b.favN && i < 8 && lay.sideN < 32; ++i) {
+            lay.sides[lay.sideN] = zoneOf(b.wFav[i]);
+            lay.sideId[lay.sideN] = i;
+            ++lay.sideN;
+        }
+        for (int i = 0; i < b.treeN && i < 16 && lay.sideN < 32; ++i) {
+            lay.sides[lay.sideN] = zoneOf(b.wTree[i]);
+            lay.sideId[lay.sideN] = 1000 + i;
+            ++lay.sideN;
+        }
     }
 }
 
@@ -1182,6 +1236,24 @@ void applyZoom(Browser& b, const Lay& lay, float x) {
         t = 1.0f;
     }
     b.look.icon = 52.0f + t * (148.0f - 52.0f);
+}
+
+void writeZoom(UiState& s, Browser& b) {
+    if (b.wZoom >= s.count) {
+        return;
+    }
+    if (auto* range = s.ent[b.wZoom].try_get_mut<UiRange>()) {
+        range->value = b.look.icon;
+    }
+}
+
+void readZoom(UiState& s, Browser& b) {
+    if (b.wZoom >= s.count) {
+        return;
+    }
+    if (const UiRange* range = s.ent[b.wZoom].try_get<UiRange>()) {
+        b.look.icon = range->value;
+    }
 }
 
 void describeItem(const Item& item, char* dst, int cap) {
@@ -1585,6 +1657,7 @@ uint16_t makeButton(UiState& s, uint16_t parent, const char* text, int8_t tag, f
         return id;
     }
     uiText(s, id, text);
+    uiBind(s, id, fileButton, &s);
     if (!wide) {
         if (auto* box = s.ent[id].try_get_mut<UiFlex>()) {
             const UiText* label = s.ent[id].try_get<UiText>();
@@ -1687,6 +1760,7 @@ void mountFiles(UiState& s) {
     UiFlex grid{};
     grid.grow = 1.0f;
     grid.shrink = 1.0f;
+    grid.position = 2;
     s.fileView = uiNode(s, bodyId, grid, solidPaint(UiRole::Panel, b.look.grid[0], b.look.grid[1], b.look.grid[2], 6.0f, -91));
     for (int i = 0; i < 18; ++i) {
         UiFlex cell{};
@@ -1815,6 +1889,7 @@ bool filesHandle(UiState& s, const InputFrame& in) {
         return false;
     }
     Browser& b = book(s);
+    readZoom(s, b);
     pullFields(s, b);
     if (b.mode != 0 && b.wRename == kUiNone) {
         s.visualDirty = true;
@@ -1962,6 +2037,7 @@ bool filesHandle(UiState& s, const InputFrame& in) {
     if (!press && down && s.capture == s.fileView) {
         if (b.zooming != 0) {
             applyZoom(b, lay, x);
+            writeZoom(s, b);
             s.visualDirty = true;
             return false;
         }
@@ -2123,6 +2199,7 @@ bool filesHandle(UiState& s, const InputFrame& in) {
     if (inside(lay.zoom, x, y)) {
         b.zooming = 1;
         applyZoom(b, lay, x);
+        writeZoom(s, b);
         s.visualDirty = true;
         return true;
     }

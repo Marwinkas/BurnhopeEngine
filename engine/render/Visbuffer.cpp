@@ -1,6 +1,7 @@
 #include "render/Visbuffer.hpp"
 #include "render/HeapMaps.hpp"
 #include "rhi/Barrier.hpp"
+#include "rhi/MeshDraw.hpp"
 #include "rhi/ShaderObject.hpp"
 
 #include <spdlog/spdlog.h>
@@ -108,9 +109,10 @@ void visPassRecord(VkCommandBuffer cmd, VkExtent2D extent, const VisPass& p) {
         .pDepthAttachment = &depth,
     };
     vkCmdBeginRendering(cmd, &ri);
-    cmdBindMeshFrag(cmd, p.mesh.handle, p.frag.handle);
     cmdSetGraphicsDynamic(cmd, extent, 1, true);
-    vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
+    // Same rhi/MeshDraw entry point as core/ui/Canvas.cpp — one registered draw per pass
+    // (plan Фаза 1/5), no second mesh-shader dispatch path for engine/.
+    meshDrawRecord(cmd, MeshDrawDesc{.mesh = p.mesh.handle, .frag = p.frag.handle, .groupCount = 1});
     vkCmdEndRendering(cmd);
 }
 

@@ -163,8 +163,24 @@ void copyShown(UiText& text, const char* src, uint8_t n) {
     text.len = n;
 }
 
+void uiFieldMulti(UiState& s, uint16_t id) {
+    auto* field = id < s.count ? s.ent[id].try_get_mut<UiField>() : nullptr;
+    if (field == nullptr) {
+        return;
+    }
+    field->multi = 1;
+    if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
+        flex->overflow = 1;
+    }
+    s.layoutDirty = true;
+    s.visualDirty = true;
+}
+
 void fieldPlaceText(UiState& s) {
     for (uint16_t id = 0; id < s.count; ++id) {
+        if (!s.ent[id].is_alive()) {
+            continue;
+        }
         const UiPaint* paint = s.ent[id].try_get<UiPaint>();
         if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Field)) {
             continue;
@@ -210,7 +226,7 @@ void fieldPlaceText(UiState& s) {
             ink->b = field->text[2];
         }
         text->align = 0;
-        text->wrap = 0;
+        text->wrap = field->multi;
         text->ellipsis = 0;
         text->scroll = field->scroll;
         if (s.box[id].w < 1.0f || s.box[id].h < 1.0f) {
@@ -244,6 +260,9 @@ void textInk(float r, float g, float b, bool hot, float& tr, float& tg, float& t
 
 void placeChromeText(UiState& s) {
     for (uint16_t id = 0; id < s.count; ++id) {
+        if (!s.ent[id].is_alive()) {
+            continue;
+        }
         const UiPaint* paint = s.ent[id].try_get<UiPaint>();
         if (paint == nullptr) {
             continue;

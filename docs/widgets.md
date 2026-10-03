@@ -55,6 +55,17 @@
 
 Фон любой роли — общая заливка. Обводка (`borderW`, `canvasBorder`) — кольцо по краю, бокс не сжимает. Тень (`shadow`, `canvasShadow`) — примитив вокруг бокса. Ребёнок рисуется и нажимается только внутри предков.
 
+Transform и filter — один draw, без второго примитива и без второго прохода Vulkan:
+
+| Поле | CSS | Что делает |
+| --- | --- | --- |
+| `angle` | transform: rotate() | градусы, поворот вокруг центра бокса, `canvasTransform`/`Panel::transform` |
+| `scaleX`, `scaleY` | transform: scale() | множитель вокруг центра бокса, по умолчанию 1 |
+| `bright` | filter: brightness() | множитель цвета после заливки, по умолчанию 1 |
+| `contrast` | filter: contrast() | растяжение вокруг 0.5, по умолчанию 1 |
+
+Упаковано в свободные `pad0`/`pad1` примитива (`kUiFlagTransform`) — несовместимо на одном примитиве с clip (`kUiFlagClip`) и с тенью/обводкой (`kUiFlagShadow`/`kUiFlagStroke`), те тоже держат данные в `pad0`/`pad1`. Панель с активным clip трансформацию/фильтр не получает, пока clip стоит. Blur для `kUiFlagPhoto` (сэмпл существующего мипа текстуры вместо второго прохода) не сделан — `docs/open.md`.
+
 ### Button, Close
 
 Ребёнок `Label`, номер в `uiTextId`. Кнопка ставит слот (с отступом, если есть `icon`) и контрастный цвет. Иконка 1–7 — маска в шейдере, не файл. Нажатие вызывает `UiAction` (`uiBind` в месте создания). Если её нет, зовётся общий `onClick` оболочки. Кнопка не знает календарь, цвет, страницу и форму. Крестик — роль Close: кадр возвращает закрытие окна, свою команду не хранит.
@@ -135,9 +146,29 @@ JSON-вёрстка читает те же слова: `dir` (`row`, `column`, `
 
 Прямоугольник с этим боксом. Сам букв не создаёт. Скругление — `radius` заливки, не отступ Yoga.
 
+## Разметка — JSON на сборке, блоб в кадре
+
+Файл `assets/ui/shell.json` описывает статичный экран. `tools/uibake.py` пишет плоский блоб (BHUI, версия 2, узел 204 байта, пул строк). Кадр читает его через `uiImportBin` / `uiImportBinFile` / `canvasImportBin` и не парсит этот JSON. `uiImportJson` остаётся для документа, который открыли в рантайме.
+
+Загрузчик вызывает `spawn`, `addText`, `uiName`, `uiWindowChrome`, `uiBuildCalendar`, `fillColorBody`. Это тот же C++ API, что `Panel::child` и `Panel::button`.
+
+Ключи узла: `name` или `id`, `role` или `type`, `text`, `hint`, `dir`, `w`/`h` (число или `"100%"`), `grow`, `shrink`, `pad`, `padT`/`padB`, `gap`, `gapRow`, `radius`, `fill`, `tag`, `icon`, `children`, `show`, `x`/`y`, `right`/`bottom`, `min`/`minW`/`minH`, `maxv`, `maxW`/`maxH`, `basis`, `value`, `shadow`, `border`, `br`/`bg`/`bb`, `padL`/`padR` (отступ текста поля), `filter`, `max` (длина поля), `clear`, `required`, `readonly`, `password`, `form`, `on`, `kind`, `group`, `minimap`, `drop`, `content`, `self`, `overflow`, `box`, `aspect`, `marginL`/`marginR`/`marginT`/`marginB`, `textWrap`, `textAlign`, `ellipsis`, `valign`, `deco`, `leading`. Слова `center`, `row`, `wrap`, `absolute` пекарь понимает так же, как числа.
+
+Роли сверх обычных виджетов: `chrome`, `calendar`, `color`, `menu`, `image`. Имя становится `UiName` и символом Flecs.
+
+Связь с узлом из блоба: `uiFindName`, `uiBindName`, `canvasFind`, `canvasBindName`, `Panel::find`. Дальше в найденный узел можно звать `child` и `button`.
+
+## Сборка руками — `Panel`
+
+`Panel::make`, `at`, `find`, `child`, `label`, `textButton`, `button`, `field`, `check`, `radio`, `spin`, `setText`, `color`, `animate`. Под ними `canvasNode` → `spawn`. Этот слой не заменяется блобом. Окно `tool` и блок YOGA GROW собраны им.
+
+`uiTrace` пишет в канал `UI` одну строку `ui fn`: имя функции, id, имя узла, роль, тег и бокс. `uiDumpLayout` пишет `ui layout`, затем `ui box` для именованных узлов и кнопок, полей, слайдеров, галочек, крестиков и скроллов. `ui miss` — бокс пустой, NaN или за пределами кадра. Кадр вызывает дамп на первом кадре и по F3 (`kScanF3`). `uiDrop` снимает поддерево: Yoga-узел уходит из родителя и освобождается вместе с детьми, сущности Flecs уничтожаются, номер слота не переиспользуется. `uiReparent` переносит узел. `uiShow(id, false)` ставит Yoga `display: none`, хит такой узел не берёт. `uiVirtual` — пул из 12 строк. Скролл меняет индекс данных, ноды не плодятся. Проводник его ещё не зовёт. `uiSpin` / `Panel::spin` — число, которое тянут мышью; на время тяги хост включает относительную мышь и возвращает курсор. `uiCurve` / `Panel::curve` — кубическая кривая. Вершинный шейдер из четырёх опорных точек строит ленту (`kUiFlagRibbon`): стык 0 круглый (капсула), 1 bevel, 2 miter. Ручки остаются квадами. `uiGradient` / `Panel::gradient` — полоса из двух остановок. `uiTreeRow` — строка и скрытое тело. `uiShowOnly` прячет соседей. `uiFocusStep` — Tab и Shift+Tab по `UiTab`. `uiMarkLayout` считает поддерево Yoga. `uiDragBegin` / `uiDragEnd` — шина переноса, список ждёт 4 px, `UiDropTarget` фильтрует kind. `uiCursorPush` / `uiCursorPop` — стек курсора. `uiTab` задаёт порядок фокуса. Escape закрывает меню и сбрасывает перенос. Поле помнит восемь снимков (Ctrl+Z, Ctrl+Y). Тройной клик выделяет всё поле. `uiFieldMulti` включает перевод строки, каретку по строкам и перенос по ширине. У заливки четыре радиуса: `radius`, `radiusTr`, `radiusBr`, `radiusBl`. Панель с `ramp` красится градиентом шейдера. `actionBind` / `actionBindChord` / `actionListen` / `actionSave` / `actionLoad` — аккорды и JSON. Незакрытый список — `docs/open.md`.
+
 ## Сборки ядра — `core/ui/kit`
 
-Цвет и календарь. Дерево виджетов и своя политика. Колесо, яркость и образец всё ещё ветки по тегам в общем кадре. Новый цвет туда не добавлять: это дырка, не образец.
+Цвет и календарь. Дерево виджетов и своя политика. Календарь собирает `uiBuildCalendar`. Цвет собирает `fillColorBody`. Колесо, яркость и образец всё ещё ветки по тегам в общем кадре. Новый цвет туда не добавлять: это дырка, не образец.
+
+Хром окна — `uiWindowChrome`: свернуть, развернуть, закрыть. Демо эти кнопки не спавнит.
 
 ## Демо — `demo/`
 
@@ -161,4 +192,12 @@ Visbuffer, shade, SSR, сцена. Подключает `core/rhi` снаруж�
 
 ## Оболочка демо — `demo/app`
 
-Соединяет слои ядра. `Shell` слушает слайдер масштаба и клики файлов. Свою кнопку не рисует. Живёт отдельно от `core/`.
+Задаёт окна и функции сборки. Свой swapchain и свой SDL не пишет. `Shell` слушает слайдер масштаба и клики файлов. Свою кнопку не рисует.
+
+## Кадр — `core/host`
+
+До восьми окон. `hostOpen` принимает `ViewDesc`: id, `WindowConfig`, `FrameDesc`, `UiBuilder`, необязательный `ColorBook`, `onOps`, `onClose`. Id принадлежит приложению, кадр его не толкует. То же id поднимает окно. `FrameDesc.present`: `Vsync`, `Mailbox`, `Immediate`, `Relaxed`. `hostSetFrame` меняет режим у живого окна. Первое окно главное. Minimize, maximize, непрозрачность, поверх всех, курсор, буфер обмена, текстовый ввод, F5 и диалог файла делает кадр. Команду, которую кадр не знает, отдаёт `onOps`.
+
+## Окно — `core/platform`
+
+Весь SDL, кроме поверхности Vulkan (`deviceCreateSurface` в `core/rhi`). Создание и последующая настройка: положение, размер, минимум, максимум, рамка, resize, скрытие, полный экран, поверх всех, фокус, модальность, родитель, непрозрачность, aspect, utility/tooltip/popup, grab, относительная мышь, вспышка, прогресс, иконка, форма, системное меню. Ввод за кадр — `InputFrame`: кнопки включая X1/X2, колесо X, Super, Caps, Num, `keyDown`/`keyUp`, `windowHoldMs`. Диалог — `windowAskFile` / `windowTakeFile`. Геометрия — `windowRemember` / `windowRecall`. Полный экран — `windowFullscreenKind` (окно, borderless, exclusive). Лимит кадра — `platformPace`.

@@ -1,6 +1,10 @@
 #include "image/ImageFile.hpp"
 
 #include "rhi/GpuBuffer.hpp"
+#include "rhi/DescriptorHeap.hpp"
+#include "rhi/ShaderObject.hpp"
+#include "rhi/Barrier.hpp"
+#include "platform/Check.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -253,13 +257,105 @@ struct Level {
     VkDeviceSize bytes = 0;
 };
 
-bool submitImage(GpuImage& img, Device& d, VkFormat format, const uint8_t* data, VkDeviceSize bytes, const Level* levels, uint32_t mipCount) {
+// Фаза 2 (план рендера): true только если устройство реально поддерживает host image copy
+// И формат сам умеет через него копироваться (оптимальный тайлинг обязан объявить фичу-флаг
+// в format features, не только в device features — иначе некоторые драйверы примут вызов, но
+// скопируют мусор на редких форматах типа BC6H).
+bool hostCopyOk(const Device& d, VkFormat format) {
+    if (!d.caps.hostImageCopy) {
+        return false;
+    }
+    VkFormatProperties3 props3{VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3};
+    VkFormatProperties2 props2{VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2, &props3};
+    vkGetPhysicalDeviceFormatProperties2(d.physical, format, &props2);
+    return (props3.optimalTilingFeatures & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT) != 0;
+}
+
+// Прямая CPU→GPU загрузка без staging-буфера, командного пула и очереди (Vulkan 1.4 core,
+// `host_image_copy`). То же содержимое байт, что шло через vkCmdCopyBufferToImage — меняется
+// только механизм переноса, не то, что внутри текстуры. Если что-то не так — false, и
+// вызывающий код падает обратно на проверенный путь со staging-буфером, кадр не теряется.
+bool submitImageHostCopy(GpuImage& img, Device& d, VkFormat format, const uint8_t* data, const Level* levels, uint32_t mipCount) {
+    // Громкий отказ вместо тихой порчи памяти: regions[16] ниже фиксированного размера,
+    // а mipCountFor() уже ограничивает цепочку 12 уровнями — если когда-то появится вызов с
+    // другим источником mipCount, это должно упасть с трейсом тут, а не переполнить стек.
+    BH_ASSERT(mipCount <= 16, "submitImageHostCopy: mipCount exceeds fixed region array");
     if (!gpuImageCreate(
             img,
             d,
             VkExtent2D{levels[0].width, levels[0].height},
             format,
-            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_HOST_TRANSFER_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            mipCount)) {
+        return false;
+    }
+    const VkImageSubresourceRange fullRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, mipCount, 0, 1};
+    VkHostImageLayoutTransitionInfo toDst{
+        .sType = VK_STRUCTURE_TYPE_HOST_IMAGE_LAYOUT_TRANSITION_INFO,
+        .image = img.image,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .subresourceRange = fullRange,
+    };
+    if (vkTransitionImageLayout(d.device, 1, &toDst) != VK_SUCCESS) {
+        gpuImageDestroy(img, d);
+        return false;
+    }
+    VkMemoryToImageCopy regions[16]{};
+    for (uint32_t i = 0; i < mipCount; ++i) {
+        regions[i] = VkMemoryToImageCopy{
+            .sType = VK_STRUCTURE_TYPE_MEMORY_TO_IMAGE_COPY,
+            .pHostPointer = data + levels[i].offset,
+            .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, i, 0, 1},
+            .imageExtent = {levels[i].width, levels[i].height, 1},
+        };
+    }
+    VkCopyMemoryToImageInfo copyInfo{
+        .sType = VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INFO,
+        .dstImage = img.image,
+        .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .regionCount = mipCount,
+        .pRegions = regions,
+    };
+    if (vkCopyMemoryToImage(d.device, &copyInfo) != VK_SUCCESS) {
+        gpuImageDestroy(img, d);
+        return false;
+    }
+    VkHostImageLayoutTransitionInfo toShader{
+        .sType = VK_STRUCTURE_TYPE_HOST_IMAGE_LAYOUT_TRANSITION_INFO,
+        .image = img.image,
+        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .subresourceRange = fullRange,
+    };
+    if (vkTransitionImageLayout(d.device, 1, &toShader) != VK_SUCCESS) {
+        gpuImageDestroy(img, d);
+        return false;
+    }
+    spdlog::info(
+        "image {} {}x{} mips {} host-copy",
+        formatName(format),
+        levels[0].width,
+        levels[0].height,
+        mipCount);
+    return true;
+}
+
+bool submitImage(GpuImage& img, Device& d, VkFormat format, const uint8_t* data, VkDeviceSize bytes, const Level* levels, uint32_t mipCount) {
+    BH_ASSERT(mipCount <= 16, "submitImage: mipCount exceeds fixed region array");
+    if (mipCount <= 16 && hostCopyOk(d, format) && submitImageHostCopy(img, d, format, data, levels, mipCount)) {
+        return true;
+    }
+    // TRANSFER_SRC добавлен ради читаемости текстуры задним числом (тесты, будущий дебаг-дамп
+    // «что реально загружено на GPU») — ничего не стоит на десктопных GPU, в сам рендер не
+    // добавляет шагов, courtesy-флаг создания образа, не новый путь копирования.
+    if (!gpuImageCreate(
+            img,
+            d,
+            VkExtent2D{levels[0].width, levels[0].height},
+            format,
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT,
             mipCount)) {
         return false;
@@ -272,10 +368,15 @@ bool submitImage(GpuImage& img, Device& d, VkFormat format, const uint8_t* data,
     std::memcpy(staging.mapped, data, static_cast<size_t>(bytes));
     gpuBufferFlush(staging, d, 0, bytes);
 
+    // d.commandPool/d.transferPool общий разовый пул, submit — общая очередь: запись кадра
+    // разных окон (job system, core/host/Host.cpp) идёт параллельно, без этой блокировки
+    // allocate/free в одном пуле и submit на одной VkQueue из разных потоков — UB.
+    std::lock_guard<std::mutex> uploadLock(d.queueMutex);
+    const bool split = d.transferPool != VK_NULL_HANDLE && d.transferPool != d.commandPool;
     VkCommandBuffer cmd = VK_NULL_HANDLE;
     VkCommandBufferAllocateInfo alloc{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = d.commandPool,
+        .commandPool = split ? d.transferPool : d.commandPool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
@@ -323,11 +424,16 @@ bool submitImage(GpuImage& img, Device& d, VkFormat format, const uint8_t* data,
         .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
         .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .srcQueueFamilyIndex = split ? d.caps.transferFamily : VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = split ? d.caps.graphicsFamily : VK_QUEUE_FAMILY_IGNORED,
         .image = img.image,
         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mipCount, 0, 1},
     };
+    if (split) {
+        toSample.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        toSample.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+        toSample.dstAccessMask = VK_ACCESS_2_NONE;
+    }
     dep.pImageMemoryBarriers = &toSample;
     vkCmdPipelineBarrier2(cmd, &dep);
     vkEndCommandBuffer(cmd);
@@ -340,11 +446,37 @@ bool submitImage(GpuImage& img, Device& d, VkFormat format, const uint8_t* data,
         .commandBufferInfoCount = 1,
         .pCommandBufferInfos = &cbsi,
     };
-    const bool ok = vkQueueSubmit2(d.graphicsQueue, 1, &submit, VK_NULL_HANDLE) == VK_SUCCESS;
-    if (ok) {
-        vkQueueWaitIdle(d.graphicsQueue);
+    VkQueue queue = split ? d.transferQueue : d.graphicsQueue;
+    const bool okCopy = vkQueueSubmit2(queue, 1, &submit, VK_NULL_HANDLE) == VK_SUCCESS;
+    if (okCopy) {
+        vkQueueWaitIdle(queue);
     }
-    vkFreeCommandBuffers(d.device, d.commandPool, 1, &cmd);
+    vkFreeCommandBuffers(d.device, alloc.commandPool, 1, &cmd);
+    bool ok = okCopy;
+    if (ok && split) {
+        VkCommandBuffer acquire = VK_NULL_HANDLE;
+        alloc.commandPool = d.commandPool;
+        if (vkAllocateCommandBuffers(d.device, &alloc, &acquire) == VK_SUCCESS) {
+            vkBeginCommandBuffer(acquire, &begin);
+            toSample.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+            toSample.srcAccessMask = VK_ACCESS_2_NONE;
+            toSample.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+            toSample.dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+            toSample.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            toSample.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            dep.pImageMemoryBarriers = &toSample;
+            vkCmdPipelineBarrier2(acquire, &dep);
+            vkEndCommandBuffer(acquire);
+            cbsi.commandBuffer = acquire;
+            ok = vkQueueSubmit2(d.graphicsQueue, 1, &submit, VK_NULL_HANDLE) == VK_SUCCESS;
+            if (ok) {
+                vkQueueWaitIdle(d.graphicsQueue);
+            }
+            vkFreeCommandBuffers(d.device, d.commandPool, 1, &acquire);
+        } else {
+            ok = false;
+        }
+    }
     gpuBufferDestroy(staging, d);
     if (!ok) {
         gpuImageDestroy(img, d);
@@ -384,6 +516,120 @@ bool hasAlpha(const uint8_t* rgba, uint32_t pixels) {
         }
     }
     return false;
+}
+
+// GPU-компьют BC1 (план рендера, Фаза 2): один поток на блок 4x4 в core/image/compress.slang.
+// Используется только для непрозрачного пути (BC1), где у CPU ISPC нет поиска партиций —
+// алгоритм простой (per-channel min/max), поэтому сравнение «GPU vs CPU» в golden-image тесте
+// проверяет не побитовое совпадение (разные реализации могут выбрать разные конечные точки),
+// а то, что GPU-результат декодируется в цвет, близкий к оригиналу — тот же критерий, что
+// у любого BC1 энкодера. При любой неудаче возвращает false, вызывающий код падает на ISPC.
+bool gpuCompressBc1(Device& d, const uint8_t* rgba, uint32_t width, uint32_t height, uint8_t* dst) {
+    const uint32_t blocksX = (width + 3u) / 4u;
+    const uint32_t blocksY = (height + 3u) / 4u;
+    const VkDeviceSize dstBytes = static_cast<VkDeviceSize>(blocksX) * blocksY * 8u;
+    const VkDeviceSize srcBytes = 16 + static_cast<VkDeviceSize>(width) * height * 4u;
+
+    GpuBuffer src{};
+    GpuBuffer dstBuf{};
+    DescriptorHeaps heaps{};
+    ShaderExt cs{};
+    VkCommandBuffer cmd = VK_NULL_HANDLE;
+    bool ok = false;
+
+    const VkBufferUsageFlags usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    if (!gpuBufferCreate(src, d, srcBytes, usage, true) || !gpuBufferCreate(dstBuf, d, dstBytes, usage, true)) {
+        goto cleanup;
+    }
+    {
+        uint32_t header[4] = {width, height, 0, 0};
+        std::memcpy(src.mapped, header, sizeof(header));
+        std::memcpy(static_cast<uint8_t*>(src.mapped) + 16, rgba, static_cast<size_t>(width) * height * 4u);
+        gpuBufferFlush(src, d, 0, srcBytes);
+    }
+    if (!descriptorHeapsCreate(heaps, d, HeapLayout{.buffers = 2, .images = 0, .samplers = 0})) {
+        goto cleanup;
+    }
+    if (!heapWriteBuffer(heaps, d, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, src.address, src.size)
+        || !heapWriteBuffer(heaps, d, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dstBuf.address, dstBuf.size)) {
+        goto cleanup;
+    }
+    {
+        VkDescriptorSetAndBindingMappingEXT maps[2] = {
+            heapMap(0, 0, VK_SPIRV_RESOURCE_TYPE_READ_ONLY_STORAGE_BUFFER_BIT_EXT,
+                heapBufOffset(heaps, 0), static_cast<uint32_t>(heaps.bufferDescSize)),
+            heapMap(0, 1, VK_SPIRV_RESOURCE_TYPE_READ_WRITE_STORAGE_BUFFER_BIT_EXT,
+                heapBufOffset(heaps, 1), static_cast<uint32_t>(heaps.bufferDescSize)),
+        };
+        const ShaderCreateDesc desc{
+            .path = BH_COMPRESS_BC1,
+            .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+            .mappingCount = 2,
+            .mappings = maps,
+        };
+        if (!shaderCreate(d, desc, cs)) {
+            goto cleanup;
+        }
+    }
+    {
+        // Общий пул/очередь — см. комментарий у d.queueMutex в Device.hpp.
+        std::lock_guard<std::mutex> uploadLock(d.queueMutex);
+        const VkCommandBufferAllocateInfo alloc{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool = d.commandPool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1,
+        };
+        if (vkAllocateCommandBuffers(d.device, &alloc, &cmd) != VK_SUCCESS) {
+            goto cleanup;
+        }
+        const VkCommandBufferBeginInfo begin{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        };
+        vkBeginCommandBuffer(cmd, &begin);
+        heapBind(cmd, heaps);
+        cmdBindCompute(cmd, cs.handle);
+        vkCmdDispatch(cmd, (blocksX + 7u) / 8u, (blocksY + 7u) / 8u, 1);
+        rhiBufferBarrier(
+            cmd,
+            dstBuf.buffer,
+            0,
+            dstBytes,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_HOST_BIT,
+            VK_ACCESS_2_HOST_READ_BIT);
+        vkEndCommandBuffer(cmd);
+
+        const VkCommandBufferSubmitInfo cbsi{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .commandBuffer = cmd,
+        };
+        const VkSubmitInfo2 submit{
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+            .commandBufferInfoCount = 1,
+            .pCommandBufferInfos = &cbsi,
+        };
+        if (vkQueueSubmit2(d.graphicsQueue, 1, &submit, VK_NULL_HANDLE) != VK_SUCCESS) {
+            goto cleanup;
+        }
+        vkQueueWaitIdle(d.graphicsQueue);
+        gpuBufferInvalidate(dstBuf, d, 0, dstBytes);
+        std::memcpy(dst, dstBuf.mapped, static_cast<size_t>(dstBytes));
+        ok = true;
+        spdlog::info("bc1 gpu-compress {}x{} blocks {}x{}", width, height, blocksX, blocksY);
+    }
+
+cleanup:
+    if (cmd != VK_NULL_HANDLE) {
+        vkFreeCommandBuffers(d.device, d.commandPool, 1, &cmd);
+    }
+    shaderDestroy(d, cs);
+    descriptorHeapsDestroy(heaps, d);
+    gpuBufferDestroy(dstBuf, d);
+    gpuBufferDestroy(src, d);
+    return ok;
 }
 
 void compressRgbaLevel(const uint8_t* src, uint32_t width, uint32_t height, VkFormat format, uint8_t* dst) {
@@ -478,7 +724,15 @@ bool gpuImageUploadRgba(GpuImage& img, Device& d, const uint8_t* rgba, uint32_t 
         levels[mip].bytes = bytes;
         const size_t at = packed.size();
         packed.resize(at + static_cast<size_t>(bytes));
-        compressRgbaLevel(levelPixels.data(), lw, lh, format, packed.data() + at);
+        // GPU-компьют сначала, только для BC1 (без партиций, один простой энкодер = один
+        // понятный шейдер); BC7/BC3 остаются на ISPC. Неудача GPU-пути (нет шейдера, нет
+        // compute на этом GPU) молча падает на проверенный CPU путь — то же, что уже сделано
+        // для host_image_copy.
+        const bool gpuDone = format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK
+            && gpuCompressBc1(d, levelPixels.data(), lw, lh, packed.data() + at);
+        if (!gpuDone) {
+            compressRgbaLevel(levelPixels.data(), lw, lh, format, packed.data() + at);
+        }
         if (mip + 1u < mips) {
             std::vector<uint8_t> next;
             downsampleRgba(levelPixels, lw, lh, next, lw, lh);

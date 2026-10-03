@@ -4,6 +4,7 @@
 #include "rhi/DescriptorHeap.hpp"
 #include "rhi/GpuBuffer.hpp"
 #include "rhi/GpuImage.hpp"
+#include "rhi/MeshDraw.hpp"
 #include "rhi/ShaderObject.hpp"
 #include "rhi/Swapchain.hpp"
 #include "ui/Model.hpp"
@@ -28,6 +29,7 @@ struct Canvas {
     DescriptorHeaps* heaps = nullptr;
     ShaderExt vs{};
     ShaderExt fs{};
+    ShaderExt ms{};
     bool nullMesh = false;
     uint32_t drawCount = 0;
     void (*builder)(Canvas&, void*) = nullptr;
@@ -42,6 +44,11 @@ void canvasDestroy(Canvas& c, Device& d);
 void canvasSetLook(Canvas& c, const UiLook& look);
 [[nodiscard]] UiLook canvasLook(const Canvas& c);
 [[nodiscard]] bool canvasWantsText(const Canvas& c);
+[[nodiscard]] bool canvasWantsRelative(const Canvas& c);
+[[nodiscard]] bool canvasFocusBox(const Canvas& c, float& x, float& y, float& w, float& h);
+void canvasApplyDpi(Canvas& c, float dpi, float previous);
+void canvasSetDpi(Canvas& c, float dpi);
+[[nodiscard]] bool canvasMouseClip(const Canvas& c, float& x, float& y, float& w, float& h);
 void canvasTakeWindowOps(Canvas& c, WindowOps& out);
 [[nodiscard]] bool canvasAddCommand(Canvas& c, const char* name, UiCommandFn fn, void* user);
 void canvasMenuStyle(Canvas& c, float width, float itemH, float pad, float gap);
@@ -51,6 +58,8 @@ void canvasBuildColor(Canvas& c);
 void canvasSetBook(Canvas& c, ColorBook* book);
 [[nodiscard]] uint16_t canvasImportJson(Canvas& c, uint16_t parent, const char* text);
 [[nodiscard]] uint16_t canvasFind(const Canvas& c, const char* name);
+void canvasBindName(Canvas& c, const char* name, UiClickFn fn, void* user);
+[[nodiscard]] uint16_t canvasImportBin(Canvas& c, uint16_t parent, const char* path);
 void canvasSetBuilder(Canvas& c, UiBuilder builder, void* user);
 void canvasReload(Canvas& c);
 uint16_t canvasNode(Canvas& c, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
@@ -83,9 +92,12 @@ void canvasBindContext(Canvas& c, uint16_t owner, uint16_t menu);
 void canvasText(Canvas& c, uint16_t id, const char* text);
 void canvasStamp(Canvas& c, uint16_t id, UiToken token);
 [[nodiscard]] bool canvasSetFont(Canvas& c, const char* path, float pixelSize);
+[[nodiscard]] bool canvasUseFont(Canvas& c, float pixelSize);
 void canvasSetPaint(Canvas& c, uint16_t id, float r, float g, float b, float a);
 void canvasBorder(Canvas& c, uint16_t id, float width, float r, float g, float b, float radius);
 void canvasShadow(Canvas& c, uint16_t id, float shadow);
+void canvasTransform(Canvas& c, uint16_t id, float angle, float scaleX, float scaleY);
+void canvasFilter(Canvas& c, uint16_t id, float bright, float contrast);
 void canvasTextStyle(Canvas& c, uint16_t id, uint8_t align, uint8_t ellipsis, uint8_t valign, uint8_t wrap, uint8_t deco, float leading);
 [[nodiscard]] uint16_t canvasTextId(const Canvas& c, uint16_t id);
 [[nodiscard]] uint16_t canvasIcon(Canvas& c, uint16_t parent, uint8_t slot, float w, float h);

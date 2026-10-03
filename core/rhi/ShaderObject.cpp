@@ -136,7 +136,8 @@ void cmdSetGraphicsDynamic(
     VkExtent2D extent,
     uint32_t colorAttCount,
     bool depthTest,
-    bool alphaBlend) {
+    bool alphaBlend,
+    uint8_t blendMode) {
     const VkViewport vp{
         .x = 0.0f,
         .y = 0.0f,
@@ -172,8 +173,24 @@ void cmdSetGraphicsDynamic(
     VkBool32 blend[2]{alphaBlend ? VK_TRUE : VK_FALSE, VK_FALSE};
     vkCmdSetColorBlendEnableEXT(cmd, 0, colorAttCount, blend);
     VkColorBlendEquationEXT eq{};
-    eq.srcColorBlendFactor = alphaBlend ? VK_BLEND_FACTOR_SRC_ALPHA : VK_BLEND_FACTOR_ONE;
-    eq.dstColorBlendFactor = alphaBlend ? VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA : VK_BLEND_FACTOR_ZERO;
+    eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    eq.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    if (blendMode == 1) {
+        eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        eq.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    } else if (blendMode == 2) {
+        eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        eq.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    } else if (blendMode == 3) {
+        eq.srcColorBlendFactor = VK_BLEND_FACTOR_DST_COLOR;
+        eq.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    } else if (blendMode == 4) {
+        eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        eq.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+    } else if (alphaBlend) {
+        eq.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        eq.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    }
     eq.colorBlendOp = VK_BLEND_OP_ADD;
     eq.srcAlphaBlendFactor = alphaBlend ? VK_BLEND_FACTOR_SRC_ALPHA : VK_BLEND_FACTOR_ONE;
     eq.dstAlphaBlendFactor = alphaBlend ? VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA : VK_BLEND_FACTOR_ZERO;

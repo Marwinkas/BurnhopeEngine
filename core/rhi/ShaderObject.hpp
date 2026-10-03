@@ -38,6 +38,7 @@ void cmdSetGraphicsDynamic(
     VkExtent2D extent,
     uint32_t colorAttCount,
     bool depthTest,
-    bool alphaBlend = false);
+    bool alphaBlend = false,
+    uint8_t blendMode = 0);
 
 } // namespace burnhope

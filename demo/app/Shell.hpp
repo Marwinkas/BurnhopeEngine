@@ -4,7 +4,7 @@
 
 namespace burnhope {
 
-// Пример приложения. Другое приложение подставляет свой UiBuilder и не трогает rhi/ui.
+// Пример приложения. Другое приложение передаёт свой UiBuilder в hostOpen и не трогает окно, rhi и present.
 void shellBuild(Canvas& canvas, void* user);
 void toolBuild(Canvas& canvas, void* user);
 void colorBuild(Canvas& canvas, void* user);

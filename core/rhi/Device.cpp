@@ -2,7 +2,12 @@
 
 #include <SDL3/SDL_vulkan.h>
 #include <spdlog/spdlog.h>
+#include <spdlog/sinks/ringbuffer_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 
+#include <renderdoc_app.h>
+
+#include <dlfcn.h>
 #include <cstring>
 #include <vector>
 
@@ -64,10 +69,12 @@ bool pickQueues(VkPhysicalDevice pd, VkSurfaceKHR surface, DeviceCaps& caps) {
     caps.graphicsFamily = UINT32_MAX;
     caps.presentFamily = UINT32_MAX;
     caps.computeFamily = UINT32_MAX;
+    caps.transferFamily = UINT32_MAX;
 
     for (uint32_t i = 0; i < n; ++i) {
         const bool gfx = (fams[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
         const bool compute = (fams[i].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
+        const bool transfer = (fams[i].queueFlags & VK_QUEUE_TRANSFER_BIT) != 0;
         VkBool32 present = VK_FALSE;
         vkGetPhysicalDeviceSurfaceSupportKHR(pd, i, surface, &present);
         if (gfx && caps.graphicsFamily == UINT32_MAX) {
@@ -79,6 +86,12 @@ bool pickQueues(VkPhysicalDevice pd, VkSurfaceKHR surface, DeviceCaps& caps) {
         if (compute && caps.computeFamily == UINT32_MAX) {
             caps.computeFamily = i;
         }
+        if (transfer && !gfx && caps.transferFamily == UINT32_MAX) {
+            caps.transferFamily = i;
+        }
+    }
+    if (caps.transferFamily == UINT32_MAX) {
+        caps.transferFamily = caps.graphicsFamily;
     }
     return caps.graphicsFamily != UINT32_MAX && caps.presentFamily != UINT32_MAX;
 }
@@ -116,10 +129,30 @@ void fillCaps(VkPhysicalDevice pd, DeviceCaps& caps) {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT,
         .pNext = &presentId,
     };
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapMaint{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT,
+        .pNext = &heapFeat,
+    };
+    VkPhysicalDeviceNestedCommandBufferFeaturesEXT nestedCmd{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_FEATURES_EXT,
+        .pNext = &swapMaint,
+    };
+    VkPhysicalDeviceDepthClampControlFeaturesEXT depthClamp{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_CONTROL_FEATURES_EXT,
+        .pNext = &nestedCmd,
+    };
+    VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR barycentric{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR,
+        .pNext = &depthClamp,
+    };
+    VkPhysicalDeviceCooperativeMatrixFeaturesKHR coopMatrix{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR,
+        .pNext = &barycentric,
+    };
 
     VkPhysicalDeviceFeatures2 feats{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-        .pNext = &heapFeat,
+        .pNext = &coopMatrix,
     };
     vkGetPhysicalDeviceFeatures2(pd, &feats);
 
@@ -128,6 +161,7 @@ void fillCaps(VkPhysicalDevice pd, DeviceCaps& caps) {
     caps.timelineSemaphore = f12.timelineSemaphore == VK_TRUE;
     caps.bufferDeviceAddress = f12.bufferDeviceAddress == VK_TRUE;
     caps.maintenance6 = f14.maintenance6 == VK_TRUE;
+    caps.hostImageCopy = f14.hostImageCopy == VK_TRUE;
     caps.shaderObject = hasDeviceExt(pd, VK_EXT_SHADER_OBJECT_EXTENSION_NAME) && shaderObj.shaderObject == VK_TRUE;
     caps.presentWait = hasDeviceExt(pd, VK_KHR_PRESENT_WAIT_EXTENSION_NAME) && presentWait.presentWait == VK_TRUE;
     caps.presentId = hasDeviceExt(pd, VK_KHR_PRESENT_ID_EXTENSION_NAME) && presentId.presentId == VK_TRUE;
@@ -137,6 +171,17 @@ void fillCaps(VkPhysicalDevice pd, DeviceCaps& caps) {
         && heapFeat.descriptorHeap == VK_TRUE;
     caps.dgc = hasDeviceExt(pd, "VK_EXT_device_generated_commands")
         || hasDeviceExt(pd, "VK_NVX_device_generated_commands");
+    caps.swapchainMaintenance1 = hasDeviceExt(pd, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME)
+        && swapMaint.swapchainMaintenance1 == VK_TRUE;
+    caps.nestedCommandBuffer = hasDeviceExt(pd, VK_EXT_NESTED_COMMAND_BUFFER_EXTENSION_NAME)
+        && nestedCmd.nestedCommandBuffer == VK_TRUE;
+    caps.depthClampControl = hasDeviceExt(pd, VK_EXT_DEPTH_CLAMP_CONTROL_EXTENSION_NAME)
+        && depthClamp.depthClampControl == VK_TRUE;
+    caps.fragmentShaderBarycentric = hasDeviceExt(pd, VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME)
+        && barycentric.fragmentShaderBarycentric == VK_TRUE;
+    // Только обнаружение: нет потребителя в текущих фазах, фичу устройству не запрашиваем.
+    caps.cooperativeMatrix = hasDeviceExt(pd, VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME)
+        && coopMatrix.cooperativeMatrix == VK_TRUE;
 }
 
 } // namespace
@@ -146,13 +191,16 @@ void deviceDumpCaps(const Device& d) {
     spdlog::info("=== Burnhope caps (once) ===");
     spdlog::info("GPU: {}", c.deviceName);
     spdlog::info("device api: {}.{}.{}", c.apiMajor, c.apiMinor, c.apiPatch);
-    spdlog::info("queues: graphics={} present={} compute={}", c.graphicsFamily, c.presentFamily, c.computeFamily);
+    spdlog::info("queues: graphics={} present={} compute={} transfer={}", c.graphicsFamily, c.presentFamily, c.computeFamily, c.transferFamily);
     spdlog::info("shaderObject: {}", c.shaderObject);
     spdlog::info("presentWait: {}  presentId: {}", c.presentWait, c.presentId);
     spdlog::info("dynamicRendering: {}  sync2: {}  timeline: {}  BDA: {}",
         c.dynamicRendering, c.sync2, c.timelineSemaphore, c.bufferDeviceAddress);
     spdlog::info("meshShader: {}  rayQuery: {}  descriptorHeap: {}  dgc: {}",
         c.meshShader, c.rayQuery, c.descriptorHeap, c.dgc);
+    spdlog::info("maintenance6: {}  hostImageCopy: {}", c.maintenance6, c.hostImageCopy);
+    spdlog::info("swapchainMaintenance1: {}  nestedCommandBuffer: {}  depthClampControl: {}  barycentric: {}  cooperativeMatrix(discover-only): {}",
+        c.swapchainMaintenance1, c.nestedCommandBuffer, c.depthClampControl, c.fragmentShaderBarycentric, c.cooperativeMatrix);
     if (d.heapProps.imageDescriptorSize != 0) {
         spdlog::info("heap: imgDesc={} bufDesc={} sampDesc={} resAlign={} reservedRes={}",
             static_cast<unsigned long long>(d.heapProps.imageDescriptorSize),
@@ -162,6 +210,17 @@ void deviceDumpCaps(const Device& d) {
             static_cast<unsigned long long>(d.heapProps.minResourceHeapReservedRange));
     }
     spdlog::info("============================");
+}
+
+bool deviceCreateSurface(Device& d, Window& window, VkSurfaceKHR& out) {
+    if (d.instance == VK_NULL_HANDLE || window.handle == nullptr) {
+        return false;
+    }
+    if (!SDL_Vulkan_CreateSurface(window.handle, d.instance, nullptr, &out)) {
+        spdlog::error("SDL_Vulkan_CreateSurface: {}", SDL_GetError());
+        return false;
+    }
+    return true;
 }
 
 bool deviceCreate(Device& d, Window& window) {
@@ -190,9 +249,33 @@ bool deviceCreate(Device& d, Window& window) {
         return false;
     }
 
+    uint32_t instExtCount = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &instExtCount, nullptr);
+    std::vector<VkExtensionProperties> instExtProps(instExtCount);
+    vkEnumerateInstanceExtensionProperties(nullptr, &instExtCount, instExtProps.data());
+    const auto hasInstExt = [&instExtProps](const char* name) {
+        for (const auto& e : instExtProps) {
+            if (std::strcmp(e.extensionName, name) == 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+    // VK_EXT_swapchain_maintenance1 нужен на устройстве под Фазу 1.5 (пересборка свопчейна без
+    // vkDeviceWaitIdle), но он требует этот инстанс-расширение. Запрашиваем его тут и позже
+    // сверяем оба флага перед включением фичи на устройстве — иначе caps.swapchainMaintenance1
+    // будет врать: обнаружен, но не может быть включён без этого пререквизита.
+    const bool instSurfaceMaint1 = hasInstExt(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
+    const bool instSurfaceCaps2 = hasInstExt(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME)
+        && instSurfaceMaint1;
+
     std::vector<const char*> instExts(sdlExts, sdlExts + sdlExtCount);
     if (d.validation) {
         instExts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    }
+    if (instSurfaceCaps2) {
+        instExts.push_back(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
+        instExts.push_back(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     }
 
     VkDebugUtilsMessengerCreateInfoEXT dbgInfo{
@@ -206,9 +289,16 @@ bool deviceCreate(Device& d, Window& window) {
     };
 
     const char* layers[] = {kValidationLayer};
+    const VkValidationFeatureEnableEXT syncFeature = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT;
+    VkValidationFeaturesEXT validationFeatures{
+        .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
+        .pNext = &dbgInfo,
+        .enabledValidationFeatureCount = 1,
+        .pEnabledValidationFeatures = &syncFeature,
+    };
     VkInstanceCreateInfo ici{
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .pNext = d.validation ? &dbgInfo : nullptr,
+        .pNext = d.validation ? &validationFeatures : nullptr,
         .pApplicationInfo = &app,
         .enabledLayerCount = d.validation ? 1u : 0u,
         .ppEnabledLayerNames = d.validation ? layers : nullptr,
@@ -228,8 +318,7 @@ bool deviceCreate(Device& d, Window& window) {
         }
     }
 
-    if (!SDL_Vulkan_CreateSurface(window.handle, d.instance, nullptr, &d.surface)) {
-        spdlog::error("SDL_Vulkan_CreateSurface: {}", SDL_GetError());
+    if (!deviceCreateSurface(d, window, d.surface)) {
         return false;
     }
 
@@ -268,6 +357,10 @@ bool deviceCreate(Device& d, Window& window) {
 
     fillCaps(d.physical, d.caps);
     pickQueues(d.physical, d.surface, d.caps);
+    // Делаем caps правдивым до любого решения об enable: если пререквизит-расширение инстанса
+    // не попал в список (например старый лоадер), фичу устройства включать нельзя — тогда это
+    // не «обнаружено, но забыли включить» (баг maintenance6), а честное «недоступно».
+    d.caps.swapchainMaintenance1 = d.caps.swapchainMaintenance1 && instSurfaceCaps2;
 
     d.heapProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_PROPERTIES_EXT;
     d.heapProps.pNext = nullptr;
@@ -298,9 +391,25 @@ bool deviceCreate(Device& d, Window& window) {
     if (d.caps.presentWait) {
         devExts.push_back(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
     }
+    if (d.caps.swapchainMaintenance1) {
+        devExts.push_back(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    }
+    if (d.caps.nestedCommandBuffer) {
+        devExts.push_back(VK_EXT_NESTED_COMMAND_BUFFER_EXTENSION_NAME);
+    }
+    if (d.caps.depthClampControl) {
+        devExts.push_back(VK_EXT_DEPTH_CLAMP_CONTROL_EXTENSION_NAME);
+    }
+    if (d.caps.fragmentShaderBarycentric) {
+        devExts.push_back(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME);
+    }
+    // cooperativeMatrix: обнаружен и в логе, но не запрошен — нет потребителя в текущих фазах
+    // (план, Северная звезда — будущий ReSTIR/нейро-апскейл). Инстанс-расширение
+    // VK_KHR_SURFACE уже требует VK_KHR_get_surface_capabilities2 для maintenance1,
+    // но у SDL он уже в списке инстанс-расширений по умолчанию на большинстве лоадеров.
 
     const float prio = 1.0f;
-    VkDeviceQueueCreateInfo qcis[2]{};
+    VkDeviceQueueCreateInfo qcis[3]{};
     uint32_t qCount = 1;
     qcis[0] = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -309,13 +418,22 @@ bool deviceCreate(Device& d, Window& window) {
         .pQueuePriorities = &prio,
     };
     if (d.caps.presentFamily != d.caps.graphicsFamily) {
-        qcis[1] = {
+        qcis[qCount] = {
             .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
             .queueFamilyIndex = d.caps.presentFamily,
             .queueCount = 1,
             .pQueuePriorities = &prio,
         };
-        qCount = 2;
+        ++qCount;
+    }
+    if (d.caps.transferFamily != d.caps.graphicsFamily && d.caps.transferFamily != d.caps.presentFamily) {
+        qcis[qCount] = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueFamilyIndex = d.caps.transferFamily,
+            .queueCount = 1,
+            .pQueuePriorities = &prio,
+        };
+        ++qCount;
     }
 
     VkPhysicalDeviceVulkan13Features f13{};
@@ -343,6 +461,11 @@ bool deviceCreate(Device& d, Window& window) {
     VkPhysicalDeviceVulkan14Features f14{};
     f14.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
     f14.pNext = &f11;
+    // caps.* was just queried from this same GPU above (fillCaps), so gating by it here
+    // means we never ask the driver for a feature it did not report — no silent "caps says
+    // yes, device never actually got it" gap (maintenance6 used to have exactly that bug).
+    f14.maintenance6 = d.caps.maintenance6 ? VK_TRUE : VK_FALSE;
+    f14.hostImageCopy = d.caps.hostImageCopy ? VK_TRUE : VK_FALSE;
 
     VkPhysicalDeviceShaderObjectFeaturesEXT shaderObj{};
     shaderObj.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT;
@@ -362,6 +485,42 @@ bool deviceCreate(Device& d, Window& window) {
         devExts.push_back(VK_EXT_MESH_SHADER_EXTENSION_NAME);
         meshFeat.pNext = pNext;
         pNext = &meshFeat;
+    }
+
+    // Фаза 1.5: позволяет менять present-режим и переиспользовать swapchain без полной
+    // пересборки — follow-up к точечной правке `pace` в Swapchain.cpp, не включён в draw ещё.
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapMaintFeat{};
+    swapMaintFeat.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
+    swapMaintFeat.swapchainMaintenance1 = VK_TRUE;
+    if (d.caps.swapchainMaintenance1) {
+        swapMaintFeat.pNext = pNext;
+        pNext = &swapMaintFeat;
+    }
+
+    // Фаза 5+: много потоков смогут писать командные буферы вложенно, когда появится
+    // 3D-сцена с несколькими слоями; сейчас только фича включена, вызовов ещё нет.
+    VkPhysicalDeviceNestedCommandBufferFeaturesEXT nestedCmdFeat{};
+    nestedCmdFeat.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_FEATURES_EXT;
+    nestedCmdFeat.nestedCommandBuffer = VK_TRUE;
+    if (d.caps.nestedCommandBuffer) {
+        nestedCmdFeat.pNext = pNext;
+        pNext = &nestedCmdFeat;
+    }
+
+    VkPhysicalDeviceDepthClampControlFeaturesEXT depthClampFeat{};
+    depthClampFeat.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_CONTROL_FEATURES_EXT;
+    depthClampFeat.depthClampControl = VK_TRUE;
+    if (d.caps.depthClampControl) {
+        depthClampFeat.pNext = pNext;
+        pNext = &depthClampFeat;
+    }
+
+    VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR barycentricFeat{};
+    barycentricFeat.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR;
+    barycentricFeat.fragmentShaderBarycentric = VK_TRUE;
+    if (d.caps.fragmentShaderBarycentric) {
+        barycentricFeat.pNext = pNext;
+        pNext = &barycentricFeat;
     }
 
     VkPhysicalDevicePresentIdFeaturesKHR presentIdFeat{
@@ -399,9 +558,21 @@ bool deviceCreate(Device& d, Window& window) {
         return false;
     }
     volkLoadDevice(d.device);
+    static bool logs = false;
+    if (!logs) {
+        logs = true;
+        auto console = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        auto ring = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(10000);
+        const char* channels[] = {"RHI", "UI", "INPUT", "HOST", "ECS"};
+        for (const char* name : channels) {
+            auto logger = std::make_shared<spdlog::logger>(name, spdlog::sinks_init_list{console, ring});
+            spdlog::register_logger(logger);
+        }
+    }
 
     vkGetDeviceQueue(d.device, d.caps.graphicsFamily, 0, &d.graphicsQueue);
     vkGetDeviceQueue(d.device, d.caps.presentFamily, 0, &d.presentQueue);
+    vkGetDeviceQueue(d.device, d.caps.transferFamily, 0, &d.transferQueue);
 
     VkCommandPoolCreateInfo pool{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -412,6 +583,16 @@ bool deviceCreate(Device& d, Window& window) {
         spdlog::error("vkCreateCommandPool failed");
         return false;
     }
+    if (d.caps.transferFamily != d.caps.graphicsFamily) {
+        pool.queueFamilyIndex = d.caps.transferFamily;
+        if (vkCreateCommandPool(d.device, &pool, nullptr, &d.transferPool) != VK_SUCCESS) {
+            spdlog::error("transfer command pool failed");
+            return false;
+        }
+    } else {
+        d.transferPool = d.commandPool;
+    }
+    deviceName(d, reinterpret_cast<uint64_t>(d.device), VK_OBJECT_TYPE_DEVICE, "BurnhopeDevice");
 
     VmaVulkanFunctions vmaFn{};
     vmaFn.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
@@ -443,6 +624,10 @@ void deviceDestroy(Device& d) {
         vmaDestroyAllocator(d.allocator);
         d.allocator = VK_NULL_HANDLE;
     }
+    if (d.transferPool != VK_NULL_HANDLE && d.transferPool != d.commandPool) {
+        vkDestroyCommandPool(d.device, d.transferPool, nullptr);
+    }
+    d.transferPool = VK_NULL_HANDLE;
     if (d.commandPool != VK_NULL_HANDLE) {
         vkDestroyCommandPool(d.device, d.commandPool, nullptr);
         d.commandPool = VK_NULL_HANDLE;
@@ -462,6 +647,48 @@ void deviceDestroy(Device& d) {
     if (d.instance != VK_NULL_HANDLE) {
         vkDestroyInstance(d.instance, nullptr);
         d.instance = VK_NULL_HANDLE;
+    }
+}
+
+void deviceName(Device& d, uint64_t handle, VkObjectType type, const char* name) {
+    if (!d.validation || d.device == VK_NULL_HANDLE || handle == 0 || name == nullptr) {
+        return;
+    }
+    VkDebugUtilsObjectNameInfoEXT info{
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType = type,
+        .objectHandle = handle,
+        .pObjectName = name,
+    };
+    vkSetDebugUtilsObjectNameEXT(d.device, &info);
+}
+
+void rhiCaptureToggle() {
+    using GetApi = int (*)(int, void**);
+    static void* lib = nullptr;
+    static RENDERDOC_API_1_6_0* api = nullptr;
+    static bool open = false;
+    if (api == nullptr) {
+        if (lib == nullptr) {
+            lib = dlopen("librenderdoc.so", RTLD_NOW | RTLD_NOLOAD);
+            if (lib == nullptr) {
+                lib = dlopen("librenderdoc.so", RTLD_NOW);
+            }
+        }
+        if (lib == nullptr) {
+            return;
+        }
+        auto get = reinterpret_cast<GetApi>(dlsym(lib, "RENDERDOC_GetAPI"));
+        if (get == nullptr || get(eRENDERDOC_API_Version_1_6_0, reinterpret_cast<void**>(&api)) != 1 || api == nullptr) {
+            return;
+        }
+    }
+    if (!open) {
+        api->StartFrameCapture(nullptr, nullptr);
+        open = true;
+    } else {
+        api->EndFrameCapture(nullptr, nullptr);
+        open = false;
     }
 }
 

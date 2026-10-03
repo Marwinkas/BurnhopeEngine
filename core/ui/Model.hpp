@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -10,7 +11,7 @@ constexpr uint16_t kUiCap = 1024;
 constexpr uint16_t kUiNone = 0xffff;
 constexpr uint32_t kUiPrimCap = 2048;
 constexpr uint32_t kUiHeaderBytes = 64;
-constexpr uint32_t kUiPrimBytes = 64;
+constexpr uint32_t kUiPrimBytes = 80;
 constexpr uint32_t kUiFontGlyphs = 192;
 constexpr uint32_t kUiGlyphStride = 16;
 constexpr uint32_t kUiFontBytes = kUiFontGlyphs * kUiGlyphStride;
@@ -186,10 +187,18 @@ struct UiPaint {
     uint8_t ramp = 0;
     uint8_t disabled = 0;
     float shadow = 0;
+    float radiusTr = -1;
+    float radiusBr = -1;
+    float radiusBl = -1;
     int16_t tag = -1;
     float hr = -1;
     float hg = -1;
     float hb = -1;
+    float angle = 0;      // rotate, degrees, around box center
+    float scaleX = 1;     // scale around box center
+    float scaleY = 1;
+    float bright = 1;     // filter: output.rgb *= bright
+    float contrast = 1;   // filter: (output.rgb - 0.5) * contrast + 0.5
 };
 
 // Один POD на весь кадр. Меняет цвета, радиусы, шрифт, длительность анимации и хром окна.
@@ -303,6 +312,7 @@ struct UiField {
     uint8_t readOnly = 0;
     uint8_t required = 0;
     uint8_t password = 0;
+    uint8_t multi = 0;
     uint8_t inForm = 0;
     char hint[40]{};
     uint8_t hintLen = 0;
@@ -316,6 +326,93 @@ struct UiRange {
     float value = 0;
     float min = 0;
     float max = 1;
+    float step = 0;
+};
+
+struct UiVirtual {
+    uint32_t count = 0;
+    uint32_t first = 0;
+    uint16_t slot[16]{};
+    uint8_t slots = 0;
+    float rowH = 36;
+    void (*fill)(void* user, uint32_t index, char* dst, uint8_t cap) = nullptr;
+    void (*click)(void* user, uint32_t index) = nullptr;
+    void* user = nullptr;
+};
+
+struct UiVirtRow {
+    uint32_t index = 0;
+};
+
+struct UiTree {
+    uint16_t body = kUiNone;
+    uint8_t open = 0;
+};
+
+struct UiDrop {
+    uint16_t source = kUiNone;
+    uint16_t target = kUiNone;
+    char kind[16]{};
+    char bytes[64]{};
+    uint8_t active = 0;
+    uint8_t hover = 0;
+};
+
+struct UiTab {
+    uint16_t index = 0;
+};
+
+struct UiHovered {};
+struct UiFocused {};
+struct UiCapture {};
+struct UiPass {};
+
+struct UiPressed {
+    uint8_t button = 0;
+    float x = 0;
+    float y = 0;
+};
+
+struct UiDragState {
+    float startX = 0;
+    float startY = 0;
+    float currentX = 0;
+    float currentY = 0;
+    float deltaX = 0;
+    float deltaY = 0;
+    uint8_t active = 0;
+};
+
+struct UiBounds {
+    float x = 0;
+    float y = 0;
+    float w = 0;
+    float h = 0;
+};
+
+struct UiScissor {
+    float minX = 0;
+    float minY = 0;
+    float maxX = 0;
+    float maxY = 0;
+    uint8_t enabled = 0;
+};
+
+struct UiDropTarget {
+    char kind[16]{};
+};
+
+struct UiCurve {
+    float x[4]{0.05f, 0.35f, 0.65f, 0.95f};
+    float y[4]{0.75f, 0.2f, 0.2f, 0.75f};
+};
+
+struct UiGradient {
+    float t[4]{0.0f, 1.0f, 1.0f, 1.0f};
+    float r[4]{0.1f, 0.9f, 0.9f, 0.9f};
+    float g[4]{0.15f, 0.45f, 0.45f, 0.45f};
+    float b[4]{0.35f, 0.15f, 0.15f, 0.15f};
+    uint8_t stops = 2;
 };
 
 struct UiCheck {
@@ -392,6 +489,7 @@ struct UiPrimitive {
     uint32_t pad0 = 0;
     uint32_t pad1 = 0;
     float extra[4]{};
+    float corner[4]{};
 };
 
 static_assert(std::is_trivially_copyable_v<UiSlot>);
@@ -409,6 +507,7 @@ static_assert(std::is_trivially_copyable_v<UiCommand>);
 static_assert(std::is_trivially_copyable_v<UiPrimitive>);
 static_assert(sizeof(UiPrimitive) == kUiPrimBytes);
 static_assert(offsetof(UiPrimitive, extra) == 48);
+static_assert(offsetof(UiPrimitive, corner) == 64);
 
 inline int uiGlyphIndex(uint32_t cp) {
     if (cp >= 32 && cp <= 126) {
@@ -457,6 +556,57 @@ constexpr uint32_t kUiFlagRamp = 16;
 constexpr uint32_t kUiFlagPhoto = 32;
 constexpr uint32_t kUiFlagStroke = 64;
 constexpr uint32_t kUiFlagShadow = 128;
+constexpr uint32_t kUiFlagRibbon = 256;
+// pad0/pad1 carry rotate+scale+filter instead of clip height/shadow spread — not combinable
+// with kUiFlagClip or kUiFlagShadow/kUiFlagStroke on the same primitive (those own pad0/pad1
+// for their own data). Panel::transform()/Panel::filter() in Canvas.cpp enforce this.
+constexpr uint32_t kUiFlagTransform = 512;
+
+// Fixed-point pack into 16 bits over [lo, hi]; exact round trip is not needed for UI
+// transform/filter (visual-only), only monotonic coverage of the range.
+inline uint16_t uiPackU16(float v, float lo, float hi) {
+    const float t = hi > lo ? std::clamp((v - lo) / (hi - lo), 0.0f, 1.0f) : 0.0f;
+    return static_cast<uint16_t>(t * 65535.0f + 0.5f);
+}
+
+inline float uiUnpackU16(uint16_t v, float lo, float hi) {
+    return lo + (static_cast<float>(v) / 65535.0f) * (hi - lo);
+}
+
+inline uint8_t uiPackU8(float v, float lo, float hi) {
+    const float t = hi > lo ? std::clamp((v - lo) / (hi - lo), 0.0f, 1.0f) : 0.0f;
+    return static_cast<uint8_t>(t * 255.0f + 0.5f);
+}
+
+inline float uiUnpackU8(uint8_t v, float lo, float hi) {
+    return lo + (static_cast<float>(v) / 255.0f) * (hi - lo);
+}
+
+constexpr float kUiAngleLo = -180.0f;
+constexpr float kUiAngleHi = 180.0f;
+constexpr float kUiScaleLo = 0.0f;
+constexpr float kUiScaleHi = 4.0f;
+constexpr float kUiFilterLo = 0.0f;
+constexpr float kUiFilterHi = 2.0f;
+
+// pad0 = angle(lo16) | scaleX(hi16); pad1 = scaleY(lo16) | bright(lo8) contrast(hi8) of hi16.
+inline void uiPackTransform(uint32_t& pad0, uint32_t& pad1, float angle, float scaleX, float scaleY, float bright, float contrast) {
+    const uint16_t a = uiPackU16(angle, kUiAngleLo, kUiAngleHi);
+    const uint16_t sx = uiPackU16(scaleX, kUiScaleLo, kUiScaleHi);
+    const uint16_t sy = uiPackU16(scaleY, kUiScaleLo, kUiScaleHi);
+    const uint8_t br = uiPackU8(bright, kUiFilterLo, kUiFilterHi);
+    const uint8_t ct = uiPackU8(contrast, kUiFilterLo, kUiFilterHi);
+    pad0 = static_cast<uint32_t>(a) | (static_cast<uint32_t>(sx) << 16);
+    pad1 = static_cast<uint32_t>(sy) | (static_cast<uint32_t>(br) << 16) | (static_cast<uint32_t>(ct) << 24);
+}
+
+inline void uiUnpackTransform(uint32_t pad0, uint32_t pad1, float& angle, float& scaleX, float& scaleY, float& bright, float& contrast) {
+    angle = uiUnpackU16(static_cast<uint16_t>(pad0 & 0xFFFFu), kUiAngleLo, kUiAngleHi);
+    scaleX = uiUnpackU16(static_cast<uint16_t>(pad0 >> 16), kUiScaleLo, kUiScaleHi);
+    scaleY = uiUnpackU16(static_cast<uint16_t>(pad1 & 0xFFFFu), kUiScaleLo, kUiScaleHi);
+    bright = uiUnpackU8(static_cast<uint8_t>((pad1 >> 16) & 0xFFu), kUiFilterLo, kUiFilterHi);
+    contrast = uiUnpackU8(static_cast<uint8_t>((pad1 >> 24) & 0xFFu), kUiFilterLo, kUiFilterHi);
+}
 
 // Colors and chrome of the file browser. The browser does not know about the app.
 struct FileLook {

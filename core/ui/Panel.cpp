@@ -1,6 +1,11 @@
 #include "ui/Panel.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
+
+Panel Panel::find(Canvas& canvas, const char* name) {
+    return at(canvas, canvasFind(canvas, name));
+}
 
 Panel Panel::at(Canvas& canvas, uint16_t id) {
     Panel panel{};
@@ -147,6 +152,33 @@ Panel Panel::radio(const char* text, uint8_t group) const {
     return box;
 }
 
+Panel Panel::spin(float value, float minV, float maxV, float step) const {
+    Panel box{};
+    box.canvas = canvas;
+    if (canvas != nullptr && canvas->state != nullptr) {
+        box.id = uiSpin(*canvas->state, id, value, minV, maxV, step);
+    }
+    return box;
+}
+
+Panel Panel::curve() const {
+    Panel box{};
+    box.canvas = canvas;
+    if (canvas != nullptr && canvas->state != nullptr) {
+        box.id = uiCurve(*canvas->state, id);
+    }
+    return box;
+}
+
+Panel Panel::gradient() const {
+    Panel box{};
+    box.canvas = canvas;
+    if (canvas != nullptr && canvas->state != nullptr) {
+        box.id = uiGradient(*canvas->state, id);
+    }
+    return box;
+}
+
 void Panel::setText(const char* text) const {
     if (canvas != nullptr) {
         canvasText(*canvas, id, text);
@@ -162,6 +194,18 @@ void Panel::color(float r, float g, float b, float a) const {
 void Panel::animate(float r, float g, float b, float a) const {
     if (canvas != nullptr) {
         canvasAnimate(*canvas, id, r, g, b, a);
+    }
+}
+
+void Panel::transform(float angle, float scaleX, float scaleY) const {
+    if (canvas != nullptr) {
+        canvasTransform(*canvas, id, angle, scaleX, scaleY);
+    }
+}
+
+void Panel::filter(float bright, float contrast) const {
+    if (canvas != nullptr) {
+        canvasFilter(*canvas, id, bright, contrast);
     }
 }
 

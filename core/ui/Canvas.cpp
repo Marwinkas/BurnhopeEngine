@@ -1,4 +1,5 @@
 #include "ui/Canvas.hpp"
+#include "platform/Trace.hpp"
 
 #include <cmath>
 #include "ui/Font.hpp"
@@ -213,6 +214,14 @@ void cacheBox(UiState& s, uint16_t id) {
     s.box[id].y = y;
     s.box[id].w = YGNodeLayoutGetWidth(s.yoga[id]);
     s.box[id].h = YGNodeLayoutGetHeight(s.yoga[id]);
+    s.ent[id].set<UiBounds>({s.box[id].x, s.box[id].y, s.box[id].w, s.box[id].h});
+    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+    const UiFlex* flex = s.ent[id].try_get<UiFlex>();
+    const bool clip = (paint != nullptr && paint->role == static_cast<uint8_t>(UiRole::Scroll))
+        || (flex != nullptr && (flex->overflow == 1 || flex->overflow == 2));
+    if (clip) {
+        s.ent[id].set<UiScissor>({s.box[id].x, s.box[id].y, s.box[id].x + s.box[id].w, s.box[id].y + s.box[id].h, 1});
+    }
 }
 
 void putFloat(uint32_t& dst, float v) {
@@ -247,6 +256,10 @@ uint32_t emitRect(
     p.color[2] = b;
     p.color[3] = a;
     p.extra[0] = radius;
+    p.corner[0] = radius;
+    p.corner[1] = radius;
+    p.corner[2] = radius;
+    p.corner[3] = radius;
     if (clip != nullptr) {
         p.flags |= kUiFlagClip;
         p.extra[1] = clip->x;
@@ -383,6 +396,13 @@ bool nodeShown(const UiState& s, uint16_t id) {
 bool clipAncestors(const UiState& s, uint16_t id, UiBox& out) {
     bool any = false;
     for (uint16_t p = s.parentOf[id]; p != kUiNone; p = s.parentOf[p]) {
+        const UiPaint* paint = s.ent[p].try_get<UiPaint>();
+        const UiFlex* flex = s.ent[p].try_get<UiFlex>();
+        const bool clip = (paint != nullptr && paint->role == static_cast<uint8_t>(UiRole::Scroll))
+            || (flex != nullptr && (flex->overflow == 1 || flex->overflow == 2));
+        if (!clip) {
+            continue;
+        }
         const UiBox& box = s.box[p];
         if (!any) {
             out = box;
@@ -431,6 +451,10 @@ uint32_t emitMark(
     p.color[2] = b;
     p.color[3] = a;
     p.extra[0] = radius;
+    p.corner[0] = radius;
+    p.corner[1] = radius;
+    p.corner[2] = radius;
+    p.corner[3] = radius;
     p.flags = flag;
     putFloat(p.pad1, spread);
     if (clip != nullptr) {
@@ -595,14 +619,53 @@ uint32_t uiEmitRun(
 }
 
 void uiLayout(UiState& s, float w, float h) {
+    BH_ZONE;
     if (!s.layoutDirty && s.laidW == w && s.laidH == h) {
         return;
     }
     if (s.count == 0) {
         return;
     }
+    if (s.layoutFrom != kUiNone && s.layoutFrom != 0 && s.layoutFrom < s.count && s.yoga[s.layoutFrom] != nullptr
+        && s.box[s.layoutFrom].w > 1.0f) {
+        const uint16_t root = s.layoutFrom;
+        const auto applySub = [&](auto&& self, uint16_t id) -> void {
+            const UiFlex* flex = s.ent[id].try_get<UiFlex>();
+            if (flex != nullptr && s.yoga[id] != nullptr) {
+                applyFlex(s.yoga[id], *flex);
+            }
+            for (uint16_t child = 0; child < s.count; ++child) {
+                if (s.parentOf[child] == id) {
+                    self(self, child);
+                }
+            }
+        };
+        const auto cacheSub = [&](auto&& self, uint16_t id) -> void {
+            if (s.yoga[id] != nullptr) {
+                cacheBox(s, id);
+            }
+            for (uint16_t child = 0; child < s.count; ++child) {
+                if (s.parentOf[child] == id) {
+                    self(self, child);
+                }
+            }
+        };
+        applySub(applySub, root);
+        const float layW = s.box[root].w > 1.0f ? s.box[root].w : YGUndefined;
+        const float layH = s.box[root].h > 1.0f ? s.box[root].h : YGUndefined;
+        YGNodeCalculateLayout(s.yoga[root], layW, layH, YGDirectionLTR);
+        cacheSub(cacheSub, root);
+        s.layoutFrom = kUiNone;
+        s.layoutDirty = false;
+        s.visualDirty = true;
+        return;
+    }
+    s.layoutFrom = kUiNone;
     auto measure = [&]() {
         for (uint16_t id = 0; id < s.count; ++id) {
+            if (!s.ent[id].is_alive()) {
+                continue;
+            }
             const UiFlex* flex = s.ent[id].try_get<UiFlex>();
             const UiPaint* paint = s.ent[id].try_get<UiPaint>();
             if (flex == nullptr || s.yoga[id] == nullptr) {
@@ -617,6 +680,9 @@ void uiLayout(UiState& s, float w, float h) {
         YGNodeStyleSetHeight(s.yoga[0], h);
         YGNodeCalculateLayout(s.yoga[0], w, h, YGDirectionLTR);
         for (uint16_t id = 0; id < s.count; ++id) {
+            if (!s.ent[id].is_alive() || s.yoga[id] == nullptr) {
+                continue;
+            }
             cacheBox(s, id);
         }
     };
@@ -630,6 +696,9 @@ void uiLayout(UiState& s, float w, float h) {
     for (int pass = 0; pass < 8; ++pass) {
         uint16_t victim = kUiNone;
         for (uint16_t parent = 0; parent < s.count; ++parent) {
+            if (!s.ent[parent].is_alive()) {
+                continue;
+            }
             const UiFlex* flex = s.ent[parent].try_get<UiFlex>();
             if (flex == nullptr || flex->drop == 0 || s.yoga[parent] == nullptr) {
                 continue;
@@ -674,7 +743,7 @@ void uiLayout(UiState& s, float w, float h) {
     }
     for (uint16_t id = 0; id < s.count; ++id) {
         s.tight[id] = 0;
-        if (s.culled[id] != 0) {
+        if (s.culled[id] != 0 || !s.ent[id].is_alive()) {
             continue;
         }
         const UiFlex* flex = s.ent[id].try_get<UiFlex>();
@@ -894,7 +963,29 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                     dst, n, cap, box.x - sh, box.y - sh * 0.15f, box.w + sh * 2.0f, box.h + sh * 2.0f,
                     0.0f, 0.0f, 0.0f, 0.42f, paint.radius + sh, sh, kUiFlagShadow, clip);
             }
-            n = emitRect(dst, n, cap, box.x, box.y, box.w, box.h, br, bg, bb, ba, paint.radius, clip);
+            const uint32_t beforeFill = n;
+            if (role == UiRole::Panel && paint.ramp != 0) {
+                n = emitRamp(dst, n, cap, box.x, box.y, box.w, box.h, br, bg, bb, paint.ramp, kUiFlagRamp);
+            } else {
+                n = emitRect(dst, n, cap, box.x, box.y, box.w, box.h, br, bg, bb, ba, paint.radius, clip);
+            }
+            if (n > beforeFill && (paint.radiusTr >= 0.0f || paint.radiusBr >= 0.0f || paint.radiusBl >= 0.0f)) {
+                UiPrimitive& filled = dst[n - 1];
+                const float tl = paint.radius;
+                filled.corner[0] = tl;
+                filled.corner[1] = paint.radiusTr >= 0.0f ? paint.radiusTr : tl;
+                filled.corner[2] = paint.radiusBr >= 0.0f ? paint.radiusBr : tl;
+                filled.corner[3] = paint.radiusBl >= 0.0f ? paint.radiusBl : tl;
+            }
+            const bool hasTransform = paint.angle != 0.0f || paint.scaleX != 1.0f || paint.scaleY != 1.0f
+                || paint.bright != 1.0f || paint.contrast != 1.0f;
+            if (n > beforeFill && hasTransform && clip == nullptr) {
+                // pad0/pad1 double as clip-rect storage above; transform/filter needs both,
+                // so a clipped panel cannot also rotate/scale/filter in this one draw.
+                UiPrimitive& filled = dst[n - 1];
+                filled.flags |= kUiFlagTransform;
+                uiPackTransform(filled.pad0, filled.pad1, paint.angle, paint.scaleX, paint.scaleY, paint.bright, paint.contrast);
+            }
             if (ring > 0.4f) {
                 const float orr = missing ? s.look.accent[2][0] : (focusRing && paint.borderW < 0.4f ? s.look.accent[0][0] : paint.br);
                 const float org = missing ? s.look.accent[2][1] : (focusRing && paint.borderW < 0.4f ? s.look.accent[0][1] : paint.bg);
@@ -994,7 +1085,32 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                 const UiBox inset = fieldInset(s, id, *field);
                 const uint8_t sel0 = field->anchor < field->caret ? field->anchor : field->caret;
                 const uint8_t sel1 = field->anchor < field->caret ? field->caret : field->anchor;
-                if (sel0 != sel1 && field->len > 0) {
+                if (field->multi != 0) {
+                    FieldRow rows[16]{};
+                    const int rn = fieldRows(s, *field, inset.w, rows, 16);
+                    const float lineH = s.look.glyphH > 1.0f ? s.look.glyphH : 18.0f;
+                    if (sel0 != sel1) {
+                        for (int li = 0; li < rn; ++li) {
+                            const uint8_t a = sel0 > rows[li].begin ? sel0 : rows[li].begin;
+                            uint8_t b = sel1 < rows[li].end ? sel1 : rows[li].end;
+                            if (rows[li].begin == rows[li].end && sel0 <= rows[li].begin && sel1 > rows[li].begin) {
+                                b = rows[li].begin;
+                            }
+                            if (a >= b && rows[li].begin != rows[li].end) {
+                                continue;
+                            }
+                            if (a >= b) {
+                                continue;
+                            }
+                            const float x0 = inset.x + fieldOffset(s, *field, rows[li].begin, a);
+                            const float x1 = inset.x + fieldOffset(s, *field, rows[li].begin, b);
+                            const float y = inset.y + static_cast<float>(li) * lineH - field->scroll;
+                            if (x1 > x0 && y + lineH > box.y && y < box.y + box.h) {
+                                n = emitRect(dst, n, cap, x0, y, x1 - x0, lineH, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.45f, 2.0f, clip);
+                            }
+                        }
+                    }
+                } else if (sel0 != sel1 && field->len > 0) {
                     const float x0 = inset.x + uiFieldWidth(s, *field, sel0) - field->scroll;
                     const float x1 = inset.x + uiFieldWidth(s, *field, sel1) - field->scroll;
                     const float left = x0 > inset.x ? x0 : inset.x;
@@ -1003,10 +1119,29 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                         n = emitRect(dst, n, cap, left, box.y + 6.0f, right - left, box.h - 12.0f, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.45f, 2.0f, clip);
                     }
                 }
-                if (id == s.focused && paint.disabled == 0) {
+                if (id == s.focused && paint.disabled == 0 && field->multi != 0) {
+                    FieldRow rows[16]{};
+                    const int rn = fieldRows(s, *field, inset.w, rows, 16);
+                    const float lineH = s.look.glyphH > 1.0f ? s.look.glyphH : 18.0f;
+                    int line = 0;
+                    for (int li = 0; li < rn; ++li) {
+                        if (field->caret >= rows[li].begin && field->caret <= rows[li].end) {
+                            line = li;
+                        }
+                    }
+                    const float cx = inset.x + fieldOffset(s, *field, rows[line].begin, field->caret);
+                    const float cy = inset.y + static_cast<float>(line) * lineH - field->scroll;
+                    if (cy + lineH > box.y && cy < box.y + box.h) {
+                        n = emitRect(dst, n, cap, cx, cy, 1.5f, lineH, field->text[0], field->text[1], field->text[2], 1.0f, 0.0f, clip);
+                    }
+                } else if (id == s.focused && paint.disabled == 0) {
                     const float cx = inset.x + uiFieldWidth(s, *field, field->caret) - field->scroll;
                     if (cx >= inset.x - 1.0f && cx <= inset.x + inset.w) {
                         n = emitRect(dst, n, cap, cx, box.y + 7.0f, 1.5f, box.h - 14.0f, field->text[0], field->text[1], field->text[2], 1.0f, 0.0f, clip);
+                    }
+                    if (s.imeLen > 0) {
+                        const float mark = s.look.advance * static_cast<float>(s.imeLen);
+                        n = emitRect(dst, n, cap, cx, box.y + box.h - 10.0f, mark, 2.0f, 0.95f, 0.72f, 0.25f, 0.9f, 0.0f, clip);
                     }
                 }
                 const float clearW = field->clear != 0 && field->len > 0 ? 22.0f : 0.0f;
@@ -1025,6 +1160,51 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                     icon.texId = 3;
                     icon.flags = kUiFlagIcon;
                 }
+            }
+        }
+        if (const UiCurve* curve = s.ent[id].try_get<UiCurve>()) {
+            const int steps = 16;
+            for (int step = 0; step < steps && n < cap; ++step) {
+                UiPrimitive& prim = dst[n++];
+                prim = {};
+                prim.posX = box.x + curve->x[0] * box.w;
+                prim.posY = box.y + curve->y[0] * box.h;
+                prim.sizeX = box.x + curve->x[1] * box.w;
+                prim.sizeY = box.y + curve->y[1] * box.h;
+                prim.extra[0] = box.x + curve->x[2] * box.w;
+                prim.extra[1] = box.y + curve->y[2] * box.h;
+                prim.extra[2] = box.x + curve->x[3] * box.w;
+                prim.extra[3] = box.y + curve->y[3] * box.h;
+                prim.color[0] = 0.95f;
+                prim.color[1] = 0.82f;
+                prim.color[2] = 0.35f;
+                prim.color[3] = 1.0f;
+                prim.texId = static_cast<uint32_t>(step);
+                prim.flags = kUiFlagRibbon;
+            }
+            for (int p = 0; p < 4; ++p) {
+                n = emitRect(dst, n, cap, box.x + curve->x[p] * box.w - 4.0f, box.y + curve->y[p] * box.h - 4.0f, 8.0f, 8.0f, 0.95f, 0.9f, 0.85f, 1.0f, 4.0f, clip);
+            }
+        }
+        if (const UiGradient* grad = s.ent[id].try_get<UiGradient>()) {
+            const int stops = grad->stops < 2 ? 2 : (grad->stops > 4 ? 4 : grad->stops);
+            for (int band = 0; band < 24; ++band) {
+                const float t0 = static_cast<float>(band) / 24.0f;
+                int seg = 0;
+                for (int sidx = 0; sidx < stops - 1; ++sidx) {
+                    if (t0 >= grad->t[sidx] && t0 <= grad->t[sidx + 1]) {
+                        seg = sidx;
+                    }
+                }
+                const float span = grad->t[seg + 1] - grad->t[seg];
+                const float u = span > 0.0001f ? (t0 - grad->t[seg]) / span : 0.0f;
+                const float cr = grad->r[seg] + (grad->r[seg + 1] - grad->r[seg]) * u;
+                const float cg = grad->g[seg] + (grad->g[seg + 1] - grad->g[seg]) * u;
+                const float cb = grad->b[seg] + (grad->b[seg + 1] - grad->b[seg]) * u;
+                n = emitRect(dst, n, cap, box.x + t0 * box.w, box.y + box.h * 0.35f, box.w / 24.0f + 1.0f, box.h * 0.3f, cr, cg, cb, 1.0f, 0.0f, clip);
+            }
+            for (int p = 0; p < stops; ++p) {
+                n = emitRect(dst, n, cap, box.x + grad->t[p] * box.w - 5.0f, box.y + box.h * 0.35f - 4.0f, 10.0f, box.h * 0.3f + 8.0f, 1.0f, 1.0f, 1.0f, 0.9f, 2.0f, clip);
             }
         }
     }
@@ -1056,7 +1236,7 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
     }
     c.device = &d;
     c.heaps = &heaps;
-    if (!canvasSetFont(c, "/usr/share/fonts/TTF/DejaVuSans.ttf", 32.0f)) {
+    if (!canvasUseFont(c, 32.0f)) {
         spdlog::error("default sdf font failed");
         canvasDestroy(c, d);
         return false;
@@ -1149,12 +1329,31 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
         canvasDestroy(c, d);
         return false;
     }
+    // Mesh-shader path is additive and optional: same primitive, same SSBO, same fragment
+    // shader (ui.slang: uiPrimVertex feeds both uiVs and uiMs). If the GPU lacks
+    // VK_EXT_mesh_shader, or this one shader object somehow fails to build, c.ms.handle stays
+    // null and canvasRecord keeps using the vertex-pull path that was already proven to work —
+    // no feature here is allowed to take down the one working UI draw.
+    if (d.caps.meshShader) {
+        const ShaderCreateDesc ms{
+            .path = BH_UI_MESH,
+            .stage = VK_SHADER_STAGE_MESH_BIT_EXT,
+            .nextStage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .mappingCount = 1,
+            .mappings = &vsMap,
+        };
+        if (!shaderCreate(d, ms, c.ms)) {
+            spdlog::warn("ui mesh shader failed, falling back to vertex-pull path");
+            c.ms = {};
+        }
+    }
     return true;
 }
 
 void canvasDestroy(Canvas& c, Device& d) {
     shaderDestroy(d, c.vs);
     shaderDestroy(d, c.fs);
+    shaderDestroy(d, c.ms);
     gpuImageDestroy(c.font, d);
     for (uint8_t slot = 0; slot < kPhotoSlots; ++slot) {
         gpuImageDestroy(c.photos[slot], d);
@@ -1165,9 +1364,6 @@ void canvasDestroy(Canvas& c, Device& d) {
         jsonRelease(*c.state);
         if (c.state->plug.shutdown != nullptr) {
             c.state->plug.shutdown(*c.state);
-        }
-        if (c.state->count > 0 && c.state->yoga[0] != nullptr) {
-            YGNodeFreeRecursive(c.state->yoga[0]);
         }
         delete c.state;
         c.state = nullptr;
@@ -1276,6 +1472,19 @@ uint16_t canvasFind(const Canvas& c, const char* name) {
         return kUiNone;
     }
     return uiFindName(*c.state, name);
+}
+
+void canvasBindName(Canvas& c, const char* name, UiClickFn fn, void* user) {
+    if (c.state != nullptr) {
+        uiBindName(*c.state, name, fn, user);
+    }
+}
+
+uint16_t canvasImportBin(Canvas& c, uint16_t parent, const char* path) {
+    if (c.state == nullptr) {
+        return kUiNone;
+    }
+    return uiImportBinFile(*c.state, parent, path);
 }
 
 void canvasSetBuilder(Canvas& c, UiBuilder builder, void* user) {
@@ -1486,7 +1695,13 @@ bool canvasSaveJsonDoc(const Canvas& c, const char* path) {
 }
 
 int canvasCursor(const Canvas& c) {
-    return c.state != nullptr ? static_cast<int>(c.state->cursor) : 0;
+    if (c.state == nullptr) {
+        return 0;
+    }
+    if (c.state->cursorN > 0) {
+        return c.state->cursorStack[c.state->cursorN - 1];
+    }
+    return c.state->cursor;
 }
 
 void canvasSetIcon(Canvas& c, uint16_t id, uint8_t icon) {
@@ -1611,6 +1826,20 @@ bool canvasSetFont(Canvas& c, const char* path, float pixelSize) {
     return true;
 }
 
+bool canvasUseFont(Canvas& c, float pixelSize) {
+    const char* faces[] = {
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    };
+    for (const char* path : faces) {
+        if (canvasSetFont(c, path, pixelSize)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void canvasShadow(Canvas& c, uint16_t id, float shadow) {
     if (c.state == nullptr || id >= c.state->count) {
         return;
@@ -1620,6 +1849,33 @@ void canvasShadow(Canvas& c, uint16_t id, float shadow) {
         return;
     }
     paint->shadow = shadow;
+    c.state->visualDirty = true;
+}
+
+void canvasTransform(Canvas& c, uint16_t id, float angle, float scaleX, float scaleY) {
+    if (c.state == nullptr || id >= c.state->count) {
+        return;
+    }
+    auto* paint = c.state->ent[id].try_get_mut<UiPaint>();
+    if (paint == nullptr) {
+        return;
+    }
+    paint->angle = angle;
+    paint->scaleX = scaleX;
+    paint->scaleY = scaleY;
+    c.state->visualDirty = true;
+}
+
+void canvasFilter(Canvas& c, uint16_t id, float bright, float contrast) {
+    if (c.state == nullptr || id >= c.state->count) {
+        return;
+    }
+    auto* paint = c.state->ent[id].try_get_mut<UiPaint>();
+    if (paint == nullptr) {
+        return;
+    }
+    paint->bright = bright;
+    paint->contrast = contrast;
     c.state->visualDirty = true;
 }
 
@@ -1818,10 +2074,18 @@ UiEvent canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& 
     }
     UiState& s = *c.state;
     s.time = timeSec;
-    uiLayout(s, w, h);
-    const UiEvent ev = uiApplyInput(s, input);
+    const float dpi = s.dpi < 0.5f ? 1.0f : s.dpi;
+    const float pointsW = w / dpi;
+    const float pointsH = h / dpi;
+    InputFrame local = input;
+    local.pointer.x /= dpi;
+    local.pointer.y /= dpi;
+    local.pointer.dx /= dpi;
+    local.pointer.dy /= dpi;
+    uiLayout(s, pointsW, pointsH);
+    const UiEvent ev = uiApplyInput(s, local);
     if (s.layoutDirty) {
-        uiLayout(s, w, h);
+        uiLayout(s, pointsW, pointsH);
     }
     if (uiTickMotion(s)) {
         s.visualDirty = true;
@@ -1830,11 +2094,16 @@ UiEvent canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& 
         auto* bytes = static_cast<std::byte*>(c.prims.mapped);
         auto* dst = reinterpret_cast<UiPrimitive*>(bytes + kUiHeaderBytes);
         const uint32_t n = uiEmit(s, dst, kUiPrimCap);
-        const UiGpuHeader hdr{w, h, n, 0};
+        const UiGpuHeader hdr{pointsW, pointsH, n, 0};
         std::memcpy(bytes, &hdr, sizeof(hdr));
         c.drawCount = n;
         gpuBufferFlush(c.prims, d, 0, kUiHeaderBytes + sizeof(UiPrimitive) * n);
         s.visualDirty = false;
+    }
+    if (s.dumpLayout != 0) {
+        uiDumpLayout(s);
+        spdlog::info("ui draw {}", c.drawCount);
+        s.dumpLayout = 0;
     }
     return ev;
 }
@@ -1910,6 +2179,54 @@ bool canvasWantsText(const Canvas& c) {
     return c.state->ent[c.state->focused].try_get<UiField>() != nullptr;
 }
 
+bool canvasWantsRelative(const Canvas& c) {
+    return c.state != nullptr && c.state->relative != 0;
+}
+
+bool canvasFocusBox(const Canvas& c, float& x, float& y, float& w, float& h) {
+    if (c.state == nullptr || c.state->focused == kUiNone || c.state->focused >= c.state->count) {
+        return false;
+    }
+    const UiBox& box = c.state->box[c.state->focused];
+    x = box.x;
+    y = box.y;
+    w = box.w;
+    h = box.h;
+    return w > 0.0f && h > 0.0f;
+}
+
+void canvasSetDpi(Canvas& c, float dpi) {
+    if (c.state == nullptr) {
+        return;
+    }
+    if (dpi < 0.5f) {
+        dpi = 1.0f;
+    }
+    if (c.state->dpi != dpi) {
+        c.state->layoutDirty = true;
+        c.state->visualDirty = true;
+    }
+    c.state->dpi = dpi;
+}
+
+bool canvasMouseClip(const Canvas& c, float& x, float& y, float& w, float& h) {
+    if (c.state == nullptr || c.state->clipOn == 0) {
+        return false;
+    }
+    x = c.state->clipBox.x;
+    y = c.state->clipBox.y;
+    w = c.state->clipBox.w;
+    h = c.state->clipBox.h;
+    return w > 0.0f && h > 0.0f;
+}
+
+void canvasApplyDpi(Canvas& c, float dpi, float previous) {
+    if (c.state == nullptr || previous < 0.1f || dpi < 0.1f) {
+        return;
+    }
+    (void)canvasUseFont(c, c.state->fontPx * (dpi / previous));
+}
+
 void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, const FrameContext& fc) {
     rhiBufferBarrier(
         cmd,
@@ -1925,10 +2242,10 @@ void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, con
         sc.images[fc.imageIndex],
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_PIPELINE_STAGE_2_NONE,
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
         VK_ACCESS_2_NONE,
         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+        VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
 
     VkClearValue clear{};
     clear.color.float32[0] = 0.102f;
@@ -1951,10 +2268,32 @@ void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, con
         .pColorAttachments = &color,
     };
     vkCmdBeginRendering(cmd, &ri);
-    if (c.drawCount > 0 && c.vs.handle != VK_NULL_HANDLE) {
-        cmdBindVertFrag(cmd, c.vs.handle, c.fs.handle, c.nullMesh);
-        cmdSetGraphicsDynamic(cmd, sc.extent, 1, false, true);
-        vkCmdDraw(cmd, c.drawCount * 6, 1, 0, 0);
+    const bool mark = c.device != nullptr && c.device->validation;
+    if (mark) {
+        VkDebugUtilsLabelEXT label{
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+            .pLabelName = "UI",
+        };
+        vkCmdBeginDebugUtilsLabelEXT(cmd, &label);
+    }
+    if (c.drawCount > 0) {
+        // GPU-driven path (plan Фаза 1/5): one mesh-shader workgroup per primitive, 4 unique
+        // vertices + 2 indexed triangles instead of 6 vertices with repeats, falling back to
+        // vertex-pull when the device has no mesh shader. Same SSBO, same fragment shader,
+        // still one draw per frame. `meshDrawRecord` is the single rhi entry point engine/
+        // render already shares for its own mesh-shader passes — not a second draw path.
+        cmdSetGraphicsDynamic(cmd, sc.extent, 1, false, true, sc.asked.transparent ? 1 : 0);
+        meshDrawRecord(cmd, MeshDrawDesc{
+            .mesh = c.ms.handle,
+            .vert = c.vs.handle,
+            .frag = c.fs.handle,
+            .vertNullMeshStage = c.nullMesh,
+            .groupCount = c.drawCount,
+            .vertexCount = c.drawCount * 6,
+        });
+    }
+    if (mark) {
+        vkCmdEndDebugUtilsLabelEXT(cmd);
     }
     vkCmdEndRendering(cmd);
 }

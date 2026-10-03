@@ -94,7 +94,39 @@ function(bh_module name)
     target_link_libraries(bh_${name} PUBLIC volk spdlog::spdlog)
 endfunction()
 
-bh_module(platform core/platform/Window.cpp)
+option(BH_TRACY "Pull Tracy from https://github.com/wolfpld/tracy and mark frame zones" OFF)
+option(BH_ASAN "Debug address and undefined sanitizers" OFF)
+option(BH_TSAN "Debug thread sanitizer" OFF)
+
+bh_module(platform
+    core/platform/Window.cpp
+    core/platform/Dialog.cpp
+    core/platform/Check.cpp
+    core/platform/Jobs.cpp
+)
+set_source_files_properties(core/platform/Check.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions;-frtti")
+find_package(cpptrace CONFIG REQUIRED)
+target_link_libraries(bh_platform PUBLIC cpptrace::cpptrace)
+
+if(BH_TRACY)
+    FetchContent_Declare(tracy
+        GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+        GIT_TAG v0.11.1
+    )
+    set(TRACY_ENABLE ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(tracy)
+    target_compile_definitions(bh_platform PUBLIC BH_TRACY)
+    target_link_libraries(bh_platform PUBLIC TracyClient)
+endif()
+
+if(BH_ASAN)
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+if(BH_TSAN)
+    add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=thread)
+endif()
 bh_module(memory   core/memory/FrameArena.cpp)
 bh_module(rhi
     core/rhi/Device.cpp
@@ -103,6 +135,7 @@ bh_module(rhi
     core/rhi/GpuBuffer.cpp
     core/rhi/DescriptorHeap.cpp
     core/rhi/ShaderObject.cpp
+    core/rhi/MeshDraw.cpp
     core/rhi/VolkVma.cpp
 )
 find_program(ISPC_EXECUTABLE ispc REQUIRED)
@@ -150,16 +183,20 @@ bh_module(ui
     core/ui/Font.cpp
     core/ui/Panel.cpp
     core/ui/Json.cpp
+    core/ui/Layout.cpp
+    core/ui/widget/Chrome.cpp
     core/ui/widget/Tree.cpp
     core/ui/widget/Button.cpp
     core/ui/widget/Field.cpp
     core/ui/widget/TextEdit.cpp
     core/ui/widget/Text.cpp
     core/ui/widget/Slider.cpp
+    core/ui/widget/Curve.cpp
     core/ui/widget/Scroll.cpp
     core/ui/widget/Splitter.cpp
     core/ui/widget/Image.cpp
     core/ui/widget/List.cpp
+    core/ui/widget/Virtual.cpp
     core/ui/widget/Menu.cpp
     core/ui/widget/Input.cpp
     core/ui/widget/Tip.cpp
@@ -168,6 +205,8 @@ bh_module(ui
 )
 bh_module(files core/files/Files.cpp)
 target_link_libraries(bh_files PUBLIC bh_ui)
+bh_module(host core/host/Host.cpp)
+target_link_libraries(bh_host PUBLIC bh_ui bh_rhi bh_platform bh_memory)
 bh_module(app
     demo/app/Engine.cpp
     demo/app/Shell.cpp
@@ -178,12 +217,12 @@ target_compile_options(bh_ui PRIVATE -Wno-deprecated-declarations)
 target_compile_definitions(bh_ui PRIVATE
     "BH_UI_VERT=\"${CMAKE_CURRENT_BINARY_DIR}/shaders/ui.vert.spv\""
     "BH_UI_FRAG=\"${CMAKE_CURRENT_BINARY_DIR}/shaders/ui.frag.spv\""
+    "BH_UI_MESH=\"${CMAKE_CURRENT_BINARY_DIR}/shaders/ui.mesh.spv\""
 )
 
 set_source_files_properties(core/rhi/VolkVma.cpp PROPERTIES COMPILE_OPTIONS "-w")
 target_link_libraries(bh_rhi PUBLIC Vulkan::Vulkan)
 target_link_libraries(bh_platform PUBLIC SDL3::SDL3)
-target_link_libraries(bh_app PUBLIC SDL3::SDL3)
 
 find_program(SLANGC_EXECUTABLE slangc REQUIRED)
 set(SHADER_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
@@ -225,23 +264,71 @@ add_custom_command(
     OUTPUT
         ${SHADER_OUT_DIR}/ui.vert.spv
         ${SHADER_OUT_DIR}/ui.frag.spv
+        ${SHADER_OUT_DIR}/ui.mesh.spv
     COMMAND ${SLANGC_EXECUTABLE} ${UI_SHADER} -target spirv -profile spirv_1_6 -stage vertex -entry uiVs -o ${SHADER_OUT_DIR}/ui.vert.spv
     COMMAND ${SLANGC_EXECUTABLE} ${UI_SHADER} -target spirv -profile spirv_1_6 -stage fragment -entry uiFs -o ${SHADER_OUT_DIR}/ui.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${UI_SHADER} -target spirv -profile spirv_1_6 -stage mesh -entry uiMs -o ${SHADER_OUT_DIR}/ui.mesh.spv
     DEPENDS ${UI_SHADER}
     COMMENT "slangc ui → SPIR-V 1.6"
 )
 add_custom_target(UiSpv ALL DEPENDS
     ${SHADER_OUT_DIR}/ui.vert.spv
     ${SHADER_OUT_DIR}/ui.frag.spv
+    ${SHADER_OUT_DIR}/ui.mesh.spv
 )
+
+set(COMPRESS_SHADER ${CMAKE_CURRENT_SOURCE_DIR}/core/image/compress.slang)
+add_custom_command(
+    OUTPUT ${SHADER_OUT_DIR}/compress.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile spirv_1_6 -stage compute -entry csBc1 -o ${SHADER_OUT_DIR}/compress.comp.spv
+    DEPENDS ${COMPRESS_SHADER}
+    COMMENT "slangc compress (GPU BC1) → SPIR-V 1.6"
+)
+add_custom_target(CompressSpv ALL DEPENDS ${SHADER_OUT_DIR}/compress.comp.spv)
+target_compile_definitions(bh_image PRIVATE
+    "BH_COMPRESS_BC1=\"${SHADER_OUT_DIR}/compress.comp.spv\""
+)
+add_dependencies(bh_image CompressSpv)
+
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+set(UI_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/ui)
+file(MAKE_DIRECTORY ${UI_BIN_DIR})
+add_custom_command(
+    OUTPUT ${UI_BIN_DIR}/shell.uib
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/uibake.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/shell.json ${UI_BIN_DIR}/shell.uib
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/uibake.py ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/shell.json
+    COMMENT "bake shell.json → shell.uib"
+)
+add_custom_command(
+    OUTPUT ${UI_BIN_DIR}/sample.uib
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/uibake.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/sample.json ${UI_BIN_DIR}/sample.uib
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/uibake.py ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/sample.json
+    COMMENT "bake sample.json → sample.uib"
+)
+add_custom_target(UiBin DEPENDS ${UI_BIN_DIR}/shell.uib ${UI_BIN_DIR}/sample.uib)
 
 add_executable(BurnhopeEngine demo/app/Main.cpp demo/Sample.cpp)
 target_link_libraries(BurnhopeEngine PRIVATE
-    bh_app bh_files bh_ui bh_image bh_rhi bh_memory bh_platform
+    bh_app bh_host bh_files bh_ui bh_image bh_rhi bh_memory bh_platform
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
 target_include_directories(BurnhopeEngine PRIVATE ${BH_CORE} ${BH_DEMO} ${vma_SOURCE_DIR}/include)
-target_compile_definitions(BurnhopeEngine PRIVATE ${BH_DEFS})
+target_compile_definitions(BurnhopeEngine PRIVATE ${BH_DEFS}
+    "BH_UI_SHELL=\"${UI_BIN_DIR}/shell.uib\""
+    "BH_UI_SAMPLE=\"${UI_BIN_DIR}/sample.uib\""
+)
 target_compile_options(BurnhopeEngine PRIVATE ${BH_OPTS})
-add_dependencies(BurnhopeEngine BurnhopeSpv UiSpv)
+add_dependencies(BurnhopeEngine BurnhopeSpv UiSpv UiBin)
+
+add_executable(BurnhopeTest tests/Core.cpp)
+target_link_libraries(BurnhopeTest PRIVATE
+    bh_files bh_ui bh_image bh_rhi bh_memory bh_platform
+    yogacore flecs_static
+    SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
+)
+target_include_directories(BurnhopeTest PRIVATE ${BH_CORE} ${vma_SOURCE_DIR}/include)
+target_compile_options(BurnhopeTest PRIVATE ${BH_OPTS})
+add_dependencies(BurnhopeTest UiSpv)

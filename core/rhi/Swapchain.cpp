@@ -1,5 +1,6 @@
 #include "rhi/Swapchain.hpp"
 #include "rhi/Barrier.hpp"
+#include "platform/Trace.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -22,17 +23,66 @@ VkSurfaceFormatKHR pickFormat(VkPhysicalDevice pd, VkSurfaceKHR surface) {
     return fmts[0];
 }
 
-VkPresentModeKHR pickPresent(VkPhysicalDevice pd, VkSurfaceKHR surface) {
+VkPresentModeKHR askedMode(Present present) {
+    if (present == Present::Mailbox) {
+        return VK_PRESENT_MODE_MAILBOX_KHR;
+    }
+    if (present == Present::Immediate) {
+        return VK_PRESENT_MODE_IMMEDIATE_KHR;
+    }
+    if (present == Present::Relaxed) {
+        return VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+    }
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+const char* presentName(VkPresentModeKHR mode) {
+    if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+        return "mailbox";
+    }
+    if (mode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+        return "immediate";
+    }
+    if (mode == VK_PRESENT_MODE_FIFO_RELAXED_KHR) {
+        return "relaxed";
+    }
+    return "vsync";
+}
+
+VkPresentModeKHR pickPresent(VkPhysicalDevice pd, VkSurfaceKHR surface, Present present) {
+    const VkPresentModeKHR want = askedMode(present);
     uint32_t n = 0;
     vkGetPhysicalDeviceSurfacePresentModesKHR(pd, surface, &n, nullptr);
     std::vector<VkPresentModeKHR> modes(n);
     vkGetPhysicalDeviceSurfacePresentModesKHR(pd, surface, &n, modes.data());
     for (auto m : modes) {
-        if (m == VK_PRESENT_MODE_MAILBOX_KHR) {
+        if (m == want) {
             return m;
         }
     }
+    if (want != VK_PRESENT_MODE_FIFO_KHR) {
+        spdlog::info("present {} unavailable, vsync", presentName(want));
+    }
     return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+VkCompositeAlphaFlagBitsKHR pickAlpha(const VkSurfaceCapabilitiesKHR& caps, bool transparent) {
+    if (!transparent) {
+        if ((caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) != 0) {
+            return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        }
+    } else {
+        if ((caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) != 0) {
+            return VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+        }
+        if ((caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR) != 0) {
+            return VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+        }
+        if ((caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) != 0) {
+            return VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+        }
+    }
+    return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 }
 
 } // namespace
@@ -41,8 +91,9 @@ bool swapchainCreate(Swapchain& sc, Device& d, uint32_t w, uint32_t h) {
     return swapchainCreate(sc, d, d.surface, w, h);
 }
 
-bool swapchainCreate(Swapchain& sc, Device& d, VkSurfaceKHR surface, uint32_t w, uint32_t h) {
+bool swapchainCreate(Swapchain& sc, Device& d, VkSurfaceKHR surface, uint32_t w, uint32_t h, const FrameDesc& frame, VkSwapchainKHR retired) {
     sc.surface = surface;
+    sc.asked = frame;
     VkSurfaceCapabilitiesKHR caps{};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(d.physical, surface, &caps);
 
@@ -81,9 +132,10 @@ bool swapchainCreate(Swapchain& sc, Device& d, VkSurfaceKHR surface, uint32_t w,
         .queueFamilyIndexCount = exclusive ? 0u : 2u,
         .pQueueFamilyIndices = exclusive ? nullptr : families,
         .preTransform = caps.currentTransform,
-        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = pickPresent(d.physical, surface),
-        .clipped = VK_TRUE,
+        .compositeAlpha = pickAlpha(caps, frame.transparent),
+        .presentMode = pickPresent(d.physical, surface, frame.present),
+        .clipped = frame.clipped ? VK_TRUE : VK_FALSE,
+        .oldSwapchain = retired,
     };
 
     if (vkCreateSwapchainKHR(d.device, &ci, nullptr, &sc.handle) != VK_SUCCESS) {
@@ -111,9 +163,18 @@ bool swapchainCreate(Swapchain& sc, Device& d, VkSurfaceKHR surface, uint32_t w,
         }
     }
 
+    // Свой пул на окно, не общий d.commandPool — см. комментарий у Swapchain.pool в Swapchain.hpp.
+    const VkCommandPoolCreateInfo poolCi{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = d.caps.graphicsFamily,
+    };
+    if (vkCreateCommandPool(d.device, &poolCi, nullptr, &sc.pool) != VK_SUCCESS) {
+        return false;
+    }
     VkCommandBufferAllocateInfo ai{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = d.commandPool,
+        .commandPool = sc.pool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = kFramesInFlight,
     };
@@ -148,8 +209,12 @@ void swapchainDestroy(Swapchain& sc, Device& d) {
         return;
     }
     vkDeviceWaitIdle(d.device);
-    if (sc.cmd[0] != VK_NULL_HANDLE) {
-        vkFreeCommandBuffers(d.device, d.commandPool, kFramesInFlight, sc.cmd);
+    if (sc.cmd[0] != VK_NULL_HANDLE && sc.pool != VK_NULL_HANDLE) {
+        vkFreeCommandBuffers(d.device, sc.pool, kFramesInFlight, sc.cmd);
+    }
+    if (sc.pool != VK_NULL_HANDLE) {
+        vkDestroyCommandPool(d.device, sc.pool, nullptr);
+        sc.pool = VK_NULL_HANDLE;
     }
     for (uint32_t i = 0; i < kFramesInFlight; ++i) {
         if (sc.acquireSem[i] != VK_NULL_HANDLE) {
@@ -182,11 +247,19 @@ void swapchainDestroy(Swapchain& sc, Device& d) {
 
 bool swapchainRecreate(Swapchain& sc, Device& d, uint32_t w, uint32_t h) {
     const VkSurfaceKHR surface = sc.surface != VK_NULL_HANDLE ? sc.surface : d.surface;
+    const FrameDesc frame = sc.asked;
+    const VkSwapchainKHR retired = sc.handle;
+    sc.handle = VK_NULL_HANDLE;
     swapchainDestroy(sc, d);
-    return swapchainCreate(sc, d, surface, w, h);
+    const bool ok = swapchainCreate(sc, d, surface, w, h, frame, retired);
+    if (retired != VK_NULL_HANDLE) {
+        vkDestroySwapchainKHR(d.device, retired, nullptr);
+    }
+    return ok;
 }
 
 bool swapchainBegin(Swapchain& sc, Device& d, FrameContext& fc) {
+    BH_ZONE;
     const uint32_t f = sc.frame;
     vkWaitForFences(d.device, 1, &sc.flightFence[f], VK_TRUE, UINT64_MAX);
     vkResetFences(d.device, 1, &sc.flightFence[f]);
@@ -221,7 +294,7 @@ void swapchainToPresent(Swapchain& sc, const FrameContext& fc) {
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE);
 }
 
-bool swapchainSubmitPresent(Swapchain& sc, Device& d, FrameContext& fc) {
+bool swapchainSubmitPresent(Swapchain& sc, Device& d, FrameContext& fc, bool pace) {
     vkEndCommandBuffer(fc.cmd);
 
     VkSemaphoreSubmitInfo waitSem{
@@ -247,6 +320,10 @@ bool swapchainSubmitPresent(Swapchain& sc, Device& d, FrameContext& fc) {
         .signalSemaphoreInfoCount = 1,
         .pSignalSemaphoreInfos = &sigSem,
     };
+    // Очередь общая на все окна — несколько окон могут писать кадр параллельно (job system,
+    // core/host/Host.cpp), submit/present на одной VkQueue из разных потоков без внешней
+    // синхронизации запрещён спецификацией.
+    std::unique_lock<std::mutex> queueLock(d.queueMutex);
     const VkResult sub = vkQueueSubmit2(d.graphicsQueue, 1, &si, sc.flightFence[fc.flight]);
     if (sub != VK_SUCCESS) {
         spdlog::error("vkQueueSubmit2 failed: {}", static_cast<int>(sub));
@@ -271,6 +348,7 @@ bool swapchainSubmitPresent(Swapchain& sc, Device& d, FrameContext& fc) {
         .pImageIndices = &fc.imageIndex,
     };
     VkResult pres = vkQueuePresentKHR(d.presentQueue, &pi);
+    queueLock.unlock(); // остальное (present-wait, пэйсинг) не трогает очередь — не держим других окон.
     if (pres == VK_ERROR_OUT_OF_DATE_KHR || pres == VK_SUBOPTIMAL_KHR) {
         return false;
     }
@@ -278,8 +356,16 @@ bool swapchainSubmitPresent(Swapchain& sc, Device& d, FrameContext& fc) {
         spdlog::error("vkQueuePresentKHR {}", static_cast<int>(pres));
         return false;
     }
+    if (sc.clickTick != 0 && d.caps.presentWait && d.caps.presentId) {
+        const uint64_t freq = platformFrequency();
+        if (vkWaitForPresentKHR(d.device, sc.handle, pid, 50'000'000ull) == VK_SUCCESS && freq != 0) {
+            const uint64_t now = platformCounter();
+            sc.photonMs = static_cast<float>(now - sc.clickTick) * 1000.0f / static_cast<float>(freq);
+        }
+        sc.clickTick = 0;
+    }
 
-    if (d.caps.presentWait && vkWaitForPresentKHR != nullptr) {
+    if (pace && d.caps.presentWait && vkWaitForPresentKHR != nullptr) {
         vkWaitForPresentKHR(d.device, sc.handle, pid, UINT64_MAX);
     }
 

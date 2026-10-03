@@ -236,4 +236,84 @@ void calPick(UiState& s, uint16_t id) {
     }
 }
 
+void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, float h) {
+    UiFlex flex{};
+    flex.position = 1;
+    flex.posX = x;
+    flex.posY = y;
+    flex.widthMode = static_cast<uint8_t>(UiSize::Px);
+    flex.width = w;
+    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.height = h;
+    flex.pad = 10.0f;
+    flex.gap = 6.0f;
+    flex.shrink = 0.0f;
+    s.calPanel = spawn(s, parent, flex, paint(UiRole::Panel, 0.11f, 0.12f, 0.15f, 8.0f));
+    UiFlex bar{};
+    bar.direction = 1;
+    bar.align = 1;
+    bar.shrink = 0.0f;
+    bar.heightMode = static_cast<uint8_t>(UiSize::Px);
+    bar.height = 32.0f;
+    bar.gap = 8.0f;
+    const uint16_t tools = spawn(s, s.calPanel, bar, paint(UiRole::Hidden, 0, 0, 0));
+    auto mini = [&](uint16_t host, const char* name, int16_t tag, UiClickFn fn) {
+        UiFlex item{};
+        item.heightMode = static_cast<uint8_t>(UiSize::Px);
+        item.height = 28.0f;
+        item.shrink = 0.0f;
+        const uint16_t id = spawn(s, host, item, paint(UiRole::Button, 0.20f, 0.24f, 0.32f, 6.0f, tag));
+        addText(s, id, name);
+        if (auto* box = s.ent[id].try_get_mut<UiFlex>()) {
+            const UiText* label = s.ent[id].try_get<UiText>();
+            const uint8_t n = label != nullptr ? label->len : 1;
+            box->widthMode = static_cast<uint8_t>(UiSize::Px);
+            box->width = static_cast<float>(n) * s.look.advance + 24.0f;
+            box->height = 28.0f;
+            box->heightMode = static_cast<uint8_t>(UiSize::Px);
+        }
+        uiBind(s, id, fn, &s);
+    };
+    mini(tools, "<", -54, calOnPrev);
+    s.calHead = spawn(s, tools, UiFlex{}, paint(UiRole::Label, 0.9f, 0.92f, 0.96f));
+    addText(s, s.calHead, "OCT 2026");
+    mini(tools, ">", -55, calOnNext);
+    mini(tools, "X", -57, calOnClose);
+    UiFlex todayRow{};
+    todayRow.direction = 1;
+    todayRow.shrink = 0.0f;
+    todayRow.heightMode = static_cast<uint8_t>(UiSize::Px);
+    todayRow.height = 32.0f;
+    mini(spawn(s, s.calPanel, todayRow, paint(UiRole::Hidden, 0, 0, 0)), "TODAY", -87, calOnToday);
+    UiFlex weekHead{};
+    weekHead.direction = 1;
+    weekHead.gap = 4.0f;
+    weekHead.shrink = 0.0f;
+    weekHead.heightMode = static_cast<uint8_t>(UiSize::Px);
+    weekHead.height = 20.0f;
+    const uint16_t weekHeadId = spawn(s, s.calPanel, weekHead, paint(UiRole::Hidden, 0, 0, 0));
+    const char* weekNames[] = {"SU", "MO", "TU", "WE", "TH", "FR", "SA"};
+    for (int day = 0; day < 7; ++day) {
+        const uint16_t id = spawn(s, weekHeadId, px(32.0f, 18.0f), paint(UiRole::Label, 0.55f, 0.58f, 0.64f));
+        addText(s, id, weekNames[day]);
+    }
+    for (int week = 0; week < 6; ++week) {
+        UiFlex weekRow{};
+        weekRow.direction = 1;
+        weekRow.gap = 4.0f;
+        weekRow.shrink = 0.0f;
+        weekRow.heightMode = static_cast<uint8_t>(UiSize::Px);
+        weekRow.height = 32.0f;
+        const uint16_t weekId = spawn(s, s.calPanel, weekRow, paint(UiRole::Hidden, 0, 0, 0));
+        for (int day = 0; day < 7; ++day) {
+            const uint16_t id = spawn(s, weekId, px(32.0f, 28.0f), paint(UiRole::Button, 0.16f, 0.18f, 0.24f, 4.0f, -56));
+            uiBind(s, id, calOnDay, &s);
+            s.calDay[week * 7 + day] = id;
+            s.ent[id].set<UiText>(UiText{});
+        }
+    }
+    calFill(s);
+    uiShow(s, s.calPanel, false);
+}
+
 } // namespace burnhope

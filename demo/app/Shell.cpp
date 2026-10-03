@@ -227,7 +227,7 @@ void shellBuild(Canvas& canvas, void*) {
     gDemo.canvas = &canvas;
     gDemo.chipsOn = true;
     gDemo.toolsOn = true;
-    if (!canvasSetFont(canvas, "/usr/share/fonts/TTF/DejaVuSans.ttf", 22.0f)) {
+    if (!canvasUseFont(canvas, 22.0f)) {
         spdlog::error("app font was not set");
     }
     canvasBuildSample(canvas);
@@ -246,7 +246,7 @@ void shellBuild(Canvas& canvas, void*) {
     canvasMenuStyle(canvas, 210.0f, 30.0f, 8.0f, 4.0f);
     canvasSetClick(canvas, onClick, &gDemo);
 
-    Panel look = Panel::at(canvas, canvasPage(canvas, 1));
+    Panel look = Panel::find(canvas, "page_look");
     UiFlex block{};
     block.direction = 0;
     block.gap = 8.0f;
@@ -384,7 +384,7 @@ void shellBuild(Canvas& canvas, void*) {
 }
 
 void toolBuild(Canvas& canvas, void*) {
-    if (!canvasSetFont(canvas, "/usr/share/fonts/TTF/DejaVuSans.ttf", 22.0f)) {
+    if (!canvasUseFont(canvas, 22.0f)) {
         spdlog::error("tool font was not set");
     }
     UiFlex rootFlex{};
@@ -434,10 +434,12 @@ void toolBuild(Canvas& canvas, void*) {
     (void)page.label("Separate OS window.");
     (void)page.label("Drag the title. Resize any edge.");
     (void)page.button("PING", -12, 0.20f, 0.28f, 0.40f, 6);
+    (void)page.curve();
+    (void)page.gradient();
 }
 
 void colorBuild(Canvas& canvas, void*) {
-    if (!canvasSetFont(canvas, "/usr/share/fonts/TTF/DejaVuSans.ttf", 22.0f)) {
+    if (!canvasUseFont(canvas, 22.0f)) {
         spdlog::error("color font was not set");
     }
     canvasBuildColor(canvas);

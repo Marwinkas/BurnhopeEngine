@@ -11,7 +11,7 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    while (!engine.window.closeRequested) {
+    while (!burnhope::hostQuit(engine.host)) {
         if (!burnhope::engineTick(engine)) {
             break;
         }

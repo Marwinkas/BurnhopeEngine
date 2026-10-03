@@ -11,6 +11,7 @@ struct Panel {
 
     static Panel make(Canvas& canvas, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
     static Panel at(Canvas& canvas, uint16_t id);
+    static Panel find(Canvas& canvas, const char* name);
     [[nodiscard]] Panel child(const UiFlex& flex, const UiPaint& paint) const;
     [[nodiscard]] Panel label(const char* text) const;
     [[nodiscard]] Panel textButton(const char* text, int8_t tag) const;
@@ -18,9 +19,14 @@ struct Panel {
     [[nodiscard]] Panel field(const char* text, uint8_t filter, bool clear) const;
     [[nodiscard]] Panel check(const char* text) const;
     [[nodiscard]] Panel radio(const char* text, uint8_t group) const;
+    [[nodiscard]] Panel spin(float value, float minV, float maxV, float step) const;
+    [[nodiscard]] Panel curve() const;
+    [[nodiscard]] Panel gradient() const;
     void setText(const char* text) const;
     void color(float r, float g, float b, float a) const;
     void animate(float r, float g, float b, float a) const;
+    void transform(float angle, float scaleX, float scaleY) const;
+    void filter(float bright, float contrast) const;
 };
 
 } // namespace burnhope

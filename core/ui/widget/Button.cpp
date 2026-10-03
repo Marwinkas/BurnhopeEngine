@@ -27,6 +27,7 @@ void activate(UiState& s, uint16_t id) {
         }
         s.visualDirty = true;
     }
+    uiTrace(s, "activate", id);
     if (const UiAction* act = s.ent[id].try_get<UiAction>(); act != nullptr && act->fn != nullptr) {
         act->fn(act->user, id, p->tag);
         return;
