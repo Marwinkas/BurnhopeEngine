@@ -25,6 +25,7 @@ struct VsOut {
     nointerpolation uint slot : TEXCOORD8;
     nointerpolation float spread : TEXCOORD9;
     nointerpolation float2 filterBc : TEXCOORD10; // brightness, contrast (1,1 = no-op)
+    nointerpolation float blur : TEXCOORD11; // photo: 0 sharp .. 1 coarsest mip
 };
 
 // Mirrors Model.hpp uiUnpackTransform: pad0 = angle(lo16) | scaleX(hi16),
@@ -134,6 +135,7 @@ VsOut uiPrimVertex(uint prim, float2 corner) {
     o.slot = 0;
     o.spread = ribbon || transform ? 0.0 : asfloat(gUi.Load(base + 44));
     o.filterBc = filterBc;
+    o.blur = 0.0;
     if (ribbon) {
         return o;
     }
@@ -141,6 +143,7 @@ VsOut uiPrimVertex(uint prim, float2 corner) {
         o.uv = lerp(extra.xy, extra.zw, corner);
         o.radii = float4(6.0, 6.0, 6.0, 6.0);
         o.slot = packed.x;
+        o.blur = asfloat(gUi.Load(base + 44));
         if ((packed.y & 2u) != 0) {
             o.clip = color;
         }
@@ -191,15 +194,27 @@ void uiMs(
     }
 }
 
-float4 samplePhoto(uint slot, float2 uv) {
-    if (slot == 1u) return gPhoto[1].Sample(gSdfSamp, uv);
-    if (slot == 2u) return gPhoto[2].Sample(gSdfSamp, uv);
-    if (slot == 3u) return gPhoto[3].Sample(gSdfSamp, uv);
-    if (slot == 4u) return gPhoto[4].Sample(gSdfSamp, uv);
-    if (slot == 5u) return gPhoto[5].Sample(gSdfSamp, uv);
-    if (slot == 6u) return gPhoto[6].Sample(gSdfSamp, uv);
-    if (slot == 7u) return gPhoto[7].Sample(gSdfSamp, uv);
-    return gPhoto[0].Sample(gSdfSamp, uv);
+// One sample. Blur adds lod on top of the mip the sampler would have picked.
+// Mirrors Model.hpp uiPhotoLod: extra = saturate(blur) * (mips - 1).
+float4 sampleLevel(Texture2D<float4> tex, float2 uv, float blur) {
+    uint w;
+    uint h;
+    uint mips;
+    tex.GetDimensions(0, w, h, mips);
+    const float span = mips > 1u ? (float)(mips - 1u) : 0.0;
+    const float base = tex.CalculateLevelOfDetail(gSdfSamp, uv);
+    return tex.SampleLevel(gSdfSamp, uv, base + saturate(blur) * span);
+}
+
+float4 samplePhoto(uint slot, float2 uv, float blur) {
+    if (slot == 1u) return sampleLevel(gPhoto[1], uv, blur);
+    if (slot == 2u) return sampleLevel(gPhoto[2], uv, blur);
+    if (slot == 3u) return sampleLevel(gPhoto[3], uv, blur);
+    if (slot == 4u) return sampleLevel(gPhoto[4], uv, blur);
+    if (slot == 5u) return sampleLevel(gPhoto[5], uv, blur);
+    if (slot == 6u) return sampleLevel(gPhoto[6], uv, blur);
+    if (slot == 7u) return sampleLevel(gPhoto[7], uv, blur);
+    return sampleLevel(gPhoto[0], uv, blur);
 }
 
 float sdRound(float2 local, float2 size, float4 rad) {
@@ -229,7 +244,7 @@ float4 uiFs(VsOut i) : SV_Target0 {
     float3 rgb = i.color.rgb;
     float alpha = i.color.a;
     if ((i.flags & 32u) != 0) {
-        const float4 tex = samplePhoto(min(i.slot, 7u), saturate(i.uv));
+        const float4 tex = samplePhoto(min(i.slot, 7u), saturate(i.uv), i.blur);
         rgb = tex.rgb;
         alpha = tex.a;
         const float d = sdRound(i.local, i.size, i.radii);

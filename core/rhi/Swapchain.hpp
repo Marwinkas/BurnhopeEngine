@@ -26,19 +26,33 @@ struct Swapchain {
     // потокобезопасен сам по себе). Это не добавляет потоки сейчас — hostTick остаётся
     // последовательным, — но структурно убирает единственное, что мешало бы параллельной записи
     // позже. Следующий шаг — мьютекс вокруг vkQueueSubmit2 (общая очередь) и сами потоки; не сделано.
-    VkCommandPool pool = VK_NULL_HANDLE;
+    // Один пул на кадр в полёте. Флаг создания 0: сброс только vkResetCommandPool,
+    // после того как fence этого кадра уже подождали. Соседний кадр в другом пуле.
+    VkCommandPool pool[kFramesInFlight]{};
     VkFormat format = VK_FORMAT_B8G8R8A8_UNORM;
     VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     VkExtent2D extent{};
     uint32_t imageCount = 0;
     VkImage images[8]{};
     VkImageView views[8]{};
+    // 1 after this image has been presented. The next acquire is PRESENT_SRC, not UNDEFINED.
+    uint8_t presented[8]{};
+    // 1 after swapchainBegin moved this image to COLOR_ATTACHMENT this frame.
+    uint8_t inColor[8]{};
 
     VkCommandBuffer cmd[kFramesInFlight]{};
+    // Холст. Сцена его не пишет. Сабмит идёт следом за буфером сцены.
+    VkCommandBuffer uiCmd[kFramesInFlight]{};
     VkSemaphore acquireSem[kFramesInFlight]{};
+    // Сцена сигналит, холст ждёт. Иначе тонмап с LOAD_CLEAR может лечь поверх уже нарисованного UI.
+    VkSemaphore uiSem[kFramesInFlight]{};
     VkSemaphore renderSem[8]{};
     VkFence flightFence[kFramesInFlight]{};
+    VkSemaphore orderSem = VK_NULL_HANDLE;
+    uint64_t orderValue = 0;
     uint64_t presentId = 0;
+    // 1 пока кадр в полёте и этот тик его не дождался. Resize не ждёт вечно.
+    uint8_t gpuBusy = 0;
     uint64_t clickTick = 0;
     float photonMs = 0;
     uint32_t frame = 0;
@@ -47,6 +61,7 @@ struct Swapchain {
 
 struct FrameContext {
     VkCommandBuffer cmd = VK_NULL_HANDLE;
+    VkCommandBuffer uiCmd = VK_NULL_HANDLE;
     uint32_t imageIndex = 0;
     uint32_t flight = 0;
 };
@@ -57,6 +72,8 @@ void swapchainDestroy(Swapchain& sc, Device& d);
 [[nodiscard]] bool swapchainRecreate(Swapchain& sc, Device& d, uint32_t w, uint32_t h);
 
 [[nodiscard]] bool swapchainBegin(Swapchain& sc, Device& d, FrameContext& fc);
+// Открывает буфер холста этого кадра. Картинку свопчейна не трогает: переход уже в буфере сцены.
+[[nodiscard]] bool swapchainBeginUi(Swapchain& sc, FrameContext& fc);
 void swapchainToPresent(Swapchain& sc, const FrameContext& fc);
 // pace: true блокирует до реального появления кадра на экране (present_wait, фотон-задержка).
 // Нужно только для того окна, где важна задержка клика (главное/активное). Второе и третье окно

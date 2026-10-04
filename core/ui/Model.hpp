@@ -7,6 +7,11 @@
 
 namespace burnhope {
 
+// Слот 48 буфера кучи, диапазон холста 48..63. Проходы движка его не занимают.
+constexpr uint32_t kUiDescPrims = 48;
+static_assert(kUiDescPrims >= 48u && kUiDescPrims < 64u);
+constexpr uint32_t kUiDescFont = 800;
+constexpr uint32_t kUiDescPhoto = 801;
 constexpr uint16_t kUiCap = 1024;
 constexpr uint16_t kUiNone = 0xffff;
 constexpr uint32_t kUiPrimCap = 2048;
@@ -199,6 +204,7 @@ struct UiPaint {
     float scaleY = 1;
     float bright = 1;     // filter: output.rgb *= bright
     float contrast = 1;   // filter: (output.rgb - 0.5) * contrast + 0.5
+    float blur = 0;       // photo only: 0 sharp, 1 coarsest existing mip
 };
 
 // Один POD на весь кадр. Меняет цвета, радиусы, шрифт, длительность анимации и хром окна.
@@ -606,6 +612,14 @@ inline void uiUnpackTransform(uint32_t pad0, uint32_t pad1, float& angle, float&
     scaleY = uiUnpackU16(static_cast<uint16_t>(pad1 & 0xFFFFu), kUiScaleLo, kUiScaleHi);
     bright = uiUnpackU8(static_cast<uint8_t>((pad1 >> 16) & 0xFFu), kUiFilterLo, kUiFilterHi);
     contrast = uiUnpackU8(static_cast<uint8_t>((pad1 >> 24) & 0xFFu), kUiFilterLo, kUiFilterHi);
+}
+
+// Photo blur lives in pad1 as a raw float (kUiFlagPhoto). 0 keeps the sampler lod,
+// 1 adds the full mip chain. Same formula in ui.slang sampleLevel.
+inline float uiPhotoLod(float blur, uint32_t mips) {
+    const float t = std::clamp(blur, 0.0f, 1.0f);
+    const float span = mips > 1 ? static_cast<float>(mips - 1) : 0.0f;
+    return t * span;
 }
 
 // Colors and chrome of the file browser. The browser does not know about the app.

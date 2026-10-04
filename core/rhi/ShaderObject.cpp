@@ -49,6 +49,11 @@ bool shaderCreate(Device& d, const ShaderCreateDesc& desc, ShaderExt& out) {
         .pMappings = desc.mappings,
     };
 
+    VkPushConstantRange pushRange{
+        .stageFlags = desc.pushStages != 0 ? desc.pushStages : static_cast<VkShaderStageFlags>(desc.stage),
+        .offset = 0,
+        .size = desc.pushBytes,
+    };
     VkShaderCreateInfoEXT ci{
         .sType = VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
         .pNext = desc.mappingCount > 0 ? &mapInfo : nullptr,
@@ -59,6 +64,8 @@ bool shaderCreate(Device& d, const ShaderCreateDesc& desc, ShaderExt& out) {
         .codeSize = spirv.size() * sizeof(uint32_t),
         .pCode = spirv.data(),
         .pName = desc.entry != nullptr ? desc.entry : "main",
+        .pushConstantRangeCount = desc.pushBytes > 0 ? 1u : 0u,
+        .pPushConstantRanges = desc.pushBytes > 0 ? &pushRange : nullptr,
     };
 
     const VkResult r = vkCreateShadersEXT(d.device, 1, &ci, nullptr, &out.handle);
@@ -137,7 +144,8 @@ void cmdSetGraphicsDynamic(
     uint32_t colorAttCount,
     bool depthTest,
     bool alphaBlend,
-    uint8_t blendMode) {
+    uint8_t blendMode,
+    bool reverseDepth) {
     const VkViewport vp{
         .x = 0.0f,
         .y = 0.0f,
@@ -154,7 +162,7 @@ void cmdSetGraphicsDynamic(
     vkCmdSetFrontFace(cmd, VK_FRONT_FACE_COUNTER_CLOCKWISE);
     vkCmdSetDepthTestEnable(cmd, depthTest ? VK_TRUE : VK_FALSE);
     vkCmdSetDepthWriteEnable(cmd, depthTest ? VK_TRUE : VK_FALSE);
-    vkCmdSetDepthCompareOp(cmd, VK_COMPARE_OP_LESS);
+    vkCmdSetDepthCompareOp(cmd, reverseDepth ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS);
     vkCmdSetDepthBoundsTestEnable(cmd, VK_FALSE);
     vkCmdSetStencilTestEnable(cmd, VK_FALSE);
     vkCmdSetDepthBiasEnable(cmd, VK_FALSE);
@@ -170,6 +178,9 @@ void cmdSetGraphicsDynamic(
     vkCmdSetPrimitiveTopology(cmd, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     vkCmdSetVertexInputEXT(cmd, 0, nullptr, 0, nullptr);
 
+    if (colorAttCount == 0) {
+        return;
+    }
     VkBool32 blend[2]{alphaBlend ? VK_TRUE : VK_FALSE, VK_FALSE};
     vkCmdSetColorBlendEnableEXT(cmd, 0, colorAttCount, blend);
     VkColorBlendEquationEXT eq{};

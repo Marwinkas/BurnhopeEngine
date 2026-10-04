@@ -180,9 +180,14 @@ struct Window {
     bool dpiChanged = false;
     bool focused = true;
     bool relOn = false;
+    // Кадр, когда захват только включился: прыжок курсора в центр не крутит взгляд.
+    bool relEat = false;
     bool smooth = false;
     float relX = 0;
     float relY = 0;
+    // Сумма xrel/yrel за кадр. В захвате курсор прыгает в центр, позиция для поворота не годится.
+    float motionDx = 0;
+    float motionDy = 0;
     float smoothDx = 0;
     float smoothDy = 0;
     uint16_t holdMs[512]{};

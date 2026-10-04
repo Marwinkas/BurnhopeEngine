@@ -15,6 +15,9 @@ struct Host;
 
 using HostOpsFn = void (*)(Host& host, int slot, const WindowOps& ops, void* user);
 using HostCloseFn = void (*)(Host& host, int slot, void* user);
+using HostSceneTickFn = bool (*)(void* user, const InputFrame& input, float dt);
+using HostSceneRecordFn = void (*)(void* user, VkCommandBuffer cmd, Device& device, DescriptorHeaps& heaps, const Swapchain& swap, const FrameContext& frame);
+using HostReleaseFn = void (*)(void* user, Device& device);
 
 // Приложение задаёт размер окна и функцию сборки холста. Кадр, swapchain и SDL живут здесь.
 struct ViewDesc {
@@ -25,6 +28,8 @@ struct ViewDesc {
     ColorBook* book = nullptr;
     HostOpsFn onOps = nullptr;
     HostCloseFn onClose = nullptr;
+    HostSceneTickFn sceneTick = nullptr;
+    HostSceneRecordFn sceneRecord = nullptr;
     void* user = nullptr;
 };
 
@@ -40,6 +45,8 @@ struct HostView {
     ColorBook* book = nullptr;
     HostOpsFn onOps = nullptr;
     HostCloseFn onClose = nullptr;
+    HostSceneTickFn sceneTick = nullptr;
+    HostSceneRecordFn sceneRecord = nullptr;
     void* user = nullptr;
 };
 
@@ -50,6 +57,10 @@ struct Host {
     int primary = -1;
     int fileSlot = -1;
     bool ready = false;
+    float clock = 0.0f;
+    float frameDt = 0.0f;
+    HostReleaseFn releaseGpu = nullptr;
+    void* releaseUser = nullptr;
 };
 
 [[nodiscard]] bool hostInit(Host& host);

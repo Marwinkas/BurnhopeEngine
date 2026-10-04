@@ -1,0 +1,10 @@
+called_from_lib:libvulkan.so
+called_from_lib:libnvidia
+called_from_lib:libGLX
+called_from_lib:libSDL3
+called_from_lib:libVkLayer
+called_from_lib:liblsfg
+called_from_lib:libdbus
+called_from_lib:libwayland
+called_from_lib:libX11
+called_from_lib:libxcb

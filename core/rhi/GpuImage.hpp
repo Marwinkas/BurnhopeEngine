@@ -12,6 +12,7 @@ struct GpuImage {
     VmaAllocation alloc = VK_NULL_HANDLE;
     VkFormat format = VK_FORMAT_UNDEFINED;
     VkExtent2D extent{};
+    uint32_t mips = 1;
 };
 
 [[nodiscard]] bool gpuImageCreate(

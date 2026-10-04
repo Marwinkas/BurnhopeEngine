@@ -9,6 +9,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -480,7 +481,8 @@ uint32_t emitPhoto(
     uint32_t cap,
     const UiBox& box,
     const UiImage& image,
-    const UiBox* clip) {
+    const UiBox* clip,
+    float blur) {
     if (n >= cap || box.w < 1.0f || box.h < 1.0f) {
         return n;
     }
@@ -499,6 +501,7 @@ uint32_t emitPhoto(
     p.color[3] = 1.0f;
     p.texId = image.slot;
     p.flags = kUiFlagPhoto;
+    putFloat(p.pad1, std::clamp(blur, 0.0f, 1.0f));
     p.extra[0] = image.viewX;
     p.extra[1] = base + image.viewY * span;
     p.extra[2] = image.viewX + image.viewW;
@@ -844,7 +847,7 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
         if (paint.tag == -90) {
             const UiImage* image = s.ent[id].try_get<UiImage>();
             if (image != nullptr) {
-                n = emitPhoto(dst, n, cap, box, *image, clip);
+                n = emitPhoto(dst, n, cap, box, *image, clip, paint.blur);
             }
             continue;
         }
@@ -1215,6 +1218,9 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
     if (s.edgeOn != 0) {
         n = emitRect(dst, n, cap, s.edgeLine.x, s.edgeLine.y, s.edgeLine.w, s.edgeLine.h, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.95f, 0.0f, nullptr);
     }
+    if (s.plug.over != nullptr) {
+        s.plug.over(s, s.fileView, dst, n, cap);
+    }
     return n;
 }
 
@@ -1242,7 +1248,7 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
         return false;
     }
 
-    if (!heapWriteBuffer(heaps, d, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, c.prims.address, c.prims.size)) {
+    if (!heapWriteBuffer(heaps, d, kUiDescPrims, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, c.prims.address, c.prims.size)) {
         spdlog::error("ui heap write failed");
         canvasDestroy(c, d);
         return false;
@@ -1274,7 +1280,7 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
         photosOk = heapWriteImage(
             heaps,
             d,
-            static_cast<uint32_t>(slot) + 1u,
+            kUiDescPhoto + slot,
             VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
             c.photos[slot],
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -1290,14 +1296,14 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
         0,
         0,
         VK_SPIRV_RESOURCE_TYPE_READ_ONLY_STORAGE_BUFFER_BIT_EXT,
-        heapBufOffset(heaps, 0),
+        heapBufOffset(heaps, kUiDescPrims),
         static_cast<uint32_t>(heaps.bufferDescSize));
     VkDescriptorSetAndBindingMappingEXT fsMap[3];
     fsMap[0] = heapMap(
         0,
         1,
         VK_SPIRV_RESOURCE_TYPE_SAMPLED_IMAGE_BIT_EXT,
-        heapImgOffset(heaps, 0),
+        heapImgOffset(heaps, kUiDescFont),
         static_cast<uint32_t>(heaps.imageDescSize));
     fsMap[1] = heapMap(
         1,
@@ -1309,7 +1315,7 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
         0,
         2,
         VK_SPIRV_RESOURCE_TYPE_SAMPLED_IMAGE_BIT_EXT,
-        heapImgOffset(heaps, 1),
+        heapImgOffset(heaps, kUiDescPhoto),
         static_cast<uint32_t>(heaps.imageDescSize));
     const ShaderCreateDesc vs{
         .path = BH_UI_VERT,
@@ -1662,7 +1668,7 @@ bool canvasLoadImage(Canvas& c, uint8_t slot, const char* path) {
         ok = heapWriteImage(
             *c.heaps,
             *c.device,
-            static_cast<uint32_t>(slot) + 1u,
+            kUiDescPhoto + slot,
             VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
             c.photos[slot],
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -1793,6 +1799,8 @@ uint16_t canvasNode(Canvas& c, uint16_t parent, const UiFlex& flex, const UiPain
 void canvasText(Canvas& c, uint16_t id, const char* text) {
     if (c.state != nullptr) {
         uiText(*c.state, id, text);
+        c.state->visualDirty = true;
+        c.state->layoutDirty = true;
     }
 }
 
@@ -1863,6 +1871,18 @@ void canvasTransform(Canvas& c, uint16_t id, float angle, float scaleX, float sc
     paint->angle = angle;
     paint->scaleX = scaleX;
     paint->scaleY = scaleY;
+    c.state->visualDirty = true;
+}
+
+void canvasBlur(Canvas& c, uint16_t id, float blur) {
+    if (c.state == nullptr || id >= c.state->count) {
+        return;
+    }
+    auto* paint = c.state->ent[id].try_get_mut<UiPaint>();
+    if (paint == nullptr) {
+        return;
+    }
+    paint->blur = std::clamp(blur, 0.0f, 1.0f);
     c.state->visualDirty = true;
 }
 
@@ -2007,6 +2027,14 @@ void canvasFieldExtra(Canvas& c, uint16_t id, const char* placeholder, uint8_t m
     c.state->visualDirty = true;
 }
 
+void canvasScroll(Canvas& c, uint16_t id, uint16_t inner) {
+    if (c.state == nullptr || id >= c.state->count || inner >= c.state->count) {
+        return;
+    }
+    c.state->ent[id].set<UiScroll>({0.0f, inner});
+    c.state->layoutDirty = true;
+}
+
 void canvasCheck(Canvas& c, uint16_t id, uint8_t kind, uint8_t group, bool on) {
     if (c.state == nullptr || id >= c.state->count) {
         return;
@@ -2021,6 +2049,21 @@ void canvasCheck(Canvas& c, uint16_t id, uint8_t kind, uint8_t group, bool on) {
     }
     c.state->layoutDirty = true;
     c.state->visualDirty = true;
+}
+
+int canvasCheckOn(const Canvas& c, const char* name) {
+    if (c.state == nullptr || name == nullptr) {
+        return -1;
+    }
+    const uint16_t id = canvasFind(c, name);
+    if (id == kUiNone || id >= c.state->count) {
+        return -1;
+    }
+    const UiCheck* check = c.state->ent[id].try_get<UiCheck>();
+    if (check == nullptr) {
+        return -1;
+    }
+    return check->on != 0 ? 1 : 0;
 }
 
 bool canvasTakeClip(Canvas& c, char* dst, uint8_t cap) {
@@ -2099,6 +2142,35 @@ UiEvent canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& 
         c.drawCount = n;
         gpuBufferFlush(c.prims, d, 0, kUiHeaderBytes + sizeof(UiPrimitive) * n);
         s.visualDirty = false;
+    }
+    static float uiCheckAt = 0.0f;
+    if (timeSec >= uiCheckAt) {
+        uiCheckAt = timeSec + 1.0f;
+        float sx = 0.0f;
+        float sy = 0.0f;
+        float sw = 0.0f;
+        float sh = 0.0f;
+        for (uint16_t id = 1; id < s.count; ++id) {
+            const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+            if (paint == nullptr || static_cast<UiRole>(paint->role) != UiRole::Scroll) {
+                continue;
+            }
+            sx = s.box[id].x;
+            sy = s.box[id].y;
+            sw = s.box[id].w;
+            sh = s.box[id].h;
+            break;
+        }
+        spdlog::info(
+            "ui check nodes={} draw={} view={:.0f}x{:.0f} scroll={:.0f},{:.0f} {:.0f}x{:.0f}",
+            static_cast<unsigned>(s.count),
+            c.drawCount,
+            pointsW,
+            pointsH,
+            sx,
+            sy,
+            sw,
+            sh);
     }
     if (s.dumpLayout != 0) {
         uiDumpLayout(s);
@@ -2227,7 +2299,11 @@ void canvasApplyDpi(Canvas& c, float dpi, float previous) {
     (void)canvasUseFont(c, c.state->fontPx * (dpi / previous));
 }
 
-void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, const FrameContext& fc) {
+void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, const FrameContext& fc, bool keepColor) {
+    VkPipelineStageFlags2 primDst = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    if (c.ms.handle != VK_NULL_HANDLE) {
+        primDst |= VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT;
+    }
     rhiBufferBarrier(
         cmd,
         c.prims.buffer,
@@ -2235,15 +2311,16 @@ void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, con
         c.prims.size,
         VK_PIPELINE_STAGE_2_HOST_BIT,
         VK_ACCESS_2_HOST_WRITE_BIT,
-        VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+        primDst,
         VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+    const bool alreadyColor = fc.imageIndex < 8 && sc.inColor[fc.imageIndex] != 0;
     rhiImageBarrier(
         cmd,
         sc.images[fc.imageIndex],
-        VK_IMAGE_LAYOUT_UNDEFINED,
+        (keepColor || alreadyColor) ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_ACCESS_2_NONE,
+        (keepColor || alreadyColor) ? VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT : VK_ACCESS_2_NONE,
         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
         VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
 
@@ -2256,7 +2333,7 @@ void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, con
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView = sc.views[fc.imageIndex],
         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .loadOp = keepColor ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = clear,
     };

@@ -149,15 +149,32 @@ void fillCaps(VkPhysicalDevice pd, DeviceCaps& caps) {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR,
         .pNext = &barycentric,
     };
+    VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR rtMaint{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR,
+        .pNext = &coopMatrix,
+    };
+    VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeat{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
+        .pNext = &rtMaint,
+    };
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeat{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+        .pNext = &rayQueryFeat,
+    };
+    VkPhysicalDeviceRobustness2FeaturesEXT robust2{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+        .pNext = &accelFeat,
+    };
 
     VkPhysicalDeviceFeatures2 feats{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-        .pNext = &coopMatrix,
+        .pNext = &robust2,
     };
     vkGetPhysicalDeviceFeatures2(pd, &feats);
 
     caps.dynamicRendering = f13.dynamicRendering == VK_TRUE;
     caps.sync2 = f13.synchronization2 == VK_TRUE;
+    caps.shaderDemote = f13.shaderDemoteToHelperInvocation == VK_TRUE;
     caps.timelineSemaphore = f12.timelineSemaphore == VK_TRUE;
     caps.bufferDeviceAddress = f12.bufferDeviceAddress == VK_TRUE;
     caps.maintenance6 = f14.maintenance6 == VK_TRUE;
@@ -166,7 +183,14 @@ void fillCaps(VkPhysicalDevice pd, DeviceCaps& caps) {
     caps.presentWait = hasDeviceExt(pd, VK_KHR_PRESENT_WAIT_EXTENSION_NAME) && presentWait.presentWait == VK_TRUE;
     caps.presentId = hasDeviceExt(pd, VK_KHR_PRESENT_ID_EXTENSION_NAME) && presentId.presentId == VK_TRUE;
     caps.meshShader = hasDeviceExt(pd, VK_EXT_MESH_SHADER_EXTENSION_NAME);
-    caps.rayQuery = hasDeviceExt(pd, VK_KHR_RAY_QUERY_EXTENSION_NAME);
+    caps.accelStruct = hasDeviceExt(pd, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)
+        && hasDeviceExt(pd, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
+        && accelFeat.accelerationStructure == VK_TRUE;
+    caps.rayQuery = caps.accelStruct
+        && hasDeviceExt(pd, VK_KHR_RAY_QUERY_EXTENSION_NAME)
+        && hasDeviceExt(pd, VK_KHR_RAY_TRACING_MAINTENANCE_1_EXTENSION_NAME)
+        && rayQueryFeat.rayQuery == VK_TRUE
+        && rtMaint.rayTracingMaintenance1 == VK_TRUE;
     caps.descriptorHeap = hasDeviceExt(pd, VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME)
         && heapFeat.descriptorHeap == VK_TRUE;
     caps.dgc = hasDeviceExt(pd, "VK_EXT_device_generated_commands")
@@ -182,6 +206,12 @@ void fillCaps(VkPhysicalDevice pd, DeviceCaps& caps) {
     // Только обнаружение: нет потребителя в текущих фазах, фичу устройству не запрашиваем.
     caps.cooperativeMatrix = hasDeviceExt(pd, VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME)
         && coopMatrix.cooperativeMatrix == VK_TRUE;
+    caps.robustness2 = hasDeviceExt(pd, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME)
+        && robust2.robustBufferAccess2 == VK_TRUE
+        && robust2.robustImageAccess2 == VK_TRUE
+        && robust2.nullDescriptor == VK_TRUE;
+    caps.samplerAnisotropy = feats.features.samplerAnisotropy == VK_TRUE;
+    caps.shaderInt64 = feats.features.shaderInt64 == VK_TRUE;
 }
 
 } // namespace
@@ -201,6 +231,7 @@ void deviceDumpCaps(const Device& d) {
     spdlog::info("maintenance6: {}  hostImageCopy: {}", c.maintenance6, c.hostImageCopy);
     spdlog::info("swapchainMaintenance1: {}  nestedCommandBuffer: {}  depthClampControl: {}  barycentric: {}  cooperativeMatrix(discover-only): {}",
         c.swapchainMaintenance1, c.nestedCommandBuffer, c.depthClampControl, c.fragmentShaderBarycentric, c.cooperativeMatrix);
+    spdlog::info("robustness2: {}", c.robustness2);
     if (d.heapProps.imageDescriptorSize != 0) {
         spdlog::info("heap: imgDesc={} bufDesc={} sampDesc={} resAlign={} reservedRes={}",
             static_cast<unsigned long long>(d.heapProps.imageDescriptorSize),
@@ -403,6 +434,9 @@ bool deviceCreate(Device& d, Window& window) {
     if (d.caps.fragmentShaderBarycentric) {
         devExts.push_back(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME);
     }
+    if (d.caps.robustness2) {
+        devExts.push_back(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+    }
     // cooperativeMatrix: обнаружен и в логе, но не запрошен — нет потребителя в текущих фазах
     // (план, Северная звезда — будущий ReSTIR/нейро-апскейл). Инстанс-расширение
     // VK_KHR_SURFACE уже требует VK_KHR_get_surface_capabilities2 для maintenance1,
@@ -440,6 +474,7 @@ bool deviceCreate(Device& d, Window& window) {
     f13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     f13.synchronization2 = VK_TRUE;
     f13.dynamicRendering = VK_TRUE;
+    f13.shaderDemoteToHelperInvocation = d.caps.shaderDemote ? VK_TRUE : VK_FALSE;
 
     VkPhysicalDeviceVulkan12Features f12{};
     f12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
@@ -485,6 +520,25 @@ bool deviceCreate(Device& d, Window& window) {
         devExts.push_back(VK_EXT_MESH_SHADER_EXTENSION_NAME);
         meshFeat.pNext = pNext;
         pNext = &meshFeat;
+    }
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelOn{};
+    accelOn.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    accelOn.accelerationStructure = VK_TRUE;
+    VkPhysicalDeviceRayQueryFeaturesKHR rayOn{};
+    rayOn.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+    rayOn.rayQuery = VK_TRUE;
+    VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR maintOn{};
+    maintOn.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR;
+    maintOn.rayTracingMaintenance1 = VK_TRUE;
+    if (d.caps.rayQuery) {
+        devExts.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+        devExts.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+        devExts.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+        devExts.push_back(VK_KHR_RAY_TRACING_MAINTENANCE_1_EXTENSION_NAME);
+        maintOn.pNext = pNext;
+        rayOn.pNext = &maintOn;
+        accelOn.pNext = &rayOn;
+        pNext = &accelOn;
     }
 
     // Фаза 1.5: позволяет менять present-режим и переиспользовать swapchain без полной
@@ -537,12 +591,25 @@ bool deviceCreate(Device& d, Window& window) {
         pNext = &presentIdFeat;
     }
 
+    VkPhysicalDeviceRobustness2FeaturesEXT robustFeat{};
+    robustFeat.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
+    robustFeat.robustBufferAccess2 = VK_TRUE;
+    robustFeat.robustImageAccess2 = VK_TRUE;
+    robustFeat.nullDescriptor = VK_TRUE;
+    if (d.caps.robustness2) {
+        robustFeat.pNext = pNext;
+        pNext = &robustFeat;
+    }
+
     VkPhysicalDeviceFeatures2 feat2{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .pNext = pNext,
     };
+    feat2.features.robustBufferAccess = VK_TRUE;
     feat2.features.shaderStorageImageWriteWithoutFormat = VK_TRUE;
     feat2.features.shaderStorageImageReadWithoutFormat = VK_TRUE;
+    feat2.features.samplerAnisotropy = d.caps.samplerAnisotropy ? VK_TRUE : VK_FALSE;
+    feat2.features.shaderInt64 = d.caps.shaderInt64 ? VK_TRUE : VK_FALSE;
 
     VkDeviceCreateInfo dci{
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -576,7 +643,7 @@ bool deviceCreate(Device& d, Window& window) {
 
     VkCommandPoolCreateInfo pool{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .flags = 0,
         .queueFamilyIndex = d.caps.graphicsFamily,
     };
     if (vkCreateCommandPool(d.device, &pool, nullptr, &d.commandPool) != VK_SUCCESS) {
@@ -614,6 +681,22 @@ bool deviceCreate(Device& d, Window& window) {
         spdlog::warn("present_wait missing — present without wait (caps fallback)");
     }
     return true;
+}
+
+uint64_t deviceMemoryUsed(const Device& d) {
+    if (d.allocator == VK_NULL_HANDLE) {
+        return 0;
+    }
+    VmaTotalStatistics stats{};
+    vmaCalculateStatistics(d.allocator, &stats);
+    return stats.total.statistics.allocationBytes;
+}
+
+void deviceMarkLost(Device& d, const char* where, int32_t result) {
+    const uint32_t was = d.lost.exchange(1, std::memory_order_acq_rel);
+    if (was == 0) {
+        spdlog::error("RHI device lost at {} ({}) — draws stop, host recovers next tick", where != nullptr ? where : "vulkan", result);
+    }
 }
 
 void deviceDestroy(Device& d) {

@@ -5,13 +5,18 @@
 #include "rhi/ShaderObject.hpp"
 #include "rhi/Barrier.hpp"
 #include "platform/Check.hpp"
+#include "platform/Jobs.hpp"
+#include "io/File.hpp"
 
 #include <spdlog/spdlog.h>
 
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
+#include <sys/stat.h>
 #include <vector>
 
 #define STBI_NO_STDIO
@@ -518,58 +523,131 @@ bool hasAlpha(const uint8_t* rgba, uint32_t pixels) {
     return false;
 }
 
-// GPU-компьют BC1 (план рендера, Фаза 2): один поток на блок 4x4 в core/image/compress.slang.
-// Используется только для непрозрачного пути (BC1), где у CPU ISPC нет поиска партиций —
-// алгоритм простой (per-channel min/max), поэтому сравнение «GPU vs CPU» в golden-image тесте
-// проверяет не побитовое совпадение (разные реализации могут выбрать разные конечные точки),
-// а то, что GPU-результат декодируется в цвет, близкий к оригиналу — тот же критерий, что
-// у любого BC1 энкодера. При любой неудаче возвращает false, вызывающий код падает на ISPC.
-bool gpuCompressBc1(Device& d, const uint8_t* rgba, uint32_t width, uint32_t height, uint8_t* dst) {
+struct CompressFlight {
+    VkCommandBuffer cmd = VK_NULL_HANDLE;
+    GpuBuffer* cache = nullptr;
+    uint8_t* dst = nullptr;
+    VkDeviceSize bytes = 0;
+};
+
+bool gDeferWait = false;
+CompressFlight gFlight{};
+
+void gpuCompressJoin(Device& d) {
+    if (gFlight.cmd == VK_NULL_HANDLE) {
+        return;
+    }
+    std::lock_guard<std::mutex> uploadLock(d.queueMutex);
+    vkQueueWaitIdle(d.graphicsQueue);
+    if (gFlight.cache != nullptr && gFlight.dst != nullptr && gFlight.bytes > 0) {
+        gpuBufferInvalidate(*gFlight.cache, d, 0, gFlight.bytes);
+        std::memcpy(gFlight.dst, gFlight.cache->mapped, static_cast<size_t>(gFlight.bytes));
+    }
+    vkFreeCommandBuffers(d.device, d.commandPool, 1, &gFlight.cmd);
+    gFlight = {};
+}
+
+// Один compute-проход на блок 4x4 (compress.slang). BC1 — 8 байт, BC7 mode 6 — 16 байт.
+// Конечные точки min/max, не перебор партиций. Неудача (нет compute, нет SPIR-V) — false,
+// вызывающий падает на ISPC. Сравнение с оригиналом — по декодированному цвету, не по байтам.
+bool gpuCompressBlocks(
+    Device& d,
+    const uint8_t* rgba,
+    uint32_t width,
+    uint32_t height,
+    uint8_t* dst,
+    uint32_t blockBytes,
+    uint32_t pixelBytes,
+    const char* spvPath,
+    const char* tag) {
+    (void)tag;
+    const bool defer = gDeferWait;
+    gDeferWait = false;
     const uint32_t blocksX = (width + 3u) / 4u;
     const uint32_t blocksY = (height + 3u) / 4u;
-    const VkDeviceSize dstBytes = static_cast<VkDeviceSize>(blocksX) * blocksY * 8u;
-    const VkDeviceSize srcBytes = 16 + static_cast<VkDeviceSize>(width) * height * 4u;
+    const VkDeviceSize dstBytes = static_cast<VkDeviceSize>(blocksX) * blocksY * blockBytes;
+    const VkDeviceSize srcBytes = 16 + static_cast<VkDeviceSize>(width) * height * pixelBytes;
 
-    GpuBuffer src{};
-    GpuBuffer dstBuf{};
-    DescriptorHeaps heaps{};
-    ShaderExt cs{};
+    struct CompressKeep {
+        Device* device = nullptr;
+        DescriptorHeaps heaps{};
+        ShaderExt shader[8]{};
+        const char* path[8]{};
+        GpuBuffer src{};
+        GpuBuffer dst{};
+        VkDeviceSize srcCap = 0;
+        VkDeviceSize dstCap = 0;
+    };
+    static CompressKeep keep{};
+    static std::mutex keepMutex;
+    std::lock_guard<std::mutex> keepLock(keepMutex);
     VkCommandBuffer cmd = VK_NULL_HANDLE;
     bool ok = false;
+    ShaderExt* cs = nullptr;
 
     const VkBufferUsageFlags usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    if (!gpuBufferCreate(src, d, srcBytes, usage, true) || !gpuBufferCreate(dstBuf, d, dstBytes, usage, true)) {
-        goto cleanup;
+    if (keep.device != &d) {
+        keep = {};
+        keep.device = &d;
+    }
+    if (keep.srcCap < srcBytes) {
+        gpuBufferDestroy(keep.src, d);
+        if (!gpuBufferCreate(keep.src, d, srcBytes, usage, true)) {
+            keep.srcCap = 0;
+            return false;
+        }
+        keep.srcCap = srcBytes;
+    }
+    if (keep.dstCap < dstBytes) {
+        gpuBufferDestroy(keep.dst, d);
+        if (!gpuBufferCreate(keep.dst, d, dstBytes, usage, true)) {
+            keep.dstCap = 0;
+            return false;
+        }
+        keep.dstCap = dstBytes;
     }
     {
         uint32_t header[4] = {width, height, 0, 0};
-        std::memcpy(src.mapped, header, sizeof(header));
-        std::memcpy(static_cast<uint8_t*>(src.mapped) + 16, rgba, static_cast<size_t>(width) * height * 4u);
-        gpuBufferFlush(src, d, 0, srcBytes);
+        std::memcpy(keep.src.mapped, header, sizeof(header));
+        std::memcpy(static_cast<uint8_t*>(keep.src.mapped) + 16, rgba, static_cast<size_t>(width) * height * pixelBytes);
+        gpuBufferFlush(keep.src, d, 0, srcBytes);
     }
-    if (!descriptorHeapsCreate(heaps, d, HeapLayout{.buffers = 2, .images = 0, .samplers = 0})) {
-        goto cleanup;
+    if (keep.heaps.writeResources == nullptr
+        && !descriptorHeapsCreate(keep.heaps, d, HeapLayout{.buffers = 2, .images = 0, .samplers = 0})) {
+        return false;
     }
-    if (!heapWriteBuffer(heaps, d, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, src.address, src.size)
-        || !heapWriteBuffer(heaps, d, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, dstBuf.address, dstBuf.size)) {
-        goto cleanup;
+    if (!heapWriteBuffer(keep.heaps, d, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, keep.src.address, keep.src.size)
+        || !heapWriteBuffer(keep.heaps, d, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, keep.dst.address, keep.dst.size)) {
+        return false;
     }
-    {
-        VkDescriptorSetAndBindingMappingEXT maps[2] = {
-            heapMap(0, 0, VK_SPIRV_RESOURCE_TYPE_READ_ONLY_STORAGE_BUFFER_BIT_EXT,
-                heapBufOffset(heaps, 0), static_cast<uint32_t>(heaps.bufferDescSize)),
-            heapMap(0, 1, VK_SPIRV_RESOURCE_TYPE_READ_WRITE_STORAGE_BUFFER_BIT_EXT,
-                heapBufOffset(heaps, 1), static_cast<uint32_t>(heaps.bufferDescSize)),
-        };
-        const ShaderCreateDesc desc{
-            .path = BH_COMPRESS_BC1,
-            .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-            .mappingCount = 2,
-            .mappings = maps,
-        };
-        if (!shaderCreate(d, desc, cs)) {
-            goto cleanup;
+    for (uint32_t i = 0; i < 8; ++i) {
+        if (keep.path[i] == spvPath) {
+            cs = &keep.shader[i];
+            break;
         }
+        if (keep.path[i] == nullptr) {
+            VkDescriptorSetAndBindingMappingEXT maps[2] = {
+                heapMap(0, 0, VK_SPIRV_RESOURCE_TYPE_READ_ONLY_STORAGE_BUFFER_BIT_EXT,
+                    heapBufOffset(keep.heaps, 0), static_cast<uint32_t>(keep.heaps.bufferDescSize)),
+                heapMap(0, 1, VK_SPIRV_RESOURCE_TYPE_READ_WRITE_STORAGE_BUFFER_BIT_EXT,
+                    heapBufOffset(keep.heaps, 1), static_cast<uint32_t>(keep.heaps.bufferDescSize)),
+            };
+            const ShaderCreateDesc desc{
+                .path = spvPath,
+                .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+                .mappingCount = 2,
+                .mappings = maps,
+            };
+            if (!shaderCreate(d, desc, keep.shader[i])) {
+                return false;
+            }
+            keep.path[i] = spvPath;
+            cs = &keep.shader[i];
+            break;
+        }
+    }
+    if (cs == nullptr) {
+        return false;
     }
     {
         // Общий пул/очередь — см. комментарий у d.queueMutex в Device.hpp.
@@ -581,19 +659,19 @@ bool gpuCompressBc1(Device& d, const uint8_t* rgba, uint32_t width, uint32_t hei
             .commandBufferCount = 1,
         };
         if (vkAllocateCommandBuffers(d.device, &alloc, &cmd) != VK_SUCCESS) {
-            goto cleanup;
+            return false;
         }
         const VkCommandBufferBeginInfo begin{
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
         };
         vkBeginCommandBuffer(cmd, &begin);
-        heapBind(cmd, heaps);
-        cmdBindCompute(cmd, cs.handle);
+        heapBind(cmd, keep.heaps);
+        cmdBindCompute(cmd, cs->handle);
         vkCmdDispatch(cmd, (blocksX + 7u) / 8u, (blocksY + 7u) / 8u, 1);
         rhiBufferBarrier(
             cmd,
-            dstBuf.buffer,
+            keep.dst.buffer,
             0,
             dstBytes,
             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -612,23 +690,25 @@ bool gpuCompressBc1(Device& d, const uint8_t* rgba, uint32_t width, uint32_t hei
             .pCommandBufferInfos = &cbsi,
         };
         if (vkQueueSubmit2(d.graphicsQueue, 1, &submit, VK_NULL_HANDLE) != VK_SUCCESS) {
-            goto cleanup;
+            vkFreeCommandBuffers(d.device, d.commandPool, 1, &cmd);
+            return false;
+        }
+        if (defer) {
+            gFlight.cmd = cmd;
+            gFlight.cache = &keep.dst;
+            gFlight.dst = dst;
+            gFlight.bytes = dstBytes;
+            return true;
         }
         vkQueueWaitIdle(d.graphicsQueue);
-        gpuBufferInvalidate(dstBuf, d, 0, dstBytes);
-        std::memcpy(dst, dstBuf.mapped, static_cast<size_t>(dstBytes));
+        gpuBufferInvalidate(keep.dst, d, 0, dstBytes);
+        std::memcpy(dst, keep.dst.mapped, static_cast<size_t>(dstBytes));
         ok = true;
-        spdlog::info("bc1 gpu-compress {}x{} blocks {}x{}", width, height, blocksX, blocksY);
     }
 
-cleanup:
     if (cmd != VK_NULL_HANDLE) {
         vkFreeCommandBuffers(d.device, d.commandPool, 1, &cmd);
     }
-    shaderDestroy(d, cs);
-    descriptorHeapsDestroy(heaps, d);
-    gpuBufferDestroy(dstBuf, d);
-    gpuBufferDestroy(src, d);
     return ok;
 }
 
@@ -669,9 +749,225 @@ void compressHdrLevel(const float* rgb, uint32_t width, uint32_t height, uint8_t
     CompressBlocksBC6H(&surf, dst, &settings);
 }
 
+void compressChannelLevel(const uint8_t* src, uint32_t width, uint32_t height, bool two, uint8_t* dst) {
+    rgba_surface surf{
+        const_cast<uint8_t*>(src),
+        static_cast<int32_t>(width),
+        static_cast<int32_t>(height),
+        static_cast<int32_t>(width * 4u),
+    };
+    if (two) {
+        CompressBlocksBC5(&surf, dst);
+    } else {
+        CompressBlocksBC4(&surf, dst);
+    }
+}
+
 } // namespace
 
-bool gpuImageUploadRgba(GpuImage& img, Device& d, const uint8_t* rgba, uint32_t width, uint32_t height, uint32_t frames) {
+bool imageUploadCompressed(GpuImage& img, Device& d, VkFormat format, const uint8_t* blocks, uint32_t width, uint32_t height) {
+    if (blocks == nullptr || width == 0 || height == 0) {
+        return false;
+    }
+    Level level{};
+    level.width = width;
+    level.height = height;
+    const uint32_t bx = (width + 3u) / 4u;
+    const uint32_t by = (height + 3u) / 4u;
+    const uint32_t blockBytes = format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK ? 8u : 16u;
+    level.bytes = static_cast<VkDeviceSize>(bx) * by * blockBytes;
+    return submitImageHostCopy(img, d, format, blocks, &level, 1);
+}
+
+bool imageLoadDds(GpuImage& img, Device& d, const char* path) {
+    MappedFile mapped{};
+    if (!fileMapReadOnly(path, &mapped) || mapped.size < 128) {
+        return false;
+    }
+    const uint8_t* h = mapped.data;
+    if (std::memcmp(h, "DDS ", 4) != 0) {
+        fileUnmap(&mapped);
+        return false;
+    }
+    const uint32_t height = static_cast<uint32_t>(h[12]) | (static_cast<uint32_t>(h[13]) << 8) | (static_cast<uint32_t>(h[14]) << 16) | (static_cast<uint32_t>(h[15]) << 24);
+    const uint32_t width = static_cast<uint32_t>(h[16]) | (static_cast<uint32_t>(h[17]) << 8) | (static_cast<uint32_t>(h[18]) << 16) | (static_cast<uint32_t>(h[19]) << 24);
+    uint32_t mips = static_cast<uint32_t>(h[28]) | (static_cast<uint32_t>(h[29]) << 8) | (static_cast<uint32_t>(h[30]) << 16) | (static_cast<uint32_t>(h[31]) << 24);
+    const uint8_t* four = h + 84;
+    VkFormat format = VK_FORMAT_UNDEFINED;
+    uint32_t blockBytes = 0;
+    if (std::memcmp(four, "DXT1", 4) == 0) {
+        format = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+        blockBytes = 8;
+    } else if (std::memcmp(four, "DXT5", 4) == 0) {
+        format = VK_FORMAT_BC3_UNORM_BLOCK;
+        blockBytes = 16;
+    } else     if (std::memcmp(four, "ATI2", 4) == 0) {
+        format = VK_FORMAT_BC5_UNORM_BLOCK;
+        blockBytes = 16;
+    } else if (std::memcmp(four, "BC7 ", 4) == 0) {
+        format = VK_FORMAT_BC7_UNORM_BLOCK;
+        blockBytes = 16;
+    }
+    if (format == VK_FORMAT_UNDEFINED || width == 0 || height == 0) {
+        fileUnmap(&mapped);
+        return false;
+    }
+    if (mips < 1) {
+        mips = 1;
+    }
+    if (mips > 16) {
+        mips = 16;
+    }
+    Level levels[16]{};
+    VkDeviceSize cursor = 128;
+    uint32_t w = width;
+    uint32_t ht = height;
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < mips; ++i) {
+        const uint32_t bx = (w + 3u) / 4u;
+        const uint32_t by = (ht + 3u) / 4u;
+        const VkDeviceSize bytes = static_cast<VkDeviceSize>(bx) * by * blockBytes;
+        if (cursor + bytes > mapped.size) {
+            break;
+        }
+        levels[count].width = w;
+        levels[count].height = ht;
+        levels[count].offset = cursor;
+        levels[count].bytes = bytes;
+        cursor += bytes;
+        count += 1;
+        w = w > 1 ? w / 2 : 1;
+        ht = ht > 1 ? ht / 2 : 1;
+    }
+    const bool ok = count > 0 && submitImageHostCopy(img, d, format, mapped.data, levels, count);
+    fileUnmap(&mapped);
+    return ok;
+}
+
+uint32_t imageBlockBytes(ImageBlock format) {
+    switch (format) {
+    case ImageBlock::Bc1:
+    case ImageBlock::Bc4:
+        return 8u;
+    case ImageBlock::Bc3:
+    case ImageBlock::Bc5:
+    case ImageBlock::Bc6h:
+    case ImageBlock::Bc7:
+        return 16u;
+    }
+    return 0u;
+}
+
+bool gpuCompressLevel(Device& d, ImageBlock format, const void* pixels, uint32_t width, uint32_t height, uint8_t* dst) {
+    if (pixels == nullptr || dst == nullptr || width == 0 || height == 0 || (width % 4u) != 0 || (height % 4u) != 0) {
+        return false;
+    }
+    const auto* bytes = static_cast<const uint8_t*>(pixels);
+    switch (format) {
+    case ImageBlock::Bc1:
+        if (!gpuCompressBlocks(d, bytes, width, height, dst, 8u, 4u, BH_COMPRESS_BC1, "bc1")) {
+            compressRgbaLevel(bytes, width, height, VK_FORMAT_BC1_RGBA_UNORM_BLOCK, dst);
+        }
+        return true;
+    case ImageBlock::Bc3:
+        if (!gpuCompressBlocks(d, bytes, width, height, dst, 16u, 4u, BH_COMPRESS_BC3, "bc3")) {
+            compressRgbaLevel(bytes, width, height, VK_FORMAT_BC3_UNORM_BLOCK, dst);
+        }
+        return true;
+    case ImageBlock::Bc4:
+        if (!gpuCompressBlocks(d, bytes, width, height, dst, 8u, 4u, BH_COMPRESS_BC4, "bc4")) {
+            compressChannelLevel(bytes, width, height, false, dst);
+        }
+        return true;
+    case ImageBlock::Bc5:
+        if (!gpuCompressBlocks(d, bytes, width, height, dst, 16u, 4u, BH_COMPRESS_BC5, "bc5")) {
+            compressChannelLevel(bytes, width, height, true, dst);
+        }
+        return true;
+    case ImageBlock::Bc7:
+        if (!gpuCompressBlocks(d, bytes, width, height, dst, 16u, 4u, BH_COMPRESS_BC7, "bc7")) {
+            compressRgbaLevel(bytes, width, height, VK_FORMAT_BC7_UNORM_BLOCK, dst);
+        }
+        return true;
+    case ImageBlock::Bc6h:
+        if (!gpuCompressBlocks(d, bytes, width, height, dst, 16u, 12u, BH_COMPRESS_BC6H, "bc6h")) {
+            compressHdrLevel(static_cast<const float*>(pixels), width, height, dst);
+        }
+        return true;
+    }
+    return false;
+}
+
+struct MipCpu {
+    const uint8_t* src = nullptr;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    VkFormat format = VK_FORMAT_UNDEFINED;
+    uint8_t* dst = nullptr;
+};
+
+void mipCpuJob(void* user) {
+    const auto* job = static_cast<const MipCpu*>(user);
+    compressRgbaLevel(job->src, job->width, job->height, job->format, job->dst);
+}
+
+void writeBlockDds(
+    const char* path,
+    uint32_t width,
+    uint32_t height,
+    uint32_t mips,
+    VkFormat format,
+    const uint8_t* data,
+    size_t bytes) {
+    if (path == nullptr || path[0] == '\0' || data == nullptr || bytes == 0) {
+        return;
+    }
+    const char* four = nullptr;
+    if (format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK) {
+        four = "DXT1";
+    } else if (format == VK_FORMAT_BC3_UNORM_BLOCK) {
+        four = "DXT5";
+    } else if (format == VK_FORMAT_BC7_UNORM_BLOCK) {
+        four = "BC7 ";
+    }
+    if (four == nullptr) {
+        return;
+    }
+    mkdir("cache", 0755);
+    mkdir("cache/textures", 0755);
+    uint8_t hdr[128]{};
+    std::memcpy(hdr, "DDS ", 4);
+    const uint32_t size = 124;
+    const uint32_t flags = 0x000A1007u;
+    const uint32_t pfSize = 32;
+    const uint32_t pfFlags = 4;
+    const uint32_t caps = mips > 1 ? 0x00401008u : 0x00001000u;
+    std::memcpy(hdr + 4, &size, 4);
+    std::memcpy(hdr + 8, &flags, 4);
+    std::memcpy(hdr + 12, &height, 4);
+    std::memcpy(hdr + 16, &width, 4);
+    std::memcpy(hdr + 28, &mips, 4);
+    std::memcpy(hdr + 76, &pfSize, 4);
+    std::memcpy(hdr + 80, &pfFlags, 4);
+    std::memcpy(hdr + 84, four, 4);
+    std::memcpy(hdr + 108, &caps, 4);
+    std::FILE* file = std::fopen(path, "wb");
+    if (file == nullptr) {
+        return;
+    }
+    std::fwrite(hdr, 1, 128, file);
+    std::fwrite(data, 1, bytes, file);
+    std::fclose(file);
+}
+
+bool gpuImageUploadRgba(
+    GpuImage& img,
+    Device& d,
+    const uint8_t* rgba,
+    uint32_t width,
+    uint32_t height,
+    uint32_t frames,
+    const char* cacheDds) {
     if (rgba == nullptr || width == 0 || height == 0 || d.device == VK_NULL_HANDLE) {
         return false;
     }
@@ -711,35 +1007,72 @@ bool gpuImageUploadRgba(GpuImage& img, Device& d, const uint8_t* rgba, uint32_t 
     const bool chain = frames == 1;
     const uint32_t mips = mipCountFor(pw, stacked, chain);
     const uint32_t blockBytes = format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK ? 8u : 16u;
-    Level levels[16]{};
-    std::vector<uint8_t> packed;
-    std::vector<uint8_t> levelPixels = padded;
+    const ImageBlock block = format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK
+        ? ImageBlock::Bc1
+        : (format == VK_FORMAT_BC7_UNORM_BLOCK ? ImageBlock::Bc7 : ImageBlock::Bc3);
+    std::vector<std::vector<uint8_t>> chainPx;
+    chainPx.push_back(std::move(padded));
     uint32_t lw = pw;
     uint32_t lh = stacked;
+    while (chainPx.size() < mips) {
+        std::vector<uint8_t> next;
+        downsampleRgba(chainPx.back(), lw, lh, next, lw, lh);
+        chainPx.push_back(std::move(next));
+    }
+    Level levels[16]{};
+    std::vector<uint8_t> packed;
+    lw = pw;
+    lh = stacked;
     for (uint32_t mip = 0; mip < mips; ++mip) {
         const VkDeviceSize bytes = static_cast<VkDeviceSize>(lw / 4u) * (lh / 4u) * blockBytes;
         levels[mip].width = lw;
         levels[mip].height = lh;
         levels[mip].offset = packed.size();
         levels[mip].bytes = bytes;
-        const size_t at = packed.size();
-        packed.resize(at + static_cast<size_t>(bytes));
-        // GPU-компьют сначала, только для BC1 (без партиций, один простой энкодер = один
-        // понятный шейдер); BC7/BC3 остаются на ISPC. Неудача GPU-пути (нет шейдера, нет
-        // compute на этом GPU) молча падает на проверенный CPU путь — то же, что уже сделано
-        // для host_image_copy.
-        const bool gpuDone = format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK
-            && gpuCompressBc1(d, levelPixels.data(), lw, lh, packed.data() + at);
-        if (!gpuDone) {
-            compressRgbaLevel(levelPixels.data(), lw, lh, format, packed.data() + at);
-        }
-        if (mip + 1u < mips) {
-            std::vector<uint8_t> next;
-            downsampleRgba(levelPixels, lw, lh, next, lw, lh);
-            levelPixels.swap(next);
+        packed.resize(packed.size() + static_cast<size_t>(bytes));
+        lw = lw > 1 ? lw / 2u : 1u;
+        lh = lh > 1 ? lh / 2u : 1u;
+    }
+    const bool gpu0 = levels[0].width >= 2048u || levels[0].height >= 2048u;
+    bool gpuKicked = false;
+    if (gpu0) {
+        gDeferWait = true;
+        gpuKicked = gpuCompressLevel(d, block, chainPx[0].data(), levels[0].width, levels[0].height, packed.data());
+        if (!gpuKicked) {
+            gDeferWait = false;
+            compressRgbaLevel(chainPx[0].data(), levels[0].width, levels[0].height, format, packed.data());
         }
     }
+    MipCpu cpu[16]{};
+    Job jobs[16]{};
+    int jobCount = 0;
+    for (uint32_t mip = gpuKicked ? 1u : 0u; mip < mips; ++mip) {
+        cpu[jobCount] = MipCpu{
+            chainPx[mip].data(),
+            levels[mip].width,
+            levels[mip].height,
+            format,
+            packed.data() + levels[mip].offset,
+        };
+        jobs[jobCount] = Job{mipCpuJob, &cpu[jobCount]};
+        jobCount += 1;
+    }
+    if (jobCount > 0) {
+        jobsRunAndWait(jobs, jobCount);
+    }
+    if (gpuKicked) {
+        gpuCompressJoin(d);
+    }
+    writeBlockDds(cacheDds, levels[0].width, levels[0].height, mips, format, packed.data(), packed.size());
     return submitImage(img, d, format, packed.data(), packed.size(), levels, mips);
+}
+
+bool imageUploadUncompressed(GpuImage& img, Device& d, const uint8_t* rgba, uint32_t width, uint32_t height) {
+    if (rgba == nullptr || width == 0 || height == 0 || d.device == VK_NULL_HANDLE) {
+        return false;
+    }
+    const Level level{width, height, 0, static_cast<VkDeviceSize>(width) * height * 4u};
+    return submitImage(img, d, VK_FORMAT_R8G8B8A8_UNORM, rgba, level.bytes, &level, 1);
 }
 
 bool gpuImageUploadHdr(GpuImage& img, Device& d, const float* rgb, uint32_t width, uint32_t height) {
@@ -776,6 +1109,7 @@ bool gpuImageUploadHdr(GpuImage& img, Device& d, const float* rgb, uint32_t widt
     std::vector<float> levelPixels = padded;
     uint32_t lw = pw;
     uint32_t lh = ph;
+    const auto compressT0 = std::chrono::steady_clock::now();
     for (uint32_t mip = 0; mip < mips; ++mip) {
         const uint32_t blocksX = lw / 4u;
         const uint32_t blocksY = lh / 4u;
@@ -786,13 +1120,17 @@ bool gpuImageUploadHdr(GpuImage& img, Device& d, const float* rgb, uint32_t widt
         levels[mip].bytes = bytes;
         const size_t at = packed.size();
         packed.resize(at + static_cast<size_t>(bytes));
-        compressHdrLevel(levelPixels.data(), lw, lh, packed.data() + at);
+        if (!gpuCompressLevel(d, ImageBlock::Bc6h, levelPixels.data(), lw, lh, packed.data() + at)) {
+            return false;
+        }
         if (mip + 1u < mips) {
             std::vector<float> next;
             downsampleRgb(levelPixels, lw, lh, next, lw, lh);
             levelPixels.swap(next);
         }
     }
+    const double compressMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - compressT0).count();
+    spdlog::info("hdr compress {}x{} mips {} ms {:.3f}", pw, ph, mips, compressMs);
     return submitImage(img, d, VK_FORMAT_BC6H_UFLOAT_BLOCK, packed.data(), packed.size(), levels, mips);
 }
 

@@ -19,14 +19,17 @@ struct Panel {
     [[nodiscard]] Panel field(const char* text, uint8_t filter, bool clear) const;
     [[nodiscard]] Panel check(const char* text) const;
     [[nodiscard]] Panel radio(const char* text, uint8_t group) const;
+    [[nodiscard]] Panel slider(float value, float minV, float maxV) const;
     [[nodiscard]] Panel spin(float value, float minV, float maxV, float step) const;
     [[nodiscard]] Panel curve() const;
     [[nodiscard]] Panel gradient() const;
     void setText(const char* text) const;
+    void name(const char* text) const;
     void color(float r, float g, float b, float a) const;
     void animate(float r, float g, float b, float a) const;
     void transform(float angle, float scaleX, float scaleY) const;
     void filter(float bright, float contrast) const;
+    void blur(float blur) const;
 };
 
 } // namespace burnhope

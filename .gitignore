@@ -9,6 +9,9 @@ build-asan/
 x64/
 .vs/
 BurnHopeEngine/
-
+testscene/
+newscenetest/
+build-tsan/
+cache/
 imgui.ini
 *.spv

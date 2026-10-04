@@ -61,6 +61,27 @@ void dragSpin(UiState& s, uint16_t id, float x) {
     }
 }
 
+uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float maxV) {
+    UiFlex flex{};
+    flex.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    flex.width = 100.0f;
+    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.height = 18.0f;
+    flex.shrink = 0.0f;
+    const uint16_t id = spawn(s, parent, flex, paint(UiRole::Slider, 0.18f, 0.20f, 0.26f, 8.0f));
+    if (id == kUiNone) {
+        return id;
+    }
+    if (value < minV) {
+        value = minV;
+    }
+    if (value > maxV) {
+        value = maxV;
+    }
+    s.ent[id].set<UiRange>({value, minV, maxV, 0.0f});
+    return id;
+}
+
 uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV, float step) {
     UiFlex flex{};
     flex.heightMode = static_cast<uint8_t>(UiSize::Px);

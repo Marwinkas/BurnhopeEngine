@@ -163,23 +163,27 @@ bool swapchainCreate(Swapchain& sc, Device& d, VkSurfaceKHR surface, uint32_t w,
         }
     }
 
-    // Свой пул на окно, не общий d.commandPool — см. комментарий у Swapchain.pool в Swapchain.hpp.
     const VkCommandPoolCreateInfo poolCi{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .flags = 0,
         .queueFamilyIndex = d.caps.graphicsFamily,
     };
-    if (vkCreateCommandPool(d.device, &poolCi, nullptr, &sc.pool) != VK_SUCCESS) {
-        return false;
-    }
-    VkCommandBufferAllocateInfo ai{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = sc.pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = kFramesInFlight,
-    };
-    if (vkAllocateCommandBuffers(d.device, &ai, sc.cmd) != VK_SUCCESS) {
-        return false;
+    for (uint32_t i = 0; i < kFramesInFlight; ++i) {
+        if (vkCreateCommandPool(d.device, &poolCi, nullptr, &sc.pool[i]) != VK_SUCCESS) {
+            return false;
+        }
+        VkCommandBufferAllocateInfo ai{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool = sc.pool[i],
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 2,
+        };
+        VkCommandBuffer pair[2]{};
+        if (vkAllocateCommandBuffers(d.device, &ai, pair) != VK_SUCCESS) {
+            return false;
+        }
+        sc.cmd[i] = pair[0];
+        sc.uiCmd[i] = pair[1];
     }
 
     VkSemaphoreCreateInfo si{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
@@ -187,7 +191,8 @@ bool swapchainCreate(Swapchain& sc, Device& d, VkSurfaceKHR surface, uint32_t w,
     fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fi.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     for (uint32_t i = 0; i < kFramesInFlight; ++i) {
-        if (vkCreateSemaphore(d.device, &si, nullptr, &sc.acquireSem[i]) != VK_SUCCESS) {
+        if (vkCreateSemaphore(d.device, &si, nullptr, &sc.acquireSem[i]) != VK_SUCCESS
+            || vkCreateSemaphore(d.device, &si, nullptr, &sc.uiSem[i]) != VK_SUCCESS) {
             return false;
         }
         if (vkCreateFence(d.device, &fi, nullptr, &sc.flightFence[i]) != VK_SUCCESS) {
@@ -199,7 +204,17 @@ bool swapchainCreate(Swapchain& sc, Device& d, VkSurfaceKHR surface, uint32_t w,
             return false;
         }
     }
+    if (d.caps.timelineSemaphore) {
+        VkSemaphoreTypeCreateInfo timeline{VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
+        timeline.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+        VkSemaphoreCreateInfo orderInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+        orderInfo.pNext = &timeline;
+        if (vkCreateSemaphore(d.device, &orderInfo, nullptr, &sc.orderSem) != VK_SUCCESS) {
+            sc.orderSem = VK_NULL_HANDLE;
+        }
+    }
     sc.frame = 0;
+    sc.orderValue = 0;
     sc.presentId = 0;
     return true;
 }
@@ -208,24 +223,57 @@ void swapchainDestroy(Swapchain& sc, Device& d) {
     if (d.device == VK_NULL_HANDLE) {
         return;
     }
-    vkDeviceWaitIdle(d.device);
-    if (sc.cmd[0] != VK_NULL_HANDLE && sc.pool != VK_NULL_HANDLE) {
-        vkFreeCommandBuffers(d.device, sc.pool, kFramesInFlight, sc.cmd);
+    if (!deviceLost(d)) {
+        for (uint32_t i = 0; i < kFramesInFlight; ++i) {
+            if (sc.flightFence[i] != VK_NULL_HANDLE) {
+                const VkResult waited = vkWaitForFences(d.device, 1, &sc.flightFence[i], VK_TRUE, 200'000'000ull);
+                if (waited == VK_TIMEOUT || waited == VK_ERROR_DEVICE_LOST) {
+                    deviceMarkLost(d, "swapchain fence", static_cast<int32_t>(waited));
+                    break;
+                }
+            }
+        }
     }
-    if (sc.pool != VK_NULL_HANDLE) {
-        vkDestroyCommandPool(d.device, sc.pool, nullptr);
-        sc.pool = VK_NULL_HANDLE;
+    for (uint32_t i = 0; i < kFramesInFlight; ++i) {
+        if (sc.pool[i] != VK_NULL_HANDLE && (sc.cmd[i] != VK_NULL_HANDLE || sc.uiCmd[i] != VK_NULL_HANDLE)) {
+            VkCommandBuffer pair[2] = {sc.cmd[i], sc.uiCmd[i]};
+            uint32_t n = 0;
+            VkCommandBuffer live[2]{};
+            if (pair[0] != VK_NULL_HANDLE) {
+                live[n++] = pair[0];
+            }
+            if (pair[1] != VK_NULL_HANDLE) {
+                live[n++] = pair[1];
+            }
+            if (n > 0) {
+                vkFreeCommandBuffers(d.device, sc.pool[i], n, live);
+            }
+        }
+        if (sc.pool[i] != VK_NULL_HANDLE) {
+            vkDestroyCommandPool(d.device, sc.pool[i], nullptr);
+            sc.pool[i] = VK_NULL_HANDLE;
+        }
+        sc.cmd[i] = VK_NULL_HANDLE;
+        sc.uiCmd[i] = VK_NULL_HANDLE;
     }
     for (uint32_t i = 0; i < kFramesInFlight; ++i) {
         if (sc.acquireSem[i] != VK_NULL_HANDLE) {
             vkDestroySemaphore(d.device, sc.acquireSem[i], nullptr);
         }
+        if (sc.uiSem[i] != VK_NULL_HANDLE) {
+            vkDestroySemaphore(d.device, sc.uiSem[i], nullptr);
+        }
         if (sc.flightFence[i] != VK_NULL_HANDLE) {
             vkDestroyFence(d.device, sc.flightFence[i], nullptr);
         }
         sc.acquireSem[i] = VK_NULL_HANDLE;
+        sc.uiSem[i] = VK_NULL_HANDLE;
         sc.flightFence[i] = VK_NULL_HANDLE;
-        sc.cmd[i] = VK_NULL_HANDLE;
+    }
+    if (sc.orderSem != VK_NULL_HANDLE) {
+        vkDestroySemaphore(d.device, sc.orderSem, nullptr);
+        sc.orderSem = VK_NULL_HANDLE;
+        sc.orderValue = 0;
     }
     for (uint32_t i = 0; i < sc.imageCount; ++i) {
         if (sc.renderSem[i] != VK_NULL_HANDLE) {
@@ -237,6 +285,8 @@ void swapchainDestroy(Swapchain& sc, Device& d) {
             sc.views[i] = VK_NULL_HANDLE;
         }
         sc.images[i] = VK_NULL_HANDLE;
+        sc.presented[i] = 0;
+        sc.inColor[i] = 0;
     }
     if (sc.handle != VK_NULL_HANDLE) {
         vkDestroySwapchainKHR(d.device, sc.handle, nullptr);
@@ -260,8 +310,24 @@ bool swapchainRecreate(Swapchain& sc, Device& d, uint32_t w, uint32_t h) {
 
 bool swapchainBegin(Swapchain& sc, Device& d, FrameContext& fc) {
     BH_ZONE;
+    if (deviceLost(d)) {
+        spdlog::error("RHI acquire skipped, device lost");
+        return false;
+    }
     const uint32_t f = sc.frame;
-    vkWaitForFences(d.device, 1, &sc.flightFence[f], VK_TRUE, UINT64_MAX);
+    const VkResult waited = vkWaitForFences(d.device, 1, &sc.flightFence[f], VK_TRUE, 2'000'000ull);
+    if (waited == VK_TIMEOUT) {
+        sc.gpuBusy = 1;
+        return false;
+    }
+    sc.gpuBusy = 0;
+    if (waited != VK_SUCCESS) {
+        spdlog::error("vkWaitForFences {}", static_cast<int>(waited));
+        if (waited == VK_ERROR_DEVICE_LOST) {
+            deviceMarkLost(d, "vkWaitForFences", static_cast<int32_t>(waited));
+        }
+        return false;
+    }
     vkResetFences(d.device, 1, &sc.flightFence[f]);
 
     uint32_t imageIndex = 0;
@@ -271,10 +337,13 @@ bool swapchainBegin(Swapchain& sc, Device& d, FrameContext& fc) {
     }
     if (acq != VK_SUCCESS && acq != VK_SUBOPTIMAL_KHR) {
         spdlog::error("vkAcquireNextImageKHR {}", static_cast<int>(acq));
+        if (acq == VK_ERROR_DEVICE_LOST || acq == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+            deviceMarkLost(d, "vkAcquireNextImageKHR", static_cast<int32_t>(acq));
+        }
         return false;
     }
 
-    vkResetCommandBuffer(sc.cmd[f], 0);
+    vkResetCommandPool(d.device, sc.pool[f], 0);
     VkCommandBufferBeginInfo bi{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
@@ -282,51 +351,127 @@ bool swapchainBegin(Swapchain& sc, Device& d, FrameContext& fc) {
     vkBeginCommandBuffer(sc.cmd[f], &bi);
 
     fc.cmd = sc.cmd[f];
+    fc.uiCmd = VK_NULL_HANDLE;
     fc.imageIndex = imageIndex;
     fc.flight = f;
+    const VkImageLayout oldLayout = sc.presented[imageIndex] != 0
+        ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+        : VK_IMAGE_LAYOUT_UNDEFINED;
+    rhiImageBarrier(fc.cmd, sc.images[imageIndex],
+        oldLayout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        oldLayout == VK_IMAGE_LAYOUT_UNDEFINED ? VK_ACCESS_2_NONE : VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+    sc.inColor[imageIndex] = 1;
     return true;
 }
 
+bool swapchainBeginUi(Swapchain& sc, FrameContext& fc) {
+    if (fc.flight >= kFramesInFlight || sc.uiCmd[fc.flight] == VK_NULL_HANDLE) {
+        return false;
+    }
+    fc.uiCmd = sc.uiCmd[fc.flight];
+    const VkCommandBufferBeginInfo bi{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    return vkBeginCommandBuffer(fc.uiCmd, &bi) == VK_SUCCESS;
+}
+
 void swapchainToPresent(Swapchain& sc, const FrameContext& fc) {
-    rhiImageBarrier(fc.cmd, sc.images[fc.imageIndex],
+    const VkCommandBuffer cmd = fc.uiCmd != VK_NULL_HANDLE ? fc.uiCmd : fc.cmd;
+    rhiImageBarrier(cmd, sc.images[fc.imageIndex],
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE);
+    if (fc.imageIndex < 8) {
+        sc.presented[fc.imageIndex] = 1;
+        sc.inColor[fc.imageIndex] = 0;
+    }
 }
 
 bool swapchainSubmitPresent(Swapchain& sc, Device& d, FrameContext& fc, bool pace) {
     vkEndCommandBuffer(fc.cmd);
+    const bool split = fc.uiCmd != VK_NULL_HANDLE;
+    if (split) {
+        vkEndCommandBuffer(fc.uiCmd);
+    }
 
-    VkSemaphoreSubmitInfo waitSem{
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-        .semaphore = sc.acquireSem[fc.flight],
-        .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+    VkSemaphoreSubmitInfo waitSem[2]{};
+    waitSem[0].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    waitSem[0].semaphore = sc.acquireSem[fc.flight];
+    waitSem[0].stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    uint32_t waitCount = 1;
+    if (sc.orderSem != VK_NULL_HANDLE && sc.orderValue > 0) {
+        waitSem[1].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+        waitSem[1].semaphore = sc.orderSem;
+        waitSem[1].value = sc.orderValue;
+        waitSem[1].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        waitCount = 2;
+    }
+    VkSemaphoreSubmitInfo sigSem[2]{};
+    sigSem[0].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    sigSem[0].semaphore = sc.renderSem[fc.imageIndex];
+    sigSem[0].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    uint32_t sigCount = 1;
+    if (sc.orderSem != VK_NULL_HANDLE) {
+        sigSem[1].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+        sigSem[1].semaphore = sc.orderSem;
+        sigSem[1].value = sc.orderValue + 1;
+        sigSem[1].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        sigCount = 2;
+    }
+    VkCommandBufferSubmitInfo cbs[2]{};
+    cbs[0].sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    cbs[0].commandBuffer = fc.cmd;
+    cbs[1].sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    cbs[1].commandBuffer = fc.uiCmd;
+    VkSemaphoreSubmitInfo uiWait{};
+    uiWait.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    uiWait.semaphore = sc.uiSem[fc.flight];
+    uiWait.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSemaphoreSubmitInfo sceneSig{};
+    sceneSig.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    sceneSig.semaphore = sc.uiSem[fc.flight];
+    sceneSig.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo2 sceneSi{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .waitSemaphoreInfoCount = waitCount,
+        .pWaitSemaphoreInfos = waitSem,
+        .commandBufferInfoCount = split ? 1u : 1u,
+        .pCommandBufferInfos = cbs,
+        .signalSemaphoreInfoCount = split ? 1u : sigCount,
+        .pSignalSemaphoreInfos = split ? &sceneSig : sigSem,
     };
-    VkSemaphoreSubmitInfo sigSem{
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-        .semaphore = sc.renderSem[fc.imageIndex],
-        .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-    };
-    VkCommandBufferSubmitInfo cbsi{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-        .commandBuffer = fc.cmd,
-    };
-    VkSubmitInfo2 si{
+    VkSubmitInfo2 uiSi{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
         .waitSemaphoreInfoCount = 1,
-        .pWaitSemaphoreInfos = &waitSem,
+        .pWaitSemaphoreInfos = &uiWait,
         .commandBufferInfoCount = 1,
-        .pCommandBufferInfos = &cbsi,
-        .signalSemaphoreInfoCount = 1,
-        .pSignalSemaphoreInfos = &sigSem,
+        .pCommandBufferInfos = &cbs[1],
+        .signalSemaphoreInfoCount = sigCount,
+        .pSignalSemaphoreInfos = sigSem,
     };
     // Очередь общая на все окна — несколько окон могут писать кадр параллельно (job system,
     // core/host/Host.cpp), submit/present на одной VkQueue из разных потоков без внешней
     // синхронизации запрещён спецификацией.
     std::unique_lock<std::mutex> queueLock(d.queueMutex);
-    const VkResult sub = vkQueueSubmit2(d.graphicsQueue, 1, &si, sc.flightFence[fc.flight]);
+    if (deviceLost(d)) {
+        spdlog::error("RHI submit skipped, device lost");
+        return false;
+    }
+    VkResult sub = vkQueueSubmit2(d.graphicsQueue, 1, &sceneSi, split ? VK_NULL_HANDLE : sc.flightFence[fc.flight]);
+    if (sub == VK_SUCCESS && split) {
+        sub = vkQueueSubmit2(d.graphicsQueue, 1, &uiSi, sc.flightFence[fc.flight]);
+    }
+    if (sub == VK_SUCCESS && sc.orderSem != VK_NULL_HANDLE) {
+        sc.orderValue += 1;
+    }
     if (sub != VK_SUCCESS) {
         spdlog::error("vkQueueSubmit2 failed: {}", static_cast<int>(sub));
+        if (sub == VK_ERROR_DEVICE_LOST || sub == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+            deviceMarkLost(d, "vkQueueSubmit2", static_cast<int32_t>(sub));
+        }
         return false;
     }
 
@@ -354,6 +499,9 @@ bool swapchainSubmitPresent(Swapchain& sc, Device& d, FrameContext& fc, bool pac
     }
     if (pres != VK_SUCCESS) {
         spdlog::error("vkQueuePresentKHR {}", static_cast<int>(pres));
+        if (pres == VK_ERROR_DEVICE_LOST || pres == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+            deviceMarkLost(d, "vkQueuePresentKHR", static_cast<int32_t>(pres));
+        }
         return false;
     }
     if (sc.clickTick != 0 && d.caps.presentWait && d.caps.presentId) {
@@ -365,7 +513,7 @@ bool swapchainSubmitPresent(Swapchain& sc, Device& d, FrameContext& fc, bool pac
         sc.clickTick = 0;
     }
 
-    if (pace && d.caps.presentWait && vkWaitForPresentKHR != nullptr) {
+    if (pace && sc.asked.present != Present::Immediate && d.caps.presentWait && vkWaitForPresentKHR != nullptr) {
         vkWaitForPresentKHR(d.device, sc.handle, pid, UINT64_MAX);
     }
 

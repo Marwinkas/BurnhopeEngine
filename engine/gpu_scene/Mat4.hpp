@@ -41,6 +41,18 @@ inline Mat4 mat4PerspectiveYUpRh(float fovYRad, float aspect, float zn, float zf
     return r;
 }
 
+// Infinite reverse-Z. Near is 1, far is 0. Point and sun shadows stay on the finite matrix.
+inline Mat4 mat4PerspectiveReverseZ(float fovYRad, float aspect, float zn) {
+    Mat4 r{};
+    const float th = std::tan(fovYRad * 0.5f);
+    r.m[0] = 1.0f / (aspect * th);
+    r.m[5] = -1.0f / th;
+    r.m[10] = 0.0f;
+    r.m[11] = -1.0f;
+    r.m[14] = zn;
+    return r;
+}
+
 inline Mat4 mat4LookAtYUpRh(float ex, float ey, float ez, float tx, float ty, float tz) {
     float fx = tx - ex;
     float fy = ty - ey;
@@ -49,10 +61,17 @@ inline Mat4 mat4LookAtYUpRh(float ex, float ey, float ez, float tx, float ty, fl
     fx /= fl;
     fy /= fl;
     fz /= fl;
-    // right = forward × up(0,1,0)
-    float sx = fy * 0.0f - fz * 1.0f;
-    float sy = fz * 0.0f - fx * 0.0f;
-    float sz = fx * 1.0f - fy * 0.0f;
+    float upx = 0.0f;
+    float upy = 1.0f;
+    float upz = 0.0f;
+    if (std::fabs(fy) > 0.999f) {
+        upx = 0.0f;
+        upy = 0.0f;
+        upz = fy > 0.0f ? -1.0f : 1.0f;
+    }
+    float sx = fy * upz - fz * upy;
+    float sy = fz * upx - fx * upz;
+    float sz = fx * upy - fy * upx;
     const float sl = std::sqrt(sx * sx + sy * sy + sz * sz);
     sx /= sl;
     sy /= sl;

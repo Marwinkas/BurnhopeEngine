@@ -97,6 +97,8 @@ void addText(UiState& s, uint16_t id, const char* text) {
     flex->width = uiMeasure(s, t.bytes, t.len, t.len);
     flex->heightMode = static_cast<uint8_t>(UiSize::Px);
     flex->height = s.look.glyphH;
+    s.layoutDirty = true;
+    s.visualDirty = true;
 }
 
 void tokenRgb(const UiLook& look, UiToken token, float& r, float& g, float& b) {

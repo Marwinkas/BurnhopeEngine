@@ -1,14 +1,9 @@
 #include "gpu_scene/MeshletGpu.hpp"
+#include "gpu_scene/Camera.hpp"
 
-#include <cmath>
 #include <cstring>
 
 namespace burnhope {
-namespace {
-
-constexpr float kPi = 3.14159265358979323846f;
-
-} // namespace
 
 bool meshletGpuCreate(MeshletGpu& s, Device& d) {
     meshletGpuDestroy(s, d);
@@ -26,7 +21,7 @@ bool meshletGpuCreate(MeshletGpu& s, Device& d) {
             VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true)
         || !gpuBufferCreate(s.indices, d, sizeof(indices),
             VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true)
-        || !gpuBufferCreate(s.frame, d, sizeof(FrameGPU), usage, true)) {
+        || !gpuBufferCreate(s.frame, d, sizeof(FrameView), usage, true)) {
         meshletGpuDestroy(s, d);
         return false;
     }
@@ -45,15 +40,13 @@ void meshletGpuWriteFrame(MeshletGpu& s, VkExtent2D extent) {
     if (s.frame.mapped == nullptr || extent.width == 0 || extent.height == 0) {
         return;
     }
-    const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
-    const Mat4 proj = mat4PerspectiveYUpRh(kPi / 3.0f, aspect, 0.1f, 50.0f);
-    const Mat4 view = mat4LookAtYUpRh(0.0f, 0.35f, 2.4f, 0.0f, 0.05f, 0.0f);
-    const Mat4 vp = mat4Mul(proj, view);
-    const Mat4 inv = mat4Inverse(vp);
+    CameraPose pose{};
+    pose.aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
+    const CameraCull cam = cameraCullBuild(pose, nullptr);
 
-    FrameGPU f{};
-    std::memcpy(f.viewProj, vp.m, sizeof(vp.m));
-    std::memcpy(f.invViewProj, inv.m, sizeof(inv.m));
+    FrameView f{};
+    std::memcpy(f.viewProj, cam.viewProj.m, sizeof(cam.viewProj.m));
+    std::memcpy(f.invViewProj, cam.invViewProj.m, sizeof(cam.invViewProj.m));
     const float sx = 0.35f;
     const float sy = 0.85f;
     const float sz = 0.40f;
@@ -66,9 +59,9 @@ void meshletGpuWriteFrame(MeshletGpu& s, VkExtent2D extent) {
     f.sunColor[1] = 0.96f;
     f.sunColor[2] = 0.90f;
     f.sunColor[3] = 1.0f;
-    f.cameraPos[0] = 0.0f;
-    f.cameraPos[1] = 0.35f;
-    f.cameraPos[2] = 2.4f;
+    f.cameraPos[0] = cam.pos[0];
+    f.cameraPos[1] = cam.pos[1];
+    f.cameraPos[2] = cam.pos[2];
     f.invExtent[0] = 1.0f / static_cast<float>(extent.width);
     f.invExtent[1] = 1.0f / static_cast<float>(extent.height);
     f.extent[0] = extent.width;

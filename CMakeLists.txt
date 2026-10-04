@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 project(BurnhopeEngine LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -10,6 +10,7 @@ find_package(Vulkan REQUIRED)
 find_package(Freetype REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(Threads REQUIRED)
+find_package(assimp REQUIRED)
 
 include(FetchContent)
 
@@ -84,7 +85,7 @@ set(BH_DEFS
     SPDLOG_NO_EXCEPTIONS
     FMT_EXCEPTIONS=0
 )
-set(BH_OPTS -Wall -Wextra -Wpedantic -std=c++2c -fno-rtti -fno-exceptions -Wno-missing-field-initializers)
+set(BH_OPTS -Wall -Wextra -Wpedantic -std=c++26 -fno-rtti -fno-exceptions -Wno-missing-field-initializers)
 
 function(bh_module name)
     add_library(bh_${name} OBJECT ${ARGN})
@@ -128,6 +129,12 @@ if(BH_TSAN)
     add_link_options(-fsanitize=thread)
 endif()
 bh_module(memory   core/memory/FrameArena.cpp)
+bh_module(wasm core/wasm/WasmHost.cpp)
+bh_module(io core/io/File.cpp)
+bh_module(asset core/asset/AssimpImporter.cpp)
+target_link_libraries(bh_asset PUBLIC assimp::assimp meshoptimizer bh_platform)
+set_source_files_properties(core/asset/AssimpImporter.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions;-frtti")
+target_link_libraries(bh_wasm PUBLIC bh_memory)
 bh_module(rhi
     core/rhi/Device.cpp
     core/rhi/Swapchain.cpp
@@ -136,6 +143,7 @@ bh_module(rhi
     core/rhi/DescriptorHeap.cpp
     core/rhi/ShaderObject.cpp
     core/rhi/MeshDraw.cpp
+    core/rhi/GpuProfiler.cpp
     core/rhi/VolkVma.cpp
 )
 find_program(ISPC_EXECUTABLE ispc REQUIRED)
@@ -167,17 +175,32 @@ target_include_directories(bh_image PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Libraries/include
     ${CMAKE_CURRENT_SOURCE_DIR}/Libraries/ispc_texcomp
 )
-target_link_libraries(bh_image PUBLIC bh_rhi bh_texcomp)
+target_link_libraries(bh_image PUBLIC bh_rhi bh_texcomp bh_platform)
 set_source_files_properties(core/image/ImageFile.cpp PROPERTIES COMPILE_OPTIONS "-w")
 bh_module(gpu_scene engine/gpu_scene/MeshletGpu.cpp)
 target_include_directories(bh_gpu_scene PUBLIC ${BH_ENGINE})
 bh_module(render
     engine/render/Visbuffer.cpp
     engine/render/Shade.cpp
+    engine/render/Ssrc.cpp
+    engine/render/Radiance.cpp
     engine/render/SSR.cpp
+    engine/render/Cube.cpp
+    engine/render/Cull.cpp
     engine/render/Tonemap.cpp
+    engine/render/PassClusters.cpp
+    engine/render/PassCull.cpp
+    engine/render/PassSun.cpp
+    engine/render/PassPoints.cpp
+    engine/render/PassVis.cpp
+    engine/render/PassShade.cpp
+    engine/render/PassRadiance.cpp
+    engine/render/PassSsr.cpp
+    engine/render/PassTonemap.cpp
+    engine/render/SceneFrame.cpp
 )
 target_include_directories(bh_render PUBLIC ${BH_ENGINE})
+target_compile_definitions(bh_render PUBLIC "BH_SHADER_DIR=\"${CMAKE_CURRENT_BINARY_DIR}/shaders\"")
 bh_module(ui
     core/ui/Canvas.cpp
     core/ui/Font.cpp
@@ -211,7 +234,7 @@ bh_module(app
     demo/app/Engine.cpp
     demo/app/Shell.cpp
 )
-target_include_directories(bh_app PUBLIC ${BH_DEMO})
+target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE})
 target_link_libraries(bh_ui PUBLIC bh_image yogacore flecs_static Freetype::Freetype)
 target_compile_options(bh_ui PRIVATE -Wno-deprecated-declarations)
 target_compile_definitions(bh_ui PRIVATE
@@ -232,29 +255,171 @@ set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/engine/render)
 add_custom_command(
     OUTPUT
         ${SHADER_OUT_DIR}/visbuffer.mesh.spv
+        ${SHADER_OUT_DIR}/visbuffer.mesh1.spv
+        ${SHADER_OUT_DIR}/visbuffer.late.mesh.spv
+        ${SHADER_OUT_DIR}/visbuffer.late1.mesh.spv
+        ${SHADER_OUT_DIR}/visbuffer.shadow0.mesh.spv
+        ${SHADER_OUT_DIR}/visbuffer.shadow1.mesh.spv
+        ${SHADER_OUT_DIR}/visbuffer.shadow2.mesh.spv
         ${SHADER_OUT_DIR}/visbuffer.frag.spv
         ${SHADER_OUT_DIR}/shade.comp.spv
+        ${SHADER_OUT_DIR}/resolve.comp.spv
+        ${SHADER_OUT_DIR}/cull.comp.spv
+        ${SHADER_OUT_DIR}/cull.comp1.spv
+        ${SHADER_OUT_DIR}/cull.late.spv
+        ${SHADER_OUT_DIR}/cull.late1.spv
+        ${SHADER_OUT_DIR}/cull.clear.spv
+        ${SHADER_OUT_DIR}/cull.clear1.spv
+        ${SHADER_OUT_DIR}/cluster.comp.spv
+        ${SHADER_OUT_DIR}/shadowcull.comp.spv
+        ${SHADER_OUT_DIR}/shadowcull.clear.spv
         ${SHADER_OUT_DIR}/ssr.comp.spv
+        ${SHADER_OUT_DIR}/ssr.up.comp.spv
+        ${SHADER_OUT_DIR}/gtao.comp.spv
+        ${SHADER_OUT_DIR}/cmaa2.comp.spv
+        ${SHADER_OUT_DIR}/bloom0.comp.spv
+        ${SHADER_OUT_DIR}/bloom1.comp.spv
+        ${SHADER_OUT_DIR}/bloom2.comp.spv
+        ${SHADER_OUT_DIR}/bloom3.comp.spv
+        ${SHADER_OUT_DIR}/bloomup0.comp.spv
+        ${SHADER_OUT_DIR}/bloomup1.comp.spv
+        ${SHADER_OUT_DIR}/bloomup2.comp.spv
+        ${SHADER_OUT_DIR}/hiz0.comp.spv
+        ${SHADER_OUT_DIR}/hiz1.comp.spv
+        ${SHADER_OUT_DIR}/hiz2.comp.spv
+        ${SHADER_OUT_DIR}/hiz3.comp.spv
+        ${SHADER_OUT_DIR}/hiz4.comp.spv
+        ${SHADER_OUT_DIR}/hiz5.comp.spv
+        ${SHADER_OUT_DIR}/hizmax0.comp.spv
+        ${SHADER_OUT_DIR}/hizmax1.comp.spv
+        ${SHADER_OUT_DIR}/hizmax2.comp.spv
+        ${SHADER_OUT_DIR}/hizmax3.comp.spv
+        ${SHADER_OUT_DIR}/hizmax4.comp.spv
+        ${SHADER_OUT_DIR}/hizmax5.comp.spv
+        ${SHADER_OUT_DIR}/visbuffer.point0.mesh.spv
+        ${SHADER_OUT_DIR}/visbuffer.point1.mesh.spv
+        ${SHADER_OUT_DIR}/visbuffer.point2.mesh.spv
+        ${SHADER_OUT_DIR}/cube0.mesh.spv
+        ${SHADER_OUT_DIR}/cube1.mesh.spv
+        ${SHADER_OUT_DIR}/cube2.mesh.spv
+        ${SHADER_OUT_DIR}/cube3.mesh.spv
+        ${SHADER_OUT_DIR}/cube4.mesh.spv
+        ${SHADER_OUT_DIR}/cube5.mesh.spv
+        ${SHADER_OUT_DIR}/cube.frag.spv
+        ${SHADER_OUT_DIR}/ssrc0.comp.spv
+        ${SHADER_OUT_DIR}/ssrc1.comp.spv
+        ${SHADER_OUT_DIR}/ssrc2.comp.spv
+        ${SHADER_OUT_DIR}/ssrc3.comp.spv
+        ${SHADER_OUT_DIR}/ssrc.apply.comp.spv
+        ${SHADER_OUT_DIR}/radiance.trace.comp.spv
+        ${SHADER_OUT_DIR}/radiance.apply.comp.spv
         ${SHADER_OUT_DIR}/tonemap.mesh.spv
         ${SHADER_OUT_DIR}/tonemap.frag.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -target spirv -profile spirv_1_6 -stage mesh -entry visMesh -o ${SHADER_OUT_DIR}/visbuffer.mesh.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -target spirv -profile spirv_1_6 -stage fragment -entry visFs -o ${SHADER_OUT_DIR}/visbuffer.frag.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade.slang -target spirv -profile spirv_1_6 -stage compute -entry shadeCs -o ${SHADER_OUT_DIR}/shade.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/ssr.slang -target spirv -profile spirv_1_6 -stage compute -entry ssrCs -o ${SHADER_OUT_DIR}/ssr.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry visMesh -DCULL_FLIGHT=0 -o ${SHADER_OUT_DIR}/visbuffer.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry visMesh -DCULL_FLIGHT=1 -o ${SHADER_OUT_DIR}/visbuffer.mesh1.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry visMesh -DLATE=1 -DCULL_FLIGHT=0 -o ${SHADER_OUT_DIR}/visbuffer.late.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry visMesh -DLATE=1 -DCULL_FLIGHT=1 -o ${SHADER_OUT_DIR}/visbuffer.late1.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry shadowMesh -DSHADOW_CASCADE=0 -o ${SHADER_OUT_DIR}/visbuffer.shadow0.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry shadowMesh -DSHADOW_CASCADE=1 -o ${SHADER_OUT_DIR}/visbuffer.shadow1.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry shadowMesh -DSHADOW_CASCADE=2 -o ${SHADER_OUT_DIR}/visbuffer.shadow2.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry visFs -o ${SHADER_OUT_DIR}/visbuffer.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadeCs -o ${SHADER_OUT_DIR}/shade.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/resolve.slang -target spirv -profile spirv_1_6 -stage compute -entry resolveCs -o ${SHADER_OUT_DIR}/resolve.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry meshletCull -DCULL_FLIGHT=0 -o ${SHADER_OUT_DIR}/cull.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry meshletCull -DCULL_FLIGHT=1 -o ${SHADER_OUT_DIR}/cull.comp1.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry meshletCullLate -DCULL_FLIGHT=0 -o ${SHADER_OUT_DIR}/cull.late.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry meshletCullLate -DCULL_FLIGHT=1 -o ${SHADER_OUT_DIR}/cull.late1.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cullClear -DCULL_FLIGHT=0 -o ${SHADER_OUT_DIR}/cull.clear.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cullClear -DCULL_FLIGHT=1 -o ${SHADER_OUT_DIR}/cull.clear1.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cluster.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry clusterCs -o ${SHADER_OUT_DIR}/cluster.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shadowcull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadowCull -o ${SHADER_OUT_DIR}/shadowcull.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shadowcull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadowClear -o ${SHADER_OUT_DIR}/shadowcull.clear.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/ssr.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry ssrCs -o ${SHADER_OUT_DIR}/ssr.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/ssr.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry ssrUp -o ${SHADER_OUT_DIR}/ssr.up.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gtao.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry gtaoCs -o ${SHADER_OUT_DIR}/gtao.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cmaa2.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cmaa2Cs -o ${SHADER_OUT_DIR}/cmaa2.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=0 -o ${SHADER_OUT_DIR}/hiz0.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=1 -o ${SHADER_OUT_DIR}/hiz1.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=2 -o ${SHADER_OUT_DIR}/hiz2.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=3 -o ${SHADER_OUT_DIR}/hiz3.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=4 -o ${SHADER_OUT_DIR}/hiz4.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=5 -o ${SHADER_OUT_DIR}/hiz5.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=0 -DHIZ_MAX=1 -o ${SHADER_OUT_DIR}/hizmax0.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=1 -DHIZ_MAX=1 -o ${SHADER_OUT_DIR}/hizmax1.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=2 -DHIZ_MAX=1 -o ${SHADER_OUT_DIR}/hizmax2.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=3 -DHIZ_MAX=1 -o ${SHADER_OUT_DIR}/hizmax3.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=4 -DHIZ_MAX=1 -o ${SHADER_OUT_DIR}/hizmax4.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=5 -DHIZ_MAX=1 -o ${SHADER_OUT_DIR}/hizmax5.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry pointMesh -DPOINT_LIGHT=0 -o ${SHADER_OUT_DIR}/visbuffer.point0.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry pointMesh -DPOINT_LIGHT=1 -o ${SHADER_OUT_DIR}/visbuffer.point1.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry pointMesh -DPOINT_LIGHT=2 -o ${SHADER_OUT_DIR}/visbuffer.point2.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry cubeMesh -DCUBE_FACE=0 -o ${SHADER_OUT_DIR}/cube0.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry cubeMesh -DCUBE_FACE=1 -o ${SHADER_OUT_DIR}/cube1.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry cubeMesh -DCUBE_FACE=2 -o ${SHADER_OUT_DIR}/cube2.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry cubeMesh -DCUBE_FACE=3 -o ${SHADER_OUT_DIR}/cube3.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry cubeMesh -DCUBE_FACE=4 -o ${SHADER_OUT_DIR}/cube4.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry cubeMesh -DCUBE_FACE=5 -o ${SHADER_OUT_DIR}/cube5.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry cubeFs -o ${SHADER_OUT_DIR}/cube.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/ssrc.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry ssrcCs -DCASCADE=0 -o ${SHADER_OUT_DIR}/ssrc0.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/ssrc.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry ssrcCs -DCASCADE=1 -o ${SHADER_OUT_DIR}/ssrc1.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/ssrc.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry ssrcCs -DCASCADE=2 -o ${SHADER_OUT_DIR}/ssrc2.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/ssrc.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry ssrcCs -DCASCADE=3 -o ${SHADER_OUT_DIR}/ssrc3.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/ssrc.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry ssrcApply -o ${SHADER_OUT_DIR}/ssrc.apply.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/radiance.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcTrace -o ${SHADER_OUT_DIR}/radiance.trace.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/radiance.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcApply -o ${SHADER_OUT_DIR}/radiance.apply.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -target spirv -profile spirv_1_6 -stage mesh -entry tonemapMesh -o ${SHADER_OUT_DIR}/tonemap.mesh.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -target spirv -profile spirv_1_6 -stage fragment -entry tonemapFs -o ${SHADER_OUT_DIR}/tonemap.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomDown -DBLOOM_LEVEL=0 -o ${SHADER_OUT_DIR}/bloom0.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomDown -DBLOOM_LEVEL=1 -o ${SHADER_OUT_DIR}/bloom1.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomDown -DBLOOM_LEVEL=2 -o ${SHADER_OUT_DIR}/bloom2.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomDown -DBLOOM_LEVEL=3 -o ${SHADER_OUT_DIR}/bloom3.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomUp -DBLOOM_LEVEL=0 -o ${SHADER_OUT_DIR}/bloomup0.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomUp -DBLOOM_LEVEL=1 -o ${SHADER_OUT_DIR}/bloomup1.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomUp -DBLOOM_LEVEL=2 -o ${SHADER_OUT_DIR}/bloomup2.comp.spv
     DEPENDS
         ${SHADER_DIR}/visbuffer.slang
+        ${SHADER_DIR}/frame.slang
         ${SHADER_DIR}/shade.slang
+        ${SHADER_DIR}/resolve.slang
+        ${SHADER_DIR}/cull.slang
+        ${SHADER_DIR}/cluster.slang
+        ${SHADER_DIR}/shadowcull.slang
         ${SHADER_DIR}/ssr.slang
+        ${SHADER_DIR}/gtao.slang
+        ${SHADER_DIR}/cmaa2.slang
+        ${SHADER_DIR}/bloom.slang
+        ${SHADER_DIR}/hiz.slang
+        ${SHADER_DIR}/cube.slang
+        ${SHADER_DIR}/ssrc.slang
+        ${SHADER_DIR}/radiance.slang
         ${SHADER_DIR}/tonemap.slang
     COMMENT "slangc vis/shade/ssr/tonemap → SPIR-V 1.6"
 )
 add_custom_target(BurnhopeSpv ALL DEPENDS
     ${SHADER_OUT_DIR}/visbuffer.mesh.spv
+    ${SHADER_OUT_DIR}/visbuffer.mesh1.spv
+    ${SHADER_OUT_DIR}/visbuffer.late.mesh.spv
+    ${SHADER_OUT_DIR}/visbuffer.late1.mesh.spv
     ${SHADER_OUT_DIR}/visbuffer.frag.spv
     ${SHADER_OUT_DIR}/shade.comp.spv
+    ${SHADER_OUT_DIR}/resolve.comp.spv
+    ${SHADER_OUT_DIR}/cull.comp.spv
+    ${SHADER_OUT_DIR}/cull.comp1.spv
+    ${SHADER_OUT_DIR}/cull.late.spv
+    ${SHADER_OUT_DIR}/cull.late1.spv
+    ${SHADER_OUT_DIR}/cull.clear.spv
+    ${SHADER_OUT_DIR}/cull.clear1.spv
     ${SHADER_OUT_DIR}/ssr.comp.spv
+    ${SHADER_OUT_DIR}/ssr.up.comp.spv
+    ${SHADER_OUT_DIR}/gtao.comp.spv
+    ${SHADER_OUT_DIR}/cmaa2.comp.spv
+    ${SHADER_OUT_DIR}/ssrc0.comp.spv
+    ${SHADER_OUT_DIR}/ssrc1.comp.spv
+    ${SHADER_OUT_DIR}/ssrc2.comp.spv
+    ${SHADER_OUT_DIR}/ssrc3.comp.spv
+    ${SHADER_OUT_DIR}/ssrc.apply.comp.spv
+    ${SHADER_OUT_DIR}/radiance.trace.comp.spv
+    ${SHADER_OUT_DIR}/radiance.apply.comp.spv
     ${SHADER_OUT_DIR}/tonemap.mesh.spv
     ${SHADER_OUT_DIR}/tonemap.frag.spv
 )
@@ -265,28 +430,57 @@ add_custom_command(
         ${SHADER_OUT_DIR}/ui.vert.spv
         ${SHADER_OUT_DIR}/ui.frag.spv
         ${SHADER_OUT_DIR}/ui.mesh.spv
+        ${SHADER_OUT_DIR}/msdf.mesh.spv
+        ${SHADER_OUT_DIR}/msdf.frag.spv
     COMMAND ${SLANGC_EXECUTABLE} ${UI_SHADER} -target spirv -profile spirv_1_6 -stage vertex -entry uiVs -o ${SHADER_OUT_DIR}/ui.vert.spv
     COMMAND ${SLANGC_EXECUTABLE} ${UI_SHADER} -target spirv -profile spirv_1_6 -stage fragment -entry uiFs -o ${SHADER_OUT_DIR}/ui.frag.spv
     COMMAND ${SLANGC_EXECUTABLE} ${UI_SHADER} -target spirv -profile spirv_1_6 -stage mesh -entry uiMs -o ${SHADER_OUT_DIR}/ui.mesh.spv
-    DEPENDS ${UI_SHADER}
-    COMMENT "slangc ui → SPIR-V 1.6"
+    COMMAND ${SLANGC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/core/text/msdf.slang -target spirv -profile spirv_1_6 -stage mesh -entry glyphMs -o ${SHADER_OUT_DIR}/msdf.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/core/text/msdf.slang -target spirv -profile spirv_1_6 -stage fragment -entry glyphFs -o ${SHADER_OUT_DIR}/msdf.frag.spv
+    DEPENDS ${UI_SHADER} ${CMAKE_CURRENT_SOURCE_DIR}/core/text/msdf.slang
+    COMMENT "slangc ui + msdf → SPIR-V 1.6"
 )
 add_custom_target(UiSpv ALL DEPENDS
     ${SHADER_OUT_DIR}/ui.vert.spv
     ${SHADER_OUT_DIR}/ui.frag.spv
     ${SHADER_OUT_DIR}/ui.mesh.spv
+    ${SHADER_OUT_DIR}/msdf.mesh.spv
+    ${SHADER_OUT_DIR}/msdf.frag.spv
 )
 
 set(COMPRESS_SHADER ${CMAKE_CURRENT_SOURCE_DIR}/core/image/compress.slang)
 add_custom_command(
-    OUTPUT ${SHADER_OUT_DIR}/compress.comp.spv
+    OUTPUT
+        ${SHADER_OUT_DIR}/compress.comp.spv
+        ${SHADER_OUT_DIR}/compress_bc3.comp.spv
+        ${SHADER_OUT_DIR}/compress_bc4.comp.spv
+        ${SHADER_OUT_DIR}/compress_bc5.comp.spv
+        ${SHADER_OUT_DIR}/compress_bc7.comp.spv
+        ${SHADER_OUT_DIR}/compress_bc6h.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile spirv_1_6 -stage compute -entry csBc1 -o ${SHADER_OUT_DIR}/compress.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile spirv_1_6 -stage compute -entry csBc3 -o ${SHADER_OUT_DIR}/compress_bc3.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile spirv_1_6 -stage compute -entry csBc4 -o ${SHADER_OUT_DIR}/compress_bc4.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile spirv_1_6 -stage compute -entry csBc5 -o ${SHADER_OUT_DIR}/compress_bc5.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile spirv_1_6 -stage compute -entry csBc7 -o ${SHADER_OUT_DIR}/compress_bc7.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile spirv_1_6 -stage compute -entry csBc6h -o ${SHADER_OUT_DIR}/compress_bc6h.comp.spv
     DEPENDS ${COMPRESS_SHADER}
-    COMMENT "slangc compress (GPU BC1) → SPIR-V 1.6"
+    COMMENT "slangc compress BC1/3/4/5/7 + BC6H mode 11"
 )
-add_custom_target(CompressSpv ALL DEPENDS ${SHADER_OUT_DIR}/compress.comp.spv)
+add_custom_target(CompressSpv ALL DEPENDS
+    ${SHADER_OUT_DIR}/compress.comp.spv
+    ${SHADER_OUT_DIR}/compress_bc3.comp.spv
+    ${SHADER_OUT_DIR}/compress_bc4.comp.spv
+    ${SHADER_OUT_DIR}/compress_bc5.comp.spv
+    ${SHADER_OUT_DIR}/compress_bc7.comp.spv
+    ${SHADER_OUT_DIR}/compress_bc6h.comp.spv
+)
 target_compile_definitions(bh_image PRIVATE
     "BH_COMPRESS_BC1=\"${SHADER_OUT_DIR}/compress.comp.spv\""
+    "BH_COMPRESS_BC3=\"${SHADER_OUT_DIR}/compress_bc3.comp.spv\""
+    "BH_COMPRESS_BC4=\"${SHADER_OUT_DIR}/compress_bc4.comp.spv\""
+    "BH_COMPRESS_BC5=\"${SHADER_OUT_DIR}/compress_bc5.comp.spv\""
+    "BH_COMPRESS_BC7=\"${SHADER_OUT_DIR}/compress_bc7.comp.spv\""
+    "BH_COMPRESS_BC6H=\"${SHADER_OUT_DIR}/compress_bc6h.comp.spv\""
 )
 add_dependencies(bh_image CompressSpv)
 
@@ -311,11 +505,11 @@ add_custom_target(UiBin DEPENDS ${UI_BIN_DIR}/shell.uib ${UI_BIN_DIR}/sample.uib
 
 add_executable(BurnhopeEngine demo/app/Main.cpp demo/Sample.cpp)
 target_link_libraries(BurnhopeEngine PRIVATE
-    bh_app bh_host bh_files bh_ui bh_image bh_rhi bh_memory bh_platform
+    bh_app bh_host bh_files bh_ui bh_image bh_rhi bh_memory bh_platform bh_render bh_gpu_scene bh_asset bh_io
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
-target_include_directories(BurnhopeEngine PRIVATE ${BH_CORE} ${BH_DEMO} ${vma_SOURCE_DIR}/include)
+target_include_directories(BurnhopeEngine PRIVATE ${BH_CORE} ${BH_ENGINE} ${BH_DEMO} ${vma_SOURCE_DIR}/include)
 target_compile_definitions(BurnhopeEngine PRIVATE ${BH_DEFS}
     "BH_UI_SHELL=\"${UI_BIN_DIR}/shell.uib\""
     "BH_UI_SAMPLE=\"${UI_BIN_DIR}/sample.uib\""
@@ -323,12 +517,23 @@ target_compile_definitions(BurnhopeEngine PRIVATE ${BH_DEFS}
 target_compile_options(BurnhopeEngine PRIVATE ${BH_OPTS})
 add_dependencies(BurnhopeEngine BurnhopeSpv UiSpv UiBin)
 
+add_executable(BurnhopeHostTick tests/HostTick.cpp)
+target_link_libraries(BurnhopeHostTick PRIVATE
+    bh_host bh_ui bh_image bh_rhi bh_memory bh_platform
+    yogacore flecs_static
+    SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads Freetype::Freetype
+)
+target_include_directories(BurnhopeHostTick PRIVATE ${BH_CORE} ${vma_SOURCE_DIR}/include)
+target_compile_definitions(BurnhopeHostTick PRIVATE ${BH_DEFS})
+target_compile_options(BurnhopeHostTick PRIVATE ${BH_OPTS})
+add_dependencies(BurnhopeHostTick UiSpv)
+
 add_executable(BurnhopeTest tests/Core.cpp)
 target_link_libraries(BurnhopeTest PRIVATE
-    bh_files bh_ui bh_image bh_rhi bh_memory bh_platform
+    bh_files bh_ui bh_image bh_rhi bh_memory bh_platform bh_wasm bh_io
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
-target_include_directories(BurnhopeTest PRIVATE ${BH_CORE} ${vma_SOURCE_DIR}/include)
+target_include_directories(BurnhopeTest PRIVATE ${BH_CORE} ${BH_ENGINE} ${vma_SOURCE_DIR}/include)
 target_compile_options(BurnhopeTest PRIVATE ${BH_OPTS})
 add_dependencies(BurnhopeTest UiSpv)

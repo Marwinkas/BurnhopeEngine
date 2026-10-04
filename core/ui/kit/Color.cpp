@@ -1,4 +1,5 @@
 #include "ui/widget/Detail.hpp"
+#include "color/Color.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -7,41 +8,15 @@
 namespace burnhope {
 
 void hsvToRgb(float h, float s, float v, float& r, float& g, float& b) {
-    float hh = h * 6.0f;
-    if (hh >= 6.0f) {
-        hh = 0.0f;
-    }
-    const int i = static_cast<int>(hh);
-    const float f = hh - static_cast<float>(i);
-    const float p = v * (1.0f - s);
-    const float q = v * (1.0f - f * s);
-    const float t = v * (1.0f - (1.0f - f) * s);
-    if (i == 0) { r = v; g = t; b = p; }
-    else if (i == 1) { r = q; g = v; b = p; }
-    else if (i == 2) { r = p; g = v; b = t; }
-    else if (i == 3) { r = p; g = q; b = v; }
-    else if (i == 4) { r = t; g = p; b = v; }
-    else { r = v; g = p; b = q; }
+    ColorLinear color{};
+    colorHsvToLinear(h, s, v, color);
+    r = color.r;
+    g = color.g;
+    b = color.b;
 }
 
 void rgbToHsv(float r, float g, float b, float& h, float& s, float& v) {
-    const float maxc = r > g ? (r > b ? r : b) : (g > b ? g : b);
-    const float minc = r < g ? (r < b ? r : b) : (g < b ? g : b);
-    v = maxc;
-    const float d = maxc - minc;
-    s = maxc <= 0.0001f ? 0.0f : d / maxc;
-    if (d <= 0.0001f) {
-        h = 0.0f;
-        return;
-    }
-    if (maxc == r) {
-        h = (g - b) / d + (g < b ? 6.0f : 0.0f);
-    } else if (maxc == g) {
-        h = (b - r) / d + 2.0f;
-    } else {
-        h = (r - g) / d + 4.0f;
-    }
-    h /= 6.0f;
+    colorLinearToHsv(r, g, b, h, s, v);
 }
 
 void setRange(UiState& s, uint16_t id, float value) {

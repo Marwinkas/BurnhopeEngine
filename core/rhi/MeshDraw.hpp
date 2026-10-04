@@ -22,8 +22,15 @@ struct MeshDrawDesc {
     bool vertNullMeshStage = false;
     // Mesh path: workgroup count passed to vkCmdDrawMeshTasksEXT(cmd, groupCount, 1, 1).
     uint32_t groupCount = 0;
+    VkBuffer indirect = VK_NULL_HANDLE;
+    VkDeviceSize indirectOffset = 0;
     // Vertex-pull path: raw vertex count passed to vkCmdDraw(cmd, vertexCount, 1, 0, 0).
     uint32_t vertexCount = 0;
+    // Optional push before the one draw. Visbuffer puts the instance BDA here.
+    const void* pushData = nullptr;
+    uint32_t pushBytes = 0;
+    VkPipelineLayout pushLayout = VK_NULL_HANDLE;
+    VkShaderStageFlags pushStages = 0;
 };
 
 // Binds shaders and issues exactly one draw for this pass: mesh-shader groups if `mesh` is

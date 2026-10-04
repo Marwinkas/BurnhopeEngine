@@ -16,6 +16,7 @@ struct HeapLayout {
 struct DescriptorHeaps {
     HeapLayout layout{};
     GpuBuffer resources;
+    GpuBuffer resourcesFlight;
     GpuBuffer samplers;
     VkDeviceSize bufferDescSize = 0;
     VkDeviceSize imageDescSize = 0;
@@ -42,6 +43,16 @@ void descriptorHeapsDestroy(DescriptorHeaps& h, Device& d);
     VkDeviceAddress address,
     VkDeviceSize size);
 
+// Пишет дескриптор только в копию кучи этого кадра. Соседний кадр свой адрес не трогает.
+[[nodiscard]] bool heapWriteBufferFlight(
+    DescriptorHeaps& h,
+    Device& d,
+    uint32_t flight,
+    uint32_t slot,
+    VkDescriptorType type,
+    VkDeviceAddress address,
+    VkDeviceSize size);
+
 [[nodiscard]] bool heapWriteImage(
     DescriptorHeaps& h,
     Device& d,
@@ -49,7 +60,8 @@ void descriptorHeapsDestroy(DescriptorHeaps& h, Device& d);
     VkDescriptorType type,
     const GpuImage& img,
     VkImageLayout layout,
-    VkImageAspectFlags aspect);
+    VkImageAspectFlags aspect,
+    uint32_t mipLevels = 1);
 
 [[nodiscard]] bool heapWriteSampler(
     DescriptorHeaps& h,
@@ -57,7 +69,7 @@ void descriptorHeapsDestroy(DescriptorHeaps& h, Device& d);
     uint32_t slot,
     const VkSamplerCreateInfo& ci);
 
-void heapBind(VkCommandBuffer cmd, const DescriptorHeaps& h);
+void heapBind(VkCommandBuffer cmd, const DescriptorHeaps& h, uint32_t flight = 0);
 
 [[nodiscard]] uint32_t heapBufOffset(const DescriptorHeaps& h, uint32_t slot);
 [[nodiscard]] uint32_t heapImgOffset(const DescriptorHeaps& h, uint32_t slot);

@@ -17,6 +17,8 @@ struct ShaderCreateDesc {
     uint32_t mappingCount = 0;
     const VkDescriptorSetAndBindingMappingEXT* mappings = nullptr;
     const char* entry = nullptr;
+    uint32_t pushBytes = 0;
+    VkShaderStageFlags pushStages = 0;
 };
 
 [[nodiscard]] bool shaderCreate(Device& d, const ShaderCreateDesc& desc, ShaderExt& out);
@@ -39,6 +41,7 @@ void cmdSetGraphicsDynamic(
     uint32_t colorAttCount,
     bool depthTest,
     bool alphaBlend = false,
-    uint8_t blendMode = 0);
+    uint8_t blendMode = 0,
+    bool reverseDepth = false);
 
 } // namespace burnhope

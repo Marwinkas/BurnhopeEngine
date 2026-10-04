@@ -6,6 +6,21 @@
 
 namespace burnhope {
 
+float scrollContentH(const UiState& s, uint16_t inner) {
+    float bottom = s.box[inner].y + s.box[inner].h;
+    for (uint16_t id = 0; id < s.count; ++id) {
+        if (s.parentOf[id] != inner) {
+            continue;
+        }
+        const float childBottom = s.box[id].y + s.box[id].h;
+        if (childBottom > bottom) {
+            bottom = childBottom;
+        }
+    }
+    const float h = bottom - s.box[inner].y;
+    return h > 0.0f ? h : 0.0f;
+}
+
 void scrollBy(UiState& s, uint16_t id, float wheel) {
     auto* scroll = s.ent[id].try_get_mut<UiScroll>();
     if (scroll == nullptr || scroll->inner == kUiNone) {
@@ -13,7 +28,7 @@ void scrollBy(UiState& s, uint16_t id, float wheel) {
     }
     const UiVirtual* virt = s.ent[id].try_get<UiVirtual>();
     const float viewH = s.box[id].h;
-    const float contentH = virt != nullptr ? virt->count * virt->rowH : s.box[scroll->inner].h;
+    const float contentH = virt != nullptr ? virt->count * virt->rowH : scrollContentH(s, scroll->inner);
     float maxOff = contentH - viewH;
     if (maxOff < 0.0f) {
         maxOff = 0.0f;
@@ -45,7 +60,7 @@ bool scrollThumb(const UiState& s, uint16_t id, UiBox& thumb) {
     }
     const float viewH = s.box[id].h;
     const UiVirtual* virtThumb = s.ent[id].try_get<UiVirtual>();
-    const float contentH = virtThumb != nullptr ? virtThumb->count * virtThumb->rowH : s.box[scroll->inner].h;
+    const float contentH = virtThumb != nullptr ? virtThumb->count * virtThumb->rowH : scrollContentH(s, scroll->inner);
     if (viewH < 8.0f || contentH <= viewH + 1.0f) {
         return false;
     }
@@ -79,7 +94,7 @@ void dragScroll(UiState& s, uint16_t id, float y) {
     }
     const float viewH = s.box[id].h;
     const UiVirtual* virtDrag = s.ent[id].try_get<UiVirtual>();
-    const float contentH = virtDrag != nullptr ? virtDrag->count * virtDrag->rowH : s.box[scroll->inner].h;
+    const float contentH = virtDrag != nullptr ? virtDrag->count * virtDrag->rowH : scrollContentH(s, scroll->inner);
     const float maxOff = contentH - viewH;
     if (maxOff <= 0.0f || viewH < 8.0f) {
         return;

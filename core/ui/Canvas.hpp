@@ -98,6 +98,7 @@ void canvasBorder(Canvas& c, uint16_t id, float width, float r, float g, float b
 void canvasShadow(Canvas& c, uint16_t id, float shadow);
 void canvasTransform(Canvas& c, uint16_t id, float angle, float scaleX, float scaleY);
 void canvasFilter(Canvas& c, uint16_t id, float bright, float contrast);
+void canvasBlur(Canvas& c, uint16_t id, float blur);
 void canvasTextStyle(Canvas& c, uint16_t id, uint8_t align, uint8_t ellipsis, uint8_t valign, uint8_t wrap, uint8_t deco, float leading);
 [[nodiscard]] uint16_t canvasTextId(const Canvas& c, uint16_t id);
 [[nodiscard]] uint16_t canvasIcon(Canvas& c, uint16_t parent, uint8_t slot, float w, float h);
@@ -107,8 +108,10 @@ void canvasDisable(Canvas& c, uint16_t id, bool disabled);
 void canvasField(Canvas& c, uint16_t id, const char* text, uint8_t filter, bool clear);
 void canvasFieldExtra(Canvas& c, uint16_t id, const char* placeholder, uint8_t maxChars, bool required, bool readOnly, bool password);
 void canvasCheck(Canvas& c, uint16_t id, uint8_t kind, uint8_t group, bool on);
+void canvasScroll(Canvas& c, uint16_t id, uint16_t inner);
+[[nodiscard]] int canvasCheckOn(const Canvas& c, const char* name);
 bool canvasTakeClip(Canvas& c, char* dst, uint8_t cap);
 void canvasAnimate(Canvas& c, uint16_t id, float r, float g, float b, float a);
-void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, const FrameContext& fc);
+void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, const FrameContext& fc, bool keepColor = false);
 
 } // namespace burnhope

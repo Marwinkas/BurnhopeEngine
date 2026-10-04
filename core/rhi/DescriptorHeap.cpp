@@ -92,6 +92,7 @@ bool descriptorHeapsCreate(DescriptorHeaps& h, Device& d, HeapLayout layout) {
     const VkBufferUsageFlags heapUsage =
         VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     if (!gpuBufferCreate(h.resources, d, resourceSize, heapUsage, true)
+        || !gpuBufferCreate(h.resourcesFlight, d, resourceSize, heapUsage, true)
         || !gpuBufferCreate(h.samplers, d, samplerSize, heapUsage, true)) {
         spdlog::error("descriptor heap buffers failed");
         descriptorHeapsDestroy(h, d);
@@ -111,6 +112,7 @@ bool descriptorHeapsCreate(DescriptorHeaps& h, Device& d, HeapLayout layout) {
 
 void descriptorHeapsDestroy(DescriptorHeaps& h, Device& d) {
     gpuBufferDestroy(h.resources, d);
+    gpuBufferDestroy(h.resourcesFlight, d);
     gpuBufferDestroy(h.samplers, d);
     h.writeResources = nullptr;
     h.writeSamplers = nullptr;
@@ -134,13 +136,48 @@ bool heapWriteBuffer(
         .type = type,
         .data = {.pAddressRange = &range},
     };
+    const VkDeviceSize byteOff = heapBufOffset(h, slot);
+    VkHostAddressRangeEXT dest{
+        .address = static_cast<std::byte*>(h.resources.mapped) + byteOff,
+        .size = h.bufferDescSize,
+    };
+    VkResult r = h.writeResources(d.device, 1, &info, &dest);
+    if (r == VK_SUCCESS && h.resourcesFlight.mapped != nullptr) {
+        dest.address = static_cast<std::byte*>(h.resourcesFlight.mapped) + byteOff;
+        r = h.writeResources(d.device, 1, &info, &dest);
+    }
+    if (r != VK_SUCCESS) {
+        spdlog::error("vkWriteResourceDescriptorsEXT buffer failed: {}", static_cast<int>(r));
+        return false;
+    }
+    return true;
+}
+
+bool heapWriteBufferFlight(
+    DescriptorHeaps& h,
+    Device& d,
+    uint32_t flight,
+    uint32_t slot,
+    VkDescriptorType type,
+    VkDeviceAddress address,
+    VkDeviceSize size) {
+    GpuBuffer& buf = flight == 1 ? h.resourcesFlight : h.resources;
+    if (buf.mapped == nullptr || h.writeResources == nullptr) {
+        return false;
+    }
+    const VkDeviceAddressRangeEXT range{.address = address, .size = size};
+    const VkResourceDescriptorInfoEXT info{
+        .sType = VK_STRUCTURE_TYPE_RESOURCE_DESCRIPTOR_INFO_EXT,
+        .type = type,
+        .data = {.pAddressRange = &range},
+    };
     const VkHostAddressRangeEXT dest{
-        .address = static_cast<std::byte*>(h.resources.mapped) + heapBufOffset(h, slot),
+        .address = static_cast<std::byte*>(buf.mapped) + heapBufOffset(h, slot),
         .size = h.bufferDescSize,
     };
     const VkResult r = h.writeResources(d.device, 1, &info, &dest);
     if (r != VK_SUCCESS) {
-        spdlog::error("vkWriteResourceDescriptorsEXT buffer failed: {}", static_cast<int>(r));
+        spdlog::error("vkWriteResourceDescriptorsEXT flight buffer failed: {}", static_cast<int>(r));
         return false;
     }
     return true;
@@ -153,16 +190,20 @@ bool heapWriteImage(
     VkDescriptorType type,
     const GpuImage& img,
     VkImageLayout layout,
-    VkImageAspectFlags aspect) {
-    if (h.resources.mapped == nullptr || h.writeResources == nullptr) {
+    VkImageAspectFlags aspect,
+    uint32_t mipLevels) {
+    if (h.resources.mapped == nullptr || h.writeResources == nullptr || img.image == VK_NULL_HANDLE) {
         return false;
+    }
+    if (mipLevels < 1) {
+        mipLevels = 1;
     }
     const VkImageViewCreateInfo viewCi{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = img.image,
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
         .format = img.format,
-        .subresourceRange = {aspect, 0, 1, 0, 1},
+        .subresourceRange = {aspect, 0, mipLevels, 0, 1},
     };
     const VkImageDescriptorInfoEXT imageInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_DESCRIPTOR_INFO_EXT,
@@ -174,11 +215,16 @@ bool heapWriteImage(
         .type = type,
         .data = {.pImage = &imageInfo},
     };
-    const VkHostAddressRangeEXT dest{
-        .address = static_cast<std::byte*>(h.resources.mapped) + heapImgOffset(h, slot),
+    const VkDeviceSize byteOff = heapImgOffset(h, slot);
+    VkHostAddressRangeEXT dest{
+        .address = static_cast<std::byte*>(h.resources.mapped) + byteOff,
         .size = h.imageDescSize,
     };
-    const VkResult r = h.writeResources(d.device, 1, &info, &dest);
+    VkResult r = h.writeResources(d.device, 1, &info, &dest);
+    if (r == VK_SUCCESS && h.resourcesFlight.mapped != nullptr) {
+        dest.address = static_cast<std::byte*>(h.resourcesFlight.mapped) + byteOff;
+        r = h.writeResources(d.device, 1, &info, &dest);
+    }
     if (r != VK_SUCCESS) {
         spdlog::error("vkWriteResourceDescriptorsEXT image failed: {}", static_cast<int>(r));
         return false;
@@ -206,11 +252,12 @@ bool heapWriteSampler(
     return true;
 }
 
-void heapBind(VkCommandBuffer cmd, const DescriptorHeaps& h) {
+void heapBind(VkCommandBuffer cmd, const DescriptorHeaps& h, uint32_t flight) {
+    const GpuBuffer& resBuf = flight == 1 && h.resourcesFlight.address != 0 ? h.resourcesFlight : h.resources;
     const VkBindHeapInfoEXT res{
         .sType = VK_STRUCTURE_TYPE_BIND_HEAP_INFO_EXT,
-        .heapRange = {.address = h.resources.address, .size = h.resources.size},
-        .reservedRangeOffset = h.resources.size - h.props.minResourceHeapReservedRange,
+        .heapRange = {.address = resBuf.address, .size = resBuf.size},
+        .reservedRangeOffset = resBuf.size - h.props.minResourceHeapReservedRange,
         .reservedRangeSize = h.props.minResourceHeapReservedRange,
     };
     const VkBindHeapInfoEXT samp{

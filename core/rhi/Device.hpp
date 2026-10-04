@@ -6,6 +6,8 @@
 #include <volk.h>
 #include <vk_mem_alloc.h>
 
+#include <atomic>
+#include <cstdint>
 #include <mutex>
 
 namespace burnhope {
@@ -37,7 +39,17 @@ struct Device {
     // не дали бы взаимного исключения между ними, где оно и нужно. Держит параллельную запись
     // кадра разных окон (core/host/Host.cpp, job system).
     std::mutex queueMutex;
+    // 1 after VK_ERROR_DEVICE_LOST. Draws return before any Vulkan call.
+    // hostTick on the main thread is the only place that clears it, after recover.
+    std::atomic<uint32_t> lost{0};
 };
+
+[[nodiscard]] inline bool deviceLost(const Device& d) {
+    return d.lost.load(std::memory_order_acquire) != 0;
+}
+
+void deviceMarkLost(Device& d, const char* where, int32_t result);
+[[nodiscard]] uint64_t deviceMemoryUsed(const Device& d);
 
 [[nodiscard]] bool deviceCreate(Device& d, Window& window);
 [[nodiscard]] bool deviceCreateSurface(Device& d, Window& window, VkSurfaceKHR& out);

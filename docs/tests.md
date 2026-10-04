@@ -11,7 +11,7 @@ cmake --build build-core --target BurnhopeTest -j
 ./build-core/BurnhopeTest
 ```
 
-Зелёный прогон заканчивается строкой `Status: SUCCESS!` и `0 failed`. Предупреждения Flecs `is_trivial` и неиспользуемые функции в `Files.cpp` сборку не роняют.
+Зелёный прогон заканчивается строкой `Status: SUCCESS!` и `0 failed`. `gpu profiler table names the slow pass` проверяет `FrameView` (2240), `FramePost` (512) и блоки GTAO/SSR по 64 байта, и текст таблицы зон. Предупреждения Flecs `is_trivial` и неиспользуемые функции в `Files.cpp` сборку не роняют.
 
 Демо:
 
@@ -52,6 +52,40 @@ cmake --build build-asan --target BurnhopeTest -j
 - `"golden image: panel fill is exact and mesh/vertex paths match"` — offscreen-рендер (не свопчейн). Панель без радиуса даёт точный RGBA; mesh-shader путь и vertex-pull путь сравниваются пиксель-в-пиксель (`rgbaMiss`, допуск 0). Это первый настоящий golden-image тест в проекте — читает `docs/open.md`, если ищешь, можно ли так же проверить что-то ещё.
 - Job system (`core/platform/Jobs.hpp`) и параллельная запись окон (`core/host/Host.cpp`, Фаза 1.5) инструментальным тестом не покрыты — проверка только через реальный запуск `BurnhopeEngine` с несколькими открытыми окнами (главное + Files) и грепом лога на `vk:`/`error`. Санитайзер потоков (`-DBH_TSAN=ON`) не прогонялся под многооконной нагрузкой — честно записано в `docs/open.md`.
 - `"gpuImageUploadRgba: GPU BC1 decodes close to the source"` — синтетический градиент без альфы (форсирует BC1 → GPU-компьют путь). Декодирует BC1-блоки эталонным декодером внутри теста, сравнивает со источником: средняя ошибка канала должна быть < 20/255. Это golden-критерий лоссового кодека — не байт-в-байт с CPU ISPC (легальны разные конечные точки), а «результат близок к оригиналу».
+- `"gpuImageUploadRgba: GPU BC7 mode 6 decodes close to the source"` — тот же градиент с переменной альфой (форсирует BC7). Каждый блок mip 0 обязан декодироваться как mode 6 (если это ISPC, режимы смешаны и `mode6 == blocks` падает). Средняя ошибка канала RGBA < 12/255.
+- `"gpuImageUploadHdr: GPU BC6H mode 11 decodes close to the source"` — float-градиент 0..8 через `gpuImageUploadHdr`. Каждый блок mip 0 — mode 11 (`0b00011`). Средняя абсолютная ошибка канала < 0.05. Строка `hdr compress` — замер Фазы 2.
+- `"gpuCompressLevel: BC3 BC4 BC5 decode close to the source"` — 32×32 RGBA через `gpuCompressLevel`. BC4 (R) и BC5 (RG) — средняя ошибка < 8/255, BC3 (цвет+альфа) < 12/255. У BC4 `e0 > e1`.
+- `"photo blur packs one lod into the photo primitive"` — `canvasBlur` клампит 1.5 → 1, `uiEmit` даёт ровно один `kUiFlagPhoto`, blur float в `pad1`. `uiPhotoLod(0.5, 8) == 3.5`.
+- `"camera cull feeds frustum cascades and froxels"` — сфера в кадре видна, сфера за камерой нет, 4 каскада, 16 froxel, конус от камеры отсекается.
+- `"cullInstances keeps spheres inside the frustum"` — 12 инстансов, 8 перед камерой остаются индексами 0..7, 4 за камерой выпадают.
+- `"anim track samples linear loop and cubic"` — ключи 0→100 за 1 с. t=0.5 даёт 50. t=1.5 в `Loop` тоже 50. Кубическая Безье на 0.5 около 50, на 0.25 ниже линейной. `Step` держит левый ключ.
+- `"fixed step consumes remainder and clamps a spike"` — шаг 0.02 с и кадр 0.05 с дают два тика, остаток 0.01, `alpha` 0.5. Кадр в 1 с режется до `maxAccumulation` 0.1 и даёт пять тиков.
+- `"style cascade keeps padding and replaces danger fields"` — `button` задаёт фон, padding 8 и radius 4. `danger` с большим приоритетом меняет фон и `border_width`. Padding и radius остаются. Yoga-узел получает padding 8.
+- `"input queue tracks pointer keys pad pen touch and tray"` — два `MouseMove` дают позицию (110, 215) и дельту (10, 15). `Key_A` живёт после `inputBeginFrame`, край кадра гаснет. Стик и кнопка геймпада, перо 0.75 / наклон 0.2, касание и клик трея. 129-е событие в кольцо не входит.
+- `"srgb linear hsv and packed rgba8"` — белый sRGB даёт линейную 1 и пакуется обратно. Красный канал лежит в младшем байте. HSV (0, 1, 1) даёт красный.
+- `"document insert delete undo and redo"` — `Burn` + `hope`, срез хвоста, undo возвращает слово, ещё undo оставляет `Burn`, redo собирает слово снова.
+- `"msdf line places glyphs for mesh draw"` — `Burnhope` на виде 200×100. `posMin.x` растёт в клипе и остаётся в диапазоне кадра. Push в `MeshDrawDesc` — 16 байт, групп столько, сколько глифов.
+- `"mapped file reads the bytes that were written"` — временный файл, `fileMapReadOnly`, те же 8 байт, `fileUnmap` гасит указатель.
+- `"material blob roundtrips through the asset header"` — `BHOP`, тип Material, `memcmp` туда и обратно. Порченый байт не проходит checksum.
+- `"inspector drag writes the bound float"` — сдвиг мыши на 40 поднимает roughness с 0.5 до 0.7. Строка статистики содержит `60.0`.
+- `"meshlet cone culls a sphere that faces away"` — полусфера смотрит в +Z. Глаз спереди видит, сзади нет. Hi-Z: ближняя сфера видна, дальняя за тайлом 0.4 скрыта.
+- `"cluster grid keeps a point light in its sphere"` — лампа в (8.5, 4.5, 12.5) радиусом 0.25 лежит только в ячейке (8, 4, 12).
+- `"meshlet blob maps without a copy"` — `meshletView` указывает внутрь `mmap`, радиус 2.
+- `"frustum keeps the sphere in front of the camera"` — сфера в нуле проходит, сфера на z=20 нет.
+- `"visbuffer resolve reads the material by instance id"` — пиксель инстанса 0 и примитива 5 достаёт материал 2.
+- `"cube meshlet stays inside the vertex and triangle caps"` — куб 8 вершин и 12 треугольников. Пол: 4 вершины, индексы `0,1,2` и `2,3,0`, `y = 0`. Кубы стоят выше пола. Три лампы сцены лежат в разных ячейках. Тень солнца 2048.
+- `"look straight down keeps a finite view"` — глаз над целью, правый вектор конечный.
+- `"meshlet partition stays inside the caps and the bhop header matches"` — 500 треугольников, каждый мешлет ≤ 64/124, конус отсекает взгляд снизу, `BistroScene` читается обратно.
+- `"a sector stays visible until a portal is marked and leaves the frustum"` — сектор без порталов виден. Проём за плоскостью прячет зал, проём внутри плоскости оставляет.
+- Интервалы `ssrcInterval` стыкуются: каскад 0 это `[0, base]`, каждый следующий начинается на конце предыдущего. `screenBary` центра треугольника даёт три равных веса, ребро даёт нулевой третий вес, схлопнутая проекция ставит `flat`. `ssrcThickness(0.1)` равен 0.004 и меньше старых 0.012, на 100 м равен 0.0004.
+- `"stream ring wraps after the first chunks are released"` — четыре чанка, освобождение первых двух, следующий берётся с нуля.
+- `"stream queue picks the nearest asset"` — из трёх запросов выбирается меньший priority.
+- `"stream commit marks the mapped blob resident"` — байты из mmap попадают в стейджинг, слот становится Resident.
+- `"fly camera moves forward and yaws with the mouse"` — W уменьшает z, сдвиг мыши растит yaw и pitch, пробел поднимает y и не двигает z, один кадр крутит yaw не больше чем на 240·0.004.
+- `"point light shadow face and atlas index"` — точечная лампа получает срез 0, направленная остаётся −1, глубина на радиусе равна 1.
+- `"wasm add and apply through linear memory"` — встроенный модуль. `add(15, 27) == 42`. Число пишется в страницу через `wasmGetMemory`, `apply` прибавляет `env.tick` и кладёт результат обратно. Адрес 70000 — `Trap`, страница не портится.
+- `"device lost flag stops draws until cleared"` — `deviceMarkLost` ставит флаг, повторный вызов не сбрасывает его.
+- `BurnhopeHostTick` — сначала два потока `jobsRunAndWait` (общий счётчик под мьютексом, ждёт 8000). Потом два скрытых окна. Под `-DBH_TSAN=ON` пул проходит без гонки; дальше процесс падает SIGSEGV в ThreadSanitizer из драйвера NVIDIA на `vkCreateDevice`.
 
 ## Как писать тест
 

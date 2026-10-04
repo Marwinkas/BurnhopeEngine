@@ -19,6 +19,7 @@ using UiDropFn = void (*)(UiState& s);
 struct UiPlug {
     UiInputFn handle = nullptr;
     UiDrawFn draw = nullptr;
+    UiDrawFn over = nullptr;
     UiTextGateFn wantsText = nullptr;
     UiDropFn shutdown = nullptr;
 };
@@ -241,6 +242,7 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
 [[nodiscard]] uint16_t uiVirtual(UiState& s, uint16_t parent, float rowH);
 void uiVirtualSource(UiState& s, uint16_t id, uint32_t count, void (*fill)(void*, uint32_t, char*, uint8_t), void (*click)(void*, uint32_t), void* user);
 void uiVirtualRefresh(UiState& s, uint16_t id);
+[[nodiscard]] uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float maxV);
 [[nodiscard]] uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV, float step);
 [[nodiscard]] uint16_t uiCurve(UiState& s, uint16_t parent);
 [[nodiscard]] uint16_t uiGradient(UiState& s, uint16_t parent);

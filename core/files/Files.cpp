@@ -93,6 +93,8 @@ struct Browser {
     uint16_t wTree[16]{};
     uint16_t wRoot = kUiNone;
     uint16_t wCell[18]{};
+    uint16_t wStatus = kUiNone;
+    int cellItem[18]{};
     int crumbPart[8]{};
     int kind = 0;
     int split = 0;
@@ -1474,6 +1476,7 @@ void bindChrome(UiState& s, Browser& b, const Lay& lay) {
     }
     for (int i = 0; i < 18; ++i) {
         const bool on = i < lay.cellN;
+        b.cellItem[i] = on ? lay.cellId[i] : -1;
         showNode(s, b.wCell[i], on);
         if (!on || b.wCell[i] >= s.count) {
             continue;
@@ -1493,6 +1496,19 @@ void bindChrome(UiState& s, Browser& b, const Lay& lay) {
         auto* flex = s.ent[b.wCell[i]].try_get_mut<UiFlex>();
         if (flex != nullptr && (flex->position == 0 || std::fabs(flex->posX - lx) > 0.5f || std::fabs(flex->posY - ly) > 0.5f || std::fabs(flex->width - cell.w) > 0.5f)) {
             uiPlace(s, b.wCell[i], true, lx, ly, cell.w, cell.h);
+        }
+    }
+    if (b.wStatus != kUiNone) {
+        char foot[32]{};
+        const int picked = selectedCount(b);
+        if (b.status[0] != '\0') {
+            putText(s, b.wStatus, b.status, false);
+        } else if (picked > 1) {
+            std::snprintf(foot, sizeof(foot), "%d selected", picked);
+            putText(s, b.wStatus, foot, false);
+        } else {
+            std::snprintf(foot, sizeof(foot), "%d items", b.count);
+            putText(s, b.wStatus, foot, false);
         }
     }
     if (b.mode == 2 && b.wRename != kUiNone) {
@@ -1587,6 +1603,22 @@ void clickFile(UiState& s, uint16_t id) {
     }
     if (b.wRoot == id) {
         go(b, root);
+        s.visualDirty = true;
+        return;
+    }
+    for (int i = 0; i < 18; ++i) {
+        if (b.wCell[i] != id || b.cellItem[i] < 0) {
+            continue;
+        }
+        const int cell = b.cellItem[i];
+        if (b.lastClick == cell) {
+            b.lastClick = -1;
+            openItem(s, b, cell);
+        } else {
+            selectOnly(b, cell);
+            b.lastClick = cell;
+            b.focus = 1;
+        }
         s.visualDirty = true;
         return;
     }
@@ -1776,6 +1808,10 @@ void mountFiles(UiState& s) {
             showNode(s, b.wCell[i], false);
         }
     }
+    b.wStatus = uiNode(s, s.fileFrame, rowBox(22.0f), solidPaint(UiRole::Label, 0.78f, 0.82f, 0.88f, 0.0f, -1));
+    if (b.wStatus != kUiNone) {
+        uiText(s, b.wStatus, "");
+    }
     UiFlex menu{};
     menu.position = 1;
     menu.widthMode = static_cast<uint8_t>(UiSize::Px);
@@ -1882,6 +1918,45 @@ void filesRoot(UiState& s, const char* path) {
             go(b, b.root);
         }
     }
+}
+
+uint32_t filesGesture(UiState& s, const Browser& b, const Lay& lay, UiPrimitive* dst, uint32_t n, uint32_t cap);
+
+bool cellsMounted(const UiState& s, const Browser& b) {
+    return b.wCell[0] != 0 && b.wCell[0] != kUiNone && b.wCell[0] < s.count;
+}
+
+bool hoverIsFileWidget(const UiState& s, const Browser& b) {
+    if (s.hovered == kUiNone || s.hovered >= s.count) {
+        return false;
+    }
+    auto owns = [&](uint16_t id) {
+        if (id == kUiNone || id >= s.count) {
+            return false;
+        }
+        for (uint16_t p = s.hovered; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+            if (p == id) {
+                return true;
+            }
+        }
+        return false;
+    };
+    for (int i = 0; i < 18; ++i) {
+        if (owns(b.wCell[i]) || (i < 8 && owns(b.wFav[i])) || (i < 8 && owns(b.wCrumb[i])) || (i < 7 && owns(b.wTool[i]))) {
+            return true;
+        }
+    }
+    for (int i = 0; i < 16; ++i) {
+        if (owns(b.wTree[i])) {
+            return true;
+        }
+    }
+    for (int i = 0; i < 5; ++i) {
+        if (owns(b.wChip[i])) {
+            return true;
+        }
+    }
+    return owns(b.wRoot) || owns(b.wSearch) || owns(b.wZoom) || owns(b.wRename) || owns(b.wStatus);
 }
 
 bool filesHandle(UiState& s, const InputFrame& in) {
@@ -2180,6 +2255,10 @@ bool filesHandle(UiState& s, const InputFrame& in) {
         }
         return false;
     }
+    if (press && cellsMounted(s, b) && hoverIsFileWidget(s, b) && in.shift == 0 && in.ctrl == 0) {
+        b.focus = 1;
+        return false;
+    }
     b.focus = 1;
     uiFocus(s, kUiNone);
     s.capture = s.fileView;
@@ -2352,6 +2431,7 @@ uint32_t filesEmit(UiState& s, UiPrimitive* dst, uint32_t n, uint32_t cap) {
     layout(s, b, lay);
     const UiBox& view = s.box[s.fileView];
     Zone all{view.x, view.y, view.w, view.h};
+    if (!cellsMounted(s, b)) {
     n = boxRect(dst, n, cap, all, b.look.grid[0], b.look.grid[1], b.look.grid[2], 1.0f, 8.0f, nullptr);
     if (b.wSearch == kUiNone) {
     for (int i = 0; i < 7; ++i) {
@@ -2452,6 +2532,8 @@ uint32_t filesEmit(UiState& s, UiPrimitive* dst, uint32_t n, uint32_t cap) {
         }
     }
     }
+    }
+    if (!cellsMounted(s, b)) {
     n = boxRect(dst, n, cap, lay.grid, 0.05f, 0.055f, 0.07f, 1.0f, 6.0f, nullptr);
     const bool list = b.look.icon < 64.0f;
     if (b.wCell[0] == kUiNone) {
@@ -2497,6 +2579,7 @@ uint32_t filesEmit(UiState& s, UiPrimitive* dst, uint32_t n, uint32_t cap) {
         n = label(s, dst, n, cap, title, name, 0.92f, 0.93f, 0.95f, !list && !renaming);
     }
     }
+    }
     char foot[180]{};
     const int picked = selectedCount(b);
     if (b.confirm != 0 && b.status[0] != '\0') {
@@ -2525,7 +2608,14 @@ uint32_t filesEmit(UiState& s, UiPrimitive* dst, uint32_t n, uint32_t cap) {
     } else {
         std::snprintf(foot, sizeof(foot), "%d items", b.count);
     }
-    n = label(s, dst, n, cap, foot, lay.foot, 0.78f, 0.82f, 0.88f, false);
+    if (b.wStatus == kUiNone) {
+        n = label(s, dst, n, cap, foot, lay.foot, 0.78f, 0.82f, 0.88f, false);
+    }
+    n = filesGesture(s, b, lay, dst, n, cap);
+    return n;
+}
+
+uint32_t filesGesture(UiState& s, const Browser& b, const Lay& lay, UiPrimitive* dst, uint32_t n, uint32_t cap) {
     if (b.confirm != 0) {
         n = boxRect(dst, n, cap, lay.yes, 0.55f, 0.24f, 0.22f, 1.0f, 4.0f, nullptr);
         n = label(s, dst, n, cap, "YES", lay.yes, 1.0f, 1.0f, 1.0f, true, false);
@@ -2556,13 +2646,28 @@ bool filesDraw(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t 
     if (id != s.fileView || s.fileView == kUiNone) {
         return false;
     }
+    if (cellsMounted(s, viewBook(s))) {
+        return false;
+    }
     n = filesEmit(s, dst, n, cap);
+    return true;
+}
+
+bool filesOver(UiState& s, uint16_t, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
+    if (!shown(s) || s.files == nullptr || !cellsMounted(s, viewBook(s))) {
+        return false;
+    }
+    const Browser& b = viewBook(s);
+    Lay lay{};
+    layout(s, b, lay);
+    n = filesGesture(s, b, lay, dst, n, cap);
     return true;
 }
 
 void filesAttach(UiState& s) {
     s.plug.handle = filesHandle;
     s.plug.draw = filesDraw;
+    s.plug.over = filesOver;
     s.plug.wantsText = filesWantsText;
     s.plug.shutdown = filesShutdown;
 }

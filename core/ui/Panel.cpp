@@ -3,6 +3,12 @@
 
 namespace burnhope {
 
+void Panel::name(const char* text) const {
+    if (canvas != nullptr && canvas->state != nullptr) {
+        uiName(*canvas->state, id, text);
+    }
+}
+
 Panel Panel::find(Canvas& canvas, const char* name) {
     return at(canvas, canvasFind(canvas, name));
 }
@@ -34,6 +40,7 @@ Panel Panel::label(const char* text) const {
     UiFlex flex{};
     flex.heightMode = static_cast<uint8_t>(UiSize::Px);
     flex.height = canvas != nullptr ? canvasLook(*canvas).glyphH : 18.0f;
+    flex.shrink = 0.0f;
     UiPaint paint{};
     paint.role = static_cast<uint8_t>(UiRole::Label);
     paint.token = static_cast<uint8_t>(UiToken::Text);
@@ -152,6 +159,15 @@ Panel Panel::radio(const char* text, uint8_t group) const {
     return box;
 }
 
+Panel Panel::slider(float value, float minV, float maxV) const {
+    Panel box{};
+    box.canvas = canvas;
+    if (canvas != nullptr && canvas->state != nullptr) {
+        box.id = uiSlider(*canvas->state, id, value, minV, maxV);
+    }
+    return box;
+}
+
 Panel Panel::spin(float value, float minV, float maxV, float step) const {
     Panel box{};
     box.canvas = canvas;
@@ -206,6 +222,12 @@ void Panel::transform(float angle, float scaleX, float scaleY) const {
 void Panel::filter(float bright, float contrast) const {
     if (canvas != nullptr) {
         canvasFilter(*canvas, id, bright, contrast);
+    }
+}
+
+void Panel::blur(float blur) const {
+    if (canvas != nullptr) {
+        canvasBlur(*canvas, id, blur);
     }
 }
 

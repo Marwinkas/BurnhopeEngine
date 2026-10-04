@@ -13,11 +13,12 @@ bool gpuImageCreate(
     VkImageAspectFlags aspect,
     uint32_t mipLevels) {
     gpuImageDestroy(img, d);
-    img.format = format;
-    img.extent = extent;
     if (mipLevels < 1) {
         mipLevels = 1;
     }
+    img.format = format;
+    img.extent = extent;
+    img.mips = mipLevels;
 
     VkImageCreateInfo ci{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,

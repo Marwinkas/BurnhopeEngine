@@ -1,4 +1,5 @@
 #include "ui/Font.hpp"
+#include "ui/Model.hpp"
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -135,7 +136,7 @@ bool uploadAtlas(Device& device, DescriptorHeaps& heaps, GpuImage& atlas, const 
     if (!heapWriteImage(
             heaps,
             device,
-            0,
+            kUiDescFont,
             VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
             atlas,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,

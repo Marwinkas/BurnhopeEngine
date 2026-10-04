@@ -46,6 +46,7 @@
 - `shaderCreate`, `shaderCreateSpvFile`, `shaderDestroy`.
 - `cmdBindMeshFrag`, `cmdBindVertFrag`, `cmdBindCompute`, `cmdSetGraphicsDynamic`.
 - `descriptorHeapsCreate`, `descriptorHeapsDestroy`, `heapWriteBuffer`, `heapWriteImage`, `heapWriteSampler`, `heapBind`, `heapBufOffset`, `heapImgOffset`, `heapSampOffset`, `heapMap`, `heapAlign`.
+- `rhiImageBarrier`, `rhiBufferBarrier`, `rhiMemoryBarrier` — один барьер Synchronization2. Проход не собирает `VkDependencyInfo` сам.
 
 Файлы: `Device.cpp`, `Swapchain.cpp`, `GpuBuffer.cpp`, `GpuImage.cpp`, `ShaderObject.cpp`, `DescriptorHeap.cpp`, `VolkVma.cpp`.
 
@@ -87,6 +88,7 @@
 - `UiPaint.ramp` на панели — линейный градиент того же шейдера (режимы рампы 1–7, как у цвета).
 - `UiPaint.shadow` — тень спадом SDF, не отдельным непрозрачным прямоугольником. `borderW` — толщина обводки, край сглаживает `fwidth`.
 - `UiPaint.angle/scaleX/scaleY` (rotate/scale вокруг центра бокса) и `UiPaint.bright/contrast` (filter) — один draw, без второго прохода. Упаковка в `pad0`/`pad1` примитива (`kUiFlagTransform`, фиксированная точка 16/8 бит, `uiPackTransform`/`uiUnpackTransform` в `Model.hpp`, то же в `ui.slang`). Несовместимо с `kUiFlagClip` и `kUiFlagShadow`/`kUiFlagStroke` на одном примитиве — они тоже используют `pad0`/`pad1`; трансформированная/отфильтрованная панель с активным clip эти байты не трогает (панель рисуется без transform/filter, пока на ней есть clip). `Panel::transform(angle, scaleX, scaleY)` / `Panel::filter(bright, contrast)`, снизу `canvasTransform` / `canvasFilter`.
+- `UiPaint.blur` — только `kUiFlagPhoto`. 0 — lod сэмплера, 1 — самый грубый мип цепочки. Float в `pad1` того же примитива (80 байт, POD). `uiPhotoLod(blur, mips)` — добавка к базовому lod. `Panel::blur` / `canvasBlur`. Мини-карта фото остаётся резкой.
 - `cmdSetGraphicsDynamic(..., blend)` — 0 прямой альфа, 1 premultiplied, 2 additive, 3 multiply, 4 screen. Прозрачное окно само ставит 1.
 
 `Font.cpp` — SDF-атлас. Снаружи его зовёт `canvasSetFont`.
@@ -182,10 +184,43 @@
 В этот exe не входит.
 
 - `visPassCreate`, `visPassDestroy`, `visPassResize`, `visPassRecord`.
+- `visShadowRecord` — один каскад солнца, только глубина, без фрагментного шейдера. Полоса 2048² в атласе 2048×6144. Список групп — буфер этого каскада, не список камеры.
 - `shadePassCreate`, `shadePassDestroy`, `shadePassResize`, `shadePassRecord`.
 - `ssrPassCreate`, `ssrPassDestroy`, `ssrPassRecord`.
+- `ssrcPassCreate`, `ssrcPassDestroy`, `ssrcPassRecord` — четыре экранных каскада, интервал `ssrcInterval`. Луч, ушедший с экрана, пустой: мировые воксели сюда ещё не подключены.
+- `ssrcInterval(cascade, base)` — границы `t_n = base * 4^n`. Каскад 0 это `(0, base]`, следующий `(base, 4 base]`, дальше `(4 base, 16 base]` и `(16 base, 64 base]`. Попадание ближе интервала принадлежит более плотному каскаду. Промах (альфа 1) склеивается с дальним: `J + beta * I`.
 - `tonemapPassCreate`, `tonemapPassDestroy`, `tonemapPassRecord`.
+- `cmaaPassRecord` — CMAA2: ребро длиннее двух пикселей смешивается с соседом не больше чем на 0.45, одиночный шум не трогается. Читает `HdrB`, пишет `HdrA`, тонмап берёт `HdrA`.
 - `meshletGpuCreate`, `meshletGpuDestroy`, `meshletGpuWriteFrame`.
+- `sceneFrameLoadBhop` — mmap `cache/bistro.bhop` в буферы кадра. Нет файла — остаётся тестовая сцена.
+- `sceneImportFbx(fbx, bhop)` — один файл через `sceneImportFbxList`.
+- `sceneImportFbxList(paths, count, bhop)` — несколько FBX в один `BistroScene` версии 9. Улица, интерьер и винный зал. Длина ребра не режется. Рядом с LOD 0 пишется LOD 1: `meshopt_simplify` с `meshopt_SimplifyLockBorder`, цель — половина треугольников. У пары LOD в `pad[1]` стоит старший бит. Лампы дописываются после текстур, не больше 128.
+- `clusterPassRecord` — сетка света 16×9×24 на GPU. `shadowCullRecord` — три каскада солнца в indirect draw. `sectorVisible` — сектор без порталов остаётся, сектор с порталами виден, только если проём в пирамиде.
+- `sceneFrameStats(scene, out, cap)` — в буфер пишет fps, низкий кадр и 1% за последние 128 кадров.
+- `sceneFrameShift(scene, dx, dy, dz)` — сдвигает уже загруженные инстансы.
+- `sceneFrameAppendBhop(scene, path)` — дописывает второй блоб к текущей сцене. Текстуры и материалы перенумеровываются. Камера встаёт на добавленный объём.
+- `sceneFrameTune(scene, HudPost)` — зерно, блюм, виньетка, хроматика, контакт, окклюзия блика, Toksvig, параллакс, multi-scatter, сила SSRC, сила GTAO, яркость свечей. Сцена хранит тот же `HudPost`, не массив из двенадцати чисел. Ноль выключает ползунок.
+- `GpuTask`, `gpuTaskBegin`, `gpuTaskEnd`, `gpuTaskSubmit`, `gpuTaskDone`, `gpuTaskDestroy` — разовый пул, буфер и fence вне кадра. `gpuTaskDone` правда только после сабмита. `passGroups`, `dispatch1D`, `dispatch2D`, `dispatchCompute2D`, `alignUp`, `mipExtent`. `halfExtent`, `recreateImage`, `recreateHdr` поднимают сторону до одного текселя. `TrackedImage` держит картинку и `VkImageLayout` вместе. `PassContext` — командный буфер, размер, номер кадра и профайлер. `heapMapBuf` / `heapMapImg` — binding и имя слота.
+- `transitionAttachmentToSampled`, `transitionToColorAttachment`, `transitionToDepthAttachment`, `transitionHdrToStorageWrite`, `transitionHdrStorageToSampled`, `transitionHdrSampledToStorageWrite`.
+- `heapWriteStorage` — слот и буфер, тип storage внутри. Нулевой адрес не пишется. Примитивы холста — слот `48`.
+- `createDefaultGpuBuffer(out, device, size, hostVisible, extraUsage)`, `destroyBuffers`, `destroyImages`.
+- `RenderingPass`, `beginRenderingColorDepth`, `beginRenderingDepthOnly(clearOnLoad, renderArea)`, `endRendering`.
+- `bufferBarrierComputeWriteToRead`, `bufferBarrierComputeToIndirect`, `bufferBarrierComputeToMeshShader`, `bufferBarrierComputeWriteToReadWrite`, `bufferBarrierToCompute`.
+- `createShaderArray`, `createShaderGroup`, `destroyShaderArray` — ошибка посередине массива уничтожает уже созданные в этом вызове шейдеры. `SceneTweaks.fogDensity`, `fogHeight`, `fogScatter` — плотность тумана, высота, где он редеет, и доля солнца в объёме. Ноль плотности выключает луч.
+- `sceneFrameTweaks(scene, SceneTweaks)` — восемь блоков по 64 байта внутри `FramePost` (512): флаги, GTAO, SSR, SSRC, RC, свет, слайдеры, блюм. У каждого свой binding 50–57. `FrameView` (2240 байт, binding 0) держит вид, проекцию и каскады солнца и от ползунков не сдвигается. `forceLod` (−1 авто), `passMask` (бит 0 кластер ламп, 1 зонды, 2 билатеральный апскейл SSR, 3 CMAA, 4 GTAO, 5 блюм, 6 замороженная пирамида кулинга, 7 мировой RC), радиус GTAO, срезы, шаги, степень и спад выборки, отсечка шероховатости SSR, шаги, доля шага, толщина, длина и старт луча, длина/толщина/шаги/пиксельный предел SSCS, база/толщина/потолок/шаги SSRC, `rcRays` / `rcSpacing` / `rcIntensity` / `rcMax`, порог блюма, тонмап 0 AgX / 1 ACES / 2 Reinhard / 3 linear. Выключенный бит — проход не диспатчится, шейдер делает ранний выход. `sceneFrameKick` после present собирает BLAS и сабмитит луч RC в свой буфер. Кадр только читает готовый хеш (`radianceRecord`) и, пока хеш не живой, рисует экранный SSRC.
+- `radianceCreate`, `radianceDestroy`, `radianceArm`, `radianceTraceArm`, `radianceKick`, `radianceRecord` — мировой хэш каскадов. `radianceArm` печёт треугольники в свой буфер. `radianceTraceArm` пишет чистку хэша и луч в другой свой буфер. `sceneFrameKick` сабмитит их после present. `radianceRecord` только добавляет облучённость в `HdrA`, когда fence луча уже сигналит. Пока хэш пуст, кадр продолжает экранный SSRC. `freeze` не ставит новый луч. Нет ray query — функции ничего не делают.
+- `sceneFrameKick(scene, device)` — после present опрашивает fence луча и сабмитит BLAS. Чистка хеша стартует здесь и только после кадра, который уже добавил хеш в `HdrA`. Запись кадра fence не читает.
+- `Swapchain.gpuBusy` — 1, если кадр в полёте не успел за 2 мс. Холст этот тик не перезаписывается, resize откладывается.
+- `sceneFrameGpuText(scene)` — таблица GPU-зон прошлого кадра и CPU-время записи. `shadeAoRecord` / `shadeLitRecord`, `ssrTraceRecord` / `ssrUpRecord`, `bloomPassRecord` / `tonemapDrawRecord` — те же проходы, что раньше, разрезанные так, чтобы зона видела каждый кусок.
+- `sceneFrameSetDecals(scene, decals, count)` — копирует до 64 ориентированных боксов в `HeapBuf::Decals`. `count == 0` оставляет буфер пустым, шейдер цикл не крутит.
+- `sceneFrameSetSectors(scene, sectors, sectorCount, portals, portalCount)` — до 32 комнат и 64 порталов. Без вызова маска секторов вся открыта, у каждого инстанса сектор 0.
+- `screenBary(px, py, ax, ay, bx, by, cx, cy)` — экранные веса треугольника. `flat` значит проекция схлопнулась в линию.
+- `ssrcThickness(viewZ)` — `clamp(0.006 / viewZ, 0.0004, 0.004)`. У камеры уже, чем постоянные 0.012.
+- `cubePassCreate`, `cubePassDestroy`, `cubePassRecord` — шесть граней куба сцены в атлас 384×64.
+- `ssrPassRecord(..., flight)` — пирамида минимума из глубины кадра и отражение. Один SPIR-V, два `VkShaderEXT`: `cs[flight]` читает только `gHiZ` своего кадра. Нормаль — интерполяция вершин по экранным барицентрикам треугольника из visbuffer. Зазор каскада `clamp(0.006 / viewZ, 0.0004, 0.004)`. `hizMaxBuildRecord(..., flight)` пишет пирамиду максимума тем же объектом кадра. Промах отражения куб не подставляет. `occlPassRecord(..., late, flight)` на позднем проходе биндит `cull.late.spv` или `cull.late1.spv`: шейдер читает только пирамиду этого кадра в полёте.
+- `meshletBuildAppend` — жадная нарезка, сфера и конус нормалей.
+- `sceneBlobWrite` / `sceneBlobView` — заголовок `AssetHeader`, тип `BistroScene`.
+- `mat4LookAtYUpRh` — если взгляд почти вдоль `(0,1,0)`, up становится `(0,0,±1)`.
 
 ## Правила, которые держит эта сборка
 
@@ -204,7 +239,7 @@
 - `windowFullscreenKind` — 0 окно, 1 borderless, 2 exclusive.
 - `InputFrame` — x, y, dx, dy, колесо X/Y, кнопки включая X1/X2, `keyEdge` / `keyDown` / `keyUp`, Ctrl, Shift, Alt, Super, Caps, Num, текст, композиция.
 - Курсор `windowSetCursor` 0–11. Стек виджета — `uiCursorPush` / `uiCursorPop`. Цветной — `windowCursorRgba`. Сглаживание — `windowMouseSmooth`.
-- `UiPaint` — цвет, `radius` и три остальных угла, `borderW`, цвет обводки, `shadow`, `ramp`, `disabled`, `tag`, hover-цвет, `angle`/`scaleX`/`scaleY` (rotate/scale), `bright`/`contrast` (filter).
+- `UiPaint` — цвет, `radius` и три остальных угла, `borderW`, цвет обводки, `shadow`, `ramp`, `disabled`, `tag`, hover-цвет, `angle`/`scaleX`/`scaleY` (rotate/scale), `bright`/`contrast` (filter), `blur` (фото, 0..1).
 - `UiField` — байты, caret, anchor, filter, clear, maxChars, readOnly, required, password, `multi`, hint, scroll, цвет текста, padL, padR.
 - `UiFlex` — направление, wrap, выравнивание, размер px/percent/auto, grow, shrink, padding, gap, margin, absolute, overflow, aspect.
 - `UiLook` — цвета кадра, радиусы, `glyphH`, `advance`, высота шапки, кромка resize.
@@ -253,7 +288,7 @@
 - `bool windowModal(Window& w, bool modal)`
 - `bool windowFocusable(Window& w, bool focusable)`
 - `bool windowGrab(Window& w, bool keyboard, bool mouse)`
-- `bool windowRelativeMouse(Window& w, bool on)`
+- `bool windowRelativeMouse(Window& w, bool on)` — захват курсора. Пока он включён, `pointer.dx/dy` берутся из `xrel/yrel` (`Window.motionDx/motionDy`). Кадр включения (`Window.relEat`) обнуляет сдвиг: прыжок в центр не крутит взгляд. Потеря фокуса при захвате не отпускает кнопки.
 - `bool windowAspect(Window& w, float minAspect, float maxAspect)`
 - `bool windowFlash(Window& w, int op)`
 - `bool windowProgress(Window& w, int state, float value)`
@@ -302,12 +337,143 @@
 - `void platformScreensaver(bool enabled)`
 - `void platformShutdown()`
 
+### `core/wasm/WasmHost.hpp`
+- `bool wasmBind(WasmHost& host, const char* module, const char* field, WasmHostFn fn, void* user)` — до `wasmLoad`. Импорт `env.tick` отдаёт i32.
+- `bool wasmLoad(WasmHost& host, const uint8_t* bytes, uint32_t size, FrameArena& arena)` — одна страница 64 КБ из арены. Разбор один раз.
+- `void wasmReset(WasmHost& host)`
+- `uint8_t* wasmMemory(WasmHost& host, uint32_t& bytes)`
+- `uint8_t* wasmGetMemory(WasmHost* host, uint32_t* outSize)` — прямой указатель на линейную память, без копии.
+- `WasmStatus wasmInvoke(WasmHost& host, const char* name, const int32_t* args, uint32_t argCount, int32_t& result)` — без аллокации. Выход за страницу и битый LEB128 дают `Trap`, процесс не падает.
+- Подмножество опкодов: `local.get`, `local.set`, `i32.const`, `i32.add`, `i32.sub`, `i32.load`, `i32.store`, `call`, `end`.
+
+### `core/anim/Animation.hpp`
+- `AnimKey` — `time`, `value`. POD.
+- `AnimTrack` — срез ключей, `AnimEase` (`Linear`, `Step`, `CubicBezier`), `AnimWrap` (`Once`, `Loop`, `PingPong`), `duration`, ручки Безье `x1,y1,x2,y2`.
+- `AnimPlayer` — `currentTime`, `speed`, `duration`, `wrap`, `playing`.
+- `float animSampleTrack(const AnimTrack& track, float time)` — поиск диапазона и интерполяция. Без аллокации.
+- `void animTickPlayers(AnimPlayer* players, uint32_t count, float dt)` — двигает время. `Once` зажимает и останавливает, `Loop` оборачивает, `PingPong` складывает.
+
+### `core/time/Time.hpp`
+- `EngineTime` — `rawDelta`, `fixedDelta` (по умолчанию 1/60), `accumulator`, `alpha`, `fixedTickCount`, `maxAccumulation` (по умолчанию 0.1). POD, 32 байта.
+- `void timeAdvance(EngineTime& time, float frameDt, FixedTickFn&& onFixedTick)` — режет `frameDt` сверху по `maxAccumulation`, копит остаток, вызывает фиксированный шаг, пишет `alpha = accumulator / fixedDelta`.
+
+### `core/ui/Style.hpp`
+- `UiStyle` — цвета, `padding`/`margin`/`radius` по четыре числа (верх, право, низ, лево), `border_width`, `blur`, `opacity`, `width`, `height`, `flags`. 96 байт, кратно 16.
+- `uiClassHash(const char* name)` — FNV-1a, считается и на этапе компиляции.
+- `StyleRule` — `classHash`, маска полей, `priority`, готовый `UiStyle`.
+- `StyleSheet` — срез правил.
+- `void uiResolveStyle(const StyleSheet& sheet, const uint32_t* classHashes, uint32_t count, UiStyle* outStyle)` — дефолт, затем совпавшие классы. Более поздний равный приоритет перекрывает поле. Куча не нужна.
+- `void uiStyleApplyYoga(YGNodeRef node, const UiStyle& style)` — пишет в узел только заданные `padding`, `margin`, `width`, `height`.
+
+### `core/input/Input.hpp`
+- `InputEvent` — 48 байт. Устройство, тип, `deviceId`, флаги модификаторов и пера, код, координаты, оси, давление, наклон, `consumed`.
+- `InputState` — маски клавиш `keyActive` / `keyPressed` / `keyReleased` / `keyConsumed`, мышь и дельта, перо, до четырёх геймпадов, восемь касаний, флаги трея.
+- `InputQueue` — кольцо на 128 событий.
+- `bool inputPushEvent(InputQueue& queue, const InputEvent& event)` — отказ, когда кольцо полное. Старое событие не выбрасывается.
+- `void inputBeginFrame(InputState& state)` — снимает края кадра и дельты. Удержание клавиши, стика и пера остаётся.
+- `void inputProcessQueue(InputState& state, InputQueue& queue)` — читает кольцо и опустошает его.
+- `inputKeyDown` / `inputKeyPressed` / `inputKeyReleased` — опрос кода. `kInputKeyA` совпадает со сканкодом SDL `A`.
+- `InputFrame` в `core/platform` по-прежнему снимок SDL за кадр. Это кольцо его не заменяет.
+
+### `core/color/Color.hpp`
+- `ColorRgba8`, `ColorLinear` — по 16 байт. Канал sRGB считается через `colorSelect`, без отдельной ветки на горячем пути.
+- `colorPackBytes`, `colorSrgb8ToLinear`, `colorLinearToSrgb8`.
+- `colorHsvToLinear`, `colorLinearToHsv`. Пикер зовёт их из `hsvToRgb` и `rgbToHsv`.
+
+### `core/doc/Document.hpp`
+- `Document` — фиксированный UTF-8, каретка, `UndoStack` на 32 записи и пул 2048 байт.
+- `bool docInsert`, `bool docDelete`, `bool docUndo`, `bool docRedo`. Новая правка срезает хвост redo. Переполнение истории сбрасывает кольцо, текст правки остаётся.
+
+### `core/text/TextLayout.hpp`
+- `GlyphMetric`, `GlyphInstance` (48 байт), `GlyphDrawPush` (16 байт: адрес среза и число глифов).
+- `textPixelToClip` — пиксель экрана в клип, ось Y вверх.
+- `uint32_t textLayoutLine(...)` — пишет `posMin`/`posMax` уже в клипе. Шейдер `core/text/msdf.slang`: одна mesh-группа на глиф, 4 вершины и 2 треугольника, фрагмент берёт медиану MSDF и умножает на цвет. Адрес среза идёт в `meshDrawRecord` через push. Атлас MSDF снаружи не генерируется.
+
+### `core/io/File.hpp`
+- `MappedFile` — `data`, `size`, `fd`.
+- `bool fileMapReadOnly(const char* path, MappedFile* out)` — `mmap` с `MAP_PRIVATE`.
+- `void fileUnmap(MappedFile* file)`.
+
+### `core/io/Blob.hpp`
+- `AssetHeader` — 32 байта, выравнивание 16. Магия `0x42484F50`. `assetHash` — FNV-1a.
+
+### `core/gfx/Material.hpp`
+- `MaterialGpuData` — 64 байта.
+- `size_t materialSerialize(...)`, `bool materialDeserialize(...)`.
+
+### `core/gfx/Meshlet.hpp`
+- `MeshletVertex` — 32 байта. `Meshlet` — 48 байт: сфера, конус нормалей, смещения.
+- `meshletFit` считает сферу и конус по вершинам.
+- `bool meshletConeVisible(const Meshlet&, float eyeX, float eyeY, float eyeZ)` — та же проверка, что `cameraConeVisible`.
+- `meshletSerialize`, `const Meshlet* meshletView(...)` — блоб `MeshletBlob` внутри `mmap`, без копии. Хеш совпадает с `uiClassHash("MeshletBlob")`.
+
+### `core/gfx/Light.hpp`
+- `LightGpuData` — 64 байта. Тип: направленный, точечный, прожектор. `kLightCap` — 10240 ламп в буфере кадра. Ячейка сетки берёт до 64 индексов и до 8 декалей.
+- `MaterialGpuData.flags` бит 2 (`4`) — карта `orm` в раскладке glTF: R occlusion, G roughness, B metallic. Без бита карта читается как спекуляр Bistro.
+- `MaterialGpuData.pad[0]` — индекс карты высоты. Ноль выключает параллакс. Импорт берёт соседний файл `Height`.
+
+### `core/gfx/ClusterGrid.hpp`
+- Сетка `16×9×24`. `ClusterCell` — смещение и число ламп.
+- `bool clusterAssignLights(...)` — сфера лампы пишет индексы в буфер вызывающего. Куча не нужна.
+
+### `core/gfx/HiZ.hpp`
+- `hizMipForSphere` — mip по размеру сферы на экране.
+- `hizSphereVisible` — ближайшая глубина сферы против дальней глубины тайла.
+
+### `engine/gpu_scene/InstanceCull.hpp`
+- `InstanceBounds` — центр и радиус.
+- `cullInstances(const CameraCull&, const InstanceBounds*, ...)` — те же 6 плоскостей, что у инстансов. Старый вызов по `GpuInstance` остаётся.
+- `pointShadowAssign` / `pointShadowFace` / `pointShadowDepth` — индекс среза 512 и матрица грани куба. В кадре окна радиус ламп для картинки 8 м.
+
+### `core/stream`
+- `streamRingAlloc` / `streamRingRelease` — чанки фиксированного размера, освобождение с хвоста.
+- `streamQueuePick` — один проход, меньший `priority` ближе к камере.
+- `streamCommitResident` — запрос `Complete`, слот `Resident`.
+
+### `core/scene/FlyCam.hpp`
+- `flyCamUpdate` — WASD, Space/Shift или E/Q, ПКМ крутит yaw/pitch, колесо меняет скорость.
+
+### `engine/render/VisResolve.hpp`
+- `visPack` / `visUnpack` — 20 бит инстанса и 12 бит примитива. Ноль — пустой пиксель.
+- `bool visResolve(...)` — `materialId` из инстанса, `MaterialGpuData` по этому индексу.
+
+### `engine/gpu_scene/SunShadow.hpp`
+- `sunShadowBuildAt` — ортографическая матрица каскада вокруг точки, не камеры. Reverse-Z, ближняя глубина 1. `sunShadowSlice` строит ортокамеру по сфере среза пирамиды взгляда, не по кубу вокруг глаза. Срезы 0.2–36 м, 24–180 м и 120–2500 м. `sunShadowBuildAt` снапит центр на `snapCells` текселей. Кадр зовёт срез, в `sunSplit` кладёт радиус сферы. Shade берёт самый тесный каскад, в чьей карте лежит точка. Перерисовывается только каскад, чья матрица сменилась. Глубина читается точечно внутри своей полосы. Shade берёт самый тесный каскад, в чьей карте лежит точка мира. Мешлет дальше среза своего каскада в список не попадает. Цепочка LOD: каскад 0 берёт 0 и 1, каскад 1 берёт 0, 1 и 2, каскад 2 берёт самый грубый не выше 2, а если грубее LOD 0 нет — сам LOD 0. Сфера меньше 2 пикселей ортопроекции каскада не рисуется. Мешлет камеры меньше 1.5 px на экране в список Early не пишется. Смещение сравнения около 5 см. Первый каскад чистит весь атлас, следующие грузят свою полосу. Если три матрицы совпали с прошлым кадром, проход не записывается. PCF 5×5 читает полосу атласа. Режим кадра 5 красит каскады: красный, зелёный, синий, дальше 50 м белый. `postAt` — элемент `post[12]`, в шейдере это `float4 postPack[3]`. `offsetof(freezeVp) == offsetof(post) + 48`.
+
+### `engine/gpu_scene/MeshletCull.hpp`
+- `meshletPassCull` — сфера, `cameraConeVisible`, mip через `hizMipForSphere`. Тот же конус в `cull.slang`.
+
+### `core/gfx/PrimitiveGen.hpp`
+- `genPlaneMeshlets`, `genCubeMeshlets`. Лимит мешлета: 64 вершины, 124 треугольника.
+
+### `core/scene/TestScene.hpp`
+- `testSceneBuild` — пол 20 м, три куба, солнце и три точечные лампы в разных ячейках. Камера — существующий `CameraPose`.
+
+### `core/ui/PropertyInspector.hpp`
+- `PropertyBinding`, `PropType`.
+- `bool inspectorHandleInput(PropertyBinding* props, uint32_t count, const InputState& input)` — пишет в `dataPtr`.
+- `uint32_t inspectorWriteLines(...)` — строки в буфер вызывающего.
+
+### `core/debug/DebugStats.hpp`
+- `GpuDebugStats` — 64 байта.
+- `uint32_t debugFormatStats(...)` — одна строка для `textLayoutLine`.
+
 ### `core/memory/FrameArena.hpp`
 - `[[nodiscard]] bool frameArenaCreate(FrameArena& a, std::size_t bytes)`
 - `void frameArenaDestroy(FrameArena& a)`
 - `void frameArenaReset(FrameArena& a)`
 - `[[nodiscard]] void* frameArenaAlloc(FrameArena& a, std::size_t bytes, std::size_t align = 16)`
 - `return static_cast<T*>(frameArenaAlloc(a, sizeof(T), alignof(T)))`
+
+### `core/rhi/GpuProfiler.hpp`
+- `bool gpuProfilerCreate(GpuProfiler&, Device&)` — пул на 96 меток `VK_QUERY_TYPE_TIMESTAMP` (24 зоны × 2 кадра).
+- `void gpuProfilerDestroy(GpuProfiler&, Device&)`
+- `void gpuProfilerBegin(GpuProfiler&, Device&, VkCommandBuffer, flight)` — читает метки прошлого оборота этого слота без ожидания, потом `vkCmdResetQueryPool`.
+- `void gpuProfilerOpen` / `gpuProfilerClose` — `vkCmdWriteTimestamp2` на `TOP_OF_PIPE` и `BOTTOM_OF_PIPE`. `GpuZone` вызывает их сам.
+- `uint32_t gpuProfilerFormat(const GpuProfiler&, char*, cap)` — таблица миллисекунд. Период берётся из `timestampPeriod`.
+
+### `core/debug/CpuScope.hpp`
+- `CpuScope(name, float*)` — `steady_clock` на область. Пишет миллисекунды в слот. Если область дольше 1 мс, предупреждение не чаще раза в 2 секунды.
 
 ### `core/rhi/Barrier.hpp`
 - `vkCmdPipelineBarrier2(cmd, &dep)`
@@ -318,9 +484,10 @@
 - `[[nodiscard]] bool descriptorHeapsCreate(DescriptorHeaps& h, Device& d, HeapLayout layout)`
 - `void descriptorHeapsDestroy(DescriptorHeaps& h, Device& d)`
 - `[[nodiscard]] bool heapWriteBuffer( DescriptorHeaps& h, Device& d, uint32_t slot, VkDescriptorType type, VkDeviceAddress address, VkDeviceSize size)`
-- `[[nodiscard]] bool heapWriteImage( DescriptorHeaps& h, Device& d, uint32_t slot, VkDescriptorType type, const GpuImage& img, VkImageLayout layout, VkImageAspectFlags aspect)`
+- `[[nodiscard]] bool heapWriteImage( DescriptorHeaps& h, Device& d, uint32_t slot, VkDescriptorType type, const GpuImage& img, VkImageLayout layout, VkImageAspectFlags aspect, uint32_t mipLevels = 1)` — `mipLevels` больше 1 только у sampled-вида с цепочкой мипов. Storage остаётся одним уровнем.
 - `[[nodiscard]] bool heapWriteSampler( DescriptorHeaps& h, Device& d, uint32_t slot, const VkSamplerCreateInfo& ci)`
-- `void heapBind(VkCommandBuffer cmd, const DescriptorHeaps& h)`
+- `void heapBind(VkCommandBuffer cmd, const DescriptorHeaps& h, uint32_t flight = 0)` — `flight` 1 берёт вторую копию кучи ресурсов.
+- `bool heapWriteBufferFlight(h, device, flight, slot, type, address, size)` — дескриптор буфера только в копию этого кадра.
 - `[[nodiscard]] uint32_t heapBufOffset(const DescriptorHeaps& h, uint32_t slot)`
 - `[[nodiscard]] uint32_t heapImgOffset(const DescriptorHeaps& h, uint32_t slot)`
 - `[[nodiscard]] uint32_t heapSampOffset(const DescriptorHeaps& h, uint32_t slot)`
@@ -330,7 +497,29 @@
 - `[[nodiscard]] bool deviceCreate(Device& d, Window& window)`
 - `[[nodiscard]] bool deviceCreateSurface(Device& d, Window& window, VkSurfaceKHR& out)`
 - `void deviceDestroy(Device& d)`
+- `void deviceMarkLost(Device& d, const char* where, int32_t result)` — ставит `Device::lost`. Дальше acquire/submit не зовут Vulkan. `hostTick` на главном потоке пересоздаёт устройство и свопчейны открытых окон, окна не закрывает.
+- `uint64_t deviceMemoryUsed(const Device& d)` — сумма байт, которые VMA держит в аллокациях. Ноль, если аллокатора нет.
+- `bool deviceLost(const Device& d)`
 - `void deviceDumpCaps(const Device& d)`
+
+### `engine/gpu_scene/Camera.hpp`
+- `CameraPose` — eye, target, fov, near, far, aspect, jitter (NDC).
+- `CameraCull` — view/proj/viewProj и обратные, prevViewProj, оси, 6 плоскостей фрустума, 4 каскада, 16 froxel-границ. Один блоб на все фазы отсечения.
+- `CameraCull cameraCullBuild(const CameraPose& pose, const Mat4* prevViewProj)`
+- `bool cameraSphereVisible(const CameraCull& c, float x, float y, float z, float radius)`
+- `bool cameraConeVisible(const CameraCull& c, float x, float y, float z, float dx, float dy, float dz, float cutoff)`
+- `int cameraFroxelSlice(const CameraCull& c, float viewZ)`
+
+### `engine/gpu_scene/InstanceData.hpp`
+- `GpuInstance` — 80 байт, POD. `world[12]` (3×float4), `sphere[4]` (центр + радиус), `materialId`, `meshId`, `pad[2]`.
+- `void instanceSet(GpuInstance& g, float x, float y, float z, float radius, uint32_t material, uint32_t mesh)`
+- `VisInstancePush` — `instances` и `visible` как `VkDeviceAddress`, `visibleCount`. 24 байта, push constant меш-шейдера.
+
+### `engine/gpu_scene/InstanceCull.hpp`
+- `uint32_t cullInstances(const GpuInstance* src, uint32_t count, const CameraCull& cam, uint32_t* visible, uint32_t visibleCap)` — пишет индексы выживших в буфер вызывающего. Без аллокации. Сфера через `cameraSphereVisible`.
+
+### `engine/render/Visbuffer.hpp`
+- `VisInstanceDraw` — те же два адреса и число видимых. `visPassRecord(..., flight)` берёт меш-шейдер этого кадра в полёте: база списка зашита как `CULL_FLIGHT`, не читается из `cubeMax.w`.
 - `void deviceName(Device& d, uint64_t handle, VkObjectType type, const char* name)`
 - `void rhiCaptureToggle()`
 
@@ -339,6 +528,7 @@
 - `shaderObject`, `descriptorHeap` — обязательны, без них `deviceCreate` падает (M0).
 - `presentWait`, `presentId`, `dynamicRendering`, `timelineSemaphore`, `bufferDeviceAddress`, `sync2` — ядро 1.3/1.2, уже требуются или включаются.
 - `meshShader`, `rayQuery`, `dgc` — опциональные, под будущий GPU-driven/3D путь (`docs/now.md`).
+- `shaderInt64` — `VkPhysicalDeviceFeatures::shaderInt64`. Включается, если устройство умеет. Адрес BLAS в мировом RC — `uint64`, без этой фичи `vkCreateShadersEXT` для `radiance.trace` не проходит.
 - `maintenance6`, `hostImageCopy` — ядро Vulkan 1.4 (`VkPhysicalDeviceVulkan14Features`), включаются в `vkCreateDevice` только если обнаружены у физического устройства; `hostImageCopy` — прямая CPU→GPU загрузка без staging-буфера, будет использован при переносе сжатия текстур на GPU.
 - `graphicsFamily`/`presentFamily`/`computeFamily`/`transferFamily` — индексы очередей, `deviceName`/`apiMajor`/`apiMinor`/`apiPatch` — для лога/диагностики.
 
@@ -358,7 +548,8 @@
 - `void cmdBindMeshFrag(VkCommandBuffer cmd, VkShaderEXT mesh, VkShaderEXT frag)`
 - `void cmdBindVertFrag(VkCommandBuffer cmd, VkShaderEXT vert, VkShaderEXT frag, bool nullMesh)`
 - `void cmdBindCompute(VkCommandBuffer cmd, VkShaderEXT cs)`
-- `void cmdSetGraphicsDynamic( VkCommandBuffer cmd, VkExtent2D extent, uint32_t colorAttCount, bool depthTest, bool alphaBlend = false, uint8_t blendMode = 0)`
+- `Mat4 mat4PerspectiveReverseZ(float fovYRad, float aspect, float zn)` — камера, ближняя плоскость 1, дальняя 0. Точечные тени остаются на `mat4PerspectiveYUpRh`.
+- `void cmdSetGraphicsDynamic(..., bool reverseDepth = false)` — `true` только у прохода камеры, сравнение GREATER_OR_EQUAL. Тени и интерфейс передают `false`.
 
 ### `core/rhi/MeshDraw.hpp` (план Фаза 1/5)
 Единая точка одного зарегистрированного draw-прохода — явные шейдеры и явный draw count на входе, ровно один `vkCmdDrawMeshTasksEXT`/`vkCmdDraw` на выходе, без скрытого состояния между проходами. `core/ui/Canvas.cpp` (mesh + vertex-pull fallback), `engine/render/Visbuffer.cpp`, `engine/render/Tonemap.cpp` (mesh-only) зовут одну и ту же функцию, второй копии паттерна `cmdBindMeshFrag`+`vkCmdDrawMeshTasksEXT` в коде не осталось.
@@ -370,7 +561,9 @@
 - `[[nodiscard]] bool swapchainCreate(Swapchain& sc, Device& d, VkSurfaceKHR surface, uint32_t w, uint32_t h, const FrameDesc& frame =`
 - `void swapchainDestroy(Swapchain& sc, Device& d)`
 - `[[nodiscard]] bool swapchainRecreate(Swapchain& sc, Device& d, uint32_t w, uint32_t h)`
-- `[[nodiscard]] bool swapchainBegin(Swapchain& sc, Device& d, FrameContext& fc)`
+- `Swapchain.uiSem[2]` — бинарный семафор кадра в полёте. Сабмит сцены его сигналит, сабмит холста ждёт.
+- `[[nodiscard]] bool swapchainBegin(Swapchain& sc, Device& d, FrameContext& fc)` — после acquire переводит картинку в color attachment: первый раз из `UNDEFINED`, после present из `PRESENT_SRC`. `Swapchain.inColor` на этот кадр 1. `FrameContext.uiCmd` обнуляется. `swapchainToPresent` возвращает `PRESENT_SRC` и поднимает `presented`. Если `uiCmd` задан, переход в present пишется в него, не в буфер сцены.
+- `[[nodiscard]] bool swapchainBeginUi(Swapchain& sc, FrameContext& fc)` — открывает `Swapchain.uiCmd[flight]`. Хост зовёт его после сцены. `swapchainSubmitPresent` сначала сабмитит буфер сцены и сигналит `uiSem`, затем сабмитит холст, который этот семафор ждёт, и только холст сигналит семафор present. Сцена `swapchainToPresent` не вызывает.
 - `void swapchainToPresent(Swapchain& sc, const FrameContext& fc)`
 - `[[nodiscard]] bool swapchainSubmitPresent(Swapchain& sc, Device& d, FrameContext& fc, bool pace = true)` — `pace=false` пропускает блокирующий `vkWaitForPresentKHR`, нужно для неглавных окон, чтобы они не ждали vsync друг друга по очереди в одном потоке.
 
@@ -400,14 +593,20 @@
 
 ### core/rhi/Device.hpp — `queueMutex`
 
-- `std::mutex queueMutex` — одна блокировка на (1) `vkQueueSubmit2`/`vkQueuePresentKHR` на общей `VkQueue` (все окна делят `graphicsQueue`/`presentQueue`/`transferQueue`) и (2) общий разовый `commandPool`/`transferPool` для upload текстур/шрифтов. Один мьютекс, не два — загрузка текстуры сама делает submit на ту же очередь, что и кадр; раздельные мьютексы не дали бы взаимного исключения между ними. Берут: `swapchainSubmitPresent` (`Swapchain.cpp`), `submitImage`/`gpuCompressBc1` (`ImageFile.cpp`), `uploadAtlas` (`Font.cpp`).
+- `std::mutex queueMutex` — одна блокировка на (1) `vkQueueSubmit2`/`vkQueuePresentKHR` на общей `VkQueue` (все окна делят `graphicsQueue`/`presentQueue`/`transferQueue`) и (2) общий разовый `commandPool`/`transferPool` для upload текстур/шрифтов. Один мьютекс, не два — загрузка текстуры сама делает submit на ту же очередь, что и кадр; раздельные мьютексы не дали бы взаимного исключения между ними. Берут: `swapchainSubmitPresent` (`Swapchain.cpp`), `submitImage`/`gpuCompressBlocks` (`ImageFile.cpp`), `uploadAtlas` (`Font.cpp`).
 
-### core/image/compress.slang — GPU-компьют BC1 (Фаза 2)
+### core/image/compress.slang — GPU-компьют BC1, BC7 mode 6, BC6H mode 11 (Фаза 2)
 
 - `csBc1` — один поток на блок 4×4, per-channel min/max (не ISPC-уровень перебора партиций, но корректный 4-цветный BC1). Источник: свой буфер `[width,height,pad,pad]` + RGBA8 с offset 16. Назначение: BC1-блоки по 8 байт. Гарантирует `color0_u16 > color1_u16` (всегда непрозрачный 4-цветный режим, никогда punch-through alpha).
-- `gpuCompressBc1` (внутренняя, `ImageFile.cpp`) — создаёт свои `DescriptorHeaps` (2 буфера), свой `ShaderExt` на вызов, диспатчит, читает результат через `gpuBufferInvalidate` + `memcpy`. Используется только для формата BC1 (путь без альфы); BC7/BC3/BC6H остаются на CPU ISPC — нет простого корректного GPU-алгоритма с перебором партиций в этом бюджете. Неудача (нет compute, нет шейдера) молча падает на `compressRgbaLevel` (CPU).
+- `csBc7` — тот же источник RGBA8, назначение 16 байт. Только BC7 mode 6: биты режима `0b1000000`, компоненты `R0 R1 G0 G1 B0 B1 A0 A1` по 7 бит, два p-bit (по одному на endpoint, дописываются младшим битом всех каналов), индексы 4 бита по таблице весов `{0,4,9,13,17,21,26,30,34,38,43,47,51,55,60,64}`, пиксель 0 — якорь на 3 битах. Если якорь ближе ко второму концу, концы меняются местами. Без rotation, без partition, без mode 0–5 и 7.
+- `csBc6h` — источник `[width,height,pad,pad]` + float RGB по 12 байт на пиксель. Только BC6H mode 11 (биты режима `0b00011`, 5 бит): `R0 G0 B0 R1 G1 B1` по 10 бит, оба конца явно, без дельты. Unsigned. Unquantize 10→16 и финальный масштаб `*31>>6` в half — как в спецификации. Индексы те же 4 бита, якорь пикселя 0 на 3 битах.
+- `csBc3` / `csBc4` / `csBc5` — тот же RGBA8-источник. BC4: 8 байт, канал R, `e0 > e1`, 8 градаций, индекс 3 бита. BC5: два блока BC4, R затем G (нормали). BC3: 8 байт BC1-цвета и 8 байт BC4-альфы.
+- `enum class ImageBlock` — `Bc1`, `Bc3`, `Bc4`, `Bc5`, `Bc6h`, `Bc7`.
+- `uint32_t imageBlockBytes(ImageBlock)` — 8 или 16.
+- `bool gpuCompressLevel(Device&, ImageBlock, const void* pixels, width, height, uint8_t* dst)` — один мип, ширина и высота кратны 4. SDR — RGBA8, `Bc6h` — float RGB. GPU сначала, ISPC если шейдера нет. Это вход и для загрузчика картинки, и для будущей текстуры материала.
+- `gpuCompressBlocks` (внутренняя, `ImageFile.cpp`) — один диспатч: свои `DescriptorHeaps` (2 буфера), свой `ShaderExt`, чтение через `gpuBufferInvalidate` + `memcpy`. `pixelBytes`: 4 для SDR, 12 для BC6H. `gpuImageUploadHdr` пишет `hdr compress WxH mips N ms`.
 - `gpuBufferInvalidate(const GpuBuffer&, Device&, offset, size)` — новая функция в `GpuBuffer.hpp`, зеркало `gpuBufferFlush` для чтения: `vmaInvalidateAllocation` перед CPU-чтением памяти, которую писал GPU. Не было нужно раньше — ничего не читало GPU-записи с хоста до этой фичи.
-- Регрессия — `tests/Core.cpp`: `"gpuImageUploadRgba: GPU BC1 decodes close to the source"`. Не сравнение байт в байт с CPU (разные энкодеры законно выбирают разные конечные точки), а golden-критерий лоссового кодека: декодирует BC1-блоки вручную (эталонный декодер в тесте) и проверяет среднюю ошибку канала < 20/255 от исходных пикселей. На RTX 3090 — 2.4/255.
+- Регрессия — `tests/Core.cpp`: `"gpuImageUploadRgba: GPU BC1 decodes close to the source"` (ошибка канала < 20/255, на RTX 3090 — 2.4), `"gpuImageUploadRgba: GPU BC7 mode 6 decodes close to the source"` (каждый блок mode 6, ошибка RGBA < 12/255, на RTX 3090 — 1.25), `"gpuImageUploadHdr: GPU BC6H mode 11 decodes close to the source"` (каждый блок mode 11, средняя абсолютная ошибка < 0.05, на RTX 3090 — 0.038). Не сравнение байт в байт с CPU.
 - `void (*builder)(Canvas&, void*) = nullptr`
 - `[[nodiscard]] bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps)`
 - `void canvasDestroy(Canvas& c, Device& d)`
@@ -469,6 +668,7 @@
 - `void canvasShadow(Canvas& c, uint16_t id, float shadow)`
 - `void canvasTransform(Canvas& c, uint16_t id, float angle, float scaleX, float scaleY)`
 - `void canvasFilter(Canvas& c, uint16_t id, float bright, float contrast)`
+- `void canvasBlur(Canvas& c, uint16_t id, float blur)` — кламп 0..1, пишет `UiPaint.blur`.
 - `void canvasTextStyle(Canvas& c, uint16_t id, uint8_t align, uint8_t ellipsis, uint8_t valign, uint8_t wrap, uint8_t deco, float leading)`
 - `[[nodiscard]] uint16_t canvasTextId(const Canvas& c, uint16_t id)`
 - `[[nodiscard]] uint16_t canvasIcon(Canvas& c, uint16_t parent, uint8_t slot, float w, float h)`
@@ -478,6 +678,8 @@
 - `void canvasField(Canvas& c, uint16_t id, const char* text, uint8_t filter, bool clear)`
 - `void canvasFieldExtra(Canvas& c, uint16_t id, const char* placeholder, uint8_t maxChars, bool required, bool readOnly, bool password)`
 - `void canvasCheck(Canvas& c, uint16_t id, uint8_t kind, uint8_t group, bool on)`
+- `void canvasScroll(Canvas& c, uint16_t id, uint16_t inner)` — роль `Scroll` получает `UiScroll.inner`. Высота `id` — окно, `inner` — содержимое. Колесо и ползунок справа читают эту пару. Если бокс колонки короче её детей, высота прокрутки — низ самого нижнего ребёнка.
+- `int canvasCheckOn(const Canvas& c, const char* name)` — 1 включена, 0 выключена, −1 имени нет.
 - `bool canvasTakeClip(Canvas& c, char* dst, uint8_t cap)`
 - `void canvasAnimate(Canvas& c, uint16_t id, float r, float g, float b, float a)`
 - `void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, const FrameContext& fc)`
@@ -517,10 +719,12 @@
 - `[[nodiscard]] Panel curve() const`
 - `[[nodiscard]] Panel gradient() const`
 - `void setText(const char* text) const`
+- `void name(const char* text) const` — имя узла для `Panel::find`.
 - `void color(float r, float g, float b, float a) const`
 - `void animate(float r, float g, float b, float a) const`
 - `void transform(float angle, float scaleX, float scaleY) const`
 - `void filter(float bright, float contrast) const`
+- `void blur(float blur) const`
 
 ### `core/ui/State.hpp`
 - `UiState()`
@@ -562,6 +766,7 @@
 - `[[nodiscard]] uint16_t uiVirtual(UiState& s, uint16_t parent, float rowH)`
 - `void uiVirtualSource(UiState& s, uint16_t id, uint32_t count, void (*fill)(void*, uint32_t, char*, uint8_t), void (*click)(void*, uint32_t), void* user)`
 - `void uiVirtualRefresh(UiState& s, uint16_t id)`
+- `[[nodiscard]] uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float maxV)` — дорожка `UiRole::Slider` и `UiRange`. `Panel::slider`.
 - `[[nodiscard]] uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV, float step)`
 - `[[nodiscard]] uint16_t uiCurve(UiState& s, uint16_t parent)`
 - `[[nodiscard]] uint16_t uiGradient(UiState& s, uint16_t parent)`
@@ -730,7 +935,8 @@
 ### `core/image/ImageFile.hpp`
 - `void imageCpuFree(ImageCpu& img)`
 - `[[nodiscard]] bool imageLoadFile(ImageCpu& img, const char* path)`
-- `[[nodiscard]] bool gpuImageUploadRgba( GpuImage& img, Device& d, const uint8_t* rgba, uint32_t width, uint32_t height, uint32_t frames = 1)`
+- `[[nodiscard]] bool imageUploadUncompressed(GpuImage& img, Device& d, const uint8_t* rgba, uint32_t width, uint32_t height)`
+- `[[nodiscard]] bool gpuImageUploadRgba( GpuImage& img, Device& d, const uint8_t* rgba, uint32_t width, uint32_t height, uint32_t frames = 1, const char* cacheDds = nullptr)`
 - `[[nodiscard]] bool gpuImageUploadHdr( GpuImage& img, Device& d, const float* rgb, uint32_t width, uint32_t height)`
 
 ### `core/host/Host.hpp`

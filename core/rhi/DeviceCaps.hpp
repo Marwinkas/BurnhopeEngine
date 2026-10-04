@@ -14,6 +14,7 @@ struct DeviceCaps {
     bool sync2 = false;
     bool meshShader = false;
     bool rayQuery = false;
+    bool accelStruct = false;
     bool descriptorHeap = false;
     bool dgc = false;
     bool maintenance6 = false;
@@ -28,6 +29,11 @@ struct DeviceCaps {
     // Северная звезда: обнаруживаемая опция под будущий ReSTIR-деноизер/нейро-апскейл. Не включается
     // в фичи устройства, пока нет потребителя — только флаг в логе caps.
     bool cooperativeMatrix = false;
+    // VK_EXT_robustness2: чтение за границей BDA возвращает 0, запись отбрасывается.
+    bool robustness2 = false;
+    bool samplerAnisotropy = false;
+    bool shaderInt64 = false;
+    bool shaderDemote = false;
     uint32_t apiMajor = 0;
     uint32_t apiMinor = 0;
     uint32_t apiPatch = 0;

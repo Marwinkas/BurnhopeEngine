@@ -79,9 +79,6 @@ void destroyView(Host& host, int slot, bool notify) {
     view.on = false;
     view.onOps = nullptr;
     view.onClose = nullptr;
-    if (host.device.device != VK_NULL_HANDLE) {
-        vkDeviceWaitIdle(host.device.device);
-    }
     canvasDestroy(view.canvas, host.device);
     descriptorHeapsDestroy(view.heaps, host.device);
     swapchainDestroy(view.swap, host.device);
@@ -104,8 +101,8 @@ void destroyView(Host& host, int slot, bool notify) {
     }
 }
 
-// Фаза 1 (последовательно, до любых потоков): DPI и resize. swapchainRecreate делает
-// vkDeviceWaitIdle на весь Device — нельзя гонять параллельно с записью другого окна.
+// Фаза 1 (последовательно, до любых потоков): DPI и resize. swapchainDestroy ждёт
+// fence только этого окна, затем пул кадра сбрасывается целиком.
 // Возвращает false только если primary не смог пересобраться (фатально для hostTick).
 bool prepareViewSync(Host& host, int slot) {
     HostView& view = host.view[slot];
@@ -119,12 +116,30 @@ bool prepareViewSync(Host& host, int slot) {
         view.window.dpiChanged = false;
     }
     if (view.window.resized) {
+        bool busy = false;
+        if (!deviceLost(host.device)) {
+            for (uint32_t i = 0; i < kFramesInFlight; ++i) {
+                if (view.swap.flightFence[i] == VK_NULL_HANDLE) {
+                    continue;
+                }
+                if (vkGetFenceStatus(host.device.device, view.swap.flightFence[i]) != VK_SUCCESS) {
+                    busy = true;
+                    break;
+                }
+            }
+        }
+        if (busy) {
+            if (view.swap.gpuBusy == 0) {
+                spdlog::warn("resize deferred, gpu busy");
+            }
+            view.swap.gpuBusy = 1;
+        } else {
         view.window.resized = false;
+        view.swap.gpuBusy = 0;
         windowRefreshSize(view.window);
         if (view.window.pixelW == 0 || view.window.pixelH == 0) {
             return true;
         }
-        vkDeviceWaitIdle(host.device.device);
         if (!swapchainRecreate(view.swap, host.device, view.window.pixelW, view.window.pixelH)) {
             spdlog::error("resize recreate failed");
             if (slot == host.primary) {
@@ -132,6 +147,7 @@ bool prepareViewSync(Host& host, int slot) {
             }
             destroyView(host, slot, true);
             return true;
+        }
         }
     }
     if (view.window.input.f12) {
@@ -185,17 +201,46 @@ void recordAndPresentView(DrawJobCtx& ctx) {
     if (view.window.pixelW == 0 || view.window.pixelH == 0) {
         return;
     }
+    const float dt = host.frameDt;
+    if (view.sceneTick != nullptr) {
+        out.wantsRelative = view.sceneTick(view.user, view.window.input, dt);
+    }
+    const bool flyLook = out.wantsRelative;
     FrameContext frame{};
     if (!swapchainBegin(view.swap, host.device, frame)) {
+        if (view.swap.gpuBusy != 0) {
+            // Кадр на GPU ещё занят. Взгляд уже сдвинут этим тиком, картинка догонит следующим present.
+            if (view.sceneRecord != nullptr) {
+                out.wantsRelative = flyLook;
+            }
+            out.handled = true;
+            return;
+        }
         out.needsResize = true;
         return;
     }
     if (view.window.input.reload) {
         canvasReload(view.canvas);
     }
-    float title = 40.0f;
-    float border = 6.0f;
-    canvasChrome(view.canvas, title, border);
+    float title = view.sceneRecord != nullptr ? 0.0f : 40.0f;
+    float border = view.sceneRecord != nullptr ? 0.0f : 6.0f;
+    const bool sceneView = view.sceneRecord != nullptr;
+    if (view.sceneRecord != nullptr) {
+        heapBind(frame.cmd, view.heaps, frame.flight);
+        view.sceneRecord(view.user, frame.cmd, host.device, view.heaps, view.swap, frame);
+    }
+    if (view.sceneRecord != nullptr && view.canvas.builder == nullptr) {
+        swapchainToPresent(view.swap, frame);
+        if (!swapchainSubmitPresent(view.swap, host.device, frame, ctx.slot == host.primary)) {
+            out.needsResize = true;
+            return;
+        }
+        out.handled = true;
+        return;
+    }
+    if (!sceneView) {
+        canvasChrome(view.canvas, title, border);
+    }
     char dropped[260]{};
     if (view.window.input.dropLen > 0) {
         std::memcpy(dropped, view.window.input.drop, view.window.input.dropLen + 1u);
@@ -215,9 +260,24 @@ void recordAndPresentView(DrawJobCtx& ctx) {
     out.wantsRelative = canvasWantsRelative(view.canvas);
     out.hasClipRect = canvasMouseClip(view.canvas, out.clipX, out.clipY, out.clipW, out.clipH);
     out.hasFocus = canvasFocusBox(view.canvas, out.focusX, out.focusY, out.focusW, out.focusH);
+    if (sceneView) {
+        out.wantsRelative = flyLook;
+        out.ops = {};
+        out.wantsText = false;
+        out.hasClip = false;
+        out.cursor = 0;
+    }
 
-    heapBind(frame.cmd, view.heaps);
-    canvasRecord(frame.cmd, view.canvas, view.swap, frame);
+    // Тонмап чистит свопчейн в буфере сцены. Холст — следующий сабмит той же очереди:
+    // ждёт uiSem, грузит картинку (LOAD) и только он переводит её в present.
+    // Сцена в present не уходит, иначе на экране остаётся clear без панели.
+    if (sceneView && swapchainBeginUi(view.swap, frame)) {
+        heapBind(frame.uiCmd, view.heaps, frame.flight);
+        canvasRecord(frame.uiCmd, view.canvas, view.swap, frame, true);
+    } else {
+        heapBind(frame.cmd, view.heaps, frame.flight);
+        canvasRecord(frame.cmd, view.canvas, view.swap, frame, sceneView);
+    }
     swapchainToPresent(view.swap, frame);
     if (!swapchainSubmitPresent(view.swap, host.device, frame, ctx.slot == host.primary)) {
         out.needsResize = true;
@@ -323,6 +383,9 @@ bool hostInit(Host& host) {
 }
 
 void hostShutdown(Host& host) {
+    if (host.device.device != VK_NULL_HANDLE) {
+        vkDeviceWaitIdle(host.device.device);
+    }
     if (const char* path = actionPath()) {
         (void)actionSave(path);
     }
@@ -389,7 +452,7 @@ int hostOpen(Host& host, const ViewDesc& desc) {
         destroyView(host, slot, false);
         return -1;
     }
-    const HeapLayout heap{.buffers = 1, .images = 9, .samplers = 1};
+    const HeapLayout heap{.buffers = 64, .images = 810, .samplers = 3};
     if (!descriptorHeapsCreate(view.heaps, host.device, heap) || !canvasCreate(view.canvas, host.device, view.heaps)) {
         destroyView(host, slot, false);
         return -1;
@@ -397,12 +460,14 @@ int hostOpen(Host& host, const ViewDesc& desc) {
     if (desc.book != nullptr) {
         canvasSetBook(view.canvas, desc.book);
     }
-    canvasSetBuilder(view.canvas, desc.builder, nullptr);
+    canvasSetBuilder(view.canvas, desc.builder, desc.user);
     canvasReload(view.canvas);
     copyName(view, desc.name);
     view.book = desc.book;
     view.onOps = desc.onOps;
     view.onClose = desc.onClose;
+    view.sceneTick = desc.sceneTick;
+    view.sceneRecord = desc.sceneRecord;
     view.user = desc.user;
     view.on = true;
     const char* present = "vsync";
@@ -434,7 +499,6 @@ bool hostSetFrame(Host& host, int slot, const FrameDesc& frame) {
     if (view.window.pixelW == 0 || view.window.pixelH == 0 || host.device.device == VK_NULL_HANDLE) {
         return true;
     }
-    vkDeviceWaitIdle(host.device.device);
     return swapchainRecreate(view.swap, host.device, view.window.pixelW, view.window.pixelH);
 }
 
@@ -443,6 +507,94 @@ FrameDesc hostFrame(const Host& host, int slot) {
         return {};
     }
     return host.view[slot].frame;
+}
+
+void releaseViewGpu(Host& host, int slot) {
+    HostView& view = host.view[slot];
+    const UiBuilder builder = view.canvas.builder;
+    void* builderUser = view.canvas.builderUser;
+    canvasDestroy(view.canvas, host.device);
+    descriptorHeapsDestroy(view.heaps, host.device);
+    swapchainDestroy(view.swap, host.device);
+    if (view.surface != VK_NULL_HANDLE && host.device.instance != VK_NULL_HANDLE) {
+        if (view.surface == host.device.surface) {
+            host.device.surface = VK_NULL_HANDLE;
+        }
+        vkDestroySurfaceKHR(host.device.instance, view.surface, nullptr);
+        view.surface = VK_NULL_HANDLE;
+    }
+    view.swap = {};
+    view.heaps = {};
+    view.canvas = {};
+    view.canvas.builder = builder;
+    view.canvas.builderUser = builderUser;
+}
+
+bool restoreViewGpu(Host& host, int slot, bool ownsDeviceSurface) {
+    HostView& view = host.view[slot];
+    if (ownsDeviceSurface) {
+        view.surface = host.device.surface;
+    } else if (!deviceCreateSurface(host.device, view.window, view.surface)) {
+        spdlog::error("HOST recover surface failed {}", view.name);
+        return false;
+    }
+    if (!swapchainCreate(view.swap, host.device, view.surface, view.window.pixelW, view.window.pixelH, view.frame)) {
+        spdlog::error("HOST recover swapchain failed {}", view.name);
+        return false;
+    }
+    const HeapLayout heap{.buffers = 64, .images = 810, .samplers = 3};
+    if (!descriptorHeapsCreate(view.heaps, host.device, heap) || !canvasCreate(view.canvas, host.device, view.heaps)) {
+        spdlog::error("HOST recover canvas failed {}", view.name);
+        return false;
+    }
+    if (view.book != nullptr) {
+        canvasSetBook(view.canvas, view.book);
+    }
+    canvasSetBuilder(view.canvas, view.canvas.builder, view.canvas.builderUser);
+    canvasReload(view.canvas);
+    return true;
+}
+
+// Main thread only. Workers set Device::lost and return; this rebuilds the device
+// and every open window's swapchain/canvas. Windows themselves stay.
+bool hostRecover(Host& host) {
+    if (host.primary < 0 || !host.view[host.primary].on) {
+        spdlog::error("HOST recover: no primary window");
+        return false;
+    }
+    spdlog::error("HOST recover 1: new draws are no-ops");
+    if (host.device.device != VK_NULL_HANDLE) {
+        vkDeviceWaitIdle(host.device.device);
+    }
+    if (host.releaseGpu != nullptr) {
+        host.releaseGpu(host.releaseUser, host.device);
+    }
+    spdlog::error("HOST recover 2: release swapchains, keep windows");
+    for (int i = 0; i < kHostSlots; ++i) {
+        if (host.view[i].on) {
+            releaseViewGpu(host, i);
+        }
+    }
+    spdlog::error("HOST recover 3: recreate logical device");
+    if (!deviceCreate(host.device, host.view[host.primary].window)) {
+        spdlog::error("HOST recover: deviceCreate failed");
+        return false;
+    }
+    spdlog::error("HOST recover 4: recreate each window");
+    if (!restoreViewGpu(host, host.primary, true)) {
+        return false;
+    }
+    for (int i = 0; i < kHostSlots; ++i) {
+        if (i == host.primary || !host.view[i].on) {
+            continue;
+        }
+        if (!restoreViewGpu(host, i, false)) {
+            destroyView(host, i, true);
+        }
+    }
+    host.device.lost.store(0, std::memory_order_release);
+    spdlog::error("HOST recover 5: device live");
+    return true;
 }
 
 bool hostTick(Host& host) {
@@ -461,12 +613,27 @@ bool hostTick(Host& host) {
         return false;
     }
     windowsPump(list, count);
+    if (deviceLost(host.device)) {
+        spdlog::error("HOST device lost — recover before the next draw");
+        if (!hostRecover(host)) {
+            return false;
+        }
+    }
     frameArenaReset(host.arena);
     char path[512]{};
     if (windowTakeFile(path, static_cast<int>(sizeof(path)))) {
         acceptPath(host, host.fileSlot, path);
     }
     const float now = platformSeconds();
+    float dt = host.clock > 0.0f ? now - host.clock : 0.0f;
+    if (dt < 0.0f) {
+        dt = 0.0f;
+    }
+    if (dt > 0.1f) {
+        dt = 0.1f;
+    }
+    host.clock = now;
+    host.frameDt = dt;
     for (int i = 0; i < kHostSlots; ++i) {
         if (i != host.primary && host.view[i].on && host.view[i].window.closeRequested) {
             destroyView(host, i, true);

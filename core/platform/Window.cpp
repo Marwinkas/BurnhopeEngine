@@ -307,6 +307,7 @@ bool windowRelativeMouse(Window& w, bool on) {
     }
     if (on && !w.relOn) {
         SDL_GetMouseState(&w.relX, &w.relY);
+        w.relEat = true;
     }
     const bool ok = SDL_SetWindowRelativeMouseMode(w.handle, on);
     if (ok && !on && w.relOn) {
@@ -862,6 +863,8 @@ void windowArm(Window& w) {
     w.input.pointer.down = down;
     w.input.pointer.x = x;
     w.input.pointer.y = y;
+    w.motionDx = 0.0f;
+    w.motionDy = 0.0f;
 }
 
 void windowEvent(Window& w, const SDL_Event& e, bool primary) {
@@ -908,6 +911,12 @@ void windowEvent(Window& w, const SDL_Event& e, bool primary) {
         if (w.handle != nullptr && e.window.windowID == self) {
             w.input.focusOut = 1;
             w.focused = false;
+        }
+        break;
+    case SDL_EVENT_MOUSE_MOTION:
+        if (e.motion.windowID == self) {
+            w.motionDx += e.motion.xrel;
+            w.motionDy += e.motion.yrel;
         }
         break;
     case SDL_EVENT_MOUSE_WHEEL:
@@ -1054,7 +1063,7 @@ void windowFinish(Window& w) {
     const bool wasLeft = (w.input.pointer.down & kPointerLeft) != 0;
     const bool wasRight = (w.input.pointer.down & kPointerRight) != 0;
     const bool wasMiddle = (w.input.pointer.down & kPointerMiddle) != 0;
-    if (SDL_GetMouseFocus() != w.handle) {
+    if (SDL_GetMouseFocus() != w.handle && !w.relOn) {
         if (wasLeft) {
             w.input.pointer.released |= kPointerLeft;
         }
@@ -1067,6 +1076,16 @@ void windowFinish(Window& w) {
         w.input.pointer.down = 0;
         return;
     }
+    if (SDL_GetMouseFocus() != w.handle) {
+        w.input.pointer.dx = w.motionDx;
+        w.input.pointer.dy = w.motionDy;
+        if (w.relEat) {
+            w.input.pointer.dx = 0.0f;
+            w.input.pointer.dy = 0.0f;
+            w.relEat = false;
+        }
+        return;
+    }
     float mx = 0.0f;
     float my = 0.0f;
     const SDL_MouseButtonFlags buttons = SDL_GetMouseState(&mx, &my);
@@ -1077,8 +1096,18 @@ void windowFinish(Window& w) {
         const float prevY = w.input.pointer.y;
         w.input.pointer.x = mx * static_cast<float>(w.pixelW) / static_cast<float>(ww);
         w.input.pointer.y = my * static_cast<float>(w.pixelH) / static_cast<float>(wh);
-        w.input.pointer.dx = w.input.pointer.x - prevX;
-        w.input.pointer.dy = w.input.pointer.y - prevY;
+        if (w.relOn) {
+            w.input.pointer.dx = w.motionDx;
+            w.input.pointer.dy = w.motionDy;
+            if (w.relEat) {
+                w.input.pointer.dx = 0.0f;
+                w.input.pointer.dy = 0.0f;
+                w.relEat = false;
+            }
+        } else {
+            w.input.pointer.dx = w.input.pointer.x - prevX;
+            w.input.pointer.dy = w.input.pointer.y - prevY;
+        }
         if (w.smooth) {
             w.smoothDx = w.smoothDx * 0.5f + w.input.pointer.dx * 0.5f;
             w.smoothDy = w.smoothDy * 0.5f + w.input.pointer.dy * 0.5f;

@@ -70,9 +70,8 @@ Pool& pool() {
     static std::once_flag once;
     std::call_once(once, [] {
         const unsigned hw = std::thread::hardware_concurrency();
-        // Один поток остаётся вызывающему (он сам тянет работу), остальные в пул.
-        // Верхняя граница 7 — больше окон/задач за кадр в этом движке не бывает.
-        const unsigned extra = hw > 1 ? std::min(hw - 1u, 7u) : 0u;
+        // Вызывающий поток тоже берёт работу. Остальные ядра ждут в пуле.
+        const unsigned extra = hw > 1 ? hw - 1u : 0u;
         for (unsigned i = 0; i < extra; ++i) {
             p.workers.emplace_back([&p] { p.workerLoop(); });
         }
