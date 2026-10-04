@@ -1,29 +1,50 @@
 #include "render/SceneFrameImpl.hpp"
 
-#include "render/PassTransitions.hpp"
+#include "render/Sky.hpp"
 #include "rhi/GpuProfiler.hpp"
-
-#include <spdlog/spdlog.h>
-
-#include <cstring>
 
 namespace burnhope {
 
-void framePassShade(FramePass& p) {
-    const bool gtaoOn = p.knob != nullptr && (p.knob->flags.passMask & 16u) != 0u && p.scene->hud.gtao > 0.001f;
-    transitionHdrToStorageWrite(p.cmd, p.scene->shade.hdrA.image);
+void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, TrackedImage& vis, TrackedImage& depth, bool gtaoOn) {
+    imageBarrier(ctx.cmd, shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     {
-        GpuZone zone(p.scene->gpuTime, p.cmd, "GTAO");
+        GpuZone zone(ctx.profiler, ctx.cmd, "GTAO");
         if (gtaoOn) {
-            shadeAoRecord(p.cmd, p.swap->extent, p.scene->shade);
+            shadeAoRecord(ctx.cmd, ctx.extent, shade);
         } else {
-            transitionHdrStorageToSampled(p.cmd, p.scene->shade.ao.image, 0, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE);
+            imageBarrier(ctx.cmd, shade.ao, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
         }
     }
     {
-        GpuZone zone(p.scene->gpuTime, p.cmd, "Shade");
-        shadeLitRecord(p.cmd, p.swap->extent, p.scene->shade);
+        GpuZone zone(ctx.profiler, ctx.cmd, "Sky");
+        skyLutRecord(ctx.cmd, sky);
+        shadeSkyRecord(ctx.cmd, ctx.extent, shade);
+    }
+    const VkAccessFlags2 hdrUse = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+    imageBarrier(ctx.cmd, vis, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    imageBarrier(ctx.cmd, depth, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT);
+    imageBarrier(ctx.cmd, shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, true);
+    {
+        GpuZone zone(ctx.profiler, ctx.cmd, "Sun");
+        shadeSunRecord(ctx.cmd, ctx.extent, shade);
+    }
+    imageBarrier(ctx.cmd, shade.surf0, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, true);
+    imageBarrier(ctx.cmd, shade.surf1, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, true);
+    imageBarrier(ctx.cmd, shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, true);
+    {
+        GpuZone zone(ctx.profiler, ctx.cmd, "Lamps");
+        shadePunctualRecord(ctx.cmd, ctx.extent, shade);
+    }
+    if (ctx.post.shade.fogDensity > 0.0008f) {
+        imageBarrier(ctx.cmd, shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, true);
+        GpuZone zone(ctx.profiler, ctx.cmd, "Fog");
+        shadeFogRecord(ctx.cmd, ctx.extent, shade);
+    }
+    {
+        GpuZone zone(ctx.profiler, ctx.cmd, "Clouds");
+        imageBarrier(ctx.cmd, shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, true);
+        cloudRecord(ctx.cmd, sky, ctx.extent);
     }
 }
 

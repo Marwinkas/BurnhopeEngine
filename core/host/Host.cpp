@@ -452,6 +452,7 @@ int hostOpen(Host& host, const ViewDesc& desc) {
         destroyView(host, slot, false);
         return -1;
     }
+    // 800 и 801 — шрифт и фото холста. Картинки сцены живут в SceneFrameImpl::gpuHeap.
     const HeapLayout heap{.buffers = 64, .images = 810, .samplers = 3};
     if (!descriptorHeapsCreate(view.heaps, host.device, heap) || !canvasCreate(view.canvas, host.device, view.heaps)) {
         destroyView(host, slot, false);
@@ -542,6 +543,7 @@ bool restoreViewGpu(Host& host, int slot, bool ownsDeviceSurface) {
         spdlog::error("HOST recover swapchain failed {}", view.name);
         return false;
     }
+    // 800 и 801 — шрифт и фото холста. Картинки сцены живут в SceneFrameImpl::gpuHeap.
     const HeapLayout heap{.buffers = 64, .images = 810, .samplers = 3};
     if (!descriptorHeapsCreate(view.heaps, host.device, heap) || !canvasCreate(view.canvas, host.device, view.heaps)) {
         spdlog::error("HOST recover canvas failed {}", view.name);

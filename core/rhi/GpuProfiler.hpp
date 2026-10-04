@@ -6,7 +6,7 @@
 
 namespace burnhope {
 
-constexpr uint32_t kGpuZoneCap = 24;
+constexpr uint32_t kGpuZoneCap = 48;
 
 struct GpuProfiler {
     VkQueryPool pool = VK_NULL_HANDLE;
@@ -14,7 +14,8 @@ struct GpuProfiler {
     uint32_t cursor = 0;
     uint32_t flight = 0;
     uint32_t count = 0;
-    uint32_t open = 0;
+    uint32_t nestDepth = 0;
+    uint32_t nest[8]{};
     bool timestamps = false;
     bool armed[2]{};
     float ms[kGpuZoneCap]{};

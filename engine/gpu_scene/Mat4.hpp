@@ -53,33 +53,47 @@ inline Mat4 mat4PerspectiveReverseZ(float fovYRad, float aspect, float zn) {
     return r;
 }
 
-inline Mat4 mat4LookAtYUpRh(float ex, float ey, float ez, float tx, float ty, float tz) {
-    float fx = tx - ex;
-    float fy = ty - ey;
-    float fz = tz - ez;
-    const float fl = std::sqrt(fx * fx + fy * fy + fz * fz);
-    fx /= fl;
-    fy /= fl;
-    fz /= fl;
-    float upx = 0.0f;
-    float upy = 1.0f;
-    float upz = 0.0f;
-    if (std::fabs(fy) > 0.999f) {
-        upx = 0.0f;
-        upy = 0.0f;
-        upz = fy > 0.0f ? -1.0f : 1.0f;
-    }
-    float sx = fy * upz - fz * upy;
-    float sy = fz * upx - fx * upz;
-    float sz = fx * upy - fy * upx;
-    const float sl = std::sqrt(sx * sx + sy * sy + sz * sz);
-    sx /= sl;
-    sy /= sl;
-    sz /= sl;
-    const float ux = sy * fz - sz * fy;
-    const float uy = sz * fx - sx * fz;
-    const float uz = sx * fy - sy * fx;
+inline Mat4 mat4OrthoRh(float left, float right, float bottom, float top, float zn, float zf) {
+    Mat4 r{};
+    r.m[0] = 2.0f / (right - left);
+    r.m[5] = 2.0f / (bottom - top);
+    r.m[10] = 1.0f / (zn - zf);
+    r.m[12] = -(right + left) / (right - left);
+    r.m[13] = -(top + bottom) / (bottom - top);
+    r.m[14] = zn / (zn - zf);
+    r.m[15] = 1.0f;
+    return r;
+}
 
+inline void mat4Orthonormal(
+    float fx, float fy, float fz,
+    float upx, float upy, float upz,
+    float& sx, float& sy, float& sz,
+    float& ux, float& uy, float& uz) {
+    sx = fy * upz - fz * upy;
+    sy = fz * upx - fx * upz;
+    sz = fx * upy - fy * upx;
+    const float sl = std::sqrt(sx * sx + sy * sy + sz * sz);
+    const float inv = sl > 1.0e-8f ? 1.0f / sl : 0.0f;
+    sx *= inv;
+    sy *= inv;
+    sz *= inv;
+    ux = sy * fz - sz * fy;
+    uy = sz * fx - sx * fz;
+    uz = sx * fy - sy * fx;
+}
+
+inline Mat4 mat4LookDir(
+    float ex, float ey, float ez,
+    float fx, float fy, float fz,
+    float upx, float upy, float upz) {
+    const float fl = std::sqrt(fx * fx + fy * fy + fz * fz);
+    const float inv = fl > 1.0e-8f ? 1.0f / fl : 0.0f;
+    fx *= inv;
+    fy *= inv;
+    fz *= inv;
+    float sx, sy, sz, ux, uy, uz;
+    mat4Orthonormal(fx, fy, fz, upx, upy, upz, sx, sy, sz, ux, uy, uz);
     Mat4 r = mat4Identity();
     r.m[0] = sx;
     r.m[1] = ux;
@@ -92,8 +106,25 @@ inline Mat4 mat4LookAtYUpRh(float ex, float ey, float ez, float tx, float ty, fl
     r.m[10] = -fz;
     r.m[12] = -(sx * ex + sy * ey + sz * ez);
     r.m[13] = -(ux * ex + uy * ey + uz * ez);
-    r.m[14] = -(-fx * ex - fy * ey - fz * ez);
+    r.m[14] = fx * ex + fy * ey + fz * ez;
     return r;
+}
+
+inline Mat4 mat4LookAtYUpRh(float ex, float ey, float ez, float tx, float ty, float tz) {
+    float fx = tx - ex;
+    float fy = ty - ey;
+    float fz = tz - ez;
+    float upx = 0.0f;
+    float upy = 1.0f;
+    float upz = 0.0f;
+    const float fl = std::sqrt(fx * fx + fy * fy + fz * fz);
+    const float inv = fl > 1.0e-8f ? 1.0f / fl : 0.0f;
+    if (std::fabs(fy * inv) > 0.999f) {
+        upx = 0.0f;
+        upy = 0.0f;
+        upz = fy > 0.0f ? -1.0f : 1.0f;
+    }
+    return mat4LookDir(ex, ey, ez, fx, fy, fz, upx, upy, upz);
 }
 
 inline Mat4 mat4Inverse(const Mat4& in) {

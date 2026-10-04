@@ -3,6 +3,7 @@
 #include "debug/DebugStats.hpp"
 #include "gpu_scene/Camera.hpp"
 #include "gpu_scene/InstanceData.hpp"
+#include "gpu_scene/FrameUniforms.hpp"
 #include "gpu_scene/MeshletGpu.hpp"
 #include "gfx/Decal.hpp"
 #include "gfx/Portal.hpp"
@@ -10,13 +11,14 @@
 #include "image/ImageFile.hpp"
 #include "gfx/Material.hpp"
 #include "render/Cull.hpp"
+#include "render/PassCommon.hpp"
 #include "render/PassTargets.hpp"
 #include "render/Cube.hpp"
 #include "render/Shade.hpp"
-#include "render/SSR.hpp"
+#include "render/Sky.hpp"
+#include "render/Hiz.hpp"
 #include "render/Radiance.hpp"
 #include "render/SceneFrame.hpp"
-#include "render/Ssrc.hpp"
 #include "render/Tonemap.hpp"
 #include "render/Visbuffer.hpp"
 #include "rhi/Swapchain.hpp"
@@ -41,14 +43,18 @@ struct SceneFrameImpl {
     TestScene world{};
     VisPass vis{};
     ShadePass shade{};
-    SsrcPass ssrc{};
+    SkyPass sky{};
+    GpuBuffer atmBuf{};
+    AtmosphereParams atmosphere{};
+    float skyTime = 0.0f;
     RadiancePass radiance{};
-    SsrPass reflect{};
     CubePass cube{};
     TonemapPass tone{};
     GpuBuffer frameBuf{};
+    GpuBuffer sunBuf{};
     GpuBuffer postBuf{};
     DescriptorHeaps* kickHeaps = nullptr;
+    DescriptorHeaps gpuHeap{};
     uint32_t kickFlight = 0;
     GpuBuffer verts{};
     GpuBuffer indices{};
@@ -65,8 +71,7 @@ struct SceneFrameImpl {
     ShadowCullPass shadowCull{};
     GpuBuffer shadowIndirect{};
     bool flagFlip[2]{};
-    bool showSsr = true;
-    bool showSsrc = true;
+    uint32_t lightProfile = 0;
     bool showHiz = true;
     bool showCone = true;
     bool showLod = true;
@@ -125,12 +130,14 @@ struct SceneFrameImpl {
     bool pointReady = false;
     float pointSig = 0.0f;
     uint32_t pointCursor = 0;
-    GpuImage cubeColor{};
-    GpuImage cubeDepth{};
+    uint32_t cubeFace = 0;
+    float cubeEye[3]{};
+    TrackedImage cubeColor{};
+    TrackedImage cubeDepth{};
     bool cubeReady = false;
-    TrackedImage hiz[2]{};
+    bool cubeBaked = false;
+    HizPass hiz{};
     TrackedImage hizMax[2]{};
-    bool hizReady[2]{};
     uint32_t occlIn = 0;
     uint32_t occlOut = 0;
     float boxMin[3]{-20.0f, -2.0f, -20.0f};
@@ -193,36 +200,52 @@ struct SceneFrameImpl {
 };
 
 
-struct FramePass {
-    SceneFrameImpl* scene = nullptr;
-    VkCommandBuffer cmd = VK_NULL_HANDLE;
-    Device* device = nullptr;
-    DescriptorHeaps* heaps = nullptr;
-    const Swapchain* swap = nullptr;
-    const FrameContext* frame = nullptr;
-    FrameView* gpu = nullptr;
-    FramePost* knob = nullptr;
-    uint32_t flight = 0;
+void framePassClusters(const RenderContext& ctx, ClusterPass& clusters, GpuBuffer& cells, GpuBuffer& lightIndex);
+struct SunPassData {
+    TrackedImage& depth;
+    const GpuBuffer& instances;
+    const GpuBuffer& shadowVisible;
+    const GpuBuffer& shadowIndirect;
+    float (*stamp)[16];
+    uint32_t& stampValid;
+    uint32_t& stampCount;
     uint32_t strideU = 0;
-    VkDeviceSize shadowStride = 0;
-    bool occl = false;
-    VisInstanceDraw draw{};
-    VisInstanceDraw lateDraw{};
-    bool twoPhase = false;
-    uint32_t sunKeep[3]{};
-    float sunC[3]{};
-    float splits[3]{};
+    const float* sunC = nullptr;
+    const float* splits = nullptr;
 };
 
-
-void framePassClusters(FramePass& p);
-void framePassCull(FramePass& p);
-void framePassSun(FramePass& p);
-void framePassPoints(FramePass& p);
-void framePassVis(FramePass& p);
-void framePassShade(FramePass& p);
-void framePassRadiance(const PassContext& ctx, RadiancePass& rad, SsrcPass& ssrc, GpuImage& hdrA, bool worldRc, bool showSsrc, uint32_t debugMode);
-void framePassSsr(const PassContext& ctx, SsrPass& ssr, GpuImage& hdrA, GpuImage& hdrB, TrackedImage& hiz, bool ssrOn);
-void framePassTonemap(const PassContext& ctx, TonemapPass& tone, GpuImage& hdrA, GpuImage& hdrB, const Swapchain& swap, const FrameContext& frame, bool bloomOn);
+void framePassCull(const RenderContext& ctx, SceneFrameImpl& scene, const CullBuffers& bufs, CullResults& res);
+void framePassSun(const RenderContext& ctx, SceneFrameImpl& scene, VisPass& vis, SunPassData& sun);
+void framePassPoints(
+    const RenderContext& ctx,
+    VisPass& vis,
+    CubePass& cube,
+    TrackedImage& pointDepth,
+    TrackedImage& cubeColor,
+    TrackedImage& cubeDepth,
+    uint32_t lightCount,
+    const uint32_t pointCount[3],
+    const uint32_t cubeCount[6],
+    uint32_t pointCursor,
+    bool& pointReady,
+    bool& cubeReady,
+    uint32_t& cubeFace);
+void framePassVis(
+    const RenderContext& ctx,
+    VisPass& vis,
+    OcclPass& occl,
+    HizPass& hiz,
+    TrackedImage& hizMax,
+    const GpuBuffer& indirect,
+    const GpuBuffer& candidates,
+    const GpuBuffer& visible,
+    uint32_t instanceCount,
+    bool twoPhase,
+    bool showHiz,
+    const VisInstanceDraw& draw,
+    const VisInstanceDraw& lateDraw);
+void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, TrackedImage& vis, TrackedImage& depth, bool gtaoOn);
+void framePassRadiance(const RenderContext& ctx, RadiancePass& rad, TrackedImage& hdrA, bool worldRc);
+void framePassTonemap(const RenderContext& ctx, TonemapPass& tone, TrackedImage& hdrA, TrackedImage& hdrB, const Swapchain& swap, const FrameContext& frame, bool bloomOn);
 
 } // namespace burnhope

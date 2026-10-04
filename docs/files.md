@@ -12,9 +12,9 @@
 
 Изоляция не закончена, пока они такие.
 
-1. `engine/render/shade.slang` — один compute считает солнце, лампы, контактную тень и туман. Запись этих проходов уже в разных файлах (`PassSun`, `PassPoints`, `PassShade`). Шейдер — нет. Ломать его правкой лампы всё ещё можно. Разрез: солнце пишет свет, лампы добавляют своим проходом. Атмосфера в этот файл не входит.
+1. Свет кадра разрезан: `shade_sky` пишет плоский фон, `shade_sun` пишет `HdrA`, `shade_punctual` добавляет лампы, `shade_fog` кладёт туман. Общая поверхность — `shade_hit.slang`, карты солнца — `shade_shadow.slang`. Атмосфера в эти файлы не входит.
 2. Панель и сцена держат `HudPost`. В шейдер уходят уже именованные блоки. Мёртвый `PostPack` внутри `FramePost` оставлен, чтобы сдвиг байт соседа не поехал.
-3. Одна куча дескрипторов на окно. Карты, глубина, HDR и текстуры — номера слотов. Хост держит запас 64 буфера и не знает имён эффектов. Слот, который занял холст или другой проход, второй раз не берётся. Пересоздание картинки при ресайзе обязано записать тот же слот, не новый.
+3. Куча сцены — `SceneFrameImpl::gpuHeap`, 912 слотов `HeapImg`, полосы по 16 после 784. Небо с 896. Куча хоста держит буфер холста и картинки 800/801. Ресайз сцены пишет только `gpuHeap`. Каскады до текстур, 768 текстур с 16.
 4. BLAS один, после present, сцена статическая. Отдельного TLAS нет, пока объекты не двигаются. Атмосфера не начата: промах луча — плоский фон. Небо будет своим модулем и готовым цветом солнца, не кодом внутри `shade.slang`.
 
 Базового класса модуля нет. Модуль — свои данные и функция записи. Ядро (`core/rhi`, `core/host`, `core/ui`) эффекты по имени не знает.
@@ -146,15 +146,15 @@
 - `engine/gpu_scene/InstanceData.hpp` — One drawable. Affine world is 3 rows × float4 (xyz + translation). 80 bytes, 16-aligned.
 - `engine/gpu_scene/Mat4.hpp` — без шапки
 - `engine/gpu_scene/MeshletCull.hpp` — без шапки
-- `engine/gpu_scene/MeshletGpu.cpp` — без шапки
-- `engine/gpu_scene/MeshletGpu.hpp` — Вид, проекция, каскады солнца. Размер заморожен: новый ползунок сюда не вставляется.
+- `engine/gpu_scene/FrameUniforms.hpp` — `FrameView` (384), `FrameSun` (1920) и `FramePost`. Ползунок в вид и в солнце не вставляется.
+- `engine/gpu_scene/MeshletGpu.hpp` — `GpuVertex` и `GpuMeshlet`.
 - `engine/gpu_scene/PointShadow.hpp` — без шапки
 - `engine/gpu_scene/SunShadow.hpp` — без шапки
 - `engine/render/Cube.cpp` — без шапки
 - `engine/render/Cube.hpp` — без шапки
 - `engine/render/Cull.cpp` — без шапки
 - `engine/render/Cull.hpp` — без шапки
-- `engine/render/HeapMaps.hpp` — Visbuffer frame slots. The heap itself is untyped; these indices are this pass.
+- `engine/render/HeapBind.hpp` — имена слотов кадра (`HeapBuf`, `HeapImg`, `HeapSamp`) и `PassBindings`. Куча в ядре безымянная.
 - `engine/render/PassCommon.hpp` — разовая задача GPU, группы compute. Барьеры остаются в `core/rhi/Barrier.hpp`.
 - `engine/render/PassClusters.cpp` — без шапки
 - `engine/render/PassCull.cpp` — без шапки
@@ -167,36 +167,49 @@
 - `engine/render/PassTonemap.cpp` — без шапки
 - `engine/render/PassVis.cpp` — без шапки
 - `engine/render/Radiance.cpp` — без шапки
-- `engine/render/Radiance.hpp` — World-space hash of radiance intervals. One BLAS of the static scene, ray query on RT cores.
-- `engine/render/SSR.cpp` — без шапки
-- `engine/render/SSR.hpp` — без шапки
+- `engine/render/Radiance.hpp` — Split Radiance Cascades. Один BLAS сцены, луч и слияние в боковом буфере. Хеш — ключ и индекс, направления плотные.
+- `engine/render/Hiz.cpp` — пирамида максимума глубины для окклюзии.
+- `engine/render/Hiz.hpp` — без шапки
 - `engine/render/SceneFrame.cpp` — без шапки
 - `engine/render/SceneFrame.hpp` — Биты как у галок по умолчанию. 128 (RC) и 64 (заморозка) выключены: иначе первый кадр,
 - `engine/render/SceneFrameImpl.hpp` — без шапки
 - `engine/render/Shade.cpp` — без шапки
 - `engine/render/Shade.hpp` — без шапки
-- `engine/render/Ssrc.cpp` — без шапки
-- `engine/render/Ssrc.hpp` — без шапки
 - `engine/render/Tonemap.cpp` — без шапки
 - `engine/render/Tonemap.hpp` — без шапки
 - `engine/render/VisResolve.hpp` — без шапки
 - `engine/render/Visbuffer.cpp` — без шапки
 - `engine/render/Visbuffer.hpp` — без шапки
 - `engine/render/bloom.slang` — без шапки
-- `engine/render/camera.slang` — Screen to world. Included after frame.slang. Passes do not each keep a copy.
+- `engine/render/camera.slang` — луч из пикселя, клип, нормаль по глубине, отсев соседа дальше радиуса.
+- `engine/render/core/math.slang` — luma, Байер, грань куба, октаэдр нормали.
+- `engine/render/core/brdf.slang` — GGX, Smith, Schlick.
+- `engine/render/core/hiz_atlas.slang` — смещение полосы mip.
+- `engine/render/core/vis_surface.slang` — экранные барицентрики visbuffer.
 - `engine/render/cluster.slang` — без шапки
 - `engine/render/cmaa2.slang` — CMAA2: trace a color edge and blend only the pixels that sit on it.
 - `engine/render/cube.slang` — без шапки
 - `engine/render/cull.slang` — Two-phase occlusion. Phase early draws what was visible last frame.
-- `engine/render/frame.slang` — FrameView — binding 0, 2240. Ползунки — восемь блоков по 64, свои binding 50–57.
+- `engine/render/frame.slang` — FrameView binding 0, 384. FrameSun binding 49, 1920. Ползунки — восемь блоков по 64, свои binding 50–57.
 - `engine/render/gtao.slang` — без шапки
 - `engine/render/hiz.slang` — без шапки
-- `engine/render/radiance.slang` — Sparse hash of world cells. A ray from a visible surface is split by distance
+- `engine/render/radiance.slang` — луч с видимой поверхности и выборка 6×6 в `HdrA`.
+- `engine/render/radiance_rc.slang` — ключ пробы, плотные направления, интервал луча.
+- `engine/render/radiance_merge.slang` — слияние каскадов и кэш irradiance. Номер каскада — push-константа.
 - `engine/render/resolve.slang` — Fullscreen resolve. One R32 vis pixel: 20b instance, 12b primitive.
-- `engine/render/shade.slang` — Compute shade: visbuffer + depth + meshlet SSBO → HDR.
+- `engine/render/shade_hit.slang` — поверхность из visbuffer. Солнце и лампы её вызывают.
+- `engine/render/shade_shadow.slang` — выборка карт солнца.
+- `engine/render/Sky.cpp` — LUT неба и облака в половине кадра.
+- `engine/render/Sky.hpp` — `skyPassCreate`, `skyLutRecord`, `cloudRecord`, `atmosphereApply`.
+- `engine/render/core/atmosphere.slang` — Рэлей, Ми, озон. Дескрипторов нет.
+- `engine/render/sky_lut.slang` — пропускание, многократное рассеяние, панорама, диск, звёзды, луна.
+- `engine/render/cloud.slang` — марш слоя, шахматка, апскейл по глубине.
+- `engine/render/shade_sky.slang` — пиксель неба читает панораму в `HdrA`.
+- `engine/render/shade_sun.slang` — солнце и контактная тень пишут `HdrA`.
+- `engine/render/shade_punctual.slang` — лампы добавляют свет в `HdrA`.
+- `engine/render/shade_fog.slang` — туман поверх `HdrA`.
 - `engine/render/shadowcull.slang` — Cascade cull. The ortho matrix already covers casters whose shadow
 - `engine/render/ssr.slang` — без шапки
-- `engine/render/ssrc.slang` — Screen-space radiance cascades. Probes sit on the screen. Cascade 0 is dense
 - `engine/render/tonemap.slang` — HDR → swapchain. AgX, two-scale Karis bloom, grain, vignette, chromatic aberration.
 - `engine/render/visbuffer.slang` — visbuffer — one meshlet per group. 64 vertices, 124 triangles.
 - `tests/Core.cpp` — без шапки

@@ -1,4 +1,5 @@
 #include "frame.slang"
+#include "core/hiz_atlas.slang"
 
 [[vk::binding(2, 0)]] Texture2D<float> gDepth;
 [[vk::binding(6, 0)]] RWTexture2D<float> gHiZ;
@@ -19,13 +20,7 @@ void hizStore(uint2 p, float v) {
 #endif
 
 uint mipY(uint mip) {
-    uint y = 0;
-    uint h = gFrame.extent.y;
-    for (uint i = 0; i < mip; ++i) {
-        y += h;
-        h = max(h >> 1, 1u);
-    }
-    return y;
+    return atlasMipY(mip, gFrame.extent.y);
 }
 
 [shader("compute")]

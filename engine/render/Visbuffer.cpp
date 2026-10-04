@@ -3,12 +3,12 @@
 #ifndef BH_SHADER_DIR
 #define BH_SHADER_DIR "shaders"
 #endif
-#include "render/HeapMaps.hpp"
+#include "render/HeapBind.hpp"
 #include "gpu_scene/InstanceData.hpp"
 #include "render/PassTargets.hpp"
 #include "render/PassRendering.hpp"
 #include "render/PassShaderGroup.hpp"
-#include "render/PassTransitions.hpp"
+#include "rhi/Barrier.hpp"
 #include "rhi/MeshDraw.hpp"
 
 #include <spdlog/spdlog.h>
@@ -17,11 +17,11 @@ namespace burnhope {
 namespace {
 
 bool visTargetsCreate(VisTargets& t, Device& d, VkExtent2D extent) {
-    const bool visOk = recreateImage(
+    const bool visOk = recreateTracked(
         t.vis, d, extent, VK_FORMAT_R32_UINT,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         VK_IMAGE_ASPECT_COLOR_BIT);
-    const bool depthOk = recreateImage(
+    const bool depthOk = recreateTracked(
         t.depth, d, extent, VK_FORMAT_D32_SFLOAT,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         VK_IMAGE_ASPECT_DEPTH_BIT);
@@ -29,8 +29,22 @@ bool visTargetsCreate(VisTargets& t, Device& d, VkExtent2D extent) {
 }
 
 void visTargetsDestroy(VisTargets& t, Device& d) {
-    gpuImageDestroy(t.vis, d);
-    gpuImageDestroy(t.depth, d);
+    destroyTracked(d, {&t.vis, &t.depth});
+}
+
+void bindVisMesh(PassBindings& b) {
+    b.ubo(0, HeapBuf::Frame);
+    b.storageBuf(7, HeapBuf::Verts);
+    b.storageBuf(8, HeapBuf::Indices);
+    b.storageBuf(9, HeapBuf::Meshlets);
+    b.storageBuf(10, HeapBuf::Instances);
+    b.storageBuf(11, HeapBuf::Visible);
+}
+
+void copyBindings(const PassBindings& b, VkDescriptorSetAndBindingMappingEXT* dst) {
+    for (uint32_t i = 0; i < b.raw.count; ++i) {
+        dst[i] = b.raw.mappings[i];
+    }
 }
 
 } // namespace
@@ -40,8 +54,10 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
     if (!visTargetsCreate(p.targets, d, extent)) {
         return false;
     }
+    PassBindings mesh{heaps};
+    bindVisMesh(mesh);
     VkDescriptorSetAndBindingMappingEXT maps[6];
-    heapMapsVis(heaps, maps);
+    copyBindings(mesh, maps);
     const char* meshPath[2] = {BH_SHADER_DIR "/visbuffer.mesh.spv", BH_SHADER_DIR "/visbuffer.mesh1.spv"};
     const char* latePath[2] = {BH_SHADER_DIR "/visbuffer.late.mesh.spv", BH_SHADER_DIR "/visbuffer.late1.mesh.spv"};
     const char* shadowPath[3] = {
@@ -54,10 +70,15 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
         BH_SHADER_DIR "/visbuffer.point1.mesh.spv",
         BH_SHADER_DIR "/visbuffer.point2.mesh.spv",
     };
-    VkDescriptorSetAndBindingMappingEXT shadowMaps[3][7];
-    VkDescriptorSetAndBindingMappingEXT pointMaps[3][7];
+    VkDescriptorSetAndBindingMappingEXT shadowMaps[3][8];
+    VkDescriptorSetAndBindingMappingEXT pointMaps[3][8];
     VkDescriptorSetAndBindingMappingEXT fragMaps[9];
-    heapMapsVisFrag(heaps, fragMaps);
+    PassBindings fragBind{heaps};
+    bindVisMesh(fragBind);
+    fragBind.sampledImg(12, HeapImg::Textures);
+    fragBind.storageBuf(14, HeapBuf::Materials);
+    fragBind.sampler(24, HeapSamp::Wrap);
+    copyBindings(fragBind, fragMaps);
     const ShaderCreateDesc frag{
         .path = BH_SHADER_DIR "/visbuffer.frag.spv",
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -67,12 +88,28 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
     const bool shaders = createShaderArray(d, p.mesh, meshPath, VK_SHADER_STAGE_MESH_BIT_EXT, maps, 6u, VK_SHADER_STAGE_FRAGMENT_BIT)
         && createShaderArray(d, p.meshLate, latePath, VK_SHADER_STAGE_MESH_BIT_EXT, maps, 6u, VK_SHADER_STAGE_FRAGMENT_BIT)
         && createShaderGroup(d, p.shadow, shadowPath, VK_SHADER_STAGE_MESH_BIT_EXT, [&](uint32_t cascade, ShaderCreateDesc& desc) {
-            heapMapsShadow(heaps, shadowMaps[cascade], cascade);
+            PassBindings shadowBind{heaps};
+            shadowBind.ubo(0, HeapBuf::Frame);
+            shadowBind.storageBuf(7, HeapBuf::Verts);
+            shadowBind.storageBuf(8, HeapBuf::Indices);
+            shadowBind.storageBuf(9, HeapBuf::Meshlets);
+            shadowBind.storageBuf(10, HeapBuf::Instances);
+            shadowBind.sun();
+            shadowBind.storageBuf(18, static_cast<uint32_t>(HeapBuf::ShadowVisible) + cascade);
+            copyBindings(shadowBind, shadowMaps[cascade]);
             desc.mappingCount = 7;
             desc.mappings = shadowMaps[cascade];
         })
         && createShaderGroup(d, p.point, pointPath, VK_SHADER_STAGE_MESH_BIT_EXT, [&](uint32_t light, ShaderCreateDesc& desc) {
-            heapMapsPoint(heaps, pointMaps[light], light);
+            PassBindings pointBind{heaps};
+            pointBind.ubo(0, HeapBuf::Frame);
+            pointBind.storageBuf(7, HeapBuf::Verts);
+            pointBind.storageBuf(8, HeapBuf::Indices);
+            pointBind.storageBuf(9, HeapBuf::Meshlets);
+            pointBind.storageBuf(10, HeapBuf::Instances);
+            pointBind.sun();
+            pointBind.storageBuf(19, static_cast<uint32_t>(HeapBuf::PointVisible) + light);
+            copyBindings(pointBind, pointMaps[light]);
             desc.mappingCount = 7;
             desc.mappings = pointMaps[light];
             desc.nextStage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -109,24 +146,23 @@ bool visPassResize(VisPass& p, Device& d, VkExtent2D extent) {
     return visTargetsCreate(p.targets, d, extent);
 }
 
-void visPassRecord(VkCommandBuffer cmd, VkExtent2D extent, const VisPass& p, const VisInstanceDraw& draw, bool load, uint32_t flight) {
-    const VisTargets& t = p.targets;
-    transitionToColorAttachment(cmd, t.vis.image,
-        load ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
-        load ? VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_2_NONE,
-        load ? VK_ACCESS_2_SHADER_SAMPLED_READ_BIT : VK_ACCESS_2_NONE,
-        load ? (VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT) : VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
-    transitionToDepthAttachment(cmd, t.depth.image,
-        load ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
-        load ? VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_2_NONE,
-        load ? VK_ACCESS_2_SHADER_SAMPLED_READ_BIT : VK_ACCESS_2_NONE,
-        load ? (VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT) : VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+void visPassRecord(VkCommandBuffer cmd, VkExtent2D extent, VisPass& p, const VisInstanceDraw& draw, bool load, uint32_t flight) {
+    VisTargets& t = p.targets;
+    const VkAccessFlags2 colorDst = load
+        ? (VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT)
+        : VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    const VkAccessFlags2 depthDst = load
+        ? (VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
+        : VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    imageBarrier(cmd, t.vis, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, colorDst);
+    imageBarrier(cmd, t.depth, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, depthDst, VK_IMAGE_ASPECT_DEPTH_BIT);
 
     VkClearValue visClear{};
     visClear.color.uint32[0] = 0;
     VkClearValue depthClear{};
     depthClear.depthStencil.depth = 0.0f;
-    RenderingPass rendering = beginRenderingColorDepth(cmd, extent, t.vis.view, t.depth.view, visClear, depthClear, !load);
+    RenderingPass rendering = beginRenderingColorDepth(cmd, extent, t.vis.image.view, t.depth.image.view, visClear, depthClear, !load);
     cmdSetGraphicsDynamic(cmd, extent, 1, true, false, 0, true);
     // Same rhi/MeshDraw entry point as core/ui/Canvas.cpp — one registered draw per pass
     // (plan Фаза 1/5), no second mesh-shader dispatch path for engine/.
@@ -140,21 +176,21 @@ void visPassRecord(VkCommandBuffer cmd, VkExtent2D extent, const VisPass& p, con
     endRendering(rendering);
 }
 
-void visShadowRecord(VkCommandBuffer cmd, const VisPass& p, const GpuImage& depth, const VisInstanceDraw& draw, VkImageLayout depthLayout, uint32_t cascade) {
-    const VkExtent2D extent = depth.extent;
-    const bool fresh = depthLayout == VK_IMAGE_LAYOUT_UNDEFINED;
-    transitionToDepthAttachment(cmd, depth.image, depthLayout,
-        fresh ? VK_PIPELINE_STAGE_2_NONE : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        fresh ? VK_ACCESS_2_NONE : VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-        fresh ? VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
-              : (VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT));
+void visShadowRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth, const VisInstanceDraw& draw, uint32_t cascade) {
+    const VkExtent2D extent = depth.image.extent;
+    const bool fresh = depth.layout == VK_IMAGE_LAYOUT_UNDEFINED;
+    const VkAccessFlags2 dst = fresh
+        ? VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+        : (VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+    imageBarrier(cmd, depth, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, dst, VK_IMAGE_ASPECT_DEPTH_BIT);
     VkClearValue depthClear{};
     depthClear.depthStencil.depth = 0.0f;
     const uint32_t band = extent.width > 0 ? extent.width : 1u;
     const int32_t bandY = static_cast<int32_t>(cascade * band);
     const VkRect2D bandRect{{0, bandY}, {band, band}};
     const VkRect2D fullRect{{0, 0}, {extent.width, extent.height}};
-    RenderingPass rendering = beginRenderingDepthOnly(cmd, extent, depth.view, depthClear, fresh, fresh ? fullRect : bandRect);
+    RenderingPass rendering = beginRenderingDepthOnly(cmd, extent, depth.image.view, depthClear, fresh, fresh ? fullRect : bandRect);
     if (!fresh) {
         VkClearAttachment clear{};
         clear.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -177,11 +213,10 @@ void visShadowRecord(VkCommandBuffer cmd, const VisPass& p, const GpuImage& dept
     endRendering(rendering);
 }
 
-void visPointRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth, const uint32_t counts[3], uint64_t base, VkDeviceSize stride) {
-    const bool fresh = depth.layout == VK_IMAGE_LAYOUT_UNDEFINED;
-    transitionToDepthAttachment(cmd, depth.image.image, depth.layout,
-        fresh ? VK_PIPELINE_STAGE_2_NONE : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        fresh ? VK_ACCESS_2_NONE : VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+void visPointRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth, const uint32_t counts[3]) {
+    imageBarrier(cmd, depth, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+        VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_DEPTH_BIT);
     VkClearValue depthClear{};
     depthClear.depthStencil.depth = 1.0f;
     RenderingPass rendering = beginRenderingDepthOnly(cmd, depth.image.extent, depth.image.view, depthClear, true);
@@ -197,10 +232,8 @@ void visPointRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth, 
         });
     }
     endRendering(rendering);
-    transitionAttachmentToSampled(cmd, depth.image.image, VK_IMAGE_ASPECT_DEPTH_BIT);
-    depth.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    (void)base;
-    (void)stride;
+    imageBarrier(cmd, depth, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT);
 }
 
 } // namespace burnhope

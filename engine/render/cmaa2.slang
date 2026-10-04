@@ -2,13 +2,10 @@
 // A single-pixel speck is left alone. The blend never exceeds half a texel.
 
 #include "frame.slang"
+#include "core/math.slang"
 
 [[vk::binding(6, 0)]] Texture2D<float4> gSrc;
 [[vk::binding(3, 0)]] RWTexture2D<float4> gDst;
-
-float luma(float3 c) {
-    return dot(c, float3(0.2126, 0.7152, 0.0722));
-}
 
 float4 loadPx(int2 p) {
     const int2 e = int2(gFrame.extent.xy) - int2(1, 1);

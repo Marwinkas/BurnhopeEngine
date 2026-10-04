@@ -1,5 +1,6 @@
 #pragma once
 
+#include "render/Visbuffer.hpp"
 #include "rhi/Device.hpp"
 #include "rhi/GpuBuffer.hpp"
 #include "rhi/ShaderObject.hpp"
@@ -34,5 +35,24 @@ void clusterPassRecord(VkCommandBuffer cmd, const ClusterPass& p);
 [[nodiscard]] bool shadowCullCreate(ShadowCullPass& p, Device& d, const DescriptorHeaps& heaps);
 void shadowCullDestroy(ShadowCullPass& p, Device& d);
 void shadowCullRecord(VkCommandBuffer cmd, const ShadowCullPass& p, const GpuBuffer& indirect, const GpuBuffer& lists, uint32_t count);
+
+struct CullBuffers {
+    GpuBuffer& shadowIndirect;
+    GpuBuffer& shadowVisible;
+    GpuBuffer& indirect;
+    GpuBuffer& candidates;
+    GpuBuffer& visible;
+    uint32_t instanceCount = 0;
+    uint32_t strideU = 0;
+    const uint32_t* sunKeep = nullptr;
+};
+
+struct CullResults {
+    VisInstanceDraw draw{};
+    VisInstanceDraw lateDraw{};
+    uint32_t visibleCount = 0;
+    uint32_t occlOut = 0;
+    bool twoPhase = false;
+};
 
 } // namespace burnhope

@@ -1,5 +1,5 @@
 #include "render/Cull.hpp"
-#include "render/HeapMaps.hpp"
+#include "render/HeapBind.hpp"
 #include "render/PassBufferSync.hpp"
 #include "render/PassCommon.hpp"
 #include "render/PassShaderGroup.hpp"
@@ -14,8 +14,21 @@ namespace burnhope {
 
 bool occlPassCreate(OcclPass& p, Device& d, const DescriptorHeaps& heaps) {
     occlPassDestroy(p, d);
+    PassBindings b{heaps};
+    b.ubo(0, HeapBuf::Frame);
+    b.sampledImg(6, HeapImg::HiZSample);
+    b.storageBuf(10, HeapBuf::Instances);
+    b.storageBuf(11, HeapBuf::Visible, false);
+    b.storageBuf(28, HeapBuf::Candidates, false);
+    b.storageBuf(29, HeapBuf::Indirect, false);
+    b.sampledImg(31, HeapImg::HiZSample1);
+    b.storageBuf(9, HeapBuf::Meshlets);
+    b.storageBuf(8, HeapBuf::Sectors);
+    b.knob(50, HeapBuf::Flags);
     VkDescriptorSetAndBindingMappingEXT maps[10];
-    heapMapsOccl(heaps, maps);
+    for (uint32_t i = 0; i < b.raw.count; ++i) {
+        maps[i] = b.raw.mappings[i];
+    }
     const char* clearPath[2] = {BH_SHADER_DIR "/cull.clear.spv", BH_SHADER_DIR "/cull.clear1.spv"};
     const char* compactPath[2] = {BH_SHADER_DIR "/cull.comp.spv", BH_SHADER_DIR "/cull.comp1.spv"};
     const char* latePath[2] = {BH_SHADER_DIR "/cull.late.spv", BH_SHADER_DIR "/cull.late1.spv"};
@@ -58,13 +71,18 @@ void occlPassRecord(VkCommandBuffer cmd, const OcclPass& p, const GpuBuffer& ind
 
 bool clusterPassCreate(ClusterPass& p, Device& d, const DescriptorHeaps& heaps) {
     clusterPassDestroy(p, d);
-    VkDescriptorSetAndBindingMappingEXT maps[5];
-    heapMapsCluster(heaps, maps);
+    PassBindings b{heaps};
+    b.ubo(0, HeapBuf::Frame);
+    b.sun();
+    b.storageBuf(25, HeapBuf::Lights);
+    b.storageBuf(26, HeapBuf::Clusters, false);
+    b.storageBuf(27, HeapBuf::ClusterIndex, false);
+    b.storageBuf(18, HeapBuf::Decals);
     const ShaderCreateDesc desc{
         .path = BH_SHADER_DIR "/cluster.comp.spv",
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = 5,
-        .mappings = maps,
+        .mappingCount = b.raw.count,
+        .mappings = b.raw.mappings,
     };
     if (!shaderCreate(d, desc, p.cs)) {
         spdlog::error("cluster light shader failed");
@@ -85,19 +103,26 @@ void clusterPassRecord(VkCommandBuffer cmd, const ClusterPass& p) {
 
 bool shadowCullCreate(ShadowCullPass& p, Device& d, const DescriptorHeaps& heaps) {
     shadowCullDestroy(p, d);
-    VkDescriptorSetAndBindingMappingEXT maps[4];
-    heapMapsShadowCull(heaps, maps);
+    PassBindings b{heaps};
+    b.ubo(0, HeapBuf::Frame);
+    b.sun();
+    b.storageBuf(10, HeapBuf::Instances);
+    b.storageBuf(18, HeapBuf::ShadowAll, false);
+    b.storageBuf(32, HeapBuf::ShadowIndirect, false);
+    PassBindings clearBind{heaps};
+    clearBind.sun();
+    clearBind.storageBuf(32, HeapBuf::ShadowIndirect, false);
     const ShaderCreateDesc clear{
         .path = BH_SHADER_DIR "/shadowcull.clear.spv",
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = 4,
-        .mappings = maps,
+        .mappingCount = clearBind.raw.count,
+        .mappings = clearBind.raw.mappings,
     };
     const ShaderCreateDesc compact{
         .path = BH_SHADER_DIR "/shadowcull.comp.spv",
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = 4,
-        .mappings = maps,
+        .mappingCount = 5,
+        .mappings = b.raw.mappings,
     };
     if (!shaderCreate(d, clear, p.clear) || !shaderCreate(d, compact, p.compact)) {
         spdlog::error("shadow cull shader failed");

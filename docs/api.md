@@ -185,13 +185,12 @@
 
 - `visPassCreate`, `visPassDestroy`, `visPassResize`, `visPassRecord`.
 - `visShadowRecord` — один каскад солнца, только глубина, без фрагментного шейдера. Полоса 2048² в атласе 2048×6144. Список групп — буфер этого каскада, не список камеры.
-- `shadePassCreate`, `shadePassDestroy`, `shadePassResize`, `shadePassRecord`.
-- `ssrPassCreate`, `ssrPassDestroy`, `ssrPassRecord`.
-- `ssrcPassCreate`, `ssrcPassDestroy`, `ssrcPassRecord` — четыре экранных каскада, интервал `ssrcInterval`. Луч, ушедший с экрана, пустой: мировые воксели сюда ещё не подключены.
-- `ssrcInterval(cascade, base)` — границы `t_n = base * 4^n`. Каскад 0 это `(0, base]`, следующий `(base, 4 base]`, дальше `(4 base, 16 base]` и `(16 base, 64 base]`. Попадание ближе интервала принадлежит более плотному каскаду. Промах (альфа 1) склеивается с дальним: `J + beta * I`.
-- `tonemapPassCreate`, `tonemapPassDestroy`, `tonemapPassRecord`.
+- `shadePassCreate`, `shadePassDestroy`, `shadePassResize`, `shadeAoRecord`, `shadeSkyRecord`, `shadeSunRecord`, `shadePunctualRecord`, `shadeFogRecord`.
+- `AtmosphereParams` — 192 байта, binding 58, слот `HeapBuf::Atm`. Поля: `sunZenith`, `sunAzimuth`, `sunIntensity`, `sunDisk`, `rayleigh`, `mie`, `mieG`, `ozone`, `cloudCoverage`, `cloudDensity`, `cloudBottom`, `cloudTop`, `cloudSpeedX`, `cloudSpeedZ`, `cloudDetail`, `moon`, `stars`, `nightAmbient`, `time`, `parity`.
+- `atmosphereApply` — направление и цвет солнца из зенита. `skyPassCreate`, `skyPassDestroy`, `skyLutRecord`, `cloudRecord`. Картинки полосы 896: пропускание, многократное рассеяние, панорама 192×108, облака в половине кадра.
+- `hizPassCreate`, `hizPassDestroy`, `hizMaxBuildRecord` — пирамида максимума глубины для окклюзии. Экранные SSR и SSRC удалены.
+- `tonemapPassCreate`, `tonemapPassDestroy`, `cmaaPassRecord`, `bloomPassRecord`, `tonemapDrawRecord`.
 - `cmaaPassRecord` — CMAA2: ребро длиннее двух пикселей смешивается с соседом не больше чем на 0.45, одиночный шум не трогается. Читает `HdrB`, пишет `HdrA`, тонмап берёт `HdrA`.
-- `meshletGpuCreate`, `meshletGpuDestroy`, `meshletGpuWriteFrame`.
 - `sceneFrameLoadBhop` — mmap `cache/bistro.bhop` в буферы кадра. Нет файла — остаётся тестовая сцена.
 - `sceneImportFbx(fbx, bhop)` — один файл через `sceneImportFbxList`.
 - `sceneImportFbxList(paths, count, bhop)` — несколько FBX в один `BistroScene` версии 9. Улица, интерьер и винный зал. Длина ребра не режется. Рядом с LOD 0 пишется LOD 1: `meshopt_simplify` с `meshopt_SimplifyLockBorder`, цель — половина треугольников. У пары LOD в `pad[1]` стоит старший бит. Лампы дописываются после текстур, не больше 128.
@@ -200,24 +199,24 @@
 - `sceneFrameShift(scene, dx, dy, dz)` — сдвигает уже загруженные инстансы.
 - `sceneFrameAppendBhop(scene, path)` — дописывает второй блоб к текущей сцене. Текстуры и материалы перенумеровываются. Камера встаёт на добавленный объём.
 - `sceneFrameTune(scene, HudPost)` — зерно, блюм, виньетка, хроматика, контакт, окклюзия блика, Toksvig, параллакс, multi-scatter, сила SSRC, сила GTAO, яркость свечей. Сцена хранит тот же `HudPost`, не массив из двенадцати чисел. Ноль выключает ползунок.
-- `GpuTask`, `gpuTaskBegin`, `gpuTaskEnd`, `gpuTaskSubmit`, `gpuTaskDone`, `gpuTaskDestroy` — разовый пул, буфер и fence вне кадра. `gpuTaskDone` правда только после сабмита. `passGroups`, `dispatch1D`, `dispatch2D`, `dispatchCompute2D`, `alignUp`, `mipExtent`. `halfExtent`, `recreateImage`, `recreateHdr` поднимают сторону до одного текселя. `TrackedImage` держит картинку и `VkImageLayout` вместе. `PassContext` — командный буфер, размер, номер кадра и профайлер. `heapMapBuf` / `heapMapImg` — binding и имя слота.
-- `transitionAttachmentToSampled`, `transitionToColorAttachment`, `transitionToDepthAttachment`, `transitionHdrToStorageWrite`, `transitionHdrStorageToSampled`, `transitionHdrSampledToStorageWrite`.
+- `GpuTask`, `gpuTaskBegin`, `gpuTaskEnd`, `gpuTaskSubmit`, `gpuTaskDone`, `gpuTaskDestroy` — разовый пул, буфер и fence вне кадра. `gpuTaskDone` правда только после сабмита. `passGroups`, `dispatch1D`, `dispatch2D`, `dispatchCompute2D`, `alignUp`, `mipExtent`. `dispatchMipChainDown` / `dispatchMipChainUp` — запись мипа и чтение следующим; `firstMip` сдвигает размер. SSRC сюда не входит. `halfExtent`, `recreateImage`, `recreateHdr`, `recreateTracked`, `destroyTracked` поднимают сторону до одного текселя и сбрасывают раскладку. `TrackedImage` держит картинку, `VkImageLayout`, стадию и доступ. `RenderContext` — командный буфер, устройство, кучи, профайлер, размер, номер кадра, заморозка, `FrameView`, `FrameSun` и `FramePost`. `HeapBindingBuilder` в ядре пишет до 32 сырых mapping. `PassBindings` в `engine/render/HeapBind.hpp` называет слот: `ubo`, `storageBuf`, `sampledImg`, `storageImg`, `sampler`, `knob`.
+- `imageBarrier` — единственный барьер картинки. Если раскладка, стадия и доступ уже такие, вызов ничего не пишет. `depend` ставит зависимость даже в том же состоянии. Из `UNDEFINED` источник — `NONE`. Новое состояние остаётся в `TrackedImage`. Куб и visbuffer — `TrackedImage`. Свопчейн в цвет переводит `swapchainBegin`; запасной путь тонмапа собирает временный `TrackedImage` и зовёт тот же `imageBarrier`.
 - `heapWriteStorage` — слот и буфер, тип storage внутри. Нулевой адрес не пишется. Примитивы холста — слот `48`.
 - `createDefaultGpuBuffer(out, device, size, hostVisible, extraUsage)`, `destroyBuffers`, `destroyImages`.
 - `RenderingPass`, `beginRenderingColorDepth`, `beginRenderingDepthOnly(clearOnLoad, renderArea)`, `endRendering`.
 - `bufferBarrierComputeWriteToRead`, `bufferBarrierComputeToIndirect`, `bufferBarrierComputeToMeshShader`, `bufferBarrierComputeWriteToReadWrite`, `bufferBarrierToCompute`.
 - `createShaderArray`, `createShaderGroup`, `destroyShaderArray` — ошибка посередине массива уничтожает уже созданные в этом вызове шейдеры. `SceneTweaks.fogDensity`, `fogHeight`, `fogScatter` — плотность тумана, высота, где он редеет, и доля солнца в объёме. Ноль плотности выключает луч.
-- `sceneFrameTweaks(scene, SceneTweaks)` — восемь блоков по 64 байта внутри `FramePost` (512): флаги, GTAO, SSR, SSRC, RC, свет, слайдеры, блюм. У каждого свой binding 50–57. `FrameView` (2240 байт, binding 0) держит вид, проекцию и каскады солнца и от ползунков не сдвигается. `forceLod` (−1 авто), `passMask` (бит 0 кластер ламп, 1 зонды, 2 билатеральный апскейл SSR, 3 CMAA, 4 GTAO, 5 блюм, 6 замороженная пирамида кулинга, 7 мировой RC), радиус GTAO, срезы, шаги, степень и спад выборки, отсечка шероховатости SSR, шаги, доля шага, толщина, длина и старт луча, длина/толщина/шаги/пиксельный предел SSCS, база/толщина/потолок/шаги SSRC, `rcRays` / `rcSpacing` / `rcIntensity` / `rcMax`, порог блюма, тонмап 0 AgX / 1 ACES / 2 Reinhard / 3 linear. Выключенный бит — проход не диспатчится, шейдер делает ранний выход. `sceneFrameKick` после present собирает BLAS и сабмитит луч RC в свой буфер. Кадр только читает готовый хеш (`radianceRecord`) и, пока хеш не живой, рисует экранный SSRC.
+- `sceneFrameTweaks(scene, SceneTweaks)` — восемь блоков по 64 байта внутри `FramePost` (512): флаги, GTAO, SSR, SSRC, RC, свет, слайдеры, блюм. У каждого свой binding 50–57. `FrameView` (384 байта, binding 0) держит вид и проекцию. `FrameSun` (1920 байт, binding 49) держит каскады, лампы и куб. Ползунок их не сдвигает. `forceLod` (−1 авто), `passMask` (бит 0 кластер ламп, 1 зонды, 2 билатеральный апскейл SSR, 3 CMAA, 4 GTAO, 5 блюм, 6 замороженная пирамида кулинга, 7 мировой RC), радиус GTAO, срезы, шаги, степень и спад выборки, отсечка шероховатости SSR, шаги, доля шага, толщина, длина и старт луча, длина/толщина/шаги/пиксельный предел SSCS, база/толщина/потолок/шаги SSRC, `rcRays` / `rcSpacing` / `rcIntensity` / `rcMax`, порог блюма, тонмап 0 AgX / 1 ACES / 2 Reinhard / 3 linear. Выключенный бит — проход не диспатчится, шейдер делает ранний выход. `sceneFrameKick` после present собирает BLAS и сабмитит луч RC в свой буфер. Кадр только читает готовый хеш (`radianceRecord`) и, пока хеш не живой, рисует экранный SSRC.
 - `radianceCreate`, `radianceDestroy`, `radianceArm`, `radianceTraceArm`, `radianceKick`, `radianceRecord` — мировой хэш каскадов. `radianceArm` печёт треугольники в свой буфер. `radianceTraceArm` пишет чистку хэша и луч в другой свой буфер. `sceneFrameKick` сабмитит их после present. `radianceRecord` только добавляет облучённость в `HdrA`, когда fence луча уже сигналит. Пока хэш пуст, кадр продолжает экранный SSRC. `freeze` не ставит новый луч. Нет ray query — функции ничего не делают.
 - `sceneFrameKick(scene, device)` — после present опрашивает fence луча и сабмитит BLAS. Чистка хеша стартует здесь и только после кадра, который уже добавил хеш в `HdrA`. Запись кадра fence не читает.
 - `Swapchain.gpuBusy` — 1, если кадр в полёте не успел за 2 мс. Холст этот тик не перезаписывается, resize откладывается.
-- `sceneFrameGpuText(scene)` — таблица GPU-зон прошлого кадра и CPU-время записи. `shadeAoRecord` / `shadeLitRecord`, `ssrTraceRecord` / `ssrUpRecord`, `bloomPassRecord` / `tonemapDrawRecord` — те же проходы, что раньше, разрезанные так, чтобы зона видела каждый кусок.
+- `sceneFrameGpuText(scene)` — таблица GPU-зон прошлого кадра и CPU-время записи. `shadeAoRecord` / `shadeSkyRecord` / `shadeSunRecord` / `shadePunctualRecord` / `shadeFogRecord`, `ssrTraceRecord` / `ssrUpRecord`, `bloomPassRecord` / `tonemapDrawRecord` — те же проходы, что раньше, разрезанные так, чтобы зона видела каждый кусок.
 - `sceneFrameSetDecals(scene, decals, count)` — копирует до 64 ориентированных боксов в `HeapBuf::Decals`. `count == 0` оставляет буфер пустым, шейдер цикл не крутит.
 - `sceneFrameSetSectors(scene, sectors, sectorCount, portals, portalCount)` — до 32 комнат и 64 порталов. Без вызова маска секторов вся открыта, у каждого инстанса сектор 0.
 - `screenBary(px, py, ax, ay, bx, by, cx, cy)` — экранные веса треугольника. `flat` значит проекция схлопнулась в линию.
 - `ssrcThickness(viewZ)` — `clamp(0.006 / viewZ, 0.0004, 0.004)`. У камеры уже, чем постоянные 0.012.
-- `cubePassCreate`, `cubePassDestroy`, `cubePassRecord` — шесть граней куба сцены в атлас 384×64.
-- `ssrPassRecord(..., flight)` — пирамида минимума из глубины кадра и отражение. Один SPIR-V, два `VkShaderEXT`: `cs[flight]` читает только `gHiZ` своего кадра. Нормаль — интерполяция вершин по экранным барицентрикам треугольника из visbuffer. Зазор каскада `clamp(0.006 / viewZ, 0.0004, 0.004)`. `hizMaxBuildRecord(..., flight)` пишет пирамиду максимума тем же объектом кадра. Промах отражения куб не подставляет. `occlPassRecord(..., late, flight)` на позднем проходе биндит `cull.late.spv` или `cull.late1.spv`: шейдер читает только пирамиду этого кадра в полёте.
+- `cubePassCreate`, `cubePassDestroy`, `cubePassRecord`, `probeBakeRecord` — одна грань куба за кадр в атлас 384×64. Первая грань цикла чистит картинку и читает её при дорисовке. Когда цикл собран, `probeBakeRecord` проецирует атлас в SH L2 всех 64 проб.
+- `hizBuildRecord` / `ssrTraceRecord` / `ssrUpRecord(..., flight)` — пирамида минимума из глубины кадра и отражение. Один SPIR-V, два `VkShaderEXT`: `cs[flight]` читает только `gHiZ` своего кадра. Нормаль — интерполяция вершин по экранным барицентрикам треугольника из visbuffer. Зазор каскада `clamp(0.006 / viewZ, 0.0004, 0.004)`. `hizMaxBuildRecord(..., flight)` пишет пирамиду максимума тем же объектом кадра. Промах отражения куб не подставляет. `occlPassRecord(..., late, flight)` на позднем проходе биндит `cull.late.spv` или `cull.late1.spv`: шейдер читает только пирамиду этого кадра в полёте.
 - `meshletBuildAppend` — жадная нарезка, сфера и конус нормалей.
 - `sceneBlobWrite` / `sceneBlobView` — заголовок `AssetHeader`, тип `BistroScene`.
 - `mat4LookAtYUpRh` — если взгляд почти вдоль `(0,1,0)`, up становится `(0,0,±1)`.
@@ -466,7 +465,7 @@
 - `return static_cast<T*>(frameArenaAlloc(a, sizeof(T), alignof(T)))`
 
 ### `core/rhi/GpuProfiler.hpp`
-- `bool gpuProfilerCreate(GpuProfiler&, Device&)` — пул на 96 меток `VK_QUERY_TYPE_TIMESTAMP` (24 зоны × 2 кадра).
+- `bool gpuProfilerCreate(GpuProfiler&, Device&)` — пул на 192 метки `VK_QUERY_TYPE_TIMESTAMP` (48 зон × 2 кадра).
 - `void gpuProfilerDestroy(GpuProfiler&, Device&)`
 - `void gpuProfilerBegin(GpuProfiler&, Device&, VkCommandBuffer, flight)` — читает метки прошлого оборота этого слота без ожидания, потом `vkCmdResetQueryPool`.
 - `void gpuProfilerOpen` / `gpuProfilerClose` — `vkCmdWriteTimestamp2` на `TOP_OF_PIPE` и `BOTTOM_OF_PIPE`. `GpuZone` вызывает их сам.
@@ -513,7 +512,7 @@
 ### `engine/gpu_scene/InstanceData.hpp`
 - `GpuInstance` — 80 байт, POD. `world[12]` (3×float4), `sphere[4]` (центр + радиус), `materialId`, `meshId`, `pad[2]`.
 - `void instanceSet(GpuInstance& g, float x, float y, float z, float radius, uint32_t material, uint32_t mesh)`
-- `VisInstancePush` — `instances` и `visible` как `VkDeviceAddress`, `visibleCount`. 24 байта, push constant меш-шейдера.
+- `GpuInstance` — 80 байт, 16-выровнен. `instanceSet` пишет аффинную строку и сферу.
 
 ### `engine/gpu_scene/InstanceCull.hpp`
 - `uint32_t cullInstances(const GpuInstance* src, uint32_t count, const CameraCull& cam, uint32_t* visible, uint32_t visibleCap)` — пишет индексы выживших в буфер вызывающего. Без аллокации. Сфера через `cameraSphereVisible`.

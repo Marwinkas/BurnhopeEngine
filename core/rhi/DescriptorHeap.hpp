@@ -82,4 +82,19 @@ void heapBind(VkCommandBuffer cmd, const DescriptorHeaps& h, uint32_t flight = 0
     uint32_t heapOffset,
     uint32_t heapStride);
 
+// Фиксированные 32 привязки. Имен слотов нет: их знает вызывающий.
+struct HeapBindingBuilder {
+    const DescriptorHeaps* heaps = nullptr;
+    VkDescriptorSetAndBindingMappingEXT mappings[32]{};
+    uint32_t count = 0;
+
+    void push(uint32_t set, uint32_t binding, VkSpirvResourceTypeFlagsEXT kind, uint32_t heapOffset, uint32_t heapStride) {
+        if (count >= 32u) {
+            return;
+        }
+        mappings[count] = heapMap(set, binding, kind, heapOffset, heapStride);
+        count += 1u;
+    }
+};
+
 } // namespace burnhope

@@ -1,23 +1,32 @@
 #include "render/SceneFrameImpl.hpp"
 
-#include "rhi/Barrier.hpp"
-#include "rhi/GpuProfiler.hpp"
-
-#include <spdlog/spdlog.h>
-
-#include <cstring>
-
 namespace burnhope {
 
-void framePassPoints(FramePass& p) {
-    const uint32_t pointNeed = p.scene->world.lightCount < 3u ? p.scene->world.lightCount : 3u;
-    if (!p.scene->pointReady && p.scene->pointCursor >= pointNeed) {
-        visPointRecord(p.cmd, p.scene->vis, p.scene->pointDepth, p.scene->pointCount, p.scene->pointVisible.address, p.shadowStride);
-        p.scene->pointReady = true;
+void framePassPoints(
+    const RenderContext& ctx,
+    VisPass& vis,
+    CubePass& cube,
+    TrackedImage& pointDepth,
+    TrackedImage& cubeColor,
+    TrackedImage& cubeDepth,
+    uint32_t lightCount,
+    const uint32_t pointCount[3],
+    const uint32_t cubeCount[6],
+    uint32_t pointCursor,
+    bool& pointReady,
+    bool& cubeReady,
+    uint32_t& cubeFace) {
+    const uint32_t pointNeed = lightCount < 3u ? lightCount : 3u;
+    if (!pointReady && pointCursor >= pointNeed) {
+        visPointRecord(ctx.cmd, vis, pointDepth, pointCount);
+        pointReady = true;
     }
-    if (!p.scene->cubeReady) {
-        cubePassRecord(p.cmd, p.scene->cube, p.scene->cubeColor, p.scene->cubeDepth, p.scene->cubeCount);
-        p.scene->cubeReady = true;
+    if (!cubeReady) {
+        cubePassRecord(ctx.cmd, cube, cubeColor, cubeDepth, cubeCount, cubeFace, cubeFace == 0u);
+        cubeFace = (cubeFace + 1u) % 6u;
+        if (cubeFace == 0u) {
+            cubeReady = true;
+        }
     }
 }
 

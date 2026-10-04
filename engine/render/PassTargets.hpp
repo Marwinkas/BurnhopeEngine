@@ -8,28 +8,13 @@
 
 namespace burnhope {
 
-struct GpuProfiler;
-
-// Командный буфер, размер и номер кадра. Имени шейдера и чужой картинки здесь нет.
-struct PassContext {
-    VkCommandBuffer cmd = VK_NULL_HANDLE;
-    VkExtent2D extent{};
-    uint32_t flight = 0;
-    GpuProfiler* profiler = nullptr;
-    bool freeze = false;
-};
-
-// Картинка и её раскладка — одно поле. Отдельной переменной на сцене нет.
-struct TrackedImage {
-    GpuImage image{};
-    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
-};
-
 inline void destroyTracked(Device& device, std::initializer_list<TrackedImage*> pics) {
     for (TrackedImage* pic : pics) {
         if (pic != nullptr) {
             gpuImageDestroy(pic->image, device);
             pic->layout = VK_IMAGE_LAYOUT_UNDEFINED;
+            pic->stage = VK_PIPELINE_STAGE_2_NONE;
+            pic->access = VK_ACCESS_2_NONE;
         }
     }
 }
@@ -55,6 +40,20 @@ inline void destroyTracked(Device& device, std::initializer_list<TrackedImage*> 
         extent.height = 1u;
     }
     return gpuImageCreate(img, device, extent, format, usage, aspect);
+}
+
+[[nodiscard]] inline bool recreateTracked(
+    TrackedImage& img,
+    Device& device,
+    VkExtent2D extent,
+    VkFormat format,
+    VkImageUsageFlags usage,
+    VkImageAspectFlags aspect) {
+    const bool ok = recreateImage(img.image, device, extent, format, usage, aspect);
+    img.layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    img.stage = VK_PIPELINE_STAGE_2_NONE;
+    img.access = VK_ACCESS_2_NONE;
+    return ok;
 }
 
 [[nodiscard]] inline bool recreateHdr(GpuImage& img, Device& device, VkExtent2D extent) {

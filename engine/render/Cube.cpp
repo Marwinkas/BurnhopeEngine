@@ -3,11 +3,12 @@
 #ifndef BH_SHADER_DIR
 #define BH_SHADER_DIR "shaders"
 #endif
-#include "render/HeapMaps.hpp"
+#include "render/HeapBind.hpp"
 #include "render/PassRendering.hpp"
 #include "render/PassShaderGroup.hpp"
-#include "render/PassTransitions.hpp"
+#include "rhi/Barrier.hpp"
 #include "rhi/MeshDraw.hpp"
+#include "rhi/ShaderObject.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -23,25 +24,58 @@ bool cubePassCreate(CubePass& p, Device& d, const DescriptorHeaps& heaps) {
         BH_SHADER_DIR "/cube4.mesh.spv",
         BH_SHADER_DIR "/cube5.mesh.spv",
     };
-    VkDescriptorSetAndBindingMappingEXT maps[6][9];
+    VkDescriptorSetAndBindingMappingEXT maps[6][12];
+    VkDescriptorSetAndBindingMappingEXT fragMaps[8];
     if (!createShaderGroup(d, p.mesh, path, VK_SHADER_STAGE_MESH_BIT_EXT, [&](uint32_t face, ShaderCreateDesc& desc) {
-            heapMapsCube(heaps, maps[face], face);
-            desc.mappingCount = 9;
+            PassBindings b{heaps};
+            b.sun();
+            b.storageBuf(7, HeapBuf::Verts);
+            b.storageBuf(8, HeapBuf::Indices);
+            b.storageBuf(9, HeapBuf::Meshlets);
+            b.storageBuf(10, HeapBuf::Instances);
+            b.storageBuf(21, static_cast<uint32_t>(HeapBuf::CubeVisible) + face);
+            for (uint32_t i = 0; i < b.raw.count; ++i) {
+                maps[face][i] = b.raw.mappings[i];
+            }
+            desc.mappingCount = b.raw.count;
             desc.mappings = maps[face];
         }, VK_SHADER_STAGE_FRAGMENT_BIT)) {
         spdlog::error("cube mesh shader failed");
         cubePassDestroy(p, d);
         return false;
     }
-    heapMapsCube(heaps, maps[0], 0);
+    PassBindings fragBind{heaps};
+    fragBind.sun();
+    fragBind.storageBuf(10, HeapBuf::Instances);
+    fragBind.sampledImg(12, HeapImg::Textures);
+    fragBind.sampler(13, HeapSamp::Linear);
+    fragBind.storageBuf(14, HeapBuf::Materials);
+    for (uint32_t i = 0; i < fragBind.raw.count; ++i) {
+        fragMaps[i] = fragBind.raw.mappings[i];
+    }
     const ShaderCreateDesc frag{
         .path = BH_SHADER_DIR "/cube.frag.spv",
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-        .mappingCount = 8,
-        .mappings = maps[0],
+        .mappingCount = fragBind.raw.count,
+        .mappings = fragMaps,
     };
     if (!shaderCreate(d, frag, p.frag)) {
         spdlog::error("cube fragment shader failed");
+        cubePassDestroy(p, d);
+        return false;
+    }
+    PassBindings bakeBind{heaps};
+    bakeBind.sampledImg(16, HeapImg::Cube);
+    bakeBind.storageBuf(19, HeapBuf::Probes, false);
+    bakeBind.sampler(24, HeapSamp::Wrap);
+    const ShaderCreateDesc bake{
+        .path = BH_SHADER_DIR "/probe.comp.spv",
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .mappingCount = bakeBind.raw.count,
+        .mappings = bakeBind.raw.mappings,
+    };
+    if (!shaderCreate(d, bake, p.bake)) {
+        spdlog::error("probe bake shader failed");
         cubePassDestroy(p, d);
         return false;
     }
@@ -53,11 +87,18 @@ void cubePassDestroy(CubePass& p, Device& d) {
         shaderDestroy(d, p.mesh[face]);
     }
     shaderDestroy(d, p.frag);
+    shaderDestroy(d, p.bake);
 }
 
-void cubePassRecord(VkCommandBuffer cmd, const CubePass& p, const GpuImage& color, const GpuImage& depth, const uint32_t counts[6]) {
-    transitionToColorAttachment(cmd, color.image);
-    transitionToDepthAttachment(cmd, depth.image);
+void cubePassRecord(VkCommandBuffer cmd, const CubePass& p, TrackedImage& color, TrackedImage& depth, const uint32_t counts[6], uint32_t face, bool clearColor) {
+    const VkAccessFlags2 colorAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
+        | (clearColor ? VkAccessFlags2{0} : VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT);
+    const VkAccessFlags2 depthAccess = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+        | (clearColor ? VkAccessFlags2{0} : VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT);
+    imageBarrier(cmd, color, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, colorAccess);
+    imageBarrier(cmd, depth, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+        depthAccess, VK_IMAGE_ASPECT_DEPTH_BIT);
     VkClearValue colorClear{};
     colorClear.color.float32[0] = 0.45f;
     colorClear.color.float32[1] = 0.55f;
@@ -65,20 +106,33 @@ void cubePassRecord(VkCommandBuffer cmd, const CubePass& p, const GpuImage& colo
     colorClear.color.float32[3] = 1.0f;
     VkClearValue depthClear{};
     depthClear.depthStencil.depth = 1.0f;
-    RenderingPass rendering = beginRenderingColorDepth(cmd, color.extent, color.view, depth.view, colorClear, depthClear, true);
-    cmdSetGraphicsDynamic(cmd, color.extent, 1, true);
-    for (uint32_t face = 0; face < 6; ++face) {
-        if (counts[face] == 0) {
-            continue;
-        }
+    RenderingPass rendering = beginRenderingColorDepth(cmd, color.image.extent, color.image.view, depth.image.view, colorClear, depthClear, clearColor);
+    cmdSetGraphicsDynamic(cmd, color.image.extent, 1, true);
+    const uint32_t slot = face % 6u;
+    if (counts[slot] > 0) {
         meshDrawRecord(cmd, MeshDrawDesc{
-            .mesh = p.mesh[face].handle,
+            .mesh = p.mesh[slot].handle,
             .frag = p.frag.handle,
-            .groupCount = counts[face],
+            .groupCount = counts[slot],
         });
     }
     endRendering(rendering);
-    transitionAttachmentToSampled(cmd, color.image, VK_IMAGE_ASPECT_COLOR_BIT);
+    imageBarrier(cmd, color, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+}
+
+void probeBakeRecord(VkCommandBuffer cmd, const CubePass& p, VkBuffer probes, VkDeviceSize probeBytes) {
+    if (p.bake.handle == VK_NULL_HANDLE || probes == VK_NULL_HANDLE) {
+        return;
+    }
+    rhiBufferBarrier(cmd, probes, 0, probeBytes,
+        VK_PIPELINE_STAGE_2_HOST_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_HOST_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    cmdBindCompute(cmd, p.bake.handle);
+    vkCmdDispatch(cmd, 1, 1, 1);
+    rhiBufferBarrier(cmd, probes, 0, probeBytes,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
 }
 
 } // namespace burnhope

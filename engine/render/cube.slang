@@ -53,7 +53,7 @@ void cubeMesh(
     if (gtid < vertCount) {
         const Vertex srcVert = gVerts[meshlet.vertexOffset + gtid];
         const float3 world = instancePoint(inst, srcVert.pos);
-        float4 clip = mul(gFrame.cubeFace[CUBE_FACE], float4(world, 1.0));
+        float4 clip = mul(gSun.cubeFace[CUBE_FACE], float4(world, 1.0));
         const float w = clip.w == 0.0 ? 1.0 : clip.w;
         const float2 local = clip.xy / w * 0.5 + 0.5;
         const float2 atlas = float2((local.x + float(CUBE_FACE)) / 6.0, local.y);
@@ -100,7 +100,7 @@ float4 cubeFs(VertOut vin, nointerpolation uint primId : COLOR1) : SV_Target0 {
     if (mat.albedo > 0 && mat.albedo < 768) {
         albedo *= gTex[mat.albedo].SampleLevel(gSamp, float2(0.5, 0.5), 4.0).rgb;
     }
-    const float3 L = normalize(gFrame.sunDirIntensity.xyz);
-    const float ndotl = saturate(dot(normalize(vin.world - gFrame.cubeMin.xyz), L) * 0.5 + 0.5);
+    const float3 L = normalize(gSun.sunDirIntensity.xyz);
+    const float ndotl = saturate(dot(normalize(vin.world - gSun.cubeMin.xyz), L) * 0.5 + 0.5);
     return float4(albedo * (0.2 + 0.8 * ndotl), 1.0);
 }

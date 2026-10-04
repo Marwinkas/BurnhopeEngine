@@ -18,7 +18,7 @@ void sceneFrameReleaseGpu(SceneFrame* scene, Device& device);
 [[nodiscard]] bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt);
 [[nodiscard]] const char* sceneFrameTitle(const SceneFrame* scene);
 void sceneFrameStats(const SceneFrame* scene, char* out, size_t cap);
-void sceneFrameDebug(SceneFrame* scene, bool ssr, bool ssrc, bool hiz, bool cone, bool lod, bool frustum, bool subpixel, bool shadow, uint32_t mode);
+void sceneFrameDebug(SceneFrame* scene, bool hiz, bool cone, bool lod, bool frustum, bool subpixel, bool shadow, uint32_t mode);
 
 struct SceneTweaks {
     int32_t forceLod = -1;
@@ -48,6 +48,7 @@ struct SceneTweaks {
     float rcSpacing = 0.45f;
     float rcIntensity = 1.0f;
     float rcMax = 48.0f;
+    uint32_t lightProfile = 0;
     float bloomThreshold = 0.35f;
     float fogDensity = 0.012f;
     float fogHeight = 4.0f;

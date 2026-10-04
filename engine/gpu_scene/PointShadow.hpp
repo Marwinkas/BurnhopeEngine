@@ -37,34 +37,7 @@ inline void pointShadowAssign(LightGpuData* lights, uint32_t count) {
 }
 
 inline Mat4 pointShadowLook(float ex, float ey, float ez, float fx, float fy, float fz, float ux, float uy, float uz) {
-    const float fl = std::sqrt(fx * fx + fy * fy + fz * fz);
-    fx /= fl;
-    fy /= fl;
-    fz /= fl;
-    float sx = uy * fz - uz * fy;
-    float sy = uz * fx - ux * fz;
-    float sz = ux * fy - uy * fx;
-    const float sl = std::sqrt(sx * sx + sy * sy + sz * sz);
-    sx /= sl;
-    sy /= sl;
-    sz /= sl;
-    const float vx = sy * fz - sz * fy;
-    const float vy = sz * fx - sx * fz;
-    const float vz = sx * fy - sy * fx;
-    Mat4 r = mat4Identity();
-    r.m[0] = sx;
-    r.m[1] = vx;
-    r.m[2] = -fx;
-    r.m[4] = sy;
-    r.m[5] = vy;
-    r.m[6] = -fy;
-    r.m[8] = sz;
-    r.m[9] = vz;
-    r.m[10] = -fz;
-    r.m[12] = -(sx * ex + sy * ey + sz * ez);
-    r.m[13] = -(vx * ex + vy * ey + vz * ez);
-    r.m[14] = fx * ex + fy * ey + fz * ez;
-    return r;
+    return mat4LookDir(ex, ey, ez, fx, fy, fz, ux, uy, uz);
 }
 
 inline Mat4 pointShadowFace(const LightGpuData& light, uint32_t face) {

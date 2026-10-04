@@ -15,6 +15,14 @@ struct GpuImage {
     uint32_t mips = 1;
 };
 
+// Картинка и последнее состояние барьера. Ядро не знает, чей это проход.
+struct TrackedImage {
+    GpuImage image{};
+    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkPipelineStageFlags2 stage = VK_PIPELINE_STAGE_2_NONE;
+    VkAccessFlags2 access = VK_ACCESS_2_NONE;
+};
+
 [[nodiscard]] bool gpuImageCreate(
     GpuImage& img,
     Device& d,

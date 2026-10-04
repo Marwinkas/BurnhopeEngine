@@ -1,6 +1,5 @@
 #include "render/SceneFrameImpl.hpp"
 
-#include "render/PassTransitions.hpp"
 #include "rhi/GpuProfiler.hpp"
 
 #include <spdlog/spdlog.h>
@@ -9,57 +8,59 @@
 
 namespace burnhope {
 
-void framePassSun(FramePass& p) {
-    if (!p.scene->showShadow) {
-        p.scene->shadowStampValid = 0;
+void framePassSun(const RenderContext& ctx, SceneFrameImpl& scene, VisPass& vis, SunPassData& sun) {
+    if (!scene.showShadow) {
+        sun.stampValid = 0;
         return;
     }
-    bool shadowSame = p.scene->shadowStampValid != 0
-        && p.scene->shadowStampCount == p.scene->instanceCount
-        && p.scene->shadowDepth[0].layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    bool shadowSame = sun.stampValid != 0
+        && sun.stampCount == scene.instanceCount
+        && sun.depth.layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     for (uint32_t c = 0; c < 3; ++c) {
-        if (std::memcmp(p.scene->shadowStamp[c], p.gpu->sunCascade[c], sizeof(p.scene->shadowStamp[c])) != 0) {
+        if (std::memcmp(sun.stamp[c], ctx.sun.sunCascade[c], sizeof(sun.stamp[c])) != 0) {
             shadowSame = false;
         }
     }
-    GpuZone zone(p.scene->gpuTime, p.cmd, "CSM");
+    GpuZone zone(ctx.profiler, ctx.cmd, "CSM");
     if (!shadowSame) {
-        TrackedImage& depth = p.scene->shadowDepth[0];
-        VkImageLayout shadowLayout = depth.layout;
         bool drewShadow = false;
         for (uint32_t c = 0; c < 3; ++c) {
-            if (p.scene->shadowStampValid != 0
-                && std::memcmp(p.scene->shadowStamp[c], p.gpu->sunCascade[c], sizeof(p.scene->shadowStamp[c])) == 0) {
+            if (sun.stampValid != 0 && std::memcmp(sun.stamp[c], ctx.sun.sunCascade[c], sizeof(sun.stamp[c])) == 0) {
                 continue;
             }
-            const VkDeviceSize shadowList = static_cast<VkDeviceSize>(p.strideU) * sizeof(uint32_t);
-            VisInstanceDraw sunDraw{p.scene->instances.address, p.scene->shadowVisible.address + shadowList * c, 0};
-            sunDraw.indirect = p.scene->shadowIndirect.buffer;
-            sunDraw.indirectOffset = static_cast<VkDeviceSize>(p.flight * 64u + c * 16u);
-            visShadowRecord(p.cmd, p.scene->vis, depth.image, sunDraw, shadowLayout, c);
-            shadowLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+            const VkDeviceSize shadowList = static_cast<VkDeviceSize>(sun.strideU) * sizeof(uint32_t);
+            VisInstanceDraw sunDraw{sun.instances.address, sun.shadowVisible.address + shadowList * c, 0};
+            sunDraw.indirect = sun.shadowIndirect.buffer;
+            sunDraw.indirectOffset = static_cast<VkDeviceSize>(ctx.flight * 64u + c * 16u);
+            visShadowRecord(ctx.cmd, vis, sun.depth, sunDraw, c);
             drewShadow = true;
-            std::memcpy(p.scene->shadowStamp[c], p.gpu->sunCascade[c], sizeof(p.scene->shadowStamp[c]));
+            std::memcpy(sun.stamp[c], ctx.sun.sunCascade[c], sizeof(sun.stamp[c]));
         }
         if (drewShadow) {
-            transitionAttachmentToSampled(p.cmd, depth.image.image, VK_IMAGE_ASPECT_DEPTH_BIT);
-            depth.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            imageBarrier(ctx.cmd, sun.depth, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT);
         }
-        p.scene->shadowStampValid = 1;
-        p.scene->shadowStampCount = p.scene->instanceCount;
+        sun.stampValid = 1;
+        sun.stampCount = scene.instanceCount;
     }
     static uint32_t shadowLog = 0;
     if (++shadowLog % 60u == 0u) {
+        const float* sunC = sun.sunC != nullptr ? sun.sunC : scene.fly.eye;
+        const float splits[3] = {
+            sun.splits != nullptr ? sun.splits[0] : 0.0f,
+            sun.splits != nullptr ? sun.splits[1] : 0.0f,
+            sun.splits != nullptr ? sun.splits[2] : 0.0f,
+        };
         spdlog::info(
-            "shadow cache {} inst {}/{} center {:.1f} {:.1f} {:.1f} split {:.1f} {:.1f} {:.1f} eye {:.1f} {:.1f} {:.1f} mode {} sscs {:.2f} sh {} | c0 {:.2f} {:.2f} {:.2f} | c1 {:.2f} {:.2f} {:.2f} | c2 {:.2f} {:.2f} {:.2f} | cpu {:.2f} early {} late {}",
-            shadowSame ? 1 : 0, p.scene->shadowStampCount, p.scene->instanceCount,
-            p.sunC[0], p.sunC[1], p.sunC[2], p.splits[0], p.splits[1], p.splits[2],
-            p.scene->fly.eye[0], p.scene->fly.eye[1], p.scene->fly.eye[2],
-            p.scene->debugMode, p.scene->hud.contact, 1,
-            p.gpu->sunCascade[0][12], p.gpu->sunCascade[0][13], p.gpu->sunCascade[0][14],
-            p.gpu->sunCascade[1][12], p.gpu->sunCascade[1][13], p.gpu->sunCascade[1][14],
-            p.gpu->sunCascade[2][12], p.gpu->sunCascade[2][13], p.gpu->sunCascade[2][14],
-            p.scene->cpuRecordMs, p.scene->occlOut > 0 ? p.scene->visibleCount : 0u, p.scene->occlOut);
+            "shadow cache {} inst {}/{} center {:.1f} {:.1f} {:.1f} split {:.1f} {:.1f} {:.1f} eye {:.1f} {:.1f} {:.1f} mode {} sscs {:.2f} sh {} | c0 {:.2f} {:.2f} {:.2f} | c1 {:.2f} {:.2f} {:.2f} | c2 {:.2f} {:.2f} {:.2f} | cpu {:.2f} vis {} late {}",
+            shadowSame ? 1 : 0, sun.stampCount, scene.instanceCount,
+            sunC[0], sunC[1], sunC[2], splits[0], splits[1], splits[2],
+            scene.fly.eye[0], scene.fly.eye[1], scene.fly.eye[2],
+            scene.debugMode, scene.hud.contact, 1,
+            ctx.sun.sunCascade[0][12], ctx.sun.sunCascade[0][13], ctx.sun.sunCascade[0][14],
+            ctx.sun.sunCascade[1][12], ctx.sun.sunCascade[1][13], ctx.sun.sunCascade[1][14],
+            ctx.sun.sunCascade[2][12], ctx.sun.sunCascade[2][13], ctx.sun.sunCascade[2][14],
+            scene.cpuRecordMs, scene.occlOut > 0 ? scene.visibleCount : 0u, scene.occlOut);
     }
 }
 

@@ -1,4 +1,6 @@
 #include "frame.slang"
+#include "core/math.slang"
+#include "core/hiz_atlas.slang"
 
 [[vk::binding(6, 0)]] Texture2D<float4> gHdr;
 [[vk::binding(33, 0)]] RWTexture2D<float4> gBloom;
@@ -8,21 +10,14 @@
 #endif
 
 uint bandY(uint level) {
-    uint y = 0;
-    [unroll]
-    for (uint i = 0; i < 4; ++i) {
-        if (i < level) {
-            y += max(gFrame.extent.y >> (i + 1u), 1u);
-        }
-    }
-    return y;
+    return atlasMipY(level, max(gFrame.extent.y >> 1, 1u));
 }
 
 uint bandW(uint level) { return max(gFrame.extent.x >> (level + 1u), 1u); }
 uint bandH(uint level) { return max(gFrame.extent.y >> (level + 1u), 1u); }
 
 float karis(float3 c) {
-    return 1.0 / (1.0 + max(dot(c, float3(0.2126, 0.7152, 0.0722)), 1e-4));
+    return 1.0 / (1.0 + max(luma(c), 1e-4));
 }
 
 float3 loadHdr(int2 p) {

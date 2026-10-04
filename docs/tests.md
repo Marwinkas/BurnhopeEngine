@@ -11,7 +11,7 @@ cmake --build build-core --target BurnhopeTest -j
 ./build-core/BurnhopeTest
 ```
 
-Зелёный прогон заканчивается строкой `Status: SUCCESS!` и `0 failed`. `gpu profiler table names the slow pass` проверяет `FrameView` (2240), `FramePost` (512) и блоки GTAO/SSR по 64 байта, и текст таблицы зон. Предупреждения Flecs `is_trivial` и неиспользуемые функции в `Files.cpp` сборку не роняют.
+Зелёный прогон заканчивается строкой `Status: SUCCESS!` и `0 failed`. `gpu profiler table names the slow pass` проверяет `FrameView` (384), `FrameSun` (1920), `FramePost` (512) и блоки GTAO/SSR по 64 байта, и текст таблицы зон. Предупреждения Flecs `is_trivial` и неиспользуемые функции в `Files.cpp` сборку не роняют.
 
 Демо:
 

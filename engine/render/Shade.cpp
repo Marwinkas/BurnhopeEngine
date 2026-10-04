@@ -3,51 +3,131 @@
 #ifndef BH_SHADER_DIR
 #define BH_SHADER_DIR "shaders"
 #endif
-#include "render/HeapMaps.hpp"
+#include "render/HeapBind.hpp"
 #include "render/PassTargets.hpp"
 #include "render/PassCommon.hpp"
-#include "render/PassTransitions.hpp"
 #include "rhi/ShaderObject.hpp"
 
 #include <algorithm>
 #include <spdlog/spdlog.h>
 
 namespace burnhope {
-namespace {
-
-bool storageCreate(GpuImage& img, Device& d, VkExtent2D extent, VkFormat format) {
-    return recreateImage(
-        img, d, extent, format,
-        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_IMAGE_ASPECT_COLOR_BIT);
-}
-
-} // namespace
 
 bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkExtent2D extent) {
     shadePassDestroy(p, d);
-    const bool aoOk = storageCreate(p.ao, d, extent, VK_FORMAT_R8_UNORM);
-    if (!recreateHdr(p.hdrA, d, extent) || !recreateHdr(p.hdrB, d, extent) || !aoOk) {
+    const bool aoOk = recreateTracked(
+        p.ao, d, extent, VK_FORMAT_R8_UNORM,
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+    const bool hdrOk = recreateTracked(
+            p.hdrA, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+        && recreateTracked(
+            p.hdrB, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+        && recreateTracked(
+            p.surf0, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+        && recreateTracked(
+            p.surf1, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+    if (!aoOk || !hdrOk) {
         shadePassDestroy(p, d);
         return false;
     }
-    VkDescriptorSetAndBindingMappingEXT maps[26];
-    heapMapsShade(heaps, maps);
-    const ShaderCreateDesc desc{
-        .path = BH_SHADER_DIR "/shade.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = 26,
-        .mappings = maps,
-    };
-    VkDescriptorSetAndBindingMappingEXT gtaoMaps[5];
-    heapMapsGtao(heaps, gtaoMaps);
-    const ShaderCreateDesc gtao{
+    PassBindings sky{heaps};
+    sky.ubo(0, HeapBuf::Frame);
+    sky.storageImg(3, HeapImg::HdrAStorage);
+    sky.sampledImg(42, HeapImg::SkyViewSample);
+    sky.sampler(23, HeapSamp::Linear);
+    PassBindings sun{heaps};
+    sun.ubo(0, HeapBuf::Frame);
+    sun.sun();
+    sun.sampledImg(1, HeapImg::Vis);
+    sun.sampledImg(2, HeapImg::Depth);
+    sun.storageImg(3, HeapImg::HdrAStorage);
+    sun.storageImg(4, HeapImg::Surf0);
+    sun.storageImg(5, HeapImg::Surf1);
+    sun.storageBuf(7, HeapBuf::Verts);
+    sun.storageBuf(8, HeapBuf::Indices);
+    sun.storageBuf(9, HeapBuf::Meshlets);
+    sun.storageBuf(10, HeapBuf::Instances);
+    sun.sampledImg(12, HeapImg::Textures);
+    sun.storageBuf(14, HeapBuf::Materials);
+    sun.sampledImg(15, HeapImg::Shadow);
+    sun.sampledImg(16, HeapImg::Cube);
+    sun.storageBuf(18, HeapBuf::Decals);
+    sun.storageBuf(19, HeapBuf::Probes);
+    sun.sampler(24, HeapSamp::Wrap);
+    sun.storageBuf(26, HeapBuf::Clusters);
+    sun.storageBuf(27, HeapBuf::ClusterIndex);
+    sun.storageBuf(29, HeapBuf::TexFeedback, false);
+    sun.sampledImg(32, HeapImg::Ao);
+    sun.sampledImg(42, HeapImg::SkyViewSample);
+    sun.sampler(23, HeapSamp::Linear);
+    sun.knob(50, HeapBuf::Flags);
+    sun.knob(55, HeapBuf::Shade);
+    PassBindings punctual{heaps};
+    punctual.ubo(0, HeapBuf::Frame);
+    punctual.sun();
+    punctual.sampledImg(1, HeapImg::Vis);
+    punctual.sampledImg(2, HeapImg::Depth);
+    punctual.storageImg(3, HeapImg::HdrAStorage);
+    punctual.storageImg(4, HeapImg::Surf0);
+    punctual.storageImg(5, HeapImg::Surf1);
+    punctual.sampler(13, HeapSamp::Linear);
+    punctual.sampledImg(17, HeapImg::PointShadow);
+    punctual.storageBuf(25, HeapBuf::Lights);
+    punctual.storageBuf(26, HeapBuf::Clusters);
+    punctual.storageBuf(27, HeapBuf::ClusterIndex);
+    punctual.sampledImg(32, HeapImg::Ao);
+    punctual.knob(50, HeapBuf::Flags);
+    punctual.knob(55, HeapBuf::Shade);
+    PassBindings fog{heaps};
+    fog.ubo(0, HeapBuf::Frame);
+    fog.sun();
+    fog.sampledImg(1, HeapImg::Vis);
+    fog.sampledImg(2, HeapImg::Depth);
+    fog.storageImg(3, HeapImg::HdrAStorage);
+    fog.sampledImg(15, HeapImg::Shadow);
+    fog.knob(55, HeapBuf::Shade);
+    PassBindings gtao{heaps};
+    gtao.ubo(0, HeapBuf::Frame);
+    gtao.sampledImg(2, HeapImg::Depth);
+    gtao.storageImg(32, HeapImg::AoStorage);
+    gtao.knob(50, HeapBuf::Flags);
+    gtao.knob(51, HeapBuf::Gtao);
+    const ShaderCreateDesc gtaoDesc{
         .path = BH_SHADER_DIR "/gtao.comp.spv",
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = 5,
-        .mappings = gtaoMaps,
+        .mappingCount = gtao.raw.count,
+        .mappings = gtao.raw.mappings,
     };
-    if (!shaderCreate(d, desc, p.cs) || !shaderCreate(d, gtao, p.gtao)) {
+    const ShaderCreateDesc skyDesc{
+        .path = BH_SHADER_DIR "/shade.sky.comp.spv",
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .mappingCount = sky.raw.count,
+        .mappings = sky.raw.mappings,
+    };
+    const ShaderCreateDesc sunDesc{
+        .path = BH_SHADER_DIR "/shade.sun.comp.spv",
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .mappingCount = sun.raw.count,
+        .mappings = sun.raw.mappings,
+    };
+    const ShaderCreateDesc punctualDesc{
+        .path = BH_SHADER_DIR "/shade.punctual.comp.spv",
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .mappingCount = punctual.raw.count,
+        .mappings = punctual.raw.mappings,
+    };
+    const ShaderCreateDesc fogDesc{
+        .path = BH_SHADER_DIR "/shade.fog.comp.spv",
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .mappingCount = fog.raw.count,
+        .mappings = fog.raw.mappings,
+    };
+    if (!shaderCreate(d, skyDesc, p.sky) || !shaderCreate(d, sunDesc, p.sun) || !shaderCreate(d, punctualDesc, p.punctual)
+        || !shaderCreate(d, fogDesc, p.fog) || !shaderCreate(d, gtaoDesc, p.gtao)) {
         spdlog::error("shade compute shader failed");
         shadePassDestroy(p, d);
         return false;
@@ -57,30 +137,52 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
 
 void shadePassDestroy(ShadePass& p, Device& d) {
     shaderDestroy(d, p.gtao);
-    shaderDestroy(d, p.cs);
-    gpuImageDestroy(p.ao, d);
-    gpuImageDestroy(p.hdrB, d);
-    gpuImageDestroy(p.hdrA, d);
+    shaderDestroy(d, p.fog);
+    shaderDestroy(d, p.punctual);
+    shaderDestroy(d, p.sun);
+    shaderDestroy(d, p.sky);
+    destroyTracked(d, {&p.surf1, &p.surf0, &p.ao, &p.hdrB, &p.hdrA});
 }
 
 bool shadePassResize(ShadePass& p, Device& d, VkExtent2D extent) {
-    const bool aoOk = storageCreate(p.ao, d, extent, VK_FORMAT_R8_UNORM);
-    return recreateHdr(p.hdrA, d, extent) && recreateHdr(p.hdrB, d, extent) && aoOk;
+    const bool aoOk = recreateTracked(
+        p.ao, d, extent, VK_FORMAT_R8_UNORM,
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+    return recreateTracked(
+            p.hdrA, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+        && recreateTracked(
+            p.hdrB, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+        && recreateTracked(
+            p.surf0, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+        && recreateTracked(
+            p.surf1, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+        && aoOk;
 }
 
-void shadeAoRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p) {
-    transitionHdrToStorageWrite(cmd, p.ao.image);
+void shadeAoRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p) {
+    imageBarrier(cmd, p.ao, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     dispatchCompute2D(cmd, p.gtao, halfExtent(extent));
-    transitionHdrStorageToSampled(cmd, p.ao.image, 0, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+    imageBarrier(cmd, p.ao, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
 }
 
-void shadeLitRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p) {
-    dispatchCompute2D(cmd, p.cs, extent, 16u);
+void shadeSkyRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p) {
+    dispatchCompute2D(cmd, p.sky, extent, 16u);
 }
 
-void shadePassRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p) {
-    shadeAoRecord(cmd, extent, p);
-    shadeLitRecord(cmd, extent, p);
+void shadeSunRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p) {
+    dispatchCompute2D(cmd, p.sun, extent, 16u);
+}
+
+void shadePunctualRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p) {
+    dispatchCompute2D(cmd, p.punctual, extent, 16u);
+}
+
+void shadeFogRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p) {
+    dispatchCompute2D(cmd, p.fog, extent, 16u);
 }
 
 } // namespace burnhope

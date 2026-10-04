@@ -160,7 +160,7 @@ JSON-вёрстка читает те же слова: `dir` (`row`, `column`, `
 
 ## Сборка руками — `Panel`
 
-`Panel::make`, `at`, `find`, `child`, `label`, `textButton`, `button`, `field`, `check`, `radio`, `spin`, `setText`, `color`, `animate`. Под ними `canvasNode` → `spawn`. Этот слой не заменяется блобом. Окно `tool` и блок YOGA GROW собраны им. Панель сцены ставит `check` на SSR, SSRC, Hi-Z, конус, LOD, пирамиду вида, мелкие треугольники и тени, и `radio` на вид кадра.
+`Panel::make`, `at`, `find`, `child`, `label`, `textButton`, `button`, `field`, `check`, `radio`, `spin`, `setText`, `color`, `animate`. Под ними `canvasNode` → `spawn`. Этот слой не заменяется блобом. Окно `tool` и блок YOGA GROW собраны им. Панель сцены ставит `radio` на профиль света (низкий, баланс, ультра) и вид кадра, и `check` на Hi-Z, конус, LOD, пирамиду вида, мелкие треугольники и тени.
 
 `uiTrace` пишет в канал `UI` одну строку `ui fn`: имя функции, id, имя узла, роль, тег и бокс. `uiDumpLayout` пишет `ui layout`, затем `ui box` для именованных узлов и кнопок, полей, слайдеров, галочек, крестиков и скроллов. `ui miss` — бокс пустой, NaN или за пределами кадра. Кадр вызывает дамп на первом кадре и по F3 (`kScanF3`). `uiDrop` снимает поддерево: Yoga-узел уходит из родителя и освобождается вместе с детьми, сущности Flecs уничтожаются, номер слота не переиспользуется. `uiReparent` переносит узел. `uiShow(id, false)` ставит Yoga `display: none`, хит такой узел не берёт. `uiVirtual` — пул из 12 строк. Скролл меняет индекс данных, ноды не плодятся. Проводник его ещё не зовёт. `uiSpin` / `Panel::spin` — число, которое тянут мышью; на время тяги хост включает относительную мышь и возвращает курсор. `uiCurve` / `Panel::curve` — кубическая кривая. Вершинный шейдер из четырёх опорных точек строит ленту (`kUiFlagRibbon`): стык 0 круглый (капсула), 1 bevel, 2 miter. Ручки остаются квадами. `uiGradient` / `Panel::gradient` — полоса из двух остановок. `uiTreeRow` — строка и скрытое тело. `uiShowOnly` прячет соседей. `uiFocusStep` — Tab и Shift+Tab по `UiTab`. `uiMarkLayout` считает поддерево Yoga. `uiDragBegin` / `uiDragEnd` — шина переноса, список ждёт 4 px, `UiDropTarget` фильтрует kind. `uiCursorPush` / `uiCursorPop` — стек курсора. `uiTab` задаёт порядок фокуса. Escape закрывает меню и сбрасывает перенос. Поле помнит восемь снимков (Ctrl+Z, Ctrl+Y). Тройной клик выделяет всё поле. `uiFieldMulti` включает перевод строки, каретку по строкам и перенос по ширине. У заливки четыре радиуса: `radius`, `radiusTr`, `radiusBr`, `radiusBl`. Панель с `ramp` красится градиентом шейдера. `actionBind` / `actionBindChord` / `actionListen` / `actionSave` / `actionLoad` — аккорды и JSON. Незакрытый список — `docs/open.md`.
 
@@ -180,7 +180,7 @@ JSON-вёрстка читает те же слова: `dir` (`row`, `column`, `
 
 ## Движок — `engine/`
 
-Visbuffer, shade, экранные каскады излучения, SSR, сцена. Подключает `core/rhi` снаружи. В демо-exe не входит. Ядро его не видит.
+Visbuffer, shade, небо и облака, экранные каскады излучения, сцена. Подключает `core/rhi` снаружи. В демо-exe не входит. Ядро его не видит.
 
 ## Картинка — `core/image`
 

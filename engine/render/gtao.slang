@@ -1,15 +1,9 @@
 #include "frame.slang"
 #include "camera.slang"
+#include "core/math.slang"
 
 [[vk::binding(2, 0)]] Texture2D<float> gDepth;
 [[vk::binding(32, 0)]] RWTexture2D<float> gAo;
-
-float fastAcos(float x) {
-    x = clamp(x, -1.0, 1.0);
-    const float ax = abs(x);
-    const float res = (-0.156583 * ax + 1.570796) * sqrt(max(1.0 - ax, 0.0));
-    return x >= 0.0 ? res : 3.141593 - res;
-}
 
 float depthAt(int2 p) {
     const int2 e = int2(gFrame.extent.xy) - int2(1, 1);
@@ -52,21 +46,8 @@ void gtaoCs(uint3 dtid : SV_DispatchThreadID) {
     const float2 cuv = (float2(center) + 0.5) * gFrame.invExtent;
     const float3 P = reconstructWorld(cuv, cd);
     const float rad = max(gGtao.radius, 0.05);
-    const float edge2 = rad * rad;
-    float3 px = reconstructWorld((float2(center + int2(1, 0)) + 0.5) * gFrame.invExtent, depthAt(center + int2(1, 0))) - P;
-    float3 py = reconstructWorld((float2(center + int2(0, 1)) + 0.5) * gFrame.invExtent, depthAt(center + int2(0, 1))) - P;
-    if (dot(px, px) > edge2) {
-        px = float3(0.0, 0.0, 0.0);
-    }
-    if (dot(py, py) > edge2) {
-        py = float3(0.0, 0.0, 0.0);
-    }
-    float3 N = cross(px, py);
-    N = dot(N, N) > 1e-12 ? normalize(N) : float3(0.0, 1.0, 0.0);
     const float3 V = normalize(gFrame.cameraPos.xyz - P);
-    if (dot(N, V) < 0.0) {
-        N = -N;
-    }
+    float3 N = reconstructNormalGated(gDepth, uint2(center), P, rad * rad);
     const int slices = clamp(int(gGtao.slices), 1, 8);
     const int steps = clamp(int(gGtao.steps), 1, 12);
     const float fallRange = clamp(gGtao.falloff, 0.05, 1.0);

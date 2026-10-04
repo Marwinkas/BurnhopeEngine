@@ -20,6 +20,10 @@ struct RadiancePass {
     VkAccelerationStructureKHR blas = VK_NULL_HANDLE;
     ShaderExt trace{};
     ShaderExt apply{};
+    ShaderExt merge{};
+    ShaderExt irradiance{};
+    VkPipelineLayout pushLayout = VK_NULL_HANDLE;
+    uint32_t posByte = 0;
     uint32_t triangles = 0;
     uint32_t slots = 262144;
     bool geometry = false;

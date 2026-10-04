@@ -3,6 +3,7 @@
 
 #include "frame.slang"
 #include "camera.slang"
+#include "core/math.slang"
 
 #ifndef LATE
 #define LATE 0
@@ -42,16 +43,6 @@ struct VertOut {
 [[vk::binding(12, 0)]] Texture2D<float4> gTex[768];
 [[vk::binding(14, 0)]] StructuredBuffer<MaterialGpu> gMat;
 [[vk::binding(24, 0)]] SamplerState gWrap;
-
-float bayer4(uint2 p) {
-    const float table[16] = {
-        1.0 / 16.0, 9.0 / 16.0, 3.0 / 16.0, 11.0 / 16.0,
-        13.0 / 16.0, 5.0 / 16.0, 15.0 / 16.0, 7.0 / 16.0,
-        4.0 / 16.0, 12.0 / 16.0, 2.0 / 16.0, 10.0 / 16.0,
-        0.0 / 16.0, 8.0 / 16.0, 14.0 / 16.0, 6.0 / 16.0,
-    };
-    return table[(p.x & 3u) + (p.y & 3u) * 4u];
-}
 
 float lodFade(GpuInstance inst) {
     if ((inst.pad.y & 0x80000000u) == 0u) {
@@ -221,7 +212,7 @@ void shadowMesh(
     out indices uint3 prims[124],
     out primitives PrimOut primPayload[124])
 {
-    emitMeshlet(gtid, gid, gFrame.sunCascade[SHADOW_CASCADE], false, verts, prims, primPayload);
+    emitMeshlet(gtid, gid, gSun.sunCascade[SHADOW_CASCADE], false, verts, prims, primPayload);
 }
 
 #if POINT_LIGHT >= 0
@@ -248,7 +239,7 @@ void pointMesh(
     if (gtid < vertCount) {
         const Vertex srcVert = gVerts[meshlet.vertexOffset + gtid];
         const float3 world = instancePoint(inst, srcVert.pos);
-        float4 clip = mul(gFrame.pointFace[POINT_LIGHT][face], float4(world, 1.0));
+        float4 clip = mul(gSun.pointFace[POINT_LIGHT][face], float4(world, 1.0));
         const float w = clip.w == 0.0 ? 1.0 : clip.w;
         const float2 local = clip.xy / w * 0.5 + 0.5;
         const float2 atlas = float2((local.x + float(face)) / 6.0, (local.y + float(POINT_LIGHT)) / 3.0);

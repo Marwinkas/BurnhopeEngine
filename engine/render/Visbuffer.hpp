@@ -10,8 +10,8 @@ namespace burnhope {
 struct DescriptorHeaps;
 
 struct VisTargets {
-    GpuImage vis;
-    GpuImage depth;
+    TrackedImage vis;
+    TrackedImage depth;
 };
 
 struct VisPass {
@@ -37,8 +37,8 @@ struct VisInstanceDraw {
 void visPassDestroy(VisPass& p, Device& d);
 [[nodiscard]] bool visPassResize(VisPass& p, Device& d, VkExtent2D extent);
 
-void visPassRecord(VkCommandBuffer cmd, VkExtent2D extent, const VisPass& p, const VisInstanceDraw& draw, bool load, uint32_t flight);
-void visShadowRecord(VkCommandBuffer cmd, const VisPass& p, const GpuImage& depth, const VisInstanceDraw& draw, VkImageLayout depthLayout, uint32_t cascade);
-void visPointRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth, const uint32_t counts[3], uint64_t base, VkDeviceSize stride);
+void visPassRecord(VkCommandBuffer cmd, VkExtent2D extent, VisPass& p, const VisInstanceDraw& draw, bool load, uint32_t flight);
+void visShadowRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth, const VisInstanceDraw& draw, uint32_t cascade);
+void visPointRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth, const uint32_t counts[3]);
 
 } // namespace burnhope

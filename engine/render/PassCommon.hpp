@@ -1,6 +1,10 @@
 #pragma once
 
+#include "gpu_scene/FrameUniforms.hpp"
+#include "rhi/Barrier.hpp"
+#include "rhi/DescriptorHeap.hpp"
 #include "rhi/Device.hpp"
+#include "rhi/GpuProfiler.hpp"
 #include "rhi/ShaderObject.hpp"
 
 #include <cstdint>
@@ -145,6 +149,54 @@ inline void dispatchCompute2D(VkCommandBuffer cmd, const ShaderExt& shader, VkEx
     const uint32_t width = extent.width >> mip;
     const uint32_t height = extent.height >> mip;
     return {width == 0u ? 1u : width, height == 0u ? 1u : height};
+}
+
+// Командный буфер кадра и то, что общее у всех проходов. Чужие картинки сюда не кладутся.
+struct RenderContext {
+    VkCommandBuffer cmd;
+    Device& device;
+    DescriptorHeaps& heaps;
+    GpuProfiler& profiler;
+    VkExtent2D extent;
+    uint32_t flight;
+    bool freeze;
+    const FrameView& view;
+    const FrameSun& sun;
+    const FramePost& post;
+};
+
+inline constexpr VkAccessFlags2 kPingAccess = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+    | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
+    | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+
+// Один и тот же пирамидальный проход: запись мипа, затем чтение следующим.
+// firstMip сдвигает размер. SSRC сюда не входит: у него отдельные картинки, не мипы одной.
+inline void dispatchMipChainDown(
+    VkCommandBuffer cmd,
+    const ShaderExt* shaders,
+    uint32_t count,
+    VkExtent2D baseExtent,
+    TrackedImage& target,
+    uint32_t firstMip = 0) {
+    for (uint32_t i = 0; i < count; ++i) {
+        imageBarrier(cmd, target, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+        dispatchCompute2D(cmd, shaders[i], mipExtent(baseExtent, firstMip + i));
+        imageBarrier(cmd, target, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, kPingAccess);
+    }
+}
+
+inline void dispatchMipChainUp(
+    VkCommandBuffer cmd,
+    const ShaderExt* shaders,
+    uint32_t count,
+    VkExtent2D baseExtent,
+    TrackedImage& target,
+    uint32_t firstMip = 0) {
+    for (int i = static_cast<int>(count) - 1; i >= 0; --i) {
+        imageBarrier(cmd, target, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+        dispatchCompute2D(cmd, shaders[static_cast<uint32_t>(i)], mipExtent(baseExtent, firstMip + static_cast<uint32_t>(i)));
+        imageBarrier(cmd, target, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, kPingAccess);
+    }
 }
 
 } // namespace burnhope

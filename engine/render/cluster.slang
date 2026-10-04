@@ -32,7 +32,7 @@ void clusterCs(uint3 id : SV_DispatchThreadID) {
     const uint y = (cell / 16u) % 9u;
     const uint z = cell / 144u;
     const float nearZ = max(gFrame.cameraPos.w, 0.05);
-    const float far = max(gFrame.sunSplit.z, nearZ + 1.0);
+    const float far = max(gSun.sunSplit.z, nearZ + 1.0);
     const float z0 = nearZ * pow(far / nearZ, float(z) / 24.0);
     const float z1 = nearZ * pow(far / nearZ, float(z + 1u) / 24.0);
     const uint lightCount = min(uint(gFrame.padInv.y), 10240u);

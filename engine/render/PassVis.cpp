@@ -1,40 +1,51 @@
 #include "render/SceneFrameImpl.hpp"
 
-#include "render/PassTransitions.hpp"
 #include "rhi/GpuProfiler.hpp"
-
-#include <spdlog/spdlog.h>
-
-#include <cstring>
 
 namespace burnhope {
 
-void framePassVis(FramePass& p) {
-    if (p.twoPhase) {
+void framePassVis(
+    const RenderContext& ctx,
+    VisPass& vis,
+    OcclPass& occl,
+    HizPass& hiz,
+    TrackedImage& hizMax,
+    const GpuBuffer& indirect,
+    const GpuBuffer& candidates,
+    const GpuBuffer& visible,
+    uint32_t instanceCount,
+    bool twoPhase,
+    bool showHiz,
+    const VisInstanceDraw& draw,
+    const VisInstanceDraw& lateDraw) {
+    auto release = [&]() {
+        imageBarrier(ctx.cmd, vis.targets.vis, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+        imageBarrier(ctx.cmd, vis.targets.depth, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT);
+    };
+    if (twoPhase) {
         {
-            GpuZone zone(p.scene->gpuTime, p.cmd, "Visbuffer");
-            visPassRecord(p.cmd, p.swap->extent, p.scene->vis, p.draw, false, p.flight);
+            GpuZone zone(ctx.profiler, ctx.cmd, "Visbuffer");
+            visPassRecord(ctx.cmd, ctx.extent, vis, draw, false, ctx.flight);
         }
-        transitionAttachmentToSampled(p.cmd, p.scene->vis.targets.vis.image, VK_IMAGE_ASPECT_COLOR_BIT);
-        transitionAttachmentToSampled(p.cmd, p.scene->vis.targets.depth.image, VK_IMAGE_ASPECT_DEPTH_BIT);
-        if (p.scene->showHiz) {
-            GpuZone zone(p.scene->gpuTime, p.cmd, "HiZ_Max");
-            hizMaxBuildRecord(p.cmd, p.swap->extent, p.scene->reflect, p.scene->hizMax[p.flight], p.flight);
-        }
-        {
-            GpuZone zone(p.scene->gpuTime, p.cmd, "Mesh_Cull_Late");
-            occlPassRecord(p.cmd, p.scene->occl, p.scene->indirect, p.scene->candidates, p.scene->visible, std::max(p.scene->instanceCount, 1u), true, p.flight);
+        release();
+        if (showHiz) {
+            GpuZone zone(ctx.profiler, ctx.cmd, "HiZ_Max");
+            hizMaxBuildRecord(ctx.cmd, ctx.extent, hiz, hizMax, ctx.flight);
         }
         {
-            GpuZone zone(p.scene->gpuTime, p.cmd, "Visbuffer_Late");
-            visPassRecord(p.cmd, p.swap->extent, p.scene->vis, p.lateDraw, true, p.flight);
+            GpuZone zone(ctx.profiler, ctx.cmd, "Mesh_Cull_Late");
+            occlPassRecord(ctx.cmd, occl, indirect, candidates, visible, std::max(instanceCount, 1u), true, ctx.flight);
+        }
+        {
+            GpuZone zone(ctx.profiler, ctx.cmd, "Visbuffer_Late");
+            visPassRecord(ctx.cmd, ctx.extent, vis, lateDraw, true, ctx.flight);
         }
     } else {
-        GpuZone zone(p.scene->gpuTime, p.cmd, "Visbuffer");
-        visPassRecord(p.cmd, p.swap->extent, p.scene->vis, p.draw, false, p.flight);
+        GpuZone zone(ctx.profiler, ctx.cmd, "Visbuffer");
+        visPassRecord(ctx.cmd, ctx.extent, vis, draw, false, ctx.flight);
     }
-    transitionAttachmentToSampled(p.cmd, p.scene->vis.targets.vis.image, VK_IMAGE_ASPECT_COLOR_BIT);
-    transitionAttachmentToSampled(p.cmd, p.scene->vis.targets.depth.image, VK_IMAGE_ASPECT_DEPTH_BIT);
 }
 
 } // namespace burnhope

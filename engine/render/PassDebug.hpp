@@ -36,17 +36,4 @@ inline ScreenBary screenBary(float px, float py, float ax, float ay, float bx, f
     return b;
 }
 
-// Same clamp as the cascade march: tighter near the camera than a fixed 0.012.
-inline float ssrcThickness(float viewZ) {
-    const float z = viewZ > 0.05f ? viewZ : 0.05f;
-    float t = 0.006f / z;
-    if (t < 0.0004f) {
-        t = 0.0004f;
-    }
-    if (t > 0.004f) {
-        t = 0.004f;
-    }
-    return t;
-}
-
 } // namespace burnhope

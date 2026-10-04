@@ -2,6 +2,7 @@
 // Strengths live in FrameGPU.post.
 
 #include "frame.slang"
+#include "core/math.slang"
 
 [[vk::binding(6, 0)]] Texture2D<float4> gHdr;
 [[vk::binding(33, 0)]] Texture2D<float4> gBloom;
@@ -83,10 +84,10 @@ float4 tonemapFs(VertOut vin) : SV_Target0 {
         mapped = agx(hdr);
     }
     float3 color = mapped;
-    const float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
+    const float lum = luma(color);
     if (gTone.grain > 0.001) {
         const float n = frac(sin(dot(vin.uv * float2(gFrame.extent.xy) + gFrame.cameraPos.xy, float2(12.9898, 78.233))) * 43758.5453);
-        color += (n - 0.5) * gTone.grain * saturate(1.15 - luma);
+        color += (n - 0.5) * gTone.grain * saturate(1.15 - lum);
     }
     color *= saturate(1.15 - dot(d, d) * gTone.vignette);
     return float4(saturate(color), 1.0);

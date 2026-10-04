@@ -21,7 +21,7 @@ bool cascadeOut(float4x4 vp, float3 center, float radius, float extent) {
 [shader("compute")]
 [numthreads(1, 1, 1)]
 void shadowClear(uint3 id : SV_DispatchThreadID) {
-    const uint base = uint(gFrame.sunSplit.w);
+    const uint base = uint(gSun.sunSplit.w);
     [unroll]
     for (uint c = 0; c < 3; ++c) {
         gArgs[base + c * 4u + 0u] = 0u;
@@ -33,7 +33,7 @@ void shadowClear(uint3 id : SV_DispatchThreadID) {
 [shader("compute")]
 [numthreads(64, 1, 1)]
 void shadowCull(uint3 id : SV_DispatchThreadID) {
-    const uint base = uint(gFrame.sunSplit.w);
+    const uint base = uint(gSun.sunSplit.w);
     const uint count = gArgs[base + 12u];
     if (id.x >= count) {
         return;
@@ -64,13 +64,13 @@ void shadowCull(uint3 id : SV_DispatchThreadID) {
                 continue;
             }
         }
-        const float extent = max(gFrame.sunSplit[c], 1.0);
+        const float extent = max(gSun.sunSplit[c], 1.0);
         const float pixels = radius / extent * 2048.0;
         const float minPx = c == 0u ? 8.0 : c == 1u ? 4.0 : 3.0;
         if (pixels < minPx) {
             continue;
         }
-        if (cascadeOut(gFrame.sunCascade[c], inst.sphere.xyz, radius, extent)) {
+        if (cascadeOut(gSun.sunCascade[c], inst.sphere.xyz, radius, extent)) {
             continue;
         }
         uint slot;

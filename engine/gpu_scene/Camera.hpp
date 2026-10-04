@@ -119,8 +119,8 @@ inline CameraCull cameraCullBuild(const CameraPose& pose, const Mat4* prevViewPr
     cameraPlane(c.planes[1], r3x - r0x, r3y - r0y, r3z - r0z, r3w - r0w);
     cameraPlane(c.planes[2], r3x + r1x, r3y + r1y, r3z + r1z, r3w + r1w);
     cameraPlane(c.planes[3], r3x - r1x, r3y - r1y, r3z - r1z, r3w - r1w);
-    cameraPlane(c.planes[4], r2x, r2y, r2z, r2w);
-    cameraPlane(c.planes[5], r3x - r2x, r3y - r2y, r3z - r2z, r3w - r2w);
+    cameraPlane(c.planes[4], r3x - r2x, r3y - r2y, r3z - r2z, r3w - r2w);
+    cameraPlane(c.planes[5], r2x, r2y, r2z, r2w);
 
     constexpr int kCascades = 4;
     c.cascadeCount = kCascades;

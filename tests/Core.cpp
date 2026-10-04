@@ -12,7 +12,7 @@
 #include "rhi/DescriptorHeap.hpp"
 #include "rhi/Barrier.hpp"
 #include "rhi/GpuProfiler.hpp"
-#include "gpu_scene/MeshletGpu.hpp"
+#include "gpu_scene/FrameUniforms.hpp"
 #include "rhi/GpuBuffer.hpp"
 #include "image/ImageFile.hpp"
 #include "ui/Canvas.hpp"
@@ -20,7 +20,6 @@
 #include "gpu_scene/InstanceCull.hpp"
 #include "gpu_scene/MeshletCull.hpp"
 #include "gpu_scene/SunShadow.hpp"
-#include "render/Ssrc.hpp"
 #include "render/PassDebug.hpp"
 #include "render/VisResolve.hpp"
 #include "gfx/PrimitiveGen.hpp"
@@ -506,17 +505,15 @@ TEST_CASE("cullInstances keeps spheres inside the frustum") {
         instanceSet(scene[8 + i], 0.0f, 0.0f, 30.0f, 0.2f, 100, 1);
     }
     uint32_t visible[12]{};
-    const uint32_t n = cullInstances(scene, 12, cam, visible, 12);
+    const uint32_t n = cullInstances(cam, scene, 12, visible, 12);
     CHECK(n == 8);
     for (uint32_t i = 0; i < n; ++i) {
         CHECK(visible[i] == i);
         CHECK(scene[visible[i]].sphere[2] == doctest::Approx(0.0f));
     }
     CHECK(!cameraSphereVisible(cam, scene[8].sphere[0], scene[8].sphere[1], scene[8].sphere[2], scene[8].sphere[3]));
-    VisInstancePush push{};
-    push.visibleCount = n;
     CHECK(sizeof(GpuInstance) == 80);
-    CHECK(push.visibleCount == 8);
+    CHECK(n == 8);
 }
 
 TEST_CASE("anim track samples linear loop and cubic") {
@@ -851,14 +848,6 @@ TEST_CASE("cube meshlet stays inside the vertex and triangle caps") {
     CHECK(cells[c].count == 1);
     CHECK(a != b);
     CHECK(b != c);
-    const SsrcInterval near = ssrcInterval(0, 0.2f);
-    const SsrcInterval mid = ssrcInterval(1, 0.2f);
-    const SsrcInterval far = ssrcInterval(2, 0.2f);
-    CHECK(near.start == doctest::Approx(0.0f));
-    CHECK(near.end == doctest::Approx(0.2f));
-    CHECK(mid.start == doctest::Approx(near.end));
-    CHECK(far.start == doctest::Approx(mid.end));
-    CHECK(far.end > far.start);
     const ScreenBary center = screenBary(1.0f, 1.0f, 0.0f, 0.0f, 3.0f, 0.0f, 0.0f, 3.0f);
     CHECK(center.flat == false);
     CHECK(center.u == doctest::Approx(1.0f / 3.0f));
@@ -872,10 +861,6 @@ TEST_CASE("cube meshlet stays inside the vertex and triangle caps") {
     CHECK(outside.u < -0.05f);
     const ScreenBary collapsed = screenBary(0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 2.0f, 0.0f);
     CHECK(collapsed.flat == true);
-    CHECK(ssrcThickness(0.1f) == doctest::Approx(0.004f));
-    CHECK(ssrcThickness(0.1f) < 0.012f);
-    CHECK(ssrcThickness(3.0f) == doctest::Approx(0.002f));
-    CHECK(ssrcThickness(100.0f) == doctest::Approx(0.0004f));
     SunShadow sun = sunShadowBuild(cameraCullBuild(CameraPose{}, nullptr), scene.sunDir[0], scene.sunDir[1], scene.sunDir[2]);
     CHECK(sun.resolution == kSunShadowResolution);
     CHECK(sun.viewProj.m[0] != 0.0f);
@@ -1241,7 +1226,8 @@ TEST_CASE("inspector drag writes the bound float") {
 }
 
 TEST_CASE("gpu profiler table names the slow pass") {
-    CHECK(sizeof(FrameView) == 2240);
+    CHECK(sizeof(FrameView) == 384);
+    CHECK(sizeof(FrameSun) == 1920);
     CHECK(sizeof(FramePost) == 512);
     CHECK(sizeof(GtaoParams) == 64);
     CHECK(sizeof(SsrParams) == 64);

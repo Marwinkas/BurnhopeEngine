@@ -3,11 +3,11 @@
 #ifndef BH_SHADER_DIR
 #define BH_SHADER_DIR "shaders"
 #endif
-#include "render/HeapMaps.hpp"
+#include "render/HeapBind.hpp"
 #include "render/PassCommon.hpp"
 #include "render/PassRendering.hpp"
 #include "render/PassShaderGroup.hpp"
-#include "render/PassTransitions.hpp"
+#include "rhi/Barrier.hpp"
 #include "rhi/MeshDraw.hpp"
 
 #include <algorithm>
@@ -17,8 +17,17 @@ namespace burnhope {
 
 bool tonemapPassCreate(TonemapPass& p, Device& d, const DescriptorHeaps& heaps) {
     tonemapPassDestroy(p, d);
+    PassBindings tone{heaps};
+    tone.sampledImg(6, HeapImg::HdrASampled);
+    tone.sampler(1, HeapSamp::Linear, 1);
+    tone.ubo(0, HeapBuf::Frame);
+    tone.sampledImg(33, HeapImg::Bloom);
+    tone.knob(50, HeapBuf::Flags);
+    tone.knob(57, HeapBuf::Bloom);
     VkDescriptorSetAndBindingMappingEXT maps[6];
-    heapMapsTonemap(heaps, maps);
+    for (uint32_t i = 0; i < tone.raw.count; ++i) {
+        maps[i] = tone.raw.mappings[i];
+    }
     const ShaderCreateDesc mesh{
         .path = BH_SHADER_DIR "/tonemap.mesh.spv",
         .stage = VK_SHADER_STAGE_MESH_BIT_EXT,
@@ -32,8 +41,15 @@ bool tonemapPassCreate(TonemapPass& p, Device& d, const DescriptorHeaps& heaps) 
         .mappingCount = 6,
         .mappings = maps,
     };
+    PassBindings bloom{heaps};
+    bloom.ubo(0, HeapBuf::Frame);
+    bloom.sampledImg(6, HeapImg::HdrBSampled);
+    bloom.storageImg(33, HeapImg::BloomStorage);
+    bloom.knob(57, HeapBuf::Bloom);
     VkDescriptorSetAndBindingMappingEXT bloomMaps[4];
-    heapMapsBloom(heaps, bloomMaps);
+    for (uint32_t i = 0; i < bloom.raw.count; ++i) {
+        bloomMaps[i] = bloom.raw.mappings[i];
+    }
     const char* downPath[4] = {
         BH_SHADER_DIR "/bloom0.comp.spv",
         BH_SHADER_DIR "/bloom1.comp.spv",
@@ -49,8 +65,15 @@ bool tonemapPassCreate(TonemapPass& p, Device& d, const DescriptorHeaps& heaps) 
     bool bloomOk = shaderCreate(d, mesh, p.mesh) && shaderCreate(d, frag, p.frag)
         && createShaderArray(d, p.down, downPath, VK_SHADER_STAGE_COMPUTE_BIT, bloomMaps, downCount)
         && createShaderArray(d, p.up, upPath, VK_SHADER_STAGE_COMPUTE_BIT, bloomMaps, 3u);
+    PassBindings cmaaBind{heaps};
+    cmaaBind.ubo(0, HeapBuf::Frame);
+    cmaaBind.sampledImg(6, HeapImg::HdrBSampled);
+    cmaaBind.storageImg(3, HeapImg::HdrAStorage);
+    cmaaBind.knob(50, HeapBuf::Flags);
     VkDescriptorSetAndBindingMappingEXT cmaaMaps[4];
-    heapMapsCmaa(heaps, cmaaMaps);
+    for (uint32_t i = 0; i < cmaaBind.raw.count; ++i) {
+        cmaaMaps[i] = cmaaBind.raw.mappings[i];
+    }
     const ShaderCreateDesc cmaa{
         .path = BH_SHADER_DIR "/cmaa2.comp.spv",
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -71,39 +94,28 @@ void tonemapPassDestroy(TonemapPass& p, Device& d) {
     destroyShaderArray(d, p.down);
     destroyShaderArray(d, p.up);
     shaderDestroy(d, p.cmaa);
-    gpuImageDestroy(p.bloom, d);
+    destroyTracked(d, {&p.bloom});
 }
 
 void cmaaPassRecord(VkCommandBuffer cmd, VkExtent2D extent, const TonemapPass& p) {
-        dispatchCompute2D(cmd, p.cmaa, extent);
+    dispatchCompute2D(cmd, p.cmaa, extent);
 }
 
-void bloomPassRecord(VkCommandBuffer cmd, const Swapchain& sc, const TonemapPass& p, bool run) {
-    transitionHdrToStorageWrite(cmd, p.bloom.image);
+void bloomPassRecord(VkCommandBuffer cmd, const Swapchain& sc, TonemapPass& p, bool run) {
     if (!run) {
-        transitionHdrStorageToSampled(cmd, p.bloom.image, 0, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        imageBarrier(cmd, p.bloom, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
         return;
     }
-    for (uint32_t level = 0; level < 4; ++level) {
-        const VkExtent2D band = mipExtent(sc.extent, level + 1u);
-        dispatchCompute2D(cmd, p.down[level], band);
-        transitionHdrStorageToSampled(cmd, p.bloom.image,
-            VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    }
-    for (int level = 2; level >= 0; --level) {
-        const VkExtent2D band = mipExtent(sc.extent, static_cast<uint32_t>(level) + 1u);
-        dispatchCompute2D(cmd, p.up[static_cast<uint32_t>(level)], band);
-        transitionHdrStorageToSampled(cmd, p.bloom.image,
-            VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
-    }
-    transitionHdrStorageToSampled(cmd, p.bloom.image, 0, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    dispatchMipChainDown(cmd, p.down, 4, sc.extent, p.bloom, 1);
+    dispatchMipChainUp(cmd, p.up, 3, sc.extent, p.bloom, 1);
+    imageBarrier(cmd, p.bloom, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
 }
 
 void tonemapDrawRecord(VkCommandBuffer cmd, const Swapchain& sc, const FrameContext& fc, const TonemapPass& p) {
     if (fc.imageIndex >= 8 || sc.inColor[fc.imageIndex] == 0) {
-        transitionToColorAttachment(cmd, sc.images[fc.imageIndex]);
+        TrackedImage pic{};
+        pic.image.image = sc.images[fc.imageIndex];
+        imageBarrier(cmd, pic, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
     }
 
     VkClearValue clear{};
@@ -112,15 +124,6 @@ void tonemapDrawRecord(VkCommandBuffer cmd, const Swapchain& sc, const FrameCont
     cmdSetGraphicsDynamic(cmd, sc.extent, 1, false);
     meshDrawRecord(cmd, MeshDrawDesc{.mesh = p.mesh.handle, .frag = p.frag.handle, .groupCount = 1});
     endRendering(rendering);
-}
-
-void tonemapPassRecord(
-    VkCommandBuffer cmd,
-    const Swapchain& sc,
-    const FrameContext& fc,
-    const TonemapPass& p) {
-    bloomPassRecord(cmd, sc, p, true);
-    tonemapDrawRecord(cmd, sc, fc, p);
 }
 
 } // namespace burnhope

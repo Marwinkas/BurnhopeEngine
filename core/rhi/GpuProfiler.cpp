@@ -38,7 +38,7 @@ void gpuProfilerDestroy(GpuProfiler& p, Device& d) {
     p.pool = VK_NULL_HANDLE;
     p.cursor = 0;
     p.count = 0;
-    p.open = 0;
+    p.nestDepth = 0;
     p.armed[0] = p.armed[1] = false;
 }
 
@@ -46,7 +46,7 @@ void gpuProfilerBegin(GpuProfiler& p, Device& d, VkCommandBuffer cmd, uint32_t f
     flight &= 1u;
     p.flight = flight;
     p.cursor = 0;
-    p.open = 0;
+    p.nestDepth = 0;
     if (p.pool == VK_NULL_HANDLE || d.device == VK_NULL_HANDLE || cmd == VK_NULL_HANDLE) {
         return;
     }
@@ -67,32 +67,31 @@ void gpuProfilerBegin(GpuProfiler& p, Device& d, VkCommandBuffer cmd, uint32_t f
 }
 
 void gpuProfilerOpen(GpuProfiler& p, VkCommandBuffer cmd, const char* name) {
-    if (p.cursor >= kGpuZoneCap) {
+    if (p.cursor >= kGpuZoneCap || p.nestDepth >= 8u) {
         return;
     }
     const uint32_t slot = p.cursor;
+    p.nest[p.nestDepth] = slot;
+    p.nestDepth += 1u;
+    p.cursor += 1u;
+    p.count = p.cursor;
     std::snprintf(p.name[slot], sizeof(p.name[slot]), "%s", name != nullptr ? name : "?");
     p.ms[slot] = 0.0f;
     if (p.pool != VK_NULL_HANDLE && cmd != VK_NULL_HANDLE) {
         const uint32_t query = p.flight * kQueriesPerFlight + slot * 2u;
         vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, p.pool, query);
     }
-    p.open = slot + 1u;
 }
 
 void gpuProfilerClose(GpuProfiler& p, VkCommandBuffer cmd) {
-    if (p.open == 0) {
+    if (p.nestDepth == 0) {
         return;
     }
-    const uint32_t slot = p.open - 1u;
+    p.nestDepth -= 1u;
+    const uint32_t slot = p.nest[p.nestDepth];
     if (p.pool != VK_NULL_HANDLE && cmd != VK_NULL_HANDLE && slot < kGpuZoneCap) {
         const uint32_t query = p.flight * kQueriesPerFlight + slot * 2u + 1u;
         vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, p.pool, query);
-    }
-    p.open = 0;
-    if (p.cursor < kGpuZoneCap) {
-        p.cursor += 1u;
-        p.count = p.cursor;
     }
 }
 

@@ -36,15 +36,4 @@ inline void instanceSet(GpuInstance& g, float x, float y, float z, float radius,
     g.meshId = mesh;
 }
 
-// What the visbuffer mesh shader reads. Addresses are VkDeviceAddress. 24 bytes.
-struct VisInstancePush {
-    uint64_t instances = 0;
-    uint64_t visible = 0;
-    uint32_t visibleCount = 0;
-    uint32_t pad = 0;
-};
-
-static_assert(std::is_trivially_copyable_v<VisInstancePush>);
-static_assert(sizeof(VisInstancePush) == 24);
-
 } // namespace burnhope

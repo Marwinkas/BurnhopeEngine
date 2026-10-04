@@ -19,18 +19,6 @@ struct SunShadow {
     uint32_t pad[2]{};
 };
 
-inline Mat4 mat4OrthoRh(float left, float right, float bottom, float top, float zn, float zf) {
-    Mat4 r{};
-    r.m[0] = 2.0f / (right - left);
-    r.m[5] = 2.0f / (bottom - top);
-    r.m[10] = 1.0f / (zn - zf);
-    r.m[12] = -(right + left) / (right - left);
-    r.m[13] = -(top + bottom) / (bottom - top);
-    r.m[14] = zn / (zn - zf);
-    r.m[15] = 1.0f;
-    return r;
-}
-
 inline SunShadow sunShadowBuildAt(float cx, float cy, float cz, float dirX, float dirY, float dirZ, float extent = 20.0f, float snapCells = 1.0f) {
     SunShadow sun{};
     const float len = std::sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
@@ -38,36 +26,23 @@ inline SunShadow sunShadowBuildAt(float cx, float cy, float cz, float dirX, floa
     dirX *= s;
     dirY *= s;
     dirZ *= s;
-    float fx = dirX;
-    float fy = dirY;
-    float fz = dirZ;
     float upx = 0.0f;
     float upy = 1.0f;
     float upz = 0.0f;
-    if (std::fabs(fy) > 0.999f) {
-        upx = 0.0f;
+    if (std::fabs(dirY) > 0.999f) {
         upy = 0.0f;
-        upz = fy > 0.0f ? -1.0f : 1.0f;
+        upz = dirY > 0.0f ? -1.0f : 1.0f;
     }
-    float rx = fy * upz - fz * upy;
-    float ry = fz * upx - fx * upz;
-    float rz = fx * upy - fy * upx;
-    const float rl = std::sqrt(rx * rx + ry * ry + rz * rz);
-    const float rs = rl > 1.0e-6f ? 1.0f / rl : 1.0f;
-    rx *= rs;
-    ry *= rs;
-    rz *= rs;
-    const float ux = ry * fz - rz * fy;
-    const float uy = rz * fx - rx * fz;
-    const float uz = rx * fy - ry * fx;
+    float rx, ry, rz, ux, uy, uz;
+    mat4Orthonormal(dirX, dirY, dirZ, upx, upy, upz, rx, ry, rz, ux, uy, uz);
     const float cells = snapCells > 1.0f ? snapCells : 1.0f;
     const float texel = (2.0f * extent) / static_cast<float>(kSunShadowResolution) * cells;
     const float su = std::round((cx * rx + cy * ry + cz * rz) / texel) * texel;
     const float sv = std::round((cx * ux + cy * uy + cz * uz) / texel) * texel;
-    const float sw = cx * fx + cy * fy + cz * fz;
-    const float tx = rx * su + ux * sv + fx * sw;
-    const float ty = ry * su + uy * sv + fy * sw;
-    const float tz = rz * su + uz * sv + fz * sw;
+    const float sw = cx * dirX + cy * dirY + cz * dirZ;
+    const float tx = rx * su + ux * sv + dirX * sw;
+    const float ty = ry * su + uy * sv + dirY * sw;
+    const float tz = rz * su + uz * sv + dirZ * sw;
     const float dist = extent * 4.0f;
     const float ex = tx - dirX * dist;
     const float ey = ty - dirY * dist;

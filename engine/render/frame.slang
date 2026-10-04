@@ -1,24 +1,14 @@
-// FrameView — binding 0, 2240. Ползунки — восемь блоков по 64, свои binding 50–57.
-// Размеры совпадают с MeshletGpu.hpp. Массив скаляров здесь запрещён.
+// FrameView — binding 0, 384. FrameSun — binding 49, 1920. Ползунки — binding 50–57.
+// Размеры совпадают с FrameUniforms.hpp. Массив скаляров здесь запрещён.
 
 struct FrameView {
     float4x4 viewProj;
     float4x4 invViewProj;
-    float4 sunDirIntensity;
-    float4 sunColor;
     float4 cameraPos;
     float2 invExtent;
     float2 padInv;
     uint2 extent;
     uint2 padExt;
-    float4 pointPos[3];
-    float4 pointColor[3];
-    float4x4 sunCascade[3];
-    float4 sunSplit;
-    float4x4 pointFace[3][6];
-    float4x4 cubeFace[6];
-    float4 cubeMin;
-    float4 cubeMax;
     uint debugMode;
     uint disableSSR;
     uint disableSSRC;
@@ -31,16 +21,37 @@ struct FrameView {
     uint debugPad0;
     uint debugPad1;
     uint debugPad2;
+    uint debugAlign0;
+    uint debugAlign1;
+    uint debugAlign2;
+    uint debugAlign3;
     float4x4 freezeVp;
     float4 viewTail0;
     float4 viewTail1;
     float4 viewTail2;
+    float4 viewTail3;
+    float4 viewPad;
+};
+
+struct FrameSun {
+    float4 sunDirIntensity;
+    float4 sunColor;
+    float4 pointPos[3];
+    float4 pointColor[3];
+    float4x4 sunCascade[3];
+    float4 sunSplit;
+    float4x4 pointFace[3][6];
+    float4x4 cubeFace[6];
+    float4 cubeMin;
+    float4 cubeMax;
+    float4 pad;
 };
 
 struct PassFlags {
     int forceLod;
     uint passMask;
-    uint p0; uint p1; uint p2; uint p3; uint p4; uint p5; uint p6;
+    uint lightProfile;
+    uint p1; uint p2; uint p3; uint p4; uint p5; uint p6;
     uint p7; uint p8; uint p9; uint p10; uint p11; uint p12; uint p13;
 };
 struct GtaoParams {
@@ -112,6 +123,7 @@ struct BloomParams {
 };
 
 [[vk::binding(0, 0)]] ConstantBuffer<FrameView> gFrame;
+[[vk::binding(49, 0)]] ConstantBuffer<FrameSun> gSun;
 [[vk::binding(50, 0)]] ConstantBuffer<PassFlags> gPass;
 [[vk::binding(51, 0)]] ConstantBuffer<GtaoParams> gGtao;
 [[vk::binding(52, 0)]] ConstantBuffer<SsrParams> gSsr;

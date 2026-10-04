@@ -251,19 +251,17 @@ void sceneHud(Canvas& canvas, void*) {
     panel.check("кластер ламп").name("cluster");
     panel.check("тени").name("shadow");
     panel.check("зонды SH").name("probes");
-    panel.label("GTAO / SSR").name("h3");
+    panel.label("профиль света").name("h3");
+    panel.radio("Низкий", 3).name("prof0");
+    panel.radio("Баланс", 3).name("prof1");
+    panel.radio("Ультра", 3).name("prof2");
     panel.check("GTAO").name("gtaoen");
-    panel.check("SSR").name("ssr");
-    panel.check("SSR bilateral").name("bilat");
-    panel.check("SSRC").name("ssrc");
-    panel.check("RC мир").name("rcworld");
     panel.check("CMAA").name("cmaa");
     panel.check("Bloom").name("bloomen");
     panel.radio("Lit", 1).name("mode0");
     panel.radio("Normals", 1).name("mode2");
     panel.radio("Primitive ID", 1).name("mode1");
-    panel.radio("SSR Only", 1).name("mode3");
-    panel.radio("SSRC Only", 1).name("mode4");
+    panel.radio("GI", 1).name("mode4");
     panel.radio("каскады", 1).name("mode5");
     panel.radio("AgX", 2).name("tone0");
     panel.radio("ACES", 2).name("tone1");
@@ -283,11 +281,6 @@ void sceneHud(Canvas& canvas, void*) {
     rowSlide(panel, "Toksvig", "tok", 1.0f, 0.0f, 1.0f);
     rowSlide(panel, "параллакс", "pom", 0.35f, 0.0f, 1.0f);
     rowSlide(panel, "multi-scatter", "ggx", 1.0f, 0.0f, 1.0f);
-    rowSlide(panel, "SSRC сила", "ssrci", 1.0f, 0.0f, 2.0f);
-    rowSlide(panel, "SSRC база м", "ssrcB", 2.0f, 0.05f, 12.0f);
-    rowSlide(panel, "SSRC толщина", "ssrcT", 0.03f, 0.001f, 0.2f);
-    rowSlide(panel, "SSRC потолок", "ssrcC", 0.6f, 0.0f, 2.0f);
-    rowSlide(panel, "SSRC шаги", "ssrcS", 8.0f, 1.0f, 16.0f);
     rowSlide(panel, "RC лучи", "rcRays", 8.0f, 1.0f, 32.0f);
     rowSlide(panel, "RC клетка м", "rcCell", 0.45f, 0.1f, 4.0f);
     rowSlide(panel, "RC сила", "rcGain", 1.0f, 0.0f, 4.0f);
@@ -298,12 +291,6 @@ void sceneHud(Canvas& canvas, void*) {
     rowSlide(panel, "GTAO сила", "gtaoPw", 1.6f, 0.2f, 4.0f);
     rowSlide(panel, "GTAO край", "gtaoFa", 1.0f, 0.1f, 1.0f);
     rowSlide(panel, "GTAO", "gtao", 1.2f, 0.0f, 4.0f);
-    rowSlide(panel, "SSR cutoff", "ssrcut", 0.82f, 0.1f, 1.0f);
-    rowSlide(panel, "SSR шаги", "ssrstep", 32.0f, 4.0f, 96.0f);
-    rowSlide(panel, "SSR шаг", "ssrstr", 0.025f, 0.002f, 0.15f);
-    rowSlide(panel, "SSR толщина", "ssrth", 0.06f, 0.005f, 0.4f);
-    rowSlide(panel, "SSR длина м", "ssrmax", 180.0f, 2.0f, 500.0f);
-    rowSlide(panel, "SSR старт м", "ssrbias", 0.15f, 0.02f, 4.0f);
     rowSlide(panel, "свечи", "lamp", 1.0f, 0.0f, 1.0f);
     rowSlide(panel, "туман", "fog", 0.012f, 0.0f, 0.08f);
     rowSlide(panel, "высота тумана", "fogH", 4.0f, -30.0f, 40.0f);
@@ -313,10 +300,11 @@ void sceneHud(Canvas& canvas, void*) {
         std::snprintf(name, sizeof(name), "g%d", i);
         panel.label("").name(name);
     }
-    const char* on[] = {"ssr", "ssrc", "hiz", "cone", "lod", "frust", "small", "shadow", "cluster", "probes", "gtaoen", "bilat", "cmaa", "bloomen"};
+    const char* on[] = {"hiz", "cone", "lod", "frust", "small", "shadow", "cluster", "probes", "gtaoen", "cmaa", "bloomen"};
     for (const char* name : on) {
         canvasCheck(canvas, canvasFind(canvas, name), 0, 0, true);
     }
+    canvasCheck(canvas, canvasFind(canvas, "prof0"), 1, 3, true);
     canvasCheck(canvas, canvasFind(canvas, "mode0"), 1, 1, true);
     canvasCheck(canvas, canvasFind(canvas, "tone0"), 1, 2, true);
 }
@@ -415,7 +403,7 @@ bool engineTick(Engine& e) {
             }
         }
         sceneFrameDebug(e.scene,
-            checkOn(hud, "ssr", true), checkOn(hud, "ssrc", true), checkOn(hud, "hiz", true), checkOn(hud, "cone", true),
+            checkOn(hud, "hiz", true), checkOn(hud, "cone", true),
             checkOn(hud, "lod", true), checkOn(hud, "frust", true), checkOn(hud, "small", true), checkOn(hud, "shadow", true),
             mode);
         HudPost hudPost{};
@@ -428,7 +416,6 @@ bool engineTick(Engine& e) {
         hudPost.toksvig = slideAt(hud, "tok", hudPost.toksvig);
         hudPost.pom = slideAt(hud, "pom", hudPost.pom);
         hudPost.ggx = slideAt(hud, "ggx", hudPost.ggx);
-        hudPost.ssrc = slideAt(hud, "ssrci", hudPost.ssrc);
         hudPost.gtao = slideAt(hud, "gtao", hudPost.gtao);
         hudPost.lamp = slideAt(hud, "lamp", hudPost.lamp);
         sceneFrameTune(e.scene, hudPost);
@@ -439,20 +426,10 @@ bool engineTick(Engine& e) {
         tweaks.gtaoSlices = slideAt(hud, "gtaoSl", 6.0f);
         tweaks.gtaoPower = slideAt(hud, "gtaoPw", 1.6f);
         tweaks.gtaoFalloff = slideAt(hud, "gtaoFa", 1.0f);
-        tweaks.ssrCutoff = slideAt(hud, "ssrcut", 0.82f);
-        tweaks.ssrSteps = slideAt(hud, "ssrstep", 32.0f);
-        tweaks.ssrStride = slideAt(hud, "ssrstr", 0.025f);
-        tweaks.ssrThick = slideAt(hud, "ssrth", 0.06f);
-        tweaks.ssrMax = slideAt(hud, "ssrmax", 180.0f);
-        tweaks.ssrBias = slideAt(hud, "ssrbias", 0.15f);
         tweaks.sscsReach = slideAt(hud, "sscsR", 30.0f);
         tweaks.sscsThick = slideAt(hud, "sscsT", 1.0f);
         tweaks.sscsSteps = slideAt(hud, "sscsS", 20.0f);
         tweaks.sscsPx = slideAt(hud, "sscsP", 128.0f);
-        tweaks.ssrcBase = slideAt(hud, "ssrcB", 2.0f);
-        tweaks.ssrcThick = slideAt(hud, "ssrcT", 0.03f);
-        tweaks.ssrcCap = slideAt(hud, "ssrcC", 0.6f);
-        tweaks.ssrcSteps = slideAt(hud, "ssrcS", 8.0f);
         tweaks.rcRays = slideAt(hud, "rcRays", 8.0f);
         tweaks.rcSpacing = slideAt(hud, "rcCell", 0.45f);
         tweaks.rcIntensity = slideAt(hud, "rcGain", 1.0f);
@@ -469,9 +446,6 @@ bool engineTick(Engine& e) {
         if (checkOn(hud, "probes", true)) {
             tweaks.passMask |= 2u;
         }
-        if (checkOn(hud, "bilat", true)) {
-            tweaks.passMask |= 4u;
-        }
         if (checkOn(hud, "cmaa", true)) {
             tweaks.passMask |= 8u;
         }
@@ -481,7 +455,15 @@ bool engineTick(Engine& e) {
         if (checkOn(hud, "bloomen", true)) {
             tweaks.passMask |= 32u;
         }
-        if (checkOn(hud, "rcworld", false)) {
+        tweaks.lightProfile = 0;
+        for (uint32_t i = 0; i < 3; ++i) {
+            char name[8];
+            std::snprintf(name, sizeof(name), "prof%u", i);
+            if (canvasCheckOn(hud, name) == 1) {
+                tweaks.lightProfile = i;
+            }
+        }
+        if (tweaks.lightProfile >= 1u) {
             tweaks.passMask |= 128u;
         }
         tweaks.tonemapper = 0;

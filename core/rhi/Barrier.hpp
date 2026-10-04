@@ -1,5 +1,7 @@
 #pragma once
 
+#include "rhi/GpuImage.hpp"
+
 #include <volk.h>
 
 namespace burnhope {
@@ -86,6 +88,34 @@ inline void rhiMemoryBarrier(
         .pMemoryBarriers = &b,
     };
     vkCmdPipelineBarrier2(cmd, &dep);
+}
+
+// Если раскладка, стадия и доступ уже такие — барьер не ставится.
+// depend ставит зависимость даже в том же состоянии: два compute подряд пишут одну картинку.
+inline void imageBarrier(
+    VkCommandBuffer cmd,
+    TrackedImage& img,
+    VkImageLayout newLayout,
+    VkPipelineStageFlags2 newStage,
+    VkAccessFlags2 newAccess,
+    VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+    bool depend = false) {
+    if (img.image.image == VK_NULL_HANDLE) {
+        return;
+    }
+    if (!depend && img.layout != VK_IMAGE_LAYOUT_UNDEFINED && img.layout == newLayout && img.stage == newStage && img.access == newAccess) {
+        return;
+    }
+    VkPipelineStageFlags2 srcStage = VK_PIPELINE_STAGE_2_NONE;
+    VkAccessFlags2 srcAccess = VK_ACCESS_2_NONE;
+    if (img.layout != VK_IMAGE_LAYOUT_UNDEFINED) {
+        srcStage = img.stage;
+        srcAccess = img.access;
+    }
+    rhiImageBarrier(cmd, img.image.image, img.layout, newLayout, srcStage, srcAccess, newStage, newAccess, aspect);
+    img.layout = newLayout;
+    img.stage = newStage;
+    img.access = newAccess;
 }
 
 } // namespace burnhope

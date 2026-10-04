@@ -1,4 +1,4 @@
-#include "render/HeapMaps.hpp"
+#include "render/HeapBind.hpp"
 #include "render/PassAllocators.hpp"
 #include "render/PassBufferSync.hpp"
 #include "render/PassCommon.hpp"
@@ -20,9 +20,8 @@
 #include "render/Cull.hpp"
 #include "render/Cube.hpp"
 #include "render/Shade.hpp"
-#include "render/SSR.hpp"
+#include "render/Hiz.hpp"
 #include "render/Radiance.hpp"
-#include "render/Ssrc.hpp"
 #include "render/Tonemap.hpp"
 #include "render/Visbuffer.hpp"
 #include "debug/CpuScope.hpp"
@@ -271,18 +270,7 @@ bool loadTextures(SceneFrameImpl& s, Device& device) {
 }
 
 uint32_t cullLod(SceneFrameImpl& s, const CameraCull& cam) {
-    uint32_t n = 0;
-    for (uint32_t i = 0; i < s.instanceCount && n < s.visibleCap; ++i) {
-        const GpuInstance& inst = s.instSrc[i];
-        if (!cameraSphereVisible(cam, inst.sphere[0], inst.sphere[1], inst.sphere[2], inst.sphere[3])) {
-            continue;
-        }
-        if (inst.pad[0] != 0) {
-            continue;
-        }
-        s.visibleCpu[n++] = i;
-    }
-    return n;
+    return cullInstances(cam, s.instSrc, s.instanceCount, s.visibleCpu, s.visibleCap, true);
 }
 
 uint32_t cullPoint(const SceneFrameImpl& s, float lx, float ly, float lz, float radius, uint32_t* out) {
@@ -344,7 +332,7 @@ bool heapImage(
     if (use->image == VK_NULL_HANDLE || use->view == VK_NULL_HANDLE) {
         use = s.textureSlots > 0 ? &s.textures[0] : &img;
     }
-    if (use->image == VK_NULL_HANDLE || use->view == VK_NULL_HANDLE) {
+    if (use->image == VK_NULL_HANDLE || use->view == VK_NULL_HANDLE || !imageSlotLive(slot)) {
         return false;
     }
     const uint32_t mips = type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ? use->mips : 1u;
@@ -373,22 +361,35 @@ bool writeKnob(DescriptorHeaps& heaps, Device& device, const GpuBuffer& post) {
 }
 
 bool bindHeap(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
-    const bool buffers =
-        heapWriteBufferFlight(heaps, device, 0, static_cast<uint32_t>(HeapBuf::Frame), VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, s.frameBuf.address, sizeof(FrameView))
+    const bool buffers = writeKnob(heaps, device, s.postBuf);
+    struct StorageBind {
+        HeapBuf slot;
+        GpuBuffer* buf;
+    };
+    const StorageBind table[] = {
+        {HeapBuf::Verts, &s.verts},
+        {HeapBuf::Indices, &s.indices},
+        {HeapBuf::Meshlets, &s.meshlets},
+        {HeapBuf::Instances, &s.instances},
+        {HeapBuf::Visible, &s.visible},
+        {HeapBuf::Materials, &s.materialsBuf},
+    };
+    bool stored = buffers
+        && heapWriteBufferFlight(heaps, device, 0, static_cast<uint32_t>(HeapBuf::Frame), VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, s.frameBuf.address, sizeof(FrameView))
         && heapWriteBufferFlight(heaps, device, 1, static_cast<uint32_t>(HeapBuf::Frame), VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, s.frameBuf.address + sizeof(FrameView), sizeof(FrameView))
-        && writeKnob(heaps, device, s.postBuf)
-        && heapWriteStorage(heaps, device, HeapBuf::Verts, s.verts)
-        && heapWriteStorage(heaps, device, HeapBuf::Indices, s.indices)
-        && heapWriteStorage(heaps, device, HeapBuf::Meshlets, s.meshlets)
-        && heapWriteStorage(heaps, device, HeapBuf::Instances, s.instances)
-        && heapWriteStorage(heaps, device, HeapBuf::Visible, s.visible)
-        && heapWriteStorage(heaps, device, HeapBuf::Materials, s.materialsBuf);
+        && heapWriteBufferFlight(heaps, device, 0, static_cast<uint32_t>(HeapBuf::Sun), VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, s.sunBuf.address, sizeof(FrameSun))
+        && heapWriteBufferFlight(heaps, device, 1, static_cast<uint32_t>(HeapBuf::Sun), VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, s.sunBuf.address + sizeof(FrameSun), sizeof(FrameSun))
+        && heapWriteBufferFlight(heaps, device, 0, static_cast<uint32_t>(HeapBuf::Atm), VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, s.atmBuf.address, sizeof(AtmosphereParams))
+        && heapWriteBufferFlight(heaps, device, 1, static_cast<uint32_t>(HeapBuf::Atm), VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, s.atmBuf.address + sizeof(AtmosphereParams), sizeof(AtmosphereParams));
+    for (const StorageBind& row : table) {
+        stored = stored && heapWriteStorage(heaps, device, row.slot, *row.buf);
+    }
     const VkDeviceSize list = alignUp(s.visibleCap) * sizeof(uint32_t);
     const bool shadowLists =
         heapWriteStorage(heaps, device, static_cast<uint32_t>(HeapBuf::ShadowVisible) + 0, s.shadowVisible.address, list)
         && heapWriteStorage(heaps, device, static_cast<uint32_t>(HeapBuf::ShadowVisible) + 1, s.shadowVisible.address + list, list)
         && heapWriteStorage(heaps, device, static_cast<uint32_t>(HeapBuf::ShadowVisible) + 2, s.shadowVisible.address + 2 * list, list);
-    bool extra = buffers && shadowLists;
+    bool extra = stored && shadowLists;
     for (uint32_t i = 0; extra && i < 3; ++i) {
         extra = heapWriteStorage(heaps, device, static_cast<uint32_t>(HeapBuf::PointVisible) + i, s.pointVisible.address + list * i, list);
     }
@@ -396,24 +397,13 @@ bool bindHeap(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
         extra = heapWriteStorage(heaps, device, static_cast<uint32_t>(HeapBuf::CubeVisible) + i, s.cubeVisible.address + list * i, list);
     }
     const bool images =
-        heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Vis), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.vis.targets.vis, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Depth), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.vis.targets.depth, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HdrAStorage), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HdrBSampled), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Vis), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.vis.targets.vis.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Depth), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.vis.targets.depth.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HdrAStorage), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.hdrA.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HdrBSampled), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shade.hdrA.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Shadow), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shadowDepth[0].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::ShadowB), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shadowDepth[1].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT);
-    bool cascades = images;
-    for (uint32_t set = 0; set < 2 && cascades; ++set) {
-        for (uint32_t c = 0; c < kSsrcCascades; ++c) {
-            cascades = heapImage(
-                heaps, device, s,
-                static_cast<uint32_t>(HeapImg::Cascade) + set * kSsrcCascades + c,
-                VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                s.ssrc.level[set][c].image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_IMAGE_ASPECT_COLOR_BIT);
-        }
-    }
+    const bool cascades = images;
     VkSamplerCreateInfo sampler{
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .magFilter = VK_FILTER_LINEAR,
@@ -424,20 +414,24 @@ bool bindHeap(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
         .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
     };
     const bool pictures =
-        heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HdrASampled), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HdrBStorage), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.hdrB, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HdrBSampled), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shade.hdrB, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::AoStorage), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.ao, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Ao), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shade.ao, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::SsrHalf), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.reflect.half, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::BloomStorage), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.tone.bloom, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Bloom), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.tone.bloom, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HdrASampled), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shade.hdrA.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HdrBStorage), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.hdrB.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HdrBSampled), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shade.hdrB.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::AoStorage), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.ao.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Ao), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shade.ao.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Surf0), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.surf0.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Surf1), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.surf1.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::SkyTrans), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.sky.transmittance.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::SkyTransSample), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.sky.transmittance.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::SkyMs), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.sky.multiScatter.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::SkyView), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.sky.skyView.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::SkyViewSample), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.sky.skyView.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Cloud), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.sky.cloud.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::CloudSample), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.sky.cloud.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::BloomStorage), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.tone.bloom.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Bloom), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.tone.bloom.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::PointShadow), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.pointDepth.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Cube), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.cubeColor, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HiZ), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.hiz[0].image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HiZSample), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.hiz[0].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HiZ1), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.hiz[1].image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HiZSample1), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.hiz[1].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Cube), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.cubeColor.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HiZMax), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.hizMax[0].image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HiZMaxSample), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.hizMax[0].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HiZMax1), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.hizMax[1].image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
@@ -917,7 +911,7 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
     scene->farPlane = std::max(scene->farPlane, std::max(400.0f, extent * 4.0f));
     scene->farPlane = std::max(scene->farPlane, 8000.0f);
     scene->fly.eye[0] = (minX + maxX) * 0.5f;
-    scene->fly.eye[1] = minY + std::max(2.0f, extent * 0.15f);
+    scene->fly.eye[1] = std::max(2.0f, minY + std::max(2.0f, extent * 0.15f));
     scene->fly.eye[2] = maxZ + std::max(4.0f, extent * 0.05f);
     scene->fly.yaw = 0.0f;
     scene->fly.pitch = -0.1f;
@@ -939,6 +933,7 @@ void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
     }
     scene->forceLod = tweaks.forceLod;
     scene->passMask = tweaks.passMask;
+    scene->lightProfile = tweaks.lightProfile;
     scene->gtaoRadius = tweaks.gtaoRadius;
     scene->gtaoSteps = tweaks.gtaoSteps;
     scene->gtaoSlices = tweaks.gtaoSlices;
@@ -994,9 +989,9 @@ void sceneFrameReleaseGpu(SceneFrame* scene, Device& device) {
     gpuProfilerDestroy(scene->gpuTime, device);
     visPassDestroy(scene->vis, device);
     shadePassDestroy(scene->shade, device);
-    ssrcPassDestroy(scene->ssrc, device);
+    skyPassDestroy(scene->sky, device);
     radianceDestroy(scene->radiance, device);
-    ssrPassDestroy(scene->reflect, device);
+    hizPassDestroy(scene->hiz, device);
     cubePassDestroy(scene->cube, device);
     tonemapPassDestroy(scene->tone, device);
     destroyBuffers(device, {
@@ -1006,21 +1001,20 @@ void sceneFrameReleaseGpu(SceneFrame* scene, Device& device) {
     occlPassDestroy(scene->occl, device);
     clusterPassDestroy(scene->clusters, device);
     shadowCullDestroy(scene->shadowCull, device);
-    scene->hizReady[0] = scene->hizReady[1] = false;
     destroyBuffers(device, {
         &scene->lightBuf, &scene->cellBuf, &scene->lightIndex, &scene->decalBuf, &scene->probeBuf,
         &scene->sectorBuf, &scene->shadowPageBuf, &scene->texPageBuf, &scene->texFeedbackBuf,
         &scene->meshlets, &scene->instances, &scene->indices, &scene->verts,
-        &scene->frameBuf, &scene->postBuf, &scene->materialsBuf,
+        &scene->frameBuf, &scene->sunBuf, &scene->postBuf, &scene->atmBuf, &scene->materialsBuf,
     });
     destroyImages(device, {
         &scene->shadowColor[0], &scene->shadowColor[1],
-        &scene->cubeColor, &scene->cubeDepth,
     });
     destroyTracked(device, {
+        &scene->cubeColor, &scene->cubeDepth,
         &scene->shadowDepth[0], &scene->shadowDepth[1],
         &scene->pointDepth,
-        &scene->hiz[0], &scene->hiz[1], &scene->hizMax[0], &scene->hizMax[1],
+        &scene->hizMax[0], &scene->hizMax[1],
     });
     scene->pointReady = false;
     scene->cubeReady = false;
@@ -1030,6 +1024,7 @@ void sceneFrameReleaseGpu(SceneFrame* scene, Device& device) {
     delete[] scene->textures;
     scene->textures = nullptr;
     scene->textureSlots = 0;
+    descriptorHeapsDestroy(scene->gpuHeap, device);
     scene->ready = false;
 }
 
@@ -1060,6 +1055,7 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
         scene->fps = 1.0f / dt;
         scene->frameMs[scene->frameCursor % 128u] = dt * 1000.0f;
         scene->frameCursor += 1;
+        scene->skyTime += dt;
     }
     return (input.pointer.down & kPointerRight) != 0;
 }
@@ -1106,20 +1102,18 @@ void sceneFrameSetSectors(SceneFrame* scene, const Sector* sectors, uint32_t sec
     }
 }
 
-void sceneFrameDebug(SceneFrame* scene, bool ssr, bool ssrc, bool hiz, bool cone, bool lod, bool frustum, bool subpixel, bool shadow, uint32_t mode) {
+void sceneFrameDebug(SceneFrame* scene, bool hiz, bool cone, bool lod, bool frustum, bool subpixel, bool shadow, uint32_t mode) {
     if (scene == nullptr) {
         return;
     }
-    if (mode > 4u) {
+    if (mode > 5u) {
         mode = 0;
     }
-    if (scene->showSsr == ssr && scene->showSsrc == ssrc && scene->showHiz == hiz && scene->showCone == cone
+    if (scene->showHiz == hiz && scene->showCone == cone
         && scene->showLod == lod && scene->showFrustum == frustum && scene->showSubpixel == subpixel
         && scene->showShadow == shadow && scene->debugMode == mode) {
         return;
     }
-    scene->showSsr = ssr;
-    scene->showSsrc = ssrc;
     scene->showHiz = hiz;
     scene->showCone = cone;
     scene->showLod = lod;
@@ -1127,8 +1121,8 @@ void sceneFrameDebug(SceneFrame* scene, bool ssr, bool ssrc, bool hiz, bool cone
     scene->showSubpixel = subpixel;
     scene->showShadow = shadow;
     scene->debugMode = mode;
-    spdlog::info("debug ssr {} ssrc {} hiz {} cone {} lod {} frust {} small {} shadow {} mode {}",
-        ssr ? 1 : 0, ssrc ? 1 : 0, hiz ? 1 : 0, cone ? 1 : 0, lod ? 1 : 0, frustum ? 1 : 0, subpixel ? 1 : 0, shadow ? 1 : 0, mode);
+    spdlog::info("debug profile {} hiz {} cone {} lod {} frust {} small {} shadow {} mode {}",
+        scene->lightProfile, hiz ? 1 : 0, cone ? 1 : 0, lod ? 1 : 0, frustum ? 1 : 0, subpixel ? 1 : 0, shadow ? 1 : 0, mode);
 }
 
 void sceneFrameStats(const SceneFrame* scene, char* out, size_t cap) {
@@ -1200,6 +1194,7 @@ void sceneFrameRecord(
     if (scene == nullptr || swap.extent.width == 0 || swap.extent.height == 0) {
         return;
     }
+    (void)heaps;
     CpuScope recordCpu("sceneFrameRecord", &scene->cpuRecordMs);
     if (!scene->ready || scene->extent.width != swap.extent.width || scene->extent.height != swap.extent.height) {
         sceneFrameReleaseGpu(scene, device);
@@ -1211,7 +1206,9 @@ void sceneFrameRecord(
         const VkDeviceSize listBytes = alignUp(visibleBytes);
         const bool buffers =
             createDefaultGpuBuffer(scene->frameBuf, device, sizeof(FrameView) * 2)
+            && createDefaultGpuBuffer(scene->sunBuf, device, sizeof(FrameSun) * 2)
             && createDefaultGpuBuffer(scene->postBuf, device, sizeof(FramePost) * 2)
+            && createDefaultGpuBuffer(scene->atmBuf, device, sizeof(AtmosphereParams) * 2)
             && createDefaultGpuBuffer(scene->verts, device, vertBytes)
             && createDefaultGpuBuffer(scene->indices, device, indexBytes)
             && createDefaultGpuBuffer(scene->instances, device, instanceBytes)
@@ -1243,30 +1240,35 @@ void sceneFrameRecord(
             && recreateImage(scene->shadowDepth[0].image, device, shadowExtent, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)
             && recreateImage(scene->shadowDepth[1].image, device, shadowExtent, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)
             && recreateImage(scene->pointDepth.image, device, pointExtent, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)
-            && gpuImageCreate(scene->cubeColor, device, cubeExtent, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
-            && gpuImageCreate(scene->cubeDepth, device, cubeExtent, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)
-            && recreateImage(scene->hiz[0].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
-            && recreateImage(scene->hiz[1].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+            && recreateTracked(scene->cubeColor, device, cubeExtent, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+            && recreateTracked(scene->cubeDepth, device, cubeExtent, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT)
             && recreateImage(scene->hizMax[0].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
             && recreateImage(scene->hizMax[1].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+        if (!descriptorHeapsCreate(scene->gpuHeap, device, HeapLayout{
+                .buffers = 64,
+                .images = static_cast<uint32_t>(HeapImg::Count),
+                .samplers = 3,
+            })) {
+            return;
+        }
         const bool passes = buffers && shadowImages
-            && visPassCreate(scene->vis, device, heaps, swap.extent)
-            && shadePassCreate(scene->shade, device, heaps, swap.extent)
-            && ssrcPassCreate(scene->ssrc, device, heaps, swap.extent)
-            && radianceCreate(scene->radiance, device, heaps)
-            && ssrPassCreate(scene->reflect, device, heaps)
-            && occlPassCreate(scene->occl, device, heaps)
-            && clusterPassCreate(scene->clusters, device, heaps)
-            && shadowCullCreate(scene->shadowCull, device, heaps)
-            && cubePassCreate(scene->cube, device, heaps)
-            && tonemapPassCreate(scene->tone, device, heaps);
+            && visPassCreate(scene->vis, device, scene->gpuHeap, swap.extent)
+            && shadePassCreate(scene->shade, device, scene->gpuHeap, swap.extent)
+            && skyPassCreate(scene->sky, device, scene->gpuHeap, swap.extent)
+            && radianceCreate(scene->radiance, device, scene->gpuHeap)
+            && hizPassCreate(scene->hiz, device, scene->gpuHeap)
+            && occlPassCreate(scene->occl, device, scene->gpuHeap)
+            && clusterPassCreate(scene->clusters, device, scene->gpuHeap)
+            && shadowCullCreate(scene->shadowCull, device, scene->gpuHeap)
+            && cubePassCreate(scene->cube, device, scene->gpuHeap)
+            && tonemapPassCreate(scene->tone, device, scene->gpuHeap);
         const bool targets = passes
-            && recreateHdr(scene->reflect.half, device, halfExtent(swap.extent))
-            && recreateHdr(scene->tone.bloom, device, VkExtent2D{
+            && recreateTracked(scene->tone.bloom, device, VkExtent2D{
                 std::max(swap.extent.width / 2u, 1u),
                 std::max(swap.extent.height / 2u, 1u) + std::max(swap.extent.height / 4u, 1u)
-                    + std::max(swap.extent.height / 8u, 1u) + std::max(swap.extent.height / 16u, 1u)});
-        if (!targets || !loadTextures(*scene, device) || !bindHeap(*scene, device, heaps)) {
+                    + std::max(swap.extent.height / 8u, 1u) + std::max(swap.extent.height / 16u, 1u)},
+                VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);;
+        if (!targets || !loadTextures(*scene, device) || !bindHeap(*scene, device, scene->gpuHeap)) {
             return;
         }
         uploadStatic(*scene);
@@ -1327,20 +1329,13 @@ void sceneFrameRecord(
     }
 
     FrameView gpu{};
+    FrameSun lit{};
     FramePost knob{};
     std::memcpy(gpu.viewProj, cam.viewProj.m, sizeof(cam.viewProj.m));
     std::memcpy(gpu.invViewProj, cam.invViewProj.m, sizeof(cam.invViewProj.m));
-    float sx = -scene->world.sunDir[0];
-    float sy = -scene->world.sunDir[1];
-    float sz = -scene->world.sunDir[2];
-    const float sl = std::sqrt(sx * sx + sy * sy + sz * sz);
-    gpu.sunDirIntensity[0] = sx / sl;
-    gpu.sunDirIntensity[1] = sy / sl;
-    gpu.sunDirIntensity[2] = sz / sl;
-    gpu.sunDirIntensity[3] = 3.0f;
-    gpu.sunColor[0] = 1.0f;
-    gpu.sunColor[1] = 0.95f;
-    gpu.sunColor[2] = 0.85f;
+    scene->atmosphere.time = scene->skyTime;
+    scene->atmosphere.parity = (scene->frameCursor & 1u) != 0u ? 1.0f : 0.0f;
+    atmosphereApply(lit, scene->atmosphere);
     gpu.cameraPos[0] = cam.pos[0];
     gpu.cameraPos[1] = cam.pos[1];
     gpu.cameraPos[2] = cam.pos[2];
@@ -1353,7 +1348,7 @@ void sceneFrameRecord(
     gpu.extent[1] = swap.extent.height;
     scene->shadowSlot = 0;
     gpu.padExt[0] = 0.0f;
-    gpu.padExt[1] = scene->ssrc.slot;
+    gpu.padExt[1] = 0;
     const float sliceNear[3] = {0.2f, 24.0f, 120.0f};
     const float sliceFar[3] = {36.0f, 180.0f, 2500.0f};
     const float casterPad[3] = {28.0f, 48.0f, 80.0f};
@@ -1362,10 +1357,10 @@ void sceneFrameRecord(
     float sunCy = scene->fly.eye[1];
     float sunCz = scene->fly.eye[2];
     float splits[3] = {36.0f, 180.0f, 2500.0f};
-    gpu.sunSplit[3] = static_cast<float>(flight * 16u);
+    lit.sunSplit[3] = static_cast<float>(flight * 16u);
     gpu.debugMode = scene->debugMode;
-    gpu.disableSSR = scene->showSsr ? 0u : 1u;
-    gpu.disableSSRC = scene->showSsrc ? 0u : 1u;
+    gpu.disableSSR = 1u;
+    gpu.disableSSRC = 1u;
     gpu.disableHiZ = scene->showHiz ? 0u : 1u;
     gpu.disableConeCull = scene->showCone ? 0u : 1u;
     gpu.disableLod = scene->showLod ? 0u : 1u;
@@ -1383,6 +1378,7 @@ void sceneFrameRecord(
     std::memcpy(gpu.freezeVp, scene->freezeVp, sizeof(gpu.freezeVp));
     knob.flags.forceLod = scene->forceLod;
     knob.flags.passMask = scene->passMask;
+    knob.flags.lightProfile = scene->lightProfile;
     if (scene->freeze) {
         knob.flags.passMask |= 64u;
     } else {
@@ -1442,9 +1438,11 @@ void sceneFrameRecord(
     }
     const VkDeviceSize shadowStride = alignUp(sizeof(uint32_t) * scene->visibleCap);
     for (uint32_t c = 0; c < 3; ++c) {
-        const SunShadow sun = sunShadowSlice(cam, scene->world.sunDir[0], scene->world.sunDir[1], scene->world.sunDir[2], sliceNear[c], sliceFar[c], casterPad[c], snapCells[c]);
-        std::memcpy(gpu.sunCascade[c], sun.viewProj.m, sizeof(sun.viewProj.m));
-        gpu.sunSplit[c] = sun.radius;
+        const SunShadow sun = sunShadowSlice(
+            cam, -lit.sunDirIntensity[0], -lit.sunDirIntensity[1], -lit.sunDirIntensity[2],
+            sliceNear[c], sliceFar[c], casterPad[c], snapCells[c]);
+        std::memcpy(lit.sunCascade[c], sun.viewProj.m, sizeof(sun.viewProj.m));
+        lit.sunSplit[c] = sun.radius;
         splits[c] = sun.radius;
         if (c == 0) {
             sunCx = cam.pos[0] + cam.forward[0] * 16.0f;
@@ -1499,17 +1497,17 @@ void sceneFrameRecord(
         scene->pointCursor = 0;
     }
     for (uint32_t i = 0; i < scene->world.lightCount && i < 3; ++i) {
-        gpu.pointPos[i][0] = scene->world.lights[i].pos[0];
-        gpu.pointPos[i][1] = scene->world.lights[i].pos[1];
-        gpu.pointPos[i][2] = scene->world.lights[i].pos[2];
-        gpu.pointPos[i][3] = scene->world.lights[i].radius;
-        gpu.pointColor[i][0] = scene->world.lights[i].color[0];
-        gpu.pointColor[i][1] = scene->world.lights[i].color[1];
-        gpu.pointColor[i][2] = scene->world.lights[i].color[2];
-        gpu.pointColor[i][3] = 2.0f;
+        lit.pointPos[i][0] = scene->world.lights[i].pos[0];
+        lit.pointPos[i][1] = scene->world.lights[i].pos[1];
+        lit.pointPos[i][2] = scene->world.lights[i].pos[2];
+        lit.pointPos[i][3] = scene->world.lights[i].radius;
+        lit.pointColor[i][0] = scene->world.lights[i].color[0];
+        lit.pointColor[i][1] = scene->world.lights[i].color[1];
+        lit.pointColor[i][2] = scene->world.lights[i].color[2];
+        lit.pointColor[i][3] = 2.0f;
         for (uint32_t face = 0; face < 6; ++face) {
             const Mat4 vp = pointShadowFace(scene->world.lights[i], face);
-            std::memcpy(gpu.pointFace[i][face], vp.m, sizeof(vp.m));
+            std::memcpy(lit.pointFace[i][face], vp.m, sizeof(vp.m));
         }
         if (!scene->pointReady && i == scene->pointCursor) {
             scene->pointCount[i] = cullPoint(*scene, scene->world.lights[i].pos[0], scene->world.lights[i].pos[1], scene->world.lights[i].pos[2], scene->world.lights[i].radius, scene->visibleCpu);
@@ -1525,16 +1523,31 @@ void sceneFrameRecord(
     probe.pos[1] = (scene->boxMin[1] + scene->boxMax[1]) * 0.5f;
     probe.pos[2] = (scene->boxMin[2] + scene->boxMax[2]) * 0.5f;
     probe.radius = scene->shadowExtent;
-    gpu.cubeBox[0] = scene->boxMin[0];
-    gpu.cubeBox[1] = scene->boxMin[1];
-    gpu.cubeBox[2] = scene->boxMin[2];
-    gpu.cubeBox[4] = scene->boxMax[0];
-    gpu.cubeBox[5] = scene->boxMax[1];
-    gpu.cubeBox[6] = scene->boxMax[2];
+    lit.cubeMin[0] = scene->boxMin[0];
+    lit.cubeMin[1] = scene->boxMin[1];
+    lit.cubeMin[2] = scene->boxMin[2];
+    lit.cubeMax[0] = scene->boxMax[0];
+    lit.cubeMax[1] = scene->boxMax[1];
+    lit.cubeMax[2] = scene->boxMax[2];
+    const float cubeDx = scene->fly.eye[0] - scene->cubeEye[0];
+    const float cubeDy = scene->fly.eye[1] - scene->cubeEye[1];
+    const float cubeDz = scene->fly.eye[2] - scene->cubeEye[2];
+    if (scene->cubeReady) {
+        const bool fresh = scene->cubeEye[0] == 0.0f && scene->cubeEye[1] == 0.0f && scene->cubeEye[2] == 0.0f;
+        if (fresh || cubeDx * cubeDx + cubeDy * cubeDy + cubeDz * cubeDz > 4.0f) {
+            scene->cubeEye[0] = scene->fly.eye[0];
+            scene->cubeEye[1] = scene->fly.eye[1];
+            scene->cubeEye[2] = scene->fly.eye[2];
+            if (!fresh) {
+                scene->cubeReady = false;
+                scene->cubeFace = 0;
+            }
+        }
+    }
     for (uint32_t face = 0; face < 6; ++face) {
         const Mat4 vp = pointShadowFace(probe, face);
-        std::memcpy(gpu.cubeFace[face], vp.m, sizeof(vp.m));
-        if (!scene->cubeReady) {
+        std::memcpy(lit.cubeFace[face], vp.m, sizeof(vp.m));
+        if (!scene->cubeReady && face == scene->cubeFace) {
             const float dir[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
             const float up[6][3] = {{0, -1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, -1, 0}};
             const Mat4 view = pointShadowLook(
@@ -1556,8 +1569,12 @@ void sceneFrameRecord(
     }
     gpu.padInv[1] = static_cast<float>(uploadLights(*scene, flight));
     std::memcpy(static_cast<uint8_t*>(scene->frameBuf.mapped) + sizeof(FrameView) * flight, &gpu, sizeof(gpu));
+    std::memcpy(static_cast<uint8_t*>(scene->sunBuf.mapped) + sizeof(FrameSun) * flight, &lit, sizeof(lit));
     std::memcpy(static_cast<uint8_t*>(scene->postBuf.mapped) + sizeof(FramePost) * flight, &knob, sizeof(knob));
-    scene->kickHeaps = &heaps;
+    if (scene->atmBuf.mapped != nullptr) {
+        std::memcpy(static_cast<uint8_t*>(scene->atmBuf.mapped) + sizeof(AtmosphereParams) * flight, &scene->atmosphere, sizeof(AtmosphereParams));
+    }
+    scene->kickHeaps = &scene->gpuHeap;
     scene->kickFlight = flight;
     if (scene->shadowIndirect.mapped != nullptr) {
         auto* shadowArgs = static_cast<uint32_t*>(scene->shadowIndirect.mapped);
@@ -1566,6 +1583,7 @@ void sceneFrameRecord(
     if (scene->gpuTime.pool == VK_NULL_HANDLE) {
         (void)gpuProfilerCreate(scene->gpuTime, device);
     }
+    heapBind(cmd, scene->gpuHeap, flight);
     gpuProfilerBegin(scene->gpuTime, device, cmd, flight);
     (void)gpuProfilerFormat(scene->gpuTime, scene->gpuText, sizeof(scene->gpuText));
     {
@@ -1580,40 +1598,18 @@ void sceneFrameRecord(
         gpuLog = gpuNow;
         spdlog::info("frame {:.1f} ms ({:.1f} fps)\n{}", scene->fps > 1.0f ? 1000.0f / scene->fps : 0.0, static_cast<double>(scene->fps), scene->gpuText);
     }
-    if (scene->showSsr && scene->hizReady[flight]
-        && scene->hiz[flight].layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-        && scene->hiz[flight].layout != VK_IMAGE_LAYOUT_UNDEFINED) {
-        spdlog::warn("barrier SSR hiz layout {}", static_cast<int>(scene->hiz[flight].layout));
-    }
     bufferBarrierHostToShader(cmd, scene->postBuf.buffer, scene->postBuf.size);
     bufferBarrierHostToShader(cmd, scene->frameBuf.buffer, scene->frameBuf.size);
+    bufferBarrierHostToShader(cmd, scene->sunBuf.buffer, scene->sunBuf.size);
+    bufferBarrierHostToShader(cmd, scene->atmBuf.buffer, scene->atmBuf.size);
     bufferBarrierHostToShader(cmd, scene->lightBuf.buffer, scene->lightBuf.size,
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
-    FramePass pass{};
-    pass.scene = scene;
-    pass.cmd = cmd;
-    pass.device = &device;
-    pass.heaps = &heaps;
-    pass.swap = &swap;
-    pass.frame = &frame;
-    pass.gpu = &gpu;
-    pass.knob = &knob;
-    pass.flight = flight;
-    pass.strideU = strideU;
-    pass.shadowStride = shadowStride;
-    pass.occl = occl;
-    pass.draw = VisInstanceDraw{scene->instances.address, scene->visible.address, scene->visibleCount};
-    pass.sunKeep[0] = sunKeep[0];
-    pass.sunKeep[1] = sunKeep[1];
-    pass.sunKeep[2] = sunKeep[2];
-    pass.sunC[0] = sunCx;
-    pass.sunC[1] = sunCy;
-    pass.sunC[2] = sunCz;
-    pass.splits[0] = splits[0];
-    pass.splits[1] = splits[1];
-    pass.splits[2] = splits[2];
-    framePassClusters(pass);
-    framePassCull(pass);
+    const RenderContext ctx{cmd, device, scene->gpuHeap, scene->gpuTime, swap.extent, flight, scene->freeze, gpu, lit, knob};
+    framePassClusters(ctx, scene->clusters, scene->cellBuf, scene->lightIndex);
+    CullBuffers cullBufs{scene->shadowIndirect, scene->shadowVisible, scene->indirect, scene->candidates, scene->visible, scene->instanceCount, strideU, sunKeep};
+    CullResults culled{};
+    culled.draw = VisInstanceDraw{scene->instances.address, scene->visible.address, scene->visibleCount};
+    framePassCull(ctx, *scene, cullBufs, culled);
     GpuDebugStats stats{};
     stats.visibleInstances = scene->visibleCount;
     stats.culledInstances = scene->instanceCount - scene->visibleCount;
@@ -1621,24 +1617,24 @@ void sceneFrameRecord(
     stats.activeLights = scene->world.lightCount;
     stats.fps = scene->fps;
     debugFormatStats(stats, scene->title, sizeof(scene->title));
-    framePassSun(pass);
-    framePassPoints(pass);
-    framePassVis(pass);
-    framePassShade(pass);
-    PassContext ctx{};
-    ctx.cmd = cmd;
-    ctx.extent = swap.extent;
-    ctx.flight = flight;
-    ctx.profiler = &scene->gpuTime;
-    ctx.freeze = scene->freeze;
-    const bool worldRc = (scene->passMask & 128u) != 0u;
-    framePassRadiance(ctx, scene->radiance, scene->ssrc, scene->shade.hdrA, worldRc, scene->showSsrc, scene->debugMode);
-    const bool ssrOn = scene->showSsr || scene->debugMode == 3u;
-    framePassSsr(ctx, scene->reflect, scene->shade.hdrA, scene->shade.hdrB, scene->hiz[flight], ssrOn);
-    if (ssrOn) {
-        scene->hizReady[flight] = true;
+    const float sunC[3] = {sunCx, sunCy, sunCz};
+    SunPassData sunData{scene->shadowDepth[0], scene->instances, scene->shadowVisible, scene->shadowIndirect, scene->shadowStamp, scene->shadowStampValid, scene->shadowStampCount, strideU, sunC, splits};
+    framePassSun(ctx, *scene, scene->vis, sunData);
+    framePassPoints(ctx, scene->vis, scene->cube, scene->pointDepth, scene->cubeColor, scene->cubeDepth, scene->world.lightCount,
+        scene->pointCount, scene->cubeCount, scene->pointCursor, scene->pointReady, scene->cubeReady, scene->cubeFace);
+    if (!scene->cubeReady) {
+        scene->cubeBaked = false;
+    } else if (!scene->cubeBaked) {
+        probeBakeRecord(ctx.cmd, scene->cube, scene->probeBuf.buffer, scene->probeBuf.size);
+        scene->cubeBaked = true;
     }
-    const bool bloomOn = pass.knob != nullptr && (pass.knob->flags.passMask & 32u) != 0u && scene->hud.bloom > 0.001f;
+    framePassVis(ctx, scene->vis, scene->occl, scene->hiz, scene->hizMax[flight], scene->indirect, scene->candidates, scene->visible,
+        scene->instanceCount, culled.twoPhase, scene->showHiz, culled.draw, culled.lateDraw);
+    const bool gtaoOn = scene->lightProfile < 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
+    framePassShade(ctx, scene->shade, scene->sky, scene->vis.targets.vis, scene->vis.targets.depth, gtaoOn);
+    const bool worldRc = scene->lightProfile >= 1u && (scene->passMask & 128u) != 0u;
+    framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc);
+    const bool bloomOn = (knob.flags.passMask & 32u) != 0u && scene->hud.bloom > 0.001f;
     framePassTonemap(ctx, scene->tone, scene->shade.hdrA, scene->shade.hdrB, swap, frame, bloomOn);
 }
 
