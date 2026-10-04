@@ -39,7 +39,7 @@ void skyMulti(uint3 dtid : SV_DispatchThreadID) {
     const float3 through = atmSampleTrans(gTransRead, gClamp, pos, view);
     const float3 sunT = atmSampleTrans(gTransRead, gClamp, pos, sun);
     const float3 scatter = atmBetaR(gAtm) * atmRayleighPhase(dot(view, sun));
-    gMs[dtid.xy] = float4((1.0 - through) * scatter * sunT * atmSunIllum(gAtm, sun) * 8000.0, 1.0);
+    gMs[dtid.xy] = float4((1.0 - through) * scatter * sunT * atmSunIllum(gAtm, sun), 1.0);
 }
 
 float3 atmInscatter(float3 rd, float3 sun) {
@@ -81,15 +81,17 @@ void skyView(uint3 dtid : SV_DispatchThreadID) {
     const float2 uv = (float2(dtid.xy) + 0.5) / float2(192.0, 108.0);
     const float3 rd = atmSkyDir(uv);
     const float3 sun = atmSunDir(gAtm);
-    float3 color = atmInscatter(rd, sun);
+    float3 color = atmInscatter(rd, sun) * atmViewScale();
     const float mu = rd.y * 0.5 + 0.5;
     const float nu = sun.y * 0.5 + 0.5;
     const float2 msUv = float2(mu, nu);
     const float3 ro = float3(0.0, kAtmRg + 200.0, 0.0);
-    color += gMs[int2(int(msUv.x * 31.0), int(msUv.y * 31.0))].rgb * atmSampleTrans(gTransRead, gClamp, ro, rd);
-    const float disk = cos(0.00463 * max(gAtm.sunDisk, 0.2));
-    if (dot(rd, sun) > disk && rd.y > -0.05) {
-        color += atmSunIllum(gAtm, sun) * atmSampleTrans(gTransRead, gClamp, ro, sun) * 8.0;
+    color += gMs[int2(int(msUv.x * 31.0), int(msUv.y * 31.0))].rgb * atmSampleTrans(gTransRead, gClamp, ro, rd) * atmViewScale();
+    const float disk = cos(max(0.00463 * max(gAtm.sunDisk, 0.2), 0.02));
+    const float sunDot = dot(rd, sun);
+    if (sunDot > disk && rd.y > -0.05) {
+        const float core = saturate((sunDot - disk) / max(1.0 - disk, 1e-4));
+        color += atmSunIllum(gAtm, sun) * atmSampleTrans(gTransRead, gClamp, ro, sun) * (4.0 + core * 40.0);
     }
     if (sun.y < -0.02 && rd.y > 0.05) {
         const float3 cell = floor(rd * 280.0);

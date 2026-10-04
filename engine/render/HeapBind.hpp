@@ -38,6 +38,7 @@ enum class HeapBuf : uint32_t {
     Sliders = 38,
     Bloom = 39,
     Atm = 40,
+    CloudNoise = 41,
     Candidates = 23,
     Indirect = 24,
     ShadowAll = 25,
@@ -52,6 +53,7 @@ static_assert(static_cast<uint32_t>(HeapBuf::Sun) >= 16u && static_cast<uint32_t
 static_assert(static_cast<uint32_t>(HeapBuf::Rc) >= 16u && static_cast<uint32_t>(HeapBuf::Rc) < 32u);
 static_assert(static_cast<uint32_t>(HeapBuf::Sun) != static_cast<uint32_t>(HeapBuf::Rc));
 static_assert(static_cast<uint32_t>(HeapBuf::Rc) != 48u);
+static_assert(static_cast<uint32_t>(HeapBuf::CloudNoise) == 41u && static_cast<uint32_t>(HeapBuf::CloudNoise) < 48u);
 static_assert(static_cast<uint32_t>(HeapBuf::Flags) >= 32u && static_cast<uint32_t>(HeapBuf::Bloom) < 48u);
 static_assert(static_cast<uint32_t>(HeapBuf::Atm) == 40u && static_cast<uint32_t>(HeapBuf::Atm) < 48u);
 
@@ -68,6 +70,7 @@ enum class HeapImg : uint32_t {
     Textures = 16,
     PointShadow = 784,
     Cube = 800,
+    CubeFill = 801,
     HiZ = 816,
     HiZSample = 817,
     HiZ1 = 818,
@@ -90,6 +93,10 @@ enum class HeapImg : uint32_t {
     SkyViewSample = 900,
     CloudSample = 901,
     SkyTransSample = 902,
+    Contact = 903,
+    ContactSample = 904,
+    Reflect = 905,
+    ReflectSample = 906,
     Count = 912,
 };
 

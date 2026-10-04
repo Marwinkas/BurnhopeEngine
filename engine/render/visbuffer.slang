@@ -226,8 +226,9 @@ void pointMesh(
     out indices uint3 prims[124],
     out primitives PrimOut primPayload[124])
 {
-    const uint face = gid % 6;
-    const uint item = gid / 6;
+    const float mode = gSun.pad[POINT_LIGHT];
+    const uint face = mode == 0.0 ? 0u : uint(abs(mode) + 0.5) - 1u;
+    const uint item = gid;
     const uint src = gPointVisible[item];
     const GpuInstance inst = gInstanceBuf[src];
     const MeshletRef meshlet = gMeshlets[inst.meshId];
@@ -239,12 +240,22 @@ void pointMesh(
     if (gtid < vertCount) {
         const Vertex srcVert = gVerts[meshlet.vertexOffset + gtid];
         const float3 world = instancePoint(inst, srcVert.pos);
-        float4 clip = mul(gSun.pointFace[POINT_LIGHT][face], float4(world, 1.0));
-        const float w = clip.w == 0.0 ? 1.0 : clip.w;
-        const float2 local = clip.xy / w * 0.5 + 0.5;
-        const float2 atlas = float2((local.x + float(face)) / 6.0, (local.y + float(POINT_LIGHT)) / 3.0);
-        clip.xy = (atlas * 2.0 - 1.0) * w;
-        gClip[gtid] = clip;
+        const float page = mode < 0.0 ? (64.0 / 512.0) : 1.0;
+        float2 local = 0.0;
+        float depth01 = 1.0;
+        if (mode == 0.0) {
+            const float3 fromLight = world - gSun.pointPos[POINT_LIGHT].xyz;
+            const float dist = max(length(fromLight), 1e-4);
+            local = octEncode(fromLight / dist) * page;
+            depth01 = saturate(dist / max(gSun.pointPos[POINT_LIGHT].w, 0.05));
+        } else {
+            float4 clip = mul(gSun.pointFace[POINT_LIGHT][face], float4(world, 1.0));
+            const float w = clip.w == 0.0 ? 1.0 : clip.w;
+            local = (clip.xy / w * 0.5 + 0.5) * page;
+            depth01 = saturate(clip.z / w);
+        }
+        const float2 atlas = float2(local.x, (local.y + float(POINT_LIGHT)) / 3.0);
+        gClip[gtid] = float4((atlas * 2.0 - 1.0), depth01, 1.0);
     }
     GroupMemoryBarrierWithGroupSync();
     uint3 tri = uint3(0, 0, 0);

@@ -61,7 +61,7 @@ void gtaoCs(uint3 dtid : SV_DispatchThreadID) {
     float visibility = 0.0;
     [loop]
     for (int s = 0; s < slices; ++s) {
-        const float phi = (float(s) + 0.5) / float(slices) * 3.14159265;
+        const float phi = ((float(s) + 0.5) / float(slices) + bayer4(dtid.xy)) * 3.14159265;
         const float2 omega = float2(cos(phi), sin(phi));
         const float3 sliceDir = side * omega.x + up * omega.y;
         const float3 axis = normalize(cross(sliceDir, viewVec));

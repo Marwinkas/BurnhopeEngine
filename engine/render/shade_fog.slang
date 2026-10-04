@@ -16,7 +16,7 @@ void shadeFog(uint3 dtid : SV_DispatchThreadID) {
     if (dtid.x >= gFrame.extent.x || dtid.y >= gFrame.extent.y) {
         return;
     }
-    if (gShade.fogDensity <= 0.0008 || gFrame.debugMode != 0) {
+    if ((gPass.passMask & 4096u) == 0u || gShade.fogDensity <= 0.0008 || gFrame.debugMode != 0) {
         return;
     }
     const uint2 px = dtid.xy;
@@ -29,13 +29,20 @@ void shadeFog(uint3 dtid : SV_DispatchThreadID) {
     const float3 ray = P - cam;
     const float rayLen = max(length(ray), 0.05);
     const float3 rayDir = ray / rayLen;
-    const int fogSteps = 10;
-    const float stepLen = min(rayLen, 80.0) / float(fogSteps);
+    const int fogSteps = 16;
+    const float zn = max(gFrame.cameraPos.w, 0.05);
+    const float zf = 80.0;
     float transmit = 1.0;
     float3 fogLight = 0.0;
     [loop]
     for (int i = 1; i <= fogSteps; ++i) {
-        const float3 Q = cam + rayDir * stepLen * float(i);
+        const float z0 = zn * pow(zf / zn, float(i - 1) / float(fogSteps));
+        const float z1 = zn * pow(zf / zn, float(i) / float(fogSteps));
+        if (z0 >= rayLen) {
+            break;
+        }
+        const float stepLen = min(z1, rayLen) - z0;
+        const float3 Q = cam + rayDir * min(z1, rayLen);
         const float height = exp(-max(Q.y - gShade.fogHeight, 0.0) * 0.12);
         const float optical = gShade.fogDensity * height * stepLen;
         const float absorb = 1.0 - exp(-optical);

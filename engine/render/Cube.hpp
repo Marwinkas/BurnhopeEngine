@@ -11,6 +11,7 @@ struct DescriptorHeaps;
 struct CubePass {
     ShaderExt mesh[6];
     ShaderExt frag;
+    ShaderExt fill;
     ShaderExt bake;
 };
 

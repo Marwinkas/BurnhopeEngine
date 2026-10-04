@@ -86,6 +86,8 @@ struct SceneFrameImpl {
     GpuBuffer probeBuf{};
     GpuBuffer sectorBuf{};
     GpuBuffer shadowPageBuf{};
+    int32_t pageCell[3][2]{};
+    bool pageReady = false;
     GpuBuffer texPageBuf{};
     GpuBuffer texFeedbackBuf{};
     DecalGpu decals[kDecalCap]{};
@@ -185,7 +187,7 @@ struct SceneFrameImpl {
     float rcIntensity = 1.0f;
     float rcMax = 48.0f;
     float bloomThreshold = 0.35f;
-    float fogDensity = 0.012f;
+    float fogDensity = 0.002f;
     float fogHeight = 4.0f;
     float fogScatter = 1.0f;
     uint32_t tonemapper = 0;
@@ -244,7 +246,7 @@ void framePassVis(
     bool showHiz,
     const VisInstanceDraw& draw,
     const VisInstanceDraw& lateDraw);
-void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, TrackedImage& vis, TrackedImage& depth, bool gtaoOn);
+void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes);
 void framePassRadiance(const RenderContext& ctx, RadiancePass& rad, TrackedImage& hdrA, bool worldRc);
 void framePassTonemap(const RenderContext& ctx, TonemapPass& tone, TrackedImage& hdrA, TrackedImage& hdrB, const Swapchain& swap, const FrameContext& frame, bool bloomOn);
 

@@ -141,9 +141,13 @@ float3 atmSkyDir(float2 uv) {
     return normalize(float3(cos(phi) * horiz, mu, sin(phi) * horiz));
 }
 
+float atmViewScale() {
+    return 6.0;
+}
+
 float3 atmSunIllum(AtmosphereParams a, float3 sun) {
     const float day = atmSunFade(sun);
     const float warm = saturate(1.0 - sun.y * 3.0);
     const float3 color = lerp(float3(1.0, 0.97, 0.92), float3(1.0, 0.35, 0.12), warm * (1.0 - day * 0.5));
-    return color * (a.sunIntensity / 25000.0) * max(day, 0.02);
+    return color * (a.sunIntensity / 5000.0) * max(day, 0.02);
 }

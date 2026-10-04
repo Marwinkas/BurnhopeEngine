@@ -64,6 +64,14 @@ float4 tonemapFs(VertOut vin) : SV_Target0 {
     hdr.r = gHdr.SampleLevel(gLinear, vin.uv + shift, 0.0).r;
     hdr.g = gHdr.SampleLevel(gLinear, vin.uv, 0.0).g;
     hdr.b = gHdr.SampleLevel(gLinear, vin.uv - shift, 0.0).b;
+    if (gTone.cas > 0.001) {
+        const float3 n0 = gHdr.SampleLevel(gLinear, vin.uv + float2(gFrame.invExtent.x, 0.0), 0.0).rgb;
+        const float3 n1 = gHdr.SampleLevel(gLinear, vin.uv - float2(gFrame.invExtent.x, 0.0), 0.0).rgb;
+        const float3 n2 = gHdr.SampleLevel(gLinear, vin.uv + float2(0.0, gFrame.invExtent.y), 0.0).rgb;
+        const float3 n3 = gHdr.SampleLevel(gLinear, vin.uv - float2(0.0, gFrame.invExtent.y), 0.0).rgb;
+        const float3 blur = (n0 + n1 + n2 + n3) * 0.25;
+        hdr += (hdr - blur) * gTone.cas;
+    }
     if (gTone.bloomMix > 0.001 && (gPass.passMask & 32u) != 0u) {
         const uint h0 = max(gFrame.extent.y >> 1, 1u);
         const uint h1 = max(gFrame.extent.y >> 2, 1u);

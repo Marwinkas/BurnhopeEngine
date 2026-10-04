@@ -87,11 +87,11 @@ struct RcParams {
     float pad[11]{};
 };
 struct ShadeParams {
-    float sscsReach = 30.0f;
-    float sscsThick = 1.0f;
-    float sscsSteps = 20.0f;
+    float sscsReach = 0.2f;
+    float sscsThick = 0.02f;
+    float sscsSteps = 12.0f;
     float sscsPx = 128.0f;
-    float fogDensity = 0.012f;
+    float fogDensity = 0.002f;
     float fogHeight = 4.0f;
     float fogScatter = 1.0f;
     float sscsAmt = 1.0f;
@@ -168,7 +168,8 @@ struct BloomParams {
     float bloomMix = 0.15f;
     float vignette = 1.1f;
     float ca = 2.0f;
-    float pad[9]{};
+    float cas = 0.25f;
+    float pad[8]{};
 };
 struct FramePost {
     PassFlags flags{};

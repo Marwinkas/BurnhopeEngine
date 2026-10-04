@@ -4,6 +4,7 @@
 #define BH_SHADER_DIR "shaders"
 #endif
 #include "render/HeapBind.hpp"
+#include "render/PassCommon.hpp"
 #include "render/PassRendering.hpp"
 #include "render/PassShaderGroup.hpp"
 #include "rhi/Barrier.hpp"
@@ -64,6 +65,23 @@ bool cubePassCreate(CubePass& p, Device& d, const DescriptorHeaps& heaps) {
         cubePassDestroy(p, d);
         return false;
     }
+    PassBindings fillBind{heaps};
+    fillBind.sampler(23, HeapSamp::Linear);
+    fillBind.storageImg(39, HeapImg::CubeFill);
+    fillBind.sampledImg(42, HeapImg::SkyViewSample);
+    fillBind.storageBuf(46, HeapBuf::CloudNoise);
+    fillBind.knob(58, HeapBuf::Atm);
+    const ShaderCreateDesc fillDesc{
+        .path = BH_SHADER_DIR "/cube.fill.comp.spv",
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .mappingCount = fillBind.raw.count,
+        .mappings = fillBind.raw.mappings,
+    };
+    if (!shaderCreate(d, fillDesc, p.fill)) {
+        spdlog::error("cube fill shader failed");
+        cubePassDestroy(p, d);
+        return false;
+    }
     PassBindings bakeBind{heaps};
     bakeBind.sampledImg(16, HeapImg::Cube);
     bakeBind.storageBuf(19, HeapBuf::Probes, false);
@@ -86,6 +104,7 @@ void cubePassDestroy(CubePass& p, Device& d) {
     for (uint32_t face = 0; face < 6; ++face) {
         shaderDestroy(d, p.mesh[face]);
     }
+    shaderDestroy(d, p.fill);
     shaderDestroy(d, p.frag);
     shaderDestroy(d, p.bake);
 }
@@ -103,7 +122,7 @@ void cubePassRecord(VkCommandBuffer cmd, const CubePass& p, TrackedImage& color,
     colorClear.color.float32[0] = 0.45f;
     colorClear.color.float32[1] = 0.55f;
     colorClear.color.float32[2] = 0.7f;
-    colorClear.color.float32[3] = 1.0f;
+    colorClear.color.float32[3] = 0.0f;
     VkClearValue depthClear{};
     depthClear.depthStencil.depth = 1.0f;
     RenderingPass rendering = beginRenderingColorDepth(cmd, color.image.extent, color.image.view, depth.image.view, colorClear, depthClear, clearColor);
@@ -117,7 +136,9 @@ void cubePassRecord(VkCommandBuffer cmd, const CubePass& p, TrackedImage& color,
         });
     }
     endRendering(rendering);
-    imageBarrier(cmd, color, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    imageBarrier(cmd, color, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    dispatchCompute2D(cmd, p.fill, color.image.extent, 8u);
+    imageBarrier(cmd, color, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT, true);
 }
 
 void probeBakeRecord(VkCommandBuffer cmd, const CubePass& p, VkBuffer probes, VkDeviceSize probeBytes) {

@@ -11,35 +11,20 @@
 [[vk::binding(44, 0)]] RWTexture2D<float4> gCloud;
 [[vk::binding(45, 0)]] Texture2D<float4> gCloudRead;
 [[vk::binding(23, 0)]] SamplerState gClamp;
+[[vk::binding(46, 0)]] StructuredBuffer<float> gNoise;
 [[vk::binding(58, 0)]] ConstantBuffer<AtmosphereParams> gAtm;
 
-float cloudHash(float3 p) {
-    p = frac(p * 0.1031);
-    p += dot(p, p.yzx + 33.33);
-    return frac((p.x + p.y) * p.z);
-}
-
-float cloudWorley(float3 p) {
-    const float3 cell = floor(p);
-    const float3 f = frac(p);
-    float d = 1.0;
-    for (int z = -1; z <= 1; z++) {
-        for (int y = -1; y <= 1; y++) {
-            for (int x = -1; x <= 1; x++) {
-                const float3 c = float3(float(x), float(y), float(z));
-                const float3 r = c + cloudHash(cell + c) - f;
-                d = min(d, dot(r, r));
-            }
-        }
-    }
-    return sqrt(d);
+float noiseTex(float3 uv, uint res, uint base) {
+    const float3 q = frac(uv) * float(res);
+    const uint3 i = uint3(q) % res;
+    return gNoise[base + i.x + i.y * res + i.z * res * res];
 }
 
 float cloudDensityAt(float3 world, float height01) {
     const float3 wind = float3(gAtm.cloudSpeedX, height01 * 8.0, gAtm.cloudSpeedZ) * gAtm.time;
     const float3 p = world + wind;
-    const float shape = 1.0 - cloudWorley(p / 2200.0);
-    const float detail = cloudWorley(p / 380.0 + 19.0);
+    const float shape = 1.0 - noiseTex(p / 2200.0, 128u, 0u);
+    const float detail = noiseTex(p / 380.0 + 19.0, 32u, 128u * 128u * 128u);
     const float base = shape - (1.0 - gAtm.cloudCoverage) * 0.55;
     const float eroded = base - detail * gAtm.cloudDetail * (0.35 + height01);
     return saturate(eroded) * gAtm.cloudDensity * 8.0;
@@ -125,7 +110,7 @@ void cloudMarch(uint3 dtid : SV_DispatchThreadID) {
         const float3 sunCol = atmSunIllum(gAtm, sun) * light * hg * 0.15;
         const float3 amb = float3(0.25, 0.35, 0.55) * (0.15 + u) * gAtm.nightAmbient * 4.0 + sunCol;
         const float beer = exp(-dens * dt * 0.004);
-        lum += amb * dens * trans * dt * 0.002;
+        lum += amb * dens * trans * dt * 0.002 * atmViewScale();
         trans *= beer;
     }
     gCloud[dtid.xy] = float4(lum, trans);
@@ -134,7 +119,7 @@ void cloudMarch(uint3 dtid : SV_DispatchThreadID) {
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void cloudUp(uint3 dtid : SV_DispatchThreadID) {
-    if (dtid.x >= gFrame.extent.x || dtid.y >= gFrame.extent.y) {
+    if (dtid.x >= gFrame.extent.x || dtid.y >= gFrame.extent.y || gFrame.debugMode != 0u) {
         return;
     }
     const uint vis = gVis.Load(int3(dtid.xy, 0));
@@ -155,13 +140,22 @@ void cloudUp(uint3 dtid : SV_DispatchThreadID) {
         }
     }
     const float4 cloud = acc / max(wsum, 1e-4);
+    if ((gPass.passMask & 2048u) == 0u) {
+        return;
+    }
     if (vis != 0u) {
+        if (depth <= 0.0) {
+            return;
+        }
         const float3 surface = reconstructWorld(dtid.xy, depth);
         const float surfaceDist = length(surface - gFrame.cameraPos.xyz);
         if (surfaceDist < gAtm.cloudBottom * 0.85) {
             return;
         }
     }
+    if (cloud.a <= 0.001 && dot(cloud.rgb, cloud.rgb) <= 1e-6) {
+        return;
+    }
     const float3 src = gHdr[dtid.xy].rgb;
-    gHdr[dtid.xy] = float4(cloud.rgb + src * cloud.a, 1.0);
+    gHdr[dtid.xy] = float4(cloud.rgb + src * saturate(cloud.a), 1.0);
 }

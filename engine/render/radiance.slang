@@ -202,6 +202,9 @@ void rcApply(uint3 dtid : SV_DispatchThreadID) {
     const uint packed = vis - 1u;
     const MaterialGpu mat = gMat[gInstances[packed & 0xFFFFFu].materialId];
     const float3 gi = min(irradianceAt(P, N), gRcParams.cap) * max(gRcParams.intensity, 0.0);
+    if (max(gi.r, max(gi.g, gi.b)) < 0.002) {
+        return;
+    }
     if (gFrame.debugMode == 4) {
         gHdr[px] = float4(gi, 1.0);
         return;

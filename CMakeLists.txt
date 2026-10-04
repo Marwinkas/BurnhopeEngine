@@ -278,6 +278,7 @@ add_custom_command(
         ${SHADER_OUT_DIR}/shadowcull.clear.spv
         ${SHADER_OUT_DIR}/gtao.comp.spv
         ${SHADER_OUT_DIR}/cmaa2.comp.spv
+        ${SHADER_OUT_DIR}/smaa.comp.spv
         ${SHADER_OUT_DIR}/bloom0.comp.spv
         ${SHADER_OUT_DIR}/bloom1.comp.spv
         ${SHADER_OUT_DIR}/bloom2.comp.spv
@@ -301,12 +302,17 @@ add_custom_command(
         ${SHADER_OUT_DIR}/cube4.mesh.spv
         ${SHADER_OUT_DIR}/cube5.mesh.spv
         ${SHADER_OUT_DIR}/cube.frag.spv
+        ${SHADER_OUT_DIR}/cube.fill.comp.spv
         ${SHADER_OUT_DIR}/probe.comp.spv
         ${SHADER_OUT_DIR}/sky.trans.comp.spv
         ${SHADER_OUT_DIR}/sky.ms.comp.spv
         ${SHADER_OUT_DIR}/sky.view.comp.spv
         ${SHADER_OUT_DIR}/cloud.march.comp.spv
         ${SHADER_OUT_DIR}/cloud.up.comp.spv
+        ${SHADER_OUT_DIR}/contact.comp.spv
+        ${SHADER_OUT_DIR}/sky.probe.comp.spv
+        ${SHADER_OUT_DIR}/reflect.trace.comp.spv
+        ${SHADER_OUT_DIR}/reflect.up.comp.spv
         ${SHADER_OUT_DIR}/radiance.trace.comp.spv
         ${SHADER_OUT_DIR}/radiance.apply.comp.spv
         ${SHADER_OUT_DIR}/radiance.merge.comp.spv
@@ -325,6 +331,7 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_sun.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadeSun -o ${SHADER_OUT_DIR}/shade.sun.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_punctual.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadePunctual -o ${SHADER_OUT_DIR}/shade.punctual.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_fog.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadeFog -o ${SHADER_OUT_DIR}/shade.fog.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/contact.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry contactCs -o ${SHADER_OUT_DIR}/contact.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/resolve.slang -target spirv -profile spirv_1_6 -stage compute -entry resolveCs -o ${SHADER_OUT_DIR}/resolve.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry meshletCull -DCULL_FLIGHT=0 -o ${SHADER_OUT_DIR}/cull.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry meshletCull -DCULL_FLIGHT=1 -o ${SHADER_OUT_DIR}/cull.comp1.spv
@@ -337,6 +344,7 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shadowcull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadowClear -o ${SHADER_OUT_DIR}/shadowcull.clear.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gtao.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry gtaoCs -o ${SHADER_OUT_DIR}/gtao.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cmaa2.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cmaa2Cs -o ${SHADER_OUT_DIR}/cmaa2.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/smaa.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry smaaCs -o ${SHADER_OUT_DIR}/smaa.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=0 -DHIZ_MAX=1 -o ${SHADER_OUT_DIR}/hizmax0.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=1 -DHIZ_MAX=1 -o ${SHADER_OUT_DIR}/hizmax1.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -DHIZ_MIP=2 -DHIZ_MAX=1 -o ${SHADER_OUT_DIR}/hizmax2.comp.spv
@@ -353,12 +361,16 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry cubeMesh -DCUBE_FACE=4 -o ${SHADER_OUT_DIR}/cube4.mesh.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry cubeMesh -DCUBE_FACE=5 -o ${SHADER_OUT_DIR}/cube5.mesh.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry cubeFs -o ${SHADER_OUT_DIR}/cube.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube_fill.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cubeFill -o ${SHADER_OUT_DIR}/cube.fill.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/probe.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry probeBake -o ${SHADER_OUT_DIR}/probe.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_lut.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry skyTransmittance -o ${SHADER_OUT_DIR}/sky.trans.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_lut.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry skyMulti -o ${SHADER_OUT_DIR}/sky.ms.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_lut.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry skyView -o ${SHADER_OUT_DIR}/sky.view.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cloudMarch -o ${SHADER_OUT_DIR}/cloud.march.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cloudUp -o ${SHADER_OUT_DIR}/cloud.up.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_probe.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry skyProbe -o ${SHADER_OUT_DIR}/sky.probe.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reflect.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry reflectTrace -o ${SHADER_OUT_DIR}/reflect.trace.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reflect.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry reflectUp -o ${SHADER_OUT_DIR}/reflect.up.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/radiance.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcTrace -o ${SHADER_OUT_DIR}/radiance.trace.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/radiance.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcApply -o ${SHADER_OUT_DIR}/radiance.apply.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/radiance_merge.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcMerge -o ${SHADER_OUT_DIR}/radiance.merge.comp.spv
@@ -379,6 +391,9 @@ add_custom_command(
         ${SHADER_DIR}/shade_sun.slang
         ${SHADER_DIR}/shade_punctual.slang
         ${SHADER_DIR}/shade_fog.slang
+        ${SHADER_DIR}/contact.slang
+        ${SHADER_DIR}/sky_probe.slang
+        ${SHADER_DIR}/reflect.slang
         ${SHADER_DIR}/shade_hit.slang
         ${SHADER_DIR}/shade_shadow.slang
         ${SHADER_DIR}/resolve.slang
@@ -387,9 +402,11 @@ add_custom_command(
         ${SHADER_DIR}/shadowcull.slang
         ${SHADER_DIR}/gtao.slang
         ${SHADER_DIR}/cmaa2.slang
+        ${SHADER_DIR}/smaa.slang
         ${SHADER_DIR}/bloom.slang
         ${SHADER_DIR}/hiz.slang
         ${SHADER_DIR}/cube.slang
+        ${SHADER_DIR}/cube_fill.slang
         ${SHADER_DIR}/probe.slang
         ${SHADER_DIR}/sky_lut.slang
         ${SHADER_DIR}/cloud.slang

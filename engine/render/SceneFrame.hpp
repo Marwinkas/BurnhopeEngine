@@ -50,9 +50,13 @@ struct SceneTweaks {
     float rcMax = 48.0f;
     uint32_t lightProfile = 0;
     float bloomThreshold = 0.35f;
-    float fogDensity = 0.012f;
+    float fogDensity = 0.002f;
     float fogHeight = 4.0f;
     float fogScatter = 1.0f;
+    float sunZenith = 35.0f;
+    float sunAzimuth = 30.0f;
+    float cloudCoverage = 0.42f;
+    float cloudDensity = 0.08f;
     uint32_t tonemapper = 0;
     bool freeze = false;
 };

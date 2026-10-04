@@ -20,6 +20,7 @@
 #include "gpu_scene/InstanceCull.hpp"
 #include "gpu_scene/MeshletCull.hpp"
 #include "gpu_scene/SunShadow.hpp"
+#include "gpu_scene/LightMath.hpp"
 #include "render/PassDebug.hpp"
 #include "render/VisResolve.hpp"
 #include "gfx/PrimitiveGen.hpp"
@@ -2450,4 +2451,54 @@ TEST_CASE("gpuImageUploadRgba round-trips through host_image_copy") {
     }
     deviceDestroy(device);
     windowDestroy(window);
+}
+
+TEST_CASE("light math keeps energy penumbra and contact handoff") {
+    const float smooth = hammonDiffuse(1.0f, 1.0f, 1.0f, 0.0f);
+    const float rough = hammonDiffuse(1.0f, 1.0f, 1.0f, 1.0f);
+    CHECK(smooth > 0.2f);
+    CHECK(rough > 0.0f);
+    CHECK(coatLeft(1.0f, 0.0f) == doctest::Approx(1.0f));
+    CHECK(coatLeft(0.0f, 1.0f) < 0.1f);
+    CHECK(pcssPenumbra(0.5f, 0.5f, 1.0f) == doctest::Approx(1.0f));
+    CHECK(pcssPenumbra(0.8f, 0.2f, 1.0f) > 1.0f);
+    float x = 0.0f;
+    float y = 0.0f;
+    vogelDisk(0, 12, 0.0f, x, y);
+    CHECK(x * x + y * y < 1.0f);
+    float differ = 0.0f;
+    const float n0 = blueNoise64(0, 0);
+    for (uint32_t i = 1; i < 16; ++i) {
+        differ += std::fabs(blueNoise64(i, 3) - n0);
+    }
+    CHECK(differ > 0.1f);
+    CHECK(sscsHandoff(0.02f) == doctest::Approx(0.0f));
+    CHECK(sscsHandoff(0.125f) == doctest::Approx(0.5f).epsilon(0.02));
+    CHECK(sscsHandoff(0.4f) == doctest::Approx(1.0f));
+    CHECK(casDelta(1.0f, 0.5f, 0.25f) == doctest::Approx(0.125f));
+    CHECK(froxelSlice(0.1f, 80.0f, 0, 16) == doctest::Approx(0.1f));
+    CHECK(froxelSlice(0.1f, 80.0f, 16, 16) == doctest::Approx(80.0f));
+    CHECK(ggxCone(0.0f) == 0.0f);
+    CHECK(ggxCone(1.0f) > ggxCone(0.5f));
+    float ox = 0.0f;
+    float oy = 0.0f;
+    float oz = 0.0f;
+    planarReflect(0.2f, -0.4f, 0.6f, ox, oy, oz);
+    CHECK(ox == -0.2f);
+    CHECK(oy == -0.4f);
+    CHECK(oz == -0.6f);
+    CHECK(ltcForm(0.0f) == 0.0f);
+    CHECK(ltcForm(1.0f) == 0.5f);
+    CHECK(outdoorProbe(4u, 1u, 2u) == 1u + 3u * 4u + 2u * 16u);
+    CHECK(cloudNoiseIndex(1u, 2u, 3u, 128u, 0u) == 1u + 2u * 128u + 3u * 128u * 128u);
+    CHECK(cloudNoiseIndex(0u, 0u, 0u, 32u, 128u * 128u * 128u) == 128u * 128u * 128u);
+    CHECK(shadowPagesCrossed(3, 4, 3, 4) == 0u);
+    CHECK(shadowPagesCrossed(3, 4, 5, 4) == 3u);
+    CHECK(spotPage(40.0f) == 64u);
+    CHECK(spotPage(200.0f) == 512u);
+    CHECK(dominantFace(0.0f, -2.0f, 0.1f) == 3u);
+    CHECK(ltcCorner(0.0f, 0.0f, 1.0f, 1.0f) == 0.5f);
+    CHECK(shadowPage(128, 256, 128) == 2u * (4096u / 128u) + 1u);
+    CHECK(sizeof(AtmosphereParams) == 192);
+    CHECK(sizeof(BloomParams) == 64);
 }

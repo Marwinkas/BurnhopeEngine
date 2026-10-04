@@ -228,7 +228,7 @@ void visPointRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth, 
         meshDrawRecord(cmd, MeshDrawDesc{
             .mesh = p.point[light].handle,
             .frag = VK_NULL_HANDLE,
-            .groupCount = counts[light] * 6u,
+            .groupCount = counts[light],
         });
     }
     endRendering(rendering);

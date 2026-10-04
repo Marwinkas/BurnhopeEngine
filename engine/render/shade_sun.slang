@@ -9,11 +9,27 @@
 [[vk::binding(15, 0)]] Texture2D<float> gShadow0;
 [[vk::binding(16, 0)]] Texture2D<float4> gCube;
 
-float3 sampleEnv(float3 dir) {
+float3 sampleEnvDir(float3 dir) {
     uint face = 0u;
     float2 uv = 0.0;
     cubeDirToFaceUV(dir, face, uv);
     return gCube.SampleLevel(gWrap, float2((uv.x + float(face)) / 6.0, uv.y), 0.0).rgb;
+}
+
+float3 sampleEnv(float3 dir, float roughness) {
+    const float radius = ggxCone(roughness);
+    float3 acc = sampleEnvDir(dir);
+    if (radius < 0.002) {
+        return acc;
+    }
+    const float3 up = abs(dir.y) < 0.9 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+    const float3 t = normalize(cross(up, dir));
+    const float3 b = cross(dir, t);
+    acc += sampleEnvDir(normalize(dir + t * radius));
+    acc += sampleEnvDir(normalize(dir - t * radius));
+    acc += sampleEnvDir(normalize(dir + b * radius));
+    acc += sampleEnvDir(normalize(dir - b * radius));
+    return acc * 0.2;
 }
 
 #include "shade_shadow.slang"
@@ -21,6 +37,7 @@ float3 sampleEnv(float3 dir) {
 
 [[vk::binding(42, 0)]] Texture2D<float4> gSkyView;
 [[vk::binding(23, 0)]] SamplerState gClamp;
+[[vk::binding(47, 0)]] Texture2D<float> gContact;
 
 float3 shadowPoint(uint cascade, float3 P, float3 N, float NdotL) {
     const float texel = max(gSun.sunSplit[cascade], 1.0) / 2048.0;
@@ -65,56 +82,60 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
             }
         }
     }
-    if (gShade.sscsAmt > 0.001 && hit.NdotL > 0.05) {
-        const float reach = max(gShade.sscsReach, 0.05);
-        const float thick = max(gShade.sscsThick, 0.01);
-        const float pxCap = clamp(gShade.sscsPx, 4.0, 256.0);
-        const int steps = int(clamp(gShade.sscsSteps, 2.0, 32.0));
-        const float4 aClip = worldToClip(hit.P + hit.N * 0.02);
-        if (aClip.w > 1e-3) {
-            const float2 px0 = (aClip.xy / aClip.w * 0.5 + 0.5) * float2(gFrame.extent.xy);
-            [loop]
-            for (int s = 1; s <= steps; ++s) {
-                const float t = reach * (float(s) / float(steps));
-                const float3 Q = hit.P + hit.L * t + hit.N * 0.02;
-                const float4 clip = worldToClip(Q);
-                if (clip.w <= 1e-3) {
-                    break;
-                }
-                const float2 uv = clip.xy / clip.w * 0.5 + 0.5;
-                if (uv.x <= 0.0 || uv.y <= 0.0 || uv.x >= 1.0 || uv.y >= 1.0) {
-                    break;
-                }
-                const float2 sp = uv * float2(gFrame.extent.xy);
-                if (length(sp - px0) > pxCap) {
-                    break;
-                }
-                const float sd = gDepth.Load(int3(int2(sp), 0));
-                if (sd <= 0.0) {
-                    continue;
-                }
-                const float3 sceneP = reconstructWorld(uint2(sp), sd);
-                const float4 sceneClip = worldToClip(sceneP);
-                const float gap = clip.w - sceneClip.w;
-                const float along = dot(sceneP - hit.P, hit.L);
-                const float bias = min(0.05, thick * 0.3);
-                if (gap > bias && gap < thick && along > bias && along < reach) {
-                    shadow *= lerp(1.0, 0.0, saturate(gShade.sscsAmt) * saturate(1.0 - along / reach));
-                    break;
-                }
-            }
-        }
+    if ((gPass.passMask & 16384u) != 0u && gShade.sscsAmt > 0.001 && hit.NdotL > 0.05) {
+        shadow *= gContact.Load(int3(px, 0));
+    }
+    if (gFrame.debugMode == 6) {
+        const float c = gContact.Load(int3(px, 0));
+        gHdr[px] = float4(c, c, c, 1.0);
+        return;
     }
     shadow *= hit.pomShadow;
     if (gFrame.disableShadow != 0) {
         shadow = 1.0;
     }
-    const float3 radiance = gSun.sunColor.xyz * gSun.sunDirIntensity.w;
-    float3 color = hit.albedo * shAmbient(hit.N, hit.P) * hit.ao + hit.emissive
-        + (hit.diff * hit.ao + hit.spec) * hit.NdotL * shadow * radiance;
+    float3 radiance = gSun.sunColor.xyz * gSun.sunDirIntensity.w;
+    if ((gPass.passMask & 256u) == 0u) {
+        radiance = 0.0;
+    }
+    const float3 sky = gSkyView.SampleLevel(gClamp, atmSkyUv(hit.N), 0.0).rgb;
+    const float3 skyFill = sky * saturate(0.35 + 0.65 * hit.N.y) * 0.15 * hit.ao;
+    const bool worldRc = gPass.lightProfile >= 1u && (gPass.passMask & 128u) != 0u;
+    float3 bounce = shAmbient(hit.N, hit.P);
+    if (worldRc) {
+        bounce *= 0.35;
+    }
+    float3 indirect = hit.albedo * bounce * hit.ao + skyFill * (worldRc ? 0.25 : 1.0) + hit.emissive;
+    if (gFrame.debugMode == 4) {
+        gHdr[px] = float4(max(indirect, 0.0), 1.0);
+        return;
+    }
+    float3 direct = (hit.diff * hit.ao + hit.spec) * hit.NdotL * shadow * radiance;
+    if (!all(direct == direct)) {
+        direct = 0.0;
+    }
+    if (gFrame.debugMode == 8u) {
+        gHdr[px] = float4(direct, 1.0);
+        return;
+    }
+    if (gFrame.debugMode == 9u) {
+        gHdr[px] = float4(hit.albedo, 1.0);
+        return;
+    }
+    if (gFrame.debugMode == 10u) {
+        gHdr[px] = float4(hit.NdotL * shadow * radiance, 1.0);
+        return;
+    }
+    float3 color = indirect + direct;
     const float gloss = saturate(1.0 - hit.roughness);
-    color += sampleEnv(boxProjectDir(hit.P, reflect(-hit.V, hit.N))) * hit.spec * gloss;
-    color += hit.albedo * gSkyView.SampleLevel(gClamp, atmSkyUv(hit.N), 0.0).rgb * saturate(hit.N.y) * 0.12 * hit.ao;
+    const float3 env = sampleEnv(boxProjectDir(hit.P, reflect(-hit.V, hit.N)), hit.roughness) * hit.spec * gloss;
+    if (all(env == env)) {
+        color += max(env, 0.0);
+    }
+    if (hit.mirror > 0.5) {
+        const float3 floorR = float3(-hit.V.x, hit.V.y, -hit.V.z);
+        color += sampleEnv(boxProjectDir(hit.P, floorR), hit.roughness) * hit.spec;
+    }
     if (gFrame.debugMode == 1) {
         const uint h = hit.tri * 1664525u + 1013904223u;
         gHdr[px] = float4(float(h & 255u) / 255.0, float((h >> 8u) & 255u) / 255.0, float((h >> 16u) & 255u) / 255.0, 1.0);

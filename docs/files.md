@@ -200,12 +200,17 @@
 - `engine/render/shade_hit.slang` — поверхность из visbuffer. Солнце и лампы её вызывают.
 - `engine/render/shade_shadow.slang` — выборка карт солнца.
 - `engine/render/Sky.cpp` — LUT неба и облака в половине кадра.
-- `engine/render/Sky.hpp` — `skyPassCreate`, `skyLutRecord`, `cloudRecord`, `atmosphereApply`.
+- `engine/render/Sky.hpp` — `skyPassCreate`, `skyLutRecord`, `skyProbeRecord`, `cloudRecord`, `atmosphereApply`.
+- `engine/render/sky_probe.slang` — SH панорамы в верхний слой проб.
+- `engine/render/cube_fill.slang` — пустой тексель кубмапы читает панораму и облако. Слот `HeapImg::CubeFill` = 801.
+- `engine/render/smaa.slang` — SMAA T2x после CMAA. История в `hdrB`.
+- `engine/render/reflect.slang` — `reflectTrace`, `reflectUp`. Луч после ламп.
 - `engine/render/core/atmosphere.slang` — Рэлей, Ми, озон. Дескрипторов нет.
 - `engine/render/sky_lut.slang` — пропускание, многократное рассеяние, панорама, диск, звёзды, луна.
 - `engine/render/cloud.slang` — марш слоя, шахматка, апскейл по глубине.
 - `engine/render/shade_sky.slang` — пиксель неба читает панораму в `HdrA`.
-- `engine/render/shade_sun.slang` — солнце и контактная тень пишут `HdrA`.
+- `engine/render/shade_sun.slang` — солнце пишет `HdrA`, окружение берёт конус GGX, зеркало пола по биту 16.
+- `engine/render/contact.slang` — контактная тень, свой R8.
 - `engine/render/shade_punctual.slang` — лампы добавляют свет в `HdrA`.
 - `engine/render/shade_fog.slang` — туман поверх `HdrA`.
 - `engine/render/shadowcull.slang` — Cascade cull. The ortho matrix already covers casters whose shadow

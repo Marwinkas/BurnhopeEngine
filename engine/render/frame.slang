@@ -118,7 +118,8 @@ struct BloomParams {
     float bloomMix;
     float vignette;
     float ca;
-    float f3; float f4; float f5;
+    float cas;
+    float f4; float f5;
     float f6; float f7; float f8; float f9; float f10; float f11;
 };
 

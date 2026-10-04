@@ -15,6 +15,7 @@
 [[vk::binding(19, 0)]] StructuredBuffer<ProbeGpu> gProbes;
 [[vk::binding(26, 0)]] StructuredBuffer<uint4> gCells;
 [[vk::binding(27, 0)]] StructuredBuffer<uint> gLightIds;
+[[vk::binding(28, 0)]] StructuredBuffer<uint> gPages;
 [[vk::binding(29, 0)]] RWStructuredBuffer<uint> gFeedback;
 [[vk::binding(32, 0)]] Texture2D<float> gAo;
 
@@ -58,6 +59,7 @@ struct ShadeHit {
     float NdotL;
     float NdotV;
     float pomShadow;
+    float mirror;
 };
 
 float4 sampleHeap(uint id, float2 uv, float lod) {
@@ -124,6 +126,7 @@ float3 shAmbient(float3 N, float3 P) {
 ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     ShadeHit hit;
     hit.pomShadow = 1.0;
+    hit.mirror = 0.0;
     const uint packed = vis - 1u;
     const VisTri tri = loadVisTri(packed & 0xFFFFF, packed >> 20, px);
     hit.tri = tri.triId;
@@ -200,7 +203,8 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     if (dot(N, V) < 0.0) {
         N = -N;
     }
-    const float3 L = normalize(gSun.sunDirIntensity.xyz);
+    const float3 sunRaw = gSun.sunDirIntensity.xyz;
+    const float3 L = dot(sunRaw, sunRaw) > 1e-8 ? normalize(sunRaw) : float3(0.0, 1.0, 0.0);
     const float3 H = normalize(V + L);
     const float NdotL = saturate(dot(N, L));
     const float NdotV = saturate(dot(N, V));
@@ -268,7 +272,17 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     }
     const uint tex = mat.albedo;
     if (tex < 768) {
+        float lod = 0.0;
+        if ((gPass.passMask & 32768u) != 0u) {
+            const uint page = min(uint(saturate(uv.x) * 8.0) + uint(saturate(uv.y) * 8.0) * 8u, 63u);
+            if (gPages[page] == 0u) {
+                lod = 4.0;
+            }
+        }
         albedo *= sampleGrad(tex, uv, uvDdx, uvDdy).rgb;
+        if (lod > 0.0) {
+            albedo = sampleHeap(tex, uv, lod).rgb;
+        }
         if (feedback && gtid == 0u) {
             const uint vpage = min(uint(saturate(uv.x) * 8.0) + uint(saturate(uv.y) * 8.0) * 8u, 63u);
             uint slot = 0u;
@@ -337,6 +351,9 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     float3 spec = min((D * G * F) / max(4.0 * NdotV * NdotL, 1e-4), float3(2.0, 2.0, 2.0));
     spec *= lerp(float3(1.0, 1.0, 1.0), energyCompensation(f0, NdotV, roughness), saturate(gShade.ggx));
     spec *= lerp(1.0, specOcclusion(NdotV, gtao, roughness), saturate(gShade.specOcc));
+    const float coatRaw = asfloat(mat.pad0);
+    const float coat = coatRaw == coatRaw ? saturate(coatRaw) : 0.0;
+    const float left = coatLeft(NdotV, coat);
     hit.tri = hit.tri;
     hit.N = N;
     hit.P = P;
@@ -344,7 +361,7 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     hit.L = L;
     hit.albedo = albedo;
     hit.spec = spec;
-    hit.diff = albedo * (1.0 / kPi) * (1.0 - F) * (1.0 - metallic) * gtao;
+    hit.diff = albedo * hammonDiffuse(NdotL, NdotV, dot(V, L), roughness) * (1.0 - F) * (1.0 - metallic) * gtao * left;
     hit.f0 = f0;
     hit.emissive = mat.baseColor.rgb * mat.emissive;
     hit.roughness = roughness;
@@ -353,5 +370,6 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     hit.gtao = gtao;
     hit.NdotL = NdotL;
     hit.NdotV = NdotV;
+    hit.mirror = (mat.flags & 16u) != 0u ? 1.0 : 0.0;
     return hit;
 }

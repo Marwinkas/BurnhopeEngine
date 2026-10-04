@@ -56,6 +56,7 @@ cmake --build build-asan --target BurnhopeTest -j
 - `"gpuImageUploadHdr: GPU BC6H mode 11 decodes close to the source"` — float-градиент 0..8 через `gpuImageUploadHdr`. Каждый блок mip 0 — mode 11 (`0b00011`). Средняя абсолютная ошибка канала < 0.05. Строка `hdr compress` — замер Фазы 2.
 - `"gpuCompressLevel: BC3 BC4 BC5 decode close to the source"` — 32×32 RGBA через `gpuCompressLevel`. BC4 (R) и BC5 (RG) — средняя ошибка < 8/255, BC3 (цвет+альфа) < 12/255. У BC4 `e0 > e1`.
 - `"photo blur packs one lod into the photo primitive"` — `canvasBlur` клампит 1.5 → 1, `uiEmit` даёт ровно один `kUiFlagPhoto`, blur float в `pad1`. `uiPhotoLod(0.5, 8) == 3.5`.
+- `"light math keeps energy penumbra and contact handoff"` — Hammon, лак, полутень PCSS, диск Фогеля, синий шум, стык SSCS 5–20 см, CAS, срез фрокеля, страница тени 128, конус GGX, отражение пола, форма LTC, индекс уличной пробы, индекс шума облаков 128³/32³, страницы бокса, страница прожектора 64/512, грань лампы, четыре угла LTC.
 - `"camera cull feeds frustum cascades and froxels"` — сфера в кадре видна, сфера за камерой нет, 4 каскада, 16 froxel, конус от камеры отсекается.
 - `"cullInstances keeps spheres inside the frustum"` — 12 инстансов, 8 перед камерой остаются индексами 0..7, 4 за камерой выпадают.
 - `"anim track samples linear loop and cubic"` — ключи 0→100 за 1 с. t=0.5 даёт 50. t=1.5 в `Loop` тоже 50. Кубическая Безье на 0.5 около 50, на 0.25 ниже линейной. `Step` держит левый ключ.

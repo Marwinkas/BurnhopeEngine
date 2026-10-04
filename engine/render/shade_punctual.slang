@@ -26,7 +26,7 @@ struct LightGpu {
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
-    if (gFrame.debugMode == 1u || gFrame.debugMode == 2u || gFrame.debugMode == 5u) {
+    if (gFrame.debugMode != 0u && gFrame.debugMode != 8u) {
         return;
     }
     uint vis;
@@ -84,27 +84,63 @@ void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) 
         Lp = toLight / dist;
         atten = saturate(1.0 - dist / radius);
         atten *= atten;
+        if (kind == 1u && (gPass.passMask & 512u) == 0u) {
+            continue;
+        }
+        if (kind == 2u && (gPass.passMask & 65536u) == 0u) {
+            continue;
+        }
         if (kind == 2 && dot(Lp, -normalize(lamp.dirAngle.xyz)) < cos(max(lamp.dirAngle.w, 0.05))) {
             continue;
         }
         shadowSlot = int(lamp.meta.z);
         float pshadow = 1.0;
         if (gFrame.disableShadow == 0 && shadowSlot >= 0 && shadowSlot < 3) {
-            const float3 toPoint = -Lp;
-            uint face = 0;
-            float2 faceUv = 0.0;
-            cubeDirToFaceUV(toPoint, face, faceUv);
-            const float4 pclip = mul(gSun.pointFace[shadowSlot][face], float4(P, 1.0));
-            const float pw = pclip.w == 0.0 ? 1.0 : pclip.w;
-            const float2 pLocal = pclip.xy / pw * 0.5 + 0.5;
-            if (pLocal.x > 0.0 && pLocal.y > 0.0 && pLocal.x < 1.0 && pLocal.y < 1.0) {
-                const float2 pUv = float2((pLocal.x + float(face)) / 6.0, (pLocal.y + float(shadowSlot)) / 3.0);
+            const float mode = gSun.pad[shadowSlot];
+            const float page = mode < 0.0 ? (64.0 / 512.0) : 1.0;
+            float2 local = 0.0;
+            float receiverZ = 1.0;
+            bool inside = false;
+            if (abs(mode) < 0.5) {
+                const float3 fromLight = -toLight;
+                local = octEncode(fromLight / max(dist, 1e-4));
+                receiverZ = saturate(dist / max(radius, 0.05));
+                inside = true;
+            } else {
+                const uint face = uint(abs(mode) + 0.5) - 1u;
+                const float4 pclip = mul(gSun.pointFace[shadowSlot][face], float4(P, 1.0));
+                const float pw = pclip.w == 0.0 ? 1.0 : pclip.w;
+                local = pclip.xy / pw * 0.5 + 0.5;
+                receiverZ = saturate(pclip.z / pw);
+                inside = local.x > 0.0 && local.y > 0.0 && local.x < 1.0 && local.y < 1.0;
+            }
+            local *= page;
+            if (inside && local.x < page && local.y < page) {
+                const float2 pUv = float2(local.x, (local.y + float(shadowSlot)) / 3.0);
                 const float closest = gPointShadow.SampleLevel(gSamp, pUv, 0.0);
-                const float receiverZ = pclip.z / pw;
                 pshadow = closest >= 0.998 ? 1.0 : receiverZ <= closest + 0.012 ? 1.0 : 0.0;
             }
         }
         const float ndl = saturate(dot(N, Lp));
+        if ((lamp.meta.y & 1u) != 0u && (gPass.passMask & 131072u) == 0u) {
+            continue;
+        }
+        if ((lamp.meta.y & 1u) != 0u) {
+            const float halfExt = max(lamp.dirAngle.w, 0.05);
+            const float3 axis = abs(N.y) < 0.9 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+            const float3 tng = normalize(cross(axis, N));
+            const float3 bit = cross(N, tng);
+            float corner = 0.0;
+            [unroll]
+            for (int s = 0; s < 4; ++s) {
+                const float sx = (s & 1) != 0 ? 1.0 : -1.0;
+                const float sy = (s & 2) != 0 ? 1.0 : -1.0;
+                const float3 c = P + (tng * sx + bit * sy) * halfExt;
+                corner += saturate(dot(normalize(lamp.posRadius.xyz - c), N));
+            }
+            color += albedo * ltcForm(ndl) * lamp.colorIntensity.rgb * lamp.colorIntensity.w * atten * (corner * 0.25);
+            continue;
+        }
         const float3 H2 = normalize(V + Lp);
         const float3 F2 = F_Schlick(saturate(dot(V, H2)), f0);
         const float D2 = D_GGX(saturate(dot(N, H2)), a);
@@ -112,7 +148,7 @@ void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) 
         float3 specL = min((D2 * G2 * F2) / max(4.0 * NdotV * ndl, 1e-4), float3(2.0, 2.0, 2.0));
         specL *= lerp(float3(1.0, 1.0, 1.0), energyCompensation(f0, NdotV, roughness), saturate(gShade.ggx));
         specL *= lerp(1.0, specOcclusion(NdotV, gtao, roughness), saturate(gShade.specOcc));
-        const float3 diffL = albedo * (1.0 / kPi) * (1.0 - F2) * (1.0 - metallic);
+        const float3 diffL = albedo * hammonDiffuse(ndl, NdotV, dot(V, Lp), roughness) * (1.0 - F2) * (1.0 - metallic);
         float3 lampRad = lamp.colorIntensity.rgb * lamp.colorIntensity.w;
         const float lampPeak = max(lampRad.r, max(lampRad.g, lampRad.b));
         const float lampCap = lerp(1.2, 8.0, saturate(gShade.lamp));

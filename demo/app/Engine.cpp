@@ -257,12 +257,28 @@ void sceneHud(Canvas& canvas, void*) {
     panel.radio("Ультра", 3).name("prof2");
     panel.check("GTAO").name("gtaoen");
     panel.check("CMAA").name("cmaa");
+    panel.check("SMAA").name("smaa");
     panel.check("Bloom").name("bloomen");
+    panel.check("солнце").name("sun");
+    panel.check("точки").name("points");
+    panel.check("прожекторы").name("spots");
+    panel.check("площадь").name("area");
+    panel.check("небо").name("sky");
+    panel.check("облака").name("clouden");
+    panel.check("туман").name("fogen");
+    panel.check("отражение").name("reflecten");
+    panel.check("контакт").name("contacten");
+    panel.check("вирт. текстуры").name("vt");
     panel.radio("Lit", 1).name("mode0");
     panel.radio("Normals", 1).name("mode2");
     panel.radio("Primitive ID", 1).name("mode1");
     panel.radio("GI", 1).name("mode4");
     panel.radio("каскады", 1).name("mode5");
+    panel.radio("контакт", 1).name("mode6");
+    panel.radio("луч", 1).name("mode7");
+    panel.radio("прямой", 1).name("mode8");
+    panel.radio("альбедо", 1).name("mode9");
+    panel.radio("солнце", 1).name("mode10");
     panel.radio("AgX", 2).name("tone0");
     panel.radio("ACES", 2).name("tone1");
     panel.radio("Reinhard", 2).name("tone2");
@@ -273,9 +289,9 @@ void sceneHud(Canvas& canvas, void*) {
     rowSlide(panel, "виньетка", "vig", 1.1f, 0.0f, 2.0f);
     rowSlide(panel, "хромат. пкс", "ca", 2.0f, 0.0f, 4.0f);
     rowSlide(panel, "SSCS", "contact", 1.0f, 0.0f, 1.0f);
-    rowSlide(panel, "SSCS длина м", "sscsR", 30.0f, 0.2f, 80.0f);
-    rowSlide(panel, "SSCS толщина", "sscsT", 1.0f, 0.01f, 4.0f);
-    rowSlide(panel, "SSCS шаги", "sscsS", 20.0f, 2.0f, 48.0f);
+    rowSlide(panel, "SSCS длина м", "sscsR", 0.2f, 0.05f, 2.0f);
+    rowSlide(panel, "SSCS толщина", "sscsT", 0.02f, 0.005f, 0.2f);
+    rowSlide(panel, "SSCS шаги", "sscsS", 12.0f, 4.0f, 16.0f);
     rowSlide(panel, "SSCS экран px", "sscsP", 128.0f, 4.0f, 256.0f);
     rowSlide(panel, "окклюзия блика", "spec", 1.0f, 0.0f, 1.0f);
     rowSlide(panel, "Toksvig", "tok", 1.0f, 0.0f, 1.0f);
@@ -292,7 +308,11 @@ void sceneHud(Canvas& canvas, void*) {
     rowSlide(panel, "GTAO край", "gtaoFa", 1.0f, 0.1f, 1.0f);
     rowSlide(panel, "GTAO", "gtao", 1.2f, 0.0f, 4.0f);
     rowSlide(panel, "свечи", "lamp", 1.0f, 0.0f, 1.0f);
-    rowSlide(panel, "туман", "fog", 0.012f, 0.0f, 0.08f);
+    rowSlide(panel, "зенит", "zenith", 35.0f, -20.0f, 80.0f);
+    rowSlide(panel, "азимут", "azimuth", 30.0f, 0.0f, 360.0f);
+    rowSlide(panel, "облака", "clouds", 0.42f, 0.0f, 0.95f);
+    rowSlide(panel, "плотность", "cdens", 0.08f, 0.0f, 0.3f);
+    rowSlide(panel, "туман", "fog", 0.002f, 0.0f, 0.08f);
     rowSlide(panel, "высота тумана", "fogH", 4.0f, -30.0f, 40.0f);
     rowSlide(panel, "свет в тумане", "fogS", 1.0f, 0.0f, 2.0f);
     for (int i = 0; i < 12; ++i) {
@@ -395,7 +415,7 @@ bool engineTick(Engine& e) {
         Panel::find(e.host.view[e.host.primary].canvas, "load").setText(loadLine);
         const Canvas& hud = e.host.view[e.host.primary].canvas;
         uint32_t mode = 0;
-        for (uint32_t i = 0; i < 6; ++i) {
+        for (uint32_t i = 0; i < 11; ++i) {
             char name[8];
             std::snprintf(name, sizeof(name), "mode%u", i);
             if (canvasCheckOn(hud, name) == 1) {
@@ -426,18 +446,22 @@ bool engineTick(Engine& e) {
         tweaks.gtaoSlices = slideAt(hud, "gtaoSl", 6.0f);
         tweaks.gtaoPower = slideAt(hud, "gtaoPw", 1.6f);
         tweaks.gtaoFalloff = slideAt(hud, "gtaoFa", 1.0f);
-        tweaks.sscsReach = slideAt(hud, "sscsR", 30.0f);
-        tweaks.sscsThick = slideAt(hud, "sscsT", 1.0f);
-        tweaks.sscsSteps = slideAt(hud, "sscsS", 20.0f);
+        tweaks.sscsReach = slideAt(hud, "sscsR", 0.2f);
+        tweaks.sscsThick = slideAt(hud, "sscsT", 0.02f);
+        tweaks.sscsSteps = slideAt(hud, "sscsS", 12.0f);
         tweaks.sscsPx = slideAt(hud, "sscsP", 128.0f);
         tweaks.rcRays = slideAt(hud, "rcRays", 8.0f);
         tweaks.rcSpacing = slideAt(hud, "rcCell", 0.45f);
         tweaks.rcIntensity = slideAt(hud, "rcGain", 1.0f);
         tweaks.rcMax = slideAt(hud, "rcMax", 48.0f);
         tweaks.bloomThreshold = slideAt(hud, "bloomth", 0.35f);
-        tweaks.fogDensity = slideAt(hud, "fog", 0.012f);
+        tweaks.fogDensity = slideAt(hud, "fog", 0.002f);
         tweaks.fogHeight = slideAt(hud, "fogH", 4.0f);
         tweaks.fogScatter = slideAt(hud, "fogS", 1.0f);
+        tweaks.sunZenith = slideAt(hud, "zenith", 35.0f);
+        tweaks.sunAzimuth = slideAt(hud, "azimuth", 30.0f);
+        tweaks.cloudCoverage = slideAt(hud, "clouds", 0.42f);
+        tweaks.cloudDensity = slideAt(hud, "cdens", 0.08f);
         tweaks.freeze = checkOn(hud, "freeze", false);
         tweaks.passMask = 0;
         if (checkOn(hud, "cluster", true)) {
@@ -454,6 +478,39 @@ bool engineTick(Engine& e) {
         }
         if (checkOn(hud, "bloomen", true)) {
             tweaks.passMask |= 32u;
+        }
+        if (checkOn(hud, "smaa", false)) {
+            tweaks.passMask |= 4u;
+        }
+        if (checkOn(hud, "sun", true)) {
+            tweaks.passMask |= 256u;
+        }
+        if (checkOn(hud, "points", true)) {
+            tweaks.passMask |= 512u;
+        }
+        if (checkOn(hud, "spots", true)) {
+            tweaks.passMask |= 65536u;
+        }
+        if (checkOn(hud, "area", true)) {
+            tweaks.passMask |= 131072u;
+        }
+        if (checkOn(hud, "sky", true)) {
+            tweaks.passMask |= 1024u;
+        }
+        if (checkOn(hud, "clouden", true)) {
+            tweaks.passMask |= 2048u;
+        }
+        if (checkOn(hud, "fogen", true)) {
+            tweaks.passMask |= 4096u;
+        }
+        if (checkOn(hud, "reflecten", true)) {
+            tweaks.passMask |= 8192u;
+        }
+        if (checkOn(hud, "contacten", true)) {
+            tweaks.passMask |= 16384u;
+        }
+        if (checkOn(hud, "vt", false)) {
+            tweaks.passMask |= 32768u;
         }
         tweaks.lightProfile = 0;
         for (uint32_t i = 0; i < 3; ++i) {
