@@ -289,6 +289,10 @@ void pointMesh(
 #endif
 
 [shader("fragment")]
+void shadowFs(float4 pos : SV_Position) {
+}
+
+[shader("fragment")]
 uint visFs(VertOut vin, nointerpolation uint primId : COLOR1) : SV_Target0 {
     const float threshold = bayer4(uint2(vin.pos.xy));
     if (vin.fade < 1.0) {

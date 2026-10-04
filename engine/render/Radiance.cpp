@@ -98,6 +98,7 @@ bool radianceCreate(RadiancePass& p, Device& d, const DescriptorHeaps& heaps) {
     apply.storageBuf(10, HeapBuf::Instances);
     apply.storageBuf(14, HeapBuf::Materials);
     apply.storageBuf(30, HeapBuf::Rc, false);
+    apply.knob(50, HeapBuf::Flags);
     apply.knob(54, HeapBuf::RcParams);
     const ShaderCreateDesc traceDesc{
         .path = BH_SHADER_DIR "/radiance.trace.comp.spv",

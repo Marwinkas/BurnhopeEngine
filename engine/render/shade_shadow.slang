@@ -34,7 +34,7 @@ float cascadeShadow(uint cascade, float3 world) {
         const float2 o = vogelDisk(i, 8, turn) * 3.0;
         const int2 sp = int2(clamp(basePx.x + int(o.x), 0, 2047), clamp(basePx.y + int(o.y), y0, y0 + 2047));
         const float mapDepth = gShadow0.Load(int3(sp, 0));
-        if (mapDepth < receiver) {
+        if (mapDepth > 0.001 && mapDepth > receiver) {
             blockerSum += mapDepth;
             blockerN += 1.0;
         }

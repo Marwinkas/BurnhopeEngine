@@ -87,7 +87,7 @@ void skyView(uint3 dtid : SV_DispatchThreadID) {
     const float2 msUv = float2(mu, nu);
     const float3 ro = float3(0.0, kAtmRg + 200.0, 0.0);
     color += gMs[int2(int(msUv.x * 31.0), int(msUv.y * 31.0))].rgb * atmSampleTrans(gTransRead, gClamp, ro, rd) * atmViewScale();
-    const float disk = cos(max(0.00463 * max(gAtm.sunDisk, 0.2), 0.02));
+    const float disk = cos(max(0.00463 * max(gAtm.sunDisk, 0.2), 0.08));
     const float sunDot = dot(rd, sun);
     if (sunDot > disk && rd.y > -0.05) {
         const float core = saturate((sunDot - disk) / max(1.0 - disk, 1e-4));

@@ -74,14 +74,14 @@ void contactCs(uint3 dtid : SV_DispatchThreadID) {
         }
         const float3 sceneP = reconstructWorld(uint2(sp), sd);
         const float along = dot(sceneP - P, L);
-        if (along < 0.03 || along >= reach) {
+        if (along < 0.08 || along >= reach) {
             continue;
         }
         const float side = length(sceneP - P - L * along);
         if (side > thick) {
             continue;
         }
-        const float hand = saturate((along - 0.05) / 0.15);
+        const float hand = saturate((along - 0.08) / 0.12);
         occ = min(occ, hand);
         break;
     }

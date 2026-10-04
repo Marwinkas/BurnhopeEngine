@@ -19,6 +19,7 @@ struct VisPass {
     ShaderExt mesh[2];
     ShaderExt meshLate[2];
     ShaderExt shadow[3];
+    ShaderExt shadowFrag;
     ShaderExt point[3];
     ShaderExt frag;
     VkPipelineLayout pushLayout = VK_NULL_HANDLE;

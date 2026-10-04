@@ -83,7 +83,10 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         }
     }
     if ((gPass.passMask & 16384u) != 0u && gShade.sscsAmt > 0.001 && hit.NdotL > 0.05) {
-        shadow *= gContact.Load(int3(px, 0));
+        const float crease = gContact.Load(int3(px, 0));
+        if (crease == crease && crease > 0.02) {
+            shadow *= crease;
+        }
     }
     if (gFrame.debugMode == 6) {
         const float c = gContact.Load(int3(px, 0));
@@ -94,16 +97,29 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     if (gFrame.disableShadow != 0) {
         shadow = 1.0;
     }
-    float3 radiance = gSun.sunColor.xyz * gSun.sunDirIntensity.w;
-    if ((gPass.passMask & 256u) == 0u) {
+    float3 sunCol = gSun.sunColor.xyz;
+    if (max(sunCol.r, max(sunCol.g, sunCol.b)) < 0.02) {
+        sunCol = float3(1.0, 0.97, 0.92);
+    }
+    float inten = gSun.sunDirIntensity.w;
+    if (inten < 0.05) {
+        inten = 8.0;
+    }
+    float3 radiance = sunCol * inten;
+    const bool sunOn = (gPass.passMask & 256u) != 0u;
+    if (!sunOn) {
         radiance = 0.0;
     }
     const float3 sky = gSkyView.SampleLevel(gClamp, atmSkyUv(hit.N), 0.0).rgb;
-    const float3 skyFill = sky * saturate(0.35 + 0.65 * hit.N.y) * 0.15 * hit.ao;
+    float3 skyFill = sky * saturate(0.35 + 0.65 * hit.N.y) * 0.15 * hit.ao;
     const bool worldRc = gPass.lightProfile >= 1u && (gPass.passMask & 128u) != 0u;
     float3 bounce = shAmbient(hit.N, hit.P);
     if (worldRc) {
         bounce *= 0.35;
+    }
+    if (!sunOn) {
+        bounce *= 0.02;
+        skyFill *= 0.02;
     }
     float3 indirect = hit.albedo * bounce * hit.ao + skyFill * (worldRc ? 0.25 : 1.0) + hit.emissive;
     if (gFrame.debugMode == 4) {
@@ -115,7 +131,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         direct = 0.0;
     }
     if (gFrame.debugMode == 8u) {
-        gHdr[px] = float4(direct, 1.0);
+        gHdr[px] = float4(direct / max(inten, 1.0), 1.0);
         return;
     }
     if (gFrame.debugMode == 9u) {
@@ -123,7 +139,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         return;
     }
     if (gFrame.debugMode == 10u) {
-        gHdr[px] = float4(hit.NdotL * shadow * radiance, 1.0);
+        gHdr[px] = float4(hit.albedo * hit.NdotL * shadow, 1.0);
         return;
     }
     float3 color = indirect + direct;

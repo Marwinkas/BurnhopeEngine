@@ -185,6 +185,9 @@ void rcApply(uint3 dtid : SV_DispatchThreadID) {
     if (dtid.x >= gFrame.extent.x || dtid.y >= gFrame.extent.y) {
         return;
     }
+    if ((gPass.passMask & 256u) == 0u) {
+        return;
+    }
     const uint2 px = dtid.xy;
     if (gFrame.debugMode == 1 || gFrame.debugMode == 2) {
         return;

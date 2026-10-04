@@ -76,7 +76,7 @@ void atmosphereApply(FrameSun& sun, const AtmosphereParams& atm) {
     const float az = atm.sunAzimuth * 0.017453292f;
     const float c = std::cos(elev);
     const float dir[3] = {c * std::cos(az), std::sin(elev), c * std::sin(az)};
-    const float fade = std::min(std::max((dir[1] + 0.02f) / 0.07f, 0.0f), 1.0f);
+    const float fade = std::min(std::max(dir[1] * 1.15f + 0.02f, 0.0f), 1.0f);
     const float warm = std::min(std::max(1.0f - dir[1] * 3.0f, 0.0f), 1.0f);
     sun.sunDirIntensity[0] = dir[0];
     sun.sunDirIntensity[1] = dir[1];

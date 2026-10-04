@@ -166,7 +166,7 @@ struct BloomParams {
     uint32_t padU = 0;
     float grain = 0.0f;
     float bloomMix = 0.15f;
-    float vignette = 1.1f;
+    float vignette = 0.35f;
     float ca = 2.0f;
     float cas = 0.25f;
     float pad[8]{};

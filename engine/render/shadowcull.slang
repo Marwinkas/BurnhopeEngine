@@ -34,7 +34,8 @@ void shadowClear(uint3 id : SV_DispatchThreadID) {
 [numthreads(64, 1, 1)]
 void shadowCull(uint3 id : SV_DispatchThreadID) {
     const uint base = uint(gSun.sunSplit.w);
-    const uint count = gArgs[base + 12u];
+    const uint listed = uint(gFrame.viewPad.x + 0.5);
+    const uint count = max(listed, gArgs[base + 12u]);
     if (id.x >= count) {
         return;
     }
@@ -66,7 +67,7 @@ void shadowCull(uint3 id : SV_DispatchThreadID) {
         }
         const float extent = max(gSun.sunSplit[c], 1.0);
         const float pixels = radius / extent * 2048.0;
-        const float minPx = c == 0u ? 8.0 : c == 1u ? 4.0 : 3.0;
+        const float minPx = c == 0u ? 1.0 : c == 1u ? 1.0 : 0.5;
         if (pixels < minPx) {
             continue;
         }

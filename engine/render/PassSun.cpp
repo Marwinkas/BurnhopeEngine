@@ -13,22 +13,11 @@ void framePassSun(const RenderContext& ctx, SceneFrameImpl& scene, VisPass& vis,
         sun.stampValid = 0;
         return;
     }
-    bool shadowSame = sun.stampValid != 0
-        && sun.stampCount == scene.instanceCount
-        && sun.depth.layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    for (uint32_t c = 0; c < 3; ++c) {
-        if (std::memcmp(sun.stamp[c], ctx.sun.sunCascade[c], sizeof(sun.stamp[c])) != 0) {
-            shadowSame = false;
-        }
-    }
     GpuZone zone(ctx.profiler, ctx.cmd, "CSM");
-    if (!shadowSame) {
+    {
         bool drewShadow = false;
+        const VkDeviceSize shadowList = static_cast<VkDeviceSize>(sun.strideU) * sizeof(uint32_t);
         for (uint32_t c = 0; c < 3; ++c) {
-            if (sun.stampValid != 0 && std::memcmp(sun.stamp[c], ctx.sun.sunCascade[c], sizeof(sun.stamp[c])) == 0) {
-                continue;
-            }
-            const VkDeviceSize shadowList = static_cast<VkDeviceSize>(sun.strideU) * sizeof(uint32_t);
             VisInstanceDraw sunDraw{sun.instances.address, sun.shadowVisible.address + shadowList * c, 0};
             sunDraw.indirect = sun.shadowIndirect.buffer;
             sunDraw.indirectOffset = static_cast<VkDeviceSize>(ctx.flight * 64u + c * 16u);
@@ -52,11 +41,13 @@ void framePassSun(const RenderContext& ctx, SceneFrameImpl& scene, VisPass& vis,
             sun.splits != nullptr ? sun.splits[2] : 0.0f,
         };
         spdlog::info(
-            "shadow cache {} inst {}/{} center {:.1f} {:.1f} {:.1f} split {:.1f} {:.1f} {:.1f} eye {:.1f} {:.1f} {:.1f} mode {} sscs {:.2f} sh {} | c0 {:.2f} {:.2f} {:.2f} | c1 {:.2f} {:.2f} {:.2f} | c2 {:.2f} {:.2f} {:.2f} | cpu {:.2f} vis {} late {}",
-            shadowSame ? 1 : 0, sun.stampCount, scene.instanceCount,
+            "shadow cache {} inst {}/{} center {:.1f} {:.1f} {:.1f} split {:.1f} {:.1f} {:.1f} eye {:.1f} {:.1f} {:.1f} mode {} sscs {:.2f} sh {} zen {:.1f} az {:.1f} sun {:.2f} {:.2f} {:.2f} | c0 {:.2f} {:.2f} {:.2f} | c1 {:.2f} {:.2f} {:.2f} | c2 {:.2f} {:.2f} {:.2f} | cpu {:.2f} vis {} late {}",
+            0, sun.stampCount, scene.instanceCount,
             sunC[0], sunC[1], sunC[2], splits[0], splits[1], splits[2],
             scene.fly.eye[0], scene.fly.eye[1], scene.fly.eye[2],
             scene.debugMode, scene.hud.contact, 1,
+            scene.atmosphere.sunZenith, scene.atmosphere.sunAzimuth,
+            ctx.sun.sunDirIntensity[0], ctx.sun.sunDirIntensity[1], ctx.sun.sunDirIntensity[2],
             ctx.sun.sunCascade[0][12], ctx.sun.sunCascade[0][13], ctx.sun.sunCascade[0][14],
             ctx.sun.sunCascade[1][12], ctx.sun.sunCascade[1][13], ctx.sun.sunCascade[1][14],
             ctx.sun.sunCascade[2][12], ctx.sun.sunCascade[2][13], ctx.sun.sunCascade[2][14],

@@ -261,6 +261,7 @@ add_custom_command(
         ${SHADER_OUT_DIR}/visbuffer.shadow0.mesh.spv
         ${SHADER_OUT_DIR}/visbuffer.shadow1.mesh.spv
         ${SHADER_OUT_DIR}/visbuffer.shadow2.mesh.spv
+        ${SHADER_OUT_DIR}/visbuffer.shadow.frag.spv
         ${SHADER_OUT_DIR}/visbuffer.frag.spv
         ${SHADER_OUT_DIR}/shade.sky.comp.spv
         ${SHADER_OUT_DIR}/shade.sun.comp.spv
@@ -326,6 +327,7 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry shadowMesh -DSHADOW_CASCADE=0 -o ${SHADER_OUT_DIR}/visbuffer.shadow0.mesh.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry shadowMesh -DSHADOW_CASCADE=1 -o ${SHADER_OUT_DIR}/visbuffer.shadow1.mesh.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry shadowMesh -DSHADOW_CASCADE=2 -o ${SHADER_OUT_DIR}/visbuffer.shadow2.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry shadowFs -o ${SHADER_OUT_DIR}/visbuffer.shadow.frag.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry visFs -o ${SHADER_OUT_DIR}/visbuffer.frag.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_sky.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadeSky -o ${SHADER_OUT_DIR}/shade.sky.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_sun.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadeSun -o ${SHADER_OUT_DIR}/shade.sun.comp.spv
@@ -428,6 +430,7 @@ add_custom_target(BurnhopeSpv ALL DEPENDS
     ${SHADER_OUT_DIR}/visbuffer.mesh1.spv
     ${SHADER_OUT_DIR}/visbuffer.late.mesh.spv
     ${SHADER_OUT_DIR}/visbuffer.late1.mesh.spv
+    ${SHADER_OUT_DIR}/visbuffer.shadow.frag.spv
     ${SHADER_OUT_DIR}/visbuffer.frag.spv
     ${SHADER_OUT_DIR}/shade.sky.comp.spv
     ${SHADER_OUT_DIR}/shade.sun.comp.spv

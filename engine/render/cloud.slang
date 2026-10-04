@@ -56,51 +56,42 @@ void cloudMarch(uint3 dtid : SV_DispatchThreadID) {
     if (dtid.x >= width || dtid.y >= height) {
         return;
     }
-    const uint parity = gAtm.parity > 0.5 ? 1u : 0u;
-    if (gAtm.time > 0.05 && ((dtid.x + dtid.y) & 1u) != parity) {
-        return;
-    }
     const float2 uv = (float2(dtid.xy) + 0.5) / float2(float(width), float(height));
     const float3 farP = reconstructWorld(uv, 0.0);
     const float3 rd = normalize(farP - gFrame.cameraPos.xyz);
-    const float3 ro = float3(gFrame.cameraPos.x, gFrame.cameraPos.y + kAtmRg, gFrame.cameraPos.z);
-    const float bottom = kAtmRg + gAtm.cloudBottom;
-    const float top = kAtmRg + max(gAtm.cloudTop, gAtm.cloudBottom + 200.0);
-    const float tIn = atmExit(ro, rd);
-    float t0 = 1e20;
-    float t1 = -1.0;
-    const float b0 = dot(ro, rd);
-    const float h0 = b0 * b0 - (dot(ro, ro) - bottom * bottom);
-    const float h1 = b0 * b0 - (dot(ro, ro) - top * top);
-    if (h0 >= 0.0) {
-        const float s = sqrt(h0);
-        t0 = min(t0, max(-b0 - s, 0.0));
-        t1 = max(t1, -b0 + s);
-    }
-    if (h1 >= 0.0) {
-        const float s = sqrt(h1);
-        t0 = min(t0, max(-b0 - s, 0.0));
-        t1 = max(t1, -b0 + s);
-    }
-    if (t1 < t0 || rd.y < -0.02) {
+    const float camY = gFrame.cameraPos.y;
+    const float bottom = gAtm.cloudBottom;
+    const float top = max(gAtm.cloudTop, gAtm.cloudBottom + 200.0);
+    if (rd.y < 0.02) {
         gCloud[dtid.xy] = float4(0.0, 0.0, 0.0, 1.0);
         return;
     }
-    t1 = min(t1, tIn);
+    float enter = (bottom - camY) / rd.y;
+    float leave = (top - camY) / rd.y;
+    if (enter < 0.0) {
+        enter = 0.0;
+    }
+    if (leave <= enter) {
+        gCloud[dtid.xy] = float4(0.0, 0.0, 0.0, 1.0);
+        return;
+    }
     const float3 sun = atmSunDir(gAtm);
     const float cosT = dot(rd, sun);
     const float hg = atmMiePhase(cosT, 0.55);
     float3 lum = float3(0.0, 0.0, 0.0);
     float trans = 1.0;
     const int steps = 20;
-    const float dt = max((t1 - t0) / float(steps), 30.0);
+    const float dt = max((leave - enter) / float(steps), 30.0);
     for (int i = 0; i < steps; i++) {
-        const float t = t0 + dt * (float(i) + 0.5);
-        if (t > t1 || trans < 0.02) {
+        const float t = enter + dt * (float(i) + 0.5);
+        if (t > leave || trans < 0.02) {
             break;
         }
         const float3 p = gFrame.cameraPos.xyz + rd * t;
-        const float altitude = length(float3(p.x, p.y + kAtmRg, p.z)) - kAtmRg;
+        const float altitude = p.y;
+        if (altitude < gAtm.cloudBottom || altitude > gAtm.cloudTop) {
+            continue;
+        }
         const float u = saturate((altitude - gAtm.cloudBottom) / max(gAtm.cloudTop - gAtm.cloudBottom, 1.0));
         const float dens = cloudDensityAt(p, u);
         if (dens <= 0.0001) {
@@ -141,6 +132,9 @@ void cloudUp(uint3 dtid : SV_DispatchThreadID) {
     }
     const float4 cloud = acc / max(wsum, 1e-4);
     if ((gPass.passMask & 2048u) == 0u) {
+        return;
+    }
+    if ((gPass.passMask & 256u) == 0u) {
         return;
     }
     if (vis != 0u) {

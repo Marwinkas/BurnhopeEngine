@@ -99,7 +99,7 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
             copyBindings(shadowBind, shadowMaps[cascade]);
             desc.mappingCount = 7;
             desc.mappings = shadowMaps[cascade];
-        })
+        }, VK_SHADER_STAGE_FRAGMENT_BIT)
         && createShaderGroup(d, p.point, pointPath, VK_SHADER_STAGE_MESH_BIT_EXT, [&](uint32_t light, ShaderCreateDesc& desc) {
             PassBindings pointBind{heaps};
             pointBind.ubo(0, HeapBuf::Frame);
@@ -114,6 +114,11 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
             desc.mappings = pointMaps[light];
             desc.nextStage = VK_SHADER_STAGE_FRAGMENT_BIT;
         }, VK_SHADER_STAGE_FRAGMENT_BIT)
+        && shaderCreate(d, ShaderCreateDesc{
+            .path = BH_SHADER_DIR "/visbuffer.shadow.frag.spv",
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .extraFlags = VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT,
+        }, p.shadowFrag)
         && shaderCreate(d, frag, p.frag);
     if (!shaders) {
         spdlog::error("visPass shaders failed");
@@ -135,6 +140,7 @@ void visPassDestroy(VisPass& p, Device& d) {
     shaderDestroy(d, p.shadow[0]);
     shaderDestroy(d, p.shadow[1]);
     shaderDestroy(d, p.shadow[2]);
+    shaderDestroy(d, p.shadowFrag);
     shaderDestroy(d, p.point[0]);
     shaderDestroy(d, p.point[1]);
     shaderDestroy(d, p.point[2]);
@@ -205,7 +211,7 @@ void visShadowRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth,
     vkCmdSetScissorWithCount(cmd, 1, &scissor);
     meshDrawRecord(cmd, MeshDrawDesc{
         .mesh = p.shadow[cascade].handle,
-        .frag = VK_NULL_HANDLE,
+        .frag = p.shadowFrag.handle,
         .groupCount = draw.visibleCount,
         .indirect = draw.indirect,
         .indirectOffset = draw.indirectOffset,

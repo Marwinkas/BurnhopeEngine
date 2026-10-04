@@ -1352,6 +1352,8 @@ void sceneFrameRecord(
     gpu.invExtent[0] = 1.0f / static_cast<float>(swap.extent.width);
     gpu.invExtent[1] = 1.0f / static_cast<float>(swap.extent.height);
     gpu.padInv[0] = static_cast<float>(strideU);
+    gpu.viewPad[0] = static_cast<float>(scene->instanceCount);
+    gpu.viewPad[1] = static_cast<float>(flight * 2u * strideU);
     gpu.padInv[1] = 0.0f;
     gpu.extent[0] = swap.extent.width;
     gpu.extent[1] = swap.extent.height;
@@ -1623,10 +1625,14 @@ void sceneFrameRecord(
     }
     uint32_t sunKeep[3]{};
     if (scene->shadowIndirect.mapped != nullptr) {
+        gpuBufferInvalidate(scene->shadowIndirect, device, 0, scene->shadowIndirect.size);
         const auto* prevSun = static_cast<const uint32_t*>(scene->shadowIndirect.mapped) + flight * 16u;
         sunKeep[0] = prevSun[0];
         sunKeep[1] = prevSun[4];
         sunKeep[2] = prevSun[8];
+        if (sunKeep[0] == 0u && sunKeep[1] == 0u && sunKeep[2] == 0u) {
+            scene->shadowStampValid = 0;
+        }
     }
     gpu.padInv[1] = static_cast<float>(uploadLights(*scene, flight));
     std::memcpy(static_cast<uint8_t*>(scene->frameBuf.mapped) + sizeof(FrameView) * flight, &gpu, sizeof(gpu));
@@ -1640,6 +1646,7 @@ void sceneFrameRecord(
     if (scene->shadowIndirect.mapped != nullptr) {
         auto* shadowArgs = static_cast<uint32_t*>(scene->shadowIndirect.mapped);
         shadowArgs[flight * 16u + 12u] = scene->instanceCount;
+        gpuBufferFlush(scene->shadowIndirect, device, 0, scene->shadowIndirect.size);
     }
     if (scene->gpuTime.pool == VK_NULL_HANDLE) {
         (void)gpuProfilerCreate(scene->gpuTime, device);
