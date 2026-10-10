@@ -60,6 +60,7 @@ struct ShadeHit {
     float NdotV;
     float pomShadow;
     float mirror;
+    float foliage;
 };
 
 float4 sampleHeap(uint id, float2 uv, float lod) {
@@ -127,6 +128,7 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     ShadeHit hit;
     hit.pomShadow = 1.0;
     hit.mirror = 0.0;
+    hit.foliage = 0.0;
     const uint packed = vis - 1u;
     const VisTri tri = loadVisTri(packed & 0xFFFFF, packed >> 20, px);
     hit.tri = tri.triId;
@@ -279,7 +281,12 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
                 lod = 4.0;
             }
         }
-        albedo *= sampleGrad(tex, uv, uvDdx, uvDdy).rgb;
+        const float4 texel = sampleGrad(tex, uv, uvDdx, uvDdy);
+        albedo *= texel.rgb;
+        const float mipA = sampleHeap(tex, uv, 3.0).a;
+        if (texel.a < 0.98 || mipA < 0.92) {
+            hit.foliage = 1.0;
+        }
         if (lod > 0.0) {
             albedo = sampleHeap(tex, uv, lod).rgb;
         }

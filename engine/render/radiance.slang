@@ -55,7 +55,7 @@ void rcTrace(uint3 dtid : SV_DispatchThreadID) {
         return;
     }
     RaytracingAccelerationStructure tlas = RaytracingAccelerationStructure((uint64_t(rcLoad(4)) << 32) | uint64_t(rcLoad(0)));
-    const uint rays = uint(clamp(int(gRcParams.rays), 1, 16));
+    const uint rays = uint(clamp(int(gRcParams.rays), 1, 32));
     const float reach = max(gRcParams.maxDist, 1.0);
     const float3 sun = normalize(gSun.sunDirIntensity.xyz);
     const float3 sunCol = gSun.sunColor.rgb * gSun.sunDirIntensity.w;

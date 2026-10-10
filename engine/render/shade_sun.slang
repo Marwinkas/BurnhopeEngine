@@ -135,6 +135,10 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         return;
     }
     float3 direct = (hit.diff * hit.ao + hit.spec) * hit.NdotL * shadow * radiance;
+    if (hit.foliage > 0.5) {
+        const float back = pow(saturate(dot(-hit.N, hit.L)), 2.0);
+        direct += hit.albedo * radiance * shadow * back * 0.65;
+    }
     if (!all(direct == direct)) {
         direct = 0.0;
     }

@@ -47,3 +47,13 @@ float cascadeLit(uint cascade, float3 world) {
     const int2 sp = int2(sunLocal * 2048.0) + int2(0, y0);
     return shadowTexelLit(sp, y0, receiver, bias);
 }
+
+float cascadeFogLit(float3 world) {
+    [unroll]
+    for (uint c = 0u; c < 3u; ++c) {
+        if (cascadeOutside(c, world) <= 0.0) {
+            return cascadeLit(c, world);
+        }
+    }
+    return 1.0;
+}

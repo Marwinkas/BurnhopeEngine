@@ -20,33 +20,36 @@ void shadeFog(uint3 dtid : SV_DispatchThreadID) {
         return;
     }
     const uint2 px = dtid.xy;
-    if (gVis.Load(int3(px, 0)) == 0u) {
-        return;
-    }
+    const uint vis = gVis.Load(int3(px, 0));
     const float depth = gDepth.Load(int3(px, 0));
-    const float3 P = reconstructWorld(px, depth);
     const float3 cam = gFrame.cameraPos.xyz;
-    const float3 ray = P - cam;
-    const float rayLen = max(length(ray), 0.05);
-    const float3 rayDir = ray / rayLen;
+    float rayLen = 64.0;
+    float3 rayDir = float3(0.0, 0.0, 1.0);
+    if (vis != 0u && depth > 0.001) {
+        const float3 P = reconstructWorld(px, depth);
+        const float3 ray = P - cam;
+        rayLen = max(length(ray), 0.05);
+        rayDir = ray / rayLen;
+    } else {
+        const float3 farP = reconstructWorld(px, 0.0);
+        const float3 ray = farP - cam;
+        const float farLen = max(length(ray), 0.05);
+        rayDir = ray / farLen;
+        rayLen = 64.0;
+    }
+    const float march = min(rayLen, 64.0);
     const int fogSteps = 16;
-    const float zn = max(gFrame.cameraPos.w, 0.05);
-    const float zf = 80.0;
+    const float stepLen = march / float(fogSteps);
     float transmit = 1.0;
     float3 fogLight = 0.0;
     [loop]
-    for (int i = 1; i <= fogSteps; ++i) {
-        const float z0 = zn * pow(zf / zn, float(i - 1) / float(fogSteps));
-        const float z1 = zn * pow(zf / zn, float(i) / float(fogSteps));
-        if (z0 >= rayLen) {
-            break;
-        }
-        const float stepLen = min(z1, rayLen) - z0;
-        const float3 Q = cam + rayDir * min(z1, rayLen);
+    for (int i = 0; i < fogSteps; ++i) {
+        const float t = (float(i) + 0.5) * stepLen;
+        const float3 Q = cam + rayDir * t;
         const float height = exp(-max(Q.y - gShade.fogHeight, 0.0) * 0.12);
         const float optical = gShade.fogDensity * height * stepLen;
         const float absorb = 1.0 - exp(-optical);
-        const float sunVis = gFrame.disableShadow == 0 ? cascadeLit(2u, Q) : 1.0;
+        const float sunVis = gFrame.disableShadow == 0 ? cascadeFogLit(Q) : 1.0;
         const float3 sun = gSun.sunColor.xyz * gSun.sunDirIntensity.w * sunVis * gShade.fogScatter;
         fogLight += transmit * absorb * (sun + float3(0.04, 0.045, 0.05));
         transmit *= 1.0 - absorb;

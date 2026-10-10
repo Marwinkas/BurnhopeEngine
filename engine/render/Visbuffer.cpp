@@ -79,6 +79,13 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
     fragBind.storageBuf(14, HeapBuf::Materials);
     fragBind.sampler(24, HeapSamp::Wrap);
     copyBindings(fragBind, fragMaps);
+    VkDescriptorSetAndBindingMappingEXT shadowFragMaps[4];
+    PassBindings shadowFragBind{heaps};
+    shadowFragBind.storageBuf(10, HeapBuf::Instances);
+    shadowFragBind.sampledImg(12, HeapImg::Textures);
+    shadowFragBind.storageBuf(14, HeapBuf::Materials);
+    shadowFragBind.sampler(24, HeapSamp::Wrap);
+    copyBindings(shadowFragBind, shadowFragMaps);
     const ShaderCreateDesc frag{
         .path = BH_SHADER_DIR "/visbuffer.frag.spv",
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -118,6 +125,8 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
             .path = BH_SHADER_DIR "/visbuffer.shadow.frag.spv",
             .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
             .extraFlags = VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT,
+            .mappingCount = shadowFragBind.raw.count,
+            .mappings = shadowFragMaps,
         }, p.shadowFrag)
         && shaderCreate(d, frag, p.frag);
     if (!shaders) {

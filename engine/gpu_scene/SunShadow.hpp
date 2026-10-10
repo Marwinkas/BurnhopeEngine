@@ -112,12 +112,6 @@ inline SunShadow sunShadowWindow(
     float midV = (minV + maxV) * 0.5f;
     float halfU = (maxU - minU) * 0.5f;
     float halfV = (maxV - minV) * 0.5f;
-    if (halfU > cap) {
-        halfU = cap;
-    }
-    if (halfV > cap) {
-        halfV = cap;
-    }
     halfU = std::max(halfU, page);
     halfV = std::max(halfV, page);
     const float depthR = std::max(std::max(halfU, halfV), cap * 0.5f);

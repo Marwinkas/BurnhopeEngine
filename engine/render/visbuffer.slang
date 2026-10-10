@@ -289,7 +289,15 @@ void pointMesh(
 #endif
 
 [shader("fragment")]
-void shadowFs(float4 pos : SV_Position) {
+void shadowFs(VertOut vin) {
+    const GpuInstance inst = gInstanceBuf[vin.instanceId];
+    const MaterialGpu mat = gMat[inst.materialId];
+    if (mat.albedo > 0u && mat.albedo < 768u) {
+        const float alpha = gTex[NonUniformResourceIndex(mat.albedo)].Sample(gWrap, vin.uv).a;
+        if (alpha < 0.5) {
+            discard;
+        }
+    }
 }
 
 [shader("fragment")]

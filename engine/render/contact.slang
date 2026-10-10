@@ -6,14 +6,13 @@
 
 [[vk::binding(1, 0)]] Texture2D<uint> gVis;
 [[vk::binding(2, 0)]] Texture2D<float> gDepth;
+[[vk::binding(7, 0)]] StructuredBuffer<Vertex> gVerts;
+[[vk::binding(8, 0)]] StructuredBuffer<uint> gIdx;
+[[vk::binding(9, 0)]] StructuredBuffer<MeshletRef> gMeshlets;
+[[vk::binding(10, 0)]] StructuredBuffer<GpuInstance> gInstances;
 [[vk::binding(46, 0)]] RWTexture2D<float> gContact;
 
-float blueNoise64(uint2 p) {
-    uint n = (p.x & 63u) + (p.y & 63u) * 64u;
-    n = (n << 13u) ^ n;
-    n = n * (n * n * 15731u + 789221u) + 1376312589u;
-    return float(n & 0x7fffffffu) / 2147483647.0;
-}
+#include "core/vis_surface.slang"
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
@@ -32,7 +31,13 @@ void contactCs(uint3 dtid : SV_DispatchThreadID) {
         return;
     }
     const float3 P = reconstructWorld(px, depth);
-    const float3 N = reconstructNormalFromDepth(gDepth, px, P);
+    const uint packed = gVis.Load(int3(px, 0)) - 1u;
+    const VisTri tri = loadVisTri(packed & 0xFFFFFu, packed >> 20u, px);
+    float3 N = tri.faceN;
+    const float3 V = normalize(gFrame.cameraPos.xyz - P);
+    if (dot(N, V) < 0.0) {
+        N = -N;
+    }
     const float3 L = normalize(gSun.sunDirIntensity.xyz);
     if (dot(N, L) < 0.05) {
         gContact[px] = 1.0;
@@ -40,21 +45,14 @@ void contactCs(uint3 dtid : SV_DispatchThreadID) {
     }
     const float reach = max(gShade.sscsReach, 0.05);
     const float thick = max(gShade.sscsThick, 0.01);
-    const float pxCap = clamp(gShade.sscsPx, 4.0, 256.0);
     const int steps = int(clamp(gShade.sscsSteps, 4.0, 16.0));
-    const float jitter = blueNoise64(px);
-    const float2 uv0 = (float2(px) + 0.5) * gFrame.invExtent;
-    const float edge = min(min(uv0.x, 1.0 - uv0.x), min(uv0.y, 1.0 - uv0.y));
+    const float jitter = frac(dot(P, float3(0.754877666, 0.569840296, 0.381966011)));
+    const float step = reach / float(steps);
     float occ = 1.0;
     [loop]
     for (int s = 1; s <= steps; ++s) {
-        float t = reach * (float(s) / float(steps));
-        if (s == 1) {
-            t *= 0.35 + 0.65 * jitter;
-        } else {
-            t = reach * pow(float(s) / float(steps), 1.6);
-        }
-        const float3 Q = P + L * t + N * 0.005;
+        const float t = step * (float(s) - 0.5 + jitter);
+        const float3 Q = P + L * t + N * thick;
         const float4 clip = worldToClip(Q);
         if (clip.w <= 1e-3) {
             break;
@@ -63,28 +61,22 @@ void contactCs(uint3 dtid : SV_DispatchThreadID) {
         if (uv.x <= 0.0 || uv.y <= 0.0 || uv.x >= 1.0 || uv.y >= 1.0) {
             break;
         }
-        const float2 sp = uv * float2(gFrame.extent.xy);
-        const float pix = length(sp - float2(px));
-        if (pix < 1.5 || pix > pxCap) {
-            continue;
-        }
-        const float sd = gDepth.Load(int3(int2(sp), 0));
+        const uint2 sp = uint2(uv * float2(gFrame.extent.xy));
+        const float sd = gDepth.Load(int3(sp, 0));
         if (sd <= 0.0) {
             continue;
         }
-        const float3 sceneP = reconstructWorld(uint2(sp), sd);
+        const float3 sceneP = reconstructWorld(sp, sd);
         const float along = dot(sceneP - P, L);
-        if (along < 0.08 || along >= reach) {
+        if (along < step || along >= reach) {
             continue;
         }
         const float side = length(sceneP - P - L * along);
         if (side > thick) {
             continue;
         }
-        const float hand = saturate((along - 0.08) / 0.12);
-        occ = min(occ, hand);
+        occ = min(occ, saturate(along / reach));
         break;
     }
-    const float border = saturate(edge / 0.04);
-    gContact[px] = lerp(1.0, occ, saturate(gShade.sscsAmt) * border);
+    gContact[px] = lerp(1.0, occ, saturate(gShade.sscsAmt));
 }

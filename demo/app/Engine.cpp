@@ -262,6 +262,11 @@ void sceneHud(Canvas& canvas, void*) {
     panel.radio("Низкий", 3).name("prof0");
     panel.radio("Баланс", 3).name("prof1");
     panel.radio("Ультра", 3).name("prof2");
+    tick("radiance", "rcen", true);
+    rowSlide(panel, "RC лучи", "rcRays", 8.0f, 1.0f, 32.0f);
+    rowSlide(panel, "RC клетка м", "rcCell", 0.45f, 0.1f, 4.0f);
+    rowSlide(panel, "RC сила", "rcGain", 1.0f, 0.0f, 4.0f);
+    rowSlide(panel, "RC длина м", "rcMax", 48.0f, 2.0f, 200.0f);
     tick("GTAO", "gtaoen", true);
     tick("CMAA", "cmaa", true);
     panel.check("SMAA").name("smaa");
@@ -306,10 +311,6 @@ void sceneHud(Canvas& canvas, void*) {
     rowSlide(panel, "Toksvig", "tok", 1.0f, 0.0f, 1.0f);
     rowSlide(panel, "параллакс", "pom", 0.35f, 0.0f, 1.0f);
     rowSlide(panel, "multi-scatter", "ggx", 1.0f, 0.0f, 1.0f);
-    rowSlide(panel, "RC лучи", "rcRays", 8.0f, 1.0f, 32.0f);
-    rowSlide(panel, "RC клетка м", "rcCell", 0.45f, 0.1f, 4.0f);
-    rowSlide(panel, "RC сила", "rcGain", 1.0f, 0.0f, 4.0f);
-    rowSlide(panel, "RC длина м", "rcMax", 48.0f, 2.0f, 200.0f);
     rowSlide(panel, "радиус GTAO", "gtaor", 2.5f, 0.2f, 20.0f);
     rowSlide(panel, "GTAO срезы", "gtaoSl", 6.0f, 1.0f, 8.0f);
     rowSlide(panel, "GTAO шаги", "gtaoSt", 6.0f, 1.0f, 12.0f);
@@ -527,7 +528,7 @@ bool engineTick(Engine& e) {
                 tweaks.lightProfile = i;
             }
         }
-        if (tweaks.lightProfile >= 1u) {
+        if (checkOn(hud, "rcen", true)) {
             tweaks.passMask |= 128u;
         }
         tweaks.tonemapper = 0;

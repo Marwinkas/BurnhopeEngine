@@ -112,6 +112,10 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     contact.sun();
     contact.sampledImg(1, HeapImg::Vis);
     contact.sampledImg(2, HeapImg::Depth);
+    contact.storageBuf(7, HeapBuf::Verts);
+    contact.storageBuf(8, HeapBuf::Indices);
+    contact.storageBuf(9, HeapBuf::Meshlets);
+    contact.storageBuf(10, HeapBuf::Instances);
     contact.storageImg(46, HeapImg::Contact);
     contact.knob(55, HeapBuf::Shade);
     PassBindings reflectTrace{heaps};
