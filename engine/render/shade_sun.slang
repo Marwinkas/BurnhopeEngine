@@ -119,17 +119,17 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         radiance = 0.0;
     }
     const float3 sky = gSkyView.SampleLevel(gClamp, atmSkyUv(hit.N), 0.0).rgb;
-    float3 skyFill = sky * saturate(0.35 + 0.65 * hit.N.y) * 0.15 * hit.ao;
+    float3 skyFill = sky * saturate(0.35 + 0.65 * hit.N.y) * 0.04 * hit.ao;
     const bool worldRc = gPass.lightProfile >= 1u && (gPass.passMask & 128u) != 0u;
-    float3 bounce = shAmbient(hit.N, hit.P);
+    float3 bounce = shAmbient(hit.N, hit.P) * 0.4;
     if (worldRc) {
-        bounce *= 0.35;
+        bounce *= 0.15;
     }
     if (!sunOn) {
         bounce *= 0.02;
         skyFill *= 0.02;
     }
-    float3 indirect = hit.albedo * bounce * hit.ao + skyFill * (worldRc ? 0.25 : 1.0) + hit.emissive;
+    float3 indirect = hit.albedo * bounce * hit.ao + skyFill * (worldRc ? 0.2 : 0.55) + hit.emissive;
     if (gFrame.debugMode == 4) {
         gHdr[px] = float4(max(indirect, 0.0), 1.0);
         return;
@@ -152,7 +152,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     }
     float3 color = indirect + direct;
     const float gloss = saturate(1.0 - hit.roughness);
-    const float3 env = sampleEnv(boxProjectDir(hit.P, reflect(-hit.V, hit.N)), hit.roughness) * hit.spec * gloss;
+    const float3 env = sampleEnv(boxProjectDir(hit.P, reflect(-hit.V, hit.N)), hit.roughness) * hit.spec * gloss * 0.45;
     if (all(env == env)) {
         color += max(env, 0.0);
     }

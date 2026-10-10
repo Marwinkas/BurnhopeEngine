@@ -204,7 +204,7 @@ void rcApply(uint3 dtid : SV_DispatchThreadID) {
     const float3 N = reconstructNormalFromDepth(gDepth, px, P);
     const uint packed = vis - 1u;
     const MaterialGpu mat = gMat[gInstances[packed & 0xFFFFFu].materialId];
-    const float3 gi = min(irradianceAt(P, N), gRcParams.cap) * max(gRcParams.intensity, 0.0);
+    const float3 gi = min(irradianceAt(P, N), gRcParams.cap) * max(gRcParams.intensity, 0.0) * 0.35;
     if (max(gi.r, max(gi.g, gi.b)) < 0.002) {
         return;
     }

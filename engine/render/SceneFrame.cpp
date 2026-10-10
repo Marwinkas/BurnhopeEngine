@@ -1368,9 +1368,10 @@ void sceneFrameRecord(
     scene->shadowSlot = 0;
     gpu.padExt[0] = 0.0f;
     gpu.padExt[1] = 0;
-    const float sliceNear[3] = {0.05f, 6.0f, 24.0f};
-    const float sliceFar[3] = {8.0f, 32.0f, 120.0f};
-    const float casterPad[3] = {2.0f, 8.0f, 16.0f};
+    const float sliceNear[3] = {0.1f, 12.0f, 48.0f};
+    const float sliceFar[3] = {16.0f, 64.0f, 240.0f};
+    const float casterPad[3] = {8.0f, 16.0f, 32.0f};
+    const float maxHalf[3] = {16.0f, 32.0f, 64.0f};
     const float snapCells[3] = {8.0f, 4.0f, 8.0f};
     float sunCx = scene->fly.eye[0];
     float sunCy = scene->fly.eye[1];
@@ -1498,7 +1499,7 @@ void sceneFrameRecord(
     for (uint32_t c = 0; c < 3; ++c) {
         const SunShadow sun = sunShadowSlice(
             cam, -lit.sunDirIntensity[0], -lit.sunDirIntensity[1], -lit.sunDirIntensity[2],
-            sliceNear[c], sliceFar[c], casterPad[c], snapCells[c]);
+            sliceNear[c], sliceFar[c], casterPad[c], snapCells[c], maxHalf[c]);
         std::memcpy(lit.sunCascade[c], sun.viewProj.m, sizeof(sun.viewProj.m));
         lit.sunSplit[c] = sun.radius;
         splits[c] = sun.radius;
