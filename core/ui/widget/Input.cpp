@@ -259,6 +259,12 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         s.menuOpen = false;
     }
 
+    if (press && hit != s.capture) {
+        s.capture = kUiNone;
+        s.resizeId = kUiNone;
+        s.resizeEdge = 0;
+        s.floatWin = kUiNone;
+    }
     if (press && hit != kUiNone && !filesAte) {
         const UiPaint* p = s.ent[hit].try_get<UiPaint>();
         if (p != nullptr && p->disabled != 0) {
@@ -550,7 +556,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             }
         }
     }
-    if (release) {
+    if (release || !down) {
         if (s.dockEdge != 0 && s.floatWin == s.dockPanel) {
             uiDockTo(s, s.dockEdge);
         }

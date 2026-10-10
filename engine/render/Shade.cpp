@@ -120,16 +120,13 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     contact.knob(55, HeapBuf::Shade);
     PassBindings reflectTrace{heaps};
     reflectTrace.ubo(0, HeapBuf::Frame);
-    reflectTrace.sun();
     reflectTrace.sampledImg(1, HeapImg::Vis);
     reflectTrace.sampledImg(2, HeapImg::Depth);
     reflectTrace.storageImg(3, HeapImg::HdrAStorage);
     reflectTrace.storageImg(4, HeapImg::Surf0);
-    reflectTrace.storageBuf(14, HeapBuf::Materials);
+    reflectTrace.storageImg(5, HeapImg::Surf1);
     reflectTrace.sampledImg(16, HeapImg::Cube);
     reflectTrace.sampler(24, HeapSamp::Wrap);
-    reflectTrace.storageBuf(30, HeapBuf::Rc, false);
-    reflectTrace.storageImg(36, HeapImg::Reflect);
     reflectTrace.knob(50, HeapBuf::Flags);
     PassBindings reflectUp{heaps};
     reflectUp.ubo(0, HeapBuf::Frame);

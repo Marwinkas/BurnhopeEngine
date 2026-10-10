@@ -177,7 +177,7 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
             N = Ns;
         }
         const uint ntex = mat.normalTex;
-        if (ntex > 0 && ntex < 768) {
+        if ((mat.flags & 32u) == 0u && ntex > 0 && ntex < 768) {
             const float2 uv0 = float2(gVerts[i0].u, gVerts[i0].v);
             const float2 uv1 = float2(gVerts[i1].u, gVerts[i1].v);
             const float2 uv2 = float2(gVerts[i2].u, gVerts[i2].v);
@@ -282,10 +282,8 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
             }
         }
         const float4 texel = sampleGrad(tex, uv, uvDdx, uvDdy);
-        const float mipA = sampleHeap(tex, uv, 3.0).a;
-        const float cover = saturate((texel.a - 0.45) / 0.35);
-        albedo *= lerp(mat.baseColor.rgb, texel.rgb, cover);
-        if (texel.a < 0.98 || mipA < 0.92) {
+        albedo *= texel.rgb;
+        if ((mat.flags & 32u) != 0u && texel.a < 0.98) {
             hit.foliage = 1.0;
         }
         if (lod > 0.0) {
@@ -371,7 +369,10 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     hit.spec = spec;
     hit.diff = albedo * hammonDiffuse(NdotL, NdotV, dot(V, L), roughness) * (1.0 - F) * (1.0 - metallic) * gtao * left;
     hit.f0 = f0;
-    hit.emissive = mat.baseColor.rgb * mat.emissive;
+    hit.emissive = mat.baseColor.rgb * mat.emissive * 8.0;
+    if (mat.emissiveTex > 0u && mat.emissiveTex < 768u) {
+        hit.emissive *= sampleGrad(mat.emissiveTex, uv, uvDdx, uvDdy).rgb;
+    }
     hit.roughness = roughness;
     hit.metallic = metallic;
     hit.ao = ao;

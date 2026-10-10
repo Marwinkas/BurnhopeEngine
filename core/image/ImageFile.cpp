@@ -779,7 +779,7 @@ bool imageUploadCompressed(GpuImage& img, Device& d, VkFormat format, const uint
     return submitImageHostCopy(img, d, format, blocks, &level, 1);
 }
 
-bool imageLoadDds(GpuImage& img, Device& d, const char* path) {
+bool imageLoadDds(GpuImage& img, Device& d, const char* path, bool srgb) {
     MappedFile mapped{};
     if (!fileMapReadOnly(path, &mapped) || mapped.size < 128) {
         return false;
@@ -807,6 +807,15 @@ bool imageLoadDds(GpuImage& img, Device& d, const char* path) {
     } else if (std::memcmp(four, "BC7 ", 4) == 0) {
         format = VK_FORMAT_BC7_UNORM_BLOCK;
         blockBytes = 16;
+    }
+    if (srgb) {
+        if (format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK) {
+            format = VK_FORMAT_BC1_RGBA_SRGB_BLOCK;
+        } else if (format == VK_FORMAT_BC3_UNORM_BLOCK) {
+            format = VK_FORMAT_BC3_SRGB_BLOCK;
+        } else if (format == VK_FORMAT_BC7_UNORM_BLOCK) {
+            format = VK_FORMAT_BC7_SRGB_BLOCK;
+        }
     }
     if (format == VK_FORMAT_UNDEFINED || width == 0 || height == 0) {
         fileUnmap(&mapped);

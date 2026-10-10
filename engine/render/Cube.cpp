@@ -128,6 +128,21 @@ void cubePassRecord(VkCommandBuffer cmd, const CubePass& p, TrackedImage& color,
     RenderingPass rendering = beginRenderingColorDepth(cmd, color.image.extent, color.image.view, depth.image.view, colorClear, depthClear, clearColor);
     cmdSetGraphicsDynamic(cmd, color.image.extent, 1, true);
     const uint32_t slot = face % 6u;
+    const uint32_t side = color.image.extent.height;
+    if (!clearColor && side > 0u) {
+        VkClearAttachment clearAtt[2]{};
+        clearAtt[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        clearAtt[0].colorAttachment = 0;
+        clearAtt[0].clearValue = colorClear;
+        clearAtt[1].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        clearAtt[1].clearValue = depthClear;
+        VkClearRect clearRect{};
+        clearRect.rect.offset.x = static_cast<int32_t>(slot * side);
+        clearRect.rect.extent = {side, side};
+        clearRect.layerCount = 1;
+        vkCmdClearAttachments(cmd, 2, clearAtt, 1, &clearRect);
+        vkCmdSetScissorWithCount(cmd, 1, &clearRect.rect);
+    }
     if (counts[slot] > 0) {
         meshDrawRecord(cmd, MeshDrawDesc{
             .mesh = p.mesh[slot].handle,

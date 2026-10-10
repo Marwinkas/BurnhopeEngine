@@ -41,14 +41,17 @@ bool texOnDisk(const char* file) {
     if (file == nullptr || file[0] == '\0') {
         return false;
     }
+    const char* roots[] = {"testscene/assets/bistro", "testscene/Textures", "emeraldcity/Textures"};
     char path[320];
-    std::snprintf(path, sizeof(path), "testscene/Textures/%s", file);
-    std::FILE* f = std::fopen(path, "rb");
-    if (f == nullptr) {
-        return false;
+    for (const char* root : roots) {
+        std::snprintf(path, sizeof(path), "%s/%s", root, file);
+        std::FILE* f = std::fopen(path, "rb");
+        if (f != nullptr) {
+            std::fclose(f);
+            return true;
+        }
     }
-    std::fclose(f);
-    return true;
+    return false;
 }
 
 void siblingFile(const char* albedo, const char* kind, char* out, size_t cap) {
@@ -373,6 +376,9 @@ bool appendBistro(
         if (mat->Get(AI_MATKEY_TWOSIDED, twoSided) == AI_SUCCESS && twoSided != 0) {
             dst.flags |= 2u;
         }
+        if (foliageMaterial(mat)) {
+            dst.flags |= 32u;
+        }
         char extra[96];
         siblingFile(fileNameOf(tex.C_Str()), "Normal", extra, sizeof(extra));
         if (texOnDisk(extra)) {
@@ -389,6 +395,12 @@ bool appendBistro(
         siblingFile(fileNameOf(tex.C_Str()), "Specular", extra, sizeof(extra));
         if (texOnDisk(extra)) {
             dst.ormTexIndex = textureSlot(textures, extra, pack);
+            dst.flags |= 4u;
+        }
+        siblingFile(fileNameOf(tex.C_Str()), "Emissive", extra, sizeof(extra));
+        if (texOnDisk(extra)) {
+            dst.emissiveTexIndex = textureSlot(textures, extra, pack);
+            dst.emissiveIntensity = 1.0f;
         }
         aiString ormName;
         if (mat->GetTexture(aiTextureType_GLTF_METALLIC_ROUGHNESS, 0, &ormName) == AI_SUCCESS
@@ -423,9 +435,13 @@ bool appendBistro(
             const uint32_t localMat = mesh->mMaterialIndex;
             const bool worldUv = localMat < static_cast<uint32_t>(materials.size() - materialBase)
                 && (materials[materialBase + localMat].flags & 1u) != 0;
-            if (!worldUv && mesh->mTextureCoords[0] != nullptr) {
-                uv[static_cast<size_t>(v) * 2u + 0u] = mesh->mTextureCoords[0][v].x;
-                uv[static_cast<size_t>(v) * 2u + 1u] = mesh->mTextureCoords[0][v].y;
+            const aiVector3D* uvSet = mesh->mTextureCoords[0];
+            if (uvSet == nullptr) {
+                uvSet = mesh->mTextureCoords[1];
+            }
+            if (!worldUv && uvSet != nullptr) {
+                uv[static_cast<size_t>(v) * 2u + 0u] = uvSet[v].x;
+                uv[static_cast<size_t>(v) * 2u + 1u] = 1.0f - uvSet[v].y;
             } else {
                 uv[static_cast<size_t>(v) * 2u + 0u] = mesh->mVertices[v].x * 0.25f;
                 uv[static_cast<size_t>(v) * 2u + 1u] = mesh->mVertices[v].z * 0.25f;

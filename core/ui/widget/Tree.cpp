@@ -183,6 +183,7 @@ bool insideParents(const UiState& s, uint16_t id, float x, float y) {
 uint16_t hitTest(const UiState& s, float x, float y) {
     BH_ZONE;
     auto scan = [&](bool overlay) -> uint16_t {
+        uint16_t thumbHit = kUiNone;
         for (uint16_t n = s.count; n > 0; --n) {
             const uint16_t id = static_cast<uint16_t>(n - 1);
             if (!s.ent[id].is_alive() || uiIsOverlay(s, id) != overlay) {
@@ -196,16 +197,8 @@ uint16_t hitTest(const UiState& s, float x, float y) {
             if (!scrollThumb(s, id, thumb) || !hitBox(thumb, x, y) || !insideParents(s, id, x, y)) {
                 continue;
             }
-            bool hidden = false;
-            for (uint16_t up = id; up != kUiNone; up = s.parentOf[up]) {
-                if (s.tight[up] != 0 || (s.yoga[up] != nullptr && YGNodeStyleGetDisplay(s.yoga[up]) == YGDisplayNone)) {
-                    hidden = true;
-                    break;
-                }
-            }
-            if (!hidden) {
-                return id;
-            }
+            thumbHit = id;
+            break;
         }
         for (uint16_t n = s.count; n > 0; --n) {
             const uint16_t id = static_cast<uint16_t>(n - 1);
@@ -240,10 +233,16 @@ uint16_t hitTest(const UiState& s, float x, float y) {
                 continue;
             }
             if (hitBox(s.box[id], x, y)) {
-                return id;
+                const auto hitRole = static_cast<UiRole>(p->role);
+                const bool control = hitRole == UiRole::Button || hitRole == UiRole::Slider || hitRole == UiRole::Check
+                    || hitRole == UiRole::Field || hitRole == UiRole::Close;
+                if (control || thumbHit == kUiNone) {
+                    return id;
+                }
+                return thumbHit;
             }
         }
-        return kUiNone;
+        return thumbHit;
     };
     const uint16_t top = scan(true);
     return top != kUiNone ? top : scan(false);

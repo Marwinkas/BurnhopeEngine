@@ -17,12 +17,8 @@ float4 loadPos(uint vertex) {
     return float4(asfloat(rcLoad(byteOff)), asfloat(rcLoad(byteOff + 4u)), asfloat(rcLoad(byteOff + 8u)), asfloat(rcLoad(byteOff + 12u)));
 }
 
-float3 rayDir(uint probe, float3 N) {
-    const uint meta = metaBase(0u) + probe * 32u;
-    uint seq = 0u;
-    gRc.InterlockedAdd(meta + 16u, 1u, seq);
-    const float2 jitter = float2(asfloat(rcLoad(16)), asfloat(rcLoad(20)));
-    const float2 uv = frac(float2(float(seq) * 0.754877666, float(seq) * 0.569840296) + jitter);
+float3 rayDir(uint2 px, uint ray, float3 N) {
+    const float2 uv = frac(float2((float(px.x) + float(ray) * 47.0) * 0.754877666, (float(px.y) + float(ray) * 19.0) * 0.569840296));
     float3 w = decodeDir(uv);
     if (dot(w, N) < 0.0) {
         w = -w;
@@ -30,6 +26,8 @@ float3 rayDir(uint probe, float3 N) {
     return w;
 }
 
+// Split RC: проба стоит в мире на Δs*(cell+0.5). Луч выходит из видимой поверхности,
+// режется на t_n = t0*4^n и атомарно складывается в ближайшую пробу каждого каскада.
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void rcTrace(uint3 dtid : SV_DispatchThreadID) {
@@ -48,15 +46,10 @@ void rcTrace(uint3 dtid : SV_DispatchThreadID) {
     const float3 P = reconstructWorld(px, depth);
     const float3 N = reconstructNormalFromDepth(gDepth, px, P);
     const float cheb = max(abs(P.x - gFrame.cameraPos.x), max(abs(P.y - gFrame.cameraPos.y), abs(P.z - gFrame.cameraPos.z)));
-    const uint lod = min(uint(log2(max(cheb / max(rcParam(1u, gRcParams.spacing), 0.05), 1.0))), 5u);
-    const int3 cell0 = nearestCell(P, 0u, lod);
-    const uint probe0 = insertProbe(0u, packKey(cell0, lod), cell0, lod);
-    if (probe0 == 0xFFFFFFFFu) {
-        return;
-    }
+    const uint lod = min(uint(log2(max(cheb / max(rcTune(1u, gRcParams.spacing), 0.05), 1.0))), 5u);
     RaytracingAccelerationStructure tlas = RaytracingAccelerationStructure((uint64_t(rcLoad(4)) << 32) | uint64_t(rcLoad(0)));
-    const uint rays = uint(clamp(int(rcParam(0u, gRcParams.rays)), 1, 32));
-    const float reach = max(rcParam(3u, gRcParams.maxDist), 1.0);
+    const uint rays = uint(clamp(int(rcTune(0u, gRcParams.rays)), 1, 32));
+    const float reach = max(rcTune(3u, gRcParams.maxDist), 1.0);
     const float3 sun = normalize(gSun.sunDirIntensity.xyz);
     float t0 = 1.6 * spacingAt(0u, lod);
     if (lod > 0u) {
@@ -64,12 +57,12 @@ void rcTrace(uint3 dtid : SV_DispatchThreadID) {
     }
     [loop]
     for (uint r = 0u; r < rays; ++r) {
-        const float3 dir = rayDir(probe0, N);
+        const float3 dir = rayDir(px, r, N);
         RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
         RayDesc ray;
-        ray.Origin = P + N * 0.02;
+        ray.Origin = P + N * 0.08;
         ray.Direction = dir;
-        ray.TMin = 0.0;
+        ray.TMin = 0.05;
         ray.TMax = reach;
         q.TraceRayInline(tlas, RAY_FLAG_FORCE_OPAQUE, 0xff, ray);
         q.Proceed();
@@ -101,9 +94,9 @@ void rcTrace(uint3 dtid : SV_DispatchThreadID) {
             if (shadow.CommittedStatus() == COMMITTED_TRIANGLE_HIT && shadow.CommittedRayT() > 0.08) {
                 ndl = 0.0;
             }
-            Le = albedo * ndl + albedo * gMat[matId].emissive;
+            Le = min(albedo, float3(0.4, 0.4, 0.4)) * ndl * 0.12 + albedo * min(gMat[matId].emissive, 4.0) * 0.8;
         } else {
-            Le = float3(0.42, 0.52, 0.72) * saturate(dir.y * 0.6 + 0.35);
+            Le = float3(0.18, 0.22, 0.32) * saturate(dir.y * 0.5 + 0.25);
             hitT = reach;
         }
         uint hitC = 3u;
@@ -120,8 +113,8 @@ void rcTrace(uint3 dtid : SV_DispatchThreadID) {
             if (k > hitC) {
                 break;
             }
-            const int3 cell = k == 0u ? cell0 : nearestCell(P, k, lod);
-            const uint probe = k == 0u ? probe0 : insertProbe(k, packKey(cell, lod), cell, lod);
+            const int3 cell = nearestCell(P, k, lod);
+            const uint probe = insertProbe(k, packKey(cell, lod), cell, lod);
             const float3 J = k == hitC ? Le : float3(0.0, 0.0, 0.0);
             const float beta = k == hitC ? 0.0 : 1.0;
             depositDir(k, probe, dirIndex(dir, k), J, beta);
@@ -165,7 +158,11 @@ float3 irradianceLod(float3 P, float3 N, uint lod) {
         if (probe == 0xFFFFFFFFu || w <= 0.0) {
             continue;
         }
-        acc += sampleIrr(probe, N) * w;
+        const float3 e = sampleIrr(probe, N);
+        if (max(e.r, max(e.g, e.b)) < 0.002) {
+            continue;
+        }
+        acc += e * w;
         wsum += w;
     }
     return wsum > 1e-4 ? acc / wsum : 0.0;
@@ -173,7 +170,7 @@ float3 irradianceLod(float3 P, float3 N, uint lod) {
 
 float3 irradianceAt(float3 world, float3 N) {
     const float cheb = max(abs(world.x - gFrame.cameraPos.x), max(abs(world.y - gFrame.cameraPos.y), abs(world.z - gFrame.cameraPos.z)));
-    const float lodf = log2(max(cheb / max(rcParam(1u, gRcParams.spacing), 0.05), 1.0));
+    const float lodf = log2(max(cheb / max(rcTune(1u, gRcParams.spacing), 0.05), 1.0));
     const uint lod0 = min(uint(lodf), 5u);
     const uint lod1 = min(lod0 + 1u, 5u);
     const float3 e0 = irradianceLod(world, N, lod0);
@@ -187,13 +184,10 @@ void rcApply(uint3 dtid : SV_DispatchThreadID) {
     if (dtid.x >= gFrame.extent.x || dtid.y >= gFrame.extent.y) {
         return;
     }
-    if ((gPass.passMask & 256u) == 0u) {
+    if ((gPass.passMask & 262144u) == 0u || (gPass.passMask & 256u) == 0u || gFrame.debugMode != 0u) {
         return;
     }
     const uint2 px = dtid.xy;
-    if (gFrame.debugMode == 1 || gFrame.debugMode == 2) {
-        return;
-    }
     const uint vis = gVis.Load(int3(px, 0));
     if (vis == 0u) {
         return;
@@ -206,7 +200,9 @@ void rcApply(uint3 dtid : SV_DispatchThreadID) {
     const float3 N = reconstructNormalFromDepth(gDepth, px, P);
     const uint packed = vis - 1u;
     const MaterialGpu mat = gMat[gInstances[packed & 0xFFFFFu].materialId];
-    const float3 gi = irradianceAt(P, N) * max(gRcParams.intensity, 0.0) * gSun.sunColor.rgb * gSun.sunDirIntensity.w;
+    const float gain = max(rcTune(2u, gRcParams.intensity), 0.0);
+    const float sunScale = saturate(gSun.sunDirIntensity.w / 8.0);
+    const float3 gi = irradianceAt(P, N) * gain * gSun.sunColor.rgb * sunScale;
     if (max(gi.r, max(gi.g, gi.b)) < 0.002) {
         return;
     }

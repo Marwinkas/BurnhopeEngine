@@ -32,6 +32,9 @@ struct RadiancePass {
     bool hashDrawn = false;
     // Fence луча сигналит. Пока кадр не прочитал хеш, чистка не стартует.
     bool traceReady = false;
+    float tracedRays = -1.0f;
+    float tracedSpacing = -1.0f;
+    float tracedMax = -1.0f;
     GpuTask buildTask{};
     GpuTask traceTask{};
 };
@@ -51,7 +54,7 @@ void radianceArm(
 // Сабмит сборки и луча после present кадра. Пока fence сборки не сигналит, geometry остаётся false.
 void radianceKick(RadiancePass& p, Device& d);
 // Пишет чистку хэша и луч в свой буфер. В командный буфер кадра не кладёт.
-void radianceTraceArm(RadiancePass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent, uint32_t flight, float rays, float spacing, float intensity, float maxDist);
+void radianceTraceArm(RadiancePass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent, uint32_t flight, float rays, float spacing, float intensity, float maxDist, VkCommandBuffer cmd);
 // В кадре только добавка в HdrA, и только если прошлый луч уже дописан.
 void radianceRecord(VkCommandBuffer cmd, VkExtent2D extent, RadiancePass& p, bool freeze);
 

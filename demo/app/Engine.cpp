@@ -100,31 +100,14 @@ bool engineInit(Engine& e, int argc, char** argv) {
     }
     if (wantScene(argc, argv)) {
         e.scene = sceneFrameCreate();
-        const char* cache = "cache/bistro.bhop";
+        const char* cache = "cache/bistro-gltf.bhop";
         if (!sceneFrameLoadBhop(e.scene, cache)) {
             mkdir("cache", 0755);
             const char* parts[] = {
-                "testscene/BistroExterior.fbx",
-                "testscene/BistroInterior.fbx",
-                "testscene/BistroInterior_Wine.fbx",
+                "testscene/assets/bistro/BistroExterior.gltf",
             };
-            if (sceneImportFbxList(parts, 3, cache)) {
+            if (sceneImportFbxList(parts, 1, cache)) {
                 (void)sceneFrameLoadBhop(e.scene, cache);
-            }
-        }
-        sceneFrameShift(e.scene, 2500.0f, 0.0f, 0.0f);
-        const char* sponza = "cache/sponza.bhop";
-        if (!sceneFrameAppendBhop(e.scene, sponza)) {
-            mkdir("cache", 0755);
-            const char* packs[] = {
-                "newscenetest/main_sponza/NewSponza_Main_glTF_003.gltf",
-                "newscenetest/pkg_a_curtains/NewSponza_Curtains_glTF.gltf",
-                "newscenetest/pkg_b_ivy/NewSponza_IvyGrowth_glTF.gltf",
-                "newscenetest/pkg_c_trees/NewSponza_CypressTree_glTF.gltf",
-                "newscenetest/pkg_d_10k_candles/NewSponza_4_Combined_glTF.gltf",
-            };
-            if (sceneImportFbxList(packs, 5, sponza)) {
-                (void)sceneFrameAppendBhop(e.scene, sponza);
             }
         }
         ViewDesc main{};
@@ -258,6 +241,7 @@ void sceneHud(Canvas& canvas, void*) {
     tick("кластер ламп", "cluster", true);
     tick("тени", "shadow", true);
     tick("зонды SH", "probes", true);
+    tick("GI", "gien", true);
     panel.label("профиль света").name("h3");
     panel.radio("Низкий", 3).name("prof0");
     panel.radio("Баланс", 3).name("prof1");
@@ -297,6 +281,10 @@ void sceneHud(Canvas& canvas, void*) {
     panel.radio("прямой", 1).name("mode8");
     panel.radio("альбедо", 1).name("mode9");
     panel.radio("солнце", 1).name("mode10");
+    panel.radio("шероховатость", 1).name("mode11");
+    panel.radio("металл", 1).name("mode12");
+    panel.radio("AO", 1).name("mode13");
+    panel.radio("свечение", 1).name("mode14");
     panel.radio("AgX", 2).name("tone0");
     panel.radio("ACES", 2).name("tone1");
     panel.radio("Reinhard", 2).name("tone2");
@@ -396,9 +384,6 @@ void hostLoad(float& cpu, float& gpu) {
 
 bool engineTick(Engine& e) {
     const bool ok = hostTick(e.host);
-    if (e.scene != nullptr) {
-        sceneFrameKick(e.scene, e.host.device);
-    }
     if (e.scene != nullptr && e.host.primary >= 0) {
         char fps[96];
         sceneFrameStats(e.scene, fps, sizeof(fps));
@@ -428,7 +413,7 @@ bool engineTick(Engine& e) {
         Panel::find(e.host.view[e.host.primary].canvas, "load").setText(loadLine);
         const Canvas& hud = e.host.view[e.host.primary].canvas;
         uint32_t mode = 0;
-        for (uint32_t i = 0; i < 11; ++i) {
+        for (uint32_t i = 0; i < 15; ++i) {
             char name[8];
             std::snprintf(name, sizeof(name), "mode%u", i);
             if (canvasCheckOn(hud, name) == 1) {
@@ -487,6 +472,9 @@ bool engineTick(Engine& e) {
         }
         if (checkOn(hud, "probes", true)) {
             tweaks.passMask |= 2u;
+        }
+        if (checkOn(hud, "gien", true)) {
+            tweaks.passMask |= 262144u;
         }
         if (checkOn(hud, "cmaa", true)) {
             tweaks.passMask |= 8u;
@@ -550,6 +538,7 @@ bool engineTick(Engine& e) {
             }
         }
         sceneFrameTweaks(e.scene, tweaks);
+        sceneFrameKick(e.scene, e.host.device);
         const char* gpuText = sceneFrameGpuText(e.scene);
         char lines[12][96]{};
         uint32_t line = 0;

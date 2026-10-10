@@ -209,10 +209,13 @@ void recordAndPresentView(DrawJobCtx& ctx) {
     FrameContext frame{};
     if (!swapchainBegin(view.swap, host.device, frame)) {
         if (view.swap.gpuBusy != 0) {
-            // Кадр на GPU ещё занят. Взгляд уже сдвинут этим тиком, картинка догонит следующим present.
+            // Кадр на GPU ещё занят. Ввод холста всё равно разбирается, иначе клик и ползунок пропадают.
             if (view.sceneRecord != nullptr) {
                 out.wantsRelative = flyLook;
             }
+            const float w = view.swap.extent.width > 0 ? static_cast<float>(view.swap.extent.width) : static_cast<float>(view.window.pixelW);
+            const float h = view.swap.extent.height > 0 ? static_cast<float>(view.swap.extent.height) : static_cast<float>(view.window.pixelH);
+            out.ev = canvasConsume(view.canvas, host.device, w, h, view.window.input, ctx.now);
             out.handled = true;
             return;
         }

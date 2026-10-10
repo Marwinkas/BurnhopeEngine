@@ -16,6 +16,8 @@
 struct VertOut {
     float4 pos : SV_Position;
     float3 world : TEXCOORD0;
+    float3 nrm : TEXCOORD1;
+    float2 uv : TEXCOORD2;
     nointerpolation uint instanceId : COLOR0;
 };
 
@@ -25,6 +27,8 @@ struct PrimOut {
 
 groupshared float4 gClip[64];
 groupshared float3 gWorld[64];
+groupshared float3 gNrm[64];
+groupshared float2 gUv[64];
 groupshared uint gKept;
 
 float3 instancePoint(GpuInstance inst, float3 local) {
@@ -60,6 +64,9 @@ void cubeMesh(
         clip.xy = (atlas * 2.0 - 1.0) * w;
         gClip[gtid] = clip;
         gWorld[gtid] = world;
+        const float3 n = srcVert.nrm;
+        gNrm[gtid] = float3(dot(inst.world0.xyz, n), dot(inst.world1.xyz, n), dot(inst.world2.xyz, n));
+        gUv[gtid] = float2(srcVert.u, srcVert.v);
     }
     GroupMemoryBarrierWithGroupSync();
     uint3 tri = uint3(0, 0, 0);
@@ -84,6 +91,8 @@ void cubeMesh(
     if (gtid < vertCount) {
         verts[gtid].pos = gClip[gtid];
         verts[gtid].world = gWorld[gtid];
+        verts[gtid].nrm = gNrm[gtid];
+        verts[gtid].uv = gUv[gtid];
         verts[gtid].instanceId = src;
     }
     if (keep) {
@@ -96,11 +105,16 @@ void cubeMesh(
 float4 cubeFs(VertOut vin, nointerpolation uint primId : COLOR1) : SV_Target0 {
     const GpuInstance inst = gInstanceBuf[vin.instanceId];
     const MaterialGpu mat = gMat[inst.materialId];
-    float3 albedo = mat.baseColor.rgb;
+    float4 texel = float4(1.0, 1.0, 1.0, 1.0);
     if (mat.albedo > 0 && mat.albedo < 768) {
-        albedo *= gTex[mat.albedo].SampleLevel(gSamp, float2(0.5, 0.5), 4.0).rgb;
+        texel = gTex[mat.albedo].Sample(gSamp, vin.uv);
     }
+    if (texel.a < 0.5) {
+        discard;
+    }
+    const float3 albedo = mat.baseColor.rgb * texel.rgb;
+    const float3 n = dot(vin.nrm, vin.nrm) > 1e-8 ? normalize(vin.nrm) : float3(0.0, 1.0, 0.0);
     const float3 L = normalize(gSun.sunDirIntensity.xyz);
-    const float ndotl = saturate(dot(normalize(vin.world - gSun.cubeMin.xyz), L) * 0.5 + 0.5);
-    return float4(albedo * (0.2 + 0.8 * ndotl), 1.0);
+    const float ndotl = saturate(dot(n, L));
+    return float4(albedo * (0.22 + 0.78 * ndotl), 1.0);
 }

@@ -119,10 +119,14 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     if (!sunOn) {
         radiance = 0.0;
     }
-    const float3 sky = gSkyView.SampleLevel(gClamp, atmSkyUv(hit.N), 0.0).rgb;
-    float3 skyFill = sky * saturate(0.35 + 0.65 * hit.N.y) * 0.04 * hit.ao;
-    const bool worldRc = (gPass.passMask & 128u) != 0u;
-    float3 bounce = shAmbient(hit.N, hit.P) * 0.4;
+    const bool giOn = (gPass.passMask & 262144u) != 0u;
+    const float3 skyUp = gSkyView.SampleLevel(gClamp, atmSkyUv(float3(0.0, 1.0, 0.0)), 0.0).rgb;
+    const float3 skyN = gSkyView.SampleLevel(gClamp, atmSkyUv(float3(0.0, 0.35, 0.94)), 0.0).rgb;
+    const float3 skyE = gSkyView.SampleLevel(gClamp, atmSkyUv(float3(0.94, 0.35, 0.0)), 0.0).rgb;
+    const float3 sky = min((skyUp + skyN + skyE) * (1.0 / 3.0), float3(1.2, 1.2, 1.2));
+    float3 skyFill = giOn ? sky * 0.04 * hit.ao : 0.0;
+    const bool worldRc = giOn && (gPass.passMask & 128u) != 0u;
+    float3 bounce = giOn ? shAmbient(hit.N, hit.P) * 0.4 : 0.0;
     if (worldRc) {
         bounce *= max(gShade.pad0, 0.0);
     }
@@ -130,10 +134,10 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         bounce *= 0.02;
         skyFill *= 0.02;
     }
-    float3 indirect = hit.albedo * bounce * hit.ao + skyFill * (worldRc ? 0.2 : 0.55) + hit.emissive;
-    indirect *= sunCol * saturate(inten / 8.0);
+    const float3 diffuse = hit.albedo * (bounce * hit.ao + skyFill * (worldRc ? 0.2 : 0.55));
+    float3 indirect = diffuse * sunCol * saturate(inten / 8.0) + hit.emissive;
     if (gFrame.debugMode == 4) {
-        gHdr[px] = float4(max(indirect, 0.0), 1.0);
+        gHdr[px] = float4(max(diffuse * shadow, 0.0), 1.0);
         return;
     }
     float sunFace = hit.NdotL;
@@ -156,15 +160,33 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         gHdr[px] = float4(hit.albedo * hit.NdotL * shadow, 1.0);
         return;
     }
-    float3 color = indirect + direct;
-    const float gloss = saturate(1.0 - hit.roughness);
-    const float3 env = sampleEnv(boxProjectDir(hit.P, reflect(-hit.V, hit.N)), hit.roughness) * hit.spec * gloss * 0.45;
-    if (all(env == env)) {
-        color += max(env, 0.0);
+    if (gFrame.debugMode == 11u) {
+        gHdr[px] = float4(hit.roughness, hit.roughness, hit.roughness, 1.0);
+        return;
     }
-    if (hit.mirror > 0.5) {
-        const float3 floorR = float3(-hit.V.x, hit.V.y, -hit.V.z);
-        color += sampleEnv(boxProjectDir(hit.P, floorR), hit.roughness) * hit.spec;
+    if (gFrame.debugMode == 12u) {
+        gHdr[px] = float4(hit.metallic, hit.metallic, hit.metallic, 1.0);
+        return;
+    }
+    if (gFrame.debugMode == 13u) {
+        gHdr[px] = float4(hit.ao, hit.ao, hit.ao, 1.0);
+        return;
+    }
+    if (gFrame.debugMode == 14u) {
+        gHdr[px] = float4(hit.emissive, 1.0);
+        return;
+    }
+    float3 color = indirect + direct;
+    if ((gPass.passMask & 8192u) != 0u && gPass.lightProfile < 1u) {
+        const float gloss = saturate(1.0 - hit.roughness);
+        const float3 env = sampleEnv(boxProjectDir(hit.P, reflect(-hit.V, hit.N)), hit.roughness) * hit.f0 * gloss * 0.35;
+        if (all(env == env)) {
+            color += max(env, 0.0);
+        }
+        if (hit.mirror > 0.5) {
+            const float3 floorR = float3(-hit.V.x, hit.V.y, -hit.V.z);
+            color += sampleEnv(boxProjectDir(hit.P, floorR), hit.roughness) * hit.f0 * 0.35;
+        }
     }
     if (gFrame.debugMode == 1) {
         const uint h = hit.tri * 1664525u + 1013904223u;

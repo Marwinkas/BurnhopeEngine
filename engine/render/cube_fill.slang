@@ -28,14 +28,14 @@ float3 faceDir(uint face, float2 uv) {
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void cubeFill(uint3 dtid : SV_DispatchThreadID) {
-    if (dtid.x >= 384u || dtid.y >= 64u) {
+    if (dtid.x >= 3072u || dtid.y >= 512u) {
         return;
     }
     if (gCube[int2(dtid.xy)].a > 0.5) {
         return;
     }
-    const uint face = dtid.x / 64u;
-    const float2 uv = (float2(dtid.x % 64u, dtid.y) + 0.5) / 64.0;
+    const uint face = dtid.x / 512u;
+    const float2 uv = (float2(dtid.x % 512u, dtid.y) + 0.5) / 512.0;
     const float3 dir = faceDir(face, uv);
     float3 sky = gSky.SampleLevel(gClamp, atmSkyUv(dir), 0.0).rgb;
     if (dir.y > 0.02) {

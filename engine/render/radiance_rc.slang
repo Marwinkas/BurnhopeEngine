@@ -52,12 +52,19 @@ float rcParam(uint word, float fallback) {
     return asfloat(rcLoad(128u + word * 4u));
 }
 
+float rcTune(uint word, float fallback) {
+    if (asfloat(rcLoad(128u)) <= 0.0) {
+        return fallback;
+    }
+    return asfloat(rcLoad(128u + word * 4u));
+}
+
 float spacingAt(uint cascade, uint lod) {
-    return max(gRcParams.spacing, 0.05) * exp2(float(cascade + lod));
+    return max(rcTune(1u, gRcParams.spacing), 0.05) * exp2(float(cascade + lod));
 }
 
 int3 nearestCell(float3 world, uint cascade, uint lod) {
-    return int3(floor(world / spacingAt(cascade, lod) - 0.5));
+    return int3(floor(world / spacingAt(cascade, lod)));
 }
 
 uint64_t packKey(int3 cell, uint lod) {
@@ -148,11 +155,16 @@ void depositDir(uint cascade, uint probe, uint dir, float3 rad, float beta) {
         return;
     }
     const uint off = dirByte(cascade, probe, dir);
-    gRc.InterlockedAdd(off, uint(min(rad.r, 32.0) * 8.0));
-    gRc.InterlockedAdd(off + 4u, uint(min(rad.g, 32.0) * 8.0));
-    gRc.InterlockedAdd(off + 8u, uint(min(rad.b, 32.0) * 8.0));
-    const uint packed = (beta > 0.5 ? 1u : 0u) + (1u << 16);
-    gRc.InterlockedAdd(off + 12u, packed);
+    const uint packed = (beta > 0.5 ? 1u : 0u) + (1u << 12);
+    uint prev = 0u;
+    gRc.InterlockedAdd(off + 12u, packed, prev);
+    if ((prev >> 12) >= 4000u) {
+        gRc.InterlockedAdd(off + 12u, 0u - packed, prev);
+        return;
+    }
+    gRc.InterlockedAdd(off, uint(min(rad.r, 8.0) * 8.0));
+    gRc.InterlockedAdd(off + 4u, uint(min(rad.g, 8.0) * 8.0));
+    gRc.InterlockedAdd(off + 8u, uint(min(rad.b, 8.0) * 8.0));
 }
 
 float3 loadInterval(uint cascade, uint probe, uint dir, out float count, out float beta) {
@@ -163,11 +175,11 @@ float3 loadInterval(uint cascade, uint probe, uint dir, out float count, out flo
     }
     const uint off = dirByte(cascade, probe, dir);
     const uint packed = rcLoad(off + 12u);
-    count = float(packed >> 16);
+    count = float(packed >> 12);
     if (count < 1.0) {
         return 0.0;
     }
-    beta = float(packed & 0xffffu) / count;
+    beta = float(packed & 0xfffu) / count;
     return float3(rcLoad(off), rcLoad(off + 4u), rcLoad(off + 8u)) / count * (1.0 / 8.0);
 }
 
@@ -184,7 +196,7 @@ float3 loadMerged(uint cascade, uint probe, uint dir, out float count) {
         return 0.0;
     }
     const uint off = dirByte(cascade, probe, dir);
-    count = float(rcLoad(off + 12u) >> 16);
+    count = float(rcLoad(off + 12u) >> 12);
     if (count < 1.0) {
         return 0.0;
     }

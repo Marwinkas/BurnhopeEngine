@@ -79,8 +79,18 @@ void rcIrradiance(uint3 dtid : SV_DispatchThreadID) {
             acc += I * nd;
             w += nd;
         }
-        const float3 mean = w > 1e-4 ? acc / w : 0.0;
         const uint off = base + bin * 16u;
+        const float3 old = float3(asfloat(rcLoad(off)), asfloat(rcLoad(off + 4u)), asfloat(rcLoad(off + 8u)));
+        float3 mean = old;
+        if (w > 1e-4) {
+            const float3 target = acc / w;
+            if (rcLoad(108u) < rcLoad(116u)) {
+                mean = lerp(old, target, 0.5);
+            } else {
+                mean = old + clamp(target - old, -0.03, 0.03);
+            }
+            mean = min(mean, float3(0.45, 0.45, 0.45));
+        }
         rcStore(off, asuint(mean.x));
         rcStore(off + 4u, asuint(mean.y));
         rcStore(off + 8u, asuint(mean.z));

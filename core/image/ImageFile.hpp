@@ -67,7 +67,7 @@ enum class ImageBlock : uint8_t {
     uint32_t frames = 1,
     const char* cacheDds = nullptr);
 
-[[nodiscard]] bool imageLoadDds(GpuImage& img, Device& d, const char* path);
+[[nodiscard]] bool imageLoadDds(GpuImage& img, Device& d, const char* path, bool srgb = false);
 
 [[nodiscard]] bool imageUploadCompressed(
     GpuImage& img,

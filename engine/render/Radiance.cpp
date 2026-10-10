@@ -100,6 +100,7 @@ bool radianceCreate(RadiancePass& p, Device& d, const DescriptorHeaps& heaps) {
     apply.storageBuf(30, HeapBuf::Rc, false);
     apply.knob(50, HeapBuf::Flags);
     apply.knob(54, HeapBuf::RcParams);
+    apply.sun();
     const ShaderCreateDesc traceDesc{
         .path = BH_SHADER_DIR "/radiance.trace.comp.spv",
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -351,17 +352,10 @@ void radianceArm(
     spdlog::info("radiance: {} triangles armed, frame stays on screen", p.triangles);
 }
 
-void radianceTraceArm(RadiancePass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent, uint32_t flight, float rays, float spacing, float intensity, float maxDist) {
-    if (!p.geometry || p.trace.handle == VK_NULL_HANDLE || p.merge.handle == VK_NULL_HANDLE
+void radianceTraceArm(RadiancePass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent, uint32_t flight, float rays, float spacing, float intensity, float maxDist, VkCommandBuffer cmd) {
+    if (cmd == VK_NULL_HANDLE || !p.geometry || p.trace.handle == VK_NULL_HANDLE || p.merge.handle == VK_NULL_HANDLE
         || p.irradiance.handle == VK_NULL_HANDLE
-        || p.posByte <= kRcHeader || !d.caps.rayQuery || deviceLost(d)) {
-        return;
-    }
-    if (p.traceTask.stage != 0) {
-        return;
-    }
-    if (!gpuTaskBegin(p.traceTask, d)) {
-        spdlog::error("radiance trace begin failed");
+        || p.posByte <= kRcHeader || !d.caps.rayQuery || deviceLost(d) || p.table.mapped == nullptr) {
         return;
     }
     auto* head = static_cast<uint32_t*>(p.table.mapped);
@@ -371,15 +365,25 @@ void radianceTraceArm(RadiancePass& p, Device& d, DescriptorHeaps& heaps, VkExte
     const float jy = static_cast<float>((n * 17u) & 1023u) / 1024.0f;
     std::memcpy(head + 4, &jx, sizeof(float));
     std::memcpy(head + 5, &jy, sizeof(float));
+    float prevSpacing = 0.0f;
+    std::memcpy(&prevSpacing, head + 33, sizeof(float));
+    const bool reset = prevSpacing != spacing;
     const float rcTune[4] = {rays, spacing, intensity, maxDist};
     std::memcpy(head + 32, rcTune, sizeof(rcTune));
-    head[23] = 0;
-    head[24] = 0;
-    head[25] = 0;
-    head[26] = 0;
+    if (reset) {
+        head[23] = 0;
+        head[24] = 0;
+        head[25] = 0;
+        head[26] = 0;
+        head[29] = n + 12u;
+    }
+    rhiMemoryBarrier(cmd,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
     gpuBufferFlush(p.table, d, 0, kRcHeader);
     const VkDeviceSize cacheBytes = static_cast<VkDeviceSize>(p.posByte - kRcHeader);
-    const VkCommandBuffer cmd = p.traceTask.cmd;
     heapBind(cmd, heaps, flight);
     bufferBarrierToCompute(cmd, p.table.buffer, 0, kRcHeader,
         VK_PIPELINE_STAGE_2_HOST_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -387,7 +391,15 @@ void radianceTraceArm(RadiancePass& p, Device& d, DescriptorHeaps& heaps, VkExte
     bufferBarrierToTransfer(cmd, p.table.buffer, kRcHeader, cacheBytes,
         VK_PIPELINE_STAGE_2_HOST_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
         VK_ACCESS_2_HOST_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-    vkCmdFillBuffer(cmd, p.table.buffer, kRcHeader, cacheBytes, 0);
+    if (reset) {
+        vkCmdFillBuffer(cmd, p.table.buffer, kRcHeader, cacheBytes, 0);
+    } else {
+        const RcArena arena = rcArena();
+        for (uint32_t c = 0; c < 4u; ++c) {
+            const VkDeviceSize bytes = static_cast<VkDeviceSize>(kProbeCap[c]) * kDirCount[c] * kDirStride;
+            vkCmdFillBuffer(cmd, p.table.buffer, arena.dirBase[c], bytes, 0);
+        }
+    }
     bufferBarrierTransferToCompute(cmd, p.table.buffer, kRcHeader, cacheBytes);
     dispatchCompute2D(cmd, p.trace, extent);
     for (int c = 3; c >= 0; --c) {
@@ -414,9 +426,10 @@ void radianceTraceArm(RadiancePass& p, Device& d, DescriptorHeaps& heaps, VkExte
         VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     cmdBindCompute(cmd, p.irradiance.handle);
     vkCmdDispatch(cmd, (kProbeCap[0] + 63u) / 64u, 1u, 1u);
-    if (!gpuTaskEnd(p.traceTask)) {
-        spdlog::error("radiance trace end failed");
-    }
+    rhiBufferBarrier(cmd, p.table.buffer, kRcHeader, cacheBytes,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+    p.hashLive = true;
 }
 
 void radianceRecord(VkCommandBuffer cmd, VkExtent2D extent, RadiancePass& p, bool freeze) {

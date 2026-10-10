@@ -22,12 +22,15 @@ float cascadeShadow(uint cascade, float3 world) {
     const int y0 = int(cascade) * 4096;
     const float2 coord = saturate(sunLocal) * 4096.0 - 0.5;
     const int2 ip = int2(floor(coord));
-    const float2 f = coord - float2(ip);
-    const float s00 = shadowTexelLit(int2(ip.x, ip.y + y0), y0, receiver, bias);
-    const float s10 = shadowTexelLit(int2(ip.x + 1, ip.y + y0), y0, receiver, bias);
-    const float s01 = shadowTexelLit(int2(ip.x, ip.y + 1 + y0), y0, receiver, bias);
-    const float s11 = shadowTexelLit(int2(ip.x + 1, ip.y + 1 + y0), y0, receiver, bias);
-    return lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y);
+    float acc = 0.0;
+    [unroll]
+    for (int y = -2; y <= 2; ++y) {
+        [unroll]
+        for (int x = -2; x <= 2; ++x) {
+            acc += shadowTexelLit(int2(ip.x + x, ip.y + y + y0), y0, receiver, bias);
+        }
+    }
+    return acc * (1.0 / 25.0);
 }
 
 float cascadeShadowCover(uint cascade, float3 world) {
@@ -40,12 +43,15 @@ float cascadeShadowCover(uint cascade, float3 world) {
     const int y0 = int(cascade) * 4096;
     const float2 coord = sunLocal * 4096.0 - 0.5;
     const int2 ip = int2(floor(coord));
-    const float2 f = saturate(coord - float2(ip));
-    const float s00 = shadowTexelLit(int2(ip.x, ip.y + y0), y0, receiver, bias);
-    const float s10 = shadowTexelLit(int2(ip.x + 1, ip.y + y0), y0, receiver, bias);
-    const float s01 = shadowTexelLit(int2(ip.x, ip.y + 1 + y0), y0, receiver, bias);
-    const float s11 = shadowTexelLit(int2(ip.x + 1, ip.y + 1 + y0), y0, receiver, bias);
-    return lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y);
+    float acc = 0.0;
+    [unroll]
+    for (int y = -2; y <= 2; ++y) {
+        [unroll]
+        for (int x = -2; x <= 2; ++x) {
+            acc += shadowTexelLit(int2(ip.x + x, ip.y + y + y0), y0, receiver, bias);
+        }
+    }
+    return acc * (1.0 / 25.0);
 }
 
 float cascadeOutside(uint cascade, float3 world) {

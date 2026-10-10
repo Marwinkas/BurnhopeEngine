@@ -43,9 +43,12 @@
 #include <cstring>
 #include <dirent.h>
 #include <string>
+#include <vector>
 
 namespace burnhope {
 namespace {
+
+bool nameHas(const char* text, const char* needle);
 
 void pushBlob(SceneFrameImpl& s, const MeshletBlob& blob, float x, float y, float z) {
     if (s.instanceCount >= kSceneInstances || s.vertCount + blob.vertexCount > kSceneVerts) {
@@ -90,6 +93,18 @@ void uploadStatic(SceneFrameImpl& s) {
     std::memcpy(s.meshlets.mapped, s.meshletSrc, sizeof(GpuMeshlet) * s.instanceCount);
     if (s.materialSrc != nullptr && s.materialCount > 0) {
         std::memcpy(s.materialsBuf.mapped, s.materialSrc, sizeof(MaterialGpuData) * s.materialCount);
+        auto* mats = static_cast<MaterialGpuData*>(s.materialsBuf.mapped);
+        for (uint32_t i = 0; i < s.materialCount; ++i) {
+            const uint32_t tex = mats[i].albedoTexIndex;
+            if (tex == 0 || tex >= s.texNameCount || s.texNames == nullptr) {
+                continue;
+            }
+            const char* file = s.texNames[tex].file;
+            if (nameHas(file, "leaf") || nameHas(file, "foliage") || nameHas(file, "grass") || nameHas(file, "hedge")
+                || nameHas(file, "fern") || nameHas(file, "azalea") || nameHas(file, "linden")) {
+                mats[i].flags |= 32u;
+            }
+        }
     }
 }
 
@@ -224,7 +239,7 @@ bool loadTextures(SceneFrameImpl& s, Device& device) {
     for (uint32_t i = 1; i < count; ++i) {
         char path[320];
         const char* file = s.texNames[i].file;
-        const char* root = "testscene/Textures";
+        const char* root = "testscene/assets/bistro";
         const char* name = file;
         if (file[0] != '\0' && file[1] == '/') {
             name = file + 2;
@@ -241,17 +256,21 @@ bool loadTextures(SceneFrameImpl& s, Device& device) {
             }
         }
         resolveTexturePath(path, sizeof(path), root, name);
+        if (!fileReadable(path)) {
+            resolveTexturePath(path, sizeof(path), "testscene/Textures", name);
+        }
         char cache[512];
         ddsCachePath(cache, sizeof(cache), path);
         const bool precise = nameHas(name, "normal") || nameHas(name, "nrm") || nameHas(name, "orm")
             || nameHas(name, "rough") || nameHas(name, "metal") || nameHas(name, "spec");
-        bool loaded = imageLoadDds(s.textures[i], device, cache);
+        const bool srgb = false;
+        bool loaded = imageLoadDds(s.textures[i], device, cache, srgb);
         if (loaded && precise && s.textures[i].format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK) {
             gpuImageDestroy(s.textures[i], device);
             loaded = false;
         }
         if (!loaded) {
-            loaded = imageLoadDds(s.textures[i], device, path);
+            loaded = imageLoadDds(s.textures[i], device, path, srgb);
         }
         if (!loaded) {
             ImageCpu cpu{};
@@ -1123,7 +1142,7 @@ void sceneFrameDebug(SceneFrame* scene, bool hiz, bool cone, bool lod, bool frus
     if (scene == nullptr) {
         return;
     }
-    if (mode > 10u) {
+    if (mode > 14u) {
         mode = 0;
     }
     if (scene->showHiz == hiz && scene->showCone == cone
@@ -1184,22 +1203,6 @@ void sceneFrameKick(SceneFrame* scene, Device& device) {
         radianceArm(rad, device, *scene->kickHeaps, scene->vertSrc, scene->indexSrc, scene->instSrc, scene->meshletSrc, scene->instanceCount);
     }
     radianceKick(rad, device);
-    if (gpuTaskDone(rad.traceTask, device)) {
-        rad.hashLive = true;
-        if (!rad.traceReady) {
-            rad.traceReady = true;
-            rad.hashDrawn = false;
-        }
-    }
-    const bool world = (scene->passMask & 128u) != 0u && loaded;
-    if (world && rad.geometry && !scene->freeze && rad.traceReady && rad.hashDrawn) {
-        rad.traceReady = false;
-        rad.hashDrawn = false;
-        rad.traceTask.stage = 0;
-        radianceTraceArm(rad, device, *scene->kickHeaps, scene->extent, scene->kickFlight,
-            scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax);
-        radianceKick(rad, device);
-    }
 }
 
 void sceneFrameRecord(
@@ -1249,7 +1252,7 @@ void sceneFrameRecord(
             && createDefaultGpuBuffer(scene->texFeedbackBuf, device, sizeof(uint32_t) * 64)
             && createDefaultGpuBuffer(scene->materialsBuf, device, sizeof(MaterialGpuData) * std::max(scene->materialCount, 1u));
         const VkExtent2D pointExtent{512, 1536};
-        const VkExtent2D cubeExtent{384, 64};
+        const VkExtent2D cubeExtent{3072, 512};
         const VkExtent2D hizExtent{swap.extent.width, swap.extent.height * 2};
         const VkExtent2D shadowExtent{4096, 12288};
         const bool shadowImages =
@@ -1598,10 +1601,7 @@ void sceneFrameRecord(
     }
     LightGpuData probe{};
     probe.type = kLightPoint;
-    probe.pos[0] = (scene->boxMin[0] + scene->boxMax[0]) * 0.5f;
-    probe.pos[1] = (scene->boxMin[1] + scene->boxMax[1]) * 0.5f;
-    probe.pos[2] = (scene->boxMin[2] + scene->boxMax[2]) * 0.5f;
-    probe.radius = scene->shadowExtent;
+    probe.radius = scene->shadowExtent > 1.0f ? scene->shadowExtent : 200.0f;
     lit.cubeMin[0] = scene->boxMin[0];
     lit.cubeMin[1] = scene->boxMin[1];
     lit.cubeMin[2] = scene->boxMin[2];
@@ -1613,7 +1613,7 @@ void sceneFrameRecord(
     const float cubeDz = scene->fly.eye[2] - scene->cubeEye[2];
     if (scene->cubeReady) {
         const bool fresh = scene->cubeEye[0] == 0.0f && scene->cubeEye[1] == 0.0f && scene->cubeEye[2] == 0.0f;
-        if (fresh || cubeDx * cubeDx + cubeDy * cubeDy + cubeDz * cubeDz > 4.0f) {
+        if (fresh || cubeDx * cubeDx + cubeDy * cubeDy + cubeDz * cubeDz > 1600.0f) {
             scene->cubeEye[0] = scene->fly.eye[0];
             scene->cubeEye[1] = scene->fly.eye[1];
             scene->cubeEye[2] = scene->fly.eye[2];
@@ -1623,6 +1623,14 @@ void sceneFrameRecord(
             }
         }
     }
+    if (!scene->cubeReady && scene->cubeFace == 0u) {
+        scene->cubeEye[0] = scene->fly.eye[0];
+        scene->cubeEye[1] = scene->fly.eye[1];
+        scene->cubeEye[2] = scene->fly.eye[2];
+    }
+    probe.pos[0] = scene->cubeEye[0];
+    probe.pos[1] = scene->cubeEye[1];
+    probe.pos[2] = scene->cubeEye[2];
     for (uint32_t face = 0; face < 6; ++face) {
         const Mat4 vp = pointShadowFace(probe, face);
         std::memcpy(lit.cubeFace[face], vp.m, sizeof(vp.m));
@@ -1717,7 +1725,7 @@ void sceneFrameRecord(
     const bool gtaoOn = scene->lightProfile < 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
     framePassShade(ctx, scene->shade, scene->sky, scene->vis.targets.vis, scene->vis.targets.depth, gtaoOn, scene->probeBuf.buffer, scene->probeBuf.size);
     const bool worldRc = (scene->passMask & 128u) != 0u;
-    framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc);
+    framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax);
     const bool bloomOn = (knob.flags.passMask & 32u) != 0u && scene->hud.bloom > 0.001f;
     framePassTonemap(ctx, scene->tone, scene->shade.hdrA, scene->shade.hdrB, swap, frame, bloomOn);
 }
