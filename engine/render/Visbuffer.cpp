@@ -95,7 +95,7 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
             shadowBind.storageBuf(9, HeapBuf::Meshlets);
             shadowBind.storageBuf(10, HeapBuf::Instances);
             shadowBind.sun();
-            shadowBind.storageBuf(18, static_cast<uint32_t>(HeapBuf::ShadowVisible) + cascade);
+            shadowBind.storageBuf(18, shadowListSlot(cascade));
             copyBindings(shadowBind, shadowMaps[cascade]);
             desc.mappingCount = 7;
             desc.mappings = shadowMaps[cascade];

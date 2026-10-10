@@ -386,23 +386,32 @@ bool bindHeap(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
         stored = stored && heapWriteStorage(heaps, device, row.slot, *row.buf);
     }
     const VkDeviceSize list = alignUp(s.visibleCap) * sizeof(uint32_t);
-    const bool shadowLists =
-        heapWriteStorage(heaps, device, static_cast<uint32_t>(HeapBuf::ShadowVisible) + 0, s.shadowVisible.address, list)
-        && heapWriteStorage(heaps, device, static_cast<uint32_t>(HeapBuf::ShadowVisible) + 1, s.shadowVisible.address + list, list)
-        && heapWriteStorage(heaps, device, static_cast<uint32_t>(HeapBuf::ShadowVisible) + 2, s.shadowVisible.address + 2 * list, list);
+    bool shadowLists = s.shadowVisible.address != 0;
+    for (uint32_t flight = 0; shadowLists && flight < 2u; ++flight) {
+        const VkDeviceAddress base = s.shadowVisible.address + list * 3u * flight;
+        shadowLists = heapWriteBufferFlight(
+            heaps, device, flight, static_cast<uint32_t>(HeapBuf::ShadowAll),
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, base, list * 3u);
+        for (uint32_t c = 0; shadowLists && c < 3u; ++c) {
+            shadowLists = heapWriteBufferFlight(
+                heaps, device, flight, shadowListSlot(c),
+                VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, base + list * c, list);
+        }
+    }
     bool extra = stored && shadowLists;
     for (uint32_t i = 0; extra && i < 3; ++i) {
         extra = heapWriteStorage(heaps, device, static_cast<uint32_t>(HeapBuf::PointVisible) + i, s.pointVisible.address + list * i, list);
     }
     for (uint32_t i = 0; extra && i < 6; ++i) {
-        extra = heapWriteStorage(heaps, device, static_cast<uint32_t>(HeapBuf::CubeVisible) + i, s.cubeVisible.address + list * i, list);
+        extra = heapWriteStorage(heaps, device, cubeListSlot(i), s.cubeVisible.address + list * i, list);
     }
     const bool images =
         heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Vis), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.vis.targets.vis.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Depth), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.vis.targets.depth.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HdrAStorage), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.hdrA.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::HdrBSampled), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shade.hdrA.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
-        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Shadow), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shadowDepth[0].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT)
+        && heapWriteImageFlight(heaps, device, 0, static_cast<uint32_t>(HeapImg::Shadow), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shadowDepth[0].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT, 1)
+        && heapWriteImageFlight(heaps, device, 1, static_cast<uint32_t>(HeapImg::Shadow), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shadowDepth[1].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT, 1)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::ShadowB), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shadowDepth[1].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT);
     const bool cascades = images;
     VkSamplerCreateInfo sampler{
@@ -465,7 +474,6 @@ bool bindHeap(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
         && heapWriteStorage(heaps, device, HeapBuf::Candidates, s.candidates)
         && heapWriteStorage(heaps, device, HeapBuf::Indirect, s.indirect)
         && s.shadowIndirect.address != 0
-        && heapWriteStorage(heaps, device, HeapBuf::ShadowAll, s.shadowVisible)
         && heapWriteStorage(heaps, device, HeapBuf::ShadowIndirect, s.shadowIndirect);
     if (!(extra && cascades && pictures && lamps && heapWriteSampler(heaps, device, static_cast<uint32_t>(HeapSamp::Linear), sampler) && heapWriteSampler(heaps, device, static_cast<uint32_t>(HeapSamp::Wrap), wrap))) {
         return false;
@@ -1226,7 +1234,7 @@ void sceneFrameRecord(
             && createDefaultGpuBuffer(scene->candidates, device, listBytes * 4)
             && createDefaultGpuBuffer(scene->indirect, device, 512, true, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT)
             && createDefaultGpuBuffer(scene->shadowIndirect, device, 128, true, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT)
-            && createDefaultGpuBuffer(scene->shadowVisible, device, listBytes * 3)
+            && createDefaultGpuBuffer(scene->shadowVisible, device, listBytes * 6)
             && createDefaultGpuBuffer(scene->pointVisible, device, listBytes * 3)
             && createDefaultGpuBuffer(scene->cubeVisible, device, listBytes * 6)
             && createDefaultGpuBuffer(scene->lightBuf, device, sizeof(LightGpuData) * kLightCap * 2)
@@ -1360,9 +1368,9 @@ void sceneFrameRecord(
     scene->shadowSlot = 0;
     gpu.padExt[0] = 0.0f;
     gpu.padExt[1] = 0;
-    const float sliceNear[3] = {0.2f, 24.0f, 120.0f};
-    const float sliceFar[3] = {36.0f, 180.0f, 2500.0f};
-    const float casterPad[3] = {28.0f, 48.0f, 80.0f};
+    const float sliceNear[3] = {0.05f, 6.0f, 24.0f};
+    const float sliceFar[3] = {8.0f, 32.0f, 120.0f};
+    const float casterPad[3] = {2.0f, 8.0f, 16.0f};
     const float snapCells[3] = {8.0f, 4.0f, 8.0f};
     float sunCx = scene->fly.eye[0];
     float sunCy = scene->fly.eye[1];
@@ -1686,7 +1694,7 @@ void sceneFrameRecord(
     stats.fps = scene->fps;
     debugFormatStats(stats, scene->title, sizeof(scene->title));
     const float sunC[3] = {sunCx, sunCy, sunCz};
-    SunPassData sunData{scene->shadowDepth[0], scene->instances, scene->shadowVisible, scene->shadowIndirect, scene->shadowStamp, scene->shadowStampValid, scene->shadowStampCount, strideU, sunC, splits};
+    SunPassData sunData{scene->shadowDepth[flight], scene->instances, scene->shadowVisible, scene->shadowIndirect, scene->shadowStamp, scene->shadowStampValid, scene->shadowStampCount, strideU, sunC, splits};
     framePassSun(ctx, *scene, scene->vis, sunData);
     framePassPoints(ctx, scene->vis, scene->cube, scene->pointDepth, scene->cubeColor, scene->cubeDepth, scene->world.lightCount,
         scene->pointCount, scene->cubeCount, scene->pointCursor, scene->pointReady, scene->cubeReady, scene->cubeFace);

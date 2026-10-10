@@ -183,16 +183,18 @@ bool heapWriteBufferFlight(
     return true;
 }
 
-bool heapWriteImage(
+bool heapWriteImageFlight(
     DescriptorHeaps& h,
     Device& d,
+    uint32_t flight,
     uint32_t slot,
     VkDescriptorType type,
     const GpuImage& img,
     VkImageLayout layout,
     VkImageAspectFlags aspect,
     uint32_t mipLevels) {
-    if (h.resources.mapped == nullptr || h.writeResources == nullptr || img.image == VK_NULL_HANDLE) {
+    GpuBuffer& buf = flight == 1 ? h.resourcesFlight : h.resources;
+    if (buf.mapped == nullptr || h.writeResources == nullptr || img.image == VK_NULL_HANDLE) {
         return false;
     }
     if (mipLevels < 1) {
@@ -215,21 +217,34 @@ bool heapWriteImage(
         .type = type,
         .data = {.pImage = &imageInfo},
     };
-    const VkDeviceSize byteOff = heapImgOffset(h, slot);
-    VkHostAddressRangeEXT dest{
-        .address = static_cast<std::byte*>(h.resources.mapped) + byteOff,
+    const VkHostAddressRangeEXT dest{
+        .address = static_cast<std::byte*>(buf.mapped) + heapImgOffset(h, slot),
         .size = h.imageDescSize,
     };
-    VkResult r = h.writeResources(d.device, 1, &info, &dest);
-    if (r == VK_SUCCESS && h.resourcesFlight.mapped != nullptr) {
-        dest.address = static_cast<std::byte*>(h.resourcesFlight.mapped) + byteOff;
-        r = h.writeResources(d.device, 1, &info, &dest);
-    }
+    const VkResult r = h.writeResources(d.device, 1, &info, &dest);
     if (r != VK_SUCCESS) {
-        spdlog::error("vkWriteResourceDescriptorsEXT image failed: {}", static_cast<int>(r));
+        spdlog::error("vkWriteResourceDescriptorsEXT image flight failed: {}", static_cast<int>(r));
         return false;
     }
     return true;
+}
+
+bool heapWriteImage(
+    DescriptorHeaps& h,
+    Device& d,
+    uint32_t slot,
+    VkDescriptorType type,
+    const GpuImage& img,
+    VkImageLayout layout,
+    VkImageAspectFlags aspect,
+    uint32_t mipLevels) {
+    if (!heapWriteImageFlight(h, d, 0, slot, type, img, layout, aspect, mipLevels)) {
+        return false;
+    }
+    if (h.resourcesFlight.mapped == nullptr) {
+        return true;
+    }
+    return heapWriteImageFlight(h, d, 1, slot, type, img, layout, aspect, mipLevels);
 }
 
 bool heapWriteSampler(

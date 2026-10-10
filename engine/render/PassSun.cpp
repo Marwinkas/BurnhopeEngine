@@ -17,8 +17,9 @@ void framePassSun(const RenderContext& ctx, SceneFrameImpl& scene, VisPass& vis,
     {
         bool drewShadow = false;
         const VkDeviceSize shadowList = static_cast<VkDeviceSize>(sun.strideU) * sizeof(uint32_t);
+        const VkDeviceSize flightBase = shadowList * 3u * ctx.flight;
         for (uint32_t c = 0; c < 3; ++c) {
-            VisInstanceDraw sunDraw{sun.instances.address, sun.shadowVisible.address + shadowList * c, 0};
+            VisInstanceDraw sunDraw{sun.instances.address, sun.shadowVisible.address + flightBase + shadowList * c, 0};
             sunDraw.indirect = sun.shadowIndirect.buffer;
             sunDraw.indirectOffset = static_cast<VkDeviceSize>(ctx.flight * 64u + c * 16u);
             visShadowRecord(ctx.cmd, vis, sun.depth, sunDraw, c);

@@ -877,6 +877,40 @@ TEST_CASE("cube meshlet stays inside the vertex and triangle caps") {
     CHECK(meshletPassCull(cameraCullBuild(pose, nullptr), facing, 1080.0f, 8, mip));
 }
 
+TEST_CASE("sun cascade keeps the slice and reverse depth") {
+    CameraPose pose{};
+    pose.eye[0] = 0.0f;
+    pose.eye[1] = 2.0f;
+    pose.eye[2] = 0.0f;
+    pose.target[0] = 0.0f;
+    pose.target[1] = 2.0f;
+    pose.target[2] = -8.0f;
+    const CameraCull cam = cameraCullBuild(pose, nullptr);
+    const SunShadow sun = sunShadowSlice(cam, 0.0f, -1.0f, 0.0f, 0.2f, 36.0f, 28.0f, 8.0f);
+    const auto project = [&](float x, float y, float z, float& u, float& v, float& depth) {
+        const float cx = sun.viewProj.m[0] * x + sun.viewProj.m[4] * y + sun.viewProj.m[8] * z + sun.viewProj.m[12];
+        const float cy = sun.viewProj.m[1] * x + sun.viewProj.m[5] * y + sun.viewProj.m[9] * z + sun.viewProj.m[13];
+        const float cz = sun.viewProj.m[2] * x + sun.viewProj.m[6] * y + sun.viewProj.m[10] * z + sun.viewProj.m[14];
+        const float cw = sun.viewProj.m[3] * x + sun.viewProj.m[7] * y + sun.viewProj.m[11] * z + sun.viewProj.m[15];
+        const float w = cw == 0.0f ? 1.0f : cw;
+        u = cx / w * 0.5f + 0.5f;
+        v = cy / w * 0.5f + 0.5f;
+        depth = cz / w;
+    };
+    float u = 0.0f;
+    float v = 0.0f;
+    float ground = 0.0f;
+    float high = 0.0f;
+    project(0.0f, 0.0f, -6.0f, u, v, ground);
+    CHECK(u > 0.05f);
+    CHECK(u < 0.95f);
+    CHECK(v > 0.05f);
+    CHECK(v < 0.95f);
+    project(0.0f, 8.0f, -6.0f, u, v, high);
+    CHECK(high > ground);
+    CHECK(sun.radius >= 8.0f);
+}
+
 TEST_CASE("look straight down keeps a finite view") {
     CameraPose pose{};
     pose.eye[1] = 8.0f;

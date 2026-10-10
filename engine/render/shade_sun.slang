@@ -40,7 +40,7 @@ float3 sampleEnv(float3 dir, float roughness) {
 [[vk::binding(47, 0)]] Texture2D<float> gContact;
 
 float3 shadowPoint(uint cascade, float3 P, float3 N, float NdotL) {
-    const float texel = max(gSun.sunSplit[cascade], 1.0) / 2048.0;
+    const float texel = max(gSun.sunSplit[cascade], 1.0) * 2.0 / 2048.0;
     const float slope = sqrt(saturate(1.0 - NdotL * NdotL));
     return P + N * texel * slope;
 }
@@ -60,25 +60,33 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     float shadow = 1.0;
     if (gFrame.disableShadow == 0) {
         const float3 p0 = shadowPoint(0u, hit.P, hit.N, hit.NdotL);
-        const float3 p1 = shadowPoint(1u, hit.P, hit.N, hit.NdotL);
-        const float3 p2 = shadowPoint(2u, hit.P, hit.N, hit.NdotL);
         const float o0 = cascadeOutside(0u, p0);
-        const float o1 = cascadeOutside(1u, p1);
-        const float s2 = cascadeShadow(2u, p2);
-        shadow = s2;
-        sunCascade = 2u;
-        if (o1 <= 0.0) {
-            const float w = saturate(-o1 / 0.18);
-            shadow = lerp(s2, cascadeShadow(1u, p1), w);
-            if (w > 0.5) {
-                sunCascade = 1u;
-            }
-        }
         if (o0 <= 0.0) {
-            const float w = saturate(-o0 / 0.18);
-            shadow = lerp(shadow, cascadeShadow(0u, p0), w);
-            if (w > 0.5) {
-                sunCascade = 0u;
+            const float w = saturate(-o0 / 0.1);
+            shadow = cascadeShadow(0u, p0);
+            sunCascade = 0u;
+            if (w < 0.999) {
+                shadow = lerp(cascadeShadow(1u, shadowPoint(1u, hit.P, hit.N, hit.NdotL)), shadow, w);
+                if (w <= 0.5) {
+                    sunCascade = 1u;
+                }
+            }
+        } else {
+            const float3 p1 = shadowPoint(1u, hit.P, hit.N, hit.NdotL);
+            const float o1 = cascadeOutside(1u, p1);
+            if (o1 <= 0.0) {
+                const float w = saturate(-o1 / 0.1);
+                shadow = cascadeShadow(1u, p1);
+                sunCascade = 1u;
+                if (w < 0.999) {
+                    shadow = lerp(cascadeShadow(2u, shadowPoint(2u, hit.P, hit.N, hit.NdotL)), shadow, w);
+                    if (w <= 0.5) {
+                        sunCascade = 2u;
+                    }
+                }
+            } else {
+                shadow = cascadeShadow(2u, shadowPoint(2u, hit.P, hit.N, hit.NdotL));
+                sunCascade = 2u;
             }
         }
     }

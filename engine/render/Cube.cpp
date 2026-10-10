@@ -34,7 +34,7 @@ bool cubePassCreate(CubePass& p, Device& d, const DescriptorHeaps& heaps) {
             b.storageBuf(8, HeapBuf::Indices);
             b.storageBuf(9, HeapBuf::Meshlets);
             b.storageBuf(10, HeapBuf::Instances);
-            b.storageBuf(21, static_cast<uint32_t>(HeapBuf::CubeVisible) + face);
+            b.storageBuf(21, cubeListSlot(face));
             for (uint32_t i = 0; i < b.raw.count; ++i) {
                 maps[face][i] = b.raw.mappings[i];
             }

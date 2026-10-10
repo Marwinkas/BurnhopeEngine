@@ -76,6 +76,7 @@ cmake --build build-asan --target BurnhopeTest -j
 - `"visbuffer resolve reads the material by instance id"` — пиксель инстанса 0 и примитива 5 достаёт материал 2.
 - `"cube meshlet stays inside the vertex and triangle caps"` — куб 8 вершин и 12 треугольников. Пол: 4 вершины, индексы `0,1,2` и `2,3,0`, `y = 0`. Кубы стоят выше пола. Три лампы сцены лежат в разных ячейках. Тень солнца 2048.
 - `"look straight down keeps a finite view"` — глаз над целью, правый вектор конечный.
+- `"sun cascade keeps the slice and reverse depth"` — точка пола перед камерой лежит внутри UV ближнего каскада. Точка выше, ближе к солнцу, имеет большую глубину.
 - `"meshlet partition stays inside the caps and the bhop header matches"` — 500 треугольников, каждый мешлет ≤ 64/124, конус отсекает взгляд снизу, `BistroScene` читается обратно.
 - `"a sector stays visible until a portal is marked and leaves the frustum"` — сектор без порталов виден. Проём за плоскостью прячет зал, проём внутри плоскости оставляет.
 - Интервалы `ssrcInterval` стыкуются: каскад 0 это `[0, base]`, каждый следующий начинается на конце предыдущего. `screenBary` центра треугольника даёт три равных веса, ребро даёт нулевой третий вес, схлопнутая проекция ставит `flat`. `ssrcThickness(0.1)` равен 0.004 и меньше старых 0.012, на 100 м равен 0.0004.

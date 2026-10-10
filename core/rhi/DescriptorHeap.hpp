@@ -63,6 +63,18 @@ void descriptorHeapsDestroy(DescriptorHeaps& h, Device& d);
     VkImageAspectFlags aspect,
     uint32_t mipLevels = 1);
 
+// Пишет картинку только в копию кучи этого кадра. Соседний кадр свой вид не трогает.
+[[nodiscard]] bool heapWriteImageFlight(
+    DescriptorHeaps& h,
+    Device& d,
+    uint32_t flight,
+    uint32_t slot,
+    VkDescriptorType type,
+    const GpuImage& img,
+    VkImageLayout layout,
+    VkImageAspectFlags aspect,
+    uint32_t mipLevels = 1);
+
 [[nodiscard]] bool heapWriteSampler(
     DescriptorHeaps& h,
     Device& d,

@@ -43,7 +43,12 @@ enum class HeapBuf : uint32_t {
     Indirect = 24,
     ShadowAll = 25,
     ShadowIndirect = 26,
-    Count = 42,
+    ShadowCascade1 = 42,
+    ShadowCascade2 = 43,
+    CubeFace3 = 44,
+    CubeFace4 = 45,
+    CubeFace5 = 46,
+    Count = 47,
 };
 
 // Буферы и картинки — разные номера. 0..15 геометрия. 16..31 проходы. 32..47 ползунки.
@@ -56,6 +61,37 @@ static_assert(static_cast<uint32_t>(HeapBuf::Rc) != 48u);
 static_assert(static_cast<uint32_t>(HeapBuf::CloudNoise) == 41u && static_cast<uint32_t>(HeapBuf::CloudNoise) < 48u);
 static_assert(static_cast<uint32_t>(HeapBuf::Flags) >= 32u && static_cast<uint32_t>(HeapBuf::Bloom) < 48u);
 static_assert(static_cast<uint32_t>(HeapBuf::Atm) == 40u && static_cast<uint32_t>(HeapBuf::Atm) < 48u);
+static_assert(static_cast<uint32_t>(HeapBuf::ShadowCascade1) == 42u && static_cast<uint32_t>(HeapBuf::CubeFace5) == 46u);
+static_assert(static_cast<uint32_t>(HeapBuf::ShadowCascade1) != static_cast<uint32_t>(HeapBuf::Decals));
+static_assert(static_cast<uint32_t>(HeapBuf::ShadowCascade2) != static_cast<uint32_t>(HeapBuf::Probes));
+static_assert(static_cast<uint32_t>(HeapBuf::CubeFace3) != static_cast<uint32_t>(HeapBuf::Sun));
+static_assert(static_cast<uint32_t>(HeapBuf::CubeFace5) != static_cast<uint32_t>(HeapBuf::Rc));
+static_assert(static_cast<uint32_t>(HeapBuf::Count) <= 48u);
+
+// Каскад 0 остаётся в ShadowVisible. +1 и +2 попадали в Decals и Probes.
+[[nodiscard]] inline uint32_t shadowListSlot(uint32_t cascade) {
+    if (cascade == 1u) {
+        return static_cast<uint32_t>(HeapBuf::ShadowCascade1);
+    }
+    if (cascade >= 2u) {
+        return static_cast<uint32_t>(HeapBuf::ShadowCascade2);
+    }
+    return static_cast<uint32_t>(HeapBuf::ShadowVisible);
+}
+
+// Грани 0..2 остаются в CubeVisible. +3 затирал слот солнца, +5 — слот Rc.
+[[nodiscard]] inline uint32_t cubeListSlot(uint32_t face) {
+    if (face == 3u) {
+        return static_cast<uint32_t>(HeapBuf::CubeFace3);
+    }
+    if (face == 4u) {
+        return static_cast<uint32_t>(HeapBuf::CubeFace4);
+    }
+    if (face >= 5u) {
+        return static_cast<uint32_t>(HeapBuf::CubeFace5);
+    }
+    return static_cast<uint32_t>(HeapBuf::CubeVisible) + face;
+}
 
 enum class HeapImg : uint32_t {
     Vis = 0,
