@@ -118,19 +118,6 @@ bool radianceCreate(RadiancePass& p, Device& d, const DescriptorHeaps& heaps) {
         return true;
     }
     p.slots = kHashCap;
-    VkPushConstantRange range{};
-    range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    range.offset = 0;
-    range.size = 8;
-    VkPipelineLayoutCreateInfo layout{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &range,
-    };
-    if (vkCreatePipelineLayout(d.device, &layout, nullptr, &p.pushLayout) != VK_SUCCESS) {
-        spdlog::error("radiance push layout failed");
-        p.pushLayout = VK_NULL_HANDLE;
-    }
     PassBindings mergeBind{heaps};
     mergeBind.storageBuf(30, HeapBuf::Rc, false);
     mergeBind.knob(54, HeapBuf::RcParams);
@@ -139,8 +126,6 @@ bool radianceCreate(RadiancePass& p, Device& d, const DescriptorHeaps& heaps) {
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
         .mappingCount = mergeBind.raw.count,
         .mappings = mergeBind.raw.mappings,
-        .pushBytes = 8,
-        .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
     };
     PassBindings irrBind{heaps};
     irrBind.storageBuf(30, HeapBuf::Rc, false);
@@ -366,9 +351,9 @@ void radianceArm(
     spdlog::info("radiance: {} triangles armed, frame stays on screen", p.triangles);
 }
 
-void radianceTraceArm(RadiancePass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent, uint32_t flight) {
+void radianceTraceArm(RadiancePass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent, uint32_t flight, float rays, float spacing, float intensity, float maxDist) {
     if (!p.geometry || p.trace.handle == VK_NULL_HANDLE || p.merge.handle == VK_NULL_HANDLE
-        || p.irradiance.handle == VK_NULL_HANDLE || p.pushLayout == VK_NULL_HANDLE
+        || p.irradiance.handle == VK_NULL_HANDLE
         || p.posByte <= kRcHeader || !d.caps.rayQuery || deviceLost(d)) {
         return;
     }
@@ -386,6 +371,8 @@ void radianceTraceArm(RadiancePass& p, Device& d, DescriptorHeaps& heaps, VkExte
     const float jy = static_cast<float>((n * 17u) & 1023u) / 1024.0f;
     std::memcpy(head + 4, &jx, sizeof(float));
     std::memcpy(head + 5, &jy, sizeof(float));
+    const float rcTune[4] = {rays, spacing, intensity, maxDist};
+    std::memcpy(head + 32, rcTune, sizeof(rcTune));
     head[23] = 0;
     head[24] = 0;
     head[25] = 0;
@@ -403,17 +390,20 @@ void radianceTraceArm(RadiancePass& p, Device& d, DescriptorHeaps& heaps, VkExte
     vkCmdFillBuffer(cmd, p.table.buffer, kRcHeader, cacheBytes, 0);
     bufferBarrierTransferToCompute(cmd, p.table.buffer, kRcHeader, cacheBytes);
     dispatchCompute2D(cmd, p.trace, extent);
-    struct MergePush {
-        uint32_t cascade;
-        uint32_t lod;
-    };
     for (int c = 3; c >= 0; --c) {
+        const uint32_t mergeWord[2] = {static_cast<uint32_t>(c), 0xFFFFFFFFu};
+        rhiBufferBarrier(cmd, p.table.buffer, 144, 8,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+        vkCmdUpdateBuffer(cmd, p.table.buffer, 144, sizeof(mergeWord), mergeWord);
+        rhiBufferBarrier(cmd, p.table.buffer, 0, kRcHeader,
+            VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
         rhiBufferBarrier(cmd, p.table.buffer, kRcHeader, cacheBytes,
             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-        const MergePush push{static_cast<uint32_t>(c), 0xFFFFFFFFu};
-        vkCmdPushConstants(cmd, p.pushLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
         cmdBindCompute(cmd, p.merge.handle);
         const uint32_t threads = kProbeCap[c] * kDirCount[c];
         vkCmdDispatch(cmd, (threads + 63u) / 64u, 1u, 1u);

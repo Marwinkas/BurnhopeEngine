@@ -8,7 +8,7 @@
 
 namespace burnhope {
 
-constexpr uint32_t kSunShadowResolution = 2048;
+constexpr uint32_t kSunShadowResolution = 4096;
 
 struct SunShadow {
     Mat4 view{};

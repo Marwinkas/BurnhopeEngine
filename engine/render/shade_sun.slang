@@ -40,7 +40,7 @@ float3 sampleEnv(float3 dir, float roughness) {
 [[vk::binding(47, 0)]] Texture2D<float> gContact;
 
 float3 shadowPoint(uint cascade, float3 P, float3 N, float NdotL) {
-    const float texel = max(gSun.sunSplit[cascade], 1.0) * 2.0 / 2048.0;
+    const float texel = max(gSun.sunSplit[cascade], 1.0) * 2.0 / 4096.0;
     const float slope = sqrt(saturate(1.0 - NdotL * NdotL));
     return P + N * texel * slope;
 }
@@ -85,7 +85,8 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
                     }
                 }
             } else {
-                shadow = cascadeShadow(2u, shadowPoint(2u, hit.P, hit.N, hit.NdotL));
+                const float3 p2 = shadowPoint(2u, hit.P, hit.N, hit.NdotL);
+                shadow = cascadeOutside(2u, p2) <= 0.0 ? cascadeShadow(2u, p2) : cascadeShadowCover(2u, p2);
                 sunCascade = 2u;
             }
         }
@@ -120,25 +121,26 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     }
     const float3 sky = gSkyView.SampleLevel(gClamp, atmSkyUv(hit.N), 0.0).rgb;
     float3 skyFill = sky * saturate(0.35 + 0.65 * hit.N.y) * 0.04 * hit.ao;
-    const bool worldRc = gPass.lightProfile >= 1u && (gPass.passMask & 128u) != 0u;
+    const bool worldRc = (gPass.passMask & 128u) != 0u;
     float3 bounce = shAmbient(hit.N, hit.P) * 0.4;
     if (worldRc) {
-        bounce *= 0.15;
+        bounce *= max(gShade.pad0, 0.0);
     }
     if (!sunOn) {
         bounce *= 0.02;
         skyFill *= 0.02;
     }
     float3 indirect = hit.albedo * bounce * hit.ao + skyFill * (worldRc ? 0.2 : 0.55) + hit.emissive;
+    indirect *= sunCol * saturate(inten / 8.0);
     if (gFrame.debugMode == 4) {
         gHdr[px] = float4(max(indirect, 0.0), 1.0);
         return;
     }
-    float3 direct = (hit.diff * hit.ao + hit.spec) * hit.NdotL * shadow * radiance;
+    float sunFace = hit.NdotL;
     if (hit.foliage > 0.5) {
-        const float back = pow(saturate(dot(-hit.N, hit.L)), 2.0);
-        direct += hit.albedo * radiance * shadow * back * 0.65;
+        sunFace = max(sunFace, saturate(dot(-hit.N, hit.L)) * 0.45);
     }
+    float3 direct = (hit.diff * hit.ao + hit.spec) * sunFace * shadow * radiance;
     if (!all(direct == direct)) {
         direct = 0.0;
     }

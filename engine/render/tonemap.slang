@@ -81,6 +81,7 @@ float4 tonemapFs(VertOut vin) : SV_Target0 {
         const float2 uvb = float2(vin.uv.x, vin.uv.y * (float(h0) / span));
         hdr += gBloom.SampleLevel(gLinear, uvb, 0.0).rgb * gTone.bloomMix;
     }
+    hdr *= max(gTone.f4, 0.0);
     float3 mapped;
     if (gTone.tonemapper == 1u) {
         mapped = saturate((hdr * (2.51 * hdr + 0.03)) / (hdr * (2.43 * hdr + 0.59) + 0.14));

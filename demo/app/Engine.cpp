@@ -272,6 +272,10 @@ void sceneHud(Canvas& canvas, void*) {
     panel.check("SMAA").name("smaa");
     tick("Bloom", "bloomen", true);
     tick("солнце", "sun", true);
+    rowSlide(panel, "солнце", "sunI", 1.0f, 0.0f, 4.0f);
+    rowSlide(panel, "солнце R", "sunR", 1.0f, 0.0f, 1.0f);
+    rowSlide(panel, "солнце G", "sunG", 0.97f, 0.0f, 1.0f);
+    rowSlide(panel, "солнце B", "sunB", 0.92f, 0.0f, 1.0f);
     rowSlide(panel, "солнце зенит", "zenith", 35.0f, -10.0f, 80.0f);
     rowSlide(panel, "солнце азимут", "azimuth", 30.0f, 0.0f, 360.0f);
     tick("точки", "points", true);
@@ -297,6 +301,7 @@ void sceneHud(Canvas& canvas, void*) {
     panel.radio("ACES", 2).name("tone1");
     panel.radio("Reinhard", 2).name("tone2");
     panel.radio("Linear", 2).name("tone3");
+    rowSlide(panel, "яркость", "bright", 1.0f, 0.05f, 4.0f);
     rowSlide(panel, "зерно", "grain", 0.0f, 0.0f, 0.12f);
     rowSlide(panel, "блюм", "bloom", 0.15f, 0.0f, 0.80f);
     rowSlide(panel, "порог блюма", "bloomth", 0.35f, 0.0f, 2.0f);
@@ -435,6 +440,7 @@ bool engineTick(Engine& e) {
             checkOn(hud, "lod", true), checkOn(hud, "frust", true), checkOn(hud, "small", true), checkOn(hud, "shadow", true),
             mode);
         HudPost hudPost{};
+        hudPost.brightness = slideAt(hud, "bright", 1.0f);
         hudPost.grain = slideAt(hud, "grain", hudPost.grain);
         hudPost.bloom = slideAt(hud, "bloom", hudPost.bloom);
         hudPost.vignette = slideAt(hud, "vig", hudPost.vignette);
@@ -446,6 +452,10 @@ bool engineTick(Engine& e) {
         hudPost.ggx = slideAt(hud, "ggx", hudPost.ggx);
         hudPost.gtao = slideAt(hud, "gtao", hudPost.gtao);
         hudPost.lamp = slideAt(hud, "lamp", hudPost.lamp);
+        hudPost.sunGain = slideAt(hud, "sunI", 1.0f);
+        hudPost.sunR = slideAt(hud, "sunR", 1.0f);
+        hudPost.sunG = slideAt(hud, "sunG", 0.97f);
+        hudPost.sunB = slideAt(hud, "sunB", 0.92f);
         sceneFrameTune(e.scene, hudPost);
         SceneTweaks tweaks{};
         tweaks.forceLod = static_cast<int32_t>(slideAt(hud, "lodf", -1.0f));

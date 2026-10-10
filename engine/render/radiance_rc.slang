@@ -45,12 +45,19 @@ uint dirCountOf(uint cascade) {
     return 2048u;
 }
 
+float rcParam(uint word, float fallback) {
+    if (asfloat(rcLoad(128u)) <= 0.0) {
+        return fallback;
+    }
+    return asfloat(rcLoad(128u + word * 4u));
+}
+
 float spacingAt(uint cascade, uint lod) {
     return max(gRcParams.spacing, 0.05) * exp2(float(cascade + lod));
 }
 
 int3 nearestCell(float3 world, uint cascade, uint lod) {
-    return int3(floor(world / spacingAt(cascade, lod)));
+    return int3(floor(world / spacingAt(cascade, lod) - 0.5));
 }
 
 uint64_t packKey(int3 cell, uint lod) {

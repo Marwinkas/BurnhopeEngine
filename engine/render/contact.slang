@@ -32,7 +32,7 @@ void contactCs(uint3 dtid : SV_DispatchThreadID) {
     }
     const float3 P = reconstructWorld(px, depth);
     const uint packed = gVis.Load(int3(px, 0)) - 1u;
-    const VisTri tri = loadVisTri(packed & 0xFFFFFu, packed >> 20u, px);
+    const VisTri tri = loadVisTri(packed & 0xFFFFFu, packed >> 20u, P);
     float3 N = tri.faceN;
     const float3 V = normalize(gFrame.cameraPos.xyz - P);
     if (dot(N, V) < 0.0) {

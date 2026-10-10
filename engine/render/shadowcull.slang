@@ -66,7 +66,7 @@ void shadowCull(uint3 id : SV_DispatchThreadID) {
             }
         }
         const float extent = max(gSun.sunSplit[c], 1.0);
-        const float pixels = radius / extent * 2048.0;
+        const float pixels = radius / extent * 4096.0;
         const float minPx = c == 0u ? 1.0 : c == 1u ? 1.0 : 0.5;
         if (pixels < minPx) {
             continue;

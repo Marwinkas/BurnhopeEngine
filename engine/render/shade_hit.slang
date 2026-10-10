@@ -130,7 +130,9 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     hit.mirror = 0.0;
     hit.foliage = 0.0;
     const uint packed = vis - 1u;
-    const VisTri tri = loadVisTri(packed & 0xFFFFF, packed >> 20, px);
+    const float depth = gDepth.Load(int3(px, 0));
+    const float3 P = reconstructWorld(px, depth);
+    const VisTri tri = loadVisTri(packed & 0xFFFFF, packed >> 20, P);
     hit.tri = tri.triId;
     const GpuInstance inst = tri.inst;
     const uint i0 = tri.i0;
@@ -143,8 +145,6 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     const float3 n0 = tri.n0;
     const float3 n1 = tri.n1;
     const float3 n2 = tri.n2;
-    const float depth = gDepth.Load(int3(px, 0));
-    const float3 P = reconstructWorld(px, depth);
     const float3 V = normalize(gFrame.cameraPos.xyz - P);
     if (dot(N, V) < 0.0) {
         N = -N;
@@ -282,8 +282,9 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
             }
         }
         const float4 texel = sampleGrad(tex, uv, uvDdx, uvDdy);
-        albedo *= texel.rgb;
         const float mipA = sampleHeap(tex, uv, 3.0).a;
+        const float cover = saturate((texel.a - 0.45) / 0.35);
+        albedo *= lerp(mat.baseColor.rgb, texel.rgb, cover);
         if (texel.a < 0.98 || mipA < 0.92) {
             hit.foliage = 1.0;
         }

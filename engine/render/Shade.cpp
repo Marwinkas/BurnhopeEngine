@@ -125,6 +125,7 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     reflectTrace.sampledImg(2, HeapImg::Depth);
     reflectTrace.storageImg(3, HeapImg::HdrAStorage);
     reflectTrace.storageImg(4, HeapImg::Surf0);
+    reflectTrace.storageBuf(14, HeapBuf::Materials);
     reflectTrace.sampledImg(16, HeapImg::Cube);
     reflectTrace.sampler(24, HeapSamp::Wrap);
     reflectTrace.storageBuf(30, HeapBuf::Rc, false);
@@ -259,14 +260,9 @@ void reflectRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p, uint32_
     if (lightProfile < 1u) {
         return;
     }
-    const VkExtent2D traceExtent = lightProfile >= 2u ? extent : halfExtent(extent);
+    (void)lightProfile;
     imageBarrier(cmd, p.reflect, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-    dispatchCompute2D(cmd, p.reflectTrace, traceExtent, 8u);
-    if (lightProfile == 1u) {
-        imageBarrier(cmd, p.reflect, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT, true);
-        dispatchCompute2D(cmd, p.reflectUp, extent, 8u);
-    }
+    dispatchCompute2D(cmd, p.reflectTrace, extent, 8u);
 }
 
 void shadeFogRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p) {

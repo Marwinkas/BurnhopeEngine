@@ -68,6 +68,7 @@ void sceneFrameShift(SceneFrame* scene, float dx, float dy, float dz);
 // Ползунки панели. Имена, не индексы post[12].
 struct HudPost {
     float grain = 0.0f;
+    float brightness = 1.0f;
     float bloom = 0.15f;
     float vignette = 1.1f;
     float ca = 2.0f;
@@ -79,6 +80,10 @@ struct HudPost {
     float ssrc = 1.0f;
     float gtao = 1.2f;
     float lamp = 1.0f;
+    float sunGain = 1.0f;
+    float sunR = 1.0f;
+    float sunG = 0.97f;
+    float sunB = 0.92f;
 };
 
 void sceneFrameTune(SceneFrame* scene, const HudPost& post);

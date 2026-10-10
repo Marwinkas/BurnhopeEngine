@@ -2,18 +2,10 @@
 #include "core/math.slang"
 #include "radiance_rc.slang"
 
-struct MergePush {
-    uint cascadeIndex;
-    uint lod;
-};
-
-[[vk::push_constant]]
-ConstantBuffer<MergePush> gMerge;
-
 [shader("compute")]
 [numthreads(64, 1, 1)]
 void rcMerge(uint3 dtid : SV_DispatchThreadID) {
-    const uint cascade = gMerge.cascadeIndex;
+    const uint cascade = rcLoad(144u);
     const uint dirs = dirCountOf(cascade);
     const uint probe = dtid.x / dirs;
     const uint dir = dtid.x - probe * dirs;
@@ -30,7 +22,7 @@ void rcMerge(uint3 dtid : SV_DispatchThreadID) {
     if (cascade < 3u) {
         const uint meta = metaBase(cascade) + probe * 32u;
         const uint lod = rcLoad(meta + 12u);
-        if (gMerge.lod != 0xFFFFFFFFu && lod != gMerge.lod) {
+        if (rcLoad(148u) != 0xFFFFFFFFu && lod != rcLoad(148u)) {
             return;
         }
         const int3 cell = int3(asint(rcLoad(meta)), asint(rcLoad(meta + 4u)), asint(rcLoad(meta + 8u)));

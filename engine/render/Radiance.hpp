@@ -51,7 +51,7 @@ void radianceArm(
 // Сабмит сборки и луча после present кадра. Пока fence сборки не сигналит, geometry остаётся false.
 void radianceKick(RadiancePass& p, Device& d);
 // Пишет чистку хэша и луч в свой буфер. В командный буфер кадра не кладёт.
-void radianceTraceArm(RadiancePass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent, uint32_t flight);
+void radianceTraceArm(RadiancePass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent, uint32_t flight, float rays, float spacing, float intensity, float maxDist);
 // В кадре только добавка в HdrA, и только если прошлый луч уже дописан.
 void radianceRecord(VkCommandBuffer cmd, VkExtent2D extent, RadiancePass& p, bool freeze);
 

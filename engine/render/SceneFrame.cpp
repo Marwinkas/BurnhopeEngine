@@ -1196,7 +1196,8 @@ void sceneFrameKick(SceneFrame* scene, Device& device) {
         rad.traceReady = false;
         rad.hashDrawn = false;
         rad.traceTask.stage = 0;
-        radianceTraceArm(rad, device, *scene->kickHeaps, scene->extent, scene->kickFlight);
+        radianceTraceArm(rad, device, *scene->kickHeaps, scene->extent, scene->kickFlight,
+            scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax);
         radianceKick(rad, device);
     }
 }
@@ -1250,7 +1251,7 @@ void sceneFrameRecord(
         const VkExtent2D pointExtent{512, 1536};
         const VkExtent2D cubeExtent{384, 64};
         const VkExtent2D hizExtent{swap.extent.width, swap.extent.height * 2};
-        const VkExtent2D shadowExtent{2048, 6144};
+        const VkExtent2D shadowExtent{4096, 12288};
         const bool shadowImages =
             gpuImageCreate(scene->shadowColor[0], device, shadowExtent, VK_FORMAT_R32_UINT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
             && gpuImageCreate(scene->shadowColor[1], device, shadowExtent, VK_FORMAT_R32_UINT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
@@ -1353,6 +1354,10 @@ void sceneFrameRecord(
     scene->atmosphere.time = scene->skyTime;
     scene->atmosphere.parity = (scene->frameCursor & 1u) != 0u ? 1.0f : 0.0f;
     atmosphereApply(lit, scene->atmosphere);
+    lit.sunDirIntensity[3] *= scene->hud.sunGain;
+    lit.sunColor[0] = scene->hud.sunR;
+    lit.sunColor[1] = scene->hud.sunG;
+    lit.sunColor[2] = scene->hud.sunB;
     gpu.cameraPos[0] = cam.pos[0];
     gpu.cameraPos[1] = cam.pos[1];
     gpu.cameraPos[2] = cam.pos[2];
@@ -1371,7 +1376,7 @@ void sceneFrameRecord(
     const float sliceNear[3] = {0.1f, 12.0f, 48.0f};
     const float sliceFar[3] = {16.0f, 64.0f, 240.0f};
     const float casterPad[3] = {8.0f, 16.0f, 32.0f};
-    const float maxHalf[3] = {16.0f, 32.0f, 64.0f};
+    const float maxHalf[3] = {8.0f, 24.0f, 64.0f};
     const float snapCells[3] = {8.0f, 4.0f, 8.0f};
     float sunCx = scene->fly.eye[0];
     float sunCy = scene->fly.eye[1];
@@ -1431,6 +1436,7 @@ void sceneFrameRecord(
     knob.shade.ggx = scene->hud.ggx;
     knob.shade.gtaoAmt = scene->hud.gtao;
     knob.shade.lamp = scene->hud.lamp;
+    knob.shade.pad0 = scene->rcIntensity;
     knob.ssrc.strength = scene->hud.ssrc;
     knob.ssrc.base = scene->ssrcBase;
     knob.ssrc.thick = scene->ssrcThick;
@@ -1440,13 +1446,14 @@ void sceneFrameRecord(
     knob.rc.spacing = scene->rcSpacing;
     knob.rc.intensity = scene->rcIntensity;
     knob.rc.maxDist = scene->rcMax;
-    knob.rc.cap = scene->ssrcCap;
+    knob.rc.cap = 8.0f;
     knob.bloom.threshold = scene->bloomThreshold;
     knob.bloom.tonemapper = scene->tonemapper;
     knob.bloom.grain = scene->hud.grain;
     knob.bloom.bloomMix = scene->hud.bloom;
     knob.bloom.vignette = scene->hud.vignette;
     knob.bloom.ca = scene->hud.ca;
+    knob.bloom.pad[0] = scene->hud.brightness;
     gpu.debugPad[0] = scene->decalCount;
     gpu.debugPad[1] = kProbeGrid;
     gpu.debugPad[2] = sectorVisibleMask(scene->sectors, scene->sectorCount, scene->portals, scene->portalCount, &cam.planes[0][0]);
@@ -1709,7 +1716,7 @@ void sceneFrameRecord(
         scene->instanceCount, culled.twoPhase, scene->showHiz, culled.draw, culled.lateDraw);
     const bool gtaoOn = scene->lightProfile < 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
     framePassShade(ctx, scene->shade, scene->sky, scene->vis.targets.vis, scene->vis.targets.depth, gtaoOn, scene->probeBuf.buffer, scene->probeBuf.size);
-    const bool worldRc = scene->lightProfile >= 1u && (scene->passMask & 128u) != 0u;
+    const bool worldRc = (scene->passMask & 128u) != 0u;
     framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc);
     const bool bloomOn = (knob.flags.passMask & 32u) != 0u && scene->hud.bloom > 0.001f;
     framePassTonemap(ctx, scene->tone, scene->shade.hdrA, scene->shade.hdrB, swap, frame, bloomOn);

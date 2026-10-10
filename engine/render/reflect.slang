@@ -10,6 +10,7 @@
 [[vk::binding(2, 0)]] Texture2D<float> gDepth;
 [[vk::binding(3, 0)]] RWTexture2D<float4> gHdr;
 [[vk::binding(4, 0)]] RWTexture2D<float4> gSurf0;
+[[vk::binding(14, 0)]] StructuredBuffer<MaterialGpu> gMat;
 [[vk::binding(16, 0)]] Texture2D<float4> gCube;
 [[vk::binding(24, 0)]] SamplerState gWrap;
 [[vk::binding(36, 0)]] RWTexture2D<float4> gReflect;
@@ -32,25 +33,20 @@ void reflectTrace(uint3 dtid : SV_DispatchThreadID) {
     if (gPass.lightProfile < 1u || (gFrame.debugMode != 0u && gFrame.debugMode != 7u)) {
         return;
     }
-    const bool half = gPass.lightProfile < 2u;
-    const uint2 px = half ? dtid.xy * 2u : dtid.xy;
+    const uint2 px = dtid.xy;
     if (px.x >= uint(gFrame.extent.x) || px.y >= uint(gFrame.extent.y)) {
         return;
     }
     const uint vis = gVis.Load(int3(px, 0));
     const float depth = gDepth.Load(int3(px, 0));
     if (vis == 0u || depth <= 0.0) {
-        if (half) {
-            gReflect[int2(dtid.xy)] = 0.0;
-        }
         return;
     }
     const float3 P = reconstructWorld(px, depth);
     const float3 N = reconstructNormalFromDepth(gDepth, px, P);
     const float3 V = normalize(gFrame.cameraPos.xyz - P);
     const float rough = gSurf0[int2(px)].w;
-    const float2 u = float2(frac(float(px.x) * 0.754877666), frac(float(px.y) * 0.569840296));
-    const float3 dir = gPass.lightProfile >= 2u ? ggxReflect(N, V, rough, u) : reflect(-V, N);
+    const float3 dir = reflect(-V, N);
     const float weight = saturate(1.0 - rough);
     float3 col = sampleCube(dir);
     const uint lo = rcLoad(0);
@@ -73,16 +69,13 @@ void reflectTrace(uint3 dtid : SV_DispatchThreadID) {
             float3 n = cross(b - a, c - a);
             n = dot(n, n) > 1e-12 ? normalize(n) : -dir;
             const float3 sun = normalize(gSun.sunDirIntensity.xyz);
+            const uint matId = asuint(loadPos(prim * 3u).w);
             const float ndl = saturate(dot(n, sun));
-            col = gSun.sunColor.rgb * gSun.sunDirIntensity.w * ndl * 0.35;
+            col = gMat[matId].baseColor.rgb * gSun.sunColor.rgb * gSun.sunDirIntensity.w * ndl * 0.2;
         }
     }
     if (gFrame.debugMode == 7u) {
         gHdr[int2(px)] = float4(col, 1.0);
-        return;
-    }
-    if (half) {
-        gReflect[int2(dtid.xy)] = float4(col, weight);
         return;
     }
     gHdr[int2(px)] += float4(col * weight, 0.0);

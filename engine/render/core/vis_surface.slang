@@ -25,7 +25,7 @@ struct VisTri {
     float3 smoothN;
 };
 
-VisTri loadVisTri(uint instanceId, uint tri, uint2 px) {
+VisTri loadVisTri(uint instanceId, uint tri, float3 worldP) {
     VisTri t;
     t.instanceId = instanceId;
     t.triId = tri;
@@ -47,23 +47,16 @@ VisTri loadVisTri(uint instanceId, uint tri, uint2 px) {
     t.n0 = float3(dot(t.inst.world0.xyz, gVerts[t.i0].nrm), dot(t.inst.world1.xyz, gVerts[t.i0].nrm), dot(t.inst.world2.xyz, gVerts[t.i0].nrm));
     t.n1 = float3(dot(t.inst.world0.xyz, gVerts[t.i1].nrm), dot(t.inst.world1.xyz, gVerts[t.i1].nrm), dot(t.inst.world2.xyz, gVerts[t.i1].nrm));
     t.n2 = float3(dot(t.inst.world0.xyz, gVerts[t.i2].nrm), dot(t.inst.world1.xyz, gVerts[t.i2].nrm), dot(t.inst.world2.xyz, gVerts[t.i2].nrm));
-    const float4 c0 = worldToClip(t.w0);
-    const float4 c1 = worldToClip(t.w1);
-    const float4 c2 = worldToClip(t.w2);
-    const float2 s0 = (c0.xy / max(abs(c0.w), 1e-4) * 0.5 + 0.5) * float2(gFrame.extent.xy);
-    const float2 s1 = (c1.xy / max(abs(c1.w), 1e-4) * 0.5 + 0.5) * float2(gFrame.extent.xy);
-    const float2 s2 = (c2.xy / max(abs(c2.w), 1e-4) * 0.5 + 0.5) * float2(gFrame.extent.xy);
-    const float2 sp = float2(px) + 0.5;
-    const float2 d1 = s1 - s0;
-    const float2 d2 = s2 - s0;
-    const float2 dp = sp - s0;
-    const float d00 = dot(d1, d1);
-    const float d01 = dot(d1, d2);
-    const float d11 = dot(d2, d2);
+    const float3 e1 = t.w1 - t.w0;
+    const float3 e2 = t.w2 - t.w0;
+    const float3 ep = worldP - t.w0;
+    const float d00 = dot(e1, e1);
+    const float d01 = dot(e1, e2);
+    const float d11 = dot(e2, e2);
     const float denom = d00 * d11 - d01 * d01;
-    t.denomOk = denom > 1e-6;
-    t.bv = t.denomOk ? (d11 * dot(dp, d1) - d01 * dot(dp, d2)) / denom : 0.0;
-    t.bw = t.denomOk ? (d00 * dot(dp, d2) - d01 * dot(dp, d1)) / denom : 0.0;
+    t.denomOk = abs(denom) > 1e-8;
+    t.bv = t.denomOk ? (d11 * dot(ep, e1) - d01 * dot(ep, e2)) / denom : 0.0;
+    t.bw = t.denomOk ? (d00 * dot(ep, e2) - d01 * dot(ep, e1)) / denom : 0.0;
     t.bu = 1.0 - t.bv - t.bw;
     t.inRange = t.bu >= -0.2 && t.bv >= -0.2 && t.bw >= -0.2;
     t.uv = float2(
