@@ -7,10 +7,6 @@ namespace burnhope {
 constexpr uint32_t kUiBinMagic = 0x49554842u;
 constexpr uint16_t kUiBinVersion = 2;
 
-constexpr uint8_t kBinChrome = 10;
-constexpr uint8_t kBinMenu = 13;
-constexpr uint8_t kBinImage = 14;
-
 constexpr uint8_t kBinClear = 1;
 constexpr uint8_t kBinRequired = 2;
 constexpr uint8_t kBinReadOnly = 4;

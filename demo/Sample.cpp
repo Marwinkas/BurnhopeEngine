@@ -20,6 +20,9 @@ struct ShellIds {
     uint16_t compactRow = kUiNone;
     uint16_t formNote = kUiNone;
     uint16_t sideId = kUiNone;
+    uint16_t pageLabel = kUiNone;
+    uint16_t statusLabel = kUiNone;
+    int8_t page = 0;
 };
 
 ShellIds& shellIds(UiState& s) {
@@ -30,18 +33,18 @@ void setPage(UiState& s, int8_t tag) {
     if (tag < 0 || tag > 2) {
         tag = 0;
     }
-    s.selected = tag;
     ShellIds& ids = shellIds(s);
+    ids.page = tag;
     for (int i = 0; i < 3; ++i) {
         if (ids.pages[i] == kUiNone || s.yoga[ids.pages[i]] == nullptr) {
             continue;
         }
         YGNodeStyleSetDisplay(s.yoga[ids.pages[i]], i == tag ? YGDisplayFlex : YGDisplayNone);
     }
-    if (s.pageLabel != kUiNone) {
-        auto* text = s.ent[s.pageLabel].try_get_mut<UiText>();
+    if (ids.pageLabel != kUiNone) {
+        auto* text = s.ent[ids.pageLabel].try_get_mut<UiText>();
         copyText(text->bytes, text->len, kPages[tag]);
-        auto* flex = s.ent[s.pageLabel].try_get_mut<UiFlex>();
+        auto* flex = s.ent[ids.pageLabel].try_get_mut<UiFlex>();
         flex->width = uiMeasure(s, text->bytes, text->len, text->len);
     }
     s.layoutDirty = true;
@@ -111,7 +114,7 @@ void cmdClear(void* user) {
 
 void onPage(void* user, uint16_t, int16_t tag) {
     auto& s = *static_cast<UiState*>(user);
-    if (tag != s.selected) {
+    if (tag != shellIds(s).page) {
         setPage(s, static_cast<int8_t>(tag));
     }
     s.visualDirty = true;
@@ -204,8 +207,8 @@ void uiBuildShell(UiState& s) {
             s.contextOf[a] = b;
         }
     };
-    s.pageLabel = take("page_label");
     ShellIds& ids = shellIds(s);
+    ids.pageLabel = take("page_label");
     ids.pages[0] = take("page_scene");
     ids.pages[1] = take("page_look");
     ids.pages[2] = take("page_input");
@@ -218,7 +221,7 @@ void uiBuildShell(UiState& s) {
     uiColor(s).colorTarget = take("field_color");
     ids.formNote = take("form_note");
     uiFiles(s).photoView = take("photo");
-    s.statusLabel = take("scale_text");
+    ids.statusLabel = take("scale_text");
     ids.sideId = take("side");
     s.menu = take("menu_main");
     s.fieldMenu = take("field_menu");
@@ -335,14 +338,14 @@ void uiBuildShell(UiState& s) {
     stamp(s, brand, UiToken::Accent);
     stamp(s, side, UiToken::Side);
     stamp(s, content, UiToken::Content);
-    stamp(s, s.pageLabel, UiToken::Text);
+    stamp(s, ids.pageLabel, UiToken::Text);
     stamp(s, ids.compactRow, UiToken::Check);
     stamp(s, scroll, UiToken::Scroll);
     stamp(s, slider, UiToken::Slider);
     stamp(s, ids.preview, UiToken::Preview);
     stamp(s, s.field, UiToken::Field);
     stamp(s, status, UiToken::Status);
-    stamp(s, s.statusLabel, UiToken::Muted);
+    stamp(s, ids.statusLabel, UiToken::Muted);
     stamp(s, s.menu, UiToken::Menu);
     for (uint16_t id = 0; id < s.count; ++id) {
         auto* node = s.ent[id].try_get<UiPaint>();

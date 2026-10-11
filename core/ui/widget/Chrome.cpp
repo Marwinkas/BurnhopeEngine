@@ -109,7 +109,7 @@ uint16_t loadChromeBin(UiState& s, uint16_t parent, const BinNode&, const char* 
 }
 
 void uiInstallChromeBin(UiState& s) {
-    uiRegisterCustomBinNode(s, kBinChrome, loadChromeBin, nullptr);
+    uiRegisterCustomBinNode(s, 10, loadChromeBin, nullptr);
 }
 
 void uiMarkTab(UiState& s, uint16_t strip, uint16_t tab) {

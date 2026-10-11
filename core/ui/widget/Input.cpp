@@ -507,7 +507,8 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             s.grabX = in.pointer.x;
             s.grabY = in.pointer.y;
         }
-        if (item != kUiNone && s.statusLabel != kUiNone) {
+        const uint16_t statusId = uiFindName(s, "status");
+        if (item != kUiNone && statusId != kUiNone) {
             const char* name = "ITEM";
             uint8_t nameLen = 4;
             for (uint16_t id = 0; id < s.count; ++id) {
@@ -521,7 +522,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
                     break;
                 }
             }
-            auto* status = s.ent[s.statusLabel].try_get_mut<UiText>();
+            auto* status = s.ent[statusId].try_get_mut<UiText>();
             if (status != nullptr) {
                 char buf[32] = {'I', 'D', ' '};
                 uint8_t n = 3;
@@ -545,7 +546,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
                 copyText(status->bytes, status->len, buf);
                 uiPick(s).id = item;
                 copyText(uiPick(s).name, uiPick(s).len, name);
-                auto* flex = s.ent[s.statusLabel].try_get_mut<UiFlex>();
+                auto* flex = s.ent[statusId].try_get_mut<UiFlex>();
                 if (flex != nullptr) {
                     flex->width = static_cast<float>(status->len) * s.look.advance;
                 }
@@ -754,8 +755,9 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             }
             uiFieldNotify(s, s.focused);
             const char* msg = "";
-            if (fieldProblem(*field, msg) && s.statusLabel != kUiNone) {
-                auto* text = s.ent[s.statusLabel].try_get_mut<UiText>();
+            const uint16_t statusId = uiFindName(s, "status");
+            if (fieldProblem(*field, msg) && statusId != kUiNone) {
+                auto* text = s.ent[statusId].try_get_mut<UiText>();
                 if (text != nullptr) {
                     copyText(text->bytes, text->len, msg);
                 }

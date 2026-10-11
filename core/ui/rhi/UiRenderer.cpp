@@ -53,13 +53,8 @@ bool uiRendererCreate(UiRenderer& r, Device& d, DescriptorHeaps& heaps) {
         }
     }
     bool photosOk = gpuImageUploadRgba(r.photos[0], d, demo.data(), 128, 256, 2);
-    r.photoMeta[0].frames = 2;
-    r.photoMeta[0].delayMs[0] = 420;
-    r.photoMeta[0].delayMs[1] = 420;
     for (uint8_t slot = 1; slot < kPhotoSlots && photosOk; ++slot) {
         photosOk = gpuImageUploadRgba(r.photos[slot], d, blank, 1, 1);
-        r.photoMeta[slot].frames = 1;
-        r.photoMeta[slot].delayMs[0] = 100;
     }
     for (uint8_t slot = 0; slot < kPhotoSlots && photosOk; ++slot) {
         photosOk = heapWriteImage(
@@ -143,7 +138,6 @@ void uiRendererDestroy(UiRenderer& r, Device& d) {
     gpuImageDestroy(r.font, d);
     for (uint8_t slot = 0; slot < kPhotoSlots; ++slot) {
         gpuImageDestroy(r.photos[slot], d);
-        r.photoMeta[slot] = {};
     }
     gpuBufferDestroy(r.prims[0], d);
     gpuBufferDestroy(r.prims[1], d);

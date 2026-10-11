@@ -206,6 +206,7 @@ target_compile_definitions(bh_render PUBLIC "BH_SHADER_DIR=\"${CMAKE_CURRENT_BIN
 target_link_libraries(bh_render PUBLIC flecs_static)
 bh_module(ui
     core/ui/Canvas.cpp
+    core/ui/Motion.cpp
     core/ui/rhi/UiRenderer.cpp
     core/ui/LayoutBridge.cpp
     core/ui/PrimitiveBatch.cpp

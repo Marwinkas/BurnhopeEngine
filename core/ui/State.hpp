@@ -49,8 +49,6 @@ struct UiState {
     uint8_t cursorN = 0;
     uint16_t focused = kUiNone;
     uint16_t capture = kUiNone;
-    uint16_t pageLabel = kUiNone;
-    uint16_t statusLabel = kUiNone;
     uint16_t menu = kUiNone;
     uint16_t field = kUiNone;
     uint16_t fieldMenu = kUiNone;
@@ -70,7 +68,6 @@ struct UiState {
     uint8_t culled[kUiCap]{};
     UiBox hint{};
     UiBox edgeLine{};
-    float openH[kUiCap]{};
     char clip[96]{};
     uint8_t clipLen = 0;
     uint8_t clipPut = 0;
@@ -99,12 +96,11 @@ struct UiState {
     UiAnim anim[kUiCap]{};
     UiCommand cmds[kUiCmdCap]{};
     uint8_t cmdCount = 0;
-    int8_t selected = 0;
     float laidW = -1.0f;
     float laidH = -1.0f;
     bool layoutDirty = true;
     bool visualDirty = true;
-    uint8_t dumpLayout = 1;
+    uint8_t dumpLayout = 0;
     uint16_t layoutFrom = kUiNone;
     UiDrop dropBus{};
     char ime[64]{};

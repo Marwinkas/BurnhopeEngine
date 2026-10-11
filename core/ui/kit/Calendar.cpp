@@ -24,7 +24,7 @@ void setNote(UiState& s, const char* msg) {
             flex->width = uiMeasure(s, text->bytes, text->len, text->len);
         }
     };
-    write(s.statusLabel);
+    write(uiFindName(s, "status"));
     write(uiFindName(s, "form_note"));
     s.visualDirty = true;
 }

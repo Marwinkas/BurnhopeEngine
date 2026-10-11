@@ -90,6 +90,7 @@ bool parseNumber(Cur& c, float& out) {
 
 void skipValue(Cur& c) {
     skip(c);
+    const char* before = c.p;
     if (c.p >= c.end) {
         return;
     }
@@ -147,7 +148,9 @@ void skipValue(Cur& c) {
         return;
     }
     float dummy = 0.0f;
-    parseNumber(c, dummy);
+    if (!parseNumber(c, dummy) && c.p == before && c.p < c.end) {
+        ++c.p;
+    }
 }
 
 bool same(const char* key, const char* name) {
@@ -189,11 +192,7 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
     }
     UiFlex flex{};
     flex.shrink = 0.0f;
-    UiPaint paint{};
-    paint.role = static_cast<uint8_t>(UiRole::Panel);
-    paint.r = 0.16f;
-    paint.g = 0.18f;
-    paint.b = 0.22f;
+    UiPaint paint = paintToken(s.look, UiRole::Panel, UiToken::Content, 0.0f);
     paint.a = 1.0f;
     paint.tag = -1;
     const uint16_t id = uiNode(s, parent, flex, paint);
@@ -232,7 +231,12 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                     auto* node = s.ent[id].try_get_mut<UiPaint>();
                     if (node != nullptr) {
                         if (std::strcmp(role, "button") == 0) {
-                            node->role = static_cast<uint8_t>(UiRole::Button);
+                            const UiPaint ink = paintToken(s.look, UiRole::Button, UiToken::Button, 0.0f);
+                            node->role = ink.role;
+                            node->token = ink.token;
+                            node->r = ink.r;
+                            node->g = ink.g;
+                            node->b = ink.b;
                         } else if (std::strcmp(role, "label") == 0) {
                             const UiPaint ink = paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f);
                             node->role = ink.role;
@@ -241,9 +245,19 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                             node->g = ink.g;
                             node->b = ink.b;
                         } else if (std::strcmp(role, "field") == 0) {
-                            node->role = static_cast<uint8_t>(UiRole::Field);
+                            const UiPaint ink = paintToken(s.look, UiRole::Field, UiToken::Field, 0.0f);
+                            node->role = ink.role;
+                            node->token = ink.token;
+                            node->r = ink.r;
+                            node->g = ink.g;
+                            node->b = ink.b;
                         } else if (std::strcmp(role, "check") == 0) {
-                            node->role = static_cast<uint8_t>(UiRole::Check);
+                            const UiPaint ink = paintToken(s.look, UiRole::Check, UiToken::Check, 0.0f);
+                            node->role = ink.role;
+                            node->token = ink.token;
+                            node->r = ink.r;
+                            node->g = ink.g;
+                            node->b = ink.b;
                         } else {
                             const UiPaint ink = paintToken(s.look, UiRole::Panel, UiToken::Content, 0.0f);
                             node->role = ink.role;

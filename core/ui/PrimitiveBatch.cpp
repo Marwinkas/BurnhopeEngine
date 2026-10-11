@@ -435,15 +435,7 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             ids[nIds++] = slot.index;
         }
     });
-    for (uint16_t a = 1; a < nIds; ++a) {
-        const uint16_t value = ids[a];
-        uint16_t b = a;
-        while (b > 0 && ids[b - 1] > value) {
-            ids[b] = ids[b - 1];
-            --b;
-        }
-        ids[b] = value;
-    }
+    std::sort(ids, ids + nIds);
 
     const UiDrawHooks* hooks = s.world.try_get<UiDrawHooks>();
     uint32_t n = 0;
@@ -470,11 +462,6 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
         float g = paint.g;
         float b = paint.b;
         float a = paint.a;
-        if (role == UiRole::Button && paint.tag == s.selected && paint.tag >= 0 && paint.tag < 3) {
-            r = s.look.accent[paint.tag][0];
-            g = s.look.accent[paint.tag][1];
-            b = s.look.accent[paint.tag][2];
-        }
         if (s.anim[id].on != 0 && s.anim[id].dur > 0.0f) {
             float u = (s.time - s.anim[id].t0) / s.anim[id].dur;
             if (u < 0.0f) {

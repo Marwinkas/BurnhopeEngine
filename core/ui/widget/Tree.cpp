@@ -9,6 +9,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cstdint>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -22,6 +23,7 @@ void uiInstallColorBin(UiState& s);
 uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint) {
     const uint16_t id = s.count++;
     YGNodeRef node = YGNodeNew();
+    YGNodeSetContext(node, reinterpret_cast<void*>(static_cast<uintptr_t>(id)));
     s.yoga[id] = node;
     s.parentOf[id] = parent;
     if (parent != kUiNone) {
@@ -580,8 +582,6 @@ void uiClear(UiState& s) {
     s.focused = kUiNone;
     s.capture = kUiNone;
     s.dragId = kUiNone;
-    s.pageLabel = kUiNone;
-    s.statusLabel = kUiNone;
     uiFiles(s).photoView = kUiNone;
     uiFiles(s).fileView = kUiNone;
     uiFiles(s).fileFrame = kUiNone;
@@ -606,7 +606,6 @@ void uiClear(UiState& s) {
     s.menuOpen = false;
     s.cmdCount = 0;
     s.valueN = 0;
-    s.selected = 0;
     s.laidW = -1.0f;
     s.laidH = -1.0f;
 }
@@ -665,13 +664,14 @@ void uiFold(UiState& s, uint16_t id) {
     }
     auto* flex = s.ent[panel].try_get_mut<UiFlex>();
     if (flex != nullptr && flex->position != 0) {
+        UiFoldState& fold = s.ent[panel].ensure<UiFoldState>();
         if (open) {
-            s.openH[panel] = flex->height > 56.0f ? flex->height : s.box[panel].h;
+            fold.openH = flex->height > 56.0f ? flex->height : s.box[panel].h;
             flex->heightMode = static_cast<uint8_t>(UiSize::Px);
             flex->height = 52.0f;
-        } else if (s.openH[panel] > 56.0f) {
+        } else if (fold.openH > 56.0f) {
             flex->heightMode = static_cast<uint8_t>(UiSize::Px);
-            flex->height = s.openH[panel];
+            flex->height = fold.openH;
         }
         s.layoutDirty = true;
     }

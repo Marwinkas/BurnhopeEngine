@@ -11,17 +11,11 @@
 
 namespace burnhope {
 
-struct PhotoMeta {
-    uint8_t frames = 1;
-    uint16_t delayMs[16]{};
-};
-
 // GPU execution only. No UiState, Yoga, widgets, menus, or files.
 struct UiRenderer {
     GpuBuffer prims[2]{};
     GpuImage font{};
     GpuImage photos[kPhotoSlots]{};
-    PhotoMeta photoMeta[kPhotoSlots]{};
     ShaderExt vs{};
     ShaderExt fs{};
     ShaderExt ms{};

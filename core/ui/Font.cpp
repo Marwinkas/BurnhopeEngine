@@ -1,6 +1,5 @@
 #include "ui/Font.hpp"
 #include "ui/Model.hpp"
-#include "image/ImageFile.hpp"
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -12,6 +11,9 @@
 #include <vector>
 
 namespace burnhope {
+
+[[nodiscard]] bool gpuImageUploadR8(GpuImage& img, Device& d, const uint8_t* pixels, uint32_t width, uint32_t height);
+
 namespace {
 
 constexpr int kCell = 64;
@@ -64,7 +66,8 @@ bool uploadAtlas(Device& device, DescriptorHeaps& heaps, GpuImage& atlas, const 
 } // namespace
 
 bool fontLoadSdf(
-    UiState& ui,
+    UiFontAtlas& font,
+    UiLook& look,
     Device& device,
     DescriptorHeaps& heaps,
     GpuImage& atlas,
@@ -93,9 +96,9 @@ bool fontLoadSdf(
 
     for (int i = 0; i < static_cast<int>(kUiFontGlyphs); ++i) {
         const uint32_t cp = codepointAt(i);
-        ui.font.glyphs[i].advance = pixelSize * 0.5f;
-        ui.font.glyphs[i].w = 0;
-        ui.font.glyphs[i].h = 0;
+        font.glyphs[i].advance = pixelSize * 0.5f;
+        font.glyphs[i].w = 0;
+        font.glyphs[i].h = 0;
         if (cp == 0 || FT_Load_Char(face, cp, FT_LOAD_DEFAULT) != 0) {
             continue;
         }
@@ -121,15 +124,15 @@ bool fontLoadSdf(
             pixels[static_cast<size_t>(dy * width + dx)] = src[x];
             }
         }
-        ui.font.glyphs[i].u0 = static_cast<float>(ox) / static_cast<float>(width);
-        ui.font.glyphs[i].v0 = static_cast<float>(oy) / static_cast<float>(height);
-        ui.font.glyphs[i].u1 = static_cast<float>(ox + static_cast<int>(bmp.width)) / static_cast<float>(width);
-        ui.font.glyphs[i].v1 = static_cast<float>(oy + static_cast<int>(bmp.rows)) / static_cast<float>(height);
-        ui.font.glyphs[i].bx = static_cast<float>(face->glyph->bitmap_left);
-        ui.font.glyphs[i].by = static_cast<float>(face->glyph->bitmap_top);
-        ui.font.glyphs[i].w = static_cast<float>(bmp.width);
-        ui.font.glyphs[i].h = static_cast<float>(bmp.rows);
-        ui.font.glyphs[i].advance = static_cast<float>(face->glyph->advance.x) / 64.0f;
+        font.glyphs[i].u0 = static_cast<float>(ox) / static_cast<float>(width);
+        font.glyphs[i].v0 = static_cast<float>(oy) / static_cast<float>(height);
+        font.glyphs[i].u1 = static_cast<float>(ox + static_cast<int>(bmp.width)) / static_cast<float>(width);
+        font.glyphs[i].v1 = static_cast<float>(oy + static_cast<int>(bmp.rows)) / static_cast<float>(height);
+        font.glyphs[i].bx = static_cast<float>(face->glyph->bitmap_left);
+        font.glyphs[i].by = static_cast<float>(face->glyph->bitmap_top);
+        font.glyphs[i].w = static_cast<float>(bmp.width);
+        font.glyphs[i].h = static_cast<float>(bmp.rows);
+        font.glyphs[i].advance = static_cast<float>(face->glyph->advance.x) / 64.0f;
     }
     FT_Done_Face(face);
     FT_Done_FreeType(library);
@@ -138,11 +141,11 @@ bool fontLoadSdf(
         spdlog::error("sdf atlas upload failed");
         return false;
     }
-    ui.font.fontPx = pixelSize;
-    ui.font.ready = true;
-    ui.look.advance = ui.font.glyphs[static_cast<int>('M' - 32)].advance * (ui.look.glyphH / pixelSize);
-    if (ui.look.advance < 4.0f) {
-        ui.look.advance = 9.0f;
+    font.fontPx = pixelSize;
+    font.ready = true;
+    look.advance = font.glyphs[static_cast<int>('M' - 32)].advance * (look.glyphH / pixelSize);
+    if (look.advance < 4.0f) {
+        look.advance = 9.0f;
     }
     spdlog::info("sdf font {} at {} px", path, pixelSize);
     return true;

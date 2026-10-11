@@ -2,9 +2,10 @@
 #include "ui/LayoutBridge.hpp"
 #include "ui/widget/Detail.hpp"
 
+#include <cstddef>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
+#include <vector>
 
 namespace burnhope {
 
@@ -55,7 +56,6 @@ void nameOf(UiState& s, uint16_t id, const char* name) {
     s.ent[id].set<UiName>(stored);
     if (plain) {
         s.ent[id].set_name(stored.bytes);
-        ecs_set_symbol(s.world, s.ent[id], stored.bytes);
     }
 }
 
@@ -113,7 +113,7 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
             continue;
         }
         BinNode plain = bin;
-        if (plain.role > kBinChrome && plain.role != kBinMenu && plain.role != kBinImage) {
+        if (plain.role > static_cast<uint8_t>(UiRole::Progress)) {
             plain.role = static_cast<uint8_t>(UiRole::Panel);
         }
         UiFlex flex{};
@@ -158,14 +158,7 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
         attr.posR = bin.posR;
         attr.posB = bin.posB;
         uiFlexApplyAttr(flex, attr);
-        uint8_t role = plain.role;
-        if (role == kBinMenu) {
-            role = static_cast<uint8_t>(UiRole::Panel);
-            flex.position = 1;
-            flex.shrink = 0.0f;
-        } else if (role == kBinImage) {
-            role = static_cast<uint8_t>(UiRole::Panel);
-        }
+        const uint8_t role = plain.role;
         UiPaint ink = paint(static_cast<UiRole>(role), bin.r, bin.g, bin.b, bin.radius, bin.tag);
         ink.a = bin.a;
         ink.icon = bin.icon;
@@ -225,16 +218,8 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
             check.kind = bin.checkKind;
             check.group = bin.checkGroup;
             s.ent[id].set<UiCheck>(check);
-        } else if (plain.role == kBinImage) {
-            UiImage photo{};
-            photo.slot = 0;
-            photo.frames = 1;
-            photo.minimap = (bin.flags & kBinMinimap) != 0 ? 1 : 0;
-            photo.viewW = 1.0f;
-            photo.viewH = 1.0f;
-            s.ent[id].set<UiImage>(photo);
         }
-        if (bin.shown == 0 || plain.role == kBinMenu) {
+        if (bin.shown == 0) {
             uiShow(s, id, false);
         }
     }
@@ -267,16 +252,13 @@ uint16_t uiImportBinFile(UiState& s, uint16_t parent, const char* path) {
         std::fclose(file);
         return kUiNone;
     }
-    char* buf = static_cast<char*>(std::malloc(static_cast<size_t>(n)));
-    if (buf == nullptr) {
-        std::fclose(file);
+    std::vector<std::byte> buf(static_cast<size_t>(n));
+    const size_t got = std::fread(buf.data(), 1, buf.size(), file);
+    std::fclose(file);
+    if (got != buf.size()) {
         return kUiNone;
     }
-    const size_t got = std::fread(buf, 1, static_cast<size_t>(n), file);
-    std::fclose(file);
-    const uint16_t id = got == static_cast<size_t>(n) ? uiImportBin(s, parent, buf, static_cast<uint32_t>(got)) : kUiNone;
-    std::free(buf);
-    return id;
+    return uiImportBin(s, parent, buf.data(), static_cast<uint32_t>(got));
 }
 
 } // namespace burnhope

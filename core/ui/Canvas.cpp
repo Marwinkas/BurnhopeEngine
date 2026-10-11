@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -22,12 +23,19 @@ bool canvasLoadImage(Canvas& c, uint8_t slot, const char* path);
 
 bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
     canvasDestroy(c, d);
-    c.state = new UiState();
+    c.state = std::make_unique<UiState>();
     c.device = &d;
     c.heaps = &heaps;
     if (!uiRendererCreate(c.rhi, d, heaps)) {
         canvasDestroy(c, d);
         return false;
+    }
+    c.photoMeta[0].frames = 2;
+    c.photoMeta[0].delayMs[0] = 420;
+    c.photoMeta[0].delayMs[1] = 420;
+    for (uint8_t slot = 1; slot < kPhotoSlots; ++slot) {
+        c.photoMeta[slot].frames = 1;
+        c.photoMeta[slot].delayMs[0] = 100;
     }
     if (!canvasUseFont(c, 20.0f)) {
         spdlog::error("default sdf font failed");
@@ -43,56 +51,10 @@ void canvasDestroy(Canvas& c, Device& d) {
         if (c.state->plug.shutdown != nullptr) {
             c.state->plug.shutdown(*c.state);
         }
-        delete c.state;
-        c.state = nullptr;
+        c.state.reset();
     }
     c.device = nullptr;
     c.heaps = nullptr;
-}
-
-void uiMotionTo(UiState& s, uint16_t id, float r, float g, float b, float a) {
-    if (id >= kUiCap) {
-        return;
-    }
-    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-    UiAnim& anim = s.anim[id];
-    anim.fr = paint != nullptr ? paint->r : r;
-    anim.fg = paint != nullptr ? paint->g : g;
-    anim.fb = paint != nullptr ? paint->b : b;
-    anim.fa = paint != nullptr ? paint->a : a;
-    if (anim.on != 0 && anim.dur > 0.0f) {
-        float u = (s.time - anim.t0) / anim.dur;
-        if (u < 0.0f) {
-            u = 0.0f;
-        }
-        if (u > 1.0f) {
-            u = 1.0f;
-        }
-        anim.fr += (anim.tr - anim.fr) * u;
-        anim.fg += (anim.tg - anim.fg) * u;
-        anim.fb += (anim.tb - anim.fb) * u;
-        anim.fa += (anim.ta - anim.fa) * u;
-    }
-    anim.tr = r;
-    anim.tg = g;
-    anim.tb = b;
-    anim.ta = a;
-    anim.t0 = s.time;
-    anim.dur = s.look.motion > 0.0f ? s.look.motion : 0.01f;
-    anim.on = 1;
-}
-
-bool uiTickMotion(UiState& s) {
-    bool live = false;
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.anim[id].on != 0) {
-            live = true;
-            if (s.time - s.anim[id].t0 >= s.anim[id].dur) {
-                s.anim[id].on = 0;
-            }
-        }
-    }
-    return live;
 }
 
 void canvasSetLook(Canvas& c, const UiLook& look) {
@@ -129,7 +91,7 @@ void photoPush(Canvas& c, uint8_t slot) {
     if (c.state == nullptr || slot >= kPhotoSlots) {
         return;
     }
-    uiApplyPhotoMeta(*c.state, slot, c.rhi.photoMeta[slot].frames, c.rhi.photoMeta[slot].delayMs, kImageFrames);
+    uiApplyPhotoMeta(*c.state, slot, c.photoMeta[slot].frames, c.photoMeta[slot].delayMs, kImageFrames);
 }
 
 void canvasReload(Canvas& c) {
@@ -187,9 +149,9 @@ bool canvasLoadImage(Canvas& c, uint8_t slot, const char* path) {
             VK_IMAGE_ASPECT_COLOR_BIT);
     }
     if (ok) {
-        c.rhi.photoMeta[slot].frames = static_cast<uint8_t>(cpu.frames == 0 ? 1u : cpu.frames);
+        c.photoMeta[slot].frames = static_cast<uint8_t>(cpu.frames == 0 ? 1u : cpu.frames);
         for (uint32_t i = 0; i < kImageFrames; ++i) {
-            c.rhi.photoMeta[slot].delayMs[i] = cpu.delayMs[i];
+            c.photoMeta[slot].delayMs[i] = cpu.delayMs[i];
         }
         photoPush(c, slot);
         spdlog::info("image slot {} {}x{} x{} frames", slot, cpu.width, cpu.height, cpu.frames);
@@ -212,7 +174,7 @@ bool canvasSetFont(Canvas& c, const char* path, float pixelSize) {
     if (c.state == nullptr || c.device == nullptr || c.heaps == nullptr) {
         return false;
     }
-    if (!fontLoadSdf(*c.state, *c.device, *c.heaps, c.rhi.font, path, pixelSize)) {
+    if (!fontLoadSdf(c.state->font, c.state->look, *c.device, *c.heaps, c.rhi.font, path, pixelSize)) {
         return false;
     }
     uiRendererUploadFontTable(c.rhi, *c.device, c.state->font);

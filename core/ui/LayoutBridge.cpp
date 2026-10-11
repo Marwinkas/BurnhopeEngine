@@ -3,6 +3,7 @@
 #include "ui/widget/Detail.hpp"
 #include "platform/Trace.hpp"
 
+#include <cstdint>
 #include <cstring>
 
 #include <yoga/YGValue.h>
@@ -200,14 +201,16 @@ void applyFlex(YGNodeRef node, const UiFlex& f) {
 } // namespace
 
 void cacheBox(UiState& s, uint16_t id) {
-    float x = 0.0f;
-    float y = 0.0f;
-    for (YGNodeRef node = s.yoga[id]; node != nullptr; node = YGNodeGetParent(node)) {
-        x += YGNodeLayoutGetLeft(node);
-        y += YGNodeLayoutGetTop(node);
+    const uint16_t parent = id < s.count ? s.parentOf[id] : kUiNone;
+    const float left = YGNodeLayoutGetLeft(s.yoga[id]);
+    const float top = YGNodeLayoutGetTop(s.yoga[id]);
+    if (parent != kUiNone && parent < s.count) {
+        s.box[id].x = s.box[parent].x + left;
+        s.box[id].y = s.box[parent].y + top;
+    } else {
+        s.box[id].x = left;
+        s.box[id].y = top;
     }
-    s.box[id].x = x;
-    s.box[id].y = y;
     s.box[id].w = YGNodeLayoutGetWidth(s.yoga[id]);
     s.box[id].h = YGNodeLayoutGetHeight(s.yoga[id]);
     s.ent[id].set<UiBounds>({s.box[id].x, s.box[id].y, s.box[id].w, s.box[id].h});
@@ -282,12 +285,20 @@ void uiLayout(UiState& s, float w, float h) {
         YGNodeStyleSetWidth(s.yoga[0], w);
         YGNodeStyleSetHeight(s.yoga[0], h);
         YGNodeCalculateLayout(s.yoga[0], w, h, YGDirectionLTR);
-        for (uint16_t id = 0; id < s.count; ++id) {
-            if (!s.ent[id].is_alive() || s.yoga[id] == nullptr) {
-                continue;
+        const auto cacheTree = [&](auto&& self, uint16_t id) -> void {
+            if (id >= s.count || s.yoga[id] == nullptr) {
+                return;
             }
             cacheBox(s, id);
-        }
+            const uint32_t kids = YGNodeGetChildCount(s.yoga[id]);
+            for (uint32_t i = 0; i < kids; ++i) {
+                const auto raw = reinterpret_cast<uintptr_t>(YGNodeGetContext(YGNodeGetChild(s.yoga[id], i)));
+                if (raw < s.count) {
+                    self(self, static_cast<uint16_t>(raw));
+                }
+            }
+        };
+        cacheTree(cacheTree, 0);
     };
     for (uint16_t id = 0; id < s.count; ++id) {
         if (s.culled[id] != 0 && s.yoga[id] != nullptr) {
@@ -296,52 +307,59 @@ void uiLayout(UiState& s, float w, float h) {
         }
     }
     measure();
-    for (int pass = 0; pass < 8; ++pass) {
-        uint16_t victim = kUiNone;
-        for (uint16_t parent = 0; parent < s.count; ++parent) {
-            if (!s.ent[parent].is_alive()) {
-                continue;
-            }
-            const UiFlex* flex = s.ent[parent].try_get<UiFlex>();
-            if (flex == nullptr || flex->drop == 0 || s.yoga[parent] == nullptr) {
-                continue;
-            }
-            if (YGNodeStyleGetDisplay(s.yoga[parent]) == YGDisplayNone) {
-                continue;
-            }
-            uint16_t kids[32];
-            int nk = 0;
-            for (uint16_t id = 0; id < s.count && nk < 32; ++id) {
-                if (s.parentOf[id] != parent || s.yoga[id] == nullptr) {
-                    continue;
-                }
-                if (YGNodeStyleGetDisplay(s.yoga[id]) == YGDisplayNone) {
-                    continue;
-                }
-                kids[nk++] = id;
-            }
-            bool tight = false;
-            for (int i = 0; i < nk; ++i) {
-                const UiFlex* child = s.ent[kids[i]].try_get<UiFlex>();
-                if (child == nullptr) {
-                    continue;
-                }
-                if ((child->minW > 1.0f && s.box[kids[i]].w + 0.5f < child->minW)
-                    || (child->minH > 1.0f && s.box[kids[i]].h + 0.5f < child->minH)) {
-                    tight = true;
-                }
-            }
-            if (!tight || nk < 2) {
-                continue;
-            }
-            victim = kids[flex->drop == 2 ? 0 : nk - 1];
-            break;
+    uint16_t victims[64];
+    int nv = 0;
+    for (uint16_t parent = 0; parent < s.count && nv < 64; ++parent) {
+        if (!s.ent[parent].is_alive()) {
+            continue;
         }
-        if (victim == kUiNone) {
-            break;
+        const UiFlex* flex = s.ent[parent].try_get<UiFlex>();
+        if (flex == nullptr || flex->drop == 0 || s.yoga[parent] == nullptr) {
+            continue;
         }
-        YGNodeStyleSetDisplay(s.yoga[victim], YGDisplayNone);
-        s.culled[victim] = 1;
+        if (YGNodeStyleGetDisplay(s.yoga[parent]) == YGDisplayNone) {
+            continue;
+        }
+        const uint32_t childCount = YGNodeGetChildCount(s.yoga[parent]);
+        if (childCount < 2) {
+            continue;
+        }
+        uint16_t first = kUiNone;
+        uint16_t last = kUiNone;
+        int nk = 0;
+        bool tight = false;
+        for (uint32_t i = 0; i < childCount; ++i) {
+            YGNodeRef childNode = YGNodeGetChild(s.yoga[parent], i);
+            if (childNode == nullptr || YGNodeStyleGetDisplay(childNode) == YGDisplayNone) {
+                continue;
+            }
+            const auto raw = reinterpret_cast<uintptr_t>(YGNodeGetContext(childNode));
+            if (raw >= s.count) {
+                continue;
+            }
+            const uint16_t id = static_cast<uint16_t>(raw);
+            if (first == kUiNone) {
+                first = id;
+            }
+            last = id;
+            ++nk;
+            const UiFlex* child = s.ent[id].try_get<UiFlex>();
+            if (child != nullptr
+                && ((child->minW > 1.0f && s.box[id].w + 0.5f < child->minW)
+                    || (child->minH > 1.0f && s.box[id].h + 0.5f < child->minH))) {
+                tight = true;
+            }
+        }
+        if (!tight || nk < 2) {
+            continue;
+        }
+        victims[nv++] = flex->drop == 2 ? first : last;
+    }
+    if (nv > 0) {
+        for (int i = 0; i < nv; ++i) {
+            YGNodeStyleSetDisplay(s.yoga[victims[i]], YGDisplayNone);
+            s.culled[victims[i]] = 1;
+        }
         measure();
     }
     for (uint16_t id = 0; id < s.count; ++id) {

@@ -2,17 +2,23 @@
 
 #include "platform/Window.hpp"
 #include "rhi/Swapchain.hpp"
-#include "ui/Model.hpp"
+#include "ui/State.hpp"
 #include "ui/rhi/UiRenderer.hpp"
+
+#include <memory>
 
 namespace burnhope {
 
-struct UiState;
+struct PhotoMeta {
+    uint8_t frames = 1;
+    uint16_t delayMs[16]{};
+};
 
 // Layout, input, and the GPU renderer. Widgets are not created here.
 struct Canvas {
-    UiState* state = nullptr;
+    std::unique_ptr<UiState> state;
     UiRenderer rhi{};
+    PhotoMeta photoMeta[kPhotoSlots]{};
     Device* device = nullptr;
     DescriptorHeaps* heaps = nullptr;
     void (*builder)(Canvas&, void*) = nullptr;
