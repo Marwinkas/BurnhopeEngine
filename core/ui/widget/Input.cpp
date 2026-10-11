@@ -17,6 +17,7 @@ bool uiListen(UiState& s, UiValueFn fn, void* user) {
 }
 
 UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
+    s.ateWheel = 0;
     tickPhoto(s);
     syncColor(s);
     s.pasteBufLen = in.pasteLen < 95 ? in.pasteLen : 95;
@@ -113,7 +114,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             const bool onClear = clearW > 0.0f && in.pointer.x >= s.box[hit].x + s.box[hit].w - field->padR - clearW;
             cursor = onClear ? 6 : 5;
         } else if (node != nullptr && node->tag == -5) {
-            cursor = 1;
+            cursor = splitCursor(s, hit);
         }
     }
     if (s.colorDrop != 0 || (s.book != nullptr && s.book->drop != 0)) {
@@ -282,7 +283,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             s.floatWin = panel;
             s.grabX = in.pointer.x - s.box[panel].x;
             s.grabY = in.pointer.y - s.box[panel].y;
-        } else if (p != nullptr && p->tag == -5 && splitTarget(s, hit) != kUiNone) {
+        } else if (p != nullptr && p->tag == -5 && splitAlive(s, hit)) {
             s.capture = hit;
         } else if (p != nullptr && s.ent[hit].try_get<UiDrag>() != nullptr) {
             s.capture = hit;
@@ -452,20 +453,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             photoPan(s, s.capture, in.pointer.x, in.pointer.y);
         } else if (s.capture == s.fileView) {
         } else if (cap != nullptr && cap->tag == -5) {
-            const uint16_t pane = splitTarget(s, s.capture);
-            auto* flex = pane != kUiNone ? s.ent[pane].try_get_mut<UiFlex>() : nullptr;
-            if (flex != nullptr) {
-                float w = in.pointer.x - s.box[pane].x;
-                if (w < 120.0f) {
-                    w = 120.0f;
-                }
-                if (w > 480.0f) {
-                    w = 480.0f;
-                }
-                flex->widthMode = static_cast<uint8_t>(UiSize::Px);
-                flex->width = w;
-                s.layoutDirty = true;
-            }
+            splitDrag(s, s.capture, in.pointer.x, in.pointer.y);
         } else if (cap != nullptr && cap->role == static_cast<uint8_t>(UiRole::Button)) {
             const UiRange* range = s.ent[s.capture].try_get<UiRange>();
             if (range != nullptr && range->step > 0.0f) {
@@ -576,11 +564,19 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         }
     }
 
-    if (in.clicks >= 2 && in.pointer.y < s.look.titleBar && hit != kUiNone) {
+    if (in.clicks >= 2 && hit != kUiNone) {
+        bool onTitle = false;
+        for (uint16_t p = hit; p != kUiNone; p = s.parentOf[p]) {
+            const UiPaint* paint = s.ent[p].try_get<UiPaint>();
+            if (paint != nullptr && paint->token == static_cast<uint8_t>(UiToken::Title)) {
+                onTitle = true;
+                break;
+            }
+        }
         const UiPaint* node = s.ent[hit].try_get<UiPaint>();
         const bool chrome = node != nullptr
             && (node->role == static_cast<uint8_t>(UiRole::Close) || node->tag == -2 || node->tag == -3);
-        if (!chrome) {
+        if (onTitle && !chrome) {
             s.opMaximize = true;
         }
     }
@@ -596,10 +592,12 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         }
         if (photo != kUiNone) {
             photoZoom(s, photo, in.wheel, in.pointer.x, in.pointer.y);
+            s.ateWheel = 1;
         } else {
             const uint16_t owner = scrollOwner(s, s.hovered);
             if (owner != kUiNone) {
                 scrollBy(s, owner, in.wheel);
+                s.ateWheel = 1;
             }
         }
     }

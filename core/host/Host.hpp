@@ -48,6 +48,10 @@ struct HostView {
     HostSceneTickFn sceneTick = nullptr;
     HostSceneRecordFn sceneRecord = nullptr;
     void* user = nullptr;
+    uint8_t lookGrab = 0;
+    uint8_t toolGrab = 0;
+    float lookX = 0.0f;
+    float lookY = 0.0f;
 };
 
 struct Host {

@@ -134,10 +134,19 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         bounce *= 0.02;
         skyFill *= 0.02;
     }
+    if (giOn && !worldRc && gFrame.disableShadow == 0 && shadow < 0.98) {
+        const float reach = max(shadowSkyReach(sunCascade, hit.P, hit.N, px), 0.05);
+        const float skyVis = lerp(reach, 1.0, saturate(shadow));
+        skyFill *= skyVis;
+        bounce *= skyVis;
+    }
+    const float giGain = giOn ? max(gShade.pad1, 0.0) : 0.0;
+    skyFill *= giGain;
+    bounce *= giGain;
     const float3 diffuse = hit.albedo * (bounce * hit.ao + skyFill * (worldRc ? 0.2 : 0.55));
     float3 indirect = diffuse * sunCol * saturate(inten / 8.0) + hit.emissive;
     if (gFrame.debugMode == 4) {
-        gHdr[px] = float4(max(diffuse * shadow, 0.0), 1.0);
+        gHdr[px] = float4(max(diffuse, 0.0), 1.0);
         return;
     }
     float sunFace = hit.NdotL;

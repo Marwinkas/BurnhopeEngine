@@ -23,6 +23,7 @@
 #include "render/Shade.hpp"
 #include "render/Hiz.hpp"
 #include "render/Radiance.hpp"
+#include "render/Gizmo.hpp"
 #include "render/Tonemap.hpp"
 #include "render/Visbuffer.hpp"
 #include "debug/CpuScope.hpp"
@@ -46,6 +47,24 @@
 #include <vector>
 
 namespace burnhope {
+namespace {
+
+void placeActors(SceneFrameImpl& scene) {
+    sceneActorsClear(scene.actors);
+    const float sun[3] = {scene.fly.eye[0], scene.fly.eye[1] + 2.0f, scene.fly.eye[2] - 6.0f};
+    const float post[3] = {sun[0] + 3.0f, sun[1], sun[2]};
+    sceneActorAdd(scene.actors, SceneActorKind::Sun, sun, "Sun");
+    if (scene.actors.count > 0) {
+        Xform pose = sceneActorXform(scene.actors, 0);
+        pose.euler[0] = 35.0f;
+        pose.euler[1] = 30.0f;
+        sceneActorWriteXform(scene.actors, 0, pose);
+    }
+    sceneActorAdd(scene.actors, SceneActorKind::Post, post, "Post");
+    scene.actors.selected = 0;
+}
+
+} // namespace
 namespace {
 
 bool nameHas(const char* text, const char* needle);
@@ -534,6 +553,7 @@ SceneFrame* sceneFrameCreate() {
     scene->fly.eye[0] = scene->world.eye[0];
     scene->fly.eye[1] = scene->world.eye[1];
     scene->fly.eye[2] = scene->world.eye[2];
+    placeActors(*scene);
     pushBlob(*scene, scene->world.floor, scene->world.objects[0].x, scene->world.objects[0].y, scene->world.objects[0].z);
     pushBlob(*scene, scene->world.cubes[0], scene->world.objects[1].x, scene->world.objects[1].y, scene->world.objects[1].z);
     pushBlob(*scene, scene->world.cubes[1], scene->world.objects[2].x, scene->world.objects[2].y, scene->world.objects[2].z);
@@ -689,6 +709,7 @@ bool sceneFrameLoadBhop(SceneFrame* scene, const char* path) {
     scene->fly.yaw = 0.0f;
     scene->fly.pitch = -0.15f;
     scene->fly.speed = std::max(4.0f, extent * 0.02f);
+    placeActors(*scene);
     scene->ready = false;
     return true;
 }
@@ -948,6 +969,7 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
     scene->fly.yaw = 0.0f;
     scene->fly.pitch = -0.1f;
     scene->fly.speed = 40.0f;
+    placeActors(*scene);
     scene->boxMin[0] = std::min(scene->boxMin[0], minX);
     scene->boxMin[1] = std::min(scene->boxMin[1], minY);
     scene->boxMin[2] = std::min(scene->boxMin[2], minZ);
@@ -989,6 +1011,7 @@ void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
     scene->rcSpacing = tweaks.rcSpacing;
     scene->rcIntensity = tweaks.rcIntensity;
     scene->rcMax = tweaks.rcMax;
+    scene->giGain = tweaks.giGain;
     scene->bloomThreshold = tweaks.bloomThreshold;
     scene->fogDensity = tweaks.fogDensity;
     scene->fogHeight = tweaks.fogHeight;
@@ -1030,6 +1053,7 @@ void sceneFrameReleaseGpu(SceneFrame* scene, Device& device) {
     hizPassDestroy(scene->hiz, device);
     cubePassDestroy(scene->cube, device);
     tonemapPassDestroy(scene->tone, device);
+    gizmoPassDestroy(scene->gizmo, device);
     destroyBuffers(device, {
         &scene->visible, &scene->shadowVisible, &scene->pointVisible, &scene->cubeVisible,
         &scene->candidates, &scene->indirect, &scene->shadowIndirect,
@@ -1080,6 +1104,13 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
     if (scene == nullptr) {
         return false;
     }
+    sceneActorPointer(
+        scene->actors,
+        input.pointer.x,
+        input.pointer.y,
+        (input.pointer.down & kPointerLeft) != 0 ? 1 : 0,
+        (input.pointer.pressed & kPointerLeft) != 0 ? 1 : 0,
+        (input.pointer.released & kPointerLeft) != 0 ? 1 : 0);
     InputState state{};
     std::memcpy(state.keyActive, input.keyDown, sizeof(state.keyActive));
     state.mouseActive = input.pointer.down;
@@ -1094,6 +1125,97 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
         scene->skyTime += dt;
     }
     return (input.pointer.down & kPointerRight) != 0;
+}
+
+uint8_t sceneFrameActorCount(const SceneFrame* scene) {
+    return scene != nullptr ? scene->actors.count : 0;
+}
+
+void sceneFrameActorName(const SceneFrame* scene, uint8_t index, char* name, uint8_t cap, uint8_t* kind) {
+    if (name != nullptr && cap > 0) {
+        name[0] = '\0';
+    }
+    if (kind != nullptr) {
+        *kind = 0;
+    }
+    if (scene == nullptr || index >= scene->actors.count || name == nullptr || cap == 0) {
+        return;
+    }
+    ActorView row[kSceneActorCap];
+    actorLoad(scene->actors, row);
+    if (row[index].used == 0) {
+        return;
+    }
+    uint8_t n = 0;
+    while (row[index].name[n] != '\0' && n + 1 < cap) {
+        name[n] = row[index].name[n];
+        ++n;
+    }
+    name[n] = '\0';
+    if (kind != nullptr) {
+        *kind = row[index].kind;
+    }
+}
+
+void sceneFrameActorSelect(SceneFrame* scene, uint8_t index) {
+    if (scene == nullptr) {
+        return;
+    }
+    scene->actors.selected = index < scene->actors.count ? index : kSceneActorNone;
+    scene->actors.drag = kSceneActorNone;
+}
+
+uint8_t sceneFrameActorSelected(const SceneFrame* scene) {
+    return scene != nullptr ? scene->actors.selected : kSceneActorNone;
+}
+
+uint8_t sceneFrameActorKind(const SceneFrame* scene, uint8_t index) {
+    if (scene == nullptr || index >= scene->actors.count) {
+        return 0;
+    }
+    ActorView row[kSceneActorCap];
+    actorLoad(scene->actors, row);
+    return row[index].used != 0 ? row[index].kind : static_cast<uint8_t>(0);
+}
+
+void sceneFrameActorGizmo(SceneFrame* scene, uint8_t mode) {
+    if (scene == nullptr) {
+        return;
+    }
+    scene->actors.gizmo = mode > 2 ? 0 : mode;
+    scene->actors.drag = kSceneActorNone;
+}
+
+uint8_t sceneFrameActorDuplicate(SceneFrame* scene) {
+    if (scene == nullptr) {
+        return kSceneActorNone;
+    }
+    return sceneActorDuplicate(scene->actors);
+}
+
+bool sceneFrameActorDragging(const SceneFrame* scene) {
+    return scene != nullptr && scene->actors.drag < 3;
+}
+
+void sceneFrameActorEuler(const SceneFrame* scene, uint8_t index, float& pitch, float& yaw) {
+    pitch = 35.0f;
+    yaw = 30.0f;
+    if (scene == nullptr || index >= scene->actors.count) {
+        return;
+    }
+    const Xform pose = sceneActorXform(scene->actors, index);
+    pitch = pose.euler[0];
+    yaw = pose.euler[1];
+}
+
+void sceneFrameActorSetEuler(SceneFrame* scene, uint8_t index, float pitch, float yaw) {
+    if (scene == nullptr || index >= scene->actors.count) {
+        return;
+    }
+    Xform pose = sceneActorXform(scene->actors, index);
+    pose.euler[0] = pitch;
+    pose.euler[1] = yaw;
+    sceneActorWriteXform(scene->actors, index, pose);
 }
 
 const char* sceneFrameTitle(const SceneFrame* scene) {
@@ -1283,6 +1405,7 @@ void sceneFrameRecord(
             && shadowCullCreate(scene->shadowCull, device, scene->gpuHeap)
             && cubePassCreate(scene->cube, device, scene->gpuHeap)
             && tonemapPassCreate(scene->tone, device, scene->gpuHeap);
+        (void)gizmoPassCreate(scene->gizmo, device, scene->gpuHeap);
         const bool targets = passes
             && recreateTracked(scene->tone.bloom, device, VkExtent2D{
                 std::max(swap.extent.width / 2u, 1u),
@@ -1336,6 +1459,7 @@ void sceneFrameRecord(
     pose.zn = 0.1f;
     pose.zf = scene->farPlane;
     const CameraCull cam = cameraCullBuild(pose, nullptr);
+    sceneActorSetCamera(scene->actors, cam, static_cast<float>(swap.extent.width), static_cast<float>(swap.extent.height));
 
     const uint32_t flight = frame.flight & 1u;
     const uint32_t strideU = static_cast<uint32_t>(alignUp(scene->visibleCap));
@@ -1440,6 +1564,7 @@ void sceneFrameRecord(
     knob.shade.gtaoAmt = scene->hud.gtao;
     knob.shade.lamp = scene->hud.lamp;
     knob.shade.pad0 = scene->rcIntensity;
+    knob.shade.pad1 = scene->giGain;
     knob.ssrc.strength = scene->hud.ssrc;
     knob.ssrc.base = scene->ssrcBase;
     knob.ssrc.thick = scene->ssrcThick;
@@ -1717,7 +1842,6 @@ void sceneFrameRecord(
     if (!scene->cubeReady) {
         scene->cubeBaked = false;
     } else if (!scene->cubeBaked) {
-        probeBakeRecord(ctx.cmd, scene->cube, scene->probeBuf.buffer, scene->probeBuf.size);
         scene->cubeBaked = true;
     }
     framePassVis(ctx, scene->vis, scene->occl, scene->hiz, scene->hizMax[flight], scene->indirect, scene->candidates, scene->visible,
@@ -1728,6 +1852,7 @@ void sceneFrameRecord(
     framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax);
     const bool bloomOn = (knob.flags.passMask & 32u) != 0u && scene->hud.bloom > 0.001f;
     framePassTonemap(ctx, scene->tone, scene->shade.hdrA, scene->shade.hdrB, swap, frame, bloomOn);
+    gizmoPassRecord(cmd, swap, frame, scene->gizmo, scene->actors);
 }
 
 } // namespace burnhope

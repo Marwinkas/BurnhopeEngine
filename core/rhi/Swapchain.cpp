@@ -223,6 +223,13 @@ void swapchainDestroy(Swapchain& sc, Device& d) {
     if (d.device == VK_NULL_HANDLE) {
         return;
     }
+    if (!deviceLost(d) && d.graphicsQueue != VK_NULL_HANDLE) {
+        std::lock_guard<std::mutex> lock(d.queueMutex);
+        vkQueueWaitIdle(d.graphicsQueue);
+        if (d.presentQueue != VK_NULL_HANDLE && d.presentQueue != d.graphicsQueue) {
+            vkQueueWaitIdle(d.presentQueue);
+        }
+    }
     if (!deviceLost(d)) {
         for (uint32_t i = 0; i < kFramesInFlight; ++i) {
             if (sc.flightFence[i] != VK_NULL_HANDLE) {

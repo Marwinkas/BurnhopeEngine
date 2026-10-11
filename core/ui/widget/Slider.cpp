@@ -68,7 +68,13 @@ uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float ma
     flex.heightMode = static_cast<uint8_t>(UiSize::Px);
     flex.height = 18.0f;
     flex.shrink = 0.0f;
-    const uint16_t id = spawn(s, parent, flex, paint(UiRole::Slider, 0.18f, 0.20f, 0.26f, 8.0f));
+    UiPaint body = paint(UiRole::Slider, s.look.button[0], s.look.button[1], s.look.button[2], s.look.radiusSm);
+    body.shadow = 3.0f;
+    body.borderW = 2.0f;
+    body.br = s.look.text[0];
+    body.bg = s.look.text[1];
+    body.bb = s.look.text[2];
+    const uint16_t id = spawn(s, parent, flex, body);
     if (id == kUiNone) {
         return id;
     }
@@ -88,7 +94,13 @@ uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV
     flex.height = 30.0f;
     flex.shrink = 0.0f;
     flex.align = 1;
-    const uint16_t id = spawn(s, parent, flex, paint(UiRole::Button, 0.18f, 0.20f, 0.26f, 6.0f));
+    UiPaint body = paint(UiRole::Button, s.look.button[0], s.look.button[1], s.look.button[2], s.look.radiusSm);
+    body.shadow = 4.0f;
+    body.borderW = 2.0f;
+    body.br = s.look.text[0];
+    body.bg = s.look.text[1];
+    body.bb = s.look.text[2];
+    const uint16_t id = spawn(s, parent, flex, body);
     if (value < minV) {
         value = minV;
     }

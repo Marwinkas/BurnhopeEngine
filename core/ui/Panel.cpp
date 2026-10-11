@@ -37,17 +37,18 @@ Panel Panel::child(const UiFlex& flex, const UiPaint& paint) const {
 }
 
 Panel Panel::label(const char* text) const {
+    const UiLook look = canvas != nullptr ? canvasLook(*canvas) : UiLook{};
     UiFlex flex{};
     flex.heightMode = static_cast<uint8_t>(UiSize::Px);
-    flex.height = canvas != nullptr ? canvasLook(*canvas).glyphH : 18.0f;
+    flex.height = look.glyphH;
     flex.shrink = 0.0f;
     UiPaint paint{};
     paint.role = static_cast<uint8_t>(UiRole::Label);
     paint.token = static_cast<uint8_t>(UiToken::Text);
     paint.a = 1.0f;
-    paint.r = 0.93f;
-    paint.g = 0.94f;
-    paint.b = 0.96f;
+    paint.r = look.text[0];
+    paint.g = look.text[1];
+    paint.b = look.text[2];
     Panel out = child(flex, paint);
     out.setText(text);
     if (canvas != nullptr) {
@@ -84,13 +85,19 @@ Panel Panel::button(const char* text, int8_t tag, float r, float g, float b, uin
         flex.widthMode = static_cast<uint8_t>(UiSize::Px);
         flex.width = 30.0f;
     }
+    const UiLook look = canvas != nullptr ? canvasLook(*canvas) : UiLook{};
     UiPaint paint{};
     paint.role = static_cast<uint8_t>(UiRole::Button);
     paint.r = r;
     paint.g = g;
     paint.b = b;
     paint.a = 1.0f;
-    paint.radius = 6.0f;
+    paint.radius = look.radiusSm;
+    paint.shadow = 4.0f;
+    paint.borderW = 2.0f;
+    paint.br = look.text[0];
+    paint.bg = look.text[1];
+    paint.bb = look.text[2];
     paint.tag = tag;
     paint.icon = icon;
     Panel button = child(flex, paint);
@@ -110,17 +117,18 @@ Panel Panel::field(const char* text, uint8_t filter, bool clear) const {
     flex.heightMode = static_cast<uint8_t>(UiSize::Px);
     flex.height = 36.0f;
     flex.shrink = 0.0f;
+    const UiLook look = canvas != nullptr ? canvasLook(*canvas) : UiLook{};
     UiPaint paint{};
     paint.role = static_cast<uint8_t>(UiRole::Field);
-    paint.r = 0.14f;
-    paint.g = 0.15f;
-    paint.b = 0.19f;
+    paint.r = look.field[0];
+    paint.g = look.field[1];
+    paint.b = look.field[2];
     paint.a = 1.0f;
-    paint.radius = 6.0f;
-    paint.borderW = 1.0f;
-    paint.br = 0.32f;
-    paint.bg = 0.38f;
-    paint.bb = 0.52f;
+    paint.radius = look.radiusSm;
+    paint.borderW = 2.0f;
+    paint.br = look.text[0];
+    paint.bg = look.text[1];
+    paint.bb = look.text[2];
     Panel box = child(flex, paint);
     if (canvas != nullptr) {
         canvasField(*canvas, box.id, text, filter, clear);
@@ -136,13 +144,19 @@ Panel Panel::check(const char* text) const {
     flex.height = 32.0f;
     flex.shrink = 0.0f;
     flex.align = 1;
+    const UiLook look = canvas != nullptr ? canvasLook(*canvas) : UiLook{};
     UiPaint paint{};
     paint.role = static_cast<uint8_t>(UiRole::Check);
-    paint.r = 0.16f;
-    paint.g = 0.17f;
-    paint.b = 0.21f;
+    paint.r = look.check[0];
+    paint.g = look.check[1];
+    paint.b = look.check[2];
     paint.a = 1.0f;
-    paint.radius = 6.0f;
+    paint.radius = look.radiusSm;
+    paint.shadow = 4.0f;
+    paint.borderW = 2.0f;
+    paint.br = look.text[0];
+    paint.bg = look.text[1];
+    paint.bb = look.text[2];
     Panel box = child(flex, paint);
     if (canvas != nullptr) {
         box.setText(text);

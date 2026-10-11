@@ -255,6 +255,72 @@ struct UiAnim {
     uint8_t on = 0;
 };
 
+inline UiLook uiLookInk() {
+    UiLook look{};
+    const float paper[3]{0.11f, 0.11f, 0.12f};
+    const float raised[3]{0.20f, 0.20f, 0.22f};
+    const float ink[3]{0.94f, 0.94f, 0.92f};
+    const float orange[3]{0.93f, 0.45f, 0.12f};
+    look.window[0] = 0.07f;
+    look.window[1] = 0.07f;
+    look.window[2] = 0.08f;
+    look.title[0] = ink[0];
+    look.title[1] = ink[1];
+    look.title[2] = ink[2];
+    look.side[0] = paper[0];
+    look.side[1] = paper[1];
+    look.side[2] = paper[2];
+    look.content[0] = 0.14f;
+    look.content[1] = 0.14f;
+    look.content[2] = 0.15f;
+    look.button[0] = raised[0];
+    look.button[1] = raised[1];
+    look.button[2] = raised[2];
+    look.field[0] = 0.08f;
+    look.field[1] = 0.08f;
+    look.field[2] = 0.09f;
+    look.menu[0] = ink[0];
+    look.menu[1] = ink[1];
+    look.menu[2] = ink[2];
+    look.close[0] = orange[0];
+    look.close[1] = orange[1];
+    look.close[2] = orange[2];
+    look.text[0] = ink[0];
+    look.text[1] = ink[1];
+    look.text[2] = ink[2];
+    look.muted[0] = 0.45f;
+    look.muted[1] = 0.45f;
+    look.muted[2] = 0.48f;
+    look.item[0] = raised[0];
+    look.item[1] = raised[1];
+    look.item[2] = raised[2];
+    look.preview[0] = orange[0];
+    look.preview[1] = orange[1];
+    look.preview[2] = orange[2];
+    look.status[0] = ink[0];
+    look.status[1] = ink[1];
+    look.status[2] = ink[2];
+    look.slider[0] = 0.05f;
+    look.slider[1] = 0.05f;
+    look.slider[2] = 0.06f;
+    look.check[0] = raised[0];
+    look.check[1] = raised[1];
+    look.check[2] = raised[2];
+    look.chrome[0] = paper[0];
+    look.chrome[1] = paper[1];
+    look.chrome[2] = paper[2];
+    for (int i = 0; i < 3; ++i) {
+        look.accent[0][i] = orange[i];
+        look.accent[1][i] = orange[i];
+    }
+    look.accent[2][0] = 0.55f;
+    look.accent[2][1] = 0.22f;
+    look.accent[2][2] = 0.05f;
+    look.radius = 3.0f;
+    look.radiusSm = 2.0f;
+    return look;
+}
+
 inline UiLook uiLookWarm() {
     UiLook look{};
     look.window[0] = 0.16f;

@@ -1,0 +1,54 @@
+# BurnhopeEngine Rules & Architectural Manifesto
+
+Be decisive. Output a 1–2 bullet plan, then edit code directly. No long internal thinking loops. Work strictly in targeted files. Never drop a GPU pass for a CPU fallback.
+
+- ZERO HESITATION: Do not over-analyze or doubt your decisions. Do not enter recursive thinking loops weighing multiple alternatives.
+- ACT IMMEDIATELY: State a maximum 1–2 line action plan and start editing files right away. Never output walls of reasoning text before making tool calls.
+- DO NOT FEAR REFACTORING: Edit, refactor, and fix code aggressively. It is completely fine to break a compilation intermediate step if the end result adheres to architecture. Fix fallout in the very next step.
+- STOP SECOND-GUESSING: If you decide on a solution, execute it. Do not discard working implementations mid-thought out of fear of breaking neighbors.
+
+## 1. Target Platforms & Scope
+- **Target**: High-performance Desktop PC ONLY (Linux & Windows x86_64 with AVX2).
+- **STRICTLY BANNED**: ARM, Android, iOS, WebAssembly, macOS, and any mobile/low-end embedded workarounds. Zero overhead for non-desktop architectures.
+- **Vision**: Modern clean DOD engine outperforming Unreal Engine / Source 2 in latency, memory footprint, and CPU overhead. Qt-level UI capability with zero OOP baggage.
+
+## 2. Core Architecture, C++26 & Data-Oriented Design
+- **Language**: Strict C++26. Pure Data-Oriented Design (DOD) with Struct-of-Arrays (SoA).
+- **Core Decoupling**: `core/` is completely standalone. NEVER include or reference `engine/`, `demo/`, or `old/`.
+- **ECS (Flecs)**: Query archetype column pointers (`flecs::column<T>`). NEVER call `entity.get<T>()` / `try_get<T>()` in hot loops.
+- **Hot-Path Allocations**: ZERO heap allocations in `Tick`, `Layout`, `Emit`, `Draw`. NO `malloc`, `new`, `std::string`, `push_back` reallocations, or `std::make_shared`. Use bump allocators, ring buffers, or `FrameArena`.
+- **POD Invariants**: All GPU and UI data must be trivially copyable POD types (`sizeof % 16 == 0`).
+
+## 3. Custom UI Framework (Meta Yoga Flexbox, No ImGui, No Qt)
+- **UI Architecture**: Custom high-performance UI layer on Meta Yoga (Flexbox) and `Panel` / `spawn`.
+- **BANNED UI**: Absolutely NO ImGui, NO Qt (`QObject`, MOC, virtual dispatch hierarchies), NO legacy immediate-mode GUI hacks.
+- **Draw Submission**: Single `vkCmdDraw` / `vkCmdDrawMeshTasksEXT` call per frame from mapped host-visible SSBO ring buffer.
+- **Layout Invariants**: NEVER place `uiSlider` with 100% width in horizontal row next to a label (Yoga collapses box to 0). Stack vertically. Role `Scroll` requires `UiScroll.inner`. Find baked nodes by name.
+
+## 4. Vulkan 1.4 & Next-Gen Graphics Pipeline
+- **Modern Standards REQUIRED**:
+  - GPU-Driven pipeline via Mesh Shaders (`VK_EXT_mesh_shader`, meshlets).
+  - Dynamic Rendering (`vkCmdBeginRendering` / `vkCmdEndRendering`) with no render pass boilerplate.
+  - Shader Objects (`VK_EXT_shader_object` + `vkCmdBindShadersEXT`).
+  - Bindless descriptors via `VK_EXT_descriptor_heap` and Buffer Device Address (BDA).
+  - Synchronization2 (`vkCmdPipelineBarrier2`), Timeline Semaphores, Host Image Copy.
+  - Lighting & GI: Radiance Cascades (RC), clustered light grids, two-phase GPU Hi-Z culling.
+- **BANNED Legacy Vulkan**:
+  - NEVER use `VkRenderPass`, `VkFramebuffer`, or runtime `VkPipeline`.
+  - NEVER use classic descriptor sets/pools (`VkDescriptorSet`), `vkCmdPipelineBarrier` (v1), or binary fences per pass.
+  - NEVER call `vkDeviceWaitIdle` or block CPU fences inside the frame loop.
+  - NEVER use `VK_KHR_mesh_shader` (use `VK_EXT_mesh_shader`).
+  - NEVER write per-dispatch constants via `vkCmdUpdateBuffer`.
+- **Submission Contract**: Scene finishes on color after `LOAD_CLEAR` and signals only `uiSem`. Canvas waits `uiSem`, runs `LOAD`, transitions to `PRESENT_SRC`, and signals present. Scene never calls `swapchainToPresent`.
+
+## 5. Memory Slots & Uniform Invariants
+- `GizmoGpu` uniform MUST be 320 bytes (multiple of 64).
+- `FrameView` is 384 bytes (binding 0). `FrameSun` is 1920 bytes (binding 49, slot `HeapBuf::Sun`). Slider blocks: bindings 50–57 (64 bytes each).
+- Canvas primitives strictly own buffer slot 22 (`kUiDescPrims`). Font is 661; UI photos are 662–669. NEVER overwrite slot 22 with render passes (RC hash uses slot 18).
+- Shared shader math lives exclusively in `engine/shader/core/` and `camera.slang`. Never duplicate math across passes.
+
+## 6. Self-Maintenance & Evolution Protocol
+- When resolving a bug, banning an API, or adopting a modern 2026 pattern, append it directly as a single-line bullet:
+  `- NEVER [banned API/action] (causes [technical failure]); ALWAYS [modern alternative] [exact slots/bytes/alignment].`
+- NEVER write debugging logs, dev stories, or symptom essays. Keep exact technical contracts only.
+- Keep this entire file strictly under **160 lines**. Merge overlapping rules during refactoring, but NEVER delete verified slot IDs, alignment numbers, or layer boundaries.

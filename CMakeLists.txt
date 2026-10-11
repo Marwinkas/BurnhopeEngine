@@ -178,29 +178,31 @@ target_include_directories(bh_image PRIVATE
 target_link_libraries(bh_image PUBLIC bh_rhi bh_texcomp bh_platform)
 set_source_files_properties(core/image/ImageFile.cpp PROPERTIES COMPILE_OPTIONS "-w")
 add_library(bh_gpu_scene INTERFACE)
-target_include_directories(bh_gpu_scene INTERFACE ${BH_INCLUDES} ${BH_ENGINE})
+target_include_directories(bh_gpu_scene INTERFACE ${BH_INCLUDES} ${BH_ENGINE} ${BH_ENGINE}/include)
 target_compile_definitions(bh_gpu_scene INTERFACE ${BH_DEFS})
 bh_module(render
-    engine/render/Visbuffer.cpp
-    engine/render/Shade.cpp
-    engine/render/Sky.cpp
-    engine/render/Radiance.cpp
-    engine/render/Hiz.cpp
-    engine/render/Cube.cpp
-    engine/render/Cull.cpp
-    engine/render/Tonemap.cpp
-    engine/render/PassClusters.cpp
-    engine/render/PassCull.cpp
-    engine/render/PassSun.cpp
-    engine/render/PassPoints.cpp
-    engine/render/PassVis.cpp
-    engine/render/PassShade.cpp
-    engine/render/PassRadiance.cpp
-    engine/render/PassTonemap.cpp
-    engine/render/SceneFrame.cpp
+    engine/src/Visbuffer.cpp
+    engine/src/Shade.cpp
+    engine/src/Sky.cpp
+    engine/src/Radiance.cpp
+    engine/src/Hiz.cpp
+    engine/src/Cube.cpp
+    engine/src/Cull.cpp
+    engine/src/Tonemap.cpp
+    engine/src/PassClusters.cpp
+    engine/src/PassCull.cpp
+    engine/src/PassSun.cpp
+    engine/src/PassPoints.cpp
+    engine/src/PassVis.cpp
+    engine/src/PassShade.cpp
+    engine/src/PassRadiance.cpp
+    engine/src/PassTonemap.cpp
+    engine/src/PassGizmo.cpp
+    engine/src/SceneFrame.cpp
 )
-target_include_directories(bh_render PUBLIC ${BH_ENGINE})
+target_include_directories(bh_render PUBLIC ${BH_ENGINE} ${BH_ENGINE}/include)
 target_compile_definitions(bh_render PUBLIC "BH_SHADER_DIR=\"${CMAKE_CURRENT_BINARY_DIR}/shaders\"")
+target_link_libraries(bh_render PUBLIC flecs_static)
 bh_module(ui
     core/ui/Canvas.cpp
     core/ui/Font.cpp
@@ -234,7 +236,8 @@ bh_module(app
     demo/app/Engine.cpp
     demo/app/Shell.cpp
 )
-target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE})
+target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
+target_link_libraries(bh_app PUBLIC bh_ui bh_files)
 target_link_libraries(bh_ui PUBLIC bh_image yogacore flecs_static Freetype::Freetype)
 target_compile_options(bh_ui PRIVATE -Wno-deprecated-declarations)
 target_compile_definitions(bh_ui PRIVATE
@@ -250,7 +253,7 @@ target_link_libraries(bh_platform PUBLIC SDL3::SDL3)
 find_program(SLANGC_EXECUTABLE slangc REQUIRED)
 set(SHADER_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
 file(MAKE_DIRECTORY ${SHADER_OUT_DIR})
-set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/engine/render)
+set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/engine/shader)
 
 add_custom_command(
     OUTPUT
@@ -379,6 +382,8 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/radiance_merge.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcIrradiance -o ${SHADER_OUT_DIR}/radiance.irr.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry tonemapMesh -o ${SHADER_OUT_DIR}/tonemap.mesh.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry tonemapFs -o ${SHADER_OUT_DIR}/tonemap.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gizmo.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry gizmoMesh -o ${SHADER_OUT_DIR}/gizmo.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gizmo.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry gizmoFs -o ${SHADER_OUT_DIR}/gizmo.frag.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomDown -DBLOOM_LEVEL=0 -o ${SHADER_OUT_DIR}/bloom0.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomDown -DBLOOM_LEVEL=1 -o ${SHADER_OUT_DIR}/bloom1.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomDown -DBLOOM_LEVEL=2 -o ${SHADER_OUT_DIR}/bloom2.comp.spv
@@ -417,6 +422,7 @@ add_custom_command(
         ${SHADER_DIR}/radiance_rc.slang
         ${SHADER_DIR}/radiance_merge.slang
         ${SHADER_DIR}/tonemap.slang
+        ${SHADER_DIR}/gizmo.slang
         ${SHADER_DIR}/camera.slang
         ${SHADER_DIR}/core/math.slang
         ${SHADER_DIR}/core/brdf.slang
@@ -538,7 +544,7 @@ target_link_libraries(BurnhopeEngine PRIVATE
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
-target_include_directories(BurnhopeEngine PRIVATE ${BH_CORE} ${BH_ENGINE} ${BH_DEMO} ${vma_SOURCE_DIR}/include)
+target_include_directories(BurnhopeEngine PRIVATE ${BH_CORE} ${BH_ENGINE} ${BH_ENGINE}/include ${BH_DEMO} ${vma_SOURCE_DIR}/include)
 target_compile_definitions(BurnhopeEngine PRIVATE ${BH_DEFS}
     "BH_UI_SHELL=\"${UI_BIN_DIR}/shell.uib\""
     "BH_UI_SAMPLE=\"${UI_BIN_DIR}/sample.uib\""
@@ -563,6 +569,6 @@ target_link_libraries(BurnhopeTest PRIVATE
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
-target_include_directories(BurnhopeTest PRIVATE ${BH_CORE} ${BH_ENGINE} ${vma_SOURCE_DIR}/include)
+target_include_directories(BurnhopeTest PRIVATE ${BH_CORE} ${BH_ENGINE} ${BH_ENGINE}/include ${vma_SOURCE_DIR}/include)
 target_compile_options(BurnhopeTest PRIVATE ${BH_OPTS})
 add_dependencies(BurnhopeTest UiSpv)

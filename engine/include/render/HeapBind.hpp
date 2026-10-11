@@ -48,7 +48,8 @@ enum class HeapBuf : uint32_t {
     CubeFace3 = 44,
     CubeFace4 = 45,
     CubeFace5 = 46,
-    Count = 47,
+    Gizmo = 47,
+    Count = 48,
 };
 
 // Буферы и картинки — разные номера. 0..15 геометрия. 16..31 проходы. 32..47 ползунки.
@@ -66,6 +67,7 @@ static_assert(static_cast<uint32_t>(HeapBuf::ShadowCascade1) != static_cast<uint
 static_assert(static_cast<uint32_t>(HeapBuf::ShadowCascade2) != static_cast<uint32_t>(HeapBuf::Probes));
 static_assert(static_cast<uint32_t>(HeapBuf::CubeFace3) != static_cast<uint32_t>(HeapBuf::Sun));
 static_assert(static_cast<uint32_t>(HeapBuf::CubeFace5) != static_cast<uint32_t>(HeapBuf::Rc));
+static_assert(static_cast<uint32_t>(HeapBuf::Gizmo) == 47u);
 static_assert(static_cast<uint32_t>(HeapBuf::Count) <= 48u);
 
 // Каскад 0 остаётся в ShadowVisible. +1 и +2 попадали в Decals и Probes.

@@ -57,7 +57,7 @@ void skyProbe(uint3 dtid : SV_DispatchThreadID) {
         const float r = sqrt(max(1.0 - y * y, 0.0));
         const float phi = float(i) * 2.3999632;
         const float3 dir = float3(cos(phi) * r, y, sin(phi) * r);
-        const float3 color = gSky.SampleLevel(gClamp, atmSkyUv(dir), 0.0).rgb;
+        const float3 color = min(gSky.SampleLevel(gClamp, atmSkyUv(dir), 0.0).rgb, float3(1.2, 1.2, 1.2));
         [unroll]
         for (uint band = 0u; band < 9u; ++band) {
             acc[band] += color * shY(band, dir) * weight;

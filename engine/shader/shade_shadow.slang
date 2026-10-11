@@ -72,6 +72,45 @@ float cascadeLit(uint cascade, float3 world) {
     return shadowTexelLit(sp, y0, receiver, bias);
 }
 
+// Доля неба в тени. По каждому лучу — расстояние до света, среднее exp по лучам.
+// Минимум по четырём кольцам давал пояса, вес только ближних проб стирал глубину.
+float shadowSkyReach(uint cascade, float3 P, float3 N, uint2 px) {
+    const float3 L = normalize(gSun.sunDirIntensity.xyz);
+    float3 side = cross(L, float3(0.0, 1.0, 0.0));
+    if (dot(side, side) < 1e-4) {
+        side = cross(L, float3(1.0, 0.0, 0.0));
+    }
+    side = normalize(side);
+    const float3 bin = normalize(cross(L, side));
+    const float radii[10] = {0.3, 0.5, 0.8, 1.2, 1.8, 2.6, 3.8, 5.4, 7.6, 10.5};
+    const float spin = float((px.x * 3u + px.y * 5u) & 7u) * 0.098175;
+    float sum = 0.0;
+    [unroll]
+    for (uint k = 0u; k < 8u; ++k) {
+        const float ang = spin + float(k) * 0.78539816;
+        const float3 dir = side * cos(ang) + bin * sin(ang);
+        float dist = 13.0;
+        [unroll]
+        for (uint ring = 0u; ring < 10u; ++ring) {
+            const float3 q = P + dir * radii[ring] + N * 0.08;
+            float lit = 1.0;
+            [unroll]
+            for (uint c = cascade; c < 3u; ++c) {
+                if (cascadeOutside(c, q) <= 0.0) {
+                    lit = cascadeLit(c, q);
+                    break;
+                }
+            }
+            if (lit > 0.5) {
+                dist = radii[ring];
+                break;
+            }
+        }
+        sum += exp(-dist * 0.62);
+    }
+    return sum * 0.125;
+}
+
 float cascadeFogLit(float3 world) {
     [unroll]
     for (uint c = 0u; c < 3u; ++c) {

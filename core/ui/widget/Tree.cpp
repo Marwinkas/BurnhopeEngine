@@ -61,28 +61,44 @@ uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& p
 }
 
 void addText(UiState& s, uint16_t id, const char* text) {
-    UiText t{};
-    if (const UiText* prev = s.ent[id].try_get<UiText>()) {
-        t = *prev;
+    if (id >= s.count) {
+        return;
     }
     uint8_t n = 0;
+    char bytes[96]{};
     if (text != nullptr) {
         while (text[n] != '\0' && n < 95) {
-            t.bytes[n] = text[n];
+            bytes[n] = text[n];
             ++n;
         }
     }
-    t.bytes[n] = '\0';
-    t.len = n;
-    s.ent[id].set<UiText>(t);
+    bytes[n] = '\0';
+    UiText* live = s.ent[id].try_get_mut<UiText>();
+    if (live != nullptr && live->len == n && (n == 0 || std::memcmp(live->bytes, bytes, n) == 0)) {
+        return;
+    }
+    if (live == nullptr) {
+        UiText created{};
+        std::memcpy(created.bytes, bytes, static_cast<size_t>(n) + 1u);
+        created.len = n;
+        s.ent[id].set<UiText>(created);
+        live = s.ent[id].try_get_mut<UiText>();
+        if (live == nullptr) {
+            return;
+        }
+    } else {
+        std::memcpy(live->bytes, bytes, static_cast<size_t>(n) + 1u);
+        live->len = n;
+    }
+    s.visualDirty = true;
     const UiPaint* paint = s.ent[id].try_get<UiPaint>();
     if (paint != nullptr
         && (paint->role == static_cast<uint8_t>(UiRole::Button) || paint->role == static_cast<uint8_t>(UiRole::Close)
             || paint->role == static_cast<uint8_t>(UiRole::Check))) {
         auto* host = s.ent[id].try_get_mut<UiFlex>();
-        if (host != nullptr && host->widthMode == static_cast<uint8_t>(UiSize::Auto) && t.len > 0) {
+        if (host != nullptr && host->widthMode == static_cast<uint8_t>(UiSize::Auto) && live->len > 0) {
             host->widthMode = static_cast<uint8_t>(UiSize::Px);
-            host->width = uiMeasure(s, t.bytes, t.len, t.len) + 16.0f;
+            host->width = uiMeasure(s, live->bytes, live->len, live->len) + 16.0f;
             s.layoutDirty = true;
         }
     }
@@ -90,15 +106,31 @@ void addText(UiState& s, uint16_t id, const char* text) {
         return;
     }
     auto* flex = s.ent[id].try_get_mut<UiFlex>();
-    if (flex == nullptr || t.wrap != 0) {
+    if (flex == nullptr) {
         return;
     }
+    if (live->wrap != 0) {
+        s.layoutDirty = true;
+        return;
+    }
+    const float measured = uiMeasure(s, live->bytes, live->len, live->len);
+    const bool wasPx = flex->widthMode == static_cast<uint8_t>(UiSize::Px);
+    const float oldW = flex->width;
+    const float oldH = flex->height;
     flex->widthMode = static_cast<uint8_t>(UiSize::Px);
-    flex->width = uiMeasure(s, t.bytes, t.len, t.len);
+    flex->width = measured;
     flex->heightMode = static_cast<uint8_t>(UiSize::Px);
     flex->height = s.look.glyphH;
+    if (wasPx && std::fabs(oldW - measured) <= 0.5f && std::fabs(oldH - s.look.glyphH) <= 0.5f) {
+        return;
+    }
+    const uint16_t parent = s.parentOf[id];
+    const UiFlex* pflex = parent < s.count ? s.ent[parent].try_get<UiFlex>() : nullptr;
+    if (wasPx && pflex != nullptr && pflex->direction == 0 && std::fabs(oldH - s.look.glyphH) <= 0.5f) {
+        s.box[id].w = measured;
+        return;
+    }
     s.layoutDirty = true;
-    s.visualDirty = true;
 }
 
 void tokenRgb(const UiLook& look, UiToken token, float& r, float& g, float& b) {

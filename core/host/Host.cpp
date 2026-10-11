@@ -156,8 +156,9 @@ bool prepareViewSync(Host& host, int slot) {
     if ((view.window.input.pointer.pressed & kPointerLeft) != 0) {
         view.swap.clickTick = platformCounter();
     }
-    float title = 40.0f;
-    float border = 6.0f;
+    const bool scene = view.sceneRecord != nullptr;
+    float title = scene ? 0.0f : 40.0f;
+    float border = scene ? 0.0f : 6.0f;
     windowChrome(view.window, title, border);
     return true;
 }
@@ -194,6 +195,17 @@ struct DrawJobCtx {
 // swapchainSubmitPresent/submitImage. SDL и onOps сюда не попадают — их нельзя звать не с
 // главного потока (SDL) и нельзя звать параллельно друг другу (onOps может реентерантно
 // дёргать hostOpen/hostClose, которые мутируют общий Host).
+void readCanvas(HostView& view, DrawJobResult& out, Device& device, float w, float h, float now, uint32_t flight, bool upload) {
+    out.ev = canvasConsume(view.canvas, device, w, h, view.window.input, now, flight, upload);
+    out.hasClip = canvasTakeClip(view.canvas, out.clip, sizeof(out.clip));
+    canvasTakeWindowOps(view.canvas, out.ops);
+    out.cursor = canvasCursor(view.canvas);
+    out.wantsText = canvasWantsText(view.canvas);
+    out.wantsRelative = canvasWantsRelative(view.canvas);
+    out.hasClipRect = canvasMouseClip(view.canvas, out.clipX, out.clipY, out.clipW, out.clipH);
+    out.hasFocus = canvasFocusBox(view.canvas, out.focusX, out.focusY, out.focusW, out.focusH);
+}
+
 void recordAndPresentView(DrawJobCtx& ctx) {
     Host& host = *ctx.host;
     HostView& view = host.view[ctx.slot];
@@ -202,37 +214,93 @@ void recordAndPresentView(DrawJobCtx& ctx) {
         return;
     }
     const float dt = host.frameDt;
-    if (view.sceneTick != nullptr) {
-        out.wantsRelative = view.sceneTick(view.user, view.window.input, dt);
-    }
-    const bool flyLook = out.wantsRelative;
-    FrameContext frame{};
-    if (!swapchainBegin(view.swap, host.device, frame)) {
-        if (view.swap.gpuBusy != 0) {
-            // Кадр на GPU ещё занят. Ввод холста всё равно разбирается, иначе клик и ползунок пропадают.
-            if (view.sceneRecord != nullptr) {
-                out.wantsRelative = flyLook;
-            }
-            const float w = view.swap.extent.width > 0 ? static_cast<float>(view.swap.extent.width) : static_cast<float>(view.window.pixelW);
-            const float h = view.swap.extent.height > 0 ? static_cast<float>(view.swap.extent.height) : static_cast<float>(view.window.pixelH);
-            out.ev = canvasConsume(view.canvas, host.device, w, h, view.window.input, ctx.now);
-            out.handled = true;
-            return;
-        }
-        out.needsResize = true;
-        return;
-    }
-    if (view.window.input.reload) {
+    const bool sceneView = view.sceneRecord != nullptr;
+    const bool hasCanvas = view.canvas.builder != nullptr;
+    if (view.window.input.reload && hasCanvas) {
         canvasReload(view.canvas);
     }
-    float title = view.sceneRecord != nullptr ? 0.0f : 40.0f;
-    float border = view.sceneRecord != nullptr ? 0.0f : 6.0f;
-    const bool sceneView = view.sceneRecord != nullptr;
+    FrameContext frame{};
+    const bool began = swapchainBegin(view.swap, host.device, frame);
+    if (!began && view.swap.gpuBusy == 0) {
+        out.needsResize = true;
+    }
+    const float viewW = began && view.swap.extent.width > 0 ? static_cast<float>(view.swap.extent.width) : static_cast<float>(view.window.pixelW);
+    const float viewH = began && view.swap.extent.height > 0 ? static_cast<float>(view.swap.extent.height) : static_cast<float>(view.window.pixelH);
+    const InputFrame scenePointer = view.window.input;
+    const bool lookHeld = view.lookGrab != 0 && (scenePointer.pointer.down & kPointerRight) != 0;
+    const bool toolHeld = view.toolGrab != 0 && (scenePointer.pointer.down & kPointerLeft) != 0;
+    if (lookHeld || toolHeld) {
+        view.window.input.pointer.x = view.lookX;
+        view.window.input.pointer.y = view.lookY;
+        view.window.input.pointer.dx = 0.0f;
+        view.window.input.pointer.dy = 0.0f;
+        if (lookHeld) {
+            view.window.input.pointer.down &= ~kPointerRight;
+            view.window.input.pointer.pressed &= ~kPointerRight;
+            view.window.input.pointer.released &= ~kPointerRight;
+        }
+        if (toolHeld) {
+            view.window.input.pointer.down &= ~kPointerLeft;
+            view.window.input.pointer.pressed &= ~kPointerLeft;
+            view.window.input.pointer.released &= ~kPointerLeft;
+        }
+    }
+    if (hasCanvas) {
+        readCanvas(view, out, host.device, viewW, viewH, ctx.now, began ? frame.flight : 0u, began);
+    }
+    view.window.input = scenePointer;
+    InputFrame sceneInput = scenePointer;
+    if (sceneView && hasCanvas && !lookHeld && !toolHeld) {
+        canvasMaskScene(view.canvas, sceneInput);
+    }
+    bool flyLook = false;
+    if (view.sceneTick != nullptr) {
+        flyLook = view.sceneTick(view.user, sceneInput, dt);
+    }
+    if ((scenePointer.pointer.pressed & kPointerRight) != 0 && sceneView && hasCanvas && !canvasPointerOver(view.canvas)) {
+        view.lookGrab = 1;
+        view.lookX = scenePointer.pointer.x;
+        view.lookY = scenePointer.pointer.y;
+    }
+    if ((scenePointer.pointer.pressed & kPointerLeft) != 0 && sceneView && hasCanvas && !canvasPointerOver(view.canvas)) {
+        view.toolGrab = 1;
+        view.lookX = scenePointer.pointer.x;
+        view.lookY = scenePointer.pointer.y;
+    }
+    if ((scenePointer.pointer.down & kPointerRight) == 0) {
+        view.lookGrab = 0;
+    }
+    if ((scenePointer.pointer.down & kPointerLeft) == 0) {
+        view.toolGrab = 0;
+    }
+    if (sceneView && hasCanvas) {
+        if (view.lookGrab != 0) {
+            out.wantsRelative = true;
+            out.cursor = 0;
+        } else if (canvasWantsRelative(view.canvas)) {
+            out.wantsRelative = true;
+        } else if (canvasPointerOver(view.canvas)) {
+            out.wantsRelative = false;
+        } else {
+            out.wantsRelative = flyLook;
+            out.cursor = 0;
+        }
+    } else if (view.sceneTick != nullptr) {
+        out.wantsRelative = flyLook;
+    }
+    if (!began) {
+        if (view.swap.gpuBusy != 0) {
+            out.handled = true;
+        }
+        return;
+    }
+    float title = sceneView ? 0.0f : 40.0f;
+    float border = sceneView ? 0.0f : 6.0f;
     if (view.sceneRecord != nullptr) {
         heapBind(frame.cmd, view.heaps, frame.flight);
         view.sceneRecord(view.user, frame.cmd, host.device, view.heaps, view.swap, frame);
     }
-    if (view.sceneRecord != nullptr && view.canvas.builder == nullptr) {
+    if (view.sceneRecord != nullptr && !hasCanvas) {
         swapchainToPresent(view.swap, frame);
         if (!swapchainSubmitPresent(view.swap, host.device, frame, ctx.slot == host.primary)) {
             out.needsResize = true;
@@ -248,27 +316,6 @@ void recordAndPresentView(DrawJobCtx& ctx) {
     if (view.window.input.dropLen > 0) {
         std::memcpy(dropped, view.window.input.drop, view.window.input.dropLen + 1u);
         acceptPath(host, ctx.slot, dropped);
-    }
-    out.ev = canvasConsume(
-        view.canvas,
-        host.device,
-        static_cast<float>(view.swap.extent.width),
-        static_cast<float>(view.swap.extent.height),
-        view.window.input,
-        ctx.now);
-    out.hasClip = canvasTakeClip(view.canvas, out.clip, sizeof(out.clip));
-    canvasTakeWindowOps(view.canvas, out.ops);
-    out.cursor = canvasCursor(view.canvas);
-    out.wantsText = canvasWantsText(view.canvas);
-    out.wantsRelative = canvasWantsRelative(view.canvas);
-    out.hasClipRect = canvasMouseClip(view.canvas, out.clipX, out.clipY, out.clipW, out.clipH);
-    out.hasFocus = canvasFocusBox(view.canvas, out.focusX, out.focusY, out.focusW, out.focusH);
-    if (sceneView) {
-        out.wantsRelative = flyLook;
-        out.ops = {};
-        out.wantsText = false;
-        out.hasClip = false;
-        out.cursor = 0;
     }
 
     // Тонмап чистит свопчейн в буфере сцены. Холст — следующий сабмит той же очереди:

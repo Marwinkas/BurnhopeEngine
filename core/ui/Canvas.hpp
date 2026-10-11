@@ -21,7 +21,7 @@ struct PhotoMeta {
 
 struct Canvas {
     UiState* state = nullptr;
-    GpuBuffer prims{};
+    GpuBuffer prims[2]{};
     GpuImage font{};
     GpuImage photos[kPhotoSlots]{};
     PhotoMeta photoMeta[kPhotoSlots]{};
@@ -40,11 +40,13 @@ using UiBuilder = void (*)(Canvas& canvas, void* user);
 
 [[nodiscard]] bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps);
 void canvasDestroy(Canvas& c, Device& d);
-[[nodiscard]] UiEvent canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& input, float timeSec);
+[[nodiscard]] UiEvent canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& input, float timeSec, uint32_t flight = 0, bool upload = true);
 void canvasSetLook(Canvas& c, const UiLook& look);
 [[nodiscard]] UiLook canvasLook(const Canvas& c);
 [[nodiscard]] bool canvasWantsText(const Canvas& c);
 [[nodiscard]] bool canvasWantsRelative(const Canvas& c);
+[[nodiscard]] bool canvasPointerOver(const Canvas& c);
+void canvasMaskScene(const Canvas& c, InputFrame& input);
 [[nodiscard]] bool canvasFocusBox(const Canvas& c, float& x, float& y, float& w, float& h);
 void canvasApplyDpi(Canvas& c, float dpi, float previous);
 void canvasSetDpi(Canvas& c, float dpi);
@@ -65,6 +67,8 @@ void canvasReload(Canvas& c);
 uint16_t canvasNode(Canvas& c, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
 [[nodiscard]] uint16_t canvasPage(const Canvas& c, int page);
 void canvasShow(Canvas& c, uint16_t id, bool visible);
+void canvasShowOnly(Canvas& c, uint16_t id);
+void canvasMarkTab(Canvas& c, uint16_t strip, uint16_t tab);
 void canvasSetClick(Canvas& c, UiClickFn fn, void* user);
 void canvasOnFocus(Canvas& c, UiFocusFn fn, void* user);
 void canvasBind(Canvas& c, uint16_t id, UiClickFn fn, void* user);

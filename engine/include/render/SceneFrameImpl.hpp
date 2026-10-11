@@ -19,6 +19,7 @@
 #include "render/Hiz.hpp"
 #include "render/Radiance.hpp"
 #include "render/SceneFrame.hpp"
+#include "render/Gizmo.hpp"
 #include "render/Tonemap.hpp"
 #include "render/Visbuffer.hpp"
 #include "rhi/Swapchain.hpp"
@@ -40,6 +41,8 @@ constexpr uint32_t kSceneInstances = 4;
 struct SceneFrameImpl {
     bool ready = false;
     FlyCam fly{};
+    SceneActors actors{};
+    GizmoPass gizmo{};
     TestScene world{};
     VisPass vis{};
     ShadePass shade{};
@@ -186,6 +189,7 @@ struct SceneFrameImpl {
     float rcSpacing = 0.45f;
     float rcIntensity = 1.0f;
     float rcMax = 48.0f;
+    float giGain = 2.0f;
     float bloomThreshold = 0.35f;
     float fogDensity = 0.002f;
     float fogHeight = 4.0f;

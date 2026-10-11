@@ -5,13 +5,18 @@
 #include "app/Shell.hpp"
 #include "render/SceneFrame.hpp"
 #include "rhi/Device.hpp"
+#include "files/Browser.hpp"
 #include "ui/Panel.hpp"
+#include "ui/State.hpp"
 
 #include <fcntl.h>
 #include <unistd.h>
 
 #include <spdlog/spdlog.h>
 
+#include "gpu_scene/SceneObject.hpp"
+
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -152,6 +157,190 @@ void engineShutdown(Engine& e) {
     hostShutdown(e.host);
 }
 
+struct PageHit {
+    Canvas* canvas = nullptr;
+    uint16_t page = kUiNone;
+};
+
+struct StatsHit {
+    Canvas* canvas = nullptr;
+    uint16_t page = kUiNone;
+    uint16_t dock = kUiNone;
+    uint8_t open = 0;
+};
+
+struct ModeHit {
+    Canvas* canvas = nullptr;
+    int index = 0;
+    uint16_t label = kUiNone;
+};
+
+PageHit gPage[8]{};
+StatsHit gStats{};
+ModeHit gMode[15]{};
+
+struct ToolHit {
+    Canvas* canvas = nullptr;
+    SceneFrame* scene = nullptr;
+    uint16_t objects = kUiNone;
+    uint16_t postPage = kUiNone;
+    uint16_t sunPage = kUiNone;
+};
+
+struct GizmoHit {
+    ToolHit* tool = nullptr;
+    uint8_t mode = 0;
+};
+
+struct ObjectHit {
+    Canvas* canvas = nullptr;
+    uint8_t index = 0;
+    uint16_t page = kUiNone;
+};
+
+ToolHit gTool{};
+GizmoHit gGizmo[3]{};
+ObjectHit gObject[16]{};
+uint8_t gShown = 0xff;
+
+void onActor(void* user, uint16_t, int16_t) {
+    auto* hit = static_cast<ObjectHit*>(user);
+    if (hit == nullptr || hit->canvas == nullptr || gTool.scene == nullptr) {
+        return;
+    }
+    sceneFrameActorSelect(gTool.scene, hit->index);
+    if (hit->page != kUiNone) {
+        canvasShowOnly(*hit->canvas, hit->page);
+    }
+    gShown = hit->index;
+}
+
+void addActorButton(Canvas& canvas, uint16_t objects, uint8_t index, const char* name, uint8_t kind) {
+    if (index >= 16 || objects == kUiNone) {
+        return;
+    }
+    const UiLook look = uiLookInk();
+    Panel rowBtn = Panel::at(canvas, objects).button(name, -1, look.button[0], look.button[1], look.button[2], 0);
+    canvasSetHeight(canvas, rowBtn.id, 28.0f);
+    gObject[index].canvas = &canvas;
+    gObject[index].index = index;
+    gObject[index].page = kind == static_cast<uint8_t>(SceneActorKind::Sun) ? gTool.sunPage : gTool.postPage;
+    canvasBind(canvas, rowBtn.id, onActor, &gObject[index]);
+}
+
+void onGizmoMode(void* user, uint16_t, int16_t) {
+    auto* hit = static_cast<GizmoHit*>(user);
+    if (hit == nullptr || hit->tool == nullptr || hit->tool->scene == nullptr) {
+        return;
+    }
+    sceneFrameActorGizmo(hit->tool->scene, hit->mode);
+}
+
+void onDuplicate(void* user, uint16_t, int16_t) {
+    auto* tool = static_cast<ToolHit*>(user);
+    if (tool == nullptr || tool->scene == nullptr || tool->canvas == nullptr) {
+        return;
+    }
+    const uint8_t index = sceneFrameActorDuplicate(tool->scene);
+    if (index == kSceneActorNone) {
+        return;
+    }
+    char name[24];
+    uint8_t kind = 0;
+    sceneFrameActorName(tool->scene, index, name, sizeof(name), &kind);
+    addActorButton(*tool->canvas, tool->objects, index, name, kind);
+    onActor(&gObject[index], 0, 0);
+}
+
+void setSlide(Canvas& canvas, const char* name, float value) {
+    if (canvas.state == nullptr) {
+        return;
+    }
+    const uint16_t id = canvasFind(canvas, name);
+    if (id == kUiNone || id >= canvas.state->count) {
+        return;
+    }
+    auto* range = canvas.state->ent[id].try_get_mut<UiRange>();
+    if (range == nullptr || range->value == value) {
+        return;
+    }
+    range->value = value;
+    canvas.state->visualDirty = 1;
+}
+
+struct ViewMode {
+    int index;
+    const char* name;
+};
+
+const ViewMode kViews[] = {
+    {0, "Lit"}, {1, "Primitive ID"}, {2, "Normals"}, {4, "GI"}, {5, "каскады"}, {6, "контакт"},
+    {7, "луч"}, {8, "прямой"}, {9, "альбедо"}, {10, "солнце"}, {11, "шероховатость"},
+    {12, "металл"}, {13, "AO"}, {14, "свечение"},
+};
+
+void onObjectPage(void* user, uint16_t, int16_t) {
+    auto* hit = static_cast<PageHit*>(user);
+    if (hit == nullptr || hit->canvas == nullptr || hit->page == kUiNone) {
+        return;
+    }
+    canvasShowOnly(*hit->canvas, hit->page);
+}
+
+void onStats(void* user, uint16_t, int16_t) {
+    auto* hit = static_cast<StatsHit*>(user);
+    if (hit == nullptr || hit->canvas == nullptr || hit->canvas->state == nullptr || hit->page == kUiNone) {
+        return;
+    }
+    hit->open = hit->open == 0 ? 1 : 0;
+    canvasShow(*hit->canvas, hit->page, hit->open != 0);
+    auto* flex = hit->canvas->state->ent[hit->dock].try_get_mut<UiFlex>();
+    if (flex != nullptr) {
+        flex->width += hit->open != 0 ? 220.0f : -220.0f;
+        if (flex->width < 220.0f) {
+            flex->width = 220.0f;
+        }
+    }
+}
+
+void onMode(void* user) {
+    auto* hit = static_cast<ModeHit*>(user);
+    if (hit == nullptr || hit->canvas == nullptr) {
+        return;
+    }
+    for (const ViewMode& mode : kViews) {
+        char name[8];
+        std::snprintf(name, sizeof(name), "mode%d", mode.index);
+        canvasCheck(*hit->canvas, canvasFind(*hit->canvas, name), 1, 1, mode.index == hit->index);
+    }
+    const char* title = "Lit";
+    for (const ViewMode& mode : kViews) {
+        if (mode.index == hit->index) {
+            title = mode.name;
+        }
+    }
+    if (hit->label != kUiNone) {
+        Panel::at(*hit->canvas, hit->label).setText(title);
+    }
+}
+
+Panel foldOpen(Panel parent, const char* title) {
+    if (parent.canvas == nullptr || parent.canvas->state == nullptr) {
+        return {};
+    }
+    UiState& s = *parent.canvas->state;
+    const uint16_t body = uiTreeRow(s, parent.id, title);
+    for (uint16_t id = 0; id < s.count; ++id) {
+        auto* tree = s.ent[id].try_get_mut<UiTree>();
+        if (tree != nullptr && tree->body == body) {
+            tree->open = 1;
+            break;
+        }
+    }
+    uiShow(s, body, true);
+    return Panel::at(*parent.canvas, body);
+}
+
 Panel rowSlide(Panel panel, const char* text, const char* name, float value, float minV, float maxV) {
     Panel lab = panel.label(text);
     (void)lab;
@@ -161,63 +350,251 @@ Panel rowSlide(Panel panel, const char* text, const char* name, float value, flo
     return slide;
 }
 
-void sceneHud(Canvas& canvas, void*) {
+void sceneHud(Canvas& canvas, void* user) {
     if (!canvasUseFont(canvas, 30.0f) || canvas.state == nullptr) {
         return;
     }
+    canvasSetLook(canvas, uiLookInk());
+    const UiLook look = canvasLook(canvas);
+    auto hiddenPaint = []() {
+        UiPaint paint{};
+        paint.a = 0.0f;
+        paint.role = static_cast<uint8_t>(UiRole::Hidden);
+        return paint;
+    };
+    auto dockPaint = [&]() {
+        UiPaint paint{};
+        paint.role = static_cast<uint8_t>(UiRole::Panel);
+        paint.r = look.content[0];
+        paint.g = look.content[1];
+        paint.b = look.content[2];
+        paint.a = 0.94f;
+        paint.borderW = 1.0f;
+        paint.br = 0.04f;
+        paint.bg = 0.04f;
+        paint.bb = 0.04f;
+        return paint;
+    };
+    auto splitBar = [&](Panel parent, bool vertical) {
+        UiFlex grip{};
+        grip.shrink = 0.0f;
+        if (vertical) {
+            grip.widthMode = static_cast<uint8_t>(UiSize::Px);
+            grip.width = 8.0f;
+            grip.heightMode = static_cast<uint8_t>(UiSize::Percent);
+            grip.height = 100.0f;
+        } else {
+            grip.heightMode = static_cast<uint8_t>(UiSize::Px);
+            grip.height = 8.0f;
+            grip.widthMode = static_cast<uint8_t>(UiSize::Percent);
+            grip.width = 100.0f;
+        }
+        UiPaint paint{};
+        paint.role = static_cast<uint8_t>(UiRole::Panel);
+        paint.tag = -5;
+        paint.a = 1.0f;
+        paint.r = 0.05f;
+        paint.g = 0.05f;
+        paint.b = 0.06f;
+        return parent.child(grip, paint);
+    };
+    auto scrollPage = [&](Panel parent, bool show) {
+        UiFlex viewFlex{};
+        viewFlex.grow = 1.0f;
+        viewFlex.shrink = 1.0f;
+        viewFlex.minH = 36.0f;
+        UiPaint scroll{};
+        scroll.role = static_cast<uint8_t>(UiRole::Scroll);
+        scroll.r = look.content[0];
+        scroll.g = look.content[1];
+        scroll.b = look.content[2];
+        scroll.a = 1.0f;
+        Panel view = parent.child(viewFlex, scroll);
+        UiFlex column{};
+        column.gap = 4.0f;
+        column.pad = 8.0f;
+        column.shrink = 0.0f;
+        Panel inner = view.child(column, hiddenPaint());
+        canvasScroll(canvas, view.id, inner.id);
+        if (!show) {
+            canvasShow(canvas, view.id, false);
+        }
+        return inner;
+    };
     UiFlex rootFlex{};
     rootFlex.grow = 1.0f;
-    rootFlex.direction = 1;
+    rootFlex.direction = 0;
+    rootFlex.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    rootFlex.width = 100.0f;
     rootFlex.heightMode = static_cast<uint8_t>(UiSize::Percent);
     rootFlex.height = 100.0f;
-    UiPaint clear{};
-    clear.a = 0.0f;
-    clear.role = static_cast<uint8_t>(UiRole::Hidden);
-    Panel root = Panel::make(canvas, kUiNone, rootFlex, clear);
-    UiFlex box{};
-    box.widthMode = static_cast<uint8_t>(UiSize::Px);
-    box.width = 360.0f;
-    box.heightMode = static_cast<uint8_t>(UiSize::Percent);
-    box.height = 100.0f;
-    box.shrink = 0.0f;
-    UiPaint scrollPaint{};
-    scrollPaint.role = static_cast<uint8_t>(UiRole::Scroll);
-    scrollPaint.r = 0.05f;
-    scrollPaint.g = 0.06f;
-    scrollPaint.b = 0.08f;
-    scrollPaint.a = 0.86f;
-    scrollPaint.radius = 6.0f;
-    Panel viewport = root.child(box, scrollPaint);
-    UiFlex columnFlex{};
-    columnFlex.gap = 6.0f;
-    columnFlex.pad = 12.0f;
-    columnFlex.shrink = 0.0f;
-    UiPaint columnPaint{};
-    columnPaint.a = 0.0f;
-    Panel panel = viewport.child(columnFlex, columnPaint);
-    canvasScroll(canvas, viewport.id, panel.id);
-    UiFlex grip{};
-    grip.widthMode = static_cast<uint8_t>(UiSize::Px);
-    grip.width = 8.0f;
-    grip.heightMode = static_cast<uint8_t>(UiSize::Percent);
-    grip.height = 100.0f;
-    grip.shrink = 0.0f;
-    UiPaint gripPaint{};
-    gripPaint.role = static_cast<uint8_t>(UiRole::Panel);
-    gripPaint.tag = -5;
-    gripPaint.r = 0.35f;
-    gripPaint.g = 0.42f;
-    gripPaint.b = 0.55f;
-    gripPaint.a = 0.45f;
-    Panel gripPanel = root.child(grip, gripPaint);
-    (void)gripPanel;
-    UiFlex rest{};
-    rest.grow = 1.0f;
-    UiPaint restPaint{};
-    restPaint.a = 0.0f;
-    restPaint.role = static_cast<uint8_t>(UiRole::Hidden);
-    Panel restPanel = root.child(rest, restPaint);
-    (void)restPanel;
+    Panel root = Panel::make(canvas, kUiNone, rootFlex, hiddenPaint());
+    UiFlex barFlex{};
+    barFlex.direction = 1;
+    barFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    barFlex.height = 50.0f;
+    barFlex.minH = 50.0f;
+    barFlex.shrink = 0.0f;
+    barFlex.align = 1;
+    barFlex.pad = 12.0f;
+    barFlex.gap = 8.0f;
+    Panel top = root.child(barFlex, dockPaint());
+    Panel viewBtn = top.button("Lit", -7, look.button[0], look.button[1], look.button[2], 0);
+    canvasSetHeight(canvas, viewBtn.id, 28.0f);
+    uint16_t viewMenu = canvasMakeMenu(canvas);
+    canvasBindContext(canvas, viewBtn.id, viewMenu);
+    for (int i = 0; i < static_cast<int>(sizeof(kViews) / sizeof(kViews[0])); ++i) {
+        gMode[i].canvas = &canvas;
+        gMode[i].index = kViews[i].index;
+        gMode[i].label = viewBtn.id;
+        (void)canvasAddCommandTo(canvas, viewMenu, kViews[i].name, onMode, &gMode[i]);
+    }
+    Panel statsBtn = top.button("Stats", -1, look.button[0], look.button[1], look.button[2], 0);
+    canvasSetHeight(canvas, statsBtn.id, 28.0f);
+    gTool.canvas = &canvas;
+    gTool.scene = static_cast<SceneFrame*>(user);
+    const char* toolName[] = {"Move", "Rotate", "Scale"};
+    for (uint8_t i = 0; i < 3; ++i) {
+        Panel toolBtn = top.button(toolName[i], -1, look.button[0], look.button[1], look.button[2], 0);
+        canvasSetHeight(canvas, toolBtn.id, 28.0f);
+        gGizmo[i].tool = &gTool;
+        gGizmo[i].mode = i;
+        canvasBind(canvas, toolBtn.id, onGizmoMode, &gGizmo[i]);
+    }
+    Panel dupBtn = top.button("Duplicate", -1, look.button[0], look.button[1], look.button[2], 0);
+    canvasSetHeight(canvas, dupBtn.id, 28.0f);
+    canvasBind(canvas, dupBtn.id, onDuplicate, &gTool);
+    UiFlex rowFlex{};
+    rowFlex.direction = 1;
+    rowFlex.grow = 1.0f;
+    rowFlex.shrink = 1.0f;
+    rowFlex.minH = 72.0f;
+    Panel row = root.child(rowFlex, hiddenPaint());
+    UiFlex viewFlex{};
+    viewFlex.grow = 1.0f;
+    viewFlex.shrink = 1.0f;
+    (void)row.child(viewFlex, hiddenPaint());
+    (void)splitBar(row, true);
+    UiFlex dockFlex{};
+    dockFlex.direction = 1;
+    dockFlex.widthMode = static_cast<uint8_t>(UiSize::Px);
+    dockFlex.width = 300.0f;
+    dockFlex.shrink = 0.0f;
+    dockFlex.heightMode = static_cast<uint8_t>(UiSize::Percent);
+    dockFlex.height = 100.0f;
+    dockFlex.minH = 72.0f;
+    Panel dock = row.child(dockFlex, hiddenPaint());
+    UiFlex statsFlex{};
+    statsFlex.direction = 0;
+    statsFlex.widthMode = static_cast<uint8_t>(UiSize::Px);
+    statsFlex.width = 220.0f;
+    statsFlex.shrink = 0.0f;
+    statsFlex.minW = 180.0f;
+    Panel statsPane = dock.child(statsFlex, dockPaint());
+    canvasShow(canvas, statsPane.id, false);
+    UiFlex statsCol{};
+    statsCol.gap = 4.0f;
+    statsCol.pad = 8.0f;
+    statsCol.shrink = 0.0f;
+    Panel stats = statsPane.child(statsCol, hiddenPaint());
+    gStats.canvas = &canvas;
+    gStats.page = statsPane.id;
+    gStats.dock = dock.id;
+    gStats.open = 0;
+    canvasBind(canvas, statsBtn.id, onStats, &gStats);
+    UiFlex sideFlex{};
+    sideFlex.direction = 0;
+    sideFlex.grow = 1.0f;
+    sideFlex.shrink = 1.0f;
+    sideFlex.minW = 180.0f;
+    sideFlex.minH = 72.0f;
+    Panel side = dock.child(sideFlex, hiddenPaint());
+    UiFlex hierFlex{};
+    hierFlex.grow = 1.0f;
+    hierFlex.shrink = 1.0f;
+    hierFlex.minH = 40.0f;
+    UiPaint hierScroll{};
+    hierScroll.role = static_cast<uint8_t>(UiRole::Scroll);
+    hierScroll.r = look.content[0];
+    hierScroll.g = look.content[1];
+    hierScroll.b = look.content[2];
+    hierScroll.a = 1.0f;
+    Panel hierView = side.child(hierFlex, hierScroll);
+    UiFlex hierCol{};
+    hierCol.gap = 4.0f;
+    hierCol.pad = 8.0f;
+    hierCol.shrink = 0.0f;
+    Panel objects = hierView.child(hierCol, hiddenPaint());
+    canvasScroll(canvas, hierView.id, objects.id);
+    objects.label("Hierarchy").color(look.accent[0][0], look.accent[0][1], look.accent[0][2], 1.0f);
+    gTool.objects = objects.id;
+    (void)splitBar(side, false);
+    UiFlex inspFlex{};
+    inspFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    inspFlex.height = 280.0f;
+    inspFlex.minH = 40.0f;
+    inspFlex.shrink = 1.0f;
+    Panel insp = side.child(inspFlex, hiddenPaint());
+    Panel post = scrollPage(insp, true);
+    Panel sun = scrollPage(insp, false);
+    Panel light = scrollPage(insp, false);
+    Panel sky = scrollPage(insp, false);
+    Panel cull = scrollPage(insp, false);
+    auto pick = [&](const char* title, int slot) {
+        Panel rowBtn = objects.button(title, -1, look.button[0], look.button[1], look.button[2], 0);
+        canvasSetHeight(canvas, rowBtn.id, 28.0f);
+        gPage[slot].canvas = &canvas;
+        const uint16_t inner = slot == 0 ? post.id : slot == 1 ? sun.id : slot == 2 ? light.id : slot == 3 ? sky.id : cull.id;
+        gPage[slot].page = canvas.state->parentOf[inner];
+        canvasBind(canvas, rowBtn.id, onObjectPage, &gPage[slot]);
+    };
+    gTool.postPage = canvas.state->parentOf[post.id];
+    gTool.sunPage = canvas.state->parentOf[sun.id];
+    if (gTool.scene != nullptr) {
+        const uint8_t count = sceneFrameActorCount(gTool.scene);
+        for (uint8_t i = 0; i < count && i < 16; ++i) {
+            char name[24];
+            uint8_t kind = 0;
+            sceneFrameActorName(gTool.scene, i, name, sizeof(name), &kind);
+            addActorButton(canvas, objects.id, i, name, kind);
+        }
+    }
+    pick("Light", 2);
+    pick("Sky", 3);
+    pick("Cull", 4);
+    canvasShowOnly(canvas, canvas.state->parentOf[post.id]);
+    Panel fogBody = foldOpen(post, "Туман");
+    Panel postBody = foldOpen(post, "Пост");
+    Panel giBody = foldOpen(post, "GI");
+    Panel sunBody = foldOpen(sun, "Солнце");
+    (void)splitBar(root, false);
+    UiFlex fileFlex{};
+    fileFlex.direction = 0;
+    fileFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    fileFlex.height = 200.0f;
+    fileFlex.minH = 48.0f;
+    fileFlex.shrink = 1.0f;
+    Panel files = root.child(fileFlex, dockPaint());
+    if (canvas.state->files != nullptr) {
+        filesShutdown(*canvas.state);
+    }
+    canvas.state->fileFrame = files.id;
+    filesAttach(*canvas.state);
+    filesMount(*canvas.state);
+    filesShow(*canvas.state, true);
+    UiFlex modeFlex{};
+    modeFlex.shrink = 0.0f;
+    Panel modeHost = root.child(modeFlex, hiddenPaint());
+    canvasShow(canvas, modeHost.id, false);
+    Panel modes = modeHost;
+    Panel panel = stats;
+    auto head = [&](const char* text, const char* id) {
+        Panel lab = panel.label(text);
+        if (id != nullptr) {
+            lab.name(id);
+        }
+        lab.color(look.accent[0][0], look.accent[0][1], look.accent[0][2], 1.0f);
+    };
     panel.label("fps").name("stats");
     panel.label("mem").name("mem");
     panel.label("gpu").name("load");
@@ -228,7 +605,8 @@ void sceneHud(Canvas& canvas, void*) {
             canvasCheck(*panel.canvas, box.id, 0, 0, true);
         }
     };
-    panel.label("кулинг").name("h1");
+    panel = cull;
+    head("кулинг", "h1");
     panel.check("Freeze Frustum").name("freeze");
     tick("конус", "cone", true);
     tick("Hi-Z", "hiz", true);
@@ -237,12 +615,17 @@ void sceneHud(Canvas& canvas, void*) {
     panel.spin(-1.0f, -1.0f, 3.0f, 1.0f).name("lodf");
     tick("пирамида", "frust", true);
     tick("мелкие", "small", true);
-    panel.label("свет").name("h2");
+    panel = light;
+    head("свет", "h2");
     tick("кластер ламп", "cluster", true);
+    panel = sun;
     tick("тени", "shadow", true);
+    panel = giBody;
     tick("зонды SH", "probes", true);
     tick("GI", "gien", true);
-    panel.label("профиль света").name("h3");
+    rowSlide(panel, "GI яркость", "giGain", 2.0f, 0.0f, 6.0f);
+    panel = giBody;
+    head("профиль света", "h3");
     panel.radio("Низкий", 3).name("prof0");
     panel.radio("Баланс", 3).name("prof1");
     panel.radio("Ультра", 3).name("prof2");
@@ -251,10 +634,12 @@ void sceneHud(Canvas& canvas, void*) {
     rowSlide(panel, "RC клетка м", "rcCell", 0.45f, 0.1f, 4.0f);
     rowSlide(panel, "RC сила", "rcGain", 1.0f, 0.0f, 4.0f);
     rowSlide(panel, "RC длина м", "rcMax", 48.0f, 2.0f, 200.0f);
+    panel = postBody;
     tick("GTAO", "gtaoen", true);
     tick("CMAA", "cmaa", true);
     panel.check("SMAA").name("smaa");
     tick("Bloom", "bloomen", true);
+    panel = sunBody;
     tick("солнце", "sun", true);
     rowSlide(panel, "солнце", "sunI", 1.0f, 0.0f, 4.0f);
     rowSlide(panel, "солнце R", "sunR", 1.0f, 0.0f, 1.0f);
@@ -262,15 +647,22 @@ void sceneHud(Canvas& canvas, void*) {
     rowSlide(panel, "солнце B", "sunB", 0.92f, 0.0f, 1.0f);
     rowSlide(panel, "солнце зенит", "zenith", 35.0f, -10.0f, 80.0f);
     rowSlide(panel, "солнце азимут", "azimuth", 30.0f, 0.0f, 360.0f);
+    panel = light;
     tick("точки", "points", true);
     tick("прожекторы", "spots", true);
     tick("площадь", "area", true);
+    panel = sky;
     tick("небо", "sky", true);
     tick("облака", "clouden", true);
+    panel = fogBody;
     tick("туман", "fogen", true);
+    panel = giBody;
     tick("отражение", "reflecten", true);
+    panel = postBody;
     tick("контакт", "contacten", true);
+    panel = cull;
     panel.check("вирт. текстуры").name("vt");
+    panel = modes;
     panel.radio("Lit", 1).name("mode0");
     panel.radio("Normals", 1).name("mode2");
     panel.radio("Primitive ID", 1).name("mode1");
@@ -285,6 +677,7 @@ void sceneHud(Canvas& canvas, void*) {
     panel.radio("металл", 1).name("mode12");
     panel.radio("AO", 1).name("mode13");
     panel.radio("свечение", 1).name("mode14");
+    panel = postBody;
     panel.radio("AgX", 2).name("tone0");
     panel.radio("ACES", 2).name("tone1");
     panel.radio("Reinhard", 2).name("tone2");
@@ -310,12 +703,16 @@ void sceneHud(Canvas& canvas, void*) {
     rowSlide(panel, "GTAO сила", "gtaoPw", 1.6f, 0.2f, 4.0f);
     rowSlide(panel, "GTAO край", "gtaoFa", 1.0f, 0.1f, 1.0f);
     rowSlide(panel, "GTAO", "gtao", 1.2f, 0.0f, 4.0f);
+    panel = light;
     rowSlide(panel, "свечи", "lamp", 1.0f, 0.0f, 1.0f);
+    panel = sky;
     rowSlide(panel, "облака", "clouds", 0.42f, 0.0f, 0.95f);
     rowSlide(panel, "плотность", "cdens", 0.08f, 0.0f, 0.3f);
+    panel = fogBody;
     rowSlide(panel, "туман", "fog", 0.002f, 0.0f, 0.08f);
     rowSlide(panel, "высота тумана", "fogH", 4.0f, -30.0f, 40.0f);
     rowSlide(panel, "свет в тумане", "fogS", 1.0f, 0.0f, 2.0f);
+    panel = stats;
     for (int i = 0; i < 12; ++i) {
         char name[8];
         std::snprintf(name, sizeof(name), "g%d", i);
@@ -411,7 +808,28 @@ bool engineTick(Engine& e) {
         Panel::find(e.host.view[e.host.primary].canvas, "stats").setText(fps);
         Panel::find(e.host.view[e.host.primary].canvas, "mem").setText(memLine);
         Panel::find(e.host.view[e.host.primary].canvas, "load").setText(loadLine);
-        const Canvas& hud = e.host.view[e.host.primary].canvas;
+        Canvas& hud = e.host.view[e.host.primary].canvas;
+        const uint8_t selected = sceneFrameActorSelected(e.scene);
+        if (selected != gShown && selected < 16) {
+            gShown = selected;
+            const uint8_t kind = sceneFrameActorKind(e.scene, selected);
+            const uint16_t page = kind == static_cast<uint8_t>(SceneActorKind::Sun) ? gTool.sunPage : gTool.postPage;
+            if (page != kUiNone) {
+                canvasShowOnly(hud, page);
+            }
+        }
+        uint8_t sunIndex = kSceneActorNone;
+        if (sceneFrameActorKind(e.scene, selected) == static_cast<uint8_t>(SceneActorKind::Sun)) {
+            sunIndex = selected;
+        } else {
+            const uint8_t count = sceneFrameActorCount(e.scene);
+            for (uint8_t i = 0; i < count; ++i) {
+                if (sceneFrameActorKind(e.scene, i) == static_cast<uint8_t>(SceneActorKind::Sun)) {
+                    sunIndex = i;
+                    break;
+                }
+            }
+        }
         uint32_t mode = 0;
         for (uint32_t i = 0; i < 15; ++i) {
             char name[8];
@@ -456,13 +874,30 @@ bool engineTick(Engine& e) {
         tweaks.rcRays = slideAt(hud, "rcRays", 8.0f);
         tweaks.rcSpacing = slideAt(hud, "rcCell", 0.45f);
         tweaks.rcIntensity = slideAt(hud, "rcGain", 1.0f);
+        tweaks.giGain = slideAt(hud, "giGain", 2.0f);
         tweaks.rcMax = slideAt(hud, "rcMax", 48.0f);
         tweaks.bloomThreshold = slideAt(hud, "bloomth", 0.35f);
         tweaks.fogDensity = slideAt(hud, "fog", 0.002f);
         tweaks.fogHeight = slideAt(hud, "fogH", 4.0f);
         tweaks.fogScatter = slideAt(hud, "fogS", 1.0f);
-        tweaks.sunZenith = slideAt(hud, "zenith", 35.0f);
-        tweaks.sunAzimuth = slideAt(hud, "azimuth", 30.0f);
+        float zenith = slideAt(hud, "zenith", 35.0f);
+        float azimuth = slideAt(hud, "azimuth", 30.0f);
+        if (sunIndex != kSceneActorNone) {
+            float pitch = zenith;
+            float yaw = azimuth;
+            sceneFrameActorEuler(e.scene, sunIndex, pitch, yaw);
+            const bool dragging = sceneFrameActorDragging(e.scene) && selected == sunIndex;
+            if (dragging || (std::fabs(zenith - pitch) <= 0.25f && std::fabs(azimuth - yaw) <= 0.25f)) {
+                setSlide(hud, "zenith", pitch);
+                setSlide(hud, "azimuth", yaw);
+                zenith = pitch;
+                azimuth = yaw;
+            } else {
+                sceneFrameActorSetEuler(e.scene, sunIndex, zenith, azimuth);
+            }
+        }
+        tweaks.sunZenith = zenith;
+        tweaks.sunAzimuth = azimuth;
         tweaks.cloudCoverage = slideAt(hud, "clouds", 0.42f);
         tweaks.cloudDensity = slideAt(hud, "cdens", 0.08f);
         tweaks.freeze = checkOn(hud, "freeze", false);

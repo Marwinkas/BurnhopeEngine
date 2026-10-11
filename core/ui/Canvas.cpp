@@ -943,10 +943,13 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             float ba = a;
             if (paint.tag == -5) {
                 const bool bar = id == s.hovered || id == s.capture;
-                if (bar) {
-                    n = emitRect(
-                        dst, n, cap, box.x + (box.w - 2.0f) * 0.5f, box.y, 2.0f, box.h,
-                        s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.95f, 0.0f, clip);
+                const float cr = bar ? s.look.accent[0][0] : s.look.muted[0];
+                const float cg = bar ? s.look.accent[0][1] : s.look.muted[1];
+                const float cb = bar ? s.look.accent[0][2] : s.look.muted[2];
+                if (splitVertical(s, id)) {
+                    n = emitRect(dst, n, cap, box.x, box.y + (box.h - 2.0f) * 0.5f, box.w, 2.0f, cr, cg, cb, 0.95f, 0.0f, clip);
+                } else {
+                    n = emitRect(dst, n, cap, box.x + (box.w - 2.0f) * 0.5f, box.y, 2.0f, box.h, cr, cg, cb, 0.95f, 0.0f, clip);
                 }
                 continue;
             } else if (hot && role == UiRole::Button && a < 0.05f) {
@@ -989,6 +992,12 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                 filled.flags |= kUiFlagTransform;
                 uiPackTransform(filled.pad0, filled.pad1, paint.angle, paint.scaleX, paint.scaleY, paint.bright, paint.contrast);
             }
+            if ((role == UiRole::Button || role == UiRole::Check) && paint.shadow > 0.5f && box.h > 10.0f && id != s.capture) {
+                const float hr = br + 0.10f > 1.0f ? 1.0f : br + 0.10f;
+                const float hg = bg + 0.10f > 1.0f ? 1.0f : bg + 0.10f;
+                const float hb = bb + 0.08f > 1.0f ? 1.0f : bb + 0.08f;
+                n = emitRect(dst, n, cap, box.x + 3.0f, box.y + 2.0f, box.w - 6.0f, 2.0f, hr, hg, hb, ba, 0.0f, clip);
+            }
             if (ring > 0.4f) {
                 const float orr = missing ? s.look.accent[2][0] : (focusRing && paint.borderW < 0.4f ? s.look.accent[0][0] : paint.br);
                 const float org = missing ? s.look.accent[2][1] : (focusRing && paint.borderW < 0.4f ? s.look.accent[0][1] : paint.bg);
@@ -1013,7 +1022,7 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             } else if (role == UiRole::Scroll) {
                 UiBox thumb{};
                 if (scrollThumb(s, id, thumb)) {
-                    n = emitRect(dst, n, cap, thumb.x, thumb.y, thumb.w, thumb.h, 0.55f, 0.60f, 0.70f, 0.9f, 3.0f, clip);
+                    n = emitRect(dst, n, cap, thumb.x, thumb.y, thumb.w, thumb.h, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.95f, 2.0f, clip);
                 }
             }
         }
@@ -1065,9 +1074,11 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             } else if (paint.ramp == 7) {
                 n = emitRamp(dst, n, cap, box.x, box.y + box.h * 0.25f, box.w, box.h * 0.50f, paint.r, paint.g, paint.b, 2, kUiFlagRamp);
             } else {
-                n = emitRect(dst, n, cap, box.x, box.y + box.h * 0.35f, fillW, box.h * 0.30f, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 1.0f, 4.0f, clip);
+                n = emitRect(dst, n, cap, box.x, box.y + box.h * 0.38f, box.w, box.h * 0.24f, s.look.slider[0], s.look.slider[1], s.look.slider[2], 1.0f, 2.0f, clip);
+                n = emitRect(dst, n, cap, box.x, box.y + box.h * 0.38f, fillW, box.h * 0.24f, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 1.0f, 2.0f, clip);
             }
-            n = emitRect(dst, n, cap, box.x + fillW - 6.0f, box.y + 3.0f, 12.0f, box.h - 6.0f, 0.93f, 0.94f, 0.96f, 1.0f, 6.0f, clip);
+            n = emitRect(dst, n, cap, box.x + fillW - 5.0f, box.y + 5.0f, 12.0f, box.h - 6.0f, 0.0f, 0.0f, 0.0f, 0.55f, 2.0f, clip);
+            n = emitRect(dst, n, cap, box.x + fillW - 6.0f, box.y + 3.0f, 12.0f, box.h - 6.0f, 0.97f, 0.96f, 0.94f, 1.0f, 2.0f, clip);
         } else if (role == UiRole::Check) {
             const UiCheck* check = s.ent[id].try_get<UiCheck>();
             const bool radio = check != nullptr && check->kind == 1;
@@ -1230,15 +1241,17 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
     c.nullMesh = d.caps.meshShader;
 
     const VkDeviceSize bytes = static_cast<VkDeviceSize>(kUiFontBase) + kUiFontBytes;
-    if (!gpuBufferCreate(
-            c.prims,
-            d,
-            bytes,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-            true)) {
-        spdlog::error("ui primitive buffer failed");
-        canvasDestroy(c, d);
-        return false;
+    for (uint32_t flight = 0; flight < 2u; ++flight) {
+        if (!gpuBufferCreate(
+                c.prims[flight],
+                d,
+                bytes,
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                true)) {
+            spdlog::error("ui primitive buffer failed");
+            canvasDestroy(c, d);
+            return false;
+        }
     }
     c.device = &d;
     c.heaps = &heaps;
@@ -1248,10 +1261,12 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
         return false;
     }
 
-    if (!heapWriteBuffer(heaps, d, kUiDescPrims, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, c.prims.address, c.prims.size)) {
-        spdlog::error("ui heap write failed");
-        canvasDestroy(c, d);
-        return false;
+    for (uint32_t flight = 0; flight < 2u; ++flight) {
+        if (!heapWriteBufferFlight(heaps, d, flight, kUiDescPrims, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, c.prims[flight].address, c.prims[flight].size)) {
+            spdlog::error("ui heap write failed");
+            canvasDestroy(c, d);
+            return false;
+        }
     }
 
     uint8_t blank[4] = {28, 30, 36, 255};
@@ -1365,7 +1380,8 @@ void canvasDestroy(Canvas& c, Device& d) {
         gpuImageDestroy(c.photos[slot], d);
         c.photoMeta[slot] = {};
     }
-    gpuBufferDestroy(c.prims, d);
+    gpuBufferDestroy(c.prims[0], d);
+    gpuBufferDestroy(c.prims[1], d);
     if (c.state != nullptr) {
         jsonRelease(*c.state);
         if (c.state->plug.shutdown != nullptr) {
@@ -1534,6 +1550,31 @@ void canvasReload(Canvas& c) {
 void canvasShow(Canvas& c, uint16_t id, bool visible) {
     if (c.state != nullptr) {
         uiShow(*c.state, id, visible);
+    }
+}
+
+void canvasShowOnly(Canvas& c, uint16_t id) {
+    if (c.state != nullptr) {
+        uiShowOnly(*c.state, id);
+    }
+}
+
+void canvasMarkTab(Canvas& c, uint16_t strip, uint16_t tab) {
+    if (c.state == nullptr) {
+        return;
+    }
+    UiState& s = *c.state;
+    const UiLook& look = s.look;
+    for (uint16_t id = 1; id < s.count; ++id) {
+        if (s.parentOf[id] != strip) {
+            continue;
+        }
+        const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+        if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Button)) {
+            continue;
+        }
+        const float* rgb = id == tab ? look.accent[0] : look.button;
+        canvasSetPaint(c, id, rgb[0], rgb[1], rgb[2], 1.0f);
     }
 }
 
@@ -1799,8 +1840,6 @@ uint16_t canvasNode(Canvas& c, uint16_t parent, const UiFlex& flex, const UiPain
 void canvasText(Canvas& c, uint16_t id, const char* text) {
     if (c.state != nullptr) {
         uiText(*c.state, id, text);
-        c.state->visualDirty = true;
-        c.state->layoutDirty = true;
     }
 }
 
@@ -1811,20 +1850,25 @@ void canvasStamp(Canvas& c, uint16_t id, UiToken token) {
 }
 
 bool canvasSetFont(Canvas& c, const char* path, float pixelSize) {
-    if (c.state == nullptr || c.device == nullptr || c.heaps == nullptr || c.prims.mapped == nullptr) {
+    if (c.state == nullptr || c.device == nullptr || c.heaps == nullptr || c.prims[0].mapped == nullptr) {
         return false;
     }
     if (!fontLoadSdf(*c.state, *c.device, *c.heaps, c.font, path, pixelSize)) {
         return false;
     }
-    auto* table = reinterpret_cast<float*>(static_cast<std::byte*>(c.prims.mapped) + kUiFontBase);
-    for (uint32_t i = 0; i < kUiFontGlyphs; ++i) {
-        table[i * 4 + 0] = c.state->glyphU0[i];
-        table[i * 4 + 1] = c.state->glyphV0[i];
-        table[i * 4 + 2] = c.state->glyphU1[i];
-        table[i * 4 + 3] = c.state->glyphV1[i];
+    for (uint32_t flight = 0; flight < 2u; ++flight) {
+        if (c.prims[flight].mapped == nullptr) {
+            continue;
+        }
+        auto* table = reinterpret_cast<float*>(static_cast<std::byte*>(c.prims[flight].mapped) + kUiFontBase);
+        for (uint32_t i = 0; i < kUiFontGlyphs; ++i) {
+            table[i * 4 + 0] = c.state->glyphU0[i];
+            table[i * 4 + 1] = c.state->glyphV0[i];
+            table[i * 4 + 2] = c.state->glyphU1[i];
+            table[i * 4 + 3] = c.state->glyphV1[i];
+        }
+        gpuBufferFlush(c.prims[flight], *c.device, kUiFontBase, kUiFontBytes);
     }
-    gpuBufferFlush(c.prims, *c.device, kUiFontBase, kUiFontBytes);
     c.state->look.glyphH = pixelSize;
     const int em = static_cast<int>('M' - 32);
     if (c.state->fontPx > 1.0f && c.state->glyphAdv[em] > 0.0f) {
@@ -2111,7 +2155,7 @@ void canvasChrome(const Canvas& c, float& titleBar, float& resizeBorder) {
     }
 }
 
-UiEvent canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& input, float timeSec) {
+UiEvent canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& input, float timeSec, uint32_t flight, bool upload) {
     if (c.state == nullptr || c.state->count == 0 || w < 1.0f || h < 1.0f) {
         return UiEvent::None;
     }
@@ -2133,14 +2177,14 @@ UiEvent canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& 
     if (uiTickMotion(s)) {
         s.visualDirty = true;
     }
-    if (s.visualDirty) {
-        auto* bytes = static_cast<std::byte*>(c.prims.mapped);
+    if (s.visualDirty && upload && flight < 2u && c.prims[flight].mapped != nullptr) {
+        auto* bytes = static_cast<std::byte*>(c.prims[flight].mapped);
         auto* dst = reinterpret_cast<UiPrimitive*>(bytes + kUiHeaderBytes);
         const uint32_t n = uiEmit(s, dst, kUiPrimCap);
         const UiGpuHeader hdr{pointsW, pointsH, n, 0};
         std::memcpy(bytes, &hdr, sizeof(hdr));
         c.drawCount = n;
-        gpuBufferFlush(c.prims, d, 0, kUiHeaderBytes + sizeof(UiPrimitive) * n);
+        gpuBufferFlush(c.prims[flight], d, 0, kUiHeaderBytes + sizeof(UiPrimitive) * n);
         s.visualDirty = false;
     }
     static float uiCheckAt = 0.0f;
@@ -2255,6 +2299,43 @@ bool canvasWantsRelative(const Canvas& c) {
     return c.state != nullptr && c.state->relative != 0;
 }
 
+bool canvasPointerOver(const Canvas& c) {
+    return c.state != nullptr && (c.state->hovered != kUiNone || c.state->capture != kUiNone);
+}
+
+void canvasMaskScene(const Canvas& c, InputFrame& input) {
+    if (c.state == nullptr) {
+        return;
+    }
+    const UiState& s = *c.state;
+    if (s.hovered != kUiNone || s.capture != kUiNone) {
+        input.pointer.dx = 0.0f;
+        input.pointer.dy = 0.0f;
+        input.pointer.down = 0;
+        input.pointer.pressed = 0;
+        input.pointer.released = 0;
+        input.clicks = 0;
+    }
+    if (s.ateWheel != 0) {
+        input.wheel = 0.0f;
+        input.wheelX = 0.0f;
+    }
+    if (s.focused != kUiNone && s.focused < s.count && s.ent[s.focused].try_get<UiField>() != nullptr) {
+        input.textLen = 0;
+        input.backspace = 0;
+        input.del = 0;
+        input.enter = 0;
+        input.tab = 0;
+        input.left = 0;
+        input.right = 0;
+        input.up = 0;
+        input.down = 0;
+        std::memset(input.keyDown, 0, sizeof(input.keyDown));
+        std::memset(input.keyEdge, 0, sizeof(input.keyEdge));
+        std::memset(input.keyUp, 0, sizeof(input.keyUp));
+    }
+}
+
 bool canvasFocusBox(const Canvas& c, float& x, float& y, float& w, float& h) {
     if (c.state == nullptr || c.state->focused == kUiNone || c.state->focused >= c.state->count) {
         return false;
@@ -2304,11 +2385,12 @@ void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, con
     if (c.ms.handle != VK_NULL_HANDLE) {
         primDst |= VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT;
     }
+    const uint32_t primFlight = fc.flight < 2u ? fc.flight : 0u;
     rhiBufferBarrier(
         cmd,
-        c.prims.buffer,
+        c.prims[primFlight].buffer,
         0,
-        c.prims.size,
+        c.prims[primFlight].size,
         VK_PIPELINE_STAGE_2_HOST_BIT,
         VK_ACCESS_2_HOST_WRITE_BIT,
         primDst,

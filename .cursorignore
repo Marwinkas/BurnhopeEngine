@@ -1,8 +1,23 @@
-# Старый редактор, сборки и кэш. Не индексировать и не читать.
+.git/
 old/
 build/
 build-core/
+build-asan/
+build-tsan/
 .cache/
+cache/
 x64/
 .vs/
+BurnHopeEngine/
+testscene/
+newscenetest/
+imgui.ini
+emeraldcity/
 *.spv
+*.slang
+*.obj
+*.fbx
+*.png
+*.jpg
+*.log
+.vscode/

@@ -1,18 +1,23 @@
-# Старый редактор. На диске остаётся, в репозиторий не входит.
+.git/
 old/
-
-# Сборки и кэш инструментов
 build/
 build-core/
 build-asan/
+build-tsan/
 .cache/
+cache/
 x64/
 .vs/
 BurnHopeEngine/
 testscene/
 newscenetest/
-build-tsan/
-cache/
 imgui.ini
-*.spv
 emeraldcity/
+*.spv
+*.slang
+*.obj
+*.fbx
+*.png
+*.jpg
+*.log
+.vscode/
