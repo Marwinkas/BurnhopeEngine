@@ -44,6 +44,193 @@ inline UiPaint paint(UiRole role, float r, float g, float b, float radius = 0.0f
     return out;
 }
 
+void tokenRgb(const UiLook& look, UiToken token, float& r, float& g, float& b);
+
+inline UiPaint paintToken(const UiLook& look, UiRole role, UiToken token, float radius = 0.0f, int16_t tag = -1) {
+    UiPaint p = paint(role, 0.0f, 0.0f, 0.0f, radius, tag);
+    p.token = static_cast<uint8_t>(token);
+    tokenRgb(look, token, p.r, p.g, p.b);
+    return p;
+}
+
+struct UiVirtualWindow {
+    uint32_t first = 0;
+    uint32_t visibleCount = 0;
+    float totalHeight = 0.0f;
+};
+
+inline UiVirtualWindow uiVirtualCalc(float scrollOffset, float viewH, float itemH, uint32_t totalItems, uint8_t cols = 1) {
+    UiVirtualWindow out{};
+    if (cols < 1) {
+        cols = 1;
+    }
+    if (itemH < 1.0f) {
+        itemH = 1.0f;
+    }
+    if (scrollOffset < 0.0f) {
+        scrollOffset = 0.0f;
+    }
+    if (viewH < 1.0f) {
+        viewH = itemH;
+    }
+    const uint32_t colN = cols;
+    const uint32_t rows = totalItems == 0 ? 0u : (totalItems + colN - 1u) / colN;
+    out.totalHeight = static_cast<float>(rows) * itemH;
+    uint32_t windowRows = static_cast<uint32_t>(viewH / itemH + 2.0f);
+    if (windowRows < 1u) {
+        windowRows = 1u;
+    }
+    uint32_t firstRow = static_cast<uint32_t>(scrollOffset / itemH);
+    if (rows > windowRows && firstRow + windowRows > rows) {
+        firstRow = rows - windowRows;
+    }
+    if (rows <= windowRows || firstRow > rows) {
+        firstRow = 0;
+    }
+    out.first = firstRow * colN;
+    uint32_t span = windowRows * colN;
+    if (span > kUiPoolCap) {
+        span = kUiPoolCap;
+    }
+    const uint32_t remain = totalItems > out.first ? totalItems - out.first : 0u;
+    out.visibleCount = remain < span ? remain : span;
+    return out;
+}
+
+inline uint16_t uiVirtualSlots(float viewH, float itemH, uint8_t cols = 1) {
+    if (cols < 1) {
+        cols = 1;
+    }
+    if (itemH < 1.0f) {
+        itemH = 1.0f;
+    }
+    if (viewH < 1.0f) {
+        viewH = itemH;
+    }
+    uint32_t n = static_cast<uint32_t>((viewH / itemH + 2.0f) * static_cast<float>(cols));
+    if (n < 1u) {
+        n = 1u;
+    }
+    if (n > kUiPoolCap) {
+        n = kUiPoolCap;
+    }
+    return static_cast<uint16_t>(n);
+}
+
+template <typename T>
+T* uiAncestor(UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return nullptr;
+    }
+    for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (auto* comp = s.ent[p].try_get_mut<T>()) {
+            return comp;
+        }
+    }
+    return nullptr;
+}
+
+template <typename T>
+const T* uiAncestor(const UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return nullptr;
+    }
+    for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (const T* comp = s.ent[p].try_get<T>()) {
+            return comp;
+        }
+    }
+    return nullptr;
+}
+
+template <typename T>
+uint16_t uiAncestorId(const UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return kUiNone;
+    }
+    for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (s.ent[p].try_get<T>() != nullptr) {
+            return p;
+        }
+    }
+    return kUiNone;
+}
+
+inline bool uiWithin(const UiState& s, uint16_t id, uint16_t ancestor) {
+    if (ancestor == kUiNone || id >= s.count) {
+        return false;
+    }
+    for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (p == ancestor) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline uint32_t uiNodeChildCount(const UiState& s, uint16_t parent) {
+    if (parent >= s.count || s.yoga[parent] == nullptr) {
+        return 0;
+    }
+    return YGNodeGetChildCount(s.yoga[parent]);
+}
+
+inline uint16_t uiNodeChild(const UiState& s, uint16_t parent, uint32_t index) {
+    if (parent >= s.count || s.yoga[parent] == nullptr || index >= YGNodeGetChildCount(s.yoga[parent])) {
+        return kUiNone;
+    }
+    YGNodeRef node = YGNodeGetChild(s.yoga[parent], index);
+    for (uint16_t id = 0; id < s.count; ++id) {
+        if (s.yoga[id] == node) {
+            return id;
+        }
+    }
+    return kUiNone;
+}
+
+inline void uiNodeMoveChild(UiState& s, uint16_t parent, uint16_t child, uint32_t newIndex) {
+    if (parent >= s.count || child >= s.count) {
+        return;
+    }
+    YGNodeRef host = s.yoga[parent];
+    YGNodeRef node = s.yoga[child];
+    if (host == nullptr || node == nullptr) {
+        return;
+    }
+    YGNodeRef from = YGNodeGetParent(node);
+    if (from == host) {
+        const uint32_t count = YGNodeGetChildCount(host);
+        uint32_t old = count;
+        for (uint32_t i = 0; i < count; ++i) {
+            if (YGNodeGetChild(host, i) == node) {
+                old = i;
+                break;
+            }
+        }
+        if (old == count) {
+            return;
+        }
+        if (newIndex > count) {
+            newIndex = count;
+        }
+        if (old == newIndex) {
+            return;
+        }
+        YGNodeRemoveChild(host, node);
+        if (old < newIndex) {
+            --newIndex;
+        }
+    } else if (from != nullptr) {
+        YGNodeRemoveChild(from, node);
+    }
+    const uint32_t live = YGNodeGetChildCount(host);
+    if (newIndex > live) {
+        newIndex = live;
+    }
+    YGNodeInsertChild(host, node, newIndex);
+    s.layoutDirty = true;
+}
+
 inline bool hitBox(const UiBox& b, float x, float y) {
     return b.w > 0.5f && b.h > 0.5f && x >= b.x && y >= b.y && x < b.x + b.w && y < b.y + b.h;
 }
@@ -56,7 +243,6 @@ inline bool focusable(uint8_t role) {
 
 uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
 void addText(UiState& s, uint16_t id, const char* text);
-void tokenRgb(const UiLook& look, UiToken token, float& r, float& g, float& b);
 void stamp(UiState& s, uint16_t id, UiToken token);
 uint16_t hitTest(const UiState& s, float x, float y);
 void setNote(UiState& s, const char* msg);

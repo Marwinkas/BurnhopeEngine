@@ -21,6 +21,9 @@ void dragSlider(UiState& s, uint16_t id, float x) {
         t = 1.0f;
     }
     range->value = range->min + t * (range->max - range->min);
+    if (const UiValueHook* hook = s.ent[id].try_get<UiValueHook>(); hook != nullptr && hook->fn != nullptr) {
+        hook->fn(hook->user, range->value);
+    }
     char note[32];
     std::snprintf(note, sizeof(note), "slider %.3f", range->value);
     uiTrace(s, note, id);
@@ -61,14 +64,20 @@ void dragSpin(UiState& s, uint16_t id, float x) {
     }
 }
 
-uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float maxV) {
+uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float maxV, UiValueChangeFn onChange, void* user, float width) {
     UiFlex flex{};
-    flex.widthMode = static_cast<uint8_t>(UiSize::Percent);
-    flex.width = 100.0f;
+    if (width > 1.0f) {
+        flex.widthMode = static_cast<uint8_t>(UiSize::Px);
+        flex.width = width;
+        flex.grow = 0.0f;
+    } else {
+        flex.widthMode = static_cast<uint8_t>(UiSize::Percent);
+        flex.width = 100.0f;
+    }
     flex.heightMode = static_cast<uint8_t>(UiSize::Px);
     flex.height = 18.0f;
     flex.shrink = 0.0f;
-    UiPaint body = paint(UiRole::Slider, s.look.button[0], s.look.button[1], s.look.button[2], s.look.radiusSm);
+    UiPaint body = paintToken(s.look, UiRole::Slider, UiToken::Slider, s.look.radiusSm);
     body.shadow = 3.0f;
     body.borderW = 2.0f;
     body.br = s.look.text[0];
@@ -85,6 +94,9 @@ uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float ma
         value = maxV;
     }
     s.ent[id].set<UiRange>({value, minV, maxV, 0.0f});
+    if (onChange != nullptr) {
+        s.ent[id].set<UiValueHook>({onChange, user});
+    }
     return id;
 }
 
@@ -94,7 +106,7 @@ uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV
     flex.height = 30.0f;
     flex.shrink = 0.0f;
     flex.align = 1;
-    UiPaint body = paint(UiRole::Button, s.look.button[0], s.look.button[1], s.look.button[2], s.look.radiusSm);
+    UiPaint body = paintToken(s.look, UiRole::Button, UiToken::Button, s.look.radiusSm);
     body.shadow = 4.0f;
     body.borderW = 2.0f;
     body.br = s.look.text[0];

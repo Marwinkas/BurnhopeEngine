@@ -2,6 +2,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include "ui/Domain.hpp"
 #include "ui/State.hpp"
 #include "ui/Layout.hpp"
 #include "ui/widget/Detail.hpp"
@@ -250,7 +251,7 @@ TEST_CASE("mounted file cells sit in the view") {
     frame.posY = 64.0f;
     frame.pad = 10.0f;
     frame.gap = 6.0f;
-    state.fileFrame = spawn(state, host, frame, paint(UiRole::Panel, 0.11f, 0.12f, 0.15f, 8.0f, -15));
+    uiFiles(state).fileFrame = spawn(state, host, frame, paint(UiRole::Panel, 0.11f, 0.12f, 0.15f, 8.0f, -15));
     filesAttach(state);
     filesMount(state);
     filesShow(state, true);
@@ -259,7 +260,7 @@ TEST_CASE("mounted file cells sit in the view") {
     InputFrame in{};
     uiApplyInput(state, in);
     uiLayout(state, 1600.0f, 1050.0f);
-    const uint16_t view = state.fileView;
+    const uint16_t view = uiFiles(state).fileView;
     uint16_t cell = kUiNone;
     for (uint16_t id = 0; id < state.count; ++id) {
         bool under = false;
@@ -286,7 +287,7 @@ TEST_CASE("mounted file cells sit in the view") {
     }
     CHECK(state.box[cell].x == doctest::Approx(state.box[view].x + 8.0f).epsilon(0.05));
     CHECK(state.box[cell].y == doctest::Approx(state.box[view].y + 8.0f).epsilon(0.05));
-    CHECK(state.box[cell].y > state.box[state.fileFrame].y + 40.0f);
+    CHECK(state.box[cell].y > state.box[uiFiles(state).fileFrame].y + 40.0f);
     fs::remove_all(dir, ec);
 }
 
@@ -496,8 +497,15 @@ TEST_CASE("virtual rows show the first page") {
     if (virt == nullptr) {
         return;
     }
+    uiLayout(state, 240.0f, 400.0f);
+    virt = state.ent[list].try_get<UiVirtual>();
+    CHECK(virt != nullptr);
+    if (virt == nullptr) {
+        return;
+    }
     CHECK(virt->count == 40);
-    CHECK(virt->slots == 12);
+    CHECK(virt->slots > 12);
+    CHECK(virt->slots <= kUiPoolCap);
     const uint16_t slot = virt->slot[0];
     const UiText* text = state.ent[slot].try_get<UiText>();
     CHECK(text != nullptr);
@@ -505,7 +513,7 @@ TEST_CASE("virtual rows show the first page") {
         return;
     }
     CHECK(std::strcmp(text->bytes, "0") == 0);
-    CHECK(state.ent[virt->slot[11]].try_get<UiVirtRow>()->index == 11);
+    CHECK(state.ent[virt->slot[virt->slots - 1]].try_get<UiVirtRow>()->index == static_cast<uint32_t>(virt->slots - 1));
 }
 
 TEST_CASE("backspace removes one utf8 character") {
@@ -1457,7 +1465,7 @@ TEST_CASE("photo blur packs one lod into the photo primitive") {
     uiLayout(state, 64.0f, 64.0f);
     Canvas canvas;
     canvas.state = &state;
-    canvasBlur(canvas, id, 1.5f);
+    uiBlur(state, id, 1.5f);
     CHECK(state.ent[id].try_get<UiPaint>()->blur == doctest::Approx(1.0f));
     std::vector<UiPrimitive> prims(kUiCap);
     const uint32_t n = uiEmit(state, prims.data(), static_cast<uint32_t>(prims.size()));
@@ -1484,8 +1492,8 @@ TEST_CASE("panel transform/filter sets the flag on the filled primitive") {
     uiLayout(state, 200.0f, 80.0f);
     Canvas canvas;
     canvas.state = &state;
-    canvasTransform(canvas, root, 30.0f, 1.2f, 1.0f);
-    canvasFilter(canvas, root, 1.3f, 0.7f);
+    uiTransform(state, root, 30.0f, 1.2f, 1.0f);
+    uiFilter(state, root, 1.3f, 0.7f);
     std::vector<UiPrimitive> prims(kUiCap);
     const uint32_t n = uiEmit(state, prims.data(), static_cast<uint32_t>(prims.size()));
     CHECK(n > 0);
@@ -1695,7 +1703,7 @@ TEST_CASE("file new folder and zoom slider") {
     fs::create_directory(dir, ec);
     UiState state;
     const uint16_t frame = spawn(state, kUiNone, px(900, 640), paint(UiRole::Panel, 0.08f, 0.08f, 0.1f));
-    state.fileFrame = frame;
+    uiFiles(state).fileFrame = frame;
     filesAttach(state);
     filesMount(state);
     filesShow(state, true);
@@ -1725,9 +1733,23 @@ TEST_CASE("file new folder and zoom slider") {
         in.pointer.pressed = kPointerLeft;
         in.pointer.down = kPointerLeft;
         uiApplyInput(state, in);
-        in.pointer.x = state.box[neu].x + 12.0f;
-        in.pointer.y = state.box[neu].y + state.box[neu].h + 10.0f;
-        uiApplyInput(state, in);
+        uiLayout(state, 900.0f, 640.0f);
+        uint16_t folder = kUiNone;
+        for (uint16_t id = 0; id < state.count; ++id) {
+            const UiText* text = state.ent[id].try_get<UiText>();
+            const UiPaint* paint = state.ent[id].try_get<UiPaint>();
+            if (paint != nullptr && paint->role == static_cast<uint8_t>(UiRole::Button) && text != nullptr
+                && std::strcmp(text->bytes, "New Folder") == 0 && state.box[id].w > 1.0f) {
+                folder = id;
+            }
+        }
+        if (folder != kUiNone) {
+            in.pointer.pressed = kPointerLeft;
+            in.pointer.down = kPointerLeft;
+            in.pointer.x = state.box[folder].x + 8.0f;
+            in.pointer.y = state.box[folder].y + 8.0f;
+            uiApplyInput(state, in);
+        }
     }
     bool created = false;
     if (fs::is_directory(dir, ec)) {
@@ -1856,13 +1878,13 @@ std::vector<uint8_t> renderGoldenToRgba(Device& d, Canvas& c, DescriptorHeaps& h
     fakeSc.asked.transparent = false;
     FrameContext fc{cmd, 0, 0};
 
-    const ShaderExt savedMs = c.ms;
+    const ShaderExt savedMs = c.rhi.ms;
     if (forceVertexPull) {
-        c.ms = {};
+        c.rhi.ms = {};
     }
     canvasRecord(cmd, c, fakeSc, fc);
     if (forceVertexPull) {
-        c.ms = savedMs;
+        c.rhi.ms = savedMs;
     }
 
     rhiImageBarrier(
@@ -1943,7 +1965,7 @@ TEST_CASE("golden image: panel fill is exact and mesh/vertex paths match") {
 
     constexpr uint32_t kW = 64;
     constexpr uint32_t kH = 64;
-    const std::vector<uint8_t> meshPixels = canvas.ms.handle != VK_NULL_HANDLE
+    const std::vector<uint8_t> meshPixels = canvas.rhi.ms.handle != VK_NULL_HANDLE
         ? renderGoldenToRgba(device, canvas, heaps, kW, kH, false)
         : std::vector<uint8_t>{};
     const std::vector<uint8_t> vertPixels = renderGoldenToRgba(device, canvas, heaps, kW, kH, true);

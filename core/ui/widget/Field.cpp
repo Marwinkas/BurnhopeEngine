@@ -258,68 +258,6 @@ void textInk(float r, float g, float b, bool hot, float& tr, float& tg, float& t
     }
 }
 
-void placeChromeText(UiState& s) {
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (!s.ent[id].is_alive()) {
-            continue;
-        }
-        const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-        if (paint == nullptr) {
-            continue;
-        }
-        const auto role = static_cast<UiRole>(paint->role);
-        if (role != UiRole::Button && role != UiRole::Close && role != UiRole::Check) {
-            continue;
-        }
-        const uint16_t label = fieldLabel(s, id);
-        const UiText* host = s.ent[id].try_get<UiText>();
-        if (label == kUiNone || host == nullptr) {
-            continue;
-        }
-        auto* text = s.ent[label].try_get_mut<UiText>();
-        auto* ink = s.ent[label].try_get_mut<UiPaint>();
-        if (text == nullptr || ink == nullptr) {
-            continue;
-        }
-        copyShown(*text, host->bytes, host->len);
-        ink->token = static_cast<uint8_t>(UiToken::Custom);
-        ink->a = paint->disabled != 0 ? 0.45f : 1.0f;
-        if (host->len == 0 || s.box[id].w < 1.0f || s.box[id].h < 1.0f) {
-            s.box[label] = {};
-            continue;
-        }
-        float tr = 0.93f;
-        float tg = 0.94f;
-        float tb = 0.96f;
-        if (role == UiRole::Check) {
-            tr = 0.93f;
-            tg = 0.94f;
-            tb = 0.96f;
-        } else if (paint->a > 0.2f) {
-            textInk(paint->r, paint->g, paint->b, id == s.hovered && paint->disabled == 0, tr, tg, tb);
-        }
-        ink->r = tr;
-        ink->g = tg;
-        ink->b = tb;
-        text->scroll = 0;
-        UiBox slot{};
-        slot.y = s.box[id].y;
-        slot.h = s.box[id].h;
-        if (role == UiRole::Check) {
-            slot.x = s.box[id].x + 32.0f;
-            slot.w = s.box[id].w > 36.0f ? s.box[id].w - 36.0f : 1.0f;
-        } else {
-            slot.x = s.box[id].x;
-            slot.w = s.box[id].w;
-            if (paint->icon != 0) {
-                slot.x += 22.0f;
-                slot.w = slot.w > 22.0f ? slot.w - 22.0f : 1.0f;
-            }
-        }
-        s.box[label] = slot;
-    }
-}
-
 UiField* editFieldOf(UiState& s) {
     if (s.editField == kUiNone || s.editField >= s.count) {
         return nullptr;
@@ -378,6 +316,120 @@ void cmdFieldWipe(void* user) {
     field->anchor = 0;
     field->scroll = 0.0f;
     field->bytes[0] = '\0';
+    s.visualDirty = true;
+}
+
+void uiFieldNotify(UiState& s, uint16_t id) {
+    const UiTextHook* hook = id < s.count ? s.ent[id].try_get<UiTextHook>() : nullptr;
+    const UiField* field = hook != nullptr ? s.ent[id].try_get<UiField>() : nullptr;
+    if (hook != nullptr && hook->fn != nullptr && field != nullptr) {
+        hook->fn(hook->user, field->bytes);
+    }
+}
+
+uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChangeFn onChange, void* user, float width) {
+    UiFlex flex{};
+    flex.shrink = 0.0f;
+    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.height = 26.0f;
+    if (width < 0.0f) {
+        flex.widthMode = static_cast<uint8_t>(UiSize::Percent);
+        flex.width = 100.0f;
+        flex.grow = 1.0f;
+    } else {
+        flex.widthMode = static_cast<uint8_t>(UiSize::Px);
+        flex.width = width > 1.0f ? width : 160.0f;
+    }
+    const uint16_t id = spawn(s, parent, flex, paintToken(s.look, UiRole::Field, UiToken::Field, s.look.radiusSm));
+    if (id == kUiNone) {
+        return id;
+    }
+    UiField field{};
+    copyText(field.hint, field.hintLen, hint != nullptr ? hint : "");
+    s.ent[id].set<UiField>(field);
+    if (onChange != nullptr) {
+        s.ent[id].set<UiTextHook>({onChange, user});
+    }
+    return id;
+}
+
+uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, bool clear) {
+    UiFlex flex{};
+    flex.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    flex.width = 100.0f;
+    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.height = 36.0f;
+    flex.shrink = 0.0f;
+    const uint16_t id = spawn(s, parent, flex, paintToken(s.look, UiRole::Field, UiToken::Field, s.look.radiusSm));
+    if (id == kUiNone) {
+        return id;
+    }
+    UiField field{};
+    uint8_t n = 0;
+    if (text != nullptr) {
+        while (text[n] != '\0' && n < 95) {
+            field.bytes[n] = text[n];
+            ++n;
+        }
+    }
+    field.bytes[n] = '\0';
+    field.len = n;
+    field.caret = n;
+    field.anchor = n;
+    field.filter = filter;
+    field.clear = clear ? 1 : 0;
+    s.ent[id].set<UiField>(field);
+    if (s.fieldMenu != kUiNone) {
+        s.contextOf[id] = s.fieldMenu;
+    }
+    return id;
+}
+
+void uiBindField(UiState& s, uint16_t id, const char* text, uint8_t filter, bool clear) {
+    if (id >= s.count) {
+        return;
+    }
+    UiField field{};
+    uint8_t n = 0;
+    if (text != nullptr) {
+        while (text[n] != '\0' && n < 95) {
+            field.bytes[n] = text[n];
+            ++n;
+        }
+    }
+    field.bytes[n] = '\0';
+    field.len = n;
+    field.caret = n;
+    field.anchor = n;
+    field.filter = filter;
+    field.clear = clear ? 1 : 0;
+    s.ent[id].set<UiField>(field);
+    if (s.fieldMenu != kUiNone) {
+        s.contextOf[id] = s.fieldMenu;
+    }
+    s.visualDirty = true;
+}
+
+void uiBindFieldExtra(UiState& s, uint16_t id, const char* placeholder, uint8_t maxChars, bool required, bool readOnly, bool password) {
+    if (id >= s.count) {
+        return;
+    }
+    auto* field = s.ent[id].try_get_mut<UiField>();
+    if (field == nullptr) {
+        return;
+    }
+    field->maxChars = maxChars;
+    field->required = required ? 1 : 0;
+    field->readOnly = readOnly ? 1 : 0;
+    field->password = password ? 1 : 0;
+    field->hintLen = 0;
+    if (placeholder != nullptr) {
+        while (placeholder[field->hintLen] != '\0' && field->hintLen < 39) {
+            field->hint[field->hintLen] = placeholder[field->hintLen];
+            ++field->hintLen;
+        }
+    }
+    field->hint[field->hintLen] = '\0';
     s.visualDirty = true;
 }
 

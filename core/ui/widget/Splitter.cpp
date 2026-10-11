@@ -1,32 +1,18 @@
+#include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Detail.hpp"
 
 namespace burnhope {
 namespace {
 
 uint16_t childAt(const UiState& s, uint16_t parent, uint32_t index) {
-    if (parent >= s.count || s.yoga[parent] == nullptr) {
-        return kUiNone;
-    }
-    if (index >= YGNodeGetChildCount(s.yoga[parent])) {
-        return kUiNone;
-    }
-    YGNodeRef node = YGNodeGetChild(s.yoga[parent], index);
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.yoga[id] == node) {
-            return id;
-        }
-    }
-    return kUiNone;
+    return uiNodeChild(s, parent, index);
 }
 
 int childIndex(const UiState& s, uint16_t id) {
     const uint16_t parent = s.parentOf[id];
-    if (parent >= s.count || s.yoga[parent] == nullptr || s.yoga[id] == nullptr) {
-        return -1;
-    }
-    const uint32_t count = YGNodeGetChildCount(s.yoga[parent]);
+    const uint32_t count = uiNodeChildCount(s, parent);
     for (uint32_t i = 0; i < count; ++i) {
-        if (YGNodeGetChild(s.yoga[parent], i) == s.yoga[id]) {
+        if (uiNodeChild(s, parent, i) == id) {
             return static_cast<int>(i);
         }
     }
@@ -63,7 +49,7 @@ float axisFloor(const UiState& s, uint16_t id, bool vertical, bool ignoreFixed, 
     const bool along = vertical == column;
     float acc = along ? 0.0f : base;
     int kids = 0;
-    const uint32_t count = YGNodeGetChildCount(s.yoga[id]);
+    const uint32_t count = uiNodeChildCount(s, id);
     for (uint32_t i = 0; i < count; ++i) {
         const uint16_t child = childAt(s, id, i);
         if (!shownNode(s, child)) {
@@ -103,7 +89,7 @@ void writeSize(UiFlex& flex, bool vertical, float size) {
 uint16_t splitTarget(const UiState& s, uint16_t split) {
     const int index = childIndex(s, split);
     if (index <= 0) {
-        return s.sideId;
+        return uiFindName(s, "side");
     }
     return childAt(s, s.parentOf[split], static_cast<uint32_t>(index - 1));
 }
@@ -179,7 +165,7 @@ void splitDrag(UiState& s, uint16_t split, float x, float y) {
     const UiBox& home = s.box[parent];
     const UiBox& bar = s.box[split];
     float reserved = vertical ? bar.h : bar.w;
-    const uint32_t kids = parent < s.count && s.yoga[parent] != nullptr ? YGNodeGetChildCount(s.yoga[parent]) : 0u;
+    const uint32_t kids = uiNodeChildCount(s, parent);
     for (uint32_t i = 0; i < kids; ++i) {
         const uint16_t child = childAt(s, parent, i);
         if (child == pane || child == split) {
@@ -208,6 +194,23 @@ void splitDrag(UiState& s, uint16_t split, float x, float y) {
     writeSize(*flex, vertical, size);
     s.layoutDirty = true;
     s.visualDirty = true;
+}
+
+bool splitCustomDraw(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
+    const UiPaint* paint = id < s.count ? s.ent[id].try_get<UiPaint>() : nullptr;
+    if (paint == nullptr || paint->tag != -5) {
+        return false;
+    }
+    const bool bar = id == s.hovered || id == s.capture;
+    const float cr = bar ? s.look.accent[0][0] : s.look.muted[0];
+    const float cg = bar ? s.look.accent[0][1] : s.look.muted[1];
+    const float cb = bar ? s.look.accent[0][2] : s.look.muted[2];
+    const UiBox grip = splitGrip(s, id);
+    UiBox ancestor{};
+    const bool hasClip = uiClipBox(s, id, ancestor);
+    const UiBox* clip = hasClip ? &ancestor : nullptr;
+    n = emitRect(dst, n, cap, grip.x, grip.y, grip.w, grip.h, cr, cg, cb, 0.95f, 0.0f, clip);
+    return true;
 }
 
 } // namespace burnhope

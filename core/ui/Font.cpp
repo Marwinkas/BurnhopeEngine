@@ -1,5 +1,6 @@
 #include "ui/Font.hpp"
 #include "ui/Model.hpp"
+#include "image/ImageFile.hpp"
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -34,105 +35,9 @@ uint32_t codepointAt(int index) {
 }
 
 bool uploadAtlas(Device& device, DescriptorHeaps& heaps, GpuImage& atlas, const std::vector<uint8_t>& pixels, int width, int height) {
-    gpuImageDestroy(atlas, device);
-    if (!gpuImageCreate(
-            atlas,
-            device,
-            VkExtent2D{static_cast<uint32_t>(width), static_cast<uint32_t>(height)},
-            VK_FORMAT_R8_UNORM,
-            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            VK_IMAGE_ASPECT_COLOR_BIT)) {
+    if (!gpuImageUploadR8(atlas, device, pixels.data(), static_cast<uint32_t>(width), static_cast<uint32_t>(height))) {
         return false;
     }
-
-    GpuBuffer staging{};
-    const VkDeviceSize bytes = static_cast<VkDeviceSize>(width * height);
-    if (!gpuBufferCreate(staging, device, bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true)) {
-        return false;
-    }
-    std::memcpy(staging.mapped, pixels.data(), static_cast<size_t>(bytes));
-    gpuBufferFlush(staging, device, 0, bytes);
-
-    // Общий пул/очередь device.commandPool — см. комментарий у Device::queueMutex (Device.hpp).
-    std::lock_guard<std::mutex> uploadLock(device.queueMutex);
-    VkCommandBuffer cmd = VK_NULL_HANDLE;
-    VkCommandBufferAllocateInfo alloc{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = device.commandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    if (vkAllocateCommandBuffers(device.device, &alloc, &cmd) != VK_SUCCESS) {
-        gpuBufferDestroy(staging, device);
-        return false;
-    }
-    VkCommandBufferBeginInfo begin{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-    };
-    vkBeginCommandBuffer(cmd, &begin);
-
-    VkImageMemoryBarrier2 toCopy{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-        .srcAccessMask = VK_ACCESS_2_NONE,
-        .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-        .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = atlas.image,
-        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
-    };
-    VkDependencyInfo dep{
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = 1,
-        .pImageMemoryBarriers = &toCopy,
-    };
-    vkCmdPipelineBarrier2(cmd, &dep);
-
-    VkBufferImageCopy region{};
-    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-    region.imageExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
-    vkCmdCopyBufferToImage(cmd, staging.buffer, atlas.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
-    VkImageMemoryBarrier2 toSample{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-        .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = atlas.image,
-        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
-    };
-    dep.pImageMemoryBarriers = &toSample;
-    vkCmdPipelineBarrier2(cmd, &dep);
-    vkEndCommandBuffer(cmd);
-
-    VkCommandBufferSubmitInfo cbsi{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-        .commandBuffer = cmd,
-    };
-    VkSubmitInfo2 submit{
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .commandBufferInfoCount = 1,
-        .pCommandBufferInfos = &cbsi,
-    };
-    const bool ok = vkQueueSubmit2(device.graphicsQueue, 1, &submit, VK_NULL_HANDLE) == VK_SUCCESS;
-    if (ok) {
-        vkQueueWaitIdle(device.graphicsQueue);
-    }
-    vkFreeCommandBuffers(device.device, device.commandPool, 1, &cmd);
-    gpuBufferDestroy(staging, device);
-    if (!ok) {
-        return false;
-    }
-
     if (!heapWriteImage(
             heaps,
             device,
@@ -177,7 +82,6 @@ bool fontLoadSdf(
     FT_Property_Set(library, "sdf", "spread", &spread);
     FT_Face face{};
     if (FT_New_Face(library, path, 0, &face) != 0) {
-        spdlog::error("font open failed: {}", path);
         FT_Done_FreeType(library);
         return false;
     }
@@ -189,9 +93,9 @@ bool fontLoadSdf(
 
     for (int i = 0; i < static_cast<int>(kUiFontGlyphs); ++i) {
         const uint32_t cp = codepointAt(i);
-        ui.glyphAdv[i] = pixelSize * 0.5f;
-        ui.glyphW[i] = 0;
-        ui.glyphH[i] = 0;
+        ui.font.glyphs[i].advance = pixelSize * 0.5f;
+        ui.font.glyphs[i].w = 0;
+        ui.font.glyphs[i].h = 0;
         if (cp == 0 || FT_Load_Char(face, cp, FT_LOAD_DEFAULT) != 0) {
             continue;
         }
@@ -217,15 +121,15 @@ bool fontLoadSdf(
             pixels[static_cast<size_t>(dy * width + dx)] = src[x];
             }
         }
-        ui.glyphU0[i] = static_cast<float>(ox) / static_cast<float>(width);
-        ui.glyphV0[i] = static_cast<float>(oy) / static_cast<float>(height);
-        ui.glyphU1[i] = static_cast<float>(ox + static_cast<int>(bmp.width)) / static_cast<float>(width);
-        ui.glyphV1[i] = static_cast<float>(oy + static_cast<int>(bmp.rows)) / static_cast<float>(height);
-        ui.glyphBx[i] = static_cast<float>(face->glyph->bitmap_left);
-        ui.glyphBy[i] = static_cast<float>(face->glyph->bitmap_top);
-        ui.glyphW[i] = static_cast<float>(bmp.width);
-        ui.glyphH[i] = static_cast<float>(bmp.rows);
-        ui.glyphAdv[i] = static_cast<float>(face->glyph->advance.x) / 64.0f;
+        ui.font.glyphs[i].u0 = static_cast<float>(ox) / static_cast<float>(width);
+        ui.font.glyphs[i].v0 = static_cast<float>(oy) / static_cast<float>(height);
+        ui.font.glyphs[i].u1 = static_cast<float>(ox + static_cast<int>(bmp.width)) / static_cast<float>(width);
+        ui.font.glyphs[i].v1 = static_cast<float>(oy + static_cast<int>(bmp.rows)) / static_cast<float>(height);
+        ui.font.glyphs[i].bx = static_cast<float>(face->glyph->bitmap_left);
+        ui.font.glyphs[i].by = static_cast<float>(face->glyph->bitmap_top);
+        ui.font.glyphs[i].w = static_cast<float>(bmp.width);
+        ui.font.glyphs[i].h = static_cast<float>(bmp.rows);
+        ui.font.glyphs[i].advance = static_cast<float>(face->glyph->advance.x) / 64.0f;
     }
     FT_Done_Face(face);
     FT_Done_FreeType(library);
@@ -234,9 +138,9 @@ bool fontLoadSdf(
         spdlog::error("sdf atlas upload failed");
         return false;
     }
-    ui.fontPx = pixelSize;
-    ui.fontReady = true;
-    ui.look.advance = ui.glyphAdv[static_cast<int>('M' - 32)] * (ui.look.glyphH / pixelSize);
+    ui.font.fontPx = pixelSize;
+    ui.font.ready = true;
+    ui.look.advance = ui.font.glyphs[static_cast<int>('M' - 32)].advance * (ui.look.glyphH / pixelSize);
     if (ui.look.advance < 4.0f) {
         ui.look.advance = 9.0f;
     }

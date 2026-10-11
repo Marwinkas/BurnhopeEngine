@@ -8,8 +8,6 @@ constexpr uint32_t kUiBinMagic = 0x49554842u;
 constexpr uint16_t kUiBinVersion = 2;
 
 constexpr uint8_t kBinChrome = 10;
-constexpr uint8_t kBinCalendar = 11;
-constexpr uint8_t kBinColor = 12;
 constexpr uint8_t kBinMenu = 13;
 constexpr uint8_t kBinImage = 14;
 
@@ -112,5 +110,17 @@ struct BinNode {
     uint8_t pad2 = 0;
 };
 #pragma pack(pop)
+
+struct UiState;
+
+using UiCustomNodeLoader = uint16_t (*)(UiState& s, uint16_t parent, const BinNode& node, const char* name, void* user);
+
+struct UiCustomBinLoader {
+    UiCustomNodeLoader fn = nullptr;
+    void* user = nullptr;
+};
+
+void uiRegisterCustomBinNode(uint8_t role, UiCustomNodeLoader loader, void* user);
+void uiCopyBinHooks(UiState& s);
 
 } // namespace burnhope

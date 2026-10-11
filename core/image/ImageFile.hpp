@@ -77,6 +77,8 @@ enum class ImageBlock : uint8_t {
     uint32_t width,
     uint32_t height);
 
+[[nodiscard]] bool gpuImageUploadR8(GpuImage& img, Device& d, const uint8_t* pixels, uint32_t width, uint32_t height);
+
 [[nodiscard]] bool gpuImageUploadHdr(
     GpuImage& img,
     Device& d,

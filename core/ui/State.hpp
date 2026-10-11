@@ -1,9 +1,11 @@
 #pragma once
 
 #include "platform/Window.hpp"
+#include "ui/Layout.hpp"
 #include "ui/Model.hpp"
 
 #include <flecs.h>
+#include <span>
 #include <yoga/Yoga.h>
 
 namespace burnhope {
@@ -12,6 +14,7 @@ struct UiState;
 
 using UiInputFn = bool (*)(UiState& s, const InputFrame& in);
 using UiDrawFn = bool (*)(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap);
+using UiOverlayDrawFn = void (*)(UiState& s, UiPrimitive* dst, uint32_t& n, uint32_t cap);
 using UiTextGateFn = bool (*)(const UiState& s);
 using UiDropFn = void (*)(UiState& s);
 
@@ -19,9 +22,15 @@ using UiDropFn = void (*)(UiState& s);
 struct UiPlug {
     UiInputFn handle = nullptr;
     UiDrawFn draw = nullptr;
-    UiDrawFn over = nullptr;
+    UiOverlayDrawFn over = nullptr;
     UiTextGateFn wantsText = nullptr;
     UiDropFn shutdown = nullptr;
+};
+
+// Widget modules register draw hooks. uiEmit never switches on widget paint tags.
+struct UiDrawHooks {
+    UiDrawFn fn[4]{};
+    uint8_t n = 0;
 };
 
 struct UiState {
@@ -42,79 +51,18 @@ struct UiState {
     uint16_t capture = kUiNone;
     uint16_t pageLabel = kUiNone;
     uint16_t statusLabel = kUiNone;
-    uint16_t pages[3]{};
-    uint16_t preview = kUiNone;
-    uint16_t listInner = kUiNone;
-    uint16_t compactRow = kUiNone;
     uint16_t menu = kUiNone;
     uint16_t field = kUiNone;
     uint16_t fieldMenu = kUiNone;
     uint16_t editField = kUiNone;
-    char fileDir[192]{};
-    char fileName[16][40]{};
-    uint8_t fileIsDir[16]{};
-    uint8_t fileCount = 0;
-    uint8_t filePick = 0xff;
-    uint16_t fileRows[16]{};
-    uint16_t filePanel = kUiNone;
-    uint16_t fileHead = kUiNone;
-    uint16_t fileTarget = kUiNone;
-    int calY = 2026;
-    int calM = 10;
-    int calSel = 0;
-    uint16_t calPanel = kUiNone;
-    uint16_t calHead = kUiNone;
-    uint16_t calDay[42]{};
-    uint16_t calTarget = kUiNone;
-    float colorR = 0.36f;
-    float colorG = 0.55f;
-    float colorB = 0.92f;
-    float colorH = 0.62f;
-    float colorS = 0.61f;
-    float colorV = 0.92f;
-    float colorA = 1.0f;
-    uint16_t colorPanel = kUiNone;
-    uint16_t colorSwatch = kUiNone;
-    uint16_t colorTarget = kUiNone;
-    uint16_t colorWheel = kUiNone;
-    uint16_t colorVal = kUiNone;
-    uint16_t colorAlpha = kUiNone;
-    uint16_t colorHex = kUiNone;
-    uint16_t colorRgb[3]{kUiNone, kUiNone, kUiNone};
-    uint16_t colorHsv[3]{kUiNone, kUiNone, kUiNone};
-    uint16_t colorNum[7]{kUiNone, kUiNone, kUiNone, kUiNone, kUiNone, kUiNone, kUiNone};
-    uint16_t colorAnchor = kUiNone;
-    uint16_t colorAlphaBtn = kUiNone;
-    uint16_t colorMenuBtn = kUiNone;
-    uint16_t colorWinBtn = kUiNone;
-    ColorBook* book = nullptr;
-    uint32_t colorSeen = 0;
-    uint8_t colorUseAlpha = 1;
-    uint8_t colorMode = 0;
-    uint8_t colorPresent = 0;
-    uint8_t colorApplied = 0;
-    uint8_t colorHost = 0;
-    uint8_t colorDrop = 0;
-    uint16_t formNote = kUiNone;
-    uint16_t photoView = kUiNone;
-    uint16_t fileView = kUiNone;
-    uint16_t fileFrame = kUiNone;
     UiValueFn valueFn[4]{};
     void* valueUser[4]{};
     uint8_t valueN = 0;
     UiPlug plug{};
-    void* files = nullptr;
-    char* jsonArena = nullptr;
-    uint32_t jsonUsed = 0;
-    uint32_t jsonCap = 0;
-    flecs::entity jsonDoc{};
     char pasteBuf[96]{};
     uint8_t pasteBufLen = 0;
-    uint16_t sideId = kUiNone;
     uint16_t openedMenu = kUiNone;
     uint16_t floatWin = kUiNone;
-    uint16_t dockHome = kUiNone;
-    uint16_t dockPanel = kUiNone;
     uint16_t resizeId = kUiNone;
     uint8_t dockEdges = 15;
     uint8_t dockEdge = 0;
@@ -125,16 +73,10 @@ struct UiState {
     uint8_t culled[kUiCap]{};
     UiBox hint{};
     UiBox edgeLine{};
-    bool opTool = false;
-    bool opColor = false;
-    bool opFile = false;
     float openH[kUiCap]{};
     char clip[96]{};
     uint8_t clipLen = 0;
     uint8_t clipPut = 0;
-    uint16_t pickedId = kUiNone;
-    char pickedName[32]{};
-    uint8_t pickedLen = 0;
     float grabX = 0;
     float grabY = 0;
     UiClickFn onClick = nullptr;
@@ -160,17 +102,7 @@ struct UiState {
     float prevTime = 0;
     bool altLook = false;
     UiLook look{};
-    float glyphU0[kUiFontGlyphs]{};
-    float glyphV0[kUiFontGlyphs]{};
-    float glyphU1[kUiFontGlyphs]{};
-    float glyphV1[kUiFontGlyphs]{};
-    float glyphBx[kUiFontGlyphs]{};
-    float glyphBy[kUiFontGlyphs]{};
-    float glyphW[kUiFontGlyphs]{};
-    float glyphH[kUiFontGlyphs]{};
-    float glyphAdv[kUiFontGlyphs]{};
-    float fontPx = 32.0f;
-    bool fontReady = false;
+    UiFontAtlas font{};
     UiAnim anim[kUiCap]{};
     UiCommand cmds[kUiCmdCap]{};
     uint8_t cmdCount = 0;
@@ -198,6 +130,7 @@ struct UiState {
     } undoSnap[8]{};
     uint8_t undoN = 0;
     uint8_t undoAt = 0;
+    UiCustomBinLoader binHooks[16]{};
 
     UiState();
     ~UiState();
@@ -235,8 +168,11 @@ void uiDumpLayout(const UiState& s);
 void uiPlace(UiState& s, uint16_t id, bool absolute, float x, float y, float w, float h);
 void uiGrow(UiState& s, uint16_t id, float extraW, float h);
 void uiDockTo(UiState& s, uint8_t edge);
-void uiBuildShell(UiState& s);
-void uiBuildColor(UiState& s);
+void uiSetHeight(UiState& s, uint16_t id, float h);
+void uiSetDrop(UiState& s, uint16_t id, uint8_t drop);
+[[nodiscard]] bool uiRange(const UiState& s, uint16_t id, float& value, float& minV, float& maxV);
+void uiMenuStyle(UiState& s, float width, float itemH, float pad, float gap);
+void uiMarkTab(UiState& s, uint16_t strip, uint16_t tab);
 [[nodiscard]] uint16_t uiImportJson(UiState& s, uint16_t parent, const char* text);
 [[nodiscard]] uint16_t uiImportJsonFile(UiState& s, uint16_t parent, const char* path);
 [[nodiscard]] uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t size);
@@ -244,46 +180,77 @@ void uiBuildColor(UiState& s);
 [[nodiscard]] uint16_t uiFindName(const UiState& s, const char* name);
 void uiName(UiState& s, uint16_t id, const char* name);
 uint16_t uiWindowChrome(UiState& s, uint16_t parent);
-void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, float h);
 [[nodiscard]] uint16_t uiVirtual(UiState& s, uint16_t parent, float rowH);
 void uiVirtualSource(UiState& s, uint16_t id, uint32_t count, void (*fill)(void*, uint32_t, char*, uint8_t), void (*click)(void*, uint32_t), void* user);
 void uiVirtualRefresh(UiState& s, uint16_t id);
-[[nodiscard]] uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float maxV);
+struct UiVirtualGridConfig {
+    float itemW = 84.0f;
+    float itemH = 96.0f;
+    uint32_t totalItems = 0;
+    void (*onBindCell)(void* user, uint16_t cellId, uint32_t itemIndex) = nullptr;
+    void (*onSelect)(void* user, uint32_t itemIndex, bool multi) = nullptr;
+    void (*onActivate)(void* user, uint32_t itemIndex) = nullptr;
+    void* user = nullptr;
+};
+[[nodiscard]] uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& cfg);
+void uiVirtualGridRefresh(UiState& s, uint16_t gridId);
+bool splitCustomDraw(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap);
+void uiDrawAdd(UiState& s, UiDrawFn fn);
+[[nodiscard]] uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, bool clear);
+void uiBindField(UiState& s, uint16_t id, const char* text, uint8_t filter, bool clear);
+void uiBindFieldExtra(UiState& s, uint16_t id, const char* placeholder, uint8_t maxChars, bool required, bool readOnly, bool password);
+void uiBindCheck(UiState& s, uint16_t id, uint8_t kind, uint8_t group, bool on);
+[[nodiscard]] int uiCheckOn(const UiState& s, const char* name);
+void uiBindScroll(UiState& s, uint16_t id, uint16_t inner);
+[[nodiscard]] uint16_t uiMakeMenu(UiState& s);
+void uiApplyPhotoMeta(UiState& s, uint8_t slot, uint8_t frames, const uint16_t* delays, uint32_t delayCount);
+[[nodiscard]] uint16_t uiCheck(UiState& s, uint16_t parent, const char* text, uint8_t kind = 0, uint8_t group = 0, bool on = false);
+[[nodiscard]] uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg);
+[[nodiscard]] uint16_t uiButton(UiState& s, uint16_t parent, const char* label, UiClickFn fn = nullptr, void* user = nullptr);
+[[nodiscard]] uint16_t uiIconButton(UiState& s, uint16_t parent, uint8_t iconSlot, UiClickFn fn = nullptr, void* user = nullptr);
+[[nodiscard]] uint16_t uiBreadcrumbs(UiState& s, uint16_t parent, void (*nav)(void* user, const char* path), void* user);
+void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* path);
+[[nodiscard]] uint16_t uiRubberband(UiState& s, uint16_t host, void (*pick)(void* user, uint16_t child), void* user);
+bool uiRubberbandTrack(UiState& s, uint16_t host, const InputFrame& in);
+struct UiMenuItem {
+    const char* label = nullptr;
+    uint8_t iconSlot = 255;
+    void (*onClick)(void* user) = nullptr;
+    bool separator = false;
+    bool disabled = false;
+};
+void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenuItem> items, void* user);
+void uiMenuClose(UiState& s);
+using UiTextChangeFn = void (*)(void* user, const char* text);
+using UiValueChangeFn = void (*)(void* user, float value);
+struct UiTreeConfig {
+    uint32_t totalNodes = 0;
+    void (*onBindNode)(void* user, uint16_t rowEntity, uint32_t nodeIndex) = nullptr;
+    void (*onToggleNode)(void* user, uint32_t nodeIndex) = nullptr;
+    void (*onSelectNode)(void* user, uint32_t nodeIndex) = nullptr;
+    void* user = nullptr;
+};
+[[nodiscard]] uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg);
+void uiTreeViewRefresh(UiState& s, uint16_t treeId);
+void uiRowIndent(UiState& s, uint16_t id, float pad);
+void uiSetIcon(UiState& s, uint16_t id, uint8_t slot);
+void uiFieldNotify(UiState& s, uint16_t id);
+[[nodiscard]] uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChangeFn onChange, void* user, float width = 160.0f);
+[[nodiscard]] uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float maxV, UiValueChangeFn onChange = nullptr, void* user = nullptr, float width = 0.0f);
 [[nodiscard]] uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV, float step);
 [[nodiscard]] uint16_t uiCurve(UiState& s, uint16_t parent);
 [[nodiscard]] uint16_t uiGradient(UiState& s, uint16_t parent);
 [[nodiscard]] uint16_t uiTreeRow(UiState& s, uint16_t parent, const char* text);
 
-// General JSON document. Nodes live in Flecs; string bytes live in UiState::jsonArena.
-enum class JsonKind : uint8_t { Null = 0, Bool = 1, Number = 2, String = 3, Array = 4, Object = 5 };
-
-struct JsonNode {
-    uint64_t parent = 0;
-    uint64_t first = 0;
-    uint64_t next = 0;
-    uint16_t order = 0;
-    uint8_t kind = 0;
-    uint8_t boolean = 0;
-    double number = 0;
-    uint32_t textOff = 0;
-    uint32_t textLen = 0;
-    char key[48]{};
-};
-
-void jsonRelease(UiState& s);
-[[nodiscard]] uint32_t jsonLoadFile(UiState& s, const char* path);
-[[nodiscard]] bool jsonSaveFile(const UiState& s, const char* path);
-[[nodiscard]] flecs::entity jsonFind(flecs::entity parent, const char* key);
-[[nodiscard]] flecs::entity jsonAt(const UiState& s, flecs::entity parent, uint32_t index);
-[[nodiscard]] bool jsonString(const UiState& s, flecs::entity e, const char*& data, uint32_t& len);
-[[nodiscard]] bool jsonNumber(flecs::entity e, double& out);
 void uiClear(UiState& s);
 uint16_t uiNode(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
 void uiText(UiState& s, uint16_t id, const char* text);
 void uiSetFieldText(UiState& s, uint16_t id, const char* text);
 void uiStamp(UiState& s, uint16_t id, UiToken token);
-void uiShowPage(UiState& s, int page);
-void uiToggleCompact(UiState& s);
+void uiBlur(UiState& s, uint16_t id, float blur);
+void uiTransform(UiState& s, uint16_t id, float angle, float scaleX, float scaleY);
+void uiFilter(UiState& s, uint16_t id, float bright, float contrast);
+void uiSetPaint(UiState& s, uint16_t id, float r, float g, float b, float a);
 void uiClearField(UiState& s);
 [[nodiscard]] UiEvent uiApplyInput(UiState& s, const InputFrame& in);
 void uiLayout(UiState& s, float w, float h);
@@ -319,7 +286,6 @@ void fieldPlaceText(UiState& s);
     float b,
     float a,
     const UiBox* clip);
-void placeChromeText(UiState& s);
 void uiTextStyle(UiState& s, uint16_t id, uint8_t align, uint8_t ellipsis, uint8_t valign, uint8_t wrap, uint8_t deco, float leading);
 [[nodiscard]] uint16_t uiTextId(const UiState& s, uint16_t id);
 [[nodiscard]] uint16_t uiIcon(UiState& s, uint16_t parent, uint8_t slot, float w, float h);
@@ -346,8 +312,8 @@ inline float uiAdvance(const UiState& s, uint32_t cp) {
     if (gi < 0 || gi >= static_cast<int>(kUiFontGlyphs)) {
         gi = static_cast<int>('?' - 32);
     }
-    const float scale = s.fontReady && s.fontPx > 1.0f ? s.look.glyphH / s.fontPx : 1.0f;
-    return s.fontReady ? s.glyphAdv[gi] * scale : s.look.advance;
+    const float scale = s.font.ready && s.font.fontPx > 1.0f ? s.look.glyphH / s.font.fontPx : 1.0f;
+    return s.font.ready ? s.font.glyphs[gi].advance * scale : s.look.advance;
 }
 
 inline float uiMeasure(const UiState& s, const char* text, uint8_t len, uint8_t until) {

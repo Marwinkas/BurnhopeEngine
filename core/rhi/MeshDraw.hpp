@@ -26,6 +26,7 @@ struct MeshDrawDesc {
     VkDeviceSize indirectOffset = 0;
     // Vertex-pull path: raw vertex count passed to vkCmdDraw(cmd, vertexCount, 1, 0, 0).
     uint32_t vertexCount = 0;
+    uint32_t firstVertex = 0;
     // Optional push before the one draw. Visbuffer puts the instance BDA here.
     const void* pushData = nullptr;
     uint32_t pushBytes = 0;

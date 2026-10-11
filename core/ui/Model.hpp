@@ -22,6 +22,24 @@ constexpr uint32_t kUiGlyphStride = 16;
 constexpr uint32_t kUiFontBytes = kUiFontGlyphs * kUiGlyphStride;
 constexpr uint32_t kUiFontBase = kUiHeaderBytes + kUiPrimCap * kUiPrimBytes;
 
+struct UiGlyphMetric {
+    float u0 = 0.0f;
+    float v0 = 0.0f;
+    float u1 = 0.0f;
+    float v1 = 0.0f;
+    float bx = 0.0f;
+    float by = 0.0f;
+    float w = 0.0f;
+    float h = 0.0f;
+    float advance = 0.0f;
+};
+
+struct UiFontAtlas {
+    UiGlyphMetric glyphs[kUiFontGlyphs]{};
+    float fontPx = 32.0f;
+    bool ready = false;
+};
+
 enum class UiRole : uint8_t {
     Panel = 0,
     Button = 1,
@@ -68,27 +86,8 @@ struct WindowOps {
     bool close = false;
     bool minimize = false;
     bool toggleMaximize = false;
-    bool openTool = false;
-    bool openColor = false;
-    bool openFile = false;
     int alwaysOnTop = -1;
     float opacity = -1.0f;
-};
-
-// Общий цвет между холстом и отдельным окном выбора.
-struct ColorBook {
-    float r = 0.36f;
-    float g = 0.55f;
-    float b = 0.92f;
-    float a = 1.0f;
-    float h = 0.62f;
-    float s = 0.61f;
-    float v = 0.92f;
-    uint8_t useAlpha = 1;
-    uint8_t mode = 0;    // 0 меню у кнопки, 1 отдельное окно
-    uint8_t present = 0; // 0 закрыт, 1 меню, 2 окно
-    uint8_t drop = 0;    // 1 пипетка ждёт клик по окну
-    uint32_t gen = 0;
 };
 
 struct UiName {
@@ -98,6 +97,15 @@ struct UiName {
 
 using UiCommandFn = void (*)(void* user);
 using UiClickFn = void (*)(void* user, uint16_t id, int16_t tag);
+
+struct UiButtonConfig {
+    const char* label = nullptr;
+    float width = 0.0f; // 0 auto, >0 px, <0 100%
+    float height = 28.0f;
+    uint8_t iconSlot = 255;
+    UiClickFn onClick = nullptr;
+    void* user = nullptr;
+};
 using UiValueFn = void (*)(void* user, uint16_t id, float value);
 using UiDragFn = void (*)(void* user, uint16_t id, float x, float y);
 using UiEditFn = void (*)(void* user, uint16_t id);
@@ -401,10 +409,12 @@ struct UiRange {
     float step = 0;
 };
 
+constexpr uint8_t kUiPoolCap = 64;
+
 struct UiVirtual {
     uint32_t count = 0;
     uint32_t first = 0;
-    uint16_t slot[16]{};
+    uint16_t slot[kUiPoolCap]{};
     uint8_t slots = 0;
     float rowH = 36;
     void (*fill)(void* user, uint32_t index, char* dst, uint8_t cap) = nullptr;
@@ -414,6 +424,76 @@ struct UiVirtual {
 
 struct UiVirtRow {
     uint32_t index = 0;
+};
+
+struct UiParts {
+    uint16_t icon = kUiNone;
+    uint16_t chevron = kUiNone;
+    uint16_t label = kUiNone;
+};
+
+struct UiMenuPop {
+    uint16_t row[12]{};
+    void (*fn[12])(void*){};
+    void* user = nullptr;
+    uint8_t n = 0;
+};
+
+struct UiValueHook {
+    void (*fn)(void* user, float value) = nullptr;
+    void* user = nullptr;
+};
+
+struct UiTextHook {
+    void (*fn)(void* user, const char* text) = nullptr;
+    void* user = nullptr;
+};
+
+struct UiTreeView {
+    uint32_t count = 0;
+    uint32_t first = 0;
+    uint16_t slot[kUiPoolCap]{};
+    uint8_t slots = 0;
+    float rowH = 28.0f;
+    void (*bind)(void* user, uint16_t row, uint32_t index) = nullptr;
+    void (*toggle)(void* user, uint32_t index) = nullptr;
+    void (*select)(void* user, uint32_t index) = nullptr;
+    void* user = nullptr;
+};
+
+struct UiVirtualGrid {
+    float itemW = 84.0f;
+    float itemH = 96.0f;
+    uint32_t count = 0;
+    uint32_t first = 0;
+    uint8_t cols = 1;
+    uint8_t slots = 0;
+    uint16_t slot[kUiPoolCap]{};
+    void (*bind)(void* user, uint16_t cell, uint32_t index) = nullptr;
+    void (*select)(void* user, uint32_t index, bool multi) = nullptr;
+    void (*activate)(void* user, uint32_t index) = nullptr;
+    void* user = nullptr;
+    uint32_t last = 0xFFFFFFFFu;
+};
+
+struct UiCrumbs {
+    uint16_t seg[8]{};
+    uint16_t sep[7]{};
+    uint8_t n = 0;
+    char path[512]{};
+    void (*nav)(void* user, const char* path) = nullptr;
+    void* user = nullptr;
+};
+
+struct UiRubber {
+    uint16_t overlay = kUiNone;
+    uint8_t active = 0;
+    float x0 = 0;
+    float y0 = 0;
+    float x1 = 0;
+    float y1 = 0;
+    void (*pick)(void* user, uint16_t child) = nullptr;
+    void* user = nullptr;
 };
 
 struct UiTree {
@@ -687,22 +767,5 @@ inline float uiPhotoLod(float blur, uint32_t mips) {
     const float span = mips > 1 ? static_cast<float>(mips - 1) : 0.0f;
     return t * span;
 }
-
-// Colors and chrome of the file browser. The browser does not know about the app.
-struct FileLook {
-    float icon = 84.0f;
-    float tree = 188.0f;
-    float details = 210.0f;
-    uint8_t showTree = 1;
-    uint8_t showDetails = 1;
-    uint8_t showHidden = 0;
-    float side[3]{0.11f, 0.122f, 0.145f};
-    float grid[3]{0.07f, 0.075f, 0.09f};
-    float card[3]{0.15f, 0.16f, 0.19f};
-    float accent[3]{0.28f, 0.48f, 0.92f};
-    float folder[3]{0.91f, 0.72f, 0.29f};
-};
-
-using FileOpenFn = void (*)(void* user, const char* path, int isDir);
 
 } // namespace burnhope

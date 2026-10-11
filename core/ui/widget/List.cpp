@@ -24,7 +24,7 @@ void onTree(void* user, uint16_t id, int16_t) {
 
 uint16_t listItemOf(const UiState& s, uint16_t id) {
     for (uint16_t p = id; p != kUiNone; p = s.parentOf[p]) {
-        if (s.parentOf[p] == s.listInner) {
+        if (s.parentOf[p] == uiFindName(s, "list_inner")) {
             return p;
         }
     }
@@ -32,19 +32,19 @@ uint16_t listItemOf(const UiState& s, uint16_t id) {
 }
 
 void moveListItem(UiState& s, uint16_t item, uint16_t before, bool after) {
-    YGNodeRef parent = s.yoga[s.listInner];
-    YGNodeRef node = s.yoga[item];
-    if (parent == nullptr || node == nullptr) {
+    const uint16_t parent = uiFindName(s, "list_inner");
+    if (uiNodeChildCount(s, parent) == 0 || item >= s.count) {
         return;
     }
-    const uint32_t count = YGNodeGetChildCount(parent);
+    const uint32_t count = uiNodeChildCount(s, parent);
     uint32_t from = count;
     uint32_t to = count;
     for (uint32_t i = 0; i < count; ++i) {
-        if (YGNodeGetChild(parent, i) == node) {
+        const uint16_t child = uiNodeChild(s, parent, i);
+        if (child == item) {
             from = i;
         }
-        if (before != kUiNone && YGNodeGetChild(parent, i) == s.yoga[before]) {
+        if (before != kUiNone && child == before) {
             to = i;
         }
     }
@@ -60,9 +60,7 @@ void moveListItem(UiState& s, uint16_t item, uint16_t before, bool after) {
     if (from == to) {
         return;
     }
-    YGNodeRemoveChild(parent, node);
-    YGNodeInsertChild(parent, node, to);
-    s.layoutDirty = true;
+    uiNodeMoveChild(s, parent, item, to);
 }
 
 uint16_t uiTreeRow(UiState& s, uint16_t parent, const char* text) {
@@ -73,7 +71,7 @@ uint16_t uiTreeRow(UiState& s, uint16_t parent, const char* text) {
     row.shrink = 0.0f;
     row.align = 1;
     row.gap = 6.0f;
-    const uint16_t head = spawn(s, parent, row, paint(UiRole::Button, 0.14f, 0.15f, 0.18f, 4.0f));
+    const uint16_t head = spawn(s, parent, row, paintToken(s.look, UiRole::Button, UiToken::Item, s.look.radiusSm));
     addText(s, head, text != nullptr ? text : "");
     UiFlex body{};
     body.direction = 0;

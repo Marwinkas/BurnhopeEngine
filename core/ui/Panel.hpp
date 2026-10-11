@@ -1,17 +1,17 @@
 #pragma once
 
-#include "ui/Canvas.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 
-// Невиртуальная панель для кода приложения. Горячий кадр её не вызывает.
+// Layout sugar. Talks to UiState and the widget functions, never to Canvas or Vulkan.
 struct Panel {
-    Canvas* canvas = nullptr;
+    UiState* state = nullptr;
     uint16_t id = kUiNone;
 
-    static Panel make(Canvas& canvas, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
-    static Panel at(Canvas& canvas, uint16_t id);
-    static Panel find(Canvas& canvas, const char* name);
+    static Panel make(UiState& state, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
+    static Panel at(UiState& state, uint16_t id);
+    static Panel find(UiState& state, const char* name);
     [[nodiscard]] Panel child(const UiFlex& flex, const UiPaint& paint) const;
     [[nodiscard]] Panel label(const char* text) const;
     [[nodiscard]] Panel textButton(const char* text, int8_t tag) const;

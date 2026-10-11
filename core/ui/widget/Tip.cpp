@@ -11,7 +11,7 @@ uint16_t uiTip(UiState& s, uint16_t parent) {
     flex.heightMode = static_cast<uint8_t>(UiSize::Px);
     flex.width = 8.0f;
     flex.height = 8.0f;
-    UiPaint body = paint(UiRole::Panel, 0.08f, 0.09f, 0.12f, 4.0f);
+    UiPaint body = paintToken(s.look, UiRole::Panel, UiToken::Menu, s.look.radiusSm);
     body.shadow = 10.0f;
     body.borderW = 1.0f;
     body.br = 0.32f;
@@ -21,7 +21,7 @@ uint16_t uiTip(UiState& s, uint16_t parent) {
     if (id == kUiNone || s.count >= kUiCap) {
         return id;
     }
-    const uint16_t label = spawn(s, id, UiFlex{}, paint(UiRole::Label, 0.93f, 0.94f, 0.96f));
+    const uint16_t label = spawn(s, id, UiFlex{}, paintToken(s.look, UiRole::Label, UiToken::Text));
     addText(s, label, "");
     s.labelOf[id] = label;
     uiShow(s, id, false);

@@ -1,4 +1,7 @@
+#include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/Domain.hpp"
+#include "ui/Layout.hpp"
 #include "platform/Trace.hpp"
 
 #include <spdlog/spdlog.h>
@@ -37,18 +40,30 @@ uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& p
         host.valign = 1;
         s.ent[id].set<UiText>(host);
     }
+    if (paint.role == static_cast<uint8_t>(UiRole::Check)) {
+        if (auto* hostFlex = s.ent[id].try_get_mut<UiFlex>()) {
+            if (hostFlex->padL < 32.0f) {
+                hostFlex->padL = 32.0f;
+            }
+        }
+    }
     if (ownsText && s.count < kUiCap) {
         UiFlex text{};
-        text.position = 1;
-        text.widthMode = static_cast<uint8_t>(UiSize::Px);
-        text.heightMode = static_cast<uint8_t>(UiSize::Px);
-        UiPaint ink{};
-        ink.role = static_cast<uint8_t>(UiRole::Label);
-        ink.a = 1.0f;
-        ink.r = 0.93f;
-        ink.g = 0.94f;
-        ink.b = 0.96f;
-        ink.token = static_cast<uint8_t>(UiToken::Custom);
+        UiPaint ink = paintToken(s.look, UiRole::Label, UiToken::Text);
+        if (paint.role == static_cast<uint8_t>(UiRole::Field)) {
+            text.position = 1;
+            text.widthMode = static_cast<uint8_t>(UiSize::Px);
+            text.heightMode = static_cast<uint8_t>(UiSize::Px);
+            ink.token = static_cast<uint8_t>(UiToken::Custom);
+        } else {
+            text.position = 1;
+            text.posX = 0.0f;
+            text.posY = 0.0f;
+            text.widthMode = static_cast<uint8_t>(UiSize::Percent);
+            text.width = 100.0f;
+            text.heightMode = static_cast<uint8_t>(UiSize::Percent);
+            text.height = 100.0f;
+        }
         const uint16_t label = spawn(s, id, text, ink);
         UiText child{};
         child.valign = 1;
@@ -58,6 +73,32 @@ uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& p
         s.labelOf[id] = label;
     }
     return id;
+}
+
+void mirrorChrome(UiState& s, uint16_t id, const char* bytes, uint8_t n) {
+    const UiPaint* paint = id < s.count ? s.ent[id].try_get<UiPaint>() : nullptr;
+    if (paint == nullptr) {
+        return;
+    }
+    const auto role = paint->role;
+    if (role != static_cast<uint8_t>(UiRole::Button) && role != static_cast<uint8_t>(UiRole::Close)
+        && role != static_cast<uint8_t>(UiRole::Check)) {
+        return;
+    }
+    const uint16_t label = s.labelOf[id];
+    if (label >= s.count) {
+        return;
+    }
+    auto* child = s.ent[label].try_get_mut<UiText>();
+    if (child == nullptr) {
+        return;
+    }
+    if (child->len == n && (n == 0 || std::memcmp(child->bytes, bytes, n) == 0)) {
+        return;
+    }
+    std::memcpy(child->bytes, bytes, static_cast<size_t>(n) + 1u);
+    child->len = n;
+    s.visualDirty = true;
 }
 
 void addText(UiState& s, uint16_t id, const char* text) {
@@ -75,6 +116,7 @@ void addText(UiState& s, uint16_t id, const char* text) {
     bytes[n] = '\0';
     UiText* live = s.ent[id].try_get_mut<UiText>();
     if (live != nullptr && live->len == n && (n == 0 || std::memcmp(live->bytes, bytes, n) == 0)) {
+        mirrorChrome(s, id, bytes, n);
         return;
     }
     if (live == nullptr) {
@@ -101,6 +143,7 @@ void addText(UiState& s, uint16_t id, const char* text) {
             host->width = uiMeasure(s, live->bytes, live->len, live->len) + 16.0f;
             s.layoutDirty = true;
         }
+        mirrorChrome(s, id, bytes, n);
     }
     if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Label)) {
         return;
@@ -533,37 +576,27 @@ void uiClear(UiState& s) {
     s.dragId = kUiNone;
     s.pageLabel = kUiNone;
     s.statusLabel = kUiNone;
-    s.pages[0] = kUiNone;
-    s.pages[1] = kUiNone;
-    s.pages[2] = kUiNone;
-    s.photoView = kUiNone;
-    s.fileView = kUiNone;
-    s.fileFrame = kUiNone;
-    jsonRelease(s);
-    s.preview = kUiNone;
-    s.listInner = kUiNone;
-    s.compactRow = kUiNone;
+    uiFiles(s).photoView = kUiNone;
+    uiFiles(s).fileView = kUiNone;
+    uiFiles(s).fileFrame = kUiNone;
     s.menu = kUiNone;
     s.field = kUiNone;
     s.fieldMenu = kUiNone;
     s.editField = kUiNone;
-    s.sideId = kUiNone;
     s.openedMenu = kUiNone;
     s.floatWin = kUiNone;
-    s.dockHome = kUiNone;
-    s.dockPanel = kUiNone;
+    uiDock(s) = {};
     s.resizeId = kUiNone;
     s.dockEdge = 0;
     s.resizeEdge = 0;
     s.cursor = 0;
     s.hintOn = 0;
     s.edgeOn = 0;
-    s.opTool = false;
+    uiHostNote(s).tool = false;
     for (uint16_t i = 0; i < kUiCap; ++i) {
         s.culled[i] = 0;
     }
-    s.pickedId = kUiNone;
-    s.pickedLen = 0;
+    uiPick(s) = {};
     s.menuOpen = false;
     s.cmdCount = 0;
     s.valueN = 0;
@@ -844,14 +877,54 @@ void uiPlace(UiState& s, uint16_t id, bool absolute, float x, float y, float w, 
     uiTrace(s, note, id);
 }
 
-void uiDockTo(UiState& s, uint8_t edge) {
-    if (s.dockPanel == kUiNone || s.dockHome == kUiNone || edge == 0) {
+void uiSetHeight(UiState& s, uint16_t id, float h) {
+    if (id >= s.count) {
         return;
     }
-    uiReparent(s, s.dockPanel, s.dockHome);
-    auto* host = s.ent[s.dockHome].try_get_mut<UiFlex>();
-    auto* panel = s.ent[s.dockPanel].try_get_mut<UiFlex>();
-    if (host == nullptr || panel == nullptr || s.yoga[s.dockHome] == nullptr || s.yoga[s.dockPanel] == nullptr) {
+    auto* flex = s.ent[id].try_get_mut<UiFlex>();
+    if (flex == nullptr) {
+        return;
+    }
+    flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex->height = h;
+    s.layoutDirty = true;
+    s.visualDirty = true;
+}
+
+void uiSetDrop(UiState& s, uint16_t id, uint8_t drop) {
+    if (id >= s.count) {
+        return;
+    }
+    auto* flex = s.ent[id].try_get_mut<UiFlex>();
+    if (flex != nullptr) {
+        flex->drop = drop;
+        s.layoutDirty = true;
+    }
+}
+
+bool uiRange(const UiState& s, uint16_t id, float& value, float& minV, float& maxV) {
+    if (id >= s.count) {
+        return false;
+    }
+    const UiRange* range = s.ent[id].try_get<UiRange>();
+    if (range == nullptr) {
+        return false;
+    }
+    value = range->value;
+    minV = range->min;
+    maxV = range->max;
+    return true;
+}
+
+void uiDockTo(UiState& s, uint8_t edge) {
+    const UiDock& dock = uiDock(s);
+    if (dock.panel == kUiNone || dock.home == kUiNone || edge == 0) {
+        return;
+    }
+    uiReparent(s, dock.panel, dock.home);
+    auto* host = s.ent[dock.home].try_get_mut<UiFlex>();
+    auto* panel = s.ent[dock.panel].try_get_mut<UiFlex>();
+    if (host == nullptr || panel == nullptr || s.yoga[dock.home] == nullptr || s.yoga[dock.panel] == nullptr) {
         return;
     }
     const bool horizontal = edge == 1 || edge == 2;
@@ -870,8 +943,8 @@ void uiDockTo(UiState& s, uint8_t edge) {
         panel->heightMode = static_cast<uint8_t>(UiSize::Px);
         panel->height = 160.0f;
     }
-    YGNodeRef node = s.yoga[s.dockPanel];
-    YGNodeRef parent = s.yoga[s.dockHome];
+    YGNodeRef node = s.yoga[dock.panel];
+    YGNodeRef parent = s.yoga[dock.home];
     YGNodeRemoveChild(parent, node);
     const uint32_t index = (edge == 1 || edge == 3) ? 0u : YGNodeGetChildCount(parent);
     YGNodeInsertChild(parent, node, index);
@@ -1054,6 +1127,14 @@ UiState::UiState()
         labelOf[i] = kUiNone;
         contextOf[i] = kUiNone;
     }
+    (void)world.ensure<UiFileBrowser>();
+    (void)world.ensure<UiCalendarComponent>();
+    (void)world.ensure<UiColorPickerComponent>();
+    (void)world.ensure<UiHostNote>();
+    (void)world.ensure<UiDock>();
+    uiCopyBinHooks(*this);
+    uiDrawAdd(*this, splitCustomDraw);
+    uiDrawAdd(*this, colorCustomDraw);
 }
 
 } // namespace burnhope

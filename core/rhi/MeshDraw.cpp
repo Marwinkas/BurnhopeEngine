@@ -17,7 +17,7 @@ void meshDrawRecord(VkCommandBuffer cmd, const MeshDrawDesc& desc) {
     }
     if (desc.vertexCount > 0 && desc.vert != VK_NULL_HANDLE) {
         cmdBindVertFrag(cmd, desc.vert, desc.frag, desc.vertNullMeshStage);
-        vkCmdDraw(cmd, desc.vertexCount, 1, 0, 0);
+        vkCmdDraw(cmd, desc.vertexCount, 1, desc.firstVertex, 0);
     }
 }
 

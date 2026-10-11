@@ -1,4 +1,5 @@
 #include "ui/widget/Detail.hpp"
+#include "ui/Domain.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -28,6 +29,16 @@ uint16_t uiIcon(UiState& s, uint16_t parent, uint8_t slot, float w, float h) {
     image.viewH = 1.0f;
     s.ent[id].set<UiImage>(image);
     return id;
+}
+
+void uiSetIcon(UiState& s, uint16_t id, uint8_t slot) {
+    auto* image = id < s.count ? s.ent[id].try_get_mut<UiImage>() : nullptr;
+    if (image == nullptr) {
+        return;
+    }
+    const bool on = slot < kPhotoSlots;
+    image->slot = on ? slot : 0;
+    uiShow(s, id, on);
 }
 
 void photoClamp(UiImage& image) {
@@ -113,10 +124,10 @@ void tickPhoto(UiState& s) {
         dt = 0.0f;
     }
     s.prevTime = s.time;
-    if (s.photoView == kUiNone || s.photoView >= s.count) {
+    if (uiFiles(s).photoView == kUiNone || uiFiles(s).photoView >= s.count) {
         return;
     }
-    auto* image = s.ent[s.photoView].try_get_mut<UiImage>();
+    auto* image = s.ent[uiFiles(s).photoView].try_get_mut<UiImage>();
     if (image == nullptr || image->frames < 2) {
         return;
     }
@@ -130,6 +141,24 @@ void tickPhoto(UiState& s) {
         image->frame = static_cast<uint8_t>((image->frame + 1u) % image->frames);
         s.visualDirty = true;
     }
+}
+
+void uiApplyPhotoMeta(UiState& s, uint8_t slot, uint8_t frames, const uint16_t* delays, uint32_t delayCount) {
+    if (slot >= kPhotoSlots || uiFiles(s).photoView == kUiNone || uiFiles(s).photoView >= s.count) {
+        return;
+    }
+    auto* image = s.ent[uiFiles(s).photoView].try_get_mut<UiImage>();
+    if (image == nullptr || image->slot != slot) {
+        return;
+    }
+    image->frames = frames == 0 ? 1 : frames;
+    if (image->frame >= image->frames) {
+        image->frame = 0;
+    }
+    for (uint32_t i = 0; i < 16u && i < delayCount; ++i) {
+        image->delayMs[i] = delays != nullptr ? delays[i] : 0;
+    }
+    s.visualDirty = true;
 }
 
 } // namespace burnhope

@@ -1,11 +1,19 @@
 #include "ui/widget/Detail.hpp"
+#include "ui/Domain.hpp"
+#include "ui/Layout.hpp"
+#include "ui/PrimitiveBatch.hpp"
 #include "color/Color.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <ctime>
 
 namespace burnhope {
+
+void uiSetColorBook(UiState& s, ColorBook* book) {
+    uiColor(s).book = book;
+}
 
 void hsvToRgb(float h, float s, float v, float& r, float& g, float& b) {
     ColorLinear color{};
@@ -71,31 +79,31 @@ void writeHex(char* dst, uint8_t& len, float r, float g, float b, float a, bool 
 
 void applyColor(UiState& s, bool fromHsv, bool publish) {
     if (fromHsv) {
-        hsvToRgb(s.colorH, s.colorS, s.colorV, s.colorR, s.colorG, s.colorB);
+        hsvToRgb(uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV, uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB);
     } else {
-        rgbToHsv(s.colorR, s.colorG, s.colorB, s.colorH, s.colorS, s.colorV);
+        rgbToHsv(uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV);
     }
-    setRange(s, s.colorRgb[0], s.colorR);
-    setRange(s, s.colorRgb[1], s.colorG);
-    setRange(s, s.colorRgb[2], s.colorB);
-    setRange(s, s.colorHsv[0], s.colorH);
-    setRange(s, s.colorHsv[1], s.colorS);
-    setRange(s, s.colorHsv[2], s.colorV);
-    if (s.colorSwatch != kUiNone) {
-        auto* paint = s.ent[s.colorSwatch].try_get_mut<UiPaint>();
+    setRange(s, uiColor(s).colorRgb[0], uiColor(s).colorR);
+    setRange(s, uiColor(s).colorRgb[1], uiColor(s).colorG);
+    setRange(s, uiColor(s).colorRgb[2], uiColor(s).colorB);
+    setRange(s, uiColor(s).colorHsv[0], uiColor(s).colorH);
+    setRange(s, uiColor(s).colorHsv[1], uiColor(s).colorS);
+    setRange(s, uiColor(s).colorHsv[2], uiColor(s).colorV);
+    if (uiColor(s).colorSwatch != kUiNone) {
+        auto* paint = s.ent[uiColor(s).colorSwatch].try_get_mut<UiPaint>();
         if (paint != nullptr) {
-            paint->r = s.colorR;
-            paint->g = s.colorG;
-            paint->b = s.colorB;
-            paint->a = s.colorA;
+            paint->r = uiColor(s).colorR;
+            paint->g = uiColor(s).colorG;
+            paint->b = uiColor(s).colorB;
+            paint->a = uiColor(s).colorA;
         }
     }
     for (uint16_t id = 0; id < s.count; ++id) {
         auto* ramp = s.ent[id].try_get_mut<UiPaint>();
         if (ramp != nullptr && ramp->ramp >= 5) {
-            ramp->r = s.colorR;
-            ramp->g = s.colorG;
-            ramp->b = s.colorB;
+            ramp->r = uiColor(s).colorR;
+            ramp->g = uiColor(s).colorG;
+            ramp->b = uiColor(s).colorB;
         }
     }
     auto write = [&](uint16_t id, bool keepCaret) {
@@ -109,23 +117,23 @@ void applyColor(UiState& s, bool fromHsv, bool publish) {
         if (keepCaret && s.focused == id) {
             return;
         }
-        writeHex(field->bytes, field->len, s.colorR, s.colorG, s.colorB, s.colorA, true);
+        writeHex(field->bytes, field->len, uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorA, true);
         field->caret = field->len;
         field->anchor = field->len;
     };
-    write(s.colorTarget, false);
-    write(s.colorHex, true);
+    write(uiColor(s).colorTarget, false);
+    write(uiColor(s).colorHex, true);
     const int shown[7] = {
-        static_cast<int>(s.colorR * 255.0f + 0.5f),
-        static_cast<int>(s.colorG * 255.0f + 0.5f),
-        static_cast<int>(s.colorB * 255.0f + 0.5f),
-        static_cast<int>(s.colorA * 255.0f + 0.5f),
-        static_cast<int>(s.colorH * 360.0f + 0.5f),
-        static_cast<int>(s.colorS * 100.0f + 0.5f),
-        static_cast<int>(s.colorV * 100.0f + 0.5f),
+        static_cast<int>(uiColor(s).colorR * 255.0f + 0.5f),
+        static_cast<int>(uiColor(s).colorG * 255.0f + 0.5f),
+        static_cast<int>(uiColor(s).colorB * 255.0f + 0.5f),
+        static_cast<int>(uiColor(s).colorA * 255.0f + 0.5f),
+        static_cast<int>(uiColor(s).colorH * 360.0f + 0.5f),
+        static_cast<int>(uiColor(s).colorS * 100.0f + 0.5f),
+        static_cast<int>(uiColor(s).colorV * 100.0f + 0.5f),
     };
     for (int i = 0; i < 7; ++i) {
-        const uint16_t id = s.colorNum[i];
+        const uint16_t id = uiColor(s).colorNum[i];
         if (id == kUiNone) {
             continue;
         }
@@ -137,7 +145,7 @@ void applyColor(UiState& s, bool fromHsv, bool publish) {
         field->caret = field->len;
         field->anchor = field->len;
     }
-    setRange(s, s.colorAlpha, s.colorA);
+    setRange(s, uiColor(s).colorAlpha, uiColor(s).colorA);
     if (publish) {
         publishColor(s);
     }
@@ -146,22 +154,22 @@ void applyColor(UiState& s, bool fromHsv, bool publish) {
 }
 
 void takeBook(UiState& s) {
-    if (s.book == nullptr || s.book->gen == 0) {
+    if (uiColor(s).book == nullptr || uiColor(s).book->gen == 0) {
         return;
     }
-    s.colorR = s.book->r;
-    s.colorG = s.book->g;
-    s.colorB = s.book->b;
-    s.colorA = s.book->a;
-    s.colorH = s.book->h;
-    s.colorS = s.book->s;
-    s.colorV = s.book->v;
-    s.colorUseAlpha = s.book->useAlpha;
-    s.colorMode = s.book->mode;
-    s.colorPresent = s.book->present;
-    s.colorDrop = s.book->drop;
-    s.colorSeen = s.book->gen;
-    s.colorApplied = s.book->present;
+    uiColor(s).colorR = uiColor(s).book->r;
+    uiColor(s).colorG = uiColor(s).book->g;
+    uiColor(s).colorB = uiColor(s).book->b;
+    uiColor(s).colorA = uiColor(s).book->a;
+    uiColor(s).colorH = uiColor(s).book->h;
+    uiColor(s).colorS = uiColor(s).book->s;
+    uiColor(s).colorV = uiColor(s).book->v;
+    uiColor(s).colorUseAlpha = uiColor(s).book->useAlpha;
+    uiColor(s).colorMode = uiColor(s).book->mode;
+    uiColor(s).colorPresent = uiColor(s).book->present;
+    uiColor(s).colorDrop = uiColor(s).book->drop;
+    uiColor(s).colorSeen = uiColor(s).book->gen;
+    uiColor(s).colorApplied = uiColor(s).book->present;
 }
 
 void paintColor(UiState& s) {
@@ -191,8 +199,8 @@ void dragWheel(UiState& s, uint16_t id, float x, float y) {
         if (hue >= 1.0f) {
             hue -= 1.0f;
         }
-        s.colorH = hue;
-        s.colorS = sat;
+        uiColor(s).colorH = hue;
+        uiColor(s).colorS = sat;
         applyColor(s, true);
     } else if (paint->tag == -71) {
         float t = b.h > 1.0f ? 1.0f - (y - b.y) / b.h : 0.0f;
@@ -202,7 +210,7 @@ void dragWheel(UiState& s, uint16_t id, float x, float y) {
         if (t > 1.0f) {
             t = 1.0f;
         }
-        s.colorV = t;
+        uiColor(s).colorV = t;
         applyColor(s, true);
     } else if (paint->tag == -72) {
         float t = b.w > 1.0f ? (x - b.x) / b.w : 0.0f;
@@ -212,7 +220,7 @@ void dragWheel(UiState& s, uint16_t id, float x, float y) {
         if (t > 1.0f) {
             t = 1.0f;
         }
-        s.colorA = t;
+        uiColor(s).colorA = t;
         applyColor(s, true);
     }
 }
@@ -333,10 +341,10 @@ void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& 
                 return true;
             }
             if (paint->tag == -78) {
-                r = s.colorR;
-                g = s.colorG;
-                b = s.colorB;
-                a = s.colorA;
+                r = uiColor(s).colorR;
+                g = uiColor(s).colorG;
+                b = uiColor(s).colorB;
+                a = uiColor(s).colorA;
                 return true;
             }
             if (paint->tag == -71) {
@@ -347,7 +355,7 @@ void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& 
                 if (v > 1.0f) {
                     v = 1.0f;
                 }
-                hsvToRgb(s.colorH, s.colorS, v, r, g, b);
+                hsvToRgb(uiColor(s).colorH, uiColor(s).colorS, v, r, g, b);
                 a = 1.0f;
                 return true;
             }
@@ -374,19 +382,19 @@ void colorTakeSlider(UiState& s, uint16_t id) {
         return;
     }
     if (paint->tag == -40) {
-        s.colorR = range->value;
+        uiColor(s).colorR = range->value;
     } else if (paint->tag == -41) {
-        s.colorG = range->value;
+        uiColor(s).colorG = range->value;
     } else if (paint->tag == -42) {
-        s.colorB = range->value;
+        uiColor(s).colorB = range->value;
     } else if (paint->tag == -46) {
-        s.colorA = range->value;
+        uiColor(s).colorA = range->value;
     } else if (paint->tag == -43) {
-        s.colorH = range->value;
+        uiColor(s).colorH = range->value;
     } else if (paint->tag == -44) {
-        s.colorS = range->value;
+        uiColor(s).colorS = range->value;
     } else {
-        s.colorV = range->value;
+        uiColor(s).colorV = range->value;
     }
     applyColor(s, paint->tag <= -43 && paint->tag >= -45);
 }
@@ -396,44 +404,41 @@ void colorOnValue(void* user, uint16_t id, float) {
 }
 
 void publishColor(UiState& s) {
-    if (s.book == nullptr) {
+    if (uiColor(s).book == nullptr) {
         return;
     }
-    ColorBook& b = *s.book;
-    b.r = s.colorR;
-    b.g = s.colorG;
-    b.b = s.colorB;
-    b.a = s.colorA;
-    b.h = s.colorH;
-    b.s = s.colorS;
-    b.v = s.colorV;
-    b.useAlpha = s.colorUseAlpha;
-    b.mode = s.colorMode;
-    b.present = s.colorPresent;
-    b.drop = s.colorDrop;
+    ColorBook& b = *uiColor(s).book;
+    b.r = uiColor(s).colorR;
+    b.g = uiColor(s).colorG;
+    b.b = uiColor(s).colorB;
+    b.a = uiColor(s).colorA;
+    b.h = uiColor(s).colorH;
+    b.s = uiColor(s).colorS;
+    b.v = uiColor(s).colorV;
+    b.useAlpha = uiColor(s).colorUseAlpha;
+    b.mode = uiColor(s).colorMode;
+    b.present = uiColor(s).colorPresent;
+    b.drop = uiColor(s).colorDrop;
     ++b.gen;
-    s.colorSeen = b.gen;
+    uiColor(s).colorSeen = b.gen;
 }
 
 void setBtnLabel(UiState& s, uint16_t id, const char* text) {
     if (id == kUiNone || id >= s.count) {
         return;
     }
-    auto* label = s.ent[id].try_get_mut<UiText>();
-    if (label == nullptr) {
-        return;
-    }
-    copyText(label->bytes, label->len, text);
+    addText(s, id, text);
+    const UiText* label = s.ent[id].try_get<UiText>();
     auto* flex = s.ent[id].try_get_mut<UiFlex>();
-    if (flex != nullptr) {
+    if (label != nullptr && flex != nullptr) {
         flex->widthMode = static_cast<uint8_t>(UiSize::Px);
         flex->width = static_cast<float>(label->len) * s.look.advance + 20.0f;
     }
 }
 
 void refreshColorChrome(UiState& s) {
-    setBtnLabel(s, s.colorMenuBtn, s.colorMode == 0 ? "MENU *" : "MENU");
-    setBtnLabel(s, s.colorWinBtn, s.colorMode == 1 ? "WINDOW *" : "WINDOW");
+    setBtnLabel(s, uiColor(s).colorMenuBtn, uiColor(s).colorMode == 0 ? "MENU *" : "MENU");
+    setBtnLabel(s, uiColor(s).colorWinBtn, uiColor(s).colorMode == 1 ? "WINDOW *" : "WINDOW");
 }
 
 void placeColorMenu(UiState& s) {
@@ -441,8 +446,8 @@ void placeColorMenu(UiState& s) {
     float y = 48.0f;
     const float w = 500.0f;
     const float h = 720.0f;
-    if (s.colorAnchor != kUiNone && s.colorAnchor < s.count) {
-        const UiBox& b = s.box[s.colorAnchor];
+    if (uiColor(s).colorAnchor != kUiNone && uiColor(s).colorAnchor < s.count) {
+        const UiBox& b = s.box[uiColor(s).colorAnchor];
         x = b.x;
         y = b.y + b.h + 6.0f;
         if (s.laidH > 0.0f && y + h > s.laidH - 8.0f) {
@@ -458,114 +463,114 @@ void placeColorMenu(UiState& s) {
     if (y < 8.0f) {
         y = 8.0f;
     }
-    uiPlace(s, s.colorPanel, true, x, y, w, h);
+    uiPlace(s, uiColor(s).colorPanel, true, x, y, w, h);
 }
 
 void syncColor(UiState& s) {
-    if (s.book == nullptr) {
+    if (uiColor(s).book == nullptr) {
         return;
     }
-    const ColorBook& b = *s.book;
-    if (b.gen != s.colorSeen) {
-        s.colorR = b.r;
-        s.colorG = b.g;
-        s.colorB = b.b;
-        s.colorA = b.a;
-        s.colorH = b.h;
-        s.colorS = b.s;
-        s.colorV = b.v;
-        s.colorUseAlpha = b.useAlpha;
-        s.colorMode = b.mode;
-        s.colorPresent = b.present;
-        s.colorDrop = b.drop;
-        s.colorSeen = b.gen;
+    const ColorBook& b = *uiColor(s).book;
+    if (b.gen != uiColor(s).colorSeen) {
+        uiColor(s).colorR = b.r;
+        uiColor(s).colorG = b.g;
+        uiColor(s).colorB = b.b;
+        uiColor(s).colorA = b.a;
+        uiColor(s).colorH = b.h;
+        uiColor(s).colorS = b.s;
+        uiColor(s).colorV = b.v;
+        uiColor(s).colorUseAlpha = b.useAlpha;
+        uiColor(s).colorMode = b.mode;
+        uiColor(s).colorPresent = b.present;
+        uiColor(s).colorDrop = b.drop;
+        uiColor(s).colorSeen = b.gen;
         applyColor(s, false, false);
     }
-    if (s.colorPresent == s.colorApplied) {
+    if (uiColor(s).colorPresent == uiColor(s).colorApplied) {
         return;
     }
-    s.colorApplied = s.colorPresent;
-    if (s.colorHost == 0) {
-        if (s.colorPresent == 1) {
+    uiColor(s).colorApplied = uiColor(s).colorPresent;
+    if (uiColor(s).colorHost == 0) {
+        if (uiColor(s).colorPresent == 1) {
             placeColorMenu(s);
-            uiShow(s, s.colorPanel, true);
+            uiShow(s, uiColor(s).colorPanel, true);
         } else {
-            uiShow(s, s.colorPanel, false);
-            if (s.colorPresent == 2) {
-                s.opColor = true;
+            uiShow(s, uiColor(s).colorPanel, false);
+            if (uiColor(s).colorPresent == 2) {
+                uiHostNote(s).color = true;
             }
         }
-    } else if (s.colorPresent != 2) {
+    } else if (uiColor(s).colorPresent != 2) {
         s.opClose = true;
     }
 }
 
 void colorOnOpen(void* user, uint16_t id, int16_t) {
     auto& s = *static_cast<UiState*>(user);
-    s.colorAnchor = id;
+    uiColor(s).colorAnchor = id;
     paintColor(s);
-    if (s.colorMode == 1) {
-        s.colorPresent = 2;
-        s.colorApplied = 2;
-        uiShow(s, s.colorPanel, false);
-        s.opColor = true;
+    if (uiColor(s).colorMode == 1) {
+        uiColor(s).colorPresent = 2;
+        uiColor(s).colorApplied = 2;
+        uiShow(s, uiColor(s).colorPanel, false);
+        uiHostNote(s).color = true;
     } else {
-        s.colorPresent = 1;
-        s.colorApplied = 1;
+        uiColor(s).colorPresent = 1;
+        uiColor(s).colorApplied = 1;
         placeColorMenu(s);
-        uiShow(s, s.colorPanel, true);
+        uiShow(s, uiColor(s).colorPanel, true);
     }
     publishColor(s);
 }
 
 void colorOnClose(void* user, uint16_t, int16_t) {
     auto& s = *static_cast<UiState*>(user);
-    s.colorPresent = 0;
-    s.colorApplied = 0;
-    uiShow(s, s.colorPanel, false);
+    uiColor(s).colorPresent = 0;
+    uiColor(s).colorApplied = 0;
+    uiShow(s, uiColor(s).colorPanel, false);
     publishColor(s);
-    if (s.colorHost != 0) {
+    if (uiColor(s).colorHost != 0) {
         s.opClose = true;
     }
 }
 
 void colorOnDrop(void* user, uint16_t, int16_t) {
     auto& s = *static_cast<UiState*>(user);
-    s.colorDrop = s.colorDrop == 0 ? 1 : 0;
+    uiColor(s).colorDrop = uiColor(s).colorDrop == 0 ? 1 : 0;
     publishColor(s);
-    if (s.colorHost == 0 && s.colorPresent == 1) {
-        if (s.colorDrop == 0) {
+    if (uiColor(s).colorHost == 0 && uiColor(s).colorPresent == 1) {
+        if (uiColor(s).colorDrop == 0) {
             placeColorMenu(s);
         }
-        uiShow(s, s.colorPanel, s.colorDrop == 0);
+        uiShow(s, uiColor(s).colorPanel, uiColor(s).colorDrop == 0);
     }
 }
 
 void colorOnMenu(void* user, uint16_t, int16_t) {
     auto& s = *static_cast<UiState*>(user);
-    s.colorMode = 0;
-    s.colorPresent = 1;
-    s.colorApplied = 1;
+    uiColor(s).colorMode = 0;
+    uiColor(s).colorPresent = 1;
+    uiColor(s).colorApplied = 1;
     publishColor(s);
     refreshColorChrome(s);
-    if (s.colorHost != 0) {
+    if (uiColor(s).colorHost != 0) {
         s.opClose = true;
     } else {
         placeColorMenu(s);
-        uiShow(s, s.colorPanel, true);
+        uiShow(s, uiColor(s).colorPanel, true);
     }
 }
 
 void colorOnWindow(void* user, uint16_t, int16_t) {
     auto& s = *static_cast<UiState*>(user);
-    s.colorMode = 1;
-    s.colorPresent = 2;
-    s.colorApplied = 2;
-    uiShow(s, s.colorPanel, false);
+    uiColor(s).colorMode = 1;
+    uiColor(s).colorPresent = 2;
+    uiColor(s).colorApplied = 2;
+    uiShow(s, uiColor(s).colorPanel, false);
     publishColor(s);
     refreshColorChrome(s);
-    if (s.colorHost == 0) {
-        s.opColor = true;
+    if (uiColor(s).colorHost == 0) {
+        uiHostNote(s).color = true;
     }
 }
 
@@ -579,23 +584,23 @@ void colorOnEdit(void* user, uint16_t id) {
     if (field == nullptr) {
         return;
     }
-    if (id == s.colorHex) {
+    if (id == uiColor(s).colorHex) {
         float r = 0.0f;
         float g = 0.0f;
         float b = 0.0f;
-        float a = s.colorA;
+        float a = uiColor(s).colorA;
         if (readHex(*field, r, g, b, a)) {
-            s.colorR = r;
-            s.colorG = g;
-            s.colorB = b;
-            s.colorA = a;
+            uiColor(s).colorR = r;
+            uiColor(s).colorG = g;
+            uiColor(s).colorB = b;
+            uiColor(s).colorA = a;
             applyColor(s, false);
         }
         return;
     }
     int which = -1;
     for (int i = 0; i < 7; ++i) {
-        if (s.colorNum[i] == id) {
+        if (uiColor(s).colorNum[i] == id) {
             which = i;
         }
     }
@@ -612,20 +617,20 @@ void colorOnEdit(void* user, uint16_t id) {
         }
         const float u = static_cast<float>(n) / 255.0f;
         if (which == 0) {
-            s.colorR = u;
+            uiColor(s).colorR = u;
         } else if (which == 1) {
-            s.colorG = u;
+            uiColor(s).colorG = u;
         } else if (which == 2) {
-            s.colorB = u;
+            uiColor(s).colorB = u;
         } else {
-            s.colorA = u;
+            uiColor(s).colorA = u;
         }
         applyColor(s, false);
     } else if (which == 4) {
         if (n > 360) {
             n = 360;
         }
-        s.colorH = static_cast<float>(n) / 360.0f;
+        uiColor(s).colorH = static_cast<float>(n) / 360.0f;
         applyColor(s, true);
     } else {
         if (n > 100) {
@@ -633,9 +638,9 @@ void colorOnEdit(void* user, uint16_t id) {
         }
         const float u = static_cast<float>(n) / 100.0f;
         if (which == 5) {
-            s.colorS = u;
+            uiColor(s).colorS = u;
         } else {
-            s.colorV = u;
+            uiColor(s).colorV = u;
         }
         applyColor(s, true);
     }
@@ -643,7 +648,7 @@ void colorOnEdit(void* user, uint16_t id) {
 
 bool colorGrab(void* user, uint16_t hit, float x, float y) {
     auto& s = *static_cast<UiState*>(user);
-    const bool dropping = s.colorDrop != 0 || (s.book != nullptr && s.book->drop != 0);
+    const bool dropping = uiColor(s).colorDrop != 0 || (uiColor(s).book != nullptr && uiColor(s).book->drop != 0);
     if (!dropping) {
         return false;
     }
@@ -656,15 +661,15 @@ bool colorGrab(void* user, uint16_t hit, float x, float y) {
     float sb = 0.0f;
     float sa = 1.0f;
     samplePixel(s, x, y, sr, sg, sb, sa);
-    s.colorR = sr;
-    s.colorG = sg;
-    s.colorB = sb;
-    s.colorA = sa;
-    s.colorDrop = 0;
+    uiColor(s).colorR = sr;
+    uiColor(s).colorG = sg;
+    uiColor(s).colorB = sb;
+    uiColor(s).colorA = sa;
+    uiColor(s).colorDrop = 0;
     applyColor(s, false);
-    if (s.colorHost == 0 && s.colorPresent == 1) {
+    if (uiColor(s).colorHost == 0 && uiColor(s).colorPresent == 1) {
         placeColorMenu(s);
-        uiShow(s, s.colorPanel, true);
+        uiShow(s, uiColor(s).colorPanel, true);
     }
     return true;
 }
@@ -704,16 +709,16 @@ void fillColorBody(UiState& s, uint16_t parent) {
     wheel.width = 220.0f;
     wheel.height = 220.0f;
     wheel.shrink = 0.0f;
-    s.colorWheel = spawn(s, wheelRowId, wheel, paint(UiRole::Panel, 0, 0, 0, 0.0f, -70));
-    uiDrag(s, s.colorWheel, colorOnDrag, &s);
+    uiColor(s).colorWheel = spawn(s, wheelRowId, wheel, paint(UiRole::Panel, 0, 0, 0, 0.0f, -70));
+    uiDrag(s, uiColor(s).colorWheel, colorOnDrag, &s);
     UiFlex valBar{};
     valBar.widthMode = static_cast<uint8_t>(UiSize::Px);
     valBar.heightMode = static_cast<uint8_t>(UiSize::Px);
     valBar.width = 22.0f;
     valBar.height = 220.0f;
     valBar.shrink = 0.0f;
-    s.colorVal = spawn(s, wheelRowId, valBar, paint(UiRole::Panel, 0, 0, 0, 0.0f, -71));
-    uiDrag(s, s.colorVal, colorOnDrag, &s);
+    uiColor(s).colorVal = spawn(s, wheelRowId, valBar, paint(UiRole::Panel, 0, 0, 0, 0.0f, -71));
+    uiDrag(s, uiColor(s).colorVal, colorOnDrag, &s);
     UiFlex side{};
     side.direction = 0;
     side.widthMode = static_cast<uint8_t>(UiSize::Px);
@@ -729,7 +734,7 @@ void fillColorBody(UiState& s, uint16_t parent) {
     swatch.widthMode = static_cast<uint8_t>(UiSize::Percent);
     swatch.width = 100.0f;
     swatch.shrink = 0.0f;
-    s.colorSwatch = spawn(s, sideId, swatch, paint(UiRole::Panel, s.colorR, s.colorG, s.colorB, 6.0f, -78));
+    uiColor(s).colorSwatch = spawn(s, sideId, swatch, paint(UiRole::Panel, uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, 6.0f, -78));
     UiFlex pick{};
     pick.heightMode = static_cast<uint8_t>(UiSize::Px);
     pick.height = 32.0f;
@@ -746,7 +751,7 @@ void fillColorBody(UiState& s, uint16_t parent) {
     const char* names[7] = {"R", "G", "B", "A", "H", "S", "V"};
     const int8_t tags[7] = {-40, -41, -42, -46, -43, -44, -45};
     const int8_t numTags[7] = {-80, -81, -82, -83, -84, -85, -86};
-    const float starts[7] = {s.colorR, s.colorG, s.colorB, s.colorA, s.colorH, s.colorS, s.colorV};
+    const float starts[7] = {uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorA, uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV};
     for (int i = 0; i < 7; ++i) {
         UiFlex line = row;
         line.heightMode = static_cast<uint8_t>(UiSize::Px);
@@ -769,11 +774,11 @@ void fillColorBody(UiState& s, uint16_t parent) {
         }
         s.ent[sliderId].set<UiRange>({starts[i], 0.0f, 1.0f});
         if (i < 3) {
-            s.colorRgb[i] = sliderId;
+            uiColor(s).colorRgb[i] = sliderId;
         } else if (i == 3) {
-            s.colorAlpha = sliderId;
+            uiColor(s).colorAlpha = sliderId;
         } else {
-            s.colorHsv[i - 4] = sliderId;
+            uiColor(s).colorHsv[i - 4] = sliderId;
         }
         UiFlex num{};
         num.widthMode = static_cast<uint8_t>(UiSize::Px);
@@ -789,7 +794,7 @@ void fillColorBody(UiState& s, uint16_t parent) {
         digits.maxChars = 3;
         s.ent[numId].set<UiField>(digits);
         uiEdit(s, numId, colorOnEdit, &s);
-        s.colorNum[i] = numId;
+        uiColor(s).colorNum[i] = numId;
     }
     UiFlex hexFlex{};
     hexFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
@@ -797,33 +802,33 @@ void fillColorBody(UiState& s, uint16_t parent) {
     hexFlex.widthMode = static_cast<uint8_t>(UiSize::Percent);
     hexFlex.width = 100.0f;
     hexFlex.shrink = 0.0f;
-    s.colorHex = spawn(s, parent, hexFlex, paint(UiRole::Field, 0.10f, 0.11f, 0.14f, 6.0f));
+    uiColor(s).colorHex = spawn(s, parent, hexFlex, paint(UiRole::Field, 0.10f, 0.11f, 0.14f, 6.0f));
     UiField hex{};
     hex.padL = 10.0f;
     hex.padR = 10.0f;
     hex.maxChars = 9;
-    s.ent[s.colorHex].set<UiField>(hex);
-    uiEdit(s, s.colorHex, colorOnEdit, &s);
+    s.ent[uiColor(s).colorHex].set<UiField>(hex);
+    uiEdit(s, uiColor(s).colorHex, colorOnEdit, &s);
     UiFlex modeRow = row;
     modeRow.heightMode = static_cast<uint8_t>(UiSize::Px);
     modeRow.height = 32.0f;
     modeRow.shrink = 0.0f;
     modeRow.gap = 6.0f;
     const uint16_t modeId = spawn(s, parent, modeRow, paint(UiRole::Hidden, 0, 0, 0));
-    s.colorMenuBtn = chip(modeId, "MENU", -74, colorOnMenu);
-    s.colorWinBtn = chip(modeId, "WINDOW", -75, colorOnWindow);
+    uiColor(s).colorMenuBtn = chip(modeId, "MENU", -74, colorOnMenu);
+    uiColor(s).colorWinBtn = chip(modeId, "WINDOW", -75, colorOnWindow);
     chip(parent, "CLOSE", -58, colorOnClose);
     s.grabFn = colorGrab;
     s.grabUser = &s;
-    applyColor(s, true, s.colorSeen == 0);
+    applyColor(s, true, uiColor(s).colorSeen == 0);
 }
 
 void uiBuildColor(UiState& s) {
-    s.colorHost = 1;
-    if (s.book != nullptr && s.book->gen != 0) {
+    uiColor(s).colorHost = 1;
+    if (uiColor(s).book != nullptr && uiColor(s).book->gen != 0) {
         takeBook(s);
     } else {
-        rgbToHsv(s.colorR, s.colorG, s.colorB, s.colorH, s.colorS, s.colorV);
+        rgbToHsv(uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV);
     }
     UiFlex col{};
     col.direction = 0;
@@ -849,11 +854,105 @@ void uiBuildColor(UiState& s) {
     gap.height = 1.0f;
     spawn(s, title, gap, paint(UiRole::Hidden, 0, 0, 0));
     spawn(s, title, px(28.0f, 28.0f), paint(UiRole::Close, 0.55f, 0.28f, 0.28f, 6.0f));
-    s.colorPanel = root;
-    s.colorPresent = 2;
-    s.colorApplied = 2;
-    s.colorMode = 1;
+    uiColor(s).colorPanel = root;
+    uiColor(s).colorPresent = 2;
+    uiColor(s).colorApplied = 2;
+    uiColor(s).colorMode = 1;
     fillColorBody(s, root);
 }
+
+bool colorCustomDraw(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
+    const UiPaint* paintPtr = id < s.count ? s.ent[id].try_get<UiPaint>() : nullptr;
+    if (paintPtr == nullptr) {
+        return false;
+    }
+    const UiPaint& paint = *paintPtr;
+    const int tag = paint.tag;
+    if (tag != -70 && tag != -71 && tag != -72 && tag != -78) {
+        return false;
+    }
+    const UiBox& box = s.box[id];
+        if (paint.tag == -70) {
+            n = emitRamp(dst, n, cap, box.x, box.y, box.w, box.h, 1.0f, 1.0f, 1.0f, 0, kUiFlagWheel);
+            const float radius = std::min(box.w, box.h) * 0.5f;
+            const float ang = (uiColor(s).colorH - 0.5f) * 6.2831853f;
+            const float mx = box.x + box.w * 0.5f + std::cos(ang) * uiColor(s).colorS * radius;
+            const float my = box.y + box.h * 0.5f + std::sin(ang) * uiColor(s).colorS * radius;
+            n = emitRect(dst, n, cap, mx - 7.0f, my - 7.0f, 14.0f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, 7.0f, nullptr);
+            n = emitRect(dst, n, cap, mx - 4.0f, my - 4.0f, 8.0f, 8.0f, uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, 1.0f, 4.0f, nullptr);
+            return true;
+        }
+        if (paint.tag == -71) {
+            float pr = 0.0f;
+            float pg = 0.0f;
+            float pb = 0.0f;
+            const float hh = uiColor(s).colorH * 6.0f;
+            const int hi = static_cast<int>(hh) % 6;
+            const float f = hh - static_cast<float>(static_cast<int>(hh));
+            const float pv = 1.0f;
+            const float q = pv * (1.0f - f * uiColor(s).colorS);
+            const float t = pv * (1.0f - (1.0f - f) * uiColor(s).colorS);
+            const float pp = pv * (1.0f - uiColor(s).colorS);
+            if (hi == 0) { pr = pv; pg = t; pb = pp; }
+            else if (hi == 1) { pr = q; pg = pv; pb = pp; }
+            else if (hi == 2) { pr = pp; pg = pv; pb = t; }
+            else if (hi == 3) { pr = pp; pg = q; pb = pv; }
+            else if (hi == 4) { pr = t; pg = pp; pb = pv; }
+            else { pr = pv; pg = pp; pb = q; }
+            n = emitRamp(dst, n, cap, box.x, box.y, box.w, box.h, pr, pg, pb, 1, kUiFlagRamp);
+            const float ty = box.y + (1.0f - uiColor(s).colorV) * box.h;
+            n = emitRect(dst, n, cap, box.x - 2.0f, ty - 3.0f, box.w + 4.0f, 6.0f, 1.0f, 1.0f, 1.0f, 1.0f, 2.0f, nullptr);
+            return true;
+        }
+        if (paint.tag == -78) {
+            n = emitRamp(dst, n, cap, box.x, box.y, box.w, box.h, 0.0f, 0.0f, 0.0f, 6, kUiFlagRamp);
+            n = emitRect(dst, n, cap, box.x, box.y, box.w, box.h, uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorA, paint.radius, nullptr);
+            return true;
+        }
+        if (paint.tag == -72) {
+            n = emitRamp(dst, n, cap, box.x, box.y, box.w, box.h, uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, 2, kUiFlagRamp);
+            const float tx = box.x + uiColor(s).colorA * box.w;
+            n = emitRect(dst, n, cap, tx - 3.0f, box.y - 2.0f, 6.0f, box.h + 4.0f, 1.0f, 1.0f, 1.0f, 1.0f, 2.0f, nullptr);
+            return true;
+        }
+    return false;
+}
+
+uint16_t loadColorBin(UiState& s, uint16_t parent, const BinNode& node, const char* name, void*) {
+    UiFlex flex{};
+    flex.position = 1;
+    flex.posX = node.posX;
+    flex.posY = node.posY;
+    flex.widthMode = static_cast<uint8_t>(UiSize::Px);
+    flex.width = node.width;
+    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.height = node.height;
+    flex.pad = 10.0f;
+    flex.gap = 6.0f;
+    flex.shrink = 0.0f;
+    const uint16_t id = spawn(s, parent, flex, paint(UiRole::Panel, node.r, node.g, node.b, node.radius));
+    if (uiColor(s).book == nullptr || uiColor(s).book->gen == 0) {
+        rgbToHsv(uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV);
+        uiColor(s).colorA = 1.0f;
+        uiColor(s).colorUseAlpha = 1;
+    } else {
+        takeBook(s);
+    }
+    uiColor(s).colorPanel = id;
+    fillColorBody(s, id);
+    uiShow(s, id, false);
+    if (name != nullptr && name[0] != '\0') {
+        uiName(s, id, name);
+    }
+    return id;
+}
+
+struct ColorBinReg {
+    ColorBinReg() {
+        uiRegisterCustomBinNode(12, loadColorBin, nullptr);
+    }
+};
+
+const ColorBinReg gColorBinReg{};
 
 } // namespace burnhope

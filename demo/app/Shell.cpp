@@ -1,5 +1,6 @@
 #include "app/Shell.hpp"
 #include "files/Browser.hpp"
+#include "ui/Domain.hpp"
 #include "ui/Panel.hpp"
 
 #include <cstdio>
@@ -8,6 +9,10 @@
 #include <spdlog/spdlog.h>
 
 namespace burnhope {
+
+void uiBuildShell(UiState& s);
+void uiBuildColor(UiState& s);
+
 namespace {
 
 struct Demo {
@@ -36,7 +41,7 @@ void onScale(void* user, uint16_t id, float value) {
     float minV = 0.5f;
     float maxV = 2.0f;
     float current = value;
-    if (!canvasRange(*demo->canvas, id, current, minV, maxV)) {
+    if (!uiRange(*demo->canvas->state, id, current, minV, maxV)) {
         return;
     }
     float t = maxV > minV ? (value - minV) / (maxV - minV) : 0.0f;
@@ -46,11 +51,13 @@ void onScale(void* user, uint16_t id, float value) {
     if (t > 1.0f) {
         t = 1.0f;
     }
-    canvasSetHeight(*demo->canvas, demo->preview, 40.0f + t * 260.0f);
-    canvasSetPaint(*demo->canvas, demo->preview, 0.16f + t * 0.55f, 0.28f + (1.0f - t) * 0.25f, 0.62f - t * 0.2f, 1.0f);
+    uiSetHeight(*demo->canvas->state, demo->preview, 40.0f + t * 260.0f);
+    if (demo->canvas->state != nullptr) {
+        uiSetPaint(*demo->canvas->state, demo->preview, 0.16f + t * 0.55f, 0.28f + (1.0f - t) * 0.25f, 0.62f - t * 0.2f, 1.0f);
+    }
     char text[16]{};
     std::snprintf(text, sizeof(text), "SCALE %.2f", value);
-    canvasText(*demo->canvas, demo->scaleText, text);
+    uiText(*demo->canvas->state, demo->scaleText, text);
 }
 
 void onClick(void* user, uint16_t id, int16_t tag) {
@@ -73,17 +80,21 @@ void onClick(void* user, uint16_t id, int16_t tag) {
     }
     if (tag == -8) {
         demo->chipsOn = !demo->chipsOn;
-        canvasShow(canvas, demo->chips, demo->chipsOn);
+        uiShow(*canvas.state, demo->chips, demo->chipsOn);
     } else if (tag == -11) {
         demo->toolsOn = !demo->toolsOn;
-        canvasShow(canvas, demo->tools, demo->toolsOn);
+        uiShow(*canvas.state, demo->tools, demo->toolsOn);
     } else if (tag == -9) {
         demo->settingsOn = !demo->settingsOn;
-        canvasShow(canvas, demo->settings, demo->settingsOn);
+        uiShow(*canvas.state, demo->settings, demo->settingsOn);
     } else if (tag == -10) {
-        canvasCommitDock(canvas, 1);
+        if (canvas.state != nullptr) {
+            uiDockTo(*canvas.state, 1);
+        }
     } else if (tag == -16) {
-        canvasOpenOs(canvas);
+        if (canvas.state != nullptr) {
+            uiHostNote(*canvas.state).tool = true;
+        }
     } else if (tag >= -20 && tag <= -17) {
         const uint8_t bit = static_cast<uint8_t>(1 << (-17 - tag));
         uint8_t next = static_cast<uint8_t>(demo->edges ^ bit);
@@ -91,16 +102,28 @@ void onClick(void* user, uint16_t id, int16_t tag) {
             next = bit;
         }
         demo->edges = next;
-        canvasDock(canvas, demo->dockPanel, demo->dockHome, next);
+        if (canvas.state != nullptr) {
+            uiDock(*canvas.state).panel = demo->dockPanel;
+            uiDock(*canvas.state).home = demo->dockHome;
+            canvas.state->dockEdges = next;
+        }
     } else if (tag == -21) {
-        canvasSetDrop(canvas, demo->chips, 1);
+        uiSetDrop(*canvas.state, demo->chips, 1);
     } else if (tag == -22) {
-        canvasSetDrop(canvas, demo->chips, 2);
+        uiSetDrop(*canvas.state, demo->chips, 2);
     } else if (tag == -12 || tag == -13) {
         uint16_t id = kUiNone;
         char name[32]{};
         uint8_t len = 0;
-        canvasSelection(canvas, id, name, 32, len);
+        if (canvas.state != nullptr) {
+            const UiPick& pick = uiPick(*canvas.state);
+            id = pick.id;
+            len = pick.len < 31 ? pick.len : 31;
+            for (uint8_t i = 0; i < len; ++i) {
+                name[i] = pick.name[i];
+            }
+            name[len] = '\0';
+        }
         spdlog::info("app pick id {} name {}", id, name);
     }
 }
@@ -132,7 +155,7 @@ UiPaint panelPaint(float r, float g, float b) {
 }
 
 void onFold(void* user, uint16_t id, int16_t) {
-    canvasFold(*static_cast<Canvas*>(user), id);
+    uiFold(*static_cast<UiState*>(user), id);
 }
 
 Panel dragHeader(Panel parent, const char* title) {
@@ -178,8 +201,8 @@ Panel dragHeader(Panel parent, const char* title) {
     fold.tag = -14;
     fold.icon = 1;
     Panel foldBtn = header.child(mark, fold);
-    if (parent.canvas != nullptr) {
-        canvasBind(*parent.canvas, foldBtn.id, onFold, parent.canvas);
+    if (parent.state != nullptr) {
+        uiBind(*parent.state, foldBtn.id, onFold, parent.state);
     }
     return header;
 }
@@ -230,23 +253,25 @@ void shellBuild(Canvas& canvas, void*) {
     if (!canvasUseFont(canvas, 12.0f)) {
         spdlog::error("app font was not set");
     }
-    canvasBuildSample(canvas);
+    if (canvas.state != nullptr) {
+        uiBuildShell(*canvas.state);
+    }
     filesAttach(*canvas.state);
     filesMount(*canvas.state);
     filesShow(*canvas.state, true);
-    gDemo.scale = canvasFind(canvas, "scale");
-    gDemo.preview = canvasFind(canvas, "preview");
-    gDemo.scaleText = canvasFind(canvas, "scale_text");
+    gDemo.scale = uiFindName(*canvas.state, "scale");
+    gDemo.preview = uiFindName(*canvas.state, "preview");
+    gDemo.scaleText = uiFindName(*canvas.state, "scale_text");
     canvasListen(canvas, onScale, &gDemo);
     filesOnOpen(*canvas.state, onBrowse, &gDemo);
-    const uint16_t note = canvasFind(canvas, "json_note");
+    const uint16_t note = uiFindName(*canvas.state, "json_note");
     if (note != kUiNone) {
-        canvasText(canvas, note, "named in flecs");
+        uiText(*canvas.state, note, "named in flecs");
     }
-    canvasMenuStyle(canvas, 210.0f, 30.0f, 8.0f, 4.0f);
+    uiMenuStyle(*canvas.state, 210.0f, 30.0f, 8.0f, 4.0f);
     canvasSetClick(canvas, onClick, &gDemo);
 
-    Panel look = Panel::find(canvas, "page_look");
+    Panel look = canvas.state != nullptr ? Panel::find(*canvas.state, "page_look") : Panel{};
     UiFlex block{};
     block.direction = 0;
     block.gap = 8.0f;
@@ -340,7 +365,11 @@ void shellBuild(Canvas& canvas, void*) {
     dockFlex.shrink = 0.0f;
     Panel dock = home.child(dockFlex, panelPaint(0.16f, 0.18f, 0.24f));
     gDemo.dockPanel = dock.id;
-    canvasDock(canvas, dock.id, home.id);
+    if (canvas.state != nullptr) {
+        uiDock(*canvas.state).panel = dock.id;
+        uiDock(*canvas.state).home = home.id;
+        canvas.state->dockEdges = 15;
+    }
     dragHeader(dock, "INSPECTOR");
     (void)dock.label("drag the header out, drop it here or press DOCK");
     (void)dock.button("DOCK", -10, 0.20f, 0.32f, 0.28f, 0);
@@ -362,20 +391,21 @@ void shellBuild(Canvas& canvas, void*) {
     win.shrink = 0.0f;
     UiPaint settingsPaint = panelPaint(0.12f, 0.13f, 0.17f);
     settingsPaint.tag = -15;
-    Panel settings = Panel::make(canvas, 0, win, settingsPaint);
+    Panel settings = canvas.state != nullptr ? Panel::make(*canvas.state, 0, win, settingsPaint) : Panel{};
     gDemo.settings = settings.id;
     dragHeader(settings, "SETTINGS");
     (void)settings.label("separate window, drag the header");
     (void)settings.button("CLOSE", -9, 0.40f, 0.24f, 0.24f, 3);
-    canvasShow(canvas, settings.id, false);
+    uiShow(*canvas.state, settings.id, false);
 
-    const uint16_t sectionMenu = canvasMakeMenu(canvas);
-    const uint16_t chipMenu = canvasMakeMenu(canvas);
-    canvasBindContext(canvas, section.id, sectionMenu);
-    canvasBindContext(canvas, chipId, chipMenu);
-    if (!canvasAddCommandTo(canvas, sectionMenu, "GROW", growCmd, &gDemo)
-        || !canvasAddCommandTo(canvas, sectionMenu, "PING", ping, nullptr)
-        || !canvasAddCommandTo(canvas, chipMenu, "WARM", warmCmd, &gDemo)) {
+    const uint16_t sectionMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
+    const uint16_t chipMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
+    if (canvas.state) canvas.state->contextOf[section.id] = sectionMenu;
+    if (canvas.state) canvas.state->contextOf[chipId] = chipMenu;
+    if (canvas.state == nullptr
+        || !uiCommandAddTo(*canvas.state, sectionMenu, "GROW", growCmd, &gDemo)
+        || !uiCommandAddTo(*canvas.state, sectionMenu, "PING", ping, nullptr)
+        || !uiCommandAddTo(*canvas.state, chipMenu, "WARM", warmCmd, &gDemo)) {
         spdlog::error("context menu was not filled");
     }
     if (!canvasAddCommand(canvas, "PING", ping, nullptr)) {
@@ -392,7 +422,7 @@ void toolBuild(Canvas& canvas, void*) {
     rootFlex.pad = 0.0f;
     UiPaint rootPaint = panelPaint(0.10f, 0.11f, 0.13f);
     rootPaint.radius = 0.0f;
-    Panel root = Panel::make(canvas, kUiNone, rootFlex, rootPaint);
+    Panel root = canvas.state != nullptr ? Panel::make(*canvas.state, kUiNone, rootFlex, rootPaint) : Panel{};
 
     UiFlex title{};
     title.direction = 1;
@@ -442,7 +472,9 @@ void colorBuild(Canvas& canvas, void*) {
     if (!canvasUseFont(canvas, 12.0f)) {
         spdlog::error("color font was not set");
     }
-    canvasBuildColor(canvas);
+    if (canvas.state != nullptr) {
+        uiBuildColor(*canvas.state);
+    }
 }
 
 } // namespace burnhope

@@ -1,3 +1,5 @@
+#include "Json.hpp"
+#include "ui/Domain.hpp"
 #include "ui/widget/Detail.hpp"
 
 #include <cmath>
@@ -8,16 +10,30 @@ namespace burnhope {
 
 const char* kPages[3] = {"SCENE", "LOOK", "INPUT"};
 
+struct ShellIds {
+    uint16_t pages[3]{kUiNone, kUiNone, kUiNone};
+    uint16_t preview = kUiNone;
+    uint16_t listInner = kUiNone;
+    uint16_t compactRow = kUiNone;
+    uint16_t formNote = kUiNone;
+    uint16_t sideId = kUiNone;
+};
+
+ShellIds& shellIds(UiState& s) {
+    return s.world.ensure<ShellIds>();
+}
+
 void setPage(UiState& s, int8_t tag) {
     if (tag < 0 || tag > 2) {
         tag = 0;
     }
     s.selected = tag;
+    ShellIds& ids = shellIds(s);
     for (int i = 0; i < 3; ++i) {
-        if (s.pages[i] == kUiNone || s.yoga[s.pages[i]] == nullptr) {
+        if (ids.pages[i] == kUiNone || s.yoga[ids.pages[i]] == nullptr) {
             continue;
         }
-        YGNodeStyleSetDisplay(s.yoga[s.pages[i]], i == tag ? YGDisplayFlex : YGDisplayNone);
+        YGNodeStyleSetDisplay(s.yoga[ids.pages[i]], i == tag ? YGDisplayFlex : YGDisplayNone);
     }
     if (s.pageLabel != kUiNone) {
         auto* text = s.ent[s.pageLabel].try_get_mut<UiText>();
@@ -30,20 +46,21 @@ void setPage(UiState& s, int8_t tag) {
 }
 
 void applyCompact(UiState& s) {
-    if (s.compactRow == kUiNone || s.listInner == kUiNone) {
+    const ShellIds& ids = shellIds(s);
+    if (ids.compactRow == kUiNone || ids.listInner == kUiNone) {
         return;
     }
-    const UiCheck* check = s.ent[s.compactRow].try_get<UiCheck>();
+    const UiCheck* check = s.ent[ids.compactRow].try_get<UiCheck>();
     const bool on = check != nullptr && check->on != 0;
     const float itemH = on ? 24.0f : 36.0f;
     const float gap = on ? 2.0f : 8.0f;
     const float pad = on ? 2.0f : 8.0f;
-    auto* inner = s.ent[s.listInner].try_get_mut<UiFlex>();
+    auto* inner = s.ent[ids.listInner].try_get_mut<UiFlex>();
     if (inner != nullptr) {
         inner->gap = gap;
     }
     for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.parentOf[id] != s.listInner) {
+        if (s.parentOf[id] != ids.listInner) {
             continue;
         }
         auto* flex = s.ent[id].try_get_mut<UiFlex>();
@@ -106,7 +123,7 @@ void onMax(void* user, uint16_t, int16_t) {
 }
 
 void onFile(void* user, uint16_t, int16_t) {
-    static_cast<UiState*>(user)->opFile = true;
+    uiHostNote(*static_cast<UiState*>(user)).file = true;
 }
 
 void onSend(void* user, uint16_t, int16_t) {
@@ -125,7 +142,7 @@ void cmdInput(void* user) { setPage(*static_cast<UiState*>(user), 2); }
 
 void cmdCompact(void* user) {
     auto& s = *static_cast<UiState*>(user);
-    auto* check = s.ent[s.compactRow].try_get_mut<UiCheck>();
+    auto* check = s.ent[shellIds(s).compactRow].try_get_mut<UiCheck>();
     if (check == nullptr) {
         return;
     }
@@ -185,20 +202,21 @@ void uiBuildShell(UiState& s) {
         }
     };
     s.pageLabel = take("page_label");
-    s.pages[0] = take("page_scene");
-    s.pages[1] = take("page_look");
-    s.pages[2] = take("page_input");
-    s.compactRow = take("compact");
-    s.listInner = take("list_inner");
-    s.preview = take("preview");
+    ShellIds& ids = shellIds(s);
+    ids.pages[0] = take("page_scene");
+    ids.pages[1] = take("page_look");
+    ids.pages[2] = take("page_input");
+    ids.compactRow = take("compact");
+    ids.listInner = take("list_inner");
+    ids.preview = take("preview");
     s.field = take("field_name");
-    s.fileTarget = take("field_file");
-    s.calTarget = take("field_date");
-    s.colorTarget = take("field_color");
-    s.formNote = take("form_note");
-    s.photoView = take("photo");
+    uiFiles(s).fileTarget = take("field_file");
+    uiCal(s).calTarget = take("field_date");
+    uiColor(s).colorTarget = take("field_color");
+    ids.formNote = take("form_note");
+    uiFiles(s).photoView = take("photo");
     s.statusLabel = take("scale_text");
-    s.sideId = take("side");
+    ids.sideId = take("side");
     s.menu = take("menu_main");
     s.fieldMenu = take("field_menu");
     uiBindName(s, "btn_scene", onPage, &s);
@@ -240,7 +258,11 @@ void uiBuildShell(UiState& s) {
     if (take("input_host") != kUiNone) {
         (void)uiImportBinFile(s, take("input_host"), BH_UI_SAMPLE);
     }
-    (void)jsonLoadFile(s, "assets/ui/sample.json");
+    {
+        JsonDocument doc;
+        (void)jsonLoadFile(doc, "assets/ui/sample.json");
+        jsonRelease(doc);
+    }
     setPage(s, 0);
 
     auto floatPanel = [&](float x, float y, float w, float h) {
@@ -277,8 +299,8 @@ void uiBuildShell(UiState& s) {
         uiBind(s, id, fn, &s);
         return id;
     };
-    s.fileFrame = floatPanel(70.0f, 64.0f, 1100.0f, 700.0f);
-    if (auto* framePaint = s.ent[s.fileFrame].try_get_mut<UiPaint>()) {
+    uiFiles(s).fileFrame = floatPanel(70.0f, 64.0f, 1100.0f, 700.0f);
+    if (auto* framePaint = s.ent[uiFiles(s).fileFrame].try_get_mut<UiPaint>()) {
         framePaint->tag = -15;
     }
     UiFlex fileBar{};
@@ -290,7 +312,7 @@ void uiBuildShell(UiState& s) {
     fileBar.height = 32.0f;
     fileBar.gap = 8.0f;
     fileBar.pad = 8.0f;
-    const uint16_t fileTools = spawn(s, s.fileFrame, fileBar, paint(UiRole::Button, 0.13f, 0.14f, 0.17f, 0.0f, -6));
+    const uint16_t fileTools = spawn(s, uiFiles(s).fileFrame, fileBar, paint(UiRole::Button, 0.13f, 0.14f, 0.17f, 0.0f, -6));
     addText(s, spawn(s, fileTools, UiFlex{}, paint(UiRole::Label, 0.9f, 0.92f, 0.96f)), "FILES");
     UiFlex fileSpacer{};
     fileSpacer.grow = 1.0f;
@@ -311,10 +333,10 @@ void uiBuildShell(UiState& s) {
     stamp(s, side, UiToken::Side);
     stamp(s, content, UiToken::Content);
     stamp(s, s.pageLabel, UiToken::Text);
-    stamp(s, s.compactRow, UiToken::Check);
+    stamp(s, ids.compactRow, UiToken::Check);
     stamp(s, scroll, UiToken::Scroll);
     stamp(s, slider, UiToken::Slider);
-    stamp(s, s.preview, UiToken::Preview);
+    stamp(s, ids.preview, UiToken::Preview);
     stamp(s, s.field, UiToken::Field);
     stamp(s, status, UiToken::Status);
     stamp(s, s.statusLabel, UiToken::Muted);
@@ -332,7 +354,7 @@ void uiBuildShell(UiState& s) {
             stamp(s, id, UiToken::Close);
         } else if (node->role == static_cast<uint8_t>(UiRole::Button) && (node->tag == -2 || node->tag == -3)) {
             stamp(s, id, UiToken::Chrome);
-        } else if (s.parentOf[id] == s.listInner) {
+        } else if (s.parentOf[id] == ids.listInner) {
             stamp(s, id, UiToken::Item);
         }
     }

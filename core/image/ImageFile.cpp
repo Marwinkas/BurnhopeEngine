@@ -1084,6 +1084,15 @@ bool imageUploadUncompressed(GpuImage& img, Device& d, const uint8_t* rgba, uint
     return submitImage(img, d, VK_FORMAT_R8G8B8A8_UNORM, rgba, level.bytes, &level, 1);
 }
 
+bool gpuImageUploadR8(GpuImage& img, Device& d, const uint8_t* pixels, uint32_t width, uint32_t height) {
+    if (pixels == nullptr || width == 0 || height == 0 || d.device == VK_NULL_HANDLE) {
+        return false;
+    }
+    gpuImageDestroy(img, d);
+    const Level level{width, height, 0, static_cast<VkDeviceSize>(width) * height};
+    return submitImage(img, d, VK_FORMAT_R8_UNORM, pixels, level.bytes, &level, 1);
+}
+
 bool gpuImageUploadHdr(GpuImage& img, Device& d, const float* rgb, uint32_t width, uint32_t height) {
     if (rgb == nullptr || width == 0 || height == 0 || d.device == VK_NULL_HANDLE) {
         return false;

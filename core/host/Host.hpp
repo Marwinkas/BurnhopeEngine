@@ -6,6 +6,7 @@
 #include "rhi/Device.hpp"
 #include "rhi/Swapchain.hpp"
 #include "ui/Canvas.hpp"
+#include "ui/widget/ColorPicker.hpp"
 
 namespace burnhope {
 
@@ -52,6 +53,9 @@ struct HostView {
     uint8_t toolGrab = 0;
     float lookX = 0.0f;
     float lookY = 0.0f;
+    bool wantTool = false;
+    bool wantColor = false;
+    bool wantFile = false;
 };
 
 struct Host {

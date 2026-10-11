@@ -104,6 +104,7 @@ bh_module(platform
     core/platform/Dialog.cpp
     core/platform/Check.cpp
     core/platform/Jobs.cpp
+    core/platform/Desktop.cpp
 )
 set_source_files_properties(core/platform/Check.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions;-frtti")
 find_package(cpptrace CONFIG REQUIRED)
@@ -205,12 +206,17 @@ target_compile_definitions(bh_render PUBLIC "BH_SHADER_DIR=\"${CMAKE_CURRENT_BIN
 target_link_libraries(bh_render PUBLIC flecs_static)
 bh_module(ui
     core/ui/Canvas.cpp
+    core/ui/rhi/UiRenderer.cpp
+    core/ui/LayoutBridge.cpp
+    core/ui/PrimitiveBatch.cpp
     core/ui/Font.cpp
     core/ui/Panel.cpp
     core/ui/Json.cpp
+    core/Json.cpp
     core/ui/Layout.cpp
     core/ui/widget/Chrome.cpp
     core/ui/widget/Tree.cpp
+    core/ui/widget/TreeView.cpp
     core/ui/widget/Button.cpp
     core/ui/widget/Field.cpp
     core/ui/widget/TextEdit.cpp
@@ -222,13 +228,21 @@ bh_module(ui
     core/ui/widget/Image.cpp
     core/ui/widget/List.cpp
     core/ui/widget/Virtual.cpp
+    core/ui/widget/VirtualGrid.cpp
+    core/ui/widget/Breadcrumbs.cpp
+    core/ui/widget/Rubberband.cpp
     core/ui/widget/Menu.cpp
     core/ui/widget/Input.cpp
     core/ui/widget/Tip.cpp
     core/ui/kit/Calendar.cpp
     core/ui/kit/Color.cpp
 )
-bh_module(files core/files/Files.cpp)
+bh_module(files
+    core/files/Files.cpp
+    core/files/Project.cpp
+    core/files/Format.cpp
+    core/files/Model.cpp
+)
 target_link_libraries(bh_files PUBLIC bh_ui)
 bh_module(host core/host/Host.cpp)
 target_link_libraries(bh_host PUBLIC bh_ui bh_rhi bh_platform bh_memory)

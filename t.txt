@@ -1,0 +1,778 @@
+[2026-10-11 22:30:03.463] [info] Burnhope — Vulkan 1.4 core + Yoga/Flecs canvas.
+[2026-10-11 22:30:03.751] [info] === Burnhope caps (once) ===
+[2026-10-11 22:30:03.751] [info] GPU: NVIDIA GeForce RTX 3090
+[2026-10-11 22:30:03.751] [info] device api: 1.4.351
+[2026-10-11 22:30:03.751] [info] queues: graphics=0 present=0 compute=0 transfer=1
+[2026-10-11 22:30:03.751] [info] shaderObject: true
+[2026-10-11 22:30:03.751] [info] presentWait: true  presentId: true
+[2026-10-11 22:30:03.751] [info] dynamicRendering: true  sync2: true  timeline: true  BDA: true
+[2026-10-11 22:30:03.751] [info] meshShader: true  rayQuery: true  descriptorHeap: true  dgc: true
+[2026-10-11 22:30:03.751] [info] maintenance6: true  hostImageCopy: true
+[2026-10-11 22:30:03.751] [info] swapchainMaintenance1: true  nestedCommandBuffer: true  depthClampControl: true  barycentric: true  cooperativeMatrix(discover-only): true
+[2026-10-11 22:30:03.751] [info] robustness2: true
+[2026-10-11 22:30:03.751] [info] heap: imgDesc=32 bufDesc=16 sampDesc=32 resAlign=64 reservedRes=96768
+[2026-10-11 22:30:03.751] [info] ============================
+[2026-10-11 22:30:03.870] [info] descriptor heaps: resource 123712 B (bufDesc 16 imgDesc 32 imgOff 1024) sampler 608 B (sampDesc 32)
+[2026-10-11 22:30:03.871] [info] image BC1 128x256 mips 1 host-copy
+[2026-10-11 22:30:03.871] [info] image BC1 4x4 mips 1 host-copy
+[2026-10-11 22:30:03.871] [info] image BC1 4x4 mips 1 host-copy
+[2026-10-11 22:30:03.871] [info] image BC1 4x4 mips 1 host-copy
+[2026-10-11 22:30:03.871] [info] image BC1 4x4 mips 1 host-copy
+[2026-10-11 22:30:03.871] [info] image BC1 4x4 mips 1 host-copy
+[2026-10-11 22:30:03.871] [info] image BC1 4x4 mips 1 host-copy
+[2026-10-11 22:30:03.871] [info] image BC1 4x4 mips 1 host-copy
+[2026-10-11 22:30:03.901] [info] image RGBA8 1024x768 mips 1 host-copy
+[2026-10-11 22:30:03.901] [info] sdf font /usr/share/fonts/TTF/DejaVuSans.ttf at 20 px
+[2026-10-11 22:30:03.903] [info] image BC7 64x64 mips 5 host-copy
+[2026-10-11 22:30:03.903] [info] image slot 6 64x64 x1 frames
+[2026-10-11 22:30:03.905] [info] image BC7 64x64 mips 5 host-copy
+[2026-10-11 22:30:03.905] [info] image slot 7 64x64 x1 frames
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=hide id=58 name=- role=panel tag=-1 parent=57 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=hide id=68 name=- role=scroll tag=-1 parent=65 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=hide id=70 name=- role=scroll tag=-1 parent=65 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=hide id=72 name=- role=scroll tag=-1 parent=65 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=hide id=74 name=- role=scroll tag=-1 parent=65 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=show id=66 name=- role=scroll tag=-1 parent=65 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=hide id=68 name=- role=scroll tag=-1 parent=65 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=hide id=70 name=- role=scroll tag=-1 parent=65 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=hide id=72 name=- role=scroll tag=-1 parent=65 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=hide id=74 name=- role=scroll tag=-1 parent=65 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=hide id=88 name=- role=hidden tag=-1 parent=67 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=show id=88 name=- role=hidden tag=-1 parent=67 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=hide id=91 name=- role=hidden tag=-1 parent=67 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=show id=91 name=- role=hidden tag=-1 parent=67 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=hide id=94 name=- role=hidden tag=-1 parent=67 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.905] [UI] [info] ui fn=show id=94 name=- role=hidden tag=-1 parent=67 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=97 name=- role=hidden tag=-1 parent=69 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=show id=97 name=- role=hidden tag=-1 parent=69 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=110 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=112 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=113 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=115 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=116 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=118 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=119 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=121 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=122 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=124 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=125 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=127 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=128 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=130 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=131 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=139 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=145 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=151 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=161 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=164 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=167 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=170 name=- role=panel tag=-1 parent=159 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=174 name=- role=field tag=-1 parent=99 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=show id=110 name=home role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=show id=113 name=marwinka role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=show id=112 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=116 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=119 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=122 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=125 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=128 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=131 name=- role=button tag=-100 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=115 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=118 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=121 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=124 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=127 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=130 name=> role=label tag=-1 parent=109 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=show id=139 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=140 name=> role=button tag=-100 parent=139 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=show id=142 name=- role=panel tag=-90 parent=139 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=show id=145 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=146 name=> role=button tag=-100 parent=145 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=show id=148 name=- role=panel tag=-90 parent=145 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=show id=151 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=152 name=> role=button tag=-100 parent=151 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=show id=154 name=- role=panel tag=-90 parent=151 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=174 name=- role=field tag=-1 parent=99 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=show id=99 name=- role=panel tag=-1 parent=0 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.906] [UI] [info] ui fn=hide id=176 name=- role=hidden tag=-1 parent=0 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.908] [info] ui: 366 flecs nodes, yoga + 1 draw
+[2026-10-11 22:30:03.908] [info] window opened scene present immediate
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=366 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=372 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=378 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=384 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=140 name=> role=button tag=-100 parent=139 box=0.0,854.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=show id=142 name=- role=panel tag=-90 parent=139 box=0.0,859.0 16.0x16.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=146 name=> role=button tag=-100 parent=145 box=0.0,882.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=show id=148 name=- role=panel tag=-90 parent=145 box=0.0,887.0 16.0x16.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=152 name=> role=button tag=-100 parent=151 box=0.0,910.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=show id=154 name=- role=panel tag=-90 parent=151 box=0.0,915.0 16.0x16.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=show id=366 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=367 name=> role=button tag=-100 parent=366 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=show id=369 name=- role=panel tag=-90 parent=366 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=show id=372 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=373 name=> role=button tag=-100 parent=372 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=show id=375 name=- role=panel tag=-90 parent=372 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=show id=378 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=379 name=> role=button tag=-100 parent=378 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=show id=381 name=- role=panel tag=-90 parent=378 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=show id=384 name=- role=panel tag=-1 parent=138 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=385 name=> role=button tag=-100 parent=384 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=show id=387 name=- role=panel tag=-90 parent=384 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=390 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=393 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.911] [UI] [info] ui fn=hide id=396 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=399 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=402 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=405 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=408 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=411 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=414 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=417 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=420 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=423 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=426 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=429 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=432 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=435 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=438 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=441 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=444 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=447 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=450 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=453 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=456 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=459 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=462 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=465 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=468 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=471 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=474 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=477 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=480 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=483 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=486 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=489 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=492 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=495 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=498 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=501 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=504 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=507 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=510 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=513 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=516 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=519 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=522 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=525 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=528 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=531 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=534 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=537 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=540 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=543 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=546 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=549 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=552 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=555 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=558 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=561 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=564 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.912] [UI] [info] ui fn=hide id=567 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.913] [UI] [info] ui fn=hide id=570 name=  role=button tag=-100 parent=160 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:03.914] [info] ui check nodes=573 draw=817 view=1920x1022 scroll=1620,50 300x476
+[2026-10-11 22:30:03.915] [UI] [info] ui layout nodes=573 laid=1920x1022 dpi=1.00
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=2 name=File role=button parent=1 box=12.0,11.0 52.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=13 name=Lit role=button parent=1 box=72.0,11.0 41.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=44 name=Stats role=button parent=1 box=121.0,11.0 67.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=46 name=Move role=button parent=1 box=196.0,11.0 69.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=48 name=Rotate role=button parent=1 box=273.0,11.0 82.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=50 name=Scale role=button parent=1 box=363.0,11.0 70.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=52 name=Duplicate role=button parent=1 box=441.0,11.0 112.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=61 name=- role=scroll parent=60 box=1620.0,50.0 300.0x476.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=66 name=- role=scroll parent=65 box=1620.0,534.0 300.0x280.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=76 name=Sun role=button parent=62 box=1628.0,82.0 55.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=78 name=Post role=button parent=62 box=1628.0,114.0 58.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=80 name=Light role=button parent=62 box=1628.0,146.0 67.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=82 name=Sky role=button parent=62 box=1628.0,178.0 53.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=84 name=Cull role=button parent=62 box=1628.0,210.0 55.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=86 name=Туман role=button parent=67 box=1628.0,542.0 80.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=89 name=Пост role=button parent=67 box=1628.0,754.0 66.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=92 name=GI role=button parent=67 box=1628.0,2086.0 38.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=101 name=< role=button parent=100 box=4.0,824.0 33.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=103 name=> role=button parent=100 box=43.0,824.0 33.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=105 name=^ role=button parent=100 box=82.0,824.0 33.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=107 name=+ role=button parent=100 box=121.0,824.0 33.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=110 name=home role=button parent=109 box=160.0,824.0 44.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=113 name=marwinka role=button parent=109 box=229.0,824.0 76.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=133 name=- role=field parent=100 box=1756.0,825.0 160.0x26.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=137 name=- role=scroll parent=136 box=0.0,854.0 188.0x144.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=143 name=BurnhopeProjects role=button parent=139 box=20.0,855.0 188.0x24.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=149 name=Library role=button parent=145 box=20.0,883.0 188.0x24.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=155 name=McSkill role=button parent=151 box=20.0,911.0 188.0x24.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=159 name=- role=scroll parent=158 box=194.0,854.0 1726.0x144.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=173 name=- role=slider parent=171 box=1806.0,1001.0 110.0x18.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=201 name=probes role=check parent=94 box=1644.0,2118.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=203 name=gien role=check parent=94 box=1644.0,2150.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=206 name=giGain role=slider parent=94 box=1644.0,2202.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=208 name=prof0 role=check parent=94 box=1644.0,2250.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=210 name=prof1 role=check parent=94 box=1644.0,2282.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=212 name=prof2 role=check parent=94 box=1644.0,2314.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=214 name=rcen role=check parent=94 box=1644.0,2346.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=217 name=rcRays role=slider parent=94 box=1644.0,2398.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=219 name=rcCell role=slider parent=94 box=1644.0,2446.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=221 name=rcGain role=slider parent=94 box=1644.0,2494.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=223 name=rcMax role=slider parent=94 box=1644.0,2542.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=224 name=gtaoen role=check parent=91 box=1644.0,786.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=226 name=cmaa role=check parent=91 box=1644.0,818.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=228 name=smaa role=check parent=91 box=1644.0,850.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=230 name=bloomen role=check parent=91 box=1644.0,882.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=256 name=fogen role=check parent=88 box=1644.0,574.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=258 name=reflecten role=check parent=94 box=1644.0,2570.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=260 name=contacten role=check parent=91 box=1644.0,914.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=292 name=tone0 role=check parent=91 box=1644.0,946.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=294 name=tone1 role=check parent=91 box=1644.0,978.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=296 name=tone2 role=check parent=91 box=1644.0,1010.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=298 name=tone3 role=check parent=91 box=1644.0,1042.0 268.0x32.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=301 name=bright role=slider parent=91 box=1644.0,1094.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=303 name=grain role=slider parent=91 box=1644.0,1142.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=305 name=bloom role=slider parent=91 box=1644.0,1190.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=307 name=bloomth role=slider parent=91 box=1644.0,1238.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=309 name=vig role=slider parent=91 box=1644.0,1286.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=311 name=ca role=slider parent=91 box=1644.0,1334.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=313 name=contact role=slider parent=91 box=1644.0,1382.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=315 name=sscsR role=slider parent=91 box=1644.0,1430.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=317 name=sscsT role=slider parent=91 box=1644.0,1478.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=319 name=sscsS role=slider parent=91 box=1644.0,1526.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=321 name=sscsP role=slider parent=91 box=1644.0,1574.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=323 name=spec role=slider parent=91 box=1644.0,1622.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=325 name=tok role=slider parent=91 box=1644.0,1670.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=327 name=pom role=slider parent=91 box=1644.0,1718.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=329 name=ggx role=slider parent=91 box=1644.0,1766.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=331 name=gtaor role=slider parent=91 box=1644.0,1814.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=333 name=gtaoSl role=slider parent=91 box=1644.0,1862.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=335 name=gtaoSt role=slider parent=91 box=1644.0,1910.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=337 name=gtaoPw role=slider parent=91 box=1644.0,1958.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=339 name=gtaoFa role=slider parent=91 box=1644.0,2006.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=341 name=gtao role=slider parent=91 box=1644.0,2054.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=349 name=fog role=slider parent=88 box=1644.0,626.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=351 name=fogH role=slider parent=88 box=1644.0,674.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=353 name=fogS role=slider parent=88 box=1644.0,722.0 268.0x28.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=370 name=My project role=button parent=366 box=20.0,939.0 188.0x24.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=376 name=My project (1) role=button parent=372 box=20.0,967.0 188.0x24.0
+[2026-10-11 22:30:03.915] [UI] [info] ui box id=382 name=Pictures role=button parent=378 box=20.0,995.0 188.0x24.0
+[2026-10-11 22:30:03.915] [UI] [warning] ui miss id=388 name=Unity role=button parent=384 box=20.0,1023.0 188.0x24.0
+[2026-10-11 22:30:03.915] [info] ui draw 817
+[2026-10-11 22:30:03.917] [info] descriptor heaps: resource 126976 B (bufDesc 16 imgDesc 32 imgOff 1024) sampler 608 B (sampDesc 32)
+[2026-10-11 22:30:04.208] [info] image RGBA8 1x1 mips 1 host-copy
+[2026-10-11 22:30:04.208] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.210] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.210] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.212] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.213] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.213] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.214] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.214] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.214] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.214] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.214] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.214] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.214] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.216] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.217] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.218] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.219] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.219] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.220] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.222] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.222] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.223] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.224] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.224] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.226] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.228] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.228] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.228] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.230] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.230] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.231] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.231] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.231] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.232] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.232] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.232] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.234] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.235] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.235] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.235] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.236] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.236] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.237] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.238] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.238] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.238] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.239] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.239] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.240] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.241] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.241] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.242] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.243] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.243] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.244] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.245] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.245] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.246] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.247] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.247] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.247] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.247] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.247] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.249] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.250] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.250] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.251] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.252] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.252] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.252] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.254] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.254] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.254] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.256] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.256] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.256] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.257] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.257] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.261] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.262] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.262] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.263] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.264] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.264] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.265] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.266] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.266] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.267] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.268] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.268] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.269] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.270] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.270] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.271] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.272] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.273] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.273] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.274] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.275] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.275] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.276] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.276] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.277] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.278] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.278] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.280] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.281] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.281] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.282] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.284] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.284] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.284] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.285] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.285] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.286] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.287] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.287] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.288] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.289] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.289] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.290] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.291] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.291] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.291] [info] image BC1 64x64 mips 5 host-copy
+[2026-10-11 22:30:04.292] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.293] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.293] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.293] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.293] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.293] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.293] [info] image BC1 64x64 mips 5 host-copy
+[2026-10-11 22:30:04.293] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.294] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.294] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.295] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.296] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.296] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.297] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.298] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.299] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.300] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.301] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.301] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.302] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.302] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.302] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.303] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.304] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.304] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.305] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.307] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.307] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.307] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.309] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.309] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.309] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.311] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.311] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.311] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.312] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.313] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.313] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.314] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.314] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.315] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.316] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.316] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.317] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.318] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.318] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.318] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.320] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.320] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.320] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.322] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.322] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.322] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.326] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.326] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.327] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.328] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.328] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.329] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.330] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.330] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.332] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.333] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.333] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.334] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.334] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.334] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.334] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.336] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.336] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.336] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.336] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.336] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.336] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.338] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.338] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.338] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.340] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.340] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.340] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.342] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.342] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.342] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.343] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.343] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.344] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.345] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.345] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.346] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.346] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.346] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.346] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.348] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.348] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.348] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.350] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.350] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.350] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.351] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.351] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.352] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.353] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.353] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.354] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.355] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.355] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.356] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.357] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.357] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.358] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.359] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.359] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.360] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.361] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.361] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.361] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.362] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.362] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.363] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.364] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.364] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.365] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.366] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.366] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.367] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.368] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.368] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.369] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.370] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.370] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.370] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.370] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.370] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.371] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.372] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.372] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.372] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.374] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.374] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.376] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.376] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.376] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.378] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.378] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.378] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.380] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.380] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.380] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.381] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.381] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.382] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.383] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.383] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.384] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.385] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.385] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.386] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.387] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.387] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.390] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.390] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.390] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.391] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.392] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.392] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.393] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.394] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.394] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.395] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.396] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.396] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.397] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.398] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.398] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.399] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.399] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.400] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.400] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.401] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.402] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.403] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.403] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.404] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.405] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.405] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.406] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.407] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.407] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.408] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.409] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.409] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.410] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.411] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.411] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.412] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.413] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.413] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.414] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.415] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.415] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.415] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.417] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.417] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.417] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.419] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.419] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.419] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.420] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.420] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.421] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.422] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.422] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.423] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.424] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.424] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.425] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.426] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.426] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.427] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.428] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.428] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.428] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.428] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.428] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.428] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.430] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.430] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.430] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.431] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.431] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.432] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.433] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.433] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.434] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.435] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.435] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.436] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.437] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.438] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.439] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.440] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.440] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.441] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.442] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.442] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.443] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.443] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.443] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.444] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.445] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.445] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.446] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.446] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.448] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.448] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.448] [info] image BC1 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.449] [info] image BC7 2048x2048 mips 10 host-copy
+[2026-10-11 22:30:04.449] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.449] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.449] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.449] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.449] [info] image BC1 64x64 mips 5 host-copy
+[2026-10-11 22:30:04.449] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.450] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.450] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.450] [info] image BC1 64x64 mips 5 host-copy
+[2026-10-11 22:30:04.450] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.450] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.450] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.450] [info] image BC1 64x64 mips 5 host-copy
+[2026-10-11 22:30:04.450] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.450] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.450] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.450] [info] image BC1 64x64 mips 5 host-copy
+[2026-10-11 22:30:04.450] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.450] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.450] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.450] [info] image BC1 64x64 mips 5 host-copy
+[2026-10-11 22:30:04.450] [info] image BC1 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.450] [info] image BC7 4x4 mips 1 host-copy
+[2026-10-11 22:30:04.450] [info] image BC7 16x16 mips 3 host-copy
+[2026-10-11 22:30:04.450] [info] image BC1 64x64 mips 5 host-copy
+[2026-10-11 22:30:04.470] [warning] cpu sceneFrameRecord 554.89 ms
+[2026-10-11 22:30:04.470] [UI] [info] ui fn=hide id=66 name=- role=scroll tag=-1 parent=65 box=1620.0,534.0 300.0x280.0
+[2026-10-11 22:30:04.470] [UI] [info] ui fn=show id=68 name=- role=scroll tag=-1 parent=65 box=1620.0,534.0 0.0x0.0
+[2026-10-11 22:30:04.470] [UI] [info] ui fn=hide id=70 name=- role=scroll tag=-1 parent=65 box=1620.0,534.0 0.0x0.0
+[2026-10-11 22:30:04.470] [UI] [info] ui fn=hide id=72 name=- role=scroll tag=-1 parent=65 box=1620.0,534.0 0.0x0.0
+[2026-10-11 22:30:04.470] [UI] [info] ui fn=hide id=74 name=- role=scroll tag=-1 parent=65 box=1620.0,534.0 0.0x0.0
+[2026-10-11 22:30:04.532] [info] radiance: 3000000 triangles armed, frame stays on screen
+[2026-10-11 22:30:04.532] [info] radiance build queued, 3000000 triangles
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=hide id=140 name=> role=button tag=-100 parent=139 box=0.0,854.0 0.0x0.0
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=show id=142 name=- role=panel tag=-90 parent=139 box=0.0,859.0 16.0x16.0
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=hide id=146 name=> role=button tag=-100 parent=145 box=0.0,882.0 0.0x0.0
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=show id=148 name=- role=panel tag=-90 parent=145 box=0.0,887.0 16.0x16.0
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=hide id=152 name=> role=button tag=-100 parent=151 box=0.0,910.0 0.0x0.0
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=show id=154 name=- role=panel tag=-90 parent=151 box=0.0,915.0 16.0x16.0
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=hide id=367 name=> role=button tag=-100 parent=366 box=0.0,938.0 0.0x0.0
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=show id=369 name=- role=panel tag=-90 parent=366 box=0.0,943.0 16.0x16.0
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=hide id=373 name=> role=button tag=-100 parent=372 box=0.0,966.0 0.0x0.0
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=show id=375 name=- role=panel tag=-90 parent=372 box=0.0,971.0 16.0x16.0
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=hide id=379 name=> role=button tag=-100 parent=378 box=0.0,994.0 0.0x0.0
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=show id=381 name=- role=panel tag=-90 parent=378 box=0.0,999.0 16.0x16.0
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=hide id=385 name=> role=button tag=-100 parent=384 box=0.0,1022.0 0.0x0.0
+[2026-10-11 22:30:04.533] [UI] [info] ui fn=show id=387 name=- role=panel tag=-90 parent=384 box=0.0,1027.0 16.0x16.0
+[2026-10-11 22:30:04.534] [info] frame 100.0 ms (10.0 fps)
+gpu 0.00 ms
+Light_Cull     0.00
+Shadow_Cull    0.00
+Mesh_Cull      0.00
+CSM            0.00
+Visbuffer      0.00
+HiZ_Max        0.00
+Mesh_Cull_Late   0.00
+Visbuffer_Late   0.00
+GTAO           0.00
+Sky            0.00
+Contact        0.00
+Sun            0.00
+Lamps          0.00
+Clouds         0.00
+CMAA           0.00
+SMAA           0.00
+Bloom          0.00
+Tonemap        0.00
+cpu record 554.89
+[2026-10-11 22:30:04.840] [info] cull in 91564 early 23818 late 0 | skipE 0 skipL 0 | lod 66291 behind 0 frust 0 cone 417 hiz 0 near 0 subpx 1038 | sun 0 25 14851 | cpu 0.13 | profile 0 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-11 22:30:04.840] [info] shadow cache 0 inst 91564/91564 center 19.5 76.3 233.8 split 25.0 84.0 284.0 eye 19.5 78.7 249.6 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 9.49 -0.56 -0.29 | c1 2.52 -0.07 0.29 | c2 0.12 0.07 0.46 | cpu 0.13 vis 23818 late 23818
+[2026-10-11 22:30:04.909] [info] ui check nodes=573 draw=322 view=1920x1022 scroll=1620,50 300x476
+[2026-10-11 22:30:05.122] [UI] [info] ui fn=hide id=573 name=ui.menu role=panel tag=-1 parent=0 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:05.122] [UI] [info] ui fn=show id=574 name=New Folder role=button tag=-1 parent=573 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:05.122] [UI] [info] ui fn=show id=576 name=New File role=button tag=-1 parent=573 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:05.122] [UI] [info] ui fn=show id=578 name=Paste (Ctrl+V) role=button tag=-1 parent=573 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:05.122] [UI] [info] ui fn=show id=580 name=Select All (Ctrl+A) role=button tag=-1 parent=573 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:05.122] [UI] [info] ui fn=show id=573 name=ui.menu role=panel tag=-1 parent=0 box=0.0,0.0 0.0x0.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=hide id=140 name=> role=button tag=-100 parent=139 box=0.0,854.0 0.0x0.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=show id=142 name=- role=panel tag=-90 parent=139 box=0.0,859.0 16.0x16.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=hide id=146 name=> role=button tag=-100 parent=145 box=0.0,882.0 0.0x0.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=show id=148 name=- role=panel tag=-90 parent=145 box=0.0,887.0 16.0x16.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=hide id=152 name=> role=button tag=-100 parent=151 box=0.0,910.0 0.0x0.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=show id=154 name=- role=panel tag=-90 parent=151 box=0.0,915.0 16.0x16.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=hide id=367 name=> role=button tag=-100 parent=366 box=0.0,938.0 0.0x0.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=show id=369 name=- role=panel tag=-90 parent=366 box=0.0,943.0 16.0x16.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=hide id=373 name=> role=button tag=-100 parent=372 box=0.0,966.0 0.0x0.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=show id=375 name=- role=panel tag=-90 parent=372 box=0.0,971.0 16.0x16.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=hide id=379 name=> role=button tag=-100 parent=378 box=0.0,994.0 0.0x0.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=show id=381 name=- role=panel tag=-90 parent=378 box=0.0,999.0 16.0x16.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=hide id=385 name=> role=button tag=-100 parent=384 box=0.0,1022.0 0.0x0.0
+[2026-10-11 22:30:05.123] [UI] [info] ui fn=show id=387 name=- role=panel tag=-90 parent=384 box=0.0,1027.0 16.0x16.0
+[2026-10-11 22:30:05.150] [info] cull in 91564 early 23816 late 0 | skipE 0 skipL 0 | lod 66293 behind 0 frust 0 cone 417 hiz 0 near 0 subpx 1038 | sun 0 25 14851 | cpu 0.16 | profile 0 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-11 22:30:05.150] [info] shadow cache 0 inst 91564/91564 center 19.5 76.4 233.8 split 25.0 84.0 284.0 eye 19.5 78.7 249.6 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 9.49 -0.56 -0.29 | c1 2.52 -0.07 0.29 | c2 0.12 0.07 0.46 | cpu 0.16 vis 23816 late 23816
+[2026-10-11 22:30:05.481] [info] cull in 91564 early 16221 late 0 | skipE 0 skipL 0 | lod 64722 behind 0 frust 9782 cone 384 hiz 0 near 0 subpx 455 | sun 0 2 14851 | cpu 0.13 | profile 0 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-11 22:30:05.482] [info] shadow cache 0 inst 91564/91564 center 30.9 77.8 238.4 split 26.0 85.5 292.0 eye 19.5 78.7 249.6 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 10.32 -0.77 -0.28 | c1 3.00 -0.33 0.26 | c2 0.21 -0.23 0.42 | cpu 0.13 vis 16221 late 16221
+[2026-10-11 22:30:05.866] [info] cull in 91564 early 24367 late 0 | skipE 0 skipL 0 | lod 65876 behind 0 frust 0 cone 437 hiz 0 near 0 subpx 884 | sun 0 3 14851 | cpu 0.11 | profile 0 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-11 22:30:05.866] [info] shadow cache 0 inst 91564/91564 center 23.0 78.0 234.0 split 25.5 87.0 292.0 eye 19.5 78.7 249.6 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 10.32 -0.57 -0.28 | c1 2.89 -0.10 0.28 | c2 0.20 0.04 0.45 | cpu 0.11 vis 24367 late 24367
+[2026-10-11 22:30:05.908] [info] ui check nodes=582 draw=373 view=1920x1022 scroll=1620,50 300x476
+[2026-10-11 22:30:06.179] [info] cull in 91564 early 24248 late 0 | skipE 0 skipL 0 | lod 65982 behind 0 frust 0 cone 425 hiz 0 near 0 subpx 909 | sun 0 0 14851 | cpu 0.12 | profile 0 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-11 22:30:06.179] [info] shadow cache 0 inst 91564/91564 center 25.7 75.6 235.2 split 26.0 88.5 296.0 eye 19.5 78.7 249.6 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 10.62 -0.69 -0.27 | c1 3.11 -0.25 0.29 | c2 0.27 -0.14 0.45 | cpu 0.12 vis 24248 late 24248
+[2026-10-11 22:30:06.509] [info] cull in 91564 early 24248 late 0 | skipE 0 skipL 0 | lod 65982 behind 0 frust 0 cone 425 hiz 0 near 0 subpx 909 | sun 0 0 14851 | cpu 0.13 | profile 0 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-11 22:30:06.509] [info] shadow cache 0 inst 91564/91564 center 25.7 75.6 235.2 split 26.0 88.5 296.0 eye 19.5 78.7 249.6 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 10.62 -0.69 -0.27 | c1 3.11 -0.25 0.29 | c2 0.27 -0.14 0.45 | cpu 0.13 vis 24248 late 24248
+[2026-10-11 22:30:06.536] [info] frame 2.0 ms (500.0 fps)
+gpu 5.10 ms
+Light_Cull     0.01
+Shadow_Cull    0.04
+Mesh_Cull      0.02
+CSM            0.13
+Visbuffer      0.21
+HiZ_Max        0.05
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.00
+GTAO           0.05
+Sky            0.05
+Contact        0.03
+Sun            0.06
+Lamps          0.02
+Fog            0.20
+Clouds         0.33
+Radiance       3.75
+CMAA           0.04
+Bloom          0.06
+Tonemap        0.04
+cpu record  0.14
+[2026-10-11 22:30:06.839] [info] cull in 91564 early 24248 late 0 | skipE 0 skipL 0 | lod 65982 behind 0 frust 0 cone 425 hiz 0 near 0 subpx 909 | sun 0 0 14851 | cpu 0.10 | profile 0 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-11 22:30:06.839] [info] shadow cache 0 inst 91564/91564 center 25.7 75.6 235.2 split 26.0 88.5 296.0 eye 19.5 78.7 249.6 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 10.62 -0.69 -0.27 | c1 3.11 -0.25 0.29 | c2 0.27 -0.14 0.45 | cpu 0.10 vis 24248 late 24248
+[2026-10-11 22:30:06.910] [info] ui check nodes=582 draw=373 view=1920x1022 scroll=1620,50 300x476
+[2026-10-11 22:30:07.167] [info] cull in 91564 early 24248 late 0 | skipE 0 skipL 0 | lod 65982 behind 0 frust 0 cone 425 hiz 0 near 0 subpx 909 | sun 0 0 14851 | cpu 0.16 | profile 0 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-11 22:30:07.167] [info] shadow cache 0 inst 91564/91564 center 25.7 75.6 235.2 split 26.0 88.5 296.0 eye 19.5 78.7 249.6 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 10.62 -0.69 -0.27 | c1 3.11 -0.25 0.29 | c2 0.27 -0.14 0.45 | cpu 0.16 vis 24248 late 24248
+[2026-10-11 22:30:07.312] [info] exit

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "files/Model.hpp"
 #include "ui/Canvas.hpp"
 
 namespace burnhope {
@@ -19,5 +20,7 @@ void filesNewProject(UiState& s, const char* path);
 void filesOpenProject(UiState& s, const char* path);
 // Photo slots 6 and 7 from assets/icons/folder.png and file.png. Pass 255 when missing; the grid then draws a neutral outline.
 void filesIconSlots(UiState& s, uint8_t folderSlot, uint8_t fileSlot);
+void filesOfferPath(UiState& s, const char* path);
+void filesLoadIcons(Canvas& c);
 
 } // namespace burnhope

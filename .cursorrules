@@ -1,16 +1,15 @@
 # BurnhopeEngine Rules & Architectural Manifesto
 
-Be decisive. Output a 1–2 bullet plan, then edit code directly. No long internal thinking loops. Work strictly in targeted files. Never drop a GPU pass for a CPU fallback.
+Be decisive, thorough, and principled. Build robust engine systems from the ground up. Never write ad-hoc glue code or one-off workarounds when a fundamental engine primitive is missing or broken.
 
-- ZERO HESITATION: Do not over-analyze or doubt your decisions. Do not enter recursive thinking loops.
-- ACT IMMEDIATELY: State a maximum 1–2 line action plan and start editing files right away.
-- MANDATORY BUILD & TEST: After making edits, ALWAYS execute this EXACT single-line command:
-  `cmake --build build-core --target BurnhopeTest -j && ./build-core/BurnhopeTest`
-  Task is COMPLETE ONLY if BOTH targets compile successfully AND BurnhopeTest reports 0 failures.
-- FORBIDDEN TERMINAL CHECKS: NEVER run `git diff`, `git status`, or pipe diffs to `head`/`cat`. Trust your edits and proceed directly to compilation.
-- TOOL CALL BUDGET: Never make more than 3 file-read or grep calls before taking action.
-- TARGETED SCOPE: If you do not know the exact file, identify maximum 2 relevant files, then immediately edit. Never read unrelated subsystems.
-- NO CURIOSITY: Do not read header files just to verify definitions if you already understand the logic. Write the patch directly.
+- CORE MODULARITY & SINGLE RESPONSIBILITY: The engine core consists of dedicated, single-purpose foundation modules (Input System, Memory Allocators, Draw Dispatcher, Scissor & Viewport State, Text & Glyph Pipeline, Asset Streaming). Every subsystem does exactly one job and does it reliably.
+- COMPOSITION OVER DUPLICATION (DRY AT ALL LAYERS): High-level systems (UI panels, File Explorer, Scene View, Render Passes) must NEVER implement their own private versions of low-level logic (e.g. ad-hoc hit-testing, private mouse tracking, manual buffer packing, custom scissor handling). They strictly compose existing core primitives.
+- SINGLE SOURCE OF TRUTH: If an architectural behavior is needed in more than one place, extract it into its dedicated core module. If a bug occurs, fix it once in the root module so every dependent engine system immediately inherits the correct behavior.
+- ROOT CAUSE FIRST: Freely trace issues down through the layers (composite widget -> base primitives -> Canvas -> RHI -> Vulkan pipeline). Never patch a symptom on the surface when the underlying engine module is faulty.
+- MANDATORY BUILD & TEST: After making edits, ALWAYS verify both targets:
+  `cmake --build build-core --target BurnhopeTest BurnhopeEngine -j && ./build-core/BurnhopeTest`
+  Task is COMPLETE ONLY if BOTH targets compile cleanly and all unit tests pass.
+- NO TERMINAL SPAM: Do not run `git diff` or cat whole files into chat via shell. Output clear, direct code modifications.
 
 ## 1. Target Platforms & Scope
 - **Target**: High-performance Desktop PC ONLY (Linux & Windows x86_64 with AVX2).
@@ -19,17 +18,22 @@ Be decisive. Output a 1–2 bullet plan, then edit code directly. No long intern
 
 ## 2. Core Architecture, C++26 & Data-Oriented Design
 - **Language**: Strict C++26. Pure Data-Oriented Design (DOD) with Struct-of-Arrays (SoA).
-- **Core Decoupling**: `core/` is completely standalone. NEVER include or reference `engine/`, `demo/`, or `old/`.
+- **Core Decoupling**: `core/` is completely standalone. Foundation modules in `core/` have zero knowledge of higher layers and NEVER reference `engine/`, `demo/`, or `old/`.
 - **ECS (Flecs)**: Query archetype column pointers (`flecs::column<T>`). NEVER call `entity.get<T>()` / `try_get<T>()` in hot loops.
 - **Hot-Path Allocations**: ZERO heap allocations in `Tick`, `Layout`, `Emit`, `Draw`. NO `malloc`, `new`, `std::string`, `push_back` reallocations, or `std::make_shared`. Use bump allocators, ring buffers, or `FrameArena`.
 - **POD Invariants**: All GPU and UI data must be trivially copyable POD types (`sizeof % 16 == 0`).
 
-## 3. Custom UI Framework (Meta Yoga Flexbox, No ImGui, No Qt)
-- **UI Architecture**: Custom high-performance UI layer on Meta Yoga (Flexbox) and `Panel` / `spawn`.
+## 3. UI Framework & Rendering Architecture
+- **Layered Structure**: Base components (Button, Label, Scroll, Icon) sit directly on top of Core Primitives (Input, Canvas, Scissor Manager). High-level compound views (Explorer, Inspector, Tree) only assemble these components.
 - **BANNED UI**: Absolutely NO ImGui, NO Qt (`QObject`, MOC, virtual dispatch hierarchies), NO legacy immediate-mode GUI hacks.
 - **Draw Submission**: Single `vkCmdDraw` / `vkCmdDrawMeshTasksEXT` call per frame from mapped host-visible SSBO ring buffer.
 - **Layout Invariants**: NEVER place `uiSlider` with 100% width in horizontal row next to a label (Yoga collapses box to 0). Stack vertically. Role `Scroll` requires `UiScroll.inner`. Find baked nodes by name.
-- UI icons load from `assets/icons/` (`folder.png`, `file.png`) into photo slots 6 and 7 (`filesIconSlots`; 255 = missing). Tag `-89` draws a static photo tinted by paint rgb. Missing files stay colored quads. NEVER tag grid icons `-90` (that tag captures photo pan). Bar menus use paint tag `-7` so they open on LMB; RMB ignores tag `-7`. Base UI font is 20px (`canvasUseFont`), baseline factor 0.76.
+- NEVER write `s.box` for button, check, or card labels (breaks Yoga alignment); ALWAYS let the label flex fill the control.
+- NEVER hardcode virtual slot counts (clips 1440p/4K); ALWAYS `uiVirtualCalc` with a recycled pool capped at `kUiPoolCap` (64).
+- NEVER paint widget chrome with raw RGB (light themes stay dark); ALWAYS `paintToken` / `UiToken`.
+- **UI Icons & Fonts**: UI icons load from `assets/icons/` into designated photo slots. Tag `-89` draws a static photo tinted by paint rgb; never use `-90` for static icons. Bar menus open on LMB using paint tag `-7`. Base UI font is Inter (`canvasUseFont`).
+- **Scissor Discipline**: Every container strictly routes clipping through the core scissor manager so text and geometry never leak into neighboring panels.
+- NEVER store File Browser, Calendar, Color Picker, or JSON bytes on UiState (domain state on the core context); ALWAYS `UiFileBrowser`, `UiCalendarComponent`, `UiColorPickerComponent`, and `JsonDocument`. NEVER branch `uiEmit` on paint tags `-70..-78` or `-5` (widget drawing inside the batch); ALWAYS `UiDrawHooks`.
 
 ## 4. Vulkan 1.4 & Next-Gen Graphics Pipeline
 - **Modern Standards REQUIRED**:
@@ -53,12 +57,7 @@ Be decisive. Output a 1–2 bullet plan, then edit code directly. No long intern
 - Canvas primitives strictly own buffer slot 22 (`kUiDescPrims`). Font is 661; UI photos are 662–669. NEVER overwrite slot 22 with render passes (RC hash uses slot 18).
 - Shared shader math lives exclusively in `engine/shader/core/` and `camera.slang`. Never duplicate math across passes.
 
-## 6. Self-Maintenance & Evolution Protocol
-- When resolving a bug, banning an API, or adopting a modern 2026 pattern, append it directly as a single-line bullet:
+## 6. Self-Maintenance Protocol
+- When resolving a bug, banning an API, or adopting a modern pattern, append it directly as a single-line bullet:
   `- NEVER [banned API/action] (causes [technical failure]); ALWAYS [modern alternative] [exact slots/bytes/alignment].`
-- NEVER write debugging logs, dev stories, or symptom essays. Keep exact technical contracts only.
-- Keep this entire file strictly under **160 lines**. Merge overlapping rules during refactoring, but NEVER delete verified slot IDs, alignment numbers, or layer boundaries.
-- TOOL CALL BUDGET: Never make more than 3 file-read or grep calls before taking action.
-- TARGETED SCOPE: If you do not know the exact file, find maximum 2 relevant files, then immediately ask or proceed to edit.
-- NEVER scan the entire tree: Do not chain grep queries across unrelated subsystems (e.g. if fixing UI/Splitter, never read Engine.cpp, Canvas.cpp, or State.hpp).
-- NO CURIOSITY: Do not read header files just to verify definitions if you already understand the logic. Write the patch directly.
+- Keep exact technical contracts only. Keep this file under 160 lines.

@@ -246,6 +246,9 @@ float4 uiFs(VsOut i) : SV_Target0 {
     if ((i.flags & 32u) != 0) {
         const float4 tex = samplePhoto(min(i.slot, 7u), saturate(i.uv), i.blur);
         rgb = tex.rgb;
+        if ((i.flags & 2u) == 0) {
+            rgb *= i.color.rgb;
+        }
         alpha = tex.a;
         const float d = sdRound(i.local, i.size, i.radii);
         const float aa = max(fwidth(d), 0.0001);

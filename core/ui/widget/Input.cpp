@@ -1,4 +1,5 @@
 #include "ui/widget/Detail.hpp"
+#include "ui/Domain.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -78,7 +79,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             }
             const UiPaint* node = s.ent[id].try_get<UiPaint>();
             const bool frameNode = node != nullptr && node->tag == -15;
-            const bool floatingDock = id == s.dockPanel && s.parentOf[id] == 0;
+            const bool floatingDock = id == uiDock(s).panel && s.parentOf[id] == 0;
             if (!frameNode && !floatingDock) {
                 continue;
             }
@@ -117,7 +118,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             cursor = splitCursor(s, hit);
         }
     }
-    if (s.colorDrop != 0 || (s.book != nullptr && s.book->drop != 0)) {
+    if (uiColor(s).colorDrop != 0 || (uiColor(s).book != nullptr && uiColor(s).book->drop != 0)) {
         cursor = 7;
     }
     s.cursor = cursor;
@@ -148,6 +149,13 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         s.visualDirty = true;
     }
 
+    uint16_t bandHost = hit < s.count && s.ent[hit].try_get<UiRubber>() != nullptr ? hit : uiAncestorId<UiRubber>(s, hit);
+    if (bandHost == kUiNone && s.capture < s.count && s.ent[s.capture].is_alive() && s.ent[s.capture].try_get<UiRubber>() != nullptr) {
+        bandHost = s.capture;
+    }
+    if (bandHost != kUiNone && uiRubberbandTrack(s, bandHost, in)) {
+        return UiEvent::None;
+    }
     const bool filesAte = s.plug.handle != nullptr && s.plug.handle(s, in);
     const bool press = (in.pointer.pressed & kPointerLeft) != 0;
     if (inputKeyEdge(in, kScanF3)) {
@@ -428,8 +436,9 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             const uint8_t prevEdge = s.dockEdge;
             s.dockEdge = 0;
             s.hintOn = 0;
-            if (s.parentOf[s.floatWin] == 0 && s.floatWin == s.dockPanel && s.dockHome != kUiNone && s.dockHome < s.count && hitBox(s.box[s.dockHome], in.pointer.x, in.pointer.y)) {
-                const UiBox& home = s.box[s.dockHome];
+            const UiDock& dock = uiDock(s);
+            if (s.parentOf[s.floatWin] == 0 && s.floatWin == dock.panel && dock.home != kUiNone && dock.home < s.count && hitBox(s.box[dock.home], in.pointer.x, in.pointer.y)) {
+                const UiBox& home = s.box[dock.home];
                 const float lx = home.w > 1.0f ? (in.pointer.x - home.x) / home.w : 0.5f;
                 const float ly = home.h > 1.0f ? (in.pointer.y - home.y) / home.h : 0.5f;
                 uint8_t edge = 0;
@@ -464,7 +473,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             drag->fn(drag->user, s.capture, in.pointer.x, in.pointer.y);
         } else if (cap != nullptr && cap->tag == -90) {
             photoPan(s, s.capture, in.pointer.x, in.pointer.y);
-        } else if (s.capture == s.fileView) {
+        } else if (s.capture == uiFiles(s).fileView) {
         } else if (cap != nullptr && cap->tag == -5) {
             splitDrag(s, s.capture, in.pointer.x, in.pointer.y);
         } else if (cap != nullptr && cap->role == static_cast<uint8_t>(UiRole::Button)) {
@@ -531,8 +540,8 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
                 }
                 buf[n] = '\0';
                 copyText(status->bytes, status->len, buf);
-                s.pickedId = item;
-                copyText(s.pickedName, s.pickedLen, name);
+                uiPick(s).id = item;
+                copyText(uiPick(s).name, uiPick(s).len, name);
                 auto* flex = s.ent[s.statusLabel].try_get_mut<UiFlex>();
                 if (flex != nullptr) {
                     flex->width = static_cast<float>(status->len) * s.look.advance;
@@ -558,7 +567,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         }
     }
     if (release || !down) {
-        if (s.dockEdge != 0 && s.floatWin == s.dockPanel) {
+        if (s.dockEdge != 0 && s.floatWin == uiDock(s).panel) {
             uiDockTo(s, s.dockEdge);
         }
         s.capture = kUiNone;
@@ -594,7 +603,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         }
     }
 
-    if (in.wheel != 0.0f && s.hovered != kUiNone && s.hovered != s.fileView) {
+    if (in.wheel != 0.0f && s.hovered != kUiNone && s.hovered != uiFiles(s).fileView) {
         uint16_t photo = kUiNone;
         for (uint16_t p = s.hovered; p != kUiNone; p = s.parentOf[p]) {
             const UiPaint* paint = s.ent[p].try_get<UiPaint>();
@@ -740,6 +749,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             if (const UiEdit* edit = s.ent[s.focused].try_get<UiEdit>(); edit != nullptr && edit->fn != nullptr) {
                 edit->fn(edit->user, s.focused);
             }
+            uiFieldNotify(s, s.focused);
             const char* msg = "";
             if (fieldProblem(*field, msg) && s.statusLabel != kUiNone) {
                 auto* text = s.ent[s.statusLabel].try_get_mut<UiText>();

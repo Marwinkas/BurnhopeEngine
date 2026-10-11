@@ -1,5 +1,8 @@
 #include "host/Host.hpp"
+#include "files/Browser.hpp"
 #include "platform/Jobs.hpp"
+#include "ui/Domain.hpp"
+#include "ui/State.hpp"
 
 #include <spdlog/spdlog.h>
 #include <cstdio>
@@ -57,7 +60,9 @@ void acceptPath(Host& host, int slot, const char* path) {
     if (!view.on) {
         return;
     }
-    canvasOfferFile(view.canvas, path);
+    if (view.canvas.state != nullptr) {
+        filesOfferPath(*view.canvas.state, path);
+    }
     if (isImagePath(path)) {
         (void)canvasLoadImage(view.canvas, 0, path);
     } else if (extIs(path, ".json")) {
@@ -381,7 +386,17 @@ void finishView(Host& host, int slot, const DrawJobResult& r) {
             static_cast<int>(r.focusH * sx));
     }
     WindowOps ops = r.ops;
-    if (ops.openFile) {
+    view.wantTool = false;
+    view.wantColor = false;
+    view.wantFile = false;
+    if (view.canvas.state != nullptr) {
+        UiHostNote& note = uiHostNote(*view.canvas.state);
+        view.wantTool = note.tool;
+        view.wantColor = note.color;
+        view.wantFile = note.file;
+        note = {};
+    }
+    if (view.wantFile) {
         static const FileFilter filters[] = {
             {"All files", "*"},
             {"JSON", "json"},
@@ -390,7 +405,7 @@ void finishView(Host& host, int slot, const DrawJobResult& r) {
         if (windowAskFile(view.window, filters, 3, FileAsk::Open)) {
             host.fileSlot = slot;
         }
-        ops.openFile = false;
+        view.wantFile = false;
     }
     if (r.ev == UiEvent::Close || ops.close) {
         if (slot == host.primary) {
@@ -508,8 +523,9 @@ int hostOpen(Host& host, const ViewDesc& desc) {
         destroyView(host, slot, false);
         return -1;
     }
-    if (desc.book != nullptr) {
-        canvasSetBook(view.canvas, desc.book);
+    filesLoadIcons(view.canvas);
+    if (desc.book != nullptr && view.canvas.state != nullptr) {
+        uiSetColorBook(*view.canvas.state, desc.book);
     }
     canvasSetBuilder(view.canvas, desc.builder, desc.user);
     canvasReload(view.canvas);
@@ -599,8 +615,9 @@ bool restoreViewGpu(Host& host, int slot, bool ownsDeviceSurface) {
         spdlog::error("HOST recover canvas failed {}", view.name);
         return false;
     }
-    if (view.book != nullptr) {
-        canvasSetBook(view.canvas, view.book);
+    filesLoadIcons(view.canvas);
+    if (view.book != nullptr && view.canvas.state != nullptr) {
+        uiSetColorBook(*view.canvas.state, view.book);
     }
     canvasSetBuilder(view.canvas, view.canvas.builder, view.canvas.builderUser);
     canvasReload(view.canvas);

@@ -1,4 +1,5 @@
 #include "ui/Layout.hpp"
+#include "ui/LayoutBridge.hpp"
 #include "ui/widget/Detail.hpp"
 
 #include <cstdio>
@@ -6,6 +7,27 @@
 #include <cstring>
 
 namespace burnhope {
+namespace {
+
+UiCustomBinLoader* binDefaults() {
+    static UiCustomBinLoader table[16]{};
+    return table;
+}
+
+} // namespace
+
+void uiRegisterCustomBinNode(uint8_t role, UiCustomNodeLoader loader, void* user) {
+    if (role < 16) {
+        binDefaults()[role] = {loader, user};
+    }
+}
+
+void uiCopyBinHooks(UiState& s) {
+    for (int i = 0; i < 16; ++i) {
+        s.binHooks[i] = binDefaults()[i];
+    }
+}
+
 namespace {
 
 static_assert(sizeof(BinHead) == 12, "BinHead");
@@ -105,80 +127,57 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
             nameOf(s, map[i], name);
             continue;
         }
-        if (bin.role == kBinCalendar) {
-            uiBuildCalendar(s, host, bin.posX, bin.posY, bin.width, bin.height);
-            map[i] = s.calPanel;
-            nameOf(s, map[i], name);
+        if (bin.role < 16 && s.binHooks[bin.role].fn != nullptr) {
+            map[i] = s.binHooks[bin.role].fn(s, host, bin, name, s.binHooks[bin.role].user);
             continue;
         }
-        if (bin.role == kBinColor) {
-            UiFlex flex{};
-            flex.position = 1;
-            flex.posX = bin.posX;
-            flex.posY = bin.posY;
-            flex.widthMode = static_cast<uint8_t>(UiSize::Px);
-            flex.width = bin.width;
-            flex.heightMode = static_cast<uint8_t>(UiSize::Px);
-            flex.height = bin.height;
-            flex.pad = 10.0f;
-            flex.gap = 6.0f;
-            flex.shrink = 0.0f;
-            const uint16_t id = spawn(s, host, flex, paint(UiRole::Panel, bin.r, bin.g, bin.b, bin.radius));
-            if (s.book == nullptr || s.book->gen == 0) {
-                rgbToHsv(s.colorR, s.colorG, s.colorB, s.colorH, s.colorS, s.colorV);
-                s.colorA = 1.0f;
-                s.colorUseAlpha = 1;
-            } else {
-                takeBook(s);
-            }
-            s.colorPanel = id;
-            fillColorBody(s, id);
-            uiShow(s, id, false);
-            map[i] = id;
-            nameOf(s, id, name);
-            continue;
+        BinNode plain = bin;
+        if (plain.role > kBinChrome && plain.role != kBinMenu && plain.role != kBinImage) {
+            plain.role = static_cast<uint8_t>(UiRole::Panel);
         }
         UiFlex flex{};
-        flex.direction = bin.direction;
-        flex.wrap = bin.wrap;
-        flex.justify = bin.justify;
-        flex.align = bin.align;
-        flex.widthMode = bin.widthMode;
-        flex.heightMode = bin.heightMode;
-        flex.width = bin.width;
-        flex.height = bin.height;
-        flex.grow = bin.grow;
-        flex.shrink = bin.shrink;
-        flex.pad = bin.pad;
-        flex.gap = bin.gap;
-        flex.position = bin.position;
-        flex.posX = bin.posX;
-        flex.posY = bin.posY;
-        flex.padT = bin.padT;
-        flex.padB = bin.padB;
-        flex.minW = bin.minW;
-        flex.minH = bin.minH;
-        flex.marginL = bin.marginL;
-        flex.marginR = bin.marginR;
-        flex.marginT = bin.marginT;
-        flex.marginB = bin.marginB;
-        flex.drop = bin.drop;
-        flex.content = bin.content;
-        flex.self = bin.self;
-        flex.basisMode = bin.basisMode;
-        flex.maxWMode = bin.maxWMode;
-        flex.maxHMode = bin.maxHMode;
-        flex.overflow = bin.overflow;
-        flex.box = bin.box;
-        flex.inset = bin.inset;
-        flex.basis = bin.basis;
-        flex.maxW = bin.maxW;
-        flex.maxH = bin.maxH;
-        flex.gapRow = bin.gapRow;
-        flex.aspect = bin.aspect;
-        flex.posR = bin.posR;
-        flex.posB = bin.posB;
-        uint8_t role = bin.role;
+        UiFlexAttr attr{};
+        attr.direction = bin.direction;
+        attr.wrap = bin.wrap;
+        attr.justify = bin.justify;
+        attr.align = bin.align;
+        attr.widthMode = bin.widthMode;
+        attr.heightMode = bin.heightMode;
+        attr.width = bin.width;
+        attr.height = bin.height;
+        attr.grow = bin.grow;
+        attr.shrink = bin.shrink;
+        attr.pad = bin.pad;
+        attr.gap = bin.gap;
+        attr.position = bin.position;
+        attr.posX = bin.posX;
+        attr.posY = bin.posY;
+        attr.padT = bin.padT;
+        attr.padB = bin.padB;
+        attr.minW = bin.minW;
+        attr.minH = bin.minH;
+        attr.marginL = bin.marginL;
+        attr.marginR = bin.marginR;
+        attr.marginT = bin.marginT;
+        attr.marginB = bin.marginB;
+        attr.drop = bin.drop;
+        attr.content = bin.content;
+        attr.self = bin.self;
+        attr.basisMode = bin.basisMode;
+        attr.maxWMode = bin.maxWMode;
+        attr.maxHMode = bin.maxHMode;
+        attr.overflow = bin.overflow;
+        attr.box = bin.box;
+        attr.inset = bin.inset;
+        attr.basis = bin.basis;
+        attr.maxW = bin.maxW;
+        attr.maxH = bin.maxH;
+        attr.gapRow = bin.gapRow;
+        attr.aspect = bin.aspect;
+        attr.posR = bin.posR;
+        attr.posB = bin.posB;
+        uiFlexApplyAttr(flex, attr);
+        uint8_t role = plain.role;
         if (role == kBinMenu) {
             role = static_cast<uint8_t>(UiRole::Panel);
             flex.position = 1;
@@ -245,7 +244,7 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
             check.kind = bin.checkKind;
             check.group = bin.checkGroup;
             s.ent[id].set<UiCheck>(check);
-        } else if (bin.role == kBinImage) {
+        } else if (plain.role == kBinImage) {
             UiImage photo{};
             photo.slot = 0;
             photo.frames = 1;
@@ -254,7 +253,7 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
             photo.viewH = 1.0f;
             s.ent[id].set<UiImage>(photo);
         }
-        if (bin.shown == 0 || bin.role == kBinMenu) {
+        if (bin.shown == 0 || plain.role == kBinMenu) {
             uiShow(s, id, false);
         }
     }
