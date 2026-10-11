@@ -65,8 +65,8 @@ void acceptPath(Host& host, int slot, const char* path) {
     }
     if (isImagePath(path)) {
         (void)canvasLoadImage(view.canvas, 0, path);
-    } else if (extIs(path, ".json")) {
-        (void)canvasLoadJsonDoc(view.canvas, path);
+    } else if (extIs(path, ".json") && view.canvas.state != nullptr) {
+        (void)uiImportJsonFile(*view.canvas.state, 0, path);
     }
 }
 

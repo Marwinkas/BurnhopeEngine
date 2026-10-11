@@ -7,6 +7,8 @@
 
 namespace burnhope {
 
+struct UiState;
+
 // Слот 48 буфера кучи, диапазон холста 48..63. Проходы движка его не занимают.
 constexpr uint32_t kUiDescPrims = 48;
 static_assert(kUiDescPrims >= 48u && kUiDescPrims < 64u);
@@ -98,14 +100,6 @@ struct UiName {
 using UiCommandFn = void (*)(void* user);
 using UiClickFn = void (*)(void* user, uint16_t id, int16_t tag);
 
-struct UiButtonConfig {
-    const char* label = nullptr;
-    float width = 0.0f; // 0 auto, >0 px, <0 100%
-    float height = 28.0f;
-    uint8_t iconSlot = 255;
-    UiClickFn onClick = nullptr;
-    void* user = nullptr;
-};
 using UiValueFn = void (*)(void* user, uint16_t id, float value);
 using UiDragFn = void (*)(void* user, uint16_t id, float x, float y);
 using UiEditFn = void (*)(void* user, uint16_t id);
@@ -411,94 +405,8 @@ struct UiRange {
 
 constexpr uint8_t kUiPoolCap = 64;
 
-struct UiVirtual {
-    uint32_t count = 0;
-    uint32_t first = 0;
-    uint16_t slot[kUiPoolCap]{};
-    uint8_t slots = 0;
-    float rowH = 36;
-    void (*fill)(void* user, uint32_t index, char* dst, uint8_t cap) = nullptr;
-    void (*click)(void* user, uint32_t index) = nullptr;
-    void* user = nullptr;
-};
-
-struct UiVirtRow {
-    uint32_t index = 0;
-};
-
-struct UiParts {
-    uint16_t icon = kUiNone;
-    uint16_t chevron = kUiNone;
-    uint16_t label = kUiNone;
-};
-
-struct UiMenuPop {
-    uint16_t row[12]{};
-    void (*fn[12])(void*){};
-    void* user = nullptr;
-    uint8_t n = 0;
-};
-
-struct UiValueHook {
-    void (*fn)(void* user, float value) = nullptr;
-    void* user = nullptr;
-};
-
-struct UiTextHook {
-    void (*fn)(void* user, const char* text) = nullptr;
-    void* user = nullptr;
-};
-
-struct UiTreeView {
-    uint32_t count = 0;
-    uint32_t first = 0;
-    uint16_t slot[kUiPoolCap]{};
-    uint8_t slots = 0;
-    float rowH = 28.0f;
-    void (*bind)(void* user, uint16_t row, uint32_t index) = nullptr;
-    void (*toggle)(void* user, uint32_t index) = nullptr;
-    void (*select)(void* user, uint32_t index) = nullptr;
-    void* user = nullptr;
-};
-
-struct UiVirtualGrid {
-    float itemW = 84.0f;
-    float itemH = 96.0f;
-    uint32_t count = 0;
-    uint32_t first = 0;
-    uint8_t cols = 1;
-    uint8_t slots = 0;
-    uint16_t slot[kUiPoolCap]{};
-    void (*bind)(void* user, uint16_t cell, uint32_t index) = nullptr;
-    void (*select)(void* user, uint32_t index, bool multi) = nullptr;
-    void (*activate)(void* user, uint32_t index) = nullptr;
-    void* user = nullptr;
-    uint32_t last = 0xFFFFFFFFu;
-};
-
-struct UiCrumbs {
-    uint16_t seg[8]{};
-    uint16_t sep[7]{};
-    uint8_t n = 0;
-    char path[512]{};
-    void (*nav)(void* user, const char* path) = nullptr;
-    void* user = nullptr;
-};
-
-struct UiRubber {
-    uint16_t overlay = kUiNone;
-    uint8_t active = 0;
-    float x0 = 0;
-    float y0 = 0;
-    float x1 = 0;
-    float y1 = 0;
-    void (*pick)(void* user, uint16_t child) = nullptr;
-    void* user = nullptr;
-};
-
-struct UiTree {
-    uint16_t body = kUiNone;
-    uint8_t open = 0;
+struct UiVirtualPool {
+    void (*refresh)(UiState& s, uint16_t id) = nullptr;
 };
 
 struct UiDrop {

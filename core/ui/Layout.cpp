@@ -7,24 +7,10 @@
 #include <cstring>
 
 namespace burnhope {
-namespace {
 
-UiCustomBinLoader* binDefaults() {
-    static UiCustomBinLoader table[16]{};
-    return table;
-}
-
-} // namespace
-
-void uiRegisterCustomBinNode(uint8_t role, UiCustomNodeLoader loader, void* user) {
+void uiRegisterCustomBinNode(UiState& s, uint8_t role, UiCustomNodeLoader loader, void* user) {
     if (role < 16) {
-        binDefaults()[role] = {loader, user};
-    }
-}
-
-void uiCopyBinHooks(UiState& s) {
-    for (int i = 0; i < 16; ++i) {
-        s.binHooks[i] = binDefaults()[i];
+        s.binHooks[role] = {loader, user};
     }
 }
 
@@ -122,11 +108,6 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
         copyPool(name, nameLen, 32, pool, head.pool, bin.nameOff, bin.nameLen);
         copyPool(text, textLen, 96, pool, head.pool, bin.textOff, bin.textLen);
         copyPool(hint, hintLen, 40, pool, head.pool, bin.hintOff, bin.hintLen);
-        if (bin.role == kBinChrome) {
-            map[i] = uiWindowChrome(s, host);
-            nameOf(s, map[i], name);
-            continue;
-        }
         if (bin.role < 16 && s.binHooks[bin.role].fn != nullptr) {
             map[i] = s.binHooks[bin.role].fn(s, host, bin, name, s.binHooks[bin.role].user);
             continue;

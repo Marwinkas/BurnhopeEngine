@@ -105,7 +105,7 @@ void onClick(void* user, uint16_t id, int16_t tag) {
         if (canvas.state != nullptr) {
             uiDock(*canvas.state).panel = demo->dockPanel;
             uiDock(*canvas.state).home = demo->dockHome;
-            canvas.state->dockEdges = next;
+            uiDock(*canvas.state).edges = next;
         }
     } else if (tag == -21) {
         uiSetDrop(*canvas.state, demo->chips, 1);
@@ -368,7 +368,7 @@ void shellBuild(Canvas& canvas, void*) {
     if (canvas.state != nullptr) {
         uiDock(*canvas.state).panel = dock.id;
         uiDock(*canvas.state).home = home.id;
-        canvas.state->dockEdges = 15;
+        uiDock(*canvas.state).edges = 15;
     }
     dragHeader(dock, "INSPECTOR");
     (void)dock.label("drag the header out, drop it here or press DOCK");

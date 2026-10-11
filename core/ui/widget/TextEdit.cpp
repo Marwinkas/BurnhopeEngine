@@ -110,34 +110,35 @@ void fieldInsert(UiField& field, const char* src, uint8_t n) {
 }
 
 void fieldRemember(UiState& s, uint16_t id, const UiField& field) {
-    if (s.undoAt < s.undoN) {
-        s.undoN = s.undoAt;
+    UiFieldUndo& undo = uiUndo(s);
+    if (undo.at < undo.n) {
+        undo.n = undo.at;
     }
-    if (s.undoAt > 0) {
-        const auto& prev = s.undoSnap[s.undoAt - 1];
+    if (undo.at > 0) {
+        const auto& prev = undo.snap[undo.at - 1];
         if (prev.id == id && prev.len == field.len && std::memcmp(prev.bytes, field.bytes, field.len) == 0) {
             return;
         }
     }
-    if (s.undoAt >= 8) {
+    if (undo.at >= 8) {
         for (uint8_t i = 1; i < 8; ++i) {
-            s.undoSnap[i - 1] = s.undoSnap[i];
+            undo.snap[i - 1] = undo.snap[i];
         }
-        s.undoAt = 7;
-        s.undoN = 7;
+        undo.at = 7;
+        undo.n = 7;
     }
-    auto& snap = s.undoSnap[s.undoAt];
+    auto& snap = undo.snap[undo.at];
     snap = {};
     snap.id = id;
     snap.len = field.len;
     snap.caret = field.caret;
     snap.anchor = field.anchor;
     std::memcpy(snap.bytes, field.bytes, field.len);
-    ++s.undoAt;
-    s.undoN = s.undoAt;
+    ++undo.at;
+    undo.n = undo.at;
 }
 
-void swapField(UiField& field, decltype(UiState::undoSnap[0])& snap) {
+void swapField(UiField& field, UiFieldUndo::Snap& snap) {
     UiField copy = field;
     field.len = snap.len;
     field.caret = snap.caret;
@@ -153,30 +154,32 @@ void swapField(UiField& field, decltype(UiState::undoSnap[0])& snap) {
 }
 
 bool fieldUndo(UiState& s) {
-    if (s.undoAt == 0 || s.focused == kUiNone) {
+    UiFieldUndo& undo = uiUndo(s);
+    if (undo.at == 0 || s.focused == kUiNone) {
         return false;
     }
     auto* field = s.ent[s.focused].try_get_mut<UiField>();
     if (field == nullptr) {
         return false;
     }
-    --s.undoAt;
-    s.undoSnap[s.undoAt].id = s.focused;
-    swapField(*field, s.undoSnap[s.undoAt]);
+    --undo.at;
+    undo.snap[undo.at].id = s.focused;
+    swapField(*field, undo.snap[undo.at]);
     s.visualDirty = true;
     return true;
 }
 
 bool fieldRedo(UiState& s) {
-    if (s.undoAt >= s.undoN || s.focused == kUiNone) {
+    UiFieldUndo& undo = uiUndo(s);
+    if (undo.at >= undo.n || s.focused == kUiNone) {
         return false;
     }
     auto* field = s.ent[s.focused].try_get_mut<UiField>();
     if (field == nullptr) {
         return false;
     }
-    swapField(*field, s.undoSnap[s.undoAt]);
-    ++s.undoAt;
+    swapField(*field, undo.snap[undo.at]);
+    ++undo.at;
     s.visualDirty = true;
     return true;
 }

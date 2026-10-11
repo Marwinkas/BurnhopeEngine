@@ -2,6 +2,24 @@
 
 #include "ui/State.hpp"
 
+#include <yoga/Yoga.h>
+#include "ui/widget/Breadcrumbs.hpp"
+#include "ui/widget/Button.hpp"
+#include "ui/widget/Chrome.hpp"
+#include "ui/widget/Curve.hpp"
+#include "ui/widget/Field.hpp"
+#include "ui/widget/Image.hpp"
+#include "ui/widget/List.hpp"
+#include "ui/widget/Menu.hpp"
+#include "ui/widget/Rubberband.hpp"
+#include "ui/widget/Scroll.hpp"
+#include "ui/widget/Slider.hpp"
+#include "ui/widget/Splitter.hpp"
+#include "ui/widget/Tip.hpp"
+#include "ui/widget/TreeView.hpp"
+#include "ui/widget/Virtual.hpp"
+#include "ui/widget/VirtualGrid.hpp"
+
 namespace burnhope {
 
 inline constexpr float kAccent[3][3] = {

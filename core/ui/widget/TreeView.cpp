@@ -87,6 +87,7 @@ uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg) {
     tree.user = cfg.user;
     tree.rowH = 28.0f;
     s.ent[scroll].set<UiTreeView>(tree);
+    s.ent[scroll].set<UiVirtualPool>({uiTreeViewRefresh});
     uiTreeViewRefresh(s, scroll);
     return scroll;
 }

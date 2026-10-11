@@ -1,4 +1,6 @@
+#include "ui/widget/Chrome.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/Layout.hpp"
 
 namespace burnhope {
 namespace {
@@ -96,6 +98,18 @@ void uiSetPaint(UiState& s, uint16_t id, float r, float g, float b, float a) {
     paint->a = a;
     paint->token = static_cast<uint8_t>(UiToken::Custom);
     s.visualDirty = true;
+}
+
+uint16_t loadChromeBin(UiState& s, uint16_t parent, const BinNode&, const char* name, void*) {
+    const uint16_t id = uiWindowChrome(s, parent);
+    if (name != nullptr && name[0] != '\0') {
+        uiName(s, id, name);
+    }
+    return id;
+}
+
+void uiInstallChromeBin(UiState& s) {
+    uiRegisterCustomBinNode(s, kBinChrome, loadChromeBin, nullptr);
 }
 
 void uiMarkTab(UiState& s, uint16_t strip, uint16_t tab) {

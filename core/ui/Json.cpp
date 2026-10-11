@@ -1,5 +1,6 @@
 #include "ui/LayoutBridge.hpp"
 #include "ui/State.hpp"
+#include "ui/widget/Detail.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -233,16 +234,23 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                         if (std::strcmp(role, "button") == 0) {
                             node->role = static_cast<uint8_t>(UiRole::Button);
                         } else if (std::strcmp(role, "label") == 0) {
-                            node->role = static_cast<uint8_t>(UiRole::Label);
-                            node->r = 0.90f;
-                            node->g = 0.92f;
-                            node->b = 0.96f;
+                            const UiPaint ink = paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f);
+                            node->role = ink.role;
+                            node->token = ink.token;
+                            node->r = ink.r;
+                            node->g = ink.g;
+                            node->b = ink.b;
                         } else if (std::strcmp(role, "field") == 0) {
                             node->role = static_cast<uint8_t>(UiRole::Field);
                         } else if (std::strcmp(role, "check") == 0) {
                             node->role = static_cast<uint8_t>(UiRole::Check);
                         } else {
-                            node->role = static_cast<uint8_t>(UiRole::Panel);
+                            const UiPaint ink = paintToken(s.look, UiRole::Panel, UiToken::Content, 0.0f);
+                            node->role = ink.role;
+                            node->token = ink.token;
+                            node->r = ink.r;
+                            node->g = ink.g;
+                            node->b = ink.b;
                         }
                     }
                 }
@@ -380,21 +388,6 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
     return id;
 }
 
-const char* kFallback = R"({
-  "id": "json_card",
-  "dir": "column",
-  "pad": 10,
-  "gap": 6,
-  "radius": 8,
-  "w": "100%",
-  "fill": [0.16, 0.18, 0.24, 1],
-  "children": [
-    {"id": "json_title", "role": "label", "text": "JSON LAYOUT"},
-    {"id": "json_note", "role": "label", "text": "embedded layout"},
-    {"id": "json_go", "role": "button", "text": "JSON BTN", "w": 120, "h": 28, "fill": [0.28, 0.36, 0.52, 1]}
-  ]
-})";
-
 } // namespace
 
 uint16_t uiImportJson(UiState& s, uint16_t parent, const char* text) {
@@ -407,20 +400,27 @@ uint16_t uiImportJson(UiState& s, uint16_t parent, const char* text) {
 
 uint16_t uiImportJsonFile(UiState& s, uint16_t parent, const char* path) {
     if (path == nullptr) {
-        return uiImportJson(s, parent, kFallback);
+        spdlog::error("ui: failed to read json file");
+        return kUiNone;
     }
     std::FILE* file = std::fopen(path, "rb");
     if (file == nullptr) {
-        return uiImportJson(s, parent, kFallback);
+        spdlog::error("ui: failed to read json file {}", path);
+        return kUiNone;
     }
-    char buf[16384];
-    const size_t n = std::fread(buf, 1, sizeof(buf) - 1, file);
+    std::fseek(file, 0, SEEK_END);
+    const long sz = std::ftell(file);
+    std::fseek(file, 0, SEEK_SET);
+    if (sz <= 0 || sz > 8 * 1024 * 1024) {
+        std::fclose(file);
+        spdlog::error("ui: failed to read json file {}", path);
+        return kUiNone;
+    }
+    std::vector<char> buf(static_cast<size_t>(sz) + 1);
+    const size_t n = std::fread(buf.data(), 1, static_cast<size_t>(sz), file);
     std::fclose(file);
     buf[n] = '\0';
-    if (n == 0) {
-        return uiImportJson(s, parent, kFallback);
-    }
-    return uiImportJson(s, parent, buf);
+    return uiImportJson(s, parent, buf.data());
 }
 
 uint16_t uiFindName(const UiState& s, const char* name) {

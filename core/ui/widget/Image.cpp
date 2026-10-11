@@ -1,3 +1,4 @@
+#include "files/FileDomain.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/Domain.hpp"
 

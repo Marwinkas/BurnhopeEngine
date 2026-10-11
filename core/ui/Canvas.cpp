@@ -40,7 +40,6 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
 void canvasDestroy(Canvas& c, Device& d) {
     uiRendererDestroy(c.rhi, d);
     if (c.state != nullptr) {
-        jsonRelease(c.json);
         if (c.state->plug.shutdown != nullptr) {
             c.state->plug.shutdown(*c.state);
         }
@@ -199,14 +198,6 @@ bool canvasLoadImage(Canvas& c, uint8_t slot, const char* path) {
     return ok;
 }
 
-uint32_t canvasLoadJsonDoc(Canvas& c, const char* path) {
-    return jsonLoadFile(c.json, path);
-}
-
-bool canvasSaveJsonDoc(const Canvas& c, const char* path) {
-    return jsonSaveFile(c.json, path);
-}
-
 int canvasCursor(const Canvas& c) {
     if (c.state == nullptr) {
         return 0;
@@ -303,35 +294,6 @@ UiEvent canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& 
         const uint32_t n = uiEmit(s, dst, primCap);
         uiRendererUploadPrims(c.rhi, d, flight, std::span<const UiPrimitive>(dst, n), pointsW, pointsH);
         s.visualDirty = false;
-    }
-    static float uiCheckAt = 0.0f;
-    if (timeSec >= uiCheckAt) {
-        uiCheckAt = timeSec + 1.0f;
-        float sx = 0.0f;
-        float sy = 0.0f;
-        float sw = 0.0f;
-        float sh = 0.0f;
-        for (uint16_t id = 1; id < s.count; ++id) {
-            const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-            if (paint == nullptr || static_cast<UiRole>(paint->role) != UiRole::Scroll) {
-                continue;
-            }
-            sx = s.box[id].x;
-            sy = s.box[id].y;
-            sw = s.box[id].w;
-            sh = s.box[id].h;
-            break;
-        }
-        spdlog::info(
-            "ui check nodes={} draw={} view={:.0f}x{:.0f} scroll={:.0f},{:.0f} {:.0f}x{:.0f}",
-            static_cast<unsigned>(s.count),
-            c.rhi.primCount,
-            pointsW,
-            pointsH,
-            sx,
-            sy,
-            sw,
-            sh);
     }
     if (s.dumpLayout != 0) {
         uiDumpLayout(s);

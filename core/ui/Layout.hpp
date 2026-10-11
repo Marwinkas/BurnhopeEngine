@@ -120,7 +120,6 @@ struct UiCustomBinLoader {
     void* user = nullptr;
 };
 
-void uiRegisterCustomBinNode(uint8_t role, UiCustomNodeLoader loader, void* user);
-void uiCopyBinHooks(UiState& s);
+void uiRegisterCustomBinNode(UiState& s, uint8_t role, UiCustomNodeLoader loader, void* user);
 
 } // namespace burnhope

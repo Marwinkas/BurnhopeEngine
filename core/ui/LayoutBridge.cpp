@@ -6,8 +6,10 @@
 #include <cstring>
 
 #include <yoga/YGValue.h>
+#include <yoga/Yoga.h>
 
 namespace burnhope {
+namespace {
 
 YGFlexDirection flexDir(uint8_t direction) {
     if (direction == 1) {
@@ -195,6 +197,8 @@ void applyFlex(YGNodeRef node, const UiFlex& f) {
     YGNodeStyleSetOverflow(node, over);
 }
 
+} // namespace
+
 void cacheBox(UiState& s, uint16_t id) {
     float x = 0.0f;
     float y = 0.0f;
@@ -359,15 +363,11 @@ void uiLayout(UiState& s, float w, float h) {
         if (!s.ent[id].is_alive()) {
             continue;
         }
-        if (s.ent[id].try_get<UiVirtual>() != nullptr) {
-            uiVirtualRefresh(s, id);
-            pooled = true;
-        } else if (s.ent[id].try_get<UiTreeView>() != nullptr) {
-            uiTreeViewRefresh(s, id);
-            pooled = true;
-        } else if (s.ent[id].try_get<UiVirtualGrid>() != nullptr) {
-            uiVirtualGridRefresh(s, id);
-            pooled = true;
+        if (const auto* pool = s.ent[id].try_get<UiVirtualPool>()) {
+            if (pool->refresh != nullptr) {
+                pool->refresh(s, id);
+                pooled = true;
+            }
         }
     }
     if (pooled) {

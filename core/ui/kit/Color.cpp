@@ -1,3 +1,4 @@
+#include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/Domain.hpp"
 #include "ui/Layout.hpp"
@@ -947,12 +948,8 @@ uint16_t loadColorBin(UiState& s, uint16_t parent, const BinNode& node, const ch
     return id;
 }
 
-struct ColorBinReg {
-    ColorBinReg() {
-        uiRegisterCustomBinNode(12, loadColorBin, nullptr);
-    }
-};
-
-const ColorBinReg gColorBinReg{};
+void uiInstallColorBin(UiState& s) {
+    uiRegisterCustomBinNode(s, 12, loadColorBin, nullptr);
+}
 
 } // namespace burnhope

@@ -6,7 +6,9 @@
 #include "render/SceneFrame.hpp"
 #include "rhi/Device.hpp"
 #include "files/Browser.hpp"
+#include "files/FileDomain.hpp"
 #include "ui/Domain.hpp"
+#include "ui/widget/ColorPicker.hpp"
 #include "ui/Panel.hpp"
 #include "ui/State.hpp"
 

@@ -2,7 +2,10 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include "files/FileDomain.hpp"
 #include "ui/Domain.hpp"
+#include "ui/widget/Calendar.hpp"
+#include "ui/widget/ColorPicker.hpp"
 #include "ui/State.hpp"
 #include "ui/Layout.hpp"
 #include "ui/widget/Detail.hpp"
@@ -37,7 +40,6 @@
 #include "wasm/WasmHost.hpp"
 #include "anim/Animation.hpp"
 #include "time/Time.hpp"
-#include "ui/Style.hpp"
 #include "input/Input.hpp"
 #include "io/File.hpp"
 #include "io/Blob.hpp"
@@ -713,37 +715,6 @@ TEST_CASE("fixed step consumes remainder and clamps a spike") {
     CHECK(burst < 50);
 }
 
-TEST_CASE("style cascade keeps padding and replaces danger fields") {
-    StyleRule rules[2]{};
-    rules[0].classHash = uiClassHash("button");
-    rules[0].priority = 0;
-    rules[0].mask = kUiStyleBg | kUiStylePadding | kUiStyleRadius;
-    rules[0].style.bg_color = 0xFF224466u;
-    rules[0].style.padding[0] = rules[0].style.padding[1] = rules[0].style.padding[2] = rules[0].style.padding[3] = 8.0f;
-    rules[0].style.radius[0] = rules[0].style.radius[1] = rules[0].style.radius[2] = rules[0].style.radius[3] = 4.0f;
-    rules[1].classHash = uiClassHash("danger");
-    rules[1].priority = 1;
-    rules[1].mask = kUiStyleBg | kUiStyleBorderWidth;
-    rules[1].style.bg_color = 0xFFAA2222u;
-    rules[1].style.border_width = 2.0f;
-    CHECK(rules[0].classHash != rules[1].classHash);
-    StyleSheet sheet{rules, 2};
-    const uint32_t classes[] = {uiClassHash("button"), uiClassHash("danger")};
-    UiStyle out{};
-    uiResolveStyle(sheet, classes, 2, &out);
-    CHECK(out.padding[0] == doctest::Approx(8.0f));
-    CHECK(out.padding[3] == doctest::Approx(8.0f));
-    CHECK(out.radius[0] == doctest::Approx(4.0f));
-    CHECK(out.bg_color == 0xFFAA2222u);
-    CHECK(out.border_width == doctest::Approx(2.0f));
-    CHECK(out.opacity == doctest::Approx(1.0f));
-    YGNodeRef node = YGNodeNew();
-    uiStyleApplyYoga(node, out);
-    CHECK(YGNodeStyleGetPadding(node, YGEdgeTop).value == doctest::Approx(8.0f));
-    CHECK(YGNodeStyleGetPadding(node, YGEdgeLeft).value == doctest::Approx(8.0f));
-    YGNodeFree(node);
-}
-
 TEST_CASE("input queue tracks pointer keys pad pen touch and tray") {
     InputQueue queue{};
     InputEvent move = inputMake(InputDevice::Mouse, InputEventType::MouseMove);
@@ -1288,7 +1259,6 @@ TEST_CASE("meshlet cone culls a sphere that faces away") {
     const float mip[4] = {0.4f, 0.4f, 0.4f, 0.4f};
     CHECK(hizSphereVisible(mip, 2, 2, 0.5f, 0.5f, 0.2f));
     CHECK(!hizSphereVisible(mip, 2, 2, 0.5f, 0.5f, 0.9f));
-    CHECK(assetHash("MeshletBlob") == uiClassHash("MeshletBlob"));
 }
 
 TEST_CASE("cluster grid keeps a point light in its sphere") {

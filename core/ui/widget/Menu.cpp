@@ -53,8 +53,8 @@ void uiMenuClose(UiState& s) {
     if (id != kUiNone) {
         uiShow(s, id, false);
     }
-    if (s.openedMenu == id) {
-        s.openedMenu = kUiNone;
+    if (uiMenuMetrics(s).opened == id) {
+        uiMenuMetrics(s).opened = kUiNone;
         s.menuOpen = false;
     }
 }
@@ -122,7 +122,7 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
         flex->height = static_cast<float>(slot) * 30.0f + 8.0f;
     }
     uiShow(s, id, true);
-    s.openedMenu = id;
+    uiMenuMetrics(s).opened = id;
     s.menuOpen = true;
     uiMarkLayout(s, id);
 }
@@ -134,9 +134,9 @@ uint16_t uiMakeMenu(UiState& s) {
     UiFlex flex{};
     flex.position = 1;
     flex.widthMode = static_cast<uint8_t>(UiSize::Px);
-    flex.width = s.menuW;
-    flex.pad = s.menuPad;
-    flex.gap = s.menuGap;
+    flex.width = uiMenuMetrics(s).w;
+    flex.pad = uiMenuMetrics(s).pad;
+    flex.gap = uiMenuMetrics(s).gap;
     flex.shrink = 0.0f;
     UiPaint paint{};
     paint.role = static_cast<uint8_t>(UiRole::Panel);
@@ -157,10 +157,10 @@ void uiMenuStyle(UiState& s, float width, float itemH, float pad, float gap) {
     if (s.menu == kUiNone) {
         return;
     }
-    s.menuW = width;
-    s.menuItemH = itemH;
-    s.menuPad = pad;
-    s.menuGap = gap;
+    uiMenuMetrics(s).w = width;
+    uiMenuMetrics(s).itemH = itemH;
+    uiMenuMetrics(s).pad = pad;
+    uiMenuMetrics(s).gap = gap;
     auto* flex = s.ent[s.menu].try_get_mut<UiFlex>();
     if (flex != nullptr) {
         flex->width = width;

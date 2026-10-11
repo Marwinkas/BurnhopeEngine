@@ -1,3 +1,4 @@
+#include "ui/widget/Calendar.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/Domain.hpp"
 #include "ui/Layout.hpp"
@@ -328,12 +329,8 @@ uint16_t loadCalendarBin(UiState& s, uint16_t parent, const BinNode& node, const
     return id;
 }
 
-struct CalendarBinReg {
-    CalendarBinReg() {
-        uiRegisterCustomBinNode(11, loadCalendarBin, nullptr);
-    }
-};
-
-const CalendarBinReg gCalendarBinReg{};
+void uiInstallCalendarBin(UiState& s) {
+    uiRegisterCustomBinNode(s, 11, loadCalendarBin, nullptr);
+}
 
 } // namespace burnhope

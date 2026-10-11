@@ -2,7 +2,6 @@
 
 #include "platform/Window.hpp"
 #include "rhi/Swapchain.hpp"
-#include "Json.hpp"
 #include "ui/Model.hpp"
 #include "ui/rhi/UiRenderer.hpp"
 
@@ -16,7 +15,6 @@ struct Canvas {
     UiRenderer rhi{};
     Device* device = nullptr;
     DescriptorHeaps* heaps = nullptr;
-    JsonDocument json{};
     void (*builder)(Canvas&, void*) = nullptr;
     void* builderUser = nullptr;
 };
@@ -45,8 +43,6 @@ void canvasSetClick(Canvas& c, UiClickFn fn, void* user);
 void canvasOnFocus(Canvas& c, UiFocusFn fn, void* user);
 bool canvasListen(Canvas& c, UiValueFn fn, void* user);
 [[nodiscard]] bool canvasLoadImage(Canvas& c, uint8_t slot, const char* path);
-[[nodiscard]] uint32_t canvasLoadJsonDoc(Canvas& c, const char* path);
-[[nodiscard]] bool canvasSaveJsonDoc(const Canvas& c, const char* path);
 [[nodiscard]] int canvasCursor(const Canvas& c);
 [[nodiscard]] bool canvasSetFont(Canvas& c, const char* path, float pixelSize);
 [[nodiscard]] bool canvasUseFont(Canvas& c, float pixelSize);

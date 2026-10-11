@@ -67,6 +67,7 @@ uint16_t uiVirtual(UiState& s, uint16_t parent, float rowH) {
     UiVirtual virt{};
     virt.rowH = rowH;
     s.ent[scroll].set<UiVirtual>(virt);
+    s.ent[scroll].set<UiVirtualPool>({uiVirtualRefresh});
     return scroll;
 }
 

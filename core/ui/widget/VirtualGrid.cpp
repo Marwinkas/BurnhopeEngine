@@ -91,6 +91,7 @@ uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& c
     grid.activate = cfg.onActivate;
     grid.user = cfg.user;
     s.ent[scroll].set<UiVirtualGrid>(grid);
+    s.ent[scroll].set<UiVirtualPool>({uiVirtualGridRefresh});
     uiVirtualGridRefresh(s, scroll);
     return scroll;
 }

@@ -1,3 +1,6 @@
+#include "files/FileDomain.hpp"
+#include "ui/widget/Calendar.hpp"
+#include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/Domain.hpp"
 
@@ -37,9 +40,9 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         s.visualDirty = true;
     }
     if (in.escape) {
-        if (s.openedMenu != kUiNone) {
-            uiShow(s, s.openedMenu, false);
-            s.openedMenu = kUiNone;
+        if (uiMenuMetrics(s).opened != kUiNone) {
+            uiShow(s, uiMenuMetrics(s).opened, false);
+            uiMenuMetrics(s).opened = kUiNone;
             s.menuOpen = false;
             s.layoutDirty = true;
         }
@@ -173,7 +176,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
 
     auto inMenu = [&](uint16_t id) {
         for (uint16_t p = id; p != kUiNone; p = s.parentOf[p]) {
-            if (p == s.openedMenu) {
+            if (p == uiMenuMetrics(s).opened) {
                 return true;
             }
         }
@@ -219,16 +222,16 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         }
     }
     if (((right && !barOnly) || barOpen) && contextMenu != kUiNone) {
-        if (barOpen && s.menuOpen && s.openedMenu == contextMenu) {
-            uiShow(s, s.openedMenu, false);
-            s.openedMenu = kUiNone;
+        if (barOpen && s.menuOpen && uiMenuMetrics(s).opened == contextMenu) {
+            uiShow(s, uiMenuMetrics(s).opened, false);
+            uiMenuMetrics(s).opened = kUiNone;
             s.menuOpen = false;
             justOpened = true;
-        } else if (s.openedMenu != kUiNone && s.openedMenu != contextMenu) {
-            uiShow(s, s.openedMenu, false);
+        } else if (uiMenuMetrics(s).opened != kUiNone && uiMenuMetrics(s).opened != contextMenu) {
+            uiShow(s, uiMenuMetrics(s).opened, false);
         }
         if (!justOpened) {
-        s.openedMenu = contextMenu;
+        uiMenuMetrics(s).opened = contextMenu;
         justOpened = true;
         auto* flex = s.ent[contextMenu].try_get_mut<UiFlex>();
         if (flex != nullptr) {
@@ -240,10 +243,10 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
                     ++items;
                 }
             }
-            const float menuH = s.menuPad * 2.0f + static_cast<float>(items) * s.menuItemH
-                + static_cast<float>(items > 0 ? items - 1 : 0) * s.menuGap;
-            if (x + s.menuW > s.laidW) {
-                x = s.laidW - s.menuW;
+            const float menuH = uiMenuMetrics(s).pad * 2.0f + static_cast<float>(items) * uiMenuMetrics(s).itemH
+                + static_cast<float>(items > 0 ? items - 1 : 0) * uiMenuMetrics(s).gap;
+            if (x + uiMenuMetrics(s).w > s.laidW) {
+                x = s.laidW - uiMenuMetrics(s).w;
             }
             if (y + menuH > s.laidH) {
                 y = s.laidH - menuH;
@@ -271,10 +274,10 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
     }
 
     if (press && s.menuOpen && !justOpened && !inMenu(hit)) {
-        if (s.openedMenu != kUiNone) {
-            uiShow(s, s.openedMenu, false);
+        if (uiMenuMetrics(s).opened != kUiNone) {
+            uiShow(s, uiMenuMetrics(s).opened, false);
         }
-        s.openedMenu = kUiNone;
+        uiMenuMetrics(s).opened = kUiNone;
         s.menuOpen = false;
     }
 
@@ -433,8 +436,8 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
                 }
                 uiPlace(s, s.floatWin, true, x, y, w, h);
             }
-            const uint8_t prevEdge = s.dockEdge;
-            s.dockEdge = 0;
+            const uint8_t prevEdge = uiDock(s).edge;
+            uiDock(s).edge = 0;
             s.hintOn = 0;
             const UiDock& dock = uiDock(s);
             if (s.parentOf[s.floatWin] == 0 && s.floatWin == dock.panel && dock.home != kUiNone && dock.home < s.count && hitBox(s.box[dock.home], in.pointer.x, in.pointer.y)) {
@@ -442,16 +445,16 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
                 const float lx = home.w > 1.0f ? (in.pointer.x - home.x) / home.w : 0.5f;
                 const float ly = home.h > 1.0f ? (in.pointer.y - home.y) / home.h : 0.5f;
                 uint8_t edge = 0;
-                if (lx < 0.28f && (s.dockEdges & 1) != 0) {
+                if (lx < 0.28f && (uiDock(s).edges & 1) != 0) {
                     edge = 1;
-                } else if (lx > 0.72f && (s.dockEdges & 2) != 0) {
+                } else if (lx > 0.72f && (uiDock(s).edges & 2) != 0) {
                     edge = 2;
-                } else if (ly < 0.28f && (s.dockEdges & 4) != 0) {
+                } else if (ly < 0.28f && (uiDock(s).edges & 4) != 0) {
                     edge = 3;
-                } else if (ly > 0.72f && (s.dockEdges & 8) != 0) {
+                } else if (ly > 0.72f && (uiDock(s).edges & 8) != 0) {
                     edge = 4;
                 }
-                s.dockEdge = edge;
+                uiDock(s).edge = edge;
                 if (edge != 0) {
                     s.hintOn = 1;
                     if (edge == 1) {
@@ -465,7 +468,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
                     }
                 }
             }
-            if (s.dockEdge != prevEdge) {
+            if (uiDock(s).edge != prevEdge) {
                 s.visualDirty = true;
             }
         } else if (cap != nullptr && s.ent[s.capture].try_get<UiDrag>() != nullptr) {
@@ -567,8 +570,8 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         }
     }
     if (release || !down) {
-        if (s.dockEdge != 0 && s.floatWin == uiDock(s).panel) {
-            uiDockTo(s, s.dockEdge);
+        if (uiDock(s).edge != 0 && s.floatWin == uiDock(s).panel) {
+            uiDockTo(s, uiDock(s).edge);
         }
         s.capture = kUiNone;
         s.relative = 0;
@@ -579,7 +582,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         s.floatWin = kUiNone;
         s.resizeId = kUiNone;
         s.resizeEdge = 0;
-        s.dockEdge = 0;
+        uiDock(s).edge = 0;
         if (s.hintOn != 0) {
             s.hintOn = 0;
             s.visualDirty = true;

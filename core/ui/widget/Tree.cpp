@@ -1,3 +1,6 @@
+#include "files/FileDomain.hpp"
+#include "ui/widget/Calendar.hpp"
+#include "ui/widget/Chrome.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/Domain.hpp"
@@ -12,6 +15,9 @@
 #include <ctime>
 
 namespace burnhope {
+
+void uiInstallCalendarBin(UiState& s);
+void uiInstallColorBin(UiState& s);
 
 uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint) {
     const uint16_t id = s.count++;
@@ -583,11 +589,11 @@ void uiClear(UiState& s) {
     s.field = kUiNone;
     s.fieldMenu = kUiNone;
     s.editField = kUiNone;
-    s.openedMenu = kUiNone;
+    uiMenuMetrics(s).opened = kUiNone;
     s.floatWin = kUiNone;
     uiDock(s) = {};
     s.resizeId = kUiNone;
-    s.dockEdge = 0;
+    uiDock(s).edge = 0;
     s.resizeEdge = 0;
     s.cursor = 0;
     s.hintOn = 0;
@@ -679,9 +685,9 @@ void onMenuCommand(void* user, uint16_t, int16_t tag) {
             s.cmds[index].fn(s.cmds[index].user);
         }
     }
-    if (s.openedMenu != kUiNone) {
-        uiShow(s, s.openedMenu, false);
-        s.openedMenu = kUiNone;
+    if (uiMenuMetrics(s).opened != kUiNone) {
+        uiShow(s, uiMenuMetrics(s).opened, false);
+        uiMenuMetrics(s).opened = kUiNone;
         s.menuOpen = false;
     }
     s.visualDirty = true;
@@ -762,7 +768,7 @@ bool uiCommandAdd(UiState& s, const char* name, UiCommandFn fn, void* user) {
     const int16_t tag = static_cast<int16_t>(100 + s.cmdCount);
     UiFlex itemF{};
     itemF.heightMode = static_cast<uint8_t>(UiSize::Px);
-    itemF.height = s.menuItemH;
+    itemF.height = uiMenuMetrics(s).itemH;
     itemF.widthMode = static_cast<uint8_t>(UiSize::Percent);
     itemF.width = 100.0f;
     itemF.shrink = 0.0f;
@@ -1132,7 +1138,9 @@ UiState::UiState()
     (void)world.ensure<UiColorPickerComponent>();
     (void)world.ensure<UiHostNote>();
     (void)world.ensure<UiDock>();
-    uiCopyBinHooks(*this);
+    uiInstallChromeBin(*this);
+    uiInstallCalendarBin(*this);
+    uiInstallColorBin(*this);
     uiDrawAdd(*this, splitCustomDraw);
     uiDrawAdd(*this, colorCustomDraw);
 }

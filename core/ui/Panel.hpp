@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/State.hpp"
+#include "ui/widget/Detail.hpp"
 
 namespace burnhope {
 

@@ -2,22 +2,10 @@
 
 #include "ui/Model.hpp"
 
-#include <yoga/Yoga.h>
-
 namespace burnhope {
 
 struct UiState;
 
-YGFlexDirection flexDir(uint8_t direction);
-YGAlign flexAlign(uint8_t align);
-YGJustify flexJustify(uint8_t justify);
-YGAlign flexContent(uint8_t content);
-YGAlign flexSelf(uint8_t self);
-void applyFlex(YGNodeRef node, const UiFlex& flex);
-void cacheBox(UiState& s, uint16_t id);
-void uiLayout(UiState& s, float w, float h);
-
-// Flex attributes shared by the binary layout reader and the JSON UI builder.
 struct UiFlexAttr {
     uint8_t direction = 0;
     uint8_t wrap = 0;
@@ -60,6 +48,8 @@ struct UiFlexAttr {
     float posB = 0;
 };
 
+void cacheBox(UiState& s, uint16_t id);
+void uiLayout(UiState& s, float w, float h);
 void uiFlexApplyAttr(UiFlex& flex, const UiFlexAttr& attr);
 bool uiFlexApplyAttr(UiFlex& flex, const char* key, const char* word);
 bool uiFlexApplyAttr(UiFlex& flex, const char* key, float value);
