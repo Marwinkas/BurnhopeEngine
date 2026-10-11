@@ -2,10 +2,15 @@
 
 Be decisive. Output a 1–2 bullet plan, then edit code directly. No long internal thinking loops. Work strictly in targeted files. Never drop a GPU pass for a CPU fallback.
 
-- ZERO HESITATION: Do not over-analyze or doubt your decisions. Do not enter recursive thinking loops weighing multiple alternatives.
-- ACT IMMEDIATELY: State a maximum 1–2 line action plan and start editing files right away. Never output walls of reasoning text before making tool calls.
-- DO NOT FEAR REFACTORING: Edit, refactor, and fix code aggressively. It is completely fine to break a compilation intermediate step if the end result adheres to architecture. Fix fallout in the very next step.
-- STOP SECOND-GUESSING: If you decide on a solution, execute it. Do not discard working implementations mid-thought out of fear of breaking neighbors.
+- ZERO HESITATION: Do not over-analyze or doubt your decisions. Do not enter recursive thinking loops.
+- ACT IMMEDIATELY: State a maximum 1–2 line action plan and start editing files right away.
+- MANDATORY BUILD & TEST: After making edits, ALWAYS execute this EXACT single-line command:
+  `cmake --build build-core --target BurnhopeTest -j && ./build-core/BurnhopeTest`
+  Task is COMPLETE ONLY if BOTH targets compile successfully AND BurnhopeTest reports 0 failures.
+- FORBIDDEN TERMINAL CHECKS: NEVER run `git diff`, `git status`, or pipe diffs to `head`/`cat`. Trust your edits and proceed directly to compilation.
+- TOOL CALL BUDGET: Never make more than 3 file-read or grep calls before taking action.
+- TARGETED SCOPE: If you do not know the exact file, identify maximum 2 relevant files, then immediately edit. Never read unrelated subsystems.
+- NO CURIOSITY: Do not read header files just to verify definitions if you already understand the logic. Write the patch directly.
 
 ## 1. Target Platforms & Scope
 - **Target**: High-performance Desktop PC ONLY (Linux & Windows x86_64 with AVX2).
@@ -24,6 +29,7 @@ Be decisive. Output a 1–2 bullet plan, then edit code directly. No long intern
 - **BANNED UI**: Absolutely NO ImGui, NO Qt (`QObject`, MOC, virtual dispatch hierarchies), NO legacy immediate-mode GUI hacks.
 - **Draw Submission**: Single `vkCmdDraw` / `vkCmdDrawMeshTasksEXT` call per frame from mapped host-visible SSBO ring buffer.
 - **Layout Invariants**: NEVER place `uiSlider` with 100% width in horizontal row next to a label (Yoga collapses box to 0). Stack vertically. Role `Scroll` requires `UiScroll.inner`. Find baked nodes by name.
+- UI icons load from `assets/icons/` (`folder.png`, `file.png`) into photo slots 6 and 7 (`filesIconSlots`; 255 = missing). Tag `-89` draws a static photo tinted by paint rgb. Missing files stay colored quads. NEVER tag grid icons `-90` (that tag captures photo pan). Bar menus use paint tag `-7` so they open on LMB; RMB ignores tag `-7`. Base UI font is 20px (`canvasUseFont`), baseline factor 0.76.
 
 ## 4. Vulkan 1.4 & Next-Gen Graphics Pipeline
 - **Modern Standards REQUIRED**:
@@ -52,3 +58,7 @@ Be decisive. Output a 1–2 bullet plan, then edit code directly. No long intern
   `- NEVER [banned API/action] (causes [technical failure]); ALWAYS [modern alternative] [exact slots/bytes/alignment].`
 - NEVER write debugging logs, dev stories, or symptom essays. Keep exact technical contracts only.
 - Keep this entire file strictly under **160 lines**. Merge overlapping rules during refactoring, but NEVER delete verified slot IDs, alignment numbers, or layer boundaries.
+- TOOL CALL BUDGET: Never make more than 3 file-read or grep calls before taking action.
+- TARGETED SCOPE: If you do not know the exact file, find maximum 2 relevant files, then immediately ask or proceed to edit.
+- NEVER scan the entire tree: Do not chain grep queries across unrelated subsystems (e.g. if fixing UI/Splitter, never read Engine.cpp, Canvas.cpp, or State.hpp).
+- NO CURIOSITY: Do not read header files just to verify definitions if you already understand the logic. Write the patch directly.

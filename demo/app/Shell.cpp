@@ -227,7 +227,7 @@ void shellBuild(Canvas& canvas, void*) {
     gDemo.canvas = &canvas;
     gDemo.chipsOn = true;
     gDemo.toolsOn = true;
-    if (!canvasUseFont(canvas, 22.0f)) {
+    if (!canvasUseFont(canvas, 12.0f)) {
         spdlog::error("app font was not set");
     }
     canvasBuildSample(canvas);
@@ -384,7 +384,7 @@ void shellBuild(Canvas& canvas, void*) {
 }
 
 void toolBuild(Canvas& canvas, void*) {
-    if (!canvasUseFont(canvas, 22.0f)) {
+    if (!canvasUseFont(canvas, 12.0f)) {
         spdlog::error("tool font was not set");
     }
     UiFlex rootFlex{};
@@ -439,7 +439,7 @@ void toolBuild(Canvas& canvas, void*) {
 }
 
 void colorBuild(Canvas& canvas, void*) {
-    if (!canvasUseFont(canvas, 22.0f)) {
+    if (!canvasUseFont(canvas, 12.0f)) {
         spdlog::error("color font was not set");
     }
     canvasBuildColor(canvas);

@@ -217,6 +217,7 @@ void splitDrag(UiState& s, uint16_t split, float x, float y);
 [[nodiscard]] bool splitAlive(const UiState& s, uint16_t split);
 [[nodiscard]] uint8_t splitCursor(const UiState& s, uint16_t split);
 [[nodiscard]] bool splitVertical(const UiState& s, uint16_t split);
+[[nodiscard]] UiBox splitGrip(const UiState& s, uint16_t split);
 void uiDragBegin(UiState& s, uint16_t source, const char* kind, const char* bytes);
 void uiDragEnd(UiState& s, uint16_t target);
 void uiBind(UiState& s, uint16_t id, UiClickFn fn, void* user);

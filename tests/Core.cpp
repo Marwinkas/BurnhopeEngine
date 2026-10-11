@@ -262,12 +262,20 @@ TEST_CASE("mounted file cells sit in the view") {
     const uint16_t view = state.fileView;
     uint16_t cell = kUiNone;
     for (uint16_t id = 0; id < state.count; ++id) {
-        if (state.parentOf[id] == view) {
-            const UiPaint* paint = state.ent[id].try_get<UiPaint>();
-            if (paint != nullptr && paint->role == static_cast<uint8_t>(UiRole::Button) && state.box[id].w > 1.0f) {
-                cell = id;
+        bool under = false;
+        for (uint16_t p = state.parentOf[id]; p != kUiNone && p < state.count; p = state.parentOf[p]) {
+            if (p == view) {
+                under = true;
                 break;
             }
+        }
+        if (!under) {
+            continue;
+        }
+        const UiPaint* paint = state.ent[id].try_get<UiPaint>();
+        if (paint != nullptr && paint->role == static_cast<uint8_t>(UiRole::Button) && state.box[id].w > 40.0f) {
+            cell = id;
+            break;
         }
     }
     CHECK(view != kUiNone);
@@ -1701,7 +1709,7 @@ TEST_CASE("file new folder and zoom slider") {
         if (paint == nullptr) {
             continue;
         }
-        if (paint->role == static_cast<uint8_t>(UiRole::Button) && text != nullptr && std::strcmp(text->bytes, "NEW") == 0) {
+        if (paint->role == static_cast<uint8_t>(UiRole::Button) && text != nullptr && std::strcmp(text->bytes, "+") == 0) {
             neu = id;
         }
         if (paint->role == static_cast<uint8_t>(UiRole::Slider)) {
@@ -1716,6 +1724,9 @@ TEST_CASE("file new folder and zoom slider") {
         in.pointer.y = state.box[neu].y + state.box[neu].h * 0.5f;
         in.pointer.pressed = kPointerLeft;
         in.pointer.down = kPointerLeft;
+        uiApplyInput(state, in);
+        in.pointer.x = state.box[neu].x + 12.0f;
+        in.pointer.y = state.box[neu].y + state.box[neu].h + 10.0f;
         uiApplyInput(state, in);
     }
     bool created = false;

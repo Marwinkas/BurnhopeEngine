@@ -14,10 +14,10 @@ newscenetest/
 imgui.ini
 emeraldcity/
 *.spv
-*.slang
 *.obj
 *.fbx
 *.png
 *.jpg
 *.log
 .vscode/
+Libraries/

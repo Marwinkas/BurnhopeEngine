@@ -200,7 +200,17 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             s.visualDirty = true;
         }
     }
-    if ((right || barOpen) && contextMenu != kUiNone) {
+    bool barOnly = false;
+    if (right && hit != kUiNone) {
+        for (uint16_t p = hit; p != kUiNone; p = s.parentOf[p]) {
+            const UiPaint* bar = s.ent[p].try_get<UiPaint>();
+            if (bar != nullptr && bar->tag == -7) {
+                barOnly = true;
+                break;
+            }
+        }
+    }
+    if (((right && !barOnly) || barOpen) && contextMenu != kUiNone) {
         if (barOpen && s.menuOpen && s.openedMenu == contextMenu) {
             uiShow(s, s.openedMenu, false);
             s.openedMenu = kUiNone;
@@ -304,8 +314,11 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
                 s.grabY = in.pointer.y;
             }
         } else if (p != nullptr && p->role == static_cast<uint8_t>(UiRole::Scroll)) {
-            s.capture = hit;
-            dragScroll(s, hit, in.pointer.y);
+            UiBox thumb{};
+            if (scrollThumb(s, hit, thumb) && hitBox(thumb, in.pointer.x, in.pointer.y)) {
+                s.capture = hit;
+                dragScroll(s, hit, in.pointer.y);
+            }
         } else if (p != nullptr && p->role == static_cast<uint8_t>(UiRole::Slider)) {
             s.capture = hit;
             dragSlider(s, hit, in.pointer.x);

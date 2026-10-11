@@ -79,8 +79,17 @@ struct Browser {
     char fav[kFavCap][512]{};
     int favN = 0;
     char tree[16][64]{};
+    uint8_t treeDepth[16]{};
+    uint8_t treeOpen[16]{};
     int treeN = 0;
+    uint16_t wTreeScroll = kUiNone;
+    uint16_t wTreeInner = kUiNone;
+    uint16_t wTreeMark[16]{};
+    uint16_t wGridInner = kUiNone;
     int lastClick = -1;
+    float clickAt = -1.0f;
+    int menuKind = 0;
+    char filt[16]{};
     uint16_t wSearch = kUiNone;
     uint16_t wRename = kUiNone;
     uint16_t wZoom = kUiNone;
@@ -93,6 +102,14 @@ struct Browser {
     uint16_t wTree[16]{};
     uint16_t wRoot = kUiNone;
     uint16_t wCell[18]{};
+    uint16_t wRow[18]{};
+    uint16_t wIcon[18]{};
+    uint16_t wName[18]{};
+    uint16_t wTreeIcon[16]{};
+    uint16_t wHead = kUiNone;
+    uint16_t wNav = kUiNone;
+    uint8_t folderSlot = 255;
+    uint8_t fileSlot = 255;
     uint16_t wStatus = kUiNone;
     int cellItem[18]{};
     int crumbPart[8]{};
@@ -136,6 +153,8 @@ struct Lay {
     int cols = 1;
     int first = 0;
 };
+
+void rebuildTree(Browser& b);
 
 void copyCap(char* dst, int cap, const char* src) {
     int i = 0;
@@ -202,7 +221,7 @@ const char* kindName(int kind) {
 
 bool underRoot(const Browser& b, const char* path) {
     if (b.root[0] == '\0' || path == nullptr) {
-        return true;
+        return false;
     }
     const size_t n = std::strlen(b.root);
     if (std::strncmp(path, b.root, n) != 0) {
@@ -307,6 +326,14 @@ void joinPath(char* dst, int cap, const char* dir, const char* name) {
 }
 
 void reload(Browser& b) {
+    if (b.root[0] == '\0') {
+        b.count = 0;
+        b.total = 0;
+        b.treeN = 0;
+        b.status[0] = '\0';
+        b.hotItem = -1;
+        return;
+    }
     Item fresh[kFileCap]{};
     int n = 0;
     int total = 0;
@@ -326,6 +353,13 @@ void reload(Browser& b) {
             }
             if (b.look.showHidden == 0 && filename[0] == '.') {
                 continue;
+            }
+            if (!dir && b.filt[0] != '\0') {
+                const size_t fn = filename.size();
+                const size_t fl = std::strlen(b.filt);
+                if (fn < fl || std::strcmp(filename.c_str() + (fn - fl), b.filt) != 0) {
+                    continue;
+                }
             }
             const int kind = kindOf(filename.c_str(), dir ? 1 : 0);
             if (b.kind == 1 && !dir) {
@@ -370,45 +404,88 @@ void reload(Browser& b) {
     if (b.scroll > b.count) {
         b.scroll = 0;
     }
-    if (b.status[0] == '\0') {
-        char buf[96]{};
-        std::snprintf(buf, sizeof(buf), "%d items", b.count);
-        setStatus(b, buf);
+    rebuildTree(b);
+}
+
+bool treeWasOpen(const char prev[][64], const uint8_t* prevOpen, int prevN, const char* rel) {
+    for (int i = 0; i < prevN; ++i) {
+        if (prevOpen[i] != 0 && std::strcmp(prev[i], rel) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void pushTreeDirs(Browser& b, const char* abs, const char* rel, int depth, const char prev[][64], const uint8_t* prevOpen, int prevN) {
+    if (depth > 3 || b.treeN >= 16) {
+        return;
+    }
+    char names[16][64]{};
+    int nameN = 0;
+    std::error_code treeEc;
+    fs::directory_iterator treeIt(fs::path(abs), fs::directory_options::skip_permission_denied, treeEc);
+    if (treeEc) {
+        return;
+    }
+    for (; treeIt != fs::directory_iterator() && nameN < 16; treeIt.increment(treeEc)) {
+        if (treeEc) {
+            break;
+        }
+        std::error_code ignored;
+        if (!treeIt->is_directory(ignored)) {
+            continue;
+        }
+        const std::string filename = treeIt->path().filename().string();
+        if (filename.empty() || filename.size() >= 63) {
+            continue;
+        }
+        if (b.look.showHidden == 0 && filename[0] == '.') {
+            continue;
+        }
+        copyCap(names[nameN], 64, filename.c_str());
+        ++nameN;
+    }
+    for (int i = 1; i < nameN; ++i) {
+        char key[64]{};
+        copyCap(key, 64, names[i]);
+        int j = i;
+        while (j > 0 && std::strcmp(names[j - 1], key) > 0) {
+            copyCap(names[j], 64, names[j - 1]);
+            --j;
+        }
+        copyCap(names[j], 64, key);
+    }
+    for (int i = 0; i < nameN && b.treeN < 16; ++i) {
+        char path[64]{};
+        if (rel[0] == '\0') {
+            copyCap(path, 64, names[i]);
+        } else {
+            std::snprintf(path, sizeof(path), "%s/%s", rel, names[i]);
+        }
+        const int slot = b.treeN;
+        copyCap(b.tree[slot], 64, path);
+        b.treeDepth[slot] = static_cast<uint8_t>(depth);
+        b.treeOpen[slot] = treeWasOpen(prev, prevOpen, prevN, path) ? 1 : 0;
+        ++b.treeN;
+        if (b.treeOpen[slot] != 0) {
+            char child[512]{};
+            joinPath(child, 512, abs, names[i]);
+            pushTreeDirs(b, child, path, depth + 1, prev, prevOpen, prevN);
+        }
+    }
+}
+
+void rebuildTree(Browser& b) {
+    char prev[16][64]{};
+    uint8_t prevOpen[16]{};
+    const int prevN = b.treeN;
+    for (int i = 0; i < prevN && i < 16; ++i) {
+        copyCap(prev[i], 64, b.tree[i]);
+        prevOpen[i] = b.treeOpen[i];
     }
     b.treeN = 0;
     const char* base = b.root[0] != '\0' ? b.root : b.cwd;
-    std::error_code treeEc;
-    fs::directory_iterator treeIt(fs::path(base), fs::directory_options::skip_permission_denied, treeEc);
-    if (!treeEc) {
-        for (; treeIt != fs::directory_iterator() && b.treeN < 16; treeIt.increment(treeEc)) {
-            if (treeEc) {
-                break;
-            }
-            std::error_code ignored;
-            if (!treeIt->is_directory(ignored)) {
-                continue;
-            }
-            const std::string filename = treeIt->path().filename().string();
-            if (filename.empty() || filename.size() >= 63) {
-                continue;
-            }
-            if (b.look.showHidden == 0 && filename[0] == '.') {
-                continue;
-            }
-            copyCap(b.tree[b.treeN], 64, filename.c_str());
-            ++b.treeN;
-        }
-    }
-    for (int i = 1; i < b.treeN; ++i) {
-        char key[64]{};
-        copyCap(key, 64, b.tree[i]);
-        int j = i;
-        while (j > 0 && std::strcmp(b.tree[j - 1], key) > 0) {
-            copyCap(b.tree[j], 64, b.tree[j - 1]);
-            --j;
-        }
-        copyCap(b.tree[j], 64, key);
-    }
+    pushTreeDirs(b, base, "", 0, prev, prevOpen, prevN);
 }
 
 void remember(Browser& b, const char* path) {
@@ -790,9 +867,14 @@ bool shown(const UiState& s) {
     return YGNodeStyleGetDisplay(s.yoga[s.fileFrame]) != YGDisplayNone;
 }
 
+uint8_t gFolderSlot = 255;
+uint8_t gFileSlot = 255;
+
 Browser& book(UiState& s) {
     if (s.files == nullptr) {
         auto* created = new Browser();
+        created->folderSlot = gFolderSlot;
+        created->fileSlot = gFileSlot;
         s.files = created;
         loadBook(*created);
         std::error_code ec;
@@ -803,13 +885,6 @@ Browser& book(UiState& s) {
         copyCap(created->hist[0], 512, created->cwd);
         created->histN = 1;
         created->histAt = 0;
-        if (created->root[0] == '\0') {
-            std::error_code rootEc;
-            const fs::path canon = fs::weakly_canonical(fs::path(created->cwd), rootEc);
-            copyCap(created->root, 512, rootEc ? created->cwd : canon.string().c_str());
-            copyCap(created->cwd, 512, created->root);
-            copyCap(created->hist[0], 512, created->root);
-        }
         reload(*created);
     }
     return *static_cast<Browser*>(s.files);
@@ -873,11 +948,16 @@ void layout(const UiState& s, const Browser& b, Lay& lay) {
         if (my < 4.0f) {
             my = 4.0f;
         }
-        for (int i = 0; i < 10; ++i) {
+        const int menuCount = b.menuKind == 0 ? 10 : b.menuKind == 1 ? 3 : 6;
+        const float menuH = 24.0f * static_cast<float>(menuCount);
+        if (s.laidH > menuH + 8.0f && my + menuH > s.laidH) {
+            my = s.laidH - menuH - 4.0f;
+        }
+        for (int i = 0; i < menuCount; ++i) {
             lay.menu[i] = {mx, my, mw, 24.0f};
             my += 24.0f;
         }
-        lay.menuN = 10;
+        lay.menuN = menuCount;
     }
     if (b.confirm != 0) {
         lay.yes = {lay.foot.x + lay.foot.w - 132.0f, lay.foot.y, 60.0f, 22.0f};
@@ -911,7 +991,7 @@ void layout(const UiState& s, const Browser& b, Lay& lay) {
     lay.split = zoneOf(b.wSide != kUiNone ? b.wSide : kUiNone);
     if (b.wSide < s.count) {
         const UiBox& side = s.box[b.wSide];
-        lay.split = {side.x + side.w, side.y, 8.0f, side.h};
+        lay.split = {side.x + side.w - 3.0f, side.y, 6.0f, side.h};
         lay.sideN = 0;
         if (b.wRoot < s.count && lay.sideN < 32) {
             lay.sides[lay.sideN] = zoneOf(b.wRoot);
@@ -1047,8 +1127,8 @@ uint32_t iconOf(UiPrimitive* dst, uint32_t n, uint32_t cap, const Zone& z, int k
 }
 
 const char* toolName(int i) {
-    static const char* names[] = {"<", ">", "UP", "NEW", "VIEW", ".*", "GO"};
-    return names[i];
+    static const char* names[] = {"+", "<", "^", ">"};
+    return i >= 0 && i < 4 ? names[i] : "";
 }
 
 const char* chipName(int i) {
@@ -1056,19 +1136,79 @@ const char* chipName(int i) {
     return names[i];
 }
 
-const char* menuName(int i) {
-    static const char* names[] = {"Open", "Rename", "Copy", "Cut", "Paste", "Duplicate", "Delete", "New folder", "Favorite", "In folder"};
-    return names[i];
+const char* menuName(int kind, int i) {
+    static const char* fileNames[] = {"Open", "Rename", "Copy", "Cut", "Paste", "Duplicate", "Delete", "New folder", "Favorite", "In folder"};
+    static const char* plusNames[] = {"New Folder", "New File", "New Scene"};
+    static const char* filtNames[] = {"All", ".slang", ".cpp", ".hpp", ".png", ".json"};
+    if (kind == 1) {
+        return i >= 0 && i < 3 ? plusNames[i] : "";
+    }
+    if (kind == 2) {
+        return i >= 0 && i < 6 ? filtNames[i] : "";
+    }
+    return i >= 0 && i < 10 ? fileNames[i] : "";
 }
 
 void sizeText(uint64_t bytes, char* dst, int cap) {
-    if (bytes < 1024) {
-        std::snprintf(dst, static_cast<size_t>(cap), "%llu B", static_cast<unsigned long long>(bytes));
-    } else if (bytes < 1024ull * 1024ull) {
-        std::snprintf(dst, static_cast<size_t>(cap), "%llu KB", static_cast<unsigned long long>(bytes / 1024ull));
-    } else {
-        std::snprintf(dst, static_cast<size_t>(cap), "%llu MB", static_cast<unsigned long long>(bytes / (1024ull * 1024ull)));
+    if (bytes < 1024ull) {
+        std::snprintf(dst, static_cast<size_t>(cap), "%llu Б", static_cast<unsigned long long>(bytes));
+        return;
     }
+    double v = static_cast<double>(bytes);
+    const char* unit = "КиБ";
+    if (bytes >= 1024ull * 1024ull * 1024ull) {
+        v /= 1024.0 * 1024.0 * 1024.0;
+        unit = "ГиБ";
+    } else if (bytes >= 1024ull * 1024ull) {
+        v /= 1024.0 * 1024.0;
+        unit = "МиБ";
+    } else {
+        v /= 1024.0;
+    }
+    char num[32]{};
+    std::snprintf(num, sizeof(num), "%.1f", v);
+    for (char* p = num; *p != '\0'; ++p) {
+        if (*p == '.') {
+            *p = ',';
+        }
+    }
+    std::snprintf(dst, static_cast<size_t>(cap), "%s %s", num, unit);
+}
+
+int ruForm(int n) {
+    const int a = n % 100;
+    const int b = n % 10;
+    if (a >= 11 && a <= 14) {
+        return 2;
+    }
+    if (b == 1) {
+        return 0;
+    }
+    if (b >= 2 && b <= 4) {
+        return 1;
+    }
+    return 2;
+}
+
+const char* ruNoun(int n, const char* one, const char* few, const char* many) {
+    const int form = ruForm(n);
+    return form == 0 ? one : form == 1 ? few : many;
+}
+
+const char* typeName(const Item& item) {
+    if (item.isDir != 0) {
+        return "Папка";
+    }
+    if (item.kind == 2) {
+        return "Изображение";
+    }
+    if (item.kind == 4) {
+        return "Аудио";
+    }
+    if (item.kind == 3 || item.kind == 0) {
+        return "Текстовый документ";
+    }
+    return "Файл";
 }
 
 void spawnLine(const char* file, char* const* argv) {
@@ -1132,8 +1272,40 @@ void revealSelection(Browser& b) {
     setStatus(b, "shown in folder");
 }
 
+void touchNamed(Browser& b, const char* name) {
+    char path[512]{};
+    joinPath(path, 512, b.cwd, name);
+    std::FILE* file = std::fopen(path, "w");
+    if (file != nullptr) {
+        std::fclose(file);
+    }
+    reload(b);
+}
+
 void menuAct(UiState& s, Browser& b, int item) {
+    const int kind = b.menuKind;
     b.menu = 0;
+    b.menuKind = 0;
+    if (kind == 1) {
+        if (item == 0) {
+            newFolder(s, b);
+        } else if (item == 1) {
+            touchNamed(b, "untitled.txt");
+        } else if (item == 2) {
+            touchNamed(b, "untitled.scene");
+        }
+        s.visualDirty = true;
+        return;
+    }
+    if (kind == 2) {
+        static const char* exts[] = {"", ".slang", ".cpp", ".hpp", ".png", ".json"};
+        if (item >= 0 && item < 6) {
+            copyCap(b.filt, 16, exts[item]);
+            reload(b);
+        }
+        s.visualDirty = true;
+        return;
+    }
     if (item == 0) {
         for (int i = 0; i < b.count; ++i) {
             if (b.items[i].selected != 0) {
@@ -1259,30 +1431,80 @@ void readZoom(UiState& s, Browser& b) {
 }
 
 void describeItem(const Item& item, char* dst, int cap) {
-    char ext[16] = "FILE";
-    if (item.isDir != 0) {
-        copyCap(ext, 16, "DIR");
-    } else {
-        const char* dot = std::strrchr(item.name, '.');
-        if (dot != nullptr && dot != item.name && dot[1] != '\0') {
-            int n = 0;
-            for (const char* p = dot + 1; *p != '\0' && n < 12; ++p) {
-                char c = *p;
-                if (c >= 'a' && c <= 'z') {
-                    c = static_cast<char>(c - 'a' + 'A');
-                }
-                ext[n++] = c;
-            }
-            ext[n] = '\0';
-        }
-    }
-    if (item.isDir != 0) {
-        std::snprintf(dst, static_cast<size_t>(cap), "%s (%s)", item.name, ext);
-        return;
-    }
     char size[32]{};
     sizeText(item.bytes, size, 32);
-    std::snprintf(dst, static_cast<size_t>(cap), "%s (%s, %s)", item.name, ext, size);
+    if (item.isDir != 0) {
+        std::snprintf(dst, static_cast<size_t>(cap), "%s (%s)", item.name, typeName(item));
+        return;
+    }
+    std::snprintf(dst, static_cast<size_t>(cap), "%s (%s, %s)", item.name, typeName(item), size);
+}
+
+void formatFoot(const Browser& b, char* dst, int cap) {
+    dst[0] = '\0';
+    if (b.root[0] == '\0') {
+        return;
+    }
+    const bool hot = b.hotItem >= 0 && b.hotItem < b.count && b.items[b.hotItem].selected == 0;
+    if (hot) {
+        describeItem(b.items[b.hotItem], dst, cap);
+        return;
+    }
+    int files = 0;
+    int dirs = 0;
+    uint64_t pickedBytes = 0;
+    for (int i = 0; i < b.count; ++i) {
+        if (b.items[i].selected == 0) {
+            continue;
+        }
+        if (b.items[i].isDir != 0) {
+            ++dirs;
+        } else {
+            ++files;
+            pickedBytes += b.items[i].bytes;
+        }
+    }
+    if (files + dirs == 1) {
+        for (int i = 0; i < b.count; ++i) {
+            if (b.items[i].selected != 0) {
+                describeItem(b.items[i], dst, cap);
+                return;
+            }
+        }
+    }
+    if (files > 1 && dirs == 0) {
+        char size[32]{};
+        sizeText(pickedBytes, size, 32);
+        std::snprintf(dst, static_cast<size_t>(cap), "Выбраны %d %s (%s)", files, ruNoun(files, "файл", "файла", "файлов"), size);
+        return;
+    }
+    if (dirs > 1 && files == 0) {
+        std::snprintf(dst, static_cast<size_t>(cap), "Выбраны %d %s", dirs, ruNoun(dirs, "папка", "папки", "папок"));
+        return;
+    }
+    if (files + dirs > 1) {
+        char size[32]{};
+        sizeText(pickedBytes, size, 32);
+        std::snprintf(dst, static_cast<size_t>(cap), "Выбраны %d %s (%s)", files + dirs, ruNoun(files + dirs, "файл", "файла", "файлов"), size);
+        return;
+    }
+    int folderN = 0;
+    int fileN = 0;
+    uint64_t bytes = 0;
+    for (int i = 0; i < b.count; ++i) {
+        if (b.items[i].isDir != 0) {
+            ++folderN;
+        } else {
+            ++fileN;
+            bytes += b.items[i].bytes;
+        }
+    }
+    char size[32]{};
+    sizeText(bytes, size, 32);
+    std::snprintf(
+        dst, static_cast<size_t>(cap), "%d %s, %d %s (%s)",
+        folderN, ruNoun(folderN, "папка", "папки", "папок"),
+        fileN, ruNoun(fileN, "файл", "файла", "файлов"), size);
 }
 
 const char* leafOf(const char* path) {
@@ -1333,10 +1555,10 @@ void putText(UiState& s, uint16_t id, const char* text, bool fit) {
     if (label == nullptr) {
         return;
     }
-    char next[32]{};
+    char next[96]{};
     int n = 0;
     if (text != nullptr) {
-        while (text[n] != '\0' && n < 31) {
+        while (text[n] != '\0' && n < 95) {
             next[n] = text[n];
             ++n;
         }
@@ -1392,6 +1614,128 @@ void pullFields(UiState& s, Browser& b) {
                 b.look.icon = range->value;
                 s.visualDirty = true;
             }
+        }
+    }
+}
+
+void placeChild(UiState& s, uint16_t id, uint16_t parent, uint32_t index) {
+    if (id >= s.count || parent >= s.count || s.yoga[id] == nullptr || s.yoga[parent] == nullptr) {
+        return;
+    }
+    YGNodeRef node = s.yoga[id];
+    YGNodeRef next = s.yoga[parent];
+    YGNodeRef from = YGNodeGetParent(node);
+    if (from == next && index < YGNodeGetChildCount(next) && YGNodeGetChild(next, index) == node) {
+        s.parentOf[id] = parent;
+        return;
+    }
+    if (from != nullptr) {
+        YGNodeRemoveChild(from, node);
+    }
+    uint32_t count = YGNodeGetChildCount(next);
+    if (index > count) {
+        index = count;
+    }
+    YGNodeInsertChild(next, node, index);
+    s.parentOf[id] = parent;
+    s.layoutDirty = true;
+}
+
+void stampIcon(UiState& s, uint16_t id, int slot, float r, float g, float b, float side) {
+    if (id == kUiNone || id >= s.count) {
+        return;
+    }
+    auto* paint = s.ent[id].try_get_mut<UiPaint>();
+    if (paint != nullptr) {
+        const int8_t tag = slot >= 0 && slot < 8 ? static_cast<int8_t>(-89) : static_cast<int8_t>(-1);
+        if (paint->r != r || paint->g != g || paint->b != b || paint->tag != tag) {
+            paint->r = r;
+            paint->g = g;
+            paint->b = b;
+            paint->tag = tag;
+            s.visualDirty = true;
+        }
+    }
+    if (slot >= 0 && slot < 8) {
+        const UiImage* cur = s.ent[id].try_get<UiImage>();
+        if (cur == nullptr || cur->slot != static_cast<uint8_t>(slot)) {
+            UiImage image{};
+            image.slot = static_cast<uint8_t>(slot);
+            image.frames = 1;
+            image.minimap = 0;
+            image.viewW = 1.0f;
+            image.viewH = 1.0f;
+            s.ent[id].set<UiImage>(image);
+            s.visualDirty = true;
+        }
+    }
+    if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
+        if (std::fabs(flex->width - side) > 0.5f || std::fabs(flex->height - side) > 0.5f) {
+            flex->widthMode = static_cast<uint8_t>(UiSize::Px);
+            flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+            flex->width = side;
+            flex->height = side;
+            flex->shrink = 0.0f;
+            uiMarkLayout(s, id);
+        }
+    }
+}
+
+void paintCard(UiState& s, uint16_t id, float r, float g, float b, float border, float br, float bg, float bb) {
+    auto* paint = id < s.count ? s.ent[id].try_get_mut<UiPaint>() : nullptr;
+    if (paint == nullptr) {
+        return;
+    }
+    if (paint->r == r && paint->g == g && paint->b == b && paint->borderW == border && paint->br == br && paint->bg == bg && paint->bb == bb) {
+        return;
+    }
+    paint->r = r;
+    paint->g = g;
+    paint->b = b;
+    paint->borderW = border;
+    paint->br = br;
+    paint->bg = bg;
+    paint->bb = bb;
+    s.visualDirty = true;
+}
+
+void clampGrid(UiState& s, const Browser& b, float cellH) {
+    if (s.fileView >= s.count) {
+        return;
+    }
+    auto* scroll = s.ent[s.fileView].try_get_mut<UiScroll>();
+    if (scroll == nullptr || scroll->inner == kUiNone || scroll->inner >= s.count) {
+        return;
+    }
+    int rows = 0;
+    for (int i = 0; i < 18; ++i) {
+        if (b.wRow[i] >= s.count || s.yoga[b.wRow[i]] == nullptr) {
+            continue;
+        }
+        if (YGNodeStyleGetDisplay(s.yoga[b.wRow[i]]) != YGDisplayNone) {
+            ++rows;
+        }
+    }
+    const float gap = 4.0f;
+    const float pad = 8.0f;
+    float content = pad * 2.0f + static_cast<float>(rows) * cellH;
+    if (rows > 1) {
+        content += gap * static_cast<float>(rows - 1);
+    }
+    float maxOff = content - s.box[s.fileView].h;
+    if (maxOff < 0.0f) {
+        maxOff = 0.0f;
+    }
+    if (scroll->offset < 0.0f) {
+        scroll->offset = 0.0f;
+    }
+    if (scroll->offset > maxOff) {
+        scroll->offset = maxOff;
+    }
+    if (auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>()) {
+        if (std::fabs(flex->marginT + scroll->offset) > 0.5f) {
+            flex->marginT = -scroll->offset;
+            uiMarkLayout(s, s.fileView);
         }
     }
 }
@@ -1460,79 +1804,217 @@ void bindChrome(UiState& s, Browser& b, const Lay& lay) {
     }
     for (int i = 0; i < 16; ++i) {
         const bool on = i < b.treeN;
+        const uint16_t row = b.wTree[i] < s.count ? s.parentOf[b.wTree[i]] : kUiNone;
+        showNode(s, row, on);
         showNode(s, b.wTree[i], on);
+        showNode(s, b.wTreeMark[i], on);
         if (!on) {
             continue;
         }
-        putText(s, b.wTree[i], b.tree[i], false);
+        if (row < s.count) {
+            if (auto* rowFlex = s.ent[row].try_get_mut<UiFlex>()) {
+                rowFlex->marginL = static_cast<float>(b.treeDepth[i]) * 12.0f;
+            }
+        }
+        const char* leaf = std::strrchr(b.tree[i], '/');
+        leaf = (leaf != nullptr && leaf[1] != '\0') ? leaf + 1 : b.tree[i];
+        putText(s, b.wTreeMark[i], b.treeOpen[i] != 0 ? "v" : ">", false);
+        putText(s, b.wTree[i], leaf, false);
+        uiTextStyle(s, b.wTree[i], 0, 1, 1, 0, 0, 1.0f);
+        if (auto* lab = s.ent[b.wTree[i]].try_get_mut<UiFlex>()) {
+            lab->justify = 0;
+            lab->align = 1;
+            lab->grow = 1.0f;
+            lab->shrink = 1.0f;
+        }
+        showNode(s, b.wTreeIcon[i], true);
+        stampIcon(s, b.wTreeIcon[i], b.folderSlot, b.look.folder[0], b.look.folder[1], b.look.folder[2], 16.0f);
         char full[512]{};
         joinPath(full, 512, root, b.tree[i]);
         const bool here = sameText(full, b.cwd);
         paintBtn(s, b.wTree[i], here ? 0.28f : 0.14f, here ? 0.48f : 0.16f, here ? 0.92f : 0.20f);
     }
-    for (int i = 0; i < 5; ++i) {
-        const bool on = b.kind == i;
-        paintBtn(s, b.wChip[i], on ? 0.28f : 0.16f, on ? 0.48f : 0.18f, on ? 0.92f : 0.22f);
+    const char* filtLabel = b.filt[0] == '\0' ? "All" : b.filt;
+    putText(s, b.wChip[0], filtLabel, true);
+    paintBtn(s, b.wChip[0], 0.16f, 0.18f, 0.22f);
+    const float icon = b.look.icon < 52.0f ? 52.0f : (b.look.icon > 148.0f ? 148.0f : b.look.icon);
+    const float labelH = 18.0f;
+    const float cellGap = 4.0f;
+    const float cellW = icon + 16.0f;
+    const float cellH = icon + cellGap + labelH + 8.0f;
+    float gridW = s.fileView < s.count ? s.box[s.fileView].w - 16.0f : 0.0f;
+    if (gridW < cellW) {
+        gridW = cellW;
+    }
+    int cols = static_cast<int>(gridW / (cellW + cellGap));
+    if (cols < 1) {
+        cols = 1;
+    }
+    const int vis = b.count < 18 ? b.count : 18;
+    const int rows = vis == 0 ? 0 : (vis + cols - 1) / cols;
+    for (int r = 0; r < 18; ++r) {
+        const bool on = r < rows;
+        showNode(s, b.wRow[r], on);
+        if (!on || b.wRow[r] >= s.count) {
+            continue;
+        }
+        if (auto* rowFlex = s.ent[b.wRow[r]].try_get_mut<UiFlex>()) {
+            if (std::fabs(rowFlex->height - cellH) > 0.5f) {
+                rowFlex->height = cellH;
+                uiMarkLayout(s, b.wRow[r]);
+            }
+        }
     }
     for (int i = 0; i < 18; ++i) {
-        const bool on = i < lay.cellN;
-        b.cellItem[i] = on ? lay.cellId[i] : -1;
+        const bool on = i < vis;
+        b.cellItem[i] = on ? i : -1;
         showNode(s, b.wCell[i], on);
+        showNode(s, b.wIcon[i], on);
+        showNode(s, b.wName[i], on);
         if (!on || b.wCell[i] >= s.count) {
             continue;
         }
-        const Item& item = b.items[lay.cellId[i]];
-        putText(s, b.wCell[i], item.name, false);
-        if (item.selected != 0) {
-            paintBtn(s, b.wCell[i], b.look.accent[0], b.look.accent[1], b.look.accent[2]);
-        } else if (item.isDir != 0) {
-            paintBtn(s, b.wCell[i], b.look.folder[0], b.look.folder[1], b.look.folder[2]);
-        } else {
-            paintBtn(s, b.wCell[i], b.look.card[0], b.look.card[1], b.look.card[2]);
+        placeChild(s, b.wCell[i], b.wRow[i / cols], static_cast<uint32_t>(i % cols));
+        const Item& item = b.items[i];
+        putText(s, b.wName[i], item.name, false);
+        const bool selected = item.selected != 0;
+        const bool hot = b.hotItem == i;
+        float cr = b.look.card[0];
+        float cg = b.look.card[1];
+        float cb = b.look.card[2];
+        if (selected) {
+            cr = cr * 0.45f + b.look.accent[0] * 0.55f;
+            cg = cg * 0.45f + b.look.accent[1] * 0.55f;
+            cb = cb * 0.45f + b.look.accent[2] * 0.55f;
+        } else if (hot) {
+            cr = std::min(1.0f, cr + 0.08f);
+            cg = std::min(1.0f, cg + 0.08f);
+            cb = std::min(1.0f, cb + 0.08f);
         }
-        const Zone& cell = lay.cells[i];
-        const float lx = cell.x - s.box[s.fileView].x;
-        const float ly = cell.y - s.box[s.fileView].y;
+        paintCard(s, b.wCell[i], cr, cg, cb, selected || hot ? 2.0f : 0.0f, b.look.accent[0], b.look.accent[1], b.look.accent[2]);
+        const int slot = item.isDir != 0 ? b.folderSlot : b.fileSlot;
+        const bool tex = slot >= 0 && slot < 8;
+        float ir = tex ? 0.86f : 0.22f;
+        float ig = tex ? 0.88f : 0.24f;
+        float ib = tex ? 0.90f : 0.28f;
+        if (tex) {
+            ir = selected ? 1.0f : 0.86f;
+            ig = selected ? 0.94f : 0.88f;
+            ib = selected ? 0.78f : 0.90f;
+        }
+        stampIcon(s, b.wIcon[i], slot, ir, ig, ib, icon);
+        if (!tex && b.wIcon[i] < s.count) {
+            if (auto* paint = s.ent[b.wIcon[i]].try_get_mut<UiPaint>()) {
+                paint->a = 0.15f;
+                paint->borderW = 1.5f;
+                paint->br = 0.72f;
+                paint->bg = 0.74f;
+                paint->bb = 0.78f;
+                paint->tag = -1;
+            }
+        }
         auto* flex = s.ent[b.wCell[i]].try_get_mut<UiFlex>();
-        if (flex != nullptr && (flex->position == 0 || std::fabs(flex->posX - lx) > 0.5f || std::fabs(flex->posY - ly) > 0.5f || std::fabs(flex->width - cell.w) > 0.5f)) {
-            uiPlace(s, b.wCell[i], true, lx, ly, cell.w, cell.h);
+        if (flex != nullptr && (std::fabs(flex->width - cellW) > 0.5f || std::fabs(flex->height - cellH) > 0.5f)) {
+            flex->position = 0;
+            flex->widthMode = static_cast<uint8_t>(UiSize::Px);
+            flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+            flex->width = cellW;
+            flex->height = cellH;
+            flex->shrink = 0.0f;
+            flex->grow = 0.0f;
+            uiMarkLayout(s, b.wCell[i]);
         }
     }
+    clampGrid(s, b, cellH);
+    (void)lay;
     if (b.wStatus != kUiNone) {
-        char foot[32]{};
-        const int picked = selectedCount(b);
-        if (b.status[0] != '\0') {
-            putText(s, b.wStatus, b.status, false);
-        } else if (picked > 1) {
-            std::snprintf(foot, sizeof(foot), "%d selected", picked);
-            putText(s, b.wStatus, foot, false);
+        char foot[180]{};
+        if (b.confirm != 0 && b.status[0] != '\0') {
+            copyCap(foot, 180, b.status);
         } else {
-            std::snprintf(foot, sizeof(foot), "%d items", b.count);
-            putText(s, b.wStatus, foot, false);
+            formatFoot(b, foot, 180);
+        }
+        putText(s, b.wStatus, foot, false);
+    }
+    if (b.wTreeScroll != kUiNone && b.wTreeScroll < s.count && b.wTreeInner != kUiNone && b.wTreeInner < s.count) {
+        int rows = 0;
+        for (int i = 0; i < 16; ++i) {
+            const uint16_t row = b.wTree[i] < s.count ? s.parentOf[b.wTree[i]] : kUiNone;
+            if (row >= s.count || s.yoga[row] == nullptr || YGNodeStyleGetDisplay(s.yoga[row]) == YGDisplayNone) {
+                continue;
+            }
+            ++rows;
+            if (auto* rowFlex = s.ent[row].try_get_mut<UiFlex>()) {
+                rowFlex->heightMode = static_cast<uint8_t>(UiSize::Px);
+                rowFlex->height = 24.0f;
+                rowFlex->shrink = 0.0f;
+                rowFlex->grow = 0.0f;
+            }
+        }
+        const float gap = 2.0f;
+        const float pad = 2.0f;
+        float content = pad * 2.0f + static_cast<float>(rows) * 24.0f;
+        if (rows > 1) {
+            content += gap * static_cast<float>(rows - 1);
+        }
+        if (auto* inner = s.ent[b.wTreeInner].try_get_mut<UiFlex>()) {
+            inner->heightMode = static_cast<uint8_t>(UiSize::Px);
+            inner->height = content;
+            inner->shrink = 0.0f;
+            inner->grow = 0.0f;
+        }
+        if (auto* scroll = s.ent[b.wTreeScroll].try_get_mut<UiScroll>()) {
+            float maxOff = content - s.box[b.wTreeScroll].h;
+            if (maxOff < 0.0f) {
+                maxOff = 0.0f;
+            }
+            if (scroll->offset < 0.0f) {
+                scroll->offset = 0.0f;
+            }
+            if (scroll->offset > maxOff) {
+                scroll->offset = maxOff;
+            }
+            if (auto* flex = s.ent[b.wTreeInner].try_get_mut<UiFlex>()) {
+                flex->marginT = -scroll->offset;
+            }
         }
     }
     if (b.mode == 2 && b.wRename != kUiNone) {
-        for (int i = 0; i < lay.cellN; ++i) {
-            if (lay.cellId[i] != b.renameAt) {
+        for (int i = 0; i < 18; ++i) {
+            if (b.cellItem[i] != b.renameAt || b.wName[i] >= s.count) {
                 continue;
             }
-            const Zone& cell = lay.cells[i];
-            auto* flex = s.ent[b.wRename].try_get_mut<UiFlex>();
-            if (flex != nullptr && (std::fabs(flex->posX - cell.x) > 0.5f || std::fabs(flex->posY - cell.y) > 0.5f || std::fabs(flex->width - cell.w) > 0.5f)) {
-                uiPlace(s, b.wRename, true, cell.x, cell.y, cell.w, 28.0f);
+            const UiBox& name = s.box[b.wName[i]];
+            if (name.w < 4.0f || name.h < 4.0f) {
+                continue;
             }
+            uiPlace(s, b.wRename, true, name.x, name.y, name.w, name.h);
         }
     }
 }
 
+void openBarMenu(UiState& s, Browser& b, uint16_t id, int kind) {
+    b.menu = 1;
+    b.menuKind = kind;
+    if (id < s.count) {
+        b.menuX = s.box[id].x;
+        b.menuY = s.box[id].y + s.box[id].h;
+    }
+    s.visualDirty = true;
+}
+
 void toolAct(UiState& s, Browser& b, int i) {
-    if (i == 0 && b.histAt > 0) {
+    if (i == 0) {
+        openBarMenu(s, b, b.wTool[0], 1);
+        return;
+    }
+    if (i == 1 && b.histAt > 0) {
         --b.histAt;
         if (underRoot(b, b.hist[b.histAt])) {
             copyCap(b.cwd, 512, b.hist[b.histAt]);
             reload(b);
         }
-    } else if (i == 1 && b.histAt + 1 < b.histN) {
+    } else if (i == 3 && b.histAt + 1 < b.histN) {
         ++b.histAt;
         if (underRoot(b, b.hist[b.histAt])) {
             copyCap(b.cwd, 512, b.hist[b.histAt]);
@@ -1541,31 +2023,34 @@ void toolAct(UiState& s, Browser& b, int i) {
     } else if (i == 2) {
         char parent[512]{};
         parentOf(b.cwd, parent, 512);
-        if (sameText(parent, b.cwd) || sameText(b.cwd, b.root)) {
+        if (b.root[0] == '\0' || sameText(parent, b.cwd) || sameText(b.cwd, b.root)) {
             setStatus(b, "root");
         } else {
             go(b, parent);
         }
-    } else if (i == 3) {
-        newFolder(s, b);
-    } else if (i == 4) {
-        b.look.icon = b.look.icon < 64.0f ? 88.0f : 56.0f;
-        if (b.wZoom != kUiNone) {
-            if (auto* range = s.ent[b.wZoom].try_get_mut<UiRange>()) {
-                range->value = b.look.icon;
-            }
-        }
-    } else if (i == 5) {
-        b.look.showHidden = b.look.showHidden != 0 ? 0 : 1;
-        reload(b);
-    } else if (i == 6) {
-        reload(b);
     }
     s.visualDirty = true;
 }
 
 void clickFile(UiState& s, uint16_t id) {
     Browser& b = book(s);
+    if (s.fileView != kUiNone && s.fileView < s.count) {
+        const uint16_t popup = s.contextOf[s.fileView];
+        if (popup != kUiNone && popup < s.count && s.yoga[popup] != nullptr && YGNodeStyleGetDisplay(s.yoga[popup]) != YGDisplayNone) {
+            bool onMenu = false;
+            for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+                if (p == popup) {
+                    onMenu = true;
+                    break;
+                }
+            }
+            if (!onMenu) {
+                YGNodeStyleSetDisplay(s.yoga[popup], YGDisplayNone);
+                s.visualDirty = true;
+                return;
+            }
+        }
+    }
     if (b.mode == 2) {
         commitRename(s, b);
     }
@@ -1577,10 +2062,7 @@ void clickFile(UiState& s, uint16_t id) {
     }
     for (int i = 0; i < 5; ++i) {
         if (b.wChip[i] == id) {
-            b.kind = i;
-            b.scroll = 0;
-            reload(b);
-            s.visualDirty = true;
+            openBarMenu(s, b, b.wChip[0], 2);
             return;
         }
     }
@@ -1607,23 +2089,94 @@ void clickFile(UiState& s, uint16_t id) {
         return;
     }
     for (int i = 0; i < 18; ++i) {
-        if (b.wCell[i] != id || b.cellItem[i] < 0) {
+        bool hit = b.wCell[i] == id;
+        if (!hit && id < s.count) {
+            for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+                if (p == b.wCell[i]) {
+                    hit = true;
+                    break;
+                }
+            }
+        }
+        if (!hit || b.cellItem[i] < 0) {
             continue;
         }
         const int cell = b.cellItem[i];
-        if (b.lastClick == cell) {
+        if (b.lastClick == cell && b.clickAt >= 0.0f && (s.time - b.clickAt) < 0.30f) {
             b.lastClick = -1;
+            b.clickAt = -1.0f;
             openItem(s, b, cell);
         } else {
             selectOnly(b, cell);
             b.lastClick = cell;
+            b.clickAt = s.time;
             b.focus = 1;
         }
         s.visualDirty = true;
         return;
     }
     for (int i = 0; i < 16; ++i) {
-        if (b.wTree[i] == id && i < b.treeN) {
+        if (i >= b.treeN) {
+            break;
+        }
+        if (b.wTreeMark[i] == id) {
+            char dest[512]{};
+            const char* rootPath = b.root[0] != '\0' ? b.root : b.cwd;
+            joinPath(dest, 512, rootPath, b.tree[i]);
+            int childDirs = 0;
+            std::error_code treeEc;
+            fs::directory_iterator treeIt(fs::path(dest), fs::directory_options::skip_permission_denied, treeEc);
+            if (!treeEc) {
+                for (; treeIt != fs::directory_iterator(); treeIt.increment(treeEc)) {
+                    if (treeEc) {
+                        break;
+                    }
+                    std::error_code dirEc;
+                    if ((*treeIt).is_directory(dirEc)) {
+                        ++childDirs;
+                        break;
+                    }
+                }
+            }
+            if (childDirs == 0) {
+                b.treeOpen[i] = 0;
+                s.visualDirty = true;
+                return;
+            }
+            float keep = 0.0f;
+            if (b.wTreeScroll < s.count) {
+                if (const UiScroll* scroll = s.ent[b.wTreeScroll].try_get<UiScroll>()) {
+                    keep = scroll->offset;
+                }
+            }
+            b.treeOpen[i] = b.treeOpen[i] != 0 ? 0 : 1;
+            rebuildTree(b);
+            if (b.wTreeScroll < s.count) {
+                if (auto* scroll = s.ent[b.wTreeScroll].try_get_mut<UiScroll>()) {
+                    const float viewH = s.box[b.wTreeScroll].h;
+                    const float contentH = static_cast<float>(b.treeN) * 26.0f + 8.0f;
+                    float maxOff = contentH - viewH;
+                    if (maxOff < 0.0f) {
+                        maxOff = 0.0f;
+                    }
+                    if (keep < 0.0f) {
+                        keep = 0.0f;
+                    }
+                    if (keep > maxOff) {
+                        keep = maxOff;
+                    }
+                    scroll->offset = keep;
+                    if (scroll->inner != kUiNone && scroll->inner < s.count) {
+                        if (auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>()) {
+                            flex->marginT = -keep;
+                        }
+                    }
+                }
+            }
+            s.visualDirty = true;
+            return;
+        }
+        if (b.wTree[i] == id) {
             char dest[512]{};
             joinPath(dest, 512, root, b.tree[i]);
             go(b, dest);
@@ -1712,50 +2265,33 @@ void mountFiles(UiState& s) {
         return;
     }
     Browser& b = book(s);
-    const char* tools[] = {"<", ">", "UP", "NEW", "VIEW", ".*", "GO"};
-    const uint16_t toolRow = uiNode(s, s.fileFrame, rowBox(30.0f), solidPaint(UiRole::Hidden, 0, 0, 0, 0, -1));
-    for (int i = 0; i < 7; ++i) {
-        b.wTool[i] = makeButton(s, toolRow, tools[i], -100, 28.0f, false);
-    }
-    UiFlex zoom{};
-    zoom.grow = 1.0f;
-    zoom.shrink = 1.0f;
-    zoom.heightMode = static_cast<uint8_t>(UiSize::Px);
-    zoom.height = 18.0f;
-    b.wZoom = uiNode(s, toolRow, zoom, solidPaint(UiRole::Slider, 0.18f, 0.20f, 0.26f, 8.0f, -1));
-    if (b.wZoom != kUiNone) {
-        s.ent[b.wZoom].set<UiRange>({b.look.icon, 52.0f, 148.0f});
-    }
+    UiFlex toolRow = rowBox(32.0f);
+    toolRow.padL = 4.0f;
+    toolRow.padR = 4.0f;
+    toolRow.shrink = 0.0f;
+    b.wHead = uiNode(s, s.fileFrame, toolRow, solidPaint(UiRole::Hidden, 0, 0, 0, 0, -1));
+    b.wTool[0] = makeButton(s, b.wHead, "+", -100, 26.0f, false);
+    UiFlex spacer{};
+    spacer.grow = 1.0f;
+    spacer.shrink = 1.0f;
+    spacer.minW = 8.0f;
+    spacer.heightMode = static_cast<uint8_t>(UiSize::Px);
+    spacer.height = 8.0f;
+    uiNode(s, b.wHead, spacer, solidPaint(UiRole::Hidden, 0, 0, 0, 0, -1));
     UiFlex search{};
     search.widthMode = static_cast<uint8_t>(UiSize::Px);
     search.width = 180.0f;
     search.heightMode = static_cast<uint8_t>(UiSize::Px);
-    search.height = 28.0f;
+    search.height = 26.0f;
     search.shrink = 0.0f;
-    b.wSearch = uiNode(s, toolRow, search, solidPaint(UiRole::Field, 0.10f, 0.11f, 0.14f, 4.0f, -1));
+    b.wSearch = uiNode(s, b.wHead, search, solidPaint(UiRole::Field, 0.10f, 0.11f, 0.14f, 4.0f, -1));
     if (b.wSearch != kUiNone) {
         UiField field{};
         copyCap(field.hint, 40, "search");
         field.hintLen = 6;
         s.ent[b.wSearch].set<UiField>(field);
     }
-    const uint16_t chipRow = uiNode(s, s.fileFrame, rowBox(28.0f), solidPaint(UiRole::Hidden, 0, 0, 0, 0, -1));
-    const char* chips[] = {"ALL", "DIR", "IMG", "TXT", "SND"};
-    for (int i = 0; i < 5; ++i) {
-        b.wChip[i] = makeButton(s, chipRow, chips[i], -100, 26.0f, false);
-    }
-    const uint16_t crumbRow = uiNode(s, s.fileFrame, rowBox(26.0f), solidPaint(UiRole::Hidden, 0, 0, 0, 0, -1));
-    for (int i = 0; i < 8; ++i) {
-        b.wCrumb[i] = makeButton(s, crumbRow, "", -100, 24.0f, false);
-        if (i < 7) {
-            UiFlex arrow{};
-            arrow.shrink = 0.0f;
-            b.wArrow[i] = uiNode(s, crumbRow, arrow, solidPaint(UiRole::Label, 0.45f, 0.50f, 0.58f, 0.0f, -1));
-            if (b.wArrow[i] != kUiNone) {
-                uiText(s, b.wArrow[i], ">");
-            }
-        }
-    }
+    b.wChip[0] = makeButton(s, b.wHead, "All", -100, 26.0f, false);
     UiFlex body{};
     body.direction = 1;
     body.widthMode = static_cast<uint8_t>(UiSize::Percent);
@@ -1763,6 +2299,8 @@ void mountFiles(UiState& s) {
     body.grow = 1.0f;
     body.shrink = 1.0f;
     body.gap = 0.0f;
+    body.overflow = 1;
+    body.minH = 0.0f;
     const uint16_t bodyId = uiNode(s, s.fileFrame, body, solidPaint(UiRole::Hidden, 0, 0, 0, 0, -1));
     UiFlex side{};
     side.widthMode = static_cast<uint8_t>(UiSize::Px);
@@ -1780,37 +2318,195 @@ void mountFiles(UiState& s) {
     const uint16_t dirHead = uiNode(s, b.wSide, UiFlex{}, solidPaint(UiRole::Label, 0.50f, 0.55f, 0.62f, 0.0f, -1));
     uiText(s, dirHead, "FOLDERS");
     b.wRoot = makeButton(s, b.wSide, "root", -100, 24.0f, true);
+    UiFlex treeHost{};
+    treeHost.grow = 1.0f;
+    treeHost.shrink = 1.0f;
+    treeHost.overflow = 1;
+    treeHost.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    treeHost.width = 100.0f;
+    b.wTreeScroll = uiNode(s, b.wSide, treeHost, solidPaint(UiRole::Scroll, 0.08f, 0.09f, 0.11f, 4.0f, -1));
+    UiFlex treeInner{};
+    treeInner.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    treeInner.width = 100.0f;
+    treeInner.shrink = 0.0f;
+    treeInner.gap = 2.0f;
+    treeInner.pad = 2.0f;
+    b.wTreeInner = uiNode(s, b.wTreeScroll, treeInner, solidPaint(UiRole::Hidden, 0, 0, 0, 0, -1));
+    if (b.wTreeScroll != kUiNone) {
+        s.ent[b.wTreeScroll].set<UiScroll>({0.0f, b.wTreeInner});
+    }
     for (int i = 0; i < 16; ++i) {
-        b.wTree[i] = makeButton(s, b.wSide, "", -100, 24.0f, true);
-        showNode(s, b.wTree[i], false);
+        UiFlex row{};
+        row.direction = 1;
+        row.widthMode = static_cast<uint8_t>(UiSize::Percent);
+        row.width = 100.0f;
+        row.heightMode = static_cast<uint8_t>(UiSize::Px);
+        row.height = 24.0f;
+        row.shrink = 0.0f;
+        row.gap = 2.0f;
+        row.align = 1;
+        const uint16_t rowId = uiNode(s, b.wTreeInner, row, solidPaint(UiRole::Hidden, 0, 0, 0, 0, -1));
+        UiFlex mark{};
+        mark.widthMode = static_cast<uint8_t>(UiSize::Px);
+        mark.width = 18.0f;
+        mark.heightMode = static_cast<uint8_t>(UiSize::Px);
+        mark.height = 22.0f;
+        mark.shrink = 0.0f;
+        b.wTreeMark[i] = uiNode(s, rowId, mark, solidPaint(UiRole::Button, 0.14f, 0.16f, 0.20f, 3.0f, -100));
+        if (b.wTreeMark[i] != kUiNone) {
+            uiText(s, b.wTreeMark[i], ">");
+            uiBind(s, b.wTreeMark[i], fileButton, &s);
+        }
+        UiFlex treeIcon{};
+        treeIcon.widthMode = static_cast<uint8_t>(UiSize::Px);
+        treeIcon.width = 16.0f;
+        treeIcon.heightMode = static_cast<uint8_t>(UiSize::Px);
+        treeIcon.height = 16.0f;
+        treeIcon.shrink = 0.0f;
+        b.wTreeIcon[i] = uiNode(s, rowId, treeIcon, solidPaint(UiRole::Panel, b.look.folder[0], b.look.folder[1], b.look.folder[2], 3.0f, -1));
+        b.wTree[i] = makeButton(s, rowId, "", -100, 22.0f, true);
+        uiTextStyle(s, b.wTree[i], 0, 1, 1, 0, 0, 1.0f);
+        showNode(s, rowId, false);
     }
     UiFlex split{};
     split.widthMode = static_cast<uint8_t>(UiSize::Px);
-    split.width = 8.0f;
+    split.width = 6.0f;
     split.shrink = 0.0f;
     uiNode(s, bodyId, split, solidPaint(UiRole::Panel, 0.28f, 0.32f, 0.40f, 0.0f, -5));
+    UiFlex rightCol{};
+    rightCol.grow = 1.0f;
+    rightCol.shrink = 1.0f;
+    rightCol.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    rightCol.width = 100.0f;
+    rightCol.overflow = 1;
+    rightCol.minH = 0.0f;
+    const uint16_t rightId = uiNode(s, bodyId, rightCol, solidPaint(UiRole::Hidden, 0, 0, 0, 0, -1));
+    UiFlex navRow = rowBox(32.0f);
+    navRow.padL = 4.0f;
+    navRow.padR = 4.0f;
+    b.wNav = uiNode(s, rightId, navRow, solidPaint(UiRole::Hidden, 0, 0, 0, 0, -1));
+    const char* nav[] = {"<", "^", ">"};
+    for (int i = 0; i < 3; ++i) {
+        b.wTool[i + 1] = makeButton(s, b.wNav, nav[i], -100, 28.0f, false);
+        if (b.wTool[i + 1] != kUiNone) {
+            if (auto* box = s.ent[b.wTool[i + 1]].try_get_mut<UiFlex>()) {
+                box->widthMode = static_cast<uint8_t>(UiSize::Px);
+                box->heightMode = static_cast<uint8_t>(UiSize::Px);
+                box->width = 28.0f;
+                box->height = 28.0f;
+                box->shrink = 0.0f;
+                box->grow = 0.0f;
+            }
+        }
+    }
+    for (int i = 0; i < 8; ++i) {
+        b.wCrumb[i] = makeButton(s, b.wNav, "", -100, 24.0f, false);
+        if (i < 7) {
+            UiFlex arrow{};
+            arrow.shrink = 0.0f;
+            b.wArrow[i] = uiNode(s, b.wNav, arrow, solidPaint(UiRole::Label, 0.45f, 0.50f, 0.58f, 0.0f, -1));
+            if (b.wArrow[i] != kUiNone) {
+                uiText(s, b.wArrow[i], ">");
+            }
+        }
+    }
     UiFlex grid{};
     grid.grow = 1.0f;
     grid.shrink = 1.0f;
-    grid.position = 2;
-    s.fileView = uiNode(s, bodyId, grid, solidPaint(UiRole::Panel, b.look.grid[0], b.look.grid[1], b.look.grid[2], 6.0f, -91));
+    grid.minH = 0.0f;
+    grid.overflow = 1;
+    s.fileView = uiNode(s, rightId, grid, solidPaint(UiRole::Scroll, b.look.grid[0], b.look.grid[1], b.look.grid[2], 6.0f, -91));
+    UiFlex gridInner{};
+    gridInner.direction = 0;
+    gridInner.wrap = 0;
+    gridInner.align = 2;
+    gridInner.content = 2;
+    gridInner.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    gridInner.width = 100.0f;
+    gridInner.shrink = 0.0f;
+    gridInner.grow = 0.0f;
+    gridInner.pad = 8.0f;
+    gridInner.gap = 4.0f;
+    b.wGridInner = uiNode(s, s.fileView, gridInner, solidPaint(UiRole::Hidden, 0, 0, 0, 0, -1));
+    if (s.fileView != kUiNone) {
+        s.ent[s.fileView].set<UiScroll>({0.0f, b.wGridInner});
+    }
+    for (int r = 0; r < 18; ++r) {
+        UiFlex row{};
+        row.direction = 1;
+        row.widthMode = static_cast<uint8_t>(UiSize::Percent);
+        row.width = 100.0f;
+        row.heightMode = static_cast<uint8_t>(UiSize::Px);
+        row.height = 84.0f;
+        row.shrink = 0.0f;
+        row.grow = 0.0f;
+        row.gap = 4.0f;
+        row.align = 2;
+        b.wRow[r] = uiNode(s, b.wGridInner, row, solidPaint(UiRole::Hidden, 0, 0, 0, 0, -1));
+        showNode(s, b.wRow[r], false);
+    }
     for (int i = 0; i < 18; ++i) {
         UiFlex cell{};
-        cell.position = 1;
+        cell.direction = 0;
         cell.widthMode = static_cast<uint8_t>(UiSize::Px);
         cell.width = 84.0f;
         cell.heightMode = static_cast<uint8_t>(UiSize::Px);
         cell.height = 84.0f;
         cell.shrink = 0.0f;
-        b.wCell[i] = uiNode(s, s.fileView, cell, solidPaint(UiRole::Button, b.look.card[0], b.look.card[1], b.look.card[2], 6.0f, -1));
-        if (b.wCell[i] != kUiNone) {
-            uiText(s, b.wCell[i], "");
-            showNode(s, b.wCell[i], false);
+        cell.grow = 0.0f;
+        cell.align = 1;
+        cell.justify = 0;
+        cell.gap = 4.0f;
+        cell.pad = 4.0f;
+        b.wCell[i] = uiNode(s, b.wRow[0], cell, solidPaint(UiRole::Button, b.look.card[0], b.look.card[1], b.look.card[2], 6.0f, -100));
+        if (b.wCell[i] == kUiNone) {
+            continue;
         }
+        uiBind(s, b.wCell[i], fileButton, &s);
+        UiFlex icon{};
+        icon.widthMode = static_cast<uint8_t>(UiSize::Px);
+        icon.width = 48.0f;
+        icon.heightMode = static_cast<uint8_t>(UiSize::Px);
+        icon.height = 48.0f;
+        icon.shrink = 0.0f;
+        icon.self = 2;
+        b.wIcon[i] = uiNode(s, b.wCell[i], icon, solidPaint(UiRole::Panel, 0.45f, 0.55f, 0.70f, 4.0f, -1));
+        UiFlex name{};
+        name.widthMode = static_cast<uint8_t>(UiSize::Percent);
+        name.width = 100.0f;
+        name.heightMode = static_cast<uint8_t>(UiSize::Px);
+        name.height = 18.0f;
+        name.shrink = 1.0f;
+        name.grow = 0.0f;
+        b.wName[i] = uiNode(s, b.wCell[i], name, solidPaint(UiRole::Label, 0.92f, 0.93f, 0.95f, 0.0f, -1));
+        if (b.wName[i] != kUiNone) {
+            uiText(s, b.wName[i], "");
+            uiTextStyle(s, b.wName[i], 1, 1, 1, 0, 0, 1.0f);
+        }
+        showNode(s, b.wCell[i], false);
     }
-    b.wStatus = uiNode(s, s.fileFrame, rowBox(22.0f), solidPaint(UiRole::Label, 0.78f, 0.82f, 0.88f, 0.0f, -1));
+    UiFlex statusRow = rowBox(28.0f);
+    statusRow.padR = 12.0f;
+    const uint16_t statusHost = uiNode(s, s.fileFrame, statusRow, solidPaint(UiRole::Hidden, 0, 0, 0, 0, -1));
+    UiFlex statusLabel{};
+    statusLabel.grow = 1.0f;
+    statusLabel.shrink = 1.0f;
+    statusLabel.heightMode = static_cast<uint8_t>(UiSize::Px);
+    statusLabel.height = 22.0f;
+    b.wStatus = uiNode(s, statusHost, statusLabel, solidPaint(UiRole::Label, 0.78f, 0.82f, 0.88f, 0.0f, -1));
     if (b.wStatus != kUiNone) {
         uiText(s, b.wStatus, "");
+    }
+    UiFlex zoom{};
+    zoom.widthMode = static_cast<uint8_t>(UiSize::Px);
+    zoom.width = 110.0f;
+    zoom.heightMode = static_cast<uint8_t>(UiSize::Px);
+    zoom.height = 18.0f;
+    zoom.shrink = 0.0f;
+    zoom.grow = 0.0f;
+    b.wZoom = uiNode(s, statusHost, zoom, solidPaint(UiRole::Slider, 0.18f, 0.20f, 0.26f, 8.0f, -1));
+    if (b.wZoom != kUiNone) {
+        s.ent[b.wZoom].set<UiRange>({b.look.icon, 52.0f, 148.0f});
     }
     UiFlex menu{};
     menu.position = 1;
@@ -1904,10 +2600,77 @@ void filesOnOpen(UiState& s, FileOpenFn fn, void* user) {
     b.user = user;
 }
 
+bool hasProjectFile(const fs::path& dir) {
+    std::error_code ec;
+    return fs::is_regular_file(dir / "project.bhproject", ec);
+}
+
+void writeProjectFile(const fs::path& dir) {
+    const fs::path file = dir / "project.bhproject";
+    std::FILE* out = std::fopen(file.string().c_str(), "w");
+    if (out == nullptr) {
+        return;
+    }
+    const std::string name = dir.filename().string();
+    std::fprintf(out, "{\"name\":\"%s\",\"version\":1}\n", name.c_str());
+    std::fclose(out);
+}
+
+void filesNewProject(UiState& s, const char* path) {
+    if (path == nullptr || path[0] == '\0') {
+        return;
+    }
+    std::error_code ec;
+    fs::create_directories(fs::path(path), ec);
+    if (ec) {
+        setStatus(book(s), "cannot create project");
+        return;
+    }
+    const fs::path dir = fs::weakly_canonical(fs::path(path), ec);
+    if (ec) {
+        setStatus(book(s), "cannot create project");
+        return;
+    }
+    writeProjectFile(dir);
+    filesRoot(s, dir.string().c_str());
+    s.visualDirty = true;
+}
+
+void filesOpenProject(UiState& s, const char* path) {
+    if (path == nullptr || path[0] == '\0') {
+        return;
+    }
+    std::error_code ec;
+    fs::path dir(path);
+    if (fs::is_regular_file(dir, ec) && dir.filename() == "project.bhproject") {
+        dir = dir.parent_path();
+    }
+    dir = fs::weakly_canonical(dir, ec);
+    if (ec || !hasProjectFile(dir)) {
+        setStatus(book(s), "no project.bhproject");
+        s.visualDirty = true;
+        return;
+    }
+    filesRoot(s, dir.string().c_str());
+    s.visualDirty = true;
+}
+
+void filesIconSlots(UiState& s, uint8_t folderSlot, uint8_t fileSlot) {
+    gFolderSlot = folderSlot;
+    gFileSlot = fileSlot;
+    Browser& b = book(s);
+    b.folderSlot = folderSlot;
+    b.fileSlot = fileSlot;
+    s.visualDirty = true;
+}
+
 void filesRoot(UiState& s, const char* path) {
     Browser& b = book(s);
     if (path == nullptr || path[0] == '\0') {
         b.root[0] = '\0';
+        b.count = 0;
+        b.treeN = 0;
+        reload(b);
         return;
     }
     std::error_code ec;
@@ -2086,7 +2849,7 @@ bool filesHandle(UiState& s, const InputFrame& in) {
                     range->value = b.look.icon;
                 }
             }
-        } else {
+        } else if (!cellsMounted(s, b)) {
             b.scroll -= static_cast<int>(in.wheel) * (lay.cols > 0 ? lay.cols : 1);
             if (b.scroll < 0) {
                 b.scroll = 0;
@@ -2109,7 +2872,7 @@ bool filesHandle(UiState& s, const InputFrame& in) {
         s.visualDirty = true;
         return false;
     }
-    if (!press && down && s.capture == s.fileView) {
+    if (!press && down && (s.capture == s.fileView || b.banding != 0)) {
         if (b.zooming != 0) {
             applyZoom(b, lay, x);
             writeZoom(s, b);
@@ -2226,6 +2989,97 @@ bool filesHandle(UiState& s, const InputFrame& in) {
     if (!press) {
         return false;
     }
+    auto onWidget = [&](uint16_t id) {
+        return id != kUiNone && id < s.count && s.yoga[id] != nullptr && YGNodeStyleGetDisplay(s.yoga[id]) != YGDisplayNone
+            && x >= s.box[id].x && y >= s.box[id].y && x < s.box[id].x + s.box[id].w && y < s.box[id].y + s.box[id].h;
+    };
+    auto onThumb = [&](uint16_t scroll) {
+        if (scroll == kUiNone || scroll >= s.count) {
+            return false;
+        }
+        const UiBox& bar = s.box[scroll];
+        return bar.w > 12.0f && x >= bar.x + bar.w - 10.0f && x < bar.x + bar.w && y >= bar.y && y < bar.y + bar.h;
+    };
+    if (b.menu != 0) {
+        for (int i = 0; i < lay.menuN; ++i) {
+            if (inside(lay.menu[i], x, y)) {
+                b.focus = 1;
+                menuAct(s, b, i);
+                return true;
+            }
+        }
+        b.menu = 0;
+        b.menuKind = 0;
+        s.visualDirty = true;
+    }
+    if (press) {
+        int cell = -1;
+        if (s.hovered != kUiNone && s.hovered < s.count) {
+            for (uint16_t p = s.hovered; p != kUiNone && p < s.count && cell < 0; p = s.parentOf[p]) {
+                for (int i = 0; i < 18; ++i) {
+                    if (p == b.wCell[i] && b.cellItem[i] >= 0) {
+                        cell = b.cellItem[i];
+                        break;
+                    }
+                }
+            }
+        }
+        if (cell >= 0) {
+            const bool again = b.lastClick == cell && b.clickAt >= 0.0f && (s.time - b.clickAt) < 0.30f;
+            if (again || in.clicks >= 2) {
+                b.lastClick = -1;
+                b.clickAt = -1.0f;
+                openItem(s, b, cell);
+            } else if (in.shift != 0) {
+                const int a = b.anchor < cell ? b.anchor : cell;
+                const int c = b.anchor < cell ? cell : b.anchor;
+                for (int i = 0; i < b.count; ++i) {
+                    b.items[i].selected = (i >= a && i <= c) ? 1 : 0;
+                }
+                b.lastClick = cell;
+                b.clickAt = s.time;
+            } else if (in.ctrl != 0) {
+                b.items[cell].selected = b.items[cell].selected != 0 ? 0 : 1;
+                b.anchor = cell;
+                b.lastClick = cell;
+                b.clickAt = s.time;
+            } else {
+                selectOnly(b, cell);
+                b.lastClick = cell;
+                b.clickAt = s.time;
+                b.drag = cell;
+                b.dragging = 0;
+            }
+            b.focus = 1;
+            s.visualDirty = true;
+            return true;
+        }
+    }
+    bool childHit = onThumb(s.fileView) || onThumb(b.wTreeScroll);
+    for (int i = 0; i < 16 && !childHit; ++i) {
+        childHit = onWidget(b.wTree[i]) || onWidget(b.wTreeMark[i]);
+    }
+    for (int i = 0; i < 8 && !childHit; ++i) {
+        childHit = onWidget(b.wFav[i]);
+    }
+    if (childHit) {
+        b.focus = 1;
+        return false;
+    }
+    if (s.hovered != kUiNone && s.hovered < s.count) {
+        const UiPaint* hitPaint = s.ent[s.hovered].try_get<UiPaint>();
+        const auto hitRole = hitPaint != nullptr ? static_cast<UiRole>(hitPaint->role) : UiRole::Hidden;
+        const bool widget = hitRole == UiRole::Button || hitRole == UiRole::Slider || hitRole == UiRole::Check
+            || hitRole == UiRole::Field;
+        if (widget && hitPaint->tag != -5) {
+            for (uint16_t p = s.hovered; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+                if (p == s.fileFrame || p == s.fileView) {
+                    b.focus = 1;
+                    return false;
+                }
+            }
+        }
+    }
     if (b.menu != 0) {
         for (int i = 0; i < lay.menuN; ++i) {
             if (inside(lay.menu[i], x, y)) {
@@ -2286,36 +3140,7 @@ bool filesHandle(UiState& s, const InputFrame& in) {
         if (!inside(lay.tools[i], x, y)) {
             continue;
         }
-        if (i == 0 && b.histAt > 0) {
-            --b.histAt;
-            if (underRoot(b, b.hist[b.histAt])) {
-                copyCap(b.cwd, 512, b.hist[b.histAt]);
-                reload(b);
-            }
-        } else if (i == 1 && b.histAt + 1 < b.histN) {
-            ++b.histAt;
-            if (underRoot(b, b.hist[b.histAt])) {
-                copyCap(b.cwd, 512, b.hist[b.histAt]);
-                reload(b);
-            }
-        } else if (i == 2) {
-            char parent[512]{};
-            parentOf(b.cwd, parent, 512);
-            if (sameText(parent, b.cwd) || sameText(b.cwd, b.root)) {
-                setStatus(b, "root");
-            } else {
-                go(b, parent);
-            }
-        } else if (i == 3) {
-            newFolder(s, b);
-        } else if (i == 4) {
-            b.look.icon = b.look.icon < 64.0f ? 88.0f : 56.0f;
-        } else if (i == 5) {
-            b.look.showHidden = b.look.showHidden != 0 ? 0 : 1;
-            reload(b);
-        } else if (i == 6) {
-            reload(b);
-        }
+        toolAct(s, b, i);
         if (b.look.icon < 52.0f) {
             b.look.icon = 52.0f;
         }
@@ -2380,12 +3205,14 @@ bool filesHandle(UiState& s, const InputFrame& in) {
         }
     }
     if (cell >= 0) {
-        if (in.clicks >= 2 && b.lastClick == cell) {
+        if (b.lastClick == cell && b.clickAt >= 0.0f && (s.time - b.clickAt) < 0.30f) {
             b.lastClick = -1;
+            b.clickAt = -1.0f;
             openItem(s, b, cell);
             return true;
         }
         b.lastClick = cell;
+        b.clickAt = s.time;
         if (in.shift != 0) {
             const int a = b.anchor < cell ? b.anchor : cell;
             const int c = b.anchor < cell ? cell : b.anchor;
@@ -2403,8 +3230,10 @@ bool filesHandle(UiState& s, const InputFrame& in) {
         s.visualDirty = true;
         return true;
     }
-    if (inside(lay.grid, x, y)) {
+    if (inside(lay.grid, x, y) || (s.fileView < s.count && x >= s.box[s.fileView].x && y >= s.box[s.fileView].y
+            && x < s.box[s.fileView].x + s.box[s.fileView].w && y < s.box[s.fileView].y + s.box[s.fileView].h && cell < 0)) {
         b.banding = 1;
+        s.capture = s.fileView;
         b.bandX0 = x;
         b.bandY0 = y;
         b.dragX = x;
@@ -2494,7 +3323,7 @@ uint32_t filesEmit(UiState& s, UiPrimitive* dst, uint32_t n, uint32_t cap) {
     }
     if (lay.side.w > 1.0f) {
         n = boxRect(dst, n, cap, lay.side, b.look.side[0], b.look.side[1], b.look.side[2], 1.0f, 6.0f, nullptr);
-        Zone gutter{lay.split.x + 3.0f, lay.split.y + 8.0f, 2.0f, lay.split.h - 16.0f};
+        Zone gutter{lay.split.x, lay.split.y, 6.0f, lay.split.h};
         n = boxRect(dst, n, cap, gutter, 0.28f, 0.32f, 0.38f, 1.0f, 1.0f, nullptr);
         const char* root = b.root[0] != '\0' ? b.root : b.cwd;
         for (int i = 0; i < lay.sideN; ++i) {
@@ -2581,32 +3410,12 @@ uint32_t filesEmit(UiState& s, UiPrimitive* dst, uint32_t n, uint32_t cap) {
     }
     }
     char foot[180]{};
-    const int picked = selectedCount(b);
     if (b.confirm != 0 && b.status[0] != '\0') {
         copyCap(foot, 180, b.status);
-    } else if (b.hotItem >= 0 && b.hotItem < b.count) {
-        describeItem(b.items[b.hotItem], foot, 180);
-    } else if (picked == 1) {
-        for (int i = 0; i < b.count; ++i) {
-            if (b.items[i].selected != 0) {
-                describeItem(b.items[i], foot, 180);
-                break;
-            }
-        }
-    } else if (picked > 1) {
-        uint64_t bytes = 0;
-        for (int i = 0; i < b.count; ++i) {
-            if (b.items[i].selected != 0 && b.items[i].isDir == 0) {
-                bytes += b.items[i].bytes;
-            }
-        }
-        char size[32]{};
-        sizeText(bytes, size, 32);
-        std::snprintf(foot, sizeof(foot), "%d selected (%s)", picked, size);
-    } else if (b.status[0] != '\0') {
+    } else if (b.status[0] != '\0' && b.root[0] == '\0') {
         copyCap(foot, 180, b.status);
     } else {
-        std::snprintf(foot, sizeof(foot), "%d items", b.count);
+        formatFoot(b, foot, 180);
     }
     if (b.wStatus == kUiNone) {
         n = label(s, dst, n, cap, foot, lay.foot, 0.78f, 0.82f, 0.88f, false);
@@ -2625,7 +3434,7 @@ uint32_t filesGesture(UiState& s, const Browser& b, const Lay& lay, UiPrimitive*
     if (b.menu != 0) {
         for (int i = 0; i < lay.menuN; ++i) {
             n = boxRect(dst, n, cap, lay.menu[i], 0.12f, 0.13f, 0.16f, 0.98f, i == 0 ? 4.0f : 0.0f, nullptr);
-            n = label(s, dst, n, cap, menuName(i), lay.menu[i], 0.93f, 0.94f, 0.96f, false, false);
+            n = label(s, dst, n, cap, menuName(b.menuKind, i), lay.menu[i], 0.93f, 0.94f, 0.96f, false, false);
         }
     }
     if (b.banding != 0) {

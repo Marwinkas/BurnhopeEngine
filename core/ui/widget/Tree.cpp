@@ -264,6 +264,12 @@ uint16_t hitTest(const UiState& s, float x, float y) {
             if (hidden) {
                 continue;
             }
+            if (p->tag == -5) {
+                const UiBox grip = splitGrip(s, id);
+                if (!hitBox(grip, x, y)) {
+                    continue;
+                }
+            }
             if (hitBox(s.box[id], x, y)) {
                 const auto hitRole = static_cast<UiRole>(p->role);
                 const bool control = hitRole == UiRole::Button || hitRole == UiRole::Slider || hitRole == UiRole::Check

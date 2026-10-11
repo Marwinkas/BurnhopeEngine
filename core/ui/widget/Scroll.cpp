@@ -7,18 +7,44 @@
 namespace burnhope {
 
 float scrollContentH(const UiState& s, uint16_t inner) {
-    float bottom = s.box[inner].y + s.box[inner].h;
+    float sum = 0.0f;
+    int n = 0;
     for (uint16_t id = 0; id < s.count; ++id) {
         if (s.parentOf[id] != inner) {
             continue;
         }
-        const float childBottom = s.box[id].y + s.box[id].h;
-        if (childBottom > bottom) {
-            bottom = childBottom;
+        if (s.yoga[id] != nullptr && YGNodeStyleGetDisplay(s.yoga[id]) == YGDisplayNone) {
+            continue;
+        }
+        float h = 0.0f;
+        if (const UiFlex* flex = s.ent[id].try_get<UiFlex>()) {
+            if (flex->heightMode == static_cast<uint8_t>(UiSize::Px) && flex->height > 1.0f) {
+                h = flex->height;
+            }
+        }
+        if (h < 1.0f) {
+            h = s.box[id].h;
+        }
+        if (h > 0.0f) {
+            sum += h;
+            ++n;
         }
     }
-    const float h = bottom - s.box[inner].y;
-    return h > 0.0f ? h : 0.0f;
+    float gap = 0.0f;
+    float pad = 0.0f;
+    if (const UiFlex* host = s.ent[inner].try_get<UiFlex>()) {
+        gap = host->gap > 0.0f ? host->gap : 0.0f;
+        pad = host->pad > 0.0f ? host->pad : 0.0f;
+    }
+    if (n > 1) {
+        sum += gap * static_cast<float>(n - 1);
+    }
+    sum += pad * 2.0f;
+    const float boxH = s.box[inner].h;
+    if (boxH > sum) {
+        sum = boxH;
+    }
+    return sum > 0.0f ? sum : 0.0f;
 }
 
 void scrollBy(UiState& s, uint16_t id, float wheel) {

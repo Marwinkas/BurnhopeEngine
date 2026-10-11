@@ -351,7 +351,7 @@ Panel rowSlide(Panel panel, const char* text, const char* name, float value, flo
 }
 
 void sceneHud(Canvas& canvas, void* user) {
-    if (!canvasUseFont(canvas, 30.0f) || canvas.state == nullptr) {
+    if (!canvasUseFont(canvas, 20.0f) || canvas.state == nullptr) {
         return;
     }
     canvasSetLook(canvas, uiLookInk());
@@ -439,6 +439,34 @@ void sceneHud(Canvas& canvas, void* user) {
     barFlex.pad = 12.0f;
     barFlex.gap = 8.0f;
     Panel top = root.child(barFlex, dockPaint());
+    Panel fileBtn = top.button("File", -1, look.button[0], look.button[1], look.button[2], -7);
+    canvasSetHeight(canvas, fileBtn.id, 28.0f);
+    uint16_t fileMenu = canvasMakeMenu(canvas);
+    canvasBindContext(canvas, fileBtn.id, fileMenu);
+    auto fileAct = [](void* user) {
+        auto* hit = static_cast<int*>(user);
+        if (hit == nullptr || gTool.canvas == nullptr || gTool.canvas->state == nullptr) {
+            return;
+        }
+        char path[512]{};
+        const char* home = std::getenv("HOME");
+        std::snprintf(path, sizeof(path), "%s/BurnhopeProjects/Untitled", home != nullptr ? home : ".");
+        if (*hit == 0) {
+            filesNewProject(*gTool.canvas->state, path);
+        } else if (*hit == 1) {
+            filesOpenProject(*gTool.canvas->state, path);
+        } else if (*hit == 3) {
+            std::exit(0);
+        }
+    };
+    static int fileNew = 0;
+    static int fileOpen = 1;
+    static int fileSave = 2;
+    static int fileExit = 3;
+    (void)canvasAddCommandTo(canvas, fileMenu, "New Project...", fileAct, &fileNew);
+    (void)canvasAddCommandTo(canvas, fileMenu, "Open Project...", fileAct, &fileOpen);
+    (void)canvasAddCommandTo(canvas, fileMenu, "Save Scene", fileAct, &fileSave);
+    (void)canvasAddCommandTo(canvas, fileMenu, "Exit", fileAct, &fileExit);
     Panel viewBtn = top.button("Lit", -7, look.button[0], look.button[1], look.button[2], 0);
     canvasSetHeight(canvas, viewBtn.id, 28.0f);
     uint16_t viewMenu = canvasMakeMenu(canvas);
@@ -572,7 +600,7 @@ void sceneHud(Canvas& canvas, void* user) {
     fileFlex.direction = 0;
     fileFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
     fileFlex.height = 200.0f;
-    fileFlex.minH = 48.0f;
+    fileFlex.minH = 120.0f;
     fileFlex.shrink = 1.0f;
     Panel files = root.child(fileFlex, dockPaint());
     if (canvas.state->files != nullptr) {

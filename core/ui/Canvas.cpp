@@ -1,4 +1,5 @@
 #include "ui/Canvas.hpp"
+#include "files/Browser.hpp"
 #include "platform/Trace.hpp"
 
 #include <cmath>
@@ -10,6 +11,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -327,7 +329,7 @@ uint32_t emitGlyphs(
         fit = box.h / em;
     }
     const float used = scale * fit;
-    const float baseline = box.y + (box.h - em * fit) * 0.5f + em * fit * 0.80f;
+    const float baseline = box.y + (box.h - em * fit) * 0.5f + em * fit * 0.76f;
     float textW = uiMeasure(ui, text, len, len) * fit;
     float pen = box.x;
     if (center) {
@@ -482,7 +484,10 @@ uint32_t emitPhoto(
     const UiBox& box,
     const UiImage& image,
     const UiBox* clip,
-    float blur) {
+    float blur,
+    float tintR = 1.0f,
+    float tintG = 1.0f,
+    float tintB = 1.0f) {
     if (n >= cap || box.w < 1.0f || box.h < 1.0f) {
         return n;
     }
@@ -495,9 +500,9 @@ uint32_t emitPhoto(
     p.posY = box.y;
     p.sizeX = box.w;
     p.sizeY = box.h;
-    p.color[0] = 1.0f;
-    p.color[1] = 1.0f;
-    p.color[2] = 1.0f;
+    p.color[0] = tintR;
+    p.color[1] = tintG;
+    p.color[2] = tintB;
     p.color[3] = 1.0f;
     p.texId = image.slot;
     p.flags = kUiFlagPhoto;
@@ -844,12 +849,18 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
         if (s.plug.draw != nullptr && s.plug.draw(s, id, dst, n, cap)) {
             continue;
         }
-        if (paint.tag == -90) {
+        if (paint.tag == -90 || paint.tag == -89) {
             const UiImage* image = s.ent[id].try_get<UiImage>();
             if (image != nullptr) {
-                n = emitPhoto(dst, n, cap, box, *image, clip, paint.blur);
+                const float tr = paint.tag == -89 ? r : 1.0f;
+                const float tg = paint.tag == -89 ? g : 1.0f;
+                const float tb = paint.tag == -89 ? b : 1.0f;
+                n = emitPhoto(dst, n, cap, box, *image, clip, paint.blur, tr, tg, tb);
+                continue;
             }
-            continue;
+            if (paint.tag == -90) {
+                continue;
+            }
         }
         if (paint.tag == -70) {
             n = emitRamp(dst, n, cap, box.x, box.y, box.w, box.h, 1.0f, 1.0f, 1.0f, 0, kUiFlagWheel);
@@ -946,11 +957,8 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                 const float cr = bar ? s.look.accent[0][0] : s.look.muted[0];
                 const float cg = bar ? s.look.accent[0][1] : s.look.muted[1];
                 const float cb = bar ? s.look.accent[0][2] : s.look.muted[2];
-                if (splitVertical(s, id)) {
-                    n = emitRect(dst, n, cap, box.x, box.y + (box.h - 2.0f) * 0.5f, box.w, 2.0f, cr, cg, cb, 0.95f, 0.0f, clip);
-                } else {
-                    n = emitRect(dst, n, cap, box.x + (box.w - 2.0f) * 0.5f, box.y, 2.0f, box.h, cr, cg, cb, 0.95f, 0.0f, clip);
-                }
+                const UiBox grip = splitGrip(s, id);
+                n = emitRect(dst, n, cap, grip.x, grip.y, grip.w, grip.h, cr, cg, cb, 0.95f, 0.0f, clip);
                 continue;
             } else if (hot && role == UiRole::Button && a < 0.05f) {
                 br = 0.36f;
@@ -1235,6 +1243,8 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
     return n;
 }
 
+bool canvasLoadImage(Canvas& c, uint8_t slot, const char* path);
+
 bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
     canvasDestroy(c, d);
     c.state = new UiState();
@@ -1255,7 +1265,7 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
     }
     c.device = &d;
     c.heaps = &heaps;
-    if (!canvasUseFont(c, 32.0f)) {
+    if (!canvasUseFont(c, 20.0f)) {
         spdlog::error("default sdf font failed");
         canvasDestroy(c, d);
         return false;
@@ -1367,6 +1377,26 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
             spdlog::warn("ui mesh shader failed, falling back to vertex-pull path");
             c.ms = {};
         }
+    }
+    auto loadIcon = [&](uint8_t slot, const char* const* paths, int n) {
+        for (int i = 0; i < n; ++i) {
+            std::FILE* probe = std::fopen(paths[i], "rb");
+            if (probe == nullptr) {
+                continue;
+            }
+            std::fclose(probe);
+            if (canvasLoadImage(c, slot, paths[i])) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const char* folderPaths[] = {"assets/icons/folder.png", "../assets/icons/folder.png"};
+    const char* filePaths[] = {"assets/icons/file.png", "../assets/icons/file.png"};
+    const bool folderOk = loadIcon(6, folderPaths, 2);
+    const bool fileOk = loadIcon(7, filePaths, 2);
+    if (c.state != nullptr) {
+        filesIconSlots(*c.state, folderOk ? 6 : 255, fileOk ? 7 : 255);
     }
     return true;
 }
@@ -1880,6 +1910,8 @@ bool canvasSetFont(Canvas& c, const char* path, float pixelSize) {
 
 bool canvasUseFont(Canvas& c, float pixelSize) {
     const char* faces[] = {
+        "assets/fonts/Inter-Regular.ttf",
+        "../assets/fonts/Inter-Regular.ttf",
         "/usr/share/fonts/TTF/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/dejavu/DejaVuSans.ttf",

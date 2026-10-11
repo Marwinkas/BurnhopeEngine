@@ -121,6 +121,30 @@ uint8_t splitCursor(const UiState& s, uint16_t split) {
     return splitVertical(s, split) ? 2 : 1;
 }
 
+UiBox splitGrip(const UiState& s, uint16_t split) {
+    UiBox grip{};
+    if (split >= s.count) {
+        return grip;
+    }
+    const UiBox& box = s.box[split];
+    if (splitVertical(s, split)) {
+        grip.w = box.w;
+        grip.h = box.h < 8.0f ? box.h : 8.0f;
+        if (grip.h < 6.0f && box.h >= 6.0f) {
+            grip.h = 6.0f;
+        }
+        grip.x = box.x;
+        grip.y = box.h > grip.h + 0.5f ? box.y + (box.h - grip.h) * 0.5f : box.y;
+        return grip;
+    }
+    grip.w = box.w < 6.0f ? box.w : 6.0f;
+    grip.h = box.h;
+    const bool leading = childIndex(s, split) <= 0;
+    grip.x = leading || box.w <= 6.0f ? box.x : box.x + box.w - grip.w;
+    grip.y = box.y;
+    return grip;
+}
+
 bool splitAlive(const UiState& s, uint16_t split) {
     const int index = childIndex(s, split);
     if (index < 0) {
