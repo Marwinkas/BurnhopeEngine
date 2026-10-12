@@ -8,10 +8,10 @@
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
+#include <vector>
 
 namespace burnhope {
 
-constexpr uint8_t kSceneActorCap = 16;
 constexpr uint8_t kSceneActorNone = 0xff;
 
 enum class SceneActorKind : uint8_t { Sun = 1, Post = 2 };
@@ -64,7 +64,7 @@ struct ActorView {
 struct SceneActors {
     flecs::world world{};
     flecs::query<Xform, ActorKind, ActorName> list;
-    flecs::entity ent[kSceneActorCap]{};
+    std::vector<flecs::entity> ent;
     uint8_t count = 0;
     uint8_t selected = kSceneActorNone;
     uint8_t gizmo = 0;
@@ -159,61 +159,66 @@ inline void actorCopyName(char* dst, const char* src) {
     dst[n] = '\0';
 }
 
-inline void actorLoad(const SceneActors& world, ActorView* out) {
-    for (uint8_t i = 0; i < kSceneActorCap; ++i) {
-        out[i].used = 0;
+inline const Xform* actorXformOf(const SceneActors& world, uint8_t index) {
+    if (index >= world.count || !world.ent[index].is_alive() || !world.ent[index].has<Xform>()) {
+        return nullptr;
     }
-    world.list.each([&](Xform& x, ActorKind& k, ActorName& n) {
-        if (k.slot >= kSceneActorCap) {
-            return;
-        }
-        out[k.slot].x = x;
-        out[k.slot].kind = k.v;
-        std::memcpy(out[k.slot].name, n.text, sizeof(out[k.slot].name));
-        out[k.slot].used = 1;
-    });
+    return &world.ent[index].get<Xform>();
+}
+
+inline Xform* actorXformMut(SceneActors& world, uint8_t index) {
+    if (index >= world.count || !world.ent[index].is_alive() || !world.ent[index].has<Xform>()) {
+        return nullptr;
+    }
+    return &world.ent[index].get_mut<Xform>();
+}
+
+inline uint8_t actorKindOf(const SceneActors& world, uint8_t index) {
+    if (index >= world.count || !world.ent[index].is_alive() || !world.ent[index].has<ActorKind>()) {
+        return 0;
+    }
+    return world.ent[index].get<ActorKind>().v;
+}
+
+inline const char* actorNameOf(const SceneActors& world, uint8_t index) {
+    if (index >= world.count || !world.ent[index].is_alive() || !world.ent[index].has<ActorName>()) {
+        return "";
+    }
+    return world.ent[index].get<ActorName>().text;
 }
 
 inline void actorStoreXform(SceneActors& world, uint8_t slot, const Xform& src) {
-    world.list.each([&](Xform& x, ActorKind& k, ActorName&) {
-        if (k.slot == slot) {
-            x = src;
-        }
-    });
+    if (Xform* x = actorXformMut(world, slot)) {
+        *x = src;
+    }
 }
 
 inline Xform sceneActorXform(const SceneActors& world, uint8_t index) {
-    ActorView row[kSceneActorCap];
-    actorLoad(world, row);
-    if (index < kSceneActorCap && row[index].used != 0) {
-        return row[index].x;
-    }
-    return {};
+    const Xform* x = actorXformOf(world, index);
+    return x != nullptr ? *x : Xform{};
 }
 
 inline void sceneActorWriteXform(SceneActors& world, uint8_t index, const Xform& src) {
-    if (index < world.count) {
-        actorStoreXform(world, index, src);
-    }
+    actorStoreXform(world, index, src);
 }
 
 inline void sceneActorsClear(SceneActors& world) {
-    for (uint8_t i = 0; i < world.count; ++i) {
-        if (world.ent[i].is_alive()) {
-            world.ent[i].destruct();
+    for (flecs::entity& ent : world.ent) {
+        if (ent.is_alive()) {
+            ent.destruct();
         }
-        world.ent[i] = {};
     }
+    world.ent.clear();
     world.count = 0;
     world.selected = kSceneActorNone;
     world.drag = kSceneActorNone;
 }
 
 inline uint8_t sceneActorAdd(SceneActors& world, SceneActorKind kind, const float pos[3], const char* name) {
-    if (world.count >= kSceneActorCap) {
+    if (world.ent.size() >= static_cast<size_t>(kSceneActorNone)) {
         return kSceneActorNone;
     }
-    const uint8_t index = world.count;
+    const uint8_t index = static_cast<uint8_t>(world.ent.size());
     Xform xform{};
     xform.scale[0] = xform.scale[1] = xform.scale[2] = 1.0f;
     if (pos != nullptr) {
@@ -235,8 +240,8 @@ inline uint8_t sceneActorAdd(SceneActors& world, SceneActorKind kind, const floa
     } else {
         ent.add<PostObj>();
     }
-    world.ent[index] = ent;
-    world.count = static_cast<uint8_t>(index + 1);
+    world.ent.push_back(ent);
+    world.count = static_cast<uint8_t>(world.ent.size());
     world.selected = index;
     return index;
 }
@@ -245,22 +250,22 @@ inline uint8_t sceneActorDuplicate(SceneActors& world) {
     if (world.selected >= world.count) {
         return kSceneActorNone;
     }
-    ActorView row[kSceneActorCap];
-    actorLoad(world, row);
-    if (row[world.selected].used == 0) {
+    const Xform* srcPtr = actorXformOf(world, world.selected);
+    if (srcPtr == nullptr) {
         return kSceneActorNone;
     }
-    const Xform src = row[world.selected].x;
+    const Xform src = *srcPtr;
+    const uint8_t kind = actorKindOf(world, world.selected);
     float pos[3] = {src.pos[0] + 2.0f, src.pos[1], src.pos[2]};
     char name[24];
-    actorCopyName(name, row[world.selected].name);
+    actorCopyName(name, actorNameOf(world, world.selected));
     const uint8_t n = static_cast<uint8_t>(std::strlen(name));
     if (n + 2 < 23) {
         name[n] = ' ';
         name[n + 1] = static_cast<char>('2' + (world.count > 9 ? 9 : world.count));
         name[n + 2] = '\0';
     }
-    const uint8_t index = sceneActorAdd(world, static_cast<SceneActorKind>(row[world.selected].kind), pos, name);
+    const uint8_t index = sceneActorAdd(world, static_cast<SceneActorKind>(kind), pos, name);
     if (index == kSceneActorNone) {
         return index;
     }
@@ -512,8 +517,6 @@ inline float actorRingAngle(const SceneActors& world, float px, float py, const 
 }
 
 inline void sceneActorFillGpu(const SceneActors& world, GizmoGpu& gpu) {
-    ActorView row[kSceneActorCap];
-    actorLoad(world, row);
     std::memcpy(gpu.viewProj, world.viewProj.m, sizeof(gpu.viewProj));
     std::memcpy(gpu.cam, world.eye, sizeof(float) * 3);
     gpu.cam[3] = 1.0f;
@@ -522,21 +525,23 @@ inline void sceneActorFillGpu(const SceneActors& world, GizmoGpu& gpu) {
     gpu.misc[2] = world.drag < 3 ? static_cast<float>(world.drag) : 3.0f;
     uint8_t markers = 0;
     for (uint8_t i = 0; i < world.count && markers < 8; ++i) {
-        if (row[i].used == 0) {
+        const Xform* x = actorXformOf(world, i);
+        if (x == nullptr) {
             continue;
         }
-        gpu.marker[markers][0] = row[i].x.pos[0];
-        gpu.marker[markers][1] = row[i].x.pos[1];
-        gpu.marker[markers][2] = row[i].x.pos[2];
-        gpu.marker[markers][3] = static_cast<float>(row[i].kind);
+        gpu.marker[markers][0] = x->pos[0];
+        gpu.marker[markers][1] = x->pos[1];
+        gpu.marker[markers][2] = x->pos[2];
+        gpu.marker[markers][3] = static_cast<float>(actorKindOf(world, i));
         markers += 1;
     }
     gpu.misc[3] = static_cast<float>(markers);
-    if (world.selected >= world.count || row[world.selected].used == 0) {
+    const Xform* selected = actorXformOf(world, world.selected);
+    if (selected == nullptr) {
         gpu.misc[0] = 1.0f;
         return;
     }
-    const Xform& xform = row[world.selected].x;
+    const Xform& xform = *selected;
     gpu.origin[0] = xform.pos[0];
     gpu.origin[1] = xform.pos[1];
     gpu.origin[2] = xform.pos[2];
@@ -556,10 +561,9 @@ inline uint8_t sceneActorHit(const SceneActors& world, float px, float py, uint8
     if (world.camReady == 0 || world.count == 0) {
         return kSceneActorNone;
     }
-    ActorView row[kSceneActorCap];
-    actorLoad(world, row);
-    if (world.selected < world.count && row[world.selected].used != 0) {
-        const Xform& xform = row[world.selected].x;
+    const Xform* selectedX = actorXformOf(world, world.selected);
+    if (selectedX != nullptr) {
+        const Xform& xform = *selectedX;
         float basis[3][3];
         actorBasis(xform.euler, basis[0], basis[1], basis[2]);
         const float span = actorSpan(world, xform.pos);
@@ -653,20 +657,21 @@ inline uint8_t sceneActorHit(const SceneActors& world, float px, float py, uint8
     uint8_t found = kSceneActorNone;
     float best = 1.0e9f;
     for (uint8_t i = 0; i < world.count; ++i) {
-        if (row[i].used == 0) {
+        const Xform* actor = actorXformOf(world, i);
+        if (actor == nullptr) {
             continue;
         }
-        const float span = actorSpan(world, row[i].x.pos);
+        const float span = actorSpan(world, actor->pos);
         float sx = 0.0f;
         float sy = 0.0f;
         float tx = 0.0f;
         float ty = 0.0f;
         const float arm[3] = {
-            row[i].x.pos[0] + world.right[0] * span * 0.32f,
-            row[i].x.pos[1] + world.right[1] * span * 0.32f,
-            row[i].x.pos[2] + world.right[2] * span * 0.32f,
+            actor->pos[0] + world.right[0] * span * 0.32f,
+            actor->pos[1] + world.right[1] * span * 0.32f,
+            actor->pos[2] + world.right[2] * span * 0.32f,
         };
-        if (!actorProject(world, row[i].x.pos, sx, sy) || !actorProject(world, arm, tx, ty)) {
+        if (!actorProject(world, actor->pos, sx, sy) || !actorProject(world, arm, tx, ty)) {
             continue;
         }
         float radius = std::sqrt((tx - sx) * (tx - sx) + (ty - sy) * (ty - sy));
@@ -692,14 +697,13 @@ inline void sceneActorPointer(SceneActors& world, float x, float y, uint8_t down
     if (released != 0) {
         world.drag = kSceneActorNone;
     }
-    ActorView row[kSceneActorCap];
-    actorLoad(world, row);
     if (pressed != 0) {
         uint8_t axis = kSceneActorNone;
         const uint8_t hit = sceneActorHit(world, x, y, axis);
-        if (axis < 3 && hit == world.selected && world.selected < world.count && row[world.selected].used != 0) {
+        const Xform* pressedX = actorXformOf(world, world.selected);
+        if (axis < 3 && hit == world.selected && pressedX != nullptr) {
             world.drag = axis;
-            const Xform& xform = row[world.selected].x;
+            const Xform& xform = *pressedX;
             world.grabPos[0] = xform.pos[0];
             world.grabPos[1] = xform.pos[1];
             world.grabPos[2] = xform.pos[2];
@@ -726,10 +730,11 @@ inline void sceneActorPointer(SceneActors& world, float x, float y, uint8_t down
             world.drag = kSceneActorNone;
         }
     }
-    if (world.drag > 2 || world.selected >= world.count || down == 0 || row[world.selected].used == 0) {
+    Xform* live = actorXformMut(world, world.selected);
+    if (world.drag > 2 || live == nullptr || down == 0) {
         return;
     }
-    Xform& xform = row[world.selected].x;
+    Xform& xform = *live;
     float basis[3][3];
     actorBasis(world.grabEuler, basis[0], basis[1], basis[2]);
     const uint8_t axis = world.drag;
@@ -744,7 +749,6 @@ inline void sceneActorPointer(SceneActors& world, float x, float y, uint8_t down
             delta += 360.0f;
         }
         actorSpin(world.grabEuler, axis, delta, xform.euler);
-        actorStoreXform(world, world.selected, xform);
         return;
     }
     float along = 0.0f;
@@ -756,14 +760,12 @@ inline void sceneActorPointer(SceneActors& world, float x, float y, uint8_t down
     if (world.gizmo == 2) {
         const float next = world.grabScale[axis] * (along / world.grabAlong);
         xform.scale[axis] = next < 0.05f ? 0.05f : next;
-        actorStoreXform(world, world.selected, xform);
         return;
     }
     const float delta = along - world.grabAlong;
     xform.pos[0] = world.grabPos[0] + basis[axis][0] * delta;
     xform.pos[1] = world.grabPos[1] + basis[axis][1] * delta;
     xform.pos[2] = world.grabPos[2] + basis[axis][2] * delta;
-    actorStoreXform(world, world.selected, xform);
 }
 
 } // namespace burnhope

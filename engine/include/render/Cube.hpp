@@ -9,10 +9,11 @@ namespace burnhope {
 struct DescriptorHeaps;
 
 struct CubePass {
-    ShaderExt mesh[6];
+    ShaderExt mesh;
     ShaderExt frag;
     ShaderExt fill;
     ShaderExt bake;
+    uint32_t listStride = 0;
 };
 
 [[nodiscard]] bool cubePassCreate(CubePass& p, Device& d, const DescriptorHeaps& heaps);

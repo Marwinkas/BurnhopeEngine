@@ -223,4 +223,144 @@ void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y) {
     }
 }
 
+namespace {
+
+void onMenuCommand(void* user, uint16_t, int16_t tag) {
+    auto& s = *static_cast<UiState*>(user);
+    if (tag >= 100) {
+        const uint8_t index = static_cast<uint8_t>(tag - 100);
+        if (index < s.cmdCount && s.cmds[index].fn != nullptr) {
+            s.cmds[index].fn(s.cmds[index].user);
+        }
+    }
+    if (uiMenuMetrics(s).opened != kUiNone) {
+        uiShow(s, uiMenuMetrics(s).opened, false);
+        uiMenuMetrics(s).opened = kUiNone;
+        s.menuOpen = false;
+    }
+    s.visualDirty = true;
+}
+
+} // namespace
+
+bool uiCommandAdd(UiState& s, const char* name, UiCommandFn fn, void* user) {
+    if (s.cmdCount >= kUiCmdCap || s.menu == kUiNone) {
+        return false;
+    }
+    UiCommand& cmd = s.cmds[s.cmdCount];
+    copyText(cmd.name, cmd.len, name);
+    cmd.fn = fn;
+    cmd.user = user;
+    const int16_t tag = static_cast<int16_t>(100 + s.cmdCount);
+    UiFlex itemF{};
+    itemF.heightMode = static_cast<uint8_t>(UiSize::Px);
+    itemF.height = uiMenuMetrics(s).itemH;
+    itemF.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    itemF.width = 100.0f;
+    itemF.shrink = 0.0f;
+    itemF.align = 1;
+    const uint16_t item = spawn(s, s.menu, itemF, paint(UiRole::Button, 0.18f, 0.19f, 0.24f, 4.0f, tag));
+    uiStamp(s, item, UiToken::Button);
+    UiText label{};
+    copyText(label.bytes, label.len, name);
+    s.ent[item].set<UiText>(label);
+    uiBind(s, item, onMenuCommand, &s);
+    ++s.cmdCount;
+    s.layoutDirty = true;
+    return item != kUiNone;
+}
+
+bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t hit, uint8_t phase, uint8_t& cursor) {
+    (void)cursor;
+    if (phase == kUiInEscape) {
+        if (uiMenuMetrics(s).opened != kUiNone) {
+            uiShow(s, uiMenuMetrics(s).opened, false);
+            uiMenuMetrics(s).opened = kUiNone;
+            s.menuOpen = false;
+            s.layoutDirty = true;
+        }
+        return false;
+    }
+    if (phase != kUiInMenu) {
+        return false;
+    }
+    const bool press = (in.pointer.pressed & kPointerLeft) != 0;
+    const bool right = (in.pointer.pressed & kPointerRight) != 0;
+    auto inMenu = [&](uint16_t id) {
+        for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+            if (p == uiMenuMetrics(s).opened) {
+                return true;
+            }
+        }
+        return false;
+    };
+    uint16_t contextMenu = s.menu;
+    for (uint16_t p = hit; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (s.contextOf[p] != kUiNone) {
+            contextMenu = s.contextOf[p];
+            break;
+        }
+    }
+    bool barOpen = false;
+    float menuX = in.pointer.x;
+    float menuY = in.pointer.y;
+    if (press && hit != kUiNone && hit < s.count) {
+        if (s.ent[hit].try_get<UiMenuBar>() != nullptr && s.contextOf[hit] != kUiNone) {
+            barOpen = true;
+            contextMenu = s.contextOf[hit];
+            menuX = s.box[hit].x;
+            menuY = s.box[hit].y + s.box[hit].h;
+        }
+    }
+    bool justOpened = false;
+    if (right && hit != kUiNone && hit < s.count) {
+        const UiPaint* node = s.ent[hit].try_get<UiPaint>();
+        if (node != nullptr && node->role == static_cast<uint8_t>(UiRole::Field) && s.fieldMenu != kUiNone) {
+            contextMenu = s.fieldMenu;
+            uiFocus(s, hit);
+            s.editField = hit;
+            s.visualDirty = true;
+        }
+    }
+    bool barOnly = false;
+    if (right && hit != kUiNone && hit < s.count) {
+        for (uint16_t p = hit; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+            if (s.ent[p].try_get<UiMenuBar>() != nullptr) {
+                barOnly = true;
+                break;
+            }
+        }
+    }
+    if (((right && !barOnly) || barOpen) && contextMenu != kUiNone) {
+        if (barOpen && s.menuOpen && uiMenuMetrics(s).opened == contextMenu) {
+            uiShow(s, uiMenuMetrics(s).opened, false);
+            uiMenuMetrics(s).opened = kUiNone;
+            s.menuOpen = false;
+            justOpened = true;
+        } else if (uiMenuMetrics(s).opened != kUiNone && uiMenuMetrics(s).opened != contextMenu) {
+            uiShow(s, uiMenuMetrics(s).opened, false);
+        }
+        if (!justOpened) {
+            justOpened = true;
+            uiMenuShowAt(s, contextMenu, menuX, menuY);
+        }
+    }
+    if (press && s.menuOpen && !justOpened && !inMenu(hit)) {
+        if (uiMenuMetrics(s).opened != kUiNone) {
+            uiShow(s, uiMenuMetrics(s).opened, false);
+        }
+        uiMenuMetrics(s).opened = kUiNone;
+        s.menuOpen = false;
+    }
+    return false;
+}
+
+bool uiCommandAddTo(UiState& s, uint16_t menu, const char* name, UiCommandFn fn, void* user) {
+    const uint16_t prev = s.menu;
+    s.menu = menu;
+    const bool ok = uiCommandAdd(s, name, fn, user);
+    s.menu = prev;
+    return ok;
+}
+
 } // namespace burnhope

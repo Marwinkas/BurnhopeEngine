@@ -1,103 +1,296 @@
-# BurnhopeEngine Rules & Architectural Manifesto
+# BurnhopeEngine Architectural Constitution
 
-Be uncompromising, thorough, and principled. Build robust, fault-tolerant engine systems from the ground up.
-NEVER write ad-hoc glue code, one-off workarounds, or fake stubs. NEVER hide architectural dirt under the carpet (e.g., removing a dirty header from `.hpp` only to sneak it into `.cpp`).
+Be uncompromising and thorough. Build fault-tolerant systems. Ship complete, compilable code.
+No ad-hoc glue, one-off workarounds, fake stubs, placeholders, `// TODO`, or `// ... rest unchanged ...`.
+No warning pragmas to hide a violation. No `const_cast` to break a const contract. No `reinterpret_cast` across non-trivial types. No `void*` adapter when a type is in the wrong layer: move the type down to the layer that may legally own it.
+A module is a black box: it owns its memory, lifecycle, and typed interface. Siblings do not mutate each other's internals, share ad-hoc mutable memory, or trigger hidden work in an unrelated subsystem. A failure stays inside that subsystem's recovery contract (`BH_ASSERT` in debug, typed `false` / error to the caller).
 
----
-
-## 0. THE UNBREAKABLE 4-LAYER MODULAR PYRAMID
-
-Every single file belongs to exactly ONE layer. Dependencies flow STRICTLY DOWNWARDS ($N \to <N$).
-A lower layer must NEVER `#include`, forward-declare, reference, or know about a higher layer. No circular dependencies, no upward leaks.
-┌────────────────────────────────────────────────────────────────────────┐
-│ LAYER 3: TOOLS & APPS (files/, editor/, scene/, tools/) │
-│ - Pure domain logic and declarative UI composition. Under 300 LOC. │
-│ - Strictly consumes Layer 2 widgets and domain models. Zero RHI/Yoga. │
-├────────────────────────────────────────────────────────────────────────┤
-│ LAYER 2: WIDGETS & CONTROLS (ui/widget/: Button, Field, Grid, Tree...) │
-│ - Universal, reusable UI components. Configurable purely via structs. │
-│ - Manipulates Flecs entities & Yoga styles. Zero Tool/Domain knowledge.│
-│ - NEVER writes raw vertex buffers (UiPrimitive*). Only sets components.│
-├────────────────────────────────────────────────────────────────────────┤
-│ LAYER 1: UI ENGINE CORE (ui/core/: State, LayoutBridge, Batch, Font) │
-│ - Agnostic framework infrastructure: Yoga bridge, SSBO batcher, input. │
-│ - UiState contains ONLY ECS world, node hierarchy, focus, theme tokens.│
-│ - ZERO knowledge of specific widgets (Tree, Grid, Menu) or tools. │
-├────────────────────────────────────────────────────────────────────────┤
-│ LAYER 0: VULKAN 1.4 RHI & PLATFORM (rhi/, platform/) │
-│ - Pure hardware execution: mesh shaders, SSBOs, memory barriers, GLFW. │
-│ - Consumes raw primitives & buffers. Zero knowledge of UI or ECS. │
-└────────────────────────────────────────────────────────────────────────┘
-code
-Code
----
-
-## 1. ANTI-LAZINESS & REFACTORING PROTOCOL (NO SHORTCUTS)
-- **NEVER DELETE FEATURES TO MAKE CODE SHORTER**: When refactoring, ALL functionality (context menus, inline F2 rename, rubberband selection, Ctrl/Shift modifiers, hierarchy chevrons, forward/back history) MUST be preserved by moving logic into proper Layer 2 widgets, NEVER by stripping code.
-- **NEVER FAKE WIDGETS WITH HARDCODED ARRAYS**: BANNED: `wTree[12]`, `wCell[18]`, `crumbs.seg[8]`, `pop.row[12]`. ALWAYS use dynamic virtual recycling (`UiVirtualPool`, `kUiPoolCap`).
-- **NEVER BIND CORE TO DEMO LOGIC**: BANNED: hardcoded strings (`"list_inner"`, `"status"`), hardcoded slots, or demo drag-reordering in `Input.cpp`, `Tree.cpp`, or `List.cpp`.
-- **NO PHANTOM LABELS**: Controls (Button, Check, Field) are single Flecs entities that own their `UiText` and `UiPaint`. NEVER spawn a child `Label` entity in `spawn()` and hack its bounding box via `placeChromeText` / `fieldPlaceText`.
-- **HEADER HYGIENE**: BANNED: monolithic mega-headers like `Detail.hpp` including all 16 widget headers. Every file includes ONLY the headers it directly consumes.
+This file is the single architectural law. When a bug is fixed, append one line: `NEVER [banned action] (causes [failure]); ALWAYS [alternative] [exact slots, bytes, alignment].` Do not restate a ban that already exists.
 
 ---
 
-## 2. Core Architecture, C++26 & Data-Oriented Design
-- **Language**: Strict C++26. Pure Data-Oriented Design (DOD). AVX2 desktop PC only (Linux & Windows x86_64). Zero support for mobile, web, or legacy OS.
-- **ECS (Flecs)**: Query archetype column pointers (`flecs::column<T>`). NEVER call `entity.get<T>()` / `try_get<T>()` in hot loops.
-- **COMPONENT OVER TAG**: NEVER use negative magic tags (`-5, -6, -7, -15, -90`) to identify widgets in `Input.cpp` or batching; ALWAYS use dedicated Flecs components (`UiSplitter`, `UiTitleBar`, `UiMenuBar`, `UiResizable`, `UiImage`).
-- **Hot-Path Allocations**: ZERO heap allocations in `Tick`, `Layout`, `Emit`, `Draw`. NO `malloc`, `new`, `std::string`, `push_back`, or `std::make_shared`. Use bump allocators, ring buffers, or `FrameArena`.
-- **POD Invariants**: All GPU and UI data must be trivially copyable POD types (`sizeof % 16 == 0`).
-- **Fault-Tolerance**: Bounds-checked arrays only. File parsers (JSON, Binary) must NEVER infinite-loop on syntax errors or mock fake fallback UI cards on read errors (`kFallback` is banned).
+## 1. Mission
+
+BurnhopeEngine is a from-scratch 3D engine and declarative GUI. Layer 3 must read like one line of Qt/Slate. The machine path is AAA: Vulkan 1.4, data-oriented layout, Flecs, C++26, AVX2.
+
+Desktop x86_64 only (Linux and Windows, AVX2). No mobile, WebAssembly-as-a-target, or legacy OS. (The in-engine `core/wasm/WasmHost` bytecode interpreter is engine code; it is not a Web target.)
+
+Axioms:
+
+1. **Zero hot-path allocation.** `Tick`, `Layout`, `Emit`, `Draw`, `Consume`, and `HitTest` do not call `malloc`, `free`, `new`, `delete`, `realloc`, `std::string`, `std::vector::push_back`, `std::map`, `std::unordered_map`, or `std::make_shared`. Per-frame memory comes from `core/memory/FrameArena.hpp` (reset in O(1)), a ring buffer, a fixed stack array, or `UiVirtualPool`.
+2. **DOD.** Hot data is trivially copyable POD, `sizeof % 16 == 0` or `sizeof % 64 == 0`, with `alignas(16)` / `alignas(64)` and `static_assert` on the GPU size. Prefer SoA and flat arrays. Trees and ASTs use `uint16_t` / `uint32_t` or `flecs::entity`, never `Node*`, `std::vector<Node*>`, or `std::unique_ptr<Node>`. Hot fields sit together; cold strings sit apart.
+3. **Zero-copy I/O.** Assets, SPIR-V, layouts, and textures load through `fileMapReadOnly` (`core/io/File.hpp`: `mmap` / `MapViewOfFile`). Numbers use `std::from_chars`. Formatting uses `core/Str.hpp`, `std::to_chars`, or a bounded `snprintf` on the stack. No `sscanf`, no locale CRT parsers, no `std::string` concatenation.
+4. **ECS composition.** A widget or actor is a `flecs::entity` (or a 16-bit id) plus POD components. No vtables, no `QObject` / MOC, no ImGui, no immediate-mode GUI.
+5. **Vulkan 1.4 only.** Dynamic rendering, shader objects, mesh shaders, bindless descriptor heaps, BDA. Legacy Vulkan listed in §7 is banned.
 
 ---
 
-## 3. UI Framework & Rendering Architecture
-- **Layered Structure**: Base components (Button, Label, Scroll, Icon) sit directly on Layer 1 Core. Composite tools (Explorer, Inspector) sit strictly in Layer 3.
-- **BANNED UI**: Absolutely NO ImGui, NO Qt (`QObject`, MOC, virtual dispatch hierarchies), NO legacy immediate-mode GUI hacks.
-- **Draw Submission**: Single `vkCmdDraw` / `vkCmdDrawMeshTasksEXT` call per frame from mapped host-visible SSBO ring buffer.
-- **Virtual Scrolling (DRY)**: NEVER duplicate scroll math across `Scroll.cpp`, `Virtual.cpp`, `VirtualGrid.cpp`, `TreeView.cpp`; ALWAYS route content height and recycling via `UiVirtualPool`.
-- **Text & Word-Wrapping (DRY)**: Unified text measurement and line-breaking (`uiWrapCut`) for both labels and text fields.
-- **Design System Invariants**: NEVER paint widget chrome with raw RGB floats (`0.14f, 0.15f, 0.18f`); ALWAYS use `paintToken` / `UiToken` so theme switches apply globally.
-- **Layout Invariants**:
-  - NEVER place `uiSlider` with 100% width in horizontal row next to a label (Yoga collapses box to 0). Stack vertically.
-  - Role `Scroll` requires `UiScroll.inner`.
-  - Absolute coordinates in `cacheBox` must be computed hierarchically in $O(1)$ from parent bounds, NEVER by climbing ancestors up to the root.
-  - `uiLayout` must be $O(N)$, inspecting flex drop victims directly via Yoga children without $O(N^2)$ full-tree rescans.
-- **Scissor Discipline**: Every container strictly routes clipping through the core scissor manager so text and geometry never leak into neighboring panels.
+## 2. Four-layer pyramid (`N → <N`)
+
+Every file has exactly one layer. A file may include, forward-declare, name, or call only a strictly lower layer. No cycles. No upward leak. Banning an include in the `.hpp` and adding it in the `.cpp` is the same violation.
+
+```
+LAYER 3  Domain tools and apps
+         demo/app/  core/files/  core/host/  editor/scene tools
+         Declarative coordinators, under 350 LOC (prefer under 300).
+         Sees layers 2, 1, and 0. Zero RHI, Yoga, and vertex internals.
+LAYER 2  Generic widgets
+         core/ui/widget/  core/ui/kit/  core/ui/Panel
+         POD config structs, Flecs components, Yoga styles.
+         Zero knowledge of files, scenes, or the editor.
+         Sets components only. Never writes UiPrimitive* or Vulkan commands.
+LAYER 1  UI infrastructure
+         core/ui/ (State, Layout, LayoutBridge, PrimitiveBatch, Font, Canvas, Motion)
+         core/ui/rhi/ (UiRenderer)
+         UiState holds only the Flecs world, node tree, focus, and design tokens.
+         Zero knowledge of Button, Tree, Grid, Menu, Splitter, or any tool.
+         Node, Hit, Input, Focus, Text, PrimitiveBatch, Layout, and Json are infrastructure
+         even when a file currently sits under widget/.
+LAYER 0  Hardware, OS, memory, I/O
+         core/rhi/  core/platform/  core/io/  core/image/  core/memory/
+         core/gfx/  core/asset/  core/stream/  core/wasm/  core/time/
+         core/doc/  core/debug/  core/text/  core/color/  core/anim/  core/input/  core/Str.hpp
+         Standard library, OS, Vulkan. Zero UI, Yoga, widgets, files/, or editor/.
+GRAPHICS engine/  (gpu_scene/, include/render/, src/, shader/)
+         Built on layer 0. Zero UI, Yoga, widgets, and app domain.
+         Scene Flecs lives in engine/gpu_scene. core/rhi and core/platform have zero ECS.
+```
+
+Laws:
+
+- **Layer 0 blindness.** `core/rhi` never includes `platform/Window.hpp`. `deviceCreate` takes a raw `VkSurfaceKHR`. Timing lives in `core/platform/PlatformUtil.hpp`. `InputFrame` lives in `core/platform/Input.hpp`. `core/ui/PrimitiveBatch.cpp` never includes `<yoga/Yoga.h>`; visibility is `nodeShown(s, p)` plus the `s.culled[p]` bitmask.
+- **Layer 1 generalization.** Infrastructure never includes a widget or Domain header. `Node.cpp`, `PrimitiveBatch.cpp`, `Json.cpp`, `Layout.cpp`, and `Input.cpp` register draw, overlay, input, spawn, and role-finish hooks. They do not name Tree, Button, or File APIs.
+- **Layer 2 agnosticism.** Widgets take abstract models, callbacks, and Flecs components. No `"list_inner"`, `"status"`, `"BistroScene"`, demo drag-reorder, or hardcoded slots in `Input.cpp`, `Tree.cpp`, or `List.cpp`.
+- **Layer 3 facades.** Layer 3 never writes `UiState.field`, `menu`, `fieldMenu`, `topOn`, `ghost`, `opOpacity`, `contextOf`, `parentOf`, `altLook`, `layoutDirty`, `visualDirty`, `opMinimize`, or `opMaximize`. Call `uiSetField`, `uiSetMenu`, `uiSetFieldMenu`, `uiRequestTop`, `uiRequestOpacity`, `uiSetContextMenu`, `uiParent`, `uiApplyLook`, `uiNotifyLayoutDirty`, `uiNotifyVisualDirty`, `uiRequestMinimize`, `uiRequestMaximize`. Host chrome goes through `windowMinimize(host, slot)` / `windowMaximize(host, slot)`.
+- A render pass never includes `ui/Model.hpp`.
+
+Canonical Layer 3 shape:
+
+```cpp
+auto [treePane, gridPane] = uiSplitter(s, rootNode, { .width = 240.0f });
+uiFolderTree(s, treePane, {
+    .model = &fileModel,
+    .onSelect = [&](const auto& path) { fileModel.navigateTo(path); }
+});
+uiVirtualGrid(s, gridPane, {
+    .items = fileModel.currentEntries(),
+    .onActivate = [&](size_t idx) { fileModel.execute(idx); }
+});
+```
 
 ---
 
-## 4. Vulkan 1.4 & Next-Gen Graphics Pipeline
-- **Modern Standards REQUIRED**:
-  - GPU-Driven pipeline via Mesh Shaders (`VK_EXT_mesh_shader`, meshlets).
-  - Dynamic Rendering (`vkCmdBeginRendering` / `vkCmdEndRendering`) with no render pass boilerplate.
-  - Shader Objects (`VK_EXT_shader_object` + `vkCmdBindShadersEXT`).
-  - Bindless descriptors via `VK_EXT_descriptor_heap` and Buffer Device Address (BDA).
-  - Synchronization2 (`vkCmdPipelineBarrier2`), Timeline Semaphores, Host Image Copy.
-  - Lighting & GI: Radiance Cascades (RC), clustered light grids, two-phase GPU Hi-Z culling.
-- **BANNED Legacy Vulkan**:
-  - NEVER use `VkRenderPass`, `VkFramebuffer`, or runtime `VkPipeline`.
-  - NEVER use classic descriptor sets/pools (`VkDescriptorSet`), `vkCmdPipelineBarrier` (v1), or binary fences per pass.
-  - NEVER call `vkDeviceWaitIdle` or block CPU fences inside the frame loop.
-  - NEVER use `VK_KHR_mesh_shader` (use `VK_EXT_mesh_shader`).
-  - NEVER write per-dispatch constants via `vkCmdUpdateBuffer`.
-- **Submission Contract**: Scene finishes on color after `LOAD_CLEAR` and signals only `uiSem`. Canvas waits `uiSem`, runs `LOAD`, transitions to `PRESENT_SRC`, and signals present. Scene never calls `swapchainToPresent`.
+## 3. Single source of truth
+
+If two modules share setup, layout, or parsing: do not copy it, and do not let peer A call peer B. Push the shared code to a lower layer.
+
+| Concern | Authority |
+| :--- | :--- |
+| JSON | `core/io/JsonCursor.hpp`, `core/io/Json.hpp` (zero-copy, `\uXXXX`, scientific notation). No second parser. |
+| Strings and numbers | `core/Str.hpp`, `std::from_chars`, `std::to_chars` |
+| Input snapshot | `core/platform/Input.hpp`. No second mouse, key, or gamepad queue. |
+| Virtualization | `core/ui/widget/Virtual.hpp`: `UiVirtualBase`, `uiVirtualTotalHeight`, `UiVirtualPool`, `kUiPoolCap`. Scroll, grid, and tree all use it. |
+| Text measure and wrap | `uiWrapCut` for labels and fields |
+| Files | `fileMapReadOnly`. No `fread` into a heap vector, no `std::ifstream` on runtime assets, no `fopen`/`fclose` probe before load. A failed map is the missing-file path. |
+| Images | `core/image/`: decode from the mapped span (SDR, HDR, GIF, DDS). Compress BC1/BC3/BC4/BC5/BC7/BC6H. Upload via Host Image Copy or staging. |
+| Time, cache, exe path | `core/platform/PlatformUtil.hpp` |
+| Shader directory | `engine/include/render/RenderDefs.hpp`. Never copy `#ifndef BH_SHADER_DIR` into a pass. |
+| Shader math | `engine/shader/core/` and `engine/shader/camera.slang` only |
+| Descriptor slots | `core/rhi/DescriptorSlots.hpp` |
+| Field setup | `uiFieldInit` in `core/ui/widget/Field.cpp` |
+| Node names | `uiName` / `uiFindName` in Layer 1 `Node`. Lookup only while building, never inside `engineTick`. |
+| Hotkeys | `core/platform/Action.hpp` |
+| Asserts | `core/platform/Check.hpp` (`BH_ASSERT`, cpptrace) |
+| Tracy | `core/platform/Trace.hpp` |
+| CPU spikes | `core/debug/CpuScope.hpp` |
+
+Header hygiene: a file includes only the headers it uses. `Detail.hpp` does not include every widget header. POSIX headers (`<sys/mman.h>`, `<unistd.h>`, `<fcntl.h>`, `<spawn.h>`, `<dlfcn.h>`, `<dirent.h>`, `<sys/stat.h>`) never appear in a platform-agnostic header; a `.cpp` that must use them guards with `#if !defined(_WIN32)`.
+
+C++26 dialect: designated initializers on every aggregate. Non-owning arguments are `std::string_view` or `std::span<const T>`. Constraints are concepts, not `std::enable_if_t`.
 
 ---
 
-## 5. Memory Slots & Uniform Invariants
-- `GizmoGpu` uniform MUST be 320 bytes (multiple of 64).
-- `FrameView` is 384 bytes (binding 0). `FrameSun` is 1920 bytes (binding 49, slot `HeapBuf::Sun`). Slider blocks: bindings 50–57 (64 bytes each).
-- Canvas primitives strictly own buffer slot 22 (`kUiDescPrims`). Font is 661; UI photos are 662–669. NEVER overwrite slot 22 with render passes (RC hash uses slot 18).
-- Shared shader math lives exclusively in `engine/shader/core/` and `camera.slang`. Never duplicate math across passes.
+## 4. Flecs
+
+Components are POD. No logic in component constructors or destructors. Behavior is free functions and Flecs queries. Child lifetime is the `ChildOf` relationship, not a hand-rolled recursive free.
+
+- Hot loops read `flecs::column<T>`. No `entity.get<T>()` or `try_get<T>()` in `Tick`, `Layout`, `Emit`, `Draw`, or cull.
+- A single-entity hit or write reads `Xform` on `world.ent[index]`. Never `actorLoad` the whole set into a stack buffer first.
+- Worlds are unbounded. `std::vector<flecs::entity>` and `sceneActorAdd`. Never `kSceneActorCap`, `flecs::entity ent[16]`, or any fixed entity ceiling.
+- Widget identity is a component: `UiSplitter`, `UiTitleBar`, `UiMenuBar`, `UiResizable`, `UiImage`. Clicks go through `uiBind` of a `UiAction`. Multi-stop gradients set `paint.ramp = kRampColorWheel`.
+- Banned identities: paint tags and magic integers `-5`, `-6`, `-7`, `-15`, `-90`, `-70..-78`, `-100`, and any `tag == N` / `type == 999` sentinel.
+- Button, Check, and Field are one entity that owns its `UiText` and `UiPaint`. Never spawn a child Label and patch its box with `placeChromeText` or `fieldPlaceText`.
+- `Hit.cpp` tests `hitBox` only. `scrollThumb` and `splitGrip` run in the widget input hook.
+- A widget never writes `UiHostNote`. Publish `ColorBook.present` (`uiSetColorBook`).
+
+Banned fake pools: `wTree[12]`, `wCell[18]`, `crumbs.seg[8]`, `pop.row[12]`, `UiNode treeSlots[12]`, `char pathSegments[8][64]`. Visible rows come from `UiVirtualPool`. Ten items and ten million items share the same recycler (about thirty live slots).
 
 ---
 
-## 6. Self-Maintenance Protocol & Mandatory Verification
-- **MANDATORY BUILD & TEST**: After making edits, ALWAYS verify both targets:
-  `cmake --build build-core --target BurnhopeTest BurnhopeEngine -j && ./build-core/BurnhopeTest`
-  Task is COMPLETE ONLY if BOTH targets compile cleanly and all unit tests pass.
-- **NO TERMINAL SPAM**: Do not run `git diff` or cat whole files into chat via shell. Output clear, direct code modifications.
-- When resolving an architectural bug, ban it directly:
-  `- NEVER [banned API/action] (causes [technical failure]); ALWAYS [modern alternative] [exact slots/bytes/alignment].`
-- Keep exact technical contracts only. Keep this file under 160 lines.
+## 5. UI contracts
+
+Chrome, borders, fills, and accents use tokens:
+
+```cpp
+paintToken(s.look, UiRole::Button, UiToken::Button, s.look.radiusSm);
+paint->token = static_cast<uint8_t>(isSelected ? UiToken::Accent : UiToken::Item);
+```
+
+No raw RGB floats (`paint.r = 0.15f`) in Layers 2 or 3, including `Shell.cpp` and `Sample.cpp`. Theme changes go through `uiApplyLook` / `uiRestyle`. Palette variation reads `s.look.accent[i]`.
+
+Layout:
+
+- Never put a 100% width `uiSlider` in a horizontal row beside a label (Yoga collapses it to 0). Stack vertically.
+- Role `Scroll` requires `UiScroll.inner`.
+- `cacheBox` is O(1) from the parent bounds. Do not walk ancestors to the root.
+- `uiLayout` is O(N): inspect Yoga flex-drop children directly. No O(N²) full-tree rescan.
+- Every container clips through the core scissor manager.
+
+Coordinates scale by `canvas.dpi`. No assumed `1920×1080`, 60 Hz, or DPI 1.0.
+
+One UI draw per frame: `vkCmdDraw` or `vkCmdDrawMeshTasksEXT` from the mapped host-visible SSBO ring. `core/ui/rhi/UiRenderer` binds that buffer at slot 48.
+
+Preserve behavior while splitting files. Required features stay, moved into the right Layer 2 widget: context menus, inline F2 rename, rubberband selection, Ctrl/Shift modifiers, hierarchy chevrons, forward/back history, docking, form validation.
+
+---
+
+## 6. Frame phases (`core/host/Host.cpp`)
+
+```
+Phase 1 main          Phase 2 jobsRunAndWait       Phase 3 main
+SDL poll, DPI,        Yoga, Flecs, SSBO batch,     deferred callbacks,
+resize, arena reset,  command buffers              clipboard, vkQueueSubmit2,
+input snapshot                                     timeline wait, vkQueuePresentKHR
+```
+
+Phase 2 workers never call SDL, change window state, read the clipboard, or run `onDrop` / `onOps`. Those callbacks are queued for Phase 3.
+
+`jobsRunAndWait` holds its mutex until workers finish. Wait on `idle` until `current == nullptr` and `engaged == 0`. Do not publish the next batch over a live one.
+
+`platformPace(hz, uint64_t& nextTick)` stores the deadline on the window (`host.paceNext`). No function-local `static` clock, and no `static` mutable state in any function. State lives on `Host`, `UiState`, or the window.
+
+No `std::this_thread::sleep_for`, spin-sleep, or lock-free polling used as a sync protocol. Sync is timeline semaphores, a wait-free ring, or a condition variable with a real predicate.
+
+Clipboard text is read on explicit paste (Ctrl+V). Never call `SDL_GetClipboardText` at the end of every frame.
+
+---
+
+## 7. Vulkan 1.4
+
+Required: `vkCmdBeginRendering` / `vkCmdEndRendering`, `VK_EXT_shader_object` via `vkCmdBindShadersEXT`, `VK_EXT_mesh_shader` via `vkCmdDrawMeshTasksEXT`, `VK_EXT_descriptor_heap` plus BDA, `vkCmdPipelineBarrier2`, timeline semaphores, Host Image Copy. Lighting is radiance cascades, a clustered light grid, and two-phase GPU Hi-Z.
+
+Banned:
+
+- `VkRenderPass`, `VkFramebuffer`, runtime `VkPipeline`, `vkCreateGraphicsPipelines`.
+- `VkDescriptorPool`, `VkDescriptorSet`, `vkCmdPipelineBarrier` (v1), binary fences per pass.
+- `vkDeviceWaitIdle` and CPU fence waits inside the frame loop and on resize.
+- `VK_KHR_mesh_shader` (use `VK_EXT_mesh_shader`).
+- `vkCmdUpdateBuffer` for per-dispatch constants.
+- `VkPipelineLayout` stored on a shader-object pass. After bind, `vkCmdPushConstants` with `VK_NULL_HANDLE`. The push block is 16 bytes.
+
+Submission: the scene ends color on `LOAD_CLEAR` and signals only `uiSem`. The canvas waits `uiSem`, begins with `LOAD` (`LOAD_OP_LOAD`), transitions the swapchain image to `VK_IMAGE_LAYOUT_PRESENT_SRC_KHR`, and signals present. The scene never calls `swapchainToPresent`.
+
+`shaderCreate` failure destroys the pass and returns `false`. A missing optional device feature (no ray query) may stay off and return `true`. Do not return success for a shader that failed to compile.
+
+### 7.1 Slots and POD sizes
+
+- UI primitive SSBO: descriptor slot **48** (`kUiDescPrims` in `core/rhi/DescriptorSlots.hpp`, canvas range 48..63). Scene passes never write slot 48.
+- SDF font atlas: slot **661**. UI photos: slots **662–669**.
+- `HeapBuf::Rc` is slot **18**. Radiance cascades use slot 18.
+- `GizmoGpu`: **320** bytes (multiple of 64).
+- `FrameView`: **384** bytes, binding 0.
+- `FrameSun`: **1920** bytes, binding 49, `HeapBuf::Sun`.
+- Slider blocks: bindings **50–57**, **64** bytes each.
+- `AtmosphereParams`: `float pad[26]` (**192** bytes). Never `z0`..`z25`.
+- `InstanceData`: **80** bytes.
+
+### 7.2 One shader, push the index
+
+Never compile a second SPIR-V per flight, Hi-Z mip, cubemap face, shadow cascade, or point light. Banned names: `CULL_FLIGHT`, `HIZ_MIP`, `CUBE_FACE`, `visbuffer.shadow0/1/2`, `visbuffer.point0/1/2`, `cube0..5`, `bloom0..3`. One shader. A 16-byte push selects the slot:
+
+- `flight`, or `flight + mip`
+- `face + stride`
+- `cascade` into `HeapBuf::ShadowAll` at binding 18
+- `light` into the full `PointVisible` list at binding 19
+
+Index the heap as `base_slot + push.index`.
+
+### 7.3 Images and resize
+
+Accumulation (`hdrA` through Sun → Lamps → Reflect → Fog → Clouds → Radiance): `discard = true` only on the first transition of an uninitialized image (`oldLayout = UNDEFINED`). Every later barrier uses `discard = false` and `oldLayout = tracked.layout`.
+
+After `framePassVis`, vis and depth leave attachment layout. `release()` them to `SHADER_READ_ONLY`, including the late draw.
+
+Resize does not call `sceneFrameReleaseGpu` and does not destroy static vertex buffers, instance buffers, BLAS, or material textures. Recreate transient targets only — vis, depth, shade, cloud, Hi-Z, bloom (`Vis`, `Depth`, `HdrA`, `HdrB`, `Ao`, `Contact`, `Reflect`, `HiZMax`, `Bloom`) — then `bindHeap` in O(1).
+
+Blend: additive is `SRC = ONE`, `DST = ONE`. Multiply is `SRC = DST_COLOR`, `DST = ZERO`.
+
+`meshletPackNormal` is octahedral and keeps Z. Hi-Z occlusion samples a conservative 2×2 footprint. The cluster grid may be 16×9×24 cells; world positions are transformed by the scene AABB. Never treat the world as a fixed 16×9×24 meter box.
+
+Volumetric noise is one GPU dispatch of `cloud_noise.comp` into `HeapBuf::CloudNoise`. Never fill a 128³ Worley volume on the CPU.
+
+HUD and tick code use cached `uint16_t` ids (`HudIds`: `mode[15]`, `stat[12]`, and the slider ids). No `snprintf` and no `uiFindName` inside `engineTick`. HUD hit records live on `Engine::hud` as a `std::deque`. No global `T[8]` / `T[16]`.
+
+Scene CPU buffers (`meshletGpu`, `visibleCpu`, `ownedVert`, `textures`) are `std::vector`. No `new[]` / `delete[]`.
+
+---
+
+## 8. Platform and assets
+
+- User directory: `platformUserDir` (`USERPROFILE` on Windows, `HOME` on Linux). Cache file: `platformCachePath` (`%LOCALAPPDATA%` / `%USERPROFILE%` on Windows, `$HOME/.cache/` on Linux). Executable: `platformExePath` (`GetModuleFileNameA` / `/proc/self/exe`). Host meters: `platformHostMeters`.
+- Never call `getenv("HOME")`, `readlink("/proc/self/exe")`, or `/proc` from app, scene, or render code.
+- Directories: `std::filesystem::create_directories` and `std::filesystem::directory_iterator`. No `mkdir(path, 0755)`, no `<dirent.h>`.
+- Process launch lives in `core/platform/Desktop.cpp`: `posix_spawnp` on Linux, `ShellExecuteA` / `CreateProcessA` on Windows. Never concatenate a command and pass it to `sh -c`.
+- Dynamic libraries: `LoadLibraryA` on Windows and `dlopen` on Linux, behind the platform loader. No raw `<dlfcn.h>` in engine or render code.
+- Dialogs: `core/platform/Dialog.cpp` (SDL3). Windowing: `core/platform/Window.cpp` (SDL3). The window system is SDL3.
+- No hardcoded absolute paths (`/home/...`, `C:\Users\...`) and no hardcoded screen size. Resolve from `platformExePath`, the project root, and `platformCachePath`.
+- Textures resolve in order: beside the active `.bhop`, then the adjacent `textures/` directory, then `assets/textures/`, then `uploadDummy`. Never hardcode `newscenetest` or `testscene/assets/bistro` inside a pass.
+- A missing `.bhop` keeps the procedural scene from `sceneFrameCreate` / `testSceneBuild`. Never import a hardcoded glTF (`BistroExterior`) as a fallback.
+- Parsers are bounds-checked and must terminate on bad syntax. No fake fallback UI card (`kFallback` is banned).
+
+---
+
+## 9. Canonical modules
+
+Use these homes. Do not invent a parallel `src/` tree.
+
+**App.** `demo/app/Main.cpp` entry. `Engine.hpp/.cpp` window, scene, canvas, cached control ids, host meters, scene load, file drop. `Shell.hpp/.cpp` menus, inspector, tabs, docking, extra windows. `demo/Sample.cpp` nested lists, compact rows, context menus, field validation.
+
+**GPU scene.** `engine/gpu_scene/`: `Mat4.hpp` (column-major, reverse-Z), `Camera.hpp`, `LightMath.hpp`, `InstanceData.hpp`, `InstanceCull.hpp` (SSE2 frustum, LOD0), `MeshletGpu.hpp`, `MeshletCull.hpp`, `PointShadow.hpp`, `SunShadow.hpp`, `SceneObject.hpp` (Flecs actors, gizmo math). `core/scene/FlyCam.hpp`.
+
+**Render.** `engine/include/render/`: `RenderDefs.hpp`, `HeapBind.hpp`, `FrameUniforms.hpp`, `PassCommon.hpp`, `PassAllocators.hpp`, `PassBufferSync.hpp`, `PassRendering.hpp`, `PassShaderGroup.hpp`, `PassTargets.hpp`, `PassDebug.hpp`, `VisResolve.hpp`, `SceneFrame.hpp` / `SceneFrameImpl.hpp`, `Cube.hpp`, `Cull.hpp`, `Hiz.hpp`, `Gizmo.hpp`, `Radiance.hpp`, `Shade.hpp`, `Sky.hpp`, `Tonemap.hpp`, `Visbuffer.hpp`. Translation units: `engine/src/SceneFrame.cpp`, `Cube.cpp`, `Cull.cpp`, `Hiz.cpp`, `PassGizmo.cpp`, `Radiance.cpp`, `Shade.cpp`, `Sky.cpp`, `Tonemap.cpp`, `Visbuffer.cpp`, `PassClusters.cpp`, `PassCull.cpp`, `PassPoints.cpp`, `PassRadiance.cpp`, `PassShade.cpp`, `PassSun.cpp`, `PassTonemap.cpp`, `PassVis.cpp`.
+
+**Platform and I/O.** `core/platform/`: `Check`, `Trace`, `Window`, `Dialog`, `Desktop`, `Input`, `Action`, `Jobs`, `PlatformUtil`. `core/debug/CpuScope.hpp`. `core/memory/FrameArena.hpp`. `core/io/`: `File`, `Blob`, `JsonCursor`, `Json`. `core/Str.hpp`. `core/color/Color.hpp` (RGBA8, sRGB↔linear, HSV). `core/time/Time.hpp`. `core/doc/UndoStack.hpp`, `Document.hpp`. `core/wasm/WasmHost.hpp`.
+
+**RHI and images.** `core/rhi/`: `VolkVma.cpp`, `DeviceCaps`, `Device`, `GpuBuffer`, `GpuImage`, `Barrier`, `DescriptorHeap`, `DescriptorSlots`, `ShaderObject`, `Swapchain`, `MeshDraw`, `GpuProfiler`. `core/image/`: `ImageDecode`, `ImageCompress`, `ImageUpload`, `ImageFile`.
+
+**Scene data.** `core/gfx/`: `Light`, `Material`, `Meshlet`, `PrimitiveGen`, `MeshletBuilder`, `ClusterGrid`, `HiZ`, `Portal`, `Probe`, `Decal`. `core/asset/`: `SceneBlob`, `AssimpImporter` (FBX/glTF, meshoptimizer LODs on the job pool). `core/scene/TestScene.hpp`. `core/stream/`: `StreamQueue`, `ResidencyTable`, `StreamRing`. `core/debug/DebugStats.hpp`. `core/text/TextLayout.hpp`. `core/anim/Animation.hpp`. `core/ui/PropertyInspector.hpp`. `core/input/InputQueue.hpp`.
+
+**UI core.** `core/ui/`: `Layout` (`UiBin`), `LayoutBridge` (Yoga), `State`, `Canvas`, `Font`, `PrimitiveBatch`. `Motion.cpp` ticks color transitions and GIF frames. `core/ui/rhi/UiRenderer`. Infrastructure also: `Node`, `Hit`, `Focus`, `Text`.
+
+**Widgets.** `core/ui/widget/`: `Detail` (token and scroll helpers; not a mega-header), `Button`, `Field`, `TextEdit`, `Slider`, `Scroll`, `Virtual`, `VirtualGrid`, `TreeView`, `Splitter`, `Menu`, `Image`, `Breadcrumbs`, `Rubberband`, `Curve`, `Tip`, `List`, `Chrome`, `Docking`, `Panel`. `core/ui/kit/`: `Calendar`, `Color` / `ColorPicker`.
+
+**Tools.** `core/ui/Domain.hpp`. `core/host/Host.hpp`. `core/files/`: `Model`, `Format`, `FileDomain`, `Browser`, `Files`, `Project`. `core/Units.hpp`.
+
+---
+
+## 10. Verification
+
+A code change is done only when every line holds:
+
+1. Dependencies point downward. No `rhi` → window types, no UI core → widgets, no UI → tools, no render pass → `ui/Model.hpp`.
+2. No second JSON parser, string helper, input queue, virtualizer, or shader-math copy.
+3. `Tick`, `Layout`, `Emit`, `Draw`, `Consume`, and `HitTest` do not allocate.
+4. Hot structs are aligned PODs addressed by id. No magic tags, fake fixed arrays, or function-local `static` mutables.
+5. UI color comes from `paintToken`. Layer 3 uses the facades in §2.
+6. Intermediate image barriers keep `discard = false`. One SPIR-V per pass family. Resize recreates transient targets only.
+7. No unguarded POSIX headers, `getenv("HOME")`, or hardcoded asset roots.
+8. Existing behavior (menus, rename, rubberband, modifiers, history, docking) is still present.
+
+After any code edit, both targets must compile and the tests must pass:
+
+```bash
+cmake --build build-core --target BurnhopeTest BurnhopeEngine -j && ./build-core/BurnhopeTest
+```
+
+Zero warnings on the C++26 toolchain in use. Do not dump `git diff` or whole files into the chat; apply the edit directly.

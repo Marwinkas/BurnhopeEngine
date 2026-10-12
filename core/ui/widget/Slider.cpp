@@ -126,4 +126,33 @@ uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV
     return id;
 }
 
+bool uiSliderInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
+    (void)cursor;
+    if (id >= s.count) {
+        return false;
+    }
+    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+    if (phase == kUiInPressLate) {
+        if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Slider)) {
+            return false;
+        }
+        s.capture = id;
+        dragSlider(s, id, in.pointer.x);
+        return true;
+    }
+    if (phase == kUiInDrag) {
+        if (paint != nullptr && paint->role == static_cast<uint8_t>(UiRole::Button)) {
+            const UiRange* range = s.ent[id].try_get<UiRange>();
+            if (range != nullptr && range->step > 0.0f) {
+                const float x = s.relative != 0 ? s.grabX + in.pointer.dx : in.pointer.x;
+                dragSpin(s, id, x);
+            }
+            return true;
+        }
+        dragSlider(s, id, in.pointer.x);
+        return true;
+    }
+    return false;
+}
+
 } // namespace burnhope

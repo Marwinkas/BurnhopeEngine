@@ -33,7 +33,8 @@ TEST_CASE("double click maximizes the title only") {
 
     UiState titled;
     const uint16_t root = spawn(titled, kUiNone, px(200.0f, 80.0f), paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
-    const uint16_t title = spawn(titled, root, px(180.0f, 32.0f), paint(UiRole::Panel, 0.2f, 0.2f, 0.2f, 0.0f, -6));
+    const uint16_t title = spawn(titled, root, px(180.0f, 32.0f), paint(UiRole::Panel, 0.2f, 0.2f, 0.2f, 0.0f));
+    titled.ent[title].set<UiTitleBar>({});
     uiLayout(titled, 200.0f, 80.0f);
     InputFrame click{};
     click.clicks = 2;
@@ -58,8 +59,8 @@ TEST_CASE("splitter resizes the dock on the far side") {
     const uint16_t top = spawn(state, root, grow, paint(UiRole::Panel, 0.2f, 0.2f, 0.2f));
     UiFlex bar = px(200.0f, 8.0f);
     UiPaint grip = paint(UiRole::Panel, 0.3f, 0.3f, 0.3f);
-    grip.tag = -5;
     const uint16_t split = spawn(state, root, bar, grip);
+    state.ent[split].set<UiSplitter>({});
     const uint16_t dock = spawn(state, root, px(200.0f, 120.0f), paint(UiRole::Panel, 0.4f, 0.4f, 0.4f));
     uiLayout(state, 200.0f, 400.0f);
     CHECK(splitVertical(state, split));
@@ -78,8 +79,8 @@ TEST_CASE("splitter resizes the dock on the far side") {
     const uint16_t left = spawn(state, line, px(140.0f, 80.0f), paint(UiRole::Panel, 0.2f, 0.2f, 0.2f));
     UiFlex vbar = px(8.0f, 80.0f);
     UiPaint vgrip = paint(UiRole::Panel, 0.3f, 0.3f, 0.3f);
-    vgrip.tag = -5;
     const uint16_t vsplit = spawn(state, line, vbar, vgrip);
+    state.ent[vsplit].set<UiSplitter>({});
     spawn(state, line, grow, paint(UiRole::Panel, 0.4f, 0.4f, 0.4f));
     state.box[line] = {0.0f, 0.0f, 500.0f, 80.0f};
     state.box[left] = {0.0f, 0.0f, 140.0f, 80.0f};
@@ -146,9 +147,7 @@ TEST_CASE("scene actor duplicate keeps the transform") {
     CHECK(dup.pos[1] == doctest::Approx(2.0f));
     CHECK(dup.euler[1] == doctest::Approx(30.0f));
     CHECK(dup.scale[0] == doctest::Approx(2.0f));
-    ActorView row[kSceneActorCap];
-    actorLoad(world, row);
-    CHECK(row[1].kind == static_cast<uint8_t>(SceneActorKind::Sun));
+    CHECK(actorKindOf(world, 1) == static_cast<uint8_t>(SceneActorKind::Sun));
     CHECK(world.ent[0].has<Xform>());
     CHECK(world.ent[0].has<SunObj>());
     CHECK(world.ent[0].has<PostObj>() == false);

@@ -40,5 +40,6 @@ void uiMenuClose(UiState& s);
 uint16_t uiMakeMenu(UiState& s);
 void uiMenuStyle(UiState& s, float width, float itemH, float pad, float gap);
 void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y);
+bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
 
 } // namespace burnhope

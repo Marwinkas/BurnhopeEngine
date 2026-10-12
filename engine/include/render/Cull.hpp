@@ -10,9 +10,9 @@ namespace burnhope {
 struct DescriptorHeaps;
 
 struct OcclPass {
-    ShaderExt clear[2]{};
-    ShaderExt compact[2]{};
-    ShaderExt late[2]{};
+    ShaderExt clear{};
+    ShaderExt compact{};
+    ShaderExt late{};
 };
 
 [[nodiscard]] bool occlPassCreate(OcclPass& p, Device& d, const DescriptorHeaps& heaps);

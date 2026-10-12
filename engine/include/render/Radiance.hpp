@@ -22,7 +22,6 @@ struct RadiancePass {
     ShaderExt apply{};
     ShaderExt merge{};
     ShaderExt irradiance{};
-    VkPipelineLayout pushLayout = VK_NULL_HANDLE;
     uint32_t posByte = 0;
     uint32_t triangles = 0;
     uint32_t slots = 262144;

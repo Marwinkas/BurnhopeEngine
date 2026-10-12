@@ -14,8 +14,8 @@ struct Panel {
     static Panel find(UiState& state, const char* name);
     [[nodiscard]] Panel child(const UiFlex& flex, const UiPaint& paint) const;
     [[nodiscard]] Panel label(const char* text) const;
-    [[nodiscard]] Panel textButton(const char* text, int8_t tag) const;
-    [[nodiscard]] Panel button(const char* text, int8_t tag, float r, float g, float b, uint8_t icon) const;
+    [[nodiscard]] Panel textButton(const char* text) const;
+    [[nodiscard]] Panel button(const char* text, uint8_t icon = 0) const;
     [[nodiscard]] Panel field(const char* text, uint8_t filter, bool clear) const;
     [[nodiscard]] Panel check(const char* text) const;
     [[nodiscard]] Panel radio(const char* text, uint8_t group) const;

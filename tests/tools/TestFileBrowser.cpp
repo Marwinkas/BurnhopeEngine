@@ -27,7 +27,8 @@ TEST_CASE("mounted file cells sit in the view") {
     frame.posY = 64.0f;
     frame.pad = 10.0f;
     frame.gap = 6.0f;
-    uiFiles(state).fileFrame = spawn(state, host, frame, paint(UiRole::Panel, 0.11f, 0.12f, 0.15f, 8.0f, -15));
+    uiFiles(state).fileFrame = spawn(state, host, frame, paint(UiRole::Panel, 0.11f, 0.12f, 0.15f, 8.0f));
+    state.ent[uiFiles(state).fileFrame].set<UiResizable>({});
     filesAttach(state);
     filesMount(state);
     filesShow(state, true);

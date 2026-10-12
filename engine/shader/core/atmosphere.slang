@@ -28,13 +28,7 @@ struct AtmosphereParams {
     float parity;
     float reserved0;
     float reserved1;
-    float z0; float z1; float z2; float z3;
-    float z4; float z5; float z6; float z7;
-    float z8; float z9; float z10; float z11;
-    float z12; float z13; float z14; float z15;
-    float z16; float z17; float z18; float z19;
-    float z20; float z21; float z22; float z23;
-    float z24; float z25;
+    float pad[26];
 };
 
 float3 atmBetaR(AtmosphereParams a) {

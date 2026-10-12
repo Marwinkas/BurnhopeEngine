@@ -42,9 +42,11 @@ void framePassVis(
             GpuZone zone(ctx.profiler, ctx.cmd, "Visbuffer_Late");
             visPassRecord(ctx.cmd, ctx.extent, vis, lateDraw, true, ctx.flight);
         }
+        release();
     } else {
         GpuZone zone(ctx.profiler, ctx.cmd, "Visbuffer");
         visPassRecord(ctx.cmd, ctx.extent, vis, draw, false, ctx.flight);
+        release();
     }
 }
 

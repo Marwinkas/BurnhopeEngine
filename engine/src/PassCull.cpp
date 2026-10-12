@@ -9,7 +9,7 @@ namespace burnhope {
 void framePassCull(const RenderContext& ctx, SceneFrameImpl& scene, const CullBuffers& bufs, CullResults& res) {
     GpuZone zone(ctx.profiler, ctx.cmd, "Shadow_Cull");
     shadowCullRecord(ctx.cmd, scene.shadowCull, bufs.shadowIndirect, bufs.shadowVisible, std::max(bufs.instanceCount, 1u));
-    const bool occlOn = scene.occl.compact[0].handle != VK_NULL_HANDLE && bufs.indirect.mapped != nullptr;
+    const bool occlOn = scene.occl.compact.handle != VK_NULL_HANDLE && bufs.indirect.mapped != nullptr;
     res.twoPhase = occlOn;
     if (!res.twoPhase) {
         return;

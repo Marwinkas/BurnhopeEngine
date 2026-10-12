@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rhi/DescriptorHeap.hpp"
+#include "rhi/DescriptorSlots.hpp"
 #include "rhi/GpuBuffer.hpp"
 
 namespace burnhope {
@@ -58,7 +59,7 @@ static_assert(static_cast<uint32_t>(HeapBuf::Frame) < 16u);
 static_assert(static_cast<uint32_t>(HeapBuf::Sun) >= 16u && static_cast<uint32_t>(HeapBuf::Sun) < 32u);
 static_assert(static_cast<uint32_t>(HeapBuf::Rc) >= 16u && static_cast<uint32_t>(HeapBuf::Rc) < 32u);
 static_assert(static_cast<uint32_t>(HeapBuf::Sun) != static_cast<uint32_t>(HeapBuf::Rc));
-static_assert(static_cast<uint32_t>(HeapBuf::Rc) != 48u);
+static_assert(static_cast<uint32_t>(HeapBuf::Rc) != kUiDescPrims);
 static_assert(static_cast<uint32_t>(HeapBuf::CloudNoise) == 41u && static_cast<uint32_t>(HeapBuf::CloudNoise) < 48u);
 static_assert(static_cast<uint32_t>(HeapBuf::Flags) >= 32u && static_cast<uint32_t>(HeapBuf::Bloom) < 48u);
 static_assert(static_cast<uint32_t>(HeapBuf::Atm) == 40u && static_cast<uint32_t>(HeapBuf::Atm) < 48u);

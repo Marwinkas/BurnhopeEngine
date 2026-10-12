@@ -1,8 +1,6 @@
 #include "render/Gizmo.hpp"
 
-#ifndef BH_SHADER_DIR
-#define BH_SHADER_DIR "shaders"
-#endif
+#include "render/RenderDefs.hpp"
 #include "render/HeapBind.hpp"
 #include "render/PassAllocators.hpp"
 #include "render/PassRendering.hpp"

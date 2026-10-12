@@ -4,9 +4,7 @@
 #include "render/PassCommon.hpp"
 #include "render/PassShaderGroup.hpp"
 
-#ifndef BH_SHADER_DIR
-#define BH_SHADER_DIR "shaders"
-#endif
+#include "render/RenderDefs.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -29,12 +27,20 @@ bool occlPassCreate(OcclPass& p, Device& d, const DescriptorHeaps& heaps) {
     for (uint32_t i = 0; i < b.raw.count; ++i) {
         maps[i] = b.raw.mappings[i];
     }
-    const char* clearPath[2] = {BH_SHADER_DIR "/cull.clear.spv", BH_SHADER_DIR "/cull.clear1.spv"};
-    const char* compactPath[2] = {BH_SHADER_DIR "/cull.comp.spv", BH_SHADER_DIR "/cull.comp1.spv"};
-    const char* latePath[2] = {BH_SHADER_DIR "/cull.late.spv", BH_SHADER_DIR "/cull.late1.spv"};
-    if (!createShaderArray(d, p.clear, clearPath, VK_SHADER_STAGE_COMPUTE_BIT, maps, 9u)
-        || !createShaderArray(d, p.compact, compactPath, VK_SHADER_STAGE_COMPUTE_BIT, maps, 10u)
-        || !createShaderArray(d, p.late, latePath, VK_SHADER_STAGE_COMPUTE_BIT, maps, 10u)) {
+    const ShaderCreateDesc clearDesc{
+        .path = BH_SHADER_DIR "/cull.clear.spv",
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .mappingCount = 9u,
+        .mappings = maps,
+        .pushBytes = sizeof(FlightPush),
+        .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
+    };
+    ShaderCreateDesc compactDesc = clearDesc;
+    compactDesc.path = BH_SHADER_DIR "/cull.comp.spv";
+    compactDesc.mappingCount = 10u;
+    ShaderCreateDesc lateDesc = compactDesc;
+    lateDesc.path = BH_SHADER_DIR "/cull.late.spv";
+    if (!shaderCreate(d, clearDesc, p.clear) || !shaderCreate(d, compactDesc, p.compact) || !shaderCreate(d, lateDesc, p.late)) {
         spdlog::error("occlusion cull shader failed");
         occlPassDestroy(p, d);
         return false;
@@ -43,19 +49,17 @@ bool occlPassCreate(OcclPass& p, Device& d, const DescriptorHeaps& heaps) {
 }
 
 void occlPassDestroy(OcclPass& p, Device& d) {
-    shaderDestroy(d, p.clear[0]);
-    shaderDestroy(d, p.clear[1]);
-    shaderDestroy(d, p.compact[0]);
-    shaderDestroy(d, p.compact[1]);
-    shaderDestroy(d, p.late[0]);
-    shaderDestroy(d, p.late[1]);
+    shaderDestroy(d, p.clear);
+    shaderDestroy(d, p.compact);
+    shaderDestroy(d, p.late);
 }
 
 void occlPassRecord(VkCommandBuffer cmd, const OcclPass& p, const GpuBuffer& indirect, const GpuBuffer& flags, const GpuBuffer& visible, uint32_t count, bool late, uint32_t flight) {
     if (!late) {
         bufferBarrierToCompute(cmd, indirect.buffer, 0, indirect.size, VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_WRITE_BIT);
         bufferBarrierToCompute(cmd, flags.buffer, 0, flags.size, VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_WRITE_BIT);
-        cmdBindCompute(cmd, p.clear[flight & 1u].handle);
+        cmdBindCompute(cmd, p.clear.handle);
+        cmdPushFlight(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight);
         vkCmdDispatch(cmd, 1, 1, 1);
         bufferBarrierComputeWriteToReadWrite(cmd, indirect.buffer, indirect.size);
     } else {
@@ -63,7 +67,8 @@ void occlPassRecord(VkCommandBuffer cmd, const OcclPass& p, const GpuBuffer& ind
         bufferBarrierToCompute(cmd, visible.buffer, 0, visible.size, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
         bufferBarrierComputeWriteToReadWrite(cmd, flags.buffer, flags.size);
     }
-    cmdBindCompute(cmd, late ? p.late[flight & 1u].handle : p.compact[flight & 1u].handle);
+    cmdBindCompute(cmd, late ? p.late.handle : p.compact.handle);
+    cmdPushFlight(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight);
     dispatch1D(cmd, count);
     bufferBarrierComputeToIndirect(cmd, indirect.buffer, indirect.size);
     bufferBarrierComputeToMeshShader(cmd, visible.buffer, visible.size);

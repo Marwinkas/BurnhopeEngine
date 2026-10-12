@@ -1,12 +1,10 @@
 #include "ui/Layout.hpp"
 #include "ui/LayoutBridge.hpp"
-#include "ui/widget/Detail.hpp"
-#include "ui/widget/Field.hpp"
+#include "ui/State.hpp"
+#include "io/File.hpp"
 
 #include <cstddef>
-#include <cstdio>
 #include <cstring>
-#include <vector>
 
 namespace burnhope {
 
@@ -36,35 +34,7 @@ void copyPool(char* dst, uint8_t& len, int cap, const char* pool, uint32_t poolN
     len = static_cast<uint8_t>(take);
 }
 
-void nameOf(UiState& s, uint16_t id, const char* name) {
-    if (id == kUiNone || name == nullptr || name[0] == '\0') {
-        return;
-    }
-    UiName stored{};
-    uint8_t n = 0;
-    bool plain = true;
-    while (name[n] != '\0' && n < 31) {
-        const char ch = name[n];
-        stored.bytes[n] = ch;
-        const bool ok = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_';
-        if (!ok) {
-            plain = false;
-        }
-        ++n;
-    }
-    stored.bytes[n] = '\0';
-    stored.len = n;
-    s.ent[id].set<UiName>(stored);
-    if (plain) {
-        s.ent[id].set_name(stored.bytes);
-    }
-}
-
 } // namespace
-
-void uiName(UiState& s, uint16_t id, const char* name) {
-    nameOf(s, id, name);
-}
 
 uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t size) {
     if (bytes == nullptr || size < sizeof(BinHead)) {
@@ -177,7 +147,7 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
         if (root == kUiNone) {
             root = id;
         }
-        nameOf(s, id, name);
+        uiName(s, id, name);
         if (text[0] != '\0') {
             addText(s, id, text);
         }
@@ -185,41 +155,8 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
             const uint8_t valign = bin.textValign != 0 ? bin.textValign : (bin.textWrap != 0 ? 1 : 0);
             uiTextStyle(s, id, bin.textAlign, bin.textEllipsis, valign, bin.textWrap, bin.textDeco, bin.textLeading);
         }
-        if (role == static_cast<uint8_t>(UiRole::Field)) {
-            UiField field{};
-            uint8_t len = textLen < 95 ? textLen : 95;
-            std::memcpy(field.bytes, text, len);
-            field.bytes[len] = '\0';
-            field.len = len;
-            field.caret = len;
-            field.anchor = len;
-            field.filter = bin.filter;
-            field.clear = (bin.flags & kBinClear) != 0 ? 1 : 0;
-            field.required = (bin.flags & kBinRequired) != 0 ? 1 : 0;
-            field.readOnly = (bin.flags & kBinReadOnly) != 0 ? 1 : 0;
-            field.password = (bin.flags & kBinPassword) != 0 ? 1 : 0;
-            field.inForm = (bin.flags & kBinForm) != 0 ? 1 : 0;
-            field.maxChars = bin.maxChars;
-            field.padL = bin.padL > 0.0f ? bin.padL : 12.0f;
-            field.padR = bin.padR > 0.0f ? bin.padR : 12.0f;
-            if (hint[0] != '\0') {
-                field.hintLen = hintLen < 39 ? hintLen : 39;
-                std::memcpy(field.hint, hint, field.hintLen);
-                field.hint[field.hintLen] = '\0';
-            }
-            s.ent[id].set<UiField>(field);
-            fieldSyncText(s, id);
-            if (field.inForm != 0) {
-                fieldMark(s, id);
-            }
-        } else if (role == static_cast<uint8_t>(UiRole::Slider) || role == static_cast<uint8_t>(UiRole::Progress)) {
-            s.ent[id].set<UiRange>({bin.value, bin.minV, bin.maxV});
-        } else if (role == static_cast<uint8_t>(UiRole::Check)) {
-            UiCheck check{};
-            check.on = (bin.flags & kBinCheckOn) != 0 ? 1 : 0;
-            check.kind = bin.checkKind;
-            check.group = bin.checkGroup;
-            s.ent[id].set<UiCheck>(check);
+        if (role < 16 && s.roleFinish[role] != nullptr) {
+            s.roleFinish[role](s, id, &bin, text, hint[0] != '\0' ? hint : nullptr);
         }
         if (bin.shown == 0) {
             uiShow(s, id, false);
@@ -240,27 +177,20 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
 }
 
 uint16_t uiImportBinFile(UiState& s, uint16_t parent, const char* path) {
-    if (path == nullptr) {
+    if (path == nullptr || path[0] == '\0') {
         return kUiNone;
     }
-    std::FILE* file = std::fopen(path, "rb");
-    if (file == nullptr) {
+    MappedFile mapped{};
+    if (!fileMapReadOnly(path, &mapped)) {
         return kUiNone;
     }
-    std::fseek(file, 0, SEEK_END);
-    const long n = std::ftell(file);
-    std::fseek(file, 0, SEEK_SET);
-    if (n <= 0 || n > 8 * 1024 * 1024) {
-        std::fclose(file);
+    if (mapped.size < sizeof(BinHead) || mapped.size > 8u * 1024u * 1024u || mapped.data == nullptr) {
+        fileUnmap(&mapped);
         return kUiNone;
     }
-    std::vector<std::byte> buf(static_cast<size_t>(n));
-    const size_t got = std::fread(buf.data(), 1, buf.size(), file);
-    std::fclose(file);
-    if (got != buf.size()) {
-        return kUiNone;
-    }
-    return uiImportBin(s, parent, buf.data(), static_cast<uint32_t>(got));
+    const uint16_t root = uiImportBin(s, parent, mapped.data, static_cast<uint32_t>(mapped.size));
+    fileUnmap(&mapped);
+    return root;
 }
 
 } // namespace burnhope

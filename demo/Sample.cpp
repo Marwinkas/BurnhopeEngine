@@ -1,9 +1,9 @@
-#include "io/Json.hpp"
+#include "Str.hpp"
+#include "files/Browser.hpp"
 #include "files/FileDomain.hpp"
 #include "ui/Domain.hpp"
 #include "ui/widget/Calendar.hpp"
 #include "ui/widget/ColorPicker.hpp"
-#include "ui/widget/Detail.hpp"
 #include "ui/widget/Field.hpp"
 
 #include <cmath>
@@ -24,6 +24,9 @@ struct ShellIds {
     uint16_t pageLabel = kUiNone;
     uint16_t statusLabel = kUiNone;
     int8_t page = 0;
+    bool topOn = false;
+    bool ghost = false;
+    bool warm = false;
 };
 
 ShellIds& shellIds(UiState& s) {
@@ -44,12 +47,12 @@ void setPage(UiState& s, int8_t tag) {
     }
     if (ids.pageLabel != kUiNone) {
         auto* text = s.ent[ids.pageLabel].try_get_mut<UiText>();
-        copyText(text->bytes, text->len, kPages[tag]);
+        text->len = static_cast<uint8_t>(strCopyCap(text->bytes, sizeof(text->bytes), kPages[tag]));
         auto* flex = s.ent[ids.pageLabel].try_get_mut<UiFlex>();
         flex->width = uiMeasure(s, text->bytes, text->len, text->len);
     }
-    s.layoutDirty = true;
-    s.visualDirty = true;
+    uiNotifyLayoutDirty(s);
+    uiNotifyVisualDirty(s);
 }
 
 void applyCompact(UiState& s) {
@@ -66,10 +69,9 @@ void applyCompact(UiState& s) {
     if (inner != nullptr) {
         inner->gap = gap;
     }
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.parentOf[id] != ids.listInner) {
-            continue;
-        }
+    const uint32_t rows = uiNodeChildCount(s, ids.listInner);
+    for (uint32_t i = 0; i < rows; ++i) {
+        const uint16_t id = uiNodeChild(s, ids.listInner, i);
         auto* flex = s.ent[id].try_get_mut<UiFlex>();
         if (flex == nullptr) {
             continue;
@@ -78,7 +80,7 @@ void applyCompact(UiState& s) {
         flex->height = itemH;
         flex->pad = pad;
     }
-    s.layoutDirty = true;
+    uiNotifyLayoutDirty(s);
 }
 
 void formSubmit(UiState& s) {
@@ -105,12 +107,12 @@ void formSubmit(UiState& s) {
     };
     writeStatus(shellIds(s).statusLabel);
     writeStatus(shellIds(s).formNote);
-    s.visualDirty = true;
+    uiNotifyVisualDirty(s);
 }
 
 void cmdClear(void* user) {
     auto& s = *static_cast<UiState*>(user);
-    auto* field = s.ent[s.field].try_get_mut<UiField>();
+    auto* field = s.ent[uiField(s)].try_get_mut<UiField>();
     if (field == nullptr) {
         return;
     }
@@ -119,8 +121,8 @@ void cmdClear(void* user) {
     field->anchor = 0;
     field->scroll = 0.0f;
     field->bytes[0] = '\0';
-    fieldSyncText(s, s.field);
-    s.visualDirty = true;
+    fieldSyncText(s, uiField(s));
+    uiNotifyVisualDirty(s);
 }
 
 void onPage(void* user, uint16_t, int16_t tag) {
@@ -128,15 +130,15 @@ void onPage(void* user, uint16_t, int16_t tag) {
     if (tag != shellIds(s).page) {
         setPage(s, static_cast<int8_t>(tag));
     }
-    s.visualDirty = true;
+    uiNotifyVisualDirty(s);
 }
 
 void onMin(void* user, uint16_t, int16_t) {
-    static_cast<UiState*>(user)->opMinimize = true;
+    uiRequestMinimize(*static_cast<UiState*>(user));
 }
 
 void onMax(void* user, uint16_t, int16_t) {
-    static_cast<UiState*>(user)->opMaximize = true;
+    uiRequestMaximize(*static_cast<UiState*>(user));
 }
 
 void onFile(void* user, uint16_t, int16_t) {
@@ -145,6 +147,10 @@ void onFile(void* user, uint16_t, int16_t) {
 
 void onSend(void* user, uint16_t, int16_t) {
     formSubmit(*static_cast<UiState*>(user));
+}
+
+void onFilesHide(void* user, uint16_t, int16_t) {
+    filesShow(*static_cast<UiState*>(user), false);
 }
 
 void onCompact(void* user, uint16_t, int16_t) {
@@ -165,47 +171,36 @@ void cmdCompact(void* user) {
     }
     check->on = check->on == 0 ? 1 : 0;
     applyCompact(s);
-    s.visualDirty = true;
+    uiNotifyVisualDirty(s);
 }
 
-void cmdMin(void* user) { static_cast<UiState*>(user)->opMinimize = true; }
+void cmdMin(void* user) { uiRequestMinimize(*static_cast<UiState*>(user)); }
 
-void cmdMax(void* user) { static_cast<UiState*>(user)->opMaximize = true; }
+void cmdMax(void* user) { uiRequestMaximize(*static_cast<UiState*>(user)); }
 
 void cmdTop(void* user) {
     auto& s = *static_cast<UiState*>(user);
-    s.topOn = !s.topOn;
-    s.opTop = s.topOn ? 1 : 0;
+    ShellIds& ids = shellIds(s);
+    ids.topOn = !ids.topOn;
+    uiRequestTop(s, ids.topOn);
 }
 
 void cmdGhost(void* user) {
     auto& s = *static_cast<UiState*>(user);
-    s.ghost = !s.ghost;
-    s.opOpacity = s.ghost ? 0.86f : 1.0f;
+    ShellIds& ids = shellIds(s);
+    ids.ghost = !ids.ghost;
+    uiRequestOpacity(s, ids.ghost ? 0.86f : 1.0f);
 }
 
 void cmdFiles(void* user) {
-    auto& s = *static_cast<UiState*>(user);
-    if (s.onClick != nullptr) {
-        s.onClick(s.clickUser, kUiNone, -94);
-    }
+    filesShow(*static_cast<UiState*>(user), true);
 }
 
 void cmdTheme(void* user) {
     auto& s = *static_cast<UiState*>(user);
-    s.altLook = !s.altLook;
-    const float glyphH = s.look.glyphH;
-    const float glyphW = s.look.glyphW;
-    const float advance = s.look.advance;
-    const float title = s.look.titleBar;
-    const float border = s.look.resizeBorder;
-    s.look = s.altLook ? uiLookWarm() : UiLook{};
-    s.look.glyphH = glyphH;
-    s.look.glyphW = glyphW;
-    s.look.advance = advance;
-    s.look.titleBar = title;
-    s.look.resizeBorder = border;
-    uiRestyle(s);
+    ShellIds& ids = shellIds(s);
+    ids.warm = !ids.warm;
+    uiApplyLook(s, ids.warm);
 }
 
 void uiBuildShell(UiState& s) {
@@ -217,7 +212,7 @@ void uiBuildShell(UiState& s) {
         const uint16_t a = take(from);
         const uint16_t b = take(to);
         if (a < s.count && b < s.count) {
-            s.contextOf[a] = b;
+            uiSetContextMenu(s, a, b);
         }
     };
     ShellIds& ids = shellIds(s);
@@ -228,7 +223,7 @@ void uiBuildShell(UiState& s) {
     ids.compactRow = take("compact");
     ids.listInner = take("list_inner");
     ids.preview = take("preview");
-    s.field = take("field_name");
+    uiSetField(s, take("field_name"));
     uiFiles(s).fileTarget = take("field_file");
     uiCal(s).calTarget = take("field_date");
     uiColor(s).colorTarget = take("field_color");
@@ -236,8 +231,8 @@ void uiBuildShell(UiState& s) {
     uiFiles(s).photoView = take("photo");
     ids.statusLabel = take("scale_text");
     ids.sideId = take("side");
-    s.menu = take("menu_main");
-    s.fieldMenu = take("field_menu");
+    uiSetMenu(s, take("menu_main"));
+    uiSetFieldMenu(s, take("field_menu"));
     uiBindName(s, "btn_scene", onPage, &s);
     uiBindName(s, "btn_look", onPage, &s);
     uiBindName(s, "btn_input", onPage, &s);
@@ -264,23 +259,18 @@ void uiBuildShell(UiState& s) {
     uiCommandAdd(s, "GHOST", cmdGhost, &s);
     uiCommandAdd(s, "THEME", cmdTheme, &s);
     uiCommandAdd(s, "FILES", cmdFiles, &s);
-    uiCommandAddTo(s, s.fieldMenu, "CUT", cmdFieldCut, &s);
-    uiCommandAddTo(s, s.fieldMenu, "COPY", cmdFieldCopy, &s);
-    uiCommandAddTo(s, s.fieldMenu, "PASTE", cmdFieldPaste, &s);
-    uiCommandAddTo(s, s.fieldMenu, "SELECT ALL", cmdFieldAll, &s);
-    uiCommandAddTo(s, s.fieldMenu, "CLEAR", cmdFieldWipe, &s);
+    uiCommandAddTo(s, uiFieldMenu(s), "CUT", cmdFieldCut, &s);
+    uiCommandAddTo(s, uiFieldMenu(s), "COPY", cmdFieldCopy, &s);
+    uiCommandAddTo(s, uiFieldMenu(s), "PASTE", cmdFieldPaste, &s);
+    uiCommandAddTo(s, uiFieldMenu(s), "SELECT ALL", cmdFieldAll, &s);
+    uiCommandAddTo(s, uiFieldMenu(s), "CLEAR", cmdFieldWipe, &s);
     for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.ent[id].try_get<UiField>() != nullptr && s.fieldMenu < s.count) {
-            s.contextOf[id] = s.fieldMenu;
+        if (s.ent[id].try_get<UiField>() != nullptr && uiFieldMenu(s) < s.count) {
+            uiSetContextMenu(s, id, uiFieldMenu(s));
         }
     }
     if (take("input_host") != kUiNone) {
         (void)uiImportBinFile(s, take("input_host"), BH_UI_SAMPLE);
-    }
-    {
-        JsonDocument doc;
-        (void)jsonLoadFile(doc, "assets/ui/sample.json");
-        jsonRelease(doc);
     }
     setPage(s, 0);
 
@@ -296,16 +286,16 @@ void uiBuildShell(UiState& s) {
         flex.pad = 10.0f;
         flex.gap = 6.0f;
         flex.shrink = 0.0f;
-        const uint16_t id = spawn(s, root, flex, paint(UiRole::Panel, 0.11f, 0.12f, 0.15f, 8.0f));
+        const uint16_t id = spawn(s, root, flex, paintToken(s.look, UiRole::Panel, UiToken::Window, s.look.radius));
         uiShow(s, id, false);
         return id;
     };
-    auto mini = [&](uint16_t host, const char* name, int8_t tag, UiClickFn fn) {
+    auto mini = [&](uint16_t host, const char* name, UiClickFn fn) {
         UiFlex flex{};
         flex.heightMode = static_cast<uint8_t>(UiSize::Px);
         flex.height = 28.0f;
         flex.shrink = 0.0f;
-        const uint16_t id = spawn(s, host, flex, paint(UiRole::Button, 0.20f, 0.24f, 0.32f, 6.0f, tag));
+        const uint16_t id = spawn(s, host, flex, paintToken(s.look, UiRole::Button, UiToken::Button, s.look.radiusSm));
         addText(s, id, name);
         if (auto* box = s.ent[id].try_get_mut<UiFlex>()) {
             const UiText* label = s.ent[id].try_get<UiText>();
@@ -319,9 +309,8 @@ void uiBuildShell(UiState& s) {
         return id;
     };
     uiFiles(s).fileFrame = floatPanel(70.0f, 64.0f, 1100.0f, 700.0f);
-    if (auto* framePaint = s.ent[uiFiles(s).fileFrame].try_get_mut<UiPaint>()) {
-        framePaint->tag = -15;
-        uiNoteChrome(s, uiFiles(s).fileFrame);
+    if (uiFiles(s).fileFrame != kUiNone) {
+        s.ent[uiFiles(s).fileFrame].set<UiResizable>({});
     }
     UiFlex fileBar{};
     fileBar.direction = 1;
@@ -332,13 +321,16 @@ void uiBuildShell(UiState& s) {
     fileBar.height = 32.0f;
     fileBar.gap = 8.0f;
     fileBar.pad = 8.0f;
-    const uint16_t fileTools = spawn(s, uiFiles(s).fileFrame, fileBar, paint(UiRole::Button, 0.13f, 0.14f, 0.17f, 0.0f, -6));
-    addText(s, spawn(s, fileTools, UiFlex{}, paint(UiRole::Label, 0.9f, 0.92f, 0.96f)), "FILES");
+    const uint16_t fileTools = spawn(s, uiFiles(s).fileFrame, fileBar, paintToken(s.look, UiRole::Button, UiToken::Title, 0.0f));
+    if (fileTools != kUiNone) {
+        s.ent[fileTools].set<UiTitleBar>({});
+    }
+    addText(s, spawn(s, fileTools, UiFlex{}, paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f)), "FILES");
     UiFlex fileSpacer{};
     fileSpacer.grow = 1.0f;
     fileSpacer.shrink = 1.0f;
     spawn(s, fileTools, fileSpacer, paint(UiRole::Hidden, 0, 0, 0));
-    mini(fileTools, "X", -93, nullptr);
+    mini(fileTools, "X", onFilesHide);
 
     const uint16_t title = take("title");
     const uint16_t brand = take("brand");
@@ -357,10 +349,10 @@ void uiBuildShell(UiState& s) {
     stamp(s, scroll, UiToken::Scroll);
     stamp(s, slider, UiToken::Slider);
     stamp(s, ids.preview, UiToken::Preview);
-    stamp(s, s.field, UiToken::Field);
+    stamp(s, uiField(s), UiToken::Field);
     stamp(s, status, UiToken::Status);
     stamp(s, ids.statusLabel, UiToken::Muted);
-    stamp(s, s.menu, UiToken::Menu);
+    stamp(s, uiMenu(s), UiToken::Menu);
     for (uint16_t id = 0; id < s.count; ++id) {
         auto* node = s.ent[id].try_get<UiPaint>();
         if (node == nullptr || node->token != static_cast<uint8_t>(UiToken::Custom)) {
@@ -372,11 +364,13 @@ void uiBuildShell(UiState& s) {
             stamp(s, id, UiToken::Text);
         } else if (node->role == static_cast<uint8_t>(UiRole::Close)) {
             stamp(s, id, UiToken::Close);
-        } else if (node->role == static_cast<uint8_t>(UiRole::Button) && (node->tag == -2 || node->tag == -3)) {
+        } else if (node->role == static_cast<uint8_t>(UiRole::Button) && (node->icon == 1 || node->icon == 2)) {
             stamp(s, id, UiToken::Chrome);
-        } else if (s.parentOf[id] == ids.listInner) {
-            stamp(s, id, UiToken::Item);
         }
+    }
+    const uint32_t rows = uiNodeChildCount(s, ids.listInner);
+    for (uint32_t i = 0; i < rows; ++i) {
+        stamp(s, uiNodeChild(s, ids.listInner, i), UiToken::Item);
     }
     uiRestyle(s);
 }

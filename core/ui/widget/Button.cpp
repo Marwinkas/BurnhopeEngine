@@ -124,11 +124,7 @@ void uiBindCheck(UiState& s, uint16_t id, uint8_t kind, uint8_t group, bool on) 
     s.visualDirty = true;
 }
 
-int uiCheckOn(const UiState& s, const char* name) {
-    if (name == nullptr) {
-        return -1;
-    }
-    const uint16_t id = uiFindName(s, name);
+int uiCheckOn(const UiState& s, uint16_t id) {
     if (id == kUiNone || id >= s.count) {
         return -1;
     }
@@ -137,6 +133,13 @@ int uiCheckOn(const UiState& s, const char* name) {
         return -1;
     }
     return check->on != 0 ? 1 : 0;
+}
+
+int uiCheckOn(const UiState& s, const char* name) {
+    if (name == nullptr) {
+        return -1;
+    }
+    return uiCheckOn(s, uiFindName(s, name));
 }
 
 } // namespace burnhope

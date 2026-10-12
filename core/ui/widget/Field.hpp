@@ -35,6 +35,16 @@ uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChan
 void uiSetFieldText(UiState& s, uint16_t id, const char* text);
 void uiClearField(UiState& s);
 void fieldSyncText(UiState& s, uint16_t id);
+void uiFieldInit(
+    UiState& s,
+    uint16_t id,
+    const char* text,
+    const char* hint = nullptr,
+    uint8_t filter = 0,
+    uint8_t flags = 0,
+    uint8_t maxChars = 0,
+    float padL = 0.0f,
+    float padR = 0.0f);
 UiBox fieldInset(const UiState& s, uint16_t id, const UiField& field);
 void uiFieldMulti(UiState& s, uint16_t id);
 
@@ -49,5 +59,34 @@ float fieldOffset(const UiState& s, const UiField& field, uint8_t from, uint8_t 
 uint8_t fieldCaretAt2(const UiState& s, const UiField& field, float localX, float localY, float viewW);
 bool fieldHandlePointer(UiState& s, uint16_t id, const InputFrame& in, bool press, bool down);
 bool fieldHandleKey(UiState& s, uint16_t id, const InputFrame& in);
+bool fieldAllows(uint8_t filter, uint32_t cp);
+bool emailOk(const UiField& field);
+bool urlOk(const UiField& field);
+bool telOk(const UiField& field);
+bool fieldProblem(const UiField& field, const char*& msg);
+void fieldMark(UiState& s, uint16_t id);
+uint8_t fieldChars(const UiField& field);
+void fieldSelectWord(UiField& field, uint8_t at);
+void fieldDropSel(UiField& field);
+void fieldInsert(UiField& field, const char* src, uint8_t n);
+void fieldInsert(UiState& s, uint16_t id, const char* src, uint8_t n);
+void fieldRemember(UiState& s, uint16_t id, const UiField& field);
+bool fieldUndo(UiState& s);
+bool fieldRedo(UiState& s);
+void fieldEraseBack(UiField& field);
+void fieldEraseForward(UiField& field);
+void fieldEraseBack(UiState& s, uint16_t id);
+void fieldEraseForward(UiState& s, uint16_t id);
+void fieldReveal(const UiState& s, UiField& field, float view);
+uint8_t fieldCaretAt(const UiState& s, const UiField& field, float local);
+void fieldCopy(UiState& s, const UiField& field);
+UiField* editFieldOf(UiState& s);
+void cmdFieldCut(void* user);
+void cmdFieldCopy(void* user);
+void cmdFieldPaste(void* user);
+void cmdFieldAll(void* user);
+void cmdFieldWipe(void* user);
+bool uiFieldDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap);
+bool uiFieldInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
 
 } // namespace burnhope

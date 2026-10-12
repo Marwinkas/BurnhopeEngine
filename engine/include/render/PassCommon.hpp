@@ -11,6 +11,38 @@
 
 namespace burnhope {
 
+// 16 байт. Номер флайта (0 или 1) в одном шейдере, без второй копии SPIR-V.
+struct FlightPush {
+    uint32_t flight = 0;
+    uint32_t pad0 = 0;
+    uint32_t pad1 = 0;
+    uint32_t pad2 = 0;
+};
+static_assert(sizeof(FlightPush) == 16);
+
+// 16 байт. Каскад CSM в одном visbuffer.shadow.mesh.spv. Список — HeapBuf::ShadowAll, индекс cascade * stride.
+struct ShadowPush {
+    uint32_t cascade = 0;
+    uint32_t pad0 = 0;
+    uint32_t pad1 = 0;
+    uint32_t pad2 = 0;
+};
+static_assert(sizeof(ShadowPush) == 16);
+
+// 16 байт. Индекс точечного источника в одном visbuffer.point.mesh.spv.
+struct PointPush {
+    uint32_t light = 0;
+    uint32_t pad0 = 0;
+    uint32_t pad1 = 0;
+    uint32_t pad2 = 0;
+};
+static_assert(sizeof(PointPush) == 16);
+
+inline void cmdPushFlight(VkCommandBuffer cmd, VkShaderStageFlags stage, uint32_t flight) {
+    const FlightPush push{flight & 1u, 0, 0, 0};
+    vkCmdPushConstants(cmd, VK_NULL_HANDLE, stage, 0, sizeof(push), &push);
+}
+
 // Разовая работа видеокарты вне буфера кадра. Свой пул, буфер и fence.
 // Модуль — структура и функции, не базовый класс.
 struct GpuTask {

@@ -1,4 +1,4 @@
-#include "ui/widget/Detail.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 

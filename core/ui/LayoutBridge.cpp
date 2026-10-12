@@ -1,7 +1,5 @@
 #include "ui/LayoutBridge.hpp"
 #include "ui/State.hpp"
-#include "ui/widget/Detail.hpp"
-#include "ui/widget/Field.hpp"
 #include "platform/Trace.hpp"
 
 #include <cstdint>

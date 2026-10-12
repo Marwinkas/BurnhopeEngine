@@ -253,4 +253,27 @@ void uiInstallDockOverlay(UiState& s) {
     uiOverlayAdd(s, dockOverlayDraw);
 }
 
+bool uiDockInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
+    if (phase == kUiInChrome) {
+        const bool plugAte = (cursor & 0x80u) != 0;
+        const bool press = (in.pointer.pressed & kPointerLeft) != 0 && !plugAte;
+        const bool down = (in.pointer.down & kPointerLeft) != 0;
+        const bool release = (in.pointer.released & kPointerLeft) != 0;
+        const ChromePointer chrome = uiChromePointer(s, in, id, press, down, release);
+        cursor = chrome.cursor;
+        if (chrome.took != 0) {
+            cursor = static_cast<uint8_t>(cursor | 0x40u);
+        }
+        return true;
+    }
+    if (phase == kUiInRelease) {
+        uiDock(s).edge = 0;
+        if (uiDock(s).hintOn != 0) {
+            uiDock(s).hintOn = 0;
+            s.visualDirty = true;
+        }
+    }
+    return false;
+}
+
 } // namespace burnhope

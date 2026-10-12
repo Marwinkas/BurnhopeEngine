@@ -18,17 +18,19 @@ uint mipY(uint mip) {
     return atlasMipY(mip, gFrame.extent.y);
 }
 
-#ifndef CULL_FLIGHT
-#define CULL_FLIGHT 0
-#endif
+struct FlightPush {
+    uint flight;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+
+[[vk::push_constant]]
+FlightPush gPush;
 
 float hizLoad(uint2 p, uint mip) {
     const int3 at = int3(int(p.x), int(mipY(mip) + p.y), 0);
-#if CULL_FLIGHT == 0
-    return gHiZ0.Load(at);
-#else
-    return gHiZ1.Load(at);
-#endif
+    return gPush.flight == 0u ? gHiZ0.Load(at) : gHiZ1.Load(at);
 }
 
 float hizAt(float2 uv, uint mip) {
@@ -127,7 +129,7 @@ static const uint kDbgStride = 16u;
 static const uint kDbgBase = 64u;
 
 uint dbgAt() {
-    return kDbgBase + CULL_FLIGHT * kDbgStride;
+    return kDbgBase + gPush.flight * kDbgStride;
 }
 
 // 0 keep, 1 lod, 2 behind, 3 frustum, 4 cone, 5 hiz.
@@ -176,7 +178,7 @@ uint cullCode(GpuInstance inst, bool late) {
 }
 
 void emitOne(uint3 id, bool late) {
-    const uint pack = CULL_FLIGHT * 16u;
+    const uint pack = gPush.flight * 16u;
     const uint count = gArgs[pack + 4u];
     const uint visBase = gArgs[pack + 6u];
     const uint flagRead = gArgs[pack + 7u];
@@ -223,7 +225,7 @@ void emitOne(uint3 id, bool late) {
 [shader("compute")]
 [numthreads(1, 1, 1)]
 void cullClear(uint3 id : SV_DispatchThreadID) {
-    const uint pack = CULL_FLIGHT * 16u;
+    const uint pack = gPush.flight * 16u;
     gArgs[pack + 0u] = 0u;
     gArgs[pack + 1u] = 1u;
     gArgs[pack + 2u] = 1u;

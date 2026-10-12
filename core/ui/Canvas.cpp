@@ -5,7 +5,6 @@
 
 #include <cmath>
 #include "ui/Font.hpp"
-#include "ui/widget/Image.hpp"
 #include "ui/State.hpp"
 #include "image/ImageFile.hpp"
 
@@ -21,6 +20,24 @@
 
 namespace burnhope {
 bool canvasLoadImage(Canvas& c, uint8_t slot, const char* path);
+
+void uiApplyPhotoMeta(UiState& s, uint16_t id, uint8_t frames, const uint16_t* delays, uint32_t delayCount) {
+    if (id >= s.count) {
+        return;
+    }
+    auto* image = s.ent[id].try_get_mut<UiImage>();
+    if (image == nullptr) {
+        return;
+    }
+    image->frames = frames == 0 ? 1 : frames;
+    if (image->frame >= image->frames) {
+        image->frame = 0;
+    }
+    for (uint32_t i = 0; i < 16u && i < delayCount; ++i) {
+        image->delayMs[i] = delays != nullptr ? delays[i] : 0;
+    }
+    s.visualDirty = true;
+}
 
 bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
     canvasDestroy(c, d);

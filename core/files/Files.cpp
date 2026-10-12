@@ -17,7 +17,6 @@
 #include "ui/Domain.hpp"
 #include "ui/widget/Detail.hpp"
 
-#include <cstdio>
 #include <cstring>
 #include <filesystem>
 
@@ -207,11 +206,7 @@ void bindCell(void* user, uint16_t cell, uint32_t index) {
     const bool editing = b.renameAt == static_cast<int>(index);
     uiText(*s, cell, editing ? "" : b.items[index].name);
     if (auto* paint = s->ent[cell].try_get_mut<UiPaint>()) {
-        const float* rgb = b.items[index].selected != 0 ? b.look.accent : b.look.card;
-        paint->token = static_cast<uint8_t>(UiToken::Custom);
-        paint->r = rgb[0];
-        paint->g = rgb[1];
-        paint->b = rgb[2];
+        paint->token = static_cast<uint8_t>(b.items[index].selected != 0 ? UiToken::Accent : UiToken::Item);
     }
     if (const UiParts* parts = s->ent[cell].try_get<UiParts>()) {
         const uint8_t slot = b.items[index].isDir != 0 ? b.folderSlot : b.fileSlot;
@@ -314,24 +309,13 @@ UiFlex rowH(float h) {
     return row;
 }
 
-UiPaint ink(UiRole role, float r, float g, float b, int16_t tag = -1) {
-    UiPaint out{};
-    out.role = static_cast<uint8_t>(role);
-    out.r = r;
-    out.g = g;
-    out.b = b;
-    out.a = 1.0f;
-    out.tag = tag;
-    return out;
-}
-
 void mountFiles(UiState& s) {
     if (uiFiles(s).fileFrame == kUiNone || book(s).mounted != 0) {
         return;
     }
     Browser& b = book(s);
     b.mounted = 1;
-    const uint16_t bar = uiNode(s, uiFiles(s).fileFrame, rowH(32.0f), ink(UiRole::Hidden, 0, 0, 0));
+    const uint16_t bar = uiNode(s, uiFiles(s).fileFrame, rowH(32.0f), paint(UiRole::Hidden, 0.0f, 0.0f, 0.0f));
     b.back = uiButton(s, bar, "<", onBack, &s);
     b.fwd = uiButton(s, bar, ">", onFwd, &s);
     b.up = uiButton(s, bar, "^", onUp, &s);
@@ -343,14 +327,14 @@ void mountFiles(UiState& s) {
     body.grow = 1.0f;
     body.shrink = 1.0f;
     body.minH = 80.0f;
-    const uint16_t mid = uiNode(s, uiFiles(s).fileFrame, body, ink(UiRole::Hidden, 0, 0, 0));
+    const uint16_t mid = uiNode(s, uiFiles(s).fileFrame, body, paint(UiRole::Hidden, 0.0f, 0.0f, 0.0f));
     UiFlex side{};
     side.widthMode = static_cast<uint8_t>(UiSize::Px);
     side.width = b.look.tree;
     side.heightMode = static_cast<uint8_t>(UiSize::Percent);
     side.height = 100.0f;
     side.shrink = 0.0f;
-    const uint16_t pane = uiNode(s, mid, side, ink(UiRole::Panel, b.look.side[0], b.look.side[1], b.look.side[2]));
+    const uint16_t pane = uiNode(s, mid, side, paintToken(s.look, UiRole::Panel, UiToken::Side, 0.0f));
     UiTreeConfig tree{};
     tree.totalNodes = static_cast<uint32_t>(b.treeN);
     tree.onBindNode = bindNode;
@@ -371,7 +355,7 @@ void mountFiles(UiState& s) {
     UiFlex gridHost{};
     gridHost.grow = 1.0f;
     gridHost.shrink = 1.0f;
-    const uint16_t right = uiNode(s, mid, gridHost, ink(UiRole::Hidden, 0, 0, 0));
+    const uint16_t right = uiNode(s, mid, gridHost, paint(UiRole::Hidden, 0.0f, 0.0f, 0.0f));
     UiVirtualGridConfig cfg{};
     cfg.itemW = b.look.icon;
     cfg.itemH = b.look.icon + 28.0f;
@@ -382,7 +366,7 @@ void mountFiles(UiState& s) {
     cfg.user = &s;
     uiFiles(s).fileView = uiVirtualGrid(s, right, cfg);
     (void)uiRubberband(s, uiFiles(s).fileView, onBand, &s);
-    const uint16_t foot = uiNode(s, uiFiles(s).fileFrame, rowH(24.0f), ink(UiRole::Hidden, 0, 0, 0));
+    const uint16_t foot = uiNode(s, uiFiles(s).fileFrame, rowH(24.0f), paint(UiRole::Hidden, 0.0f, 0.0f, 0.0f));
     UiFlex label{};
     label.grow = 1.0f;
     label.shrink = 1.0f;
@@ -607,11 +591,6 @@ void filesLoadIcons(Canvas& c) {
     }
     auto loadIcon = [&](uint8_t slot, const char* const* paths, int n) {
         for (int i = 0; i < n; ++i) {
-            std::FILE* probe = std::fopen(paths[i], "rb");
-            if (probe == nullptr) {
-                continue;
-            }
-            std::fclose(probe);
             if (canvasLoadImage(c, slot, paths[i])) {
                 return true;
             }
@@ -669,6 +648,7 @@ void uiClearDomain(UiState& s) {
 }
 
 void filesAttach(UiState& s) {
+    uiClearAdd(s, uiClearDomain);
     s.plug.handle = filesKeys;
     s.plug.draw = nullptr;
     s.plug.over = nullptr;

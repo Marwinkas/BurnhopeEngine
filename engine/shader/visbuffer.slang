@@ -14,6 +14,7 @@
 [[vk::binding(9, 0)]] StructuredBuffer<MeshletRef> gMeshlets;
 [[vk::binding(10, 0)]] StructuredBuffer<GpuInstance> gInstanceBuf;
 [[vk::binding(11, 0)]] StructuredBuffer<uint> gVisible;
+// >= 0 выбирает сборку shadowMesh. Номер каскада приходит в gPush.cascade, не в дефайн.
 #ifndef SHADOW_CASCADE
 #define SHADOW_CASCADE -1
 #endif
@@ -129,17 +130,38 @@ bool triKeep(uint3 tri, uint vertCount, bool dropSmall) {
     return (maxx - minx) >= 0.75 || (maxy - miny) >= 0.75;
 }
 
+#if SHADOW_CASCADE >= 0
+struct ShadowPush {
+    uint cascade;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+
+[[vk::push_constant]]
+ShadowPush gPush;
+#elif POINT_LIGHT < 0
+struct FlightPush {
+    uint flight;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+
+[[vk::push_constant]]
+FlightPush gPush;
+#endif
+
 void emitMeshlet(uint gtid, uint gid, float4x4 viewProj, bool dropSmall,
     out vertices VertOut verts[64], out indices uint3 prims[124], out primitives PrimOut primPayload[124]) {
-#ifndef CULL_FLIGHT
-#define CULL_FLIGHT 0
-#endif
 #if SHADOW_CASCADE >= 0
-    const uint src = gShadowVisible[gid];
+    const uint src = gShadowVisible[gPush.cascade * uint(gFrame.padInv.x) + gid];
+#elif POINT_LIGHT >= 0
+    const uint src = 0u;
 #elif LATE
-    const uint src = gVisible[CULL_FLIGHT * 2u * uint(gFrame.padInv.x) + uint(gFrame.padInv.x) + gid];
+    const uint src = gVisible[gPush.flight * 2u * uint(gFrame.padInv.x) + uint(gFrame.padInv.x) + gid];
 #else
-    const uint src = gVisible[CULL_FLIGHT * 2u * uint(gFrame.padInv.x) + gid];
+    const uint src = gVisible[gPush.flight * 2u * uint(gFrame.padInv.x) + gid];
 #endif
     const GpuInstance inst = gInstanceBuf[src];
     const MeshletRef meshlet = gMeshlets[inst.meshId];
@@ -212,10 +234,24 @@ void shadowMesh(
     out indices uint3 prims[124],
     out primitives PrimOut primPayload[124])
 {
-    emitMeshlet(gtid, gid, gSun.sunCascade[SHADOW_CASCADE], false, verts, prims, primPayload);
+#if SHADOW_CASCADE >= 0
+    emitMeshlet(gtid, gid, gSun.sunCascade[gPush.cascade], false, verts, prims, primPayload);
+#else
+    emitMeshlet(gtid, gid, gSun.sunCascade[0], false, verts, prims, primPayload);
+#endif
 }
 
 #if POINT_LIGHT >= 0
+struct PointPush {
+    uint light;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+
+[[vk::push_constant]]
+PointPush gPush;
+
 [shader("mesh")]
 [numthreads(128, 1, 1)]
 [outputtopology("triangle")]
@@ -226,10 +262,11 @@ void pointMesh(
     out indices uint3 prims[124],
     out primitives PrimOut primPayload[124])
 {
-    const float mode = gSun.pad[POINT_LIGHT];
+    const uint light = gPush.light;
+    const float mode = gSun.pad[light];
     const uint face = mode == 0.0 ? 0u : uint(abs(mode) + 0.5) - 1u;
     const uint item = gid;
-    const uint src = gPointVisible[item];
+    const uint src = gPointVisible[light * uint(gFrame.padInv.x) + item];
     const GpuInstance inst = gInstanceBuf[src];
     const MeshletRef meshlet = gMeshlets[inst.meshId];
     const uint vertCount = min(meshlet.vertexCount, 64);
@@ -244,17 +281,17 @@ void pointMesh(
         float2 local = 0.0;
         float depth01 = 1.0;
         if (mode == 0.0) {
-            const float3 fromLight = world - gSun.pointPos[POINT_LIGHT].xyz;
+            const float3 fromLight = world - gSun.pointPos[light].xyz;
             const float dist = max(length(fromLight), 1e-4);
             local = octEncode(fromLight / dist) * page;
-            depth01 = saturate(dist / max(gSun.pointPos[POINT_LIGHT].w, 0.05));
+            depth01 = saturate(dist / max(gSun.pointPos[light].w, 0.05));
         } else {
-            float4 clip = mul(gSun.pointFace[POINT_LIGHT][face], float4(world, 1.0));
+            float4 clip = mul(gSun.pointFace[light][face], float4(world, 1.0));
             const float w = clip.w == 0.0 ? 1.0 : clip.w;
             local = (clip.xy / w * 0.5 + 0.5) * page;
             depth01 = saturate(clip.z / w);
         }
-        const float2 atlas = float2(local.x, (local.y + float(POINT_LIGHT)) / 3.0);
+        const float2 atlas = float2(local.x, (local.y + float(light)) / 3.0);
         gClip[gtid] = float4((atlas * 2.0 - 1.0), depth01, 1.0);
     }
     GroupMemoryBarrierWithGroupSync();

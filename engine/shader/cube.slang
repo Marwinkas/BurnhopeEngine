@@ -9,9 +9,15 @@
 [[vk::binding(14, 0)]] StructuredBuffer<MaterialGpu> gMat;
 [[vk::binding(21, 0)]] StructuredBuffer<uint> gCubeVisible;
 
-#ifndef CUBE_FACE
-#define CUBE_FACE 0
-#endif
+struct CubePush {
+    uint face;
+    uint stride;
+    uint pad0;
+    uint pad1;
+};
+
+[[vk::push_constant]]
+CubePush gPush;
 
 struct VertOut {
     float4 pos : SV_Position;
@@ -46,7 +52,7 @@ void cubeMesh(
     out indices uint3 prims[124],
     out primitives PrimOut primPayload[124])
 {
-    const uint src = gCubeVisible[gid];
+    const uint src = gCubeVisible[gPush.face * gPush.stride + gid];
     const GpuInstance inst = gInstanceBuf[src];
     const MeshletRef meshlet = gMeshlets[inst.meshId];
     const uint vertCount = min(meshlet.vertexCount, 64);
@@ -57,10 +63,10 @@ void cubeMesh(
     if (gtid < vertCount) {
         const Vertex srcVert = gVerts[meshlet.vertexOffset + gtid];
         const float3 world = instancePoint(inst, srcVert.pos);
-        float4 clip = mul(gSun.cubeFace[CUBE_FACE], float4(world, 1.0));
+        float4 clip = mul(gSun.cubeFace[gPush.face], float4(world, 1.0));
         const float w = clip.w == 0.0 ? 1.0 : clip.w;
         const float2 local = clip.xy / w * 0.5 + 0.5;
-        const float2 atlas = float2((local.x + float(CUBE_FACE)) / 6.0, local.y);
+        const float2 atlas = float2((local.x + float(gPush.face)) / 6.0, local.y);
         clip.xy = (atlas * 2.0 - 1.0) * w;
         gClip[gtid] = clip;
         gWorld[gtid] = world;

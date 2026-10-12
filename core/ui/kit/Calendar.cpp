@@ -1,7 +1,7 @@
+#include "platform/PlatformUtil.hpp"
 #include "ui/widget/Calendar.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/Domain.hpp"
 #include "ui/Layout.hpp"
 
 #include <cmath>
@@ -62,7 +62,9 @@ void calFill(UiState& s) {
     const int lead = weekDay(uiCal(s).calY, uiCal(s).calM, 1);
     std::time_t now = std::time(nullptr);
     std::tm today{};
-    localtime_r(&now, &today);
+    if (!platformLocalTime(&now, &today)) {
+        today = {};
+    }
     const int todayY = today.tm_year + 1900;
     const int todayM = today.tm_mon + 1;
     const int todayD = today.tm_mday;
@@ -169,7 +171,9 @@ void calOnToday(void* user, uint16_t, int16_t) {
     auto& s = *static_cast<UiState*>(user);
     std::time_t now = std::time(nullptr);
     std::tm tm{};
-    localtime_r(&now, &tm);
+    if (!platformLocalTime(&now, &tm)) {
+        tm = {};
+    }
     uiCal(s).calY = tm.tm_year + 1900;
     uiCal(s).calM = tm.tm_mon + 1;
     calFill(s);
@@ -225,7 +229,7 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
     flex.pad = 10.0f;
     flex.gap = 6.0f;
     flex.shrink = 0.0f;
-    uiCal(s).calPanel = spawn(s, parent, flex, paint(UiRole::Panel, 0.11f, 0.12f, 0.15f, 8.0f));
+    uiCal(s).calPanel = spawn(s, parent, flex, paintToken(s.look, UiRole::Panel, UiToken::Menu, 8.0f));
     UiFlex bar{};
     bar.direction = 1;
     bar.align = 1;
@@ -239,7 +243,7 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
         item.heightMode = static_cast<uint8_t>(UiSize::Px);
         item.height = 28.0f;
         item.shrink = 0.0f;
-        const uint16_t id = spawn(s, host, item, paint(UiRole::Button, 0.20f, 0.24f, 0.32f, 6.0f));
+        const uint16_t id = spawn(s, host, item, paintToken(s.look, UiRole::Button, UiToken::Button, 6.0f));
         addText(s, id, name);
         if (auto* box = s.ent[id].try_get_mut<UiFlex>()) {
             const UiText* label = s.ent[id].try_get<UiText>();
@@ -252,7 +256,7 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
         uiBind(s, id, fn, &s);
     };
     mini(tools, "<", calOnPrev);
-    uiCal(s).calHead = spawn(s, tools, UiFlex{}, paint(UiRole::Label, 0.9f, 0.92f, 0.96f));
+    uiCal(s).calHead = spawn(s, tools, UiFlex{}, paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f));
     addText(s, uiCal(s).calHead, "OCT 2026");
     mini(tools, ">", calOnNext);
     mini(tools, "X", calOnClose);
@@ -271,7 +275,7 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
     const uint16_t weekHeadId = spawn(s, uiCal(s).calPanel, weekHead, paint(UiRole::Hidden, 0, 0, 0));
     const char* weekNames[] = {"SU", "MO", "TU", "WE", "TH", "FR", "SA"};
     for (int day = 0; day < 7; ++day) {
-        const uint16_t id = spawn(s, weekHeadId, px(32.0f, 18.0f), paint(UiRole::Label, 0.55f, 0.58f, 0.64f));
+        const uint16_t id = spawn(s, weekHeadId, px(32.0f, 18.0f), paintToken(s.look, UiRole::Label, UiToken::Muted, 0.0f));
         addText(s, id, weekNames[day]);
     }
     for (int week = 0; week < 6; ++week) {
@@ -283,7 +287,7 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
         weekRow.height = 32.0f;
         const uint16_t weekId = spawn(s, uiCal(s).calPanel, weekRow, paint(UiRole::Hidden, 0, 0, 0));
         for (int day = 0; day < 7; ++day) {
-            const uint16_t id = spawn(s, weekId, px(32.0f, 28.0f), paint(UiRole::Button, 0.16f, 0.18f, 0.24f, 4.0f));
+            const uint16_t id = spawn(s, weekId, px(32.0f, 28.0f), paintToken(s.look, UiRole::Button, UiToken::Item, 4.0f));
             uiBind(s, id, calOnDay, &s);
             uiCal(s).calDay[week * 7 + day] = id;
             s.ent[id].set<UiText>(UiText{});

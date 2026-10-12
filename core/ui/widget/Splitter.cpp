@@ -234,4 +234,43 @@ void splitSync(UiState& s) {
     prev.id = hot;
 }
 
+bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
+    if (phase == kUiInCursor) {
+        if (id >= s.count) {
+            return false;
+        }
+        const UiPaint* node = s.ent[id].try_get<UiPaint>();
+        if (node != nullptr && node->role == static_cast<uint8_t>(UiRole::Field)) {
+            return false;
+        }
+        if (s.ent[id].try_get<UiSplitter>() == nullptr || !hitBox(splitGrip(s, id), in.pointer.x, in.pointer.y)) {
+            return false;
+        }
+        cursor = splitCursor(s, id);
+        return true;
+    }
+    if (phase == kUiInPress) {
+        if (id < s.count && s.ent[id].try_get<UiSplitter>() != nullptr && splitAlive(s, id)
+            && hitBox(splitGrip(s, id), in.pointer.x, in.pointer.y)) {
+            s.capture = id;
+            return true;
+        }
+        return false;
+    }
+    if (phase == kUiInDrag) {
+        if (id < s.count && s.ent[id].try_get<UiSplitter>() != nullptr) {
+            splitDrag(s, id, in.pointer.x, in.pointer.y);
+            return true;
+        }
+        return false;
+    }
+    if (phase == kUiInClip) {
+        return s.capture < s.count && s.ent[s.capture].try_get<UiSplitter>() != nullptr && s.laidW > 1.0f && s.laidH > 1.0f;
+    }
+    if (phase == kUiInSync) {
+        splitSync(s);
+    }
+    return false;
+}
+
 } // namespace burnhope

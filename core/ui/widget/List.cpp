@@ -2,6 +2,8 @@
 #include "ui/widget/List.hpp"
 #include "ui/widget/TreeView.hpp"
 
+#include <yoga/Yoga.h>
+
 #include <cmath>
 #include <cstring>
 
@@ -42,6 +44,41 @@ uint16_t uiTreeRow(UiState& s, uint16_t parent, const char* text) {
     s.ent[head].set<UiTree>({child, 0});
     uiBind(s, head, onTree, &s);
     return child;
+}
+
+void uiFold(UiState& s, uint16_t id) {
+    const uint16_t header = s.parentOf[id];
+    const uint16_t panel = header == kUiNone ? kUiNone : s.parentOf[header];
+    if (panel == kUiNone) {
+        return;
+    }
+    bool open = false;
+    for (uint16_t child = 0; child < s.count; ++child) {
+        if (s.parentOf[child] != panel || child == header || s.yoga[child] == nullptr) {
+            continue;
+        }
+        if (YGNodeStyleGetDisplay(s.yoga[child]) != YGDisplayNone) {
+            open = true;
+        }
+    }
+    for (uint16_t child = 0; child < s.count; ++child) {
+        if (s.parentOf[child] == panel && child != header) {
+            uiShow(s, child, !open);
+        }
+    }
+    auto* flex = s.ent[panel].try_get_mut<UiFlex>();
+    if (flex != nullptr && flex->position != 0) {
+        UiFoldState& fold = s.ent[panel].ensure<UiFoldState>();
+        if (open) {
+            fold.openH = flex->height > 56.0f ? flex->height : s.box[panel].h;
+            flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+            flex->height = 52.0f;
+        } else if (fold.openH > 56.0f) {
+            flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+            flex->height = fold.openH;
+        }
+        s.layoutDirty = true;
+    }
 }
 
 } // namespace burnhope

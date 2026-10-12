@@ -1,3 +1,4 @@
+#include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Scroll.hpp"
 
@@ -206,6 +207,79 @@ uint16_t scrollOwner(const UiState& s, uint16_t id) {
         return id;
     }
     return uiAncestorId<UiScroll>(s, id);
+}
+
+void uiScrollOverlay(UiState& s, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
+    for (uint16_t id = 0; id < s.count; ++id) {
+        const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+        if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Scroll)) {
+            continue;
+        }
+        bool shown = s.box[id].w >= 1.0f && s.box[id].h >= 1.0f;
+        for (uint16_t p = id; shown && p != kUiNone && p < s.count; p = s.parentOf[p]) {
+            if (s.tight[p] != 0 || s.culled[p] != 0 || !nodeShown(s, p)) {
+                shown = false;
+            }
+        }
+        if (!shown) {
+            continue;
+        }
+        UiBox thumb{};
+        if (!scrollThumb(s, id, thumb)) {
+            continue;
+        }
+        n = emitRect(dst, n, cap, thumb.x, thumb.y, thumb.w, thumb.h, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.95f, 2.0f, nullptr);
+    }
+}
+
+bool uiScrollInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
+    (void)cursor;
+    if (phase == kUiInPressLate) {
+        if (id >= s.count) {
+            return false;
+        }
+        const uint16_t owner = scrollOwner(s, id);
+        if (owner == kUiNone || owner >= s.count) {
+            return false;
+        }
+        const UiPaint* ownerPaint = s.ent[owner].try_get<UiPaint>();
+        if (ownerPaint == nullptr || ownerPaint->role != static_cast<uint8_t>(UiRole::Scroll)) {
+            return false;
+        }
+        if (id != owner) {
+            const UiPaint* hitPaint = s.ent[id].try_get<UiPaint>();
+            if (hitPaint != nullptr && focusable(hitPaint->role)) {
+                return false;
+            }
+        }
+        UiBox thumb{};
+        if (scrollThumb(s, owner, thumb) && hitBox(thumb, in.pointer.x, in.pointer.y)) {
+            s.capture = owner;
+            dragScroll(s, owner, in.pointer.y);
+            return true;
+        }
+        return id == owner;
+    }
+    if (phase == kUiInDrag) {
+        if (id >= s.count) {
+            return false;
+        }
+        const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+        if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Scroll)) {
+            return false;
+        }
+        dragScroll(s, id, in.pointer.y);
+        return true;
+    }
+    if (phase == kUiInWheel) {
+        const uint16_t owner = scrollOwner(s, id);
+        if (owner == kUiNone) {
+            return false;
+        }
+        scrollBy(s, owner, in.wheel);
+        return true;
+    }
+    return false;
 }
 
 } // namespace burnhope

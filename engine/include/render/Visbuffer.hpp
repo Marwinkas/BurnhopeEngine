@@ -16,13 +16,12 @@ struct VisTargets {
 
 struct VisPass {
     VisTargets targets;
-    ShaderExt mesh[2];
-    ShaderExt meshLate[2];
-    ShaderExt shadow[3];
+    ShaderExt mesh;
+    ShaderExt meshLate;
+    ShaderExt shadow;
     ShaderExt shadowFrag;
-    ShaderExt point[3];
+    ShaderExt point;
     ShaderExt frag;
-    VkPipelineLayout pushLayout = VK_NULL_HANDLE;
 };
 
 // BDA of the instance array and of the uint visible-index list. groupCount is visibleCount.

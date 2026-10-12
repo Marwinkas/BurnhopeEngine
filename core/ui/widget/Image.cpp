@@ -152,45 +152,4 @@ void uiArmPhoto(UiState& s, uint16_t id) {
     s.ent[id].set<UiWheel>({photoWheel, &s});
 }
 
-void tickPhoto(UiState& s) {
-    float dt = s.time - s.prevTime;
-    if (s.prevTime <= 0.0f || dt < 0.0f || dt > 0.5f) {
-        dt = 0.0f;
-    }
-    s.prevTime = s.time;
-    s.world.each([&](flecs::entity, UiImage& image) {
-        if (image.frames < 2) {
-            return;
-        }
-        image.acc += dt * 1000.0f;
-        uint16_t delay = image.delayMs[image.frame];
-        if (delay < 20) {
-            delay = 100;
-        }
-        if (image.acc >= static_cast<float>(delay)) {
-            image.acc = 0.0f;
-            image.frame = static_cast<uint8_t>((image.frame + 1u) % image.frames);
-            s.visualDirty = true;
-        }
-    });
-}
-
-void uiApplyPhotoMeta(UiState& s, uint16_t id, uint8_t frames, const uint16_t* delays, uint32_t delayCount) {
-    if (id >= s.count) {
-        return;
-    }
-    auto* image = s.ent[id].try_get_mut<UiImage>();
-    if (image == nullptr) {
-        return;
-    }
-    image->frames = frames == 0 ? 1 : frames;
-    if (image->frame >= image->frames) {
-        image->frame = 0;
-    }
-    for (uint32_t i = 0; i < 16u && i < delayCount; ++i) {
-        image->delayMs[i] = delays != nullptr ? delays[i] : 0;
-    }
-    s.visualDirty = true;
-}
-
 } // namespace burnhope

@@ -3,8 +3,6 @@
 #include "io/JsonCursor.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/State.hpp"
-#include "ui/widget/Detail.hpp"
-#include "ui/widget/Field.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -293,20 +291,11 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
     }
     const UiPaint* node = s.ent[id].try_get<UiPaint>();
     const uint8_t role = node != nullptr ? node->role : 0;
-    if (textLen > 0 && role == static_cast<uint8_t>(UiRole::Field)) {
-        UiField field{};
-        uint8_t n = textLen < 95 ? textLen : 95;
-        std::memcpy(field.bytes, text, n);
-        field.bytes[n] = '\0';
-        field.len = n;
-        field.caret = n;
-        field.anchor = n;
-        s.ent[id].set<UiField>(field);
-        fieldSyncText(s, id);
-    } else if (textLen > 0) {
+    if (textLen > 0) {
         uiText(s, id, text);
-    } else if (role == static_cast<uint8_t>(UiRole::Check)) {
-        s.ent[id].set<UiCheck>({});
+    }
+    if (role < 16 && s.roleFinish[role] != nullptr) {
+        s.roleFinish[role](s, id, nullptr, text, nullptr);
     }
     auto* flexNode = s.ent[id].try_get_mut<UiFlex>();
     if (flexNode != nullptr) {

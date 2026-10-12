@@ -11,7 +11,7 @@ struct DescriptorHeaps;
 struct TrackedImage;
 
 struct HizPass {
-    ShaderExt hizMax[2][6];
+    ShaderExt cs{};
 };
 
 [[nodiscard]] bool hizPassCreate(HizPass& p, Device& d, const DescriptorHeaps& heaps);

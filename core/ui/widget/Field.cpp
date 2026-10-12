@@ -1,3 +1,4 @@
+#include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Field.hpp"
 
@@ -106,6 +107,62 @@ bool fieldProblem(const UiField& field, const char*& msg) {
         return true;
     }
     return false;
+}
+
+void uiFieldInit(
+    UiState& s,
+    uint16_t id,
+    const char* text,
+    const char* hint,
+    uint8_t filter,
+    uint8_t flags,
+    uint8_t maxChars,
+    float padL,
+    float padR) {
+    if (id == kUiNone || id >= s.count) {
+        return;
+    }
+    UiField field{};
+    if (text != nullptr) {
+        uint8_t len = 0;
+        while (text[len] != '\0' && len < 95) {
+            field.bytes[len] = text[len];
+            ++len;
+        }
+        field.bytes[len] = '\0';
+        field.len = len;
+        field.caret = len;
+        field.anchor = len;
+    }
+    field.filter = filter;
+    field.clear = (flags & 1) != 0 ? 1 : 0;
+    field.required = (flags & 2) != 0 ? 1 : 0;
+    field.readOnly = (flags & 4) != 0 ? 1 : 0;
+    field.password = (flags & 8) != 0 ? 1 : 0;
+    field.inForm = (flags & 16) != 0 ? 1 : 0;
+    if (maxChars != 0) {
+        field.maxChars = maxChars;
+    }
+    if (padL > 0.0f) {
+        field.padL = padL;
+    }
+    if (padR > 0.0f) {
+        field.padR = padR;
+    }
+    if (hint != nullptr && hint[0] != '\0') {
+        uint8_t n = 0;
+        while (hint[n] != '\0' && n < 39) {
+            field.hint[n] = hint[n];
+            ++n;
+        }
+        field.hint[n] = '\0';
+        field.hintLen = n;
+    }
+    s.ent[id].set<UiField>(field);
+    fieldSyncText(s, id);
+    if ((flags & 16) != 0) {
+        fieldMark(s, id);
+    }
 }
 
 void fieldMark(UiState& s, uint16_t id) {
@@ -578,6 +635,187 @@ bool fieldHandleKey(UiState& s, uint16_t id, const InputFrame& in) {
         s.visualDirty = true;
     }
     return true;
+}
+
+void uiSetFieldText(UiState& s, uint16_t id, const char* text) {
+    if (id >= s.count) {
+        return;
+    }
+    auto* field = s.ent[id].try_get_mut<UiField>();
+    if (field == nullptr) {
+        return;
+    }
+    const uint8_t n = uiStrCopy(field->bytes, text);
+    field->len = n;
+    field->caret = n;
+    field->anchor = n;
+    field->scroll = 0.0f;
+    fieldMark(s, id);
+    fieldSyncText(s, id);
+    s.visualDirty = true;
+}
+
+bool uiFieldDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
+    if (id >= s.count) {
+        return false;
+    }
+    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+    const UiField* field = s.ent[id].try_get<UiField>();
+    if (paint == nullptr || field == nullptr || paint->role != static_cast<uint8_t>(UiRole::Field)) {
+        return false;
+    }
+    const UiBox& box = s.box[id];
+    UiBox ancestor{};
+    const bool hasClip = uiClipBox(s, id, ancestor);
+    const UiBox* clip = hasClip ? &ancestor : nullptr;
+    if (field->required != 0 && field->len == 0 && paint->borderW < 0.4f) {
+        n = emitMark(
+            dst, n, cap, box.x, box.y, box.w, box.h,
+            s.look.accent[2][0], s.look.accent[2][1], s.look.accent[2][2],
+            paint->a > 0.2f ? paint->a : 1.0f, paint->radius, 1.5f, kUiFlagStroke, clip);
+    }
+    const UiBox inset = fieldInset(s, id, *field);
+    const uint8_t sel0 = field->anchor < field->caret ? field->anchor : field->caret;
+    const uint8_t sel1 = field->anchor < field->caret ? field->caret : field->anchor;
+    if (field->multi != 0) {
+        FieldRow rows[16]{};
+        const int rn = fieldRows(s, *field, inset.w, rows, 16);
+        const float lineH = s.look.glyphH > 1.0f ? s.look.glyphH : 18.0f;
+        if (sel0 != sel1) {
+            for (int li = 0; li < rn; ++li) {
+                const uint8_t a = sel0 > rows[li].begin ? sel0 : rows[li].begin;
+                uint8_t b = sel1 < rows[li].end ? sel1 : rows[li].end;
+                if (rows[li].begin == rows[li].end && sel0 <= rows[li].begin && sel1 > rows[li].begin) {
+                    b = rows[li].begin;
+                }
+                if (a >= b && rows[li].begin != rows[li].end) {
+                    continue;
+                }
+                if (a >= b) {
+                    continue;
+                }
+                const float x0 = inset.x + fieldOffset(s, *field, rows[li].begin, a);
+                const float x1 = inset.x + fieldOffset(s, *field, rows[li].begin, b);
+                const float y = inset.y + static_cast<float>(li) * lineH - field->scroll;
+                if (x1 > x0 && y + lineH > box.y && y < box.y + box.h) {
+                    n = emitRect(dst, n, cap, x0, y, x1 - x0, lineH, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.45f, 2.0f, clip);
+                }
+            }
+        }
+    } else if (sel0 != sel1 && field->len > 0) {
+        const float x0 = inset.x + uiFieldWidth(s, *field, sel0) - field->scroll;
+        const float x1 = inset.x + uiFieldWidth(s, *field, sel1) - field->scroll;
+        const float left = x0 > inset.x ? x0 : inset.x;
+        const float right = x1 < inset.x + inset.w ? x1 : inset.x + inset.w;
+        if (right > left) {
+            n = emitRect(dst, n, cap, left, box.y + 6.0f, right - left, box.h - 12.0f, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.45f, 2.0f, clip);
+        }
+    }
+    if (id == s.focused && paint->disabled == 0 && field->multi != 0) {
+        FieldRow rows[16]{};
+        const int rn = fieldRows(s, *field, inset.w, rows, 16);
+        const float lineH = s.look.glyphH > 1.0f ? s.look.glyphH : 18.0f;
+        int line = 0;
+        for (int li = 0; li < rn; ++li) {
+            if (field->caret >= rows[li].begin && field->caret <= rows[li].end) {
+                line = li;
+            }
+        }
+        const float cx = inset.x + fieldOffset(s, *field, rows[line].begin, field->caret);
+        const float cy = inset.y + static_cast<float>(line) * lineH - field->scroll;
+        if (cy + lineH > box.y && cy < box.y + box.h) {
+            n = emitRect(dst, n, cap, cx, cy, 1.5f, lineH, field->text[0], field->text[1], field->text[2], 1.0f, 0.0f, clip);
+        }
+    } else if (id == s.focused && paint->disabled == 0) {
+        const float cx = inset.x + uiFieldWidth(s, *field, field->caret) - field->scroll;
+        if (cx >= inset.x - 1.0f && cx <= inset.x + inset.w) {
+            n = emitRect(dst, n, cap, cx, box.y + 7.0f, 1.5f, box.h - 14.0f, field->text[0], field->text[1], field->text[2], 1.0f, 0.0f, clip);
+        }
+        if (s.imeLen > 0) {
+            const float mark = s.look.advance * static_cast<float>(s.imeLen);
+            n = emitRect(dst, n, cap, cx, box.y + box.h - 10.0f, mark, 2.0f, 0.95f, 0.72f, 0.25f, 0.9f, 0.0f, clip);
+        }
+    }
+    const float clearW = field->clear != 0 && field->len > 0 ? 22.0f : 0.0f;
+    if (clearW > 0.0f && n < cap) {
+        constexpr float kSide = 12.0f;
+        UiPrimitive& icon = dst[n++];
+        icon = {};
+        icon.posX = box.x + box.w - field->padR - kSide;
+        icon.posY = box.y + (box.h - kSide) * 0.5f;
+        icon.sizeX = kSide;
+        icon.sizeY = kSide;
+        icon.color[0] = 0.75f;
+        icon.color[1] = 0.78f;
+        icon.color[2] = 0.84f;
+        icon.color[3] = 1.0f;
+        icon.texId = 3;
+        icon.flags = kUiFlagIcon;
+    }
+    const UiText* shown = s.ent[id].try_get<UiText>();
+    if (shown != nullptr && shown->len > 0) {
+        const bool hint = field->len == 0 && field->hintLen > 0;
+        const float tr = hint ? s.look.muted[0] : field->text[0];
+        const float tg = hint ? s.look.muted[1] : field->text[1];
+        const float tb = hint ? s.look.muted[2] : field->text[2];
+        UiBox limit = inset;
+        if (hasClip && ancestor.w > 1.0f && ancestor.h > 1.0f) {
+            const float x0 = limit.x > ancestor.x ? limit.x : ancestor.x;
+            const float y0 = limit.y > ancestor.y ? limit.y : ancestor.y;
+            const float x1 = limit.x + limit.w < ancestor.x + ancestor.w ? limit.x + limit.w : ancestor.x + ancestor.w;
+            const float y1 = limit.y + limit.h < ancestor.y + ancestor.h ? limit.y + limit.h : ancestor.y + ancestor.h;
+            if (x1 > x0 && y1 > y0) {
+                limit.x = x0;
+                limit.y = y0;
+                limit.w = x1 - x0;
+                limit.h = y1 - y0;
+            }
+        }
+        const TextRun run = textRun(s, *shown, inset);
+        if (run.lines > 0) {
+            n = uiEmitRun(s, dst, n, cap, run, tr, tg, tb, 1.0f, &limit);
+        }
+    }
+    return false;
+}
+
+bool uiFieldInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
+    if (phase == kUiInCursor) {
+        if (id >= s.count) {
+            return false;
+        }
+        const UiPaint* node = s.ent[id].try_get<UiPaint>();
+        if (node == nullptr || node->role != static_cast<uint8_t>(UiRole::Field)) {
+            return false;
+        }
+        const UiField* field = s.ent[id].try_get<UiField>();
+        const float clearW = field != nullptr && field->clear != 0 && field->len > 0 && field->readOnly == 0 ? 22.0f : 0.0f;
+        const bool onClear = clearW > 0.0f && in.pointer.x >= s.box[id].x + s.box[id].w - field->padR - clearW;
+        cursor = onClear ? 6 : 5;
+        return true;
+    }
+    if (phase == kUiInFocus) {
+        if (id >= s.count) {
+            return false;
+        }
+        const UiPaint* node = s.ent[id].try_get<UiPaint>();
+        if (node == nullptr || node->role != static_cast<uint8_t>(UiRole::Field)) {
+            return false;
+        }
+        fieldHandlePointer(s, id, in, true, false);
+        return true;
+    }
+    if (phase == kUiInDrag) {
+        if (id >= s.count || s.ent[id].try_get<UiField>() == nullptr) {
+            return false;
+        }
+        fieldHandlePointer(s, id, in, false, true);
+        return true;
+    }
+    if (phase == kUiInKey) {
+        return fieldHandleKey(s, id, in);
+    }
+    return false;
 }
 
 } // namespace burnhope

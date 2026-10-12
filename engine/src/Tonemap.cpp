@@ -1,8 +1,6 @@
 #include "render/Tonemap.hpp"
 
-#ifndef BH_SHADER_DIR
-#define BH_SHADER_DIR "shaders"
-#endif
+#include "render/RenderDefs.hpp"
 #include "render/HeapBind.hpp"
 #include "render/PassCommon.hpp"
 #include "render/PassRendering.hpp"

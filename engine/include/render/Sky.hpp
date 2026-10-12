@@ -24,8 +24,11 @@ struct SkyPass {
     ShaderExt skyViewCs;
     ShaderExt cloudMarch;
     ShaderExt cloudUp;
+    ShaderExt noiseCs;
     ShaderExt skyProbe;
 };
+
+[[nodiscard]] bool skyPassResize(SkyPass& p, Device& d, VkExtent2D extent);
 
 void atmosphereApply(FrameSun& sun, const AtmosphereParams& atm);
 

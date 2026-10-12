@@ -1,6 +1,5 @@
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Detail.hpp"
-#include "ui/Domain.hpp"
 
 namespace burnhope {
 namespace {
@@ -28,8 +27,8 @@ uint16_t uiWindowChrome(UiState& s, uint16_t parent) {
     row.gap = 4.0f;
     row.marginR = 8.0f;
     const uint16_t cluster = spawn(s, parent, row, paint(UiRole::Hidden, 0, 0, 0));
-    const uint16_t minB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiRole::Button, UiToken::Chrome, s.look.radiusSm, -2));
-    const uint16_t maxB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiRole::Button, UiToken::Chrome, s.look.radiusSm, -3));
+    const uint16_t minB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiRole::Button, UiToken::Chrome, s.look.radiusSm));
+    const uint16_t maxB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiRole::Button, UiToken::Chrome, s.look.radiusSm));
     const uint16_t closeB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiRole::Close, UiToken::Close, s.look.radiusSm));
     if (auto* icon = s.ent[minB].try_get_mut<UiPaint>()) {
         icon->icon = 1;
@@ -58,7 +57,6 @@ void uiInstallChromeBin(UiState& s) {
 }
 
 void uiMarkTab(UiState& s, uint16_t strip, uint16_t tab) {
-    const UiLook& look = s.look;
     for (uint16_t id = 1; id < s.count; ++id) {
         if (s.parentOf[id] != strip) {
             continue;
@@ -67,13 +65,8 @@ void uiMarkTab(UiState& s, uint16_t strip, uint16_t tab) {
         if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Button)) {
             continue;
         }
-        const float* rgb = id == tab ? look.accent[0] : look.button;
         if (auto* live = s.ent[id].try_get_mut<UiPaint>()) {
-            live->r = rgb[0];
-            live->g = rgb[1];
-            live->b = rgb[2];
-            live->a = 1.0f;
-            live->token = static_cast<uint8_t>(UiToken::Custom);
+            live->token = static_cast<uint8_t>(id == tab ? UiToken::Accent : UiToken::Button);
             s.visualDirty = true;
         }
     }

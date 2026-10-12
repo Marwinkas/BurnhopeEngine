@@ -132,32 +132,7 @@ struct AtmosphereParams {
     float parity = 0.0f;
     float reserved0 = 0.0f;
     float reserved1 = 0.0f;
-    float z0 = 0.0f;
-    float z1 = 0.0f;
-    float z2 = 0.0f;
-    float z3 = 0.0f;
-    float z4 = 0.0f;
-    float z5 = 0.0f;
-    float z6 = 0.0f;
-    float z7 = 0.0f;
-    float z8 = 0.0f;
-    float z9 = 0.0f;
-    float z10 = 0.0f;
-    float z11 = 0.0f;
-    float z12 = 0.0f;
-    float z13 = 0.0f;
-    float z14 = 0.0f;
-    float z15 = 0.0f;
-    float z16 = 0.0f;
-    float z17 = 0.0f;
-    float z18 = 0.0f;
-    float z19 = 0.0f;
-    float z20 = 0.0f;
-    float z21 = 0.0f;
-    float z22 = 0.0f;
-    float z23 = 0.0f;
-    float z24 = 0.0f;
-    float z25 = 0.0f;
+    float pad[26]{};
 };
 
 struct BloomParams {

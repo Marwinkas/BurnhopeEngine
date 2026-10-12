@@ -95,4 +95,16 @@ bool uiRubberbandTrack(UiState& s, uint16_t host, const InputFrame& in) {
     return false;
 }
 
+bool uiRubberInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
+    (void)cursor;
+    if (phase != kUiInEarly) {
+        return false;
+    }
+    uint16_t bandHost = id < s.count && s.ent[id].try_get<UiRubber>() != nullptr ? id : uiAncestorId<UiRubber>(s, id);
+    if (bandHost == kUiNone && s.capture < s.count && s.ent[s.capture].is_alive() && s.ent[s.capture].try_get<UiRubber>() != nullptr) {
+        bandHost = s.capture;
+    }
+    return bandHost != kUiNone && uiRubberbandTrack(s, bandHost, in);
+}
+
 } // namespace burnhope

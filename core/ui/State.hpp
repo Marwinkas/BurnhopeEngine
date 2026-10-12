@@ -17,6 +17,10 @@ using UiDrawFn = bool (*)(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n
 using UiOverlayDrawFn = void (*)(UiState& s, UiPrimitive* dst, uint32_t& n, uint32_t cap);
 using UiTextGateFn = bool (*)(const UiState& s);
 using UiDropFn = void (*)(UiState& s);
+using UiClearFn = void (*)(UiState& s);
+using UiSpawnFn = void (*)(UiState& s, uint16_t id);
+using UiBootFn = void (*)(UiState& s);
+using UiRoleFinishFn = void (*)(UiState& s, uint16_t id, const BinNode* spec, const char* text, const char* hint);
 
 // A higher module (files, later others) plugs in here. Widgets never name it.
 struct UiPlug {
@@ -31,10 +35,35 @@ struct UiPlug {
 struct UiDrawHooks {
     UiDrawFn fn[4]{};
     uint8_t n = 0;
+    UiDrawFn decor[8]{};
+    uint8_t decorN = 0;
 };
 
 struct UiOverlayHooks {
     UiOverlayDrawFn fn[4]{};
+    uint8_t n = 0;
+};
+
+// Widget modules register one input hook. uiApplyInput never names a widget.
+constexpr uint8_t kUiInCursor = 1;
+constexpr uint8_t kUiInEarly = 2;
+constexpr uint8_t kUiInEscape = 3;
+constexpr uint8_t kUiInMenu = 4;
+constexpr uint8_t kUiInChrome = 5;
+constexpr uint8_t kUiInPress = 6;
+constexpr uint8_t kUiInPressLate = 7;
+constexpr uint8_t kUiInFocus = 8;
+constexpr uint8_t kUiInDrag = 9;
+constexpr uint8_t kUiInRelease = 10;
+constexpr uint8_t kUiInWheel = 11;
+constexpr uint8_t kUiInKey = 12;
+constexpr uint8_t kUiInClip = 13;
+constexpr uint8_t kUiInSync = 14;
+
+using UiInputHookFn = bool (*)(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
+
+struct UiInputHooks {
+    UiInputHookFn fn[8]{};
     uint8_t n = 0;
 };
 
@@ -111,6 +140,10 @@ struct UiState {
     uint8_t clipOn = 0;
     UiBox clipBox{};
     UiCustomBinLoader binHooks[16]{};
+    UiClearFn clearFn[4]{};
+    uint8_t clearN = 0;
+    UiSpawnFn onSpawn[16]{};
+    UiRoleFinishFn roleFinish[16]{};
 
     UiState();
     ~UiState();
@@ -148,13 +181,49 @@ void uiSetDrop(UiState& s, uint16_t id, uint8_t drop);
 [[nodiscard]] uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t size);
 [[nodiscard]] uint16_t uiImportBinFile(UiState& s, uint16_t parent, const char* path);
 [[nodiscard]] uint16_t uiFindName(const UiState& s, const char* name);
+inline void uiSetField(UiState& s, uint16_t id) { s.field = id; }
+inline void uiSetMenu(UiState& s, uint16_t id) { s.menu = id; }
+inline void uiSetFieldMenu(UiState& s, uint16_t id) { s.fieldMenu = id; }
+inline uint16_t uiField(const UiState& s) { return s.field; }
+inline uint16_t uiMenu(const UiState& s) { return s.menu; }
+inline uint16_t uiFieldMenu(const UiState& s) { return s.fieldMenu; }
+inline void uiRequestTop(UiState& s, bool on) { s.topOn = on; s.opTop = on ? 1 : 0; }
+inline void uiRequestOpacity(UiState& s, float opacity) { s.opOpacity = opacity; s.ghost = opacity < 1.0f; }
+inline void uiRequestMinimize(UiState& s) { s.opMinimize = true; }
+inline void uiRequestMaximize(UiState& s) { s.opMaximize = true; }
+inline void uiNotifyLayoutDirty(UiState& s) { s.layoutDirty = true; }
+inline void uiNotifyVisualDirty(UiState& s) { s.visualDirty = true; }
+inline void uiSetContextMenu(UiState& s, uint16_t node, uint16_t menu) {
+    if (node < s.count) {
+        s.contextOf[node] = menu;
+    }
+}
+inline uint16_t uiParent(const UiState& s, uint16_t id) {
+    return id < s.count ? s.parentOf[id] : kUiNone;
+}
 void uiName(UiState& s, uint16_t id, const char* name);
 void uiDrawAdd(UiState& s, UiDrawFn fn);
+void uiDrawDecorAdd(UiState& s, UiDrawFn fn);
 void uiOverlayAdd(UiState& s, UiOverlayDrawFn fn);
+void uiBootAdd(UiBootFn fn);
+void uiClearAdd(UiState& s, UiClearFn fn);
+void uiRegisterSpawnHook(UiState& s, uint8_t role, UiSpawnFn fn);
+void uiRegisterRoleFinish(UiState& s, uint8_t role, UiRoleFinishFn fn);
+void uiInputAdd(UiState& s, UiInputHookFn fn);
+bool nodeShown(const UiState& s, uint16_t id);
+uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
+void addText(UiState& s, uint16_t id, const char* text);
+void tokenRgb(const UiLook& look, UiToken token, float& r, float& g, float& b);
+uint16_t hitTest(const UiState& s, float x, float y);
+void activate(UiState& s, uint16_t id);
+uint32_t uiNodeChildCount(const UiState& s, uint16_t parent);
+uint16_t uiNodeChild(const UiState& s, uint16_t parent, uint32_t index);
+void uiNodeMoveChild(UiState& s, uint16_t parent, uint16_t child, uint32_t newIndex);
 
 void uiClear(UiState& s);
 uint16_t uiNode(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
 void uiText(UiState& s, uint16_t id, const char* text);
+void stamp(UiState& s, uint16_t id, UiToken token);
 void uiStamp(UiState& s, uint16_t id, UiToken token);
 void uiBlur(UiState& s, uint16_t id, float blur);
 void uiTransform(UiState& s, uint16_t id, float angle, float scaleX, float scaleY);
@@ -163,6 +232,21 @@ void uiSetPaint(UiState& s, uint16_t id, float r, float g, float b, float a);
 [[nodiscard]] UiEvent uiApplyInput(UiState& s, const InputFrame& in);
 void uiLayout(UiState& s, float w, float h);
 void uiRestyle(UiState& s);
+inline void uiApplyLook(UiState& s, bool warm) {
+    const float glyphH = s.look.glyphH;
+    const float glyphW = s.look.glyphW;
+    const float advance = s.look.advance;
+    const float title = s.look.titleBar;
+    const float border = s.look.resizeBorder;
+    s.altLook = warm;
+    s.look = warm ? uiLookWarm() : UiLook{};
+    s.look.glyphH = glyphH;
+    s.look.glyphW = glyphW;
+    s.look.advance = advance;
+    s.look.titleBar = title;
+    s.look.resizeBorder = border;
+    uiRestyle(s);
+}
 void uiMotionTo(UiState& s, uint16_t id, float r, float g, float b, float a);
 [[nodiscard]] bool uiTickMotion(UiState& s);
 [[nodiscard]] uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap);
@@ -323,6 +407,99 @@ inline UiBox uiContent(const UiState& s, uint16_t id) {
         box.h = 0.0f;
     }
     return box;
+}
+
+inline UiFlex px(float w, float h) {
+    UiFlex f{};
+    f.widthMode = static_cast<uint8_t>(UiSize::Px);
+    f.heightMode = static_cast<uint8_t>(UiSize::Px);
+    f.width = w;
+    f.height = h;
+    f.shrink = 0.0f;
+    return f;
+}
+
+inline UiPaint paint(UiRole role, float r, float g, float b, float radius = 0.0f, int16_t tag = -1) {
+    UiPaint out{};
+    out.r = r;
+    out.g = g;
+    out.b = b;
+    out.a = 1.0f;
+    out.radius = radius;
+    out.role = static_cast<uint8_t>(role);
+    out.tag = tag;
+    return out;
+}
+
+inline UiPaint paintToken(const UiLook& look, UiRole role, UiToken token, float radius = 0.0f, int16_t tag = -1) {
+    UiPaint p = paint(role, 0.0f, 0.0f, 0.0f, radius, tag);
+    p.token = static_cast<uint8_t>(token);
+    tokenRgb(look, token, p.r, p.g, p.b);
+    return p;
+}
+
+template <typename T>
+T* uiAncestor(UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return nullptr;
+    }
+    for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (auto* comp = s.ent[p].try_get_mut<T>()) {
+            return comp;
+        }
+    }
+    return nullptr;
+}
+
+template <typename T>
+const T* uiAncestor(const UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return nullptr;
+    }
+    for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (const T* comp = s.ent[p].try_get<T>()) {
+            return comp;
+        }
+    }
+    return nullptr;
+}
+
+template <typename T>
+bool uiAncestorHas(const UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return false;
+    }
+    for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (s.ent[p].has<T>()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+template <typename T>
+uint16_t uiAncestorId(const UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return kUiNone;
+    }
+    for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (s.ent[p].try_get<T>() != nullptr) {
+            return p;
+        }
+    }
+    return kUiNone;
+}
+
+inline bool uiWithin(const UiState& s, uint16_t id, uint16_t ancestor) {
+    if (ancestor == kUiNone || id >= s.count) {
+        return false;
+    }
+    for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (p == ancestor) {
+            return true;
+        }
+    }
+    return false;
 }
 
 inline bool uiIsOverlay(const UiState& s, uint16_t id) {

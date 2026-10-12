@@ -1,8 +1,7 @@
 #include "app/Engine.hpp"
-#include "asset/AssimpImporter.hpp"
 
-#include <sys/stat.h>
 #include "app/Shell.hpp"
+#include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
 #include "rhi/Device.hpp"
 #include "files/Browser.hpp"
@@ -19,9 +18,6 @@
 #include "ui/State.hpp"
 #include "ui/Canvas.hpp"
 
-#include <fcntl.h>
-#include <unistd.h>
-
 #include <spdlog/spdlog.h>
 
 #include "gpu_scene/SceneObject.hpp"
@@ -30,21 +26,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <system_error>
 
 namespace burnhope {
 namespace {
-
-struct SceneViewUser {
-    SceneFrame* scene = nullptr;
-    Host* host = nullptr;
-    int slot = -1;
-    uint8_t lookGrab = 0;
-    uint8_t toolGrab = 0;
-    float lookX = 0.0f;
-    float lookY = 0.0f;
-};
-
-SceneViewUser gSceneView{};
 
 bool extIs(const char* path, const char* ext) {
     const size_t n = std::strlen(path);
@@ -90,12 +75,13 @@ void shellDrop(Host& host, int slot, const char* path, void* user) {
     (void)user;
 }
 
-int gFileDialogSlot = -1;
-
 void onColorClose(Host&, int, void* user) {
-    auto* colors = static_cast<ColorBook*>(user);
-    colors->present = 0;
-    ++colors->gen;
+    auto* demo = static_cast<ShellDemo*>(user);
+    if (demo == nullptr || demo->colors == nullptr) {
+        return;
+    }
+    demo->colors->present = 0;
+    ++demo->colors->gen;
 }
 
 void openNamed(Host& host, const ViewDesc& desc) {
@@ -104,7 +90,8 @@ void openNamed(Host& host, const ViewDesc& desc) {
 
 void onShellOps(Host& host, int slot, const WindowOps& ops, void* user) {
     (void)ops;
-    auto* colors = static_cast<ColorBook*>(user);
+    auto* demo = static_cast<ShellDemo*>(user);
+    ColorBook* colors = demo != nullptr ? demo->colors : nullptr;
     Canvas* canvas = hostCanvas(host, slot);
     bool wantTool = false;
     bool wantColor = false;
@@ -112,18 +99,27 @@ void onShellOps(Host& host, int slot, const WindowOps& ops, void* user) {
     if (canvas != nullptr && canvas->state != nullptr) {
         UiHostNote& note = uiHostNote(*canvas->state);
         wantTool = note.tool;
-        wantColor = note.color;
         wantFile = note.file;
         note = {};
     }
-    if (wantFile && slot >= 0 && slot < kHostSlots) {
+    bool colorOpen = false;
+    for (int i = 0; i < kHostSlots; ++i) {
+        if (host.view[i].on && std::strcmp(host.view[i].name, "color") == 0) {
+            colorOpen = true;
+            break;
+        }
+    }
+    if (colors != nullptr && colors->present == 2 && !colorOpen) {
+        wantColor = true;
+    }
+    if (wantFile && demo != nullptr && slot >= 0 && slot < kHostSlots) {
         static const FileFilter filters[] = {
             {"All files", "*"},
             {"JSON", "json"},
             {"Images", "png;jpg;jpeg;gif;bmp;tga;hdr;psd"},
         };
         if (windowAskFile(host.view[slot].window, filters, 3, FileAsk::Open)) {
-            gFileDialogSlot = slot;
+            demo->fileDialogSlot = slot;
         }
     }
     if (wantTool) {
@@ -138,7 +134,7 @@ void onShellOps(Host& host, int slot, const WindowOps& ops, void* user) {
         desc.window.resizable = true;
         desc.builder = toolBuild;
         desc.onOps = onShellOps;
-        desc.user = colors;
+        desc.user = demo;
         openNamed(host, desc);
     }
     if (wantColor) {
@@ -154,13 +150,13 @@ void onShellOps(Host& host, int slot, const WindowOps& ops, void* user) {
         desc.builder = colorBuild;
         desc.onOps = onShellOps;
         desc.onClose = onColorClose;
-        desc.user = colors;
+        desc.user = demo;
         openNamed(host, desc);
     }
 }
 
 bool sceneTick(void* user, const InputFrame& input, float dt) {
-    auto* view = static_cast<SceneViewUser*>(user);
+    auto* view = static_cast<HudContext*>(user);
     if (view == nullptr || view->scene == nullptr) {
         return false;
     }
@@ -208,7 +204,7 @@ bool sceneTick(void* user, const InputFrame& input, float dt) {
 }
 
 void sceneRecord(void* user, VkCommandBuffer cmd, Device& device, DescriptorHeaps& heaps, const Swapchain& swap, const FrameContext& frame) {
-    auto* view = static_cast<SceneViewUser*>(user);
+    auto* view = static_cast<HudContext*>(user);
     if (view != nullptr && view->scene != nullptr) {
         sceneFrameRecord(view->scene, cmd, device, heaps, swap, frame);
     }
@@ -241,16 +237,7 @@ bool engineInit(Engine& e, int argc, char** argv) {
     }
     if (wantScene(argc, argv)) {
         e.scene = sceneFrameCreate();
-        const char* cache = "cache/bistro-gltf.bhop";
-        if (!sceneFrameLoadBhop(e.scene, cache)) {
-            mkdir("cache", 0755);
-            const char* parts[] = {
-                "testscene/assets/bistro/BistroExterior.gltf",
-            };
-            if (sceneImportFbxList(parts, 1, cache)) {
-                (void)sceneFrameLoadBhop(e.scene, cache);
-            }
-        }
+        (void)sceneFrameLoadBhop(e.scene, "cache/bistro-gltf.bhop");
         ViewDesc main{};
         main.name = "scene";
         main.window.title = "Burnhope scene  RMB look  WASD fly";
@@ -263,15 +250,15 @@ bool engineInit(Engine& e, int argc, char** argv) {
         main.onDrop = shellDrop;
         main.sceneTick = sceneTick;
         main.sceneRecord = sceneRecord;
-        gSceneView.scene = e.scene;
-        gSceneView.host = &e.host;
-        gSceneView.slot = -1;
-        main.user = &gSceneView;
+        e.hud.scene = e.scene;
+        e.hud.host = &e.host;
+        e.hud.slot = -1;
+        main.user = &e.hud;
         const int sceneSlot = hostOpen(e.host, main);
         if (sceneSlot < 0) {
             return false;
         }
-        gSceneView.slot = sceneSlot;
+        e.hud.slot = sceneSlot;
         e.host.releaseGpu = releaseScene;
         e.host.releaseUser = e.scene;
         return true;
@@ -284,10 +271,13 @@ bool engineInit(Engine& e, int argc, char** argv) {
     main.window.bordered = false;
     main.window.resizable = true;
     main.frame.present = Present::Mailbox;
+    e.demo.colors = &e.colors;
+    e.demo.chipsOn = true;
+    e.demo.toolsOn = true;
     main.builder = shellBuild;
     main.onDrop = shellDrop;
     main.onOps = onShellOps;
-    main.user = &e.colors;
+    main.user = &e.demo;
     if (hostOpen(e.host, main) < 0) {
         return false;
     }
@@ -302,75 +292,38 @@ void engineShutdown(Engine& e) {
     hostShutdown(e.host);
 }
 
-struct PageHit {
-    Canvas* canvas = nullptr;
-    uint16_t page = kUiNone;
-};
-
-struct StatsHit {
-    Canvas* canvas = nullptr;
-    uint16_t page = kUiNone;
-    uint16_t dock = kUiNone;
-    uint8_t open = 0;
-};
-
-struct ModeHit {
-    Canvas* canvas = nullptr;
-    int index = 0;
-    uint16_t label = kUiNone;
-};
-
-PageHit gPage[8]{};
-StatsHit gStats{};
-ModeHit gMode[15]{};
-
-struct ToolHit {
-    Canvas* canvas = nullptr;
-    SceneFrame* scene = nullptr;
-    uint16_t objects = kUiNone;
-    uint16_t postPage = kUiNone;
-    uint16_t sunPage = kUiNone;
-};
-
-struct GizmoHit {
-    ToolHit* tool = nullptr;
-    uint8_t mode = 0;
-};
-
-struct ObjectHit {
-    Canvas* canvas = nullptr;
-    uint8_t index = 0;
-    uint16_t page = kUiNone;
-};
-
-ToolHit gTool{};
-GizmoHit gGizmo[3]{};
-ObjectHit gObject[16]{};
-uint8_t gShown = 0xff;
-
 void onActor(void* user, uint16_t, int16_t) {
     auto* hit = static_cast<ObjectHit*>(user);
-    if (hit == nullptr || hit->canvas == nullptr || gTool.scene == nullptr) {
+    if (hit == nullptr || hit->canvas == nullptr || hit->scene == nullptr) {
         return;
     }
-    sceneFrameActorSelect(gTool.scene, hit->index);
+    sceneFrameActorSelect(hit->scene, hit->index);
     if (hit->page != kUiNone) {
         uiShowOnly(*hit->canvas->state, hit->page);
     }
-    gShown = hit->index;
 }
 
-void addActorButton(Canvas& canvas, uint16_t objects, uint8_t index, const char* name, uint8_t kind) {
-    if (index >= 16 || objects == kUiNone) {
-        return;
+bool addActorButton(HudContext& hud, uint16_t objects, uint8_t index, const char* name, uint8_t kind) {
+    if (hud.tool.canvas == nullptr || objects == kUiNone) {
+        return false;
     }
-    const UiLook look = uiLookInk();
-    Panel rowBtn = canvas.state != nullptr ? Panel::at(*canvas.state, objects).button(name, -1, look.button[0], look.button[1], look.button[2], 0) : Panel{};
+    Canvas& canvas = *hud.tool.canvas;
+    if (canvas.state == nullptr) {
+        return false;
+    }
+    Panel rowBtn = Panel::at(*canvas.state, objects).button(name);
+    if (rowBtn.id == kUiNone) {
+        return false;
+    }
     uiSetHeight(*canvas.state, rowBtn.id, 28.0f);
-    gObject[index].canvas = &canvas;
-    gObject[index].index = index;
-    gObject[index].page = kind == static_cast<uint8_t>(SceneActorKind::Sun) ? gTool.sunPage : gTool.postPage;
-    uiBind(*canvas.state, rowBtn.id, onActor, &gObject[index]);
+    hud.objects.push_back({});
+    ObjectHit& hit = hud.objects.back();
+    hit.canvas = &canvas;
+    hit.scene = hud.tool.scene;
+    hit.index = index;
+    hit.page = kind == static_cast<uint8_t>(SceneActorKind::Sun) ? hud.tool.sunPage : hud.tool.postPage;
+    uiBind(*canvas.state, rowBtn.id, onActor, &hit);
+    return true;
 }
 
 void onGizmoMode(void* user, uint16_t, int16_t) {
@@ -382,27 +335,24 @@ void onGizmoMode(void* user, uint16_t, int16_t) {
 }
 
 void onDuplicate(void* user, uint16_t, int16_t) {
-    auto* tool = static_cast<ToolHit*>(user);
-    if (tool == nullptr || tool->scene == nullptr || tool->canvas == nullptr) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr || hud->tool.scene == nullptr || hud->tool.canvas == nullptr) {
         return;
     }
-    const uint8_t index = sceneFrameActorDuplicate(tool->scene);
+    const uint8_t index = sceneFrameActorDuplicate(hud->tool.scene);
     if (index == kSceneActorNone) {
         return;
     }
     char name[24];
     uint8_t kind = 0;
-    sceneFrameActorName(tool->scene, index, name, sizeof(name), &kind);
-    addActorButton(*tool->canvas, tool->objects, index, name, kind);
-    onActor(&gObject[index], 0, 0);
+    sceneFrameActorName(hud->tool.scene, index, name, sizeof(name), &kind);
+    if (addActorButton(*hud, hud->tool.objects, index, name, kind)) {
+        onActor(&hud->objects.back(), 0, 0);
+    }
 }
 
-void setSlide(Canvas& canvas, const char* name, float value) {
-    if (canvas.state == nullptr) {
-        return;
-    }
-    const uint16_t id = uiFindName(*canvas.state, name);
-    if (id == kUiNone || id >= canvas.state->count) {
+void setSlide(Canvas& canvas, uint16_t id, float value) {
+    if (canvas.state == nullptr || id == kUiNone || id >= canvas.state->count) {
         return;
     }
     auto* range = canvas.state->ent[id].try_get_mut<UiRange>();
@@ -411,6 +361,91 @@ void setSlide(Canvas& canvas, const char* name, float value) {
     }
     range->value = value;
     canvas.state->visualDirty = 1;
+}
+
+void bindHudIds(HudContext& hud, UiState& state) {
+    auto id = [&](const char* name) { return uiFindName(state, name); };
+    char name[8];
+    for (uint32_t i = 0; i < 15; ++i) {
+        std::snprintf(name, sizeof(name), "mode%u", i);
+        hud.ids.mode[i] = id(name);
+    }
+    for (uint32_t i = 0; i < 4; ++i) {
+        std::snprintf(name, sizeof(name), "tone%u", i);
+        hud.ids.tone[i] = id(name);
+    }
+    for (uint32_t i = 0; i < 3; ++i) {
+        std::snprintf(name, sizeof(name), "prof%u", i);
+        hud.ids.prof[i] = id(name);
+    }
+    for (uint32_t i = 0; i < 12; ++i) {
+        std::snprintf(name, sizeof(name), "g%u", i);
+        hud.ids.stat[i] = id(name);
+    }
+    hud.ids.bright = id("bright");
+    hud.ids.grain = id("grain");
+    hud.ids.bloom = id("bloom");
+    hud.ids.vig = id("vig");
+    hud.ids.ca = id("ca");
+    hud.ids.contact = id("contact");
+    hud.ids.spec = id("spec");
+    hud.ids.tok = id("tok");
+    hud.ids.pom = id("pom");
+    hud.ids.ggx = id("ggx");
+    hud.ids.gtao = id("gtao");
+    hud.ids.lamp = id("lamp");
+    hud.ids.sunI = id("sunI");
+    hud.ids.sunR = id("sunR");
+    hud.ids.sunG = id("sunG");
+    hud.ids.sunB = id("sunB");
+    hud.ids.lodf = id("lodf");
+    hud.ids.gtaor = id("gtaor");
+    hud.ids.gtaoSt = id("gtaoSt");
+    hud.ids.gtaoSl = id("gtaoSl");
+    hud.ids.gtaoPw = id("gtaoPw");
+    hud.ids.gtaoFa = id("gtaoFa");
+    hud.ids.sscsR = id("sscsR");
+    hud.ids.sscsT = id("sscsT");
+    hud.ids.sscsS = id("sscsS");
+    hud.ids.sscsP = id("sscsP");
+    hud.ids.rcRays = id("rcRays");
+    hud.ids.rcCell = id("rcCell");
+    hud.ids.rcGain = id("rcGain");
+    hud.ids.giGain = id("giGain");
+    hud.ids.rcMax = id("rcMax");
+    hud.ids.bloomth = id("bloomth");
+    hud.ids.fog = id("fog");
+    hud.ids.fogH = id("fogH");
+    hud.ids.fogS = id("fogS");
+    hud.ids.zenith = id("zenith");
+    hud.ids.azimuth = id("azimuth");
+    hud.ids.clouds = id("clouds");
+    hud.ids.cdens = id("cdens");
+    hud.ids.hiz = id("hiz");
+    hud.ids.cone = id("cone");
+    hud.ids.lod = id("lod");
+    hud.ids.frust = id("frust");
+    hud.ids.small = id("small");
+    hud.ids.shadow = id("shadow");
+    hud.ids.cluster = id("cluster");
+    hud.ids.probes = id("probes");
+    hud.ids.gien = id("gien");
+    hud.ids.cmaa = id("cmaa");
+    hud.ids.gtaoen = id("gtaoen");
+    hud.ids.bloomen = id("bloomen");
+    hud.ids.smaa = id("smaa");
+    hud.ids.sun = id("sun");
+    hud.ids.points = id("points");
+    hud.ids.spots = id("spots");
+    hud.ids.area = id("area");
+    hud.ids.sky = id("sky");
+    hud.ids.clouden = id("clouden");
+    hud.ids.fogen = id("fogen");
+    hud.ids.reflecten = id("reflecten");
+    hud.ids.contacten = id("contacten");
+    hud.ids.vt = id("vt");
+    hud.ids.freeze = id("freeze");
+    hud.ids.rcen = id("rcen");
 }
 
 struct ViewMode {
@@ -507,20 +542,16 @@ Panel rowSlide(Panel panel, const char* text, const char* name, float value, flo
 }
 
 bool fontBesideExe(Canvas& canvas) {
-    char exe[512]{};
-    const ssize_t n = ::readlink("/proc/self/exe", exe, sizeof(exe) - 1);
-    if (n <= 0) {
+    char dir[512]{};
+    if (!platformExePath(dir, sizeof(dir))) {
         return false;
     }
-    exe[n] = '\0';
-    char dir[512]{};
-    std::snprintf(dir, sizeof(dir), "%s", exe);
     for (int up = 0; up < 5; ++up) {
-        char* slash = std::strrchr(dir, '/');
-        if (slash == nullptr) {
+        char parent[512]{};
+        if (!pathParent(dir, parent, sizeof(parent))) {
             break;
         }
-        *slash = '\0';
+        strCopyCap(dir, sizeof(dir), parent);
         char face[640]{};
         std::snprintf(face, sizeof(face), "%s/assets/fonts/Inter-Regular.ttf", dir);
         if (canvasSetFont(canvas, face, 20.0f)) {
@@ -531,10 +562,20 @@ bool fontBesideExe(Canvas& canvas) {
 }
 
 void sceneHud(Canvas& canvas, void* user) {
+    auto* hud = static_cast<HudContext*>(user);
     const bool haveFont = canvas.state != nullptr && canvas.state->font.ready;
-    if ((!haveFont && !fontBesideExe(canvas) && !canvasUseFont(canvas, 20.0f)) || canvas.state == nullptr) {
+    if (hud == nullptr || (!haveFont && !fontBesideExe(canvas) && !canvasUseFont(canvas, 20.0f)) || canvas.state == nullptr) {
         return;
     }
+    hud->pages.clear();
+    hud->modes.clear();
+    hud->gizmos.clear();
+    hud->objects.clear();
+    hud->shown = 0xff;
+    hud->tool = {};
+    hud->tool.canvas = &canvas;
+    hud->tool.scene = hud->scene;
+    hud->stats = {};
     filesLoadIcons(canvas);
     canvasSetLook(canvas, uiLookInk());
     const UiLook look = canvasLook(canvas);
@@ -571,14 +612,12 @@ void sceneHud(Canvas& canvas, void* user) {
             grip.widthMode = static_cast<uint8_t>(UiSize::Percent);
             grip.width = 100.0f;
         }
-        UiPaint paint{};
-        paint.role = static_cast<uint8_t>(UiRole::Panel);
-        paint.tag = -5;
-        paint.a = 1.0f;
-        paint.r = 0.05f;
-        paint.g = 0.05f;
-        paint.b = 0.06f;
-        return parent.child(grip, paint);
+        UiPaint paint = paintToken(look, UiRole::Panel, UiToken::Muted, 0.0f);
+        Panel bar = parent.child(grip, paint);
+        if (bar.state != nullptr && bar.id != kUiNone) {
+            bar.state->ent[bar.id].set<UiSplitter>({});
+        }
+        return bar;
     };
     auto scrollPage = [&](Panel parent, bool show) {
         UiFlex viewFlex{};
@@ -623,63 +662,69 @@ void sceneHud(Canvas& canvas, void* user) {
     barFlex.pad = 12.0f;
     barFlex.gap = 8.0f;
     Panel top = root.child(barFlex, dockPaint());
-    Panel fileBtn = top.button("File", -7, look.button[0], look.button[1], look.button[2], 0);
+    Panel fileBtn = top.button("File");
     uiSetHeight(*canvas.state, fileBtn.id, 28.0f);
     uint16_t fileMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
-    if (canvas.state) canvas.state->contextOf[fileBtn.id] = fileMenu;
-    auto fileAct = [](void* user) {
-        auto* hit = static_cast<int*>(user);
-        if (hit == nullptr || gTool.canvas == nullptr || gTool.canvas->state == nullptr) {
+    if (canvas.state) uiSetContextMenu(*canvas.state, fileBtn.id, fileMenu);
+    auto fileAct = [](void* actUser) {
+        auto* hit = static_cast<FileAct*>(actUser);
+        if (hit == nullptr || hit->canvas == nullptr || hit->canvas->state == nullptr) {
             return;
         }
+        char home[512]{};
         char path[512]{};
-        const char* home = std::getenv("HOME");
-        std::snprintf(path, sizeof(path), "%s/BurnhopeProjects/Untitled", home != nullptr ? home : ".");
-        if (*hit == 0) {
-            filesNewProject(*gTool.canvas->state, path);
-        } else if (*hit == 1) {
-            filesOpenProject(*gTool.canvas->state, path);
-        } else if (*hit == 3) {
+        if (!platformUserDir(home, sizeof(home))) {
+            home[0] = '.';
+            home[1] = '\0';
+        }
+        std::snprintf(path, sizeof(path), "%s/BurnhopeProjects/Untitled", home);
+        if (hit->kind == 0) {
+            filesNewProject(*hit->canvas->state, path);
+        } else if (hit->kind == 1) {
+            filesOpenProject(*hit->canvas->state, path);
+        } else if (hit->kind == 3) {
             std::exit(0);
         }
     };
-    static int fileNew = 0;
-    static int fileOpen = 1;
-    static int fileSave = 2;
-    static int fileExit = 3;
+    hud->fileNew = {&canvas, 0};
+    hud->fileOpen = {&canvas, 1};
+    hud->fileSave = {&canvas, 2};
+    hud->fileExit = {&canvas, 3};
     if (canvas.state != nullptr) {
-        (void)uiCommandAddTo(*canvas.state, fileMenu, "New Project...", fileAct, &fileNew);
-        (void)uiCommandAddTo(*canvas.state, fileMenu, "Open Project...", fileAct, &fileOpen);
-        (void)uiCommandAddTo(*canvas.state, fileMenu, "Save Scene", fileAct, &fileSave);
-        (void)uiCommandAddTo(*canvas.state, fileMenu, "Exit", fileAct, &fileExit);
+        (void)uiCommandAddTo(*canvas.state, fileMenu, "New Project...", fileAct, &hud->fileNew);
+        (void)uiCommandAddTo(*canvas.state, fileMenu, "Open Project...", fileAct, &hud->fileOpen);
+        (void)uiCommandAddTo(*canvas.state, fileMenu, "Save Scene", fileAct, &hud->fileSave);
+        (void)uiCommandAddTo(*canvas.state, fileMenu, "Exit", fileAct, &hud->fileExit);
     }
-    Panel viewBtn = top.button("Lit", -7, look.button[0], look.button[1], look.button[2], 0);
+    Panel viewBtn = top.button("Lit");
     uiSetHeight(*canvas.state, viewBtn.id, 28.0f);
     uint16_t viewMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
-    if (canvas.state) canvas.state->contextOf[viewBtn.id] = viewMenu;
-    for (int i = 0; i < static_cast<int>(sizeof(kViews) / sizeof(kViews[0])); ++i) {
-        gMode[i].canvas = &canvas;
-        gMode[i].index = kViews[i].index;
-        gMode[i].label = viewBtn.id;
+    if (canvas.state) uiSetContextMenu(*canvas.state, viewBtn.id, viewMenu);
+    for (const ViewMode& mode : kViews) {
+        hud->modes.push_back({});
+        ModeHit& hit = hud->modes.back();
+        hit.canvas = &canvas;
+        hit.index = mode.index;
+        hit.label = viewBtn.id;
         if (canvas.state != nullptr) {
-            (void)uiCommandAddTo(*canvas.state, viewMenu, kViews[i].name, onMode, &gMode[i]);
+            (void)uiCommandAddTo(*canvas.state, viewMenu, mode.name, onMode, &hit);
         }
     }
-    Panel statsBtn = top.button("Stats", -1, look.button[0], look.button[1], look.button[2], 0);
+    Panel statsBtn = top.button("Stats");
     uiSetHeight(*canvas.state, statsBtn.id, 28.0f);
-    gTool.canvas = &canvas;
-    gTool.scene = static_cast<SceneFrame*>(user);
     const char* toolName[] = {"Move", "Rotate", "Scale"};
     for (uint8_t i = 0; i < 3; ++i) {
-        Panel toolBtn = top.button(toolName[i], -1, look.button[0], look.button[1], look.button[2], 0);
+        Panel toolBtn = top.button(toolName[i]);
         uiSetHeight(*canvas.state, toolBtn.id, 28.0f);
-        gGizmo[i].tool = &gTool;
-        gGizmo[i].mode = i;
-        uiBind(*canvas.state, toolBtn.id, onGizmoMode, &gGizmo[i]);
+        hud->gizmos.push_back({});
+        GizmoHit& gizmo = hud->gizmos.back();
+        gizmo.tool = &hud->tool;
+        gizmo.mode = i;
+        uiBind(*canvas.state, toolBtn.id, onGizmoMode, &gizmo);
     }
-    Panel dupBtn = top.button("Duplicate", -1, look.button[0], look.button[1], look.button[2], 0);
+    Panel dupBtn = top.button("Duplicate");
     uiSetHeight(*canvas.state, dupBtn.id, 28.0f);
-    uiBind(*canvas.state, dupBtn.id, onDuplicate, &gTool);
+    uiBind(*canvas.state, dupBtn.id, onDuplicate, hud);
     UiFlex rowFlex{};
     rowFlex.direction = 1;
     rowFlex.grow = 1.0f;
@@ -713,11 +758,11 @@ void sceneHud(Canvas& canvas, void* user) {
     statsCol.pad = 8.0f;
     statsCol.shrink = 0.0f;
     Panel stats = statsPane.child(statsCol, hiddenPaint());
-    gStats.canvas = &canvas;
-    gStats.page = statsPane.id;
-    gStats.dock = dock.id;
-    gStats.open = 0;
-    uiBind(*canvas.state, statsBtn.id, onStats, &gStats);
+    hud->stats.canvas = &canvas;
+    hud->stats.page = statsPane.id;
+    hud->stats.dock = dock.id;
+    hud->stats.open = 0;
+    uiBind(*canvas.state, statsBtn.id, onStats, &hud->stats);
     UiFlex sideFlex{};
     sideFlex.direction = 0;
     sideFlex.grow = 1.0f;
@@ -745,7 +790,7 @@ void sceneHud(Canvas& canvas, void* user) {
         uiBindScroll(*canvas.state, hierView.id, objects.id);
     }
     objects.label("Hierarchy").color(look.accent[0][0], look.accent[0][1], look.accent[0][2], 1.0f);
-    gTool.objects = objects.id;
+    hud->tool.objects = objects.id;
     (void)splitBar(side, false);
     UiFlex inspFlex{};
     inspFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
@@ -758,29 +803,33 @@ void sceneHud(Canvas& canvas, void* user) {
     Panel light = scrollPage(insp, false);
     Panel sky = scrollPage(insp, false);
     Panel cull = scrollPage(insp, false);
-    auto pick = [&](const char* title, int slot) {
-        Panel rowBtn = objects.button(title, -1, look.button[0], look.button[1], look.button[2], 0);
+    auto pick = [&](const char* title, uint16_t inner) {
+        Panel rowBtn = objects.button(title);
         uiSetHeight(*canvas.state, rowBtn.id, 28.0f);
-        gPage[slot].canvas = &canvas;
-        const uint16_t inner = slot == 0 ? post.id : slot == 1 ? sun.id : slot == 2 ? light.id : slot == 3 ? sky.id : cull.id;
-        gPage[slot].page = canvas.state->parentOf[inner];
-        uiBind(*canvas.state, rowBtn.id, onObjectPage, &gPage[slot]);
+        if (rowBtn.id == kUiNone || canvas.state == nullptr) {
+            return;
+        }
+        hud->pages.push_back({});
+        PageHit& hit = hud->pages.back();
+        hit.canvas = &canvas;
+        hit.page = uiParent(*canvas.state, inner);
+        uiBind(*canvas.state, rowBtn.id, onObjectPage, &hit);
     };
-    gTool.postPage = canvas.state->parentOf[post.id];
-    gTool.sunPage = canvas.state->parentOf[sun.id];
-    if (gTool.scene != nullptr) {
-        const uint8_t count = sceneFrameActorCount(gTool.scene);
-        for (uint8_t i = 0; i < count && i < 16; ++i) {
+    hud->tool.postPage = uiParent(*canvas.state, post.id);
+    hud->tool.sunPage = uiParent(*canvas.state, sun.id);
+    if (hud->tool.scene != nullptr) {
+        const uint8_t count = sceneFrameActorCount(hud->tool.scene);
+        for (uint8_t i = 0; i < count; ++i) {
             char name[24];
             uint8_t kind = 0;
-            sceneFrameActorName(gTool.scene, i, name, sizeof(name), &kind);
-            addActorButton(canvas, objects.id, i, name, kind);
+            sceneFrameActorName(hud->tool.scene, i, name, sizeof(name), &kind);
+            (void)addActorButton(*hud, objects.id, i, name, kind);
         }
     }
-    pick("Light", 2);
-    pick("Sky", 3);
-    pick("Cull", 4);
-    uiShowOnly(*canvas.state, canvas.state->parentOf[post.id]);
+    pick("Light", light.id);
+    pick("Sky", sky.id);
+    pick("Cull", cull.id);
+        uiShowOnly(*canvas.state, uiParent(*canvas.state, post.id));
     Panel fogBody = foldOpen(post, "Туман");
     Panel postBody = foldOpen(post, "Пост");
     Panel giBody = foldOpen(post, "GI");
@@ -946,83 +995,40 @@ void sceneHud(Canvas& canvas, void* user) {
         uiBindCheck(*canvas.state, uiFindName(*canvas.state, "prof0"), 1, 3, true);
         uiBindCheck(*canvas.state, uiFindName(*canvas.state, "mode0"), 1, 1, true);
         uiBindCheck(*canvas.state, uiFindName(*canvas.state, "tone0"), 1, 2, true);
+        bindHudIds(*hud, *canvas.state);
     }
 }
 
-int readFile(const char* path, char* dst, int cap) {
-    const int fd = open(path, O_RDONLY);
-    if (fd < 0 || cap <= 1) {
-        return 0;
-    }
-    const int n = static_cast<int>(read(fd, dst, static_cast<size_t>(cap - 1)));
-    close(fd);
-    if (n <= 0) {
-        return 0;
-    }
-    dst[n] = '\0';
-    return n;
-}
-
-float slideAt(const Canvas& canvas, const char* name, float fallback) {
+float slideAt(const Canvas& canvas, uint16_t id, float fallback) {
     float value = fallback;
     float minV = 0.0f;
     float maxV = 1.0f;
-    if (!uiRange(*canvas.state, uiFindName(*canvas.state, name), value, minV, maxV)) {
+    if (canvas.state == nullptr || !uiRange(*canvas.state, id, value, minV, maxV)) {
         return fallback;
     }
     return value;
 }
 
-bool checkOn(const Canvas& canvas, const char* name, bool fallback) {
-    const int on = canvas.state != nullptr ? uiCheckOn(*canvas.state, name) : -1;
+bool checkOn(const Canvas& canvas, uint16_t id, bool fallback) {
+    const int on = canvas.state != nullptr ? uiCheckOn(*canvas.state, id) : -1;
     return on < 0 ? fallback : on != 0;
-}
-
-void hostLoad(float& cpu, float& gpu) {
-    char buf[256];
-    static uint64_t prevIdle = 0;
-    static uint64_t prevTotal = 0;
-    if (readFile("/proc/stat", buf, sizeof(buf)) > 0) {
-        uint64_t user = 0, nice = 0, system = 0, idle = 0, iowait = 0, irq = 0, soft = 0;
-        if (std::sscanf(buf, "cpu %lu %lu %lu %lu %lu %lu %lu", &user, &nice, &system, &idle, &iowait, &irq, &soft) == 7) {
-            const uint64_t total = user + nice + system + idle + iowait + irq + soft;
-            const uint64_t idleNow = idle + iowait;
-            if (prevTotal != 0 && total > prevTotal) {
-                cpu = 100.0f * static_cast<float>((total - prevTotal) - (idleNow - prevIdle)) / static_cast<float>(total - prevTotal);
-            }
-            prevIdle = idleNow;
-            prevTotal = total;
-        }
-    }
-    gpu = -1.0f;
-    if (readFile("/sys/class/drm/card1/device/gpu_busy_percent", buf, sizeof(buf)) > 0
-        || readFile("/sys/class/drm/card0/device/gpu_busy_percent", buf, sizeof(buf)) > 0) {
-        gpu = static_cast<float>(std::atoi(buf));
-    }
 }
 
 bool engineTick(Engine& e) {
     char picked[512]{};
-    if (windowTakeFile(picked, static_cast<int>(sizeof(picked))) && gFileDialogSlot >= 0) {
-        shellDrop(e.host, gFileDialogSlot, picked, nullptr);
-        gFileDialogSlot = -1;
+    if (windowTakeFile(picked, static_cast<int>(sizeof(picked))) && e.demo.fileDialogSlot >= 0) {
+        shellDrop(e.host, e.demo.fileDialogSlot, picked, nullptr);
+        e.demo.fileDialogSlot = -1;
     }
     const bool ok = hostTick(e.host);
     if (e.scene != nullptr && e.host.primary >= 0) {
         char fps[96];
         sceneFrameStats(e.scene, fps, sizeof(fps));
-        char mem[64];
-        uint64_t rss = 0;
-        if (readFile("/proc/self/statm", mem, sizeof(mem)) > 0) {
-            unsigned long pages = 0;
-            unsigned long resident = 0;
-            if (std::sscanf(mem, "%lu %lu", &pages, &resident) == 2) {
-                rss = static_cast<uint64_t>(resident) * 4096ull;
-            }
-        }
-        float cpu = 0.0f;
-        float gpu = -1.0f;
-        hostLoad(cpu, gpu);
+        HostMeters meters{};
+        platformHostMeters(meters);
+        const uint64_t rss = meters.rss;
+        const float cpu = meters.cpu;
+        const float gpu = meters.gpu;
         const uint64_t vram = deviceMemoryUsed(e.host.device);
         char memLine[96];
         char loadLine[96];
@@ -1040,10 +1046,10 @@ bool engineTick(Engine& e) {
         }
         Canvas& hud = e.host.view[e.host.primary].canvas;
         const uint8_t selected = sceneFrameActorSelected(e.scene);
-        if (selected != gShown && selected < 16) {
-            gShown = selected;
+        if (selected != e.hud.shown && selected != kSceneActorNone) {
+            e.hud.shown = selected;
             const uint8_t kind = sceneFrameActorKind(e.scene, selected);
-            const uint16_t page = kind == static_cast<uint8_t>(SceneActorKind::Sun) ? gTool.sunPage : gTool.postPage;
+            const uint16_t page = kind == static_cast<uint8_t>(SceneActorKind::Sun) ? e.hud.tool.sunPage : e.hud.tool.postPage;
             if (page != kUiNone) {
                 uiShowOnly(*hud.state, page);
             }
@@ -1060,66 +1066,65 @@ bool engineTick(Engine& e) {
                 }
             }
         }
+        const HudIds& id = e.hud.ids;
         uint32_t mode = 0;
         for (uint32_t i = 0; i < 15; ++i) {
-            char name[8];
-            std::snprintf(name, sizeof(name), "mode%u", i);
-            if (hud.state != nullptr && uiCheckOn(*hud.state, name) == 1) {
+            if (checkOn(hud, id.mode[i], false)) {
                 mode = i;
             }
         }
         sceneFrameDebug(e.scene,
-            checkOn(hud, "hiz", true), checkOn(hud, "cone", true),
-            checkOn(hud, "lod", true), checkOn(hud, "frust", true), checkOn(hud, "small", true), checkOn(hud, "shadow", true),
+            checkOn(hud, id.hiz, true), checkOn(hud, id.cone, true),
+            checkOn(hud, id.lod, true), checkOn(hud, id.frust, true), checkOn(hud, id.small, true), checkOn(hud, id.shadow, true),
             mode);
         HudPost hudPost{};
-        hudPost.brightness = slideAt(hud, "bright", 1.0f);
-        hudPost.grain = slideAt(hud, "grain", hudPost.grain);
-        hudPost.bloom = slideAt(hud, "bloom", hudPost.bloom);
-        hudPost.vignette = slideAt(hud, "vig", hudPost.vignette);
-        hudPost.ca = slideAt(hud, "ca", hudPost.ca);
-        hudPost.contact = slideAt(hud, "contact", hudPost.contact);
-        hudPost.specOcc = slideAt(hud, "spec", hudPost.specOcc);
-        hudPost.toksvig = slideAt(hud, "tok", hudPost.toksvig);
-        hudPost.pom = slideAt(hud, "pom", hudPost.pom);
-        hudPost.ggx = slideAt(hud, "ggx", hudPost.ggx);
-        hudPost.gtao = slideAt(hud, "gtao", hudPost.gtao);
-        hudPost.lamp = slideAt(hud, "lamp", hudPost.lamp);
-        hudPost.sunGain = slideAt(hud, "sunI", 1.0f);
-        hudPost.sunR = slideAt(hud, "sunR", 1.0f);
-        hudPost.sunG = slideAt(hud, "sunG", 0.97f);
-        hudPost.sunB = slideAt(hud, "sunB", 0.92f);
+        hudPost.brightness = slideAt(hud, id.bright, 1.0f);
+        hudPost.grain = slideAt(hud, id.grain, hudPost.grain);
+        hudPost.bloom = slideAt(hud, id.bloom, hudPost.bloom);
+        hudPost.vignette = slideAt(hud, id.vig, hudPost.vignette);
+        hudPost.ca = slideAt(hud, id.ca, hudPost.ca);
+        hudPost.contact = slideAt(hud, id.contact, hudPost.contact);
+        hudPost.specOcc = slideAt(hud, id.spec, hudPost.specOcc);
+        hudPost.toksvig = slideAt(hud, id.tok, hudPost.toksvig);
+        hudPost.pom = slideAt(hud, id.pom, hudPost.pom);
+        hudPost.ggx = slideAt(hud, id.ggx, hudPost.ggx);
+        hudPost.gtao = slideAt(hud, id.gtao, hudPost.gtao);
+        hudPost.lamp = slideAt(hud, id.lamp, hudPost.lamp);
+        hudPost.sunGain = slideAt(hud, id.sunI, 1.0f);
+        hudPost.sunR = slideAt(hud, id.sunR, 1.0f);
+        hudPost.sunG = slideAt(hud, id.sunG, 0.97f);
+        hudPost.sunB = slideAt(hud, id.sunB, 0.92f);
         sceneFrameTune(e.scene, hudPost);
         SceneTweaks tweaks{};
-        tweaks.forceLod = static_cast<int32_t>(slideAt(hud, "lodf", -1.0f));
-        tweaks.gtaoRadius = slideAt(hud, "gtaor", 2.5f);
-        tweaks.gtaoSteps = slideAt(hud, "gtaoSt", 6.0f);
-        tweaks.gtaoSlices = slideAt(hud, "gtaoSl", 6.0f);
-        tweaks.gtaoPower = slideAt(hud, "gtaoPw", 1.6f);
-        tweaks.gtaoFalloff = slideAt(hud, "gtaoFa", 1.0f);
-        tweaks.sscsReach = slideAt(hud, "sscsR", 0.2f);
-        tweaks.sscsThick = slideAt(hud, "sscsT", 0.02f);
-        tweaks.sscsSteps = slideAt(hud, "sscsS", 12.0f);
-        tweaks.sscsPx = slideAt(hud, "sscsP", 128.0f);
-        tweaks.rcRays = slideAt(hud, "rcRays", 8.0f);
-        tweaks.rcSpacing = slideAt(hud, "rcCell", 0.45f);
-        tweaks.rcIntensity = slideAt(hud, "rcGain", 1.0f);
-        tweaks.giGain = slideAt(hud, "giGain", 2.0f);
-        tweaks.rcMax = slideAt(hud, "rcMax", 48.0f);
-        tweaks.bloomThreshold = slideAt(hud, "bloomth", 0.35f);
-        tweaks.fogDensity = slideAt(hud, "fog", 0.002f);
-        tweaks.fogHeight = slideAt(hud, "fogH", 4.0f);
-        tweaks.fogScatter = slideAt(hud, "fogS", 1.0f);
-        float zenith = slideAt(hud, "zenith", 35.0f);
-        float azimuth = slideAt(hud, "azimuth", 30.0f);
+        tweaks.forceLod = static_cast<int32_t>(slideAt(hud, id.lodf, -1.0f));
+        tweaks.gtaoRadius = slideAt(hud, id.gtaor, 2.5f);
+        tweaks.gtaoSteps = slideAt(hud, id.gtaoSt, 6.0f);
+        tweaks.gtaoSlices = slideAt(hud, id.gtaoSl, 6.0f);
+        tweaks.gtaoPower = slideAt(hud, id.gtaoPw, 1.6f);
+        tweaks.gtaoFalloff = slideAt(hud, id.gtaoFa, 1.0f);
+        tweaks.sscsReach = slideAt(hud, id.sscsR, 0.2f);
+        tweaks.sscsThick = slideAt(hud, id.sscsT, 0.02f);
+        tweaks.sscsSteps = slideAt(hud, id.sscsS, 12.0f);
+        tweaks.sscsPx = slideAt(hud, id.sscsP, 128.0f);
+        tweaks.rcRays = slideAt(hud, id.rcRays, 8.0f);
+        tweaks.rcSpacing = slideAt(hud, id.rcCell, 0.45f);
+        tweaks.rcIntensity = slideAt(hud, id.rcGain, 1.0f);
+        tweaks.giGain = slideAt(hud, id.giGain, 2.0f);
+        tweaks.rcMax = slideAt(hud, id.rcMax, 48.0f);
+        tweaks.bloomThreshold = slideAt(hud, id.bloomth, 0.35f);
+        tweaks.fogDensity = slideAt(hud, id.fog, 0.002f);
+        tweaks.fogHeight = slideAt(hud, id.fogH, 4.0f);
+        tweaks.fogScatter = slideAt(hud, id.fogS, 1.0f);
+        float zenith = slideAt(hud, id.zenith, 35.0f);
+        float azimuth = slideAt(hud, id.azimuth, 30.0f);
         if (sunIndex != kSceneActorNone) {
             float pitch = zenith;
             float yaw = azimuth;
             sceneFrameActorEuler(e.scene, sunIndex, pitch, yaw);
             const bool dragging = sceneFrameActorDragging(e.scene) && selected == sunIndex;
             if (dragging || (std::fabs(zenith - pitch) <= 0.25f && std::fabs(azimuth - yaw) <= 0.25f)) {
-                setSlide(hud, "zenith", pitch);
-                setSlide(hud, "azimuth", yaw);
+                setSlide(hud, id.zenith, pitch);
+                setSlide(hud, id.azimuth, yaw);
                 zenith = pitch;
                 azimuth = yaw;
             } else {
@@ -1128,77 +1133,73 @@ bool engineTick(Engine& e) {
         }
         tweaks.sunZenith = zenith;
         tweaks.sunAzimuth = azimuth;
-        tweaks.cloudCoverage = slideAt(hud, "clouds", 0.42f);
-        tweaks.cloudDensity = slideAt(hud, "cdens", 0.08f);
-        tweaks.freeze = checkOn(hud, "freeze", false);
+        tweaks.cloudCoverage = slideAt(hud, id.clouds, 0.42f);
+        tweaks.cloudDensity = slideAt(hud, id.cdens, 0.08f);
+        tweaks.freeze = checkOn(hud, id.freeze, false);
         tweaks.passMask = 0;
-        if (checkOn(hud, "cluster", true)) {
+        if (checkOn(hud, id.cluster, true)) {
             tweaks.passMask |= 1u;
         }
-        if (checkOn(hud, "probes", true)) {
+        if (checkOn(hud, id.probes, true)) {
             tweaks.passMask |= 2u;
         }
-        if (checkOn(hud, "gien", true)) {
+        if (checkOn(hud, id.gien, true)) {
             tweaks.passMask |= 262144u;
         }
-        if (checkOn(hud, "cmaa", true)) {
+        if (checkOn(hud, id.cmaa, true)) {
             tweaks.passMask |= 8u;
         }
-        if (checkOn(hud, "gtaoen", true)) {
+        if (checkOn(hud, id.gtaoen, true)) {
             tweaks.passMask |= 16u;
         }
-        if (checkOn(hud, "bloomen", true)) {
+        if (checkOn(hud, id.bloomen, true)) {
             tweaks.passMask |= 32u;
         }
-        if (checkOn(hud, "smaa", false)) {
+        if (checkOn(hud, id.smaa, false)) {
             tweaks.passMask |= 4u;
         }
-        if (checkOn(hud, "sun", true)) {
+        if (checkOn(hud, id.sun, true)) {
             tweaks.passMask |= 256u;
         }
-        if (checkOn(hud, "points", true)) {
+        if (checkOn(hud, id.points, true)) {
             tweaks.passMask |= 512u;
         }
-        if (checkOn(hud, "spots", true)) {
+        if (checkOn(hud, id.spots, true)) {
             tweaks.passMask |= 65536u;
         }
-        if (checkOn(hud, "area", true)) {
+        if (checkOn(hud, id.area, true)) {
             tweaks.passMask |= 131072u;
         }
-        if (checkOn(hud, "sky", true)) {
+        if (checkOn(hud, id.sky, true)) {
             tweaks.passMask |= 1024u;
         }
-        if (checkOn(hud, "clouden", true)) {
+        if (checkOn(hud, id.clouden, true)) {
             tweaks.passMask |= 2048u;
         }
-        if (checkOn(hud, "fogen", true)) {
+        if (checkOn(hud, id.fogen, true)) {
             tweaks.passMask |= 4096u;
         }
-        if (checkOn(hud, "reflecten", true)) {
+        if (checkOn(hud, id.reflecten, true)) {
             tweaks.passMask |= 8192u;
         }
-        if (checkOn(hud, "contacten", true)) {
+        if (checkOn(hud, id.contacten, true)) {
             tweaks.passMask |= 16384u;
         }
-        if (checkOn(hud, "vt", false)) {
+        if (checkOn(hud, id.vt, false)) {
             tweaks.passMask |= 32768u;
         }
         tweaks.lightProfile = 0;
         for (uint32_t i = 0; i < 3; ++i) {
-            char name[8];
-            std::snprintf(name, sizeof(name), "prof%u", i);
-            if (hud.state != nullptr && uiCheckOn(*hud.state, name) == 1) {
+            if (checkOn(hud, id.prof[i], false)) {
                 tweaks.lightProfile = i;
             }
         }
-        if (checkOn(hud, "rcen", true)) {
+        if (checkOn(hud, id.rcen, true)) {
             tweaks.passMask |= 128u;
         }
         tweaks.tonemapper = 0;
         for (uint32_t i = 0; i < 4; ++i) {
-            char name[8];
-            std::snprintf(name, sizeof(name), "tone%u", i);
-            if (hud.state != nullptr && uiCheckOn(*hud.state, name) == 1) {
+            if (checkOn(hud, id.tone[i], false)) {
                 tweaks.tonemapper = i;
             }
         }
@@ -1220,11 +1221,9 @@ bool engineTick(Engine& e) {
             }
             cursor = nl + 1;
         }
-        for (uint32_t i = 0; i < 12; ++i) {
-            char name[8];
-            std::snprintf(name, sizeof(name), "g%u", i);
-            if (e.host.view[e.host.primary].canvas.state != nullptr) {
-                Panel::find(*e.host.view[e.host.primary].canvas.state, name).setText(lines[i]);
+        if (hud.state != nullptr) {
+            for (uint32_t i = 0; i < 12; ++i) {
+                Panel::at(*hud.state, id.stat[i]).setText(lines[i]);
             }
         }
         windowTitle(e.host.view[e.host.primary].window, sceneFrameTitle(e.scene));

@@ -1,8 +1,6 @@
 #include "render/Cube.hpp"
 
-#ifndef BH_SHADER_DIR
-#define BH_SHADER_DIR "shaders"
-#endif
+#include "render/RenderDefs.hpp"
 #include "render/HeapBind.hpp"
 #include "render/PassCommon.hpp"
 #include "render/PassRendering.hpp"
@@ -17,30 +15,28 @@ namespace burnhope {
 
 bool cubePassCreate(CubePass& p, Device& d, const DescriptorHeaps& heaps) {
     cubePassDestroy(p, d);
-    const char* path[6] = {
-        BH_SHADER_DIR "/cube0.mesh.spv",
-        BH_SHADER_DIR "/cube1.mesh.spv",
-        BH_SHADER_DIR "/cube2.mesh.spv",
-        BH_SHADER_DIR "/cube3.mesh.spv",
-        BH_SHADER_DIR "/cube4.mesh.spv",
-        BH_SHADER_DIR "/cube5.mesh.spv",
-    };
-    VkDescriptorSetAndBindingMappingEXT maps[6][12];
+    VkDescriptorSetAndBindingMappingEXT maps[12];
     VkDescriptorSetAndBindingMappingEXT fragMaps[8];
-    if (!createShaderGroup(d, p.mesh, path, VK_SHADER_STAGE_MESH_BIT_EXT, [&](uint32_t face, ShaderCreateDesc& desc) {
-            PassBindings b{heaps};
-            b.sun();
-            b.storageBuf(7, HeapBuf::Verts);
-            b.storageBuf(8, HeapBuf::Indices);
-            b.storageBuf(9, HeapBuf::Meshlets);
-            b.storageBuf(10, HeapBuf::Instances);
-            b.storageBuf(21, cubeListSlot(face));
-            for (uint32_t i = 0; i < b.raw.count; ++i) {
-                maps[face][i] = b.raw.mappings[i];
-            }
-            desc.mappingCount = b.raw.count;
-            desc.mappings = maps[face];
-        }, VK_SHADER_STAGE_FRAGMENT_BIT)) {
+    PassBindings meshBind{heaps};
+    meshBind.sun();
+    meshBind.storageBuf(7, HeapBuf::Verts);
+    meshBind.storageBuf(8, HeapBuf::Indices);
+    meshBind.storageBuf(9, HeapBuf::Meshlets);
+    meshBind.storageBuf(10, HeapBuf::Instances);
+    meshBind.storageBuf(21, HeapBuf::CubeVisible);
+    for (uint32_t i = 0; i < meshBind.raw.count; ++i) {
+        maps[i] = meshBind.raw.mappings[i];
+    }
+    const ShaderCreateDesc meshDesc{
+        .path = BH_SHADER_DIR "/cube.mesh.spv",
+        .stage = VK_SHADER_STAGE_MESH_BIT_EXT,
+        .nextStage = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .mappingCount = meshBind.raw.count,
+        .mappings = maps,
+        .pushBytes = 16,
+        .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
+    };
+    if (!shaderCreate(d, meshDesc, p.mesh)) {
         spdlog::error("cube mesh shader failed");
         cubePassDestroy(p, d);
         return false;
@@ -101,9 +97,7 @@ bool cubePassCreate(CubePass& p, Device& d, const DescriptorHeaps& heaps) {
 }
 
 void cubePassDestroy(CubePass& p, Device& d) {
-    for (uint32_t face = 0; face < 6; ++face) {
-        shaderDestroy(d, p.mesh[face]);
-    }
+    shaderDestroy(d, p.mesh);
     shaderDestroy(d, p.fill);
     shaderDestroy(d, p.frag);
     shaderDestroy(d, p.bake);
@@ -144,10 +138,20 @@ void cubePassRecord(VkCommandBuffer cmd, const CubePass& p, TrackedImage& color,
         vkCmdSetScissorWithCount(cmd, 1, &clearRect.rect);
     }
     if (counts[slot] > 0) {
+        struct CubePush {
+            uint32_t face;
+            uint32_t stride;
+            uint32_t pad0;
+            uint32_t pad1;
+        };
+        const CubePush push{slot, p.listStride, 0, 0};
         meshDrawRecord(cmd, MeshDrawDesc{
-            .mesh = p.mesh[slot].handle,
+            .mesh = p.mesh.handle,
             .frag = p.frag.handle,
             .groupCount = counts[slot],
+            .pushData = &push,
+            .pushBytes = sizeof(push),
+            .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
         });
     }
     endRendering(rendering);

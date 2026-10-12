@@ -1,3 +1,4 @@
+#include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Curve.hpp"
 #include "ui/widget/Detail.hpp"
 
@@ -97,6 +98,62 @@ uint16_t uiGradient(UiState& s, uint16_t parent) {
     s.ent[id].set<UiGradient>({});
     uiDrag(s, id, onGradient, &s);
     return id;
+}
+
+bool uiCurveDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
+    if (id >= s.count) {
+        return false;
+    }
+    const UiBox& box = s.box[id];
+    UiBox ancestor{};
+    const bool hasClip = uiClipBox(s, id, ancestor);
+    const UiBox* clip = hasClip ? &ancestor : nullptr;
+    if (const UiCurve* curve = s.ent[id].try_get<UiCurve>()) {
+        const int steps = 16;
+        for (int step = 0; step < steps && n < cap; ++step) {
+            UiPrimitive& prim = dst[n++];
+            prim = {};
+            prim.posX = box.x + curve->x[0] * box.w;
+            prim.posY = box.y + curve->y[0] * box.h;
+            prim.sizeX = box.x + curve->x[1] * box.w;
+            prim.sizeY = box.y + curve->y[1] * box.h;
+            prim.extra[0] = box.x + curve->x[2] * box.w;
+            prim.extra[1] = box.y + curve->y[2] * box.h;
+            prim.extra[2] = box.x + curve->x[3] * box.w;
+            prim.extra[3] = box.y + curve->y[3] * box.h;
+            prim.color[0] = 0.95f;
+            prim.color[1] = 0.82f;
+            prim.color[2] = 0.35f;
+            prim.color[3] = 1.0f;
+            prim.texId = static_cast<uint32_t>(step);
+            prim.flags = kUiFlagRibbon;
+        }
+        for (int p = 0; p < 4; ++p) {
+            n = emitRect(dst, n, cap, box.x + curve->x[p] * box.w - 4.0f, box.y + curve->y[p] * box.h - 4.0f, 8.0f, 8.0f, 0.95f, 0.9f, 0.85f, 1.0f, 4.0f, clip);
+        }
+    }
+    if (const UiGradient* grad = s.ent[id].try_get<UiGradient>()) {
+        const int stops = grad->stops < 2 ? 2 : (grad->stops > 4 ? 4 : grad->stops);
+        for (int band = 0; band < 24; ++band) {
+            const float t0 = static_cast<float>(band) / 24.0f;
+            int seg = 0;
+            for (int sidx = 0; sidx < stops - 1; ++sidx) {
+                if (t0 >= grad->t[sidx] && t0 <= grad->t[sidx + 1]) {
+                    seg = sidx;
+                }
+            }
+            const float span = grad->t[seg + 1] - grad->t[seg];
+            const float u = span > 0.0001f ? (t0 - grad->t[seg]) / span : 0.0f;
+            const float cr = grad->r[seg] + (grad->r[seg + 1] - grad->r[seg]) * u;
+            const float cg = grad->g[seg] + (grad->g[seg + 1] - grad->g[seg]) * u;
+            const float cb = grad->b[seg] + (grad->b[seg + 1] - grad->b[seg]) * u;
+            n = emitRect(dst, n, cap, box.x + t0 * box.w, box.y + box.h * 0.35f, box.w / 24.0f + 1.0f, box.h * 0.3f, cr, cg, cb, 1.0f, 0.0f, clip);
+        }
+        for (int p = 0; p < stops; ++p) {
+            n = emitRect(dst, n, cap, box.x + grad->t[p] * box.w - 5.0f, box.y + box.h * 0.35f - 4.0f, 10.0f, box.h * 0.3f + 8.0f, 1.0f, 1.0f, 1.0f, 0.9f, 2.0f, clip);
+        }
+    }
+    return false;
 }
 
 } // namespace burnhope

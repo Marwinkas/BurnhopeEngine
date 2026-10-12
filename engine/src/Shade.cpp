@@ -1,8 +1,6 @@
 #include "render/Shade.hpp"
 
-#ifndef BH_SHADER_DIR
-#define BH_SHADER_DIR "shaders"
-#endif
+#include "render/RenderDefs.hpp"
 #include "render/HeapBind.hpp"
 #include "render/PassTargets.hpp"
 #include "render/PassCommon.hpp"

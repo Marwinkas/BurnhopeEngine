@@ -1,16 +1,11 @@
 #include "render/Radiance.hpp"
-#include "ui/Model.hpp"
 
 #include "render/PassBufferSync.hpp"
 #include "rhi/Barrier.hpp"
 #include "rhi/DescriptorHeap.hpp"
 
-#ifndef BH_SHADER_DIR
-#define BH_SHADER_DIR "shaders"
-#endif
+#include "render/RenderDefs.hpp"
 #include "render/HeapBind.hpp"
-
-static_assert(static_cast<uint32_t>(burnhope::HeapBuf::Rc) != burnhope::kUiDescPrims, "RC buffer slot overwrites the UI primitive buffer");
 
 #include <spdlog/spdlog.h>
 
@@ -116,7 +111,7 @@ bool radianceCreate(RadiancePass& p, Device& d, const DescriptorHeaps& heaps) {
     if (!shaderCreate(d, traceDesc, p.trace) || !shaderCreate(d, applyDesc, p.apply)) {
         spdlog::error("radiance shaders failed");
         radianceDestroy(p, d);
-        return true;
+        return false;
     }
     p.slots = kHashCap;
     PassBindings mergeBind{heaps};
@@ -139,7 +134,7 @@ bool radianceCreate(RadiancePass& p, Device& d, const DescriptorHeaps& heaps) {
     if (!shaderCreate(d, mergeDesc, p.merge) || !shaderCreate(d, irrDesc, p.irradiance)) {
         spdlog::error("radiance merge shader failed");
         radianceDestroy(p, d);
-        return true;
+        return false;
     }
     return true;
 }
@@ -150,10 +145,6 @@ void radianceDestroy(RadiancePass& p, Device& d) {
     if (p.blas != VK_NULL_HANDLE && d.device != VK_NULL_HANDLE) {
         vkDestroyAccelerationStructureKHR(d.device, p.blas, nullptr);
     }
-    if (p.pushLayout != VK_NULL_HANDLE && d.device != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(d.device, p.pushLayout, nullptr);
-    }
-    p.pushLayout = VK_NULL_HANDLE;
     p.blas = VK_NULL_HANDLE;
     gpuBufferDestroy(p.table, d);
     gpuBufferDestroy(p.indices, d);

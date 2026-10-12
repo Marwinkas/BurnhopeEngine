@@ -1,5 +1,7 @@
 #pragma once
 
+#include "rhi/DescriptorSlots.hpp"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -9,9 +11,6 @@ namespace burnhope {
 
 struct UiState;
 
-// Слот 48 буфера кучи, диапазон холста 48..63. Проходы движка его не занимают.
-constexpr uint32_t kUiDescPrims = 48;
-static_assert(kUiDescPrims >= 48u && kUiDescPrims < 64u);
 constexpr uint32_t kUiDescFont = 800;
 constexpr uint32_t kUiDescPhoto = 801;
 constexpr uint16_t kUiCap = 1024;
@@ -523,6 +522,16 @@ struct UiBox {
     float w = 0;
     float h = 0;
 };
+
+inline bool hitBox(const UiBox& b, float x, float y) {
+    return b.w > 0.5f && b.h > 0.5f && x >= b.x && y >= b.y && x < b.x + b.w && y < b.y + b.h;
+}
+
+inline bool focusable(uint8_t role) {
+    return role == static_cast<uint8_t>(UiRole::Button) || role == static_cast<uint8_t>(UiRole::Slider)
+        || role == static_cast<uint8_t>(UiRole::Check) || role == static_cast<uint8_t>(UiRole::Field)
+        || role == static_cast<uint8_t>(UiRole::Close);
+}
 
 constexpr uint8_t kUiLineCap = 8;
 

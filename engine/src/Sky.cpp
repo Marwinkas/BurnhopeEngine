@@ -1,8 +1,6 @@
 #include "render/Sky.hpp"
 
-#ifndef BH_SHADER_DIR
-#define BH_SHADER_DIR "shaders"
-#endif
+#include "render/RenderDefs.hpp"
 #include "render/HeapBind.hpp"
 #include "render/PassAllocators.hpp"
 #include "render/PassBufferSync.hpp"
@@ -13,63 +11,6 @@
 #include <spdlog/spdlog.h>
 
 namespace burnhope {
-
-float cloudFrac(float v) {
-    return v - std::floor(v);
-}
-
-float cloudHashCpu(float x, float y, float z) {
-    x = cloudFrac(x * 0.1031f);
-    y = cloudFrac(y * 0.1031f);
-    z = cloudFrac(z * 0.1031f);
-    const float d = x * (y + 33.33f) + y * (z + 33.33f) + z * (x + 33.33f);
-    x += d;
-    y += d;
-    z += d;
-    return cloudFrac((x + y) * z);
-}
-
-float cloudWorleyCpu(float px, float py, float pz) {
-    const float cx = std::floor(px);
-    const float cy = std::floor(py);
-    const float cz = std::floor(pz);
-    const float fx = px - cx;
-    const float fy = py - cy;
-    const float fz = pz - cz;
-    float best = 1.0f;
-    for (int z = -1; z <= 1; ++z) {
-        for (int y = -1; y <= 1; ++y) {
-            for (int x = -1; x <= 1; ++x) {
-                const float hx = cloudHashCpu(cx + float(x), cy + float(y), cz + float(z));
-                const float rx = float(x) + hx - fx;
-                const float ry = float(y) + hx - fy;
-                const float rz = float(z) + hx - fz;
-                best = std::min(best, rx * rx + ry * ry + rz * rz);
-            }
-        }
-    }
-    return std::sqrt(best);
-}
-
-void fillCloudNoise(float* dst) {
-    constexpr uint32_t shape = 128u;
-    constexpr uint32_t detail = 32u;
-    for (uint32_t z = 0; z < shape; ++z) {
-        for (uint32_t y = 0; y < shape; ++y) {
-            for (uint32_t x = 0; x < shape; ++x) {
-                dst[x + y * shape + z * shape * shape] = cloudWorleyCpu(float(x) + 0.5f, float(y) + 0.5f, float(z) + 0.5f);
-            }
-        }
-    }
-    float* tail = dst + shape * shape * shape;
-    for (uint32_t z = 0; z < detail; ++z) {
-        for (uint32_t y = 0; y < detail; ++y) {
-            for (uint32_t x = 0; x < detail; ++x) {
-                tail[x + y * detail + z * detail * detail] = cloudWorleyCpu(float(x) + 0.5f, float(y) + 0.5f, float(z) + 0.5f);
-            }
-        }
-    }
-}
 
 void atmosphereApply(FrameSun& sun, const AtmosphereParams& atm) {
     const float elev = atm.sunZenith * 0.017453292f;
@@ -104,8 +45,9 @@ bool skyPassCreate(SkyPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
         skyPassDestroy(p, d);
         return false;
     }
-    fillCloudNoise(static_cast<float*>(p.noise.mapped));
     p.noiseReady = false;
+    PassBindings noiseBind{heaps};
+    noiseBind.storageBuf(46, HeapBuf::CloudNoise, false);
     PassBindings transBind{heaps};
     transBind.knob(58, HeapBuf::Atm);
     transBind.storageImg(40, HeapImg::SkyTrans);
@@ -175,8 +117,15 @@ bool skyPassCreate(SkyPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
         .mappingCount = upBind.raw.count,
         .mappings = upBind.raw.mappings,
     };
+    const ShaderCreateDesc noiseDesc{
+        .path = BH_SHADER_DIR "/cloud.noise.comp.spv",
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .mappingCount = noiseBind.raw.count,
+        .mappings = noiseBind.raw.mappings,
+    };
     if (!shaderCreate(d, transDesc, p.transmittanceCs) || !shaderCreate(d, msDesc, p.multiCs) || !shaderCreate(d, viewDesc, p.skyViewCs)
         || !shaderCreate(d, marchDesc, p.cloudMarch) || !shaderCreate(d, upDesc, p.cloudUp)
+        || !shaderCreate(d, noiseDesc, p.noiseCs)
         || !shaderCreate(d, probeDesc, p.skyProbe)) {
         spdlog::error("sky shader failed");
         skyPassDestroy(p, d);
@@ -185,8 +134,14 @@ bool skyPassCreate(SkyPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
     return true;
 }
 
+bool skyPassResize(SkyPass& p, Device& d, VkExtent2D extent) {
+    const VkImageUsageFlags usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    return recreateTracked(p.cloud, d, halfExtent(extent), VK_FORMAT_R16G16B16A16_SFLOAT, usage, VK_IMAGE_ASPECT_COLOR_BIT);
+}
+
 void skyPassDestroy(SkyPass& p, Device& d) {
     shaderDestroy(d, p.skyProbe);
+    shaderDestroy(d, p.noiseCs);
     shaderDestroy(d, p.cloudUp);
     shaderDestroy(d, p.cloudMarch);
     shaderDestroy(d, p.skyViewCs);
@@ -217,8 +172,11 @@ void skyProbeRecord(VkCommandBuffer cmd, SkyPass& p, VkBuffer probes, VkDeviceSi
 }
 
 void cloudRecord(VkCommandBuffer cmd, SkyPass& p, VkExtent2D extent) {
-    if (!p.noiseReady && p.noise.buffer != VK_NULL_HANDLE) {
-        bufferBarrierHostToShader(cmd, p.noise.buffer, p.noise.size, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+    if (!p.noiseReady && p.noise.buffer != VK_NULL_HANDLE && p.noiseCs.handle != VK_NULL_HANDLE) {
+        bufferBarrierHostToShader(cmd, p.noise.buffer, p.noise.size, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+        cmdBindCompute(cmd, p.noiseCs.handle);
+        vkCmdDispatch(cmd, 32, 32, 32);
+        bufferBarrierComputeWriteToRead(cmd, p.noise.buffer, 0, p.noise.size);
         p.noiseReady = true;
     }
     imageBarrier(cmd, p.cloud, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,

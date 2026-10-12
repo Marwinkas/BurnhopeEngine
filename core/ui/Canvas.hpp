@@ -1,6 +1,6 @@
 #pragma once
 
-#include "platform/Window.hpp"
+#include "platform/Input.hpp"
 #include "rhi/Swapchain.hpp"
 #include "ui/State.hpp"
 #include "ui/rhi/UiRenderer.hpp"

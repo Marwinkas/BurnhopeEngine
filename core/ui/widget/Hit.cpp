@@ -1,6 +1,4 @@
-#include "ui/widget/Detail.hpp"
-#include "ui/widget/Scroll.hpp"
-#include "ui/widget/Splitter.hpp"
+#include "ui/State.hpp"
 #include "platform/Trace.hpp"
 
 namespace burnhope {
@@ -11,7 +9,7 @@ bool insideParents(const UiState& s, uint16_t id, float x, float y) {
     float y0 = 0;
     float x1 = 0;
     float y1 = 0;
-    for (uint16_t p = s.parentOf[id]; p != kUiNone; p = s.parentOf[p]) {
+    for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
         const UiPaint* paint = s.ent[p].try_get<UiPaint>();
         const UiFlex* flex = s.ent[p].try_get<UiFlex>();
         const bool clip = (paint != nullptr && paint->role == static_cast<uint8_t>(UiRole::Scroll))
@@ -50,23 +48,6 @@ bool insideParents(const UiState& s, uint16_t id, float x, float y) {
 uint16_t hitTest(const UiState& s, float x, float y) {
     BH_ZONE;
     auto scan = [&](bool overlay) -> uint16_t {
-        uint16_t thumbHit = kUiNone;
-        for (uint16_t n = s.count; n > 0; --n) {
-            const uint16_t id = static_cast<uint16_t>(n - 1);
-            if (!s.ent[id].is_alive() || uiIsOverlay(s, id) != overlay) {
-                continue;
-            }
-            const UiPaint* p = s.ent[id].try_get<UiPaint>();
-            if (p == nullptr || p->role != static_cast<uint8_t>(UiRole::Scroll)) {
-                continue;
-            }
-            UiBox thumb{};
-            if (!scrollThumb(s, id, thumb) || !hitBox(thumb, x, y) || !insideParents(s, id, x, y)) {
-                continue;
-            }
-            thumbHit = id;
-            break;
-        }
         for (uint16_t n = s.count; n > 0; --n) {
             const uint16_t id = static_cast<uint16_t>(n - 1);
             if (!s.ent[id].is_alive() || uiIsOverlay(s, id) != overlay) {
@@ -88,7 +69,7 @@ uint16_t hitTest(const UiState& s, float x, float y) {
                 continue;
             }
             bool hidden = false;
-            for (uint16_t up = id; up != kUiNone; up = s.parentOf[up]) {
+            for (uint16_t up = id; up != kUiNone && up < s.count; up = s.parentOf[up]) {
                 if (s.tight[up] != 0 || !nodeShown(s, up)) {
                     hidden = true;
                     break;
@@ -97,23 +78,11 @@ uint16_t hitTest(const UiState& s, float x, float y) {
             if (hidden) {
                 continue;
             }
-            if (s.ent[id].try_get<UiSplitter>() != nullptr) {
-                const UiBox grip = splitGrip(s, id);
-                if (!hitBox(grip, x, y)) {
-                    continue;
-                }
-            }
             if (hitBox(s.box[id], x, y)) {
-                const auto hitRole = static_cast<UiRole>(p->role);
-                const bool control = hitRole == UiRole::Button || hitRole == UiRole::Slider || hitRole == UiRole::Check
-                    || hitRole == UiRole::Field || hitRole == UiRole::Close;
-                if (control || thumbHit == kUiNone) {
-                    return id;
-                }
-                return thumbHit;
+                return id;
             }
         }
-        return thumbHit;
+        return kUiNone;
     };
     const uint16_t top = scan(true);
     return top != kUiNone ? top : scan(false);

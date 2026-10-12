@@ -1,3 +1,4 @@
+#include "platform/PlatformUtil.hpp"
 #include "render/HeapBind.hpp"
 #include "render/PassAllocators.hpp"
 #include "render/PassBufferSync.hpp"
@@ -42,8 +43,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
-#include <dirent.h>
+#include <filesystem>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace burnhope {
@@ -165,29 +167,30 @@ void resolveTexturePath(char* path, size_t cap, const char* root, const char* na
             return;
         }
     }
-    DIR* dir = opendir(root);
-    if (dir == nullptr) {
+    std::error_code ec;
+    const std::filesystem::path dir(root);
+    if (!std::filesystem::is_directory(dir, ec)) {
         return;
     }
     const size_t n = std::strlen(name);
-    const char* only = nullptr;
+    std::string only;
     uint32_t hits = 0;
-    while (const dirent* ent = readdir(dir)) {
-        if (ent->d_name[0] == '.') {
+    for (std::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
+        const std::string file = it->path().filename().string();
+        if (file.empty() || file[0] == '.') {
             continue;
         }
-        if (std::strncmp(ent->d_name, name, n) != 0) {
+        if (file.compare(0, n, name) != 0) {
             continue;
         }
-        only = ent->d_name;
+        only = file;
         hits += 1;
         if (hits > 1) {
             break;
         }
     }
-    closedir(dir);
-    if (hits == 1 && only != nullptr) {
-        std::snprintf(path, cap, "%s/%s", root, only);
+    if (hits == 1 && !only.empty()) {
+        std::snprintf(path, cap, "%s/%s", root, only.c_str());
     }
 }
 
@@ -249,34 +252,39 @@ bool loadTextures(SceneFrameImpl& s, Device& device) {
     if (count > 768u) {
         count = 768u;
     }
-    s.textures = new GpuImage[count]{};
+    s.textures.assign(count, GpuImage{});
     s.textureSlots = count;
     const uint8_t white[4] = {0xff, 0xff, 0xff, 0xff};
     if (!imageUploadUncompressed(s.textures[0], device, white, 1, 1)) {
         return false;
     }
     for (uint32_t i = 1; i < count; ++i) {
-        char path[320];
-        const char* file = s.texNames[i].file;
-        const char* root = "testscene/assets/bistro";
-        const char* name = file;
-        if (file[0] != '\0' && file[1] == '/') {
-            name = file + 2;
-            if (file[0] == 'b') {
-                root = "newscenetest/pkg_a_curtains/textures";
-            } else if (file[0] == 'c') {
-                root = "newscenetest/pkg_b_ivy/textures";
-            } else if (file[0] == 'd') {
-                root = "newscenetest/pkg_c_trees/textures";
-            } else if (file[0] == 'e') {
-                root = "newscenetest/pkg_d_10k_candles/textures";
-            } else {
-                root = "newscenetest/main_sponza/textures";
+        char path[512];
+        const char* name = s.texNames[i].file;
+        path[0] = '\0';
+        auto tryRoot = [&](const char* root) {
+            if (root == nullptr || root[0] == '\0') {
+                return false;
+            }
+            resolveTexturePath(path, sizeof(path), root, name);
+            return fileReadable(path);
+        };
+        char beside[512]{};
+        char textures[540]{};
+        bool found = false;
+        if (s.bhopPath[0] != '\0' && pathParent(s.bhopPath, beside, sizeof(beside))) {
+            found = tryRoot(beside);
+            if (!found) {
+                std::snprintf(textures, sizeof(textures), "%s/textures", beside);
+                found = tryRoot(textures);
             }
         }
-        resolveTexturePath(path, sizeof(path), root, name);
-        if (!fileReadable(path)) {
-            resolveTexturePath(path, sizeof(path), "testscene/Textures", name);
+        if (!found) {
+            found = tryRoot("assets/textures");
+        }
+        if (!found) {
+            uploadDummy(s.textures[i], device, name);
+            continue;
         }
         char cache[512];
         ddsCachePath(cache, sizeof(cache), path);
@@ -309,7 +317,7 @@ bool loadTextures(SceneFrameImpl& s, Device& device) {
 }
 
 uint32_t cullLod(SceneFrameImpl& s, const CameraCull& cam) {
-    return cullInstances(cam, s.instSrc, s.instanceCount, s.visibleCpu, s.visibleCap, true);
+    return cullInstances(cam, s.instSrc, s.instanceCount, s.visibleCpu.data(), s.visibleCap, true);
 }
 
 uint32_t cullPoint(const SceneFrameImpl& s, float lx, float ly, float lz, float radius, uint32_t* out) {
@@ -369,7 +377,7 @@ bool heapImage(
     VkImageAspectFlags aspect) {
     const GpuImage* use = &img;
     if (use->image == VK_NULL_HANDLE || use->view == VK_NULL_HANDLE) {
-        use = s.textureSlots > 0 ? &s.textures[0] : &img;
+        use = s.textures.empty() ? &img : &s.textures.front();
     }
     if (use->image == VK_NULL_HANDLE || use->view == VK_NULL_HANDLE || !imageSlotLive(slot)) {
         return false;
@@ -437,12 +445,13 @@ bool bindHeap(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
         }
     }
     bool extra = stored && shadowLists;
-    for (uint32_t i = 0; extra && i < 3; ++i) {
-        extra = heapWriteStorage(heaps, device, static_cast<uint32_t>(HeapBuf::PointVisible) + i, s.pointVisible.address + list * i, list);
+    if (extra && s.pointVisible.address != 0) {
+        extra = heapWriteStorage(heaps, device, static_cast<uint32_t>(HeapBuf::PointVisible), s.pointVisible.address, list * 3u);
     }
     for (uint32_t i = 0; extra && i < 6; ++i) {
         extra = heapWriteStorage(heaps, device, cubeListSlot(i), s.cubeVisible.address + list * i, list);
     }
+    extra = extra && heapWriteStorage(heaps, device, static_cast<uint32_t>(HeapBuf::CubeVisible), s.cubeVisible.address, list * 6);
     const bool images =
         heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Vis), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.vis.targets.vis.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Depth), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.vis.targets.depth.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT)
@@ -566,7 +575,7 @@ SceneFrame* sceneFrameCreate() {
     scene->instSrc = scene->cpuInstances;
     scene->meshletSrc = scene->cpuMeshlets;
     scene->visibleCap = kSceneInstances;
-    scene->visibleCpu = new uint32_t[scene->visibleCap];
+    scene->visibleCpu.assign(scene->visibleCap, 0u);
     const float palette[4][3] = {{0.35f, 0.34f, 0.32f}, {0.80f, 0.25f, 0.20f}, {0.20f, 0.45f, 0.85f}, {0.85f, 0.75f, 0.30f}};
     for (uint32_t i = 0; i < 4; ++i) {
         scene->fallbackMat[i].baseColor[0] = palette[i][0];
@@ -597,8 +606,8 @@ bool sceneFrameLoadBhop(SceneFrame* scene, const char* path) {
     }
     fileUnmap(&scene->bhop);
     scene->bhop = mapped;
-    delete[] scene->meshletGpu;
-    scene->meshletGpu = new GpuMeshlet[view.info->meshletCount];
+    strCopyCap(scene->bhopPath, sizeof(scene->bhopPath), path);
+    scene->meshletGpu.assign(view.info->meshletCount, GpuMeshlet{});
     float minX = view.instances[0].sphere[0];
     float minY = view.instances[0].sphere[1];
     float minZ = view.instances[0].sphere[2];
@@ -630,16 +639,15 @@ bool sceneFrameLoadBhop(SceneFrame* scene, const char* path) {
         if (y + r > maxY) maxY = y + r;
         if (z + r > maxZ) maxZ = z + r;
     }
-    delete[] scene->visibleCpu;
-    scene->visibleCap = view.info->instanceCount;
-    scene->visibleCpu = new uint32_t[scene->visibleCap];
+    scene->visibleCpu.assign(view.info->instanceCount, 0u);
+    scene->visibleCap = static_cast<uint32_t>(scene->visibleCpu.size());
     scene->vertCount = view.info->vertexCount;
     scene->indexCount = view.info->indexCount;
     scene->instanceCount = view.info->instanceCount;
     scene->vertSrc = reinterpret_cast<const GpuVertex*>(view.vertices);
     scene->indexSrc = view.indices;
     scene->instSrc = reinterpret_cast<const GpuInstance*>(view.instances);
-    scene->meshletSrc = scene->meshletGpu;
+    scene->meshletSrc = scene->meshletGpu.data();
     scene->materialSrc = view.materials;
     scene->materialCount = view.info->materialCount;
     scene->texNames = view.textures;
@@ -715,18 +723,30 @@ bool sceneFrameLoadBhop(SceneFrame* scene, const char* path) {
 }
 
 void freeOwned(SceneFrame& s) {
-    delete[] s.ownedVert;
-    delete[] s.ownedIndex;
-    delete[] s.ownedInst;
-    delete[] s.ownedMesh;
-    delete[] s.ownedMat;
-    delete[] s.ownedTex;
-    s.ownedVert = nullptr;
-    s.ownedIndex = nullptr;
-    s.ownedInst = nullptr;
-    s.ownedMesh = nullptr;
-    s.ownedMat = nullptr;
-    s.ownedTex = nullptr;
+    if (s.vertSrc == s.ownedVert.data()) {
+        s.vertSrc = nullptr;
+    }
+    if (s.indexSrc == s.ownedIndex.data()) {
+        s.indexSrc = nullptr;
+    }
+    if (s.instSrc == s.ownedInst.data()) {
+        s.instSrc = nullptr;
+    }
+    if (s.meshletSrc == s.ownedMesh.data()) {
+        s.meshletSrc = nullptr;
+    }
+    if (s.materialSrc == s.ownedMat.data()) {
+        s.materialSrc = nullptr;
+    }
+    if (s.texNames == s.ownedTex.data()) {
+        s.texNames = nullptr;
+    }
+    s.ownedVert.clear();
+    s.ownedIndex.clear();
+    s.ownedInst.clear();
+    s.ownedMesh.clear();
+    s.ownedMat.clear();
+    s.ownedTex.clear();
 }
 
 uint32_t remapTex(uint32_t index, uint32_t texBase) {
@@ -737,12 +757,9 @@ void sceneFrameShift(SceneFrame* scene, float dx, float dy, float dz) {
     if (scene == nullptr || scene->instanceCount == 0 || scene->instSrc == nullptr) {
         return;
     }
-    if (scene->instSrc != scene->ownedInst) {
-        auto* copy = new GpuInstance[scene->instanceCount];
-        std::memcpy(copy, scene->instSrc, sizeof(GpuInstance) * scene->instanceCount);
-        delete[] scene->ownedInst;
-        scene->ownedInst = copy;
-        scene->instSrc = scene->ownedInst;
+    if (scene->instSrc != scene->ownedInst.data()) {
+        scene->ownedInst.assign(scene->instSrc, scene->instSrc + scene->instanceCount);
+        scene->instSrc = scene->ownedInst.data();
     }
     for (uint32_t i = 0; i < scene->instanceCount; ++i) {
         GpuInstance& inst = scene->ownedInst[i];
@@ -785,24 +802,30 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
     const uint32_t instCount = instBase + view.info->instanceCount + 1u;
     const uint32_t matCount = matBase + view.info->materialCount + 1u;
     const uint32_t texCount = texBase + addTex;
-    auto* verts = new GpuVertex[vertCount];
-    auto* indices = new uint32_t[indexCount];
-    auto* instances = new GpuInstance[instCount];
-    auto* meshlets = new GpuMeshlet[instCount];
-    auto* materials = new MaterialGpuData[matCount == 0 ? 1u : matCount];
-    auto* names = new SceneTexName[texCount == 0 ? 1u : texCount];
-    std::memcpy(verts, scene->vertSrc, sizeof(GpuVertex) * vertBase);
-    std::memcpy(indices, scene->indexSrc, sizeof(uint32_t) * indexBase);
-    std::memcpy(instances, scene->instSrc, sizeof(GpuInstance) * instBase);
-    std::memcpy(meshlets, scene->meshletSrc, sizeof(GpuMeshlet) * instBase);
+    std::vector<GpuVertex> verts(vertCount);
+    std::vector<uint32_t> indices(indexCount);
+    std::vector<GpuInstance> instances(instCount);
+    std::vector<GpuMeshlet> meshlets(instCount);
+    std::vector<MaterialGpuData> materials(matCount == 0 ? 1u : matCount);
+    std::vector<SceneTexName> names(texCount == 0 ? 1u : texCount);
+    if (vertBase > 0) {
+        std::memcpy(verts.data(), scene->vertSrc, sizeof(GpuVertex) * vertBase);
+    }
+    if (indexBase > 0) {
+        std::memcpy(indices.data(), scene->indexSrc, sizeof(uint32_t) * indexBase);
+    }
+    if (instBase > 0) {
+        std::memcpy(instances.data(), scene->instSrc, sizeof(GpuInstance) * instBase);
+        std::memcpy(meshlets.data(), scene->meshletSrc, sizeof(GpuMeshlet) * instBase);
+    }
     if (scene->materialSrc != nullptr && matBase > 0) {
-        std::memcpy(materials, scene->materialSrc, sizeof(MaterialGpuData) * matBase);
+        std::memcpy(materials.data(), scene->materialSrc, sizeof(MaterialGpuData) * matBase);
     }
     if (scene->texNames != nullptr && scene->texNameCount > 0) {
-        std::memcpy(names, scene->texNames, sizeof(SceneTexName) * scene->texNameCount);
+        std::memcpy(names.data(), scene->texNames, sizeof(SceneTexName) * scene->texNameCount);
     }
-    std::memcpy(verts + vertBase, view.vertices, sizeof(GpuVertex) * view.info->vertexCount);
-    std::memcpy(indices + indexBase, view.indices, sizeof(uint32_t) * view.info->indexCount);
+    std::memcpy(verts.data() + vertBase, view.vertices, sizeof(GpuVertex) * view.info->vertexCount);
+    std::memcpy(indices.data() + indexBase, view.indices, sizeof(uint32_t) * view.info->indexCount);
     float minX = 1.0e9f;
     float minY = 1.0e9f;
     float minZ = 1.0e9f;
@@ -898,28 +921,26 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
     mirror.roughness = 0.02f;
     mirror.metallic = 1.0f;
     freeOwned(*scene);
-    scene->ownedVert = verts;
-    scene->ownedIndex = indices;
-    scene->ownedInst = instances;
-    scene->ownedMesh = meshlets;
-    scene->ownedMat = materials;
-    scene->ownedTex = names;
-    scene->vertSrc = verts;
-    scene->indexSrc = indices;
-    scene->instSrc = instances;
-    scene->meshletSrc = meshlets;
-    scene->materialSrc = materials;
-    scene->texNames = names;
+    scene->ownedVert = std::move(verts);
+    scene->ownedIndex = std::move(indices);
+    scene->ownedInst = std::move(instances);
+    scene->ownedMesh = std::move(meshlets);
+    scene->ownedMat = std::move(materials);
+    scene->ownedTex = std::move(names);
+    scene->vertSrc = scene->ownedVert.data();
+    scene->indexSrc = scene->ownedIndex.data();
+    scene->instSrc = scene->ownedInst.data();
+    scene->meshletSrc = scene->ownedMesh.data();
+    scene->materialSrc = scene->ownedMat.data();
+    scene->texNames = scene->ownedTex.data();
     scene->vertCount = vertCount;
     scene->indexCount = indexCount;
     scene->instanceCount = instCount;
     scene->materialCount = matCount;
     scene->texNameCount = texCount;
-    delete[] scene->visibleCpu;
-    scene->visibleCap = instCount;
-    scene->visibleCpu = new uint32_t[instCount];
-    delete[] scene->meshletGpu;
-    scene->meshletGpu = nullptr;
+    scene->visibleCpu.assign(instCount, 0u);
+    scene->visibleCap = static_cast<uint32_t>(scene->visibleCpu.size());
+    scene->meshletGpu.clear();
     scene->cones = nullptr;
     scene->coneCount = 0;
     if (view.lights != nullptr && view.info->lightCount > 0) {
@@ -1078,11 +1099,10 @@ void sceneFrameReleaseGpu(SceneFrame* scene, Device& device) {
     });
     scene->pointReady = false;
     scene->cubeReady = false;
-    for (uint32_t i = 0; i < scene->textureSlots; ++i) {
-        gpuImageDestroy(scene->textures[i], device);
+    for (GpuImage& img : scene->textures) {
+        gpuImageDestroy(img, device);
     }
-    delete[] scene->textures;
-    scene->textures = nullptr;
+    scene->textures.clear();
     scene->textureSlots = 0;
     descriptorHeapsDestroy(scene->gpuHeap, device);
     scene->ready = false;
@@ -1095,8 +1115,8 @@ void sceneFrameDestroy(SceneFrame* scene, Device& device) {
     sceneFrameReleaseGpu(scene, device);
     fileUnmap(&scene->bhop);
     freeOwned(*scene);
-    delete[] scene->meshletGpu;
-    delete[] scene->visibleCpu;
+    scene->meshletGpu.clear();
+    scene->visibleCpu.clear();
     delete scene;
 }
 
@@ -1135,19 +1155,18 @@ void sceneFrameActorName(const SceneFrame* scene, uint8_t index, char* name, uin
     if (scene == nullptr || index >= scene->actors.count || name == nullptr || cap == 0) {
         return;
     }
-    ActorView row[kSceneActorCap];
-    actorLoad(scene->actors, row);
-    if (row[index].used == 0) {
+    const char* src = actorNameOf(scene->actors, index);
+    if (actorXformOf(scene->actors, index) == nullptr) {
         return;
     }
     uint8_t n = 0;
-    while (row[index].name[n] != '\0' && n + 1 < cap) {
-        name[n] = row[index].name[n];
+    while (src[n] != '\0' && n + 1 < cap) {
+        name[n] = src[n];
         ++n;
     }
     name[n] = '\0';
     if (kind != nullptr) {
-        *kind = row[index].kind;
+        *kind = actorKindOf(scene->actors, index);
     }
 }
 
@@ -1167,9 +1186,7 @@ uint8_t sceneFrameActorKind(const SceneFrame* scene, uint8_t index) {
     if (scene == nullptr || index >= scene->actors.count) {
         return 0;
     }
-    ActorView row[kSceneActorCap];
-    actorLoad(scene->actors, row);
-    return row[index].used != 0 ? row[index].kind : static_cast<uint8_t>(0);
+    return actorXformOf(scene->actors, index) != nullptr ? actorKindOf(scene->actors, index) : static_cast<uint8_t>(0);
 }
 
 void sceneFrameActorGizmo(SceneFrame* scene, uint8_t mode) {
@@ -1333,7 +1350,29 @@ void sceneFrameRecord(
     }
     (void)heaps;
     CpuScope recordCpu("sceneFrameRecord", &scene->cpuRecordMs);
-    if (!scene->ready || scene->extent.width != swap.extent.width || scene->extent.height != swap.extent.height) {
+    if (scene->ready && (scene->extent.width != swap.extent.width || scene->extent.height != swap.extent.height)) {
+        const VkExtent2D hizExtent{swap.extent.width, swap.extent.height * 2u};
+        const VkExtent2D bloomExtent{
+            std::max(swap.extent.width / 2u, 1u),
+            std::max(swap.extent.height / 2u, 1u) + std::max(swap.extent.height / 4u, 1u)
+                + std::max(swap.extent.height / 8u, 1u) + std::max(swap.extent.height / 16u, 1u)};
+        const bool resized = visPassResize(scene->vis, device, swap.extent)
+            && shadePassResize(scene->shade, device, swap.extent)
+            && skyPassResize(scene->sky, device, swap.extent)
+            && recreateTracked(scene->hizMax[0], device, hizExtent, VK_FORMAT_R32_SFLOAT,
+                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+            && recreateTracked(scene->hizMax[1], device, hizExtent, VK_FORMAT_R32_SFLOAT,
+                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+            && recreateTracked(scene->tone.bloom, device, bloomExtent, VK_FORMAT_R16G16B16A16_SFLOAT,
+                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+            && bindHeap(*scene, device, scene->gpuHeap);
+        if (resized) {
+            scene->extent = swap.extent;
+        } else {
+            scene->ready = false;
+        }
+    }
+    if (!scene->ready) {
         sceneFrameReleaseGpu(scene, device);
         const VkDeviceSize vertBytes = sizeof(GpuVertex) * scene->vertCount;
         const VkDeviceSize indexBytes = sizeof(uint32_t) * scene->indexCount;
@@ -1457,13 +1496,14 @@ void sceneFrameRecord(
 
     const uint32_t flight = frame.flight & 1u;
     const uint32_t strideU = static_cast<uint32_t>(alignUp(scene->visibleCap));
-    const bool occl = scene->occl.compact[0].handle != VK_NULL_HANDLE && scene->indirect.mapped != nullptr;
+    scene->cube.listStride = strideU;
+    const bool occl = scene->occl.compact.handle != VK_NULL_HANDLE && scene->indirect.mapped != nullptr;
     uint32_t nInst = 0;
     if (!occl) {
         nInst = cullLod(*scene, cam);
         scene->visibleCount = nInst;
         if (nInst > 0 && scene->visible.mapped != nullptr) {
-            std::memcpy(scene->visible.mapped, scene->visibleCpu, sizeof(uint32_t) * nInst);
+            std::memcpy(scene->visible.mapped, scene->visibleCpu.data(), sizeof(uint32_t) * nInst);
         }
     }
 
@@ -1711,10 +1751,10 @@ void sceneFrameRecord(
             std::memcpy(lit.pointFace[i][face], vp.m, sizeof(vp.m));
         }
         if (!scene->pointReady && i == scene->pointCursor) {
-            scene->pointCount[i] = cullPoint(*scene, scene->world.lights[i].pos[0], scene->world.lights[i].pos[1], scene->world.lights[i].pos[2], scene->world.lights[i].radius, scene->visibleCpu);
+            scene->pointCount[i] = cullPoint(*scene, scene->world.lights[i].pos[0], scene->world.lights[i].pos[1], scene->world.lights[i].pos[2], scene->world.lights[i].radius, scene->visibleCpu.data());
             scene->pointCursor = i + 1u;
             if (scene->pointCount[i] > 0 && scene->pointVisible.mapped != nullptr) {
-                std::memcpy(static_cast<uint8_t*>(scene->pointVisible.mapped) + shadowStride * i, scene->visibleCpu, sizeof(uint32_t) * scene->pointCount[i]);
+                std::memcpy(static_cast<uint8_t*>(scene->pointVisible.mapped) + shadowStride * i, scene->visibleCpu.data(), sizeof(uint32_t) * scene->pointCount[i]);
             }
         }
     }
@@ -1760,9 +1800,9 @@ void sceneFrameRecord(
                 probe.pos[0], probe.pos[1], probe.pos[2],
                 dir[face][0], dir[face][1], dir[face][2],
                 up[face][0], up[face][1], up[face][2]);
-            scene->cubeCount[face] = cullFace(*scene, view, scene->visibleCpu);
+            scene->cubeCount[face] = cullFace(*scene, view, scene->visibleCpu.data());
             if (scene->cubeCount[face] > 0 && scene->cubeVisible.mapped != nullptr) {
-                std::memcpy(static_cast<uint8_t*>(scene->cubeVisible.mapped) + shadowStride * face, scene->visibleCpu, sizeof(uint32_t) * scene->cubeCount[face]);
+                std::memcpy(static_cast<uint8_t*>(scene->cubeVisible.mapped) + shadowStride * face, scene->visibleCpu.data(), sizeof(uint32_t) * scene->cubeCount[face]);
             }
         }
     }

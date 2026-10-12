@@ -1,14 +1,5 @@
-#include "ui/widget/Chrome.hpp"
-#include "ui/widget/Docking.hpp"
-#include "ui/widget/Detail.hpp"
+#include "Str.hpp"
 #include "ui/State.hpp"
-#include "ui/widget/Field.hpp"
-#include "ui/widget/List.hpp"
-#include "ui/widget/Menu.hpp"
-#include "ui/widget/Scroll.hpp"
-#include "ui/widget/Splitter.hpp"
-#include "ui/Domain.hpp"
-#include "ui/Layout.hpp"
 #include "platform/Trace.hpp"
 
 #include <spdlog/spdlog.h>
@@ -23,12 +14,36 @@
 namespace burnhope {
 
 bool nodeShown(const UiState& s, uint16_t id) {
-    for (uint16_t p = id; p != kUiNone; p = s.parentOf[p]) {
+    for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
         if (s.yoga[p] != nullptr && YGNodeStyleGetDisplay(s.yoga[p]) == YGDisplayNone) {
             return false;
         }
     }
     return true;
+}
+
+void uiName(UiState& s, uint16_t id, const char* name) {
+    if (id == kUiNone || name == nullptr || name[0] == '\0') {
+        return;
+    }
+    UiName stored{};
+    uint8_t n = 0;
+    bool plain = true;
+    while (name[n] != '\0' && n < 31) {
+        const char ch = name[n];
+        stored.bytes[n] = ch;
+        const bool ok = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_';
+        if (!ok) {
+            plain = false;
+        }
+        ++n;
+    }
+    stored.bytes[n] = '\0';
+    stored.len = n;
+    s.ent[id].set<UiName>(stored);
+    if (plain) {
+        s.ent[id].set_name(stored.bytes);
+    }
 }
 
 uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint) {
@@ -48,25 +63,9 @@ uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& p
     e.set<UiFlex>(flex);
     e.set<UiPaint>(paint);
     s.ent[id] = e;
-    const bool ownsText = paint.role == static_cast<uint8_t>(UiRole::Field)
-        || paint.role == static_cast<uint8_t>(UiRole::Button)
-        || paint.role == static_cast<uint8_t>(UiRole::Close)
-        || paint.role == static_cast<uint8_t>(UiRole::Check);
-    if (ownsText) {
-        UiText host{};
-        host.align = paint.role == static_cast<uint8_t>(UiRole::Check) || paint.role == static_cast<uint8_t>(UiRole::Field) ? 0 : 1;
-        host.ellipsis = paint.role == static_cast<uint8_t>(UiRole::Field) ? 0 : 1;
-        host.valign = 1;
-        s.ent[id].set<UiText>(host);
+    if (paint.role < 16 && s.onSpawn[paint.role] != nullptr) {
+        s.onSpawn[paint.role](s, id);
     }
-    if (paint.role == static_cast<uint8_t>(UiRole::Check)) {
-        if (auto* hostFlex = s.ent[id].try_get_mut<UiFlex>()) {
-            if (hostFlex->padL < 32.0f) {
-                hostFlex->padL = 32.0f;
-            }
-        }
-    }
-    uiNoteChrome(s, id);
     return id;
 }
 
@@ -305,7 +304,14 @@ void uiRestyle(UiState& s) {
         if (paint == nullptr || paint->token == static_cast<uint8_t>(UiToken::Custom) || paint->a <= 0.0f) {
             continue;
         }
-        tokenRgb(s.look, static_cast<UiToken>(paint->token), paint->r, paint->g, paint->b);
+        if (paint->token == static_cast<uint8_t>(UiToken::Accent) && paint->tag >= 0 && paint->tag < 3) {
+            const float* src = s.look.accent[paint->tag];
+            paint->r = src[0];
+            paint->g = src[1];
+            paint->b = src[2];
+        } else {
+            tokenRgb(s.look, static_cast<UiToken>(paint->token), paint->r, paint->g, paint->b);
+        }
         if (paint->token == static_cast<uint8_t>(UiToken::Button)
             || paint->token == static_cast<uint8_t>(UiToken::Field)
             || paint->token == static_cast<uint8_t>(UiToken::Menu)
@@ -361,7 +367,11 @@ void uiClear(UiState& s) {
     s.focused = kUiNone;
     s.capture = kUiNone;
     s.dragId = kUiNone;
-    uiClearDomain(s);
+    for (uint8_t hook = 0; hook < s.clearN; ++hook) {
+        if (s.clearFn[hook] != nullptr) {
+            s.clearFn[hook](s);
+        }
+    }
     s.cursor = 0;
     for (uint16_t i = 0; i < kUiCap; ++i) {
         s.culled[i] = 0;
@@ -423,57 +433,6 @@ void uiEdit(UiState& s, uint16_t id, UiEditFn fn, void* user) {
         return;
     }
     s.ent[id].set<UiEdit>({fn, user});
-}
-
-void uiFold(UiState& s, uint16_t id) {
-    const uint16_t header = s.parentOf[id];
-    const uint16_t panel = header == kUiNone ? kUiNone : s.parentOf[header];
-    if (panel == kUiNone) {
-        return;
-    }
-    bool open = false;
-    for (uint16_t child = 0; child < s.count; ++child) {
-        if (s.parentOf[child] != panel || child == header || s.yoga[child] == nullptr) {
-            continue;
-        }
-        if (YGNodeStyleGetDisplay(s.yoga[child]) != YGDisplayNone) {
-            open = true;
-        }
-    }
-    for (uint16_t child = 0; child < s.count; ++child) {
-        if (s.parentOf[child] == panel && child != header) {
-            uiShow(s, child, !open);
-        }
-    }
-    auto* flex = s.ent[panel].try_get_mut<UiFlex>();
-    if (flex != nullptr && flex->position != 0) {
-        UiFoldState& fold = s.ent[panel].ensure<UiFoldState>();
-        if (open) {
-            fold.openH = flex->height > 56.0f ? flex->height : s.box[panel].h;
-            flex->heightMode = static_cast<uint8_t>(UiSize::Px);
-            flex->height = 52.0f;
-        } else if (fold.openH > 56.0f) {
-            flex->heightMode = static_cast<uint8_t>(UiSize::Px);
-            flex->height = fold.openH;
-        }
-        s.layoutDirty = true;
-    }
-}
-
-void onMenuCommand(void* user, uint16_t, int16_t tag) {
-    auto& s = *static_cast<UiState*>(user);
-    if (tag >= 100) {
-        const uint8_t index = static_cast<uint8_t>(tag - 100);
-        if (index < s.cmdCount && s.cmds[index].fn != nullptr) {
-            s.cmds[index].fn(s.cmds[index].user);
-        }
-    }
-    if (uiMenuMetrics(s).opened != kUiNone) {
-        uiShow(s, uiMenuMetrics(s).opened, false);
-        uiMenuMetrics(s).opened = kUiNone;
-        s.menuOpen = false;
-    }
-    s.visualDirty = true;
 }
 
 void uiText(UiState& s, uint16_t id, const char* text) {
@@ -560,61 +519,8 @@ void uiTextStyle(UiState& s, uint16_t id, uint8_t align, uint8_t ellipsis, uint8
     s.visualDirty = true;
 }
 
-void uiSetFieldText(UiState& s, uint16_t id, const char* text) {
-    if (id >= s.count) {
-        return;
-    }
-    auto* field = s.ent[id].try_get_mut<UiField>();
-    if (field == nullptr) {
-        return;
-    }
-    const uint8_t n = uiStrCopy(field->bytes, text);
-    field->len = n;
-    field->caret = n;
-    field->anchor = n;
-    field->scroll = 0.0f;
-    fieldMark(s, id);
-    fieldSyncText(s, id);
-    s.visualDirty = true;
-}
-
 void uiStamp(UiState& s, uint16_t id, UiToken token) {
     stamp(s, id, token);
-}
-
-bool uiCommandAdd(UiState& s, const char* name, UiCommandFn fn, void* user) {
-    if (s.cmdCount >= kUiCmdCap || s.menu == kUiNone) {
-        return false;
-    }
-    UiCommand& cmd = s.cmds[s.cmdCount];
-    copyText(cmd.name, cmd.len, name);
-    cmd.fn = fn;
-    cmd.user = user;
-    const int16_t tag = static_cast<int16_t>(100 + s.cmdCount);
-    UiFlex itemF{};
-    itemF.heightMode = static_cast<uint8_t>(UiSize::Px);
-    itemF.height = uiMenuMetrics(s).itemH;
-    itemF.widthMode = static_cast<uint8_t>(UiSize::Percent);
-    itemF.width = 100.0f;
-    itemF.shrink = 0.0f;
-    itemF.align = 1;
-    const uint16_t item = spawn(s, s.menu, itemF, paint(UiRole::Button, 0.18f, 0.19f, 0.24f, 4.0f, tag));
-    stamp(s, item, UiToken::Button);
-    UiText label{};
-    copyText(label.bytes, label.len, name);
-    s.ent[item].set<UiText>(label);
-    uiBind(s, item, onMenuCommand, &s);
-    ++s.cmdCount;
-    s.layoutDirty = true;
-    return item != kUiNone;
-}
-
-bool uiCommandAddTo(UiState& s, uint16_t menu, const char* name, UiCommandFn fn, void* user) {
-    const uint16_t prev = s.menu;
-    s.menu = menu;
-    const bool ok = uiCommandAdd(s, name, fn, user);
-    s.menu = prev;
-    return ok;
 }
 
 void uiDrop(UiState& s, uint16_t id) {
@@ -985,16 +891,73 @@ UiState::~UiState() {
     uiClear(*this);
 }
 
+namespace {
+
+struct BootTable {
+    UiBootFn fn[4]{};
+    uint8_t n = 0;
+};
+
+BootTable& boots() {
+    static BootTable table;
+    return table;
+}
+
+} // namespace
+
+void uiBootAdd(UiBootFn fn) {
+    if (fn == nullptr) {
+        return;
+    }
+    BootTable& table = boots();
+    for (uint8_t i = 0; i < table.n; ++i) {
+        if (table.fn[i] == fn) {
+            return;
+        }
+    }
+    if (table.n < 4) {
+        table.fn[table.n++] = fn;
+    }
+}
+
+void uiClearAdd(UiState& s, UiClearFn fn) {
+    if (fn == nullptr) {
+        return;
+    }
+    for (uint8_t i = 0; i < s.clearN; ++i) {
+        if (s.clearFn[i] == fn) {
+            return;
+        }
+    }
+    if (s.clearN < 4) {
+        s.clearFn[s.clearN++] = fn;
+    }
+}
+
+void uiRegisterSpawnHook(UiState& s, uint8_t role, UiSpawnFn fn) {
+    if (role < 16) {
+        s.onSpawn[role] = fn;
+    }
+}
+
+void uiRegisterRoleFinish(UiState& s, uint8_t role, UiRoleFinishFn fn) {
+    if (role < 16) {
+        s.roleFinish[role] = fn;
+    }
+}
+
 UiState::UiState()
     : paints(world.query<UiSlot, UiPaint>()) {
     for (uint16_t i = 0; i < kUiCap; ++i) {
         parentOf[i] = kUiNone;
         contextOf[i] = kUiNone;
     }
-    (void)world.ensure<UiHostNote>();
-    (void)world.ensure<UiDock>();
-    uiInstallChromeBin(*this);
-    uiInstallDockOverlay(*this);
+    const BootTable& table = boots();
+    for (uint8_t i = 0; i < table.n; ++i) {
+        if (table.fn[i] != nullptr) {
+            table.fn[i](*this);
+        }
+    }
 }
 
 } // namespace burnhope

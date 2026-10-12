@@ -7,6 +7,7 @@
 #include "ui/widget/Detail.hpp"
 #include "ui/Canvas.hpp"
 #include "ui/widget/Field.hpp"
+#include "ui/widget/Scroll.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "text/TextLayout.hpp"
 #include "rhi/MeshDraw.hpp"

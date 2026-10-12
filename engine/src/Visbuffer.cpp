@@ -1,13 +1,11 @@
 #include "render/Visbuffer.hpp"
 
-#ifndef BH_SHADER_DIR
-#define BH_SHADER_DIR "shaders"
-#endif
+#include "render/RenderDefs.hpp"
 #include "render/HeapBind.hpp"
 #include "gpu_scene/InstanceData.hpp"
+#include "render/PassCommon.hpp"
 #include "render/PassTargets.hpp"
 #include "render/PassRendering.hpp"
-#include "render/PassShaderGroup.hpp"
 #include "rhi/Barrier.hpp"
 #include "rhi/MeshDraw.hpp"
 
@@ -58,20 +56,19 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
     bindVisMesh(mesh);
     VkDescriptorSetAndBindingMappingEXT maps[6];
     copyBindings(mesh, maps);
-    const char* meshPath[2] = {BH_SHADER_DIR "/visbuffer.mesh.spv", BH_SHADER_DIR "/visbuffer.mesh1.spv"};
-    const char* latePath[2] = {BH_SHADER_DIR "/visbuffer.late.mesh.spv", BH_SHADER_DIR "/visbuffer.late1.mesh.spv"};
-    const char* shadowPath[3] = {
-        BH_SHADER_DIR "/visbuffer.shadow0.mesh.spv",
-        BH_SHADER_DIR "/visbuffer.shadow1.mesh.spv",
-        BH_SHADER_DIR "/visbuffer.shadow2.mesh.spv",
+    const ShaderCreateDesc meshDesc{
+        .path = BH_SHADER_DIR "/visbuffer.mesh.spv",
+        .stage = VK_SHADER_STAGE_MESH_BIT_EXT,
+        .nextStage = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .mappingCount = 6u,
+        .mappings = maps,
+        .pushBytes = sizeof(FlightPush),
+        .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
     };
-    const char* pointPath[3] = {
-        BH_SHADER_DIR "/visbuffer.point0.mesh.spv",
-        BH_SHADER_DIR "/visbuffer.point1.mesh.spv",
-        BH_SHADER_DIR "/visbuffer.point2.mesh.spv",
-    };
-    VkDescriptorSetAndBindingMappingEXT shadowMaps[3][8];
-    VkDescriptorSetAndBindingMappingEXT pointMaps[3][8];
+    ShaderCreateDesc lateDesc = meshDesc;
+    lateDesc.path = BH_SHADER_DIR "/visbuffer.late.mesh.spv";
+    VkDescriptorSetAndBindingMappingEXT shadowMaps[8];
+    VkDescriptorSetAndBindingMappingEXT pointMaps[8];
     VkDescriptorSetAndBindingMappingEXT fragMaps[9];
     PassBindings fragBind{heaps};
     bindVisMesh(fragBind);
@@ -92,35 +89,45 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
         .mappingCount = 9,
         .mappings = fragMaps,
     };
-    const bool shaders = createShaderArray(d, p.mesh, meshPath, VK_SHADER_STAGE_MESH_BIT_EXT, maps, 6u, VK_SHADER_STAGE_FRAGMENT_BIT)
-        && createShaderArray(d, p.meshLate, latePath, VK_SHADER_STAGE_MESH_BIT_EXT, maps, 6u, VK_SHADER_STAGE_FRAGMENT_BIT)
-        && createShaderGroup(d, p.shadow, shadowPath, VK_SHADER_STAGE_MESH_BIT_EXT, [&](uint32_t cascade, ShaderCreateDesc& desc) {
-            PassBindings shadowBind{heaps};
-            shadowBind.ubo(0, HeapBuf::Frame);
-            shadowBind.storageBuf(7, HeapBuf::Verts);
-            shadowBind.storageBuf(8, HeapBuf::Indices);
-            shadowBind.storageBuf(9, HeapBuf::Meshlets);
-            shadowBind.storageBuf(10, HeapBuf::Instances);
-            shadowBind.sun();
-            shadowBind.storageBuf(18, shadowListSlot(cascade));
-            copyBindings(shadowBind, shadowMaps[cascade]);
-            desc.mappingCount = 7;
-            desc.mappings = shadowMaps[cascade];
-        }, VK_SHADER_STAGE_FRAGMENT_BIT)
-        && createShaderGroup(d, p.point, pointPath, VK_SHADER_STAGE_MESH_BIT_EXT, [&](uint32_t light, ShaderCreateDesc& desc) {
-            PassBindings pointBind{heaps};
-            pointBind.ubo(0, HeapBuf::Frame);
-            pointBind.storageBuf(7, HeapBuf::Verts);
-            pointBind.storageBuf(8, HeapBuf::Indices);
-            pointBind.storageBuf(9, HeapBuf::Meshlets);
-            pointBind.storageBuf(10, HeapBuf::Instances);
-            pointBind.sun();
-            pointBind.storageBuf(19, static_cast<uint32_t>(HeapBuf::PointVisible) + light);
-            copyBindings(pointBind, pointMaps[light]);
-            desc.mappingCount = 7;
-            desc.mappings = pointMaps[light];
-            desc.nextStage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        }, VK_SHADER_STAGE_FRAGMENT_BIT)
+    PassBindings shadowBind{heaps};
+    shadowBind.ubo(0, HeapBuf::Frame);
+    shadowBind.storageBuf(7, HeapBuf::Verts);
+    shadowBind.storageBuf(8, HeapBuf::Indices);
+    shadowBind.storageBuf(9, HeapBuf::Meshlets);
+    shadowBind.storageBuf(10, HeapBuf::Instances);
+    shadowBind.sun();
+    shadowBind.storageBuf(18, HeapBuf::ShadowAll);
+    copyBindings(shadowBind, shadowMaps);
+    const ShaderCreateDesc shadowDesc{
+        .path = BH_SHADER_DIR "/visbuffer.shadow.mesh.spv",
+        .stage = VK_SHADER_STAGE_MESH_BIT_EXT,
+        .nextStage = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .mappingCount = 7u,
+        .mappings = shadowMaps,
+        .pushBytes = sizeof(ShadowPush),
+        .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
+    };
+    PassBindings pointBind{heaps};
+    pointBind.ubo(0, HeapBuf::Frame);
+    pointBind.storageBuf(7, HeapBuf::Verts);
+    pointBind.storageBuf(8, HeapBuf::Indices);
+    pointBind.storageBuf(9, HeapBuf::Meshlets);
+    pointBind.storageBuf(10, HeapBuf::Instances);
+    pointBind.sun();
+    pointBind.storageBuf(19, HeapBuf::PointVisible);
+    copyBindings(pointBind, pointMaps);
+    const ShaderCreateDesc pointDesc{
+        .path = BH_SHADER_DIR "/visbuffer.point.mesh.spv",
+        .stage = VK_SHADER_STAGE_MESH_BIT_EXT,
+        .nextStage = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .mappingCount = 7u,
+        .mappings = pointMaps,
+        .pushBytes = sizeof(PointPush),
+        .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
+    };
+    const bool shaders = shaderCreate(d, meshDesc, p.mesh) && shaderCreate(d, lateDesc, p.meshLate)
+        && shaderCreate(d, shadowDesc, p.shadow)
+        && shaderCreate(d, pointDesc, p.point)
         && shaderCreate(d, ShaderCreateDesc{
             .path = BH_SHADER_DIR "/visbuffer.shadow.frag.spv",
             .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -138,21 +145,11 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
 }
 
 void visPassDestroy(VisPass& p, Device& d) {
-    if (p.pushLayout != VK_NULL_HANDLE && d.device != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(d.device, p.pushLayout, nullptr);
-        p.pushLayout = VK_NULL_HANDLE;
-    }
-    shaderDestroy(d, p.mesh[0]);
-    shaderDestroy(d, p.mesh[1]);
-    shaderDestroy(d, p.meshLate[0]);
-    shaderDestroy(d, p.meshLate[1]);
-    shaderDestroy(d, p.shadow[0]);
-    shaderDestroy(d, p.shadow[1]);
-    shaderDestroy(d, p.shadow[2]);
+    shaderDestroy(d, p.mesh);
+    shaderDestroy(d, p.meshLate);
+    shaderDestroy(d, p.shadow);
     shaderDestroy(d, p.shadowFrag);
-    shaderDestroy(d, p.point[0]);
-    shaderDestroy(d, p.point[1]);
-    shaderDestroy(d, p.point[2]);
+    shaderDestroy(d, p.point);
     shaderDestroy(d, p.frag);
     visTargetsDestroy(p.targets, d);
 }
@@ -181,12 +178,16 @@ void visPassRecord(VkCommandBuffer cmd, VkExtent2D extent, VisPass& p, const Vis
     cmdSetGraphicsDynamic(cmd, extent, 1, true, false, BlendMode::None, true);
     // Same rhi/MeshDraw entry point as core/ui/Canvas.cpp — one registered draw per pass
     // (plan Фаза 1/5), no second mesh-shader dispatch path for engine/.
+    const FlightPush push{flight & 1u, 0, 0, 0};
     meshDrawRecord(cmd, MeshDrawDesc{
-        .mesh = load ? p.meshLate[flight & 1u].handle : p.mesh[flight & 1u].handle,
+        .mesh = load ? p.meshLate.handle : p.mesh.handle,
         .frag = p.frag.handle,
         .groupCount = draw.visibleCount,
         .indirect = draw.indirect,
         .indirectOffset = draw.indirectOffset,
+        .pushData = &push,
+        .pushBytes = sizeof(push),
+        .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
     });
     endRendering(rendering);
 }
@@ -218,12 +219,16 @@ void visShadowRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth,
     const VkRect2D scissor = bandRect;
     vkCmdSetViewportWithCount(cmd, 1, &vp);
     vkCmdSetScissorWithCount(cmd, 1, &scissor);
+    const ShadowPush push{cascade, 0, 0, 0};
     meshDrawRecord(cmd, MeshDrawDesc{
-        .mesh = p.shadow[cascade].handle,
+        .mesh = p.shadow.handle,
         .frag = p.shadowFrag.handle,
         .groupCount = draw.visibleCount,
         .indirect = draw.indirect,
         .indirectOffset = draw.indirectOffset,
+        .pushData = &push,
+        .pushBytes = sizeof(push),
+        .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
     });
     endRendering(rendering);
 }
@@ -240,10 +245,14 @@ void visPointRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth, 
         if (counts[light] == 0) {
             continue;
         }
+        const PointPush push{light, 0, 0, 0};
         meshDrawRecord(cmd, MeshDrawDesc{
-            .mesh = p.point[light].handle,
+            .mesh = p.point.handle,
             .frag = VK_NULL_HANDLE,
             .groupCount = counts[light],
+            .pushData = &push,
+            .pushBytes = sizeof(push),
+            .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
         });
     }
     endRendering(rendering);

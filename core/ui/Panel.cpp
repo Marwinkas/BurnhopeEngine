@@ -60,7 +60,7 @@ Panel Panel::label(const char* text) const {
     return out;
 }
 
-Panel Panel::textButton(const char* text, int8_t tag) const {
+Panel Panel::textButton(const char* text) const {
     Panel box{};
     box.state = state;
     if (state == nullptr) {
@@ -73,14 +73,12 @@ Panel Panel::textButton(const char* text, int8_t tag) const {
     if (box.id < state->count) {
         if (auto* paint = state->ent[box.id].try_get_mut<UiPaint>()) {
             paint->a = 0.0f;
-            paint->tag = tag;
-            uiNoteChrome(*state, box.id);
         }
     }
     return box;
 }
 
-Panel Panel::button(const char* text, int8_t tag, float r, float g, float b, uint8_t icon) const {
+Panel Panel::button(const char* text, uint8_t icon) const {
     Panel box{};
     box.state = state;
     if (state == nullptr) {
@@ -94,13 +92,9 @@ Panel Panel::button(const char* text, int8_t tag, float r, float g, float b, uin
     box.id = uiButton(*state, id, cfg);
     if (box.id < state->count) {
         if (auto* paint = state->ent[box.id].try_get_mut<UiPaint>()) {
-            paint->r = r;
-            paint->g = g;
-            paint->b = b;
-            paint->a = 1.0f;
-            paint->tag = tag;
+            *paint = paintToken(state->look, UiRole::Button, UiToken::Button, state->look.radiusSm);
+            paint->tag = -1;
             paint->icon = icon;
-            uiNoteChrome(*state, box.id);
         }
     }
     return box;

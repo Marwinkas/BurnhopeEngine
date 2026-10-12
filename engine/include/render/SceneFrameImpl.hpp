@@ -32,6 +32,8 @@
 #include "scene/TestScene.hpp"
 #include "rhi/GpuProfiler.hpp"
 
+#include <vector>
+
 namespace burnhope {
 
 constexpr uint32_t kSceneVerts = 64;
@@ -115,8 +117,8 @@ struct SceneFrameImpl {
     const uint32_t* indexSrc = nullptr;
     const GpuInstance* instSrc = nullptr;
     const GpuMeshlet* meshletSrc = nullptr;
-    GpuMeshlet* meshletGpu = nullptr;
-    uint32_t* visibleCpu = nullptr;
+    std::vector<GpuMeshlet> meshletGpu;
+    std::vector<uint32_t> visibleCpu;
     uint32_t visibleCap = 0;
     MappedFile bhop{};
     float farPlane = 80.0f;
@@ -147,13 +149,14 @@ struct SceneFrameImpl {
     uint32_t occlOut = 0;
     float boxMin[3]{-20.0f, -2.0f, -20.0f};
     float boxMax[3]{20.0f, 20.0f, 20.0f};
-    GpuImage* textures = nullptr;
+    std::vector<GpuImage> textures;
     uint32_t textureSlots = 0;
     const MaterialGpuData* materialSrc = nullptr;
     MaterialGpuData fallbackMat[4]{};
     uint32_t materialCount = 0;
     const SceneTexName* texNames = nullptr;
     uint32_t texNameCount = 0;
+    char bhopPath[512]{};
     const Meshlet* cones = nullptr;
     uint32_t coneCount = 0;
     float fps = 0.0f;
@@ -195,12 +198,12 @@ struct SceneFrameImpl {
     float fogHeight = 4.0f;
     float fogScatter = 1.0f;
     uint32_t tonemapper = 0;
-    GpuVertex* ownedVert = nullptr;
-    uint32_t* ownedIndex = nullptr;
-    GpuInstance* ownedInst = nullptr;
-    GpuMeshlet* ownedMesh = nullptr;
-    MaterialGpuData* ownedMat = nullptr;
-    SceneTexName* ownedTex = nullptr;
+    std::vector<GpuVertex> ownedVert;
+    std::vector<uint32_t> ownedIndex;
+    std::vector<GpuInstance> ownedInst;
+    std::vector<GpuMeshlet> ownedMesh;
+    std::vector<MaterialGpuData> ownedMat;
+    std::vector<SceneTexName> ownedTex;
     VkExtent2D extent{};
     char title[160]{};
 };
