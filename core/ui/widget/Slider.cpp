@@ -1,9 +1,9 @@
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Slider.hpp"
 
 #include <cmath>
 #include <cstdio>
 #include <cstring>
-#include <ctime>
 
 namespace burnhope {
 

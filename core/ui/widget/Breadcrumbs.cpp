@@ -1,3 +1,5 @@
+#include "ui/widget/Breadcrumbs.hpp"
+#include "ui/widget/Button.hpp"
 #include "ui/widget/Detail.hpp"
 
 #include <cstring>
@@ -54,17 +56,6 @@ uint16_t uiBreadcrumbs(UiState& s, uint16_t parent, void (*nav)(void* user, cons
     UiCrumbs crumbs{};
     crumbs.nav = nav;
     crumbs.user = user;
-    for (uint8_t i = 0; i < 8; ++i) {
-        crumbs.seg[i] = uiButton(s, id, "", onSeg, &s);
-        if (crumbs.seg[i] != kUiNone) {
-            uiShow(s, crumbs.seg[i], false);
-        }
-        if (i < 7) {
-            crumbs.sep[i] = spawn(s, id, px(12.0f, 16.0f), paintToken(s.look, UiRole::Label, UiToken::Muted));
-            addText(s, crumbs.sep[i], ">");
-            uiShow(s, crumbs.sep[i], false);
-        }
-    }
     s.ent[id].set<UiCrumbs>(crumbs);
     return id;
 }
@@ -75,18 +66,31 @@ void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* path) {
         return;
     }
     char local[512]{};
-    int n = 0;
-    if (path != nullptr) {
-        while (path[n] != '\0' && n < 511) {
-            local[n] = path[n];
-            ++n;
+    const uint8_t n = uiStrCopy(local, path);
+    std::memcpy(crumbs->path, local, static_cast<size_t>(n) + 1u);
+    auto grow = [&]() {
+        if (crumbs->cap >= kUiCrumbCap || s.count + 2 >= kUiCap) {
+            return;
         }
-    }
-    local[n] = '\0';
-    std::memcpy(crumbs->path, local, n + 1);
+        const uint8_t i = crumbs->cap;
+        crumbs->seg[i] = uiButton(s, id, "", onSeg, &s);
+        if (crumbs->seg[i] != kUiNone) {
+            uiShow(s, crumbs->seg[i], false);
+        }
+        crumbs->sep[i] = spawn(s, id, px(12.0f, 16.0f), paintToken(s.look, UiRole::Label, UiToken::Muted));
+        addText(s, crumbs->sep[i], ">");
+        uiShow(s, crumbs->sep[i], false);
+        crumbs->cap = static_cast<uint8_t>(i + 1);
+    };
     uint8_t seg = 0;
     uint8_t at = local[0] == '/' ? 1 : 0;
-    while (at <= n && seg < 8) {
+    while (at <= n && seg < kUiCrumbCap) {
+        if (seg >= crumbs->cap) {
+            grow();
+        }
+        if (seg >= crumbs->cap) {
+            break;
+        }
         uint8_t end = at;
         while (local[end] != '\0' && local[end] != '/') {
             ++end;
@@ -100,7 +104,7 @@ void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* path) {
         if (len > 0 && crumbs->seg[seg] < s.count) {
             uiText(s, crumbs->seg[seg], piece);
             if (auto* flex = s.ent[crumbs->seg[seg]].try_get_mut<UiFlex>()) {
-                flex->width = 12.0f + static_cast<float>(len) * 8.0f;
+                flex->width = uiMeasure(s, piece, len, len) + 16.0f;
             }
             uiShow(s, crumbs->seg[seg], true);
             if (seg > 0 && crumbs->sep[seg - 1] < s.count) {
@@ -114,12 +118,12 @@ void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* path) {
         }
     }
     crumbs->n = seg;
-    for (uint8_t i = seg; i < 8; ++i) {
+    for (uint8_t i = seg; i < crumbs->cap; ++i) {
         if (crumbs->seg[i] < s.count) {
             uiShow(s, crumbs->seg[i], false);
         }
     }
-    for (uint8_t i = 0; i < 7; ++i) {
+    for (uint8_t i = 0; i < crumbs->cap; ++i) {
         if (crumbs->sep[i] < s.count && (seg == 0 || i >= seg - 1)) {
             uiShow(s, crumbs->sep[i], false);
         }

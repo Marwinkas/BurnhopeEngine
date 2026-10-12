@@ -117,6 +117,13 @@ struct UiDrag {
     void* user = nullptr;
 };
 
+using UiWheelFn = void (*)(void* user, uint16_t id, float wheel, float x, float y);
+
+struct UiWheel {
+    UiWheelFn fn = nullptr;
+    void* user = nullptr;
+};
+
 struct UiEdit {
     UiEditFn fn = nullptr;
     void* user = nullptr;
@@ -405,8 +412,16 @@ struct UiRange {
 
 constexpr uint8_t kUiPoolCap = 64;
 
+struct UiSplitter {};
+struct UiTitleBar {};
+struct UiResizable {};
+struct UiMenuBar {};
+struct UiImageMinimap {};
+
 struct UiVirtualPool {
     void (*refresh)(UiState& s, uint16_t id) = nullptr;
+    float (*contentHeight)(const UiState& s, uint16_t id) = nullptr;
+    uint8_t follow = 1;
 };
 
 struct UiDrop {

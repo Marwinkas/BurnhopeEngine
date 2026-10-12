@@ -1,4 +1,8 @@
+#include "ui/widget/Button.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Image.hpp"
+#include "ui/widget/TreeView.hpp"
+#include "ui/widget/Virtual.hpp"
 
 namespace burnhope {
 namespace {
@@ -9,29 +13,29 @@ void onRow(void* user, uint16_t id, int16_t) {
         return;
     }
     UiTreeView* tree = uiAncestor<UiTreeView>(*s, id);
-    uint16_t rowId = s->ent[id].try_get<UiVirtRow>() != nullptr ? id : uiAncestorId<UiVirtRow>(*s, id);
-    const UiVirtRow* row = rowId < s->count ? s->ent[rowId].try_get<UiVirtRow>() : nullptr;
-    if (tree == nullptr || row == nullptr || row->index >= tree->count) {
+    const uint32_t index = uiVirtRowIndex(*s, id);
+    if (tree == nullptr || index >= tree->count) {
         return;
     }
-    const UiParts* parts = s->ent[rowId].try_get<UiParts>();
+    const uint16_t rowId = s->ent[id].try_get<UiVirtRow>() != nullptr ? id : uiAncestorId<UiVirtRow>(*s, id);
+    const UiParts* parts = rowId < s->count ? s->ent[rowId].try_get<UiParts>() : nullptr;
     const bool fold = parts != nullptr && id == parts->chevron;
     if (fold && tree->toggle != nullptr) {
-        tree->toggle(tree->user, row->index);
+        tree->toggle(tree->user, index);
         return;
     }
     if (tree->select != nullptr) {
-        tree->select(tree->user, row->index);
+        tree->select(tree->user, index);
     }
 }
 
-uint16_t addTreeSlot(UiState& s, uint16_t inner, float rowH) {
+uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
     UiFlex row{};
     row.position = 1;
     row.widthMode = static_cast<uint8_t>(UiSize::Percent);
     row.width = 100.0f;
     row.heightMode = static_cast<uint8_t>(UiSize::Px);
-    row.height = rowH > 2.0f ? rowH - 2.0f : rowH;
+    row.height = itemH > 2.0f ? itemH - 2.0f : itemH;
     row.shrink = 0.0f;
     row.direction = 1;
     row.align = 1;
@@ -43,7 +47,7 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float rowH) {
     UiButtonConfig chev{};
     chev.label = ">";
     chev.width = 16.0f;
-    chev.height = rowH > 4.0f ? rowH - 4.0f : rowH;
+    chev.height = itemH > 4.0f ? itemH - 4.0f : itemH;
     chev.onClick = onRow;
     chev.user = &s;
     const uint16_t chevron = uiButton(s, slot, chev);
@@ -51,7 +55,7 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float rowH) {
     UiButtonConfig caption{};
     caption.label = " ";
     caption.width = -1.0f;
-    caption.height = rowH > 4.0f ? rowH - 4.0f : rowH;
+    caption.height = itemH > 4.0f ? itemH - 4.0f : itemH;
     caption.onClick = onRow;
     caption.user = &s;
     const uint16_t label = uiButton(s, slot, caption);
@@ -63,31 +67,28 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float rowH) {
 
 } // namespace
 
+float uiTreeContentH(const UiState& s, uint16_t id) {
+    return uiVirtualContentHeight<UiTreeView>(s, id);
+}
+
 uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg) {
-    UiFlex host{};
-    host.grow = 1.0f;
-    host.shrink = 1.0f;
-    host.overflow = 2;
-    host.position = 2;
-    const uint16_t scroll = spawn(s, parent, host, paintToken(s.look, UiRole::Scroll, UiToken::Side, s.look.radiusSm));
-    UiFlex spacer{};
-    spacer.widthMode = static_cast<uint8_t>(UiSize::Percent);
-    spacer.width = 100.0f;
-    spacer.heightMode = static_cast<uint8_t>(UiSize::Px);
-    spacer.height = 28.0f;
-    spacer.shrink = 0.0f;
-    spacer.position = 2;
-    const uint16_t inner = spawn(s, scroll, spacer, paint(UiRole::Hidden, 0, 0, 0));
-    s.ent[scroll].set<UiScroll>({0.0f, inner});
+    const uint16_t scroll = uiVirtualHostCreate(s, parent, UiRole::Scroll, UiToken::Side, s.look.radiusSm);
+    if (scroll == kUiNone) {
+        return scroll;
+    }
+    const UiScroll* born = s.ent[scroll].try_get<UiScroll>();
+    if (born != nullptr) {
+        uiVirtualSyncSpacer(s, born->inner, 28.0f);
+    }
     UiTreeView tree{};
     tree.count = cfg.totalNodes;
     tree.bind = cfg.onBindNode;
     tree.toggle = cfg.onToggleNode;
     tree.select = cfg.onSelectNode;
     tree.user = cfg.user;
-    tree.rowH = 28.0f;
+    tree.itemH = 28.0f;
     s.ent[scroll].set<UiTreeView>(tree);
-    s.ent[scroll].set<UiVirtualPool>({uiTreeViewRefresh});
+    s.ent[scroll].set<UiVirtualPool>({uiTreeViewRefresh, uiTreeContentH, 1});
     uiTreeViewRefresh(s, scroll);
     return scroll;
 }
@@ -98,36 +99,25 @@ void uiTreeViewRefresh(UiState& s, uint16_t id) {
     if (tree == nullptr || scroll == nullptr) {
         return;
     }
-    const uint16_t need = uiVirtualSlots(s.box[id].h, tree->rowH, 1);
-    while (tree->slots < need && tree->slots < kUiPoolCap && scroll->inner < s.count && s.count + 8 < kUiCap) {
-        const uint16_t slot = addTreeSlot(s, scroll->inner, tree->rowH);
-        if (slot == kUiNone) {
-            break;
-        }
-        tree->slot[tree->slots++] = slot;
-    }
-    const UiVirtualWindow win = uiVirtualCalc(scroll->offset, s.box[id].h, tree->rowH, tree->count, 1);
-    tree->first = win.first;
+    const uint16_t need = uiVirtualSlots(s.box[id].h, tree->itemH, 1);
     if (scroll->inner < s.count) {
-        if (auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>()) {
-            flex->height = win.totalHeight;
-        }
+        uiVirtualEnsure(s, *tree, need, 8, [&] { return addTreeSlot(s, scroll->inner, tree->itemH); });
     }
+    const UiVirtualWindow win = uiVirtualCalc(scroll->offset, s.box[id].h, tree->itemH, tree->count, 1);
+    tree->first = win.first;
+    uiVirtualSyncSpacer(s, scroll->inner, win.totalHeight);
     for (uint8_t i = 0; i < tree->slots; ++i) {
         const uint16_t slot = tree->slot[i];
         const uint32_t index = win.first + i;
         const bool on = i < win.visibleCount && slot < s.count;
-        const bool live = slot < s.count && s.yoga[slot] != nullptr && YGNodeStyleGetDisplay(s.yoga[slot]) != YGDisplayNone;
-        if (live != on) {
-            uiShow(s, slot, on);
-        }
+        uiVirtualSetShown(s, slot, on);
         if (!on) {
             continue;
         }
         if (auto* flex = s.ent[slot].try_get_mut<UiFlex>()) {
             flex->position = 1;
-            flex->posY = static_cast<float>(index) * tree->rowH;
-            flex->height = tree->rowH > 2.0f ? tree->rowH - 2.0f : tree->rowH;
+            flex->posY = static_cast<float>(index) * tree->itemH;
+            flex->height = tree->itemH > 2.0f ? tree->itemH - 2.0f : tree->itemH;
         }
         s.ent[slot].set<UiVirtRow>({index});
         if (tree->bind != nullptr) {

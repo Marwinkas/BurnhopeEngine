@@ -1,4 +1,8 @@
 #include "ui/Panel.hpp"
+#include "ui/widget/Button.hpp"
+#include "ui/widget/Curve.hpp"
+#include "ui/widget/Field.hpp"
+#include "ui/widget/Slider.hpp"
 
 namespace burnhope {
 
@@ -70,6 +74,7 @@ Panel Panel::textButton(const char* text, int8_t tag) const {
         if (auto* paint = state->ent[box.id].try_get_mut<UiPaint>()) {
             paint->a = 0.0f;
             paint->tag = tag;
+            uiNoteChrome(*state, box.id);
         }
     }
     return box;
@@ -95,6 +100,7 @@ Panel Panel::button(const char* text, int8_t tag, float r, float g, float b, uin
             paint->a = 1.0f;
             paint->tag = tag;
             paint->icon = icon;
+            uiNoteChrome(*state, box.id);
         }
     }
     return box;

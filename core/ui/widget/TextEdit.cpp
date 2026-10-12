@@ -1,4 +1,5 @@
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
 
 #include <cstring>
 
@@ -68,6 +69,15 @@ void fieldDropSel(UiField& field) {
     field.bytes[field.len] = '\0';
     field.caret = a;
     field.anchor = a;
+}
+
+void fieldInsert(UiState& s, uint16_t id, const char* src, uint8_t n) {
+    auto* field = id < s.count ? s.ent[id].try_get_mut<UiField>() : nullptr;
+    if (field == nullptr) {
+        return;
+    }
+    fieldInsert(*field, src, n);
+    fieldSyncText(s, id);
 }
 
 void fieldInsert(UiField& field, const char* src, uint8_t n) {
@@ -165,6 +175,7 @@ bool fieldUndo(UiState& s) {
     --undo.at;
     undo.snap[undo.at].id = s.focused;
     swapField(*field, undo.snap[undo.at]);
+    fieldSyncText(s, s.focused);
     s.visualDirty = true;
     return true;
 }
@@ -180,8 +191,18 @@ bool fieldRedo(UiState& s) {
     }
     swapField(*field, undo.snap[undo.at]);
     ++undo.at;
+    fieldSyncText(s, s.focused);
     s.visualDirty = true;
     return true;
+}
+
+void fieldEraseBack(UiState& s, uint16_t id) {
+    auto* field = id < s.count ? s.ent[id].try_get_mut<UiField>() : nullptr;
+    if (field == nullptr) {
+        return;
+    }
+    fieldEraseBack(*field);
+    fieldSyncText(s, id);
 }
 
 void fieldEraseBack(UiField& field) {
@@ -207,6 +228,15 @@ void fieldEraseBack(UiField& field) {
     field.bytes[field.len] = '\0';
     field.caret = prev;
     field.anchor = prev;
+}
+
+void fieldEraseForward(UiState& s, uint16_t id) {
+    auto* field = id < s.count ? s.ent[id].try_get_mut<UiField>() : nullptr;
+    if (field == nullptr) {
+        return;
+    }
+    fieldEraseForward(*field);
+    fieldSyncText(s, id);
 }
 
 void fieldEraseForward(UiField& field) {
@@ -349,26 +379,13 @@ int fieldRows(const UiState& s, const UiField& field, float viewW, FieldRow* row
             ++at;
             continue;
         }
-        int j = at;
-        int lastSpace = -1;
-        while (j < n && glyph[j].kind != 1 && (ps[j + 1] - ps[at]) <= viewW + 0.01f) {
-            if (glyph[j].kind == 2) {
-                lastSpace = j;
-            }
-            ++j;
+        uint8_t kind[96]{};
+        for (int k = 0; k < n; ++k) {
+            kind[k] = glyph[k].kind;
         }
-        int end = j;
-        int next = j;
-        if (j < n && glyph[j].kind == 1) {
-            next = j + 1;
-        } else if (j < n && lastSpace > at) {
-            end = lastSpace;
-            next = lastSpace + 1;
-        }
-        if (end == at) {
-            end = at + 1;
-            next = end;
-        }
+        const UiWrapCut cut = uiWrapCut(ps, kind, n, at, viewW, 0);
+        const int end = cut.end;
+        const int next = cut.next;
         const uint8_t begin = glyph[at].at;
         const uint8_t stop = static_cast<uint8_t>(glyph[end - 1].at + glyph[end - 1].n);
         rows[lines++] = {begin, stop, ps[end] - ps[at]};

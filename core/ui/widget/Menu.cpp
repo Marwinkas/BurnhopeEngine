@@ -1,4 +1,5 @@
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Menu.hpp"
 
 #include <span>
 
@@ -77,7 +78,7 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
     }
     uint8_t slot = 0;
     for (const UiMenuItem& item : items) {
-        if (slot >= 12) {
+        if (slot >= kUiMenuCap) {
             break;
         }
         uint16_t row = kUiNone;
@@ -119,7 +120,13 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
         flex->position = 1;
         flex->posX = screenX;
         flex->posY = screenY;
-        flex->height = static_cast<float>(slot) * 30.0f + 8.0f;
+        const float full = static_cast<float>(slot) * 30.0f + 8.0f;
+        const float limit = s.laidH > 64.0f ? s.laidH - 16.0f : full;
+        flex->height = full < limit ? full : limit;
+        flex->overflow = full > limit ? 2 : 0;
+    }
+    if (slot > 0 && s.ent[id].try_get<UiFlex>() != nullptr && s.ent[id].try_get<UiFlex>()->overflow != 0) {
+        s.ent[id].set<UiScroll>({0.0f, id});
     }
     uiShow(s, id, true);
     uiMenuMetrics(s).opened = id;
@@ -147,8 +154,8 @@ uint16_t uiMakeMenu(UiState& s) {
     paint.a = 1.0f;
     paint.radius = s.look.radiusSm;
     const uint16_t id = uiNode(s, 0, flex, paint);
-    if (id != kUiNone && s.yoga[id] != nullptr) {
-        YGNodeStyleSetDisplay(s.yoga[id], YGDisplayNone);
+    if (id != kUiNone) {
+        uiShow(s, id, false);
     }
     return id;
 }
@@ -177,6 +184,43 @@ void uiMenuStyle(UiState& s, float width, float itemH, float pad, float gap) {
         }
     }
     s.layoutDirty = true;
+}
+
+void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y) {
+    if (menuId >= s.count) {
+        return;
+    }
+    auto* flex = s.ent[menuId].try_get_mut<UiFlex>();
+    if (flex == nullptr) {
+        return;
+    }
+    const uint32_t items = uiNodeChildCount(s, menuId);
+    const UiMenuMetrics& metrics = uiMenuMetrics(s);
+    const float menuH = metrics.pad * 2.0f + static_cast<float>(items) * metrics.itemH
+        + static_cast<float>(items > 0 ? items - 1 : 0) * metrics.gap;
+    if (x + metrics.w > s.laidW) {
+        x = s.laidW - metrics.w;
+    }
+    if (y + menuH > s.laidH) {
+        y = s.laidH - menuH;
+    }
+    if (x < 4.0f) {
+        x = 4.0f;
+    }
+    if (y < 4.0f) {
+        y = 4.0f;
+    }
+    flex->position = 1;
+    flex->posX = x;
+    flex->posY = y;
+    uiMenuMetrics(s).opened = menuId;
+    s.menuOpen = true;
+    uiShow(s, menuId, true);
+    const UiPaint* menuPaint = s.ent[menuId].try_get<UiPaint>();
+    if (menuPaint != nullptr) {
+        uiMotionTo(s, menuId, menuPaint->r, menuPaint->g, menuPaint->b, 1.0f);
+        s.anim[menuId].fa = 0.0f;
+    }
 }
 
 } // namespace burnhope

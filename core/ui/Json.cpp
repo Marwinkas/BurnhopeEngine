@@ -1,6 +1,7 @@
 #include "ui/LayoutBridge.hpp"
 #include "ui/State.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -336,6 +337,7 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                         auto* node = s.ent[id].try_get_mut<UiPaint>();
                         if (node != nullptr) {
                             node->tag = static_cast<int8_t>(v);
+                            uiNoteChrome(s, id);
                         }
                     } else {
                         auto* node = s.ent[id].try_get_mut<UiPaint>();
@@ -378,6 +380,7 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
         field.caret = n;
         field.anchor = n;
         s.ent[id].set<UiField>(field);
+        fieldSyncText(s, id);
     } else if (textLen > 0 && role == static_cast<uint8_t>(UiRole::Button)) {
         UiText label{};
         uint8_t n = textLen < 31 ? textLen : 31;

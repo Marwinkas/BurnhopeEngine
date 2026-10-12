@@ -216,7 +216,10 @@ bh_module(ui
     core/Json.cpp
     core/ui/Layout.cpp
     core/ui/widget/Chrome.cpp
-    core/ui/widget/Tree.cpp
+    core/ui/widget/Docking.cpp
+    core/ui/widget/Node.cpp
+    core/ui/widget/Hit.cpp
+    core/ui/widget/Focus.cpp
     core/ui/widget/TreeView.cpp
     core/ui/widget/Button.cpp
     core/ui/widget/Field.cpp

@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include "ui/Font.hpp"
+#include "ui/widget/Image.hpp"
 #include "ui/State.hpp"
 #include "image/ImageFile.hpp"
 
@@ -91,7 +92,21 @@ void photoPush(Canvas& c, uint8_t slot) {
     if (c.state == nullptr || slot >= kPhotoSlots) {
         return;
     }
-    uiApplyPhotoMeta(*c.state, slot, c.photoMeta[slot].frames, c.photoMeta[slot].delayMs, kImageFrames);
+    UiState& s = *c.state;
+    uint16_t ids[kUiCap];
+    uint16_t n = 0;
+    s.world.each([&](flecs::entity e, const UiImage& image) {
+        if (image.slot != slot || image.minimap == 0 || n >= kUiCap) {
+            return;
+        }
+        const UiSlot* node = e.try_get<UiSlot>();
+        if (node != nullptr) {
+            ids[n++] = node->index;
+        }
+    });
+    for (uint16_t i = 0; i < n; ++i) {
+        uiApplyPhotoMeta(s, ids[i], c.photoMeta[slot].frames, c.photoMeta[slot].delayMs, kImageFrames);
+    }
 }
 
 void canvasReload(Canvas& c) {

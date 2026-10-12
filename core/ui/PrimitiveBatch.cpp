@@ -1,6 +1,10 @@
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/State.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
+#include "ui/widget/Scroll.hpp"
+
+#include <yoga/Yoga.h>
 
 #include <algorithm>
 #include <cmath>
@@ -374,6 +378,21 @@ void uiDrawAdd(UiState& s, UiDrawFn fn) {
     }
 }
 
+void uiOverlayAdd(UiState& s, UiOverlayDrawFn fn) {
+    if (fn == nullptr) {
+        return;
+    }
+    UiOverlayHooks& hooks = s.world.ensure<UiOverlayHooks>();
+    for (uint8_t i = 0; i < hooks.n; ++i) {
+        if (hooks.fn[i] == fn) {
+            return;
+        }
+    }
+    if (hooks.n < 4) {
+        hooks.fn[hooks.n++] = fn;
+    }
+}
+
 uint32_t uiEmitText(
     UiState& s,
     UiPrimitive* dst,
@@ -527,16 +546,7 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             const UiText* text = s.ent[id].try_get<UiText>();
             if (text != nullptr) {
                 UiBox limit = box;
-                const UiField* host = nullptr;
-                if (parentId != kUiNone) {
-                    const UiPaint* parentPaint = s.ent[parentId].try_get<UiPaint>();
-                    if (parentPaint != nullptr && parentPaint->role == static_cast<uint8_t>(UiRole::Field)) {
-                        host = s.ent[parentId].try_get<UiField>();
-                    }
-                }
-                if (host != nullptr) {
-                    limit = fieldInset(s, parentId, *host);
-                } else if (parentId != kUiNone && s.box[parentId].w > 1.0f && s.box[parentId].h > 1.0f) {
+                if (parentId != kUiNone && s.box[parentId].w > 1.0f && s.box[parentId].h > 1.0f) {
                     const UiBox& parent = s.box[parentId];
                     const float x0 = limit.x > parent.x ? limit.x : parent.x;
                     const float y0 = limit.y > parent.y ? limit.y : parent.y;
@@ -797,6 +807,30 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                     icon.texId = 3;
                     icon.flags = kUiFlagIcon;
                 }
+                const UiText* shown = s.ent[id].try_get<UiText>();
+                if (shown != nullptr && shown->len > 0) {
+                    const bool hint = field->len == 0 && field->hintLen > 0;
+                    const float tr = hint ? s.look.muted[0] : field->text[0];
+                    const float tg = hint ? s.look.muted[1] : field->text[1];
+                    const float tb = hint ? s.look.muted[2] : field->text[2];
+                    UiBox limit = inset;
+                    if (hasClip && ancestor.w > 1.0f && ancestor.h > 1.0f) {
+                        const float x0 = limit.x > ancestor.x ? limit.x : ancestor.x;
+                        const float y0 = limit.y > ancestor.y ? limit.y : ancestor.y;
+                        const float x1 = limit.x + limit.w < ancestor.x + ancestor.w ? limit.x + limit.w : ancestor.x + ancestor.w;
+                        const float y1 = limit.y + limit.h < ancestor.y + ancestor.h ? limit.y + limit.h : ancestor.y + ancestor.h;
+                        if (x1 > x0 && y1 > y0) {
+                            limit.x = x0;
+                            limit.y = y0;
+                            limit.w = x1 - x0;
+                            limit.h = y1 - y0;
+                        }
+                    }
+                    const TextRun run = textRun(s, *shown, inset);
+                    if (run.lines > 0) {
+                        n = uiEmitRun(s, dst, n, cap, run, tr, tg, tb, 1.0f, &limit);
+                    }
+                }
             }
         }
         if (const UiCurve* curve = s.ent[id].try_get<UiCurve>()) {
@@ -858,11 +892,12 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
         }
         n = emitRect(dst, n, cap, thumb.x, thumb.y, thumb.w, thumb.h, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.95f, 2.0f, nullptr);
     }
-    if (s.hintOn != 0) {
-        n = emitRect(dst, n, cap, s.hint.x, s.hint.y, s.hint.w, s.hint.h, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.35f, 4.0f, nullptr);
-    }
-    if (s.edgeOn != 0) {
-        n = emitRect(dst, n, cap, s.edgeLine.x, s.edgeLine.y, s.edgeLine.w, s.edgeLine.h, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.95f, 0.0f, nullptr);
+    if (const UiOverlayHooks* overlays = s.world.try_get<UiOverlayHooks>()) {
+        for (uint8_t i = 0; i < overlays->n; ++i) {
+            if (overlays->fn[i] != nullptr) {
+                overlays->fn[i](s, dst, n, cap);
+            }
+        }
     }
     if (s.plug.over != nullptr) {
         s.plug.over(s, dst, n, cap);

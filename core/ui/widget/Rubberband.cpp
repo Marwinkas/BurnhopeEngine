@@ -1,4 +1,5 @@
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Rubberband.hpp"
 
 namespace burnhope {
 namespace {
@@ -22,9 +23,9 @@ uint16_t uiRubberband(UiState& s, uint16_t host, void (*pick)(void* user, uint16
     UiPaint ink = paintToken(s.look, UiRole::Panel, UiToken::Accent, 2.0f);
     ink.a = 0.25f;
     ink.borderW = 2.0f;
-    ink.br = 0.45f;
-    ink.bg = 0.62f;
-    ink.bb = 0.95f;
+    ink.br = s.look.accent[0][0];
+    ink.bg = s.look.accent[0][1];
+    ink.bb = s.look.accent[0][2];
     const uint16_t overlay = spawn(s, host, flex, ink);
     uiShow(s, overlay, false);
     s.ent[host].set<UiRubber>({overlay, 0, 0, 0, 0, 0, pick, user});

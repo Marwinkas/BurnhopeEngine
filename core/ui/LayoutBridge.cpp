@@ -1,6 +1,7 @@
 #include "ui/LayoutBridge.hpp"
 #include "ui/State.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
 #include "platform/Trace.hpp"
 
 #include <cstdint>
@@ -231,7 +232,6 @@ void uiLayout(UiState& s, float w, float h) {
     if (s.count == 0) {
         return;
     }
-    fieldPlaceText(s);
     if (s.layoutFrom != kUiNone && s.layoutFrom != 0 && s.layoutFrom < s.count && s.yoga[s.layoutFrom] != nullptr
         && s.box[s.layoutFrom].w > 1.0f) {
         const uint16_t root = s.layoutFrom;

@@ -1,4 +1,5 @@
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Tip.hpp"
 
 namespace burnhope {
 
@@ -14,16 +15,15 @@ uint16_t uiTip(UiState& s, uint16_t parent) {
     UiPaint body = paintToken(s.look, UiRole::Panel, UiToken::Menu, s.look.radiusSm);
     body.shadow = 10.0f;
     body.borderW = 1.0f;
-    body.br = 0.32f;
-    body.bg = 0.36f;
-    body.bb = 0.46f;
+    body.br = s.look.muted[0];
+    body.bg = s.look.muted[1];
+    body.bb = s.look.muted[2];
     const uint16_t id = spawn(s, parent, flex, body);
-    if (id == kUiNone || s.count >= kUiCap) {
+    if (id == kUiNone) {
         return id;
     }
-    const uint16_t label = spawn(s, id, UiFlex{}, paintToken(s.look, UiRole::Label, UiToken::Text));
-    addText(s, label, "");
-    s.labelOf[id] = label;
+    s.ent[id].set<UiText>({});
+    addText(s, id, "");
     uiShow(s, id, false);
     return id;
 }
@@ -32,12 +32,8 @@ void uiTipAt(UiState& s, uint16_t id, const char* text, float x, float y) {
     if (id >= s.count) {
         return;
     }
-    const uint16_t label = s.labelOf[id];
-    if (label >= s.count) {
-        return;
-    }
-    addText(s, label, text);
-    const UiText* line = s.ent[label].try_get<UiText>();
+    addText(s, id, text);
+    const UiText* line = s.ent[id].try_get<UiText>();
     float w = line != nullptr ? uiMeasure(s, line->bytes, line->len, line->len) + 16.0f : 16.0f;
     if (w < 24.0f) {
         w = 24.0f;

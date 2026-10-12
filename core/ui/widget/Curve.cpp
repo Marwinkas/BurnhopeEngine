@@ -1,3 +1,4 @@
+#include "ui/widget/Curve.hpp"
 #include "ui/widget/Detail.hpp"
 
 namespace burnhope {
@@ -79,7 +80,7 @@ uint16_t track(UiState& s, uint16_t parent, float h) {
     flex.heightMode = static_cast<uint8_t>(UiSize::Px);
     flex.height = h;
     flex.shrink = 0.0f;
-    return spawn(s, parent, flex, paint(UiRole::Panel, 0.14f, 0.15f, 0.18f, 6.0f));
+    return spawn(s, parent, flex, paintToken(s.look, UiRole::Panel, UiToken::Content, 6.0f));
 }
 
 } // namespace

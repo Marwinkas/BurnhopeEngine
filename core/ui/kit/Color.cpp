@@ -1,5 +1,6 @@
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
 #include "ui/Domain.hpp"
 #include "ui/Layout.hpp"
 #include "ui/PrimitiveBatch.hpp"
@@ -11,6 +12,9 @@
 #include <ctime>
 
 namespace burnhope {
+
+void publishColor(UiState& s);
+void refreshColorChrome(UiState& s);
 
 void uiSetColorBook(UiState& s, ColorBook* book) {
     uiColor(s).book = book;
@@ -36,19 +40,6 @@ void setRange(UiState& s, uint16_t id, float value) {
     if (range != nullptr) {
         range->value = value;
     }
-}
-
-int hexNib(char ch) {
-    if (ch >= '0' && ch <= '9') {
-        return ch - '0';
-    }
-    if (ch >= 'a' && ch <= 'f') {
-        return ch - 'a' + 10;
-    }
-    if (ch >= 'A' && ch <= 'F') {
-        return ch - 'A' + 10;
-    }
-    return -1;
 }
 
 void writeHex(char* dst, uint8_t& len, float r, float g, float b, float a, bool withAlpha) {
@@ -78,7 +69,7 @@ void writeHex(char* dst, uint8_t& len, float r, float g, float b, float a, bool 
     }
 }
 
-void applyColor(UiState& s, bool fromHsv, bool publish) {
+void applyColor(UiState& s, bool fromHsv, bool publish = true) {
     if (fromHsv) {
         hsvToRgb(uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV, uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB);
     } else {
@@ -121,6 +112,7 @@ void applyColor(UiState& s, bool fromHsv, bool publish) {
         writeHex(field->bytes, field->len, uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorA, true);
         field->caret = field->len;
         field->anchor = field->len;
+        fieldSyncText(s, id);
     };
     write(uiColor(s).colorTarget, false);
     write(uiColor(s).colorHex, true);
@@ -142,9 +134,10 @@ void applyColor(UiState& s, bool fromHsv, bool publish) {
         if (field == nullptr || s.focused == id) {
             continue;
         }
-        writeInt(field->bytes, field->len, shown[i]);
+        uiWriteInt(field->bytes, field->len, shown[i]);
         field->caret = field->len;
         field->anchor = field->len;
+        fieldSyncText(s, id);
     }
     setRange(s, uiColor(s).colorAlpha, uiColor(s).colorA);
     if (publish) {
@@ -178,12 +171,8 @@ void paintColor(UiState& s) {
 }
 
 void dragWheel(UiState& s, uint16_t id, float x, float y) {
-    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-    if (paint == nullptr) {
-        return;
-    }
     const UiBox& b = s.box[id];
-    if (paint->tag == -70) {
+    if (id == uiColor(s).colorWheel) {
         const float cx = b.x + b.w * 0.5f;
         const float cy = b.y + b.h * 0.5f;
         const float dx = x - cx;
@@ -203,7 +192,7 @@ void dragWheel(UiState& s, uint16_t id, float x, float y) {
         uiColor(s).colorH = hue;
         uiColor(s).colorS = sat;
         applyColor(s, true);
-    } else if (paint->tag == -71) {
+    } else if (id == uiColor(s).colorVal) {
         float t = b.h > 1.0f ? 1.0f - (y - b.y) / b.h : 0.0f;
         if (t < 0.0f) {
             t = 0.0f;
@@ -213,7 +202,7 @@ void dragWheel(UiState& s, uint16_t id, float x, float y) {
         }
         uiColor(s).colorV = t;
         applyColor(s, true);
-    } else if (paint->tag == -72) {
+    } else if (id == uiColor(s).colorAlpha) {
         float t = b.w > 1.0f ? (x - b.x) / b.w : 0.0f;
         if (t < 0.0f) {
             t = 0.0f;
@@ -234,7 +223,7 @@ bool readHex(const UiField& field, float& r, float& g, float& b, float& a) {
     char digits[8]{};
     int n = 0;
     for (; i < field.len && n < 8; ++i) {
-        if (hexNib(field.bytes[i]) < 0) {
+        if (uiHexNib(field.bytes[i]) < 0) {
             return false;
         }
         digits[n++] = field.bytes[i];
@@ -243,7 +232,7 @@ bool readHex(const UiField& field, float& r, float& g, float& b, float& a) {
         return false;
     }
     auto chan = [&](int at) {
-        return (hexNib(digits[at]) * 16 + hexNib(digits[at + 1])) / 255.0f;
+        return (uiHexNib(digits[at]) * 16 + uiHexNib(digits[at + 1])) / 255.0f;
     };
     r = chan(0);
     g = chan(2);
@@ -252,33 +241,6 @@ bool readHex(const UiField& field, float& r, float& g, float& b, float& a) {
         a = chan(6);
     }
     return true;
-}
-
-void writeInt(char* dst, uint8_t& len, int v) {
-    if (v < 0) {
-        v = 0;
-    }
-    if (v > 999) {
-        v = 999;
-    }
-    char rev[4]{};
-    int n = 0;
-    int x = v;
-    if (x == 0) {
-        dst[0] = '0';
-        dst[1] = '\0';
-        len = 1;
-        return;
-    }
-    while (x > 0 && n < 3) {
-        rev[n++] = static_cast<char>('0' + (x % 10));
-        x /= 10;
-    }
-    for (int i = 0; i < n; ++i) {
-        dst[i] = rev[n - 1 - i];
-    }
-    dst[n] = '\0';
-    len = static_cast<uint8_t>(n);
 }
 
 bool readInt(const UiField& field, int& out) {
@@ -294,15 +256,6 @@ bool readInt(const UiField& field, int& out) {
         v = v * 10 + (ch - '0');
     }
     out = v;
-    return true;
-}
-
-bool nodeShown(const UiState& s, uint16_t id) {
-    for (uint16_t p = id; p != kUiNone; p = s.parentOf[p]) {
-        if (s.yoga[p] != nullptr && YGNodeStyleGetDisplay(s.yoga[p]) == YGDisplayNone) {
-            return false;
-        }
-    }
     return true;
 }
 
@@ -376,32 +329,31 @@ void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& 
     }
 }
 
-void colorTakeSlider(UiState& s, uint16_t id) {
-    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-    const UiRange* range = s.ent[id].try_get<UiRange>();
-    if (paint == nullptr || range == nullptr || paint->tag > -40 || paint->tag < -46) {
+void colorOnValue(void* user, uint16_t id, float val) {
+    auto& s = *static_cast<UiState*>(user);
+    UiColorPickerComponent& c = uiColor(s);
+    bool fromHsv = false;
+    if (id == c.colorRgb[0]) {
+        c.colorR = val;
+    } else if (id == c.colorRgb[1]) {
+        c.colorG = val;
+    } else if (id == c.colorRgb[2]) {
+        c.colorB = val;
+    } else if (id == c.colorAlpha) {
+        c.colorA = val;
+    } else if (id == c.colorHsv[0]) {
+        c.colorH = val;
+        fromHsv = true;
+    } else if (id == c.colorHsv[1]) {
+        c.colorS = val;
+        fromHsv = true;
+    } else if (id == c.colorHsv[2]) {
+        c.colorV = val;
+        fromHsv = true;
+    } else {
         return;
     }
-    if (paint->tag == -40) {
-        uiColor(s).colorR = range->value;
-    } else if (paint->tag == -41) {
-        uiColor(s).colorG = range->value;
-    } else if (paint->tag == -42) {
-        uiColor(s).colorB = range->value;
-    } else if (paint->tag == -46) {
-        uiColor(s).colorA = range->value;
-    } else if (paint->tag == -43) {
-        uiColor(s).colorH = range->value;
-    } else if (paint->tag == -44) {
-        uiColor(s).colorS = range->value;
-    } else {
-        uiColor(s).colorV = range->value;
-    }
-    applyColor(s, paint->tag <= -43 && paint->tag >= -45);
-}
-
-void colorOnValue(void* user, uint16_t id, float) {
-    colorTakeSlider(*static_cast<UiState*>(user), id);
+    applyColor(s, fromHsv);
 }
 
 void publishColor(UiState& s) {
@@ -653,8 +605,7 @@ bool colorGrab(void* user, uint16_t hit, float x, float y) {
     if (!dropping) {
         return false;
     }
-    const UiPaint* picked = hit != kUiNone ? s.ent[hit].try_get<UiPaint>() : nullptr;
-    if (picked != nullptr && picked->tag == -76) {
+    if (hit == uiColor(s).colorPickBtn) {
         return false;
     }
     float sr = 0.0f;
@@ -678,12 +629,12 @@ bool colorGrab(void* user, uint16_t hit, float x, float y) {
 void fillColorBody(UiState& s, uint16_t parent) {
     UiFlex row{};
     row.direction = 1;
-    auto chip = [&](uint16_t host, const char* name, int8_t tag, UiClickFn fn) {
+    auto chip = [&](uint16_t host, const char* name, UiClickFn fn) {
         UiFlex flex{};
         flex.heightMode = static_cast<uint8_t>(UiSize::Px);
         flex.height = 28.0f;
         flex.shrink = 0.0f;
-        const uint16_t id = spawn(s, host, flex, paint(UiRole::Button, 0.20f, 0.24f, 0.32f, 6.0f, tag));
+        const uint16_t id = spawn(s, host, flex, paint(UiRole::Button, 0.20f, 0.24f, 0.32f, 6.0f));
         UiText label{};
         copyText(label.bytes, label.len, name);
         s.ent[id].set<UiText>(label);
@@ -742,16 +693,15 @@ void fillColorBody(UiState& s, uint16_t parent) {
     pick.widthMode = static_cast<uint8_t>(UiSize::Percent);
     pick.width = 100.0f;
     pick.shrink = 0.0f;
-    UiPaint pickPaint = paint(UiRole::Button, 0.20f, 0.24f, 0.32f, 6.0f, -76);
+    UiPaint pickPaint = paint(UiRole::Button, 0.20f, 0.24f, 0.32f, 6.0f);
     pickPaint.icon = 7;
     const uint16_t pickId = spawn(s, sideId, pick, pickPaint);
+    uiColor(s).colorPickBtn = pickId;
     UiText pickLabel{};
     copyText(pickLabel.bytes, pickLabel.len, "PICK");
     s.ent[pickId].set<UiText>(pickLabel);
     uiBind(s, pickId, colorOnDrop, &s);
     const char* names[7] = {"R", "G", "B", "A", "H", "S", "V"};
-    const int8_t tags[7] = {-40, -41, -42, -46, -43, -44, -45};
-    const int8_t numTags[7] = {-80, -81, -82, -83, -84, -85, -86};
     const float starts[7] = {uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorA, uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV};
     for (int i = 0; i < 7; ++i) {
         UiFlex line = row;
@@ -768,7 +718,7 @@ void fillColorBody(UiState& s, uint16_t parent) {
         slide.shrink = 1.0f;
         slide.heightMode = static_cast<uint8_t>(UiSize::Px);
         slide.height = 18.0f;
-        const uint16_t sliderId = spawn(s, lineId, slide, paint(UiRole::Slider, 0.16f, 0.17f, 0.20f, 8.0f, tags[i]));
+        const uint16_t sliderId = spawn(s, lineId, slide, paint(UiRole::Slider, 0.16f, 0.17f, 0.20f, 8.0f));
         const uint8_t ramps[7] = {1, 2, 3, 7, 4, 5, 6};
         if (auto* slidePaint = s.ent[sliderId].try_get_mut<UiPaint>()) {
             slidePaint->ramp = ramps[i];
@@ -787,7 +737,7 @@ void fillColorBody(UiState& s, uint16_t parent) {
         num.width = 56.0f;
         num.height = 24.0f;
         num.shrink = 0.0f;
-        const uint16_t numId = spawn(s, lineId, num, paint(UiRole::Field, 0.10f, 0.11f, 0.14f, 4.0f, numTags[i]));
+        const uint16_t numId = spawn(s, lineId, num, paint(UiRole::Field, 0.10f, 0.11f, 0.14f, 4.0f));
         UiField digits{};
         digits.padL = 6.0f;
         digits.padR = 4.0f;
@@ -816,9 +766,9 @@ void fillColorBody(UiState& s, uint16_t parent) {
     modeRow.shrink = 0.0f;
     modeRow.gap = 6.0f;
     const uint16_t modeId = spawn(s, parent, modeRow, paint(UiRole::Hidden, 0, 0, 0));
-    uiColor(s).colorMenuBtn = chip(modeId, "MENU", -74, colorOnMenu);
-    uiColor(s).colorWinBtn = chip(modeId, "WINDOW", -75, colorOnWindow);
-    chip(parent, "CLOSE", -58, colorOnClose);
+    uiColor(s).colorMenuBtn = chip(modeId, "MENU", colorOnMenu);
+    uiColor(s).colorWinBtn = chip(modeId, "WINDOW", colorOnWindow);
+    chip(parent, "CLOSE", colorOnClose);
     s.grabFn = colorGrab;
     s.grabUser = &s;
     applyColor(s, true, uiColor(s).colorSeen == 0);
@@ -950,6 +900,13 @@ uint16_t loadColorBin(UiState& s, uint16_t parent, const BinNode& node, const ch
 
 void uiInstallColorBin(UiState& s) {
     uiRegisterCustomBinNode(s, 12, loadColorBin, nullptr);
+    uiDrawAdd(s, colorCustomDraw);
+    for (uint8_t i = 0; i < s.valueN; ++i) {
+        if (s.valueFn[i] == colorOnValue) {
+            return;
+        }
+    }
+    uiListen(s, colorOnValue, &s);
 }
 
 } // namespace burnhope

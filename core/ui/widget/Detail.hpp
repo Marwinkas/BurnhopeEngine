@@ -2,25 +2,20 @@
 
 #include "ui/State.hpp"
 
-#include <yoga/Yoga.h>
-#include "ui/widget/Breadcrumbs.hpp"
-#include "ui/widget/Button.hpp"
-#include "ui/widget/Chrome.hpp"
-#include "ui/widget/Curve.hpp"
-#include "ui/widget/Field.hpp"
-#include "ui/widget/Image.hpp"
-#include "ui/widget/List.hpp"
-#include "ui/widget/Menu.hpp"
-#include "ui/widget/Rubberband.hpp"
-#include "ui/widget/Scroll.hpp"
-#include "ui/widget/Slider.hpp"
-#include "ui/widget/Splitter.hpp"
-#include "ui/widget/Tip.hpp"
-#include "ui/widget/TreeView.hpp"
-#include "ui/widget/Virtual.hpp"
-#include "ui/widget/VirtualGrid.hpp"
+#include <cstddef>
 
 namespace burnhope {
+
+struct UiScrollMetrics {
+    float contentH = 0;
+    float maxOff = 0;
+    float thumbH = 0;
+    float travel = 0;
+    float t = 0;
+    uint8_t shown = 0;
+};
+
+UiScrollMetrics uiCalcScrollMetrics(float viewH, float contentH, float offset);
 
 inline constexpr float kAccent[3][3] = {
     {0.36f, 0.55f, 0.92f},
@@ -28,16 +23,65 @@ inline constexpr float kAccent[3][3] = {
     {0.86f, 0.55f, 0.32f},
 };
 
-inline void copyText(char* dst, uint8_t& len, const char* src) {
+template <size_t N>
+inline uint8_t uiStrCopy(char (&dst)[N], const char* src) {
     uint8_t n = 0;
     if (src != nullptr) {
-        while (src[n] != '\0' && n < 31) {
+        while (src[n] != '\0' && n < static_cast<uint8_t>(N - 1)) {
             dst[n] = src[n];
             ++n;
         }
     }
     dst[n] = '\0';
-    len = n;
+    return n;
+}
+
+inline void copyText(char* dst, uint8_t& len, const char* src) {
+    char scratch[32]{};
+    len = uiStrCopy(scratch, src);
+    for (uint8_t i = 0; i <= len; ++i) {
+        dst[i] = scratch[i];
+    }
+}
+
+inline void uiWriteInt(char* dst, uint8_t& len, int v) {
+    if (v < 0) {
+        v = 0;
+    }
+    if (v > 999999) {
+        v = 999999;
+    }
+    char rev[8]{};
+    int n = 0;
+    int x = v;
+    if (x == 0) {
+        dst[0] = '0';
+        dst[1] = '\0';
+        len = 1;
+        return;
+    }
+    while (x > 0 && n < 8) {
+        rev[n++] = static_cast<char>('0' + (x % 10));
+        x /= 10;
+    }
+    for (int i = 0; i < n; ++i) {
+        dst[i] = rev[n - 1 - i];
+    }
+    dst[n] = '\0';
+    len = static_cast<uint8_t>(n);
+}
+
+inline int uiHexNib(char ch) {
+    if (ch >= '0' && ch <= '9') {
+        return ch - '0';
+    }
+    if (ch >= 'a' && ch <= 'f') {
+        return ch - 'a' + 10;
+    }
+    if (ch >= 'A' && ch <= 'F') {
+        return ch - 'A' + 10;
+    }
+    return -1;
 }
 
 inline UiFlex px(float w, float h) {
@@ -69,6 +113,33 @@ inline UiPaint paintToken(const UiLook& look, UiRole role, UiToken token, float 
     p.token = static_cast<uint8_t>(token);
     tokenRgb(look, token, p.r, p.g, p.b);
     return p;
+}
+
+inline void uiNoteChrome(UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return;
+    }
+    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+    if (paint == nullptr) {
+        return;
+    }
+    const int16_t tag = paint->tag;
+    if (tag == -5) {
+        s.ent[id].set<UiSplitter>({});
+        if (auto* live = s.ent[id].try_get_mut<UiPaint>()) {
+            const float radius = live->radius;
+            *live = paintToken(s.look, UiRole::Panel, UiToken::Muted, radius, tag);
+        }
+    }
+    if (tag == -6) {
+        s.ent[id].set<UiTitleBar>({});
+    }
+    if (tag == -7) {
+        s.ent[id].set<UiMenuBar>({});
+    }
+    if (tag == -15) {
+        s.ent[id].set<UiResizable>({});
+    }
 }
 
 struct UiVirtualWindow {
@@ -162,6 +233,19 @@ const T* uiAncestor(const UiState& s, uint16_t id) {
 }
 
 template <typename T>
+bool uiAncestorHas(const UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return false;
+    }
+    for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (s.ent[p].has<T>()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+template <typename T>
 uint16_t uiAncestorId(const UiState& s, uint16_t id) {
     if (id >= s.count) {
         return kUiNone;
@@ -186,68 +270,9 @@ inline bool uiWithin(const UiState& s, uint16_t id, uint16_t ancestor) {
     return false;
 }
 
-inline uint32_t uiNodeChildCount(const UiState& s, uint16_t parent) {
-    if (parent >= s.count || s.yoga[parent] == nullptr) {
-        return 0;
-    }
-    return YGNodeGetChildCount(s.yoga[parent]);
-}
-
-inline uint16_t uiNodeChild(const UiState& s, uint16_t parent, uint32_t index) {
-    if (parent >= s.count || s.yoga[parent] == nullptr || index >= YGNodeGetChildCount(s.yoga[parent])) {
-        return kUiNone;
-    }
-    YGNodeRef node = YGNodeGetChild(s.yoga[parent], index);
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.yoga[id] == node) {
-            return id;
-        }
-    }
-    return kUiNone;
-}
-
-inline void uiNodeMoveChild(UiState& s, uint16_t parent, uint16_t child, uint32_t newIndex) {
-    if (parent >= s.count || child >= s.count) {
-        return;
-    }
-    YGNodeRef host = s.yoga[parent];
-    YGNodeRef node = s.yoga[child];
-    if (host == nullptr || node == nullptr) {
-        return;
-    }
-    YGNodeRef from = YGNodeGetParent(node);
-    if (from == host) {
-        const uint32_t count = YGNodeGetChildCount(host);
-        uint32_t old = count;
-        for (uint32_t i = 0; i < count; ++i) {
-            if (YGNodeGetChild(host, i) == node) {
-                old = i;
-                break;
-            }
-        }
-        if (old == count) {
-            return;
-        }
-        if (newIndex > count) {
-            newIndex = count;
-        }
-        if (old == newIndex) {
-            return;
-        }
-        YGNodeRemoveChild(host, node);
-        if (old < newIndex) {
-            --newIndex;
-        }
-    } else if (from != nullptr) {
-        YGNodeRemoveChild(from, node);
-    }
-    const uint32_t live = YGNodeGetChildCount(host);
-    if (newIndex > live) {
-        newIndex = live;
-    }
-    YGNodeInsertChild(host, node, newIndex);
-    s.layoutDirty = true;
-}
+uint32_t uiNodeChildCount(const UiState& s, uint16_t parent);
+uint16_t uiNodeChild(const UiState& s, uint16_t parent, uint32_t index);
+void uiNodeMoveChild(UiState& s, uint16_t parent, uint16_t child, uint32_t newIndex);
 
 inline bool hitBox(const UiBox& b, float x, float y) {
     return b.w > 0.5f && b.h > 0.5f && x >= b.x && y >= b.y && x < b.x + b.w && y < b.y + b.h;
@@ -260,41 +285,57 @@ inline bool focusable(uint8_t role) {
 }
 
 uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
+
+inline uint16_t uiVirtualHostCreate(UiState& s, uint16_t parent, UiRole role, UiToken token, float radius) {
+    UiFlex host{};
+    host.grow = 1.0f;
+    host.shrink = 1.0f;
+    host.overflow = 2;
+    host.position = 2;
+    const uint16_t scroll = spawn(s, parent, host, paintToken(s.look, role, token, radius));
+    if (scroll == kUiNone) {
+        return kUiNone;
+    }
+    UiFlex spacer{};
+    spacer.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    spacer.width = 100.0f;
+    spacer.heightMode = static_cast<uint8_t>(UiSize::Px);
+    spacer.height = 1.0f;
+    spacer.shrink = 0.0f;
+    spacer.position = 2;
+    const uint16_t inner = spawn(s, scroll, spacer, paint(UiRole::Hidden, 0, 0, 0));
+    s.ent[scroll].set<UiScroll>({0.0f, inner});
+    return scroll;
+}
+
+inline void uiVirtualSyncSpacer(UiState& s, uint16_t inner, float totalHeight) {
+    if (inner >= s.count) {
+        return;
+    }
+    if (auto* flex = s.ent[inner].try_get_mut<UiFlex>()) {
+        flex->height = totalHeight;
+    }
+}
+
+void uiVirtualSetShown(UiState& s, uint16_t slot, bool on);
+
+template <typename Pool, typename Add>
+void uiVirtualEnsure(UiState& s, Pool& pool, uint16_t need, uint16_t budget, Add add) {
+    while (pool.slots < need && pool.slots < kUiPoolCap && s.count + budget < kUiCap) {
+        const uint16_t slot = add();
+        if (slot == kUiNone) {
+            break;
+        }
+        pool.slot[pool.slots++] = slot;
+    }
+}
 void addText(UiState& s, uint16_t id, const char* text);
 void stamp(UiState& s, uint16_t id, UiToken token);
 uint16_t hitTest(const UiState& s, float x, float y);
-void setNote(UiState& s, const char* msg);
-int daysInMonth(int year, int month);
-int weekDay(int year, int month, int day);
-void calFill(UiState& s);
-void writeDate(UiState& s, int day);
-void calPick(UiState& s, uint16_t id);
-void calOnOpen(void* user, uint16_t id, int16_t tag);
-void calOnToday(void* user, uint16_t id, int16_t tag);
-void calOnPrev(void* user, uint16_t id, int16_t tag);
-void calOnNext(void* user, uint16_t id, int16_t tag);
-void calOnClose(void* user, uint16_t id, int16_t tag);
-void calOnDay(void* user, uint16_t id, int16_t tag);
-void colorOnOpen(void* user, uint16_t id, int16_t tag);
 void activate(UiState& s, uint16_t id);
-void hsvToRgb(float h, float s, float v, float& r, float& g, float& b);
-void rgbToHsv(float r, float g, float b, float& h, float& s, float& v);
-void setRange(UiState& s, uint16_t id, float value);
-int hexNib(char ch);
-void writeHex(char* dst, uint8_t& len, float r, float g, float b, float a, bool withAlpha);
-void applyColor(UiState& s, bool fromHsv, bool publish = true);
-void takeBook(UiState& s);
-void paintColor(UiState& s);
-void dragWheel(UiState& s, uint16_t id, float x, float y);
-bool readHex(const UiField& field, float& r, float& g, float& b, float& a);
-void writeInt(char* dst, uint8_t& len, int v);
-bool readInt(const UiField& field, int& out);
 bool nodeShown(const UiState& s, uint16_t id);
-void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& b, float& a);
 void dragSlider(UiState& s, uint16_t id, float x);
 void dragSpin(UiState& s, uint16_t id, float x);
-void colorTakeSlider(UiState& s, uint16_t id);
-void colorOnValue(void* user, uint16_t id, float);
 uint16_t splitTarget(const UiState& s, uint16_t split);
 void scrollBy(UiState& s, uint16_t id, float wheel);
 uint16_t scrollOwner(const UiState& s, uint16_t id);
@@ -308,32 +349,22 @@ uint8_t fieldChars(const UiField& field);
 void fieldSelectWord(UiField& field, uint8_t at);
 void fieldDropSel(UiField& field);
 void fieldInsert(UiField& field, const char* src, uint8_t n);
+void fieldInsert(UiState& s, uint16_t id, const char* src, uint8_t n);
 void fieldRemember(UiState& s, uint16_t id, const UiField& field);
 bool fieldUndo(UiState& s);
 bool fieldRedo(UiState& s);
 void fieldEraseBack(UiField& field);
 void fieldEraseForward(UiField& field);
+void fieldEraseBack(UiState& s, uint16_t id);
+void fieldEraseForward(UiState& s, uint16_t id);
 void fieldReveal(const UiState& s, UiField& field, float view);
 uint8_t fieldCaretAt(const UiState& s, const UiField& field, float local);
 void fieldCopy(UiState& s, const UiField& field);
-void publishColor(UiState& s);
-void setBtnLabel(UiState& s, uint16_t id, const char* text);
-void refreshColorChrome(UiState& s);
-void placeColorMenu(UiState& s);
-void syncColor(UiState& s);
-void photoClamp(UiImage& image);
-bool photoMinimap(const UiBox& box, float x, float y, float& u, float& v);
-void photoZoom(UiState& s, uint16_t id, float wheel, float x, float y);
-void photoPan(UiState& s, uint16_t id, float x, float y);
-void tickPhoto(UiState& s);
 UiField* editFieldOf(UiState& s);
 void cmdFieldCut(void* user);
 void cmdFieldCopy(void* user);
 void cmdFieldPaste(void* user);
 void cmdFieldAll(void* user);
 void cmdFieldWipe(void* user);
-uint16_t listItemOf(const UiState& s, uint16_t id);
-void moveListItem(UiState& s, uint16_t item, uint16_t before, bool after);
-void fillColorBody(UiState& s, uint16_t parent);
 
 } // namespace burnhope

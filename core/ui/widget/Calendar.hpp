@@ -17,6 +17,9 @@ struct UiCalendarComponent {
 inline UiCalendarComponent& uiCal(UiState& s) {
     return s.world.ensure<UiCalendarComponent>();
 }
+void uiInstallCalendarBin(UiState& s);
+void calOnOpen(void* user, uint16_t id, int16_t tag);
+
 inline const UiCalendarComponent& uiCal(const UiState& s) {
     return *s.world.try_get<UiCalendarComponent>();
 }

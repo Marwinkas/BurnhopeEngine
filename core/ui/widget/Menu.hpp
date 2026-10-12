@@ -6,9 +6,11 @@
 
 namespace burnhope {
 
+inline constexpr uint8_t kUiMenuCap = 32;
+
 struct UiMenuPop {
-    uint16_t row[12]{};
-    void (*fn[12])(void*){};
+    uint16_t row[kUiMenuCap]{};
+    void (*fn[kUiMenuCap])(void*){};
     void* user = nullptr;
     uint8_t n = 0;
 };
@@ -37,5 +39,6 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
 void uiMenuClose(UiState& s);
 uint16_t uiMakeMenu(UiState& s);
 void uiMenuStyle(UiState& s, float width, float itemH, float pad, float gap);
+void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y);
 
 } // namespace burnhope

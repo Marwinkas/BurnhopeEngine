@@ -1,15 +1,10 @@
 #pragma once
 
-#include "ui/State.hpp"
+#include "ui/widget/Virtual.hpp"
 
 namespace burnhope {
 
-struct UiTreeView {
-    uint32_t count = 0;
-    uint32_t first = 0;
-    uint16_t slot[kUiPoolCap]{};
-    uint8_t slots = 0;
-    float rowH = 28.0f;
+struct UiTreeView : UiVirtualBase {
     void (*bind)(void* user, uint16_t row, uint32_t index) = nullptr;
     void (*toggle)(void* user, uint32_t index) = nullptr;
     void (*select)(void* user, uint32_t index) = nullptr;

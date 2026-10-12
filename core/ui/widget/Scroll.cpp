@@ -1,19 +1,18 @@
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Scroll.hpp"
 
 #include <cmath>
 #include <cstring>
-#include <ctime>
 
 namespace burnhope {
 
 float scrollContentH(const UiState& s, uint16_t inner) {
     float sum = 0.0f;
     int n = 0;
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.parentOf[id] != inner) {
-            continue;
-        }
-        if (s.yoga[id] != nullptr && YGNodeStyleGetDisplay(s.yoga[id]) == YGDisplayNone) {
+    const uint32_t count = uiNodeChildCount(s, inner);
+    for (uint32_t i = 0; i < count; ++i) {
+        const uint16_t id = uiNodeChild(s, inner, i);
+        if (id == kUiNone || !nodeShown(s, id)) {
             continue;
         }
         float h = 0.0f;
@@ -46,48 +45,81 @@ float scrollContentH(const UiState& s, uint16_t inner) {
     return sum > 0.0f ? sum : 0.0f;
 }
 
+float scrollSpan(const UiState& s, uint16_t id, uint16_t inner) {
+    float contentH = scrollContentH(s, inner);
+    if (const auto* pool = s.ent[id].try_get<UiVirtualPool>()) {
+        if (pool->contentHeight != nullptr) {
+            contentH = pool->contentHeight(s, id);
+        }
+    }
+    return contentH;
+}
+
+void scrollRefresh(UiState& s, uint16_t id) {
+    if (const auto* pool = s.ent[id].try_get<UiVirtualPool>()) {
+        if (pool->refresh != nullptr) {
+            pool->refresh(s, id);
+        }
+    }
+}
+
+UiScrollMetrics uiCalcScrollMetrics(float viewH, float contentH, float offset) {
+    UiScrollMetrics metrics{};
+    metrics.contentH = contentH;
+    metrics.maxOff = contentH - viewH;
+    if (metrics.maxOff < 0.0f) {
+        metrics.maxOff = 0.0f;
+    }
+    if (viewH < 8.0f || contentH <= viewH + 1.0f) {
+        metrics.thumbH = viewH;
+        return metrics;
+    }
+    metrics.shown = 1;
+    metrics.thumbH = viewH * viewH / contentH;
+    if (metrics.thumbH < 18.0f) {
+        metrics.thumbH = 18.0f;
+    }
+    if (metrics.thumbH > viewH) {
+        metrics.thumbH = viewH;
+    }
+    metrics.travel = viewH - metrics.thumbH;
+    metrics.t = metrics.maxOff > 0.0f ? offset / metrics.maxOff : 0.0f;
+    if (metrics.t < 0.0f) {
+        metrics.t = 0.0f;
+    }
+    if (metrics.t > 1.0f) {
+        metrics.t = 1.0f;
+    }
+    return metrics;
+}
+
 void scrollBy(UiState& s, uint16_t id, float wheel) {
     auto* scroll = s.ent[id].try_get_mut<UiScroll>();
     if (scroll == nullptr || scroll->inner == kUiNone) {
         return;
     }
     const float viewH = s.box[id].h;
-    const UiVirtualWindow list = s.ent[id].try_get<UiVirtual>() != nullptr
-        ? uiVirtualCalc(0.0f, viewH, s.ent[id].try_get<UiVirtual>()->rowH, s.ent[id].try_get<UiVirtual>()->count, 1)
-        : UiVirtualWindow{};
-    const UiTreeView* tree = s.ent[id].try_get<UiTreeView>();
-    const UiVirtualGrid* grid = s.ent[id].try_get<UiVirtualGrid>();
-    float contentH = scrollContentH(s, scroll->inner);
-    if (s.ent[id].try_get<UiVirtual>() != nullptr) {
-        contentH = list.totalHeight;
-    } else if (tree != nullptr) {
-        contentH = uiVirtualCalc(0.0f, viewH, tree->rowH, tree->count, 1).totalHeight;
-    } else if (grid != nullptr) {
-        contentH = uiVirtualCalc(0.0f, viewH, grid->itemH, grid->count, grid->cols < 1 ? 1 : grid->cols).totalHeight;
-    }
-    float maxOff = contentH - viewH;
-    if (maxOff < 0.0f) {
-        maxOff = 0.0f;
-    }
+    const float contentH = scrollSpan(s, id, scroll->inner);
+    const UiScrollMetrics metrics = uiCalcScrollMetrics(viewH, contentH, scroll->offset);
     scroll->offset -= wheel * 28.0f;
     if (scroll->offset < 0.0f) {
         scroll->offset = 0.0f;
     }
-    if (scroll->offset > maxOff) {
-        scroll->offset = maxOff;
+    if (scroll->offset > metrics.maxOff) {
+        scroll->offset = metrics.maxOff;
     }
-    if (s.ent[id].try_get<UiVirtual>() != nullptr) {
-        uiVirtualRefresh(s, id);
+    uint8_t follow = 1;
+    if (const UiVirtualPool* pool = s.ent[id].try_get<UiVirtualPool>()) {
+        follow = pool->follow;
+    }
+    scrollRefresh(s, id);
+    if (follow == 0) {
+        uiTrace(s, "scroll", id);
         return;
-    }
-    if (s.ent[id].try_get<UiTreeView>() != nullptr) {
-        uiTreeViewRefresh(s, id);
-    } else if (s.ent[id].try_get<UiVirtualGrid>() != nullptr) {
-        uiVirtualGridRefresh(s, id);
     }
     auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>();
     const float next = -scroll->offset;
-    if (flex->position != 0 || std::fabs(flex->posY) > 0.5f || std::fabs(flex->marginT - next) > 0.5f) {
+    if (flex != nullptr && (flex->position != 0 || std::fabs(flex->posY) > 0.5f || std::fabs(flex->marginT - next) > 0.5f)) {
         flex->position = 0;
         flex->posX = 0.0f;
         flex->posY = 0.0f;
@@ -106,41 +138,19 @@ bool scrollThumb(const UiState& s, uint16_t id, UiBox& thumb) {
         return false;
     }
     const float viewH = s.box[id].h;
-    float contentH = scrollContentH(s, scroll->inner);
-    if (const UiVirtual* virtThumb = s.ent[id].try_get<UiVirtual>()) {
-        contentH = uiVirtualCalc(0.0f, viewH, virtThumb->rowH, virtThumb->count, 1).totalHeight;
-    } else if (const UiTreeView* treeThumb = s.ent[id].try_get<UiTreeView>()) {
-        contentH = uiVirtualCalc(0.0f, viewH, treeThumb->rowH, treeThumb->count, 1).totalHeight;
-    } else if (const UiVirtualGrid* gridThumb = s.ent[id].try_get<UiVirtualGrid>()) {
-        const uint8_t cols = gridThumb->cols < 1 ? 1 : gridThumb->cols;
-        contentH = uiVirtualCalc(0.0f, viewH, gridThumb->itemH, gridThumb->count, cols).totalHeight;
-    }
-    if (viewH < 8.0f || contentH <= viewH + 1.0f) {
+    const UiScrollMetrics metrics = uiCalcScrollMetrics(viewH, scrollSpan(s, id, scroll->inner), scroll->offset);
+    if (metrics.shown == 0) {
         return false;
     }
-    float thumbH = viewH * viewH / contentH;
-    if (thumbH < 18.0f) {
-        thumbH = 18.0f;
-    }
-    if (thumbH > viewH) {
-        thumbH = viewH;
-    }
-    const float maxOff = contentH - viewH;
-    const float travel = viewH - thumbH;
-    float t = maxOff > 0.0f ? scroll->offset / maxOff : 0.0f;
-    if (t < 0.0f) {
-        t = 0.0f;
-    }
-    if (t > 1.0f) {
-        t = 1.0f;
-    }
+    const float travel = metrics.travel;
+    const float t = metrics.t;
     thumb.x = s.box[id].x + s.box[id].w - 8.0f;
     if (thumb.x < s.box[id].x) {
         thumb.x = s.box[id].x;
     }
     thumb.y = s.box[id].y + t * travel;
     thumb.w = 6.0f;
-    thumb.h = thumbH;
+    thumb.h = metrics.thumbH;
     return true;
 }
 
@@ -150,27 +160,12 @@ void dragScroll(UiState& s, uint16_t id, float y) {
         return;
     }
     const float viewH = s.box[id].h;
-    float contentH = scrollContentH(s, scroll->inner);
-    if (const UiVirtual* virtDrag = s.ent[id].try_get<UiVirtual>()) {
-        contentH = uiVirtualCalc(0.0f, viewH, virtDrag->rowH, virtDrag->count, 1).totalHeight;
-    } else if (const UiTreeView* treeDrag = s.ent[id].try_get<UiTreeView>()) {
-        contentH = uiVirtualCalc(0.0f, viewH, treeDrag->rowH, treeDrag->count, 1).totalHeight;
-    } else if (const UiVirtualGrid* gridDrag = s.ent[id].try_get<UiVirtualGrid>()) {
-        const uint8_t cols = gridDrag->cols < 1 ? 1 : gridDrag->cols;
-        contentH = uiVirtualCalc(0.0f, viewH, gridDrag->itemH, gridDrag->count, cols).totalHeight;
-    }
-    const float maxOff = contentH - viewH;
-    if (maxOff <= 0.0f || viewH < 8.0f) {
+    const UiScrollMetrics metrics = uiCalcScrollMetrics(viewH, scrollSpan(s, id, scroll->inner), scroll->offset);
+    if (metrics.shown == 0 || metrics.maxOff <= 0.0f) {
         return;
     }
-    float thumbH = viewH * viewH / contentH;
-    if (thumbH < 18.0f) {
-        thumbH = 18.0f;
-    }
-    if (thumbH > viewH) {
-        thumbH = viewH;
-    }
-    const float travel = viewH - thumbH;
+    const float travel = metrics.travel;
+    const float thumbH = metrics.thumbH;
     float t = travel > 1.0f ? (y - s.box[id].y - thumbH * 0.5f) / travel : 0.0f;
     if (t < 0.0f) {
         t = 0.0f;
@@ -178,15 +173,15 @@ void dragScroll(UiState& s, uint16_t id, float y) {
     if (t > 1.0f) {
         t = 1.0f;
     }
-    scroll->offset = t * maxOff;
-    if (s.ent[id].try_get<UiVirtual>() != nullptr) {
-        uiVirtualRefresh(s, id);
-        return;
+    scroll->offset = t * metrics.maxOff;
+    uint8_t follow = 1;
+    if (const UiVirtualPool* pool = s.ent[id].try_get<UiVirtualPool>()) {
+        follow = pool->follow;
     }
-    if (s.ent[id].try_get<UiTreeView>() != nullptr) {
-        uiTreeViewRefresh(s, id);
-    } else if (s.ent[id].try_get<UiVirtualGrid>() != nullptr) {
-        uiVirtualGridRefresh(s, id);
+    scrollRefresh(s, id);
+    if (follow == 0) {
+        s.visualDirty = true;
+        return;
     }
     if (auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>()) {
         flex->position = 0;

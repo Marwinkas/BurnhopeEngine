@@ -1,6 +1,6 @@
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Detail.hpp"
-#include "ui/Layout.hpp"
+#include "ui/Domain.hpp"
 
 namespace burnhope {
 namespace {
@@ -43,61 +43,6 @@ uint16_t uiWindowChrome(UiState& s, uint16_t parent) {
     uiBind(s, minB, onMin, &s);
     uiBind(s, maxB, onMax, &s);
     return cluster;
-}
-
-void uiBlur(UiState& s, uint16_t id, float blur) {
-    if (id >= s.count) {
-        return;
-    }
-    auto* paint = s.ent[id].try_get_mut<UiPaint>();
-    if (paint == nullptr) {
-        return;
-    }
-    paint->blur = blur < 0.0f ? 0.0f : (blur > 1.0f ? 1.0f : blur);
-    s.visualDirty = true;
-}
-
-void uiTransform(UiState& s, uint16_t id, float angle, float scaleX, float scaleY) {
-    if (id >= s.count) {
-        return;
-    }
-    auto* paint = s.ent[id].try_get_mut<UiPaint>();
-    if (paint == nullptr) {
-        return;
-    }
-    paint->angle = angle;
-    paint->scaleX = scaleX;
-    paint->scaleY = scaleY;
-    s.visualDirty = true;
-}
-
-void uiFilter(UiState& s, uint16_t id, float bright, float contrast) {
-    if (id >= s.count) {
-        return;
-    }
-    auto* paint = s.ent[id].try_get_mut<UiPaint>();
-    if (paint == nullptr) {
-        return;
-    }
-    paint->bright = bright;
-    paint->contrast = contrast;
-    s.visualDirty = true;
-}
-
-void uiSetPaint(UiState& s, uint16_t id, float r, float g, float b, float a) {
-    if (id >= s.count) {
-        return;
-    }
-    auto* paint = s.ent[id].try_get_mut<UiPaint>();
-    if (paint == nullptr) {
-        return;
-    }
-    paint->r = r;
-    paint->g = g;
-    paint->b = b;
-    paint->a = a;
-    paint->token = static_cast<uint8_t>(UiToken::Custom);
-    s.visualDirty = true;
 }
 
 uint16_t loadChromeBin(UiState& s, uint16_t parent, const BinNode&, const char* name, void*) {

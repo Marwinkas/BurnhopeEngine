@@ -4,6 +4,7 @@
 #include "ui/widget/Calendar.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -36,10 +37,10 @@ void setPage(UiState& s, int8_t tag) {
     ShellIds& ids = shellIds(s);
     ids.page = tag;
     for (int i = 0; i < 3; ++i) {
-        if (ids.pages[i] == kUiNone || s.yoga[ids.pages[i]] == nullptr) {
+        if (ids.pages[i] == kUiNone) {
             continue;
         }
-        YGNodeStyleSetDisplay(s.yoga[ids.pages[i]], i == tag ? YGDisplayFlex : YGDisplayNone);
+        uiShow(s, ids.pages[i], i == tag);
     }
     if (ids.pageLabel != kUiNone) {
         auto* text = s.ent[ids.pageLabel].try_get_mut<UiText>();
@@ -95,7 +96,16 @@ void formSubmit(UiState& s) {
             why = msg;
         }
     }
-    setNote(s, bad ? why : "sent");
+    const char* msg = bad ? why : "sent";
+    auto writeStatus = [&](uint16_t id) {
+        if (id == kUiNone) {
+            return;
+        }
+        uiText(s, id, msg);
+    };
+    writeStatus(shellIds(s).statusLabel);
+    writeStatus(shellIds(s).formNote);
+    s.visualDirty = true;
 }
 
 void cmdClear(void* user) {
@@ -109,6 +119,7 @@ void cmdClear(void* user) {
     field->anchor = 0;
     field->scroll = 0.0f;
     field->bytes[0] = '\0';
+    fieldSyncText(s, s.field);
     s.visualDirty = true;
 }
 
@@ -198,6 +209,8 @@ void cmdTheme(void* user) {
 }
 
 void uiBuildShell(UiState& s) {
+    uiInstallCalendarBin(s);
+    uiInstallColorBin(s);
     const uint16_t root = uiImportBinFile(s, kUiNone, BH_UI_SHELL);
     auto take = [&](const char* name) { return uiFindName(s, name); };
     auto link = [&](const char* from, const char* to) {
@@ -308,6 +321,7 @@ void uiBuildShell(UiState& s) {
     uiFiles(s).fileFrame = floatPanel(70.0f, 64.0f, 1100.0f, 700.0f);
     if (auto* framePaint = s.ent[uiFiles(s).fileFrame].try_get_mut<UiPaint>()) {
         framePaint->tag = -15;
+        uiNoteChrome(s, uiFiles(s).fileFrame);
     }
     UiFlex fileBar{};
     fileBar.direction = 1;
@@ -363,11 +377,6 @@ void uiBuildShell(UiState& s) {
         } else if (s.parentOf[id] == ids.listInner) {
             stamp(s, id, UiToken::Item);
         }
-    }
-    if (s.valueN < 4) {
-        s.valueFn[s.valueN] = colorOnValue;
-        s.valueUser[s.valueN] = &s;
-        ++s.valueN;
     }
     uiRestyle(s);
 }

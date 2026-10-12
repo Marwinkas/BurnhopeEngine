@@ -1,6 +1,7 @@
 #define DOCTEST_CONFIG_NO_EXCEPTIONS
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
+#include <yoga/Yoga.h>
 
 #include "files/FileDomain.hpp"
 #include "ui/Domain.hpp"
@@ -9,6 +10,10 @@
 #include "ui/State.hpp"
 #include "ui/Layout.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
+#include "ui/widget/Image.hpp"
+#include "ui/widget/Splitter.hpp"
+#include "ui/widget/Virtual.hpp"
 #include "files/Browser.hpp"
 #include "memory/FrameArena.hpp"
 #include "rhi/Device.hpp"
@@ -125,12 +130,13 @@ TEST_CASE("double click maximizes the title only") {
     CHECK(!state.opMaximize);
 
     UiState titled;
-    UiPaint bar = paint(UiRole::Panel, 0.2f, 0.2f, 0.2f);
-    bar.token = static_cast<uint8_t>(UiToken::Title);
-    const uint16_t title = spawn(titled, kUiNone, px(180, 32), bar);
+    const uint16_t root = spawn(titled, kUiNone, px(200.0f, 80.0f), paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
+    const uint16_t title = spawn(titled, root, px(180.0f, 32.0f), paint(UiRole::Panel, 0.2f, 0.2f, 0.2f, 0.0f, -6));
     uiLayout(titled, 200.0f, 80.0f);
     InputFrame click{};
     click.clicks = 2;
+    click.pointer.pressed = kPointerLeft;
+    click.pointer.down = kPointerLeft;
     click.pointer.x = titled.box[title].x + 4.0f;
     click.pointer.y = titled.box[title].y + 4.0f;
     (void)uiApplyInput(titled, click);
@@ -1494,14 +1500,12 @@ TEST_CASE("drop frees the subtree") {
     UiState state;
     const uint16_t root = spawn(state, kUiNone, px(200, 80), paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
     const uint16_t child = spawn(state, root, px(40, 20), paint(UiRole::Button, 0.2f, 0.2f, 0.2f));
-    const uint16_t label = state.labelOf[child];
+    CHECK(state.ent[child].try_get<UiText>() != nullptr);
     uiLayout(state, 200.0f, 80.0f);
     CHECK(state.yoga[child] != nullptr);
     uiDrop(state, child);
     CHECK(state.yoga[child] == nullptr);
-    CHECK(state.yoga[label] == nullptr);
     CHECK(!state.ent[child].is_alive());
-    CHECK(!state.ent[label].is_alive());
     CHECK(state.ent[root].is_alive());
     CHECK(YGNodeGetChildCount(state.yoga[root]) == 0);
     uiLayout(state, 200.0f, 80.0f);
@@ -1606,6 +1610,8 @@ TEST_CASE("broken blobs do not import") {
 
 TEST_CASE("baked scale slider moves") {
     UiState state;
+    uiInstallCalendarBin(state);
+    uiInstallColorBin(state);
     const uint16_t root = uiImportBinFile(state, kUiNone, "build-core/ui/shell.uib");
     CHECK(root != kUiNone);
     if (root == kUiNone) {

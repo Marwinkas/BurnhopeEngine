@@ -234,27 +234,14 @@ TextRun textRun(const UiState& s, const UiText& text, const UiBox& slot) {
                 ++at;
                 continue;
             }
-            int j = at;
-            int lastSpace = -1;
+            uint8_t kind[96]{};
+            for (int k = 0; k < ncp; ++k) {
+                kind[k] = cp[k].kind;
+            }
             const float limit = run.lines == 0 ? firstW : slot.w;
-            while (j < ncp && cp[j].kind != 1 && (ps[j + 1] - ps[at]) <= limit + 0.01f) {
-                if (text.breakAll == 0 && cp[j].kind == 2) {
-                    lastSpace = j;
-                }
-                ++j;
-            }
-            int end = j;
-            int next = j;
-            if (j < ncp && cp[j].kind == 1) {
-                next = j + 1;
-            } else if (j < ncp && lastSpace > at) {
-                end = lastSpace;
-                next = lastSpace + 1;
-            }
-            if (end == at) {
-                end = at + 1;
-                next = end;
-            }
+            const UiWrapCut cut = uiWrapCut(ps, kind, ncp, at, limit, text.breakAll);
+            const int end = cut.end;
+            const int next = cut.next;
             const bool more = next < ncp;
             const bool lastSlot = static_cast<uint8_t>(run.lines + 1) >= kUiLineCap;
             if (lastSlot && more && text.ellipsis != 0) {

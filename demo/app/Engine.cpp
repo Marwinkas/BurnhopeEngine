@@ -10,6 +10,12 @@
 #include "ui/Domain.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/Panel.hpp"
+#include "ui/widget/Button.hpp"
+#include "ui/widget/Chrome.hpp"
+#include "ui/widget/Menu.hpp"
+#include "ui/widget/Scroll.hpp"
+#include "ui/widget/Slider.hpp"
+#include "ui/widget/TreeView.hpp"
 #include "ui/State.hpp"
 
 #include <fcntl.h>

@@ -1,4 +1,6 @@
+#include "ui/widget/Button.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Image.hpp"
 
 namespace burnhope {
 
@@ -57,7 +59,7 @@ uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
         flex.width = 100.0f;
         flex.grow = 1.0f;
     }
-    const uint16_t id = spawn(s, parent, flex, paintToken(s.look, UiRole::Button, UiToken::Button, s.look.radiusSm, -100));
+    const uint16_t id = spawn(s, parent, flex, paintToken(s.look, UiRole::Button, UiToken::Button, s.look.radiusSm));
     if (id == kUiNone) {
         return id;
     }

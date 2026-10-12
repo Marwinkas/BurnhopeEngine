@@ -1,4 +1,8 @@
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Image.hpp"
+#include "ui/widget/TreeView.hpp"
+#include "ui/widget/Virtual.hpp"
+#include "ui/widget/VirtualGrid.hpp"
 
 namespace burnhope {
 namespace {
@@ -9,20 +13,17 @@ void onCell(void* user, uint16_t id, int16_t) {
         return;
     }
     UiVirtualGrid* grid = uiAncestor<UiVirtualGrid>(*s, id);
-    const UiVirtRow* row = s->ent[id].try_get<UiVirtRow>();
-    if (row == nullptr) {
-        row = uiAncestor<UiVirtRow>(*s, id);
-    }
-    if (grid == nullptr || row == nullptr || row->index >= grid->count) {
+    const uint32_t index = uiVirtRowIndex(*s, id);
+    if (grid == nullptr || index >= grid->count) {
         return;
     }
-    const bool again = grid->last == row->index;
-    grid->last = row->index;
+    const bool again = grid->last == index;
+    grid->last = index;
     if (grid->select != nullptr) {
-        grid->select(grid->user, row->index, false);
+        grid->select(grid->user, index, false);
     }
     if (again && grid->activate != nullptr) {
-        grid->activate(grid->user, row->index);
+        grid->activate(grid->user, index);
     }
 }
 
@@ -33,29 +34,17 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
     cell.align = 1;
     cell.justify = 2;
     cell.pad = 6.0f;
-    const uint16_t slot = spawn(s, inner, cell, paintToken(s.look, UiRole::Button, UiToken::Item, s.look.radiusSm, -100));
+    const uint16_t slot = spawn(s, inner, cell, paintToken(s.look, UiRole::Button, UiToken::Item, s.look.radiusSm));
     if (slot == kUiNone) {
         return slot;
     }
     const uint16_t icon = uiIcon(s, slot, 0, 48.0f, 48.0f);
     addText(s, slot, " ");
     uiTextStyle(s, slot, 1, 1, 2, 0, 0, 1.0f);
-    const uint16_t label = s.labelOf[slot];
-    if (label < s.count) {
-        if (auto* flex = s.ent[label].try_get_mut<UiFlex>()) {
-            flex->position = 0;
-            flex->grow = 0.0f;
-            flex->shrink = 1.0f;
-            flex->widthMode = static_cast<uint8_t>(UiSize::Percent);
-            flex->width = 100.0f;
-            flex->heightMode = static_cast<uint8_t>(UiSize::Px);
-            flex->height = s.look.glyphH > 1.0f ? s.look.glyphH : 16.0f;
-        }
-    }
     if (icon != kUiNone) {
         uiNodeMoveChild(s, slot, icon, 0);
     }
-    s.ent[slot].set<UiParts>({icon, kUiNone, label});
+    s.ent[slot].set<UiParts>({icon, kUiNone, slot});
     uiBind(s, slot, onCell, &s);
     s.ent[slot].set<UiVirtRow>({});
     uiShow(s, slot, false);
@@ -64,24 +53,21 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
 
 } // namespace
 
+float uiGridContentH(const UiState& s, uint16_t id) {
+    return uiVirtualContentHeight<UiVirtualGrid>(s, id);
+}
+
 uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& cfg) {
     const float itemW = cfg.itemW < 32.0f ? 84.0f : cfg.itemW;
     const float itemH = cfg.itemH < 32.0f ? 96.0f : cfg.itemH;
-    UiFlex host{};
-    host.grow = 1.0f;
-    host.shrink = 1.0f;
-    host.overflow = 2;
-    host.position = 2;
-    const uint16_t scroll = spawn(s, parent, host, paintToken(s.look, UiRole::Scroll, UiToken::Content, s.look.radiusSm));
-    UiFlex spacer{};
-    spacer.widthMode = static_cast<uint8_t>(UiSize::Percent);
-    spacer.width = 100.0f;
-    spacer.heightMode = static_cast<uint8_t>(UiSize::Px);
-    spacer.height = itemH;
-    spacer.shrink = 0.0f;
-    spacer.position = 2;
-    const uint16_t inner = spawn(s, scroll, spacer, paint(UiRole::Hidden, 0, 0, 0));
-    s.ent[scroll].set<UiScroll>({0.0f, inner});
+    const uint16_t scroll = uiVirtualHostCreate(s, parent, UiRole::Scroll, UiToken::Content, s.look.radiusSm);
+    if (scroll == kUiNone) {
+        return scroll;
+    }
+    const UiScroll* born = s.ent[scroll].try_get<UiScroll>();
+    if (born != nullptr) {
+        uiVirtualSyncSpacer(s, born->inner, itemH);
+    }
     UiVirtualGrid grid{};
     grid.itemW = itemW;
     grid.itemH = itemH;
@@ -91,7 +77,7 @@ uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& c
     grid.activate = cfg.onActivate;
     grid.user = cfg.user;
     s.ent[scroll].set<UiVirtualGrid>(grid);
-    s.ent[scroll].set<UiVirtualPool>({uiVirtualGridRefresh});
+    s.ent[scroll].set<UiVirtualPool>({uiVirtualGridRefresh, uiGridContentH, 1});
     uiVirtualGridRefresh(s, scroll);
     return scroll;
 }
@@ -113,28 +99,17 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
     const uint8_t cols = static_cast<uint8_t>(rawCols);
     grid->cols = cols;
     const uint16_t need = uiVirtualSlots(s.box[id].h, grid->itemH, cols);
-    while (grid->slots < need && grid->slots < kUiPoolCap && scroll->inner < s.count && s.count + 4 < kUiCap) {
-        const uint16_t slot = addCell(s, scroll->inner, grid->itemW, grid->itemH);
-        if (slot == kUiNone) {
-            break;
-        }
-        grid->slot[grid->slots++] = slot;
+    if (scroll->inner < s.count) {
+        uiVirtualEnsure(s, *grid, need, 4, [&] { return addCell(s, scroll->inner, grid->itemW, grid->itemH); });
     }
     const UiVirtualWindow win = uiVirtualCalc(scroll->offset, s.box[id].h, grid->itemH, grid->count, cols);
     grid->first = win.first;
-    if (scroll->inner < s.count) {
-        if (auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>()) {
-            flex->height = win.totalHeight + 16.0f;
-        }
-    }
+    uiVirtualSyncSpacer(s, scroll->inner, win.totalHeight + 16.0f);
     for (uint8_t i = 0; i < grid->slots; ++i) {
         const uint16_t slot = grid->slot[i];
         const uint32_t index = win.first + i;
         const bool on = i < win.visibleCount && slot < s.count;
-        const bool live = slot < s.count && s.yoga[slot] != nullptr && YGNodeStyleGetDisplay(s.yoga[slot]) != YGDisplayNone;
-        if (live != on) {
-            uiShow(s, slot, on);
-        }
+        uiVirtualSetShown(s, slot, on);
         if (!on) {
             continue;
         }

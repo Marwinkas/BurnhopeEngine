@@ -1,4 +1,5 @@
 #include "ui/State.hpp"
+#include "ui/widget/Image.hpp"
 
 namespace burnhope {
 
@@ -35,6 +36,7 @@ void uiMotionTo(UiState& s, uint16_t id, float r, float g, float b, float a) {
 }
 
 bool uiTickMotion(UiState& s) {
+    tickPhoto(s);
     bool live = false;
     for (uint16_t id = 0; id < s.count; ++id) {
         if (s.anim[id].on != 0) {

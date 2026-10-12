@@ -2,6 +2,10 @@
 #include "files/Browser.hpp"
 #include "ui/Domain.hpp"
 #include "ui/Panel.hpp"
+#include "ui/widget/Docking.hpp"
+#include "ui/widget/List.hpp"
+#include "ui/widget/Menu.hpp"
+#include "ui/widget/Slider.hpp"
 
 #include <cstdio>
 #include <cstring>

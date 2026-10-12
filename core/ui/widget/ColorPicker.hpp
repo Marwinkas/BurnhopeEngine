@@ -43,6 +43,7 @@ struct UiColorPickerComponent {
     uint16_t colorAlphaBtn = kUiNone;
     uint16_t colorMenuBtn = kUiNone;
     uint16_t colorWinBtn = kUiNone;
+    uint16_t colorPickBtn = kUiNone;
     ColorBook* book = nullptr;
     uint32_t colorSeen = 0;
     uint8_t colorUseAlpha = 1;
@@ -56,12 +57,16 @@ struct UiColorPickerComponent {
 inline UiColorPickerComponent& uiColor(UiState& s) {
     return s.world.ensure<UiColorPickerComponent>();
 }
+void uiInstallColorBin(UiState& s);
+
 inline const UiColorPickerComponent& uiColor(const UiState& s) {
     return *s.world.try_get<UiColorPickerComponent>();
 }
 
 void uiSetColorBook(UiState& s, ColorBook* book);
 void uiBuildColor(UiState& s);
+void colorOnOpen(void* user, uint16_t id, int16_t tag);
+void colorOnValue(void* user, uint16_t id, float value);
 bool colorCustomDraw(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap);
 
 } // namespace burnhope

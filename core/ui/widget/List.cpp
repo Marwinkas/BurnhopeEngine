@@ -1,8 +1,9 @@
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/List.hpp"
+#include "ui/widget/TreeView.hpp"
 
 #include <cmath>
 #include <cstring>
-#include <ctime>
 
 namespace burnhope {
 namespace {
@@ -21,47 +22,6 @@ void onTree(void* user, uint16_t id, int16_t) {
 }
 
 } // namespace
-
-uint16_t listItemOf(const UiState& s, uint16_t id) {
-    for (uint16_t p = id; p != kUiNone; p = s.parentOf[p]) {
-        if (s.parentOf[p] == uiFindName(s, "list_inner")) {
-            return p;
-        }
-    }
-    return kUiNone;
-}
-
-void moveListItem(UiState& s, uint16_t item, uint16_t before, bool after) {
-    const uint16_t parent = uiFindName(s, "list_inner");
-    if (uiNodeChildCount(s, parent) == 0 || item >= s.count) {
-        return;
-    }
-    const uint32_t count = uiNodeChildCount(s, parent);
-    uint32_t from = count;
-    uint32_t to = count;
-    for (uint32_t i = 0; i < count; ++i) {
-        const uint16_t child = uiNodeChild(s, parent, i);
-        if (child == item) {
-            from = i;
-        }
-        if (before != kUiNone && child == before) {
-            to = i;
-        }
-    }
-    if (from == count) {
-        return;
-    }
-    if (after && to < count) {
-        ++to;
-    }
-    if (from < to) {
-        --to;
-    }
-    if (from == to) {
-        return;
-    }
-    uiNodeMoveChild(s, parent, item, to);
-}
 
 uint16_t uiTreeRow(UiState& s, uint16_t parent, const char* text) {
     UiFlex row{};

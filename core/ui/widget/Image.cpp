@@ -1,10 +1,5 @@
-#include "files/FileDomain.hpp"
 #include "ui/widget/Detail.hpp"
-#include "ui/Domain.hpp"
-
-#include <cmath>
-#include <cstring>
-#include <ctime>
+#include "ui/widget/Image.hpp"
 
 namespace burnhope {
 
@@ -18,7 +13,7 @@ uint16_t uiIcon(UiState& s, uint16_t parent, uint8_t slot, float w, float h) {
     flex.width = w;
     flex.height = h;
     flex.shrink = 0.0f;
-    const uint16_t id = spawn(s, parent, flex, paint(UiRole::Panel, 1.0f, 1.0f, 1.0f, 4.0f, -90));
+    const uint16_t id = spawn(s, parent, flex, paint(UiRole::Panel, 1.0f, 1.0f, 1.0f, 4.0f));
     if (id == kUiNone) {
         return id;
     }
@@ -119,37 +114,73 @@ void photoPan(UiState& s, uint16_t id, float x, float y) {
     s.visualDirty = true;
 }
 
+namespace {
+
+void photoDrag(void* user, uint16_t id, float x, float y) {
+    auto& s = *static_cast<UiState*>(user);
+    auto* image = id < s.count ? s.ent[id].try_get_mut<UiImage>() : nullptr;
+    if (image == nullptr) {
+        return;
+    }
+    const float dx = s.grabX - x;
+    const float dy = s.grabY - y;
+    const bool press = dx > -0.01f && dx < 0.01f && dy > -0.01f && dy < 0.01f;
+    float u = 0.0f;
+    float v = 0.0f;
+    if (press && photoMinimap(s.box[id], x, y, u, v)) {
+        image->viewX = u - image->viewW * 0.5f;
+        image->viewY = v - image->viewH * 0.5f;
+        photoClamp(*image);
+        s.capture = kUiNone;
+        s.visualDirty = true;
+        return;
+    }
+    photoPan(s, id, x, y);
+}
+
+void photoWheel(void* user, uint16_t id, float wheel, float x, float y) {
+    photoZoom(*static_cast<UiState*>(user), id, wheel, x, y);
+}
+
+} // namespace
+
+void uiArmPhoto(UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return;
+    }
+    s.ent[id].set<UiDrag>({photoDrag, &s});
+    s.ent[id].set<UiWheel>({photoWheel, &s});
+}
+
 void tickPhoto(UiState& s) {
     float dt = s.time - s.prevTime;
     if (s.prevTime <= 0.0f || dt < 0.0f || dt > 0.5f) {
         dt = 0.0f;
     }
     s.prevTime = s.time;
-    if (uiFiles(s).photoView == kUiNone || uiFiles(s).photoView >= s.count) {
-        return;
-    }
-    auto* image = s.ent[uiFiles(s).photoView].try_get_mut<UiImage>();
-    if (image == nullptr || image->frames < 2) {
-        return;
-    }
-    image->acc += dt * 1000.0f;
-    uint16_t delay = image->delayMs[image->frame];
-    if (delay < 20) {
-        delay = 100;
-    }
-    if (image->acc >= static_cast<float>(delay)) {
-        image->acc = 0.0f;
-        image->frame = static_cast<uint8_t>((image->frame + 1u) % image->frames);
-        s.visualDirty = true;
-    }
+    s.world.each([&](flecs::entity, UiImage& image) {
+        if (image.frames < 2) {
+            return;
+        }
+        image.acc += dt * 1000.0f;
+        uint16_t delay = image.delayMs[image.frame];
+        if (delay < 20) {
+            delay = 100;
+        }
+        if (image.acc >= static_cast<float>(delay)) {
+            image.acc = 0.0f;
+            image.frame = static_cast<uint8_t>((image.frame + 1u) % image.frames);
+            s.visualDirty = true;
+        }
+    });
 }
 
-void uiApplyPhotoMeta(UiState& s, uint8_t slot, uint8_t frames, const uint16_t* delays, uint32_t delayCount) {
-    if (slot >= kPhotoSlots || uiFiles(s).photoView == kUiNone || uiFiles(s).photoView >= s.count) {
+void uiApplyPhotoMeta(UiState& s, uint16_t id, uint8_t frames, const uint16_t* delays, uint32_t delayCount) {
+    if (id >= s.count) {
         return;
     }
-    auto* image = s.ent[uiFiles(s).photoView].try_get_mut<UiImage>();
-    if (image == nullptr || image->slot != slot) {
+    auto* image = s.ent[id].try_get_mut<UiImage>();
+    if (image == nullptr) {
         return;
     }
     image->frames = frames == 0 ? 1 : frames;

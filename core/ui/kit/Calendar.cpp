@@ -1,5 +1,6 @@
 #include "ui/widget/Calendar.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
 #include "ui/Domain.hpp"
 #include "ui/Layout.hpp"
 
@@ -9,25 +10,7 @@
 
 namespace burnhope {
 
-void setNote(UiState& s, const char* msg) {
-    auto write = [&](uint16_t id) {
-        if (id == kUiNone) {
-            return;
-        }
-        auto* text = s.ent[id].try_get_mut<UiText>();
-        auto* flex = s.ent[id].try_get_mut<UiFlex>();
-        if (text == nullptr) {
-            return;
-        }
-        copyText(text->bytes, text->len, msg);
-        if (flex != nullptr && flex->widthMode == static_cast<uint8_t>(UiSize::Px)) {
-            flex->width = uiMeasure(s, text->bytes, text->len, text->len);
-        }
-    };
-    write(uiFindName(s, "status"));
-    write(uiFindName(s, "form_note"));
-    s.visualDirty = true;
-}
+void calPick(UiState& s, uint16_t id);
 
 int daysInMonth(int year, int month) {
     static const int days[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -65,16 +48,11 @@ void calFill(UiState& s) {
                 ++n;
             }
             buf[n++] = ' ';
-            int year = uiCal(s).calY;
-            char digs[8]{};
-            int d = 0;
-            int v = year;
-            do {
-                digs[d++] = static_cast<char>('0' + (v % 10));
-                v /= 10;
-            } while (v > 0 && d < 8);
-            while (d > 0) {
-                buf[n++] = digs[--d];
+            char yearBuf[8]{};
+            uint8_t yearLen = 0;
+            uiWriteInt(yearBuf, yearLen, uiCal(s).calY);
+            for (uint8_t i = 0; i < yearLen; ++i) {
+                buf[n++] = yearBuf[i];
             }
             buf[n] = '\0';
             copyText(text->bytes, text->len, buf);
@@ -114,23 +92,17 @@ void calFill(UiState& s) {
         }
         if (paint != nullptr) {
             paint->disabled = empty ? 1 : 0;
+            const float* rgb = s.look.item;
             if (empty) {
-                paint->r = 0.08f;
-                paint->g = 0.08f;
-                paint->b = 0.10f;
+                rgb = s.look.content;
             } else if (day == uiCal(s).calSel) {
-                paint->r = 0.36f;
-                paint->g = 0.55f;
-                paint->b = 0.92f;
+                rgb = s.look.accent[0];
             } else if (uiCal(s).calY == todayY && uiCal(s).calM == todayM && day == todayD) {
-                paint->r = 0.28f;
-                paint->g = 0.40f;
-                paint->b = 0.30f;
-            } else {
-                paint->r = 0.16f;
-                paint->g = 0.18f;
-                paint->b = 0.24f;
+                rgb = s.look.accent[1];
             }
+            paint->r = rgb[0];
+            paint->g = rgb[1];
+            paint->b = rgb[2];
         }
     }
     s.visualDirty = true;
@@ -163,6 +135,7 @@ void writeDate(UiState& s, int day) {
     field->len = 10;
     field->caret = 10;
     field->anchor = 10;
+    fieldSyncText(s, uiCal(s).calTarget);
     fieldMark(s, uiCal(s).calTarget);
     uiCal(s).calSel = day;
     uiShow(s, uiCal(s).calPanel, false);
@@ -261,12 +234,12 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
     bar.height = 32.0f;
     bar.gap = 8.0f;
     const uint16_t tools = spawn(s, uiCal(s).calPanel, bar, paint(UiRole::Hidden, 0, 0, 0));
-    auto mini = [&](uint16_t host, const char* name, int16_t tag, UiClickFn fn) {
+    auto mini = [&](uint16_t host, const char* name, UiClickFn fn) {
         UiFlex item{};
         item.heightMode = static_cast<uint8_t>(UiSize::Px);
         item.height = 28.0f;
         item.shrink = 0.0f;
-        const uint16_t id = spawn(s, host, item, paint(UiRole::Button, 0.20f, 0.24f, 0.32f, 6.0f, tag));
+        const uint16_t id = spawn(s, host, item, paint(UiRole::Button, 0.20f, 0.24f, 0.32f, 6.0f));
         addText(s, id, name);
         if (auto* box = s.ent[id].try_get_mut<UiFlex>()) {
             const UiText* label = s.ent[id].try_get<UiText>();
@@ -278,17 +251,17 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
         }
         uiBind(s, id, fn, &s);
     };
-    mini(tools, "<", -54, calOnPrev);
+    mini(tools, "<", calOnPrev);
     uiCal(s).calHead = spawn(s, tools, UiFlex{}, paint(UiRole::Label, 0.9f, 0.92f, 0.96f));
     addText(s, uiCal(s).calHead, "OCT 2026");
-    mini(tools, ">", -55, calOnNext);
-    mini(tools, "X", -57, calOnClose);
+    mini(tools, ">", calOnNext);
+    mini(tools, "X", calOnClose);
     UiFlex todayRow{};
     todayRow.direction = 1;
     todayRow.shrink = 0.0f;
     todayRow.heightMode = static_cast<uint8_t>(UiSize::Px);
     todayRow.height = 32.0f;
-    mini(spawn(s, uiCal(s).calPanel, todayRow, paint(UiRole::Hidden, 0, 0, 0)), "TODAY", -87, calOnToday);
+    mini(spawn(s, uiCal(s).calPanel, todayRow, paint(UiRole::Hidden, 0, 0, 0)), "TODAY", calOnToday);
     UiFlex weekHead{};
     weekHead.direction = 1;
     weekHead.gap = 4.0f;
@@ -310,7 +283,7 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
         weekRow.height = 32.0f;
         const uint16_t weekId = spawn(s, uiCal(s).calPanel, weekRow, paint(UiRole::Hidden, 0, 0, 0));
         for (int day = 0; day < 7; ++day) {
-            const uint16_t id = spawn(s, weekId, px(32.0f, 28.0f), paint(UiRole::Button, 0.16f, 0.18f, 0.24f, 4.0f, -56));
+            const uint16_t id = spawn(s, weekId, px(32.0f, 28.0f), paint(UiRole::Button, 0.16f, 0.18f, 0.24f, 4.0f));
             uiBind(s, id, calOnDay, &s);
             uiCal(s).calDay[week * 7 + day] = id;
             s.ent[id].set<UiText>(UiText{});

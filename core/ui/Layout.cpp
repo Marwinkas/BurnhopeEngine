@@ -1,6 +1,7 @@
 #include "ui/Layout.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
 
 #include <cstddef>
 #include <cstdio>
@@ -207,6 +208,7 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
                 field.hint[field.hintLen] = '\0';
             }
             s.ent[id].set<UiField>(field);
+            fieldSyncText(s, id);
             if (field.inForm != 0) {
                 fieldMark(s, id);
             }

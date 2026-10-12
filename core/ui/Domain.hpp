@@ -11,6 +11,10 @@ struct UiDock {
     uint16_t panel = kUiNone;
     uint8_t edges = 15;
     uint8_t edge = 0;
+    uint8_t hintOn = 0;
+    uint8_t edgeOn = 0;
+    UiBox hint{};
+    UiBox edgeLine{};
 };
 
 struct UiHostNote {
@@ -24,6 +28,8 @@ struct UiPick {
     char name[32]{};
     uint8_t len = 0;
 };
+
+void uiClearDomain(UiState& s);
 
 inline UiDock& uiDock(UiState& s) {
     return s.world.ensure<UiDock>();

@@ -1,8 +1,8 @@
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
 
 #include <cmath>
 #include <cstring>
-#include <ctime>
 
 namespace burnhope {
 
@@ -116,14 +116,14 @@ void fieldMark(UiState& s, uint16_t id) {
     }
     const char* msg = "";
     if (fieldProblem(*field, msg)) {
-        paint->br = 0.86f;
-        paint->bg = 0.34f;
-        paint->bb = 0.28f;
+        paint->br = s.look.accent[2][0];
+        paint->bg = s.look.accent[2][1];
+        paint->bb = s.look.accent[2][2];
         paint->borderW = 1.5f;
     } else {
-        paint->br = 0.32f;
-        paint->bg = 0.38f;
-        paint->bb = 0.52f;
+        paint->br = s.look.muted[0];
+        paint->bg = s.look.muted[1];
+        paint->bb = s.look.muted[2];
         paint->borderW = 1.0f;
     }
     s.visualDirty = true;
@@ -139,17 +139,6 @@ UiBox fieldInset(const UiState& s, uint16_t id, const UiField& field) {
         inset.w = 1.0f;
     }
     return inset;
-}
-
-uint16_t fieldLabel(const UiState& s, uint16_t id) {
-    if (id >= s.count) {
-        return kUiNone;
-    }
-    const uint16_t label = s.labelOf[id];
-    if (label >= s.count || s.parentOf[label] != id) {
-        return kUiNone;
-    }
-    return label;
 }
 
 void copyShown(UiText& text, const char* src, uint8_t n) {
@@ -176,68 +165,44 @@ void uiFieldMulti(UiState& s, uint16_t id) {
     s.visualDirty = true;
 }
 
-void fieldPlaceText(UiState& s) {
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (!s.ent[id].is_alive()) {
-            continue;
-        }
-        const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-        if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Field)) {
-            continue;
-        }
-        const UiField* field = s.ent[id].try_get<UiField>();
-        const uint16_t label = fieldLabel(s, id);
-        if (field == nullptr || label == kUiNone) {
-            continue;
-        }
-        auto* text = s.ent[label].try_get_mut<UiText>();
-        auto* ink = s.ent[label].try_get_mut<UiPaint>();
-        if (text == nullptr || ink == nullptr) {
-            continue;
-        }
-        ink->token = static_cast<uint8_t>(UiToken::Custom);
-        ink->a = 1.0f;
-        if (field->len == 0 && field->hintLen > 0) {
-            copyShown(*text, field->hint, field->hintLen);
-            ink->r = s.look.muted[0];
-            ink->g = s.look.muted[1];
-            ink->b = s.look.muted[2];
-        } else if (field->password != 0) {
-            char mask[96]{};
-            uint8_t stars = 0;
-            uint8_t bi = 0;
-            while (bi < field->len && stars < 95) {
-                uint8_t step = 1;
-                uiReadUtf8(field->bytes, field->len, bi, step);
-                if (step == 0) {
-                    break;
-                }
-                mask[stars++] = '*';
-                bi = static_cast<uint8_t>(bi + step);
-            }
-            copyShown(*text, mask, stars);
-            ink->r = field->text[0];
-            ink->g = field->text[1];
-            ink->b = field->text[2];
-        } else {
-            copyShown(*text, field->bytes, field->len);
-            ink->r = field->text[0];
-            ink->g = field->text[1];
-            ink->b = field->text[2];
-        }
-        text->align = 0;
-        text->wrap = field->multi;
-        text->ellipsis = 0;
-        text->scroll = field->scroll;
-        if (s.box[id].w < 1.0f || s.box[id].h < 1.0f) {
-            s.box[label] = {};
-            continue;
-        }
-        UiBox slot = fieldInset(s, id, *field);
-        slot.y = s.box[id].y;
-        slot.h = s.box[id].h;
-        s.box[label] = slot;
+void fieldSyncText(UiState& s, uint16_t id) {
+    if (id >= s.count || !s.ent[id].is_alive()) {
+        return;
     }
+    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+    if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Field)) {
+        return;
+    }
+    const UiField* field = s.ent[id].try_get<UiField>();
+    auto* text = s.ent[id].try_get_mut<UiText>();
+    if (field == nullptr || text == nullptr) {
+        return;
+    }
+    if (field->len == 0 && field->hintLen > 0) {
+        copyShown(*text, field->hint, field->hintLen);
+    } else if (field->password != 0) {
+        char mask[96]{};
+        uint8_t stars = 0;
+        uint8_t bi = 0;
+        while (bi < field->len && stars < 95) {
+            uint8_t step = 1;
+            uiReadUtf8(field->bytes, field->len, bi, step);
+            if (step == 0) {
+                break;
+            }
+            mask[stars++] = '*';
+            bi = static_cast<uint8_t>(bi + step);
+        }
+        copyShown(*text, mask, stars);
+    } else {
+        copyShown(*text, field->bytes, field->len);
+    }
+    text->align = 0;
+    text->wrap = field->multi;
+    text->ellipsis = 0;
+    text->valign = 1;
+    text->scroll = field->scroll;
+    s.visualDirty = true;
 }
 
 void textInk(float r, float g, float b, bool hot, float& tr, float& tg, float& tb) {
@@ -273,6 +238,7 @@ void cmdFieldCut(void* user) {
     }
     fieldCopy(s, *field);
     fieldDropSel(*field);
+    fieldSyncText(s, s.editField);
     s.visualDirty = true;
 }
 
@@ -290,7 +256,7 @@ void cmdFieldPaste(void* user) {
     if (field == nullptr || field->readOnly != 0 || s.pasteBufLen == 0) {
         return;
     }
-    fieldInsert(*field, s.pasteBuf, s.pasteBufLen);
+    fieldInsert(s, s.editField, s.pasteBuf, s.pasteBufLen);
     s.visualDirty = true;
 }
 
@@ -316,6 +282,7 @@ void cmdFieldWipe(void* user) {
     field->anchor = 0;
     field->scroll = 0.0f;
     field->bytes[0] = '\0';
+    fieldSyncText(s, s.editField);
     s.visualDirty = true;
 }
 
@@ -347,6 +314,7 @@ uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChan
     UiField field{};
     copyText(field.hint, field.hintLen, hint != nullptr ? hint : "");
     s.ent[id].set<UiField>(field);
+    fieldSyncText(s, id);
     if (onChange != nullptr) {
         s.ent[id].set<UiTextHook>({onChange, user});
     }
@@ -365,20 +333,14 @@ uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, 
         return id;
     }
     UiField field{};
-    uint8_t n = 0;
-    if (text != nullptr) {
-        while (text[n] != '\0' && n < 95) {
-            field.bytes[n] = text[n];
-            ++n;
-        }
-    }
-    field.bytes[n] = '\0';
+    const uint8_t n = uiStrCopy(field.bytes, text);
     field.len = n;
     field.caret = n;
     field.anchor = n;
     field.filter = filter;
     field.clear = clear ? 1 : 0;
     s.ent[id].set<UiField>(field);
+    fieldSyncText(s, id);
     if (s.fieldMenu != kUiNone) {
         s.contextOf[id] = s.fieldMenu;
     }
@@ -390,20 +352,14 @@ void uiBindField(UiState& s, uint16_t id, const char* text, uint8_t filter, bool
         return;
     }
     UiField field{};
-    uint8_t n = 0;
-    if (text != nullptr) {
-        while (text[n] != '\0' && n < 95) {
-            field.bytes[n] = text[n];
-            ++n;
-        }
-    }
-    field.bytes[n] = '\0';
+    const uint8_t n = uiStrCopy(field.bytes, text);
     field.len = n;
     field.caret = n;
     field.anchor = n;
     field.filter = filter;
     field.clear = clear ? 1 : 0;
     s.ent[id].set<UiField>(field);
+    fieldSyncText(s, id);
     if (s.fieldMenu != kUiNone) {
         s.contextOf[id] = s.fieldMenu;
     }
@@ -430,7 +386,198 @@ void uiBindFieldExtra(UiState& s, uint16_t id, const char* placeholder, uint8_t 
         }
     }
     field->hint[field->hintLen] = '\0';
+    fieldSyncText(s, id);
     s.visualDirty = true;
+}
+
+namespace {
+
+uint8_t caretFromPointer(const UiState& s, uint16_t id, const UiField& field, float x, float y) {
+    const float local = x - (s.box[id].x + field.padL) + (field.multi == 0 ? field.scroll : 0.0f);
+    const float localY = y - s.box[id].y + (field.multi != 0 ? field.scroll : 0.0f);
+    const float viewW = s.box[id].w - field.padL - field.padR;
+    return field.multi != 0 ? fieldCaretAt2(s, field, local, localY, viewW) : fieldCaretAt(s, field, local);
+}
+
+float fieldView(const UiState& s, uint16_t id, const UiField& field) {
+    const float clearW = field.clear != 0 && field.len > 0 && field.readOnly == 0 ? 22.0f : 0.0f;
+    return s.box[id].w - field.padL - field.padR - clearW;
+}
+
+void moveCaret(UiField& field, int dir, bool extend) {
+    if (!extend && field.anchor != field.caret) {
+        const uint8_t edge = dir < 0
+            ? (field.anchor < field.caret ? field.anchor : field.caret)
+            : (field.anchor > field.caret ? field.anchor : field.caret);
+        field.caret = edge;
+        field.anchor = edge;
+        return;
+    }
+    if (dir < 0) {
+        uint8_t prev = field.caret > 0 ? static_cast<uint8_t>(field.caret - 1) : 0;
+        while (prev > 0 && (static_cast<unsigned char>(field.bytes[prev]) & 0xC0) == 0x80) {
+            --prev;
+        }
+        field.caret = prev;
+    } else if (field.caret < field.len) {
+        uint8_t step = 1;
+        uiReadUtf8(field.bytes, field.len, field.caret, step);
+        field.caret = static_cast<uint8_t>(field.caret + (step == 0 ? 1 : step));
+    }
+    if (!extend) {
+        field.anchor = field.caret;
+    }
+}
+
+} // namespace
+
+bool fieldHandlePointer(UiState& s, uint16_t id, const InputFrame& in, bool press, bool down) {
+    auto* field = id < s.count ? s.ent[id].try_get_mut<UiField>() : nullptr;
+    if (field == nullptr) {
+        return false;
+    }
+    if (press) {
+        s.editField = id;
+        const float clearW = field->clear != 0 && field->len > 0 && field->readOnly == 0 ? 22.0f : 0.0f;
+        if (clearW > 0.0f && in.pointer.x >= s.box[id].x + s.box[id].w - field->padR - clearW) {
+            field->len = 0;
+            field->caret = 0;
+            field->anchor = 0;
+            field->scroll = 0.0f;
+            field->bytes[0] = '\0';
+            fieldSyncText(s, id);
+            s.visualDirty = true;
+            return true;
+        }
+        if (in.clicks >= 3) {
+            field->anchor = 0;
+            field->caret = field->len;
+            s.visualDirty = true;
+            return true;
+        }
+        if (in.clicks >= 2) {
+            fieldSelectWord(*field, caretFromPointer(s, id, *field, in.pointer.x, in.pointer.y));
+            s.visualDirty = true;
+            return true;
+        }
+        field->caret = caretFromPointer(s, id, *field, in.pointer.x, in.pointer.y);
+        field->anchor = field->caret;
+        s.capture = id;
+        fieldReveal(s, *field, fieldView(s, id, *field));
+        s.visualDirty = true;
+        return true;
+    }
+    if (down && s.capture == id) {
+        field->caret = caretFromPointer(s, id, *field, in.pointer.x, in.pointer.y);
+        fieldReveal(s, *field, fieldView(s, id, *field));
+        s.visualDirty = true;
+        return true;
+    }
+    return false;
+}
+
+bool fieldHandleKey(UiState& s, uint16_t id, const InputFrame& in) {
+    auto* field = id < s.count ? s.ent[id].try_get_mut<UiField>() : nullptr;
+    if (field == nullptr) {
+        return false;
+    }
+    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+    if (paint == nullptr || paint->disabled != 0) {
+        return true;
+    }
+    if (in.enter != 0) {
+        if (field->multi != 0 && field->len < 95 && field->readOnly == 0) {
+            fieldRemember(s, id, *field);
+            fieldInsert(s, id, "\n", 1);
+            s.visualDirty = true;
+            return true;
+        }
+        return false;
+    }
+    bool edited = false;
+    if (in.undo != 0) {
+        edited = fieldUndo(s);
+    } else if (in.redo != 0) {
+        edited = fieldRedo(s);
+    } else {
+        const bool typing = in.selectAll != 0 || in.cut != 0 || (in.pasteOn != 0 && in.pasteLen > 0) || (in.ctrl == 0 && in.textLen > 0)
+            || in.backspace != 0 || in.del != 0;
+        if (typing) {
+            fieldRemember(s, id, *field);
+        }
+        if (in.selectAll != 0) {
+            field->anchor = 0;
+            field->caret = field->len;
+            edited = true;
+        }
+        if (in.copy != 0 || in.cut != 0) {
+            fieldCopy(s, *field);
+            if (in.cut != 0) {
+                fieldDropSel(*field);
+                edited = true;
+            }
+        }
+        if (in.pasteOn != 0 && in.pasteLen > 0) {
+            fieldInsert(s, id, in.paste, in.pasteLen);
+            edited = true;
+        }
+        if (in.ctrl == 0 && in.textLen > 0) {
+            fieldInsert(s, id, in.text, in.textLen);
+            edited = true;
+        }
+        if (in.backspace != 0) {
+            fieldEraseBack(s, id);
+            edited = true;
+        }
+        if (in.del != 0) {
+            fieldEraseForward(s, id);
+            edited = true;
+        }
+        if (in.left != 0) {
+            moveCaret(*field, -1, in.shift != 0);
+            edited = true;
+        }
+        if (in.right != 0) {
+            moveCaret(*field, 1, in.shift != 0);
+            edited = true;
+        }
+        if (field->multi != 0 && (in.up != 0 || in.down != 0)) {
+            const float viewW = s.box[id].w - field->padL - field->padR;
+            FieldRow rows[16]{};
+            const int rn = fieldRows(s, *field, viewW, rows, 16);
+            const float lineH = s.look.glyphH > 1.0f ? s.look.glyphH : 18.0f;
+            int line = 0;
+            for (int li = 0; li < rn; ++li) {
+                if (field->caret >= rows[li].begin && field->caret <= rows[li].end) {
+                    line = li;
+                }
+            }
+            const float x = fieldOffset(s, *field, rows[line].begin, field->caret);
+            line += in.up != 0 ? -1 : 1;
+            if (line < 0) {
+                line = 0;
+            }
+            if (line >= rn) {
+                line = rn - 1;
+            }
+            field->caret = fieldCaretAt2(s, *field, x, static_cast<float>(line) * lineH + 1.0f, viewW);
+            if (in.shift == 0) {
+                field->anchor = field->caret;
+            }
+            edited = true;
+        }
+    }
+    if (edited) {
+        fieldReveal(s, *field, fieldView(s, id, *field));
+        fieldMark(s, id);
+        if (const UiEdit* edit = s.ent[id].try_get<UiEdit>(); edit != nullptr && edit->fn != nullptr) {
+            edit->fn(edit->user, id);
+        }
+        fieldSyncText(s, id);
+        uiFieldNotify(s, id);
+        s.visualDirty = true;
+    }
+    return true;
 }
 
 } // namespace burnhope

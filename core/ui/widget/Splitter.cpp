@@ -1,5 +1,5 @@
-#include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Splitter.hpp"
 
 namespace burnhope {
 namespace {
@@ -24,12 +24,8 @@ bool sized(const UiFlex& flex, bool vertical) {
     return mode == static_cast<uint8_t>(UiSize::Px) && flex.grow < 0.5f;
 }
 
-bool shownNode(const UiState& s, uint16_t id) {
-    return id < s.count && s.yoga[id] != nullptr && YGNodeStyleGetDisplay(s.yoga[id]) != YGDisplayNone;
-}
-
 float axisFloor(const UiState& s, uint16_t id, bool vertical, bool ignoreFixed, int depth) {
-    if (!shownNode(s, id) || depth > 6) {
+    if (!nodeShown(s, id) || depth > 6) {
         return 0.0f;
     }
     const UiFlex* flex = s.ent[id].try_get<UiFlex>();
@@ -52,7 +48,7 @@ float axisFloor(const UiState& s, uint16_t id, bool vertical, bool ignoreFixed, 
     const uint32_t count = uiNodeChildCount(s, id);
     for (uint32_t i = 0; i < count; ++i) {
         const uint16_t child = childAt(s, id, i);
-        if (!shownNode(s, child)) {
+        if (!nodeShown(s, child)) {
             continue;
         }
         const float part = axisFloor(s, child, vertical, false, depth + 1);
@@ -196,21 +192,46 @@ void splitDrag(UiState& s, uint16_t split, float x, float y) {
     s.visualDirty = true;
 }
 
-bool splitCustomDraw(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
-    const UiPaint* paint = id < s.count ? s.ent[id].try_get<UiPaint>() : nullptr;
-    if (paint == nullptr || paint->tag != -5) {
-        return false;
+namespace {
+
+struct UiSplitHot {
+    uint16_t id = kUiNone;
+};
+
+void splitPaint(UiState& s, uint16_t id, bool hot) {
+    if (id >= s.count || !s.ent[id].is_alive() || s.ent[id].try_get<UiSplitter>() == nullptr) {
+        return;
     }
-    const bool bar = id == s.hovered || id == s.capture;
-    const float cr = bar ? s.look.accent[0][0] : s.look.muted[0];
-    const float cg = bar ? s.look.accent[0][1] : s.look.muted[1];
-    const float cb = bar ? s.look.accent[0][2] : s.look.muted[2];
-    const UiBox grip = splitGrip(s, id);
-    UiBox ancestor{};
-    const bool hasClip = uiClipBox(s, id, ancestor);
-    const UiBox* clip = hasClip ? &ancestor : nullptr;
-    n = emitRect(dst, n, cap, grip.x, grip.y, grip.w, grip.h, cr, cg, cb, 0.95f, 0.0f, clip);
-    return true;
+    auto* paint = s.ent[id].try_get_mut<UiPaint>();
+    if (paint == nullptr) {
+        return;
+    }
+    const auto token = static_cast<uint8_t>(hot ? UiToken::Accent : UiToken::Muted);
+    if (paint->role == static_cast<uint8_t>(UiRole::Panel) && paint->token == token) {
+        return;
+    }
+    const int16_t tag = paint->tag;
+    const float radius = paint->radius;
+    *paint = paintToken(s.look, UiRole::Panel, static_cast<UiToken>(token), radius, tag);
+    s.visualDirty = true;
+}
+
+} // namespace
+
+void splitSync(UiState& s) {
+    uint16_t hot = kUiNone;
+    if (s.capture < s.count && s.ent[s.capture].try_get<UiSplitter>() != nullptr) {
+        hot = s.capture;
+    } else if (s.hovered < s.count && s.ent[s.hovered].try_get<UiSplitter>() != nullptr) {
+        hot = s.hovered;
+    }
+    UiSplitHot& prev = s.world.ensure<UiSplitHot>();
+    if (prev.id == hot) {
+        return;
+    }
+    splitPaint(s, prev.id, false);
+    splitPaint(s, hot, true);
+    prev.id = hot;
 }
 
 } // namespace burnhope

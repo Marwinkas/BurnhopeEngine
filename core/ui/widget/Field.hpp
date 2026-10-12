@@ -34,7 +34,7 @@ void uiFieldNotify(UiState& s, uint16_t id);
 uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChangeFn onChange, void* user, float width = 160.0f);
 void uiSetFieldText(UiState& s, uint16_t id, const char* text);
 void uiClearField(UiState& s);
-void fieldPlaceText(UiState& s);
+void fieldSyncText(UiState& s, uint16_t id);
 UiBox fieldInset(const UiState& s, uint16_t id, const UiField& field);
 void uiFieldMulti(UiState& s, uint16_t id);
 
@@ -47,5 +47,7 @@ struct FieldRow {
 int fieldRows(const UiState& s, const UiField& field, float viewW, FieldRow* rows, int cap);
 float fieldOffset(const UiState& s, const UiField& field, uint8_t from, uint8_t to);
 uint8_t fieldCaretAt2(const UiState& s, const UiField& field, float localX, float localY, float viewW);
+bool fieldHandlePointer(UiState& s, uint16_t id, const InputFrame& in, bool press, bool down);
+bool fieldHandleKey(UiState& s, uint16_t id, const InputFrame& in);
 
 } // namespace burnhope

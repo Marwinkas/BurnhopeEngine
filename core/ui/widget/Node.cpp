@@ -1,24 +1,34 @@
-#include "files/FileDomain.hpp"
-#include "ui/widget/Calendar.hpp"
 #include "ui/widget/Chrome.hpp"
-#include "ui/widget/ColorPicker.hpp"
+#include "ui/widget/Docking.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
+#include "ui/widget/List.hpp"
+#include "ui/widget/Menu.hpp"
+#include "ui/widget/Scroll.hpp"
+#include "ui/widget/Splitter.hpp"
 #include "ui/Domain.hpp"
 #include "ui/Layout.hpp"
 #include "platform/Trace.hpp"
 
 #include <spdlog/spdlog.h>
 
+#include <yoga/Yoga.h>
+
 #include <cstdint>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
-#include <ctime>
 
 namespace burnhope {
 
-void uiInstallCalendarBin(UiState& s);
-void uiInstallColorBin(UiState& s);
+bool nodeShown(const UiState& s, uint16_t id) {
+    for (uint16_t p = id; p != kUiNone; p = s.parentOf[p]) {
+        if (s.yoga[p] != nullptr && YGNodeStyleGetDisplay(s.yoga[p]) == YGDisplayNone) {
+            return false;
+        }
+    }
+    return true;
+}
 
 uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint) {
     const uint16_t id = s.count++;
@@ -41,10 +51,10 @@ uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& p
         || paint.role == static_cast<uint8_t>(UiRole::Button)
         || paint.role == static_cast<uint8_t>(UiRole::Close)
         || paint.role == static_cast<uint8_t>(UiRole::Check);
-    if (ownsText && paint.role != static_cast<uint8_t>(UiRole::Field)) {
+    if (ownsText) {
         UiText host{};
-        host.align = paint.role == static_cast<uint8_t>(UiRole::Check) ? 0 : 1;
-        host.ellipsis = 1;
+        host.align = paint.role == static_cast<uint8_t>(UiRole::Check) || paint.role == static_cast<uint8_t>(UiRole::Field) ? 0 : 1;
+        host.ellipsis = paint.role == static_cast<uint8_t>(UiRole::Field) ? 0 : 1;
         host.valign = 1;
         s.ent[id].set<UiText>(host);
     }
@@ -55,76 +65,18 @@ uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& p
             }
         }
     }
-    if (ownsText && s.count < kUiCap) {
-        UiFlex text{};
-        UiPaint ink = paintToken(s.look, UiRole::Label, UiToken::Text);
-        if (paint.role == static_cast<uint8_t>(UiRole::Field)) {
-            text.position = 1;
-            text.widthMode = static_cast<uint8_t>(UiSize::Px);
-            text.heightMode = static_cast<uint8_t>(UiSize::Px);
-            ink.token = static_cast<uint8_t>(UiToken::Custom);
-        } else {
-            text.position = 1;
-            text.posX = 0.0f;
-            text.posY = 0.0f;
-            text.widthMode = static_cast<uint8_t>(UiSize::Percent);
-            text.width = 100.0f;
-            text.heightMode = static_cast<uint8_t>(UiSize::Percent);
-            text.height = 100.0f;
-        }
-        const uint16_t label = spawn(s, id, text, ink);
-        UiText child{};
-        child.valign = 1;
-        child.ellipsis = paint.role == static_cast<uint8_t>(UiRole::Field) ? 0 : 1;
-        child.align = paint.role == static_cast<uint8_t>(UiRole::Button) || paint.role == static_cast<uint8_t>(UiRole::Close) ? 1 : 0;
-        s.ent[label].set<UiText>(child);
-        s.labelOf[id] = label;
-    }
+    uiNoteChrome(s, id);
     return id;
-}
-
-void mirrorChrome(UiState& s, uint16_t id, const char* bytes, uint8_t n) {
-    const UiPaint* paint = id < s.count ? s.ent[id].try_get<UiPaint>() : nullptr;
-    if (paint == nullptr) {
-        return;
-    }
-    const auto role = paint->role;
-    if (role != static_cast<uint8_t>(UiRole::Button) && role != static_cast<uint8_t>(UiRole::Close)
-        && role != static_cast<uint8_t>(UiRole::Check)) {
-        return;
-    }
-    const uint16_t label = s.labelOf[id];
-    if (label >= s.count) {
-        return;
-    }
-    auto* child = s.ent[label].try_get_mut<UiText>();
-    if (child == nullptr) {
-        return;
-    }
-    if (child->len == n && (n == 0 || std::memcmp(child->bytes, bytes, n) == 0)) {
-        return;
-    }
-    std::memcpy(child->bytes, bytes, static_cast<size_t>(n) + 1u);
-    child->len = n;
-    s.visualDirty = true;
 }
 
 void addText(UiState& s, uint16_t id, const char* text) {
     if (id >= s.count) {
         return;
     }
-    uint8_t n = 0;
     char bytes[96]{};
-    if (text != nullptr) {
-        while (text[n] != '\0' && n < 95) {
-            bytes[n] = text[n];
-            ++n;
-        }
-    }
-    bytes[n] = '\0';
+    const uint8_t n = uiStrCopy(bytes, text);
     UiText* live = s.ent[id].try_get_mut<UiText>();
     if (live != nullptr && live->len == n && (n == 0 || std::memcmp(live->bytes, bytes, n) == 0)) {
-        mirrorChrome(s, id, bytes, n);
         return;
     }
     if (live == nullptr) {
@@ -151,7 +103,6 @@ void addText(UiState& s, uint16_t id, const char* text) {
             host->width = uiMeasure(s, live->bytes, live->len, live->len) + 16.0f;
             s.layoutDirty = true;
         }
-        mirrorChrome(s, id, bytes, n);
     }
     if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Label)) {
         return;
@@ -219,187 +170,11 @@ void stamp(UiState& s, uint16_t id, UiToken token) {
     if (paint != nullptr) {
         paint->token = static_cast<uint8_t>(token);
     }
-}
-
-bool insideParents(const UiState& s, uint16_t id, float x, float y) {
-    bool any = false;
-    float x0 = 0;
-    float y0 = 0;
-    float x1 = 0;
-    float y1 = 0;
-    for (uint16_t p = s.parentOf[id]; p != kUiNone; p = s.parentOf[p]) {
-        const UiPaint* paint = s.ent[p].try_get<UiPaint>();
-        const UiFlex* flex = s.ent[p].try_get<UiFlex>();
-        const bool clip = (paint != nullptr && paint->role == static_cast<uint8_t>(UiRole::Scroll))
-            || (flex != nullptr && (flex->overflow == 1 || flex->overflow == 2));
-        if (!clip) {
-            continue;
-        }
-        const UiBox& box = s.box[p];
-        if (!any) {
-            x0 = box.x;
-            y0 = box.y;
-            x1 = box.x + box.w;
-            y1 = box.y + box.h;
-            any = true;
-            continue;
-        }
-        if (box.x > x0) {
-            x0 = box.x;
-        }
-        if (box.y > y0) {
-            y0 = box.y;
-        }
-        if (box.x + box.w < x1) {
-            x1 = box.x + box.w;
-        }
-        if (box.y + box.h < y1) {
-            y1 = box.y + box.h;
-        }
-    }
-    if (!any) {
-        return true;
-    }
-    return x >= x0 && y >= y0 && x < x1 && y < y1;
-}
-
-uint16_t hitTest(const UiState& s, float x, float y) {
-    BH_ZONE;
-    auto scan = [&](bool overlay) -> uint16_t {
-        uint16_t thumbHit = kUiNone;
-        for (uint16_t n = s.count; n > 0; --n) {
-            const uint16_t id = static_cast<uint16_t>(n - 1);
-            if (!s.ent[id].is_alive() || uiIsOverlay(s, id) != overlay) {
-                continue;
-            }
-            const UiPaint* p = s.ent[id].try_get<UiPaint>();
-            if (p == nullptr || p->role != static_cast<uint8_t>(UiRole::Scroll)) {
-                continue;
-            }
-            UiBox thumb{};
-            if (!scrollThumb(s, id, thumb) || !hitBox(thumb, x, y) || !insideParents(s, id, x, y)) {
-                continue;
-            }
-            thumbHit = id;
-            break;
-        }
-        for (uint16_t n = s.count; n > 0; --n) {
-            const uint16_t id = static_cast<uint16_t>(n - 1);
-            if (!s.ent[id].is_alive() || uiIsOverlay(s, id) != overlay) {
-                continue;
-            }
-            const UiPaint* p = s.ent[id].try_get<UiPaint>();
-            if (p == nullptr) {
-                continue;
-            }
-            const auto role = static_cast<UiRole>(p->role);
-            if (role == UiRole::Hidden || role == UiRole::Label || role == UiRole::Progress) {
-                continue;
-            }
-            if (p->tag == -90) {
-                const UiImage* image = s.ent[id].try_get<UiImage>();
-                if (image != nullptr && image->minimap == 0) {
-                    continue;
-                }
-            }
-            if (!insideParents(s, id, x, y)) {
-                continue;
-            }
-            bool hidden = false;
-            for (uint16_t up = id; up != kUiNone; up = s.parentOf[up]) {
-                if (s.tight[up] != 0 || (s.yoga[up] != nullptr && YGNodeStyleGetDisplay(s.yoga[up]) == YGDisplayNone)) {
-                    hidden = true;
-                    break;
-                }
-            }
-            if (hidden) {
-                continue;
-            }
-            if (p->tag == -5) {
-                const UiBox grip = splitGrip(s, id);
-                if (!hitBox(grip, x, y)) {
-                    continue;
-                }
-            }
-            if (hitBox(s.box[id], x, y)) {
-                const auto hitRole = static_cast<UiRole>(p->role);
-                const bool control = hitRole == UiRole::Button || hitRole == UiRole::Slider || hitRole == UiRole::Check
-                    || hitRole == UiRole::Field || hitRole == UiRole::Close;
-                if (control || thumbHit == kUiNone) {
-                    return id;
-                }
-                return thumbHit;
-            }
-        }
-        return thumbHit;
-    };
-    const uint16_t top = scan(true);
-    return top != kUiNone ? top : scan(false);
-}
-
-void uiFocus(UiState& s, uint16_t id) {
-    if (s.focused == id) {
-        return;
-    }
-    s.focused = id;
-    s.visualDirty = true;
-    if (s.focusFn != nullptr) {
-        s.focusFn(s.focusUser, id);
+    if (token == UiToken::Title) {
+        s.ent[id].set<UiTitleBar>({});
     }
 }
 
-void uiFocusStep(UiState& s, int dir) {
-    if (s.count == 0) {
-        return;
-    }
-    uint16_t ids[kUiCap];
-    uint16_t keys[kUiCap];
-    uint16_t n = 0;
-    for (uint16_t id = 0; id < s.count; ++id) {
-        const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-        if (paint == nullptr || paint->disabled != 0 || !focusable(paint->role) || !nodeShown(s, id)) {
-            continue;
-        }
-        const UiTab* tab = s.ent[id].try_get<UiTab>();
-        ids[n] = id;
-        keys[n] = tab != nullptr ? tab->index : id;
-        ++n;
-    }
-    if (n == 0) {
-        return;
-    }
-    for (uint16_t i = 1; i < n; ++i) {
-        const uint16_t id = ids[i];
-        const uint16_t key = keys[i];
-        uint16_t j = i;
-        while (j > 0 && (keys[j - 1] > key || (keys[j - 1] == key && ids[j - 1] > id))) {
-            ids[j] = ids[j - 1];
-            keys[j] = keys[j - 1];
-            --j;
-        }
-        ids[j] = id;
-        keys[j] = key;
-    }
-    int at = 0;
-    for (uint16_t i = 0; i < n; ++i) {
-        if (ids[i] == s.focused) {
-            at = static_cast<int>(i);
-            break;
-        }
-    }
-    const int step = dir < 0 ? -1 : 1;
-    int next = at + step;
-    if (s.focused == kUiNone) {
-        next = dir < 0 ? static_cast<int>(n) - 1 : 0;
-    }
-    if (next < 0) {
-        next = static_cast<int>(n) - 1;
-    }
-    if (next >= static_cast<int>(n)) {
-        next = 0;
-    }
-    uiFocus(s, ids[next]);
-}
 
 void uiMarkLayout(UiState& s, uint16_t id) {
     s.layoutDirty = true;
@@ -550,9 +325,12 @@ void uiRestyle(UiState& s) {
             flex->widthMode = static_cast<uint8_t>(UiSize::Px);
             flex->heightMode = static_cast<uint8_t>(UiSize::Px);
         }
-        if (paint->token == static_cast<uint8_t>(UiToken::Title) && flex != nullptr) {
-            flex->height = s.look.titleBar;
-            flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+        if (paint->token == static_cast<uint8_t>(UiToken::Title)) {
+            s.ent[id].set<UiTitleBar>({});
+            if (flex != nullptr) {
+                flex->height = s.look.titleBar;
+                flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+            }
         }
     }
     s.layoutDirty = true;
@@ -582,28 +360,11 @@ void uiClear(UiState& s) {
     s.focused = kUiNone;
     s.capture = kUiNone;
     s.dragId = kUiNone;
-    uiFiles(s).photoView = kUiNone;
-    uiFiles(s).fileView = kUiNone;
-    uiFiles(s).fileFrame = kUiNone;
-    s.menu = kUiNone;
-    s.field = kUiNone;
-    s.fieldMenu = kUiNone;
-    s.editField = kUiNone;
-    uiMenuMetrics(s).opened = kUiNone;
-    s.floatWin = kUiNone;
-    uiDock(s) = {};
-    s.resizeId = kUiNone;
-    uiDock(s).edge = 0;
-    s.resizeEdge = 0;
+    uiClearDomain(s);
     s.cursor = 0;
-    s.hintOn = 0;
-    s.edgeOn = 0;
-    uiHostNote(s).tool = false;
     for (uint16_t i = 0; i < kUiCap; ++i) {
         s.culled[i] = 0;
     }
-    uiPick(s) = {};
-    s.menuOpen = false;
     s.cmdCount = 0;
     s.valueN = 0;
     s.laidW = -1.0f;
@@ -697,18 +458,66 @@ void uiText(UiState& s, uint16_t id, const char* text) {
     addText(s, id, text);
 }
 
-uint16_t uiTextId(const UiState& s, uint16_t id) {
+void uiBlur(UiState& s, uint16_t id, float blur) {
     if (id >= s.count) {
+        return;
+    }
+    auto* paint = s.ent[id].try_get_mut<UiPaint>();
+    if (paint == nullptr) {
+        return;
+    }
+    paint->blur = blur < 0.0f ? 0.0f : (blur > 1.0f ? 1.0f : blur);
+    s.visualDirty = true;
+}
+
+void uiTransform(UiState& s, uint16_t id, float angle, float scaleX, float scaleY) {
+    if (id >= s.count) {
+        return;
+    }
+    auto* paint = s.ent[id].try_get_mut<UiPaint>();
+    if (paint == nullptr) {
+        return;
+    }
+    paint->angle = angle;
+    paint->scaleX = scaleX;
+    paint->scaleY = scaleY;
+    s.visualDirty = true;
+}
+
+void uiFilter(UiState& s, uint16_t id, float bright, float contrast) {
+    if (id >= s.count) {
+        return;
+    }
+    auto* paint = s.ent[id].try_get_mut<UiPaint>();
+    if (paint == nullptr) {
+        return;
+    }
+    paint->bright = bright;
+    paint->contrast = contrast;
+    s.visualDirty = true;
+}
+
+void uiSetPaint(UiState& s, uint16_t id, float r, float g, float b, float a) {
+    if (id >= s.count) {
+        return;
+    }
+    auto* paint = s.ent[id].try_get_mut<UiPaint>();
+    if (paint == nullptr) {
+        return;
+    }
+    paint->r = r;
+    paint->g = g;
+    paint->b = b;
+    paint->a = a;
+    paint->token = static_cast<uint8_t>(UiToken::Custom);
+    s.visualDirty = true;
+}
+
+uint16_t uiTextId(const UiState& s, uint16_t id) {
+    if (id >= s.count || s.ent[id].try_get<UiText>() == nullptr) {
         return kUiNone;
     }
-    const uint16_t part = s.labelOf[id];
-    if (part < s.count && s.parentOf[part] == id) {
-        return part;
-    }
-    if (s.ent[id].try_get<UiText>() != nullptr) {
-        return id;
-    }
-    return kUiNone;
+    return id;
 }
 
 void uiTextStyle(UiState& s, uint16_t id, uint8_t align, uint8_t ellipsis, uint8_t valign, uint8_t wrap, uint8_t deco, float leading) {
@@ -737,19 +546,13 @@ void uiSetFieldText(UiState& s, uint16_t id, const char* text) {
     if (field == nullptr) {
         return;
     }
-    uint8_t n = 0;
-    if (text != nullptr) {
-        while (text[n] != '\0' && n < 95) {
-            field->bytes[n] = text[n];
-            ++n;
-        }
-    }
-    field->bytes[n] = '\0';
+    const uint8_t n = uiStrCopy(field->bytes, text);
     field->len = n;
     field->caret = n;
     field->anchor = n;
     field->scroll = 0.0f;
     fieldMark(s, id);
+    fieldSyncText(s, id);
     s.visualDirty = true;
 }
 
@@ -819,7 +622,6 @@ void uiDrop(UiState& s, uint16_t id) {
         }
         s.ent[node] = {};
         s.parentOf[node] = kUiNone;
-        s.labelOf[node] = kUiNone;
         s.box[node] = {};
         if (s.hovered == node) {
             s.hovered = kUiNone;
@@ -920,42 +722,6 @@ bool uiRange(const UiState& s, uint16_t id, float& value, float& minV, float& ma
     minV = range->min;
     maxV = range->max;
     return true;
-}
-
-void uiDockTo(UiState& s, uint8_t edge) {
-    const UiDock& dock = uiDock(s);
-    if (dock.panel == kUiNone || dock.home == kUiNone || edge == 0) {
-        return;
-    }
-    uiReparent(s, dock.panel, dock.home);
-    auto* host = s.ent[dock.home].try_get_mut<UiFlex>();
-    auto* panel = s.ent[dock.panel].try_get_mut<UiFlex>();
-    if (host == nullptr || panel == nullptr || s.yoga[dock.home] == nullptr || s.yoga[dock.panel] == nullptr) {
-        return;
-    }
-    const bool horizontal = edge == 1 || edge == 2;
-    host->direction = horizontal ? 1 : 0;
-    panel->position = 0;
-    panel->shrink = 0.0f;
-    panel->grow = 0.0f;
-    if (horizontal) {
-        panel->widthMode = static_cast<uint8_t>(UiSize::Px);
-        panel->width = 260.0f;
-        panel->heightMode = static_cast<uint8_t>(UiSize::Percent);
-        panel->height = 100.0f;
-    } else {
-        panel->widthMode = static_cast<uint8_t>(UiSize::Percent);
-        panel->width = 100.0f;
-        panel->heightMode = static_cast<uint8_t>(UiSize::Px);
-        panel->height = 160.0f;
-    }
-    YGNodeRef node = s.yoga[dock.panel];
-    YGNodeRef parent = s.yoga[dock.home];
-    YGNodeRemoveChild(parent, node);
-    const uint32_t index = (edge == 1 || edge == 3) ? 0u : YGNodeGetChildCount(parent);
-    YGNodeInsertChild(parent, node, index);
-    s.layoutDirty = true;
-    s.visualDirty = true;
 }
 
 void uiGrow(UiState& s, uint16_t id, float extraW, float h) {
@@ -1112,6 +878,77 @@ void uiDumpLayout(const UiState& s) {
     }
 }
 
+uint32_t uiNodeChildCount(const UiState& s, uint16_t parent) {
+    if (parent >= s.count || s.yoga[parent] == nullptr) {
+        return 0;
+    }
+    return YGNodeGetChildCount(s.yoga[parent]);
+}
+
+uint16_t uiNodeChild(const UiState& s, uint16_t parent, uint32_t index) {
+    if (parent >= s.count || s.yoga[parent] == nullptr || index >= YGNodeGetChildCount(s.yoga[parent])) {
+        return kUiNone;
+    }
+    YGNodeRef node = YGNodeGetChild(s.yoga[parent], index);
+    for (uint16_t id = 0; id < s.count; ++id) {
+        if (s.yoga[id] == node) {
+            return id;
+        }
+    }
+    return kUiNone;
+}
+
+void uiNodeMoveChild(UiState& s, uint16_t parent, uint16_t child, uint32_t newIndex) {
+    if (parent >= s.count || child >= s.count) {
+        return;
+    }
+    YGNodeRef host = s.yoga[parent];
+    YGNodeRef node = s.yoga[child];
+    if (host == nullptr || node == nullptr) {
+        return;
+    }
+    YGNodeRef from = YGNodeGetParent(node);
+    if (from == host) {
+        const uint32_t count = YGNodeGetChildCount(host);
+        uint32_t old = count;
+        for (uint32_t i = 0; i < count; ++i) {
+            if (YGNodeGetChild(host, i) == node) {
+                old = i;
+                break;
+            }
+        }
+        if (old == count) {
+            return;
+        }
+        if (newIndex > count) {
+            newIndex = count;
+        }
+        if (old == newIndex) {
+            return;
+        }
+        YGNodeRemoveChild(host, node);
+        if (old < newIndex) {
+            --newIndex;
+        }
+    } else if (from != nullptr) {
+        YGNodeRemoveChild(from, node);
+    }
+    const uint32_t live = YGNodeGetChildCount(host);
+    if (newIndex > live) {
+        newIndex = live;
+    }
+    YGNodeInsertChild(host, node, newIndex);
+    s.parentOf[child] = parent;
+    s.layoutDirty = true;
+}
+
+void uiVirtualSetShown(UiState& s, uint16_t slot, bool on) {
+    const bool live = slot < s.count && s.yoga[slot] != nullptr && YGNodeStyleGetDisplay(s.yoga[slot]) != YGDisplayNone;
+    if (live != on) {
+        uiShow(s, slot, on);
+    }
+}
+
 void uiShow(UiState& s, uint16_t id, bool visible) {
     if (id >= s.count || s.yoga[id] == nullptr) {
         return;
@@ -1130,19 +967,12 @@ UiState::UiState()
     : paints(world.query<UiSlot, UiPaint>()) {
     for (uint16_t i = 0; i < kUiCap; ++i) {
         parentOf[i] = kUiNone;
-        labelOf[i] = kUiNone;
         contextOf[i] = kUiNone;
     }
-    (void)world.ensure<UiFileBrowser>();
-    (void)world.ensure<UiCalendarComponent>();
-    (void)world.ensure<UiColorPickerComponent>();
     (void)world.ensure<UiHostNote>();
     (void)world.ensure<UiDock>();
     uiInstallChromeBin(*this);
-    uiInstallCalendarBin(*this);
-    uiInstallColorBin(*this);
-    uiDrawAdd(*this, splitCustomDraw);
-    uiDrawAdd(*this, colorCustomDraw);
+    uiInstallDockOverlay(*this);
 }
 
 } // namespace burnhope

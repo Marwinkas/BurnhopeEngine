@@ -4,10 +4,13 @@
 
 namespace burnhope {
 
+inline constexpr uint8_t kUiCrumbCap = 32;
+
 struct UiCrumbs {
-    uint16_t seg[8]{};
-    uint16_t sep[7]{};
+    uint16_t seg[kUiCrumbCap]{};
+    uint16_t sep[kUiCrumbCap]{};
     uint8_t n = 0;
+    uint8_t cap = 0;
     char path[512]{};
     void (*nav)(void* user, const char* path) = nullptr;
     void* user = nullptr;

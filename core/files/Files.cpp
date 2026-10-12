@@ -657,6 +657,14 @@ void filesRoot(UiState& s, const char* path) {
     refresh(s);
 }
 
+void uiClearDomain(UiState& s) {
+    if (auto* files = s.world.try_get_mut<UiFileBrowser>()) {
+        files->photoView = kUiNone;
+        files->fileView = kUiNone;
+        files->fileFrame = kUiNone;
+    }
+}
+
 void filesAttach(UiState& s) {
     s.plug.handle = filesKeys;
     s.plug.draw = nullptr;

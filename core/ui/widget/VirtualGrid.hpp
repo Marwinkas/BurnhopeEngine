@@ -1,17 +1,12 @@
 #pragma once
 
-#include "ui/State.hpp"
+#include "ui/widget/Virtual.hpp"
 
 namespace burnhope {
 
-struct UiVirtualGrid {
+struct UiVirtualGrid : UiVirtualBase {
     float itemW = 84.0f;
-    float itemH = 96.0f;
-    uint32_t count = 0;
-    uint32_t first = 0;
     uint8_t cols = 1;
-    uint8_t slots = 0;
-    uint16_t slot[kUiPoolCap]{};
     void (*bind)(void* user, uint16_t cell, uint32_t index) = nullptr;
     void (*select)(void* user, uint32_t index, bool multi) = nullptr;
     void (*activate)(void* user, uint32_t index) = nullptr;

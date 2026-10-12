@@ -33,6 +33,11 @@ struct UiDrawHooks {
     uint8_t n = 0;
 };
 
+struct UiOverlayHooks {
+    UiOverlayDrawFn fn[4]{};
+    uint8_t n = 0;
+};
+
 struct UiState {
     flecs::world world;
     flecs::query<UiSlot, UiPaint> paints;
@@ -40,7 +45,6 @@ struct UiState {
     flecs::entity ent[kUiCap]{};
     UiBox box[kUiCap]{};
     uint16_t parentOf[kUiCap]{};
-    uint16_t labelOf[kUiCap]{};
     uint16_t contextOf[kUiCap]{};
     uint8_t tight[kUiCap]{};
     uint16_t count = 0;
@@ -63,11 +67,7 @@ struct UiState {
     uint16_t resizeId = kUiNone;
     uint8_t resizeEdge = 0;
     uint8_t cursor = 0;
-    uint8_t hintOn = 0;
-    uint8_t edgeOn = 0;
     uint8_t culled[kUiCap]{};
-    UiBox hint{};
-    UiBox edgeLine{};
     char clip[96]{};
     uint8_t clipLen = 0;
     uint8_t clipPut = 0;
@@ -150,12 +150,11 @@ void uiSetDrop(UiState& s, uint16_t id, uint8_t drop);
 [[nodiscard]] uint16_t uiFindName(const UiState& s, const char* name);
 void uiName(UiState& s, uint16_t id, const char* name);
 void uiDrawAdd(UiState& s, UiDrawFn fn);
-void uiApplyPhotoMeta(UiState& s, uint8_t slot, uint8_t frames, const uint16_t* delays, uint32_t delayCount);
+void uiOverlayAdd(UiState& s, UiOverlayDrawFn fn);
 
 void uiClear(UiState& s);
 uint16_t uiNode(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
 void uiText(UiState& s, uint16_t id, const char* text);
-void uiSetFieldText(UiState& s, uint16_t id, const char* text);
 void uiStamp(UiState& s, uint16_t id, UiToken token);
 void uiBlur(UiState& s, uint16_t id, float blur);
 void uiTransform(UiState& s, uint16_t id, float angle, float scaleX, float scaleY);
@@ -182,7 +181,6 @@ void uiMotionTo(UiState& s, uint16_t id, float r, float g, float b, float a);
     bool center);
 
 bool uiListen(UiState& s, UiValueFn fn, void* user);
-void fieldPlaceText(UiState& s);
 [[nodiscard]] TextRun textRun(const UiState& s, const UiText& text, const UiBox& slot);
 [[nodiscard]] uint32_t uiEmitRun(
     UiState& s,
@@ -198,6 +196,48 @@ void fieldPlaceText(UiState& s);
 void uiTextStyle(UiState& s, uint16_t id, uint8_t align, uint8_t ellipsis, uint8_t valign, uint8_t wrap, uint8_t deco, float leading);
 [[nodiscard]] uint16_t uiTextId(const UiState& s, uint16_t id);
 void textInk(float r, float g, float b, bool hot, float& tr, float& tg, float& tb);
+
+struct UiWrapCut {
+    int end = 0;
+    int next = 0;
+    float width = 0;
+};
+
+inline UiWrapCut uiWrapCut(const float* ps, const uint8_t* kind, int n, int at, float limit, int breakAll) {
+    UiWrapCut cut{};
+    if (ps == nullptr || kind == nullptr || at >= n) {
+        return cut;
+    }
+    if (kind[at] == 1) {
+        cut.end = at;
+        cut.next = at + 1;
+        return cut;
+    }
+    int j = at;
+    int lastSpace = -1;
+    while (j < n && kind[j] != 1 && (ps[j + 1] - ps[at]) <= limit + 0.01f) {
+        if (breakAll == 0 && kind[j] == 2) {
+            lastSpace = j;
+        }
+        ++j;
+    }
+    int end = j;
+    int next = j;
+    if (j < n && kind[j] == 1) {
+        next = j + 1;
+    } else if (j < n && lastSpace > at) {
+        end = lastSpace;
+        next = lastSpace + 1;
+    }
+    if (end == at) {
+        end = at + 1;
+        next = end;
+    }
+    cut.end = end;
+    cut.next = next;
+    cut.width = ps[end] - ps[at];
+    return cut;
+}
 
 inline float uiAdvance(const UiState& s, uint32_t cp) {
     int gi = uiGlyphIndex(cp);
