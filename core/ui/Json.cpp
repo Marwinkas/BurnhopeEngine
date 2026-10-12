@@ -1,3 +1,6 @@
+#include "Str.hpp"
+#include "io/File.hpp"
+#include "io/JsonCursor.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/State.hpp"
 #include "ui/widget/Detail.hpp"
@@ -5,88 +8,37 @@
 
 #include <spdlog/spdlog.h>
 
+#include <charconv>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <vector>
+#include <system_error>
 
 namespace burnhope {
 namespace {
 
-struct Cur {
-    const char* p = nullptr;
-    const char* end = nullptr;
-};
+using json::Cur;
+using json::eat;
+using json::parseNumber;
+using json::parseStringCap;
+using json::skip;
 
-void skip(Cur& c) {
-    while (c.p < c.end) {
-        const char ch = *c.p;
-        if (ch != ' ' && ch != '\n' && ch != '\r' && ch != '\t') {
-            break;
-        }
-        ++c.p;
-    }
-}
-
-bool eat(Cur& c, char ch) {
-    skip(c);
-    if (c.p < c.end && *c.p == ch) {
-        ++c.p;
-        return true;
-    }
-    return false;
-}
-
-bool parseString(Cur& c, char* dst, uint8_t cap, uint8_t& len) {
-    skip(c);
-    if (c.p >= c.end || *c.p != '"' || cap == 0) {
+bool parseUiNumber(Cur& c, float& out) {
+    double v = 0.0;
+    if (!parseNumber(c, v)) {
         return false;
     }
-    ++c.p;
-    len = 0;
-    while (c.p < c.end && *c.p != '"') {
-        char ch = *c.p++;
-        if (ch == '\\' && c.p < c.end) {
-            const char n = *c.p++;
-            ch = n == 'n' ? '\n' : n == 't' ? '\t' : n;
-        }
-        if (static_cast<uint8_t>(len + 1) < cap) {
-            dst[len++] = ch;
-        }
-    }
-    if (c.p >= c.end || *c.p != '"') {
-        return false;
-    }
-    ++c.p;
-    dst[len] = '\0';
+    out = static_cast<float>(v);
     return true;
 }
 
-bool parseNumber(Cur& c, float& out) {
-    skip(c);
-    char buf[48]{};
-    int n = 0;
-    if (c.p < c.end && (*c.p == '-' || *c.p == '+')) {
-        buf[n++] = *c.p++;
-    }
-    bool any = false;
-    while (c.p < c.end && n < 46) {
-        const char ch = *c.p;
-        const bool num = (ch >= '0' && ch <= '9') || ch == '.';
-        if (!num) {
-            break;
-        }
-        buf[n++] = ch;
-        ++c.p;
-        any = true;
-    }
-    if (!any) {
+bool parseUiString(Cur& c, char* dst, uint8_t cap, uint8_t& len) {
+    uint32_t n = 0;
+    if (!parseStringCap(c, dst, cap, n) || n > 255) {
         return false;
     }
-    buf[n] = '\0';
-    char* end = nullptr;
-    out = std::strtof(buf, &end);
-    return end != buf;
+    len = static_cast<uint8_t>(n);
+    return true;
 }
 
 void skipValue(Cur& c) {
@@ -98,7 +50,7 @@ void skipValue(Cur& c) {
     if (*c.p == '"') {
         char tmp[4]{};
         uint8_t n = 0;
-        parseString(c, tmp, 4, n);
+        parseUiString(c, tmp, 4, n);
         return;
     }
     if (*c.p == '{') {
@@ -109,7 +61,7 @@ void skipValue(Cur& c) {
         for (;;) {
             char key[32]{};
             uint8_t kl = 0;
-            if (!parseString(c, key, 32, kl) || !eat(c, ':')) {
+            if (!parseUiString(c, key, 32, kl) || !eat(c, ':')) {
                 return;
             }
             skipValue(c);
@@ -149,17 +101,14 @@ void skipValue(Cur& c) {
         return;
     }
     float dummy = 0.0f;
-    if (!parseNumber(c, dummy) && c.p == before && c.p < c.end) {
+    if (!parseUiNumber(c, dummy) && c.p == before && c.p < c.end) {
         ++c.p;
     }
 }
 
-bool same(const char* key, const char* name) {
-    return std::strcmp(key, name) == 0;
-}
-
-void bindName(UiState& s, uint16_t id, const char* name) {
-    uiName(s, id, name);
+bool parseSizeFloat(const char* begin, const char* end, float& out) {
+    const auto [ptr, ec] = std::from_chars(begin, end, out);
+    return ec == std::errc() && ptr != begin;
 }
 
 void readSize(Cur& c, uint8_t& mode, float& value) {
@@ -167,21 +116,20 @@ void readSize(Cur& c, uint8_t& mode, float& value) {
     if (c.p < c.end && *c.p == '"') {
         char buf[16]{};
         uint8_t n = 0;
-        if (!parseString(c, buf, 16, n)) {
+        if (!parseUiString(c, buf, 16, n)) {
             return;
         }
         if (n > 0 && buf[n - 1] == '%') {
-            buf[n - 1] = '\0';
             mode = static_cast<uint8_t>(UiSize::Percent);
-            value = std::strtof(buf, nullptr);
+            (void)parseSizeFloat(buf, buf + n - 1, value);
         } else {
             mode = static_cast<uint8_t>(UiSize::Px);
-            value = std::strtof(buf, nullptr);
+            (void)parseSizeFloat(buf, buf + n, value);
         }
         return;
     }
     float v = 0.0f;
-    if (parseNumber(c, v)) {
+    if (parseUiNumber(c, v)) {
         mode = static_cast<uint8_t>(UiSize::Px);
         value = v;
     }
@@ -214,75 +162,50 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
         for (;;) {
             char key[32]{};
             uint8_t kl = 0;
-            if (!parseString(c, key, 32, kl) || !eat(c, ':')) {
+            if (!parseUiString(c, key, 32, kl) || !eat(c, ':')) {
                 break;
             }
-            if (same(key, "id")) {
+            if (strSame(key, "id")) {
                 char name[32]{};
                 uint8_t n = 0;
-                if (parseString(c, name, 32, n)) {
-                    bindName(s, id, name);
+                if (parseUiString(c, name, 32, n)) {
+                    uiName(s, id, name);
                 }
-            } else if (same(key, "text")) {
-                parseString(c, text, 96, textLen);
-            } else if (same(key, "role")) {
+            } else if (strSame(key, "text")) {
+                parseUiString(c, text, 96, textLen);
+            } else if (strSame(key, "role")) {
                 char role[16]{};
                 uint8_t n = 0;
-                if (parseString(c, role, 16, n)) {
+                if (parseUiString(c, role, 16, n)) {
                     auto* node = s.ent[id].try_get_mut<UiPaint>();
                     if (node != nullptr) {
-                        if (std::strcmp(role, "button") == 0) {
-                            const UiPaint ink = paintToken(s.look, UiRole::Button, UiToken::Button, 0.0f);
-                            node->role = ink.role;
-                            node->token = ink.token;
-                            node->r = ink.r;
-                            node->g = ink.g;
-                            node->b = ink.b;
-                        } else if (std::strcmp(role, "label") == 0) {
-                            const UiPaint ink = paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f);
-                            node->role = ink.role;
-                            node->token = ink.token;
-                            node->r = ink.r;
-                            node->g = ink.g;
-                            node->b = ink.b;
-                        } else if (std::strcmp(role, "field") == 0) {
-                            const UiPaint ink = paintToken(s.look, UiRole::Field, UiToken::Field, 0.0f);
-                            node->role = ink.role;
-                            node->token = ink.token;
-                            node->r = ink.r;
-                            node->g = ink.g;
-                            node->b = ink.b;
-                        } else if (std::strcmp(role, "check") == 0) {
-                            const UiPaint ink = paintToken(s.look, UiRole::Check, UiToken::Check, 0.0f);
-                            node->role = ink.role;
-                            node->token = ink.token;
-                            node->r = ink.r;
-                            node->g = ink.g;
-                            node->b = ink.b;
+                        if (strSame(role, "button")) {
+                            *node = paintToken(s.look, UiRole::Button, UiToken::Button, 0.0f);
+                        } else if (strSame(role, "label")) {
+                            *node = paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f);
+                        } else if (strSame(role, "field")) {
+                            *node = paintToken(s.look, UiRole::Field, UiToken::Field, 0.0f);
+                        } else if (strSame(role, "check")) {
+                            *node = paintToken(s.look, UiRole::Check, UiToken::Check, 0.0f);
                         } else {
-                            const UiPaint ink = paintToken(s.look, UiRole::Panel, UiToken::Content, 0.0f);
-                            node->role = ink.role;
-                            node->token = ink.token;
-                            node->r = ink.r;
-                            node->g = ink.g;
-                            node->b = ink.b;
+                            *node = paintToken(s.look, UiRole::Panel, UiToken::Content, 0.0f);
                         }
                     }
                 }
-            } else if (same(key, "dir") || same(key, "wrap") || same(key, "justify") || same(key, "align") || same(key, "content") || same(key, "self") || same(key, "overflow") || same(key, "box") || same(key, "position")) {
+            } else if (strSame(key, "dir") || strSame(key, "wrap") || strSame(key, "justify") || strSame(key, "align") || strSame(key, "content") || strSame(key, "self") || strSame(key, "overflow") || strSame(key, "box") || strSame(key, "position")) {
                 char word[24]{};
                 uint8_t n = 0;
-                if (parseString(c, word, 24, n)) {
+                if (parseUiString(c, word, 24, n)) {
                     if (auto* node = s.ent[id].try_get_mut<UiFlex>()) {
                         uiFlexApplyAttr(*node, key, word);
                     }
                 }
-            } else if (same(key, "fill") && eat(c, '[')) {
+            } else if (strSame(key, "fill") && eat(c, '[')) {
                 float chans[4] = {0.0f, 0.0f, 0.0f, 1.0f};
                 int n = 0;
                 for (;;) {
                     float v = 0.0f;
-                    if (n < 4 && parseNumber(c, v)) {
+                    if (n < 4 && parseUiNumber(c, v)) {
                         chans[n++] = v;
                     }
                     if (eat(c, ']')) {
@@ -301,43 +224,42 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                         node->a = chans[3];
                     }
                 }
-            } else if (same(key, "w")) {
+            } else if (strSame(key, "w")) {
                 readSize(c, wMode, width);
                 sawW = true;
-            } else if (same(key, "h")) {
+            } else if (strSame(key, "h")) {
                 readSize(c, hMode, height);
                 sawH = true;
-            } else if (same(key, "basis") || same(key, "maxW") || same(key, "maxH")) {
+            } else if (strSame(key, "basis") || strSame(key, "maxW") || strSame(key, "maxH")) {
                 uint8_t mode = 0;
                 float value = 0.0f;
                 readSize(c, mode, value);
                 if (auto* node = s.ent[id].try_get_mut<UiFlex>()) {
                     uiFlexApplyAttr(*node, key, mode, value);
                 }
-            } else if (same(key, "gapRow") || same(key, "aspect") || same(key, "right") || same(key, "bottom") || same(key, "grow")) {
+            } else if (strSame(key, "gapRow") || strSame(key, "aspect") || strSame(key, "right") || strSame(key, "bottom") || strSame(key, "grow")) {
                 float v = 0.0f;
-                if (parseNumber(c, v)) {
+                if (parseUiNumber(c, v)) {
                     if (auto* node = s.ent[id].try_get_mut<UiFlex>()) {
                         uiFlexApplyAttr(*node, key, v);
                     }
                 }
-            } else if (same(key, "pad") || same(key, "gap") || same(key, "radius") || same(key, "tag") || same(key, "icon")) {
+            } else if (strSame(key, "pad") || strSame(key, "gap") || strSame(key, "radius") || strSame(key, "tag") || strSame(key, "icon")) {
                 float v = 0.0f;
-                if (parseNumber(c, v)) {
-                    if (same(key, "pad") || same(key, "gap")) {
+                if (parseUiNumber(c, v)) {
+                    if (strSame(key, "pad") || strSame(key, "gap")) {
                         if (auto* node = s.ent[id].try_get_mut<UiFlex>()) {
                             uiFlexApplyAttr(*node, key, v);
                         }
-                    } else if (same(key, "radius")) {
+                    } else if (strSame(key, "radius")) {
                         auto* node = s.ent[id].try_get_mut<UiPaint>();
                         if (node != nullptr) {
                             node->radius = v;
                         }
-                    } else if (same(key, "tag")) {
+                    } else if (strSame(key, "tag")) {
                         auto* node = s.ent[id].try_get_mut<UiPaint>();
                         if (node != nullptr) {
                             node->tag = static_cast<int8_t>(v);
-                            uiNoteChrome(s, id);
                         }
                     } else {
                         auto* node = s.ent[id].try_get_mut<UiPaint>();
@@ -346,7 +268,7 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                         }
                     }
                 }
-            } else if (same(key, "children") && eat(c, '[')) {
+            } else if (strSame(key, "children") && eat(c, '[')) {
                 if (!eat(c, ']')) {
                     for (;;) {
                         parseNode(s, id, c);
@@ -381,13 +303,6 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
         field.anchor = n;
         s.ent[id].set<UiField>(field);
         fieldSyncText(s, id);
-    } else if (textLen > 0 && role == static_cast<uint8_t>(UiRole::Button)) {
-        UiText label{};
-        uint8_t n = textLen < 31 ? textLen : 31;
-        std::memcpy(label.bytes, text, n);
-        label.bytes[n] = '\0';
-        label.len = n;
-        s.ent[id].set<UiText>(label);
     } else if (textLen > 0) {
         uiText(s, id, text);
     } else if (role == static_cast<uint8_t>(UiRole::Check)) {
@@ -420,45 +335,22 @@ uint16_t uiImportJsonFile(UiState& s, uint16_t parent, const char* path) {
         spdlog::error("ui: failed to read json file");
         return kUiNone;
     }
-    std::FILE* file = std::fopen(path, "rb");
-    if (file == nullptr) {
+    MappedFile mapped{};
+    if (!fileMapReadOnly(path, &mapped)) {
         spdlog::error("ui: failed to read json file {}", path);
         return kUiNone;
     }
-    std::fseek(file, 0, SEEK_END);
-    const long sz = std::ftell(file);
-    std::fseek(file, 0, SEEK_SET);
-    if (sz <= 0 || sz > 8 * 1024 * 1024) {
-        std::fclose(file);
+    if (mapped.size == 0 || mapped.size > 8u * 1024u * 1024u || mapped.data == nullptr) {
+        fileUnmap(&mapped);
         spdlog::error("ui: failed to read json file {}", path);
         return kUiNone;
     }
-    std::vector<char> buf(static_cast<size_t>(sz) + 1);
-    const size_t n = std::fread(buf.data(), 1, static_cast<size_t>(sz), file);
-    std::fclose(file);
-    buf[n] = '\0';
-    return uiImportJson(s, parent, buf.data());
-}
-
-uint16_t uiFindName(const UiState& s, const char* name) {
-    if (name == nullptr || name[0] == '\0') {
-        return kUiNone;
-    }
-    const ecs_entity_t symbol = ecs_lookup_symbol(s.world, name, false, false);
-    const flecs::entity named = symbol != 0 ? flecs::entity(s.world, symbol) : s.world.lookup(name);
-    if (named.id() != 0 && named.is_alive()) {
-        const UiSlot* slot = named.try_get<UiSlot>();
-        if (slot != nullptr) {
-            return slot->index;
-        }
-    }
-    for (uint16_t id = 0; id < s.count; ++id) {
-        const UiName* stored = s.ent[id].try_get<UiName>();
-        if (stored != nullptr && std::strcmp(stored->bytes, name) == 0) {
-            return id;
-        }
-    }
-    return kUiNone;
+    const char* begin = reinterpret_cast<const char*>(mapped.data);
+    const char* end = begin + mapped.size;
+    Cur cur{begin, end};
+    const uint16_t root = parseNode(s, parent, cur);
+    fileUnmap(&mapped);
+    return root;
 }
 
 } // namespace burnhope

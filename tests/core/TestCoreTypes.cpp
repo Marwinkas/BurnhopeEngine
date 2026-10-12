@@ -213,7 +213,7 @@ TEST_CASE("wasm add and apply through linear memory") {
     CHECK(wasmInvoke(host, "add", args, 2, result) == WasmStatus::Ok);
     CHECK(result == 42);
     uint32_t memBytes = 0;
-    uint8_t* mem = wasmGetMemory(&host, &memBytes);
+    uint8_t* mem = wasmMemory(host, memBytes);
     CHECK(mem != nullptr);
     CHECK(memBytes == 65536);
     const int32_t start = 15;

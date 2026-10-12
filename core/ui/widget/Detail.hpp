@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Str.hpp"
 #include "ui/State.hpp"
 
 #include <cstddef>
@@ -25,15 +26,7 @@ inline constexpr float kAccent[3][3] = {
 
 template <size_t N>
 inline uint8_t uiStrCopy(char (&dst)[N], const char* src) {
-    uint8_t n = 0;
-    if (src != nullptr) {
-        while (src[n] != '\0' && n < static_cast<uint8_t>(N - 1)) {
-            dst[n] = src[n];
-            ++n;
-        }
-    }
-    dst[n] = '\0';
-    return n;
+    return static_cast<uint8_t>(strCopyCap(dst, N, src));
 }
 
 inline void copyText(char* dst, uint8_t& len, const char* src) {

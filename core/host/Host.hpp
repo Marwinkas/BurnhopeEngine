@@ -6,16 +6,18 @@
 #include "rhi/Device.hpp"
 #include "rhi/Swapchain.hpp"
 #include "ui/Canvas.hpp"
-#include "ui/widget/ColorPicker.hpp"
 
 namespace burnhope {
 
 constexpr int kHostSlots = 8;
 
+constexpr HeapLayout kDefaultHostHeap{.buffers = 64, .images = 810, .samplers = 3};
+
 struct Host;
 
 using HostOpsFn = void (*)(Host& host, int slot, const WindowOps& ops, void* user);
 using HostCloseFn = void (*)(Host& host, int slot, void* user);
+using HostDropFn = void (*)(Host& host, int slot, const char* path, void* user);
 using HostSceneTickFn = bool (*)(void* user, const InputFrame& input, float dt);
 using HostSceneRecordFn = void (*)(void* user, VkCommandBuffer cmd, Device& device, DescriptorHeaps& heaps, const Swapchain& swap, const FrameContext& frame);
 using HostReleaseFn = void (*)(void* user, Device& device);
@@ -26,9 +28,11 @@ struct ViewDesc {
     WindowConfig window{};
     FrameDesc frame{};
     UiBuilder builder = nullptr;
-    ColorBook* book = nullptr;
+    float chromeTitle = 40.0f;
+    float chromeBorder = 6.0f;
     HostOpsFn onOps = nullptr;
     HostCloseFn onClose = nullptr;
+    HostDropFn onDrop = nullptr;
     HostSceneTickFn sceneTick = nullptr;
     HostSceneRecordFn sceneRecord = nullptr;
     void* user = nullptr;
@@ -38,24 +42,19 @@ struct HostView {
     bool on = false;
     char name[24]{};
     FrameDesc frame{};
+    float chromeTitle = 40.0f;
+    float chromeBorder = 6.0f;
     Window window{};
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     Swapchain swap{};
     DescriptorHeaps heaps{};
     Canvas canvas{};
-    ColorBook* book = nullptr;
     HostOpsFn onOps = nullptr;
     HostCloseFn onClose = nullptr;
+    HostDropFn onDrop = nullptr;
     HostSceneTickFn sceneTick = nullptr;
     HostSceneRecordFn sceneRecord = nullptr;
     void* user = nullptr;
-    uint8_t lookGrab = 0;
-    uint8_t toolGrab = 0;
-    float lookX = 0.0f;
-    float lookY = 0.0f;
-    bool wantTool = false;
-    bool wantColor = false;
-    bool wantFile = false;
 };
 
 struct Host {
@@ -63,7 +62,6 @@ struct Host {
     FrameArena arena;
     HostView view[kHostSlots]{};
     int primary = -1;
-    int fileSlot = -1;
     bool ready = false;
     float clock = 0.0f;
     float frameDt = 0.0f;

@@ -1,6 +1,7 @@
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Docking.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/State.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/List.hpp"
 #include "ui/widget/Menu.hpp"
@@ -387,6 +388,27 @@ void uiBind(UiState& s, uint16_t id, UiClickFn fn, void* user) {
 
 void uiBindName(UiState& s, const char* name, UiClickFn fn, void* user) {
     uiBind(s, uiFindName(s, name), fn, user);
+}
+
+uint16_t uiFindName(const UiState& s, const char* name) {
+    if (name == nullptr || name[0] == '\0') {
+        return kUiNone;
+    }
+    const ecs_entity_t symbol = ecs_lookup_symbol(s.world, name, false, false);
+    const flecs::entity named = symbol != 0 ? flecs::entity(s.world, symbol) : s.world.lookup(name);
+    if (named.id() != 0 && named.is_alive()) {
+        const UiSlot* slot = named.try_get<UiSlot>();
+        if (slot != nullptr) {
+            return slot->index;
+        }
+    }
+    for (uint16_t id = 0; id < s.count; ++id) {
+        const UiName* stored = s.ent[id].try_get<UiName>();
+        if (stored != nullptr && std::strcmp(stored->bytes, name) == 0) {
+            return id;
+        }
+    }
+    return kUiNone;
 }
 
 void uiDrag(UiState& s, uint16_t id, UiDragFn fn, void* user) {

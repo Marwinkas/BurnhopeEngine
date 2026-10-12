@@ -1,4 +1,5 @@
 #include "wasm/WasmHost.hpp"
+#include "Str.hpp"
 
 #include <cstring>
 
@@ -391,8 +392,8 @@ bool wasmBind(WasmHost& host, const char* module, const char* field, WasmHostFn 
         return false;
     }
     WasmBind& b = host.binds[host.bindCount++];
-    std::strncpy(b.module, module, sizeof(b.module) - 1);
-    std::strncpy(b.field, field, sizeof(b.field) - 1);
+    (void)strCopyCap(b.module, sizeof(b.module), module);
+    (void)strCopyCap(b.field, sizeof(b.field), field);
     b.fn = fn;
     b.user = user;
     return true;
@@ -428,19 +429,6 @@ void wasmReset(WasmHost& host) {
 uint8_t* wasmMemory(WasmHost& host, uint32_t& bytes) {
     bytes = host.memoryBytes;
     return host.memory;
-}
-
-uint8_t* wasmGetMemory(WasmHost* host, uint32_t* outSize) {
-    if (host == nullptr) {
-        if (outSize != nullptr) {
-            *outSize = 0;
-        }
-        return nullptr;
-    }
-    if (outSize != nullptr) {
-        *outSize = host->memoryBytes;
-    }
-    return host->memory;
 }
 
 WasmStatus wasmInvoke(WasmHost& host, const char* name, const int32_t* args, uint32_t argCount, int32_t& result) {

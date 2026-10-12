@@ -1,10 +1,7 @@
 #include "host/Host.hpp"
-#include "files/Browser.hpp"
 #include "platform/Action.hpp"
 #include "platform/Jobs.hpp"
 #include "platform/PlatformUtil.hpp"
-#include "ui/Domain.hpp"
-#include "ui/State.hpp"
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/ringbuffer_sink.h>
@@ -26,53 +23,7 @@ void copyName(HostView& view, const char* name) {
     if (name == nullptr) {
         return;
     }
-    std::strncpy(view.name, name, sizeof(view.name) - 1);
-    view.name[sizeof(view.name) - 1] = '\0';
-}
-
-bool extIs(const char* path, const char* ext) {
-    const size_t n = std::strlen(path);
-    const size_t m = std::strlen(ext);
-    if (n < m) {
-        return false;
-    }
-    for (size_t i = 0; i < m; ++i) {
-        char a = path[n - m + i];
-        char b = ext[i];
-        if (a >= 'A' && a <= 'Z') {
-            a = static_cast<char>(a - 'A' + 'a');
-        }
-        if (b >= 'A' && b <= 'Z') {
-            b = static_cast<char>(b - 'A' + 'a');
-        }
-        if (a != b) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool isImagePath(const char* path) {
-    return extIs(path, ".png") || extIs(path, ".jpg") || extIs(path, ".jpeg") || extIs(path, ".gif")
-        || extIs(path, ".bmp") || extIs(path, ".tga") || extIs(path, ".hdr") || extIs(path, ".psd");
-}
-
-void acceptPath(Host& host, int slot, const char* path) {
-    if (slot < 0 || slot >= kHostSlots || path == nullptr || path[0] == '\0') {
-        return;
-    }
-    HostView& view = host.view[slot];
-    if (!view.on) {
-        return;
-    }
-    if (view.canvas.state != nullptr) {
-        filesOfferPath(*view.canvas.state, path);
-    }
-    if (isImagePath(path)) {
-        (void)canvasLoadImage(view.canvas, 0, path);
-    } else if (extIs(path, ".json") && view.canvas.state != nullptr) {
-        (void)uiImportJsonFile(*view.canvas.state, 0, path);
-    }
+    (void)strCopyCap(view.name, sizeof(view.name), name);
 }
 
 void destroyView(Host& host, int slot, bool notify) {
@@ -89,6 +40,7 @@ void destroyView(Host& host, int slot, bool notify) {
     view.on = false;
     view.onOps = nullptr;
     view.onClose = nullptr;
+    view.onDrop = nullptr;
     canvasDestroy(view.canvas, host.device);
     descriptorHeapsDestroy(view.heaps, host.device);
     swapchainDestroy(view.swap, host.device);
@@ -101,11 +53,7 @@ void destroyView(Host& host, int slot, bool notify) {
     }
     windowDestroy(view.window);
     view.name[0] = '\0';
-    view.book = nullptr;
     view.user = nullptr;
-    if (host.fileSlot == slot) {
-        host.fileSlot = -1;
-    }
     if (notify && onClose != nullptr) {
         onClose(host, slot, user);
     }
@@ -167,8 +115,8 @@ bool prepareViewSync(Host& host, int slot) {
         view.swap.clickTick = platformCounter();
     }
     const bool scene = view.sceneRecord != nullptr;
-    float title = scene ? 0.0f : 40.0f;
-    float border = scene ? 0.0f : 6.0f;
+    const float title = scene ? 0.0f : view.chromeTitle;
+    const float border = scene ? 0.0f : view.chromeBorder;
     windowChrome(view.window, title, border);
     return true;
 }
@@ -189,6 +137,8 @@ struct DrawJobResult {
     float clipX = 0, clipY = 0, clipW = 0, clipH = 0;
     bool hasFocus = false;
     float focusX = 0, focusY = 0, focusW = 0, focusH = 0;
+    char dropPath[260]{};
+    bool hasDrop = false;
 };
 
 struct DrawJobCtx {
@@ -220,8 +170,13 @@ void recordAndPresentView(DrawJobCtx& ctx) {
     Host& host = *ctx.host;
     HostView& view = host.view[ctx.slot];
     DrawJobResult& out = ctx.result;
-    // Hidden surfaces may never complete vkWaitForPresentKHR on some WSI backends.
-    const bool pacePresent = ctx.slot == host.primary && !view.window.hidden;
+    // A hidden surface is not given an image by the compositor. vkAcquireNextImageKHR
+    // with UINT64_MAX then never returns, and the process dies on SIGINT.
+    if (view.window.hidden) {
+        out.handled = true;
+        return;
+    }
+    const bool pacePresent = ctx.slot == host.primary;
     if (view.window.pixelW == 0 || view.window.pixelH == 0) {
         return;
     }
@@ -238,64 +193,21 @@ void recordAndPresentView(DrawJobCtx& ctx) {
     }
     const float viewW = began && view.swap.extent.width > 0 ? static_cast<float>(view.swap.extent.width) : static_cast<float>(view.window.pixelW);
     const float viewH = began && view.swap.extent.height > 0 ? static_cast<float>(view.swap.extent.height) : static_cast<float>(view.window.pixelH);
-    const InputFrame scenePointer = view.window.input;
-    const bool lookHeld = view.lookGrab != 0 && (scenePointer.pointer.down & kPointerRight) != 0;
-    const bool toolHeld = view.toolGrab != 0 && (scenePointer.pointer.down & kPointerLeft) != 0;
-    if (lookHeld || toolHeld) {
-        view.window.input.pointer.x = view.lookX;
-        view.window.input.pointer.y = view.lookY;
-        view.window.input.pointer.dx = 0.0f;
-        view.window.input.pointer.dy = 0.0f;
-        if (lookHeld) {
-            view.window.input.pointer.down &= ~kPointerRight;
-            view.window.input.pointer.pressed &= ~kPointerRight;
-            view.window.input.pointer.released &= ~kPointerRight;
-        }
-        if (toolHeld) {
-            view.window.input.pointer.down &= ~kPointerLeft;
-            view.window.input.pointer.pressed &= ~kPointerLeft;
-            view.window.input.pointer.released &= ~kPointerLeft;
-        }
+    bool flyLook = false;
+    if (view.sceneTick != nullptr) {
+        flyLook = view.sceneTick(view.user, view.window.input, dt);
     }
     if (hasCanvas) {
         readCanvas(view, out, host.device, viewW, viewH, ctx.now, began ? frame.flight : 0u, began);
-    }
-    view.window.input = scenePointer;
-    InputFrame sceneInput = scenePointer;
-    if (sceneView && hasCanvas && !lookHeld && !toolHeld) {
-        canvasMaskScene(view.canvas, sceneInput);
-    }
-    bool flyLook = false;
-    if (view.sceneTick != nullptr) {
-        flyLook = view.sceneTick(view.user, sceneInput, dt);
-    }
-    if ((scenePointer.pointer.pressed & kPointerRight) != 0 && sceneView && hasCanvas && !canvasPointerOver(view.canvas)) {
-        view.lookGrab = 1;
-        view.lookX = scenePointer.pointer.x;
-        view.lookY = scenePointer.pointer.y;
-    }
-    if ((scenePointer.pointer.pressed & kPointerLeft) != 0 && sceneView && hasCanvas && !canvasPointerOver(view.canvas)) {
-        view.toolGrab = 1;
-        view.lookX = scenePointer.pointer.x;
-        view.lookY = scenePointer.pointer.y;
-    }
-    if ((scenePointer.pointer.down & kPointerRight) == 0) {
-        view.lookGrab = 0;
-    }
-    if ((scenePointer.pointer.down & kPointerLeft) == 0) {
-        view.toolGrab = 0;
-    }
-    if (sceneView && hasCanvas) {
-        if (view.lookGrab != 0) {
+        if (canvasWantsRelative(view.canvas)) {
             out.wantsRelative = true;
-            out.cursor = 0;
-        } else if (canvasWantsRelative(view.canvas)) {
-            out.wantsRelative = true;
-        } else if (canvasPointerOver(view.canvas)) {
+        } else if (sceneView && canvasPointerOver(view.canvas)) {
             out.wantsRelative = false;
-        } else {
+        } else if (sceneView) {
             out.wantsRelative = flyLook;
-            out.cursor = 0;
+            if (flyLook) {
+                out.cursor = 0;
+            }
         }
     } else if (view.sceneTick != nullptr) {
         out.wantsRelative = flyLook;
@@ -306,8 +218,6 @@ void recordAndPresentView(DrawJobCtx& ctx) {
         }
         return;
     }
-    float title = sceneView ? 0.0f : 40.0f;
-    float border = sceneView ? 0.0f : 6.0f;
     if (view.sceneRecord != nullptr) {
         heapBind(frame.cmd, view.heaps, frame.flight);
         view.sceneRecord(view.user, frame.cmd, host.device, view.heaps, view.swap, frame);
@@ -321,13 +231,11 @@ void recordAndPresentView(DrawJobCtx& ctx) {
         out.handled = true;
         return;
     }
-    if (!sceneView) {
-        canvasChrome(view.canvas, title, border);
-    }
-    char dropped[260]{};
-    if (view.window.input.dropLen > 0) {
-        std::memcpy(dropped, view.window.input.drop, view.window.input.dropLen + 1u);
-        acceptPath(host, ctx.slot, dropped);
+    if (view.window.input.dropLen > 0 && view.onDrop != nullptr) {
+        out.hasDrop = true;
+        const uint32_t n = view.window.input.dropLen < 259u ? view.window.input.dropLen : 259u;
+        std::memcpy(out.dropPath, view.window.input.drop, n);
+        out.dropPath[n] = '\0';
     }
 
     // Тонмап чистит свопчейн в буфере сцены. Холст — следующий сабмит той же очереди:
@@ -393,27 +301,6 @@ void finishView(Host& host, int slot, const DrawJobResult& r) {
             static_cast<int>(r.focusH * sx));
     }
     WindowOps ops = r.ops;
-    view.wantTool = false;
-    view.wantColor = false;
-    view.wantFile = false;
-    if (view.canvas.state != nullptr) {
-        UiHostNote& note = uiHostNote(*view.canvas.state);
-        view.wantTool = note.tool;
-        view.wantColor = note.color;
-        view.wantFile = note.file;
-        note = {};
-    }
-    if (view.wantFile) {
-        static const FileFilter filters[] = {
-            {"All files", "*"},
-            {"JSON", "json"},
-            {"Images", "png;jpg;jpeg;gif;bmp;tga;hdr;psd"},
-        };
-        if (windowAskFile(view.window, filters, 3, FileAsk::Open)) {
-            host.fileSlot = slot;
-        }
-        view.wantFile = false;
-    }
     if (r.ev == UiEvent::Close || ops.close) {
         if (slot == host.primary) {
             view.window.closeRequested = true;
@@ -425,6 +312,9 @@ void finishView(Host& host, int slot, const DrawJobResult& r) {
     if (!view.on) {
         return;
     }
+    if (r.hasDrop && view.onDrop != nullptr) {
+        view.onDrop(host, slot, r.dropPath, view.user);
+    }
     if (view.onOps != nullptr) {
         view.onOps(host, slot, ops, view.user);
     }
@@ -432,10 +322,6 @@ void finishView(Host& host, int slot, const DrawJobResult& r) {
 
 const char* actionPath() {
     static char path[512];
-    const char* home = std::getenv("HOME");
-    if (home == nullptr || home[0] == '\0') {
-        return nullptr;
-    }
     if (!platformCachePath(path, sizeof(path), "burnhope-actions.txt")) {
         return nullptr;
     }
@@ -543,26 +429,22 @@ int hostOpen(Host& host, const ViewDesc& desc) {
         frame.transparent = true;
     }
     view.frame = frame;
+    view.chromeTitle = desc.chromeTitle;
+    view.chromeBorder = desc.chromeBorder;
     if (!swapchainCreate(view.swap, host.device, view.surface, view.window.pixelW, view.window.pixelH, frame)) {
         destroyView(host, slot, false);
         return -1;
     }
-    // 800 и 801 — шрифт и фото холста. Картинки сцены живут в SceneFrameImpl::gpuHeap.
-    const HeapLayout heap{.buffers = 64, .images = 810, .samplers = 3};
-    if (!descriptorHeapsCreate(view.heaps, host.device, heap) || !canvasCreate(view.canvas, host.device, view.heaps)) {
+    if (!descriptorHeapsCreate(view.heaps, host.device, kDefaultHostHeap) || !canvasCreate(view.canvas, host.device, view.heaps)) {
         destroyView(host, slot, false);
         return -1;
-    }
-    filesLoadIcons(view.canvas);
-    if (desc.book != nullptr && view.canvas.state != nullptr) {
-        uiSetColorBook(*view.canvas.state, desc.book);
     }
     canvasSetBuilder(view.canvas, desc.builder, desc.user);
     canvasReload(view.canvas);
     copyName(view, desc.name);
-    view.book = desc.book;
     view.onOps = desc.onOps;
     view.onClose = desc.onClose;
+    view.onDrop = desc.onDrop;
     view.sceneTick = desc.sceneTick;
     view.sceneRecord = desc.sceneRecord;
     view.user = desc.user;
@@ -640,15 +522,9 @@ bool restoreViewGpu(Host& host, int slot, bool ownsDeviceSurface) {
         spdlog::error("HOST recover swapchain failed {}", view.name);
         return false;
     }
-    // 800 и 801 — шрифт и фото холста. Картинки сцены живут в SceneFrameImpl::gpuHeap.
-    const HeapLayout heap{.buffers = 64, .images = 810, .samplers = 3};
-    if (!descriptorHeapsCreate(view.heaps, host.device, heap) || !canvasCreate(view.canvas, host.device, view.heaps)) {
+    if (!descriptorHeapsCreate(view.heaps, host.device, kDefaultHostHeap) || !canvasCreate(view.canvas, host.device, view.heaps)) {
         spdlog::error("HOST recover canvas failed {}", view.name);
         return false;
-    }
-    filesLoadIcons(view.canvas);
-    if (view.book != nullptr && view.canvas.state != nullptr) {
-        uiSetColorBook(*view.canvas.state, view.book);
     }
     canvasSetBuilder(view.canvas, view.canvas.builder, view.canvas.builderUser);
     canvasReload(view.canvas);
@@ -724,10 +600,6 @@ bool hostTick(Host& host) {
         }
     }
     frameArenaReset(host.arena);
-    char path[512]{};
-    if (windowTakeFile(path, static_cast<int>(sizeof(path)))) {
-        acceptPath(host, host.fileSlot, path);
-    }
     const float now = platformSeconds();
     float dt = host.clock > 0.0f ? now - host.clock : 0.0f;
     if (dt < 0.0f) {

@@ -5,6 +5,7 @@
 #include "ui/widget/Docking.hpp"
 #include "ui/widget/List.hpp"
 #include "ui/widget/Menu.hpp"
+#include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Slider.hpp"
 
 #include <cstdio>
@@ -246,9 +247,13 @@ void onBrowse(void* user, const char* path, int isDir) {
     }
 }
 
-void shellBuild(Canvas& canvas, void*) {
+void shellBuild(Canvas& canvas, void* user) {
     if (canvas.state == nullptr) {
         return;
+    }
+    filesLoadIcons(canvas);
+    if (user != nullptr) {
+        uiSetColorBook(*canvas.state, static_cast<ColorBook*>(user));
     }
     gDemo = {};
     gDemo.canvas = &canvas;
@@ -472,11 +477,14 @@ void toolBuild(Canvas& canvas, void*) {
     (void)page.gradient();
 }
 
-void colorBuild(Canvas& canvas, void*) {
+void colorBuild(Canvas& canvas, void* user) {
     if (!canvasUseFont(canvas, 12.0f)) {
         spdlog::error("color font was not set");
     }
     if (canvas.state != nullptr) {
+        if (user != nullptr) {
+            uiSetColorBook(*canvas.state, static_cast<ColorBook*>(user));
+        }
         uiBuildColor(*canvas.state);
     }
 }

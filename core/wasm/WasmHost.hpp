@@ -11,10 +11,10 @@ enum class WasmStatus : uint8_t { Ok = 0, Trap = 1, Missing = 2 };
 // Host function. args are the wasm params, already popped. Return value is pushed if the type has one result.
 using WasmHostFn = int32_t (*)(void* user, const int32_t* args, uint32_t n);
 
-constexpr int kWasmFuncs = 8;
-constexpr int kWasmExports = 8;
-constexpr int kWasmBinds = 4;
-constexpr int kWasmTypes = 8;
+constexpr int kWasmFuncs = 64;
+constexpr int kWasmExports = 32;
+constexpr int kWasmBinds = 16;
+constexpr int kWasmTypes = 32;
 
 struct WasmType {
     uint8_t params = 0;
@@ -68,8 +68,6 @@ void wasmReset(WasmHost& host);
 [[nodiscard]] bool wasmBind(WasmHost& host, const char* module, const char* field, WasmHostFn fn, void* user);
 
 [[nodiscard]] uint8_t* wasmMemory(WasmHost& host, uint32_t& bytes);
-// Direct pointer into the module page. outSize is the byte length (one 64KB page).
-[[nodiscard]] uint8_t* wasmGetMemory(WasmHost* host, uint32_t* outSize);
 
 [[nodiscard]] WasmStatus wasmInvoke(WasmHost& host, const char* name, const int32_t* args, uint32_t argCount, int32_t& result);
 

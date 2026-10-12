@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <type_traits>
 
@@ -57,28 +58,16 @@ inline float animWrapTime(float time, float duration, AnimWrap wrap) {
         return std::clamp(time, 0.0f, duration);
     }
     if (wrap == AnimWrap::Loop) {
-        float m = time - duration * static_cast<float>(static_cast<int>(time / duration));
-        if (time < 0.0f) {
-            m = duration - animWrapTime(-time, duration, AnimWrap::Loop);
-            if (m == duration) {
-                m = 0.0f;
-            }
-        }
+        float m = std::fmod(time, duration);
         if (m < 0.0f) {
             m += duration;
-        }
-        if (m >= duration) {
-            m -= duration;
         }
         return m;
     }
     const float period = duration * 2.0f;
-    float m = time - period * static_cast<float>(static_cast<int>(time / period));
+    float m = std::fmod(time, period);
     if (m < 0.0f) {
         m += period;
-    }
-    if (m >= period) {
-        m -= period;
     }
     return m <= duration ? m : period - m;
 }

@@ -2,7 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <span>
+#include <new>
+#include <utility>
 
 namespace burnhope {
 
@@ -19,10 +20,11 @@ void frameArenaReset(FrameArena& a);
 
 [[nodiscard]] void* frameArenaAlloc(FrameArena& a, std::size_t bytes, std::size_t align = 16);
 
-template <class T>
-[[nodiscard]] T* frameArenaNew(FrameArena& a) {
+template <typename T, typename... Args>
+[[nodiscard]] T* frameArenaNew(FrameArena& a, Args&&... args) {
     static_assert(alignof(T) <= 64);
-    return static_cast<T*>(frameArenaAlloc(a, sizeof(T), alignof(T)));
+    void* ptr = frameArenaAlloc(a, sizeof(T), alignof(T));
+    return ptr != nullptr ? ::new (ptr) T(std::forward<Args>(args)...) : nullptr;
 }
 
 } // namespace burnhope

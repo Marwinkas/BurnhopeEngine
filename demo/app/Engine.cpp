@@ -17,6 +17,7 @@
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "ui/State.hpp"
+#include "ui/Canvas.hpp"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -33,6 +34,64 @@
 namespace burnhope {
 namespace {
 
+struct SceneViewUser {
+    SceneFrame* scene = nullptr;
+    Host* host = nullptr;
+    int slot = -1;
+    uint8_t lookGrab = 0;
+    uint8_t toolGrab = 0;
+    float lookX = 0.0f;
+    float lookY = 0.0f;
+};
+
+SceneViewUser gSceneView{};
+
+bool extIs(const char* path, const char* ext) {
+    const size_t n = std::strlen(path);
+    const size_t m = std::strlen(ext);
+    if (n < m) {
+        return false;
+    }
+    for (size_t i = 0; i < m; ++i) {
+        char a = path[n - m + i];
+        char b = ext[i];
+        if (a >= 'A' && a <= 'Z') {
+            a = static_cast<char>(a - 'A' + 'a');
+        }
+        if (b >= 'A' && b <= 'Z') {
+            b = static_cast<char>(b - 'A' + 'a');
+        }
+        if (a != b) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool isImagePath(const char* path) {
+    return extIs(path, ".png") || extIs(path, ".jpg") || extIs(path, ".jpeg") || extIs(path, ".gif")
+        || extIs(path, ".bmp") || extIs(path, ".tga") || extIs(path, ".hdr") || extIs(path, ".psd");
+}
+
+void shellDrop(Host& host, int slot, const char* path, void* user) {
+    if (path == nullptr || path[0] == '\0') {
+        return;
+    }
+    Canvas* canvas = hostCanvas(host, slot);
+    if (canvas == nullptr || canvas->state == nullptr) {
+        return;
+    }
+    filesOfferPath(*canvas->state, path);
+    if (isImagePath(path)) {
+        (void)canvasLoadImage(*canvas, 0, path);
+    } else if (extIs(path, ".json")) {
+        (void)uiImportJsonFile(*canvas->state, 0, path);
+    }
+    (void)user;
+}
+
+int gFileDialogSlot = -1;
+
 void onColorClose(Host&, int, void* user) {
     auto* colors = static_cast<ColorBook*>(user);
     colors->present = 0;
@@ -46,8 +105,27 @@ void openNamed(Host& host, const ViewDesc& desc) {
 void onShellOps(Host& host, int slot, const WindowOps& ops, void* user) {
     (void)ops;
     auto* colors = static_cast<ColorBook*>(user);
-    const bool wantTool = slot >= 0 && slot < kHostSlots && host.view[slot].wantTool;
-    const bool wantColor = slot >= 0 && slot < kHostSlots && host.view[slot].wantColor;
+    Canvas* canvas = hostCanvas(host, slot);
+    bool wantTool = false;
+    bool wantColor = false;
+    bool wantFile = false;
+    if (canvas != nullptr && canvas->state != nullptr) {
+        UiHostNote& note = uiHostNote(*canvas->state);
+        wantTool = note.tool;
+        wantColor = note.color;
+        wantFile = note.file;
+        note = {};
+    }
+    if (wantFile && slot >= 0 && slot < kHostSlots) {
+        static const FileFilter filters[] = {
+            {"All files", "*"},
+            {"JSON", "json"},
+            {"Images", "png;jpg;jpeg;gif;bmp;tga;hdr;psd"},
+        };
+        if (windowAskFile(host.view[slot].window, filters, 3, FileAsk::Open)) {
+            gFileDialogSlot = slot;
+        }
+    }
     if (wantTool) {
         ViewDesc desc{};
         desc.name = "tool";
@@ -74,7 +152,6 @@ void onShellOps(Host& host, int slot, const WindowOps& ops, void* user) {
         desc.window.bordered = false;
         desc.window.resizable = true;
         desc.builder = colorBuild;
-        desc.book = colors;
         desc.onOps = onShellOps;
         desc.onClose = onColorClose;
         desc.user = colors;
@@ -83,11 +160,58 @@ void onShellOps(Host& host, int slot, const WindowOps& ops, void* user) {
 }
 
 bool sceneTick(void* user, const InputFrame& input, float dt) {
-    return sceneFrameTick(static_cast<SceneFrame*>(user), input, dt);
+    auto* view = static_cast<SceneViewUser*>(user);
+    if (view == nullptr || view->scene == nullptr) {
+        return false;
+    }
+    InputFrame sceneInput = input;
+    const bool lookHeld = view->lookGrab != 0 && (input.pointer.down & kPointerRight) != 0;
+    const bool toolHeld = view->toolGrab != 0 && (input.pointer.down & kPointerLeft) != 0;
+    if (lookHeld || toolHeld) {
+        sceneInput.pointer.x = view->lookX;
+        sceneInput.pointer.y = view->lookY;
+        sceneInput.pointer.dx = 0.0f;
+        sceneInput.pointer.dy = 0.0f;
+        if (lookHeld) {
+            sceneInput.pointer.down &= ~kPointerRight;
+            sceneInput.pointer.pressed &= ~kPointerRight;
+            sceneInput.pointer.released &= ~kPointerRight;
+        }
+        if (toolHeld) {
+            sceneInput.pointer.down &= ~kPointerLeft;
+            sceneInput.pointer.pressed &= ~kPointerLeft;
+            sceneInput.pointer.released &= ~kPointerLeft;
+        }
+    }
+    Canvas* canvas = view->host != nullptr ? hostCanvas(*view->host, view->slot) : nullptr;
+    if (canvas != nullptr && canvas->builder != nullptr && !lookHeld && !toolHeld) {
+        canvasMaskScene(*canvas, sceneInput);
+    }
+    const bool flyLook = sceneFrameTick(view->scene, sceneInput, dt);
+    if ((input.pointer.pressed & kPointerRight) != 0 && canvas != nullptr && canvas->builder != nullptr && !canvasPointerOver(*canvas)) {
+        view->lookGrab = 1;
+        view->lookX = input.pointer.x;
+        view->lookY = input.pointer.y;
+    }
+    if ((input.pointer.pressed & kPointerLeft) != 0 && canvas != nullptr && canvas->builder != nullptr && !canvasPointerOver(*canvas)) {
+        view->toolGrab = 1;
+        view->lookX = input.pointer.x;
+        view->lookY = input.pointer.y;
+    }
+    if ((input.pointer.down & kPointerRight) == 0) {
+        view->lookGrab = 0;
+    }
+    if ((input.pointer.down & kPointerLeft) == 0) {
+        view->toolGrab = 0;
+    }
+    return flyLook || view->lookGrab != 0;
 }
 
 void sceneRecord(void* user, VkCommandBuffer cmd, Device& device, DescriptorHeaps& heaps, const Swapchain& swap, const FrameContext& frame) {
-    sceneFrameRecord(static_cast<SceneFrame*>(user), cmd, device, heaps, swap, frame);
+    auto* view = static_cast<SceneViewUser*>(user);
+    if (view != nullptr && view->scene != nullptr) {
+        sceneFrameRecord(view->scene, cmd, device, heaps, swap, frame);
+    }
 }
 
 bool wantScene(int argc, char** argv) {
@@ -136,12 +260,21 @@ bool engineInit(Engine& e, int argc, char** argv) {
         main.window.resizable = true;
         main.frame.present = Present::Immediate;
         main.builder = sceneHud;
+        main.onDrop = shellDrop;
         main.sceneTick = sceneTick;
         main.sceneRecord = sceneRecord;
-        main.user = e.scene;
+        gSceneView.scene = e.scene;
+        gSceneView.host = &e.host;
+        gSceneView.slot = -1;
+        main.user = &gSceneView;
+        const int sceneSlot = hostOpen(e.host, main);
+        if (sceneSlot < 0) {
+            return false;
+        }
+        gSceneView.slot = sceneSlot;
         e.host.releaseGpu = releaseScene;
         e.host.releaseUser = e.scene;
-        return hostOpen(e.host, main) >= 0;
+        return true;
     }
     ViewDesc main{};
     main.name = "main";
@@ -152,7 +285,7 @@ bool engineInit(Engine& e, int argc, char** argv) {
     main.window.resizable = true;
     main.frame.present = Present::Mailbox;
     main.builder = shellBuild;
-    main.book = &e.colors;
+    main.onDrop = shellDrop;
     main.onOps = onShellOps;
     main.user = &e.colors;
     if (hostOpen(e.host, main) < 0) {
@@ -402,6 +535,7 @@ void sceneHud(Canvas& canvas, void* user) {
     if ((!haveFont && !fontBesideExe(canvas) && !canvasUseFont(canvas, 20.0f)) || canvas.state == nullptr) {
         return;
     }
+    filesLoadIcons(canvas);
     canvasSetLook(canvas, uiLookInk());
     const UiLook look = canvasLook(canvas);
     auto hiddenPaint = []() {
@@ -868,6 +1002,11 @@ void hostLoad(float& cpu, float& gpu) {
 }
 
 bool engineTick(Engine& e) {
+    char picked[512]{};
+    if (windowTakeFile(picked, static_cast<int>(sizeof(picked))) && gFileDialogSlot >= 0) {
+        shellDrop(e.host, gFileDialogSlot, picked, nullptr);
+        gFileDialogSlot = -1;
+    }
     const bool ok = hostTick(e.host);
     if (e.scene != nullptr && e.host.primary >= 0) {
         char fps[96];

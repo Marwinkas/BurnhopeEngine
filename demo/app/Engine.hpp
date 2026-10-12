@@ -2,6 +2,7 @@
 
 #include "host/Host.hpp"
 #include "render/SceneFrame.hpp"
+#include "ui/widget/ColorPicker.hpp"
 
 namespace burnhope {
 

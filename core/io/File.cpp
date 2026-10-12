@@ -1,9 +1,14 @@
 #include "io/File.hpp"
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 namespace burnhope {
 
@@ -11,6 +16,39 @@ bool fileMapReadOnly(const char* path, MappedFile* out) {
     if (path == nullptr || out == nullptr) {
         return false;
     }
+    out->data = nullptr;
+    out->size = 0;
+    out->fd = -1;
+
+#if defined(_WIN32)
+    const HANDLE hFile = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    LARGE_INTEGER sz{};
+    if (!GetFileSizeEx(hFile, &sz) || sz.QuadPart < 0) {
+        CloseHandle(hFile);
+        return false;
+    }
+    if (sz.QuadPart == 0) {
+        CloseHandle(hFile);
+        return true;
+    }
+    const HANDLE hMap = CreateFileMappingA(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
+    if (hMap == nullptr) {
+        CloseHandle(hFile);
+        return false;
+    }
+    void* mapped = MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0);
+    CloseHandle(hMap);
+    CloseHandle(hFile);
+    if (mapped == nullptr) {
+        return false;
+    }
+    out->data = static_cast<const uint8_t*>(mapped);
+    out->size = static_cast<size_t>(sz.QuadPart);
+    return true;
+#else
     const int fd = ::open(path, O_RDONLY);
     if (fd < 0) {
         return false;
@@ -35,18 +73,25 @@ bool fileMapReadOnly(const char* path, MappedFile* out) {
     }
     out->data = static_cast<const uint8_t*>(mapped);
     return true;
+#endif
 }
 
 void fileUnmap(MappedFile* file) {
     if (file == nullptr) {
         return;
     }
+#if defined(_WIN32)
+    if (file->data != nullptr) {
+        UnmapViewOfFile(file->data);
+    }
+#else
     if (file->data != nullptr && file->size > 0) {
-        ::munmap(const_cast<uint8_t*>(file->data), static_cast<size_t>(file->size));
+        ::munmap(const_cast<uint8_t*>(file->data), file->size);
     }
     if (file->fd >= 0) {
         ::close(file->fd);
     }
+#endif
     file->data = nullptr;
     file->size = 0;
     file->fd = -1;

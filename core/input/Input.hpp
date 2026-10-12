@@ -27,6 +27,12 @@ enum class InputDevice : uint8_t {
     SystemTray,
 };
 
+enum class InputAxis : uint8_t {
+    LeftStick = 0,
+    RightStick = 1,
+    Triggers = 2,
+};
+
 enum class InputEventType : uint8_t {
     KeyDown = 0,
     KeyUp,
@@ -285,15 +291,19 @@ inline void inputApplyEvent(InputState& state, const InputEvent& event) {
     }
     if (type == InputEventType::AxisMotion) {
         InputPad& pad = state.pads[event.deviceId];
-        if (event.code == 1) {
+        switch (static_cast<InputAxis>(event.code)) {
+        case InputAxis::RightStick:
             pad.rx = event.axisX;
             pad.ry = event.axisY;
-        } else if (event.code == 2) {
+            break;
+        case InputAxis::Triggers:
             pad.triggerL = event.axisX;
             pad.triggerR = event.axisY;
-        } else {
+            break;
+        default:
             pad.lx = event.axisX;
             pad.ly = event.axisY;
+            break;
         }
         return;
     }

@@ -173,13 +173,16 @@ target_include_directories(bh_texcomp
 )
 target_compile_options(bh_texcomp PRIVATE -w)
 
-bh_module(image core/image/ImageFile.cpp)
+bh_module(image
+    core/image/ImageDecode.cpp
+    core/image/ImageCompress.cpp
+    core/image/ImageUpload.cpp)
 target_include_directories(bh_image PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Libraries/include
     ${CMAKE_CURRENT_SOURCE_DIR}/Libraries/ispc_texcomp
 )
 target_link_libraries(bh_image PUBLIC bh_rhi bh_texcomp bh_platform)
-set_source_files_properties(core/image/ImageFile.cpp PROPERTIES COMPILE_OPTIONS "-w")
+set_source_files_properties(core/image/ImageDecode.cpp PROPERTIES COMPILE_OPTIONS "-w")
 add_library(bh_gpu_scene INTERFACE)
 target_include_directories(bh_gpu_scene INTERFACE ${BH_INCLUDES} ${BH_ENGINE} ${BH_ENGINE}/include)
 target_compile_definitions(bh_gpu_scene INTERFACE ${BH_DEFS})
@@ -215,7 +218,7 @@ bh_module(ui
     core/ui/Font.cpp
     core/ui/Panel.cpp
     core/ui/Json.cpp
-    core/Json.cpp
+    core/io/Json.cpp
     core/ui/Layout.cpp
     core/ui/widget/Chrome.cpp
     core/ui/widget/Docking.cpp
@@ -258,7 +261,7 @@ bh_module(app
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
 target_link_libraries(bh_app PUBLIC bh_ui bh_files)
-target_link_libraries(bh_ui PUBLIC bh_image yogacore flecs_static Freetype::Freetype)
+target_link_libraries(bh_ui PUBLIC bh_io bh_image yogacore flecs_static Freetype::Freetype)
 target_compile_options(bh_ui PRIVATE -Wno-deprecated-declarations)
 target_compile_definitions(bh_ui PRIVATE
     "BH_UI_VERT=\"${CMAKE_CURRENT_BINARY_DIR}/shaders/ui.vert.spv\""

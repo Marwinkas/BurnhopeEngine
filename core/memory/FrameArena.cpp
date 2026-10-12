@@ -1,5 +1,7 @@
 #include "memory/FrameArena.hpp"
 
+#include "platform/Check.hpp"
+
 #include <cstdlib>
 
 namespace burnhope {
@@ -9,11 +11,12 @@ bool frameArenaCreate(FrameArena& a, std::size_t bytes) {
     if (bytes == 0) {
         return false;
     }
-    a.mem = static_cast<std::byte*>(std::aligned_alloc(64, bytes));
+    const std::size_t alignedBytes = (bytes + 63) & ~std::size_t(63);
+    a.mem = static_cast<std::byte*>(std::aligned_alloc(64, alignedBytes));
     if (a.mem == nullptr) {
         return false;
     }
-    a.cap = bytes;
+    a.cap = alignedBytes;
     a.off = 0;
     return true;
 }
@@ -30,6 +33,7 @@ void frameArenaReset(FrameArena& a) {
 }
 
 void* frameArenaAlloc(FrameArena& a, std::size_t bytes, std::size_t align) {
+    BH_ASSERT(align != 0 && (align & (align - 1)) == 0, "align must be a power of two");
     if (a.mem == nullptr || bytes == 0) {
         return nullptr;
     }
