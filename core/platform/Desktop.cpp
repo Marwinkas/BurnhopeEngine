@@ -3,12 +3,20 @@
 
 #include <cstdio>
 #include <cstring>
+
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <shellapi.h>
+#include <windows.h>
+#else
 #include <spawn.h>
 #include <sys/wait.h>
 
 extern char** environ;
+#endif
 
 namespace burnhope {
+#if !defined(_WIN32)
 namespace {
 
 void fileUri(const char* path, char* dst, int cap) {
@@ -45,6 +53,28 @@ bool spawnWait(const char* file, char* const* argv) {
 }
 
 } // namespace
+#endif
+
+#if defined(_WIN32)
+
+bool desktopOpen(const char* path) {
+    if (path == nullptr || path[0] == '\0') {
+        return false;
+    }
+    const HINSTANCE res = ShellExecuteA(nullptr, "open", path, nullptr, nullptr, SW_SHOWNORMAL);
+    return reinterpret_cast<INT_PTR>(res) > 32;
+}
+
+void desktopReveal(const char* const* paths, int count) {
+    if (paths == nullptr || count <= 0 || paths[0] == nullptr) {
+        return;
+    }
+    char param[540]{};
+    std::snprintf(param, sizeof(param), "/select,\"%s\"", paths[0]);
+    ShellExecuteA(nullptr, "open", "explorer.exe", param, nullptr, SW_SHOWNORMAL);
+}
+
+#else
 
 bool desktopOpen(const char* path) {
     if (path == nullptr || path[0] == '\0') {
@@ -100,5 +130,7 @@ void desktopReveal(const char* const* paths, int count) {
     pid_t pid = 0;
     posix_spawnp(&pid, "xdg-open", nullptr, nullptr, openArgv, environ);
 }
+
+#endif
 
 } // namespace burnhope

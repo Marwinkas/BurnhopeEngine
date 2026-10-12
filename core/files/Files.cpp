@@ -15,6 +15,7 @@
 #include "ui/widget/VirtualGrid.hpp"
 
 #include "ui/Domain.hpp"
+#include "ui/widget/Detail.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -55,8 +56,7 @@ Browser& book(UiState& s) {
         created->load();
         std::error_code ec;
         if (!fs::is_directory(fs::path(created->cwd), ec)) {
-            const char* home = std::getenv("HOME");
-            copyCap(created->cwd, 512, home != nullptr ? home : ".");
+            copyCap(created->cwd, 512, ".");
         }
         copyCap(created->hist[0], 512, created->cwd);
         created->histN = 1;
@@ -364,7 +364,10 @@ void mountFiles(UiState& s) {
     grip.heightMode = static_cast<uint8_t>(UiSize::Percent);
     grip.height = 100.0f;
     grip.shrink = 0.0f;
-    uiNode(s, mid, grip, ink(UiRole::Panel, 0.22f, 0.24f, 0.28f, -5));
+    const uint16_t gripNode = uiNode(s, mid, grip, paintToken(s.look, UiRole::Panel, UiToken::Muted, 0.0f));
+    if (gripNode != kUiNone) {
+        s.ent[gripNode].set<UiSplitter>({});
+    }
     UiFlex gridHost{};
     gridHost.grow = 1.0f;
     gridHost.shrink = 1.0f;
@@ -385,7 +388,7 @@ void mountFiles(UiState& s) {
     label.shrink = 1.0f;
     label.heightMode = static_cast<uint8_t>(UiSize::Px);
     label.height = 18.0f;
-    b.status = uiNode(s, foot, label, ink(UiRole::Label, 0.78f, 0.82f, 0.88f));
+    b.status = uiNode(s, foot, label, paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f));
     uiText(s, b.status, "");
     (void)uiSlider(s, foot, b.look.icon, 52.0f, 148.0f, onZoom, &s, 110.0f);
     UiFlex rename{};
@@ -395,7 +398,7 @@ void mountFiles(UiState& s) {
     rename.width = 160.0f;
     rename.height = 24.0f;
     rename.shrink = 0.0f;
-    b.wRename = uiNode(s, uiFiles(s).fileFrame, rename, ink(UiRole::Field, 0.10f, 0.11f, 0.14f));
+    b.wRename = uiNode(s, uiFiles(s).fileFrame, rename, paintToken(s.look, UiRole::Field, UiToken::Field, 4.0f));
     if (b.wRename != kUiNone) {
         s.ent[b.wRename].set<UiField>({});
         uiShow(s, b.wRename, false);
@@ -551,11 +554,11 @@ void filesMount(UiState& s) { mountFiles(s); }
 void filesClick(UiState& s, uint16_t id) {
     Browser& b = book(s);
     if (id == b.plus) {
-        onPlus(&s, id, -100);
+        onPlus(&s, id, 0);
     } else if (id == b.back) {
-        onBack(&s, id, -100);
+        onBack(&s, id, 0);
     } else if (id == b.up) {
-        onUp(&s, id, -100);
+        onUp(&s, id, 0);
     }
 }
 

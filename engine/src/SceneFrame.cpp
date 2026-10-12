@@ -1111,13 +1111,7 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
         (input.pointer.down & kPointerLeft) != 0 ? 1 : 0,
         (input.pointer.pressed & kPointerLeft) != 0 ? 1 : 0,
         (input.pointer.released & kPointerLeft) != 0 ? 1 : 0);
-    InputState state{};
-    std::memcpy(state.keyActive, input.keyDown, sizeof(state.keyActive));
-    state.mouseActive = input.pointer.down;
-    state.deltaX = input.pointer.dx;
-    state.deltaY = input.pointer.dy;
-    state.wheelDelta = input.wheel;
-    flyCamUpdate(scene->fly, state, dt);
+    flyCamUpdate(scene->fly, input, dt);
     if (dt > 1.0e-4f) {
         scene->fps = 1.0f / dt;
         scene->frameMs[scene->frameCursor % 128u] = dt * 1000.0f;

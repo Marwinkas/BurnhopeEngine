@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <type_traits>
 
@@ -90,7 +91,18 @@ inline void textPixelToClip(float x, float y, float viewW, float viewH, float& c
     clipY = 1.0f - y * (2.0f / height);
 }
 
-inline uint32_t textLayoutLine(const char* utf8, uint32_t len, const GlyphMetric* atlas, uint32_t atlasCount, float startX, float startY, float viewW, float viewH, GlyphInstance* outGlyphs, uint32_t maxGlyphs) {
+inline uint32_t textLayoutLine(
+    const char* utf8,
+    uint32_t len,
+    const GlyphMetric* atlas,
+    uint32_t atlasCount,
+    float startX,
+    float startY,
+    float viewW,
+    float viewH,
+    GlyphInstance* outGlyphs,
+    uint32_t maxGlyphs,
+    uint32_t color = 0xFFFFFFFFu) {
     if (outGlyphs == nullptr || maxGlyphs == 0) {
         return 0;
     }
@@ -106,13 +118,21 @@ inline uint32_t textLayoutLine(const char* utf8, uint32_t len, const GlyphMetric
         GlyphInstance& glyph = outGlyphs[written];
         const float left = pen + metric->bearingX;
         const float top = startY - metric->bearingY;
-        textPixelToClip(left, top, viewW, viewH, glyph.posMin[0], glyph.posMin[1]);
-        textPixelToClip(left + metric->width, top + metric->height, viewW, viewH, glyph.posMax[0], glyph.posMax[1]);
+        float cMinX = 0.0f;
+        float cMinY = 0.0f;
+        float cMaxX = 0.0f;
+        float cMaxY = 0.0f;
+        textPixelToClip(left, top, viewW, viewH, cMinX, cMinY);
+        textPixelToClip(left + metric->width, top + metric->height, viewW, viewH, cMaxX, cMaxY);
+        glyph.posMin[0] = std::min(cMinX, cMaxX);
+        glyph.posMin[1] = std::min(cMinY, cMaxY);
+        glyph.posMax[0] = std::max(cMinX, cMaxX);
+        glyph.posMax[1] = std::max(cMinY, cMaxY);
         glyph.uvMin[0] = metric->uvMin[0];
         glyph.uvMin[1] = metric->uvMin[1];
         glyph.uvMax[0] = metric->uvMax[0];
         glyph.uvMax[1] = metric->uvMax[1];
-        glyph.color = 0xFFFFFFFFu;
+        glyph.color = color;
         glyph.pxRange = kMsdfPxRange;
         glyph.pad[0] = 0;
         glyph.pad[1] = 0;

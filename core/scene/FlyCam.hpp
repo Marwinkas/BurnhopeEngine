@@ -1,6 +1,7 @@
 #pragma once
 
-#include "input/Input.hpp"
+#include "input/InputQueue.hpp"
+#include "platform/Input.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -63,6 +64,87 @@ inline void flyCamUpdate(FlyCam& cam, const InputState& input, float dt) {
     }
     if (input.wheelDelta != 0.0f) {
         cam.speed *= std::exp(input.wheelDelta * 0.12f);
+        if (cam.speed < 0.25f) {
+            cam.speed = 0.25f;
+        }
+        if (cam.speed > 80.0f) {
+            cam.speed = 80.0f;
+        }
+    }
+    float fx = 0.0f;
+    float fy = 0.0f;
+    float fz = 0.0f;
+    flyCamForward(cam, fx, fy, fz);
+    const float rx = -fz;
+    const float rz = fx;
+    float mx = 0.0f;
+    float my = 0.0f;
+    float mz = 0.0f;
+    if (inputKeyDown(input, kFlyKeyW)) {
+        mx += fx;
+        my += fy;
+        mz += fz;
+    }
+    if (inputKeyDown(input, kFlyKeyS)) {
+        mx -= fx;
+        my -= fy;
+        mz -= fz;
+    }
+    if (inputKeyDown(input, kFlyKeyD)) {
+        mx += rx;
+        mz += rz;
+    }
+    if (inputKeyDown(input, kFlyKeyA)) {
+        mx -= rx;
+        mz -= rz;
+    }
+    if (inputKeyDown(input, kFlyKeySpace) || inputKeyDown(input, kFlyKeyE)) {
+        my += 1.0f;
+    }
+    if (inputKeyDown(input, kFlyKeyShift) || inputKeyDown(input, kFlyKeyQ)) {
+        my -= 1.0f;
+    }
+    const float len = std::sqrt(mx * mx + my * my + mz * mz);
+    if (len > 1.0e-6f) {
+        const float s = cam.speed * dt / len;
+        cam.eye[0] += mx * s;
+        cam.eye[1] += my * s;
+        cam.eye[2] += mz * s;
+    }
+}
+
+inline void flyCamUpdate(FlyCam& cam, const InputFrame& input, float dt) {
+    if (dt < 0.0f) {
+        dt = 0.0f;
+    }
+    if ((input.pointer.down & kPointerRight) != 0) {
+        float dx = input.pointer.dx;
+        float dy = input.pointer.dy;
+        constexpr float kMax = 240.0f;
+        if (dx > kMax) {
+            dx = kMax;
+        }
+        if (dx < -kMax) {
+            dx = -kMax;
+        }
+        if (dy > kMax) {
+            dy = kMax;
+        }
+        if (dy < -kMax) {
+            dy = -kMax;
+        }
+        cam.yaw += dx * 0.004f;
+        cam.pitch -= dy * 0.004f;
+    }
+    constexpr float kLimit = 1.553343f;
+    if (cam.pitch > kLimit) {
+        cam.pitch = kLimit;
+    }
+    if (cam.pitch < -kLimit) {
+        cam.pitch = -kLimit;
+    }
+    if (input.wheel != 0.0f) {
+        cam.speed *= std::exp(input.wheel * 0.12f);
         if (cam.speed < 0.25f) {
             cam.speed = 0.25f;
         }

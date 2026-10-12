@@ -1,5 +1,6 @@
 #include "image/ImageCompress.hpp"
 
+#include "Str.hpp"
 #include "rhi/Barrier.hpp"
 #include "rhi/DescriptorHeap.hpp"
 #include "rhi/GpuBuffer.hpp"
@@ -147,7 +148,7 @@ bool gpuCompressBlocks(
 
     ShaderExt* cs = nullptr;
     for (uint32_t i = 0; i < 8; ++i) {
-        if (keep.path[i] == spvPath) {
+        if (keep.path[i] == spvPath || (keep.path[i] != nullptr && strSame(keep.path[i], spvPath))) {
             cs = &keep.shader[i];
             break;
         }

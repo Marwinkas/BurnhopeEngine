@@ -665,7 +665,7 @@ bool hostTick(Host& host) {
     if (!live) {
         platformSleep(32);
     } else if (host.primary >= 0) {
-        platformPace(host.view[host.primary].frame.hz);
+        platformPace(host.view[host.primary].frame.hz, host.paceNext);
     }
     return true;
 }

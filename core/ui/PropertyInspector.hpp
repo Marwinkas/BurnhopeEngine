@@ -1,6 +1,6 @@
 #pragma once
 
-#include "input/Input.hpp"
+#include "input/InputQueue.hpp"
 
 #include <cstdint>
 #include <cstdio>

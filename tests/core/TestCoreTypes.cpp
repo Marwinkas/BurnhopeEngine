@@ -3,7 +3,7 @@
 
 #include "anim/Animation.hpp"
 #include "time/Time.hpp"
-#include "input/Input.hpp"
+#include "input/InputQueue.hpp"
 #include "color/Color.hpp"
 #include "doc/Document.hpp"
 #include "wasm/WasmHost.hpp"

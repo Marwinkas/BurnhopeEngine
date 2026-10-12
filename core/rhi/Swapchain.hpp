@@ -7,6 +7,7 @@
 namespace burnhope {
 
 constexpr uint32_t kFramesInFlight = 2;
+constexpr uint32_t kMaxSwapchainImages = 8;
 
 // 0 ждёт кадр (FIFO), 1 mailbox, 2 без ожидания, 3 FIFO relaxed. Нет режима — остаётся FIFO.
 enum class Present : uint8_t { Vsync = 0, Mailbox = 1, Immediate = 2, Relaxed = 3 };
@@ -33,12 +34,12 @@ struct Swapchain {
     VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     VkExtent2D extent{};
     uint32_t imageCount = 0;
-    VkImage images[8]{};
-    VkImageView views[8]{};
+    VkImage images[kMaxSwapchainImages]{};
+    VkImageView views[kMaxSwapchainImages]{};
     // 1 after this image has been presented. The next acquire is PRESENT_SRC, not UNDEFINED.
-    uint8_t presented[8]{};
+    uint8_t presented[kMaxSwapchainImages]{};
     // 1 after swapchainBegin moved this image to COLOR_ATTACHMENT this frame.
-    uint8_t inColor[8]{};
+    uint8_t inColor[kMaxSwapchainImages]{};
 
     VkCommandBuffer cmd[kFramesInFlight]{};
     // Холст. Сцена его не пишет. Сабмит идёт следом за буфером сцены.
@@ -46,7 +47,7 @@ struct Swapchain {
     VkSemaphore acquireSem[kFramesInFlight]{};
     // Сцена сигналит, холст ждёт. Иначе тонмап с LOAD_CLEAR может лечь поверх уже нарисованного UI.
     VkSemaphore uiSem[kFramesInFlight]{};
-    VkSemaphore renderSem[8]{};
+    VkSemaphore renderSem[kMaxSwapchainImages]{};
     VkFence flightFence[kFramesInFlight]{};
     VkSemaphore orderSem = VK_NULL_HANDLE;
     uint64_t orderValue = 0;

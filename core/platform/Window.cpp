@@ -518,38 +518,29 @@ void platformSleep(int ms) {
     }
 }
 
-uint64_t platformCounter() {
-    return SDL_GetPerformanceCounter();
-}
-
-uint64_t platformFrequency() {
-    return SDL_GetPerformanceFrequency();
-}
-
-void platformPace(int hz) {
+void platformPace(int hz, uint64_t& nextTick) {
     if (hz <= 0) {
         return;
     }
-    static uint64_t next = 0;
     const uint64_t freq = SDL_GetPerformanceFrequency();
     const uint64_t now = SDL_GetPerformanceCounter();
     const uint64_t step = freq / static_cast<uint64_t>(hz);
     if (step == 0) {
         return;
     }
-    if (next == 0 || next + step * 4 < now) {
-        next = now + step;
+    if (nextTick == 0 || nextTick + step * 4 < now) {
+        nextTick = now + step;
         return;
     }
-    if (now < next) {
-        const double ms = 1000.0 * static_cast<double>(next - now) / static_cast<double>(freq);
+    if (now < nextTick) {
+        const double ms = 1000.0 * static_cast<double>(nextTick - now) / static_cast<double>(freq);
         if (ms > 2.0) {
             SDL_Delay(static_cast<Uint32>(ms - 1.5));
         }
-        while (SDL_GetPerformanceCounter() < next) {
+        while (SDL_GetPerformanceCounter() < nextTick) {
         }
     }
-    next += step;
+    nextTick += step;
 }
 
 void windowClipboardSet(const char* text) {
@@ -564,10 +555,6 @@ bool windowClipboardGet(char* out, int cap) {
         SDL_free(clip);
     }
     return clip != nullptr;
-}
-
-float platformSeconds() {
-    return static_cast<float>(SDL_GetTicks()) * 0.001f;
 }
 
 const char* platformError() {
@@ -747,6 +734,11 @@ void windowEvent(Window& w, const SDL_Event& e, bool primary) {
                 w.input.cut = 1;
             } else if (e.key.key == SDLK_V && ctrl) {
                 w.input.pasteOn = 1;
+                char* clip = SDL_GetClipboardText();
+                copyText(w.input.paste, static_cast<int>(sizeof(w.input.paste)), w.input.pasteLen, clip);
+                if (clip != nullptr) {
+                    SDL_free(clip);
+                }
             } else if (e.key.key == SDLK_Z && ctrl) {
                 if (shift) {
                     w.input.redo = 1;
@@ -904,13 +896,6 @@ void windowFinish(Window& w) {
     if (wasMiddle && !middle) {
         w.input.pointer.released |= kPointerMiddle;
     }
-    uint8_t pasteLen = 0;
-    (void)windowClipboardGet(w.input.paste, static_cast<int>(sizeof(w.input.paste)));
-    pasteLen = 0;
-    while (w.input.paste[pasteLen] != '\0' && pasteLen < 95) {
-        ++pasteLen;
-    }
-    w.input.pasteLen = pasteLen;
 }
 
 void windowsPump(Window** list, int count) {

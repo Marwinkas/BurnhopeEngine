@@ -3,6 +3,7 @@
 #include "gfx/Light.hpp"
 #include "gfx/MeshletBuilder.hpp"
 #include "platform/Jobs.hpp"
+#include "platform/PlatformUtil.hpp"
 
 #include <assimp/GltfMaterial.h>
 #include <assimp/Importer.hpp>
@@ -37,21 +38,53 @@ const char* fileNameOf(const char* path) {
     return slash;
 }
 
-bool texOnDisk(const char* file) {
+struct TexSearch {
+    char modelDir[320]{};
+    bool hasModelDir = false;
+};
+
+bool fileReadable(const char* path) {
+    if (path == nullptr || path[0] == '\0') {
+        return false;
+    }
+    std::FILE* f = std::fopen(path, "rb");
+    if (f == nullptr) {
+        return false;
+    }
+    std::fclose(f);
+    return true;
+}
+
+void texSearchFromFbx(const char* fbxPath, TexSearch& out) {
+    out.hasModelDir = pathParent(fbxPath, out.modelDir, sizeof(out.modelDir));
+}
+
+bool texOnDisk(const TexSearch& search, const char* file) {
     if (file == nullptr || file[0] == '\0') {
         return false;
     }
-    const char* roots[] = {"testscene/assets/bistro", "testscene/Textures", "emeraldcity/Textures"};
-    char path[320];
-    for (const char* root : roots) {
-        std::snprintf(path, sizeof(path), "%s/%s", root, file);
-        std::FILE* f = std::fopen(path, "rb");
-        if (f != nullptr) {
-            std::fclose(f);
-            return true;
-        }
+    if (fileReadable(file)) {
+        return true;
     }
-    return false;
+    if (!search.hasModelDir) {
+        return false;
+    }
+    char path[320];
+    std::snprintf(path, sizeof(path), "%s/%s", search.modelDir, file);
+    if (fileReadable(path)) {
+        return true;
+    }
+    const char* base = fileNameOf(file);
+    std::snprintf(path, sizeof(path), "%s/%s", search.modelDir, base);
+    if (fileReadable(path)) {
+        return true;
+    }
+    std::snprintf(path, sizeof(path), "%s/Textures/%s", search.modelDir, base);
+    if (fileReadable(path)) {
+        return true;
+    }
+    std::snprintf(path, sizeof(path), "%s/Textures/%s", search.modelDir, file);
+    return fileReadable(path);
 }
 
 void siblingFile(const char* albedo, const char* kind, char* out, size_t cap) {
@@ -79,19 +112,13 @@ void siblingFile(const char* albedo, const char* kind, char* out, size_t cap) {
     std::snprintf(out, cap, "%.*s_%s%s", static_cast<int>(head), albedo, kind, dot);
 }
 
-uint32_t textureSlot(std::vector<SceneTexName>& names, const char* path, char pack) {
+uint32_t textureSlot(std::vector<SceneTexName>& names, const char* path) {
     const char* file = fileNameOf(path);
     if (file[0] == '\0') {
         return 0;
     }
-    char stored[64];
-    if (pack != 0) {
-        std::snprintf(stored, sizeof(stored), "%c/%s", pack, file);
-    } else {
-        std::snprintf(stored, sizeof(stored), "%s", file);
-    }
     for (uint32_t i = 1; i < names.size(); ++i) {
-        if (std::strcmp(names[i].file, stored) == 0) {
+        if (std::strcmp(names[i].file, file) == 0) {
             return i;
         }
     }
@@ -99,7 +126,7 @@ uint32_t textureSlot(std::vector<SceneTexName>& names, const char* path, char pa
         return 0;
     }
     SceneTexName name{};
-    std::snprintf(name.file, sizeof(name.file), "%s", stored);
+    std::snprintf(name.file, sizeof(name.file), "%s", file);
     names.push_back(name);
     return static_cast<uint32_t>(names.size() - 1);
 }
@@ -327,14 +354,14 @@ aiMatrix4x4 nodeWorld(const aiNode* node, const aiMatrix4x4& parent, const aiStr
     return world;
 }
 
-bool appendBistro(
+bool appendSceneMeshes(
     const aiScene* scene,
     const char* label,
+    const TexSearch& texSearch,
     std::vector<MaterialGpuData>& materials,
     std::vector<SceneTexName>& textures,
     std::vector<LightGpuData>& lights,
-    MeshletBuild& build,
-    char pack) {
+    MeshletBuild& build) {
     const uint32_t materialBase = static_cast<uint32_t>(materials.size());
     const uint32_t localCount = scene->mNumMaterials > 0 ? scene->mNumMaterials : 1u;
     materials.resize(materialBase + localCount);
@@ -366,7 +393,7 @@ bool appendBistro(
         if (mat->GetTexture(aiTextureType_BASE_COLOR, 0, &tex) != AI_SUCCESS) {
             mat->GetTexture(aiTextureType_DIFFUSE, 0, &tex);
         }
-        dst.albedoTexIndex = textureSlot(textures, tex.C_Str(), pack);
+        dst.albedoTexIndex = textureSlot(textures, tex.C_Str());
         aiTextureMapping mapping = aiTextureMapping_UV;
         mat->GetTexture(aiTextureType_BASE_COLOR, 0, &tex, &mapping);
         if (mapping == aiTextureMapping_BOX || mapping == aiTextureMapping_OTHER) {
@@ -381,25 +408,25 @@ bool appendBistro(
         }
         char extra[96];
         siblingFile(fileNameOf(tex.C_Str()), "Normal", extra, sizeof(extra));
-        if (texOnDisk(extra)) {
-            dst.normalTexIndex = textureSlot(textures, extra, pack);
+        if (texOnDisk(texSearch, extra)) {
+            dst.normalTexIndex = textureSlot(textures, extra);
         }
         aiString nrmMap;
         if (mat->GetTexture(aiTextureType_NORMALS, 0, &nrmMap) == AI_SUCCESS) {
-            dst.normalTexIndex = textureSlot(textures, nrmMap.C_Str(), pack);
+            dst.normalTexIndex = textureSlot(textures, nrmMap.C_Str());
         }
         siblingFile(fileNameOf(tex.C_Str()), "Height", extra, sizeof(extra));
-        if (texOnDisk(extra)) {
-            dst.pad[0] = textureSlot(textures, extra, pack);
+        if (texOnDisk(texSearch, extra)) {
+            dst.pad[0] = textureSlot(textures, extra);
         }
         siblingFile(fileNameOf(tex.C_Str()), "Specular", extra, sizeof(extra));
-        if (texOnDisk(extra)) {
-            dst.ormTexIndex = textureSlot(textures, extra, pack);
+        if (texOnDisk(texSearch, extra)) {
+            dst.ormTexIndex = textureSlot(textures, extra);
             dst.flags |= 4u;
         }
         siblingFile(fileNameOf(tex.C_Str()), "Emissive", extra, sizeof(extra));
-        if (texOnDisk(extra)) {
-            dst.emissiveTexIndex = textureSlot(textures, extra, pack);
+        if (texOnDisk(texSearch, extra)) {
+            dst.emissiveTexIndex = textureSlot(textures, extra);
             dst.emissiveIntensity = 1.0f;
         }
         aiString ormName;
@@ -407,7 +434,7 @@ bool appendBistro(
             || mat->GetTexture(aiTextureType_METALNESS, 0, &ormName) == AI_SUCCESS
             || mat->GetTexture(aiTextureType_DIFFUSE_ROUGHNESS, 0, &ormName) == AI_SUCCESS
             || mat->GetTexture(aiTextureType_UNKNOWN, 0, &ormName) == AI_SUCCESS) {
-            dst.ormTexIndex = textureSlot(textures, ormName.C_Str(), pack);
+            dst.ormTexIndex = textureSlot(textures, ormName.C_Str());
             dst.flags |= 4u;
         }
     }
@@ -487,7 +514,7 @@ bool appendBistro(
         for (uint32_t lod = 1; lod <= 3 && level.size() >= 12; ++lod) {
             const uint32_t triCount = static_cast<uint32_t>(level.size() / 3);
             const uint32_t chunks = (triCount + kSimTris - 1u) / kSimTris;
-            std::fprintf(stderr, "bistro %s mesh %u lod %u  tris %u  jobs %u  sloppy %d  threads %d\n",
+            std::fprintf(stderr, "scene import: %s mesh %u lod %u  tris %u  jobs %u  sloppy %d  threads %d\n",
                 label, m + 1u, lod, triCount, chunks, sloppy ? 1 : 0, jobsWorkerCount());
             std::vector<SimChunk> parts(chunks);
             std::vector<Job> jobs(chunks);
@@ -531,7 +558,7 @@ bool appendBistro(
                 build.instances[i].pad[1] = group | 0x80000000u | (maxLod << 28);
             }
         }
-        std::fprintf(stderr, "bistro %s mesh %u/%u  meshlets %zu\n", label, m + 1u, scene->mNumMeshes, build.meshlets.size());
+        std::fprintf(stderr, "scene import: %s mesh %u/%u  meshlets %zu\n", label, m + 1u, scene->mNumMeshes, build.meshlets.size());
     }
     if (scene->mLights != nullptr) {
         for (unsigned i = 0; i < scene->mNumLights && lights.size() < kLightCap; ++i) {
@@ -555,7 +582,7 @@ bool appendBistro(
                 pushLight(lights, src, world * src->mPosition, aiMatrix3x3(world) * src->mDirection, crowd);
             }
         }
-        std::fprintf(stderr, "bistro %s lights %zu\n", label, lights.size());
+        std::fprintf(stderr, "scene import: %s lights %zu\n", label, lights.size());
     }
     return true;
 }
@@ -592,19 +619,9 @@ bool sceneImportFbxList(const char* const* fbxPaths, uint32_t count, const char*
             std::fprintf(stderr, "assimp: %s\n", importer.GetErrorString());
             continue;
         }
-        char pack = 0;
-        if (std::strstr(fbxPaths[file], "main_sponza") != nullptr) {
-            pack = 'a';
-        } else if (std::strstr(fbxPaths[file], "pkg_a_curtains") != nullptr) {
-            pack = 'b';
-        } else if (std::strstr(fbxPaths[file], "pkg_b_ivy") != nullptr) {
-            pack = 'c';
-        } else if (std::strstr(fbxPaths[file], "pkg_c_trees") != nullptr) {
-            pack = 'd';
-        } else if (std::strstr(fbxPaths[file], "pkg_d_10k_candles") != nullptr) {
-            pack = 'e';
-        }
-        if (!appendBistro(scene, label, materials, textures, lights, build, pack)) {
+        TexSearch texSearch{};
+        texSearchFromFbx(fbxPaths[file], texSearch);
+        if (!appendSceneMeshes(scene, label, texSearch, materials, textures, lights, build)) {
             return false;
         }
     }

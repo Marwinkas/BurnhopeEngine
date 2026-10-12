@@ -71,6 +71,8 @@ static_assert(std::is_trivially_copyable_v<SceneBlobInfo>);
 static_assert(sizeof(SceneBlobInfo) == 32);
 static_assert(sizeof(SceneTexName) == 64);
 
+constexpr uint32_t kSceneBlobTypeHash = assetHash("SceneBlob");
+
 inline uint32_t sceneIndexBytes(uint32_t indexCount) {
     const uint32_t raw = indexCount * static_cast<uint32_t>(sizeof(uint32_t));
     return (raw + 15u) & ~15u;
@@ -86,7 +88,7 @@ inline bool sceneBlobView(const uint8_t* mapped, size_t size, SceneBlobView* out
     }
     AssetHeader header{};
     std::memcpy(&header, mapped, sizeof(header));
-    if (header.magic != kAssetMagic || header.version != 9 || header.typeHash != assetHash("BistroScene")) {
+    if (header.magic != kAssetMagic || header.version != 9 || header.typeHash != kSceneBlobTypeHash) {
         return false;
     }
     if (size < sizeof(AssetHeader) + header.dataSize) {
@@ -172,7 +174,7 @@ inline bool sceneBlobWrite(
     AssetHeader header{};
     header.magic = kAssetMagic;
     header.version = 9;
-    header.typeHash = assetHash("BistroScene");
+    header.typeHash = kSceneBlobTypeHash;
     header.dataSize = static_cast<uint32_t>(payload);
     const bool wrote = std::fwrite(&header, sizeof(header), 1, file) == 1
         && std::fwrite(&info, sizeof(info), 1, file) == 1

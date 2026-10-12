@@ -1,3 +1,4 @@
+#include "Str.hpp"
 #include "ui/Domain.hpp"
 #include "ui/widget/Docking.hpp"
 #include "ui/widget/Detail.hpp"
@@ -22,16 +23,8 @@ bool uiListen(UiState& s, UiValueFn fn, void* user) {
 
 UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
     s.ateWheel = 0;
-    s.pasteBufLen = in.pasteLen < 95 ? in.pasteLen : 95;
-    for (uint8_t i = 0; i < s.pasteBufLen; ++i) {
-        s.pasteBuf[i] = in.paste[i];
-    }
-    s.pasteBuf[s.pasteBufLen] = '\0';
-    s.imeLen = in.editingLen < 63 ? in.editingLen : 63;
-    for (uint8_t i = 0; i < s.imeLen; ++i) {
-        s.ime[i] = in.editing[i];
-    }
-    s.ime[s.imeLen] = '\0';
+    s.pasteBufLen = static_cast<uint8_t>(strCopyCap(s.pasteBuf, sizeof(s.pasteBuf), in.paste));
+    s.imeLen = static_cast<uint8_t>(strCopyCap(s.ime, sizeof(s.ime), in.editing));
     const uint16_t hit = hitTest(s, in.pointer.x, in.pointer.y);
     if (hit != s.hovered) {
         s.hovered = hit;

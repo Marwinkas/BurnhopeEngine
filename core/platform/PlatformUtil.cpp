@@ -1,5 +1,6 @@
 #include "platform/PlatformUtil.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -47,12 +48,36 @@ bool platformCachePath(char* dst, size_t cap, const char* fileName) {
             return false;
         }
     }
+#if defined(_WIN32)
+    const char* appData = std::getenv("LOCALAPPDATA");
+    if (appData == nullptr || appData[0] == '\0') {
+        appData = std::getenv("USERPROFILE");
+    }
+    if (appData == nullptr || appData[0] == '\0') {
+        appData = ".";
+    }
+    const int wrote = std::snprintf(dst, cap, "%s/Burnhope/%s", appData, fileName);
+#else
     const char* home = std::getenv("HOME");
     if (home == nullptr || home[0] == '\0') {
         home = ".";
     }
     const int wrote = std::snprintf(dst, cap, "%s/.cache/%s", home, fileName);
+#endif
     return wrote > 0 && static_cast<size_t>(wrote) < cap;
+}
+
+uint64_t platformCounter() {
+    return static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+}
+
+uint64_t platformFrequency() {
+    return static_cast<uint64_t>(std::chrono::steady_clock::period::den) / static_cast<uint64_t>(std::chrono::steady_clock::period::num);
+}
+
+float platformSeconds() {
+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
+    return std::chrono::duration<float>(now).count();
 }
 
 } // namespace burnhope

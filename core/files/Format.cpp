@@ -1,5 +1,7 @@
 #include "files/Format.hpp"
 
+#include "platform/PlatformUtil.hpp"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -17,16 +19,14 @@ void joinPath(char* dst, int cap, const char* dir, const char* name) {
 }
 
 void parentOf(const char* path, char* dst, int cap) {
-    copyCap(dst, cap, path);
-    char* slash = std::strrchr(dst, '/');
-    if (slash == nullptr) {
+    if (dst == nullptr || cap <= 0) {
         return;
     }
-    if (slash == dst) {
-        slash[1] = '\0';
+    if (path == nullptr) {
+        dst[0] = '\0';
         return;
     }
-    *slash = '\0';
+    pathParent(path, dst, static_cast<size_t>(cap));
 }
 
 void uniquePath(char* dst, int cap, const char* dir, const char* stem, const char* ext) {
@@ -42,7 +42,7 @@ void uniquePath(char* dst, int cap, const char* dir, const char* stem, const cha
 void splitStem(const char* name, char* stem, int stemCap, char* ext, int extCap) {
     const char* dot = std::strrchr(name, '.');
     if (dot == nullptr || dot == name) {
-        copyCap(stem, stemCap, name);
+        strCopyCap(stem, stemCap > 0 ? static_cast<size_t>(stemCap) : 0, name);
         ext[0] = '\0';
         return;
     }
@@ -53,7 +53,7 @@ void splitStem(const char* name, char* stem, int stemCap, char* ext, int extCap)
         ++i;
     }
     stem[i] = '\0';
-    copyCap(ext, extCap, dot);
+    strCopyCap(ext, extCap > 0 ? static_cast<size_t>(extCap) : 0, dot);
 }
 
 int fileKind(const char* name, int isDir) {
@@ -65,24 +65,24 @@ int fileKind(const char* name, int isDir) {
         return 0;
     }
     char ext[12]{};
-    copyCap(ext, 12, dot);
+    strCopyCap(ext, sizeof(ext), dot);
     for (char* p = ext; *p != '\0'; ++p) {
         if (*p >= 'A' && *p <= 'Z') {
             *p = static_cast<char>(*p - 'A' + 'a');
         }
     }
-    if (std::strcmp(ext, ".png") == 0 || std::strcmp(ext, ".jpg") == 0 || std::strcmp(ext, ".jpeg") == 0
-        || std::strcmp(ext, ".gif") == 0 || std::strcmp(ext, ".bmp") == 0 || std::strcmp(ext, ".tga") == 0
-        || std::strcmp(ext, ".hdr") == 0 || std::strcmp(ext, ".psd") == 0) {
+    if (strSame(ext, ".png") || strSame(ext, ".jpg") || strSame(ext, ".jpeg")
+        || strSame(ext, ".gif") || strSame(ext, ".bmp") || strSame(ext, ".tga")
+        || strSame(ext, ".hdr") || strSame(ext, ".psd")) {
         return 2;
     }
-    if (std::strcmp(ext, ".txt") == 0 || std::strcmp(ext, ".md") == 0 || std::strcmp(ext, ".json") == 0
-        || std::strcmp(ext, ".cpp") == 0 || std::strcmp(ext, ".hpp") == 0 || std::strcmp(ext, ".h") == 0
-        || std::strcmp(ext, ".slang") == 0 || std::strcmp(ext, ".cmake") == 0) {
+    if (strSame(ext, ".txt") || strSame(ext, ".md") || strSame(ext, ".json")
+        || strSame(ext, ".cpp") || strSame(ext, ".hpp") || strSame(ext, ".h")
+        || strSame(ext, ".slang") || strSame(ext, ".cmake")) {
         return 3;
     }
-    if (std::strcmp(ext, ".wav") == 0 || std::strcmp(ext, ".ogg") == 0 || std::strcmp(ext, ".mp3") == 0
-        || std::strcmp(ext, ".flac") == 0) {
+    if (strSame(ext, ".wav") || strSame(ext, ".ogg") || strSame(ext, ".mp3")
+        || strSame(ext, ".flac")) {
         return 4;
     }
     return 0;

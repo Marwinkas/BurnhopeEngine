@@ -1,6 +1,7 @@
 #include "files/Model.hpp"
 #include "files/Format.hpp"
 #include "platform/Desktop.hpp"
+#include "platform/PlatformUtil.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -13,15 +14,6 @@ namespace burnhope {
 namespace fs = std::filesystem;
 
 namespace {
-
-void cachePath(char* dst, int cap) {
-    dst[0] = '\0';
-    const char* home = std::getenv("HOME");
-    if (home == nullptr) {
-        return;
-    }
-    std::snprintf(dst, static_cast<size_t>(cap), "%s/.cache/burnhope-files.txt", home);
-}
 
 bool searchHit(const FileModel& model, const char* name) {
     if (model.search[0] == '\0') {
@@ -152,9 +144,8 @@ bool FileModel::underRoot(const char* path) const {
 }
 
 void FileModel::save() const {
-    char path[640]{};
-    cachePath(path, 640);
-    if (path[0] == '\0') {
+    char path[512]{};
+    if (!platformCachePath(path, sizeof(path), "burnhope-files.txt")) {
         return;
     }
     std::FILE* file = std::fopen(path, "w");
@@ -169,9 +160,8 @@ void FileModel::save() const {
 }
 
 void FileModel::load() {
-    char path[640]{};
-    cachePath(path, 640);
-    std::FILE* file = path[0] != '\0' ? std::fopen(path, "r") : nullptr;
+    char path[512]{};
+    std::FILE* file = platformCachePath(path, sizeof(path), "burnhope-files.txt") ? std::fopen(path, "r") : nullptr;
     if (file != nullptr) {
         char line[640]{};
         while (std::fgets(line, sizeof(line), file) != nullptr) {
@@ -189,14 +179,7 @@ void FileModel::load() {
         std::fclose(file);
     }
     if (cwd[0] == '\0') {
-        const char* home = std::getenv("HOME");
-        copyCap(cwd, 512, home != nullptr ? home : ".");
-    }
-    if (favN == 0) {
-        const char* home = std::getenv("HOME");
-        if (home != nullptr && favN < kFavCap) {
-            copyCap(fav[favN++], 512, home);
-        }
+        copyCap(cwd, 512, ".");
     }
 }
 

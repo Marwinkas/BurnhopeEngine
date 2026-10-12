@@ -5,7 +5,12 @@
 
 #include <renderdoc_app.h>
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 #include <cstring>
 #include <vector>
 
@@ -758,6 +763,18 @@ void rhiCaptureToggle() {
     static RENDERDOC_API_1_6_0* api = nullptr;
     static bool open = false;
     if (api == nullptr) {
+#if defined(_WIN32)
+        if (lib == nullptr) {
+            lib = reinterpret_cast<void*>(GetModuleHandleA("renderdoc.dll"));
+            if (lib == nullptr) {
+                lib = reinterpret_cast<void*>(LoadLibraryA("renderdoc.dll"));
+            }
+        }
+        if (lib == nullptr) {
+            return;
+        }
+        auto get = reinterpret_cast<GetApi>(GetProcAddress(reinterpret_cast<HMODULE>(lib), "RENDERDOC_GetAPI"));
+#else
         if (lib == nullptr) {
             lib = dlopen("librenderdoc.so", RTLD_NOW | RTLD_NOLOAD);
             if (lib == nullptr) {
@@ -768,6 +785,7 @@ void rhiCaptureToggle() {
             return;
         }
         auto get = reinterpret_cast<GetApi>(dlsym(lib, "RENDERDOC_GetAPI"));
+#endif
         if (get == nullptr || get(eRENDERDOC_API_Version_1_6_0, reinterpret_cast<void**>(&api)) != 1 || api == nullptr) {
             return;
         }

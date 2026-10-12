@@ -75,17 +75,13 @@ inline bool docDelete(Document& doc, uint32_t pos, uint32_t length) {
     if (pos > doc.length || length > doc.length - pos) {
         return false;
     }
-    char saved[kUndoPool];
     if (length > kUndoPool) {
         return false;
     }
-    if (length > 0) {
-        std::memcpy(saved, doc.text + pos, length);
-    }
-    if (!docSplice(doc, pos, length, nullptr, 0)) {
+    if (!docRemember(doc, kUndoDelete, pos, doc.text + pos, length)) {
         return false;
     }
-    return docRemember(doc, kUndoDelete, pos, saved, length);
+    return docSplice(doc, pos, length, nullptr, 0);
 }
 
 inline bool docApply(Document& doc, const UndoRecord& rec, bool undo) {

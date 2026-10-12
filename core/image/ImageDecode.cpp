@@ -1,5 +1,7 @@
 #include "image/ImageDecode.hpp"
 
+#include "io/File.hpp"
+
 #include <spdlog/spdlog.h>
 
 #include <cstdint>
@@ -7,7 +9,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <vector>
 
 #define STBI_NO_STDIO
 #define STB_IMAGE_IMPLEMENTATION
@@ -17,27 +18,6 @@ namespace burnhope {
 namespace {
 
 constexpr uint32_t kMaxEdge = 4096;
-
-bool readFile(const char* path, std::vector<uint8_t>& out) {
-    std::FILE* file = std::fopen(path, "rb");
-    if (file == nullptr) {
-        return false;
-    }
-    if (std::fseek(file, 0, SEEK_END) != 0) {
-        std::fclose(file);
-        return false;
-    }
-    const long size = std::ftell(file);
-    if (size <= 0 || size > 64 * 1024 * 1024) {
-        std::fclose(file);
-        return false;
-    }
-    std::rewind(file);
-    out.resize(static_cast<size_t>(size));
-    const size_t n = std::fread(out.data(), 1, out.size(), file);
-    std::fclose(file);
-    return n == out.size();
-}
 
 bool isGif(const uint8_t* data, size_t n) {
     return n >= 6 && data[0] == 'G' && data[1] == 'I' && data[2] == 'F';
@@ -66,19 +46,22 @@ bool imageLoadFile(ImageCpu& img, const char* path) {
     if (path == nullptr || path[0] == '\0') {
         return false;
     }
-    std::vector<uint8_t> file;
-    if (!readFile(path, file)) {
+    MappedFile file{};
+    if (!fileMapReadOnly(path, &file) || file.data == nullptr || file.size == 0 || file.size > 64u * 1024u * 1024u) {
+        fileUnmap(&file);
         spdlog::error("image read failed: {}", path);
         return false;
     }
+    const int fileBytes = static_cast<int>(file.size);
     int w = 0;
     int h = 0;
     int comp = 0;
     int frames = 1;
     int* delays = nullptr;
     stbi_uc* pixels = nullptr;
-    if (stbi_is_hdr_from_memory(file.data(), static_cast<int>(file.size())) != 0) {
-        float* hdr = stbi_loadf_from_memory(file.data(), static_cast<int>(file.size()), &w, &h, &comp, 3);
+    if (stbi_is_hdr_from_memory(file.data, fileBytes) != 0) {
+        float* hdr = stbi_loadf_from_memory(file.data, fileBytes, &w, &h, &comp, 3);
+        fileUnmap(&file);
         if (hdr == nullptr || w <= 0 || h <= 0) {
             spdlog::error("hdr decode failed: {} ({})", path, stbi_failure_reason());
             std::free(hdr);
@@ -97,13 +80,14 @@ bool imageLoadFile(ImageCpu& img, const char* path) {
         img.delayMs[0] = 100;
         return true;
     }
-    if (isGif(file.data(), file.size())) {
+    if (isGif(file.data, file.size)) {
         int z = 0;
-        pixels = stbi_load_gif_from_memory(file.data(), static_cast<int>(file.size()), &delays, &w, &h, &z, &comp, 4);
+        pixels = stbi_load_gif_from_memory(file.data, fileBytes, &delays, &w, &h, &z, &comp, 4);
         frames = z;
     } else {
-        pixels = stbi_load_from_memory(file.data(), static_cast<int>(file.size()), &w, &h, &comp, 4);
+        pixels = stbi_load_from_memory(file.data, fileBytes, &w, &h, &comp, 4);
     }
+    fileUnmap(&file);
     if (pixels == nullptr || w <= 0 || h <= 0 || frames <= 0) {
         spdlog::error("image decode failed: {} ({})", path, stbi_failure_reason());
         std::free(delays);

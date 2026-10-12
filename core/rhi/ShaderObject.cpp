@@ -1,39 +1,21 @@
 #include "rhi/ShaderObject.hpp"
 
+#include "io/File.hpp"
 #include "platform/Check.hpp"
 
 #include <spdlog/spdlog.h>
 
-#include <cstdio>
-#include <vector>
-
 namespace burnhope {
-namespace {
-
-bool readSpv(const char* path, std::vector<uint32_t>& out) {
-    FILE* f = std::fopen(path, "rb");
-    if (f == nullptr) {
-        spdlog::error("SPIR-V missing: {}", path);
-        return false;
-    }
-    std::fseek(f, 0, SEEK_END);
-    const long bytes = std::ftell(f);
-    std::rewind(f);
-    if (bytes <= 0 || (bytes % 4) != 0) {
-        std::fclose(f);
-        return false;
-    }
-    out.resize(static_cast<size_t>(bytes) / 4);
-    const size_t n = std::fread(out.data(), 1, static_cast<size_t>(bytes), f);
-    std::fclose(f);
-    return n == static_cast<size_t>(bytes);
-}
-
-} // namespace
 
 bool shaderCreate(Device& d, const ShaderCreateDesc& desc, ShaderExt& out) {
-    std::vector<uint32_t> spirv;
-    if (desc.path == nullptr || !readSpv(desc.path, spirv)) {
+    MappedFile mapped{};
+    if (desc.path == nullptr || !fileMapReadOnly(desc.path, &mapped)) {
+        spdlog::error("SPIR-V missing or cannot map: {}", desc.path != nullptr ? desc.path : "null");
+        return false;
+    }
+    if (mapped.size == 0 || (mapped.size % 4) != 0) {
+        fileUnmap(&mapped);
+        spdlog::error("SPIR-V size is not a multiple of 4: {}", desc.path);
         return false;
     }
 
@@ -63,14 +45,15 @@ bool shaderCreate(Device& d, const ShaderCreateDesc& desc, ShaderExt& out) {
         .stage = desc.stage,
         .nextStage = desc.nextStage,
         .codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT,
-        .codeSize = spirv.size() * sizeof(uint32_t),
-        .pCode = spirv.data(),
+        .codeSize = mapped.size,
+        .pCode = reinterpret_cast<const uint32_t*>(mapped.data),
         .pName = desc.entry != nullptr ? desc.entry : "main",
         .pushConstantRangeCount = desc.pushBytes > 0 ? 1u : 0u,
         .pPushConstantRanges = desc.pushBytes > 0 ? &pushRange : nullptr,
     };
 
     const VkResult r = vkCreateShadersEXT(d.device, 1, &ci, nullptr, &out.handle);
+    fileUnmap(&mapped);
     if (r != VK_SUCCESS) {
         spdlog::error("vkCreateShadersEXT {} failed: {}", desc.path, static_cast<int>(r));
         return false;
@@ -189,31 +172,32 @@ void cmdSetGraphicsDynamic(
     }
     VkBool32 blend[kMaxColorAttachments]{};
     for (uint32_t i = 0; i < colorAttCount; ++i) {
-        blend[i] = (i == 0 && alphaBlend) ? VK_TRUE : VK_FALSE;
+        blend[i] = (i == 0 && (alphaBlend || blendMode != BlendMode::None)) ? VK_TRUE : VK_FALSE;
     }
     vkCmdSetColorBlendEnableEXT(cmd, 0, colorAttCount, blend);
     VkColorBlendEquationEXT eq{};
     eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
     eq.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
     if (blendMode == BlendMode::Alpha) {
-        eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        eq.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
         eq.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
     } else if (blendMode == BlendMode::Premultiplied) {
         eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-        eq.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        eq.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
     } else if (blendMode == BlendMode::Additive) {
+        eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        eq.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    } else if (blendMode == BlendMode::Multiply) {
         eq.srcColorBlendFactor = VK_BLEND_FACTOR_DST_COLOR;
         eq.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-    } else if (blendMode == BlendMode::Multiply) {
-        eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-        eq.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
     } else if (alphaBlend) {
         eq.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
         eq.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
     }
     eq.colorBlendOp = VK_BLEND_OP_ADD;
-    eq.srcAlphaBlendFactor = alphaBlend ? VK_BLEND_FACTOR_SRC_ALPHA : VK_BLEND_FACTOR_ONE;
-    eq.dstAlphaBlendFactor = alphaBlend ? VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA : VK_BLEND_FACTOR_ZERO;
+    const bool isBlending = alphaBlend || blendMode != BlendMode::None;
+    eq.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    eq.dstAlphaBlendFactor = isBlending ? VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA : VK_BLEND_FACTOR_ZERO;
     eq.alphaBlendOp = VK_BLEND_OP_ADD;
     VkColorBlendEquationEXT eqs[kMaxColorAttachments]{};
     const VkColorComponentFlags write = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT

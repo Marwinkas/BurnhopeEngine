@@ -1,7 +1,7 @@
 #include "rhi/Swapchain.hpp"
 #include "rhi/Barrier.hpp"
+#include "platform/PlatformUtil.hpp"
 #include "platform/Trace.hpp"
-#include "platform/Window.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -145,7 +145,7 @@ bool swapchainCreate(Swapchain& sc, Device& d, VkSurfaceKHR surface, uint32_t w,
     }
 
     vkGetSwapchainImagesKHR(d.device, sc.handle, &sc.imageCount, nullptr);
-    if (sc.imageCount > 8) {
+    if (sc.imageCount > kMaxSwapchainImages) {
         spdlog::error("swapchain imageCount {}", sc.imageCount);
         return false;
     }
@@ -392,7 +392,7 @@ void swapchainToPresent(Swapchain& sc, const FrameContext& fc) {
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE);
-    if (fc.imageIndex < 8) {
+    if (fc.imageIndex < kMaxSwapchainImages) {
         sc.presented[fc.imageIndex] = 1;
         sc.inColor[fc.imageIndex] = 0;
     }

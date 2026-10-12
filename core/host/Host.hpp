@@ -65,6 +65,7 @@ struct Host {
     bool ready = false;
     float clock = 0.0f;
     float frameDt = 0.0f;
+    uint64_t paceNext = 0;
     HostReleaseFn releaseGpu = nullptr;
     void* releaseUser = nullptr;
 };
