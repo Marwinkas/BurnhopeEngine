@@ -1,7 +1,6 @@
 #pragma once
 
 #include "rhi/DeviceCaps.hpp"
-#include "platform/Window.hpp"
 
 #include <volk.h>
 #include <vk_mem_alloc.h>
@@ -51,8 +50,9 @@ struct Device {
 void deviceMarkLost(Device& d, const char* where, int32_t result);
 [[nodiscard]] uint64_t deviceMemoryUsed(const Device& d);
 
-[[nodiscard]] bool deviceCreate(Device& d, Window& window);
-[[nodiscard]] bool deviceCreateSurface(Device& d, Window& window, VkSurfaceKHR& out);
+[[nodiscard]] bool deviceCreateInstance(Device& d);
+[[nodiscard]] bool deviceCreate(Device& d, VkSurfaceKHR surface);
+[[nodiscard]] bool deviceCreateSurface(Device& d, VkSurfaceKHR surface, VkSurfaceKHR& out);
 void deviceDestroy(Device& d);
 void deviceDumpCaps(const Device& d);
 void deviceName(Device& d, uint64_t handle, VkObjectType type, const char* name);

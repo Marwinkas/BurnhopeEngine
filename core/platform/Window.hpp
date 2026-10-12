@@ -1,5 +1,7 @@
 #pragma once
 
+#include <volk.h>
+
 #include <cstdint>
 
 struct SDL_Window;
@@ -178,6 +180,7 @@ struct Window {
     float dpi = 1;
     float dpiApplied = 1;
     bool dpiChanged = false;
+    bool hidden = false;
     bool focused = true;
     bool relOn = false;
     // Кадр, когда захват только включился: прыжок курсора в центр не крутит взгляд.
@@ -251,17 +254,7 @@ void windowApply(Window& w, const WindowCommand& command);
 
 void windowText(Window& w, bool on);
 void windowTextArea(Window& w, int x, int y, int width, int height);
-void actionBind(const char* name, int scancode, uint8_t mods);
-void actionBindChord(const char* name, int scancode, uint8_t mods, uint8_t trigger, uint8_t mouse, uint8_t kind, uint8_t context);
-[[nodiscard]] bool actionEdge(const InputFrame& in, const char* name);
-[[nodiscard]] bool actionHeld(const InputFrame& in, const char* name);
-[[nodiscard]] bool actionReleased(const InputFrame& in, const char* name);
-[[nodiscard]] float actionAxis(const InputFrame& in, const char* name);
-void actionPush(uint8_t context);
-void actionPop();
-void actionListen(const char* name);
-[[nodiscard]] bool actionSave(const char* path);
-[[nodiscard]] bool actionLoad(const char* path);
+[[nodiscard]] bool windowCreateSurface(Window& w, VkInstance instance, VkSurfaceKHR& out);
 void platformSleep(int ms);
 void platformPace(int hz);
 [[nodiscard]] uint64_t platformCounter();

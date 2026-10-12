@@ -1,5 +1,7 @@
 #include "rhi/ShaderObject.hpp"
 
+#include "platform/Check.hpp"
+
 #include <spdlog/spdlog.h>
 
 #include <cstdio>
@@ -144,7 +146,7 @@ void cmdSetGraphicsDynamic(
     uint32_t colorAttCount,
     bool depthTest,
     bool alphaBlend,
-    uint8_t blendMode,
+    BlendMode blendMode,
     bool reverseDepth) {
     const VkViewport vp{
         .x = 0.0f,
@@ -181,21 +183,28 @@ void cmdSetGraphicsDynamic(
     if (colorAttCount == 0) {
         return;
     }
-    VkBool32 blend[2]{alphaBlend ? VK_TRUE : VK_FALSE, VK_FALSE};
+    BH_ASSERT(colorAttCount <= kMaxColorAttachments, "color attachment count");
+    if (colorAttCount > kMaxColorAttachments) {
+        return;
+    }
+    VkBool32 blend[kMaxColorAttachments]{};
+    for (uint32_t i = 0; i < colorAttCount; ++i) {
+        blend[i] = (i == 0 && alphaBlend) ? VK_TRUE : VK_FALSE;
+    }
     vkCmdSetColorBlendEnableEXT(cmd, 0, colorAttCount, blend);
     VkColorBlendEquationEXT eq{};
     eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
     eq.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-    if (blendMode == 1) {
+    if (blendMode == BlendMode::Alpha) {
         eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
         eq.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    } else if (blendMode == 2) {
+    } else if (blendMode == BlendMode::Premultiplied) {
         eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
         eq.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    } else if (blendMode == 3) {
+    } else if (blendMode == BlendMode::Additive) {
         eq.srcColorBlendFactor = VK_BLEND_FACTOR_DST_COLOR;
         eq.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-    } else if (blendMode == 4) {
+    } else if (blendMode == BlendMode::Multiply) {
         eq.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
         eq.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
     } else if (alphaBlend) {
@@ -206,11 +215,15 @@ void cmdSetGraphicsDynamic(
     eq.srcAlphaBlendFactor = alphaBlend ? VK_BLEND_FACTOR_SRC_ALPHA : VK_BLEND_FACTOR_ONE;
     eq.dstAlphaBlendFactor = alphaBlend ? VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA : VK_BLEND_FACTOR_ZERO;
     eq.alphaBlendOp = VK_BLEND_OP_ADD;
-    VkColorBlendEquationEXT eqs[2]{eq, eq};
-    vkCmdSetColorBlendEquationEXT(cmd, 0, colorAttCount, eqs);
+    VkColorBlendEquationEXT eqs[kMaxColorAttachments]{};
     const VkColorComponentFlags write = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
         | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    VkColorComponentFlags masks[2]{write, write};
+    VkColorComponentFlags masks[kMaxColorAttachments]{};
+    for (uint32_t i = 0; i < colorAttCount; ++i) {
+        eqs[i] = eq;
+        masks[i] = write;
+    }
+    vkCmdSetColorBlendEquationEXT(cmd, 0, colorAttCount, eqs);
     vkCmdSetColorWriteMaskEXT(cmd, 0, colorAttCount, masks);
 }
 

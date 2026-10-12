@@ -4,6 +4,10 @@
 
 namespace burnhope {
 
+constexpr uint32_t kMaxColorAttachments = 8;
+
+enum class BlendMode : uint8_t { None = 0, Alpha = 1, Premultiplied = 2, Additive = 3, Multiply = 4 };
+
 struct ShaderExt {
     VkShaderEXT handle = VK_NULL_HANDLE;
     VkShaderStageFlagBits stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -41,7 +45,7 @@ void cmdSetGraphicsDynamic(
     uint32_t colorAttCount,
     bool depthTest,
     bool alphaBlend = false,
-    uint8_t blendMode = 0,
+    BlendMode blendMode = BlendMode::None,
     bool reverseDepth = false);
 
 } // namespace burnhope

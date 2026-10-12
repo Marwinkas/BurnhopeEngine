@@ -10,44 +10,56 @@
 namespace burnhope {
 namespace {
 
-struct Pool {
-    std::vector<std::thread> workers;
-    std::mutex m;
-    std::condition_variable cv;
+struct Batch {
     Job* jobs = nullptr;
     int count = 0;
     std::atomic<int> next{0};
     std::atomic<int> remaining{0};
-    uint64_t generation = 0;
+    std::atomic<int> engaged{0};
+};
+
+struct Pool {
+    std::vector<std::thread> workers;
+    std::mutex m;
+    std::condition_variable cv;
+    std::condition_variable idle;
+    Batch* current = nullptr;
+    uint64_t epoch = 0;
     bool stop = false;
 
-    void runSlice(Job* j, int n) {
+    static void runSlice(Batch& batch) {
         for (;;) {
-            const int i = next.fetch_add(1, std::memory_order_relaxed);
-            if (i >= n) {
+            const int i = batch.next.fetch_add(1, std::memory_order_relaxed);
+            if (i >= batch.count) {
                 break;
             }
-            j[i].fn(j[i].user);
-            remaining.fetch_sub(1, std::memory_order_acq_rel);
+            batch.jobs[i].fn(batch.jobs[i].user);
+            batch.remaining.fetch_sub(1, std::memory_order_acq_rel);
         }
     }
 
     void workerLoop() {
         uint64_t seen = 0;
         for (;;) {
-            Job* localJobs = nullptr;
-            int localCount = 0;
+            Batch* batch = nullptr;
             {
                 std::unique_lock<std::mutex> lk(m);
-                cv.wait(lk, [&] { return stop || generation != seen; });
-                if (stop) {
+                cv.wait(lk, [&] { return stop || epoch != seen; });
+                if (stop && current == nullptr) {
                     return;
                 }
-                seen = generation;
-                localJobs = jobs;
-                localCount = count;
+                seen = epoch;
+                batch = current;
+                if (batch != nullptr) {
+                    batch->engaged.fetch_add(1, std::memory_order_acq_rel);
+                }
             }
-            runSlice(localJobs, localCount);
+            if (batch == nullptr) {
+                continue;
+            }
+            runSlice(*batch);
+            batch->engaged.fetch_sub(1, std::memory_order_acq_rel);
+            idle.notify_all();
         }
     }
 
@@ -94,19 +106,28 @@ void jobsRunAndWait(Job* jobs, int count) {
         return;
     }
     Pool& p = pool();
+    Batch batch;
+    batch.jobs = jobs;
+    batch.count = count;
+    batch.next.store(0, std::memory_order_relaxed);
+    batch.remaining.store(count, std::memory_order_relaxed);
     {
-        std::lock_guard<std::mutex> lk(p.m);
-        p.jobs = jobs;
-        p.count = count;
-        p.next.store(0, std::memory_order_relaxed);
-        p.remaining.store(count, std::memory_order_relaxed);
-        p.generation += 1;
+        std::unique_lock<std::mutex> lk(p.m);
+        p.idle.wait(lk, [&] { return p.current == nullptr; });
+        p.current = &batch;
+        p.epoch += 1;
     }
     p.cv.notify_all();
-    p.runSlice(jobs, count);
-    while (p.remaining.load(std::memory_order_acquire) > 0) {
+    Pool::runSlice(batch);
+    while (batch.remaining.load(std::memory_order_acquire) > 0) {
         std::this_thread::yield();
     }
+    {
+        std::unique_lock<std::mutex> lk(p.m);
+        p.idle.wait(lk, [&] { return batch.engaged.load(std::memory_order_acquire) == 0; });
+        p.current = nullptr;
+    }
+    p.idle.notify_all();
 }
 
 } // namespace burnhope

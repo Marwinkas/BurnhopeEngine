@@ -178,7 +178,7 @@ void visPassRecord(VkCommandBuffer cmd, VkExtent2D extent, VisPass& p, const Vis
     VkClearValue depthClear{};
     depthClear.depthStencil.depth = 0.0f;
     RenderingPass rendering = beginRenderingColorDepth(cmd, extent, t.vis.image.view, t.depth.image.view, visClear, depthClear, !load);
-    cmdSetGraphicsDynamic(cmd, extent, 1, true, false, 0, true);
+    cmdSetGraphicsDynamic(cmd, extent, 1, true, false, BlendMode::None, true);
     // Same rhi/MeshDraw entry point as core/ui/Canvas.cpp — one registered draw per pass
     // (plan Фаза 1/5), no second mesh-shader dispatch path for engine/.
     meshDrawRecord(cmd, MeshDrawDesc{
@@ -213,7 +213,7 @@ void visShadowRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth,
         VkClearRect clearRect{bandRect, 0u, 1u};
         vkCmdClearAttachments(cmd, 1, &clear, 1, &clearRect);
     }
-    cmdSetGraphicsDynamic(cmd, extent, 0, true, false, 0, true);
+    cmdSetGraphicsDynamic(cmd, extent, 0, true, false, BlendMode::None, true);
     const VkViewport vp{0.0f, static_cast<float>(bandY), static_cast<float>(band), static_cast<float>(band), 0.0f, 1.0f};
     const VkRect2D scissor = bandRect;
     vkCmdSetViewportWithCount(cmd, 1, &vp);

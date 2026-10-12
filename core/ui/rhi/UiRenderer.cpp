@@ -244,7 +244,7 @@ void uiRendererRecord(VkCommandBuffer cmd, const UiRenderer& r, const Swapchain&
         vkCmdBeginDebugUtilsLabelEXT(cmd, &label);
     }
     if (primCount > 0) {
-        cmdSetGraphicsDynamic(cmd, sc.extent, 1, false, true, sc.asked.transparent ? 1 : 0);
+        cmdSetGraphicsDynamic(cmd, sc.extent, 1, false, true, sc.asked.transparent ? BlendMode::Alpha : BlendMode::None);
         const VkRect2D scissor{{0, 0}, sc.extent};
         vkCmdSetScissorWithCount(cmd, 1, &scissor);
         meshDrawRecord(cmd, MeshDrawDesc{

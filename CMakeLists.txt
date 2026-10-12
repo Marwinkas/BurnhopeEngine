@@ -105,6 +105,8 @@ bh_module(platform
     core/platform/Check.cpp
     core/platform/Jobs.cpp
     core/platform/Desktop.cpp
+    core/platform/PlatformUtil.cpp
+    core/platform/Action.cpp
 )
 set_source_files_properties(core/platform/Check.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions;-frtti")
 find_package(cpptrace CONFIG REQUIRED)
@@ -570,22 +572,27 @@ target_compile_definitions(BurnhopeEngine PRIVATE ${BH_DEFS}
 target_compile_options(BurnhopeEngine PRIVATE ${BH_OPTS})
 add_dependencies(BurnhopeEngine BurnhopeSpv UiSpv UiBin)
 
-add_executable(BurnhopeHostTick tests/HostTick.cpp)
-target_link_libraries(BurnhopeHostTick PRIVATE
-    bh_host bh_ui bh_image bh_rhi bh_memory bh_platform
+set(BH_TEST_SOURCES
+    tests/Main.cpp
+    tests/platform/TestPlatform.cpp
+    tests/rhi/TestRhiDraw.cpp
+    tests/rhi/TestRhiGolden.cpp
+    tests/rhi/TestRhiCompute.cpp
+    tests/core/TestCoreTypes.cpp
+    tests/gfx/TestGfxScene.cpp
+    tests/gfx/TestStreaming.cpp
+    tests/ui/TestUiLayout.cpp
+    tests/ui/TestUiWidgets.cpp
+    tests/ui/TestUiPrimitives.cpp
+    tests/ui/TestUiBinary.cpp
+    tests/tools/TestFileBrowser.cpp
+    tests/tools/TestEditorTools.cpp
+)
+add_executable(BurnhopeTest ${BH_TEST_SOURCES})
+target_link_libraries(BurnhopeTest PRIVATE
+    bh_host bh_files bh_ui bh_image bh_rhi bh_memory bh_platform bh_wasm bh_io
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads Freetype::Freetype
-)
-target_include_directories(BurnhopeHostTick PRIVATE ${BH_CORE} ${vma_SOURCE_DIR}/include)
-target_compile_definitions(BurnhopeHostTick PRIVATE ${BH_DEFS})
-target_compile_options(BurnhopeHostTick PRIVATE ${BH_OPTS})
-add_dependencies(BurnhopeHostTick UiSpv)
-
-add_executable(BurnhopeTest tests/Core.cpp)
-target_link_libraries(BurnhopeTest PRIVATE
-    bh_files bh_ui bh_image bh_rhi bh_memory bh_platform bh_wasm bh_io
-    yogacore flecs_static
-    SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
 target_include_directories(BurnhopeTest PRIVATE ${BH_CORE} ${BH_ENGINE} ${BH_ENGINE}/include ${vma_SOURCE_DIR}/include)
 target_compile_options(BurnhopeTest PRIVATE ${BH_OPTS})

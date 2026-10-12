@@ -1,4 +1,5 @@
 #include "platform/Window.hpp"
+#include "platform/PlatformUtil.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_dialog.h>
@@ -26,12 +27,10 @@ void loadDir() {
         return;
     }
     gDirLoaded = true;
-    const char* home = std::getenv("HOME");
-    if (home == nullptr) {
+    char path[640]{};
+    if (!platformCachePath(path, sizeof(path), "burnhope-dialog.txt")) {
         return;
     }
-    char path[640]{};
-    std::snprintf(path, sizeof(path), "%s/.cache/burnhope-dialog.txt", home);
     std::FILE* file = std::fopen(path, "r");
     if (file == nullptr) {
         return;
@@ -46,22 +45,13 @@ void loadDir() {
 }
 
 void rememberFolder(const char* file) {
-    const char* slash = std::strrchr(file, '/');
-    if (slash == nullptr || slash == file) {
-        return;
-    }
-    const size_t n = static_cast<size_t>(slash - file);
-    if (n >= sizeof(gDir)) {
-        return;
-    }
-    std::memcpy(gDir, file, n);
-    gDir[n] = '\0';
-    const char* home = std::getenv("HOME");
-    if (home == nullptr) {
+    if (!pathParent(file, gDir, sizeof(gDir))) {
         return;
     }
     char path[640]{};
-    std::snprintf(path, sizeof(path), "%s/.cache/burnhope-dialog.txt", home);
+    if (!platformCachePath(path, sizeof(path), "burnhope-dialog.txt")) {
+        return;
+    }
     std::FILE* out = std::fopen(path, "w");
     if (out == nullptr) {
         return;

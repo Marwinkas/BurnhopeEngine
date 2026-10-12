@@ -1,6 +1,7 @@
 #include "rhi/Swapchain.hpp"
 #include "rhi/Barrier.hpp"
 #include "platform/Trace.hpp"
+#include "platform/Window.hpp"
 
 #include <spdlog/spdlog.h>
 

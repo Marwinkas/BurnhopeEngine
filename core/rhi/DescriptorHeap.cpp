@@ -91,9 +91,11 @@ bool descriptorHeapsCreate(DescriptorHeaps& h, Device& d, HeapLayout layout) {
 
     const VkBufferUsageFlags heapUsage =
         VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    if (!gpuBufferCreate(h.resources, d, resourceSize, heapUsage, true)
-        || !gpuBufferCreate(h.resourcesFlight, d, resourceSize, heapUsage, true)
-        || !gpuBufferCreate(h.samplers, d, samplerSize, heapUsage, true)) {
+    bool buffersOk = gpuBufferCreate(h.samplers, d, samplerSize, heapUsage, true);
+    for (uint32_t i = 0; buffersOk && i < kFramesInFlight; ++i) {
+        buffersOk = gpuBufferCreate(h.resources[i], d, resourceSize, heapUsage, true);
+    }
+    if (!buffersOk) {
         spdlog::error("descriptor heap buffers failed");
         descriptorHeapsDestroy(h, d);
         return false;
@@ -111,8 +113,9 @@ bool descriptorHeapsCreate(DescriptorHeaps& h, Device& d, HeapLayout layout) {
 }
 
 void descriptorHeapsDestroy(DescriptorHeaps& h, Device& d) {
-    gpuBufferDestroy(h.resources, d);
-    gpuBufferDestroy(h.resourcesFlight, d);
+    for (uint32_t i = 0; i < kFramesInFlight; ++i) {
+        gpuBufferDestroy(h.resources[i], d);
+    }
     gpuBufferDestroy(h.samplers, d);
     h.writeResources = nullptr;
     h.writeSamplers = nullptr;
@@ -127,7 +130,7 @@ bool heapWriteBuffer(
     VkDescriptorType type,
     VkDeviceAddress address,
     VkDeviceSize size) {
-    if (h.resources.mapped == nullptr || h.writeResources == nullptr) {
+    if (h.resources[0].mapped == nullptr || h.writeResources == nullptr) {
         return false;
     }
     const VkDeviceAddressRangeEXT range{.address = address, .size = size};
@@ -137,13 +140,15 @@ bool heapWriteBuffer(
         .data = {.pAddressRange = &range},
     };
     const VkDeviceSize byteOff = heapBufOffset(h, slot);
-    VkHostAddressRangeEXT dest{
-        .address = static_cast<std::byte*>(h.resources.mapped) + byteOff,
-        .size = h.bufferDescSize,
-    };
-    VkResult r = h.writeResources(d.device, 1, &info, &dest);
-    if (r == VK_SUCCESS && h.resourcesFlight.mapped != nullptr) {
-        dest.address = static_cast<std::byte*>(h.resourcesFlight.mapped) + byteOff;
+    VkResult r = VK_SUCCESS;
+    for (uint32_t flight = 0; flight < kFramesInFlight && r == VK_SUCCESS; ++flight) {
+        if (h.resources[flight].mapped == nullptr) {
+            continue;
+        }
+        const VkHostAddressRangeEXT dest{
+            .address = static_cast<std::byte*>(h.resources[flight].mapped) + byteOff,
+            .size = h.bufferDescSize,
+        };
         r = h.writeResources(d.device, 1, &info, &dest);
     }
     if (r != VK_SUCCESS) {
@@ -161,7 +166,10 @@ bool heapWriteBufferFlight(
     VkDescriptorType type,
     VkDeviceAddress address,
     VkDeviceSize size) {
-    GpuBuffer& buf = flight == 1 ? h.resourcesFlight : h.resources;
+    if (flight >= kFramesInFlight) {
+        return false;
+    }
+    GpuBuffer& buf = h.resources[flight];
     if (buf.mapped == nullptr || h.writeResources == nullptr) {
         return false;
     }
@@ -193,7 +201,10 @@ bool heapWriteImageFlight(
     VkImageLayout layout,
     VkImageAspectFlags aspect,
     uint32_t mipLevels) {
-    GpuBuffer& buf = flight == 1 ? h.resourcesFlight : h.resources;
+    if (flight >= kFramesInFlight) {
+        return false;
+    }
+    GpuBuffer& buf = h.resources[flight];
     if (buf.mapped == nullptr || h.writeResources == nullptr || img.image == VK_NULL_HANDLE) {
         return false;
     }
@@ -238,13 +249,15 @@ bool heapWriteImage(
     VkImageLayout layout,
     VkImageAspectFlags aspect,
     uint32_t mipLevels) {
-    if (!heapWriteImageFlight(h, d, 0, slot, type, img, layout, aspect, mipLevels)) {
-        return false;
+    for (uint32_t flight = 0; flight < kFramesInFlight; ++flight) {
+        if (h.resources[flight].mapped == nullptr) {
+            continue;
+        }
+        if (!heapWriteImageFlight(h, d, flight, slot, type, img, layout, aspect, mipLevels)) {
+            return false;
+        }
     }
-    if (h.resourcesFlight.mapped == nullptr) {
-        return true;
-    }
-    return heapWriteImageFlight(h, d, 1, slot, type, img, layout, aspect, mipLevels);
+    return h.resources[0].mapped != nullptr;
 }
 
 bool heapWriteSampler(
@@ -268,7 +281,8 @@ bool heapWriteSampler(
 }
 
 void heapBind(VkCommandBuffer cmd, const DescriptorHeaps& h, uint32_t flight) {
-    const GpuBuffer& resBuf = flight == 1 && h.resourcesFlight.address != 0 ? h.resourcesFlight : h.resources;
+    const uint32_t slot = flight < kFramesInFlight ? flight : 0u;
+    const GpuBuffer& resBuf = h.resources[slot];
     const VkBindHeapInfoEXT res{
         .sType = VK_STRUCTURE_TYPE_BIND_HEAP_INFO_EXT,
         .heapRange = {.address = resBuf.address, .size = resBuf.size},

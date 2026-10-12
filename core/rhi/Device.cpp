@@ -2,8 +2,6 @@
 
 #include <SDL3/SDL_vulkan.h>
 #include <spdlog/spdlog.h>
-#include <spdlog/sinks/ringbuffer_sink.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
 
 #include <renderdoc_app.h>
 
@@ -15,6 +13,19 @@ namespace burnhope {
 namespace {
 
 constexpr const char* kValidationLayer = "VK_LAYER_KHRONOS_validation";
+
+bool instanceHasExt(const char* name) {
+    uint32_t count = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
+    std::vector<VkExtensionProperties> props(count);
+    vkEnumerateInstanceExtensionProperties(nullptr, &count, props.data());
+    for (const auto& e : props) {
+        if (std::strcmp(e.extensionName, name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
@@ -243,18 +254,18 @@ void deviceDumpCaps(const Device& d) {
     spdlog::info("============================");
 }
 
-bool deviceCreateSurface(Device& d, Window& window, VkSurfaceKHR& out) {
-    if (d.instance == VK_NULL_HANDLE || window.handle == nullptr) {
+bool deviceCreateSurface(Device& d, VkSurfaceKHR surface, VkSurfaceKHR& out) {
+    if (d.instance == VK_NULL_HANDLE || surface == VK_NULL_HANDLE) {
         return false;
     }
-    if (!SDL_Vulkan_CreateSurface(window.handle, d.instance, nullptr, &out)) {
-        spdlog::error("SDL_Vulkan_CreateSurface: {}", SDL_GetError());
-        return false;
-    }
+    out = surface;
     return true;
 }
 
-bool deviceCreate(Device& d, Window& window) {
+bool deviceCreateInstance(Device& d) {
+    if (d.instance != VK_NULL_HANDLE) {
+        return true;
+    }
     if (volkInitialize() != VK_SUCCESS) {
         spdlog::error("volkInitialize failed");
         return false;
@@ -348,10 +359,14 @@ bool deviceCreate(Device& d, Window& window) {
             spdlog::warn("debug messenger failed");
         }
     }
+    return true;
+}
 
-    if (!deviceCreateSurface(d, window, d.surface)) {
+bool deviceCreate(Device& d, VkSurfaceKHR surface) {
+    if (d.instance == VK_NULL_HANDLE || surface == VK_NULL_HANDLE) {
         return false;
     }
+    d.surface = surface;
 
     uint32_t physCount = 0;
     vkEnumeratePhysicalDevices(d.instance, &physCount, nullptr);
@@ -391,6 +406,8 @@ bool deviceCreate(Device& d, Window& window) {
     // Делаем caps правдивым до любого решения об enable: если пререквизит-расширение инстанса
     // не попал в список (например старый лоадер), фичу устройства включать нельзя — тогда это
     // не «обнаружено, но забыли включить» (баг maintenance6), а честное «недоступно».
+    const bool instSurfaceCaps2 = instanceHasExt(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME)
+        && instanceHasExt(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
     d.caps.swapchainMaintenance1 = d.caps.swapchainMaintenance1 && instSurfaceCaps2;
 
     d.heapProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_PROPERTIES_EXT;
@@ -625,17 +642,6 @@ bool deviceCreate(Device& d, Window& window) {
         return false;
     }
     volkLoadDevice(d.device);
-    static bool logs = false;
-    if (!logs) {
-        logs = true;
-        auto console = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-        auto ring = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(10000);
-        const char* channels[] = {"RHI", "UI", "INPUT", "HOST", "ECS"};
-        for (const char* name : channels) {
-            auto logger = std::make_shared<spdlog::logger>(name, spdlog::sinks_init_list{console, ring});
-            spdlog::register_logger(logger);
-        }
-    }
 
     vkGetDeviceQueue(d.device, d.caps.graphicsFamily, 0, &d.graphicsQueue);
     vkGetDeviceQueue(d.device, d.caps.presentFamily, 0, &d.presentQueue);

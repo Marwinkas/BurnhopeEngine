@@ -3,6 +3,7 @@
 #include "rhi/Device.hpp"
 #include "rhi/GpuBuffer.hpp"
 #include "rhi/GpuImage.hpp"
+#include "rhi/Swapchain.hpp"
 
 namespace burnhope {
 
@@ -15,8 +16,7 @@ struct HeapLayout {
 
 struct DescriptorHeaps {
     HeapLayout layout{};
-    GpuBuffer resources;
-    GpuBuffer resourcesFlight;
+    GpuBuffer resources[kFramesInFlight]{};
     GpuBuffer samplers;
     VkDeviceSize bufferDescSize = 0;
     VkDeviceSize imageDescSize = 0;

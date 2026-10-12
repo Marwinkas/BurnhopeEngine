@@ -1,11 +1,16 @@
 #include "host/Host.hpp"
 #include "files/Browser.hpp"
+#include "platform/Action.hpp"
 #include "platform/Jobs.hpp"
+#include "platform/PlatformUtil.hpp"
 #include "ui/Domain.hpp"
 #include "ui/State.hpp"
 
 #include <spdlog/spdlog.h>
+#include <spdlog/sinks/ringbuffer_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <cstdio>
+#include <memory>
 #include <cstdlib>
 #include <cstring>
 
@@ -215,6 +220,8 @@ void recordAndPresentView(DrawJobCtx& ctx) {
     Host& host = *ctx.host;
     HostView& view = host.view[ctx.slot];
     DrawJobResult& out = ctx.result;
+    // Hidden surfaces may never complete vkWaitForPresentKHR on some WSI backends.
+    const bool pacePresent = ctx.slot == host.primary && !view.window.hidden;
     if (view.window.pixelW == 0 || view.window.pixelH == 0) {
         return;
     }
@@ -307,7 +314,7 @@ void recordAndPresentView(DrawJobCtx& ctx) {
     }
     if (view.sceneRecord != nullptr && !hasCanvas) {
         swapchainToPresent(view.swap, frame);
-        if (!swapchainSubmitPresent(view.swap, host.device, frame, ctx.slot == host.primary)) {
+        if (!swapchainSubmitPresent(view.swap, host.device, frame, pacePresent)) {
             out.needsResize = true;
             return;
         }
@@ -334,7 +341,7 @@ void recordAndPresentView(DrawJobCtx& ctx) {
         canvasRecord(frame.cmd, view.canvas, view.swap, frame, sceneView);
     }
     swapchainToPresent(view.swap, frame);
-    if (!swapchainSubmitPresent(view.swap, host.device, frame, ctx.slot == host.primary)) {
+    if (!swapchainSubmitPresent(view.swap, host.device, frame, pacePresent)) {
         out.needsResize = true;
         return;
     }
@@ -429,13 +436,31 @@ const char* actionPath() {
     if (home == nullptr || home[0] == '\0') {
         return nullptr;
     }
-    std::snprintf(path, sizeof(path), "%s/.cache/burnhope-actions.txt", home);
+    if (!platformCachePath(path, sizeof(path), "burnhope-actions.txt")) {
+        return nullptr;
+    }
     return path;
 }
 
 } // namespace
 
+void hostLogChannels() {
+    static bool ready = false;
+    if (ready) {
+        return;
+    }
+    ready = true;
+    auto console = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    auto ring = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(10000);
+    const char* channels[] = {"RHI", "UI", "INPUT", "HOST", "ECS"};
+    for (const char* name : channels) {
+        auto logger = std::make_shared<spdlog::logger>(name, spdlog::sinks_init_list{console, ring});
+        spdlog::register_logger(logger);
+    }
+}
+
 bool hostInit(Host& host) {
+    hostLogChannels();
     if (!frameArenaCreate(host.arena, 1 * 1024 * 1024)) {
         spdlog::error("FrameArena 1MB failed");
         return false;
@@ -497,13 +522,18 @@ int hostOpen(Host& host, const ViewDesc& desc) {
     }
     const bool first = host.device.instance == VK_NULL_HANDLE;
     if (first) {
-        if (!deviceCreate(host.device, view.window)) {
+        VkSurfaceKHR surface = VK_NULL_HANDLE;
+        if (!deviceCreateInstance(host.device)
+            || !windowCreateSurface(view.window, host.device.instance, surface)
+            || !deviceCreate(host.device, surface)) {
             windowDestroy(view.window);
+            deviceDestroy(host.device);
             return -1;
         }
         view.surface = host.device.surface;
         host.primary = slot;
-    } else if (!deviceCreateSurface(host.device, view.window, view.surface)) {
+    } else if (!windowCreateSurface(view.window, host.device.instance, view.surface)
+        || !deviceCreateSurface(host.device, view.surface, view.surface)) {
         spdlog::error("surface failed: {}", platformError());
         windowDestroy(view.window);
         return -1;
@@ -601,7 +631,8 @@ bool restoreViewGpu(Host& host, int slot, bool ownsDeviceSurface) {
     HostView& view = host.view[slot];
     if (ownsDeviceSurface) {
         view.surface = host.device.surface;
-    } else if (!deviceCreateSurface(host.device, view.window, view.surface)) {
+    } else if (!windowCreateSurface(view.window, host.device.instance, view.surface)
+        || !deviceCreateSurface(host.device, view.surface, view.surface)) {
         spdlog::error("HOST recover surface failed {}", view.name);
         return false;
     }
@@ -645,7 +676,11 @@ bool hostRecover(Host& host) {
         }
     }
     spdlog::error("HOST recover 3: recreate logical device");
-    if (!deviceCreate(host.device, host.view[host.primary].window)) {
+    deviceDestroy(host.device);
+    VkSurfaceKHR surface = VK_NULL_HANDLE;
+    if (!deviceCreateInstance(host.device)
+        || !windowCreateSurface(host.view[host.primary].window, host.device.instance, surface)
+        || !deviceCreate(host.device, surface)) {
         spdlog::error("HOST recover: deviceCreate failed");
         return false;
     }

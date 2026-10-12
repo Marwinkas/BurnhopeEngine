@@ -1,42 +1,15 @@
 #include "platform/Desktop.hpp"
+#include "platform/PlatformUtil.hpp"
 
 #include <cstdio>
 #include <cstring>
 #include <spawn.h>
+#include <sys/wait.h>
 
 extern char** environ;
 
 namespace burnhope {
 namespace {
-
-void copyCap(char* dst, int cap, const char* src) {
-    int i = 0;
-    if (src != nullptr) {
-        while (src[i] != '\0' && i + 1 < cap) {
-            dst[i] = src[i];
-            ++i;
-        }
-    }
-    dst[i] = '\0';
-}
-
-void parentOf(const char* path, char* dst, int cap) {
-    copyCap(dst, cap, path);
-    char* slash = std::strrchr(dst, '/');
-    if (slash == nullptr) {
-        return;
-    }
-    if (slash == dst) {
-        slash[1] = '\0';
-        return;
-    }
-    *slash = '\0';
-}
-
-void spawnLine(const char* file, char* const* argv) {
-    pid_t pid = 0;
-    posix_spawnp(&pid, file, nullptr, nullptr, argv, environ);
-}
 
 void fileUri(const char* path, char* dst, int cap) {
     int n = 0;
@@ -59,6 +32,18 @@ void fileUri(const char* path, char* dst, int cap) {
     dst[n] = '\0';
 }
 
+bool spawnWait(const char* file, char* const* argv) {
+    pid_t pid = 0;
+    if (posix_spawnp(&pid, file, nullptr, nullptr, argv, environ) != 0) {
+        return false;
+    }
+    int status = 0;
+    if (waitpid(pid, &status, 0) != pid) {
+        return false;
+    }
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
 } // namespace
 
 bool desktopOpen(const char* path) {
@@ -66,7 +51,7 @@ bool desktopOpen(const char* path) {
         return false;
     }
     char storage[512]{};
-    copyCap(storage, 512, path);
+    strCopyCap(storage, sizeof(storage), path);
     char* argv[] = {const_cast<char*>("xdg-open"), storage, nullptr};
     pid_t pid = 0;
     return posix_spawnp(&pid, "xdg-open", nullptr, nullptr, argv, environ) == 0;
@@ -76,31 +61,44 @@ void desktopReveal(const char* const* paths, int count) {
     if (paths == nullptr || count <= 0 || paths[0] == nullptr) {
         return;
     }
+    char uris[8][640]{};
     char list[2048]{};
     int at = 0;
     const int n = count < 8 ? count : 8;
-    for (int i = 0; i < n && at + 8 < static_cast<int>(sizeof(list)); ++i) {
-        char uri[640]{};
-        fileUri(paths[i], uri, 640);
-        const int wrote = std::snprintf(list + at, sizeof(list) - static_cast<size_t>(at), "%s\"%s\"", i == 0 ? "" : ",", uri);
+    const char* head = "array:string:";
+    while (*head != '\0' && at + 1 < static_cast<int>(sizeof(list))) {
+        list[at++] = *head++;
+    }
+    list[at] = '\0';
+    for (int i = 0; i < n; ++i) {
+        fileUri(paths[i], uris[i], 640);
+        const int wrote = std::snprintf(list + at, sizeof(list) - static_cast<size_t>(at), "%s%s", i == 0 ? "" : ",", uris[i]);
         if (wrote < 0) {
             break;
         }
         at += wrote;
     }
-    char parent[512]{};
-    parentOf(paths[0], parent, 512);
-    char script[2400]{};
-    std::snprintf(
-        script,
-        sizeof(script),
-        "dbus-send --session --dest=org.freedesktop.FileManager1 --type=method_call "
-        "/org/freedesktop/FileManager1 org.freedesktop.FileManager1.ShowItems array:string:%s string:\"\" "
-        "|| xdg-open \"%s\"",
+    char* argv[] = {
+        const_cast<char*>("dbus-send"),
+        const_cast<char*>("--session"),
+        const_cast<char*>("--dest=org.freedesktop.FileManager1"),
+        const_cast<char*>("--type=method_call"),
+        const_cast<char*>("/org/freedesktop/FileManager1"),
+        const_cast<char*>("org.freedesktop.FileManager1.ShowItems"),
         list,
-        parent);
-    char* argv[] = {const_cast<char*>("sh"), const_cast<char*>("-c"), script, nullptr};
-    spawnLine("sh", argv);
+        const_cast<char*>("string:"),
+        nullptr,
+    };
+    if (spawnWait("dbus-send", argv)) {
+        return;
+    }
+    char parent[512]{};
+    if (!pathParent(paths[0], parent, sizeof(parent))) {
+        strCopyCap(parent, sizeof(parent), paths[0]);
+    }
+    char* openArgv[] = {const_cast<char*>("xdg-open"), parent, nullptr};
+    pid_t pid = 0;
+    posix_spawnp(&pid, "xdg-open", nullptr, nullptr, openArgv, environ);
 }
 
 } // namespace burnhope
