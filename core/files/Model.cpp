@@ -45,6 +45,50 @@ bool treeWasOpen(const char prev[][64], const uint8_t* prevOpen, int prevN, cons
     return false;
 }
 
+void packListed(FileModel& model, FileItem* fresh, int n) {
+    if (model.groupOn == 0) {
+        model.count = n;
+        for (int i = 0; i < n; ++i) {
+            model.items[i] = fresh[i];
+        }
+        return;
+    }
+    static const uint8_t keys[] = {1, 2, 3, 4, 0};
+    static const char* titles[] = {"Folders", "Images", "Text", "Audio", "Other"};
+    int out = 0;
+    for (int g = 0; g < 5; ++g) {
+        const uint8_t key = keys[g];
+        int hits = 0;
+        for (int i = 0; i < n; ++i) {
+            const bool dir = fresh[i].isDir != 0;
+            if (key == 1 ? dir : (!dir && fresh[i].kind == key)) {
+                ++hits;
+            }
+        }
+        if (hits == 0 || out >= kFileCap) {
+            continue;
+        }
+        FileItem& head = model.items[out++];
+        head = {};
+        head.isDir = 2;
+        head.kind = key;
+        const bool open = (model.groupOpen & static_cast<uint8_t>(1u << key)) != 0;
+        char title[64]{};
+        std::snprintf(title, sizeof(title), "%s  %s", open ? "v" : ">", titles[g]);
+        copyCap(head.name, 64, title);
+        if (!open) {
+            continue;
+        }
+        for (int i = 0; i < n && out < kFileCap; ++i) {
+            const bool dir = fresh[i].isDir != 0;
+            if (key == 1 ? dir : (!dir && fresh[i].kind == key)) {
+                model.items[out++] = fresh[i];
+            }
+        }
+    }
+    model.count = out;
+}
+
 void pushTreeDirs(FileModel& model, const char* abs, const char* rel, int depth, const char prev[][64], const uint8_t* prevOpen, int prevN) {
     if (depth > 3 || model.treeN >= kTreeCap) {
         return;
@@ -193,17 +237,16 @@ void FileModel::rebuildTree() {
     }
     treeN = 0;
     const char* base = root[0] != '\0' ? root : cwd;
-    pushTreeDirs(*this, base, "", 0, prev, prevOpen, prevN);
+    if (base[0] != '\0' && treeN < kTreeCap) {
+        tree[0][0] = '\0';
+        treeDepth[0] = 0;
+        treeOpen[0] = 1;
+        treeN = 1;
+        pushTreeDirs(*this, base, "", 1, prev, prevOpen, prevN);
+    }
 }
 
 void FileModel::reload() {
-    if (root[0] == '\0') {
-        count = 0;
-        total = 0;
-        treeN = 0;
-        status[0] = '\0';
-        return;
-    }
     FileItem fresh[kFileCap]{};
     int n = 0;
     int listed = 0;
@@ -257,20 +300,33 @@ void FileModel::reload() {
             if (!dir) {
                 fresh[n].bytes = static_cast<uint64_t>(ent.file_size(ignored));
             }
+            std::error_code timeEc;
+            const auto stamp = ent.last_write_time(timeEc);
+            if (!timeEc) {
+                const auto ticks = stamp.time_since_epoch().count();
+                fresh[n].mtime = ticks > 0 ? static_cast<uint64_t>(ticks) : 0;
+            }
             ++n;
         }
     }
-    std::sort(fresh, fresh + n, [](const FileItem& a, const FileItem& c) {
+    const int key = sortKey;
+    std::sort(fresh, fresh + n, [key](const FileItem& a, const FileItem& c) {
         if (a.isDir != c.isDir) {
             return a.isDir > c.isDir;
         }
+        if (key == 1 && a.bytes != c.bytes) {
+            return a.bytes < c.bytes;
+        }
+        if (key == 2 && a.kind != c.kind) {
+            return a.kind < c.kind;
+        }
+        if (key == 3 && a.mtime != c.mtime) {
+            return a.mtime > c.mtime;
+        }
         return std::strcmp(a.name, c.name) < 0;
     });
-    count = n;
     total = listed;
-    for (int i = 0; i < n; ++i) {
-        items[i] = fresh[i];
-    }
+    packListed(*this, fresh, n);
     if (scroll > count) {
         scroll = 0;
     }
@@ -340,7 +396,7 @@ void FileModel::selectedPaths(char out[][512], int cap, int& n) const {
 int FileModel::selectedCount() const {
     int n = 0;
     for (int i = 0; i < count; ++i) {
-        if (items[i].selected != 0) {
+        if (items[i].selected != 0 && items[i].isDir != 2) {
             ++n;
         }
     }
@@ -376,12 +432,18 @@ void FileModel::selectRange(int from, int to) {
     }
     clearSelection();
     for (int i = from; i <= to && i < count; ++i) {
+        if (items[i].isDir == 2) {
+            continue;
+        }
         items[i].selected = 1;
     }
 }
 
 void FileModel::selectAll() {
     for (int i = 0; i < count; ++i) {
+        if (items[i].isDir == 2) {
+            continue;
+        }
         items[i].selected = 1;
     }
 }
@@ -477,7 +539,7 @@ void FileModel::paste() {
 void FileModel::removeSelected() {
     int removed = 0;
     for (int i = 0; i < count; ++i) {
-        if (items[i].selected == 0) {
+        if (items[i].selected == 0 || items[i].isDir == 2) {
             continue;
         }
         char path[512]{};
@@ -640,9 +702,6 @@ bool FileModel::createFolder(char* created, int cap) {
 
 void FileModel::formatFoot(char* dst, int cap) const {
     dst[0] = '\0';
-    if (root[0] == '\0') {
-        return;
-    }
     int files = 0;
     int dirs = 0;
     uint64_t pickedBytes = 0;

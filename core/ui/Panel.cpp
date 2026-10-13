@@ -93,7 +93,6 @@ Panel Panel::button(const char* text, uint8_t icon) const {
     if (box.id < state->count) {
         if (auto* paint = state->ent[box.id].try_get_mut<UiPaint>()) {
             *paint = paintToken(state->look, UiRole::Button, UiToken::Button, state->look.radiusSm);
-            paint->tag = -1;
             paint->icon = icon;
         }
     }

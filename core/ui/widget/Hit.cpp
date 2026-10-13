@@ -57,6 +57,9 @@ uint16_t hitTest(const UiState& s, float x, float y) {
             if (p == nullptr) {
                 continue;
             }
+            if (s.ent[id].has<UiNoHit>()) {
+                continue; // Пропускаем нематериальные иконки!
+            }
             const auto role = static_cast<UiRole>(p->role);
             if (role == UiRole::Hidden || role == UiRole::Label || role == UiRole::Progress) {
                 continue;
@@ -67,6 +70,14 @@ uint16_t hitTest(const UiState& s, float x, float y) {
             }
             if (!insideParents(s, id, x, y)) {
                 continue;
+            }
+            if (role == UiRole::Button && p->icon != 0) {
+                const uint16_t parent = s.parentOf[id];
+                const UiPaint* host = parent < s.count ? s.ent[parent].try_get<UiPaint>() : nullptr;
+                if (host != nullptr
+                    && (host->role == static_cast<uint8_t>(UiRole::Button) || host->role == static_cast<uint8_t>(UiRole::Panel))) {
+                    continue;
+                }
             }
             bool hidden = false;
             for (uint16_t up = id; up != kUiNone && up < s.count; up = s.parentOf[up]) {

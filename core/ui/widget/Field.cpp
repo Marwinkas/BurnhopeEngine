@@ -759,21 +759,26 @@ bool uiFieldDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
         const float tg = hint ? s.look.muted[1] : field->text[1];
         const float tb = hint ? s.look.muted[2] : field->text[2];
         UiBox limit = inset;
+        bool outside = false;
         if (hasClip && ancestor.w > 1.0f && ancestor.h > 1.0f) {
             const float x0 = limit.x > ancestor.x ? limit.x : ancestor.x;
             const float y0 = limit.y > ancestor.y ? limit.y : ancestor.y;
             const float x1 = limit.x + limit.w < ancestor.x + ancestor.w ? limit.x + limit.w : ancestor.x + ancestor.w;
             const float y1 = limit.y + limit.h < ancestor.y + ancestor.h ? limit.y + limit.h : ancestor.y + ancestor.h;
-            if (x1 > x0 && y1 > y0) {
+            if (x1 - x0 < 1.0f || y1 - y0 < 1.0f) {
+                outside = true;
+            } else {
                 limit.x = x0;
                 limit.y = y0;
                 limit.w = x1 - x0;
                 limit.h = y1 - y0;
             }
         }
-        const TextRun run = textRun(s, *shown, inset);
-        if (run.lines > 0) {
-            n = uiEmitRun(s, dst, n, cap, run, tr, tg, tb, 1.0f, &limit);
+        if (!outside) {
+            const TextRun run = textRun(s, *shown, inset);
+            if (run.lines > 0) {
+                n = uiEmitRun(s, dst, n, cap, run, tr, tg, tb, 1.0f, &limit);
+            }
         }
     }
     return false;

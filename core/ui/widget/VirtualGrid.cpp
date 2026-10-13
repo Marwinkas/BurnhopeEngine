@@ -1,8 +1,10 @@
+#include "ui/widget/Button.hpp"
 #include "ui/widget/Detail.hpp"
-#include "ui/widget/Image.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/widget/VirtualGrid.hpp"
+
+#include <cmath>
 
 namespace burnhope {
 namespace {
@@ -17,34 +19,61 @@ void onCell(void* user, uint16_t id, int16_t) {
     if (grid == nullptr || index >= grid->count) {
         return;
     }
-    const bool again = grid->last == index;
-    grid->last = index;
+    const float dt = s->time - grid->lastClickTime;
+    const float dx = grid->pressX - grid->lastClickX;
+    const float dy = grid->pressY - grid->lastClickY;
+    const bool dbl = grid->lastClickIndex == index && id == grid->lastClickId && dt >= 0.0f && dt < 0.30f
+        && dx * dx + dy * dy < 16.0f;
+    grid->lastClickIndex = index;
+    grid->lastClickId = id;
+    grid->lastClickTime = s->time;
+    grid->lastClickX = grid->pressX;
+    grid->lastClickY = grid->pressY;
     if (grid->select != nullptr) {
         grid->select(grid->user, index, false);
     }
-    if (again && grid->activate != nullptr) {
+    if (dbl && grid->activate != nullptr) {
         grid->activate(grid->user, index);
     }
 }
 
 uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
-    UiFlex cell = px(itemW > 8.0f ? itemW - 8.0f : itemW, itemH > 8.0f ? itemH - 8.0f : itemH);
+    const float tile = itemW < itemH ? itemW : itemH;
+    UiFlex cell = px(tile > 12.0f ? tile - 4.0f : tile, tile > 12.0f ? tile - 4.0f : tile);
     cell.shrink = 0.0f;
     cell.direction = 0;
     cell.align = 1;
-    cell.justify = 2;
+    cell.justify = 1;
     cell.pad = 6.0f;
-    const uint16_t slot = spawn(s, inner, cell, paintToken(s.look, UiRole::Button, UiToken::Item, s.look.radiusSm));
+    cell.gap = 4.0f;
+    UiPaint ink = paintToken(s.look, UiRole::Button, UiToken::Item, s.look.radiusSm);
+    ink.a = 0.0f;
+    ink.borderW = 0.0f;
+    const uint16_t slot = spawn(s, inner, cell, ink);
     if (slot == kUiNone) {
         return slot;
     }
-    const uint16_t icon = uiIcon(s, slot, 0, 48.0f, 48.0f);
-    addText(s, slot, " ");
-    uiTextStyle(s, slot, 1, 1, 2, 0, 0, 1.0f);
-    if (icon != kUiNone) {
-        uiNodeMoveChild(s, slot, icon, 0);
+    UiButtonConfig glyph{};
+    const float iconSide = tile > 24.0f ? tile * 0.52f : 20.0f;
+    glyph.width = iconSide;
+    glyph.height = iconSide;
+    const uint16_t icon = uiButton(s, slot, glyph);
+    if (icon < s.count) {
+        if (auto* paint = s.ent[icon].try_get_mut<UiPaint>()) {
+            paint->a = 0.0f;
+            paint->borderW = 0.0f;
+            paint->icon = 4;
+        }
     }
-    s.ent[slot].set<UiParts>({icon, kUiNone, slot});
+    UiFlex lab{};
+    lab.self = 1;
+    lab.heightMode = static_cast<uint8_t>(UiSize::Px);
+    lab.height = 18.0f;
+    lab.shrink = 1.0f;
+    const uint16_t label = spawn(s, slot, lab, paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f));
+    addText(s, label, " ");
+    uiTextStyle(s, label, 1, 1, 1, 0, 0, 1.0f);
+    s.ent[slot].set<UiParts>({icon, kUiNone, label});
     uiBind(s, slot, onCell, &s);
     s.ent[slot].set<UiVirtRow>({});
     uiShow(s, slot, false);
@@ -77,7 +106,7 @@ uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& c
     grid.activate = cfg.onActivate;
     grid.user = cfg.user;
     s.ent[scroll].set<UiVirtualGrid>(grid);
-    s.ent[scroll].set<UiVirtualPool>({uiVirtualGridRefresh, uiGridContentH, 1});
+    s.ent[scroll].set<UiVirtualPool>({uiVirtualGridRefresh, uiGridContentH, 0});
     uiVirtualGridRefresh(s, scroll);
     return scroll;
 }
@@ -89,7 +118,10 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
         return;
     }
     const float viewW = s.box[id].w > 32.0f ? s.box[id].w - 16.0f : grid->itemW;
-    uint32_t rawCols = grid->itemW > 1.0f ? static_cast<uint32_t>(viewW / grid->itemW) : 1u;
+    uint32_t rawCols = 1u;
+    if (grid->list == 0 && grid->itemW > 1.0f) {
+        rawCols = static_cast<uint32_t>(viewW / grid->itemW);
+    }
     if (rawCols < 1u) {
         rawCols = 1u;
     }
@@ -113,26 +145,43 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
         if (!on) {
             continue;
         }
-        const uint32_t col = cols > 0 ? index % cols : 0;
-        const uint32_t row = cols > 0 ? index / cols : index;
+        const uint32_t col = grid->list != 0 || cols == 0 ? 0u : index % cols;
+        const uint32_t row = grid->list != 0 || cols == 0 ? index : index / cols;
+        const bool rows = grid->list != 0;
+        const float square = grid->itemW;
+        const float tileW = rows ? (viewW > 24.0f ? viewW : grid->itemW) : square;
+        const float tileH = rows ? grid->itemH - 4.0f : square;
         if (auto* flex = s.ent[slot].try_get_mut<UiFlex>()) {
             flex->position = 1;
-            flex->posX = static_cast<float>(col) * grid->itemW + 8.0f;
-            flex->posY = static_cast<float>(row) * grid->itemH + 8.0f;
+            flex->posX = rows ? 4.0f : static_cast<float>(col) * grid->itemW + 8.0f;
+            flex->posY = static_cast<float>(row) * grid->itemH - scroll->offset + (rows ? 2.0f : 8.0f);
             flex->widthMode = static_cast<uint8_t>(UiSize::Px);
             flex->heightMode = static_cast<uint8_t>(UiSize::Px);
-            flex->direction = 0;
+            flex->direction = rows ? 1 : 0;
             flex->align = 1;
-            flex->justify = 2;
-            flex->width = grid->itemW - 8.0f;
-            flex->height = grid->itemH - 8.0f;
+            flex->justify = rows ? 0 : 1;
+            flex->gap = rows ? 6.0f : 4.0f;
+            flex->pad = rows ? 8.0f : 6.0f;
+            flex->width = tileW > 8.0f ? tileW : 8.0f;
+            flex->height = tileH > 8.0f ? tileH : 8.0f;
             flex->shrink = 0.0f;
         }
         if (const UiParts* parts = s.ent[slot].try_get<UiParts>()) {
             if (auto* icon = parts->icon < s.count ? s.ent[parts->icon].try_get_mut<UiFlex>() : nullptr) {
-                const float side = grid->itemW > 72.0f ? 64.0f : 48.0f;
+                const float side = rows ? 22.0f : (square > 24.0f ? square * 0.52f : 20.0f);
                 icon->width = side;
                 icon->height = side;
+                icon->shrink = 0.0f;
+            }
+            if (parts->label < s.count) {
+                if (auto* lab = s.ent[parts->label].try_get_mut<UiFlex>()) {
+                    lab->self = 1;
+                    lab->heightMode = static_cast<uint8_t>(UiSize::Px);
+                    lab->height = 18.0f;
+                    lab->grow = rows ? 1.0f : 0.0f;
+                    lab->shrink = 1.0f;
+                }
+                uiTextStyle(s, parts->label, rows ? 0 : 1, 1, 1, 0, 0, 1.0f);
             }
         }
         s.ent[slot].set<UiVirtRow>({index});
@@ -141,6 +190,38 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
         }
     }
     s.visualDirty = true;
+}
+
+void uiVirtualGridClearClick(UiState& s, uint16_t gridId) {
+    auto* grid = gridId < s.count ? s.ent[gridId].try_get_mut<UiVirtualGrid>() : nullptr;
+    if (grid == nullptr) {
+        return;
+    }
+    grid->lastClickIndex = 0xFFFFFFFFu;
+    grid->lastClickId = kUiNone;
+    grid->lastClickTime = 0.0f;
+    grid->lastClickX = 0.0f;
+    grid->lastClickY = 0.0f;
+}
+
+bool uiVirtualGridInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
+    (void)cursor;
+    if (phase != kUiInPress) {
+        return false;
+    }
+    const uint16_t gridId = id < s.count && s.ent[id].try_get<UiVirtualGrid>() != nullptr
+        ? id
+        : uiAncestorId<UiVirtualGrid>(s, id);
+    if (gridId == kUiNone) {
+        return false;
+    }
+    auto* grid = s.ent[gridId].try_get_mut<UiVirtualGrid>();
+    if (grid == nullptr) {
+        return false;
+    }
+    grid->pressX = in.pointer.x;
+    grid->pressY = in.pointer.y;
+    return false;
 }
 
 } // namespace burnhope

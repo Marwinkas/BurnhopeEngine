@@ -67,7 +67,7 @@ ChromePointer uiChromePointer(UiState& s, const InputFrame& in, uint16_t hit, bo
             if (!nodeShown(s, id)) {
                 continue;
             }
-            const bool frameNode = s.ent[id].try_get<UiResizable>() != nullptr;
+            const bool frameNode = s.ent[id].has<UiResizable>();
             const bool floatingDock = id == uiDock(s).panel && s.parentOf[id] == 0;
             if (!frameNode && !floatingDock) {
                 continue;
@@ -97,22 +97,8 @@ ChromePointer uiChromePointer(UiState& s, const InputFrame& in, uint16_t hit, bo
         }
     }
     UiDock& dockChrome = uiDock(s);
-    const uint8_t wasEdge = dockChrome.edgeOn;
-    dockChrome.edgeOn = 0;
-    if (hoverEdge != 0 && frame != kUiNone && frame < s.count) {
-        const UiBox& b = s.box[frame];
-        dockChrome.edgeOn = 1;
-        if ((hoverEdge & 1) != 0) {
-            dockChrome.edgeLine = {b.x, b.y, 2.0f, b.h};
-        } else if ((hoverEdge & 2) != 0) {
-            dockChrome.edgeLine = {b.x + b.w - 2.0f, b.y, 2.0f, b.h};
-        } else if ((hoverEdge & 4) != 0) {
-            dockChrome.edgeLine = {b.x, b.y, b.w, 2.0f};
-        } else {
-            dockChrome.edgeLine = {b.x, b.y + b.h - 2.0f, b.w, 2.0f};
-        }
-    }
-    if (dockChrome.edgeOn != wasEdge) {
+    if (dockChrome.edgeOn != 0) {
+        dockChrome.edgeOn = 0;
         s.visualDirty = true;
     }
     if (press && hoverEdge != 0 && frame != kUiNone) {

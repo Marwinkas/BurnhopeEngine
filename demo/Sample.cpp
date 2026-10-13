@@ -125,7 +125,7 @@ void cmdClear(void* user) {
     uiNotifyVisualDirty(s);
 }
 
-void onPage(void* user, uint16_t, int16_t tag) {
+void onPage(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     if (tag != shellIds(s).page) {
         setPage(s, static_cast<int8_t>(tag));

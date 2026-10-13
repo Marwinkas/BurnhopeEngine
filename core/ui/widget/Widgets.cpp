@@ -8,6 +8,7 @@
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Splitter.hpp"
+#include "ui/widget/VirtualGrid.hpp"
 #include "ui/Layout.hpp"
 
 namespace burnhope {
@@ -106,6 +107,7 @@ void uiWidgetsInit(UiState& s) {
     uiInputAdd(s, uiMenuInput);
     uiInputAdd(s, uiDockInput);
     uiInputAdd(s, uiScrollInput);
+    uiInputAdd(s, uiVirtualGridInput);
     uiInputAdd(s, uiSliderInput);
 }
 

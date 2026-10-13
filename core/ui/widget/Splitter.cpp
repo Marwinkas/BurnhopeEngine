@@ -1,6 +1,8 @@
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Splitter.hpp"
 
+#include <algorithm>
+
 namespace burnhope {
 namespace {
 
@@ -104,26 +106,20 @@ uint8_t splitCursor(const UiState& s, uint16_t split) {
 }
 
 UiBox splitGrip(const UiState& s, uint16_t split) {
-    UiBox grip{};
     if (split >= s.count) {
-        return grip;
+        return {};
     }
-    const UiBox& box = s.box[split];
+    UiBox grip = s.box[split];
+    constexpr float kHit = 8.0f;
     if (splitVertical(s, split)) {
-        grip.w = box.w;
-        grip.h = box.h < 8.0f ? box.h : 8.0f;
-        if (grip.h < 6.0f && box.h >= 6.0f) {
-            grip.h = 6.0f;
+        if (grip.h < kHit) {
+            grip.y -= (kHit - grip.h) * 0.5f;
+            grip.h = kHit;
         }
-        grip.x = box.x;
-        grip.y = box.h > grip.h + 0.5f ? box.y + (box.h - grip.h) * 0.5f : box.y;
-        return grip;
+    } else if (grip.w < kHit) {
+        grip.x -= (kHit - grip.w) * 0.5f;
+        grip.w = kHit;
     }
-    grip.w = box.w < 6.0f ? box.w : 6.0f;
-    grip.h = box.h;
-    const bool leading = childIndex(s, split) <= 0;
-    grip.x = leading || box.w <= 6.0f ? box.x : box.x + box.w - grip.w;
-    grip.y = box.y;
     return grip;
 }
 
@@ -136,7 +132,20 @@ bool splitAlive(const UiState& s, uint16_t split) {
     return childAt(s, parent, static_cast<uint32_t>(index + 1)) != kUiNone || splitTarget(s, split) != kUiNone;
 }
 
-void splitDrag(UiState& s, uint16_t split, float x, float y) {
+float paneSize(const UiState& s, uint16_t pane, bool vertical) {
+    const UiFlex* flex = pane < s.count ? s.ent[pane].try_get<UiFlex>() : nullptr;
+    if (flex == nullptr) {
+        return vertical ? s.box[pane].h : s.box[pane].w;
+    }
+    const uint8_t mode = vertical ? flex->heightMode : flex->widthMode;
+    const float px = vertical ? flex->height : flex->width;
+    if (mode == static_cast<uint8_t>(UiSize::Px) && px > 1.0f) {
+        return px;
+    }
+    return vertical ? s.box[pane].h : s.box[pane].w;
+}
+
+void splitBegin(UiState& s, uint16_t split, float x, float y) {
     const int index = childIndex(s, split);
     if (index < 0) {
         return;
@@ -154,40 +163,61 @@ void splitDrag(UiState& s, uint16_t split, float x, float y) {
     if (pane == kUiNone) {
         return;
     }
+    auto* drag = s.ent[split].try_get_mut<UiSplitter>();
+    if (drag == nullptr) {
+        return;
+    }
+    drag->pane = pane;
+    drag->useNext = useNext ? 1 : 0;
+    drag->startSize = paneSize(s, pane, vertical);
+    drag->startMouse = vertical ? y : x;
+    drag->axis = vertical ? 1 : 0;
+    drag->armed = 1;
+}
+
+void splitDrag(UiState& s, uint16_t split, float x, float y) {
+    const int index = childIndex(s, split);
+    if (index < 0) {
+        return;
+    }
+    auto* drag = s.ent[split].try_get_mut<UiSplitter>();
+    if (drag == nullptr) {
+        return;
+    }
+    const uint16_t parent = s.parentOf[split];
+    const bool vertical = drag->armed != 0 ? drag->axis != 0 : splitVertical(s, split);
+    const uint16_t prev = index > 0 ? childAt(s, parent, static_cast<uint32_t>(index - 1)) : kUiNone;
+    const uint16_t next = childAt(s, parent, static_cast<uint32_t>(index + 1));
+    const UiFlex* prevFlex = prev != kUiNone ? s.ent[prev].try_get<UiFlex>() : nullptr;
+    const UiFlex* nextFlex = next != kUiNone ? s.ent[next].try_get<UiFlex>() : nullptr;
+    const bool prevSized = prevFlex != nullptr && sized(*prevFlex, vertical);
+    const bool nextSized = nextFlex != nullptr && sized(*nextFlex, vertical);
+    const bool useNext = drag->armed != 0 ? drag->useNext != 0 : (nextSized && !prevSized);
+    const uint16_t pane = drag->armed != 0 && drag->pane != kUiNone ? drag->pane : (useNext ? next : prev);
+    if (pane == kUiNone || pane >= s.count) {
+        return;
+    }
     auto* flex = s.ent[pane].try_get_mut<UiFlex>();
     if (flex == nullptr) {
         return;
     }
     const UiBox& home = s.box[parent];
     const UiBox& bar = s.box[split];
-    float reserved = vertical ? bar.h : bar.w;
-    const uint32_t kids = uiNodeChildCount(s, parent);
-    for (uint32_t i = 0; i < kids; ++i) {
-        const uint16_t child = childAt(s, parent, i);
-        if (child == pane || child == split) {
-            continue;
-        }
-        reserved += axisFloor(s, child, vertical, false, 0);
+    if (drag->armed == 0) {
+        return;
     }
-    const float extent = vertical ? home.h : home.w;
-    float limit = extent - reserved;
-    const float paneMin = axisFloor(s, pane, vertical, true, 0);
-    float size = 0.0f;
-    if (vertical) {
-        size = useNext ? (home.y + home.h) - y - bar.h : y - s.box[pane].y;
-    } else {
-        size = useNext ? (home.x + home.w) - x - bar.w : x - s.box[pane].x;
+    const float mouse = vertical ? y : x;
+    float delta = mouse - drag->startMouse;
+    if (drag->useNext != 0) {
+        delta = -delta;
     }
-    if (limit < 32.0f) {
-        limit = 32.0f;
-    }
-    if (size > limit) {
-        size = limit;
-    }
-    if (size < paneMin && paneMin <= limit) {
-        size = paneMin;
-    }
+    constexpr float minSize = 48.0f;
+    const float span = vertical ? home.h : home.w;
+    const float grip = vertical ? bar.h : bar.w;
+    const float maxSize = std::max(minSize, span - grip - minSize);
+    const float size = std::clamp(drag->startSize + delta, minSize, maxSize);
     writeSize(*flex, vertical, size);
+    s.layoutFrom = 0;
     s.layoutDirty = true;
     s.visualDirty = true;
 }
@@ -199,7 +229,7 @@ struct UiSplitHot {
 };
 
 void splitPaint(UiState& s, uint16_t id, bool hot) {
-    if (id >= s.count || !s.ent[id].is_alive() || s.ent[id].try_get<UiSplitter>() == nullptr) {
+    if (id >= s.count || !s.ent[id].is_alive() || !s.ent[id].has<UiSplitter>()) {
         return;
     }
     auto* paint = s.ent[id].try_get_mut<UiPaint>();
@@ -210,9 +240,9 @@ void splitPaint(UiState& s, uint16_t id, bool hot) {
     if (paint->role == static_cast<uint8_t>(UiRole::Panel) && paint->token == token) {
         return;
     }
-    const int16_t tag = paint->tag;
     const float radius = paint->radius;
-    *paint = paintToken(s.look, UiRole::Panel, static_cast<UiToken>(token), radius, tag);
+    *paint = paintToken(s.look, UiRole::Panel, static_cast<UiToken>(token), radius);
+    paint->a = hot ? 0.9f : 0.16f;
     s.visualDirty = true;
 }
 
@@ -220,9 +250,9 @@ void splitPaint(UiState& s, uint16_t id, bool hot) {
 
 void splitSync(UiState& s) {
     uint16_t hot = kUiNone;
-    if (s.capture < s.count && s.ent[s.capture].try_get<UiSplitter>() != nullptr) {
+    if (s.capture < s.count && s.ent[s.capture].has<UiSplitter>()) {
         hot = s.capture;
-    } else if (s.hovered < s.count && s.ent[s.hovered].try_get<UiSplitter>() != nullptr) {
+    } else if (s.hovered < s.count && s.ent[s.hovered].has<UiSplitter>()) {
         hot = s.hovered;
     }
     UiSplitHot& prev = s.world.ensure<UiSplitHot>();
@@ -234,38 +264,49 @@ void splitSync(UiState& s) {
     prev.id = hot;
 }
 
+namespace {
+
+uint16_t splitAt(const UiState& s, float x, float y) {
+    for (uint16_t n = s.count; n > 0; --n) {
+        const uint16_t id = static_cast<uint16_t>(n - 1);
+        if (!s.ent[id].is_alive() || !s.ent[id].has<UiSplitter>() || !nodeShown(s, id) || !splitAlive(s, id)) {
+            continue;
+        }
+        if (hitBox(splitGrip(s, id), x, y)) {
+            return id;
+        }
+    }
+    return kUiNone;
+}
+
+} // namespace
+
 bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
+    const uint16_t under = splitAt(s, in.pointer.x, in.pointer.y);
     if (phase == kUiInCursor) {
-        if (id >= s.count) {
+        if (under == kUiNone) {
             return false;
         }
-        const UiPaint* node = s.ent[id].try_get<UiPaint>();
-        if (node != nullptr && node->role == static_cast<uint8_t>(UiRole::Field)) {
-            return false;
-        }
-        if (s.ent[id].try_get<UiSplitter>() == nullptr || !hitBox(splitGrip(s, id), in.pointer.x, in.pointer.y)) {
-            return false;
-        }
-        cursor = splitCursor(s, id);
+        cursor = splitCursor(s, under);
         return true;
     }
     if (phase == kUiInPress) {
-        if (id < s.count && s.ent[id].try_get<UiSplitter>() != nullptr && splitAlive(s, id)
-            && hitBox(splitGrip(s, id), in.pointer.x, in.pointer.y)) {
-            s.capture = id;
-            return true;
+        if (under == kUiNone) {
+            return false;
         }
-        return false;
+        s.capture = under;
+        splitBegin(s, under, in.pointer.x, in.pointer.y);
+        return true;
     }
     if (phase == kUiInDrag) {
-        if (id < s.count && s.ent[id].try_get<UiSplitter>() != nullptr) {
+        if (id < s.count && s.ent[id].has<UiSplitter>()) {
             splitDrag(s, id, in.pointer.x, in.pointer.y);
             return true;
         }
         return false;
     }
     if (phase == kUiInClip) {
-        return s.capture < s.count && s.ent[s.capture].try_get<UiSplitter>() != nullptr && s.laidW > 1.0f && s.laidH > 1.0f;
+        return s.capture < s.count && s.ent[s.capture].has<UiSplitter>() && s.laidW > 1.0f && s.laidH > 1.0f;
     }
     if (phase == kUiInSync) {
         splitSync(s);

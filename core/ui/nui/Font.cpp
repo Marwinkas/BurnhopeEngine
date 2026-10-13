@@ -1,5 +1,4 @@
-#include "ui/Font.hpp"
-#include "ui/Model.hpp"
+#include "core/ui/Font.hpp"
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -8,6 +7,7 @@
 #include <spdlog/spdlog.h>
 
 #include <cstring>
+#include <span>
 #include <vector>
 
 namespace burnhope {
@@ -20,23 +20,7 @@ constexpr int kCell = 64;
 constexpr int kCols = 16;
 constexpr int kRows = 12;
 
-uint32_t codepointAt(int index) {
-    if (index < 95) {
-        return static_cast<uint32_t>(32 + index);
-    }
-    if (index == 95) {
-        return 0x0401;
-    }
-    if (index < 160) {
-        return 0x0410u + static_cast<uint32_t>(index - 96);
-    }
-    if (index == 160) {
-        return 0x0451;
-    }
-    return 0;
-}
-
-bool uploadAtlas(Device& device, DescriptorHeaps& heaps, GpuImage& atlas, const std::vector<uint8_t>& pixels, int width, int height) {
+bool uploadAtlas(Device& device, DescriptorHeaps& heaps, GpuImage& atlas, std::span<const uint8_t> pixels, int width, int height) {
     if (!gpuImageUploadR8(atlas, device, pixels.data(), static_cast<uint32_t>(width), static_cast<uint32_t>(height))) {
         return false;
     }
@@ -50,7 +34,7 @@ bool uploadAtlas(Device& device, DescriptorHeaps& heaps, GpuImage& atlas, const 
             VK_IMAGE_ASPECT_COLOR_BIT)) {
         return false;
     }
-    VkSamplerCreateInfo sampler{
+    const VkSamplerCreateInfo sampler{
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .magFilter = VK_FILTER_LINEAR,
         .minFilter = VK_FILTER_LINEAR,
@@ -95,10 +79,11 @@ bool fontLoadSdf(
     std::vector<uint8_t> pixels(static_cast<size_t>(width * height), 0);
 
     for (int i = 0; i < static_cast<int>(kUiFontGlyphs); ++i) {
-        const uint32_t cp = codepointAt(i);
+        // Единый источник правды из Typography.hpp!
+        const uint32_t cp = uiGlyphCodepoint(i);
         font.glyphs[i].advance = pixelSize * 0.5f;
-        font.glyphs[i].w = 0;
-        font.glyphs[i].h = 0;
+        font.glyphs[i].w = 0.0f;
+        font.glyphs[i].h = 0.0f;
         if (cp == 0 || FT_Load_Char(face, cp, FT_LOAD_DEFAULT) != 0) {
             continue;
         }
@@ -121,7 +106,7 @@ bool fontLoadSdf(
                     continue;
                 }
                 const unsigned char* src = bmp.buffer + static_cast<int>(y) * bmp.pitch;
-            pixels[static_cast<size_t>(dy * width + dx)] = src[x];
+                pixels[static_cast<size_t>(dy * width + dx)] = src[x];
             }
         }
         font.glyphs[i].u0 = static_cast<float>(ox) / static_cast<float>(width);
@@ -149,6 +134,28 @@ bool fontLoadSdf(
     }
     spdlog::info("sdf font {} at {} px", path, pixelSize);
     return true;
+}
+
+bool fontLoadDefaultSdf(
+    UiFontAtlas& font,
+    UiLook& look,
+    Device& device,
+    DescriptorHeaps& heaps,
+    GpuImage& atlas,
+    float pixelSize) {
+    const char* candidates[] = {
+        "assets/fonts/Inter-Regular.ttf",
+        "../assets/fonts/Inter-Regular.ttf",
+        "../../assets/fonts/Inter-Regular.ttf",
+        "../../../assets/fonts/Inter-Regular.ttf",
+    };
+    for (const char* path : candidates) {
+        if (fontLoadSdf(font, look, device, heaps, atlas, path, pixelSize)) {
+            return true;
+        }
+    }
+    spdlog::error("default sdf font candidates not found");
+    return false;
 }
 
 } // namespace burnhope

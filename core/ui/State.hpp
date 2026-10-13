@@ -1,6 +1,6 @@
 #pragma once
 
-#include "platform/Window.hpp"
+#include "platform/Input.hpp"
 #include "ui/Layout.hpp"
 #include "ui/Model.hpp"
 
@@ -21,7 +21,7 @@ using UiClearFn = void (*)(UiState& s);
 using UiSpawnFn = void (*)(UiState& s, uint16_t id);
 using UiBootFn = void (*)(UiState& s);
 using UiRoleFinishFn = void (*)(UiState& s, uint16_t id, const BinNode* spec, const char* text, const char* hint);
-
+struct UiNoHit {}; // Пустой тег: объект нематериален для курсора мыши
 // A higher module (files, later others) plugs in here. Widgets never name it.
 struct UiPlug {
     UiInputFn handle = nullptr;
@@ -43,22 +43,23 @@ struct UiOverlayHooks {
     UiOverlayDrawFn fn[4]{};
     uint8_t n = 0;
 };
+enum class UiInputPhase : uint8_t {
+    Cursor = 1,
+    Early = 2,
+    Escape = 3,
+    Menu = 4,
+    Chrome = 5,
+    Press = 6,
+    PressLate = 7,
+    Focus = 8,
+    Drag = 9,
+    Release = 10,
+    Wheel = 11,
+    Key = 12,
+    Clip = 13,
+    Sync = 14
+};
 
-// Widget modules register one input hook. uiApplyInput never names a widget.
-constexpr uint8_t kUiInCursor = 1;
-constexpr uint8_t kUiInEarly = 2;
-constexpr uint8_t kUiInEscape = 3;
-constexpr uint8_t kUiInMenu = 4;
-constexpr uint8_t kUiInChrome = 5;
-constexpr uint8_t kUiInPress = 6;
-constexpr uint8_t kUiInPressLate = 7;
-constexpr uint8_t kUiInFocus = 8;
-constexpr uint8_t kUiInDrag = 9;
-constexpr uint8_t kUiInRelease = 10;
-constexpr uint8_t kUiInWheel = 11;
-constexpr uint8_t kUiInKey = 12;
-constexpr uint8_t kUiInClip = 13;
-constexpr uint8_t kUiInSync = 14;
 
 using UiInputHookFn = bool (*)(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
 
@@ -419,7 +420,7 @@ inline UiFlex px(float w, float h) {
     return f;
 }
 
-inline UiPaint paint(UiRole role, float r, float g, float b, float radius = 0.0f, int16_t tag = -1) {
+inline UiPaint paint(UiRole role, float r, float g, float b, float radius = 0.0f) {
     UiPaint out{};
     out.r = r;
     out.g = g;
@@ -427,12 +428,11 @@ inline UiPaint paint(UiRole role, float r, float g, float b, float radius = 0.0f
     out.a = 1.0f;
     out.radius = radius;
     out.role = static_cast<uint8_t>(role);
-    out.tag = tag;
     return out;
 }
 
-inline UiPaint paintToken(const UiLook& look, UiRole role, UiToken token, float radius = 0.0f, int16_t tag = -1) {
-    UiPaint p = paint(role, 0.0f, 0.0f, 0.0f, radius, tag);
+inline UiPaint paintToken(const UiLook& look, UiRole role, UiToken token, float radius = 0.0f) {
+    UiPaint p = paint(role, 0.0f, 0.0f, 0.0f, radius);
     p.token = static_cast<uint8_t>(token);
     tokenRgb(look, token, p.r, p.g, p.b);
     return p;

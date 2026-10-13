@@ -163,21 +163,9 @@ bool sceneTick(void* user, const InputFrame& input, float dt) {
     InputFrame sceneInput = input;
     const bool lookHeld = view->lookGrab != 0 && (input.pointer.down & kPointerRight) != 0;
     const bool toolHeld = view->toolGrab != 0 && (input.pointer.down & kPointerLeft) != 0;
-    if (lookHeld || toolHeld) {
+    if (lookHeld) {
         sceneInput.pointer.x = view->lookX;
         sceneInput.pointer.y = view->lookY;
-        sceneInput.pointer.dx = 0.0f;
-        sceneInput.pointer.dy = 0.0f;
-        if (lookHeld) {
-            sceneInput.pointer.down &= ~kPointerRight;
-            sceneInput.pointer.pressed &= ~kPointerRight;
-            sceneInput.pointer.released &= ~kPointerRight;
-        }
-        if (toolHeld) {
-            sceneInput.pointer.down &= ~kPointerLeft;
-            sceneInput.pointer.pressed &= ~kPointerLeft;
-            sceneInput.pointer.released &= ~kPointerLeft;
-        }
     }
     Canvas* canvas = view->host != nullptr ? hostCanvas(*view->host, view->slot) : nullptr;
     if (canvas != nullptr && canvas->builder != nullptr && !lookHeld && !toolHeld) {
@@ -592,10 +580,7 @@ void sceneHud(Canvas& canvas, void* user) {
         paint.g = look.content[1];
         paint.b = look.content[2];
         paint.a = 0.94f;
-        paint.borderW = 1.0f;
-        paint.br = 0.04f;
-        paint.bg = 0.04f;
-        paint.bb = 0.04f;
+        paint.borderW = 0.0f;
         return paint;
     };
     auto splitBar = [&](Panel parent, bool vertical) {
@@ -603,16 +588,17 @@ void sceneHud(Canvas& canvas, void* user) {
         grip.shrink = 0.0f;
         if (vertical) {
             grip.widthMode = static_cast<uint8_t>(UiSize::Px);
-            grip.width = 8.0f;
+            grip.width = 2.0f;
             grip.heightMode = static_cast<uint8_t>(UiSize::Percent);
             grip.height = 100.0f;
         } else {
             grip.heightMode = static_cast<uint8_t>(UiSize::Px);
-            grip.height = 8.0f;
+            grip.height = 2.0f;
             grip.widthMode = static_cast<uint8_t>(UiSize::Percent);
             grip.width = 100.0f;
         }
         UiPaint paint = paintToken(look, UiRole::Panel, UiToken::Muted, 0.0f);
+        paint.a = 0.16f;
         Panel bar = parent.child(grip, paint);
         if (bar.state != nullptr && bar.id != kUiNone) {
             bar.state->ent[bar.id].set<UiSplitter>({});
@@ -665,7 +651,10 @@ void sceneHud(Canvas& canvas, void* user) {
     Panel fileBtn = top.button("File");
     uiSetHeight(*canvas.state, fileBtn.id, 28.0f);
     uint16_t fileMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
-    if (canvas.state) uiSetContextMenu(*canvas.state, fileBtn.id, fileMenu);
+    if (canvas.state) {
+        uiSetContextMenu(*canvas.state, fileBtn.id, fileMenu);
+        uiMarkMenuBar(*canvas.state, fileBtn.id);
+    }
     auto fileAct = [](void* actUser) {
         auto* hit = static_cast<FileAct*>(actUser);
         if (hit == nullptr || hit->canvas == nullptr || hit->canvas->state == nullptr) {
@@ -699,7 +688,10 @@ void sceneHud(Canvas& canvas, void* user) {
     Panel viewBtn = top.button("Lit");
     uiSetHeight(*canvas.state, viewBtn.id, 28.0f);
     uint16_t viewMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
-    if (canvas.state) uiSetContextMenu(*canvas.state, viewBtn.id, viewMenu);
+    if (canvas.state) {
+        uiSetContextMenu(*canvas.state, viewBtn.id, viewMenu);
+        uiMarkMenuBar(*canvas.state, viewBtn.id);
+    }
     for (const ViewMode& mode : kViews) {
         hud->modes.push_back({});
         ModeHit& hit = hud->modes.back();

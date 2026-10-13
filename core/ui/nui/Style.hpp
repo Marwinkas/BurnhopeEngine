@@ -1,0 +1,129 @@
+#pragma once
+
+#include "core/ui/Geometry.hpp"
+#include <cstdint>
+#include <type_traits>
+
+namespace burnhope {
+
+// Семантические токены оформления. Никаких сырых RGB в коде виджетов!
+enum class UiToken : uint8_t {
+    Custom = 0, // Цвет задан вручную, тема его не меняет
+    Window,
+    Title,
+    Side,
+    Content,
+    Button,
+    Field,
+    Menu,
+    Close,
+    Text,
+    Muted,
+    Item,
+    Preview,
+    Status,
+    Slider,
+    Check,
+    Scroll,
+    Chrome,
+    Accent,
+};
+
+enum class UiRamp : uint8_t {
+    None = 0,
+    HueWheel = 1,
+    ValueRamp = 2,
+    Saturation = 3,
+    Gradient = 4,
+    Alpha = 5,
+};
+
+// Визуальный компонент сущности (прямоугольник, скругление, цвет, обводка)
+struct UiPaint {
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+    float a = 1.0f;
+    float radius = 0.0f;
+    float borderW = 0.0f;
+    float br = 0.45f;
+    float bg = 0.50f;
+    float bb = 0.62f;
+    UiToken token = UiToken::Custom;
+    uint8_t icon = 0;
+    UiRamp ramp = UiRamp::None;
+    bool disabled = false;
+    float shadow = 0.0f;
+    float radiusTr = kUiUnset; // Если < 0.0f, наследует radius
+    float radiusBr = kUiUnset;
+    float radiusBl = kUiUnset;
+    float hr = kUiUnset;       // Цвет при наведении (если < 0, управляется темой)
+    float hg = kUiUnset;
+    float hb = kUiUnset;
+    float angle = 0.0f;        // Поворот в градусах
+    float scaleX = 1.0f;
+    float scaleY = 1.0f;
+    float bright = 1.0f;       // rgb *= bright
+    float contrast = 1.0f;     // (rgb - 0.5) * contrast + 0.5
+    float blur = 0.0f;         // Размытие текстуры
+
+    [[nodiscard]] float effectiveRadiusTr() const noexcept { return radiusTr < 0.0f ? radius : radiusTr; }
+    [[nodiscard]] float effectiveRadiusBr() const noexcept { return radiusBr < 0.0f ? radius : radiusBr; }
+    [[nodiscard]] float effectiveRadiusBl() const noexcept { return radiusBl < 0.0f ? radius : radiusBl; }
+    [[nodiscard]] bool hasHoverColor() const noexcept { return hr >= 0.0f && hg >= 0.0f && hb >= 0.0f; }
+};
+
+// Единая палитра кадра для смены тем оформления
+struct UiLook {
+    float window[3]{0.102f, 0.106f, 0.122f};
+    float title[3]{0.145f, 0.153f, 0.176f};
+    float side[3]{0.118f, 0.125f, 0.145f};
+    float content[3]{0.086f, 0.090f, 0.106f};
+    float button[3]{0.20f, 0.22f, 0.28f};
+    float field[3]{0.14f, 0.15f, 0.19f};
+    float menu[3]{0.11f, 0.12f, 0.15f};
+    float close[3]{0.55f, 0.28f, 0.28f};
+    float text[3]{0.93f, 0.94f, 0.96f};
+    float muted[3]{0.62f, 0.66f, 0.74f};
+    float item[3]{0.16f, 0.17f, 0.21f};
+    float preview[3]{0.36f, 0.42f, 0.55f};
+    float status[3]{0.078f, 0.082f, 0.098f};
+    float slider[3]{0.18f, 0.20f, 0.26f};
+    float check[3]{0.16f, 0.17f, 0.21f};
+    float chrome[3]{0.22f, 0.24f, 0.28f};
+    float accent[3][3]{
+        {0.36f, 0.55f, 0.92f},
+        {0.45f, 0.72f, 0.48f},
+        {0.86f, 0.55f, 0.32f},
+    };
+    float radius = 8.0f;
+    float radiusSm = 6.0f;
+    float motion = 0.14f;
+    float hover = 0.08f;
+    float titleBar = 40.0f;
+    float resizeBorder = 6.0f;
+    float advance = 9.0f;
+    float glyphW = 8.0f;
+    float glyphH = 18.0f;
+};
+
+// Плавная цветовая анимация
+struct UiAnim {
+    float fr = 0.0f;
+    float fg = 0.0f;
+    float fb = 0.0f;
+    float fa = 1.0f;
+    float tr = 0.0f;
+    float tg = 0.0f;
+    float tb = 0.0f;
+    float ta = 1.0f;
+    float t0 = 0.0f;
+    float dur = 0.0f;
+    bool on = false;
+};
+
+static_assert(std::is_trivially_copyable_v<UiPaint>);
+static_assert(std::is_trivially_copyable_v<UiLook>);
+static_assert(std::is_trivially_copyable_v<UiAnim>);
+
+} // namespace burnhope

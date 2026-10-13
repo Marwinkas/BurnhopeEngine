@@ -1,6 +1,5 @@
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Detail.hpp"
-#include "ui/widget/Image.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/Virtual.hpp"
 
@@ -39,8 +38,12 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
     row.shrink = 0.0f;
     row.direction = 1;
     row.align = 1;
+    row.justify = 0;
     row.gap = 4.0f;
-    const uint16_t slot = spawn(s, inner, row, paintToken(s.look, UiRole::Panel, UiToken::Item, s.look.radiusSm));
+    UiPaint rowPaint = paintToken(s.look, UiRole::Button, UiToken::Item, s.look.radiusSm);
+    rowPaint.a = 0.0f;
+    rowPaint.borderW = 0.0f;
+    const uint16_t slot = spawn(s, inner, row, rowPaint);
     if (slot == kUiNone) {
         return slot;
     }
@@ -51,14 +54,33 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
     chev.onClick = onRow;
     chev.user = &s;
     const uint16_t chevron = uiButton(s, slot, chev);
-    const uint16_t icon = uiIcon(s, slot, 0, 16.0f, 16.0f);
-    UiButtonConfig caption{};
-    caption.label = " ";
-    caption.width = -1.0f;
-    caption.height = itemH > 4.0f ? itemH - 4.0f : itemH;
-    caption.onClick = onRow;
-    caption.user = &s;
-    const uint16_t label = uiButton(s, slot, caption);
+    if (chevron < s.count) {
+        if (auto* paint = s.ent[chevron].try_get_mut<UiPaint>()) {
+            paint->a = 0.0f;
+            paint->borderW = 0.0f;
+        }
+    }
+    UiButtonConfig glyph{};
+    glyph.width = 16.0f;
+    glyph.height = 16.0f;
+    const uint16_t icon = uiButton(s, slot, glyph);
+    if (icon < s.count) {
+        if (auto* paint = s.ent[icon].try_get_mut<UiPaint>()) {
+            paint->a = 0.0f;
+            paint->borderW = 0.0f;
+            paint->icon = 4;
+        }
+    }
+    UiFlex caption{};
+    caption.grow = 1.0f;
+    caption.shrink = 1.0f;
+    caption.self = 1;
+    caption.heightMode = static_cast<uint8_t>(UiSize::Px);
+    caption.height = itemH > 6.0f ? itemH - 6.0f : itemH;
+    const uint16_t label = spawn(s, slot, caption, paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f));
+    addText(s, label, " ");
+    uiTextStyle(s, label, 0, 1, 1, 0, 0, 1.0f);
+    uiBind(s, slot, onRow, &s);
     s.ent[slot].set<UiParts>({icon, chevron, label});
     s.ent[slot].set<UiVirtRow>({});
     uiShow(s, slot, false);
@@ -88,7 +110,7 @@ uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg) {
     tree.user = cfg.user;
     tree.itemH = 28.0f;
     s.ent[scroll].set<UiTreeView>(tree);
-    s.ent[scroll].set<UiVirtualPool>({uiTreeViewRefresh, uiTreeContentH, 1});
+    s.ent[scroll].set<UiVirtualPool>({uiTreeViewRefresh, uiTreeContentH, 0});
     uiTreeViewRefresh(s, scroll);
     return scroll;
 }
@@ -116,7 +138,13 @@ void uiTreeViewRefresh(UiState& s, uint16_t id) {
         }
         if (auto* flex = s.ent[slot].try_get_mut<UiFlex>()) {
             flex->position = 1;
-            flex->posY = static_cast<float>(index) * tree->itemH;
+            flex->posX = 0.0f;
+            flex->posY = static_cast<float>(index) * tree->itemH - scroll->offset;
+            flex->widthMode = static_cast<uint8_t>(UiSize::Percent);
+            flex->width = 100.0f;
+            flex->justify = 0;
+            flex->align = 1;
+            flex->direction = 1;
             flex->height = tree->itemH > 2.0f ? tree->itemH - 2.0f : tree->itemH;
         }
         s.ent[slot].set<UiVirtRow>({index});

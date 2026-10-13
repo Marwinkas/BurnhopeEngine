@@ -16,6 +16,7 @@ struct FileItem {
     uint8_t kind = 0;
     uint8_t selected = 0;
     uint64_t bytes = 0;
+    uint64_t mtime = 0;
 };
 
 // Directory listing, history, bookmarks, and file operations. No widgets.
@@ -47,6 +48,9 @@ struct FileModel {
     int treeN = 0;
     char filt[16]{};
     int kind = 0;
+    uint8_t sortKey = 0;
+    uint8_t groupOn = 0;
+    uint8_t groupOpen = 0x1f;
     char status[96]{};
     uint8_t showHidden = 0;
 

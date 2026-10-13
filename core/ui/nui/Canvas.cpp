@@ -1,53 +1,31 @@
-#include "ui/Canvas.hpp"
-#include "ui/LayoutBridge.hpp"
-#include "ui/PrimitiveBatch.hpp"
-#include "platform/Trace.hpp"
-
-#include <cmath>
-#include "ui/Font.hpp"
-#include "ui/State.hpp"
-#include "image/ImageFile.hpp"
+#include "core/ui/Canvas.hpp"
+#include "core/ui/LayoutBridge.hpp"
+#include "core/ui/PrimitiveBatch.hpp"
+#include "core/ui/Font.hpp"
+#include "core/ui/State.hpp"
+#include "core/platform/Trace.hpp"
 
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
-#include <cstdio>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <span>
-#include <vector>
-
 
 namespace burnhope {
-bool canvasLoadImage(Canvas& c, uint8_t slot, const char* path);
-
-void uiApplyPhotoMeta(UiState& s, uint16_t id, uint8_t frames, const uint16_t* delays, uint32_t delayCount) {
-    if (id >= s.count) {
-        return;
-    }
-    auto* image = s.ent[id].try_get_mut<UiImage>();
-    if (image == nullptr) {
-        return;
-    }
-    image->frames = frames == 0 ? 1 : frames;
-    if (image->frame >= image->frames) {
-        image->frame = 0;
-    }
-    for (uint32_t i = 0; i < 16u && i < delayCount; ++i) {
-        image->delayMs[i] = delays != nullptr ? delays[i] : 0;
-    }
-    s.visualDirty = true;
-}
 
 bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
     canvasDestroy(c, d);
     c.state = std::make_unique<UiState>();
     c.device = &d;
     c.heaps = &heaps;
+
     if (!uiRendererCreate(c.rhi, d, heaps)) {
         canvasDestroy(c, d);
         return false;
     }
+
     c.photoMeta[0].frames = 2;
     c.photoMeta[0].delayMs[0] = 420;
     c.photoMeta[0].delayMs[1] = 420;
@@ -55,6 +33,7 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
         c.photoMeta[slot].frames = 1;
         c.photoMeta[slot].delayMs[0] = 100;
     }
+
     if (!canvasUseFont(c, 20.0f)) {
         spdlog::error("default sdf font failed");
         canvasDestroy(c, d);
@@ -105,27 +84,6 @@ void canvasSetBuilder(Canvas& c, UiBuilder builder, void* user) {
     c.builderUser = user;
 }
 
-void photoPush(Canvas& c, uint8_t slot) {
-    if (c.state == nullptr || slot >= kPhotoSlots) {
-        return;
-    }
-    UiState& s = *c.state;
-    uint16_t ids[kUiCap];
-    uint16_t n = 0;
-    s.world.each([&](flecs::entity e, const UiImage& image) {
-        if (image.slot != slot || image.minimap == 0 || n >= kUiCap) {
-            return;
-        }
-        const UiSlot* node = e.try_get<UiSlot>();
-        if (node != nullptr) {
-            ids[n++] = node->index;
-        }
-    });
-    for (uint16_t i = 0; i < n; ++i) {
-        uiApplyPhotoMeta(s, ids[i], c.photoMeta[slot].frames, c.photoMeta[slot].delayMs, kImageFrames);
-    }
-}
-
 void canvasReload(Canvas& c) {
     if (c.state == nullptr) {
         return;
@@ -134,7 +92,6 @@ void canvasReload(Canvas& c) {
     if (c.builder != nullptr) {
         c.builder(c, c.builderUser);
     }
-    photoPush(c, 0);
     c.state->layoutDirty = true;
     c.state->visualDirty = true;
     spdlog::info("ui: {} flecs nodes, yoga + 1 draw", c.state->count);
@@ -158,38 +115,23 @@ bool canvasListen(Canvas& c, UiValueFn fn, void* user) {
     return c.state != nullptr && uiListen(*c.state, fn, user);
 }
 
-bool canvasLoadImage(Canvas& c, uint8_t slot, const char* path) {
-    if (slot >= kPhotoSlots || c.device == nullptr || c.heaps == nullptr || path == nullptr) {
+bool canvasLoadPhoto(Canvas& c, uint8_t slot, const char* path) {
+    if (slot >= kPhotoSlots || c.device == nullptr || c.heaps == nullptr) {
         return false;
     }
-    ImageCpu cpu{};
-    if (!imageLoadFile(cpu, path)) {
-        return false;
+    // Вызов чистой инкапсулированной функции из UiPhoto.cpp
+    const bool ok = uiPhotoLoad(c.rhi, *c.device, *c.heaps, c.photoMeta[slot], slot, path);
+    if (ok && c.state != nullptr) {
+        c.state->visualDirty = true;
     }
-    const uint32_t stacked = cpu.height * (cpu.frames == 0 ? 1u : cpu.frames);
-    bool ok = cpu.hdr != 0
-        ? gpuImageUploadHdr(c.rhi.photos[slot], *c.device, cpu.rgb, cpu.width, cpu.height)
-        : gpuImageUploadRgba(c.rhi.photos[slot], *c.device, cpu.rgba, cpu.width, stacked, cpu.frames == 0 ? 1u : cpu.frames);
-    if (ok) {
-        ok = heapWriteImage(
-            *c.heaps,
-            *c.device,
-            kUiDescPhoto + slot,
-            VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-            c.rhi.photos[slot],
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
-    }
-    if (ok) {
-        c.photoMeta[slot].frames = static_cast<uint8_t>(cpu.frames == 0 ? 1u : cpu.frames);
-        for (uint32_t i = 0; i < kImageFrames; ++i) {
-            c.photoMeta[slot].delayMs[i] = cpu.delayMs[i];
-        }
-        photoPush(c, slot);
-        spdlog::info("image slot {} {}x{} x{} frames", slot, cpu.width, cpu.height, cpu.frames);
-    }
-    imageCpuFree(cpu);
     return ok;
+}
+
+const PhotoMeta* canvasPhotoMeta(const Canvas& c, uint8_t slot) {
+    if (slot >= kPhotoSlots) {
+        return nullptr;
+    }
+    return &c.photoMeta[slot];
 }
 
 int canvasCursor(const Canvas& c) {
@@ -220,47 +162,26 @@ bool canvasSetFont(Canvas& c, const char* path, float pixelSize) {
 }
 
 bool canvasUseFont(Canvas& c, float pixelSize) {
-        const char* faces[] = {
-        "assets/fonts/Inter-Regular.ttf",
-        "../assets/fonts/Inter-Regular.ttf",
-        "../../assets/fonts/Inter-Regular.ttf",
-        "../../../assets/fonts/Inter-Regular.ttf",
-        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-    };
-    for (const char* path : faces) {
-        if (canvasSetFont(c, path, pixelSize)) {
-            return true;
-        }
-    }
-    spdlog::error("sdf font failed at {} px", pixelSize);
-    return false;
-}
-
-bool canvasTakeClip(Canvas& c, char* dst, uint8_t cap) {
-    if (c.state == nullptr || c.state->clipPut == 0 || dst == nullptr || cap == 0) {
+    if (c.state == nullptr || c.device == nullptr || c.heaps == nullptr) {
         return false;
     }
-    const uint8_t n = c.state->clipLen < static_cast<uint8_t>(cap - 1) ? c.state->clipLen : static_cast<uint8_t>(cap - 1);
-    for (uint8_t i = 0; i < n; ++i) {
-        dst[i] = c.state->clip[i];
+    if (!fontLoadDefaultSdf(c.state->font, c.state->look, *c.device, *c.heaps, c.rhi.font, pixelSize)) {
+        return false;
     }
-    dst[n] = '\0';
-    c.state->clipPut = 0;
-    return n > 0;
+    uiRendererUploadFontTable(c.rhi, *c.device, c.state->font);
+    uiRestyle(*c.state);
+    return true;
 }
 
-void canvasChrome(const Canvas& c, float& titleBar, float& resizeBorder) {
-    titleBar = 40.0f;
-    resizeBorder = 6.0f;
-    if (c.state != nullptr) {
-        titleBar = c.state->look.titleBar;
-        resizeBorder = c.state->look.resizeBorder;
-    }
-}
-
-UiEvent canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& input, float timeSec, uint32_t flight, bool upload) {
+UiEvent canvasConsume(
+    Canvas& c,
+    Device& d,
+    float w,
+    float h,
+    const InputFrame& input,
+    float timeSec,
+    uint32_t flight,
+    bool upload) {
     if (c.state == nullptr || c.state->count == 0 || w < 1.0f || h < 1.0f) {
         return UiEvent::None;
     }
@@ -269,19 +190,28 @@ UiEvent canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& 
     const float dpi = s.dpi < 0.5f ? 1.0f : s.dpi;
     const float pointsW = w / dpi;
     const float pointsH = h / dpi;
+
     InputFrame local = input;
     local.pointer.x /= dpi;
     local.pointer.y /= dpi;
     local.pointer.dx /= dpi;
     local.pointer.dy /= dpi;
+
+    // 1. Верстка дерева через Yoga
     uiLayout(s, pointsW, pointsH);
+
+    // 2. Доставка событий ввода сущностям
     const UiEvent ev = uiApplyInput(s, local);
     if (s.layoutDirty) {
         uiLayout(s, pointsW, pointsH);
     }
+
+    // 3. Анимации цвета и GIF
     if (uiTickMotion(s)) {
         s.visualDirty = true;
     }
+
+    // 4. Сборка вертексов в SSBO буфер слота kUiDescPrims
     uint32_t primCap = 0;
     UiPrimitive* dst = upload ? uiRendererPrimDst(c.rhi, flight, primCap) : nullptr;
     if (s.visualDirty && dst != nullptr && primCap > 0) {
@@ -289,30 +219,13 @@ UiEvent canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& 
         uiRendererUploadPrims(c.rhi, d, flight, std::span<const UiPrimitive>(dst, n), pointsW, pointsH);
         s.visualDirty = false;
     }
+
     if (s.dumpLayout != 0) {
         uiDumpLayout(s);
         spdlog::info("ui draw {}", c.rhi.primCount);
         s.dumpLayout = 0;
     }
     return ev;
-}
-
-void canvasTakeWindowOps(Canvas& c, WindowOps& out) {
-    out = {};
-    if (c.state == nullptr) {
-        return;
-    }
-    UiState& s = *c.state;
-    out.close = s.opClose;
-    out.minimize = s.opMinimize;
-    out.toggleMaximize = s.opMaximize;
-    out.alwaysOnTop = s.opTop;
-    out.opacity = s.opOpacity;
-    s.opClose = false;
-    s.opMinimize = false;
-    s.opMaximize = false;
-    s.opTop = -1;
-    s.opOpacity = -1.0f;
 }
 
 bool canvasAddCommand(Canvas& c, const char* name, UiCommandFn fn, void* user) {
@@ -329,10 +242,10 @@ bool canvasWantsText(const Canvas& c) {
     if (c.state->plug.wantsText != nullptr && c.state->plug.wantsText(*c.state)) {
         return true;
     }
-    if (c.state->focused == kUiNone) {
+    if (c.state->focused == kUiNone || c.state->focused >= c.state->count) {
         return false;
     }
-    return c.state->ent[c.state->focused].try_get<UiField>() != nullptr;
+    return c.state->ent[c.state->focused].has<UiTextInput>();
 }
 
 bool canvasWantsRelative(const Canvas& c) {
@@ -341,39 +254,6 @@ bool canvasWantsRelative(const Canvas& c) {
 
 bool canvasPointerOver(const Canvas& c) {
     return c.state != nullptr && (c.state->hovered != kUiNone || c.state->capture != kUiNone);
-}
-
-void canvasMaskScene(const Canvas& c, InputFrame& input) {
-    if (c.state == nullptr) {
-        return;
-    }
-    const UiState& s = *c.state;
-    if (s.hovered != kUiNone || s.capture != kUiNone) {
-        input.pointer.dx = 0.0f;
-        input.pointer.dy = 0.0f;
-        input.pointer.down = 0;
-        input.pointer.pressed = 0;
-        input.pointer.released = 0;
-        input.clicks = 0;
-    }
-    if (s.ateWheel != 0) {
-        input.wheel = 0.0f;
-        input.wheelX = 0.0f;
-    }
-    if (s.focused != kUiNone && s.focused < s.count && s.ent[s.focused].try_get<UiField>() != nullptr) {
-        input.textLen = 0;
-        input.backspace = 0;
-        input.del = 0;
-        input.enter = 0;
-        input.tab = 0;
-        input.left = 0;
-        input.right = 0;
-        input.up = 0;
-        input.down = 0;
-        std::memset(input.keyDown, 0, sizeof(input.keyDown));
-        std::memset(input.keyEdge, 0, sizeof(input.keyEdge));
-        std::memset(input.keyUp, 0, sizeof(input.keyUp));
-    }
 }
 
 bool canvasFocusBox(const Canvas& c, float& x, float& y, float& w, float& h) {

@@ -469,10 +469,21 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
 
     const UiDrawHooks* hooks = s.world.try_get<UiDrawHooks>();
     uint32_t n = 0;
-    for (int pass = 0; pass < 2; ++pass) {
+    for (int pass = 0; pass < 3; ++pass) {
     for (uint16_t k = 0; k < nIds; ++k) {
         const uint16_t id = ids[k];
-        if (uiIsOverlay(s, id) != (pass == 1)) {
+        bool popup = false;
+        for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+            if (s.ent[p].has<UiPopup>()) {
+                popup = true;
+                break;
+            }
+        }
+        if (pass == 2) {
+            if (!popup) {
+                continue;
+            }
+        } else if (popup || uiIsOverlay(s, id) != (pass == 1)) {
             continue;
         }
         const UiPaint* paintPtr = s.ent[id].try_get<UiPaint>();
@@ -535,8 +546,26 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             }
         }
         if (const UiImage* image = s.ent[id].try_get<UiImage>()) {
-            n = emitPhoto(dst, n, cap, box, *image, clip, paint.blur, r, g, b);
+            float pr = r;
+            float pg = g;
+            float pb = b;
+            if (role == UiRole::Button && pr * 0.30f + pg * 0.59f + pb * 0.11f < 0.55f) {
+                pr = 1.0f;
+                pg = 1.0f;
+                pb = 1.0f;
+            }
+            n = emitPhoto(dst, n, cap, box, *image, clip, paint.blur, pr, pg, pb);
             continue;
+        }
+        if (role == UiRole::Label && r + g + b < 0.25f) {
+            r = s.look.text[0];
+            g = s.look.text[1];
+            b = s.look.text[2];
+            if (r + g + b < 0.25f) {
+                r = 0.92f;
+                g = 0.93f;
+                b = 0.95f;
+            }
         }
         if (role == UiRole::Label) {
             const uint16_t parentId = s.parentOf[id];
@@ -575,17 +604,13 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                     const float y0 = limit.y > ancestor.y ? limit.y : ancestor.y;
                     const float x1 = limit.x + limit.w < ancestor.x + ancestor.w ? limit.x + limit.w : ancestor.x + ancestor.w;
                     const float y1 = limit.y + limit.h < ancestor.y + ancestor.h ? limit.y + limit.h : ancestor.y + ancestor.h;
+                    if (x1 - x0 < 1.0f || y1 - y0 < 1.0f) {
+                        continue;
+                    }
                     limit.x = x0;
                     limit.y = y0;
-                    if (x1 - x0 > 1.0f && y1 - y0 > 1.0f) {
-                        limit.x = x0;
-                        limit.y = y0;
-                        limit.w = x1 - x0;
-                        limit.h = y1 - y0;
-                    }
-                }
-                if (limit.w < 1.0f || limit.h < 1.0f) {
-                    limit = box;
+                    limit.w = x1 - x0;
+                    limit.h = y1 - y0;
                 }
                 const TextRun run = textRun(s, *text, box);
                 if (run.lines > 0) {
@@ -599,7 +624,9 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             float bg = g;
             float bb = b;
             float ba = a;
-            if (hot && role == UiRole::Button && a < 0.05f) {
+            const bool ghost = a < 0.05f;
+            const bool hoverStroke = hot && role == UiRole::Button && ghost && paint.borderW > 0.4f;
+            if (hot && role == UiRole::Button && ghost && !hoverStroke) {
                 br = s.look.accent[0][0];
                 bg = s.look.accent[0][1];
                 bb = s.look.accent[0][2];
@@ -607,7 +634,8 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             }
             const bool focusRing = paint.disabled == 0 && id == s.focused
                 && (role == UiRole::Field || role == UiRole::Check || role == UiRole::Button);
-            const float ring = paint.borderW > 0.4f ? paint.borderW : (focusRing ? 1.5f : 0.0f);
+            const float ring = hoverStroke ? paint.borderW
+                : (paint.borderW > 0.4f && !ghost ? paint.borderW : (focusRing ? 1.5f : 0.0f));
             if (paint.shadow > 0.5f && ba > 0.02f) {
                 const float sh = paint.shadow;
                 n = emitMark(
@@ -671,25 +699,42 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
         if ((role == UiRole::Button || role == UiRole::Close) && paint.icon != 0 && n < cap) {
             const UiText* host = s.ent[id].try_get<UiText>();
             const bool hasText = host != nullptr && host->len > 0;
-            float ir = 0.93f;
-            float ig = 0.94f;
-            float ib = 0.96f;
-            if (a > 0.2f) {
-                textInk(r, g, b, hot, ir, ig, ib);
+            float ir = s.look.text[0];
+            float ig = s.look.text[1];
+            float ib = s.look.text[2];
+            const float lum = ir * 0.30f + ig * 0.59f + ib * 0.11f;
+            if (lum < 0.55f) {
+                ir = 0.88f;
+                ig = 0.88f;
+                ib = 0.88f;
             }
-            constexpr float kSide = 14.0f;
+            const float fit = box.w < box.h ? box.w : box.h;
+            float side = fit > 18.0f ? fit - 4.0f : 14.0f;
+            if (side > 72.0f) {
+                side = 72.0f;
+            }
+            if (side < 12.0f) {
+                side = 12.0f;
+            }
             UiPrimitive& icon = dst[n++];
             icon = {};
-            icon.posX = hasText ? box.x + 6.0f : box.x + (box.w - kSide) * 0.5f;
-            icon.posY = box.y + (box.h - kSide) * 0.5f;
-            icon.sizeX = kSide;
-            icon.sizeY = kSide;
+            icon.posX = hasText ? box.x + 6.0f : box.x + (box.w - side) * 0.5f;
+            icon.posY = box.y + (box.h - side) * 0.5f;
+            icon.sizeX = side;
+            icon.sizeY = side;
             icon.color[0] = ir;
             icon.color[1] = ig;
             icon.color[2] = ib;
             icon.color[3] = 1.0f;
             icon.texId = paint.icon;
             icon.flags = kUiFlagIcon;
+            if (clip != nullptr) {
+                icon.flags |= kUiFlagClip;
+                icon.extra[1] = clip->x;
+                icon.extra[2] = clip->y;
+                icon.extra[3] = clip->w;
+                putFloat(icon.pad0, clip->h);
+            }
         }
         if (role == UiRole::Slider) {
             const UiRange* range = s.ent[id].try_get<UiRange>();
@@ -723,7 +768,8 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             n = emitRect(dst, n, cap, box.x + fillW - 6.0f, box.y + 3.0f, 12.0f, box.h - 6.0f, 0.97f, 0.96f, 0.94f, 1.0f, 2.0f, clip);
         } else if (role == UiRole::Check) {
             const UiCheck* check = s.ent[id].try_get<UiCheck>();
-            const bool radio = check != nullptr && check->kind == 1;
+            const bool radio = check != nullptr && check->kind == static_cast<uint8_t>(UiCheckKind::Radio);
+
             const float side = 18.0f;
             const float by = box.y + (box.h - side) * 0.5f;
             const float rad = radio ? side * 0.5f : 4.0f;
@@ -734,6 +780,29 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                     n = emitRect(dst, n, cap, box.x + 13.0f, by + 5.0f, side - 10.0f, side - 10.0f, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 1.0f, (side - 10.0f) * 0.5f, clip);
                 } else {
                     n = emitRect(dst, n, cap, box.x + 12.0f, by + 4.0f, side - 8.0f, side - 8.0f, s.look.accent[1][0], s.look.accent[1][1], s.look.accent[1][2], 1.0f, 2.0f, clip);
+                }
+            }
+        }
+        if (role == UiRole::Button || role == UiRole::Close || role == UiRole::Check) {
+            const UiText* host = s.ent[id].try_get<UiText>();
+            if (host != nullptr && host->len > 0) {
+                UiBox slot = box;
+                if (role == UiRole::Check) {
+                    const UiFlex* flex = s.ent[id].try_get<UiFlex>();
+                    const float inset = flex != nullptr && flex->padL > 1.0f ? flex->padL : 32.0f;
+                    slot.x += inset;
+                    slot.w = slot.w > inset + 4.0f ? slot.w - inset : 4.0f;
+                }
+                float tr = s.look.text[0];
+                float tg = s.look.text[1];
+                float tb = s.look.text[2];
+                if (a > 0.2f) {
+                    textInk(r, g, b, hot, tr, tg, tb);
+                }
+                const TextRun run = textRun(s, *host, slot);
+                if (run.lines > 0) {
+                    const float ta = paint.disabled != 0 ? a * 0.45f : a;
+                    n = uiEmitRun(s, dst, n, cap, run, tr, tg, tb, ta > 0.05f ? ta : 1.0f, clip);
                 }
             }
         }

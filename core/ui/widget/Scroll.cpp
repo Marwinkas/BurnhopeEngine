@@ -2,6 +2,7 @@
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Scroll.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -92,6 +93,29 @@ UiScrollMetrics uiCalcScrollMetrics(float viewH, float contentH, float offset) {
         metrics.t = 1.0f;
     }
     return metrics;
+}
+
+void scrollClamp(UiState& s, uint16_t id) {
+    auto* scroll = id < s.count ? s.ent[id].try_get_mut<UiScroll>() : nullptr;
+    if (scroll == nullptr || scroll->inner == kUiNone) {
+        return;
+    }
+    const float viewH = s.box[id].h;
+    const float contentH = scrollSpan(s, id, scroll->inner);
+    const float maxScroll = std::max(0.0f, contentH - viewH);
+    scroll->offset = contentH <= viewH ? 0.0f : std::clamp(scroll->offset, 0.0f, maxScroll);
+    if (auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>()) {
+        flex->marginT = -scroll->offset;
+    }
+    scrollRefresh(s, id);
+}
+
+void scrollClampAll(UiState& s) {
+    for (uint16_t id = 0; id < s.count; ++id) {
+        if (s.ent[id].is_alive() && s.ent[id].try_get<UiScroll>() != nullptr) {
+            scrollClamp(s, id);
+        }
+    }
 }
 
 void scrollBy(UiState& s, uint16_t id, float wheel) {

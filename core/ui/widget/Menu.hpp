@@ -8,13 +8,6 @@ namespace burnhope {
 
 inline constexpr uint8_t kUiMenuCap = 32;
 
-struct UiMenuPop {
-    uint16_t row[kUiMenuCap]{};
-    void (*fn[kUiMenuCap])(void*){};
-    void* user = nullptr;
-    uint8_t n = 0;
-};
-
 struct UiMenuMetrics {
     uint16_t opened = kUiNone;
     float w = 180.0f;
@@ -31,10 +24,23 @@ struct UiMenuItem {
     const char* label = nullptr;
     uint8_t iconSlot = 255;
     void (*onClick)(void* user) = nullptr;
+    const UiMenuItem* children = nullptr;
+    uint8_t childCount = 0;
     bool separator = false;
     bool disabled = false;
 };
 
+struct UiMenuPop {
+    uint16_t row[kUiMenuCap]{};
+    void (*fn[kUiMenuCap])(void*){};
+    const UiMenuItem* item[kUiMenuCap]{};
+    void* user = nullptr;
+    uint8_t n = 0;
+    uint8_t hover = 255;
+    uint16_t sub = kUiNone;
+};
+
+void uiMarkMenuBar(UiState& s, uint16_t id);
 void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenuItem> items, void* user);
 void uiMenuClose(UiState& s);
 uint16_t uiMakeMenu(UiState& s);

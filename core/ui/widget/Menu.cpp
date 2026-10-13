@@ -1,6 +1,7 @@
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Menu.hpp"
 
+#include <algorithm>
 #include <span>
 
 namespace burnhope {
@@ -28,8 +29,29 @@ void onItem(void* user, uint16_t id, int16_t) {
     }
 }
 
-uint16_t ensureMenu(UiState& s) {
-    uint16_t id = uiFindName(s, "ui.menu");
+void menuShell(UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return;
+    }
+    auto* paint = s.ent[id].try_get_mut<UiPaint>();
+    if (paint == nullptr) {
+        s.ent[id].set<UiPaint>(paintToken(s.look, UiRole::Panel, UiToken::Window, s.look.radiusSm));
+        paint = s.ent[id].try_get_mut<UiPaint>();
+        if (paint == nullptr) {
+            return;
+        }
+    }
+    const float radius = paint->radius;
+    *paint = paintToken(s.look, UiRole::Panel, UiToken::Menu, radius);
+    paint->a = 1.0f;
+    paint->borderW = 1.0f;
+    paint->br = s.look.muted[0];
+    paint->bg = s.look.muted[1];
+    paint->bb = s.look.muted[2];
+}
+
+uint16_t ensureMenuNamed(UiState& s, const char* name) {
+    uint16_t id = uiFindName(s, name);
     if (id != kUiNone) {
         return id;
     }
@@ -40,14 +62,22 @@ uint16_t ensureMenu(UiState& s) {
     flex.pad = 4.0f;
     flex.gap = 2.0f;
     flex.shrink = 0.0f;
-    id = spawn(s, 0, flex, paintToken(s.look, UiRole::Panel, UiToken::Menu, s.look.radius));
-    uiName(s, id, "ui.menu");
+    id = spawn(s, 0, flex, paintToken(s.look, UiRole::Panel, UiToken::Window, s.look.radius));
+    menuShell(s, id);
+    uiName(s, id, name);
     uiShow(s, id, false);
     s.ent[id].set<UiMenuPop>({});
+    s.ent[id].set<UiPopup>({});
     return id;
 }
 
 } // namespace
+
+void uiMarkMenuBar(UiState& s, uint16_t id) {
+    if (id < s.count) {
+        s.ent[id].set<UiMenuBar>({});
+    }
+}
 
 void uiMenuClose(UiState& s) {
     const uint16_t id = uiFindName(s, "ui.menu");
@@ -61,7 +91,7 @@ void uiMenuClose(UiState& s) {
 }
 
 void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenuItem> items, void* user) {
-    const uint16_t id = ensureMenu(s);
+    const uint16_t id = ensureMenuNamed(s, "ui.menu");
     if (id == kUiNone || id >= s.count) {
         return;
     }
@@ -71,6 +101,9 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
     }
     pop->user = user;
     pop->n = 0;
+    pop->hover = 255;
+    pop->sub = kUiNone;
+    uiShow(s, uiFindName(s, "ui.menu.sub"), false);
     for (uint16_t child = 0; child < s.count; ++child) {
         if (s.parentOf[child] == id) {
             uiShow(s, child, false);
@@ -99,7 +132,14 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
             } else {
                 UiFlex line = px(200.0f, 28.0f);
                 line.shrink = 0.0f;
+                line.align = 2;
+                line.justify = 0;
+                line.padL = 8.0f;
                 row = spawn(s, id, line, paintToken(s.look, UiRole::Button, UiToken::Item, s.look.radiusSm));
+                if (auto* paint = row < s.count ? s.ent[row].try_get_mut<UiPaint>() : nullptr) {
+                    paint->a = 0.0f;
+                    paint->borderW = 0.0f;
+                }
                 addText(s, row, item.label != nullptr ? item.label : "");
                 uiBind(s, row, onItem, &s);
             }
@@ -107,23 +147,52 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
         uiShow(s, row, true);
         if (!item.separator) {
             uiText(s, row, item.label != nullptr ? item.label : "");
+            if (auto* line = s.ent[row].try_get_mut<UiFlex>()) {
+                line->align = 2;
+                line->justify = 0;
+                line->padL = 8.0f;
+            }
+            if (auto* text = s.ent[row].try_get_mut<UiText>()) {
+                text->align = 0;
+            }
             if (auto* paint = s.ent[row].try_get_mut<UiPaint>()) {
+                paint->token = static_cast<uint8_t>(UiToken::Item);
+                paint->a = 0.0f;
+                paint->borderW = 0.0f;
                 paint->disabled = item.disabled ? 1 : 0;
             }
         }
         pop->row[slot] = row;
         pop->fn[slot] = item.separator ? nullptr : item.onClick;
+        pop->item[slot] = item.separator ? nullptr : &item;
         ++slot;
     }
     pop->n = slot;
     if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
         flex->position = 1;
-        flex->posX = screenX;
-        flex->posY = screenY;
+        const float menuW = flex->width > 1.0f ? flex->width : 220.0f;
         const float full = static_cast<float>(slot) * 30.0f + 8.0f;
         const float limit = s.laidH > 64.0f ? s.laidH - 16.0f : full;
-        flex->height = full < limit ? full : limit;
+        const float menuH = full < limit ? full : limit;
+        float x = screenX;
+        float y = screenY;
+        if (x + menuW > s.laidW - 4.0f) {
+            x = s.laidW - menuW - 4.0f;
+        }
+        if (y + menuH > s.laidH) {
+            y = std::max(4.0f, screenY - menuH);
+        }
+        if (x < 4.0f) {
+            x = 4.0f;
+        }
+        if (y < 4.0f) {
+            y = 4.0f;
+        }
+        flex->posX = x;
+        flex->posY = y;
+        flex->height = menuH;
         flex->overflow = full > limit ? 2 : 0;
+        menuShell(s, id);
     }
     if (slot > 0 && s.ent[id].try_get<UiFlex>() != nullptr && s.ent[id].try_get<UiFlex>()->overflow != 0) {
         s.ent[id].set<UiScroll>({0.0f, id});
@@ -145,17 +214,11 @@ uint16_t uiMakeMenu(UiState& s) {
     flex.pad = uiMenuMetrics(s).pad;
     flex.gap = uiMenuMetrics(s).gap;
     flex.shrink = 0.0f;
-    UiPaint paint{};
-    paint.role = static_cast<uint8_t>(UiRole::Panel);
-    paint.token = static_cast<uint8_t>(UiToken::Menu);
-    paint.r = s.look.menu[0];
-    paint.g = s.look.menu[1];
-    paint.b = s.look.menu[2];
-    paint.a = 1.0f;
-    paint.radius = s.look.radiusSm;
-    const uint16_t id = uiNode(s, 0, flex, paint);
+    const uint16_t id = uiNode(s, 0, flex, paintToken(s.look, UiRole::Panel, UiToken::Window, s.look.radiusSm));
     if (id != kUiNone) {
+        menuShell(s, id);
         uiShow(s, id, false);
+        s.ent[id].set<UiPopup>({});
     }
     return id;
 }
@@ -198,11 +261,13 @@ void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y) {
     const UiMenuMetrics& metrics = uiMenuMetrics(s);
     const float menuH = metrics.pad * 2.0f + static_cast<float>(items) * metrics.itemH
         + static_cast<float>(items > 0 ? items - 1 : 0) * metrics.gap;
+    const float anchorY = y;
+    y = anchorY + 4.0f;
     if (x + metrics.w > s.laidW) {
         x = s.laidW - metrics.w;
     }
     if (y + menuH > s.laidH) {
-        y = s.laidH - menuH;
+        y = anchorY - menuH - 4.0f;
     }
     if (x < 4.0f) {
         x = 4.0f;
@@ -213,6 +278,7 @@ void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y) {
     flex->position = 1;
     flex->posX = x;
     flex->posY = y;
+    menuShell(s, menuId);
     uiMenuMetrics(s).opened = menuId;
     s.menuOpen = true;
     uiShow(s, menuId, true);
@@ -225,7 +291,7 @@ void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y) {
 
 namespace {
 
-void onMenuCommand(void* user, uint16_t, int16_t tag) {
+void onMenuCommand(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     if (tag >= 100) {
         const uint8_t index = static_cast<uint8_t>(tag - 100);
@@ -251,17 +317,22 @@ bool uiCommandAdd(UiState& s, const char* name, UiCommandFn fn, void* user) {
     copyText(cmd.name, cmd.len, name);
     cmd.fn = fn;
     cmd.user = user;
-    const int16_t tag = static_cast<int16_t>(100 + s.cmdCount);
     UiFlex itemF{};
     itemF.heightMode = static_cast<uint8_t>(UiSize::Px);
     itemF.height = uiMenuMetrics(s).itemH;
     itemF.widthMode = static_cast<uint8_t>(UiSize::Percent);
     itemF.width = 100.0f;
     itemF.shrink = 0.0f;
-    itemF.align = 1;
-    const uint16_t item = spawn(s, s.menu, itemF, paint(UiRole::Button, 0.18f, 0.19f, 0.24f, 4.0f, tag));
-    uiStamp(s, item, UiToken::Button);
+    itemF.align = 2;
+    itemF.justify = 0;
+    itemF.padL = 8.0f;
+    const uint16_t item = spawn(s, s.menu, itemF, paintToken(s.look, UiRole::Button, UiToken::Item, s.look.radiusSm, tag));
+    if (auto* rowPaint = item < s.count ? s.ent[item].try_get_mut<UiPaint>() : nullptr) {
+        rowPaint->a = 0.0f;
+        rowPaint->borderW = 0.0f;
+    }
     UiText label{};
+    label.align = 0;
     copyText(label.bytes, label.len, name);
     s.ent[item].set<UiText>(label);
     uiBind(s, item, onMenuCommand, &s);
@@ -304,13 +375,20 @@ bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t hit, uint8_t phase, 
     bool barOpen = false;
     float menuX = in.pointer.x;
     float menuY = in.pointer.y;
-    if (press && hit != kUiNone && hit < s.count) {
-        if (s.ent[hit].try_get<UiMenuBar>() != nullptr && s.contextOf[hit] != kUiNone) {
-            barOpen = true;
-            contextMenu = s.contextOf[hit];
-            menuX = s.box[hit].x;
-            menuY = s.box[hit].y + s.box[hit].h;
+    uint16_t bar = kUiNone;
+    if (hit != kUiNone && hit < s.count) {
+        for (uint16_t p = hit; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+            if (s.ent[p].has<UiMenuBar>() && s.contextOf[p] != kUiNone) {
+                bar = p;
+                break;
+            }
         }
+    }
+    if (press && bar != kUiNone) {
+        barOpen = true;
+        contextMenu = s.contextOf[bar];
+        menuX = s.box[bar].x;
+        menuY = s.box[bar].y + s.box[bar].h;
     }
     bool justOpened = false;
     if (right && hit != kUiNone && hit < s.count) {
@@ -325,7 +403,7 @@ bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t hit, uint8_t phase, 
     bool barOnly = false;
     if (right && hit != kUiNone && hit < s.count) {
         for (uint16_t p = hit; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-            if (s.ent[p].try_get<UiMenuBar>() != nullptr) {
+            if (s.ent[p].has<UiMenuBar>()) {
                 barOnly = true;
                 break;
             }

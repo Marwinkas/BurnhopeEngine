@@ -12,17 +12,14 @@ void activate(UiState& s, uint16_t id) {
     if (p->role == static_cast<uint8_t>(UiRole::Check)) {
         auto* check = s.ent[id].try_get_mut<UiCheck>();
         if (check != nullptr) {
-            if (check->kind == 1) {
+            if (check->kind == static_cast<uint8_t>(UiCheckKind::Radio)) {
                 check->on = 1;
-                for (uint16_t other = 0; other < s.count; ++other) {
-                    if (other == id) {
-                        continue;
+                // Обходим только сущности с компонентом UiCheck через Flecs Each:
+                s.world.each([&](flecs::entity e, UiCheck& mate) {
+                    if (e.id() != id && mate.kind == static_cast<uint8_t>(UiCheckKind::Radio) && mate.group == check->group) {
+                        mate.on = 0;
                     }
-                    auto* mate = s.ent[other].try_get_mut<UiCheck>();
-                    if (mate != nullptr && mate->kind == 1 && mate->group == check->group) {
-                        mate->on = 0;
-                    }
-                }
+                });
             } else {
                 check->on = check->on == 0 ? 1 : 0;
             }
@@ -42,22 +39,23 @@ void activate(UiState& s, uint16_t id) {
 uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
     UiFlex flex{};
     flex.shrink = 0.0f;
-    flex.align = 1;
-    flex.justify = 1;
-    if (cfg.height < 0.0f) {
+    flex.align = static_cast<uint8_t>(UiAlign::Center);
+    flex.justify = static_cast<uint8_t>(UiJustify::Center);
+    if (cfg.fillHeight) {
         flex.heightMode = static_cast<uint8_t>(UiSize::Percent);
         flex.height = 100.0f;
     } else {
         flex.heightMode = static_cast<uint8_t>(UiSize::Px);
         flex.height = cfg.height > 0.0f ? cfg.height : 28.0f;
     }
-    if (cfg.width > 0.0f) {
-        flex.widthMode = static_cast<uint8_t>(UiSize::Px);
-        flex.width = cfg.width;
-    } else if (cfg.width < 0.0f) {
+    
+    if (cfg.fillWidth) {
         flex.widthMode = static_cast<uint8_t>(UiSize::Percent);
         flex.width = 100.0f;
         flex.grow = 1.0f;
+    } else if (cfg.width > 0.0f) {
+        flex.widthMode = static_cast<uint8_t>(UiSize::Px);
+        flex.width = cfg.width;
     }
     const uint16_t id = spawn(s, parent, flex, paintToken(s.look, UiRole::Button, UiToken::Button, s.look.radiusSm));
     if (id == kUiNone) {
@@ -65,7 +63,16 @@ uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
     }
     addText(s, id, cfg.label != nullptr ? cfg.label : "");
     if (cfg.iconSlot < kPhotoSlots) {
-        (void)uiIcon(s, id, cfg.iconSlot, 16.0f, 16.0f);
+        (void)uiIcon(s, id, cfg.iconSlot, 16.0f, 16.0f); // Иконка перехватывает хит-тест!
+    }
+    
+    // СТАЛО:
+    if (cfg.iconSlot < kPhotoSlots) {
+        const uint16_t iconId = uiIcon(s, id, cfg.iconSlot, 16.0f, 16.0f);
+        if (iconId != kUiNone) {
+            // Иконка нематериальна: все клики и наведения падают строго на родительскую кнопку!
+            s.ent[iconId].set<UiNoHit>({});
+        }
     }
     if (cfg.onClick != nullptr) {
         uiBind(s, id, cfg.onClick, cfg.user);
@@ -91,20 +98,19 @@ uint16_t uiIconButton(UiState& s, uint16_t parent, uint8_t iconSlot, UiClickFn f
     return uiButton(s, parent, cfg);
 }
 
-uint16_t uiCheck(UiState& s, uint16_t parent, const char* text, uint8_t kind, uint8_t group, bool on) {
-    UiFlex flex{};
-    flex.widthMode = static_cast<uint8_t>(UiSize::Percent);
-    flex.width = 100.0f;
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
-    flex.height = 32.0f;
-    flex.shrink = 0.0f;
-    flex.align = 1;
-    const uint16_t id = spawn(s, parent, flex, paintToken(s.look, UiRole::Check, UiToken::Check, s.look.radiusSm));
+// СТАЛО:
+uint16_t uiCheck(UiState& s, uint16_t parent, const char* text, UiCheckKind kind, uint8_t group, bool on) {
+    // 1. Создаем ноду с дефолтными стилями
+    const uint16_t id = spawn(s, parent, {}, paintToken(s.look, UiRole::Check, UiToken::Check, s.look.radiusSm));
     if (id == kUiNone) {
         return id;
     }
+    
+    // 2. Навешиваем текст
     addText(s, id, text != nullptr ? text : "");
-    s.ent[id].set<UiCheck>({on ? uint8_t{1} : uint8_t{0}, kind, group});
+    
+    // 3. Вызываем единую функцию настройки (никакого дублирования flex-свойств!)
+    uiBindCheck(s, id, 0, group, on);
     return id;
 }
 

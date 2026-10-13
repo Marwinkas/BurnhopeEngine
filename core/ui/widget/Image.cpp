@@ -13,7 +13,12 @@ uint16_t uiIcon(UiState& s, uint16_t parent, uint8_t slot, float w, float h) {
     flex.width = w;
     flex.height = h;
     flex.shrink = 0.0f;
-    const uint16_t id = spawn(s, parent, flex, paint(UiRole::Panel, 1.0f, 1.0f, 1.0f, 4.0f));
+    UiPaint ink = paintToken(s.look, UiRole::Panel, UiToken::Content, 4.0f);
+    ink.a = 0.0f;
+    ink.r = 1.0f;
+    ink.g = 1.0f;
+    ink.b = 1.0f;
+    const uint16_t id = spawn(s, parent, flex, ink);
     if (id == kUiNone) {
         return id;
     }

@@ -141,7 +141,6 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
     flex.shrink = 0.0f;
     UiPaint paint = paintToken(s.look, UiRole::Panel, UiToken::Content, 0.0f);
     paint.a = 1.0f;
-    paint.tag = -1;
     const uint16_t id = uiNode(s, parent, flex, paint);
     if (id == kUiNone) {
         skipValue(c);
@@ -242,7 +241,7 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                         uiFlexApplyAttr(*node, key, v);
                     }
                 }
-            } else if (strSame(key, "pad") || strSame(key, "gap") || strSame(key, "radius") || strSame(key, "tag") || strSame(key, "icon")) {
+            } else if (strSame(key, "pad") || strSame(key, "gap") || strSame(key, "radius") || strSame(key, "icon")) {
                 float v = 0.0f;
                 if (parseUiNumber(c, v)) {
                     if (strSame(key, "pad") || strSame(key, "gap")) {
@@ -254,12 +253,7 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                         if (node != nullptr) {
                             node->radius = v;
                         }
-                    } else if (strSame(key, "tag")) {
-                        auto* node = s.ent[id].try_get_mut<UiPaint>();
-                        if (node != nullptr) {
-                            node->tag = static_cast<int8_t>(v);
-                        }
-                    } else {
+                    }  else {
                         auto* node = s.ent[id].try_get_mut<UiPaint>();
                         if (node != nullptr) {
                             node->icon = static_cast<uint8_t>(v);
