@@ -1,4 +1,4 @@
-#include "ui/widget/Button.hpp"
+#include "ui/Hover.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/Virtual.hpp"
@@ -47,39 +47,46 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
     if (slot == kUiNone) {
         return slot;
     }
-    UiButtonConfig chev{};
-    chev.label = ">";
-    chev.width = 16.0f;
-    chev.height = itemH > 4.0f ? itemH - 4.0f : itemH;
-    chev.onClick = onRow;
-    chev.user = &s;
-    const uint16_t chevron = uiButton(s, slot, chev);
+    auto bareIcon = [&](float side, uint8_t iconId) {
+        UiFlex box{};
+        box.widthMode = UiSize::Px;
+        box.width = side;
+        box.heightMode = UiSize::Px;
+        box.height = side;
+        box.shrink = 0.0f;
+        UiPaint paint{};
+        paint.a = 0.0f;
+        paint.borderW = 0.0f;
+        paint.shadow = 0.0f;
+        paint.icon = iconId;
+        paint.r = s.look.text[0];
+        paint.g = s.look.text[1];
+        paint.b = s.look.text[2];
+        return spawn(s, slot, box, paint);
+    };
+    const uint16_t chevron = bareIcon(16.0f, 10);
     if (chevron < s.count) {
-        if (auto* paint = s.ent[chevron].try_get_mut<UiPaint>()) {
-            paint->a = 0.0f;
-            paint->borderW = 0.0f;
-        }
+        s.ent[chevron].add<UiFocusable>();
+        uiBind(s, chevron, onRow, &s);
     }
-    UiButtonConfig glyph{};
-    glyph.width = 16.0f;
-    glyph.height = 16.0f;
-    const uint16_t icon = uiButton(s, slot, glyph);
-    if (icon < s.count) {
-        if (auto* paint = s.ent[icon].try_get_mut<UiPaint>()) {
-            paint->a = 0.0f;
-            paint->borderW = 0.0f;
-            paint->icon = 4;
-        }
-    }
+    const uint16_t icon = bareIcon(16.0f, 4);
     UiFlex caption{};
     caption.grow = 1.0f;
     caption.shrink = 1.0f;
     caption.self = UiAlignSelf::Stretch;
     caption.heightMode = UiSize::Px;
     caption.height = itemH > 6.0f ? itemH - 6.0f : itemH;
-    const uint16_t label = spawn(s, slot, caption, paintToken(s.look, UiToken::Text, 0.0f));
+    const uint16_t label = spawn(s, slot, caption, paintLabel(s.look));
     addText(s, label, " ");
     uiTextStyle(s, label, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+    if (icon < s.count) {
+        s.ent[icon].add<UiNoHit>();
+    }
+    if (label < s.count) {
+        s.ent[label].add<UiNoHit>();
+    }
+    s.ent[slot].add<UiFocusable>();
+    uiHover(s, slot);
     uiBind(s, slot, onRow, &s);
     s.ent[slot].set<UiParts>({icon, chevron, label});
     s.ent[slot].set<UiVirtRow>({});
@@ -91,6 +98,10 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
 
 float uiTreeContentH(const UiState& s, uint16_t id) {
     return uiVirtualContentHeight<UiTreeView>(s, id);
+}
+
+void treeOnLayout(UiState& s, uint16_t id, void*) {
+    uiTreeViewRefresh(s, id);
 }
 
 uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg) {
@@ -111,6 +122,7 @@ uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg) {
     tree.itemH = 28.0f;
     s.ent[scroll].set<UiTreeView>(tree);
     s.ent[scroll].set<UiVirtualPool>({uiTreeViewRefresh, uiTreeContentH, 0});
+    s.ent[scroll].set<UiLayoutRefresh>({treeOnLayout, nullptr});
     uiTreeViewRefresh(s, scroll);
     return scroll;
 }

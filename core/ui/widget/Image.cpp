@@ -1,3 +1,4 @@
+#include "ui/Panel.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Image.hpp"
 
@@ -18,7 +19,7 @@ uint16_t uiIcon(UiState& s, uint16_t parent, uint8_t slot, float w, float h) {
     ink.r = 1.0f;
     ink.g = 1.0f;
     ink.b = 1.0f;
-    const uint16_t id = spawn(s, parent, flex, ink);
+    const uint16_t id = uiPanel(s, parent, flex, ink);
     if (id == kUiNone) {
         return id;
     }

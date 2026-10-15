@@ -1,4 +1,6 @@
+#include "ui/Panel.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/List.hpp"
 #include "ui/widget/Splitter.hpp"
 
 #include <algorithm>
@@ -102,6 +104,9 @@ bool splitVertical(const UiState& s, uint16_t split) {
 }
 
 uint8_t splitCursor(const UiState& s, uint16_t split) {
+    if (split < s.count && s.ent[split].has<UiSplitShare>()) {
+        return 1;
+    }
     return splitVertical(s, split) ? 2 : 1;
 }
 
@@ -111,7 +116,8 @@ UiBox splitGrip(const UiState& s, uint16_t split) {
     }
     UiBox grip = s.box[split];
     constexpr float kHit = 8.0f;
-    if (splitVertical(s, split)) {
+    const bool alongY = splitVertical(s, split) && !s.ent[split].has<UiSplitShare>();
+    if (alongY) {
         if (grip.h < kHit) {
             grip.y -= (kHit - grip.h) * 0.5f;
             grip.h = kHit;
@@ -145,7 +151,66 @@ float paneSize(const UiState& s, uint16_t pane, bool vertical) {
     return vertical ? s.box[pane].h : s.box[pane].w;
 }
 
+void shareResize(UiState& s, uint16_t split, float x) {
+    auto* drag = s.ent[split].try_get_mut<UiSplitter>();
+    if (drag == nullptr) {
+        return;
+    }
+    const uint16_t host = s.parentOf[split];
+    const UiBox& home = host < s.count ? s.box[host] : UiBox{};
+    float size = drag->armed != 0 ? drag->startSize + (x - drag->startMouse) : (x - home.x);
+    const float maxSize = std::max(96.0f, home.w - 96.0f);
+    size = std::clamp(size, 72.0f, maxSize);
+    for (uint16_t id = 0; id < s.count; ++id) {
+        if (!s.ent[id].is_alive() || !s.ent[id].has<UiPropLabel>()) {
+            continue;
+        }
+        bool under = false;
+        for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+            if (p == host) {
+                under = true;
+                break;
+            }
+        }
+        if (!under) {
+            continue;
+        }
+        auto* flex = s.ent[id].try_get_mut<UiFlex>();
+        if (flex != nullptr) {
+            writeSize(*flex, false, size);
+        }
+    }
+    if (auto* bar = s.ent[split].try_get_mut<UiFlex>()) {
+        bar->position = UiPosition::Absolute;
+        bar->posX = size;
+        bar->widthMode = UiSize::Px;
+        bar->width = 6.0f;
+    }
+    if (host < s.count) {
+        if (auto* grid = s.ent[host].try_get_mut<UiPropGrid>()) {
+            grid->labelW = size;
+        }
+    }
+    s.layoutFrom = 0;
+    s.layoutDirty = true;
+    s.visualDirty = true;
+}
+
 void splitBegin(UiState& s, uint16_t split, float x, float y) {
+    if (split < s.count && s.ent[split].has<UiSplitShare>()) {
+        auto* drag = s.ent[split].try_get_mut<UiSplitter>();
+        const UiFlex* bar = s.ent[split].try_get<UiFlex>();
+        if (drag == nullptr) {
+            return;
+        }
+        drag->pane = s.parentOf[split];
+        drag->useNext = 0;
+        drag->startSize = bar != nullptr ? bar->posX : 140.0f;
+        drag->startMouse = x;
+        drag->axis = 0;
+        drag->armed = 1;
+        return;
+    }
     const int index = childIndex(s, split);
     if (index < 0) {
         return;
@@ -176,6 +241,10 @@ void splitBegin(UiState& s, uint16_t split, float x, float y) {
 }
 
 void splitDrag(UiState& s, uint16_t split, float x, float y) {
+    if (split < s.count && s.ent[split].has<UiSplitShare>()) {
+        shareResize(s, split, x);
+        return;
+    }
     const int index = childIndex(s, split);
     if (index < 0) {
         return;
@@ -203,19 +272,23 @@ void splitDrag(UiState& s, uint16_t split, float x, float y) {
     }
     const UiBox& home = s.box[parent];
     const UiBox& bar = s.box[split];
-    if (drag->armed == 0) {
-        return;
-    }
     const float mouse = vertical ? y : x;
-    float delta = mouse - drag->startMouse;
-    if (drag->useNext != 0) {
-        delta = -delta;
-    }
-    constexpr float minSize = 48.0f;
+    const float origin = vertical ? home.y : home.x;
     const float span = vertical ? home.h : home.w;
     const float grip = vertical ? bar.h : bar.w;
+    float size = 0.0f;
+    if (drag->armed == 0) {
+        size = useNext ? (origin + span - mouse - grip) : (mouse - origin);
+    } else {
+        float delta = mouse - drag->startMouse;
+        if (drag->useNext != 0) {
+            delta = -delta;
+        }
+        size = drag->startSize + delta;
+    }
+    constexpr float minSize = 48.0f;
     const float maxSize = std::max(minSize, span - grip - minSize);
-    const float size = std::clamp(drag->startSize + delta, minSize, maxSize);
+    size = std::clamp(size, minSize, maxSize);
     writeSize(*flex, vertical, size);
     s.layoutFrom = 0;
     s.layoutDirty = true;
@@ -242,19 +315,13 @@ void splitPaint(UiState& s, uint16_t id, bool hot) {
     }
     const float radius = paint->radius;
     *paint = paintToken(s.look, token, radius);
-    paint->a = hot ? 0.9f : 0.16f;
+    paint->a = hot ? 0.9f : 0.62f;
     s.visualDirty = true;
 }
 
 } // namespace
 
-void splitSync(UiState& s) {
-    uint16_t hot = kUiNone;
-    if (s.capture < s.count && s.ent[s.capture].has<UiSplitter>()) {
-        hot = s.capture;
-    } else if (s.hovered < s.count && s.ent[s.hovered].has<UiSplitter>()) {
-        hot = s.hovered;
-    }
+void splitSync(UiState& s, uint16_t hot) {
     UiSplitHot& prev = s.world.ensure<UiSplitHot>();
     if (prev.id == hot) {
         return;
@@ -309,9 +376,38 @@ bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, 
         return s.capture < s.count && s.ent[s.capture].has<UiSplitter>() && s.laidW > 1.0f && s.laidH > 1.0f;
     }
     if (phase == kUiInSync) {
-        splitSync(s);
+        uint16_t hot = kUiNone;
+        if (s.capture < s.count && s.ent[s.capture].has<UiSplitter>()) {
+            hot = s.capture;
+        } else {
+            hot = splitAt(s, in.pointer.x, in.pointer.y);
+        }
+        splitSync(s, hot);
     }
     return false;
+}
+
+uint16_t uiSplitBar(UiState& s, uint16_t parent, bool verticalBar) {
+    UiFlex grip{};
+    grip.shrink = 0.0f;
+    grip.self = UiAlignSelf::Stretch;
+    if (verticalBar) {
+        grip.widthMode = UiSize::Px;
+        grip.width = 6.0f;
+        grip.self = UiAlignSelf::Stretch;
+    } else {
+        grip.heightMode = UiSize::Px;
+        grip.height = 6.0f;
+        grip.self = UiAlignSelf::Stretch;
+    }
+    UiPaint paint = paintToken(s.look, UiToken::Muted, 0.0f);
+    paint.a = 0.55f;
+    const uint16_t bar = uiPanel(s, parent, grip, paint);
+    if (bar != kUiNone) {
+        s.ent[bar].set<UiSplitter>({});
+        s.ent[bar].add<UiFocusable>();
+    }
+    return bar;
 }
 
 } // namespace burnhope

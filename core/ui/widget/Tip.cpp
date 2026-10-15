@@ -1,3 +1,5 @@
+#include "ui/Panel.hpp"
+#include "ui/Text.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Tip.hpp"
 
@@ -18,7 +20,7 @@ uint16_t uiTip(UiState& s, uint16_t parent) {
     body.br = s.look.muted[0];
     body.bg = s.look.muted[1];
     body.bb = s.look.muted[2];
-    const uint16_t id = spawn(s, parent, flex, body);
+    const uint16_t id = uiPanel(s, parent, flex, body);
     if (id == kUiNone) {
         return id;
     }

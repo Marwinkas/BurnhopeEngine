@@ -18,6 +18,8 @@ struct UiField {
     uint8_t maxChars = 0;
     uint8_t hintLen = 0;
     uint8_t multi = 0;
+    uint8_t align = 0;
+    uint8_t scrub = 0;
     float scroll = 0.0f;
     float padL = 12.0f;
     float padR = 12.0f;

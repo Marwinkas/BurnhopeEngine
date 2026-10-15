@@ -3,7 +3,7 @@
 
 #include "ui/Domain.hpp"
 #include "ui/State.hpp"
-#include "ui/Layout.hpp"
+#include "ui/LayoutBridge.hpp"
 #include "ui/widget/Splitter.hpp"
 #include "ui/PropertyInspector.hpp"
 #include "debug/DebugStats.hpp"
@@ -22,7 +22,7 @@ using namespace burnhope;
 
 TEST_CASE("double click maximizes the title only") {
     UiState state;
-    const uint16_t btn = spawn(state, kUiNone, px(80, 24), paint(UiRole::Button, 0.2f, 0.2f, 0.2f));
+    const uint16_t btn = spawn(state, kUiNone, px(80, 24), paintRgb(0.2f, 0.2f, 0.2f));
     uiLayout(state, 200.0f, 80.0f);
     InputFrame in{};
     in.clicks = 2;
@@ -32,8 +32,8 @@ TEST_CASE("double click maximizes the title only") {
     CHECK(!state.opMaximize);
 
     UiState titled;
-    const uint16_t root = spawn(titled, kUiNone, px(200.0f, 80.0f), paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
-    const uint16_t title = spawn(titled, root, px(180.0f, 32.0f), paint(UiRole::Panel, 0.2f, 0.2f, 0.2f, 0.0f));
+    const uint16_t root = spawn(titled, kUiNone, px(200.0f, 80.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t title = spawn(titled, root, px(180.0f, 32.0f), paintRgb(0.2f, 0.2f, 0.2f, 0.0f));
     titled.ent[title].set<UiTitleBar>({});
     uiLayout(titled, 200.0f, 80.0f);
     InputFrame click{};
@@ -48,20 +48,20 @@ TEST_CASE("double click maximizes the title only") {
 TEST_CASE("splitter resizes the dock on the far side") {
     UiState state;
     UiFlex col{};
-    col.widthMode = static_cast<uint8_t>(UiSize::Px);
+    col.widthMode = UiSize::Px;
     col.width = 200.0f;
-    col.heightMode = static_cast<uint8_t>(UiSize::Px);
+    col.heightMode = UiSize::Px;
     col.height = 400.0f;
-    const uint16_t root = spawn(state, kUiNone, col, paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
+    const uint16_t root = spawn(state, kUiNone, col, paintRgb(0.1f, 0.1f, 0.1f));
     UiFlex grow{};
     grow.grow = 1.0f;
     grow.shrink = 1.0f;
-    const uint16_t top = spawn(state, root, grow, paint(UiRole::Panel, 0.2f, 0.2f, 0.2f));
+    const uint16_t top = spawn(state, root, grow, paintRgb(0.2f, 0.2f, 0.2f));
     UiFlex bar = px(200.0f, 8.0f);
-    UiPaint grip = paint(UiRole::Panel, 0.3f, 0.3f, 0.3f);
+    UiPaint grip = paintRgb(0.3f, 0.3f, 0.3f);
     const uint16_t split = spawn(state, root, bar, grip);
     state.ent[split].set<UiSplitter>({});
-    const uint16_t dock = spawn(state, root, px(200.0f, 120.0f), paint(UiRole::Panel, 0.4f, 0.4f, 0.4f));
+    const uint16_t dock = spawn(state, root, px(200.0f, 120.0f), paintRgb(0.4f, 0.4f, 0.4f));
     uiLayout(state, 200.0f, 400.0f);
     CHECK(splitVertical(state, split));
     splitDrag(state, split, 40.0f, 250.0f);
@@ -70,18 +70,18 @@ TEST_CASE("splitter resizes the dock on the far side") {
     CHECK(flex->height == doctest::Approx(142.0f));
     CHECK(state.ent[top].try_get<UiFlex>()->grow == doctest::Approx(1.0f));
     UiFlex row{};
-    row.direction = 1;
-    row.widthMode = static_cast<uint8_t>(UiSize::Px);
+    row.direction = UiFlexDir::Row;
+    row.widthMode = UiSize::Px;
     row.width = 500.0f;
-    row.heightMode = static_cast<uint8_t>(UiSize::Px);
+    row.heightMode = UiSize::Px;
     row.height = 80.0f;
-    const uint16_t line = spawn(state, kUiNone, row, paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
-    const uint16_t left = spawn(state, line, px(140.0f, 80.0f), paint(UiRole::Panel, 0.2f, 0.2f, 0.2f));
+    const uint16_t line = spawn(state, kUiNone, row, paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t left = spawn(state, line, px(140.0f, 80.0f), paintRgb(0.2f, 0.2f, 0.2f));
     UiFlex vbar = px(8.0f, 80.0f);
-    UiPaint vgrip = paint(UiRole::Panel, 0.3f, 0.3f, 0.3f);
+    UiPaint vgrip = paintRgb(0.3f, 0.3f, 0.3f);
     const uint16_t vsplit = spawn(state, line, vbar, vgrip);
     state.ent[vsplit].set<UiSplitter>({});
-    spawn(state, line, grow, paint(UiRole::Panel, 0.4f, 0.4f, 0.4f));
+    spawn(state, line, grow, paintRgb(0.4f, 0.4f, 0.4f));
     state.box[line] = {0.0f, 0.0f, 500.0f, 80.0f};
     state.box[left] = {0.0f, 0.0f, 140.0f, 80.0f};
     state.box[vsplit] = {140.0f, 0.0f, 8.0f, 80.0f};

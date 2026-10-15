@@ -1,3 +1,4 @@
+#include "ui/UiBin.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Field.hpp"
@@ -734,7 +735,7 @@ void fillColorBody(UiState& s, uint16_t parent) {
         line.align = UiAlign::Center;
         line.gap = 8.0f;
         const uint16_t lineId = spawn(s, parent, line, paintClear());
-        const uint16_t lab = spawn(s, lineId, UiFlex{}, paintToken(s.look, UiToken::Text, 0.0f));
+        const uint16_t lab = spawn(s, lineId, UiFlex{}, paintLabel(s.look));
         addText(s, lab, names[i]);
         UiFlex slide{};
         slide.grow = 1.0f;
@@ -815,7 +816,7 @@ void uiBuildColor(UiState& s) {
     titleF.shrink = 0.0f;
     titleF.align = UiAlign::Center;
     const uint16_t title = spawn(s, root, titleF, paintToken(s.look, UiToken::Title, 0.0f));
-    const uint16_t brand = spawn(s, title, UiFlex{}, paintToken(s.look, UiToken::Text, 0.0f));
+    const uint16_t brand = spawn(s, title, UiFlex{}, paintLabel(s.look));
     addText(s, brand, "COLOR");
     UiFlex gap{};
     gap.grow = 1.0f;
@@ -918,7 +919,7 @@ uint16_t loadColorBin(UiState& s, uint16_t parent, const BinNode& node, const ch
 }
 
 void uiInstallColorBin(UiState& s) {
-    uiRegisterCustomBinNode(s, 12, loadColorBin, nullptr);
+    uiRegisterCustomBinNode(s, kBinSlotColor, loadColorBin, nullptr);
     uiDrawAdd(s, colorCustomDraw);
     for (uint8_t i = 0; i < s.valueN; ++i) {
         if (s.valueFn[i] == colorOnValue) {

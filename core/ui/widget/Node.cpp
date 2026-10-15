@@ -146,6 +146,7 @@ void uiDragEnd(UiState& s, uint16_t target) {
 void uiTab(UiState& s, uint16_t id, uint16_t index) {
     if (id < s.count) {
         s.ent[id].set<UiTab>({index});
+        s.ent[id].add<UiFocusable>();
     }
 }
 

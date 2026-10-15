@@ -323,20 +323,62 @@ void uiOverlayAdd(UiState& s, UiOverlayDrawFn fn) {
 }
 
 uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
-    uint16_t ids[kUiCap];
-    uint16_t nIds = 0;
-    s.paints.each([&](flecs::entity, UiSlot& slot, UiPaint&) {
-        if (nIds < kUiCap) {
-            ids[nIds++] = slot.index;
+    uint16_t order[kUiCap];
+    uint16_t nOrder = 0;
+    uint16_t childHead[kUiCap];
+    uint16_t childNext[kUiCap];
+    uint16_t childTail[kUiCap];
+    for (uint16_t i = 0; i < s.count && i < kUiCap; ++i) {
+        childHead[i] = kUiNone;
+        childNext[i] = kUiNone;
+        childTail[i] = kUiNone;
+    }
+    uint16_t roots[kUiCap];
+    uint16_t nRoots = 0;
+    for (uint16_t id = 0; id < s.count && id < kUiCap; ++id) {
+        if (!s.ent[id].is_alive()) {
+            continue;
         }
-    });
-    std::sort(ids, ids + nIds);
+        const uint16_t parent = s.parentOf[id];
+        if (parent == kUiNone || parent >= s.count || !s.ent[parent].is_alive()) {
+            if (nRoots < kUiCap) {
+                roots[nRoots++] = id;
+            }
+            continue;
+        }
+        childNext[id] = kUiNone;
+        if (childHead[parent] == kUiNone) {
+            childHead[parent] = id;
+        } else if (childTail[parent] < kUiCap) {
+            childNext[childTail[parent]] = id;
+        }
+        childTail[parent] = id;
+    }
+    uint16_t stack[kUiCap];
+    uint16_t sp = 0;
+    for (uint16_t i = nRoots; i > 0; --i) {
+        stack[sp++] = roots[i - 1];
+    }
+    while (sp > 0 && nOrder < kUiCap) {
+        const uint16_t id = stack[--sp];
+        order[nOrder++] = id;
+        const uint16_t begin = sp;
+        for (uint16_t child = childHead[id]; child != kUiNone && child < kUiCap && sp < kUiCap; child = childNext[child]) {
+            stack[sp++] = child;
+        }
+        for (uint16_t a = begin, b = sp; a + 1 < b; ++a) {
+            --b;
+            const uint16_t swap = stack[a];
+            stack[a] = stack[b];
+            stack[b] = swap;
+        }
+    }
 
     const UiDrawHooks* hooks = s.world.try_get<UiDrawHooks>();
     uint32_t n = 0;
     for (int pass = 0; pass < 3; ++pass) {
-        for (uint16_t k = 0; k < nIds; ++k) {
-            const uint16_t id = ids[k];
+        for (uint16_t k = 0; k < nOrder; ++k) {
+            const uint16_t id = order[k];
             bool popup = false;
             for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
                 if (s.ent[p].has<UiPopup>()) {
@@ -361,6 +403,11 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             UiBox ancestor{};
             const bool hasClip = clipAncestors(s, id, ancestor);
             const UiBox* clip = hasClip ? &ancestor : nullptr;
+            if (hasClip && (ancestor.w < 0.5f || ancestor.h < 0.5f
+                || s.box[id].x >= ancestor.x + ancestor.w || ancestor.x >= s.box[id].x + s.box[id].w
+                || s.box[id].y >= ancestor.y + ancestor.h || ancestor.y >= s.box[id].y + s.box[id].h)) {
+                continue;
+            }
             if (s.plug.draw != nullptr && s.plug.draw(s, id, dst, n, cap)) {
                 continue;
             }

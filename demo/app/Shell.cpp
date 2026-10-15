@@ -1,10 +1,14 @@
 #include "app/Shell.hpp"
 #include "files/Browser.hpp"
 #include "ui/Domain.hpp"
+#include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
+#include "ui/widget/Button.hpp"
+#include "ui/widget/Curve.hpp"
 #include "ui/widget/Docking.hpp"
 #include "ui/widget/List.hpp"
 #include "ui/widget/Menu.hpp"
+#include "ui/widget/Text.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Slider.hpp"
 
@@ -55,35 +59,35 @@ void toggleShow(ShellDemo& demo, uint16_t id, bool& flag) {
     uiShow(*demo.canvas->state, id, flag);
 }
 
-void toggleChips(void* user, uint16_t, int16_t) {
+void toggleChips(void* user, uint16_t) {
     auto* demo = static_cast<ShellDemo*>(user);
     if (demo != nullptr) {
         toggleShow(*demo, demo->chips, demo->chipsOn);
     }
 }
 
-void toggleTools(void* user, uint16_t, int16_t) {
+void toggleTools(void* user, uint16_t) {
     auto* demo = static_cast<ShellDemo*>(user);
     if (demo != nullptr) {
         toggleShow(*demo, demo->tools, demo->toolsOn);
     }
 }
 
-void toggleSettings(void* user, uint16_t, int16_t) {
+void toggleSettings(void* user, uint16_t) {
     auto* demo = static_cast<ShellDemo*>(user);
     if (demo != nullptr) {
         toggleShow(*demo, demo->settings, demo->settingsOn);
     }
 }
 
-void onDock(void* user, uint16_t, int16_t) {
+void onDock(void* user, uint16_t) {
     auto* demo = static_cast<ShellDemo*>(user);
     if (demo != nullptr && demo->canvas != nullptr && demo->canvas->state != nullptr) {
         uiDockTo(*demo->canvas->state, 1);
     }
 }
 
-void onToolWindow(void* user, uint16_t, int16_t) {
+void onToolWindow(void* user, uint16_t) {
     auto* demo = static_cast<ShellDemo*>(user);
     if (demo != nullptr && demo->canvas != nullptr && demo->canvas->state != nullptr) {
         uiHostNote(*demo->canvas->state).tool = true;
@@ -105,29 +109,29 @@ void setEdge(void* user, uint8_t bit) {
     uiDock(*demo->canvas->state).edges = next;
 }
 
-void onEdgeLeft(void* user, uint16_t, int16_t) { setEdge(user, 1); }
+void onEdgeLeft(void* user, uint16_t) { setEdge(user, 1); }
 
-void onEdgeRight(void* user, uint16_t, int16_t) { setEdge(user, 2); }
+void onEdgeRight(void* user, uint16_t) { setEdge(user, 2); }
 
-void onEdgeTop(void* user, uint16_t, int16_t) { setEdge(user, 4); }
+void onEdgeTop(void* user, uint16_t) { setEdge(user, 4); }
 
-void onEdgeBottom(void* user, uint16_t, int16_t) { setEdge(user, 8); }
+void onEdgeBottom(void* user, uint16_t) { setEdge(user, 8); }
 
-void onDropLast(void* user, uint16_t, int16_t) {
+void onDropLast(void* user, uint16_t) {
     auto* demo = static_cast<ShellDemo*>(user);
     if (demo != nullptr && demo->canvas != nullptr && demo->canvas->state != nullptr) {
         uiSetDrop(*demo->canvas->state, demo->chips, 1);
     }
 }
 
-void onDropFirst(void* user, uint16_t, int16_t) {
+void onDropFirst(void* user, uint16_t) {
     auto* demo = static_cast<ShellDemo*>(user);
     if (demo != nullptr && demo->canvas != nullptr && demo->canvas->state != nullptr) {
         uiSetDrop(*demo->canvas->state, demo->chips, 2);
     }
 }
 
-void logPick(void* user, uint16_t, int16_t) {
+void logPick(void* user, uint16_t) {
     auto* demo = static_cast<ShellDemo*>(user);
     if (demo == nullptr || demo->canvas == nullptr || demo->canvas->state == nullptr) {
         return;
@@ -147,7 +151,7 @@ void ping(void*) {
 }
 
 void growCmd(void* user) {
-    toggleChips(user, kUiNone, 0);
+    toggleChips(user, kUiNone);
 }
 
 void warmCmd(void* user) {
@@ -157,51 +161,44 @@ void warmCmd(void* user) {
     }
 }
 
-void onFold(void* user, uint16_t id, int16_t) {
+void onFold(void* user, uint16_t id) {
     uiFold(*static_cast<UiState*>(user), id);
 }
 
-Panel dragHeader(Panel parent, const char* title) {
+uint16_t dragHeader(UiState& s, uint16_t parent, const char* title) {
     UiFlex row{};
-    row.direction = 1;
-    row.heightMode = static_cast<uint8_t>(UiSize::Px);
+    row.direction = UiFlexDir::Row;
+    row.heightMode = UiSize::Px;
     row.height = 28.0f;
-    row.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    row.widthMode = UiSize::Percent;
     row.width = 100.0f;
     row.shrink = 0.0f;
-    row.align = 1;
-    row.pad = 0.0f;
+    row.align = UiAlign::Center;
     row.padL = 8.0f;
     row.padR = 4.0f;
-    const UiLook theme = parent.state != nullptr ? parent.state->look : UiLook{};
-    UiPaint paint = paintToken(theme, UiRole::Panel, UiToken::Title, theme.radiusSm);
-    Panel header = parent.child(row, paint);
-    if (header.state != nullptr && header.id != kUiNone) {
-        header.state->ent[header.id].set<UiTitleBar>({});
+    const uint16_t header = uiPanel(s, parent, row, paintToken(s.look, UiToken::Title, s.look.radiusSm));
+    if (header != kUiNone) {
+        s.ent[header].set<UiTitleBar>({});
     }
-    (void)header.label(title);
+    (void)uiLabel(s, header, title);
     UiFlex gap{};
     gap.grow = 1.0f;
     gap.shrink = 1.0f;
-    gap.heightMode = static_cast<uint8_t>(UiSize::Px);
+    gap.heightMode = UiSize::Px;
     gap.height = 1.0f;
-    UiPaint hidden{};
-    hidden.role = static_cast<uint8_t>(UiRole::Hidden);
-    (void)header.child(gap, hidden);
+    (void)uiSpacer(s, header, gap);
     UiFlex mark{};
-    mark.widthMode = static_cast<uint8_t>(UiSize::Px);
-    mark.heightMode = static_cast<uint8_t>(UiSize::Px);
+    mark.widthMode = UiSize::Px;
+    mark.heightMode = UiSize::Px;
     mark.width = 22.0f;
     mark.height = 22.0f;
     mark.shrink = 0.0f;
     mark.marginR = 2.0f;
-    const UiLook headerLook = parent.state != nullptr ? parent.state->look : UiLook{};
-    UiPaint fold = paintToken(headerLook, UiRole::Button, UiToken::Chrome, headerLook.radiusSm);
+    UiPaint fold = paintToken(s.look, UiToken::Chrome, s.look.radiusSm);
     fold.icon = 1;
-    Panel foldBtn = header.child(mark, fold);
-    if (parent.state != nullptr) {
-        uiBind(*parent.state, foldBtn.id, onFold, parent.state);
-    }
+    const uint16_t foldBtn = uiPanel(s, header, mark, fold);
+    uiHover(s, foldBtn);
+    uiBind(s, foldBtn, onFold, &s);
     return header;
 }
 
@@ -235,15 +232,43 @@ void onBrowse(void* user, const char* path, int isDir) {
     if (isDir != 0 || demo == nullptr || demo->canvas == nullptr || path == nullptr || !imagePath(path)) {
         return;
     }
-    if (canvasLoadImage(*demo->canvas, 0, path)) {
+    if (canvasLoadPhoto(*demo->canvas, 0, path)) {
         spdlog::info("browser opened image {}", path);
     }
 }
 
-void bindClick(const Panel& box, UiClickFn fn, void* user) {
-    if (box.state != nullptr && box.id != kUiNone && fn != nullptr) {
-        uiBind(*box.state, box.id, fn, user);
+void bindClick(UiState& s, uint16_t id, UiClickFn fn, void* user) {
+    if (id != kUiNone && fn != nullptr) {
+        uiBind(s, id, fn, user);
     }
+}
+
+uint16_t textButton(UiState& s, uint16_t parent, const char* text) {
+    UiButtonConfig cfg{};
+    cfg.label = text;
+    cfg.height = s.look.glyphH + 6.0f;
+    const uint16_t id = uiButton(s, parent, cfg);
+    if (id < s.count) {
+        if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
+            paint->a = 0.0f;
+        }
+    }
+    return id;
+}
+
+uint16_t iconButton(UiState& s, uint16_t parent, const char* text, uint8_t icon) {
+    const bool labeled = text != nullptr && text[0] != '\0';
+    UiButtonConfig cfg{};
+    cfg.label = labeled ? text : nullptr;
+    cfg.height = 30.0f;
+    cfg.width = labeled ? 0.0f : 30.0f;
+    const uint16_t id = uiButton(s, parent, cfg);
+    if (id < s.count) {
+        if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
+            paint->icon = icon;
+        }
+    }
+    return id;
 }
 
 void shellBuild(Canvas& canvas, void* user) {
@@ -283,146 +308,134 @@ void shellBuild(Canvas& canvas, void* user) {
     }
     uiMenuStyle(*canvas.state, 210.0f, 30.0f, 8.0f, 4.0f);
 
-    Panel look = Panel::find(*canvas.state, "page_look");
+    UiState& s = *canvas.state;
+    const uint16_t look = uiFindName(s, "page_look");
     UiFlex block{};
-    block.direction = 0;
+    block.direction = UiFlexDir::Column;
     block.gap = 8.0f;
     block.shrink = 0.0f;
-    UiPaint clear{};
-    clear.role = static_cast<uint8_t>(UiRole::Hidden);
-    Panel section = look.child(block, clear);
+    const uint16_t section = uiPanel(s, look, block, paintClear());
 
-    const UiLook theme = canvas.state->look;
-    Panel heading = section.textButton("YOGA GROW");
-    bindClick(heading, toggleChips, demo);
+    const UiLook theme = s.look;
+    const uint16_t heading = textButton(s, section, "YOGA GROW");
+    bindClick(s, heading, toggleChips, demo);
 
     UiFlex strip{};
-    strip.direction = 1;
-    strip.heightMode = static_cast<uint8_t>(UiSize::Px);
+    strip.direction = UiFlexDir::Row;
+    strip.heightMode = UiSize::Px;
     strip.height = 44.0f;
     strip.gap = 8.0f;
     strip.shrink = 0.0f;
-    strip.drop = 1;
-    Panel row = section.child(strip, clear);
-    demo->chips = row.id;
+    strip.drop = UiFlexDrop::HideLast;
+    const uint16_t row = uiPanel(s, section, strip, paintClear());
+    demo->chips = row;
     const float grow[3] = {1.0f, 2.0f, 1.0f};
     uint16_t chipId = kUiNone;
     for (int i = 0; i < 3; ++i) {
         UiFlex chipFlex{};
         chipFlex.grow = grow[i];
         chipFlex.shrink = 1.0f;
-        chipFlex.heightMode = static_cast<uint8_t>(UiSize::Percent);
+        chipFlex.heightMode = UiSize::Percent;
         chipFlex.height = 100.0f;
         chipFlex.minW = i == 2 ? 360.0f : 0.0f;
-        UiPaint chipPaint = paintToken(theme, UiRole::Panel, UiToken::Accent, theme.radius);
-        chipPaint.tag = static_cast<int16_t>(i);
-        chipPaint.r = theme.accent[i][0];
-        chipPaint.g = theme.accent[i][1];
-        chipPaint.b = theme.accent[i][2];
-        Panel piece = row.child(chipFlex, chipPaint);
+        UiPaint chipPaint = paintRgb(theme.accent[i][0], theme.accent[i][1], theme.accent[i][2], theme.radius);
+        const uint16_t piece = uiPanel(s, row, chipFlex, chipPaint);
         if (i == 0) {
-            chipId = piece.id;
+            chipId = piece;
         }
         if (i == 1) {
-            piece.animate(theme.accent[1][0], theme.accent[1][1], theme.accent[1][2], 1.0f);
+            uiMotionTo(s, piece, theme.accent[1][0], theme.accent[1][1], theme.accent[1][2], 1.0f);
         }
         if (i == 2) {
-            (void)piece.label("MIN 360");
+            (void)uiLabel(s, piece, "MIN 360");
         }
     }
 
     UiFlex nestFlex{};
-    nestFlex.direction = 0;
+    nestFlex.direction = UiFlexDir::Column;
     nestFlex.pad = 8.0f;
     nestFlex.gap = 4.0f;
     nestFlex.shrink = 0.0f;
-    Panel nest = section.child(nestFlex, paintToken(theme, UiRole::Panel, UiToken::Content, theme.radius));
+    const uint16_t nest = uiPanel(s, section, nestFlex, paintToken(theme, UiToken::Content, theme.radius));
     UiFlex innerFlex{};
-    innerFlex.direction = 0;
+    innerFlex.direction = UiFlexDir::Column;
     innerFlex.pad = 6.0f;
     innerFlex.shrink = 0.0f;
-    Panel inner = nest.child(innerFlex, paintToken(theme, UiRole::Panel, UiToken::Item, theme.radius));
-    (void)inner.label("NESTED LAYER");
+    const uint16_t inner = uiPanel(s, nest, innerFlex, paintToken(theme, UiToken::Item, theme.radius));
+    (void)uiLabel(s, inner, "NESTED LAYER");
 
-    Panel dropLast = section.textButton("DROP LAST");
-    bindClick(dropLast, onDropLast, demo);
-    Panel dropFirst = section.textButton("DROP FIRST");
-    bindClick(dropFirst, onDropFirst, demo);
-    Panel toolsLabel = section.textButton("TOOLS");
-    bindClick(toolsLabel, toggleTools, demo);
+    bindClick(s, textButton(s, section, "DROP LAST"), onDropLast, demo);
+    bindClick(s, textButton(s, section, "DROP FIRST"), onDropFirst, demo);
+    bindClick(s, textButton(s, section, "TOOLS"), toggleTools, demo);
     UiFlex toolsFlex{};
-    toolsFlex.direction = 1;
+    toolsFlex.direction = UiFlexDir::Row;
     toolsFlex.gap = 8.0f;
     toolsFlex.shrink = 0.0f;
-    toolsFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    toolsFlex.heightMode = UiSize::Px;
     toolsFlex.height = 36.0f;
-    Panel tools = section.child(toolsFlex, clear);
-    demo->tools = tools.id;
-    bindClick(tools.button("SAVE", 4), logPick, demo);
-    bindClick(tools.button("PICK", 6), logPick, demo);
-    bindClick(tools.button("", 5), onToolWindow, demo);
-    bindClick(tools.button("WINDOW", 4), toggleSettings, demo);
+    const uint16_t tools = uiPanel(s, section, toolsFlex, paintClear());
+    demo->tools = tools;
+    bindClick(s, iconButton(s, tools, "SAVE", 4), logPick, demo);
+    bindClick(s, iconButton(s, tools, "PICK", 6), logPick, demo);
+    bindClick(s, iconButton(s, tools, "", 5), onToolWindow, demo);
+    bindClick(s, iconButton(s, tools, "WINDOW", 4), toggleSettings, demo);
 
     UiFlex homeFlex{};
-    homeFlex.direction = 0;
+    homeFlex.direction = UiFlexDir::Column;
     homeFlex.gap = 6.0f;
     homeFlex.grow = 1.0f;
     homeFlex.shrink = 1.0f;
     homeFlex.minH = 180.0f;
-    Panel home = section.child(homeFlex, paintToken(theme, UiRole::Panel, UiToken::Content, theme.radius));
-    demo->dockHome = home.id;
-    (void)home.label("DOCK");
+    const uint16_t home = uiPanel(s, section, homeFlex, paintToken(theme, UiToken::Content, theme.radius));
+    demo->dockHome = home;
+    (void)uiLabel(s, home, "DOCK");
 
     UiFlex dockFlex{};
-    dockFlex.direction = 0;
+    dockFlex.direction = UiFlexDir::Column;
     dockFlex.gap = 6.0f;
     dockFlex.pad = 8.0f;
     dockFlex.shrink = 0.0f;
-    Panel dock = home.child(dockFlex, paintToken(theme, UiRole::Panel, UiToken::Side, theme.radius));
-    demo->dockPanel = dock.id;
-    if (canvas.state != nullptr) {
-        uiDock(*canvas.state).panel = dock.id;
-        uiDock(*canvas.state).home = home.id;
-        uiDock(*canvas.state).edges = 15;
-    }
-    dragHeader(dock, "INSPECTOR");
-    (void)dock.label("drag the header out, drop it here or press DOCK");
-    bindClick(dock.button("DOCK", 0), onDock, demo);
-    bindClick(dock.textButton("LEFT"), onEdgeLeft, demo);
-    bindClick(dock.textButton("RIGHT"), onEdgeRight, demo);
-    bindClick(dock.textButton("TOP"), onEdgeTop, demo);
-    bindClick(dock.textButton("BOTTOM"), onEdgeBottom, demo);
+    const uint16_t dock = uiPanel(s, home, dockFlex, paintToken(theme, UiToken::Side, theme.radius));
+    demo->dockPanel = dock;
+    uiDock(s).panel = dock;
+    uiDock(s).home = home;
+    uiDock(s).edges = 15;
+    dragHeader(s, dock, "INSPECTOR");
+    (void)uiLabel(s, dock, "drag the header out, drop it here or press DOCK");
+    bindClick(s, iconButton(s, dock, "DOCK", 0), onDock, demo);
+    bindClick(s, textButton(s, dock, "LEFT"), onEdgeLeft, demo);
+    bindClick(s, textButton(s, dock, "RIGHT"), onEdgeRight, demo);
+    bindClick(s, textButton(s, dock, "TOP"), onEdgeTop, demo);
+    bindClick(s, textButton(s, dock, "BOTTOM"), onEdgeBottom, demo);
 
     UiFlex win{};
-    win.position = 1;
+    win.position = UiPosition::Absolute;
     win.posX = 640.0f;
     win.posY = 160.0f;
-    win.widthMode = static_cast<uint8_t>(UiSize::Px);
+    win.widthMode = UiSize::Px;
     win.width = 300.0f;
-    win.heightMode = static_cast<uint8_t>(UiSize::Px);
+    win.heightMode = UiSize::Px;
     win.height = 168.0f;
     win.pad = 10.0f;
     win.gap = 8.0f;
     win.shrink = 0.0f;
-    UiPaint settingsPaint = paintToken(theme, UiRole::Panel, UiToken::Window, theme.radius);
-    Panel settings = canvas.state != nullptr ? Panel::make(*canvas.state, 0, win, settingsPaint) : Panel{};
-    if (canvas.state != nullptr && settings.id != kUiNone) {
-        canvas.state->ent[settings.id].set<UiResizable>({});
+    const uint16_t settings = uiPanel(s, 0, win, paintToken(theme, UiToken::Window, theme.radius));
+    if (settings != kUiNone) {
+        s.ent[settings].set<UiResizable>({});
     }
-    demo->settings = settings.id;
-    dragHeader(settings, "SETTINGS");
-    (void)settings.label("separate window, drag the header");
-    bindClick(settings.button("CLOSE", 3), toggleSettings, demo);
-    uiShow(*canvas.state, settings.id, false);
+    demo->settings = settings;
+    dragHeader(s, settings, "SETTINGS");
+    (void)uiLabel(s, settings, "separate window, drag the header");
+    bindClick(s, iconButton(s, settings, "CLOSE", 3), toggleSettings, demo);
+    uiShow(s, settings, false);
 
-    const uint16_t sectionMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
-    const uint16_t chipMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
-    if (canvas.state) uiSetContextMenu(*canvas.state, section.id, sectionMenu);
-    if (canvas.state) uiSetContextMenu(*canvas.state, chipId, chipMenu);
-    if (canvas.state == nullptr
-        || !uiCommandAddTo(*canvas.state, sectionMenu, "GROW", growCmd, demo)
-        || !uiCommandAddTo(*canvas.state, sectionMenu, "PING", ping, nullptr)
-        || !uiCommandAddTo(*canvas.state, chipMenu, "WARM", warmCmd, demo)) {
+    const uint16_t sectionMenu = uiMakeMenu(s);
+    const uint16_t chipMenu = uiMakeMenu(s);
+    uiSetContextMenu(s, section, sectionMenu);
+    uiSetContextMenu(s, chipId, chipMenu);
+    if (!uiCommandAddTo(s, sectionMenu, "GROW", growCmd, demo)
+        || !uiCommandAddTo(s, sectionMenu, "PING", ping, nullptr)
+        || !uiCommandAddTo(s, chipMenu, "WARM", warmCmd, demo)) {
         spdlog::error("context menu was not filled");
     }
     if (!canvasAddCommand(canvas, "PING", ping, nullptr)) {
@@ -431,52 +444,50 @@ void shellBuild(Canvas& canvas, void* user) {
 }
 
 void toolBuild(Canvas& canvas, void*) {
-    if (!canvasUseFont(canvas, 12.0f)) {
+    if (canvas.state == nullptr || !canvasUseFont(canvas, 12.0f)) {
         spdlog::error("tool font was not set");
+        if (canvas.state == nullptr) {
+            return;
+        }
     }
+    UiState& s = *canvas.state;
     UiFlex rootFlex{};
-    rootFlex.direction = 0;
-    rootFlex.pad = 0.0f;
-    const UiLook theme = canvas.state != nullptr ? canvas.state->look : UiLook{};
-    UiPaint rootPaint = paintToken(theme, UiRole::Panel, UiToken::Window, 0.0f);
-    Panel root = canvas.state != nullptr ? Panel::make(*canvas.state, kUiNone, rootFlex, rootPaint) : Panel{};
-
+    rootFlex.direction = UiFlexDir::Column;
+    const uint16_t root = uiPanel(s, kUiNone, rootFlex, paintToken(s.look, UiToken::Window, 0.0f));
     UiFlex title{};
-    title.direction = 1;
-    title.heightMode = static_cast<uint8_t>(UiSize::Px);
+    title.direction = UiFlexDir::Row;
+    title.heightMode = UiSize::Px;
     title.height = 40.0f;
-    title.align = 1;
+    title.align = UiAlign::Center;
     title.shrink = 0.0f;
     title.pad = 10.0f;
-    Panel bar = root.child(title, paintToken(theme, UiRole::Panel, UiToken::Title, 0.0f));
-    (void)bar.label("SETTINGS");
+    const uint16_t bar = uiPanel(s, root, title, paintToken(s.look, UiToken::Title, 0.0f));
+    (void)uiLabel(s, bar, "SETTINGS");
     UiFlex gap{};
     gap.grow = 1.0f;
     gap.shrink = 1.0f;
-    UiPaint hidden{};
-    hidden.role = static_cast<uint8_t>(UiRole::Hidden);
-    (void)bar.child(gap, hidden);
+    (void)uiSpacer(s, bar, gap);
     UiFlex closeFlex{};
-    closeFlex.widthMode = static_cast<uint8_t>(UiSize::Px);
-    closeFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    closeFlex.widthMode = UiSize::Px;
+    closeFlex.heightMode = UiSize::Px;
     closeFlex.width = 28.0f;
     closeFlex.height = 28.0f;
     closeFlex.shrink = 0.0f;
-    UiPaint closePaint = paintToken(theme, UiRole::Close, UiToken::Close, theme.radiusSm);
+    UiPaint closePaint = paintToken(s.look, UiToken::Close, s.look.radiusSm);
     closePaint.icon = 3;
-    (void)bar.child(closeFlex, closePaint);
-
+    const uint16_t closeB = uiPanel(s, bar, closeFlex, closePaint);
+    uiHover(s, closeB);
     UiFlex body{};
-    body.direction = 0;
+    body.direction = UiFlexDir::Column;
     body.pad = 16.0f;
     body.gap = 10.0f;
     body.grow = 1.0f;
-    Panel page = root.child(body, hidden);
-    (void)page.label("Separate OS window.");
-    (void)page.label("Drag the title. Resize any edge.");
-    (void)page.button("PING", 6);
-    (void)page.curve();
-    (void)page.gradient();
+    const uint16_t page = uiPanel(s, root, body, paintClear());
+    (void)uiLabel(s, page, "Separate OS window.");
+    (void)uiLabel(s, page, "Drag the title. Resize any edge.");
+    (void)iconButton(s, page, "PING", 6);
+    (void)uiCurve(s, page);
+    (void)uiGradient(s, page);
 }
 
 void colorBuild(Canvas& canvas, void* user) {

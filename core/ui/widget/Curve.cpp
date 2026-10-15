@@ -1,3 +1,5 @@
+#include "ui/Hover.hpp"
+#include "ui/Panel.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Curve.hpp"
 #include "ui/widget/Detail.hpp"
@@ -81,7 +83,9 @@ uint16_t track(UiState& s, uint16_t parent, float h) {
     flex.heightMode = UiSize::Px;
     flex.height = h;
     flex.shrink = 0.0f;
-    return spawn(s, parent, flex, paintToken(s.look, UiToken::Content, 6.0f));
+    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Content, 6.0f));
+    uiHover(s, id);
+    return id;
 }
 
 } // namespace

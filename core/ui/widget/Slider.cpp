@@ -1,4 +1,8 @@
+#include "ui/Hover.hpp"
+#include "ui/Panel.hpp"
+#include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
 #include "ui/widget/Slider.hpp"
 
 #include <cmath>
@@ -92,15 +96,15 @@ uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float ma
     flex.height = 18.0f;
     flex.shrink = 0.0f;
     UiPaint body = paintToken(s.look, UiToken::Slider, s.look.radiusSm);
-    body.shadow = 3.0f;
-    body.borderW = 2.0f;
-    body.br = s.look.text[0];
-    body.bg = s.look.text[1];
-    body.bb = s.look.text[2];
-    const uint16_t id = spawn(s, parent, flex, body);
+    body.a = 0.0f;
+    body.borderW = 0.0f;
+    body.shadow = 0.0f;
+    const uint16_t id = uiPanel(s, parent, flex, body);
     if (id == kUiNone) {
         return id;
     }
+    uiHover(s, id);
+    s.ent[id].add<UiFocusable>();
     if (value < minV) {
         value = minV;
     }
@@ -108,6 +112,33 @@ uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float ma
         value = maxV;
     }
     s.ent[id].set<UiRange>({value, minV, maxV, 0.0f});
+    if (onChange != nullptr) {
+        s.ent[id].set<UiValueHook>({onChange, user});
+    }
+    return id;
+}
+
+uint16_t uiNumber(UiState& s, uint16_t parent, float value, float minV, float maxV, float step, UiValueChangeFn onChange, void* user) {
+    if (value < minV) {
+        value = minV;
+    }
+    if (value > maxV) {
+        value = maxV;
+    }
+    if (step <= 0.0f) {
+        step = 0.01f;
+    }
+    char text[32]{};
+    std::snprintf(text, sizeof(text), "%.4g", static_cast<double>(value));
+    const uint16_t id = uiField(s, parent, text, 0, false);
+    if (id == kUiNone) {
+        return id;
+    }
+    s.ent[id].set<UiRange>({value, minV, maxV, step});
+    if (auto* field = s.ent[id].try_get_mut<UiField>()) {
+        field->align = 1;
+    }
+    fieldSyncText(s, id);
     if (onChange != nullptr) {
         s.ent[id].set<UiValueHook>({onChange, user});
     }
@@ -126,7 +157,11 @@ uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV
     body.br = s.look.text[0];
     body.bg = s.look.text[1];
     body.bb = s.look.text[2];
-    const uint16_t id = spawn(s, parent, flex, body);
+    const uint16_t id = uiPanel(s, parent, flex, body);
+    if (id == kUiNone) {
+        return id;
+    }
+    uiHover(s, id);
     if (value < minV) {
         value = minV;
     }
@@ -136,7 +171,7 @@ uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV
     s.ent[id].set<UiRange>({value, minV, maxV, step > 0.0f ? step : 0.01f});
     char text[32]{};
     std::snprintf(text, sizeof(text), "%.3f", static_cast<double>(value));
-    addText(s, id, text);
+    uiText(s, id, text);
     return id;
 }
 
@@ -166,6 +201,46 @@ bool uiSliderInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase,
         dragSlider(s, id, in.pointer.x);
         return true;
     }
+    return false;
+}
+
+bool uiSliderDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
+    if (id >= s.count) {
+        return false;
+    }
+    const UiRange* range = s.ent[id].try_get<UiRange>();
+    if (range == nullptr || range->step > 0.0f) {
+        return false;
+    }
+    const UiBox& box = s.box[id];
+    if (box.w < 8.0f || box.h < 8.0f) {
+        return false;
+    }
+    UiBox ancestor{};
+    const bool hasClip = uiClipBox(s, id, ancestor);
+    const UiBox* clip = hasClip ? &ancestor : nullptr;
+    const float span = range->max - range->min;
+    float t = span > 0.0001f ? (range->value - range->min) / span : 0.0f;
+    if (t < 0.0f) {
+        t = 0.0f;
+    }
+    if (t > 1.0f) {
+        t = 1.0f;
+    }
+    const float inset = 2.0f;
+    const float trackH = 4.0f;
+    const float trackW = box.w - inset * 2.0f;
+    const float trackY = box.y + (box.h - trackH) * 0.5f;
+    n = emitRect(dst, n, cap, box.x + inset, trackY, trackW, trackH,
+        s.look.muted[0], s.look.muted[1], s.look.muted[2], 0.7f, trackH * 0.5f, clip);
+    n = emitRect(dst, n, cap, box.x + inset, trackY, trackW * t, trackH,
+        s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 1.0f, trackH * 0.5f, clip);
+    const float thumb = box.h > 16.0f ? 14.0f : box.h - 4.0f;
+    const float travel = trackW > thumb ? trackW - thumb : 0.0f;
+    const float tx = box.x + inset + travel * t;
+    const float ty = box.y + (box.h - thumb) * 0.5f;
+    n = emitRect(dst, n, cap, tx, ty, thumb, thumb,
+        s.look.text[0], s.look.text[1], s.look.text[2], 1.0f, thumb * 0.5f, clip);
     return false;
 }
 

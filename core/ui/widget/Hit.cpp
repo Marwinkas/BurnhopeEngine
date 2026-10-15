@@ -60,6 +60,9 @@ uint16_t hitTest(const UiState& s, float x, float y) {
             if (s.ent[id].has<UiNoHit>() || s.ent[id].has<UiPass>()) {
                 continue;
             }
+            if (p->a <= 0.02f && !s.ent[id].has<UiFocusable>()) {
+                continue;
+            }
             if (!insideParents(s, id, x, y)) {
                 continue;
             }

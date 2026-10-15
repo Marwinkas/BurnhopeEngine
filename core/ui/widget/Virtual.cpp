@@ -1,3 +1,4 @@
+#include "ui/Hover.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Virtual.hpp"
 
@@ -37,6 +38,8 @@ uint16_t addVirtSlot(UiState& s, uint16_t scroll, float itemH) {
     }
     addText(s, slot, " ");
     uiBind(s, slot, onVirtClick, &s);
+    s.ent[slot].add<UiFocusable>();
+    uiHover(s, slot);
     s.ent[slot].set<UiVirtRow>({});
     uiShow(s, slot, false);
     return slot;
@@ -53,6 +56,8 @@ float uiVirtualTotalHeight(const UiState& s, uint16_t id, float itemH, uint32_t 
 float uiVirtualContentH(const UiState& s, uint16_t id) {
     return uiVirtualContentHeight<UiVirtual>(s, id);
 }
+
+void virtualOnLayout(UiState& s, uint16_t id, void*);
 
 uint16_t uiVirtual(UiState& s, uint16_t parent, float itemH) {
     if (itemH < 8.0f) {
@@ -76,6 +81,7 @@ uint16_t uiVirtual(UiState& s, uint16_t parent, float itemH) {
     virt.itemH = itemH;
     s.ent[scroll].set<UiVirtual>(virt);
     s.ent[scroll].set<UiVirtualPool>({uiVirtualRefresh, uiVirtualContentH, 0});
+    s.ent[scroll].set<UiLayoutRefresh>({virtualOnLayout, nullptr});
     return scroll;
 }
 
@@ -113,6 +119,10 @@ void uiVirtualRefresh(UiState& s, uint16_t id) {
         uiText(s, slot, text);
     }
     s.visualDirty = true;
+}
+
+void virtualOnLayout(UiState& s, uint16_t id, void*) {
+    uiVirtualRefresh(s, id);
 }
 
 void uiVirtualSource(

@@ -1,4 +1,5 @@
 #include "platform/PlatformUtil.hpp"
+#include "ui/UiBin.hpp"
 #include "ui/widget/Calendar.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Field.hpp"
@@ -256,7 +257,7 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
         uiBind(s, id, fn, &s);
     };
     mini(tools, "<", calOnPrev);
-    uiCal(s).calHead = spawn(s, tools, UiFlex{}, paintToken(s.look, UiToken::Text, 0.0f));
+    uiCal(s).calHead = spawn(s, tools, UiFlex{}, paintLabel(s.look));
     addText(s, uiCal(s).calHead, "OCT 2026");
     mini(tools, ">", calOnNext);
     mini(tools, "X", calOnClose);
@@ -307,7 +308,7 @@ uint16_t loadCalendarBin(UiState& s, uint16_t parent, const BinNode& node, const
 }
 
 void uiInstallCalendarBin(UiState& s) {
-    uiRegisterCustomBinNode(s, 11, loadCalendarBin, nullptr);
+    uiRegisterCustomBinNode(s, kBinSlotCalendar, loadCalendarBin, nullptr);
 }
 
 } // namespace burnhope

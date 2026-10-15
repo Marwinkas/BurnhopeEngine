@@ -143,6 +143,9 @@ inline uint16_t uiVirtualHostCreate(UiState& s, uint16_t parent, UiToken token, 
     host.shrink = 1.0f;
     host.overflow = UiOverflow::Scroll;
     host.position = UiPosition::Relative;
+    host.justify = UiJustify::Start;
+    host.align = UiAlign::Stretch;
+    host.content = UiAlignContent::Start;
     const uint16_t scroll = spawn(s, parent, host, paintToken(s.look, token, radius));
     if (scroll == kUiNone) {
         return kUiNone;
@@ -153,7 +156,9 @@ inline uint16_t uiVirtualHostCreate(UiState& s, uint16_t parent, UiToken token, 
     spacer.heightMode = UiSize::Px;
     spacer.height = 1.0f;
     spacer.shrink = 0.0f;
-    spacer.position = UiPosition::Relative;
+    spacer.position = UiPosition::Absolute;
+    spacer.posX = 0.0f;
+    spacer.posY = 0.0f;
     const uint16_t inner = spawn(s, scroll, spacer, paintClear());
     s.ent[scroll].set<UiScroll>({0.0f, inner});
     return scroll;
@@ -165,6 +170,11 @@ inline void uiVirtualSyncSpacer(UiState& s, uint16_t inner, float totalHeight) {
     }
     if (auto* flex = s.ent[inner].try_get_mut<UiFlex>()) {
         flex->height = totalHeight;
+        flex->position = UiPosition::Absolute;
+        flex->posX = 0.0f;
+        flex->posY = 0.0f;
+        flex->marginT = 0.0f;
+        flex->marginB = 0.0f;
     }
 }
 

@@ -180,7 +180,7 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                         if (strSame(role, "button")) {
                             *node = paintToken(s.look, UiToken::Button, 0.0f);
                         } else if (strSame(role, "label")) {
-                            *node = paintToken(s.look, UiToken::Text, 0.0f);
+                            *node = paintLabel(s.look);
                         } else if (strSame(role, "field")) {
                             *node = paintToken(s.look, UiToken::Field, 0.0f);
                         } else if (strSame(role, "check")) {

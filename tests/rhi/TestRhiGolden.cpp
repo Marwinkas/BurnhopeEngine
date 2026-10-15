@@ -3,7 +3,7 @@
 
 #include "ui/Domain.hpp"
 #include "ui/State.hpp"
-#include "ui/Layout.hpp"
+#include "ui/LayoutBridge.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/Canvas.hpp"
 #include "rhi/Device.hpp"
@@ -41,7 +41,7 @@ constexpr float kGoldenG = 0.30f;
 constexpr float kGoldenB = 0.10f;
 
 void goldenBuilder(Canvas& c, void*) {
-    spawn(*c.state, kUiNone, px(64.0f, 64.0f), paint(UiRole::Panel, kGoldenR, kGoldenG, kGoldenB));
+    spawn(*c.state, kUiNone, px(64.0f, 64.0f), paintRgb(kGoldenR, kGoldenG, kGoldenB));
 }
 
 // Рендерит текущее содержимое canvas в offscreen-картинку W×H и возвращает RGBA байты через

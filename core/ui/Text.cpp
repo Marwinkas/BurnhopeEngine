@@ -139,7 +139,7 @@ uint32_t emitGlyphs(
         fit = box.h / em;
     }
     const float used = scale * fit;
-    const float baseline = box.y + (box.h - em * fit) * 0.5f + em * fit * 0.76f;
+    const float baseline = box.y + (box.h - em * fit) * 0.5f + em * fit * 0.84f;
     const float textW = uiMeasure(ui, text, len, len) * fit;
     float pen = box.x;
     if (center) {
@@ -267,6 +267,9 @@ void uiText(UiState& s, uint16_t id, const char* text) {
     const uint8_t n = uiStrCopy(bytes, text);
     UiText created{};
     if (const UiText* live = s.ent[id].try_get<UiText>()) {
+        if (live->len == n && std::memcmp(live->bytes, bytes, static_cast<size_t>(n) + 1u) == 0) {
+            return;
+        }
         created = *live;
     }
     std::memcpy(created.bytes, bytes, static_cast<size_t>(n) + 1u);
@@ -276,7 +279,13 @@ void uiText(UiState& s, uint16_t id, const char* text) {
         s.ent[id].set<UiContentMeasure>(UiContentMeasure{measureLabel, nullptr});
     }
     s.visualDirty = true;
-    s.layoutDirty = true;
+    const uint16_t parent = s.parentOf[id];
+    const UiFlex* parentFlex = parent < s.count ? s.ent[parent].try_get<UiFlex>() : nullptr;
+    const bool column = parentFlex != nullptr
+        && (parentFlex->direction == UiFlexDir::Column || parentFlex->direction == UiFlexDir::ColumnReverse);
+    if (!column) {
+        s.layoutDirty = true;
+    }
 }
 
 TextRun textRun(const UiState& s, const UiText& text, const UiBox& slot) {
@@ -560,15 +569,52 @@ uint32_t uiEmitTextNode(
     if (text == nullptr || text->len == 0) {
         return n;
     }
+    UiBox slot = s.box[id];
+    if (const UiFlex* flex = s.ent[id].try_get<UiFlex>()) {
+        const bool sides = flex->padL > 0.0f || flex->padR > 0.0f || flex->padT > 0.0f || flex->padB > 0.0f;
+        const float left = sides ? flex->padL : flex->pad;
+        const float right = sides ? flex->padR : flex->pad;
+        const float top = sides ? flex->padT : flex->pad;
+        const float bottom = sides ? flex->padB : flex->pad;
+        if (slot.w > left + right + 1.0f && slot.h > top + bottom + 1.0f) {
+            slot.x += left;
+            slot.y += top;
+            slot.w -= left + right;
+            slot.h -= top + bottom;
+        }
+    }
+    if (clip != nullptr) {
+        const bool empty = clip->w < 0.5f || clip->h < 0.5f;
+        const bool miss = slot.x >= clip->x + clip->w || clip->x >= slot.x + slot.w
+            || slot.y >= clip->y + clip->h || clip->y >= slot.y + slot.h;
+        if (empty || miss) {
+            return n;
+        }
+    }
+    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
     float tr = r;
     float tg = g;
     float tb = b;
-    textInk(r, g, b, id == s.hovered, tr, tg, tb);
-    const TextRun run = textRun(s, *text, s.box[id]);
+    float ta = a;
+    const bool bare = paint != nullptr && (paint->token == UiToken::Text || paint->a <= 0.02f);
+    if (bare && paint->token == UiToken::Custom) {
+        tr = paint->r;
+        tg = paint->g;
+        tb = paint->b;
+        ta = 1.0f;
+    } else if (bare) {
+        tr = s.look.text[0];
+        tg = s.look.text[1];
+        tb = s.look.text[2];
+        ta = 1.0f;
+    } else {
+        textInk(r, g, b, id == s.hovered, tr, tg, tb);
+    }
+    const TextRun run = textRun(s, *text, slot);
     if (run.lines == 0) {
         return n;
     }
-    return uiEmitRun(s, dst, n, cap, run, tr, tg, tb, a, clip);
+    return uiEmitRun(s, dst, n, cap, run, tr, tg, tb, ta, clip);
 }
 
 } // namespace burnhope

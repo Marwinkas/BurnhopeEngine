@@ -66,7 +66,7 @@ enum class UiInputPhase : uint8_t {
 using UiInputHookFn = bool (*)(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
 
 struct UiInputHooks {
-    UiInputHookFn fn[8]{};
+    UiInputHookFn fn[12]{};
     uint8_t n = 0;
 };
 
@@ -349,9 +349,20 @@ inline bool uiWithin(const UiState& s, uint16_t id, uint16_t ancestor) {
 }
 
 inline bool uiIsOverlay(const UiState& s, uint16_t id) {
-    for (uint16_t p = id; p != kUiNone; p = s.parentOf[p]) {
+    if (id >= s.count) {
+        return false;
+    }
+    for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
         const UiFlex* flex = s.ent[p].try_get<UiFlex>();
-        if (flex != nullptr && flex->position != UiPosition::Static) {
+        if (flex == nullptr || flex->position != UiPosition::Absolute) {
+            continue;
+        }
+        const uint16_t parent = s.parentOf[p];
+        if (parent == kUiNone || parent >= s.count) {
+            return true;
+        }
+        const UiFlex* home = s.ent[parent].try_get<UiFlex>();
+        if (home == nullptr || home->position == UiPosition::Static) {
             return true;
         }
     }

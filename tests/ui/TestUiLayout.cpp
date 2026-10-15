@@ -4,7 +4,7 @@
 
 #include "ui/Domain.hpp"
 #include "ui/State.hpp"
-#include "ui/Layout.hpp"
+#include "ui/LayoutBridge.hpp"
 #include "ui/widget/Detail.hpp"
 
 #include <chrono>
@@ -15,7 +15,7 @@ using namespace burnhope;
 
 TEST_CASE("layout dump names the node") {
     UiState state;
-    const uint16_t id = spawn(state, kUiNone, px(80, 24), paint(UiRole::Button, 0.2f, 0.2f, 0.2f));
+    const uint16_t id = spawn(state, kUiNone, px(80, 24), paintRgb(0.2f, 0.2f, 0.2f));
     uiName(state, id, "save");
     uiLayout(state, 200.0f, 80.0f);
     uiTrace(state, "test", id);
@@ -26,8 +26,8 @@ TEST_CASE("layout dump names the node") {
 TEST_CASE("column label skips yoga when the line changes") {
     UiState state;
     UiFlex col{};
-    const uint16_t column = spawn(state, kUiNone, col, paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
-    const uint16_t id = spawn(state, column, UiFlex{}, paint(UiRole::Label, 1.0f, 1.0f, 1.0f));
+    const uint16_t column = spawn(state, kUiNone, col, paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t id = spawn(state, column, UiFlex{}, paintRgb(1.0f, 1.0f, 1.0f));
     addText(state, id, "fps 1");
     CHECK(state.layoutDirty);
     uiLayout(state, 400.0f, 300.0f);
@@ -47,9 +47,9 @@ TEST_CASE("column label skips yoga when the line changes") {
 TEST_CASE("row label still marks layout") {
     UiState state;
     UiFlex row{};
-    row.direction = 1;
-    const uint16_t line = spawn(state, kUiNone, row, paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
-    const uint16_t id = spawn(state, line, UiFlex{}, paint(UiRole::Label, 1.0f, 1.0f, 1.0f));
+    row.direction = UiFlexDir::Row;
+    const uint16_t line = spawn(state, kUiNone, row, paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t id = spawn(state, line, UiFlex{}, paintRgb(1.0f, 1.0f, 1.0f));
     addText(state, id, "a");
     uiLayout(state, 400.0f, 80.0f);
     addText(state, id, "abcd");
@@ -58,17 +58,17 @@ TEST_CASE("row label still marks layout") {
 TEST_CASE("yoga box") {
     UiState state;
     UiFlex flex{};
-    flex.widthMode = static_cast<uint8_t>(UiSize::Px);
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.widthMode = UiSize::Px;
+    flex.heightMode = UiSize::Px;
     flex.width = 120.0f;
     flex.height = 40.0f;
-    const uint16_t root = spawn(state, kUiNone, flex, paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
+    const uint16_t root = spawn(state, kUiNone, flex, paintRgb(0.1f, 0.1f, 0.1f));
     UiFlex childFlex{};
-    childFlex.widthMode = static_cast<uint8_t>(UiSize::Px);
-    childFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    childFlex.widthMode = UiSize::Px;
+    childFlex.heightMode = UiSize::Px;
     childFlex.width = 120.0f;
     childFlex.height = 40.0f;
-    const uint16_t child = spawn(state, root, childFlex, paint(UiRole::Button, 0.2f, 0.2f, 0.2f));
+    const uint16_t child = spawn(state, root, childFlex, paintRgb(0.2f, 0.2f, 0.2f));
     uiLayout(state, 400.0f, 300.0f);
     CHECK(state.box[root].w == doctest::Approx(400.0f));
     CHECK(state.box[child].w == doctest::Approx(120.0f));
@@ -78,12 +78,12 @@ TEST_CASE("yoga box") {
 TEST_CASE("tab index wraps") {
     UiState state;
     UiFlex flex{};
-    flex.widthMode = static_cast<uint8_t>(UiSize::Px);
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.widthMode = UiSize::Px;
+    flex.heightMode = UiSize::Px;
     flex.width = 80.0f;
     flex.height = 24.0f;
-    const uint16_t a = spawn(state, kUiNone, flex, paint(UiRole::Button, 0.2f, 0.2f, 0.2f));
-    const uint16_t b = spawn(state, kUiNone, flex, paint(UiRole::Button, 0.2f, 0.2f, 0.2f));
+    const uint16_t a = spawn(state, kUiNone, flex, paintRgb(0.2f, 0.2f, 0.2f));
+    const uint16_t b = spawn(state, kUiNone, flex, paintRgb(0.2f, 0.2f, 0.2f));
     uiTab(state, a, 2);
     uiTab(state, b, 1);
     uiLayout(state, 200.0f, 200.0f);
@@ -96,34 +96,35 @@ TEST_CASE("tab index wraps") {
 TEST_CASE("scroll scissor blocks the child") {
     UiState state;
     UiFlex host{};
-    host.widthMode = static_cast<uint8_t>(UiSize::Px);
-    host.heightMode = static_cast<uint8_t>(UiSize::Px);
+    host.widthMode = UiSize::Px;
+    host.heightMode = UiSize::Px;
     host.width = 200.0f;
     host.height = 200.0f;
-    const uint16_t root = spawn(state, kUiNone, host, paint(UiRole::Panel, 0.05f, 0.05f, 0.05f));
+    const uint16_t root = spawn(state, kUiNone, host, paintRgb(0.05f, 0.05f, 0.05f));
     UiFlex scrollFlex{};
-    scrollFlex.widthMode = static_cast<uint8_t>(UiSize::Px);
-    scrollFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    scrollFlex.widthMode = UiSize::Px;
+    scrollFlex.heightMode = UiSize::Px;
     scrollFlex.width = 100.0f;
     scrollFlex.height = 40.0f;
-    scrollFlex.overflow = 2;
-    const uint16_t scroll = spawn(state, root, scrollFlex, paint(UiRole::Scroll, 0.1f, 0.1f, 0.1f));
+    scrollFlex.overflow = UiOverflow::Scroll;
+    const uint16_t scroll = spawn(state, root, scrollFlex, paintRgb(0.1f, 0.1f, 0.1f));
     UiFlex child{};
-    child.position = 1;
+    child.position = UiPosition::Absolute;
     child.posY = 80.0f;
-    child.widthMode = static_cast<uint8_t>(UiSize::Px);
-    child.heightMode = static_cast<uint8_t>(UiSize::Px);
+    child.widthMode = UiSize::Px;
+    child.heightMode = UiSize::Px;
     child.width = 40.0f;
     child.height = 20.0f;
-    const uint16_t button = spawn(state, scroll, child, paint(UiRole::Button, 0.3f, 0.3f, 0.3f));
+    const uint16_t button = spawn(state, scroll, child, paintRgb(0.3f, 0.3f, 0.3f));
     uiLayout(state, 200.0f, 200.0f);
     const uint16_t hit = hitTest(state, state.box[button].x + 2.0f, state.box[button].y + 2.0f);
     CHECK(hit != button);
 }
 TEST_CASE("drop frees the subtree") {
     UiState state;
-    const uint16_t root = spawn(state, kUiNone, px(200, 80), paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
-    const uint16_t child = spawn(state, root, px(40, 20), paint(UiRole::Button, 0.2f, 0.2f, 0.2f));
+    const uint16_t root = spawn(state, kUiNone, px(200, 80), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t child = spawn(state, root, px(40, 20), paintRgb(0.2f, 0.2f, 0.2f));
+    uiText(state, child, "x");
     CHECK(state.ent[child].try_get<UiText>() != nullptr);
     uiLayout(state, 200.0f, 80.0f);
     CHECK(state.yoga[child] != nullptr);
@@ -137,10 +138,10 @@ TEST_CASE("drop frees the subtree") {
 }
 TEST_CASE("reparent moves the yoga parent") {
     UiState state;
-    const uint16_t host = spawn(state, kUiNone, px(220, 40), paint(UiRole::Panel, 0.05f, 0.05f, 0.05f));
-    const uint16_t a = spawn(state, host, px(100, 40), paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
-    const uint16_t b = spawn(state, host, px(100, 40), paint(UiRole::Panel, 0.2f, 0.2f, 0.2f));
-    const uint16_t child = spawn(state, a, px(20, 10), paint(UiRole::Button, 0.3f, 0.3f, 0.3f));
+    const uint16_t host = spawn(state, kUiNone, px(220, 40), paintRgb(0.05f, 0.05f, 0.05f));
+    const uint16_t a = spawn(state, host, px(100, 40), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t b = spawn(state, host, px(100, 40), paintRgb(0.2f, 0.2f, 0.2f));
+    const uint16_t child = spawn(state, a, px(20, 10), paintRgb(0.3f, 0.3f, 0.3f));
     uiReparent(state, child, b);
     CHECK(state.parentOf[child] == b);
     CHECK(YGNodeGetParent(state.yoga[child]) == state.yoga[b]);
@@ -149,7 +150,7 @@ TEST_CASE("reparent moves the yoga parent") {
 }
 TEST_CASE("hidden node is not a hit") {
     UiState state;
-    const uint16_t id = spawn(state, kUiNone, px(80, 30), paint(UiRole::Button, 0.2f, 0.2f, 0.2f));
+    const uint16_t id = spawn(state, kUiNone, px(80, 30), paintRgb(0.2f, 0.2f, 0.2f));
     uiShow(state, id, false);
     uiLayout(state, 200.0f, 80.0f);
     CHECK(YGNodeStyleGetDisplay(state.yoga[id]) == YGDisplayNone);
@@ -157,24 +158,24 @@ TEST_CASE("hidden node is not a hit") {
 }
 TEST_CASE("scissor edge and a nested child") {
     UiState state;
-    const uint16_t root = spawn(state, kUiNone, px(200, 80), paint(UiRole::Panel, 0.05f, 0.05f, 0.05f));
+    const uint16_t root = spawn(state, kUiNone, px(200, 80), paintRgb(0.05f, 0.05f, 0.05f));
     UiFlex scrollFlex = px(100, 40);
-    scrollFlex.overflow = 2;
-    const uint16_t scroll = spawn(state, root, scrollFlex, paint(UiRole::Scroll, 0.1f, 0.1f, 0.1f));
+    scrollFlex.overflow = UiOverflow::Scroll;
+    const uint16_t scroll = spawn(state, root, scrollFlex, paintRgb(0.1f, 0.1f, 0.1f));
     UiFlex deep = px(80, 80);
-    deep.position = 1;
+    deep.position = UiPosition::Absolute;
     deep.posY = 0.0f;
-    deep.overflow = 2;
-    const uint16_t inner = spawn(state, scroll, deep, paint(UiRole::Scroll, 0.05f, 0.05f, 0.05f));
+    deep.overflow = UiOverflow::Scroll;
+    const uint16_t inner = spawn(state, scroll, deep, paintRgb(0.05f, 0.05f, 0.05f));
     UiFlex buried = px(16, 16);
-    buried.position = 1;
+    buried.position = UiPosition::Absolute;
     buried.posY = 50.0f;
-    const uint16_t buriedBtn = spawn(state, inner, buried, paint(UiRole::Button, 0.4f, 0.2f, 0.2f));
+    const uint16_t buriedBtn = spawn(state, inner, buried, paintRgb(0.4f, 0.2f, 0.2f));
     UiFlex child = px(30, 16);
-    child.position = 1;
+    child.position = UiPosition::Absolute;
     child.posX = 10.0f;
     child.posY = 8.0f;
-    const uint16_t button = spawn(state, scroll, child, paint(UiRole::Button, 0.3f, 0.3f, 0.3f));
+    const uint16_t button = spawn(state, scroll, child, paintRgb(0.3f, 0.3f, 0.3f));
     uiLayout(state, 200.0f, 80.0f);
     const UiBox& box = state.box[button];
     CHECK(hitTest(state, box.x + 1.0f, box.y + 1.0f) == button);
@@ -187,18 +188,18 @@ TEST_CASE("scissor edge and a nested child") {
 }
 TEST_CASE("uiLayout timing on a near-cap tree") {
     UiState state;
-    const uint16_t root = spawn(state, kUiNone, px(1600, 1000), paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
+    const uint16_t root = spawn(state, kUiNone, px(1600, 1000), paintRgb(0.1f, 0.1f, 0.1f));
     UiFlex grid{};
-    grid.direction = 1; // row
-    grid.wrap = 1;
-    grid.widthMode = static_cast<uint8_t>(UiSize::Px);
-    grid.heightMode = static_cast<uint8_t>(UiSize::Px);
+    grid.direction = UiFlexDir::Row; // row
+    grid.wrap = UiFlexWrap::Wrap;
+    grid.widthMode = UiSize::Px;
+    grid.heightMode = UiSize::Px;
     grid.width = 40.0f;
     grid.height = 24.0f;
     grid.shrink = 0.0f;
     uint16_t made = 0;
     for (uint16_t i = 0; i < 900 && state.count < kUiCap - 4; ++i) {
-        const uint16_t id = spawn(state, root, grid, paint(UiRole::Button, 0.2f, 0.2f, 0.2f));
+        const uint16_t id = spawn(state, root, grid, paintRgb(0.2f, 0.2f, 0.2f));
         if (id == kUiNone) {
             break;
         }
@@ -214,18 +215,18 @@ TEST_CASE("uiLayout timing on a near-cap tree") {
 }
 TEST_CASE("uiEmit timing on a near-cap tree") {
     UiState state;
-    const uint16_t root = spawn(state, kUiNone, px(1600, 1000), paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
+    const uint16_t root = spawn(state, kUiNone, px(1600, 1000), paintRgb(0.1f, 0.1f, 0.1f));
     UiFlex grid{};
-    grid.direction = 1;
-    grid.wrap = 1;
-    grid.widthMode = static_cast<uint8_t>(UiSize::Px);
-    grid.heightMode = static_cast<uint8_t>(UiSize::Px);
+    grid.direction = UiFlexDir::Row;
+    grid.wrap = UiFlexWrap::Wrap;
+    grid.widthMode = UiSize::Px;
+    grid.heightMode = UiSize::Px;
     grid.width = 40.0f;
     grid.height = 24.0f;
     grid.shrink = 0.0f;
     uint16_t made = 0;
     for (uint16_t i = 0; i < 900 && state.count < kUiCap - 4; ++i) {
-        const uint16_t id = spawn(state, root, grid, paint(UiRole::Button, 0.2f, 0.2f, 0.2f));
+        const uint16_t id = spawn(state, root, grid, paintRgb(0.2f, 0.2f, 0.2f));
         if (id == kUiNone) {
             break;
         }

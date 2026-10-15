@@ -131,7 +131,7 @@ struct UiFlex {
     UiSize basisMode = UiSize::Auto;
     UiSize maxWMode = UiSize::Auto;
     UiSize maxHMode = UiSize::Auto;
-    UiOverflow overflow = UiOverflow::Visible;
+    UiOverflow overflow = UiOverflow::Hidden;
     UiBoxSizing box = UiBoxSizing::BorderBox;
     UiInsetFlags inset = UiInsetFlags::None;
     float basis = 0.0f;

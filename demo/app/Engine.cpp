@@ -10,6 +10,10 @@
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/Panel.hpp"
 #include "ui/widget/Button.hpp"
+#include "ui/widget/Field.hpp"
+#include "ui/widget/List.hpp"
+#include "ui/widget/Splitter.hpp"
+#include "ui/widget/Text.hpp"
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Scroll.hpp"
@@ -68,7 +72,7 @@ void shellDrop(Host& host, int slot, const char* path, void* user) {
     }
     filesOfferPath(*canvas->state, path);
     if (isImagePath(path)) {
-        (void)canvasLoadImage(*canvas, 0, path);
+        (void)canvasLoadPhoto(*canvas, 0, path);
     } else if (extIs(path, ".json")) {
         (void)uiImportJsonFile(*canvas->state, 0, path);
     }
@@ -280,7 +284,7 @@ void engineShutdown(Engine& e) {
     hostShutdown(e.host);
 }
 
-void onActor(void* user, uint16_t, int16_t) {
+void onActor(void* user, uint16_t) {
     auto* hit = static_cast<ObjectHit*>(user);
     if (hit == nullptr || hit->canvas == nullptr || hit->scene == nullptr) {
         return;
@@ -299,22 +303,22 @@ bool addActorButton(HudContext& hud, uint16_t objects, uint8_t index, const char
     if (canvas.state == nullptr) {
         return false;
     }
-    Panel rowBtn = Panel::at(*canvas.state, objects).button(name);
-    if (rowBtn.id == kUiNone) {
+    uint16_t rowBtn = uiButton(*canvas.state, objects, { .label = name });
+    if (rowBtn == kUiNone) {
         return false;
     }
-    uiSetHeight(*canvas.state, rowBtn.id, 28.0f);
+    uiSetHeight(*canvas.state, rowBtn, 28.0f);
     hud.objects.push_back({});
     ObjectHit& hit = hud.objects.back();
     hit.canvas = &canvas;
     hit.scene = hud.tool.scene;
     hit.index = index;
     hit.page = kind == static_cast<uint8_t>(SceneActorKind::Sun) ? hud.tool.sunPage : hud.tool.postPage;
-    uiBind(*canvas.state, rowBtn.id, onActor, &hit);
+    uiBind(*canvas.state, rowBtn, onActor, &hit);
     return true;
 }
 
-void onGizmoMode(void* user, uint16_t, int16_t) {
+void onGizmoMode(void* user, uint16_t) {
     auto* hit = static_cast<GizmoHit*>(user);
     if (hit == nullptr || hit->tool == nullptr || hit->tool->scene == nullptr) {
         return;
@@ -322,7 +326,7 @@ void onGizmoMode(void* user, uint16_t, int16_t) {
     sceneFrameActorGizmo(hit->tool->scene, hit->mode);
 }
 
-void onDuplicate(void* user, uint16_t, int16_t) {
+void onDuplicate(void* user, uint16_t) {
     auto* hud = static_cast<HudContext*>(user);
     if (hud == nullptr || hud->tool.scene == nullptr || hud->tool.canvas == nullptr) {
         return;
@@ -335,7 +339,7 @@ void onDuplicate(void* user, uint16_t, int16_t) {
     uint8_t kind = 0;
     sceneFrameActorName(hud->tool.scene, index, name, sizeof(name), &kind);
     if (addActorButton(*hud, hud->tool.objects, index, name, kind)) {
-        onActor(&hud->objects.back(), 0, 0);
+        onActor(&hud->objects.back(), 0);
     }
 }
 
@@ -348,8 +352,36 @@ void setSlide(Canvas& canvas, uint16_t id, float value) {
         return;
     }
     range->value = value;
+    char text[32]{};
+    std::snprintf(text, sizeof(text), "%.4g", static_cast<double>(range->value));
+    uiSetFieldText(*canvas.state, id, text);
     canvas.state->visualDirty = 1;
 }
+
+void applyTone(UiState& s, int which) {
+    const char* names[] = {"tone0", "tone1", "tone2", "tone3"};
+    const char* caps[] = {"AgX", "ACES", "Reinhard", "Linear"};
+    for (int i = 0; i < 4; ++i) {
+        uiBindCheck(s, uiFindName(s, names[i]), 1, 2, i == which);
+    }
+    uiText(s, uiFindName(s, "toneBtn"), caps[which]);
+}
+
+void toneAgx(void* user) { applyTone(*static_cast<UiState*>(user), 0); }
+void toneAces(void* user) { applyTone(*static_cast<UiState*>(user), 1); }
+void toneReinhard(void* user) { applyTone(*static_cast<UiState*>(user), 2); }
+void toneLinear(void* user) { applyTone(*static_cast<UiState*>(user), 3); }
+
+void applyAa(UiState& s, int which) {
+    uiBindCheck(s, uiFindName(s, "smaa"), 0, 0, which == 1);
+    uiBindCheck(s, uiFindName(s, "cmaa"), 0, 0, which == 2);
+    const char* caps[] = {"Off", "SMAA", "CMAA"};
+    uiText(s, uiFindName(s, "aaBtn"), caps[which]);
+}
+
+void aaOff(void* user) { applyAa(*static_cast<UiState*>(user), 0); }
+void aaSmaa(void* user) { applyAa(*static_cast<UiState*>(user), 1); }
+void aaCmaa(void* user) { applyAa(*static_cast<UiState*>(user), 2); }
 
 void bindHudIds(HudContext& hud, UiState& state) {
     auto id = [&](const char* name) { return uiFindName(state, name); };
@@ -447,7 +479,7 @@ const ViewMode kViews[] = {
     {12, "металл"}, {13, "AO"}, {14, "свечение"},
 };
 
-void onObjectPage(void* user, uint16_t, int16_t) {
+void onObjectPage(void* user, uint16_t) {
     auto* hit = static_cast<PageHit*>(user);
     if (hit == nullptr || hit->canvas == nullptr || hit->page == kUiNone) {
         return;
@@ -455,7 +487,7 @@ void onObjectPage(void* user, uint16_t, int16_t) {
     uiShowOnly(*hit->canvas->state, hit->page);
 }
 
-void onStats(void* user, uint16_t, int16_t) {
+void onStats(void* user, uint16_t) {
     auto* hit = static_cast<StatsHit*>(user);
     if (hit == nullptr || hit->canvas == nullptr || hit->canvas->state == nullptr || hit->page == kUiNone) {
         return;
@@ -491,42 +523,51 @@ void onMode(void* user) {
     }
     if (hit->label != kUiNone) {
         if (hit->canvas->state != nullptr) {
-            Panel::at(*hit->canvas->state, hit->label).setText(title);
+            uiText(*hit->canvas->state, hit->label, title);
         }
     }
 }
 
-Panel foldOpen(Panel parent, const char* title) {
-    if (parent.state == nullptr) {
-        return {};
-    }
-    UiState& s = *parent.state;
-    const uint16_t body = uiTreeRow(s, parent.id, title);
+uint16_t foldOpen(UiState& s, uint16_t parent, const char* title) {
+    const uint16_t body = uiTreeRow(s, parent, title);
     for (uint16_t id = 0; id < s.count; ++id) {
         auto* tree = s.ent[id].try_get_mut<UiTree>();
         if (tree != nullptr && tree->body == body) {
             tree->open = 1;
+            for (uint16_t child = 0; child < s.count; ++child) {
+                if (s.parentOf[child] != id) {
+                    continue;
+                }
+                uiText(s, child, "");
+                if (auto* paint = s.ent[child].try_get_mut<UiPaint>()) {
+                    paint->a = 0.0f;
+                    paint->borderW = 0.0f;
+                    paint->shadow = 0.0f;
+                    paint->icon = 11;
+                    paint->r = s.look.text[0];
+                    paint->g = s.look.text[1];
+                    paint->b = s.look.text[2];
+                }
+                break;
+            }
             break;
         }
     }
     uiShow(s, body, true);
-    return Panel::at(*parent.state, body);
+    return body;
 }
 
-Panel rowSlide(Panel panel, const char* text, const char* name, float value, float minV, float maxV) {
-    Panel lab = panel.label(text);
-    (void)lab;
-    Panel slide = panel.slider(value, minV, maxV);
-    slide.name(name);
-    if (panel.state != nullptr && slide.id < panel.state->count) {
-        if (auto* flex = panel.state->ent[slide.id].try_get_mut<UiFlex>()) {
-            flex->heightMode = static_cast<uint8_t>(UiSize::Px);
-            flex->height = 28.0f;
-            panel.state->layoutDirty = true;
-            panel.state->visualDirty = true;
-        }
+uint16_t rowSlide(UiState& s, uint16_t panel, const char* text, const char* name, float value, float minV, float maxV) {
+    const float span = maxV - minV;
+    float step = 0.01f;
+    if (span > 40.0f) {
+        step = 1.0f;
+    } else if (span > 4.0f) {
+        step = 0.1f;
     }
-    return slide;
+    const uint16_t id = uiPropNumber(s, panel, text, value, minV, maxV, step);
+    uiName(s, id, name);
+    return id;
 }
 
 bool fontBesideExe(Canvas& canvas) {
@@ -570,12 +611,10 @@ void sceneHud(Canvas& canvas, void* user) {
     auto hiddenPaint = []() {
         UiPaint paint{};
         paint.a = 0.0f;
-        paint.role = static_cast<uint8_t>(UiRole::Hidden);
         return paint;
     };
     auto dockPaint = [&]() {
         UiPaint paint{};
-        paint.role = static_cast<uint8_t>(UiRole::Panel);
         paint.r = look.content[0];
         paint.g = look.content[1];
         paint.b = look.content[2];
@@ -583,77 +622,57 @@ void sceneHud(Canvas& canvas, void* user) {
         paint.borderW = 0.0f;
         return paint;
     };
-    auto splitBar = [&](Panel parent, bool vertical) {
-        UiFlex grip{};
-        grip.shrink = 0.0f;
-        if (vertical) {
-            grip.widthMode = static_cast<uint8_t>(UiSize::Px);
-            grip.width = 2.0f;
-            grip.heightMode = static_cast<uint8_t>(UiSize::Percent);
-            grip.height = 100.0f;
-        } else {
-            grip.heightMode = static_cast<uint8_t>(UiSize::Px);
-            grip.height = 2.0f;
-            grip.widthMode = static_cast<uint8_t>(UiSize::Percent);
-            grip.width = 100.0f;
-        }
-        UiPaint paint = paintToken(look, UiRole::Panel, UiToken::Muted, 0.0f);
-        paint.a = 0.16f;
-        Panel bar = parent.child(grip, paint);
-        if (bar.state != nullptr && bar.id != kUiNone) {
-            bar.state->ent[bar.id].set<UiSplitter>({});
-        }
-        return bar;
+    auto splitBar = [&](uint16_t parent, bool vertical) {
+        return uiSplitBar(*canvas.state, parent, vertical);
     };
-    auto scrollPage = [&](Panel parent, bool show) {
+    auto scrollPage = [&](uint16_t parent, bool show) {
         UiFlex viewFlex{};
         viewFlex.grow = 1.0f;
         viewFlex.shrink = 1.0f;
         viewFlex.minH = 36.0f;
         UiPaint scroll{};
-        scroll.role = static_cast<uint8_t>(UiRole::Scroll);
         scroll.r = look.content[0];
         scroll.g = look.content[1];
         scroll.b = look.content[2];
         scroll.a = 1.0f;
-        Panel view = parent.child(viewFlex, scroll);
+        const uint16_t view = uiPanel(*canvas.state, parent, viewFlex, scroll);
         UiFlex column{};
         column.gap = 4.0f;
         column.pad = 8.0f;
         column.shrink = 0.0f;
-        Panel inner = view.child(column, hiddenPaint());
+        const uint16_t inner = uiPanel(*canvas.state, view, column, hiddenPaint());
         if (canvas.state != nullptr) {
-            uiBindScroll(*canvas.state, view.id, inner.id);
+            uiBindScroll(*canvas.state, view, inner);
         }
         if (!show) {
-            uiShow(*canvas.state, view.id, false);
+            uiShow(*canvas.state, view, false);
         }
         return inner;
     };
     UiFlex rootFlex{};
     rootFlex.grow = 1.0f;
-    rootFlex.direction = 0;
-    rootFlex.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    rootFlex.direction = UiFlexDir::Column;
+    rootFlex.widthMode = UiSize::Percent;
     rootFlex.width = 100.0f;
-    rootFlex.heightMode = static_cast<uint8_t>(UiSize::Percent);
+    rootFlex.heightMode = UiSize::Percent;
     rootFlex.height = 100.0f;
-    Panel root = canvas.state != nullptr ? Panel::make(*canvas.state, kUiNone, rootFlex, hiddenPaint()) : Panel{};
+    const uint16_t root = uiPanel(*canvas.state, kUiNone, rootFlex, hiddenPaint());
     UiFlex barFlex{};
-    barFlex.direction = 1;
-    barFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    barFlex.direction = UiFlexDir::Row;
+    barFlex.heightMode = UiSize::Px;
     barFlex.height = 50.0f;
     barFlex.minH = 50.0f;
     barFlex.shrink = 0.0f;
-    barFlex.align = 1;
+    barFlex.align = UiAlign::Center;
     barFlex.pad = 12.0f;
     barFlex.gap = 8.0f;
-    Panel top = root.child(barFlex, dockPaint());
-    Panel fileBtn = top.button("File");
-    uiSetHeight(*canvas.state, fileBtn.id, 28.0f);
+    const uint16_t top = uiPanel(*canvas.state, root, barFlex, dockPaint());
+    uint16_t fileBtn = uiButton(*canvas.state, top, { .label = "File" });
+    uiSetHeight(*canvas.state, fileBtn, 28.0f);
     uint16_t fileMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
     if (canvas.state) {
-        uiSetContextMenu(*canvas.state, fileBtn.id, fileMenu);
-        uiMarkMenuBar(*canvas.state, fileBtn.id);
+        uiSetContextMenu(*canvas.state, fileBtn, fileMenu);
+        uiMarkMenuBar(*canvas.state, fileBtn);
     }
     auto fileAct = [](void* actUser) {
         auto* hit = static_cast<FileAct*>(actUser);
@@ -685,193 +704,206 @@ void sceneHud(Canvas& canvas, void* user) {
         (void)uiCommandAddTo(*canvas.state, fileMenu, "Save Scene", fileAct, &hud->fileSave);
         (void)uiCommandAddTo(*canvas.state, fileMenu, "Exit", fileAct, &hud->fileExit);
     }
-    Panel viewBtn = top.button("Lit");
-    uiSetHeight(*canvas.state, viewBtn.id, 28.0f);
+    uint16_t viewBtn = uiButton(*canvas.state, top, { .label = "Lit" });
+    uiSetHeight(*canvas.state, viewBtn, 28.0f);
     uint16_t viewMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
     if (canvas.state) {
-        uiSetContextMenu(*canvas.state, viewBtn.id, viewMenu);
-        uiMarkMenuBar(*canvas.state, viewBtn.id);
+        uiSetContextMenu(*canvas.state, viewBtn, viewMenu);
+        uiMarkMenuBar(*canvas.state, viewBtn);
     }
     for (const ViewMode& mode : kViews) {
         hud->modes.push_back({});
         ModeHit& hit = hud->modes.back();
         hit.canvas = &canvas;
         hit.index = mode.index;
-        hit.label = viewBtn.id;
+        hit.label = viewBtn;
         if (canvas.state != nullptr) {
             (void)uiCommandAddTo(*canvas.state, viewMenu, mode.name, onMode, &hit);
         }
     }
-    Panel statsBtn = top.button("Stats");
-    uiSetHeight(*canvas.state, statsBtn.id, 28.0f);
+    uint16_t statsBtn = uiButton(*canvas.state, top, { .label = "Stats" });
+    uiSetHeight(*canvas.state, statsBtn, 28.0f);
     const char* toolName[] = {"Move", "Rotate", "Scale"};
     for (uint8_t i = 0; i < 3; ++i) {
-        Panel toolBtn = top.button(toolName[i]);
-        uiSetHeight(*canvas.state, toolBtn.id, 28.0f);
+        uint16_t toolBtn = uiButton(*canvas.state, top, { .label = toolName[i] });
+        uiSetHeight(*canvas.state, toolBtn, 28.0f);
         hud->gizmos.push_back({});
         GizmoHit& gizmo = hud->gizmos.back();
         gizmo.tool = &hud->tool;
         gizmo.mode = i;
-        uiBind(*canvas.state, toolBtn.id, onGizmoMode, &gizmo);
+        uiBind(*canvas.state, toolBtn, onGizmoMode, &gizmo);
     }
-    Panel dupBtn = top.button("Duplicate");
-    uiSetHeight(*canvas.state, dupBtn.id, 28.0f);
-    uiBind(*canvas.state, dupBtn.id, onDuplicate, hud);
+    uint16_t dupBtn = uiButton(*canvas.state, top, { .label = "Duplicate" });
+    uiSetHeight(*canvas.state, dupBtn, 28.0f);
+    uiBind(*canvas.state, dupBtn, onDuplicate, hud);
     UiFlex rowFlex{};
-    rowFlex.direction = 1;
+    rowFlex.direction = UiFlexDir::Row;
     rowFlex.grow = 1.0f;
     rowFlex.shrink = 1.0f;
     rowFlex.minH = 72.0f;
-    Panel row = root.child(rowFlex, hiddenPaint());
+    const uint16_t row = uiPanel(*canvas.state, root, rowFlex, hiddenPaint());
     UiFlex viewFlex{};
     viewFlex.grow = 1.0f;
     viewFlex.shrink = 1.0f;
-    (void)row.child(viewFlex, hiddenPaint());
+    (void)uiPanel(*canvas.state, row, viewFlex, hiddenPaint());
     (void)splitBar(row, true);
     UiFlex dockFlex{};
-    dockFlex.direction = 1;
-    dockFlex.widthMode = static_cast<uint8_t>(UiSize::Px);
+    dockFlex.direction = UiFlexDir::Row;
+    dockFlex.widthMode = UiSize::Px;
     dockFlex.width = 300.0f;
     dockFlex.shrink = 0.0f;
-    dockFlex.heightMode = static_cast<uint8_t>(UiSize::Percent);
+    dockFlex.heightMode = UiSize::Percent;
     dockFlex.height = 100.0f;
     dockFlex.minH = 72.0f;
-    Panel dock = row.child(dockFlex, hiddenPaint());
+    const uint16_t dock = uiPanel(*canvas.state, row, dockFlex, hiddenPaint());
     UiFlex statsFlex{};
-    statsFlex.direction = 0;
-    statsFlex.widthMode = static_cast<uint8_t>(UiSize::Px);
+    statsFlex.direction = UiFlexDir::Column;
+    statsFlex.widthMode = UiSize::Px;
     statsFlex.width = 220.0f;
     statsFlex.shrink = 0.0f;
     statsFlex.minW = 180.0f;
-    Panel statsPane = dock.child(statsFlex, dockPaint());
-    uiShow(*canvas.state, statsPane.id, false);
+    const uint16_t statsPane = uiPanel(*canvas.state, dock, statsFlex, dockPaint());
+    uiShow(*canvas.state, statsPane, false);
     UiFlex statsCol{};
     statsCol.gap = 4.0f;
     statsCol.pad = 8.0f;
     statsCol.shrink = 0.0f;
-    Panel stats = statsPane.child(statsCol, hiddenPaint());
+    const uint16_t stats = uiPanel(*canvas.state, statsPane, statsCol, hiddenPaint());
     hud->stats.canvas = &canvas;
-    hud->stats.page = statsPane.id;
-    hud->stats.dock = dock.id;
+    hud->stats.page = statsPane;
+    hud->stats.dock = dock;
     hud->stats.open = 0;
-    uiBind(*canvas.state, statsBtn.id, onStats, &hud->stats);
+    uiBind(*canvas.state, statsBtn, onStats, &hud->stats);
     UiFlex sideFlex{};
-    sideFlex.direction = 0;
+    sideFlex.direction = UiFlexDir::Column;
     sideFlex.grow = 1.0f;
     sideFlex.shrink = 1.0f;
     sideFlex.minW = 180.0f;
     sideFlex.minH = 72.0f;
-    Panel side = dock.child(sideFlex, hiddenPaint());
+    const uint16_t side = uiPanel(*canvas.state, dock, sideFlex, hiddenPaint());
     UiFlex hierFlex{};
     hierFlex.grow = 1.0f;
     hierFlex.shrink = 1.0f;
     hierFlex.minH = 40.0f;
     UiPaint hierScroll{};
-    hierScroll.role = static_cast<uint8_t>(UiRole::Scroll);
     hierScroll.r = look.content[0];
     hierScroll.g = look.content[1];
     hierScroll.b = look.content[2];
     hierScroll.a = 1.0f;
-    Panel hierView = side.child(hierFlex, hierScroll);
+    const uint16_t hierView = uiPanel(*canvas.state, side, hierFlex, hierScroll);
     UiFlex hierCol{};
     hierCol.gap = 4.0f;
     hierCol.pad = 8.0f;
     hierCol.shrink = 0.0f;
-    Panel objects = hierView.child(hierCol, hiddenPaint());
+    const uint16_t objects = uiPanel(*canvas.state, hierView, hierCol, hiddenPaint());
     if (canvas.state != nullptr) {
-        uiBindScroll(*canvas.state, hierView.id, objects.id);
+        uiBindScroll(*canvas.state, hierView, objects);
     }
-    objects.label("Hierarchy").color(look.accent[0][0], look.accent[0][1], look.accent[0][2], 1.0f);
-    hud->tool.objects = objects.id;
+    const uint16_t hierarchy = uiLabel(*canvas.state, objects, "Hierarchy");
+    if (auto* paint = canvas.state->ent[hierarchy].try_get_mut<UiPaint>()) {
+        paint->token = UiToken::Custom;
+        paint->r = look.accent[0][0];
+        paint->g = look.accent[0][1];
+        paint->b = look.accent[0][2];
+        paint->a = 0.0f;
+    }
+    hud->tool.objects = objects;
     (void)splitBar(side, false);
     UiFlex inspFlex{};
-    inspFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    inspFlex.heightMode = UiSize::Px;
     inspFlex.height = 280.0f;
     inspFlex.minH = 40.0f;
     inspFlex.shrink = 1.0f;
-    Panel insp = side.child(inspFlex, hiddenPaint());
-    Panel post = scrollPage(insp, true);
-    Panel sun = scrollPage(insp, false);
-    Panel light = scrollPage(insp, false);
-    Panel sky = scrollPage(insp, false);
-    Panel cull = scrollPage(insp, false);
+    const uint16_t insp = uiPanel(*canvas.state, side, inspFlex, hiddenPaint());
+    uint16_t post = uiPropHost(*canvas.state, scrollPage(insp, true));
+    uint16_t sun = uiPropHost(*canvas.state, scrollPage(insp, false));
+    uint16_t light = uiPropHost(*canvas.state, scrollPage(insp, false));
+    uint16_t sky = uiPropHost(*canvas.state, scrollPage(insp, false));
+    uint16_t cull = uiPropHost(*canvas.state, scrollPage(insp, false));
     auto pick = [&](const char* title, uint16_t inner) {
-        Panel rowBtn = objects.button(title);
-        uiSetHeight(*canvas.state, rowBtn.id, 28.0f);
-        if (rowBtn.id == kUiNone || canvas.state == nullptr) {
+        uint16_t rowBtn = uiButton(*canvas.state, objects, { .label = title });
+        uiSetHeight(*canvas.state, rowBtn, 28.0f);
+        if (rowBtn == kUiNone || canvas.state == nullptr) {
             return;
         }
         hud->pages.push_back({});
         PageHit& hit = hud->pages.back();
         hit.canvas = &canvas;
         hit.page = uiParent(*canvas.state, inner);
-        uiBind(*canvas.state, rowBtn.id, onObjectPage, &hit);
+        uiBind(*canvas.state, rowBtn, onObjectPage, &hit);
     };
-    hud->tool.postPage = uiParent(*canvas.state, post.id);
-    hud->tool.sunPage = uiParent(*canvas.state, sun.id);
+    hud->tool.postPage = uiParent(*canvas.state, post);
+    hud->tool.sunPage = uiParent(*canvas.state, sun);
     if (hud->tool.scene != nullptr) {
         const uint8_t count = sceneFrameActorCount(hud->tool.scene);
         for (uint8_t i = 0; i < count; ++i) {
             char name[24];
             uint8_t kind = 0;
             sceneFrameActorName(hud->tool.scene, i, name, sizeof(name), &kind);
-            (void)addActorButton(*hud, objects.id, i, name, kind);
+            (void)addActorButton(*hud, objects, i, name, kind);
         }
     }
-    pick("Light", light.id);
-    pick("Sky", sky.id);
-    pick("Cull", cull.id);
-        uiShowOnly(*canvas.state, uiParent(*canvas.state, post.id));
-    Panel fogBody = foldOpen(post, "Туман");
-    Panel postBody = foldOpen(post, "Пост");
-    Panel giBody = foldOpen(post, "GI");
-    Panel sunBody = foldOpen(sun, "Солнце");
+    pick("Light", light);
+    pick("Sky", sky);
+    pick("Cull", cull);
+        uiShowOnly(*canvas.state, uiParent(*canvas.state, post));
+    uint16_t fogBody = foldOpen(*canvas.state, post, "Туман");
+    uint16_t postBody = foldOpen(*canvas.state, post, "Пост");
+    uint16_t giBody = foldOpen(*canvas.state, post, "GI");
+    uint16_t sunBody = foldOpen(*canvas.state, sun, "Солнце");
     (void)splitBar(root, false);
     UiFlex fileFlex{};
-    fileFlex.direction = 0;
-    fileFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    fileFlex.direction = UiFlexDir::Column;
+    fileFlex.heightMode = UiSize::Px;
     fileFlex.height = 200.0f;
     fileFlex.minH = 120.0f;
     fileFlex.shrink = 1.0f;
-    Panel files = root.child(fileFlex, dockPaint());
+    const uint16_t files = uiPanel(*canvas.state, root, fileFlex, dockPaint());
     if (uiFiles(*canvas.state).files != nullptr) {
         filesShutdown(*canvas.state);
     }
-    uiFiles(*canvas.state).fileFrame = files.id;
+    uiFiles(*canvas.state).fileFrame = files;
     filesAttach(*canvas.state);
     filesMount(*canvas.state);
     filesShow(*canvas.state, true);
     UiFlex modeFlex{};
     modeFlex.shrink = 0.0f;
-    Panel modeHost = root.child(modeFlex, hiddenPaint());
-    uiShow(*canvas.state, modeHost.id, false);
-    Panel modes = modeHost;
-    Panel panel = stats;
+    const uint16_t modeHost = uiPanel(*canvas.state, root, modeFlex, hiddenPaint());
+    uiShow(*canvas.state, modeHost, false);
+    uint16_t modes = modeHost;
+    uint16_t panel = stats;
     auto head = [&](const char* text, const char* id) {
-        Panel lab = panel.label(text);
+        uint16_t lab = uiLabel(*canvas.state, panel, text);
         if (id != nullptr) {
-            lab.name(id);
+            uiName(*canvas.state, lab, id);
         }
-        lab.color(look.accent[0][0], look.accent[0][1], look.accent[0][2], 1.0f);
+        if (auto* paint = canvas.state->ent[lab].try_get_mut<UiPaint>()) {
+            paint->token = UiToken::Custom;
+            paint->r = look.accent[0][0];
+            paint->g = look.accent[0][1];
+            paint->b = look.accent[0][2];
+            paint->a = 0.0f;
+        }
     };
-    panel.label("fps").name("stats");
-    panel.label("mem").name("mem");
-    panel.label("gpu").name("load");
+    uiName(*canvas.state, uiLabel(*canvas.state, panel, "fps"), "stats");
+    uiName(*canvas.state, uiLabel(*canvas.state, panel, "mem"), "mem");
+    uiName(*canvas.state, uiLabel(*canvas.state, panel, "gpu"), "load");
     auto tick = [&](const char* label, const char* id, bool on) {
-        Panel box = panel.check(label);
-        box.name(id);
-        if (on && panel.state != nullptr) {
-            uiBindCheck(*panel.state, box.id, 0, 0, true);
-        }
+        uint16_t box = uiPropCheck(*canvas.state, panel, label, 0, 0, on);
+        uiName(*canvas.state, box, id);
+    };
+    auto hideCheck = [&](const char* label, const char* id, uint8_t kind, uint8_t group, bool on) {
+        uint16_t box = uiCheck(*canvas.state, modeHost, label, kind, group, on);
+        uiName(*canvas.state, box, id);
+        uiShow(*canvas.state, box, false);
     };
     panel = cull;
     head("кулинг", "h1");
-    panel.check("Freeze Frustum").name("freeze");
+    uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Freeze Frustum"), "freeze");
     tick("конус", "cone", true);
     tick("Hi-Z", "hiz", true);
     tick("LOD", "lod", true);
-    panel.label("Force LOD  -1..3").name("lodlab");
-    panel.spin(-1.0f, -1.0f, 3.0f, 1.0f).name("lodf");
+    uiName(*canvas.state, uiPropNumber(*canvas.state, panel, "Force LOD", -1.0f, -1.0f, 3.0f, 1.0f), "lodf");
     tick("пирамида", "frust", true);
     tick("мелкие", "small", true);
     panel = light;
@@ -882,30 +914,37 @@ void sceneHud(Canvas& canvas, void* user) {
     panel = giBody;
     tick("зонды SH", "probes", true);
     tick("GI", "gien", true);
-    rowSlide(panel, "GI яркость", "giGain", 2.0f, 0.0f, 6.0f);
+    rowSlide(*canvas.state, panel, "GI яркость", "giGain", 2.0f, 0.0f, 6.0f);
     panel = giBody;
     head("профиль света", "h3");
-    panel.radio("Низкий", 3).name("prof0");
-    panel.radio("Баланс", 3).name("prof1");
-    panel.radio("Ультра", 3).name("prof2");
+    uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Низкий", 1, 3, false), "prof0");
+    uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Баланс", 1, 3, false), "prof1");
+    uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Ультра", 1, 3, false), "prof2");
     tick("radiance", "rcen", true);
-    rowSlide(panel, "RC лучи", "rcRays", 8.0f, 1.0f, 32.0f);
-    rowSlide(panel, "RC клетка м", "rcCell", 0.45f, 0.1f, 4.0f);
-    rowSlide(panel, "RC сила", "rcGain", 1.0f, 0.0f, 4.0f);
-    rowSlide(panel, "RC длина м", "rcMax", 48.0f, 2.0f, 200.0f);
+    rowSlide(*canvas.state, panel, "RC лучи", "rcRays", 8.0f, 1.0f, 32.0f);
+    rowSlide(*canvas.state, panel, "RC клетка м", "rcCell", 0.45f, 0.1f, 4.0f);
+    rowSlide(*canvas.state, panel, "RC сила", "rcGain", 1.0f, 0.0f, 4.0f);
+    rowSlide(*canvas.state, panel, "RC длина м", "rcMax", 48.0f, 2.0f, 200.0f);
     panel = postBody;
     tick("GTAO", "gtaoen", true);
-    tick("CMAA", "cmaa", true);
-    panel.check("SMAA").name("smaa");
+    hideCheck("SMAA", "smaa", 0, 0, false);
+    hideCheck("CMAA", "cmaa", 0, 0, true);
+    {
+        const uint16_t menu = uiMakeMenu(*canvas.state);
+        uiCommandAddTo(*canvas.state, menu, "Off", aaOff, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "SMAA", aaSmaa, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "CMAA", aaCmaa, canvas.state.get());
+        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Сглаживание", "CMAA", menu), "aaBtn");
+    }
     tick("Bloom", "bloomen", true);
     panel = sunBody;
     tick("солнце", "sun", true);
-    rowSlide(panel, "солнце", "sunI", 1.0f, 0.0f, 4.0f);
-    rowSlide(panel, "солнце R", "sunR", 1.0f, 0.0f, 1.0f);
-    rowSlide(panel, "солнце G", "sunG", 0.97f, 0.0f, 1.0f);
-    rowSlide(panel, "солнце B", "sunB", 0.92f, 0.0f, 1.0f);
-    rowSlide(panel, "солнце зенит", "zenith", 35.0f, -10.0f, 80.0f);
-    rowSlide(panel, "солнце азимут", "azimuth", 30.0f, 0.0f, 360.0f);
+    rowSlide(*canvas.state, panel, "солнце", "sunI", 1.0f, 0.0f, 4.0f);
+    rowSlide(*canvas.state, panel, "солнце R", "sunR", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "солнце G", "sunG", 0.97f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "солнце B", "sunB", 0.92f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "солнце зенит", "zenith", 35.0f, -10.0f, 80.0f);
+    rowSlide(*canvas.state, panel, "солнце азимут", "azimuth", 30.0f, 0.0f, 360.0f);
     panel = light;
     tick("точки", "points", true);
     tick("прожекторы", "spots", true);
@@ -920,62 +959,70 @@ void sceneHud(Canvas& canvas, void* user) {
     panel = postBody;
     tick("контакт", "contacten", true);
     panel = cull;
-    panel.check("вирт. текстуры").name("vt");
+    uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "вирт. текстуры"), "vt");
     panel = modes;
-    panel.radio("Lit", 1).name("mode0");
-    panel.radio("Normals", 1).name("mode2");
-    panel.radio("Primitive ID", 1).name("mode1");
-    panel.radio("GI", 1).name("mode4");
-    panel.radio("каскады", 1).name("mode5");
-    panel.radio("контакт", 1).name("mode6");
-    panel.radio("луч", 1).name("mode7");
-    panel.radio("прямой", 1).name("mode8");
-    panel.radio("альбедо", 1).name("mode9");
-    panel.radio("солнце", 1).name("mode10");
-    panel.radio("шероховатость", 1).name("mode11");
-    panel.radio("металл", 1).name("mode12");
-    panel.radio("AO", 1).name("mode13");
-    panel.radio("свечение", 1).name("mode14");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "Lit", 1, 1, false), "mode0");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "Normals", 1, 1, false), "mode2");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "Primitive ID", 1, 1, false), "mode1");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "GI", 1, 1, false), "mode4");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "каскады", 1, 1, false), "mode5");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "контакт", 1, 1, false), "mode6");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "луч", 1, 1, false), "mode7");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "прямой", 1, 1, false), "mode8");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "альбедо", 1, 1, false), "mode9");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "солнце", 1, 1, false), "mode10");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "шероховатость", 1, 1, false), "mode11");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "металл", 1, 1, false), "mode12");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "AO", 1, 1, false), "mode13");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "свечение", 1, 1, false), "mode14");
     panel = postBody;
-    panel.radio("AgX", 2).name("tone0");
-    panel.radio("ACES", 2).name("tone1");
-    panel.radio("Reinhard", 2).name("tone2");
-    panel.radio("Linear", 2).name("tone3");
-    rowSlide(panel, "яркость", "bright", 1.0f, 0.05f, 4.0f);
-    rowSlide(panel, "зерно", "grain", 0.0f, 0.0f, 0.12f);
-    rowSlide(panel, "блюм", "bloom", 0.15f, 0.0f, 0.80f);
-    rowSlide(panel, "порог блюма", "bloomth", 0.35f, 0.0f, 2.0f);
-    rowSlide(panel, "виньетка", "vig", 0.35f, 0.0f, 2.0f);
-    rowSlide(panel, "хромат. пкс", "ca", 2.0f, 0.0f, 4.0f);
-    rowSlide(panel, "SSCS", "contact", 1.0f, 0.0f, 1.0f);
-    rowSlide(panel, "SSCS длина м", "sscsR", 0.2f, 0.05f, 2.0f);
-    rowSlide(panel, "SSCS толщина", "sscsT", 0.02f, 0.005f, 0.2f);
-    rowSlide(panel, "SSCS шаги", "sscsS", 12.0f, 4.0f, 16.0f);
-    rowSlide(panel, "SSCS экран px", "sscsP", 128.0f, 4.0f, 256.0f);
-    rowSlide(panel, "окклюзия блика", "spec", 1.0f, 0.0f, 1.0f);
-    rowSlide(panel, "Toksvig", "tok", 1.0f, 0.0f, 1.0f);
-    rowSlide(panel, "параллакс", "pom", 0.35f, 0.0f, 1.0f);
-    rowSlide(panel, "multi-scatter", "ggx", 1.0f, 0.0f, 1.0f);
-    rowSlide(panel, "радиус GTAO", "gtaor", 2.5f, 0.2f, 20.0f);
-    rowSlide(panel, "GTAO срезы", "gtaoSl", 6.0f, 1.0f, 8.0f);
-    rowSlide(panel, "GTAO шаги", "gtaoSt", 6.0f, 1.0f, 12.0f);
-    rowSlide(panel, "GTAO сила", "gtaoPw", 1.6f, 0.2f, 4.0f);
-    rowSlide(panel, "GTAO край", "gtaoFa", 1.0f, 0.1f, 1.0f);
-    rowSlide(panel, "GTAO", "gtao", 1.2f, 0.0f, 4.0f);
+    hideCheck("AgX", "tone0", 1, 2, true);
+    hideCheck("ACES", "tone1", 1, 2, false);
+    hideCheck("Reinhard", "tone2", 1, 2, false); 
+    hideCheck("Linear", "tone3", 1, 2, false);
+    {
+        const uint16_t menu = uiMakeMenu(*canvas.state);
+        uiCommandAddTo(*canvas.state, menu, "AgX", toneAgx, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "ACES", toneAces, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Reinhard", toneReinhard, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Linear", toneLinear, canvas.state.get());
+        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Цветокор", "AgX", menu), "toneBtn");
+    }
+    rowSlide(*canvas.state, panel, "яркость", "bright", 1.0f, 0.05f, 4.0f);
+    rowSlide(*canvas.state, panel, "зерно", "grain", 0.0f, 0.0f, 0.12f);
+    rowSlide(*canvas.state, panel, "блюм", "bloom", 0.15f, 0.0f, 0.80f);
+    rowSlide(*canvas.state, panel, "порог блюма", "bloomth", 0.35f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "виньетка", "vig", 0.35f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "хромат. пкс", "ca", 2.0f, 0.0f, 4.0f);
+    rowSlide(*canvas.state, panel, "SSCS", "contact", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "SSCS длина м", "sscsR", 0.2f, 0.05f, 2.0f);
+    rowSlide(*canvas.state, panel, "SSCS толщина", "sscsT", 0.02f, 0.005f, 0.2f);
+    rowSlide(*canvas.state, panel, "SSCS шаги", "sscsS", 12.0f, 4.0f, 16.0f);
+    rowSlide(*canvas.state, panel, "SSCS экран px", "sscsP", 128.0f, 4.0f, 256.0f);
+    rowSlide(*canvas.state, panel, "окклюзия блика", "spec", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Toksvig", "tok", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "параллакс", "pom", 0.35f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "multi-scatter", "ggx", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "радиус GTAO", "gtaor", 2.5f, 0.2f, 20.0f);
+    rowSlide(*canvas.state, panel, "GTAO срезы", "gtaoSl", 6.0f, 1.0f, 8.0f);
+    rowSlide(*canvas.state, panel, "GTAO шаги", "gtaoSt", 6.0f, 1.0f, 12.0f);
+    rowSlide(*canvas.state, panel, "GTAO сила", "gtaoPw", 1.6f, 0.2f, 4.0f);
+    rowSlide(*canvas.state, panel, "GTAO край", "gtaoFa", 1.0f, 0.1f, 1.0f);
+    rowSlide(*canvas.state, panel, "GTAO", "gtao", 1.2f, 0.0f, 4.0f);
     panel = light;
-    rowSlide(panel, "свечи", "lamp", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "свечи", "lamp", 1.0f, 0.0f, 1.0f);
     panel = sky;
-    rowSlide(panel, "облака", "clouds", 0.42f, 0.0f, 0.95f);
-    rowSlide(panel, "плотность", "cdens", 0.08f, 0.0f, 0.3f);
+    rowSlide(*canvas.state, panel, "облака", "clouds", 0.42f, 0.0f, 0.95f);
+    rowSlide(*canvas.state, panel, "плотность", "cdens", 0.08f, 0.0f, 0.3f);
     panel = fogBody;
-    rowSlide(panel, "туман", "fog", 0.002f, 0.0f, 0.08f);
-    rowSlide(panel, "высота тумана", "fogH", 4.0f, -30.0f, 40.0f);
-    rowSlide(panel, "свет в тумане", "fogS", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "туман", "fog", 0.002f, 0.0f, 0.08f);
+    rowSlide(*canvas.state, panel, "высота тумана", "fogH", 4.0f, -30.0f, 40.0f);
+    rowSlide(*canvas.state, panel, "свет в тумане", "fogS", 1.0f, 0.0f, 2.0f);
     panel = stats;
     for (int i = 0; i < 12; ++i) {
         char name[8];
         std::snprintf(name, sizeof(name), "g%d", i);
-        panel.label("").name(name);
+        uiName(*canvas.state, uiLabel(*canvas.state, panel, ""), name);
     }
     const char* on[] = {"hiz", "cone", "lod", "frust", "small", "shadow", "cluster", "probes", "gtaoen", "cmaa", "bloomen"};
     for (const char* name : on) {
@@ -1032,9 +1079,9 @@ bool engineTick(Engine& e) {
         }
         if (e.host.view[e.host.primary].canvas.state != nullptr) {
             UiState& hudState = *e.host.view[e.host.primary].canvas.state;
-            Panel::find(hudState, "stats").setText(fps);
-            Panel::find(hudState, "mem").setText(memLine);
-            Panel::find(hudState, "load").setText(loadLine);
+            uiText(hudState, uiFindName(hudState, "stats"), fps);
+            uiText(hudState, uiFindName(hudState, "mem"), memLine);
+            uiText(hudState, uiFindName(hudState, "load"), loadLine);
         }
         Canvas& hud = e.host.view[e.host.primary].canvas;
         const uint8_t selected = sceneFrameActorSelected(e.scene);
@@ -1215,7 +1262,7 @@ bool engineTick(Engine& e) {
         }
         if (hud.state != nullptr) {
             for (uint32_t i = 0; i < 12; ++i) {
-                Panel::at(*hud.state, id.stat[i]).setText(lines[i]);
+                uiText(*hud.state, id.stat[i], lines[i]);
             }
         }
         windowTitle(e.host.view[e.host.primary].window, sceneFrameTitle(e.scene));

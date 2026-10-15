@@ -3,11 +3,12 @@
 
 #include "ui/Domain.hpp"
 #include "ui/State.hpp"
-#include "ui/Layout.hpp"
+#include "ui/LayoutBridge.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/Canvas.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Scroll.hpp"
+#include "ui/widget/Slider.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "text/TextLayout.hpp"
 #include "rhi/MeshDraw.hpp"
@@ -18,9 +19,9 @@ using namespace burnhope;
 
 TEST_CASE("wheel on a scroll does not reach the scene") {
     UiState state;
-    const uint16_t host = spawn(state, kUiNone, px(200, 200), paint(UiRole::Panel, 0.05f, 0.05f, 0.05f));
-    const uint16_t scroll = spawn(state, host, px(100, 40), paint(UiRole::Scroll, 0.1f, 0.1f, 0.1f));
-    const uint16_t inner = spawn(state, scroll, px(80, 200), paint(UiRole::Panel, 0.2f, 0.2f, 0.2f));
+    const uint16_t host = spawn(state, kUiNone, px(200, 200), paintRgb(0.05f, 0.05f, 0.05f));
+    const uint16_t scroll = spawn(state, host, px(100, 40), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t inner = spawn(state, scroll, px(80, 200), paintRgb(0.2f, 0.2f, 0.2f));
     state.ent[scroll].set<UiScroll>({0.0f, inner});
     uiLayout(state, 200.0f, 200.0f);
     InputFrame in{};
@@ -38,12 +39,12 @@ TEST_CASE("wheel on a scroll does not reach the scene") {
 }
 TEST_CASE("text button takes the label width") {
     UiState state;
-    const uint16_t bar = spawn(state, kUiNone, px(200, 30), paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
+    const uint16_t bar = spawn(state, kUiNone, px(200, 30), paintRgb(0.1f, 0.1f, 0.1f));
     UiFlex flex{};
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.heightMode = UiSize::Px;
     flex.height = 22.0f;
     flex.shrink = 0.0f;
-    const uint16_t id = spawn(state, bar, flex, paint(UiRole::Button, 0.2f, 0.2f, 0.2f));
+    const uint16_t id = spawn(state, bar, flex, paintRgb(0.2f, 0.2f, 0.2f));
     addText(state, id, "FILE");
     uiLayout(state, 200.0f, 80.0f);
     CHECK(state.box[id].w > 20.0f);
@@ -51,12 +52,12 @@ TEST_CASE("text button takes the label width") {
 }
 TEST_CASE("scroll window stays put") {
     UiState state;
-    const uint16_t host = spawn(state, kUiNone, px(200, 200), paint(UiRole::Panel, 0.05f, 0.05f, 0.05f));
+    const uint16_t host = spawn(state, kUiNone, px(200, 200), paintRgb(0.05f, 0.05f, 0.05f));
     UiFlex scrollFlex = px(100, 40);
-    scrollFlex.overflow = 2;
-    const uint16_t scroll = spawn(state, host, scrollFlex, paint(UiRole::Scroll, 0.1f, 0.1f, 0.1f));
-    const uint16_t inner = spawn(state, scroll, px(80, 200), paint(UiRole::Panel, 0.2f, 0.2f, 0.2f));
-    const uint16_t top = spawn(state, inner, px(20, 16), paint(UiRole::Button, 0.3f, 0.3f, 0.3f));
+    scrollFlex.overflow = UiOverflow::Scroll;
+    const uint16_t scroll = spawn(state, host, scrollFlex, paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t inner = spawn(state, scroll, px(80, 200), paintRgb(0.2f, 0.2f, 0.2f));
+    const uint16_t top = spawn(state, inner, px(20, 16), paintRgb(0.3f, 0.3f, 0.3f));
     state.ent[scroll].set<UiScroll>({0.0f, inner});
     uiLayout(state, 200.0f, 200.0f);
     const float view = state.box[scroll].h;
@@ -103,7 +104,7 @@ TEST_CASE("soft wrap breaks on width") {
 }
 TEST_CASE("field undo restores bytes") {
     UiState state;
-    const uint16_t id = spawn(state, kUiNone, px(200, 36), paint(UiRole::Field, 0.1f, 0.1f, 0.1f));
+    const uint16_t id = spawn(state, kUiNone, px(200, 36), paintRgb(0.1f, 0.1f, 0.1f));
     UiField field{};
     std::memcpy(field.bytes, "hi", 2);
     field.len = 2;
@@ -120,7 +121,7 @@ TEST_CASE("field undo restores bytes") {
 }
 TEST_CASE("disabled node absorbs the hit") {
     UiState state;
-    const uint16_t id = spawn(state, kUiNone, px(80, 30), paint(UiRole::Button, 0.2f, 0.2f, 0.2f));
+    const uint16_t id = spawn(state, kUiNone, px(80, 30), paintRgb(0.2f, 0.2f, 0.2f));
     state.ent[id].try_get_mut<UiPaint>()->disabled = 1;
     uiLayout(state, 200.0f, 80.0f);
     CHECK(hitTest(state, state.box[id].x + 4.0f, state.box[id].y + 4.0f) == id);
@@ -206,7 +207,7 @@ TEST_CASE("msdf line places glyphs for mesh draw") {
 }
 TEST_CASE("slider tracks the pointer") {
     UiState state;
-    const uint16_t id = spawn(state, kUiNone, px(200, 22), paint(UiRole::Slider, 0.2f, 0.2f, 0.2f));
+    const uint16_t id = spawn(state, kUiNone, px(200, 22), paintRgb(0.2f, 0.2f, 0.2f));
     state.ent[id].set<UiRange>({0.0f, 0.0f, 100.0f});
     uiLayout(state, 200.0f, 40.0f);
     InputFrame in{};
@@ -214,11 +215,11 @@ TEST_CASE("slider tracks the pointer") {
     in.pointer.y = state.box[id].y + 4.0f;
     in.pointer.pressed = kPointerLeft;
     in.pointer.down = kPointerLeft;
-    uiApplyInput(state, in);
+    (void)uiApplyInput(state, in);
     const float mid = state.ent[id].try_get<UiRange>()->value;
     CHECK(mid == doctest::Approx(25.0f).epsilon(0.05));
     in.pointer.pressed = 0;
     in.pointer.x = state.box[id].x + state.box[id].w * 0.75f;
-    uiApplyInput(state, in);
+    (void)uiApplyInput(state, in);
     CHECK(state.ent[id].try_get<UiRange>()->value == doctest::Approx(75.0f).epsilon(0.05));
 }

@@ -3,7 +3,8 @@
 
 #include "ui/Domain.hpp"
 #include "ui/State.hpp"
-#include "ui/Layout.hpp"
+#include "ui/LayoutBridge.hpp"
+#include "ui/widget/Curve.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Image.hpp"
 
@@ -14,7 +15,7 @@ using namespace burnhope;
 
 TEST_CASE("curve is a gpu ribbon") {
     UiState state;
-    const uint16_t id = spawn(state, kUiNone, px(180, 80), paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
+    const uint16_t id = spawn(state, kUiNone, px(180, 80), paintRgb(0.1f, 0.1f, 0.1f));
     state.ent[id].set<UiCurve>({});
     uiLayout(state, 200.0f, 100.0f);
     UiPrimitive prims[128];
@@ -89,7 +90,7 @@ TEST_CASE("photo blur packs one lod into the photo primitive") {
 }
 TEST_CASE("panel transform/filter sets the flag on the filled primitive") {
     UiState state;
-    const uint16_t root = spawn(state, kUiNone, px(200, 80), paint(UiRole::Panel, 0.1f, 0.1f, 0.1f));
+    const uint16_t root = spawn(state, kUiNone, px(200, 80), paintRgb(0.1f, 0.1f, 0.1f));
     uiLayout(state, 200.0f, 80.0f);
     uiTransform(state, root, 30.0f, 1.2f, 1.0f);
     uiFilter(state, root, 1.3f, 0.7f);

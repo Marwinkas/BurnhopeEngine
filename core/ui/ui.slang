@@ -246,7 +246,10 @@ float4 uiFs(VsOut i) : SV_Target0 {
     if ((i.flags & 32u) != 0) {
         const float4 tex = samplePhoto(min(i.slot, 7u), saturate(i.uv), i.blur);
         rgb = tex.rgb;
-        if ((i.flags & 2u) == 0) {
+        const float photoLum = dot(rgb, float3(0.30, 0.59, 0.11));
+        if (photoLum <= 0.55) {
+            rgb = float3(0.94, 0.94, 0.92);
+        } else if ((i.flags & 2u) == 0) {
             rgb *= i.color.rgb;
         }
         alpha = tex.a;
@@ -284,6 +287,8 @@ float4 uiFs(VsOut i) : SV_Target0 {
         }
         alpha = 1.0;
     } else if ((i.flags & 4u) != 0) {
+        const float lum = dot(i.color.rgb, float3(0.30, 0.59, 0.11));
+        rgb = lum > 0.55 ? i.color.rgb : float3(0.94, 0.94, 0.92);
         const float2 p = i.local / max(i.size, float2(1.0, 1.0)) * 2.0 - 1.0;
         const uint icon = (uint)i.uv.x;
         if (icon == 1u) {
@@ -307,6 +312,45 @@ float4 uiFs(VsOut i) : SV_Target0 {
             const float bowl = length(tip);
             const bool stem = abs(p.x + p.y) < 0.14 && p.x > -0.05 && p.y < 0.05;
             cov = (bowl < 0.42 && bowl > 0.22) || bowl < 0.12 || stem ? 1.0 : 0.0;
+        } else if (icon == 8u) {
+            const float rad = length(p);
+            const float ring = rad < 0.78 && rad > 0.58 ? 1.0 : 0.0;
+            const float2 a = float2(-0.28, -0.12);
+            const float2 b = float2(0.0, 0.22);
+            const float2 c = float2(0.28, -0.12);
+            const float2 ab = b - a;
+            const float2 cb = b - c;
+            const float ta = saturate(dot(p - a, ab) / max(dot(ab, ab), 0.0001));
+            const float tc = saturate(dot(p - c, cb) / max(dot(cb, cb), 0.0001));
+            const float mark = length(p - (a + ab * ta)) < 0.12 || length(p - (c + cb * tc)) < 0.12 ? 1.0 : 0.0;
+            cov = max(ring, mark);
+        } else if (icon == 9u) {
+            const float2 a = float2(-0.42, 0.02);
+            const float2 b = float2(-0.12, 0.38);
+            const float2 c = float2(0.48, -0.42);
+            const float2 ab = b - a;
+            const float2 bc = c - b;
+            const float ta = saturate(dot(p - a, ab) / max(dot(ab, ab), 0.0001));
+            const float tb = saturate(dot(p - b, bc) / max(dot(bc, bc), 0.0001));
+            cov = length(p - (a + ab * ta)) < 0.16 || length(p - (b + bc * tb)) < 0.16 ? 1.0 : 0.0;
+        } else if (icon == 11u) {
+            const float2 a = float2(-0.42, -0.16);
+            const float2 b = float2(0.0, 0.28);
+            const float2 c = float2(0.42, -0.16);
+            const float2 ab = b - a;
+            const float2 cb = b - c;
+            const float ta = saturate(dot(p - a, ab) / max(dot(ab, ab), 0.0001));
+            const float tc = saturate(dot(p - c, cb) / max(dot(cb, cb), 0.0001));
+            cov = length(p - (a + ab * ta)) < 0.14 || length(p - (c + cb * tc)) < 0.14 ? 1.0 : 0.0;
+        } else if (icon == 10u) {
+            const float2 a = float2(-0.18, -0.42);
+            const float2 b = float2(0.28, 0.0);
+            const float2 c = float2(-0.18, 0.42);
+            const float2 ab = b - a;
+            const float2 cb = b - c;
+            const float ta = saturate(dot(p - a, ab) / max(dot(ab, ab), 0.0001));
+            const float tc = saturate(dot(p - c, cb) / max(dot(cb, cb), 0.0001));
+            cov = length(p - (a + ab * ta)) < 0.14 || length(p - (c + cb * tc)) < 0.14 ? 1.0 : 0.0;
         }
     } else if ((i.flags & 256u) != 0) {
         const float2 pix = i.origin + i.local;

@@ -34,6 +34,21 @@ void copyPool(char* dst, uint8_t& len, int cap, const char* pool, uint32_t poolN
     len = static_cast<uint8_t>(take);
 }
 
+UiToken tokenForSlot(uint8_t slot) noexcept {
+    switch (slot) {
+    case kBinSlotButton: return UiToken::Button;
+    case kBinSlotLabel: return UiToken::Text;
+    case kBinSlotSlider: return UiToken::Slider;
+    case kBinSlotCheck: return UiToken::Check;
+    case kBinSlotField: return UiToken::Field;
+    case kBinSlotClose: return UiToken::Close;
+    case kBinSlotScroll: return UiToken::Scroll;
+    case kBinSlotMenu: return UiToken::Menu;
+    case kBinSlotImage: return UiToken::Preview;
+    default: return UiToken::Custom;
+    }
+}
+
 } // namespace
 
 uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t size) {
@@ -144,13 +159,13 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
             .r = bin.r,
             .g = bin.g,
             .b = bin.b,
-            .a = bin.a,
+            .a = (bin.role == kBinSlotHidden || bin.role == kBinSlotLabel) ? 0.0f : bin.a,
             .radius = bin.radius,
             .borderW = bin.borderW,
             .br = bin.br,
             .bg = bin.bg,
             .bb = bin.bb,
-            .token = UiToken::Custom,
+            .token = tokenForSlot(bin.role),
             .icon = bin.icon,
             .disabled = (bin.flags & kBinDisabled) != 0,
             .shadow = bin.shadow
@@ -183,10 +198,17 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
                         bin.textLeading);
         }
 
+        if (bin.role < kUiBinRoleCap && s.onSpawn[bin.role] != nullptr) {
+            s.onSpawn[bin.role](s, id);
+        }
+
         if (bin.role < kUiBinRoleCap && s.roleFinish[bin.role] != nullptr) {
             s.roleFinish[bin.role](s, id, &bin, text, hint[0] != '\0' ? hint : nullptr);
         }
 
+        if (bin.role == kBinSlotHidden) {
+            s.ent[id].add<UiPass>();
+        }
         if (bin.shown == 0) {
             uiShow(s, id, false);
         }

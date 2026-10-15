@@ -1,3 +1,6 @@
+#include "ui/UiBin.hpp"
+#include "ui/Hover.hpp"
+#include "ui/Panel.hpp"
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Detail.hpp"
 
@@ -26,10 +29,13 @@ uint16_t uiWindowChrome(UiState& s, uint16_t parent) {
     row.justify = UiJustify::Center;
     row.gap = 4.0f;
     row.marginR = 8.0f;
-    const uint16_t cluster = spawn(s, parent, row, paintClear());
-    const uint16_t minB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiToken::Chrome, s.look.radiusSm));
-    const uint16_t maxB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiToken::Chrome, s.look.radiusSm));
-    const uint16_t closeB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiToken::Close, s.look.radiusSm));
+    const uint16_t cluster = uiPanel(s, parent, row, paintClear());
+    const uint16_t minB = uiPanel(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiToken::Chrome, s.look.radiusSm));
+    const uint16_t maxB = uiPanel(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiToken::Chrome, s.look.radiusSm));
+    const uint16_t closeB = uiPanel(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiToken::Close, s.look.radiusSm));
+    uiHover(s, minB);
+    uiHover(s, maxB);
+    uiHover(s, closeB);
     if (auto* icon = s.ent[minB].try_get_mut<UiPaint>()) {
         icon->icon = 1;
     }
@@ -53,7 +59,7 @@ uint16_t loadChromeBin(UiState& s, uint16_t parent, const BinNode&, const char* 
 }
 
 void uiInstallChromeBin(UiState& s) {
-    uiRegisterCustomBinNode(s, 10, loadChromeBin, nullptr);
+    uiRegisterCustomBinNode(s, kBinSlotChrome, loadChromeBin, nullptr);
 }
 
 void uiMarkTab(UiState& s, uint16_t strip, uint16_t tab) {

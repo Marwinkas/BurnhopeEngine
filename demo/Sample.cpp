@@ -2,6 +2,7 @@
 #include "files/Browser.hpp"
 #include "files/FileDomain.hpp"
 #include "ui/Domain.hpp"
+#include "ui/widget/Button.hpp"
 #include "ui/widget/Calendar.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
@@ -76,7 +77,7 @@ void applyCompact(UiState& s) {
         if (flex == nullptr) {
             continue;
         }
-        flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+        flex->heightMode = UiSize::Px;
         flex->height = itemH;
         flex->pad = pad;
     }
@@ -125,35 +126,39 @@ void cmdClear(void* user) {
     uiNotifyVisualDirty(s);
 }
 
-void onPage(void* user, uint16_t) {
+void onPage(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
-    if (tag != shellIds(s).page) {
-        setPage(s, static_cast<int8_t>(tag));
+    const int8_t page = id == uiFindName(s, "btn_scene") ? 0
+                       : id == uiFindName(s, "btn_look")  ? 1
+                       : id == uiFindName(s, "btn_input") ? 2
+                                                          : -1;
+    if (page >= 0 && page != shellIds(s).page) {
+        setPage(s, page);
     }
     uiNotifyVisualDirty(s);
 }
 
-void onMin(void* user, uint16_t, int16_t) {
+void onMin(void* user, uint16_t) {
     uiRequestMinimize(*static_cast<UiState*>(user));
 }
 
-void onMax(void* user, uint16_t, int16_t) {
+void onMax(void* user, uint16_t) {
     uiRequestMaximize(*static_cast<UiState*>(user));
 }
 
-void onFile(void* user, uint16_t, int16_t) {
+void onFile(void* user, uint16_t) {
     uiHostNote(*static_cast<UiState*>(user)).file = true;
 }
 
-void onSend(void* user, uint16_t, int16_t) {
+void onSend(void* user, uint16_t) {
     formSubmit(*static_cast<UiState*>(user));
 }
 
-void onFilesHide(void* user, uint16_t, int16_t) {
+void onFilesHide(void* user, uint16_t) {
     filesShow(*static_cast<UiState*>(user), false);
 }
 
-void onCompact(void* user, uint16_t, int16_t) {
+void onCompact(void* user, uint16_t) {
     applyCompact(*static_cast<UiState*>(user));
 }
 
@@ -276,34 +281,34 @@ void uiBuildShell(UiState& s) {
 
     auto floatPanel = [&](float x, float y, float w, float h) {
         UiFlex flex{};
-        flex.position = 1;
+        flex.position = UiPosition::Absolute;
         flex.posX = x;
         flex.posY = y;
-        flex.widthMode = static_cast<uint8_t>(UiSize::Px);
+        flex.widthMode = UiSize::Px;
         flex.width = w;
-        flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+        flex.heightMode = UiSize::Px;
         flex.height = h;
         flex.pad = 10.0f;
         flex.gap = 6.0f;
         flex.shrink = 0.0f;
-        const uint16_t id = spawn(s, root, flex, paintToken(s.look, UiRole::Panel, UiToken::Window, s.look.radius));
+        const uint16_t id = spawn(s, root, flex, paintToken(s.look, UiToken::Window, s.look.radius));
         uiShow(s, id, false);
         return id;
     };
     auto mini = [&](uint16_t host, const char* name, UiClickFn fn) {
         UiFlex flex{};
-        flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+        flex.heightMode = UiSize::Px;
         flex.height = 28.0f;
         flex.shrink = 0.0f;
-        const uint16_t id = spawn(s, host, flex, paintToken(s.look, UiRole::Button, UiToken::Button, s.look.radiusSm));
+        const uint16_t id = spawn(s, host, flex, paintToken(s.look, UiToken::Button, s.look.radiusSm));
         addText(s, id, name);
         if (auto* box = s.ent[id].try_get_mut<UiFlex>()) {
             const UiText* label = s.ent[id].try_get<UiText>();
             const uint8_t n = label != nullptr ? label->len : 1;
-            box->widthMode = static_cast<uint8_t>(UiSize::Px);
+            box->widthMode = UiSize::Px;
             box->width = static_cast<float>(n) * s.look.advance + 24.0f;
             box->height = 28.0f;
-            box->heightMode = static_cast<uint8_t>(UiSize::Px);
+            box->heightMode = UiSize::Px;
         }
         uiBind(s, id, fn, &s);
         return id;
@@ -313,23 +318,23 @@ void uiBuildShell(UiState& s) {
         s.ent[uiFiles(s).fileFrame].set<UiResizable>({});
     }
     UiFlex fileBar{};
-    fileBar.direction = 1;
+    fileBar.direction = UiFlexDir::Row;
     fileBar.shrink = 0.0f;
-    fileBar.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    fileBar.widthMode = UiSize::Percent;
     fileBar.width = 100.0f;
-    fileBar.heightMode = static_cast<uint8_t>(UiSize::Px);
+    fileBar.heightMode = UiSize::Px;
     fileBar.height = 32.0f;
     fileBar.gap = 8.0f;
     fileBar.pad = 8.0f;
-    const uint16_t fileTools = spawn(s, uiFiles(s).fileFrame, fileBar, paintToken(s.look, UiRole::Button, UiToken::Title, 0.0f));
+    const uint16_t fileTools = spawn(s, uiFiles(s).fileFrame, fileBar, paintToken(s.look, UiToken::Title, 0.0f));
     if (fileTools != kUiNone) {
         s.ent[fileTools].set<UiTitleBar>({});
     }
-    addText(s, spawn(s, fileTools, UiFlex{}, paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f)), "FILES");
+    addText(s, spawn(s, fileTools, UiFlex{}, paintLabel(s.look)), "FILES");
     UiFlex fileSpacer{};
     fileSpacer.grow = 1.0f;
     fileSpacer.shrink = 1.0f;
-    spawn(s, fileTools, fileSpacer, paint(UiRole::Hidden, 0, 0, 0));
+    spawn(s, fileTools, fileSpacer, paintClear());
     mini(fileTools, "X", onFilesHide);
 
     const uint16_t title = take("title");
@@ -355,16 +360,12 @@ void uiBuildShell(UiState& s) {
     stamp(s, uiMenu(s), UiToken::Menu);
     for (uint16_t id = 0; id < s.count; ++id) {
         auto* node = s.ent[id].try_get<UiPaint>();
-        if (node == nullptr || node->token != static_cast<uint8_t>(UiToken::Custom)) {
+        if (node == nullptr || node->token != UiToken::Custom) {
             continue;
         }
-        if (node->role == static_cast<uint8_t>(UiRole::Button) && node->tag >= 0 && node->tag < 3) {
-            stamp(s, id, UiToken::Button);
-        } else if (node->role == static_cast<uint8_t>(UiRole::Label)) {
-            stamp(s, id, UiToken::Text);
-        } else if (node->role == static_cast<uint8_t>(UiRole::Close)) {
+        if (node->icon == 3) {
             stamp(s, id, UiToken::Close);
-        } else if (node->role == static_cast<uint8_t>(UiRole::Button) && (node->icon == 1 || node->icon == 2)) {
+        } else if (node->icon == 1 || node->icon == 2) {
             stamp(s, id, UiToken::Chrome);
         }
     }

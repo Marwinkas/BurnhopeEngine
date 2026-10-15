@@ -236,7 +236,6 @@ uint16_t scrollOwner(const UiState& s, uint16_t id) {
 
 void uiScrollOverlay(UiState& s, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
     for (uint16_t id = 0; id < s.count; ++id) {
-        const UiPaint* paint = s.ent[id].try_get<UiPaint>();
         if (s.ent[id].try_get<UiScroll>() == nullptr) {
             continue;
         }
@@ -253,7 +252,19 @@ void uiScrollOverlay(UiState& s, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
         if (!scrollThumb(s, id, thumb)) {
             continue;
         }
-        n = emitRect(dst, n, cap, thumb.x, thumb.y, thumb.w, thumb.h, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.95f, 2.0f, nullptr);
+        UiBox clip = s.box[id];
+        UiBox ancestor{};
+        if (uiClipBox(s, id, ancestor) && ancestor.w > 0.5f && ancestor.h > 0.5f) {
+            const float x0 = clip.x > ancestor.x ? clip.x : ancestor.x;
+            const float y0 = clip.y > ancestor.y ? clip.y : ancestor.y;
+            const float x1 = clip.x + clip.w < ancestor.x + ancestor.w ? clip.x + clip.w : ancestor.x + ancestor.w;
+            const float y1 = clip.y + clip.h < ancestor.y + ancestor.h ? clip.y + clip.h : ancestor.y + ancestor.h;
+            clip.x = x0;
+            clip.y = y0;
+            clip.w = x1 > x0 ? x1 - x0 : 0.0f;
+            clip.h = y1 > y0 ? y1 - y0 : 0.0f;
+        }
+        n = emitRect(dst, n, cap, thumb.x, thumb.y, thumb.w, thumb.h, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.95f, 2.0f, &clip);
     }
 }
 
@@ -285,7 +296,6 @@ bool uiScrollInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase,
         if (id >= s.count) {
             return false;
         }
-        const UiPaint* paint = s.ent[id].try_get<UiPaint>();
         if (s.ent[id].try_get<UiScroll>() == nullptr) {
             return false;
         }

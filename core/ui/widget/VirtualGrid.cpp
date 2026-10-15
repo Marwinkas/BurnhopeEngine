@@ -1,4 +1,4 @@
-#include "ui/widget/Button.hpp"
+#include "ui/Hover.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/Virtual.hpp"
@@ -53,26 +53,38 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
     if (slot == kUiNone) {
         return slot;
     }
-    UiButtonConfig glyph{};
     const float iconSide = tile > 24.0f ? tile * 0.52f : 20.0f;
+    UiFlex glyph{};
+    glyph.widthMode = UiSize::Px;
     glyph.width = iconSide;
+    glyph.heightMode = UiSize::Px;
     glyph.height = iconSide;
-    const uint16_t icon = uiButton(s, slot, glyph);
-    if (icon < s.count) {
-        if (auto* paint = s.ent[icon].try_get_mut<UiPaint>()) {
-            paint->a = 0.0f;
-            paint->borderW = 0.0f;
-            paint->icon = 4;
-        }
-    }
+    glyph.shrink = 0.0f;
+    UiPaint glyphPaint{};
+    glyphPaint.a = 0.0f;
+    glyphPaint.borderW = 0.0f;
+    glyphPaint.shadow = 0.0f;
+    glyphPaint.icon = 4;
+    glyphPaint.r = s.look.text[0];
+    glyphPaint.g = s.look.text[1];
+    glyphPaint.b = s.look.text[2];
+    const uint16_t icon = spawn(s, slot, glyph, glyphPaint);
     UiFlex lab{};
     lab.self = UiAlignSelf::Stretch;
     lab.heightMode = UiSize::Px;
     lab.height = 18.0f;
     lab.shrink = 1.0f;
-    const uint16_t label = spawn(s, slot, lab, paintToken(s.look, UiToken::Text, 0.0f));
+    const uint16_t label = spawn(s, slot, lab, paintLabel(s.look));
     addText(s, label, " ");
     uiTextStyle(s, label, UiTextAlign::Center, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+    if (icon < s.count) {
+        s.ent[icon].add<UiNoHit>();
+    }
+    if (label < s.count) {
+        s.ent[label].add<UiNoHit>();
+    }
+    s.ent[slot].add<UiFocusable>();
+    uiHover(s, slot);
     s.ent[slot].set<UiParts>({icon, kUiNone, label});
     uiBind(s, slot, onCell, &s);
     s.ent[slot].set<UiVirtRow>({});
@@ -84,6 +96,10 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
 
 float uiGridContentH(const UiState& s, uint16_t id) {
     return uiVirtualContentHeight<UiVirtualGrid>(s, id);
+}
+
+void gridOnLayout(UiState& s, uint16_t id, void*) {
+    uiVirtualGridRefresh(s, id);
 }
 
 uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& cfg) {
@@ -107,6 +123,7 @@ uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& c
     grid.user = cfg.user;
     s.ent[scroll].set<UiVirtualGrid>(grid);
     s.ent[scroll].set<UiVirtualPool>({uiVirtualGridRefresh, uiGridContentH, 0});
+    s.ent[scroll].set<UiLayoutRefresh>({gridOnLayout, nullptr});
     uiVirtualGridRefresh(s, scroll);
     return scroll;
 }

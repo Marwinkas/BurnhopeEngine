@@ -1,3 +1,6 @@
+#include "ui/Hover.hpp"
+#include "ui/Panel.hpp"
+#include "ui/Text.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Field.hpp"
@@ -47,9 +50,10 @@ void menuShell(UiState& s, uint16_t id) {
     *paint = paintToken(s.look, UiToken::Menu, radius);
     paint->a = 1.0f;
     paint->borderW = 1.0f;
-    paint->br = s.look.muted[0];
-    paint->bg = s.look.muted[1];
-    paint->bb = s.look.muted[2];
+    paint->br = s.look.text[0];
+    paint->bg = s.look.text[1];
+    paint->bb = s.look.text[2];
+    paint->shadow = 10.0f;
 }
 
 uint16_t ensureMenuNamed(UiState& s, const char* name) {
@@ -73,6 +77,19 @@ uint16_t ensureMenuNamed(UiState& s, const char* name) {
     return id;
 }
 
+float menuTop(const UiState& s, float anchorBottom, float above, float menuH) {
+    float top = anchorBottom + 8.0f;
+    const bool bar = above >= 0.0f;
+    const float buttonTop = bar ? above : anchorBottom;
+    if (top + menuH > s.laidH - 4.0f) {
+        top = buttonTop - menuH - 10.0f;
+    }
+    if (bar && top < anchorBottom && top + menuH > buttonTop) {
+        top = buttonTop - menuH - 10.0f;
+    }
+    return top;
+}
+
 } // namespace
 
 void uiMarkMenuBar(UiState& s, uint16_t id) {
@@ -92,7 +109,7 @@ void uiMenuClose(UiState& s) {
     }
 }
 
-void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenuItem> items, void* user) {
+void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenuItem> items, void* user, float above) {
     const uint16_t id = ensureMenuNamed(s, "ui.menu");
     if (id == kUiNone || id >= s.count) {
         return;
@@ -143,6 +160,9 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
                     paint->borderW = 0.0f;
                 }
                 addText(s, row, item.label != nullptr ? item.label : "");
+                uiTextStyle(s, row, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+                s.ent[row].add<UiFocusable>();
+                uiHover(s, row);
                 uiBind(s, row, onItem, &s);
             }
         }
@@ -181,17 +201,13 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
         if (x + menuW > s.laidW - 4.0f) {
             x = s.laidW - menuW - 4.0f;
         }
-        if (y + menuH > s.laidH) {
-            y = std::max(4.0f, screenY - menuH);
-        }
+        y = menuTop(s, screenY, above, menuH);
         if (x < 4.0f) {
             x = 4.0f;
         }
-        if (y < 4.0f) {
-            y = 4.0f;
-        }
         flex->posX = x;
         flex->posY = y;
+        flex->heightMode = UiSize::Px;
         flex->height = menuH;
         flex->overflow = full > limit ? UiOverflow::Scroll : UiOverflow::Visible;
         menuShell(s, id);
@@ -251,7 +267,7 @@ void uiMenuStyle(UiState& s, float width, float itemH, float pad, float gap) {
     s.layoutDirty = true;
 }
 
-void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y) {
+void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y, float above) {
     if (menuId >= s.count) {
         return;
     }
@@ -264,20 +280,16 @@ void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y) {
     const float menuH = metrics.pad * 2.0f + static_cast<float>(items) * metrics.itemH
         + static_cast<float>(items > 0 ? items - 1 : 0) * metrics.gap;
     const float anchorY = y;
-    y = anchorY + 4.0f;
     if (x + metrics.w > s.laidW) {
         x = s.laidW - metrics.w;
     }
-    if (y + menuH > s.laidH) {
-        y = anchorY - menuH - 4.0f;
-    }
+    y = menuTop(s, anchorY, above, menuH);
     if (x < 4.0f) {
         x = 4.0f;
     }
-    if (y < 4.0f) {
-        y = 4.0f;
-    }
     flex->position = UiPosition::Absolute;
+    flex->heightMode = UiSize::Px;
+    flex->height = menuH;
     flex->posX = x;
     flex->posY = y;
     menuShell(s, menuId);
@@ -334,9 +346,12 @@ bool uiCommandAdd(UiState& s, const char* name, UiCommandFn fn, void* user) {
     }
     UiText label{};
     label.align = UiTextAlign::Left;
+    label.valign = UiTextValign::Center;
     copyText(label.bytes, label.len, name);
     s.ent[item].set<UiText>(label);
     s.ent[item].set<UiMenuCmd>({index});
+    s.ent[item].add<UiFocusable>();
+    uiHover(s, item);
     uiBind(s, item, onMenuCommand, &s);
     ++s.cmdCount;
     s.layoutDirty = true;
@@ -421,7 +436,7 @@ bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t hit, uint8_t phase, 
         }
         if (!justOpened) {
             justOpened = true;
-            uiMenuShowAt(s, contextMenu, menuX, menuY);
+            uiMenuShowAt(s, contextMenu, menuX, menuY, bar != kUiNone ? s.box[bar].y : -1.0f);
         }
     }
     if (press && s.menuOpen && !justOpened && !inMenu(hit)) {
@@ -440,6 +455,66 @@ bool uiCommandAddTo(UiState& s, uint16_t menu, const char* name, UiCommandFn fn,
     const bool ok = uiCommandAdd(s, name, fn, user);
     s.menu = prev;
     return ok;
+}
+
+uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t menu) {
+    UiFlex flex{};
+    flex.direction = UiFlexDir::Row;
+    flex.widthMode = UiSize::Percent;
+    flex.width = 100.0f;
+    flex.heightMode = UiSize::Px;
+    flex.height = 24.0f;
+    flex.grow = 1.0f;
+    flex.shrink = 1.0f;
+    flex.align = UiAlign::Center;
+    flex.padL = 8.0f;
+    flex.padR = 6.0f;
+    flex.gap = 6.0f;
+    UiPaint body = paintToken(s.look, UiToken::Field, s.look.radiusSm);
+    body.borderW = 1.0f;
+    body.br = body.r + 0.18f > 1.0f ? 1.0f : body.r + 0.18f;
+    body.bg = body.g + 0.18f > 1.0f ? 1.0f : body.g + 0.18f;
+    body.bb = body.b + 0.18f > 1.0f ? 1.0f : body.b + 0.18f;
+    body.shadow = 3.0f;
+    const uint16_t id = uiPanel(s, parent, flex, body);
+    if (id == kUiNone) {
+        return id;
+    }
+    UiFlex caption{};
+    caption.grow = 1.0f;
+    caption.shrink = 1.0f;
+    caption.heightMode = UiSize::Px;
+    caption.height = 18.0f;
+    caption.overflow = UiOverflow::Hidden;
+    const uint16_t text = uiPanel(s, id, caption, paintLabel(s.look));
+    uiText(s, text, label != nullptr ? label : "");
+    uiTextStyle(s, text, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+    if (text < s.count) {
+        s.ent[text].add<UiNoHit>();
+    }
+    UiFlex mark{};
+    mark.widthMode = UiSize::Px;
+    mark.width = 14.0f;
+    mark.heightMode = UiSize::Px;
+    mark.height = 14.0f;
+    mark.shrink = 0.0f;
+    UiPaint glyph{};
+    glyph.a = 0.0f;
+    glyph.icon = 8;
+    glyph.r = s.look.text[0];
+    glyph.g = s.look.text[1];
+    glyph.b = s.look.text[2];
+    const uint16_t icon = uiPanel(s, id, mark, glyph);
+    if (icon < s.count) {
+        s.ent[icon].add<UiNoHit>();
+    }
+    uiHover(s, id);
+    s.ent[id].add<UiFocusable>();
+    if (menu != kUiNone) {
+        uiSetContextMenu(s, id, menu);
+        uiMarkMenuBar(s, id);
+    }
+    return id;
 }
 
 } // namespace burnhope

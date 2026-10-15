@@ -3,8 +3,9 @@
 
 #include "ui/Domain.hpp"
 #include "ui/State.hpp"
-#include "ui/Layout.hpp"
+#include "ui/LayoutBridge.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Slider.hpp"
 #include "ui/widget/Calendar.hpp"
 #include "ui/widget/ColorPicker.hpp"
 
@@ -17,8 +18,7 @@ TEST_CASE("blob import keeps the name") {
     head.count = 1;
     head.pool = 5;
     BinNode node{};
-    node.parent = 0xffff;
-    node.role = static_cast<uint8_t>(UiRole::Button);
+    node.role = kBinSlotButton;
     node.widthMode = static_cast<uint8_t>(UiSize::Px);
     node.heightMode = static_cast<uint8_t>(UiSize::Px);
     node.width = 80.0f;
@@ -39,7 +39,7 @@ TEST_CASE("blob import keeps the name") {
     CHECK(uiFindName(state, "save") == root);
     const UiPaint* paint = state.ent[root].try_get<UiPaint>();
     CHECK(paint != nullptr);
-    CHECK(paint->role == static_cast<uint8_t>(UiRole::Button));
+    CHECK(paint->token == UiToken::Button);
     const UiText* title = state.ent[root].try_get<UiText>();
     CHECK(title != nullptr);
     CHECK(std::strcmp(title->bytes, "save") == 0);
@@ -72,7 +72,6 @@ TEST_CASE("broken blobs do not import") {
     BinNode named{};
     named.shown = 1;
     named.parent = 0xffff;
-    named.role = static_cast<uint8_t>(UiRole::Panel);
     named.width = 40.0f;
     named.height = 20.0f;
     named.a = 1.0f;
@@ -122,7 +121,7 @@ TEST_CASE("baked scale slider moves") {
     in.pointer.y = state.box[scale].y + state.box[scale].h * 0.5f;
     in.pointer.pressed = kPointerLeft;
     in.pointer.down = kPointerLeft;
-    uiApplyInput(state, in);
+    (void)uiApplyInput(state, in);
     const UiRange* after = state.ent[scale].try_get<UiRange>();
     CHECK(after->value == doctest::Approx(before->min + 0.8f * (before->max - before->min)).epsilon(0.08));
 }

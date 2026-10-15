@@ -3,6 +3,8 @@
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/State.hpp"
 
+#include <bit>
+
 namespace burnhope {
 
 uint16_t uiPanel(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint) {
@@ -100,6 +102,7 @@ uint32_t uiEmitPanel(
             icon.extra[1] = clip->x;
             icon.extra[2] = clip->y;
             icon.extra[3] = clip->w;
+            icon.pad0 = std::bit_cast<uint32_t>(clip->h);
         }
     }
     return n;

@@ -3,10 +3,11 @@
 
 #include "ui/Domain.hpp"
 #include "ui/State.hpp"
-#include "ui/Layout.hpp"
+#include "ui/LayoutBridge.hpp"
 #include "files/Browser.hpp"
 #include "files/FileDomain.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Slider.hpp"
 
 #include <cstring>
 #include <filesystem>
@@ -20,14 +21,14 @@ TEST_CASE("mounted file cells sit in the view") {
     fs::remove_all(dir, ec);
     fs::create_directories(dir / "Library", ec);
     UiState state;
-    const uint16_t host = spawn(state, kUiNone, px(1600, 1050), paint(UiRole::Panel, 0.02f, 0.02f, 0.03f));
+    const uint16_t host = spawn(state, kUiNone, px(1600, 1050), paintRgb(0.02f, 0.02f, 0.03f));
     UiFlex frame = px(1100, 700);
-    frame.position = 1;
+    frame.position = UiPosition::Absolute;
     frame.posX = 70.0f;
     frame.posY = 64.0f;
     frame.pad = 10.0f;
     frame.gap = 6.0f;
-    uiFiles(state).fileFrame = spawn(state, host, frame, paint(UiRole::Panel, 0.11f, 0.12f, 0.15f, 8.0f));
+    uiFiles(state).fileFrame = spawn(state, host, frame, paintRgb(0.11f, 0.12f, 0.15f, 8.0f));
     state.ent[uiFiles(state).fileFrame].set<UiResizable>({});
     filesAttach(state);
     filesMount(state);
@@ -35,7 +36,7 @@ TEST_CASE("mounted file cells sit in the view") {
     filesRoot(state, dir.c_str());
     uiLayout(state, 1600.0f, 1050.0f);
     InputFrame in{};
-    uiApplyInput(state, in);
+    (void)uiApplyInput(state, in);
     uiLayout(state, 1600.0f, 1050.0f);
     const uint16_t view = uiFiles(state).fileView;
     uint16_t cell = kUiNone;
@@ -51,7 +52,7 @@ TEST_CASE("mounted file cells sit in the view") {
             continue;
         }
         const UiPaint* paint = state.ent[id].try_get<UiPaint>();
-        if (paint != nullptr && paint->role == static_cast<uint8_t>(UiRole::Button) && state.box[id].w > 40.0f) {
+        if (paint != nullptr && paint->token == UiToken::Item && state.box[id].w > 40.0f) {
             cell = id;
             break;
         }
@@ -69,33 +70,33 @@ TEST_CASE("mounted file cells sit in the view") {
 }
 TEST_CASE("file cell sits inside the view") {
     UiState state;
-    const uint16_t host = spawn(state, kUiNone, px(800, 600), paint(UiRole::Panel, 0.05f, 0.05f, 0.05f));
+    const uint16_t host = spawn(state, kUiNone, px(800, 600), paintRgb(0.05f, 0.05f, 0.05f));
     UiFlex frame = px(400, 300);
-    frame.position = 1;
+    frame.position = UiPosition::Absolute;
     frame.posX = 70.0f;
     frame.posY = 64.0f;
-    const uint16_t win = spawn(state, host, frame, paint(UiRole::Panel, 0.1f, 0.1f, 0.12f));
-    spawn(state, win, px(400, 40), paint(UiRole::Panel, 0.12f, 0.12f, 0.14f));
+    const uint16_t win = spawn(state, host, frame, paintRgb(0.1f, 0.1f, 0.12f));
+    spawn(state, win, px(400, 40), paintRgb(0.12f, 0.12f, 0.14f));
     UiFlex view{};
     view.grow = 1.0f;
     view.shrink = 1.0f;
-    view.position = 2;
-    const uint16_t grid = spawn(state, win, view, paint(UiRole::Panel, 0.05f, 0.05f, 0.07f));
-    const uint16_t cell = spawn(state, grid, px(40, 40), paint(UiRole::Button, 0.9f, 0.8f, 0.2f));
+    view.position = UiPosition::Relative;
+    const uint16_t grid = spawn(state, win, view, paintRgb(0.05f, 0.05f, 0.07f));
+    const uint16_t cell = spawn(state, grid, px(40, 40), paintRgb(0.9f, 0.8f, 0.2f));
     uiPlace(state, cell, true, 8.0f, 8.0f, 92.0f, 108.0f);
     uiLayout(state, 800.0f, 600.0f);
     CHECK(state.box[grid].y > state.box[win].y + 20.0f);
     CHECK(state.box[cell].x == doctest::Approx(state.box[grid].x + 8.0f));
     CHECK(state.box[cell].y == doctest::Approx(state.box[grid].y + 8.0f));
 }
-TEST_CASE("file new folder and zoom slider") {
+TEST_CASE("file new folder and view menu") {
     namespace fs = std::filesystem;
     const fs::path dir = "/tmp/burnhope-folder-test";
     std::error_code ec;
     fs::remove_all(dir, ec);
     fs::create_directory(dir, ec);
     UiState state;
-    const uint16_t frame = spawn(state, kUiNone, px(900, 640), paint(UiRole::Panel, 0.08f, 0.08f, 0.1f));
+    const uint16_t frame = spawn(state, kUiNone, px(900, 640), paintRgb(0.08f, 0.08f, 0.1f));
     uiFiles(state).fileFrame = frame;
     filesAttach(state);
     filesMount(state);
@@ -103,36 +104,34 @@ TEST_CASE("file new folder and zoom slider") {
     filesRoot(state, dir.c_str());
     uiLayout(state, 900.0f, 640.0f);
     uint16_t neu = kUiNone;
-    uint16_t zoom = kUiNone;
+    uint16_t sort = kUiNone;
     for (uint16_t id = 0; id < state.count; ++id) {
         const UiPaint* paint = state.ent[id].try_get<UiPaint>();
         const UiText* text = state.ent[id].try_get<UiText>();
-        if (paint == nullptr) {
+        if (paint == nullptr || text == nullptr) {
             continue;
         }
-        if (paint->role == static_cast<uint8_t>(UiRole::Button) && text != nullptr && std::strcmp(text->bytes, "+") == 0) {
+        if (paint->token == UiToken::Button && std::strcmp(text->bytes, "+") == 0) {
             neu = id;
         }
-        if (paint->role == static_cast<uint8_t>(UiRole::Slider)) {
-            zoom = id;
+        if (std::strcmp(text->bytes, "Sort by name") == 0) {
+            sort = id;
         }
     }
     CHECK(neu != kUiNone);
-    CHECK(zoom != kUiNone);
+    CHECK(sort != kUiNone);
     if (neu != kUiNone && state.box[neu].w > 1.0f) {
         InputFrame in{};
         in.pointer.x = state.box[neu].x + state.box[neu].w * 0.5f;
         in.pointer.y = state.box[neu].y + state.box[neu].h * 0.5f;
         in.pointer.pressed = kPointerLeft;
         in.pointer.down = kPointerLeft;
-        uiApplyInput(state, in);
+        (void)uiApplyInput(state, in);
         uiLayout(state, 900.0f, 640.0f);
         uint16_t folder = kUiNone;
         for (uint16_t id = 0; id < state.count; ++id) {
             const UiText* text = state.ent[id].try_get<UiText>();
-            const UiPaint* paint = state.ent[id].try_get<UiPaint>();
-            if (paint != nullptr && paint->role == static_cast<uint8_t>(UiRole::Button) && text != nullptr
-                && std::strcmp(text->bytes, "New Folder") == 0 && state.box[id].w > 1.0f) {
+            if (text != nullptr && std::strcmp(text->bytes, "New Folder") == 0 && state.box[id].w > 1.0f) {
                 folder = id;
             }
         }
@@ -141,7 +140,7 @@ TEST_CASE("file new folder and zoom slider") {
             in.pointer.down = kPointerLeft;
             in.pointer.x = state.box[folder].x + 8.0f;
             in.pointer.y = state.box[folder].y + 8.0f;
-            uiApplyInput(state, in);
+            (void)uiApplyInput(state, in);
         }
     }
     bool created = false;
@@ -153,19 +152,6 @@ TEST_CASE("file new folder and zoom slider") {
         }
     }
     CHECK(created);
-    if (zoom != kUiNone && state.box[zoom].w > 1.0f) {
-        InputFrame in{};
-        in.pointer.x = state.box[zoom].x + state.box[zoom].w * 0.8f;
-        in.pointer.y = state.box[zoom].y + state.box[zoom].h * 0.5f;
-        in.pointer.pressed = kPointerLeft;
-        in.pointer.down = kPointerLeft;
-        uiApplyInput(state, in);
-        const UiRange* range = state.ent[zoom].try_get<UiRange>();
-        CHECK(range != nullptr);
-        if (range != nullptr) {
-            CHECK(range->value > 100.0f);
-        }
-    }
     filesShutdown(state);
     fs::remove_all(dir, ec);
 }

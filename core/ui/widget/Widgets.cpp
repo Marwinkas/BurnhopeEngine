@@ -1,6 +1,7 @@
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Widgets.hpp"
 #include "ui/UiBin.hpp"
+#include "ui/Hover.hpp"
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Curve.hpp"
 #include "ui/widget/Docking.hpp"
@@ -29,10 +30,14 @@ void hostText(UiState& s, uint16_t id, UiTextAlign align, UiTextEllipsis ellipsi
 
 void adornButton(UiState& s, uint16_t id) {
     hostText(s, id, UiTextAlign::Center, UiTextEllipsis::End);
+    uiHover(s, id);
+    s.ent[id].add<UiFocusable>();
 }
 
 void adornClose(UiState& s, uint16_t id) {
     hostText(s, id, UiTextAlign::Center, UiTextEllipsis::End);
+    uiHover(s, id);
+    s.ent[id].add<UiFocusable>();
 }
 
 void adornField(UiState& s, uint16_t id) {
@@ -70,13 +75,35 @@ void finishField(UiState& s, uint16_t id, const BinNode* spec, const char* text,
 }
 
 void finishCheck(UiState& s, uint16_t id, const BinNode* spec, const char*, const char*) {
-    UiCheck check{};
+    uint8_t on = 0;
+    uint8_t kind = 0;
+    uint8_t group = 0;
     if (spec != nullptr) {
-        check.on = (spec->flags & kBinCheckOn) != 0 ? 1 : 0;
-        check.kind = spec->checkKind;
-        check.group = spec->checkGroup;
+        on = (spec->flags & kBinCheckOn) != 0 ? 1 : 0;
+        kind = spec->checkKind;
+        group = spec->checkGroup;
     }
-    s.ent[id].set<UiCheck>(check);
+    uiHover(s, id);
+    s.ent[id].add<UiFocusable>();
+    uiBindCheck(s, id, kind, group, on != 0);
+}
+
+void scrollBindInner(UiState& s, uint16_t id, void*) {
+    auto* scroll = id < s.count ? s.ent[id].try_get_mut<UiScroll>() : nullptr;
+    if (scroll == nullptr || scroll->inner != kUiNone) {
+        return;
+    }
+    for (uint16_t child = 0; child < s.count; ++child) {
+        if (s.parentOf[child] == id) {
+            scroll->inner = child;
+            return;
+        }
+    }
+}
+
+void finishScroll(UiState& s, uint16_t id, const BinNode*, const char*, const char*) {
+    s.ent[id].set<UiScroll>({0.0f, kUiNone});
+    s.ent[id].set<UiLayoutRefresh>({scrollBindInner, nullptr});
 }
 
 void finishRange(UiState& s, uint16_t id, const BinNode* spec, const char*, const char*) {
@@ -98,10 +125,13 @@ void uiWidgetsInit(UiState& s) {
     uiRegisterRoleFinish(s, kBinSlotCheck, finishCheck);
     uiRegisterRoleFinish(s, kBinSlotSlider, finishRange);
     uiRegisterRoleFinish(s, kBinSlotProgress, finishRange);
+    uiRegisterRoleFinish(s, kBinSlotScroll, finishScroll);
     uiInstallChromeBin(s);
     uiInstallDockOverlay(s);
     uiDrawDecorAdd(s, uiFieldDecor);
     uiDrawDecorAdd(s, uiCurveDecor);
+    uiDrawDecorAdd(s, uiSliderDecor);
+    uiDrawDecorAdd(s, uiCheckDecor);
     uiOverlayAdd(s, uiScrollOverlay);
     uiInputAdd(s, uiSplitInput);
     uiInputAdd(s, uiFieldInput);

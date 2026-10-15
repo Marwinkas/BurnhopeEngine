@@ -30,6 +30,9 @@ void uiHoverTint(const UiState& s, uint16_t id, float& r, float& g, float& b, fl
     r = r + lift > 1.0f ? 1.0f : r + lift;
     g = g + lift > 1.0f ? 1.0f : g + lift;
     b = b + lift > 1.0f ? 1.0f : b + lift;
+    if (a < 0.12f) {
+        a = 0.28f;
+    }
 }
 
 } // namespace burnhope

@@ -80,16 +80,27 @@ YGSize yogaMeasureAdapter(YGNodeConstRef node, float width, YGMeasureMode widthM
         return { 0.0f, 0.0f };
     }
 
+    float outW = 0.0f;
+    float outH = 0.0f;
     if (const auto* m = s->ent[id].try_get<UiContentMeasure>()) {
         if (m->fn != nullptr) {
-            float outW = 0.0f;
-            float outH = 0.0f;
             const float maxW = (widthMode != YGMeasureModeUndefined) ? width : 0.0f;
             m->fn(*s, id, maxW, outW, outH, m->user);
-            return { outW, outH };
         }
     }
-    return { 0.0f, 0.0f };
+    if (widthMode == YGMeasureModeExactly) {
+        outW = width;
+    }
+    if (heightMode == YGMeasureModeExactly) {
+        outH = height;
+    }
+    if (outW < 0.0f) {
+        outW = 0.0f;
+    }
+    if (outH < 0.0f) {
+        outH = 0.0f;
+    }
+    return { outW, outH };
 }
 
 void applyFlex(YGNodeRef node, const UiFlex& f) {

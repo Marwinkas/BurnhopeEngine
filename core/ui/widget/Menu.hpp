@@ -47,11 +47,12 @@ struct UiMenuPop {
 };
 
 void uiMarkMenuBar(UiState& s, uint16_t id);
-void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenuItem> items, void* user);
+void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenuItem> items, void* user, float above = -1.0f);
 void uiMenuClose(UiState& s);
 uint16_t uiMakeMenu(UiState& s);
 void uiMenuStyle(UiState& s, float width, float itemH, float pad, float gap);
-void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y);
+void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y, float above = -1.0f);
+uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t menu);
 bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
 
 } // namespace burnhope

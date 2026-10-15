@@ -3,6 +3,7 @@
 #include "files/Format.hpp"
 #include "files/Model.hpp"
 #include "platform/Desktop.hpp"
+#include "ui/Panel.hpp"
 #include "ui/widget/Breadcrumbs.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Field.hpp"
@@ -10,6 +11,7 @@
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Rubberband.hpp"
 #include "ui/widget/Slider.hpp"
+#include "ui/widget/Splitter.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/widget/VirtualGrid.hpp"
@@ -97,18 +99,19 @@ void bindFileIcon(UiState& s, uint16_t iconId, uint8_t photoSlot, uint8_t procIc
     auto* paint = s.ent[iconId].try_get_mut<UiPaint>();
     if (photoSlot < kPhotoSlots) {
         UiImage image{};
+        if (const UiImage* live = s.ent[iconId].try_get<UiImage>()) {
+            image = *live;
+        }
         image.slot = photoSlot;
-        image.frames = 1;
+        image.frames = image.frames == 0 ? 1 : image.frames;
         image.viewW = 1.0f;
         image.viewH = 1.0f;
         s.ent[iconId].set<UiImage>(image);
         if (paint != nullptr) {
             paint->a = 0.0f;
             paint->borderW = 0.0f;
+            paint->shadow = 0.0f;
             paint->icon = 0;
-            paint->r = 1.0f;
-            paint->g = 1.0f;
-            paint->b = 1.0f;
         }
         return;
     }
@@ -118,7 +121,11 @@ void bindFileIcon(UiState& s, uint16_t iconId, uint8_t photoSlot, uint8_t procIc
     if (paint != nullptr) {
         paint->a = 0.0f;
         paint->borderW = 0.0f;
+        paint->shadow = 0.0f;
         paint->icon = procIcon;
+        paint->r = s.look.text[0];
+        paint->g = s.look.text[1];
+        paint->b = s.look.text[2];
     }
 }
 
@@ -178,17 +185,17 @@ void makeFile(void* user) {
     refresh(s);
 }
 
-void onPlus(void* user, uint16_t id, int16_t) {
+void onPlus(void* user, uint16_t id) {
     UiState& s = *static_cast<UiState*>(user);
     const UiBox& box = s.box[id];
     const UiMenuItem items[] = {
         {.label = "New Folder", .onClick = makeFolder},
         {.label = "New Text Document", .onClick = makeFile},
     };
-    uiMenuOpen(s, box.x, box.y + box.h, items, user);
+    uiMenuOpen(s, box.x, box.y + box.h, items, user, box.y);
 }
 
-void onBack(void* user, uint16_t, int16_t) {
+void onBack(void* user, uint16_t) {
     UiState& s = *static_cast<UiState*>(user);
     if (uiFiles(s).fileView != kUiNone) {
         uiVirtualGridClearClick(s, uiFiles(s).fileView);
@@ -197,7 +204,7 @@ void onBack(void* user, uint16_t, int16_t) {
     refresh(s);
 }
 
-void onFwd(void* user, uint16_t, int16_t) {
+void onFwd(void* user, uint16_t) {
     UiState& s = *static_cast<UiState*>(user);
     if (uiFiles(s).fileView != kUiNone) {
         uiVirtualGridClearClick(s, uiFiles(s).fileView);
@@ -242,14 +249,18 @@ void bindNode(void* user, uint16_t row, uint32_t index) {
     if (parts == nullptr) {
         return;
     }
-    const bool leaf = index + 1 >= static_cast<uint32_t>(b.treeN) || b.treeDepth[index + 1] <= b.treeDepth[index];
     uiShow(*s, parts->chevron, true);
-    uiText(*s, parts->chevron, leaf ? " " : (b.treeOpen[index] != 0 ? "v" : ">"));
+    uiText(*s, parts->chevron, "");
     if (parts->chevron < s->count) {
         if (auto* paint = s->ent[parts->chevron].try_get_mut<UiPaint>()) {
             paint->a = 0.0f;
             paint->borderW = 0.0f;
-            paint->disabled = leaf ? 1 : 0;
+            paint->shadow = 0.0f;
+            paint->disabled = 0;
+            paint->icon = b.treeOpen[index] != 0 ? 11 : 10;
+            paint->r = s->look.text[0];
+            paint->g = s->look.text[1];
+            paint->b = s->look.text[2];
         }
     }
     bindFileIcon(*s, parts->icon, b.folderSlot, 4);
@@ -291,15 +302,15 @@ void bindCell(void* user, uint16_t cell, uint32_t index) {
     uiText(*s, label, editing ? "" : b.items[index].name);
     if (auto* paint = s->ent[cell].try_get_mut<UiPaint>()) {
         if (on) {
-            *paint = paintToken(s->look, UiRole::Button, UiToken::Accent, s->look.radiusSm);
+            *paint = paintToken(s->look, UiToken::Accent, s->look.radiusSm);
             paint->a = 0.92f;
             paint->borderW = 0.0f;
         } else if (header) {
-            *paint = paintToken(s->look, UiRole::Button, UiToken::Side, 0.0f);
+            *paint = paintToken(s->look, UiToken::Side, 0.0f);
             paint->a = 0.95f;
             paint->borderW = 0.0f;
         } else {
-            *paint = paintToken(s->look, UiRole::Button, UiToken::Item, s->look.radiusSm);
+            *paint = paintToken(s->look, UiToken::Item, s->look.radiusSm);
             paint->a = 0.0f;
             paint->borderW = 0.0f;
         }
@@ -385,12 +396,6 @@ void onSearch(void* user, const char* text) {
     }
 }
 
-void onZoom(void* user, float value) {
-    UiState& s = *static_cast<UiState*>(user);
-    book(s).look.icon = value;
-    refresh(s);
-}
-
 void applyKind(UiState& s, int kind) {
     Browser& b = book(s);
     b.kind = kind;
@@ -404,7 +409,7 @@ void filtImage(void* user) { applyKind(*static_cast<UiState*>(user), 2); }
 void filtText(void* user) { applyKind(*static_cast<UiState*>(user), 3); }
 void filtAudio(void* user) { applyKind(*static_cast<UiState*>(user), 4); }
 
-void onFilter(void* user, uint16_t id, int16_t) {
+void onFilter(void* user, uint16_t id) {
     UiState& s = *static_cast<UiState*>(user);
     const UiBox& box = s.box[id];
     const UiMenuItem items[] = {
@@ -414,75 +419,10 @@ void onFilter(void* user, uint16_t id, int16_t) {
         {.label = "Text", .onClick = filtText},
         {.label = "Audio", .onClick = filtAudio},
     };
-    uiMenuOpen(s, box.x, box.y + box.h, items, user);
+    uiMenuOpen(s, box.x, box.y + box.h, items, user, box.y);
 }
 
-void setCheck(UiState& s, uint16_t id, bool on) {
-    if (auto* check = id < s.count ? s.ent[id].try_get_mut<UiCheck>() : nullptr) {
-        check->on = on ? 1 : 0;
-    }
-}
-
-void syncChecks(UiState& s) {
-    Browser& b = book(s);
-    setCheck(s, b.optIcon, b.listView == 0);
-    setCheck(s, b.optList, b.listView != 0);
-    setCheck(s, b.sortName, b.sortKey == 0);
-    setCheck(s, b.sortSize, b.sortKey == 1);
-    setCheck(s, b.sortType, b.sortKey == 2);
-    setCheck(s, b.sortDate, b.sortKey == 3);
-    setCheck(s, b.optGroup, b.groupOn != 0);
-    s.visualDirty = true;
-}
-
-void placePop(UiState& s) {
-    Browser& b = book(s);
-    const uint16_t frame = uiFiles(s).fileFrame;
-    if (b.pop >= s.count || b.viewBtn >= s.count || frame >= s.count) {
-        return;
-    }
-    auto* flex = s.ent[b.pop].try_get_mut<UiFlex>();
-    if (flex == nullptr) {
-        return;
-    }
-    const UiBox& home = s.box[frame];
-    const UiBox& btn = s.box[b.viewBtn];
-    float x = btn.x - home.x;
-    float y = btn.y + btn.h - home.y + 4.0f;
-    constexpr float kPopH = 280.0f;
-    if (home.y + y + kPopH > s.laidH) {
-        y = btn.y - home.y - kPopH - 4.0f;
-    }
-    if (home.x + x + 240.0f > s.laidW) {
-        x = s.laidW - home.x - 244.0f;
-    }
-    if (x < 4.0f) {
-        x = 4.0f;
-    }
-    if (y < 4.0f) {
-        y = 4.0f;
-    }
-    flex->position = 1;
-    flex->posX = x;
-    flex->posY = y;
-    s.layoutDirty = true;
-}
-
-void onView(void* user, uint16_t, int16_t) {
-    UiState& s = *static_cast<UiState*>(user);
-    Browser& b = book(s);
-    b.popOn = b.popOn == 0 ? 1 : 0;
-    if (b.pop == kUiNone) {
-        return;
-    }
-    if (b.popOn != 0) {
-        placePop(s);
-        syncChecks(s);
-    }
-    uiShow(s, b.pop, b.popOn != 0);
-}
-
-void onSearchBtn(void* user, uint16_t, int16_t) {
+void onSearchBtn(void* user, uint16_t) {
     UiState& s = *static_cast<UiState*>(user);
     Browser& b = book(s);
     b.searchOn = b.searchOn == 0 ? 1 : 0;
@@ -498,37 +438,6 @@ void onSearchBtn(void* user, uint16_t, int16_t) {
     }
     s.layoutDirty = true;
     s.visualDirty = true;
-}
-
-void onViewMode(void* user, uint16_t id, int16_t) {
-    UiState& s = *static_cast<UiState*>(user);
-    Browser& b = book(s);
-    b.listView = id == b.optList ? 1 : 0;
-    refresh(s);
-}
-
-void onSortPick(void* user, uint16_t id, int16_t) {
-    UiState& s = *static_cast<UiState*>(user);
-    Browser& b = book(s);
-    if (id == b.sortSize) {
-        b.sortKey = 1;
-    } else if (id == b.sortType) {
-        b.sortKey = 2;
-    } else if (id == b.sortDate) {
-        b.sortKey = 3;
-    } else {
-        b.sortKey = 0;
-    }
-    b.reload();
-    refresh(s);
-}
-
-void onGroup(void* user, uint16_t id, int16_t) {
-    UiState& s = *static_cast<UiState*>(user);
-    Browser& b = book(s);
-    b.groupOn = uiCheckOn(s, id) == 1 ? 1 : 0;
-    b.reload();
-    refresh(s);
 }
 
 uint16_t square(UiState& s, uint16_t parent, const char* label, UiClickFn fn) {
@@ -548,16 +457,6 @@ uint16_t iconSquare(UiState& s, uint16_t parent, uint8_t icon, UiClickFn fn) {
             paint->icon = icon;
         }
     }
-    return id;
-}
-
-uint16_t caption(UiState& s, uint16_t parent, const char* text) {
-    UiFlex flex{};
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
-    flex.height = 16.0f;
-    flex.shrink = 0.0f;
-    const uint16_t id = uiNode(s, parent, flex, paintToken(s.look, UiRole::Label, UiToken::Muted, 0.0f));
-    uiText(s, id, text);
     return id;
 }
 
@@ -605,15 +504,47 @@ void refresh(UiState& s) {
 
 UiFlex rowH(float h) {
     UiFlex row{};
-    row.direction = 1;
-    row.heightMode = static_cast<uint8_t>(UiSize::Px);
+    row.direction = UiFlexDir::Row;
+    row.heightMode = UiSize::Px;
     row.height = h;
     row.shrink = 0.0f;
-    row.align = 1;
+    row.align = UiAlign::Center;
     row.gap = 6.0f;
     row.padL = 4.0f;
     row.padR = 4.0f;
     return row;
+}
+
+void cmdIcons(void* user) {
+    UiState& s = *static_cast<UiState*>(user);
+    book(s).listView = 0;
+    refresh(s);
+}
+
+void cmdList(void* user) {
+    UiState& s = *static_cast<UiState*>(user);
+    book(s).listView = 1;
+    refresh(s);
+}
+
+void cmdSortAt(UiState& s, int key) {
+    Browser& b = book(s);
+    b.sortKey = key;
+    b.reload();
+    refresh(s);
+}
+
+void cmdSortName(void* user) { cmdSortAt(*static_cast<UiState*>(user), 0); }
+void cmdSortSize(void* user) { cmdSortAt(*static_cast<UiState*>(user), 1); }
+void cmdSortType(void* user) { cmdSortAt(*static_cast<UiState*>(user), 2); }
+void cmdSortDate(void* user) { cmdSortAt(*static_cast<UiState*>(user), 3); }
+
+void cmdGroup(void* user) {
+    UiState& s = *static_cast<UiState*>(user);
+    Browser& b = book(s);
+    b.groupOn = b.groupOn == 0 ? 1 : 0;
+    b.reload();
+    refresh(s);
 }
 
 void mountFiles(UiState& s) {
@@ -622,30 +553,42 @@ void mountFiles(UiState& s) {
     }
     Browser& b = book(s);
     b.mounted = 1;
-    const uint16_t bar = uiNode(s, uiFiles(s).fileFrame, rowH(32.0f), paint(UiRole::Hidden, 0.0f, 0.0f, 0.0f));
+    const uint16_t bar = uiPanel(s, uiFiles(s).fileFrame, rowH(32.0f), paintClear());
     b.plus = square(s, bar, "+", onPlus);
     b.back = square(s, bar, "<", onBack);
     b.fwd = square(s, bar, ">", onFwd);
-    b.viewBtn = iconSquare(s, bar, 6, onView);
+    b.viewBtn = iconSquare(s, bar, 6, nullptr);
+    const uint16_t viewMenu = uiMakeMenu(s);
+    if (b.viewBtn != kUiNone && viewMenu != kUiNone) {
+        uiSetContextMenu(s, b.viewBtn, viewMenu);
+        uiMarkMenuBar(s, b.viewBtn);
+        (void)uiCommandAddTo(s, viewMenu, "Icons", cmdIcons, &s);
+        (void)uiCommandAddTo(s, viewMenu, "List", cmdList, &s);
+        (void)uiCommandAddTo(s, viewMenu, "Sort by name", cmdSortName, &s);
+        (void)uiCommandAddTo(s, viewMenu, "Sort by size", cmdSortSize, &s);
+        (void)uiCommandAddTo(s, viewMenu, "Sort by type", cmdSortType, &s);
+        (void)uiCommandAddTo(s, viewMenu, "Sort by date", cmdSortDate, &s);
+        (void)uiCommandAddTo(s, viewMenu, "Group by type", cmdGroup, &s);
+    }
     UiFlex spacer{};
     spacer.grow = 1.0f;
     spacer.shrink = 1.0f;
-    spacer.heightMode = static_cast<uint8_t>(UiSize::Px);
+    spacer.heightMode = UiSize::Px;
     spacer.height = 28.0f;
-    (void)uiNode(s, bar, spacer, paint(UiRole::Hidden, 0.0f, 0.0f, 0.0f));
+    (void)uiPanel(s, bar, spacer, paintClear());
     UiFlex body{};
-    body.direction = 1;
+    body.direction = UiFlexDir::Row;
     body.grow = 1.0f;
     body.shrink = 1.0f;
     body.minH = 80.0f;
-    const uint16_t mid = uiNode(s, uiFiles(s).fileFrame, body, paint(UiRole::Hidden, 0.0f, 0.0f, 0.0f));
+    const uint16_t mid = uiPanel(s, uiFiles(s).fileFrame, body, paintClear());
     UiFlex side{};
-    side.widthMode = static_cast<uint8_t>(UiSize::Px);
+    side.widthMode = UiSize::Px;
     side.width = b.look.tree;
-    side.heightMode = static_cast<uint8_t>(UiSize::Percent);
+    side.heightMode = UiSize::Percent;
     side.height = 100.0f;
     side.shrink = 0.0f;
-    const uint16_t pane = uiNode(s, mid, side, paintToken(s.look, UiRole::Panel, UiToken::Side, 0.0f));
+    const uint16_t pane = uiPanel(s, mid, side, paintToken(s.look, UiToken::Side, 0.0f));
     UiTreeConfig tree{};
     tree.totalNodes = static_cast<uint32_t>(b.treeN);
     tree.onBindNode = bindNode;
@@ -653,33 +596,22 @@ void mountFiles(UiState& s) {
     tree.onSelectNode = onTree;
     tree.user = &s;
     b.wTree = uiTreeView(s, pane, tree);
-    UiFlex grip{};
-    grip.widthMode = static_cast<uint8_t>(UiSize::Px);
-    grip.width = 2.0f;
-    grip.heightMode = static_cast<uint8_t>(UiSize::Percent);
-    grip.height = 100.0f;
-    grip.shrink = 0.0f;
-    UiPaint gripPaint = paintToken(s.look, UiRole::Panel, UiToken::Muted, 0.0f);
-    gripPaint.a = 0.16f;
-    const uint16_t gripNode = uiNode(s, mid, grip, gripPaint);
-    if (gripNode != kUiNone) {
-        s.ent[gripNode].set<UiSplitter>({});
-    }
+    (void)uiSplitBar(s, mid, true);
     UiFlex gridHost{};
     gridHost.grow = 1.0f;
     gridHost.shrink = 1.0f;
-    gridHost.direction = 0;
-    const uint16_t right = uiNode(s, mid, gridHost, paint(UiRole::Hidden, 0.0f, 0.0f, 0.0f));
+    gridHost.direction = UiFlexDir::Column;
+    const uint16_t right = uiPanel(s, mid, gridHost, paintClear());
     UiFlex crumbRow = rowH(30.0f);
     crumbRow.shrink = 0.0f;
-    const uint16_t crumbBar = uiNode(s, right, crumbRow, paint(UiRole::Hidden, 0.0f, 0.0f, 0.0f));
+    const uint16_t crumbBar = uiPanel(s, right, crumbRow, paintClear());
     b.crumbs = uiBreadcrumbs(s, crumbBar, onNav, &s);
     UiFlex crumbSpacer{};
     crumbSpacer.grow = 1.0f;
     crumbSpacer.shrink = 1.0f;
-    crumbSpacer.heightMode = static_cast<uint8_t>(UiSize::Px);
+    crumbSpacer.heightMode = UiSize::Px;
     crumbSpacer.height = 28.0f;
-    (void)uiNode(s, crumbBar, crumbSpacer, paint(UiRole::Hidden, 0.0f, 0.0f, 0.0f));
+    (void)uiPanel(s, crumbBar, crumbSpacer, paintClear());
     b.searchBox = uiSearchField(s, crumbBar, "search", onSearch, &s, 180.0f);
     UiButtonConfig filterCfg{};
     filterCfg.label = "Filter";
@@ -699,7 +631,7 @@ void mountFiles(UiState& s) {
     gridPane.grow = 1.0f;
     gridPane.shrink = 1.0f;
     gridPane.minH = 64.0f;
-    const uint16_t gridPaneId = uiNode(s, right, gridPane, paint(UiRole::Hidden, 0.0f, 0.0f, 0.0f));
+    const uint16_t gridPaneId = uiPanel(s, right, gridPane, paintClear());
     UiVirtualGridConfig cfg{};
     cfg.itemW = b.look.icon;
     cfg.itemH = b.look.icon;
@@ -710,68 +642,36 @@ void mountFiles(UiState& s) {
     cfg.user = &s;
     uiFiles(s).fileView = uiVirtualGrid(s, gridPaneId, cfg);
     (void)uiRubberband(s, uiFiles(s).fileView, onBand, &s, onBandBegin);
-    const uint16_t foot = uiNode(s, uiFiles(s).fileFrame, rowH(24.0f), paint(UiRole::Hidden, 0.0f, 0.0f, 0.0f));
+    const uint16_t foot = uiPanel(s, uiFiles(s).fileFrame, rowH(24.0f), paintClear());
     UiFlex label{};
     label.grow = 1.0f;
     label.shrink = 1.0f;
-    label.heightMode = static_cast<uint8_t>(UiSize::Px);
+    label.heightMode = UiSize::Px;
     label.height = 18.0f;
-    b.status = uiNode(s, foot, label, paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f));
+    b.status = uiPanel(s, foot, label, paintLabel(s.look));
     uiText(s, b.status, "");
     UiFlex ghostFlex = px(36.0f, 22.0f);
-    ghostFlex.position = 1;
-    UiPaint ghostPaint = paintToken(s.look, UiRole::Panel, UiToken::Menu, s.look.radiusSm);
+    ghostFlex.position = UiPosition::Absolute;
+    UiPaint ghostPaint = paintToken(s.look, UiToken::Menu, s.look.radiusSm);
     ghostPaint.a = 0.86f;
-    b.ghost = uiNode(s, 0, ghostFlex, ghostPaint);
+    b.ghost = uiPanel(s, 0, ghostFlex, ghostPaint);
     if (b.ghost != kUiNone) {
         s.ent[b.ghost].set<UiPopup>({});
         uiText(s, b.ghost, "0");
         uiShow(s, b.ghost, false);
     }
-    UiFlex popFlex{};
-    popFlex.position = 1;
-    popFlex.widthMode = static_cast<uint8_t>(UiSize::Px);
-    popFlex.width = 240.0f;
-    popFlex.pad = 10.0f;
-    popFlex.gap = 6.0f;
-    popFlex.shrink = 0.0f;
-    popFlex.direction = 0;
-    UiPaint popPaint = paintToken(s.look, UiRole::Panel, UiToken::Menu, s.look.radius);
-    popPaint.shadow = 10.0f;
-    b.pop = uiNode(s, uiFiles(s).fileFrame, popFlex, popPaint);
-    if (b.pop != kUiNone) {
-        s.ent[b.pop].set<UiPopup>({});
-        (void)caption(s, b.pop, "Zoom");
-        (void)uiSlider(s, b.pop, b.look.icon, 52.0f, 148.0f, onZoom, &s, 216.0f);
-        (void)caption(s, b.pop, "View");
-        b.optIcon = uiCheck(s, b.pop, "Icons", 1, 1, true);
-        b.optList = uiCheck(s, b.pop, "List", 1, 1, false);
-        uiBind(s, b.optIcon, onViewMode, &s);
-        uiBind(s, b.optList, onViewMode, &s);
-        (void)caption(s, b.pop, "Sort");
-        b.sortName = uiCheck(s, b.pop, "Name", 1, 2, true);
-        b.sortSize = uiCheck(s, b.pop, "Size", 1, 2, false);
-        b.sortType = uiCheck(s, b.pop, "Type", 1, 2, false);
-        b.sortDate = uiCheck(s, b.pop, "Date Modified", 1, 2, false);
-        uiBind(s, b.sortName, onSortPick, &s);
-        uiBind(s, b.sortSize, onSortPick, &s);
-        uiBind(s, b.sortType, onSortPick, &s);
-        uiBind(s, b.sortDate, onSortPick, &s);
-        (void)caption(s, b.pop, "Group");
-        b.optGroup = uiCheck(s, b.pop, "Group by type", 0, 0, false);
-        uiBind(s, b.optGroup, onGroup, &s);
-        uiShow(s, b.pop, false);
-    }
     UiFlex rename{};
-    rename.position = 1;
-    rename.widthMode = static_cast<uint8_t>(UiSize::Px);
-    rename.heightMode = static_cast<uint8_t>(UiSize::Px);
+    rename.position = UiPosition::Absolute;
+    rename.widthMode = UiSize::Px;
+    rename.heightMode = UiSize::Px;
     rename.width = 160.0f;
     rename.height = 24.0f;
     rename.shrink = 0.0f;
-    b.wRename = uiNode(s, uiFiles(s).fileFrame, rename, paintToken(s.look, UiRole::Field, UiToken::Field, 4.0f));
+    b.wRename = uiPanel(s, 0, rename, paintToken(s.look, UiToken::Field, 4.0f));
     if (b.wRename != kUiNone) {
         s.ent[b.wRename].set<UiField>({});
+        s.ent[b.wRename].add<UiFocusable>();
+        s.ent[b.wRename].add<UiTextInput>();
         s.ent[b.wRename].set<UiPopup>({});
         uiShow(s, b.wRename, false);
     }
@@ -879,6 +779,42 @@ void hoverFoot(UiState& s) {
         std::snprintf(line, sizeof(line), "%d", b.count);
     }
     uiText(s, b.status, line);
+}
+
+bool placeRename(UiState& s) {
+    Browser& b = book(s);
+    if (b.wRename >= s.count || b.renameAt < 0) {
+        return false;
+    }
+    const uint16_t view = uiFiles(s).fileView;
+    for (uint16_t id = 0; id < s.count; ++id) {
+        const UiVirtRow* row = s.ent[id].try_get<UiVirtRow>();
+        if (row == nullptr || row->index != static_cast<uint32_t>(b.renameAt) || !uiWithin(s, id, view)) {
+            continue;
+        }
+        const UiParts* parts = s.ent[id].try_get<UiParts>();
+        const uint16_t lab = parts != nullptr && parts->label < s.count ? parts->label : id;
+        const UiBox& box = s.box[lab];
+        auto* flex = s.ent[b.wRename].try_get_mut<UiFlex>();
+        if (flex == nullptr || box.w < 8.0f || box.h < 8.0f) {
+            continue;
+        }
+        const float w = box.w > 48.0f ? box.w : 160.0f;
+        const float h = box.h > 16.0f ? box.h : 22.0f;
+        const bool moved = flex->posX != box.x || flex->posY != box.y || flex->width != w || flex->height != h;
+        flex->position = UiPosition::Absolute;
+        flex->posX = box.x;
+        flex->posY = box.y;
+        flex->widthMode = UiSize::Px;
+        flex->heightMode = UiSize::Px;
+        flex->width = w;
+        flex->height = h;
+        if (moved) {
+            s.layoutDirty = true;
+        }
+        return true;
+    }
+    return false;
 }
 
 bool filesKeys(UiState& s, const InputFrame& in) {
@@ -991,6 +927,13 @@ bool filesKeys(UiState& s, const InputFrame& in) {
     if (b.searchOn != 0 && s.focused == b.searchBox) {
         return false;
     }
+    if (b.renameAt >= 0 && b.wRename != kUiNone && placeRename(s)) {
+        const bool shown = nodeShown(s, b.wRename);
+        uiShow(s, b.wRename, true);
+        if (!shown) {
+            uiFocus(s, b.wRename);
+        }
+    }
     const bool field = s.focused == b.wRename;
     const bool right = (in.pointer.pressed & kPointerRight) != 0;
     if (field && in.enter != 0) {
@@ -1015,8 +958,15 @@ bool filesKeys(UiState& s, const InputFrame& in) {
                 b.startRename(i);
                 if (b.wRename != kUiNone) {
                     uiSetFieldText(s, b.wRename, b.items[i].name);
-                    uiShow(s, b.wRename, true);
-                    uiFocus(s, b.wRename);
+                    if (auto* field = s.ent[b.wRename].try_get_mut<UiField>()) {
+                        field->anchor = 0;
+                    }
+                    if (placeRename(s)) {
+                        uiShow(s, b.wRename, true);
+                        uiFocus(s, b.wRename);
+                    } else {
+                        uiShow(s, b.wRename, false);
+                    }
                 }
                 refresh(s);
                 return true;
@@ -1091,11 +1041,11 @@ void filesMount(UiState& s) { mountFiles(s); }
 void filesClick(UiState& s, uint16_t id) {
     Browser& b = book(s);
     if (id == b.plus) {
-        onPlus(&s, id, 0);
+        onPlus(&s, id);
     } else if (id == b.back) {
-        onBack(&s, id, 0);
+        onBack(&s, id);
     } else if (id == b.fwd) {
-        onFwd(&s, id, 0);
+        onFwd(&s, id);
     }
 }
 

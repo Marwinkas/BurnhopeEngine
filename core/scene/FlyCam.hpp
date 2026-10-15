@@ -143,7 +143,7 @@ inline void flyCamUpdate(FlyCam& cam, const InputFrame& input, float dt) {
     if (cam.pitch < -kLimit) {
         cam.pitch = -kLimit;
     }
-    if (input.wheel != 0.0f) {
+    if (input.wheel != 0.0f && (input.pointer.down & kPointerRight) != 0) {
         cam.speed *= std::exp(input.wheel * 0.12f);
         if (cam.speed < 0.25f) {
             cam.speed = 0.25f;
@@ -161,29 +161,31 @@ inline void flyCamUpdate(FlyCam& cam, const InputFrame& input, float dt) {
     float mx = 0.0f;
     float my = 0.0f;
     float mz = 0.0f;
-    if (inputKeyDown(input, kFlyKeyW)) {
-        mx += fx;
-        my += fy;
-        mz += fz;
-    }
-    if (inputKeyDown(input, kFlyKeyS)) {
-        mx -= fx;
-        my -= fy;
-        mz -= fz;
-    }
-    if (inputKeyDown(input, kFlyKeyD)) {
-        mx += rx;
-        mz += rz;
-    }
-    if (inputKeyDown(input, kFlyKeyA)) {
-        mx -= rx;
-        mz -= rz;
-    }
-    if (inputKeyDown(input, kFlyKeySpace) || inputKeyDown(input, kFlyKeyE)) {
-        my += 1.0f;
-    }
-    if (inputKeyDown(input, kFlyKeyShift) || inputKeyDown(input, kFlyKeyQ)) {
-        my -= 1.0f;
+    if ((input.pointer.down & kPointerRight) != 0) {
+        if (inputKeyDown(input, kFlyKeyW)) {
+            mx += fx;
+            my += fy;
+            mz += fz;
+        }
+        if (inputKeyDown(input, kFlyKeyS)) {
+            mx -= fx;
+            my -= fy;
+            mz -= fz;
+        }
+        if (inputKeyDown(input, kFlyKeyD)) {
+            mx += rx;
+            mz += rz;
+        }
+        if (inputKeyDown(input, kFlyKeyA)) {
+            mx -= rx;
+            mz -= rz;
+        }
+        if (inputKeyDown(input, kFlyKeySpace) || inputKeyDown(input, kFlyKeyE)) {
+            my += 1.0f;
+        }
+        if (inputKeyDown(input, kFlyKeyShift) || inputKeyDown(input, kFlyKeyQ)) {
+            my -= 1.0f;
+        }
     }
     const float len = std::sqrt(mx * mx + my * my + mz * mz);
     if (len > 1.0e-6f) {

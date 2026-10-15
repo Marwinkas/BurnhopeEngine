@@ -90,7 +90,7 @@ void packListed(FileModel& model, FileItem* fresh, int n) {
 }
 
 void pushTreeDirs(FileModel& model, const char* abs, const char* rel, int depth, const char prev[][64], const uint8_t* prevOpen, int prevN) {
-    if (depth > 3 || model.treeN >= kTreeCap) {
+    if (depth > 8 || model.treeN >= kTreeCap) {
         return;
     }
     char names[kTreeCap][64]{};
@@ -240,9 +240,12 @@ void FileModel::rebuildTree() {
     if (base[0] != '\0' && treeN < kTreeCap) {
         tree[0][0] = '\0';
         treeDepth[0] = 0;
-        treeOpen[0] = 1;
+        const uint8_t rootOpen = prevN > 0 && prev[0][0] == '\0' ? prevOpen[0] : 1;
+        treeOpen[0] = rootOpen;
         treeN = 1;
-        pushTreeDirs(*this, base, "", 1, prev, prevOpen, prevN);
+        if (rootOpen != 0) {
+            pushTreeDirs(*this, base, "", 1, prev, prevOpen, prevN);
+        }
     }
 }
 

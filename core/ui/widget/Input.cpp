@@ -48,7 +48,7 @@ void uiInputAdd(UiState& s, UiInputHookFn fn) {
             return;
         }
     }
-    if (hooks.n < 8) {
+    if (hooks.n < 12) {
         hooks.fn[hooks.n++] = fn;
     }
 }
