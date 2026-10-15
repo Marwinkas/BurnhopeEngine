@@ -446,7 +446,9 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                 n = uiEmitSprite(dst, n, cap, s.box[id], *image, clip, paint->blur, r, g, b);
             } else {
                 n = uiEmitPanel(s, id, dst, n, cap, clip, r, g, b, a);
-                n = uiEmitTextNode(s, id, dst, n, cap, clip, r, g, b, a);
+                if (!s.ent[id].has<UiTextInput>()) {
+                    n = uiEmitTextNode(s, id, dst, n, cap, clip, r, g, b, a);
+                }
             }
             if (hooks != nullptr) {
                 for (uint8_t di = 0; di < hooks->decorN; ++di) {

@@ -9,6 +9,7 @@
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
+#include "ui/widget/Breadcrumbs.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "text/TextLayout.hpp"
 #include "rhi/MeshDraw.hpp"
@@ -222,4 +223,46 @@ TEST_CASE("slider tracks the pointer") {
     in.pointer.x = state.box[id].x + state.box[id].w * 0.75f;
     (void)uiApplyInput(state, in);
     CHECK(state.ent[id].try_get<UiRange>()->value == doctest::Approx(75.0f).epsilon(0.05));
+}
+TEST_CASE("breadcrumb segment opens the folder under the root") {
+    UiState state;
+    const uint16_t host = spawn(state, kUiNone, px(400, 40), paintRgb(0.1f, 0.1f, 0.1f));
+    struct Sink {
+        char path[512]{};
+    } sink{};
+    auto nav = [](void* user, const char* path) {
+        auto* out = static_cast<Sink*>(user);
+        uint32_t i = 0;
+        if (path != nullptr) {
+            for (; path[i] != '\0' && i < 511; ++i) {
+                out->path[i] = path[i];
+            }
+        }
+        out->path[i] = '\0';
+    };
+    const uint16_t crumbs = uiBreadcrumbs(state, host, nav, &sink);
+    uiBreadcrumbsSet(state, crumbs, "/proj/src", "/proj");
+    uiLayout(state, 400.0f, 40.0f);
+    const UiCrumbs* bar = state.ent[crumbs].try_get<UiCrumbs>();
+    CHECK(bar != nullptr);
+    if (bar == nullptr) {
+        return;
+    }
+    CHECK(bar->n == 2);
+    const uint16_t leaf = bar->seg[0];
+    const uint16_t child = bar->seg[1];
+    CHECK(state.box[leaf].w > 1.0f);
+    CHECK(state.box[child].w > 1.0f);
+    InputFrame in{};
+    in.pointer.pressed = kPointerLeft;
+    in.pointer.down = kPointerLeft;
+    in.pointer.x = state.box[child].x + state.box[child].w * 0.5f;
+    in.pointer.y = state.box[child].y + state.box[child].h * 0.5f;
+    (void)uiApplyInput(state, in);
+    CHECK(std::strcmp(sink.path, "/proj/src") == 0);
+    sink.path[0] = '\0';
+    in.pointer.x = state.box[leaf].x + state.box[leaf].w * 0.5f;
+    in.pointer.y = state.box[leaf].y + state.box[leaf].h * 0.5f;
+    (void)uiApplyInput(state, in);
+    CHECK(std::strcmp(sink.path, "/proj") == 0);
 }

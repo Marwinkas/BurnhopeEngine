@@ -244,6 +244,8 @@ bh_module(ui
     core/ui/widget/List.cpp
     core/ui/widget/Virtual.cpp
     core/ui/widget/VirtualGrid.cpp
+    core/ui/widget/Thumb.cpp
+    core/ui/widget/DragDrop.cpp
     core/ui/widget/Breadcrumbs.cpp
     core/ui/widget/Rubberband.cpp
     core/ui/widget/Menu.cpp
@@ -254,6 +256,11 @@ bh_module(ui
 )
 bh_module(files
     core/files/Files.cpp
+    core/files/FileSession.cpp
+    core/files/FileBind.cpp
+    core/files/FileMenu.cpp
+    core/files/FileActions.cpp
+    core/files/FileTheme.cpp
     core/files/Project.cpp
     core/files/Format.cpp
     core/files/Model.cpp
@@ -328,10 +335,13 @@ add_custom_command(
         ${SHADER_OUT_DIR}/sky.probe.comp.spv
         ${SHADER_OUT_DIR}/reflect.trace.comp.spv
         ${SHADER_OUT_DIR}/reflect.up.comp.spv
-        ${SHADER_OUT_DIR}/radiance.trace.comp.spv
-        ${SHADER_OUT_DIR}/radiance.apply.comp.spv
-        ${SHADER_OUT_DIR}/radiance.merge.comp.spv
-        ${SHADER_OUT_DIR}/radiance.irr.comp.spv
+        ${SHADER_OUT_DIR}/rc.alloc.comp.spv
+        ${SHADER_OUT_DIR}/rc.prefix.comp.spv
+        ${SHADER_OUT_DIR}/rc.trace.comp.spv
+        ${SHADER_OUT_DIR}/rc.tracepx.comp.spv
+        ${SHADER_OUT_DIR}/rc.merge.comp.spv
+        ${SHADER_OUT_DIR}/rc.oct.comp.spv
+        ${SHADER_OUT_DIR}/rc.shade.comp.spv
         ${SHADER_OUT_DIR}/tonemap.mesh.spv
         ${SHADER_OUT_DIR}/tonemap.frag.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry visMesh -o ${SHADER_OUT_DIR}/visbuffer.mesh.spv
@@ -369,10 +379,13 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_probe.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry skyProbe -o ${SHADER_OUT_DIR}/sky.probe.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reflect.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry reflectTrace -o ${SHADER_OUT_DIR}/reflect.trace.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reflect.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry reflectUp -o ${SHADER_OUT_DIR}/reflect.up.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/radiance.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcTrace -o ${SHADER_OUT_DIR}/radiance.trace.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/radiance.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcApply -o ${SHADER_OUT_DIR}/radiance.apply.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/radiance_merge.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcMerge -o ${SHADER_OUT_DIR}/radiance.merge.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/radiance_merge.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcIrradiance -o ${SHADER_OUT_DIR}/radiance.irr.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_alloc_probes.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcAlloc -o ${SHADER_OUT_DIR}/rc.alloc.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_prefix.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcPrefix -o ${SHADER_OUT_DIR}/rc.prefix.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_trace_split.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry rcTrace -o ${SHADER_OUT_DIR}/rc.trace.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_trace_split.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry rcTracePixels -o ${SHADER_OUT_DIR}/rc.tracepx.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_merge.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvGroupNonUniform+spvGroupNonUniformShuffle -stage compute -entry rcMerge -o ${SHADER_OUT_DIR}/rc.merge.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_octahedral.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcOctahedral -o ${SHADER_OUT_DIR}/rc.oct.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_shade.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcShade -o ${SHADER_OUT_DIR}/rc.shade.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry tonemapMesh -o ${SHADER_OUT_DIR}/tonemap.mesh.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry tonemapFs -o ${SHADER_OUT_DIR}/tonemap.frag.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gizmo.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry gizmoMesh -o ${SHADER_OUT_DIR}/gizmo.mesh.spv
@@ -412,9 +425,14 @@ add_custom_command(
         ${SHADER_DIR}/cloud.slang
         ${SHADER_DIR}/cloud_noise.slang
         ${SHADER_DIR}/core/atmosphere.slang
-        ${SHADER_DIR}/radiance.slang
-        ${SHADER_DIR}/radiance_rc.slang
-        ${SHADER_DIR}/radiance_merge.slang
+        ${SHADER_DIR}/rc_common.slang
+        ${SHADER_DIR}/rc_surface.slang
+        ${SHADER_DIR}/rc_alloc_probes.slang
+        ${SHADER_DIR}/rc_prefix.slang
+        ${SHADER_DIR}/rc_trace_split.slang
+        ${SHADER_DIR}/rc_merge.slang
+        ${SHADER_DIR}/rc_octahedral.slang
+        ${SHADER_DIR}/rc_shade.slang
         ${SHADER_DIR}/tonemap.slang
         ${SHADER_DIR}/gizmo.slang
         ${SHADER_DIR}/camera.slang
@@ -440,10 +458,13 @@ add_custom_target(BurnhopeSpv ALL DEPENDS
     ${SHADER_OUT_DIR}/cull.clear.spv
     ${SHADER_OUT_DIR}/gtao.comp.spv
     ${SHADER_OUT_DIR}/cmaa2.comp.spv
-    ${SHADER_OUT_DIR}/radiance.trace.comp.spv
-    ${SHADER_OUT_DIR}/radiance.apply.comp.spv
-    ${SHADER_OUT_DIR}/radiance.merge.comp.spv
-    ${SHADER_OUT_DIR}/radiance.irr.comp.spv
+    ${SHADER_OUT_DIR}/rc.alloc.comp.spv
+    ${SHADER_OUT_DIR}/rc.prefix.comp.spv
+    ${SHADER_OUT_DIR}/rc.trace.comp.spv
+    ${SHADER_OUT_DIR}/rc.tracepx.comp.spv
+    ${SHADER_OUT_DIR}/rc.merge.comp.spv
+    ${SHADER_OUT_DIR}/rc.oct.comp.spv
+    ${SHADER_OUT_DIR}/rc.shade.comp.spv
     ${SHADER_OUT_DIR}/tonemap.mesh.spv
     ${SHADER_OUT_DIR}/tonemap.frag.spv
 )

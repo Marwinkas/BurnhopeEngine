@@ -39,7 +39,7 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
     row.direction = UiFlexDir::Row;
     row.align = UiAlign::Center;
     row.justify = UiJustify::Start;
-    row.gap = 4.0f;
+    row.gap = s.metrics.rowGap;
     UiPaint rowPaint = paintToken(s.look, UiToken::Item, s.look.radiusSm);
     rowPaint.a = 0.0f;
     rowPaint.borderW = 0.0f;
@@ -66,12 +66,12 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
         return spawn(s, slot, box, paint);
     };
     const float rowH = itemH > 6.0f ? itemH - 2.0f : itemH;
-    const uint16_t chevron = bareIcon(22.0f, rowH, 10, true);
+    const uint16_t chevron = bareIcon(s.metrics.chevronW, rowH, static_cast<uint8_t>(UiIcon::ChevronRight), true);
     if (chevron < s.count) {
         s.ent[chevron].add<UiFocusable>();
         uiBind(s, chevron, onRow, &s);
     }
-    const uint16_t icon = bareIcon(16.0f, 16.0f, 4, false);
+    const uint16_t icon = bareIcon(s.metrics.icon, s.metrics.icon, static_cast<uint8_t>(UiIcon::Folder), false);
     UiFlex caption{};
     caption.grow = 1.0f;
     caption.shrink = 1.0f;
@@ -113,15 +113,18 @@ uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg) {
     }
     const UiScroll* born = s.ent[scroll].try_get<UiScroll>();
     if (born != nullptr) {
-        uiVirtualSyncSpacer(s, born->inner, 28.0f);
+        uiVirtualSyncSpacer(s, born->inner, s.metrics.rowH);
     }
     UiTreeView tree{};
     tree.count = cfg.totalNodes;
     tree.bind = cfg.onBindNode;
     tree.toggle = cfg.onToggleNode;
     tree.select = cfg.onSelectNode;
+    tree.depth = cfg.onDepth;
+    tree.open = cfg.onOpen;
+    tree.empty = cfg.onEmptyClick;
     tree.user = cfg.user;
-    tree.itemH = 28.0f;
+    tree.itemH = s.metrics.rowH;
     s.ent[scroll].set<UiTreeView>(tree);
     s.ent[scroll].set<UiVirtualPool>({uiTreeViewRefresh, uiTreeContentH, 0});
     s.ent[scroll].set<UiLayoutRefresh>({treeOnLayout, nullptr});
@@ -139,7 +142,22 @@ void uiBindTree(UiState& s, const char* name, const UiTreeConfig& cfg) {
     tree->bind = cfg.onBindNode;
     tree->toggle = cfg.onToggleNode;
     tree->select = cfg.onSelectNode;
+    tree->depth = cfg.onDepth;
+    tree->open = cfg.onOpen;
+    tree->empty = cfg.onEmptyClick;
     tree->user = cfg.user;
+    uiTreeViewRefresh(s, id);
+}
+
+void uiTreeViewSetCount(UiState& s, uint16_t id, uint32_t count) {
+    if (id >= s.count || !s.ent[id].is_alive()) {
+        return;
+    }
+    auto* tree = s.ent[id].try_get_mut<UiTreeView>();
+    if (tree == nullptr) {
+        return;
+    }
+    tree->count = count;
     uiTreeViewRefresh(s, id);
 }
 
@@ -176,6 +194,16 @@ void uiTreeViewRefresh(UiState& s, uint16_t id) {
             flex->height = tree->itemH > 2.0f ? tree->itemH - 2.0f : tree->itemH;
         }
         s.ent[slot].set<UiVirtRow>({index});
+        if (tree->depth != nullptr) {
+            uiRowIndent(s, slot, static_cast<float>(tree->depth(tree->user, index)) * s.metrics.treeIndent);
+        }
+        if (const UiParts* parts = s.ent[slot].try_get<UiParts>(); parts != nullptr && parts->chevron < s.count && tree->open != nullptr) {
+            uiShow(s, parts->chevron, true);
+            if (auto* paint = s.ent[parts->chevron].try_get_mut<UiPaint>()) {
+                const bool opened = tree->open(tree->user, index) != 0;
+                paint->icon = static_cast<uint8_t>(opened ? UiIcon::ChevronDown : UiIcon::ChevronRight);
+            }
+        }
         if (tree->bind != nullptr) {
             tree->bind(tree->user, slot, index);
         }
@@ -184,10 +212,27 @@ void uiTreeViewRefresh(UiState& s, uint16_t id) {
 }
 
 void uiRowIndent(UiState& s, uint16_t id, float pad) {
-    if (auto* flex = id < s.count ? s.ent[id].try_get_mut<UiFlex>() : nullptr) {
-        flex->padL = pad;
-        uiMarkLayout(s, id);
+    auto* flex = id < s.count ? s.ent[id].try_get_mut<UiFlex>() : nullptr;
+    if (flex == nullptr || flex->padL == pad) {
+        return;
     }
+    flex->padL = pad;
+    uiMarkLayout(s, id);
+}
+
+bool uiTreeInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t&) {
+    if (phase != kUiInPress || (in.pointer.pressed & kPointerLeft) == 0) {
+        return false;
+    }
+    if (id >= s.count) {
+        return false;
+    }
+    auto* tree = s.ent[id].try_get<UiTreeView>();
+    if (tree == nullptr || tree->empty == nullptr) {
+        return false;
+    }
+    tree->empty(tree->user);
+    return false;
 }
 
 } // namespace burnhope

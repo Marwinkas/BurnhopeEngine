@@ -13,9 +13,7 @@
       {"name": "file.back", "role": "button", "text": "<", "w": 28, "h": 28, "shrink": 0, "textAlign": 1, "valign": 1},
       {"name": "file.fwd", "role": "button", "text": ">", "w": 28, "h": 28, "shrink": 0, "textAlign": 1, "valign": 1},
       {"name": "file.view", "role": "choice", "w": 96, "shrink": 0, "items": ["Icons", "List"]},
-      {"name": "file.sort", "role": "choice", "w": 148, "shrink": 0, "items": ["Sort by name", "Sort by size", "Sort by type", "Sort by date"]},
-      {"name": "file.group", "role": "choice", "w": 140, "shrink": 0, "items": ["No group", "Group by type"]},
-      {"name": "file.zoom", "role": "slider", "w": 120, "h": 18, "shrink": 0, "min": 48, "maxv": 256, "value": 84},
+      {"name": "file.tune", "role": "button", "text": "...", "w": 28, "h": 28, "shrink": 0, "textAlign": 1, "valign": 1},
       {"grow": 1, "shrink": 1, "h": 28, "fill": [0, 0, 0, 0]}
     ]
   },
@@ -89,30 +87,22 @@
     ]
   },
   {
-    "name": "file.ghost",
+    "name": "file.tunePanel",
     "mount": "root",
     "position": "absolute",
-    "w": 36,
-    "h": 22,
+    "dir": "column",
+    "w": 220,
+    "h": 120,
+    "pad": 10,
+    "gap": 8,
     "token": "menu",
-    "a": 0.86,
-    "radius": 6,
-    "text": "0",
-    "textAlign": 1,
-    "valign": 1,
+    "radius": 8,
     "show": false,
-    "popup": true
-  },
-  {
-    "name": "file.rename",
-    "role": "field",
-    "mount": "root",
-    "position": "absolute",
-    "w": 160,
-    "h": 24,
-    "shrink": 0,
-    "radius": 4,
-    "show": false,
-    "popup": true
+    "popup": true,
+    "children": [
+      {"name": "file.sort", "role": "choice", "w": 200, "shrink": 0, "items": ["Sort by name", "Sort by size", "Sort by type", "Sort by date"]},
+      {"name": "file.group", "role": "choice", "w": 200, "shrink": 0, "items": ["No group", "Group by type"]},
+      {"name": "file.zoom", "role": "slider", "w": 200, "h": 18, "shrink": 0, "min": 48, "maxv": 256, "value": 84}
+    ]
   }
 ]

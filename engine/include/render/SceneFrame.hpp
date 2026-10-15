@@ -54,7 +54,7 @@ struct SceneTweaks {
     float ssrcThick = 0.03f;
     float ssrcCap = 0.6f;
     float ssrcSteps = 8.0f;
-    float rcRays = 8.0f;
+    float rcRays = 1.0f;
     float rcSpacing = 0.45f;
     float rcIntensity = 1.0f;
     float rcMax = 48.0f;

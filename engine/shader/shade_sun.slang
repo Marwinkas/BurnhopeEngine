@@ -128,7 +128,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     const bool worldRc = giOn && (gPass.passMask & 128u) != 0u;
     float3 bounce = giOn ? shAmbient(hit.N, hit.P) * 0.4 : 0.0;
     if (worldRc) {
-        bounce *= max(gShade.pad0, 0.0);
+        bounce = 0.0;
     }
     if (!sunOn) {
         bounce *= 0.02;
@@ -145,10 +145,6 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     bounce *= giGain;
     const float3 diffuse = hit.albedo * (bounce * hit.ao + skyFill * (worldRc ? 0.2 : 0.55));
     float3 indirect = diffuse * sunCol * saturate(inten / 8.0) + hit.emissive;
-    if (gFrame.debugMode == 4) {
-        gHdr[px] = float4(max(diffuse, 0.0), 1.0);
-        return;
-    }
     float sunFace = hit.NdotL;
     if (hit.foliage > 0.5) {
         sunFace = max(sunFace, saturate(dot(-hit.N, hit.L)) * 0.45);

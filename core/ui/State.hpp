@@ -2,6 +2,7 @@
 
 #include "platform/Input.hpp"
 #include "ui/LayoutBridge.hpp"
+#include "ui/Metrics.hpp"
 #include "ui/Model.hpp"
 #include "ui/Text.hpp"
 #include "ui/UiBin.hpp"
@@ -124,6 +125,7 @@ struct UiState {
     float prevTime = 0;
     bool altLook = false;
     UiLook look{};
+    UiMetrics metrics{};
     UiFontAtlas font{};
     UiAnim anim[kUiCap]{};
     UiCommand cmds[kUiCmdCap]{};

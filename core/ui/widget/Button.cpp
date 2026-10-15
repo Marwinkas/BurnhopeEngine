@@ -36,21 +36,21 @@ uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
         flex.height = 100.0f;
     } else {
         flex.heightMode = UiSize::Px;
-        flex.height = cfg.height > 0.0f ? cfg.height : 28.0f;
+        flex.height = cfg.height > 0.0f ? cfg.height : s.metrics.buttonH;
     }
-    
+    const float padX = s.metrics.buttonPadX;
     if (cfg.fillWidth) {
         flex.widthMode = UiSize::Percent;
         flex.width = 100.0f;
         flex.grow = 1.0f;
-        flex.padL = 12.0f;
-        flex.padR = 12.0f;
+        flex.padL = padX;
+        flex.padR = padX;
     } else if (cfg.width > 0.0f) {
         flex.widthMode = UiSize::Px;
         flex.width = cfg.width;
     } else {
-        flex.padL = 12.0f;
-        flex.padR = 12.0f;
+        flex.padL = padX;
+        flex.padR = padX;
     }
     const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Button, s.look.radiusSm));
     if (id == kUiNone) {
@@ -80,7 +80,7 @@ uint16_t uiCheck(UiState& s, uint16_t parent, const char* text, uint8_t kind, ui
     flex.widthMode = UiSize::Percent;
     flex.width = 100.0f;
     flex.heightMode = UiSize::Px;
-    flex.height = 36.0f;
+    flex.height = s.metrics.checkH;
     flex.padL = 36.0f;
     flex.padR = 8.0f;
     const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Check, s.look.radiusSm));
@@ -182,6 +182,18 @@ bool uiCheckDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
         }
     }
     return false;
+}
+
+void uiSetDisabled(UiState& s, uint16_t id, bool disabled) {
+    if (id >= s.count || !s.ent[id].is_alive()) {
+        return;
+    }
+    auto* paint = s.ent[id].try_get_mut<UiPaint>();
+    if (paint == nullptr || paint->disabled == disabled) {
+        return;
+    }
+    paint->disabled = disabled;
+    uiNotifyVisualDirty(s);
 }
 
 int uiCheckOn(const UiState& s, const char* name) {

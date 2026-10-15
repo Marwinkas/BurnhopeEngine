@@ -18,8 +18,8 @@ bool hasProjectFile(const fs::path& dir) {
 }
 
 void note(UiState& s, const char* text) {
-    if (uiFiles(s).files != nullptr) {
-        static_cast<FileModel*>(uiFiles(s).files)->setStatus(text);
+    if (FileModel* model = filesModel(s)) {
+        model->setStatus(text);
     }
 }
 

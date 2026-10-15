@@ -1,8 +1,11 @@
 #include "ui/Hover.hpp"
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/widget/VirtualGrid.hpp"
+
+#include <cstring>
 
 #include <cmath>
 
@@ -44,8 +47,8 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
     cell.direction = UiFlexDir::Column;
     cell.align = UiAlign::Center;
     cell.justify = UiJustify::Center;
-    cell.pad = 6.0f;
-    cell.gap = 4.0f;
+    cell.pad = s.metrics.cellPad;
+    cell.gap = s.metrics.cellGap;
     UiPaint ink = paintToken(s.look, UiToken::Item, s.look.radiusSm);
     ink.a = 0.0f;
     ink.borderW = 0.0f;
@@ -72,7 +75,7 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
     UiFlex lab{};
     lab.self = UiAlignSelf::Stretch;
     lab.heightMode = UiSize::Px;
-    lab.height = 18.0f;
+    lab.height = s.metrics.labelH;
     lab.shrink = 1.0f;
     const uint16_t label = spawn(s, slot, lab, paintLabel(s.look));
     addText(s, label, " ");
@@ -120,6 +123,13 @@ uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& c
     grid.bind = cfg.onBindCell;
     grid.select = cfg.onSelect;
     grid.activate = cfg.onActivate;
+    grid.role = cfg.onRole;
+    grid.hover = cfg.onHover;
+    grid.context = cfg.onContext;
+    grid.empty = cfg.onEmptyClick;
+    grid.zoom = cfg.onZoom;
+    grid.commit = cfg.onCommit;
+    grid.cancel = cfg.onCancel;
     grid.user = cfg.user;
     s.ent[scroll].set<UiVirtualGrid>(grid);
     s.ent[scroll].set<UiVirtualPool>({uiVirtualGridRefresh, uiGridContentH, 0});
@@ -142,7 +152,29 @@ void uiBindGrid(UiState& s, const char* name, const UiVirtualGridConfig& cfg) {
     grid->bind = cfg.onBindCell;
     grid->select = cfg.onSelect;
     grid->activate = cfg.onActivate;
+    grid->role = cfg.onRole;
+    grid->hover = cfg.onHover;
+    grid->context = cfg.onContext;
+    grid->empty = cfg.onEmptyClick;
+    grid->zoom = cfg.onZoom;
+    grid->commit = cfg.onCommit;
+    grid->cancel = cfg.onCancel;
     grid->user = cfg.user;
+    uiVirtualGridRefresh(s, id);
+}
+
+void uiVirtualGridSetView(UiState& s, uint16_t id, uint32_t count, uint8_t list, float itemW, float itemH) {
+    if (id >= s.count || !s.ent[id].is_alive()) {
+        return;
+    }
+    auto* grid = s.ent[id].try_get_mut<UiVirtualGrid>();
+    if (grid == nullptr) {
+        return;
+    }
+    grid->count = count;
+    grid->list = list;
+    grid->itemW = itemW;
+    grid->itemH = itemH;
     uiVirtualGridRefresh(s, id);
 }
 
@@ -152,7 +184,7 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
     if (grid == nullptr || scroll == nullptr) {
         return;
     }
-    const float viewW = s.box[id].w > 32.0f ? s.box[id].w - 16.0f : grid->itemW;
+    const float viewW = s.box[id].w > 32.0f ? s.box[id].w - s.metrics.gridInset * 2.0f : grid->itemW;
     uint32_t rawCols = 1u;
     if (grid->list == 0 && grid->itemW > 1.0f) {
         rawCols = static_cast<uint32_t>(viewW / grid->itemW);
@@ -171,7 +203,7 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
     }
     const UiVirtualWindow win = uiVirtualCalc(scroll->offset, s.box[id].h, grid->itemH, grid->count, cols);
     grid->first = win.first;
-    uiVirtualSyncSpacer(s, scroll->inner, win.totalHeight + 16.0f);
+    uiVirtualSyncSpacer(s, scroll->inner, win.totalHeight + s.metrics.gridInset * 2.0f);
     for (uint8_t i = 0; i < grid->slots; ++i) {
         const uint16_t slot = grid->slot[i];
         const uint32_t index = win.first + i;
@@ -188,15 +220,15 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
         const float tileH = rows ? grid->itemH - 4.0f : square;
         if (auto* flex = s.ent[slot].try_get_mut<UiFlex>()) {
             flex->position = UiPosition::Absolute;
-            flex->posX = rows ? 4.0f : static_cast<float>(col) * grid->itemW + 8.0f;
-            flex->posY = static_cast<float>(row) * grid->itemH - scroll->offset + (rows ? 2.0f : 8.0f);
+            flex->posX = rows ? s.metrics.cellGap : static_cast<float>(col) * grid->itemW + s.metrics.gridInset;
+            flex->posY = static_cast<float>(row) * grid->itemH - scroll->offset + (rows ? 2.0f : s.metrics.gridInset);
             flex->widthMode = UiSize::Px;
             flex->heightMode = UiSize::Px;
             flex->direction = rows ? UiFlexDir::Row : UiFlexDir::Column;
             flex->align = UiAlign::Center;
             flex->justify = rows ? UiJustify::Start : UiJustify::Center;
-            flex->gap = rows ? 6.0f : 4.0f;
-            flex->pad = rows ? 8.0f : 6.0f;
+            flex->gap = rows ? s.metrics.listGap : s.metrics.cellGap;
+            flex->pad = rows ? s.metrics.listPad : s.metrics.cellPad;
             flex->width = tileW > 8.0f ? tileW : 8.0f;
             flex->height = tileH > 8.0f ? tileH : 8.0f;
             flex->shrink = 0.0f;
@@ -212,7 +244,7 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
                 if (auto* lab = s.ent[parts->label].try_get_mut<UiFlex>()) {
                     lab->self = UiAlignSelf::Stretch;
                     lab->heightMode = UiSize::Px;
-                    lab->height = 18.0f;
+                    lab->height = s.metrics.labelH;
                     lab->grow = rows ? 1.0f : 0.0f;
                     lab->shrink = 1.0f;
                 }
@@ -222,6 +254,29 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
         s.ent[slot].set<UiVirtRow>({index});
         if (grid->bind != nullptr) {
             grid->bind(grid->user, slot, index);
+        }
+        if (grid->role != nullptr) {
+            if (auto* paint = s.ent[slot].try_get_mut<UiPaint>()) {
+                const uint8_t role = grid->role(grid->user, index);
+                if (role == kUiCellSelected) {
+                    *paint = paintToken(s.look, UiToken::Accent, s.look.radiusSm);
+                    paint->a = s.metrics.selectedA;
+                    paint->borderW = 0.0f;
+                } else if (role == kUiCellHeader) {
+                    *paint = paintToken(s.look, UiToken::Side, 0.0f);
+                    paint->a = s.metrics.headerA;
+                    paint->borderW = 0.0f;
+                } else {
+                    *paint = paintToken(s.look, UiToken::Item, s.look.radiusSm);
+                    paint->a = 0.0f;
+                    paint->borderW = 0.0f;
+                }
+            }
+        }
+        if (grid->editAt == index) {
+            if (const UiParts* parts = s.ent[slot].try_get<UiParts>(); parts != nullptr && parts->label < s.count) {
+                uiText(s, parts->label, "");
+            }
         }
     }
     s.visualDirty = true;
@@ -239,23 +294,176 @@ void uiVirtualGridClearClick(UiState& s, uint16_t gridId) {
     grid->lastClickY = 0.0f;
 }
 
-bool uiVirtualGridInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
-    (void)cursor;
-    if (phase != kUiInPress) {
+namespace {
+
+uint16_t slotFor(const UiState& s, const UiVirtualGrid& grid, uint32_t index) {
+    for (uint8_t i = 0; i < grid.slots; ++i) {
+        const uint16_t slot = grid.slot[i];
+        const UiVirtRow* row = slot < s.count ? s.ent[slot].try_get<UiVirtRow>() : nullptr;
+        if (row != nullptr && row->index == index && nodeShown(s, slot)) {
+            return slot;
+        }
+    }
+    return kUiNone;
+}
+
+void finishEdit(UiState& s, uint16_t gridId, bool commit) {
+    auto* grid = gridId < s.count ? s.ent[gridId].try_get_mut<UiVirtualGrid>() : nullptr;
+    if (grid == nullptr || grid->editAt == kUiCellNone) {
+        return;
+    }
+    const uint32_t index = grid->editAt;
+    const uint16_t editor = grid->editor;
+    grid->editAt = kUiCellNone;
+    char text[96]{};
+    if (editor < s.count) {
+        if (const UiField* field = s.ent[editor].try_get<UiField>()) {
+            const uint8_t n = field->len < 95 ? field->len : 95;
+            std::memcpy(text, field->bytes, n);
+            text[n] = '\0';
+        }
+        uiShow(s, editor, false);
+    }
+    if (commit && grid->commit != nullptr) {
+        grid->commit(grid->user, index, text);
+    } else if (!commit && grid->cancel != nullptr) {
+        grid->cancel(grid->user, index);
+    }
+}
+
+bool placeEditor(UiState& s, uint16_t gridId) {
+    auto* grid = gridId < s.count ? s.ent[gridId].try_get_mut<UiVirtualGrid>() : nullptr;
+    if (grid == nullptr || grid->editAt == kUiCellNone || grid->editor >= s.count) {
         return false;
     }
-    const uint16_t gridId = id < s.count && s.ent[id].try_get<UiVirtualGrid>() != nullptr
-        ? id
-        : uiAncestorId<UiVirtualGrid>(s, id);
-    if (gridId == kUiNone) {
+    const uint16_t slot = slotFor(s, *grid, grid->editAt);
+    const UiParts* parts = slot < s.count ? s.ent[slot].try_get<UiParts>() : nullptr;
+    const uint16_t lab = parts != nullptr && parts->label < s.count ? parts->label : slot;
+    if (lab >= s.count) {
+        uiShow(s, grid->editor, false);
         return false;
     }
-    auto* grid = s.ent[gridId].try_get_mut<UiVirtualGrid>();
-    if (grid == nullptr) {
+    const UiBox& box = s.box[lab];
+    if (box.w < 8.0f || box.h < 8.0f) {
+        uiShow(s, grid->editor, false);
         return false;
     }
-    grid->pressX = in.pointer.x;
-    grid->pressY = in.pointer.y;
+    const float w = box.w > 48.0f ? box.w : 160.0f;
+    const float h = box.h > 16.0f ? box.h : s.metrics.searchH;
+    const UiFlex* flex = s.ent[grid->editor].try_get<UiFlex>();
+    const bool same = flex != nullptr && flex->posX == box.x && flex->posY == box.y && flex->width == w && flex->height == h
+        && nodeShown(s, grid->editor);
+    if (!same) {
+        uiPlace(s, grid->editor, true, box.x, box.y, w, h);
+        uiShow(s, grid->editor, true);
+    }
+    return true;
+}
+
+} // namespace
+
+void uiVirtualGridBeginEdit(UiState& s, uint16_t gridId, uint32_t index, const char* text) {
+    auto* grid = gridId < s.count ? s.ent[gridId].try_get_mut<UiVirtualGrid>() : nullptr;
+    if (grid == nullptr || index >= grid->count) {
+        return;
+    }
+    if (grid->editor >= s.count || !s.ent[grid->editor].is_alive()) {
+        const uint16_t editor = uiField(s, kUiNone, "", 0, false);
+        if (editor == kUiNone) {
+            return;
+        }
+        s.ent[editor].add<UiPopup>();
+        uiShow(s, editor, false);
+        grid->editor = editor;
+    }
+    grid->editAt = index;
+    uiSetFieldText(s, grid->editor, text != nullptr ? text : "");
+    if (auto* field = s.ent[grid->editor].try_get_mut<UiField>()) {
+        field->anchor = 0;
+    }
+    uiFocus(s, grid->editor);
+    (void)placeEditor(s, gridId);
+}
+
+bool uiVirtualGridEditing(const UiState& s, uint16_t gridId) {
+    const UiVirtualGrid* grid = gridId < s.count ? s.ent[gridId].try_get<UiVirtualGrid>() : nullptr;
+    return grid != nullptr && grid->editAt != kUiCellNone && s.focused == grid->editor;
+}
+
+bool uiVirtualGridInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t&) {
+    if (phase == kUiInEscape) {
+        for (uint16_t n = 0; n < s.count; ++n) {
+            if (s.ent[n].try_get<UiVirtualGrid>() != nullptr && s.ent[n].try_get<UiVirtualGrid>()->editAt != kUiCellNone) {
+                finishEdit(s, n, false);
+            }
+        }
+        return false;
+    }
+    if (phase == kUiInKey && in.enter != 0) {
+        for (uint16_t n = 0; n < s.count; ++n) {
+            const UiVirtualGrid* grid = s.ent[n].try_get<UiVirtualGrid>();
+            if (grid != nullptr && grid->editAt != kUiCellNone && s.focused == grid->editor) {
+                finishEdit(s, n, true);
+                return true;
+            }
+        }
+        return false;
+    }
+    if (phase == kUiInWheel && in.ctrl != 0) {
+        const uint16_t gridId = id < s.count && s.ent[id].try_get<UiVirtualGrid>() != nullptr
+            ? id
+            : uiAncestorId<UiVirtualGrid>(s, id);
+        auto* grid = gridId < s.count ? s.ent[gridId].try_get_mut<UiVirtualGrid>() : nullptr;
+        if (grid != nullptr && grid->zoom != nullptr) {
+            grid->zoom(grid->user, in.wheel);
+            return true;
+        }
+        return false;
+    }
+    if (phase == kUiInPress) {
+        const uint16_t gridId = id < s.count && s.ent[id].try_get<UiVirtualGrid>() != nullptr
+            ? id
+            : uiAncestorId<UiVirtualGrid>(s, id);
+        auto* grid = gridId < s.count ? s.ent[gridId].try_get_mut<UiVirtualGrid>() : nullptr;
+        if (grid == nullptr) {
+            return false;
+        }
+        grid->pressX = in.pointer.x;
+        grid->pressY = in.pointer.y;
+        if ((in.pointer.pressed & kPointerLeft) != 0 && id == gridId && grid->empty != nullptr) {
+            grid->empty(grid->user);
+        }
+        return false;
+    }
+    if (phase != kUiInSync) {
+        return false;
+    }
+    for (uint16_t n = 0; n < s.count; ++n) {
+        auto* grid = s.ent[n].try_get_mut<UiVirtualGrid>();
+        if (grid == nullptr) {
+            continue;
+        }
+        if (grid->editAt != kUiCellNone) {
+            placeEditor(s, n);
+            if (s.focused != grid->editor && nodeShown(s, grid->editor)) {
+                finishEdit(s, n, true);
+            }
+        }
+        const bool inside = s.hovered == n || uiWithin(s, s.hovered, n);
+        uint32_t index = kUiCellNone;
+        if (inside) {
+            (void)uiVirtualHitRow(s, n, index);
+        }
+        if (index != grid->hoverAt && grid->hover != nullptr) {
+            grid->hoverAt = index;
+            grid->hover(grid->user, index);
+        } else {
+            grid->hoverAt = index;
+        }
+        if (inside && (in.pointer.pressed & kPointerRight) != 0 && grid->context != nullptr) {
+            grid->context(grid->user, index, in.pointer.x, in.pointer.y);
+        }
+    }
     return false;
 }
 

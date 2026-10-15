@@ -463,11 +463,11 @@ uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t m
     flex.widthMode = UiSize::Percent;
     flex.width = 100.0f;
     flex.heightMode = UiSize::Px;
-    flex.height = 30.0f;
+    flex.height = s.metrics.menuItemH;
     flex.grow = 1.0f;
     flex.shrink = 1.0f;
     flex.align = UiAlign::Center;
-    flex.padL = 10.0f;
+    flex.padL = s.metrics.menuPadX;
     flex.padR = 8.0f;
     flex.gap = 6.0f;
     UiPaint body = paintToken(s.look, UiToken::Button, s.look.radiusSm);

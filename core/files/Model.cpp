@@ -6,144 +6,117 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <string>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 namespace burnhope {
 namespace fs = std::filesystem;
 
 namespace {
 
-bool searchHit(const FileModel& model, const char* name) {
+bool searchHit(const FileModel& model, const std::string& name) {
     if (model.search[0] == '\0') {
         return true;
     }
-    char a[64]{};
-    char c[40]{};
-    copyCap(a, 64, name);
-    copyCap(c, 40, model.search);
-    for (char* p = a; *p != '\0'; ++p) {
-        if (*p >= 'A' && *p <= 'Z') {
-            *p = static_cast<char>(*p - 'A' + 'a');
-        }
+    auto lower = [](unsigned char c) {
+        return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : static_cast<char>(c);
+    };
+    std::string hay = name;
+    std::string needle = model.search;
+    for (char& c : hay) {
+        c = lower(static_cast<unsigned char>(c));
     }
-    for (char* p = c; *p != '\0'; ++p) {
-        if (*p >= 'A' && *p <= 'Z') {
-            *p = static_cast<char>(*p - 'A' + 'a');
-        }
+    for (char& c : needle) {
+        c = lower(static_cast<unsigned char>(c));
     }
-    return std::strstr(a, c) != nullptr;
+    return hay.find(needle) != std::string::npos;
 }
 
-bool treeWasOpen(const char prev[][64], const uint8_t* prevOpen, int prevN, const char* rel) {
-    for (int i = 0; i < prevN; ++i) {
-        if (prevOpen[i] != 0 && std::strcmp(prev[i], rel) == 0) {
-            return true;
-        }
+std::vector<std::string> listDirs(const fs::path& abs, const FileModel& model, std::unordered_set<std::string>& seen) {
+    std::vector<std::string> names;
+    std::error_code canonEc;
+    const fs::path canon = fs::weakly_canonical(abs, canonEc);
+    const std::string key = canonEc ? abs.string() : canon.string();
+    if (!seen.insert(key).second) {
+        return names;
     }
-    return false;
-}
-
-void packListed(FileModel& model, FileItem* fresh, int n) {
-    if (model.groupOn == 0) {
-        model.count = n;
-        for (int i = 0; i < n; ++i) {
-            model.items[i] = fresh[i];
-        }
-        return;
-    }
-    static const uint8_t keys[] = {1, 2, 3, 4, 0};
-    static const char* titles[] = {"Folders", "Images", "Text", "Audio", "Other"};
-    int out = 0;
-    for (int g = 0; g < 5; ++g) {
-        const uint8_t key = keys[g];
-        int hits = 0;
-        for (int i = 0; i < n; ++i) {
-            const bool dir = fresh[i].isDir != 0;
-            if (key == 1 ? dir : (!dir && fresh[i].kind == key)) {
-                ++hits;
-            }
-        }
-        if (hits == 0 || out >= kFileCap) {
-            continue;
-        }
-        FileItem& head = model.items[out++];
-        head = {};
-        head.isDir = 2;
-        head.kind = key;
-        const bool open = (model.groupOpen & static_cast<uint8_t>(1u << key)) != 0;
-        char title[64]{};
-        std::snprintf(title, sizeof(title), "%s  %s", open ? "v" : ">", titles[g]);
-        copyCap(head.name, 64, title);
-        if (!open) {
-            continue;
-        }
-        for (int i = 0; i < n && out < kFileCap; ++i) {
-            const bool dir = fresh[i].isDir != 0;
-            if (key == 1 ? dir : (!dir && fresh[i].kind == key)) {
-                model.items[out++] = fresh[i];
-            }
-        }
-    }
-    model.count = out;
-}
-
-void pushTreeDirs(FileModel& model, const char* abs, const char* rel, int depth, const char prev[][64], const uint8_t* prevOpen, int prevN) {
-    if (depth > 8 || model.treeN >= kTreeCap) {
-        return;
-    }
-    char names[kTreeCap][64]{};
-    int nameN = 0;
     std::error_code treeEc;
-    fs::directory_iterator treeIt(fs::path(abs), fs::directory_options::skip_permission_denied, treeEc);
+    fs::directory_iterator treeIt(abs, fs::directory_options::skip_permission_denied, treeEc);
     if (treeEc) {
-        return;
+        return names;
     }
-    for (; treeIt != fs::directory_iterator() && nameN < kTreeCap; treeIt.increment(treeEc)) {
+    for (; treeIt != fs::directory_iterator(); treeIt.increment(treeEc)) {
         if (treeEc) {
             break;
         }
         std::error_code ignored;
-        if (!treeIt->is_directory(ignored)) {
+        if (treeIt->is_symlink(ignored) || ignored) {
+            continue;
+        }
+        if (!treeIt->is_directory(ignored) || ignored) {
             continue;
         }
         const std::string filename = treeIt->path().filename().string();
-        if (filename.empty() || filename.size() >= 63) {
+        if (filename.empty() || (model.showHidden == 0 && filename[0] == '.')) {
             continue;
         }
-        if (model.showHidden == 0 && filename[0] == '.') {
+        names.push_back(filename);
+    }
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+struct TreeWalk {
+    fs::path abs;
+    std::string rel;
+    int depth = 1;
+    std::vector<std::string> names;
+    size_t next = 0;
+};
+
+void packListed(FileModel& model, std::vector<FileItem> fresh) {
+    if (model.groupOn == 0) {
+        model.items = std::move(fresh);
+        return;
+    }
+    const int n = static_cast<int>(fresh.size());
+    model.items.clear();
+    static const uint8_t keys[] = {1, 2, 3, 4, 0};
+    static const char* titles[] = {"Folders", "Images", "Text", "Audio", "Other"};
+    for (int g = 0; g < 5; ++g) {
+        const uint8_t key = keys[g];
+        int hits = 0;
+        for (int i = 0; i < n; ++i) {
+            const FileItem& item = fresh[static_cast<size_t>(i)];
+            const bool dir = item.isDir != 0;
+            if (key == 1 ? dir : (!dir && item.kind == key)) {
+                ++hits;
+            }
+        }
+        if (hits == 0) {
             continue;
         }
-        copyCap(names[nameN], 64, filename.c_str());
-        ++nameN;
-    }
-    for (int i = 1; i < nameN; ++i) {
-        char key[64]{};
-        copyCap(key, 64, names[i]);
-        int j = i;
-        while (j > 0 && std::strcmp(names[j - 1], key) > 0) {
-            copyCap(names[j], 64, names[j - 1]);
-            --j;
+        const bool open = (model.groupOpen & static_cast<uint8_t>(1u << key)) != 0;
+        char title[64]{};
+        std::snprintf(title, sizeof(title), "%s  %s", open ? "v" : ">", titles[g]);
+        FileItem head;
+        head.isDir = 2;
+        head.kind = key;
+        head.name = title;
+        model.items.push_back(std::move(head));
+        if (!open) {
+            continue;
         }
-        copyCap(names[j], 64, key);
-    }
-    for (int i = 0; i < nameN && model.treeN < kTreeCap; ++i) {
-        char path[64]{};
-        if (rel[0] == '\0') {
-            copyCap(path, 64, names[i]);
-        } else {
-            std::snprintf(path, sizeof(path), "%s/%s", rel, names[i]);
-        }
-        const int slot = model.treeN;
-        copyCap(model.tree[slot], 64, path);
-        model.treeDepth[slot] = static_cast<uint8_t>(depth);
-        model.treeOpen[slot] = treeWasOpen(prev, prevOpen, prevN, path) ? 1 : 0;
-        ++model.treeN;
-        if (model.treeOpen[slot] != 0) {
-            char child[512]{};
-            joinPath(child, 512, abs, names[i]);
-            pushTreeDirs(model, child, path, depth + 1, prev, prevOpen, prevN);
+        for (int i = 0; i < n; ++i) {
+            FileItem& item = fresh[static_cast<size_t>(i)];
+            const bool dir = item.isDir != 0;
+            if (key == 1 ? dir : (!dir && item.kind == key)) {
+                model.items.push_back(std::move(item));
+            }
         }
     }
 }
@@ -164,10 +137,14 @@ void describeItem(const FileItem& item, char* dst, int cap) {
     char size[32]{};
     formatFileSize(item.bytes, size, 32);
     if (item.isDir != 0) {
-        std::snprintf(dst, static_cast<size_t>(cap), "%s (%s)", item.name, fileTypeName(item.isDir, item.kind));
+        std::snprintf(dst, static_cast<size_t>(cap), "%s (%s)", item.name.c_str(), fileTypeName(item.isDir, item.kind));
         return;
     }
-    std::snprintf(dst, static_cast<size_t>(cap), "%s (%s, %s)", item.name, fileTypeName(item.isDir, item.kind), size);
+    std::snprintf(dst, static_cast<size_t>(cap), "%s (%s, %s)", item.name.c_str(), fileTypeName(item.isDir, item.kind), size);
+}
+
+std::string itemPath(const FileModel& model, const FileItem& item) {
+    return (fs::path(model.cwd) / item.name).string();
 }
 
 } // namespace
@@ -197,8 +174,8 @@ void FileModel::save() const {
         return;
     }
     std::fprintf(file, "dir %s\n", cwd);
-    for (int i = 0; i < favN; ++i) {
-        std::fprintf(file, "fav %s\n", fav[i]);
+    for (const std::string& pathText : fav) {
+        std::fprintf(file, "fav %s\n", pathText.c_str());
     }
     std::fclose(file);
 }
@@ -207,7 +184,7 @@ void FileModel::load() {
     char path[512]{};
     std::FILE* file = platformCachePath(path, sizeof(path), "burnhope-files.txt") ? std::fopen(path, "r") : nullptr;
     if (file != nullptr) {
-        char line[640]{};
+        char line[4096]{};
         while (std::fgets(line, sizeof(line), file) != nullptr) {
             size_t n = std::strlen(line);
             while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) {
@@ -215,9 +192,8 @@ void FileModel::load() {
             }
             if (std::strncmp(line, "dir ", 4) == 0 && cwd[0] == '\0') {
                 copyCap(cwd, 512, line + 4);
-            } else if (std::strncmp(line, "fav ", 4) == 0 && favN < kFavCap) {
-                copyCap(fav[favN], 512, line + 4);
-                ++favN;
+            } else if (std::strncmp(line, "fav ", 4) == 0) {
+                fav.emplace_back(line + 4);
             }
         }
         std::fclose(file);
@@ -228,31 +204,65 @@ void FileModel::load() {
 }
 
 void FileModel::rebuildTree() {
-    char prev[kTreeCap][64]{};
-    uint8_t prevOpen[kTreeCap]{};
-    const int prevN = treeN;
-    for (int i = 0; i < prevN && i < kTreeCap; ++i) {
-        copyCap(prev[i], 64, tree[i]);
-        prevOpen[i] = treeOpen[i];
-    }
-    treeN = 0;
-    const char* base = root[0] != '\0' ? root : cwd;
-    if (base[0] != '\0' && treeN < kTreeCap) {
-        tree[0][0] = '\0';
-        treeDepth[0] = 0;
-        const uint8_t rootOpen = prevN > 0 && prev[0][0] == '\0' ? prevOpen[0] : 1;
-        treeOpen[0] = rootOpen;
-        treeN = 1;
-        if (rootOpen != 0) {
-            pushTreeDirs(*this, base, "", 1, prev, prevOpen, prevN);
+    std::unordered_set<std::string> opened;
+    uint8_t rootOpen = 1;
+    for (const FileTreeNode& node : tree) {
+        if (node.rel.empty()) {
+            rootOpen = node.open;
+        } else if (node.open != 0) {
+            opened.insert(node.rel);
         }
+    }
+    tree.clear();
+    const char* base = root[0] != '\0' ? root : cwd;
+    if (base[0] == '\0') {
+        return;
+    }
+    FileTreeNode rootNode;
+    rootNode.depth = 0;
+    rootNode.open = rootOpen;
+    tree.push_back(std::move(rootNode));
+    if (rootOpen == 0) {
+        return;
+    }
+    std::unordered_set<std::string> seen;
+    std::vector<TreeWalk> stack;
+    TreeWalk first;
+    first.abs = fs::path(base);
+    first.depth = 1;
+    first.names = listDirs(first.abs, *this, seen);
+    stack.push_back(std::move(first));
+    while (!stack.empty()) {
+        if (stack.back().next >= stack.back().names.size()) {
+            stack.pop_back();
+            continue;
+        }
+        const std::string name = stack.back().names[stack.back().next++];
+        const fs::path abs = stack.back().abs;
+        const std::string rel = stack.back().rel;
+        const int depth = stack.back().depth;
+        FileTreeNode node;
+        node.rel = rel.empty() ? name : rel + "/" + name;
+        node.depth = static_cast<uint8_t>(depth > 255 ? 255 : depth);
+        node.open = opened.contains(node.rel) ? 1 : 0;
+        const bool open = node.open != 0;
+        const fs::path child = abs / name;
+        const std::string childRel = node.rel;
+        tree.push_back(std::move(node));
+        if (!open) {
+            continue;
+        }
+        TreeWalk next;
+        next.abs = child;
+        next.rel = childRel;
+        next.depth = depth + 1;
+        next.names = listDirs(child, *this, seen);
+        stack.push_back(std::move(next));
     }
 }
 
 void FileModel::reload() {
-    FileItem fresh[kFileCap]{};
-    int n = 0;
-    int listed = 0;
+    std::vector<FileItem> fresh;
     std::error_code ec;
     fs::directory_iterator it(fs::path(cwd), fs::directory_options::skip_permission_denied, ec);
     if (!ec) {
@@ -264,16 +274,12 @@ void FileModel::reload() {
             std::error_code ignored;
             const bool dir = ent.is_directory(ignored);
             const std::string filename = ent.path().filename().string();
-            if (filename.empty() || filename.size() >= 63) {
-                continue;
-            }
-            if (showHidden == 0 && filename[0] == '.') {
+            if (filename.empty() || (showHidden == 0 && filename[0] == '.')) {
                 continue;
             }
             if (!dir && filt[0] != '\0') {
-                const size_t fn = filename.size();
                 const size_t fl = std::strlen(filt);
-                if (fn < fl || std::strcmp(filename.c_str() + (fn - fl), filt) != 0) {
+                if (filename.size() < fl || filename.compare(filename.size() - fl, fl, filt) != 0) {
                     continue;
                 }
             }
@@ -290,30 +296,27 @@ void FileModel::reload() {
             if (kind == 4 && itemKind != 4) {
                 continue;
             }
-            if (!searchHit(*this, filename.c_str())) {
+            if (!searchHit(*this, filename)) {
                 continue;
             }
-            ++listed;
-            if (n >= kFileCap) {
-                continue;
-            }
-            copyCap(fresh[n].name, 64, filename.c_str());
-            fresh[n].isDir = dir ? 1 : 0;
-            fresh[n].kind = static_cast<uint8_t>(itemKind);
+            FileItem item;
+            item.name = filename;
+            item.isDir = dir ? 1 : 0;
+            item.kind = static_cast<uint8_t>(itemKind);
             if (!dir) {
-                fresh[n].bytes = static_cast<uint64_t>(ent.file_size(ignored));
+                item.bytes = static_cast<uint64_t>(ent.file_size(ignored));
             }
             std::error_code timeEc;
             const auto stamp = ent.last_write_time(timeEc);
             if (!timeEc) {
                 const auto ticks = stamp.time_since_epoch().count();
-                fresh[n].mtime = ticks > 0 ? static_cast<uint64_t>(ticks) : 0;
+                item.mtime = ticks > 0 ? static_cast<uint64_t>(ticks) : 0;
             }
-            ++n;
+            fresh.push_back(std::move(item));
         }
     }
     const int key = sortKey;
-    std::sort(fresh, fresh + n, [key](const FileItem& a, const FileItem& c) {
+    std::sort(fresh.begin(), fresh.end(), [key](const FileItem& a, const FileItem& c) {
         if (a.isDir != c.isDir) {
             return a.isDir > c.isDir;
         }
@@ -326,11 +329,11 @@ void FileModel::reload() {
         if (key == 3 && a.mtime != c.mtime) {
             return a.mtime > c.mtime;
         }
-        return std::strcmp(a.name, c.name) < 0;
+        return a.name < c.name;
     });
-    total = listed;
-    packListed(*this, fresh, n);
-    if (scroll > count) {
+    total = static_cast<int>(fresh.size());
+    packListed(*this, std::move(fresh));
+    if (scroll > count()) {
         scroll = 0;
     }
     rebuildTree();
@@ -356,24 +359,17 @@ void FileModel::go(const char* path) {
     if (text.empty() || !underRoot(text.c_str())) {
         return;
     }
-    if (histN > 0 && sameText(hist[histAt], text.c_str())) {
-        copyCap(cwd, 512, text.c_str());
+    if (!hist.empty() && histAt >= 0 && histAt < static_cast<int>(hist.size())
+        && sameText(hist[static_cast<size_t>(histAt)].c_str(), text.c_str())) {
+        copyCap(cwd, static_cast<int>(sizeof(cwd)), text.c_str());
         return;
     }
-    if (histAt + 1 < histN) {
-        histN = histAt + 1;
+    if (histAt + 1 < static_cast<int>(hist.size())) {
+        hist.resize(static_cast<size_t>(histAt + 1));
     }
-    if (histN >= kHistCap) {
-        for (int i = 1; i < kHistCap; ++i) {
-            copyCap(hist[i - 1], 512, hist[i]);
-        }
-        histN = kHistCap - 1;
-        histAt = histN - 1;
-    }
-    copyCap(hist[histN], 512, text.c_str());
-    histAt = histN;
-    ++histN;
-    copyCap(cwd, 512, text.c_str());
+    hist.push_back(text);
+    histAt = static_cast<int>(hist.size()) - 1;
+    copyCap(cwd, static_cast<int>(sizeof(cwd)), text.c_str());
     scroll = 0;
     anchor = 0;
     confirm = 0;
@@ -385,21 +381,21 @@ void FileModel::go(const char* path) {
     save();
 }
 
-void FileModel::selectedPaths(char out[][512], int cap, int& n) const {
-    n = 0;
-    for (int i = 0; i < count && n < cap; ++i) {
-        if (items[i].selected == 0 || items[i].isDir == 2) {
+std::vector<std::string> FileModel::selectedPaths() const {
+    std::vector<std::string> out;
+    for (const FileItem& item : items) {
+        if (item.selected == 0 || item.isDir == 2) {
             continue;
         }
-        joinPath(out[n], 512, cwd, items[i].name);
-        ++n;
+        out.push_back(itemPath(*this, item));
     }
+    return out;
 }
 
 int FileModel::selectedCount() const {
     int n = 0;
-    for (int i = 0; i < count; ++i) {
-        if (items[i].selected != 0 && items[i].isDir != 2) {
+    for (const FileItem& item : items) {
+        if (item.selected != 0 && item.isDir != 2) {
             ++n;
         }
     }
@@ -407,17 +403,18 @@ int FileModel::selectedCount() const {
 }
 
 void FileModel::selectOnly(int index) {
-    for (int i = 0; i < count; ++i) {
-        items[i].selected = i == index ? 1 : 0;
+    for (int i = 0; i < count(); ++i) {
+        items[static_cast<size_t>(i)].selected = i == index ? 1 : 0;
     }
     anchor = index;
 }
 
 void FileModel::toggleSelect(int index) {
-    if (index < 0 || index >= count) {
+    if (index < 0 || index >= count()) {
         return;
     }
-    items[index].selected = items[index].selected == 0 ? 1 : 0;
+    FileItem& item = items[static_cast<size_t>(index)];
+    item.selected = item.selected == 0 ? 1 : 0;
     anchor = index;
 }
 
@@ -430,43 +427,44 @@ void FileModel::selectRange(int from, int to) {
     if (from < 0) {
         from = 0;
     }
-    if (to >= count) {
-        to = count - 1;
+    if (to >= count()) {
+        to = count() - 1;
     }
     clearSelection();
-    for (int i = from; i <= to && i < count; ++i) {
-        if (items[i].isDir == 2) {
+    for (int i = from; i <= to && i < count(); ++i) {
+        FileItem& item = items[static_cast<size_t>(i)];
+        if (item.isDir == 2) {
             continue;
         }
-        items[i].selected = 1;
+        item.selected = 1;
     }
 }
 
 void FileModel::selectAll() {
-    for (int i = 0; i < count; ++i) {
-        if (items[i].isDir == 2) {
+    for (FileItem& item : items) {
+        if (item.isDir == 2) {
             continue;
         }
-        items[i].selected = 1;
+        item.selected = 1;
     }
 }
 
 void FileModel::clearSelection() {
-    for (int i = 0; i < count; ++i) {
-        items[i].selected = 0;
+    for (FileItem& item : items) {
+        item.selected = 0;
     }
 }
 
 bool FileModel::canBack() const { return histAt > 0; }
 
-bool FileModel::canForward() const { return histAt + 1 < histN; }
+bool FileModel::canForward() const { return histAt + 1 < static_cast<int>(hist.size()); }
 
 void FileModel::goBack() {
     if (!canBack()) {
         return;
     }
     --histAt;
-    copyCap(cwd, 512, hist[histAt]);
+    copyCap(cwd, static_cast<int>(sizeof(cwd)), hist[static_cast<size_t>(histAt)].c_str());
     renameAt = -1;
     reload();
 }
@@ -476,24 +474,24 @@ void FileModel::goForward() {
         return;
     }
     ++histAt;
-    copyCap(cwd, 512, hist[histAt]);
+    copyCap(cwd, static_cast<int>(sizeof(cwd)), hist[static_cast<size_t>(histAt)].c_str());
     renameAt = -1;
     reload();
 }
 
 void FileModel::startRename(int index) {
-    if (index < 0 || index >= count) {
+    if (index < 0 || index >= count()) {
         return;
     }
     renameAt = index;
     mode = 2;
-    copyCap(edit, 64, items[index].name);
+    edit = items[static_cast<size_t>(index)].name;
 }
 
 void FileModel::cancelRename() {
     renameAt = -1;
     mode = 0;
-    edit[0] = '\0';
+    edit.clear();
 }
 
 bool FileModel::commitRename(const char* newName) {
@@ -501,36 +499,36 @@ bool FileModel::commitRename(const char* newName) {
         cancelRename();
         return false;
     }
-    copyCap(edit, 64, newName);
+    edit = newName;
     commitRename();
     return true;
 }
 
 void FileModel::paste() {
     int pasted = 0;
-    for (int i = 0; i < clipN; ++i) {
+    for (const std::string& srcText : clip) {
         std::error_code ec;
-        if (!fs::exists(fs::path(clip[i]), ec)) {
+        const fs::path src(srcText);
+        if (!fs::exists(src, ec)) {
             continue;
         }
-        const fs::path src(clip[i]);
-        char stem[64]{};
-        char ext[16]{};
-        splitStem(src.filename().string().c_str(), stem, 64, ext, 16);
-        char dst[512]{};
-        uniquePath(dst, 512, cwd, stem, ext);
+        char stem[256]{};
+        char ext[32]{};
+        splitStem(src.filename().string().c_str(), stem, 256, ext, 32);
+        char dst[4096]{};
+        uniquePath(dst, static_cast<int>(sizeof(dst)), cwd, stem, ext);
         if (clipCut != 0) {
             fs::rename(src, fs::path(dst), ec);
             if (ec) {
                 continue;
             }
-        } else if (!copyOne(clip[i], dst)) {
+        } else if (!copyOne(srcText.c_str(), dst)) {
             continue;
         }
         ++pasted;
     }
     if (clipCut != 0) {
-        clipN = 0;
+        clip.clear();
         clipCut = 0;
     }
     reload();
@@ -541,14 +539,12 @@ void FileModel::paste() {
 
 void FileModel::removeSelected() {
     int removed = 0;
-    for (int i = 0; i < count; ++i) {
-        if (items[i].selected == 0 || items[i].isDir == 2) {
+    for (const FileItem& item : items) {
+        if (item.selected == 0 || item.isDir == 2) {
             continue;
         }
-        char path[512]{};
-        joinPath(path, 512, cwd, items[i].name);
         std::error_code ec;
-        fs::remove_all(fs::path(path), ec);
+        fs::remove_all(fs::path(cwd) / item.name, ec);
         if (!ec) {
             ++removed;
         }
@@ -561,22 +557,20 @@ void FileModel::removeSelected() {
 }
 
 void FileModel::duplicate() {
-    char paths[kClipCap][512]{};
-    int n = 0;
-    selectedPaths(paths, kClipCap, n);
-    if (n == 0) {
+    const std::vector<std::string> paths = selectedPaths();
+    if (paths.empty()) {
         setStatus("nothing selected");
         return;
     }
     int made = 0;
-    for (int i = 0; i < n; ++i) {
-        const fs::path src(paths[i]);
-        char stem[64]{};
-        char ext[16]{};
-        splitStem(src.filename().string().c_str(), stem, 64, ext, 16);
-        char dst[512]{};
-        uniquePath(dst, 512, cwd, stem, ext);
-        if (copyOne(paths[i], dst)) {
+    for (const std::string& srcText : paths) {
+        const fs::path src(srcText);
+        char stem[256]{};
+        char ext[32]{};
+        splitStem(src.filename().string().c_str(), stem, 256, ext, 32);
+        char dst[4096]{};
+        uniquePath(dst, static_cast<int>(sizeof(dst)), cwd, stem, ext);
+        if (copyOne(srcText.c_str(), dst)) {
             ++made;
         }
     }
@@ -587,18 +581,16 @@ void FileModel::duplicate() {
 }
 
 void FileModel::commitRename() {
-    if (renameAt < 0 || renameAt >= count || edit[0] == '\0') {
+    if (renameAt < 0 || renameAt >= count() || edit.empty()) {
         mode = 0;
         renameAt = -1;
         return;
     }
-    char src[512]{};
-    char dst[512]{};
-    joinPath(src, 512, cwd, items[renameAt].name);
-    joinPath(dst, 512, cwd, edit);
+    const fs::path src = fs::path(cwd) / items[static_cast<size_t>(renameAt)].name;
+    const fs::path dst = fs::path(cwd) / edit;
     std::error_code ec;
-    if (!sameText(src, dst)) {
-        fs::rename(fs::path(src), fs::path(dst), ec);
+    if (src != dst) {
+        fs::rename(src, dst, ec);
     }
     mode = 0;
     renameAt = -1;
@@ -611,15 +603,12 @@ void FileModel::addFavorite(const char* path) {
     if (path == nullptr || path[0] == '\0') {
         return;
     }
-    for (int i = 0; i < favN; ++i) {
-        if (sameText(fav[i], path)) {
+    for (const std::string& have : fav) {
+        if (sameText(have.c_str(), path)) {
             return;
         }
     }
-    if (favN >= kFavCap) {
-        return;
-    }
-    copyCap(fav[favN++], 512, path);
+    fav.emplace_back(path);
     save();
     setStatus("favorite");
 }
@@ -628,22 +617,18 @@ void FileModel::moveInto(const char* destDir) {
     if (destDir == nullptr) {
         return;
     }
-    char moving[kClipCap][512]{};
-    int n = 0;
-    selectedPaths(moving, kClipCap, n);
-    if (n == 0) {
+    const std::vector<std::string> moving = selectedPaths();
+    if (moving.empty()) {
         return;
     }
     int moved = 0;
-    for (int i = 0; i < n; ++i) {
-        const fs::path src(moving[i]);
+    for (const std::string& srcText : moving) {
+        const fs::path src(srcText);
         if (src.parent_path() == fs::path(destDir)) {
             continue;
         }
-        char dst[512]{};
-        joinPath(dst, 512, destDir, src.filename().string().c_str());
         std::error_code ec;
-        fs::rename(src, fs::path(dst), ec);
+        fs::rename(src, fs::path(destDir) / src.filename(), ec);
         if (!ec) {
             ++moved;
         }
@@ -655,32 +640,28 @@ void FileModel::moveInto(const char* destDir) {
 }
 
 void FileModel::copySelection(int cut) {
-    clipN = 0;
-    selectedPaths(clip, kClipCap, clipN);
+    clip = selectedPaths();
     clipCut = cut;
     setStatus(cut != 0 ? "cut" : "copied");
 }
 
 void FileModel::reveal() {
-    char paths[8][512]{};
-    int n = 0;
-    selectedPaths(paths, 8, n);
-    if (n == 0) {
-        copyCap(paths[0], 512, cwd);
-        n = 1;
+    std::vector<std::string> paths = selectedPaths();
+    if (paths.empty()) {
+        paths.emplace_back(cwd);
     }
-    const char* list[8]{};
-    for (int i = 0; i < n; ++i) {
-        list[i] = paths[i];
+    std::vector<const char*> list;
+    list.reserve(paths.size());
+    for (const std::string& path : paths) {
+        list.push_back(path.c_str());
     }
-    desktopReveal(list, n);
+    desktopReveal(list.data(), static_cast<int>(list.size()));
     setStatus("shown in folder");
 }
 
 void FileModel::touchFile(const char* name) {
-    char path[512]{};
-    joinPath(path, 512, cwd, name);
-    std::FILE* file = std::fopen(path, "w");
+    const fs::path path = fs::path(cwd) / (name != nullptr ? name : "");
+    std::FILE* file = std::fopen(path.c_str(), "w");
     if (file != nullptr) {
         std::fclose(file);
     }
@@ -688,8 +669,8 @@ void FileModel::touchFile(const char* name) {
 }
 
 bool FileModel::createFolder(char* created, int cap) {
-    char dst[512]{};
-    uniquePath(dst, 512, cwd, "New Folder", "");
+    char dst[4096]{};
+    uniquePath(dst, static_cast<int>(sizeof(dst)), cwd, "New Folder", "");
     std::error_code ec;
     fs::create_directory(fs::path(dst), ec);
     if (ec) {
@@ -708,21 +689,21 @@ void FileModel::formatFoot(char* dst, int cap) const {
     int files = 0;
     int dirs = 0;
     uint64_t pickedBytes = 0;
-    for (int i = 0; i < count; ++i) {
-        if (items[i].selected == 0) {
+    for (const FileItem& item : items) {
+        if (item.selected == 0) {
             continue;
         }
-        if (items[i].isDir != 0) {
+        if (item.isDir != 0) {
             ++dirs;
         } else {
             ++files;
-            pickedBytes += items[i].bytes;
+            pickedBytes += item.bytes;
         }
     }
     if (files + dirs == 1) {
-        for (int i = 0; i < count; ++i) {
-            if (items[i].selected != 0) {
-                describeItem(items[i], dst, cap);
+        for (const FileItem& item : items) {
+            if (item.selected != 0) {
+                describeItem(item, dst, cap);
                 return;
             }
         }
@@ -746,12 +727,12 @@ void FileModel::formatFoot(char* dst, int cap) const {
     int folderN = 0;
     int fileN = 0;
     uint64_t bytes = 0;
-    for (int i = 0; i < count; ++i) {
-        if (items[i].isDir != 0) {
+    for (const FileItem& item : items) {
+        if (item.isDir != 0) {
             ++folderN;
         } else {
             ++fileN;
-            bytes += items[i].bytes;
+            bytes += item.bytes;
         }
     }
     char size[32]{};

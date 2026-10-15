@@ -1,33 +1,35 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace burnhope {
 
-constexpr int kFileCap = 256;
-constexpr int kClipCap = 12;
-constexpr int kFavCap = 8;
-constexpr int kHistCap = 16;
-constexpr int kTreeCap = 64;
-
 struct FileItem {
-    char name[64]{};
+    std::string name;
     uint8_t isDir = 0;
     uint8_t kind = 0;
     uint8_t selected = 0;
+    uint8_t held = 0;
     uint64_t bytes = 0;
     uint64_t mtime = 0;
 };
 
+struct FileTreeNode {
+    std::string rel;
+    uint8_t depth = 0;
+    uint8_t open = 0;
+};
+
 // Directory listing, history, bookmarks, and file operations. No widgets.
+// Listings and the folder tree grow with the directory. There is no item ceiling.
 struct FileModel {
     char cwd[512]{};
     char root[512]{};
-    char hist[kHistCap][512]{};
+    std::vector<std::string> hist;
     int histAt = 0;
-    int histN = 0;
-    FileItem items[kFileCap]{};
-    int count = 0;
+    std::vector<FileItem> items;
     int total = 0;
     int scroll = 0;
     int anchor = 0;
@@ -35,17 +37,12 @@ struct FileModel {
     int mode = 0;
     int renameAt = -1;
     char search[40]{};
-    char edit[64]{};
+    std::string edit;
     int editAll = 0;
-    char clip[kClipCap][512]{};
-    int clipN = 0;
+    std::vector<std::string> clip;
     int clipCut = 0;
-    char fav[kFavCap][512]{};
-    int favN = 0;
-    char tree[kTreeCap][64]{};
-    uint8_t treeDepth[kTreeCap]{};
-    uint8_t treeOpen[kTreeCap]{};
-    int treeN = 0;
+    std::vector<std::string> fav;
+    std::vector<FileTreeNode> tree;
     char filt[16]{};
     int kind = 0;
     uint8_t sortKey = 0;
@@ -54,6 +51,9 @@ struct FileModel {
     char status[96]{};
     uint8_t showHidden = 0;
 
+    [[nodiscard]] int count() const { return static_cast<int>(items.size()); }
+    [[nodiscard]] int treeCount() const { return static_cast<int>(tree.size()); }
+
     void load();
     void save() const;
     void reload();
@@ -61,7 +61,7 @@ struct FileModel {
     void go(const char* path);
     void setStatus(const char* text);
     bool underRoot(const char* path) const;
-    void selectedPaths(char out[][512], int cap, int& n) const;
+    [[nodiscard]] std::vector<std::string> selectedPaths() const;
     int selectedCount() const;
     void selectOnly(int index);
     void toggleSelect(int index);
@@ -88,6 +88,7 @@ struct FileModel {
     void formatFoot(char* dst, int cap) const;
 };
 
+// Layout preferences only. Paint comes from UiLook tokens.
 struct FileLook {
     float icon = 84.0f;
     float tree = 188.0f;
@@ -95,11 +96,6 @@ struct FileLook {
     uint8_t showTree = 1;
     uint8_t showDetails = 1;
     uint8_t showHidden = 0;
-    float side[3]{0.11f, 0.122f, 0.145f};
-    float grid[3]{0.07f, 0.075f, 0.09f};
-    float card[3]{0.15f, 0.16f, 0.19f};
-    float accent[3]{0.28f, 0.48f, 0.92f};
-    float folder[3]{0.91f, 0.72f, 0.29f};
 };
 
 using FileOpenFn = void (*)(void* user, const char* path, int isDir);

@@ -303,7 +303,7 @@ bool addActorButton(HudContext& hud, uint16_t objects, uint8_t index, const char
     if (canvas.state == nullptr) {
         return false;
     }
-    uint16_t rowBtn = uiButton(*canvas.state, objects, { .label = name });
+    uint16_t rowBtn = uiButton(*canvas.state, objects, { .label = name, .fillWidth = true });
     if (rowBtn == kUiNone) {
         return false;
     }
@@ -313,7 +313,12 @@ bool addActorButton(HudContext& hud, uint16_t objects, uint8_t index, const char
     hit.canvas = &canvas;
     hit.scene = hud.tool.scene;
     hit.index = index;
-    hit.page = kind == static_cast<uint8_t>(SceneActorKind::Sun) ? hud.tool.sunPage : hud.tool.postPage;
+    hit.page = kUiNone;
+    if (kind == static_cast<uint8_t>(SceneActorKind::Sun)) {
+        hit.page = hud.tool.sunPage;
+    } else if (kind == static_cast<uint8_t>(SceneActorKind::Post)) {
+        hit.page = hud.tool.postPage;
+    }
     uiBind(*canvas.state, rowBtn, onActor, &hit);
     return true;
 }
@@ -795,6 +800,8 @@ void sceneHud(Canvas& canvas, void* user) {
     hierCol.gap = 4.0f;
     hierCol.pad = 8.0f;
     hierCol.shrink = 0.0f;
+    hierCol.widthMode = UiSize::Percent;
+    hierCol.width = 100.0f;
     const uint16_t objects = uiPanel(*canvas.state, hierView, hierCol, hiddenPaint());
     if (canvas.state != nullptr) {
         uiBindScroll(*canvas.state, hierView, objects);
@@ -815,13 +822,23 @@ void sceneHud(Canvas& canvas, void* user) {
     inspFlex.minH = 40.0f;
     inspFlex.shrink = 1.0f;
     const uint16_t insp = uiPanel(*canvas.state, side, inspFlex, hiddenPaint());
-    uint16_t post = uiPropHost(*canvas.state, scrollPage(insp, true));
-    uint16_t sun = uiPropHost(*canvas.state, scrollPage(insp, false));
-    uint16_t light = uiPropHost(*canvas.state, scrollPage(insp, false));
-    uint16_t sky = uiPropHost(*canvas.state, scrollPage(insp, false));
-    uint16_t cull = uiPropHost(*canvas.state, scrollPage(insp, false));
-    auto pick = [&](const char* title, uint16_t inner) {
-        uint16_t rowBtn = uiButton(*canvas.state, objects, { .label = title });
+    const uint16_t postInner = scrollPage(insp, true);
+    const uint16_t sunInner = scrollPage(insp, false);
+    const uint16_t lightInner = scrollPage(insp, false);
+    const uint16_t skyInner = scrollPage(insp, false);
+    const uint16_t cullInner = scrollPage(insp, false);
+    uint16_t post = uiPropHost(*canvas.state, postInner);
+    uint16_t sun = uiPropHost(*canvas.state, sunInner);
+    uint16_t light = uiPropHost(*canvas.state, lightInner);
+    uint16_t sky = uiPropHost(*canvas.state, skyInner);
+    uint16_t cull = uiPropHost(*canvas.state, cullInner);
+    const uint16_t postView = uiParent(*canvas.state, postInner);
+    const uint16_t sunView = uiParent(*canvas.state, sunInner);
+    const uint16_t lightView = uiParent(*canvas.state, lightInner);
+    const uint16_t skyView = uiParent(*canvas.state, skyInner);
+    const uint16_t cullView = uiParent(*canvas.state, cullInner);
+    auto pick = [&](const char* title, uint16_t view) {
+        uint16_t rowBtn = uiButton(*canvas.state, objects, { .label = title, .fillWidth = true });
         uiSetHeight(*canvas.state, rowBtn, 28.0f);
         if (rowBtn == kUiNone || canvas.state == nullptr) {
             return;
@@ -829,11 +846,11 @@ void sceneHud(Canvas& canvas, void* user) {
         hud->pages.push_back({});
         PageHit& hit = hud->pages.back();
         hit.canvas = &canvas;
-        hit.page = uiParent(*canvas.state, inner);
+        hit.page = view;
         uiBind(*canvas.state, rowBtn, onObjectPage, &hit);
     };
-    hud->tool.postPage = uiParent(*canvas.state, post);
-    hud->tool.sunPage = uiParent(*canvas.state, sun);
+    hud->tool.postPage = postView;
+    hud->tool.sunPage = sunView;
     if (hud->tool.scene != nullptr) {
         const uint8_t count = sceneFrameActorCount(hud->tool.scene);
         for (uint8_t i = 0; i < count; ++i) {
@@ -843,10 +860,10 @@ void sceneHud(Canvas& canvas, void* user) {
             (void)addActorButton(*hud, objects, i, name, kind);
         }
     }
-    pick("Light", light);
-    pick("Sky", sky);
-    pick("Cull", cull);
-        uiShowOnly(*canvas.state, uiParent(*canvas.state, post));
+    pick("Light", lightView);
+    pick("Sky", skyView);
+    pick("Cull", cullView);
+    uiShowOnly(*canvas.state, sunView);
     uint16_t fogBody = foldOpen(*canvas.state, post, "Туман");
     uint16_t postBody = foldOpen(*canvas.state, post, "Пост");
     uint16_t giBody = foldOpen(*canvas.state, post, "GI");
@@ -859,9 +876,7 @@ void sceneHud(Canvas& canvas, void* user) {
     fileFlex.minH = 120.0f;
     fileFlex.shrink = 1.0f;
     const uint16_t files = uiPanel(*canvas.state, root, fileFlex, dockPaint());
-    if (uiFiles(*canvas.state).files != nullptr) {
-        filesShutdown(*canvas.state);
-    }
+    filesShutdown(*canvas.state);
     uiFiles(*canvas.state).fileFrame = files;
     filesAttach(*canvas.state);
     filesMount(*canvas.state);
@@ -921,7 +936,7 @@ void sceneHud(Canvas& canvas, void* user) {
     uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Баланс", 1, 3, false), "prof1");
     uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Ультра", 1, 3, false), "prof2");
     tick("radiance", "rcen", true);
-    rowSlide(*canvas.state, panel, "RC лучи", "rcRays", 8.0f, 1.0f, 32.0f);
+    rowSlide(*canvas.state, panel, "RC лучи", "rcRays", 1.0f, 1.0f, 4.0f);
     rowSlide(*canvas.state, panel, "RC клетка м", "rcCell", 0.45f, 0.1f, 4.0f);
     rowSlide(*canvas.state, panel, "RC сила", "rcGain", 1.0f, 0.0f, 4.0f);
     rowSlide(*canvas.state, panel, "RC длина м", "rcMax", 48.0f, 2.0f, 200.0f);
@@ -1088,7 +1103,12 @@ bool engineTick(Engine& e) {
         if (selected != e.hud.shown && selected != kSceneActorNone) {
             e.hud.shown = selected;
             const uint8_t kind = sceneFrameActorKind(e.scene, selected);
-            const uint16_t page = kind == static_cast<uint8_t>(SceneActorKind::Sun) ? e.hud.tool.sunPage : e.hud.tool.postPage;
+            uint16_t page = kUiNone;
+            if (kind == static_cast<uint8_t>(SceneActorKind::Sun)) {
+                page = e.hud.tool.sunPage;
+            } else if (kind == static_cast<uint8_t>(SceneActorKind::Post)) {
+                page = e.hud.tool.postPage;
+            }
             if (page != kUiNone) {
                 uiShowOnly(*hud.state, page);
             }
@@ -1145,7 +1165,7 @@ bool engineTick(Engine& e) {
         tweaks.sscsThick = slideAt(hud, id.sscsT, 0.02f);
         tweaks.sscsSteps = slideAt(hud, id.sscsS, 12.0f);
         tweaks.sscsPx = slideAt(hud, id.sscsP, 128.0f);
-        tweaks.rcRays = slideAt(hud, id.rcRays, 8.0f);
+        tweaks.rcRays = slideAt(hud, id.rcRays, 1.0f);
         tweaks.rcSpacing = slideAt(hud, id.rcCell, 0.45f);
         tweaks.rcIntensity = slideAt(hud, id.rcGain, 1.0f);
         tweaks.giGain = slideAt(hud, id.giGain, 2.0f);

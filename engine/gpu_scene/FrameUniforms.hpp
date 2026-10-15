@@ -79,7 +79,7 @@ struct SsrcParams {
     float pad[11]{};
 };
 struct RcParams {
-    float rays = 8.0f;
+    float rays = 1.0f;
     float spacing = 0.45f;
     float intensity = 1.0f;
     float maxDist = 48.0f;

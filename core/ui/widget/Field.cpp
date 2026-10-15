@@ -347,7 +347,7 @@ uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChan
     UiFlex flex{};
     flex.shrink = 0.0f;
     flex.heightMode = UiSize::Px;
-    flex.height = 26.0f;
+    flex.height = s.metrics.searchH;
     if (width < 0.0f) {
         flex.widthMode = UiSize::Percent;
         flex.width = 100.0f;
@@ -388,7 +388,7 @@ uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, 
     flex.widthMode = UiSize::Percent;
     flex.width = 100.0f;
     flex.heightMode = UiSize::Px;
-    flex.height = 36.0f;
+    flex.height = s.metrics.fieldH;
     flex.shrink = 0.0f;
     UiPaint face = paintToken(s.look, UiToken::Field, s.look.radiusSm);
     paintSunken(face);

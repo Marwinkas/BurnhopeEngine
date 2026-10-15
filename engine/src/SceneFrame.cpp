@@ -46,6 +46,7 @@
 #include <filesystem>
 #include <string>
 #include <system_error>
+#include <unordered_map>
 #include <vector>
 
 namespace burnhope {
@@ -247,6 +248,100 @@ void ddsCachePath(char* out, size_t cap, const char* resolved) {
     out[n] = '\0';
 }
 
+bool imageName(const std::filesystem::path& path) {
+    const std::string ext = path.extension().string();
+    return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".dds" || ext == ".tga" || ext == ".bmp"
+        || ext == ".PNG" || ext == ".JPG" || ext == ".JPEG" || ext == ".DDS" || ext == ".TGA";
+}
+
+bool skipTextureDir(const std::filesystem::path& path) {
+    const std::string name = path.filename().string();
+    return name == "cache" || name == "build" || name == "build-core" || name == ".git" || name == "shaders"
+        || name == ".cache";
+}
+
+void indexTextureDir(const std::filesystem::path& dir, std::unordered_map<std::string, std::vector<std::string>>& index,
+    int depth) {
+    if (depth < 0 || skipTextureDir(dir)) {
+        return;
+    }
+    std::error_code ec;
+    for (std::filesystem::directory_iterator it(dir, std::filesystem::directory_options::skip_permission_denied, ec), end;
+         !ec && it != end; it.increment(ec)) {
+        const std::filesystem::path& child = it->path();
+        std::error_code kind;
+        if (it->is_directory(kind)) {
+            indexTextureDir(child, index, depth - 1);
+            continue;
+        }
+        if (kind || !it->is_regular_file(kind) || !imageName(child)) {
+            continue;
+        }
+        auto& hits = index[child.filename().string()];
+        if (hits.size() < 8u) {
+            hits.push_back(child.string());
+        }
+    }
+}
+
+const char* packHint(const char* name) {
+    if (name == nullptr || name[0] == '\0' || name[1] != '/') {
+        return nullptr;
+    }
+    switch (name[0]) {
+    case 'b':
+        return "curtain";
+    case 'c':
+        return "ivy";
+    case 'd':
+        return "tree";
+    case 'e':
+        return "candle";
+    default:
+        return "sponza";
+    }
+}
+
+const std::string* pickTexture(const std::vector<std::string>& hits, const char* hint) {
+    const std::string* fallback = nullptr;
+    for (const std::string& path : hits) {
+        if (hint != nullptr && nameHas(path.c_str(), hint)) {
+            return &path;
+        }
+        if (fallback == nullptr && nameHas(path.c_str(), "texture")) {
+            fallback = &path;
+        }
+    }
+    if (fallback != nullptr) {
+        return fallback;
+    }
+    return hits.empty() ? nullptr : &hits.front();
+}
+
+void indexSceneTextures(std::unordered_map<std::string, std::vector<std::string>>& index) {
+    std::error_code ec;
+    const std::filesystem::path cwd = std::filesystem::current_path(ec);
+    if (!ec) {
+        indexTextureDir(cwd, index, 4);
+    }
+    char exe[512]{};
+    if (!platformExePath(exe, sizeof(exe))) {
+        return;
+    }
+    const std::filesystem::path project = std::filesystem::path(exe).parent_path().parent_path();
+    if (project.empty() || project == cwd || project == project.root_path()) {
+        return;
+    }
+    indexTextureDir(project, index, 4);
+}
+
+const char* textureLeaf(const char* name) {
+    if (name != nullptr && name[0] != '\0' && name[1] == '/') {
+        return name + 2;
+    }
+    return name;
+}
+
 bool loadTextures(SceneFrameImpl& s, Device& device) {
     uint32_t count = s.texNameCount == 0 ? 1u : s.texNameCount;
     if (count > 768u) {
@@ -258,29 +353,45 @@ bool loadTextures(SceneFrameImpl& s, Device& device) {
     if (!imageUploadUncompressed(s.textures[0], device, white, 1, 1)) {
         return false;
     }
+    std::unordered_map<std::string, std::vector<std::string>> indexed;
+    indexSceneTextures(indexed);
     for (uint32_t i = 1; i < count; ++i) {
         char path[512];
         const char* name = s.texNames[i].file;
+        const char* leaf = textureLeaf(name);
         path[0] = '\0';
-        auto tryRoot = [&](const char* root) {
-            if (root == nullptr || root[0] == '\0') {
+        auto tryRoot = [&](const char* root, const char* file) {
+            if (root == nullptr || root[0] == '\0' || file == nullptr || file[0] == '\0') {
                 return false;
             }
-            resolveTexturePath(path, sizeof(path), root, name);
+            resolveTexturePath(path, sizeof(path), root, file);
             return fileReadable(path);
         };
         char beside[512]{};
         char textures[540]{};
         bool found = false;
         if (s.bhopPath[0] != '\0' && pathParent(s.bhopPath, beside, sizeof(beside))) {
-            found = tryRoot(beside);
+            found = tryRoot(beside, name);
             if (!found) {
                 std::snprintf(textures, sizeof(textures), "%s/textures", beside);
-                found = tryRoot(textures);
+                found = tryRoot(textures, leaf);
+            }
+            if (!found) {
+                found = tryRoot(beside, leaf);
             }
         }
         if (!found) {
-            found = tryRoot("assets/textures");
+            found = tryRoot("assets/textures", leaf);
+        }
+        if (!found && leaf != nullptr) {
+            const auto hit = indexed.find(leaf);
+            if (hit != indexed.end()) {
+                const std::string* picked = pickTexture(hit->second, packHint(name));
+                if (picked != nullptr && picked->size() + 1 < sizeof(path)) {
+                    std::memcpy(path, picked->c_str(), picked->size() + 1);
+                    found = fileReadable(path);
+                }
+            }
         }
         if (!found) {
             uploadDummy(s.textures[i], device, name);
@@ -567,6 +678,14 @@ SceneFrame* sceneFrameCreate() {
     pushBlob(*scene, scene->world.cubes[0], scene->world.objects[1].x, scene->world.objects[1].y, scene->world.objects[1].z);
     pushBlob(*scene, scene->world.cubes[1], scene->world.objects[2].x, scene->world.objects[2].y, scene->world.objects[2].z);
     pushBlob(*scene, scene->world.cubes[2], scene->world.objects[3].x, scene->world.objects[3].y, scene->world.objects[3].z);
+    const float cubePos[3] = {scene->world.objects[1].x, scene->world.objects[1].y, scene->world.objects[1].z};
+    scene->propActor = sceneActorAdd(scene->actors, SceneActorKind::Prop, cubePos, "Cube");
+    scene->actors.selected = 0;
+    if (scene->propActor != kSceneActorNone && scene->instanceCount > 1) {
+        scene->propInstance = 1;
+        scene->propRadius = scene->cpuInstances[1].sphere[3];
+        scene->propPose = sceneActorXform(scene->actors, scene->propActor);
+    }
     for (uint32_t i = 0; i < scene->world.lightCount; ++i) {
         scene->world.lights[i].radius = 8.0f;
     }
@@ -718,6 +837,10 @@ bool sceneFrameLoadBhop(SceneFrame* scene, const char* path) {
     scene->fly.pitch = -0.15f;
     scene->fly.speed = std::max(4.0f, extent * 0.02f);
     placeActors(*scene);
+    scene->propInstance = 0xffffffffu;
+    scene->propActor = 0xff;
+    scene->propPhase = 0;
+    scene->propDirty = 0;
     scene->ready = false;
     return true;
 }
@@ -930,6 +1053,10 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
     scene->vertSrc = scene->ownedVert.data();
     scene->indexSrc = scene->ownedIndex.data();
     scene->instSrc = scene->ownedInst.data();
+    scene->propInstance = 0xffffffffu;
+    scene->propActor = 0xff;
+    scene->propPhase = 0;
+    scene->propDirty = 0;
     scene->meshletSrc = scene->ownedMesh.data();
     scene->materialSrc = scene->ownedMat.data();
     scene->texNames = scene->ownedTex.data();
@@ -1338,6 +1465,57 @@ void sceneFrameKick(SceneFrame* scene, Device& device) {
     radianceKick(rad, device);
 }
 
+bool syncPropInstance(SceneFrame* scene) {
+    if (scene->propActor == 0xff || scene->propInstance >= scene->instanceCount) {
+        return false;
+    }
+    if (scene->instSrc != scene->cpuInstances) {
+        return false;
+    }
+    const Xform pose = sceneActorXform(scene->actors, scene->propActor);
+    const Xform& prev = scene->propPose;
+    const float dp = (pose.pos[0] - prev.pos[0]) * (pose.pos[0] - prev.pos[0])
+        + (pose.pos[1] - prev.pos[1]) * (pose.pos[1] - prev.pos[1])
+        + (pose.pos[2] - prev.pos[2]) * (pose.pos[2] - prev.pos[2]);
+    const float de = (pose.euler[0] - prev.euler[0]) * (pose.euler[0] - prev.euler[0])
+        + (pose.euler[1] - prev.euler[1]) * (pose.euler[1] - prev.euler[1])
+        + (pose.euler[2] - prev.euler[2]) * (pose.euler[2] - prev.euler[2]);
+    const float ds = (pose.scale[0] - prev.scale[0]) * (pose.scale[0] - prev.scale[0])
+        + (pose.scale[1] - prev.scale[1]) * (pose.scale[1] - prev.scale[1])
+        + (pose.scale[2] - prev.scale[2]) * (pose.scale[2] - prev.scale[2]);
+    if (dp < 1.0e-8f && de < 1.0e-6f && ds < 1.0e-8f) {
+        return false;
+    }
+    float axisX[3]{};
+    float axisY[3]{};
+    float axisZ[3]{};
+    actorBasis(pose.euler, axisX, axisY, axisZ);
+    GpuInstance& cpu = scene->cpuInstances[scene->propInstance];
+    cpu.world[0] = axisX[0] * pose.scale[0];
+    cpu.world[4] = axisX[1] * pose.scale[0];
+    cpu.world[8] = axisX[2] * pose.scale[0];
+    cpu.world[1] = axisY[0] * pose.scale[1];
+    cpu.world[5] = axisY[1] * pose.scale[1];
+    cpu.world[9] = axisY[2] * pose.scale[1];
+    cpu.world[2] = axisZ[0] * pose.scale[2];
+    cpu.world[6] = axisZ[1] * pose.scale[2];
+    cpu.world[10] = axisZ[2] * pose.scale[2];
+    cpu.world[3] = pose.pos[0];
+    cpu.world[7] = pose.pos[1];
+    cpu.world[11] = pose.pos[2];
+    cpu.sphere[0] = pose.pos[0];
+    cpu.sphere[1] = pose.pos[1];
+    cpu.sphere[2] = pose.pos[2];
+    const float smax = std::max(pose.scale[0], std::max(pose.scale[1], pose.scale[2]));
+    cpu.sphere[3] = scene->propRadius * std::max(smax, 0.001f);
+    if (scene->instances.mapped != nullptr) {
+        auto* gpu = static_cast<GpuInstance*>(scene->instances.mapped);
+        gpu[scene->propInstance] = cpu;
+    }
+    scene->propPose = pose;
+    return true;
+}
+
 void sceneFrameRecord(
     SceneFrame* scene,
     VkCommandBuffer cmd,
@@ -1371,6 +1549,28 @@ void sceneFrameRecord(
         } else {
             scene->ready = false;
         }
+    }
+    const bool propMoved = syncPropInstance(scene);
+    if (propMoved && scene->instances.mapped != nullptr) {
+        const VkDeviceSize offset = sizeof(GpuInstance) * scene->propInstance;
+        gpuBufferFlush(scene->instances, device, offset, sizeof(GpuInstance));
+    }
+    if (propMoved) {
+        scene->propDirty = 1;
+    }
+    if (scene->propDirty != 0 && scene->radiance.geometry && scene->propPhase != 2) {
+        scene->propPhase = 1;
+        scene->radiance.pause = 0;
+        scene->propDirty = 0;
+    } else if (scene->propPhase == 1) {
+        scene->radiance.pause = 1;
+        scene->propPhase = 2;
+    } else if (scene->propPhase == 2) {
+        radianceDrop(scene->radiance, device);
+        scene->propPhase = 0;
+        scene->propDirty = 0;
+    } else {
+        scene->radiance.pause = 0;
     }
     if (!scene->ready) {
         sceneFrameReleaseGpu(scene, device);
@@ -1882,8 +2082,9 @@ void sceneFrameRecord(
         scene->instanceCount, culled.twoPhase, scene->showHiz, culled.draw, culled.lateDraw);
     const bool gtaoOn = scene->lightProfile < 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
     framePassShade(ctx, scene->shade, scene->sky, scene->vis.targets.vis, scene->vis.targets.depth, gtaoOn, scene->probeBuf.buffer, scene->probeBuf.size);
-    const bool worldRc = (scene->passMask & 128u) != 0u;
+    const bool worldRc = (scene->passMask & 128u) != 0u && (scene->passMask & 262144u) != 0u;
     framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax);
+    framePassShadeLate(ctx, scene->shade, scene->sky);
     const bool bloomOn = (knob.flags.passMask & 32u) != 0u && scene->hud.bloom > 0.001f;
     framePassTonemap(ctx, scene->tone, scene->shade.hdrA, scene->shade.hdrB, swap, frame, bloomOn);
     gizmoPassRecord(cmd, swap, frame, scene->gizmo, scene->actors);

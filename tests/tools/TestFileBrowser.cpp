@@ -9,8 +9,11 @@
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Slider.hpp"
 
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <string>
 
 using namespace burnhope;
 
@@ -152,6 +155,31 @@ TEST_CASE("file new folder and view menu") {
         }
     }
     CHECK(created);
+    filesShutdown(state);
+    fs::remove_all(dir, ec);
+}
+
+TEST_CASE("file listing keeps every file and folder") {
+    namespace fs = std::filesystem;
+    const fs::path dir = "/tmp/burnhope-uncapped";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    for (int i = 0; i < 70; ++i) {
+        fs::create_directory(dir / ("dir" + std::to_string(i)), ec);
+    }
+    for (int i = 0; i < 300; ++i) {
+        std::ofstream((dir / ("f" + std::to_string(i) + ".txt")).string()).close();
+    }
+    UiState state;
+    filesAttach(state);
+    filesRoot(state, dir.c_str());
+    const FileModel* model = filesModel(state);
+    CHECK(model != nullptr);
+    if (model != nullptr) {
+        CHECK(model->count() == 370);
+        CHECK(model->treeCount() == 71);
+    }
     filesShutdown(state);
     fs::remove_all(dir, ec);
 }

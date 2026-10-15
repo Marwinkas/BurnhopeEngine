@@ -112,6 +112,12 @@ struct SceneFrameImpl {
     uint32_t vertCount = 0;
     uint32_t indexCount = 0;
     uint32_t instanceCount = 0;
+    uint32_t propInstance = 0xffffffffu;
+    uint8_t propActor = 0xff;
+    uint8_t propPhase = 0;
+    uint8_t propDirty = 0;
+    float propRadius = 1.0f;
+    Xform propPose{};
     uint32_t visibleCount = 0;
     const GpuVertex* vertSrc = nullptr;
     const uint32_t* indexSrc = nullptr;
@@ -188,7 +194,7 @@ struct SceneFrameImpl {
     float ssrcThick = 0.03f;
     float ssrcCap = 0.6f;
     float ssrcSteps = 8.0f;
-    float rcRays = 8.0f;
+    float rcRays = 1.0f;
     float rcSpacing = 0.45f;
     float rcIntensity = 1.0f;
     float rcMax = 48.0f;
@@ -254,6 +260,7 @@ void framePassVis(
     const VisInstanceDraw& draw,
     const VisInstanceDraw& lateDraw);
 void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes);
+void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky);
 void framePassRadiance(const RenderContext& ctx, RadiancePass& rad, TrackedImage& hdrA, bool worldRc, float rays, float spacing, float intensity, float maxDist);
 void framePassTonemap(const RenderContext& ctx, TonemapPass& tone, TrackedImage& hdrA, TrackedImage& hdrB, const Swapchain& swap, const FrameContext& frame, bool bloomOn);
 

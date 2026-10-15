@@ -14,7 +14,7 @@ namespace burnhope {
 
 constexpr uint8_t kSceneActorNone = 0xff;
 
-enum class SceneActorKind : uint8_t { Sun = 1, Post = 2 };
+enum class SceneActorKind : uint8_t { Sun = 1, Post = 2, Prop = 3 };
 
 // Одна поза на всех. Солнце и пост её подключают, свою копию не заводят.
 struct Xform {
@@ -34,6 +34,7 @@ struct ActorName {
 
 struct SunObj {};
 struct PostObj {};
+struct PropObj {};
 
 static_assert(std::is_trivially_copyable_v<Xform>);
 static_assert(std::is_trivially_copyable_v<ActorKind>);
@@ -237,6 +238,8 @@ inline uint8_t sceneActorAdd(SceneActors& world, SceneActorKind kind, const floa
     ent.set<ActorName>(label);
     if (kind == SceneActorKind::Sun) {
         ent.add<SunObj>();
+    } else if (kind == SceneActorKind::Prop) {
+        ent.add<PropObj>();
     } else {
         ent.add<PostObj>();
     }

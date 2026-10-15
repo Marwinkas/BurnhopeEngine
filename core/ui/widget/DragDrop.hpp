@@ -1,0 +1,42 @@
+#pragma once
+
+#include "ui/State.hpp"
+
+namespace burnhope {
+
+inline constexpr uint8_t kUiDragHostCap = 4;
+inline constexpr uint32_t kUiDragNone = 0xFFFFFFFFu;
+
+struct UiDragDrop {
+    uint16_t host[kUiDragHostCap]{};
+    uint8_t hosts = 0;
+    uint16_t ghost = kUiNone;
+    uint16_t mark = kUiNone;
+    uint16_t srcHost = kUiNone;
+    uint32_t srcIndex = kUiDragNone;
+    float x = 0.0f;
+    float y = 0.0f;
+    uint8_t armed = 0;
+    uint8_t live = 0;
+    uint8_t (*canDrag)(void* user, uint16_t host, uint32_t index) = nullptr;
+    uint8_t (*canDrop)(void* user, uint16_t host, uint32_t index) = nullptr;
+    void (*onDrop)(void* user, uint16_t srcHost, uint32_t srcIndex, uint16_t dstHost, uint32_t dstIndex) = nullptr;
+    void (*badge)(void* user, char* dst, uint8_t cap) = nullptr;
+    void* user = nullptr;
+};
+
+struct UiDragDropConfig {
+    uint16_t host0 = kUiNone;
+    uint16_t host1 = kUiNone;
+    uint16_t host2 = kUiNone;
+    uint8_t (*canDrag)(void* user, uint16_t host, uint32_t index) = nullptr;
+    uint8_t (*canDrop)(void* user, uint16_t host, uint32_t index) = nullptr;
+    void (*onDrop)(void* user, uint16_t srcHost, uint32_t srcIndex, uint16_t dstHost, uint32_t dstIndex) = nullptr;
+    void (*badge)(void* user, char* dst, uint8_t cap) = nullptr;
+    void* user = nullptr;
+};
+
+void uiDragDropBind(UiState& s, const UiDragDropConfig& cfg);
+bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
+
+} // namespace burnhope

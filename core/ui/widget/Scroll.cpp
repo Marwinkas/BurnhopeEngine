@@ -303,6 +303,9 @@ bool uiScrollInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase,
         return true;
     }
     if (phase == kUiInWheel) {
+        if (in.ctrl != 0) {
+            return false;
+        }
         const uint16_t owner = scrollOwner(s, id);
         if (owner == kUiNone) {
             return false;

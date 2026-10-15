@@ -26,7 +26,7 @@ struct LightGpu {
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
-    if (gFrame.debugMode != 0u && gFrame.debugMode != 8u) {
+    if (gFrame.debugMode != 0u && gFrame.debugMode != 4u && gFrame.debugMode != 8u) {
         return;
     }
     uint vis;

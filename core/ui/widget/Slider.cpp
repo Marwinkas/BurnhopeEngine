@@ -93,7 +93,7 @@ uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float ma
         flex.width = 100.0f;
     }
     flex.heightMode = UiSize::Px;
-    flex.height = 18.0f;
+    flex.height = s.metrics.sliderH;
     flex.shrink = 0.0f;
     UiPaint body = paintToken(s.look, UiToken::Slider, s.look.radiusSm);
     body.a = 0.0f;
@@ -134,6 +134,20 @@ void uiBindSlider(UiState& s, const char* name, float value, UiValueChangeFn onC
     if (onChange != nullptr) {
         s.ent[id].set<UiValueHook>({onChange, user});
     }
+}
+
+void uiSliderSet(UiState& s, uint16_t id, float value) {
+    auto* range = id < s.count ? s.ent[id].try_get_mut<UiRange>() : nullptr;
+    if (range == nullptr) {
+        return;
+    }
+    if (value < range->min) {
+        value = range->min;
+    }
+    if (value > range->max) {
+        value = range->max;
+    }
+    range->value = value;
 }
 
 uint16_t uiNumber(UiState& s, uint16_t parent, float value, float minV, float maxV, float step, UiValueChangeFn onChange, void* user) {

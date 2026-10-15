@@ -4,6 +4,7 @@
 #include "ui/Hover.hpp"
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Curve.hpp"
+#include "ui/widget/DragDrop.hpp"
 #include "ui/widget/Docking.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Breadcrumbs.hpp"
@@ -199,6 +200,8 @@ void uiWidgetsInit(UiState& s) {
     uiInputAdd(s, uiDockInput);
     uiInputAdd(s, uiScrollInput);
     uiInputAdd(s, uiVirtualGridInput);
+    uiInputAdd(s, uiTreeInput);
+    uiInputAdd(s, uiDragDropInput);
     uiInputAdd(s, uiSliderInput);
 }
 

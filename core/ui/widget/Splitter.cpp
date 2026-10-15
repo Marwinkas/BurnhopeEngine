@@ -413,4 +413,22 @@ uint16_t uiSplitBar(UiState& s, uint16_t parent, bool verticalBar) {
     return bar;
 }
 
+void uiSplitterSetWidth(UiState& s, uint16_t split, float width) {
+    if (split >= s.count || !s.ent[split].is_alive() || !s.ent[split].has<UiSplitter>()) {
+        return;
+    }
+    const uint16_t pane = splitTarget(s, split);
+    if (pane == kUiNone || pane >= s.count) {
+        return;
+    }
+    auto* flex = s.ent[pane].try_get_mut<UiFlex>();
+    if (flex == nullptr) {
+        return;
+    }
+    writeSize(*flex, splitVertical(s, split), width);
+    s.layoutFrom = 0;
+    s.layoutDirty = true;
+    s.visualDirty = true;
+}
+
 } // namespace burnhope

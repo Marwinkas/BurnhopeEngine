@@ -26,5 +26,6 @@ UiBox splitGrip(const UiState& s, uint16_t split);
 void splitSync(UiState& s, uint16_t hot);
 bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
 uint16_t uiSplitBar(UiState& s, uint16_t parent, bool verticalBar);
+void uiSplitterSetWidth(UiState& s, uint16_t split, float width);
 
 } // namespace burnhope

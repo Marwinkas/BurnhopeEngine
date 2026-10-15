@@ -23,11 +23,11 @@ float noiseTex(float3 uv, uint res, uint base) {
 float cloudDensityAt(float3 world, float height01) {
     const float3 wind = float3(gAtm.cloudSpeedX, height01 * 8.0, gAtm.cloudSpeedZ) * gAtm.time;
     const float3 p = world + wind;
-    const float shape = 1.0 - noiseTex(p / 2200.0, 128u, 0u);
-    const float detail = noiseTex(p / 380.0 + 19.0, 32u, 128u * 128u * 128u);
-    const float base = shape - (1.0 - gAtm.cloudCoverage) * 0.55;
-    const float eroded = base - detail * gAtm.cloudDetail * (0.35 + height01);
-    return saturate(eroded) * gAtm.cloudDensity * 8.0;
+    const float worley = noiseTex(p / 1800.0, 128u, 0u);
+    const float shape = saturate((0.62 - worley) * 2.4);
+    const float detail = noiseTex(p / 320.0 + 19.0, 32u, 128u * 128u * 128u);
+    const float base = shape * gAtm.cloudCoverage * 1.6 - detail * gAtm.cloudDetail * (0.2 + height01);
+    return saturate(base) * gAtm.cloudDensity * 14.0;
 }
 
 float cloudLight(float3 world, float3 sun, float bottom, float top) {
@@ -100,8 +100,8 @@ void cloudMarch(uint3 dtid : SV_DispatchThreadID) {
         const float light = cloudLight(p, sun, gAtm.cloudBottom, gAtm.cloudTop);
         const float3 sunCol = atmSunIllum(gAtm, sun) * light * hg * 0.15;
         const float3 amb = float3(0.25, 0.35, 0.55) * (0.15 + u) * gAtm.nightAmbient * 4.0 + sunCol;
-        const float beer = exp(-dens * dt * 0.004);
-        lum += amb * dens * trans * dt * 0.002 * atmViewScale();
+        const float beer = exp(-dens * dt * 0.012);
+        lum += amb * dens * trans * dt * 0.008 * atmViewScale();
         trans *= beer;
     }
     gCloud[dtid.xy] = float4(lum, trans);
@@ -110,7 +110,10 @@ void cloudMarch(uint3 dtid : SV_DispatchThreadID) {
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void cloudUp(uint3 dtid : SV_DispatchThreadID) {
-    if (dtid.x >= gFrame.extent.x || dtid.y >= gFrame.extent.y || gFrame.debugMode != 0u) {
+    if (dtid.x >= gFrame.extent.x || dtid.y >= gFrame.extent.y) {
+        return;
+    }
+    if (gFrame.debugMode != 0u && gFrame.debugMode != 4u) {
         return;
     }
     const uint vis = gVis.Load(int3(dtid.xy, 0));

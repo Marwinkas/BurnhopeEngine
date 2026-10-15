@@ -45,6 +45,10 @@ void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, Tr
         GpuZone zone(ctx.profiler, ctx.cmd, "Lamps");
         shadePunctualRecord(ctx.cmd, ctx.extent, shade);
     }
+}
+
+void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky) {
+    const VkAccessFlags2 hdrUse = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
     if (ctx.post.flags.lightProfile >= 1u && (ctx.post.flags.passMask & 8192u) != 0u) {
         imageBarrier(ctx.cmd, shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, true);
         GpuZone zone(ctx.profiler, ctx.cmd, "Reflect");

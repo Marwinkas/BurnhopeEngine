@@ -49,6 +49,21 @@ float uiVirtualContentHeight(const UiState& s, uint16_t id) {
     return uiVirtualTotalHeight(s, id, pool->itemH, pool->count, cols);
 }
 
+inline uint16_t uiVirtualHitRow(const UiState& s, uint16_t host, uint32_t& index) {
+    index = 0xFFFFFFFFu;
+    if (host >= s.count || (s.hovered != host && !uiWithin(s, s.hovered, host))) {
+        return kUiNone;
+    }
+    for (uint16_t p = s.hovered; p != kUiNone && p < s.count && p != host; p = s.parentOf[p]) {
+        const UiVirtRow* row = s.ent[p].try_get<UiVirtRow>();
+        if (row != nullptr) {
+            index = row->index;
+            return p;
+        }
+    }
+    return kUiNone;
+}
+
 inline uint32_t uiVirtRowIndex(const UiState& s, uint16_t id) {
     if (id >= s.count) {
         return 0xFFFFFFFFu;
