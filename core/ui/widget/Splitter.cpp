@@ -184,7 +184,7 @@ void shareResize(UiState& s, uint16_t split, float x) {
         bar->position = UiPosition::Absolute;
         bar->posX = size;
         bar->widthMode = UiSize::Px;
-        bar->width = 6.0f;
+        bar->width = 2.0f;
     }
     if (host < s.count) {
         if (auto* grid = s.ent[host].try_get_mut<UiPropGrid>()) {
@@ -361,6 +361,9 @@ bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, 
         if (under == kUiNone) {
             return false;
         }
+        if (id < s.count && id != under && s.ent[id].has<UiFocusable>() && !s.ent[id].has<UiSplitter>()) {
+            return false;
+        }
         s.capture = under;
         splitBegin(s, under, in.pointer.x, in.pointer.y);
         return true;
@@ -393,11 +396,11 @@ uint16_t uiSplitBar(UiState& s, uint16_t parent, bool verticalBar) {
     grip.self = UiAlignSelf::Stretch;
     if (verticalBar) {
         grip.widthMode = UiSize::Px;
-        grip.width = 6.0f;
+        grip.width = 2.0f;
         grip.self = UiAlignSelf::Stretch;
     } else {
         grip.heightMode = UiSize::Px;
-        grip.height = 6.0f;
+        grip.height = 2.0f;
         grip.self = UiAlignSelf::Stretch;
     }
     UiPaint paint = paintToken(s.look, UiToken::Muted, 0.0f);

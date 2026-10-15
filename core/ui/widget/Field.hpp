@@ -73,6 +73,7 @@ void uiBindField(UiState& s, uint16_t id, const char* text, uint8_t filter, bool
 void uiBindFieldExtra(UiState& s, uint16_t id, const char* placeholder, uint8_t maxChars, bool required, bool readOnly, bool password);
 void uiFieldNotify(UiState& s, uint16_t id);
 uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChangeFn onChange, void* user, float width = 160.0f);
+void uiBindSearch(UiState& s, const char* name, UiTextChangeFn onChange, void* user);
 void uiSetFieldText(UiState& s, uint16_t id, const char* text);
 void uiClearField(UiState& s);
 void fieldSyncText(UiState& s, uint16_t id);

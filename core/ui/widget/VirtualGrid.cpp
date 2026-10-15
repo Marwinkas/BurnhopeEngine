@@ -128,6 +128,24 @@ uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& c
     return scroll;
 }
 
+void uiBindGrid(UiState& s, const char* name, const UiVirtualGridConfig& cfg) {
+    const uint16_t id = uiFindName(s, name);
+    auto* grid = id < s.count ? s.ent[id].try_get_mut<UiVirtualGrid>() : nullptr;
+    if (grid == nullptr) {
+        return;
+    }
+    const float itemW = cfg.itemW < 32.0f ? 84.0f : cfg.itemW;
+    const float itemH = cfg.itemH < 32.0f ? 96.0f : cfg.itemH;
+    grid->itemW = itemW;
+    grid->itemH = itemH;
+    grid->count = cfg.totalItems;
+    grid->bind = cfg.onBindCell;
+    grid->select = cfg.onSelect;
+    grid->activate = cfg.onActivate;
+    grid->user = cfg.user;
+    uiVirtualGridRefresh(s, id);
+}
+
 void uiVirtualGridRefresh(UiState& s, uint16_t id) {
     auto* grid = id < s.count ? s.ent[id].try_get_mut<UiVirtualGrid>() : nullptr;
     const UiScroll* scroll = grid != nullptr ? s.ent[id].try_get<UiScroll>() : nullptr;

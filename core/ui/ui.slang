@@ -288,7 +288,7 @@ float4 uiFs(VsOut i) : SV_Target0 {
         alpha = 1.0;
     } else if ((i.flags & 4u) != 0) {
         const float lum = dot(i.color.rgb, float3(0.30, 0.59, 0.11));
-        rgb = lum > 0.55 ? i.color.rgb : float3(0.94, 0.94, 0.92);
+        rgb = lum > 0.12 ? i.color.rgb : float3(0.94, 0.94, 0.92);
         const float2 p = i.local / max(i.size, float2(1.0, 1.0)) * 2.0 - 1.0;
         const uint icon = (uint)i.uv.x;
         if (icon == 1u) {

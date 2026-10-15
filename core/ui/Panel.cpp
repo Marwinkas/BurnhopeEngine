@@ -91,9 +91,10 @@ uint32_t uiEmitPanel(
         icon.posY = box.y + (box.h - side) * 0.5f;
         icon.sizeX = side;
         icon.sizeY = side;
-        icon.color[0] = s.look.text[0];
-        icon.color[1] = s.look.text[1];
-        icon.color[2] = s.look.text[2];
+        const bool glyph = paint->a <= 0.02f;
+        icon.color[0] = glyph ? paint->r : s.look.text[0];
+        icon.color[1] = glyph ? paint->g : s.look.text[1];
+        icon.color[2] = glyph ? paint->b : s.look.text[2];
         icon.color[3] = 1.0f;
         icon.texId = paint->icon;
         icon.flags = kUiFlagIcon;

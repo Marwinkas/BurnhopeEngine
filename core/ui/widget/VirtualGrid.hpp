@@ -32,6 +32,7 @@ struct UiVirtualGridConfig {
 };
 
 uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& cfg);
+void uiBindGrid(UiState& s, const char* name, const UiVirtualGridConfig& cfg);
 void uiVirtualGridRefresh(UiState& s, uint16_t gridId);
 void uiVirtualGridClearClick(UiState& s, uint16_t gridId);
 bool uiVirtualGridInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);

@@ -5,7 +5,6 @@
 #include "platform/Desktop.hpp"
 #include "ui/Panel.hpp"
 #include "ui/widget/Breadcrumbs.hpp"
-#include "ui/widget/Button.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Image.hpp"
 #include "ui/widget/Menu.hpp"
@@ -15,7 +14,6 @@
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/widget/VirtualGrid.hpp"
-#include "ui/widget/Image.hpp"
 
 #include "ui/Domain.hpp"
 #include "ui/widget/Detail.hpp"
@@ -24,6 +22,8 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+
+#include <spdlog/spdlog.h>
 
 namespace burnhope {
 namespace {
@@ -64,6 +64,7 @@ struct Browser : FileModel {
     float dragX = 0.0f;
     float dragY = 0.0f;
     uint16_t ghost = kUiNone;
+    uint16_t zoom = kUiNone;
     uint8_t folderSlot = 255;
     uint8_t fileSlot = 255;
     uint8_t mounted = 0;
@@ -258,9 +259,9 @@ void bindNode(void* user, uint16_t row, uint32_t index) {
             paint->shadow = 0.0f;
             paint->disabled = 0;
             paint->icon = b.treeOpen[index] != 0 ? 11 : 10;
-            paint->r = s->look.text[0];
-            paint->g = s->look.text[1];
-            paint->b = s->look.text[2];
+            paint->r = s->look.accent[0][0];
+            paint->g = s->look.accent[0][1];
+            paint->b = s->look.accent[0][2];
         }
     }
     bindFileIcon(*s, parts->icon, b.folderSlot, 4);
@@ -403,25 +404,6 @@ void applyKind(UiState& s, int kind) {
     refresh(s);
 }
 
-void filtAll(void* user) { applyKind(*static_cast<UiState*>(user), 0); }
-void filtDir(void* user) { applyKind(*static_cast<UiState*>(user), 1); }
-void filtImage(void* user) { applyKind(*static_cast<UiState*>(user), 2); }
-void filtText(void* user) { applyKind(*static_cast<UiState*>(user), 3); }
-void filtAudio(void* user) { applyKind(*static_cast<UiState*>(user), 4); }
-
-void onFilter(void* user, uint16_t id) {
-    UiState& s = *static_cast<UiState*>(user);
-    const UiBox& box = s.box[id];
-    const UiMenuItem items[] = {
-        {.label = "All", .onClick = filtAll},
-        {.label = "Folders", .onClick = filtDir},
-        {.label = "Images", .onClick = filtImage},
-        {.label = "Text", .onClick = filtText},
-        {.label = "Audio", .onClick = filtAudio},
-    };
-    uiMenuOpen(s, box.x, box.y + box.h, items, user, box.y);
-}
-
 void onSearchBtn(void* user, uint16_t) {
     UiState& s = *static_cast<UiState*>(user);
     Browser& b = book(s);
@@ -438,26 +420,6 @@ void onSearchBtn(void* user, uint16_t) {
     }
     s.layoutDirty = true;
     s.visualDirty = true;
-}
-
-uint16_t square(UiState& s, uint16_t parent, const char* label, UiClickFn fn) {
-    UiButtonConfig cfg{};
-    cfg.label = label;
-    cfg.width = 28.0f;
-    cfg.height = 28.0f;
-    cfg.onClick = fn;
-    cfg.user = &s;
-    return uiButton(s, parent, cfg);
-}
-
-uint16_t iconSquare(UiState& s, uint16_t parent, uint8_t icon, UiClickFn fn) {
-    const uint16_t id = square(s, parent, nullptr, fn);
-    if (id < s.count) {
-        if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
-            paint->icon = icon;
-        }
-    }
-    return id;
 }
 
 void refresh(UiState& s) {
@@ -502,178 +464,109 @@ void refresh(UiState& s) {
     s.visualDirty = true;
 }
 
-UiFlex rowH(float h) {
-    UiFlex row{};
-    row.direction = UiFlexDir::Row;
-    row.heightMode = UiSize::Px;
-    row.height = h;
-    row.shrink = 0.0f;
-    row.align = UiAlign::Center;
-    row.gap = 6.0f;
-    row.padL = 4.0f;
-    row.padR = 4.0f;
-    return row;
-}
-
-void cmdIcons(void* user) {
+void onViewPick(void* user, uint8_t index) {
     UiState& s = *static_cast<UiState*>(user);
-    book(s).listView = 0;
+    book(s).listView = index == 0 ? 0 : 1;
     refresh(s);
 }
 
-void cmdList(void* user) {
+void onSortPick(void* user, uint8_t index) {
     UiState& s = *static_cast<UiState*>(user);
-    book(s).listView = 1;
-    refresh(s);
-}
-
-void cmdSortAt(UiState& s, int key) {
     Browser& b = book(s);
-    b.sortKey = key;
+    b.sortKey = index;
     b.reload();
     refresh(s);
 }
 
-void cmdSortName(void* user) { cmdSortAt(*static_cast<UiState*>(user), 0); }
-void cmdSortSize(void* user) { cmdSortAt(*static_cast<UiState*>(user), 1); }
-void cmdSortType(void* user) { cmdSortAt(*static_cast<UiState*>(user), 2); }
-void cmdSortDate(void* user) { cmdSortAt(*static_cast<UiState*>(user), 3); }
-
-void cmdGroup(void* user) {
+void onGroupPick(void* user, uint8_t index) {
     UiState& s = *static_cast<UiState*>(user);
     Browser& b = book(s);
-    b.groupOn = b.groupOn == 0 ? 1 : 0;
+    b.groupOn = index == 0 ? 0 : 1;
     b.reload();
     refresh(s);
 }
+
+void onKindPick(void* user, uint8_t index) {
+    applyKind(*static_cast<UiState*>(user), static_cast<int>(index));
+}
+
+void onIconZoom(void* user, float value) {
+    UiState& s = *static_cast<UiState*>(user);
+    Browser& b = book(s);
+    if (b.look.icon == value) {
+        return;
+    }
+    b.look.icon = value;
+    refresh(s);
+}
+
+#ifndef BH_UI_FILES
+#define BH_UI_FILES "build-core/ui/files.uib"
+#endif
 
 void mountFiles(UiState& s) {
     if (uiFiles(s).fileFrame == kUiNone || book(s).mounted != 0) {
         return;
     }
     Browser& b = book(s);
+    if (uiImportBinFile(s, uiFiles(s).fileFrame, BH_UI_FILES) == kUiNone) {
+        spdlog::error("files: missing layout {}", BH_UI_FILES);
+        return;
+    }
     b.mounted = 1;
-    const uint16_t bar = uiPanel(s, uiFiles(s).fileFrame, rowH(32.0f), paintClear());
-    b.plus = square(s, bar, "+", onPlus);
-    b.back = square(s, bar, "<", onBack);
-    b.fwd = square(s, bar, ">", onFwd);
-    b.viewBtn = iconSquare(s, bar, 6, nullptr);
-    const uint16_t viewMenu = uiMakeMenu(s);
-    if (b.viewBtn != kUiNone && viewMenu != kUiNone) {
-        uiSetContextMenu(s, b.viewBtn, viewMenu);
-        uiMarkMenuBar(s, b.viewBtn);
-        (void)uiCommandAddTo(s, viewMenu, "Icons", cmdIcons, &s);
-        (void)uiCommandAddTo(s, viewMenu, "List", cmdList, &s);
-        (void)uiCommandAddTo(s, viewMenu, "Sort by name", cmdSortName, &s);
-        (void)uiCommandAddTo(s, viewMenu, "Sort by size", cmdSortSize, &s);
-        (void)uiCommandAddTo(s, viewMenu, "Sort by type", cmdSortType, &s);
-        (void)uiCommandAddTo(s, viewMenu, "Sort by date", cmdSortDate, &s);
-        (void)uiCommandAddTo(s, viewMenu, "Group by type", cmdGroup, &s);
+    auto take = [&](const char* name) { return uiFindName(s, name); };
+    b.plus = take("file.plus");
+    b.back = take("file.back");
+    b.fwd = take("file.fwd");
+    b.viewBtn = take("file.view");
+    b.sortName = take("file.sort");
+    b.optGroup = take("file.group");
+    b.zoom = take("file.zoom");
+    b.searchBtn = take("file.searchBtn");
+    b.searchBox = take("file.search");
+    b.filterBtn = take("file.filter");
+    b.crumbs = take("file.crumbs");
+    b.wTree = take("file.tree");
+    b.status = take("file.status");
+    b.ghost = take("file.ghost");
+    b.wRename = take("file.rename");
+    uiFiles(s).fileView = take("file.grid");
+    uiBindName(s, "file.plus", onPlus, &s);
+    uiBindName(s, "file.back", onBack, &s);
+    uiBindName(s, "file.fwd", onFwd, &s);
+    uiBindName(s, "file.searchBtn", onSearchBtn, &s);
+    uiBindChoice(s, "file.view", b.listView == 0 ? uint8_t{0} : uint8_t{1}, onViewPick, &s);
+    uiBindChoice(s, "file.sort", b.sortKey < 4 ? b.sortKey : uint8_t{0}, onSortPick, &s);
+    uiBindChoice(s, "file.group", b.groupOn == 0 ? uint8_t{0} : uint8_t{1}, onGroupPick, &s);
+    uiBindChoice(s, "file.filter", static_cast<uint8_t>(b.kind < 5 ? b.kind : 0), onKindPick, &s);
+    uiBindSlider(s, "file.zoom", b.look.icon, onIconZoom, &s);
+    uiBindTree(s, "file.tree", {
+        .totalNodes = static_cast<uint32_t>(b.treeN),
+        .onBindNode = bindNode,
+        .onToggleNode = onToggle,
+        .onSelectNode = onTree,
+        .user = &s,
+    });
+    uiBindCrumbs(s, "file.crumbs", onNav, &s);
+    uiBindSearch(s, "file.search", onSearch, &s);
+    uiBindGrid(s, "file.grid", {
+        .itemW = b.look.icon,
+        .itemH = b.look.icon,
+        .totalItems = static_cast<uint32_t>(b.count),
+        .onBindCell = bindCell,
+        .onSelect = onSelect,
+        .onActivate = onOpen,
+        .user = &s,
+    });
+    if (const uint16_t side = take("file.side"); side < s.count) {
+        if (auto* flex = s.ent[side].try_get_mut<UiFlex>()) {
+            flex->widthMode = UiSize::Px;
+            flex->width = b.look.tree;
+            flex->shrink = 0.0f;
+        }
     }
-    UiFlex spacer{};
-    spacer.grow = 1.0f;
-    spacer.shrink = 1.0f;
-    spacer.heightMode = UiSize::Px;
-    spacer.height = 28.0f;
-    (void)uiPanel(s, bar, spacer, paintClear());
-    UiFlex body{};
-    body.direction = UiFlexDir::Row;
-    body.grow = 1.0f;
-    body.shrink = 1.0f;
-    body.minH = 80.0f;
-    const uint16_t mid = uiPanel(s, uiFiles(s).fileFrame, body, paintClear());
-    UiFlex side{};
-    side.widthMode = UiSize::Px;
-    side.width = b.look.tree;
-    side.heightMode = UiSize::Percent;
-    side.height = 100.0f;
-    side.shrink = 0.0f;
-    const uint16_t pane = uiPanel(s, mid, side, paintToken(s.look, UiToken::Side, 0.0f));
-    UiTreeConfig tree{};
-    tree.totalNodes = static_cast<uint32_t>(b.treeN);
-    tree.onBindNode = bindNode;
-    tree.onToggleNode = onToggle;
-    tree.onSelectNode = onTree;
-    tree.user = &s;
-    b.wTree = uiTreeView(s, pane, tree);
-    (void)uiSplitBar(s, mid, true);
-    UiFlex gridHost{};
-    gridHost.grow = 1.0f;
-    gridHost.shrink = 1.0f;
-    gridHost.direction = UiFlexDir::Column;
-    const uint16_t right = uiPanel(s, mid, gridHost, paintClear());
-    UiFlex crumbRow = rowH(30.0f);
-    crumbRow.shrink = 0.0f;
-    const uint16_t crumbBar = uiPanel(s, right, crumbRow, paintClear());
-    b.crumbs = uiBreadcrumbs(s, crumbBar, onNav, &s);
-    UiFlex crumbSpacer{};
-    crumbSpacer.grow = 1.0f;
-    crumbSpacer.shrink = 1.0f;
-    crumbSpacer.heightMode = UiSize::Px;
-    crumbSpacer.height = 28.0f;
-    (void)uiPanel(s, crumbBar, crumbSpacer, paintClear());
-    b.searchBox = uiSearchField(s, crumbBar, "search", onSearch, &s, 180.0f);
-    UiButtonConfig filterCfg{};
-    filterCfg.label = "Filter";
-    filterCfg.width = 72.0f;
-    filterCfg.height = 28.0f;
-    filterCfg.onClick = onFilter;
-    filterCfg.user = &s;
-    b.filterBtn = uiButton(s, crumbBar, filterCfg);
-    b.searchBtn = iconSquare(s, crumbBar, 7, onSearchBtn);
-    if (b.searchBox != kUiNone) {
-        uiShow(s, b.searchBox, false);
-    }
-    if (b.filterBtn != kUiNone) {
-        uiShow(s, b.filterBtn, false);
-    }
-    UiFlex gridPane{};
-    gridPane.grow = 1.0f;
-    gridPane.shrink = 1.0f;
-    gridPane.minH = 64.0f;
-    const uint16_t gridPaneId = uiPanel(s, right, gridPane, paintClear());
-    UiVirtualGridConfig cfg{};
-    cfg.itemW = b.look.icon;
-    cfg.itemH = b.look.icon;
-    cfg.totalItems = static_cast<uint32_t>(b.count);
-    cfg.onBindCell = bindCell;
-    cfg.onSelect = onSelect;
-    cfg.onActivate = onOpen;
-    cfg.user = &s;
-    uiFiles(s).fileView = uiVirtualGrid(s, gridPaneId, cfg);
-    (void)uiRubberband(s, uiFiles(s).fileView, onBand, &s, onBandBegin);
-    const uint16_t foot = uiPanel(s, uiFiles(s).fileFrame, rowH(24.0f), paintClear());
-    UiFlex label{};
-    label.grow = 1.0f;
-    label.shrink = 1.0f;
-    label.heightMode = UiSize::Px;
-    label.height = 18.0f;
-    b.status = uiPanel(s, foot, label, paintLabel(s.look));
-    uiText(s, b.status, "");
-    UiFlex ghostFlex = px(36.0f, 22.0f);
-    ghostFlex.position = UiPosition::Absolute;
-    UiPaint ghostPaint = paintToken(s.look, UiToken::Menu, s.look.radiusSm);
-    ghostPaint.a = 0.86f;
-    b.ghost = uiPanel(s, 0, ghostFlex, ghostPaint);
-    if (b.ghost != kUiNone) {
-        s.ent[b.ghost].set<UiPopup>({});
-        uiText(s, b.ghost, "0");
-        uiShow(s, b.ghost, false);
-    }
-    UiFlex rename{};
-    rename.position = UiPosition::Absolute;
-    rename.widthMode = UiSize::Px;
-    rename.heightMode = UiSize::Px;
-    rename.width = 160.0f;
-    rename.height = 24.0f;
-    rename.shrink = 0.0f;
-    b.wRename = uiPanel(s, 0, rename, paintToken(s.look, UiToken::Field, 4.0f));
-    if (b.wRename != kUiNone) {
-        s.ent[b.wRename].set<UiField>({});
-        s.ent[b.wRename].add<UiFocusable>();
-        s.ent[b.wRename].add<UiTextInput>();
-        s.ent[b.wRename].set<UiPopup>({});
-        uiShow(s, b.wRename, false);
+    if (uiFiles(s).fileView != kUiNone) {
+        (void)uiRubberband(s, uiFiles(s).fileView, onBand, &s, onBandBegin);
     }
     refresh(s);
 }
@@ -833,6 +726,22 @@ bool filesKeys(UiState& s, const InputFrame& in) {
         }
     }
     const bool press = (in.pointer.pressed & kPointerLeft) != 0;
+    if (press) {
+        bool inRow = false;
+        bool widget = false;
+        for (uint16_t p = s.hovered; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+            if (s.ent[p].try_get<UiVirtRow>() != nullptr) {
+                inRow = true;
+            }
+            if (s.ent[p].try_get<UiAction>() != nullptr || s.ent[p].has<UiMenuBar>() || s.ent[p].try_get<UiRange>() != nullptr
+                || s.ent[p].try_get<UiField>() != nullptr) {
+                widget = true;
+            }
+        }
+        if (widget && !inRow) {
+            return false;
+        }
+    }
     const bool down = (in.pointer.down & kPointerLeft) != 0;
     const bool release = (in.pointer.released & kPointerLeft) != 0;
     if (press) {

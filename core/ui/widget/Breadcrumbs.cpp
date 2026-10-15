@@ -92,6 +92,16 @@ uint16_t uiBreadcrumbs(UiState& s, uint16_t parent, void (*nav)(void* user, cons
     return id;
 }
 
+void uiBindCrumbs(UiState& s, const char* name, void (*nav)(void* user, const char* path), void* user) {
+    const uint16_t id = uiFindName(s, name);
+    auto* crumbs = id < s.count ? s.ent[id].try_get_mut<UiCrumbs>() : nullptr;
+    if (crumbs == nullptr) {
+        return;
+    }
+    crumbs->nav = nav;
+    crumbs->user = user;
+}
+
 void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* path, const char* root) {
     auto* crumbs = id < s.count ? s.ent[id].try_get_mut<UiCrumbs>() : nullptr;
     if (crumbs == nullptr) {

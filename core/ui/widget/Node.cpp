@@ -766,13 +766,13 @@ void uiClearAdd(UiState& s, UiClearFn fn) {
 }
 
 void uiRegisterSpawnHook(UiState& s, uint8_t role, UiSpawnFn fn) {
-    if (role < 16) {
+    if (role < kUiBinRoleCap) {
         s.onSpawn[role] = fn;
     }
 }
 
 void uiRegisterRoleFinish(UiState& s, uint8_t role, UiRoleFinishFn fn) {
-    if (role < 16) {
+    if (role < kUiBinRoleCap) {
         s.roleFinish[role] = fn;
     }
 }

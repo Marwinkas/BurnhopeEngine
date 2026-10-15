@@ -118,6 +118,24 @@ uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float ma
     return id;
 }
 
+void uiBindSlider(UiState& s, const char* name, float value, UiValueChangeFn onChange, void* user) {
+    const uint16_t id = uiFindName(s, name);
+    auto* range = id < s.count ? s.ent[id].try_get_mut<UiRange>() : nullptr;
+    if (range == nullptr) {
+        return;
+    }
+    if (value < range->min) {
+        value = range->min;
+    }
+    if (value > range->max) {
+        value = range->max;
+    }
+    range->value = value;
+    if (onChange != nullptr) {
+        s.ent[id].set<UiValueHook>({onChange, user});
+    }
+}
+
 uint16_t uiNumber(UiState& s, uint16_t parent, float value, float minV, float maxV, float step, UiValueChangeFn onChange, void* user) {
     if (value < minV) {
         value = minV;

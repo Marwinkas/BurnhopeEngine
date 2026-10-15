@@ -39,9 +39,9 @@ void onTree(void* user, uint16_t id) {
             paint->borderW = 0.0f;
             paint->shadow = 0.0f;
             paint->icon = tree->open != 0 ? 11 : 10;
-            paint->r = s->look.text[0];
-            paint->g = s->look.text[1];
-            paint->b = s->look.text[2];
+            paint->r = s->look.accent[0][0];
+            paint->g = s->look.accent[0][1];
+            paint->b = s->look.accent[0][2];
         }
         break;
     }
@@ -87,9 +87,9 @@ uint16_t uiTreeRow(UiState& s, uint16_t parent, const char* text) {
     markPaint.borderW = 0.0f;
     markPaint.shadow = 0.0f;
     markPaint.icon = 10;
-    markPaint.r = s.look.text[0];
-    markPaint.g = s.look.text[1];
-    markPaint.b = s.look.text[2];
+    markPaint.r = s.look.accent[0][0];
+    markPaint.g = s.look.accent[0][1];
+    markPaint.b = s.look.accent[0][2];
     const uint16_t mark = uiPanel(s, head, chev, markPaint);
     if (mark < s.count) {
         s.ent[mark].add<UiNoHit>();
@@ -168,10 +168,11 @@ void propPlace(UiState& s, uint16_t id, void*) {
     }
     const float h = s.box[id].h > 4.0f ? s.box[id].h : flex->height;
     flex->position = UiPosition::Absolute;
+    flex->self = UiAlignSelf::Auto;
     flex->posX = grid->labelW;
     flex->posY = 0.0f;
     flex->widthMode = UiSize::Px;
-    flex->width = 6.0f;
+    flex->width = 2.0f;
     flex->heightMode = UiSize::Px;
     flex->height = h;
     flex->shrink = 0.0f;
@@ -201,10 +202,11 @@ uint16_t uiPropHost(UiState& s, uint16_t parent) {
     if (grip < s.count) {
         if (auto* flex = s.ent[grip].try_get_mut<UiFlex>()) {
             flex->position = UiPosition::Absolute;
+            flex->self = UiAlignSelf::Auto;
             flex->posX = 140.0f;
             flex->posY = 0.0f;
             flex->widthMode = UiSize::Px;
-            flex->width = 6.0f;
+            flex->width = 2.0f;
             flex->heightMode = UiSize::Px;
             flex->height = 8.0f;
             flex->shrink = 0.0f;

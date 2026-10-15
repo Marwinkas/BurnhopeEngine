@@ -143,11 +143,12 @@ struct UiState {
     float dpi = 1;
     uint8_t clipOn = 0;
     UiBox clipBox{};
-    UiCustomBinLoader binHooks[16]{};
+    UiCustomBinLoader binHooks[kUiBinRoleCap]{};
     UiClearFn clearFn[4]{};
     uint8_t clearN = 0;
-    UiSpawnFn onSpawn[16]{};
-    UiRoleFinishFn roleFinish[16]{};
+    UiSpawnFn onSpawn[kUiBinRoleCap]{};
+    UiRoleFinishFn roleFinish[kUiBinRoleCap]{};
+    UiImportBag importBag{};
 
     UiState();
     ~UiState();

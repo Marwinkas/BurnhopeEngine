@@ -463,19 +463,15 @@ uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t m
     flex.widthMode = UiSize::Percent;
     flex.width = 100.0f;
     flex.heightMode = UiSize::Px;
-    flex.height = 24.0f;
+    flex.height = 30.0f;
     flex.grow = 1.0f;
     flex.shrink = 1.0f;
     flex.align = UiAlign::Center;
-    flex.padL = 8.0f;
-    flex.padR = 6.0f;
+    flex.padL = 10.0f;
+    flex.padR = 8.0f;
     flex.gap = 6.0f;
-    UiPaint body = paintToken(s.look, UiToken::Field, s.look.radiusSm);
-    body.borderW = 1.0f;
-    body.br = body.r + 0.18f > 1.0f ? 1.0f : body.r + 0.18f;
-    body.bg = body.g + 0.18f > 1.0f ? 1.0f : body.g + 0.18f;
-    body.bb = body.b + 0.18f > 1.0f ? 1.0f : body.b + 0.18f;
-    body.shadow = 3.0f;
+    UiPaint body = paintToken(s.look, UiToken::Button, s.look.radiusSm);
+    paintRaised(body);
     const uint16_t id = uiPanel(s, parent, flex, body);
     if (id == kUiNone) {
         return id;
@@ -515,6 +511,115 @@ uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t m
         uiMarkMenuBar(s, id);
     }
     return id;
+}
+
+namespace {
+
+void choicePick(void* user, uint8_t index) {
+    auto& s = *static_cast<UiState*>(user);
+    const uint16_t menu = uiMenuMetrics(s).opened;
+    if (menu == kUiNone) {
+        return;
+    }
+    for (uint16_t id = 0; id < s.count; ++id) {
+        auto* choice = s.ent[id].try_get_mut<UiChoice>();
+        if (choice == nullptr || choice->menu != menu) {
+            continue;
+        }
+        choice->index = index;
+        uint8_t seen = 0;
+        for (uint16_t child = 0; child < s.count; ++child) {
+            if (s.parentOf[child] != menu) {
+                continue;
+            }
+            if (seen == index) {
+                const UiText* text = s.ent[child].try_get<UiText>();
+                if (text != nullptr && choice->caption < s.count) {
+                    uiText(s, choice->caption, text->bytes);
+                }
+                break;
+            }
+            ++seen;
+        }
+        if (choice->onPick != nullptr) {
+            choice->onPick(choice->user, index);
+        }
+        return;
+    }
+}
+
+void pick0(void* user) { choicePick(user, 0); }
+void pick1(void* user) { choicePick(user, 1); }
+void pick2(void* user) { choicePick(user, 2); }
+void pick3(void* user) { choicePick(user, 3); }
+void pick4(void* user) { choicePick(user, 4); }
+void pick5(void* user) { choicePick(user, 5); }
+void pick6(void* user) { choicePick(user, 6); }
+void pick7(void* user) { choicePick(user, 7); }
+
+} // namespace
+
+uint16_t uiChoice(UiState& s, uint16_t parent, const UiChoiceConfig& cfg) {
+    if (cfg.labels == nullptr || cfg.count == 0 || cfg.count > 8) {
+        return kUiNone;
+    }
+    const uint8_t selected = cfg.selected < cfg.count ? cfg.selected : 0;
+    const uint16_t menu = uiMakeMenu(s);
+    if (menu == kUiNone) {
+        return kUiNone;
+    }
+    using Pick = void (*)(void*);
+    const Pick picks[8] = {pick0, pick1, pick2, pick3, pick4, pick5, pick6, pick7};
+    for (uint8_t i = 0; i < cfg.count; ++i) {
+        (void)uiCommandAddTo(s, menu, cfg.labels[i] != nullptr ? cfg.labels[i] : "", picks[i], &s);
+    }
+    const uint16_t id = uiMenuButton(s, parent, cfg.labels[selected], menu);
+    if (id == kUiNone) {
+        return id;
+    }
+    if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
+        flex->widthMode = UiSize::Px;
+        flex->width = cfg.width > 48.0f ? cfg.width : 140.0f;
+        flex->grow = 0.0f;
+        flex->shrink = 0.0f;
+    }
+    uint16_t caption = kUiNone;
+    for (uint16_t child = 0; child < s.count; ++child) {
+        if (s.parentOf[child] == id && s.ent[child].try_get<UiText>() != nullptr) {
+            caption = child;
+            break;
+        }
+    }
+    s.ent[id].set<UiChoice>({menu, caption, selected, cfg.onPick, cfg.user});
+    return id;
+}
+
+void uiBindChoice(UiState& s, const char* name, uint8_t selected, void (*onPick)(void* user, uint8_t index), void* user) {
+    const uint16_t id = uiFindName(s, name);
+    auto* choice = id < s.count ? s.ent[id].try_get_mut<UiChoice>() : nullptr;
+    if (choice == nullptr) {
+        return;
+    }
+    choice->onPick = onPick;
+    choice->user = user;
+    if (selected == choice->index) {
+        return;
+    }
+    choice->index = selected;
+    uint8_t seen = 0;
+    for (uint16_t child = 0; child < s.count; ++child) {
+        if (s.parentOf[child] != choice->menu) {
+            continue;
+        }
+        if (seen == selected) {
+            const UiText* text = s.ent[child].try_get<UiText>();
+            if (text != nullptr && choice->caption < s.count) {
+                uiText(s, choice->caption, text->bytes);
+            }
+            return;
+        }
+        ++seen;
+    }
 }
 
 } // namespace burnhope

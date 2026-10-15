@@ -22,8 +22,18 @@ inline constexpr uint8_t kBinSlotCalendar = 11;
 inline constexpr uint8_t kBinSlotColor = 12;
 inline constexpr uint8_t kBinSlotMenu = 13;
 inline constexpr uint8_t kBinSlotImage = 14;
+inline constexpr uint8_t kBinSlotSplit = 15;
+inline constexpr uint8_t kBinSlotTree = 16;
+inline constexpr uint8_t kBinSlotGrid = 17;
+inline constexpr uint8_t kBinSlotCrumbs = 18;
+inline constexpr uint8_t kBinSlotChoice = 19;
+inline constexpr uint8_t kBinSlotSearch = 20;
 
-inline constexpr uint8_t kUiBinRoleCap = 16;
+inline constexpr uint8_t kUiBinRoleCap = 32;
+inline constexpr uint16_t kBinParentRoot = 0xFFFE;
+
+inline constexpr uint8_t kBinMarkPopup = 1 << 0;
+inline constexpr uint8_t kBinMarkToken = 1 << 1;
 inline constexpr uint32_t kUiMaxBinFileSize = 8u * 1024u * 1024u;
 
 inline constexpr uint8_t kUiNameCap = 32;
@@ -124,11 +134,21 @@ struct BinNode {
     uint8_t textEllipsis = 0;
     uint8_t textValign = 0;
     uint8_t textDeco = 0;
-    uint8_t pad0 = 0;
-    uint8_t pad1 = 0;
+    uint8_t marks = 0;
+    uint8_t token = 0;
     uint8_t pad2 = 0;
 };
 #pragma pack(pop)
+
+inline constexpr uint8_t kUiImportItemCap = 8;
+inline constexpr uint8_t kUiImportItemLen = 48;
+
+struct UiImportBag {
+    char item[kUiImportItemCap][kUiImportItemLen]{};
+    uint8_t count = 0;
+    char hint[kUiHintCap]{};
+    uint8_t hintLen = 0;
+};
 
 struct UiState;
 

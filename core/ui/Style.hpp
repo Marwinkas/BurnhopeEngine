@@ -183,6 +183,23 @@ inline UiPaint paintLabel(const UiLook& look) noexcept {
     return out;
 }
 
+inline void paintRaised(UiPaint& paint) noexcept {
+    paint.borderW = 2.0f;
+    paint.shadow = 7.0f;
+    constexpr float lift = 0.34f;
+    paint.br = paint.r + lift > 1.0f ? 1.0f : paint.r + lift;
+    paint.bg = paint.g + lift > 1.0f ? 1.0f : paint.g + lift;
+    paint.bb = paint.b + lift > 1.0f ? 1.0f : paint.b + lift;
+}
+
+inline void paintSunken(UiPaint& paint) noexcept {
+    paint.borderW = 2.0f;
+    paint.shadow = 3.0f;
+    paint.br = paint.r * 0.35f;
+    paint.bg = paint.g * 0.35f;
+    paint.bb = paint.b * 0.35f;
+}
+
 inline UiLook uiLookInk() noexcept {
     UiLook look{};
     const float paper[3]{0.11f, 0.11f, 0.12f};

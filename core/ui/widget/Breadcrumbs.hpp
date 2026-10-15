@@ -18,6 +18,7 @@ struct UiCrumbs {
 };
 
 uint16_t uiBreadcrumbs(UiState& s, uint16_t parent, void (*nav)(void* user, const char* path), void* user);
+void uiBindCrumbs(UiState& s, const char* name, void (*nav)(void* user, const char* path), void* user);
 void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* path, const char* root = nullptr);
 
 } // namespace burnhope

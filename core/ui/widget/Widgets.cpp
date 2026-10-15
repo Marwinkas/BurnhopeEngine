@@ -6,11 +6,13 @@
 #include "ui/widget/Curve.hpp"
 #include "ui/widget/Docking.hpp"
 #include "ui/widget/Field.hpp"
+#include "ui/widget/Breadcrumbs.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Rubberband.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Splitter.hpp"
+#include "ui/widget/TreeView.hpp"
 #include "ui/widget/VirtualGrid.hpp"
 #include "ui/LayoutBridge.hpp"
 
@@ -30,6 +32,11 @@ void hostText(UiState& s, uint16_t id, UiTextAlign align, UiTextEllipsis ellipsi
 
 void adornButton(UiState& s, uint16_t id) {
     hostText(s, id, UiTextAlign::Center, UiTextEllipsis::End);
+    uiHover(s, id);
+    s.ent[id].add<UiFocusable>();
+}
+
+void adornSlider(UiState& s, uint16_t id) {
     uiHover(s, id);
     s.ent[id].add<UiFocusable>();
 }
@@ -114,10 +121,62 @@ void finishRange(UiState& s, uint16_t id, const BinNode* spec, const char*, cons
     s.ent[id].set<UiRange>({spec->value, spec->minV, spec->maxV});
 }
 
+uint16_t loadSplit(UiState& s, uint16_t parent, const BinNode& node, const char*, void*) {
+    const bool vertical = node.direction != static_cast<uint8_t>(UiFlexDir::Row);
+    return uiSplitBar(s, parent, vertical);
+}
+
+uint16_t loadTree(UiState& s, uint16_t parent, const BinNode&, const char*, void*) {
+    return uiTreeView(s, parent, {});
+}
+
+uint16_t loadGrid(UiState& s, uint16_t parent, const BinNode& node, const char*, void*) {
+    const float itemW = node.width > 1.0f ? node.width : 84.0f;
+    const float itemH = node.height > 1.0f ? node.height : itemW;
+    return uiVirtualGrid(s, parent, {.itemW = itemW, .itemH = itemH});
+}
+
+uint16_t loadCrumbs(UiState& s, uint16_t parent, const BinNode&, const char*, void*) {
+    return uiBreadcrumbs(s, parent, nullptr, nullptr);
+}
+
+uint16_t loadChoice(UiState& s, uint16_t parent, const BinNode& node, const char*, void*) {
+    if (s.importBag.count == 0) {
+        return kUiNone;
+    }
+    const char* labels[kUiImportItemCap]{};
+    for (uint8_t i = 0; i < s.importBag.count; ++i) {
+        labels[i] = s.importBag.item[i];
+    }
+    uint8_t selected = static_cast<uint8_t>(node.value);
+    if (selected >= s.importBag.count) {
+        selected = 0;
+    }
+    return uiChoice(s, parent, {
+        .labels = labels,
+        .count = s.importBag.count,
+        .selected = selected,
+        .width = node.width > 48.0f ? node.width : 140.0f,
+    });
+}
+
+uint16_t loadSearch(UiState& s, uint16_t parent, const BinNode& node, const char*, void*) {
+    const float width = node.width > 1.0f ? node.width : 180.0f;
+    const char* hint = s.importBag.hintLen > 0 ? s.importBag.hint : nullptr;
+    return uiSearchField(s, parent, hint, nullptr, nullptr, width);
+}
+
 } // namespace
 
 void uiWidgetsInit(UiState& s) {
     uiRegisterSpawnHook(s, kBinSlotButton, adornButton);
+    uiRegisterSpawnHook(s, kBinSlotSlider, adornSlider);
+    uiRegisterCustomBinNode(s, kBinSlotSplit, loadSplit, nullptr);
+    uiRegisterCustomBinNode(s, kBinSlotTree, loadTree, nullptr);
+    uiRegisterCustomBinNode(s, kBinSlotGrid, loadGrid, nullptr);
+    uiRegisterCustomBinNode(s, kBinSlotCrumbs, loadCrumbs, nullptr);
+    uiRegisterCustomBinNode(s, kBinSlotChoice, loadChoice, nullptr);
+    uiRegisterCustomBinNode(s, kBinSlotSearch, loadSearch, nullptr);
     uiRegisterSpawnHook(s, kBinSlotClose, adornClose);
     uiRegisterSpawnHook(s, kBinSlotField, adornField);
     uiRegisterSpawnHook(s, kBinSlotCheck, adornCheck);

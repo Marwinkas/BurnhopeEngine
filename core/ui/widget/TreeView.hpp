@@ -31,6 +31,7 @@ struct UiTreeConfig {
 };
 
 uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg);
+void uiBindTree(UiState& s, const char* name, const UiTreeConfig& cfg);
 void uiTreeViewRefresh(UiState& s, uint16_t treeId);
 void uiRowIndent(UiState& s, uint16_t id, float pad);
 uint16_t uiTreeRow(UiState& s, uint16_t parent, const char* text);

@@ -47,29 +47,31 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
     if (slot == kUiNone) {
         return slot;
     }
-    auto bareIcon = [&](float side, uint8_t iconId) {
+    auto bareIcon = [&](float side, float tall, uint8_t iconId, bool accent) {
         UiFlex box{};
         box.widthMode = UiSize::Px;
         box.width = side;
         box.heightMode = UiSize::Px;
-        box.height = side;
+        box.height = tall;
         box.shrink = 0.0f;
         UiPaint paint{};
         paint.a = 0.0f;
         paint.borderW = 0.0f;
         paint.shadow = 0.0f;
         paint.icon = iconId;
-        paint.r = s.look.text[0];
-        paint.g = s.look.text[1];
-        paint.b = s.look.text[2];
+        const float* rgb = accent ? s.look.accent[0] : s.look.text;
+        paint.r = rgb[0];
+        paint.g = rgb[1];
+        paint.b = rgb[2];
         return spawn(s, slot, box, paint);
     };
-    const uint16_t chevron = bareIcon(16.0f, 10);
+    const float rowH = itemH > 6.0f ? itemH - 2.0f : itemH;
+    const uint16_t chevron = bareIcon(22.0f, rowH, 10, true);
     if (chevron < s.count) {
         s.ent[chevron].add<UiFocusable>();
         uiBind(s, chevron, onRow, &s);
     }
-    const uint16_t icon = bareIcon(16.0f, 4);
+    const uint16_t icon = bareIcon(16.0f, 16.0f, 4, false);
     UiFlex caption{};
     caption.grow = 1.0f;
     caption.shrink = 1.0f;
@@ -125,6 +127,20 @@ uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg) {
     s.ent[scroll].set<UiLayoutRefresh>({treeOnLayout, nullptr});
     uiTreeViewRefresh(s, scroll);
     return scroll;
+}
+
+void uiBindTree(UiState& s, const char* name, const UiTreeConfig& cfg) {
+    const uint16_t id = uiFindName(s, name);
+    auto* tree = id < s.count ? s.ent[id].try_get_mut<UiTreeView>() : nullptr;
+    if (tree == nullptr) {
+        return;
+    }
+    tree->count = cfg.totalNodes;
+    tree->bind = cfg.onBindNode;
+    tree->toggle = cfg.onToggleNode;
+    tree->select = cfg.onSelectNode;
+    tree->user = cfg.user;
+    uiTreeViewRefresh(s, id);
 }
 
 void uiTreeViewRefresh(UiState& s, uint16_t id) {

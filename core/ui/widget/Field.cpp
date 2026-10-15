@@ -356,7 +356,9 @@ uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChan
         flex.widthMode = UiSize::Px;
         flex.width = width > 1.0f ? width : 160.0f;
     }
-    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Field, s.look.radiusSm));
+    UiPaint face = paintToken(s.look, UiToken::Field, s.look.radiusSm);
+    paintSunken(face);
+    const uint16_t id = uiPanel(s, parent, flex, face);
     if (id == kUiNone) {
         return id;
     }
@@ -373,6 +375,14 @@ uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChan
     return id;
 }
 
+void uiBindSearch(UiState& s, const char* name, UiTextChangeFn onChange, void* user) {
+    const uint16_t id = uiFindName(s, name);
+    if (id >= s.count || onChange == nullptr) {
+        return;
+    }
+    s.ent[id].set<UiTextHook>({onChange, user});
+}
+
 uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, bool clear) {
     UiFlex flex{};
     flex.widthMode = UiSize::Percent;
@@ -380,7 +390,9 @@ uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, 
     flex.heightMode = UiSize::Px;
     flex.height = 36.0f;
     flex.shrink = 0.0f;
-    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Field, s.look.radiusSm));
+    UiPaint face = paintToken(s.look, UiToken::Field, s.look.radiusSm);
+    paintSunken(face);
+    const uint16_t id = uiPanel(s, parent, flex, face);
     if (id == kUiNone) {
         return id;
     }

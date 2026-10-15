@@ -525,7 +525,15 @@ add_custom_command(
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/uibake.py ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/sample.json
     COMMENT "bake sample.json → sample.uib"
 )
-add_custom_target(UiBin DEPENDS ${UI_BIN_DIR}/shell.uib ${UI_BIN_DIR}/sample.uib)
+add_custom_command(
+    OUTPUT ${UI_BIN_DIR}/files.uib
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/uibake.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/files.json ${UI_BIN_DIR}/files.uib
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/uibake.py ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/files.json
+    COMMENT "bake files.json → files.uib"
+)
+add_custom_target(UiBin DEPENDS ${UI_BIN_DIR}/shell.uib ${UI_BIN_DIR}/sample.uib ${UI_BIN_DIR}/files.uib)
+target_compile_definitions(bh_files PRIVATE "BH_UI_FILES=\"${UI_BIN_DIR}/files.uib\"")
 
 add_executable(BurnhopeEngine demo/app/Main.cpp demo/Sample.cpp)
 target_link_libraries(BurnhopeEngine PRIVATE
@@ -565,4 +573,4 @@ target_link_libraries(BurnhopeTest PRIVATE
 )
 target_include_directories(BurnhopeTest PRIVATE ${BH_CORE} ${BH_ENGINE} ${BH_ENGINE}/include ${vma_SOURCE_DIR}/include)
 target_compile_options(BurnhopeTest PRIVATE ${BH_OPTS})
-add_dependencies(BurnhopeTest UiSpv)
+add_dependencies(BurnhopeTest UiSpv UiBin)

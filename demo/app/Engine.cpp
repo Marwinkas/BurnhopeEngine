@@ -544,9 +544,9 @@ uint16_t foldOpen(UiState& s, uint16_t parent, const char* title) {
                     paint->borderW = 0.0f;
                     paint->shadow = 0.0f;
                     paint->icon = 11;
-                    paint->r = s.look.text[0];
-                    paint->g = s.look.text[1];
-                    paint->b = s.look.text[2];
+                    paint->r = s.look.accent[0][0];
+                    paint->g = s.look.accent[0][1];
+                    paint->b = s.look.accent[0][2];
                 }
                 break;
             }

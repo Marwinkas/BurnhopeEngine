@@ -59,11 +59,7 @@ uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
     uiText(s, id, cfg.label != nullptr ? cfg.label : "");
     uiTextStyle(s, id, UiTextAlign::Center, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
-        paint->borderW = 1.0f;
-        paint->br = paint->r + 0.16f > 1.0f ? 1.0f : paint->r + 0.16f;
-        paint->bg = paint->g + 0.16f > 1.0f ? 1.0f : paint->g + 0.16f;
-        paint->bb = paint->b + 0.16f > 1.0f ? 1.0f : paint->b + 0.16f;
-        paint->shadow = 3.0f;
+        paintRaised(*paint);
     }
     uiHover(s, id);
     s.ent[id].add<UiFocusable>();
@@ -84,8 +80,8 @@ uint16_t uiCheck(UiState& s, uint16_t parent, const char* text, uint8_t kind, ui
     flex.widthMode = UiSize::Percent;
     flex.width = 100.0f;
     flex.heightMode = UiSize::Px;
-    flex.height = 32.0f;
-    flex.padL = 28.0f;
+    flex.height = 36.0f;
+    flex.padL = 36.0f;
     flex.padR = 8.0f;
     const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Check, s.look.radiusSm));
     if (id == kUiNone) {
@@ -160,8 +156,8 @@ bool uiCheckDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
     UiBox ancestor{};
     const bool hasClip = uiClipBox(s, id, ancestor);
     const UiBox* clip = hasClip ? &ancestor : nullptr;
-    const float side = 14.0f;
-    const float x = box.w < 36.0f ? box.x + (box.w - side) * 0.5f : box.x + 6.0f;
+    const float side = 22.0f;
+    const float x = box.w < 40.0f ? box.x + (box.w - side) * 0.5f : box.x + 8.0f;
     const float y = box.y + (box.h - side) * 0.5f;
     n = emitMark(dst, n, cap, x, y, side, side, s.look.muted[0], s.look.muted[1], s.look.muted[2], 1.0f, 2.0f, 1.0f, kUiFlagStroke, clip);
     if (check->on != 0 && n < cap) {

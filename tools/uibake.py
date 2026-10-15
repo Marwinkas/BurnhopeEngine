@@ -21,7 +21,53 @@ ROLES = {
     "color": 12,
     "menu": 13,
     "image": 14,
+    "split": 15,
+    "splitter": 15,
+    "tree": 16,
+    "grid": 17,
+    "crumbs": 18,
+    "breadcrumbs": 18,
+    "choice": 19,
+    "search": 20,
 }
+
+TOKENS = {
+    "window": 1,
+    "title": 2,
+    "side": 3,
+    "content": 4,
+    "button": 5,
+    "field": 6,
+    "menu": 7,
+    "close": 8,
+    "text": 9,
+    "muted": 10,
+    "item": 11,
+    "preview": 12,
+    "status": 13,
+    "slider": 14,
+    "check": 15,
+    "scroll": 16,
+    "chrome": 17,
+    "accent": 18,
+}
+
+ROLE_TOKEN = {
+    "button": 5,
+    "label": 9,
+    "slider": 14,
+    "check": 15,
+    "field": 6,
+    "close": 8,
+    "scroll": 16,
+    "menu": 7,
+    "image": 12,
+    "progress": 14,
+}
+
+MARK_POPUP = 1
+MARK_TOKEN = 2
+PARENT_ROOT = 0xFFFE
 
 DIRS = {"column": 0, "row": 1, "column-reverse": 2, "row-reverse": 3, "col": 0}
 
@@ -87,12 +133,40 @@ def flatten(node, parent, out, pool):
         flags |= 64
     if node.get("disabled"):
         flags |= 128
-    fill = node.get("fill", [0.16, 0.18, 0.22, 1])
+    token_name = node.get("token")
+    token = TOKENS.get(token_name, 0) if isinstance(token_name, str) else 0
+    marks = 0
+    if node.get("popup"):
+        marks |= MARK_POPUP
+    if "fill" in node:
+        fill = list(node.get("fill") or [])
+    else:
+        if token == 0:
+            token = ROLE_TOKEN.get(role_name, 0)
+        if token != 0:
+            marks |= MARK_TOKEN
+            fill = [0.0, 0.0, 0.0, float(node.get("a", 1))]
+        else:
+            fill = [0.16, 0.18, 0.22, 1]
     while len(fill) < 4:
         fill.append(1 if len(fill) == 3 else 0)
+    if "a" in node:
+        fill[3] = float(node["a"])
     name = node.get("name", node.get("id", "")) or ""
     text = node.get("text", "") or ""
+    items = node.get("items")
+    value = float(node.get("value", 0))
+    if isinstance(items, list) and items:
+        text = "\n".join(str(item) for item in items)
+        if "selected" in node:
+            value = float(node["selected"])
     hint = node.get("hint", "") or ""
+    if node.get("mount") == "root":
+        parent_out = PARENT_ROOT
+    elif parent < 0:
+        parent_out = 0xFFFF
+    else:
+        parent_out = parent
 
     def put(text_value):
         if not text_value:
@@ -108,7 +182,7 @@ def flatten(node, parent, out, pool):
     index = len(out)
     out.append(
         {
-            "parent": 0xFFFF if parent < 0 else parent,
+            "parent": parent_out,
             "role": role,
             "icon": int(node.get("icon", 0)),
             "tag": int(node.get("tag", -1)),
@@ -147,7 +221,7 @@ def flatten(node, parent, out, pool):
             "posY": float(node.get("y", 0)),
             "minV": float(node.get("min", 0)),
             "maxV": float(node.get("maxv", node.get("maxValue", 0))),
-            "value": float(node.get("value", 0)),
+            "value": value,
             "shadow": float(node.get("shadow", 0)),
             "borderW": float(node.get("border", 0)),
             "br": float(node.get("br", 0)),
@@ -184,8 +258,8 @@ def flatten(node, parent, out, pool):
             "textEllipsis": int(node.get("ellipsis", 0)),
             "textValign": int(node.get("valign", 0)),
             "textDeco": int(node.get("deco", 0)),
-            "pad0": 0,
-            "pad1": 0,
+            "pad0": marks,
+            "pad1": token,
             "pad2": 0,
         }
     )
@@ -285,7 +359,9 @@ def main():
         tree = json.load(handle)
     nodes = []
     pool = bytearray()
-    flatten(tree, -1, nodes, pool)
+    roots = tree if isinstance(tree, list) else [tree]
+    for root in roots:
+        flatten(root, -1, nodes, pool)
     if len(nodes) > 65535:
         sys.stderr.write("too many nodes\n")
         return 1

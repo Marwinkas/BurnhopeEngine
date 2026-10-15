@@ -297,3 +297,4 @@ Zero warnings on the C++26 toolchain in use. Do not dump `git diff` or whole fil
 NEVER emit glyphs with the widget box after a failed scroll intersection (causes inspector text over the file pane); ALWAYS skip the run when the clip rect is empty.
 NEVER try_get an empty Flecs tag (UiSplitter, UiMenuBar, UiResizable) (returns nullptr and the hit is dropped); ALWAYS entity.has<Tag>().
 NEVER parent a property section header into the split row (disclosure sits right of the grip and labels get no width); ALWAYS a full-width header above its rows and one shared label width.
+NEVER let a splitter grip consume a press that already hit another focusable control (toolbar buttons stop firing); ALWAYS ignore the grip when the hit is a different focusable node.
