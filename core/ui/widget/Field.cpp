@@ -216,7 +216,7 @@ void uiFieldMulti(UiState& s, uint16_t id) {
     }
     field->multi = 1;
     if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
-        flex->overflow = 1;
+        flex->overflow = UiOverflow::Hidden;
     }
     s.layoutDirty = true;
     s.visualDirty = true;
@@ -226,8 +226,7 @@ void fieldSyncText(UiState& s, uint16_t id) {
     if (id >= s.count || !s.ent[id].is_alive()) {
         return;
     }
-    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-    if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Field)) {
+    if (s.ent[id].try_get<UiField>() == nullptr) {
         return;
     }
     const UiField* field = s.ent[id].try_get<UiField>();
@@ -254,30 +253,12 @@ void fieldSyncText(UiState& s, uint16_t id) {
     } else {
         copyShown(*text, field->bytes, field->len);
     }
-    text->align = 0;
+    text->align = UiTextAlign::Left;
     text->wrap = field->multi;
-    text->ellipsis = 0;
-    text->valign = 1;
+    text->ellipsis = UiTextEllipsis::None;
+    text->valign = UiTextValign::Center;
     text->scroll = field->scroll;
     s.visualDirty = true;
-}
-
-void textInk(float r, float g, float b, bool hot, float& tr, float& tg, float& tb) {
-    const float lum = 0.30f * r + 0.59f * g + 0.11f * b;
-    if (lum > 0.72f) {
-        tr = 0.10f;
-        tg = 0.11f;
-        tb = 0.14f;
-    } else {
-        tr = 0.93f;
-        tg = 0.94f;
-        tb = 0.96f;
-    }
-    if (hot) {
-        tr = tr + 0.08f > 1.0f ? 1.0f : tr + 0.08f;
-        tg = tg + 0.08f > 1.0f ? 1.0f : tg + 0.08f;
-        tb = tb + 0.08f > 1.0f ? 1.0f : tb + 0.08f;
-    }
 }
 
 UiField* editFieldOf(UiState& s) {
@@ -354,17 +335,17 @@ void uiFieldNotify(UiState& s, uint16_t id) {
 uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChangeFn onChange, void* user, float width) {
     UiFlex flex{};
     flex.shrink = 0.0f;
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.heightMode = UiSize::Px;
     flex.height = 26.0f;
     if (width < 0.0f) {
-        flex.widthMode = static_cast<uint8_t>(UiSize::Percent);
+        flex.widthMode = UiSize::Percent;
         flex.width = 100.0f;
         flex.grow = 1.0f;
     } else {
-        flex.widthMode = static_cast<uint8_t>(UiSize::Px);
+        flex.widthMode = UiSize::Px;
         flex.width = width > 1.0f ? width : 160.0f;
     }
-    const uint16_t id = spawn(s, parent, flex, paintToken(s.look, UiRole::Field, UiToken::Field, s.look.radiusSm));
+    const uint16_t id = spawn(s, parent, flex, paintToken(s.look, UiToken::Field, s.look.radiusSm));
     if (id == kUiNone) {
         return id;
     }
@@ -380,12 +361,12 @@ uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChan
 
 uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, bool clear) {
     UiFlex flex{};
-    flex.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    flex.widthMode = UiSize::Percent;
     flex.width = 100.0f;
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.heightMode = UiSize::Px;
     flex.height = 36.0f;
     flex.shrink = 0.0f;
-    const uint16_t id = spawn(s, parent, flex, paintToken(s.look, UiRole::Field, UiToken::Field, s.look.radiusSm));
+    const uint16_t id = spawn(s, parent, flex, paintToken(s.look, UiToken::Field, s.look.radiusSm));
     if (id == kUiNone) {
         return id;
     }
@@ -661,7 +642,7 @@ bool uiFieldDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
     }
     const UiPaint* paint = s.ent[id].try_get<UiPaint>();
     const UiField* field = s.ent[id].try_get<UiField>();
-    if (paint == nullptr || field == nullptr || paint->role != static_cast<uint8_t>(UiRole::Field)) {
+    if (paint == nullptr || field == nullptr) {
         return false;
     }
     const UiBox& box = s.box[id];
@@ -724,12 +705,12 @@ bool uiFieldDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
         const float cx = inset.x + fieldOffset(s, *field, rows[line].begin, field->caret);
         const float cy = inset.y + static_cast<float>(line) * lineH - field->scroll;
         if (cy + lineH > box.y && cy < box.y + box.h) {
-            n = emitRect(dst, n, cap, cx, cy, 1.5f, lineH, field->text[0], field->text[1], field->text[2], 1.0f, 0.0f, clip);
+            n = emitRect(dst, n, cap, cx, cy, 1.5f, lineH, s.look.text[0], s.look.text[1], s.look.text[2], 1.0f, 0.0f, clip);
         }
     } else if (id == s.focused && paint->disabled == 0) {
         const float cx = inset.x + uiFieldWidth(s, *field, field->caret) - field->scroll;
         if (cx >= inset.x - 1.0f && cx <= inset.x + inset.w) {
-            n = emitRect(dst, n, cap, cx, box.y + 7.0f, 1.5f, box.h - 14.0f, field->text[0], field->text[1], field->text[2], 1.0f, 0.0f, clip);
+            n = emitRect(dst, n, cap, cx, box.y + 7.0f, 1.5f, box.h - 14.0f, s.look.text[0], s.look.text[1], s.look.text[2], 1.0f, 0.0f, clip);
         }
         if (s.imeLen > 0) {
             const float mark = s.look.advance * static_cast<float>(s.imeLen);
@@ -755,9 +736,9 @@ bool uiFieldDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
     const UiText* shown = s.ent[id].try_get<UiText>();
     if (shown != nullptr && shown->len > 0) {
         const bool hint = field->len == 0 && field->hintLen > 0;
-        const float tr = hint ? s.look.muted[0] : field->text[0];
-        const float tg = hint ? s.look.muted[1] : field->text[1];
-        const float tb = hint ? s.look.muted[2] : field->text[2];
+        const float tr = hint ? s.look.muted[0] : s.look.text[0];
+        const float tg = hint ? s.look.muted[1] : s.look.text[1];
+        const float tb = hint ? s.look.muted[2] : s.look.text[2];
         UiBox limit = inset;
         bool outside = false;
         if (hasClip && ancestor.w > 1.0f && ancestor.h > 1.0f) {
@@ -789,8 +770,7 @@ bool uiFieldInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, 
         if (id >= s.count) {
             return false;
         }
-        const UiPaint* node = s.ent[id].try_get<UiPaint>();
-        if (node == nullptr || node->role != static_cast<uint8_t>(UiRole::Field)) {
+        if (s.ent[id].try_get<UiField>() == nullptr) {
             return false;
         }
         const UiField* field = s.ent[id].try_get<UiField>();
@@ -803,8 +783,7 @@ bool uiFieldInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, 
         if (id >= s.count) {
             return false;
         }
-        const UiPaint* node = s.ent[id].try_get<UiPaint>();
-        if (node == nullptr || node->role != static_cast<uint8_t>(UiRole::Field)) {
+        if (s.ent[id].try_get<UiField>() == nullptr) {
             return false;
         }
         fieldHandlePointer(s, id, in, true, false);

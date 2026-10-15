@@ -4,11 +4,11 @@
 namespace burnhope {
 namespace {
 
-void onMin(void* user, uint16_t, int16_t) {
+void onMin(void* user, uint16_t) {
     static_cast<UiState*>(user)->opMinimize = true;
 }
 
-void onMax(void* user, uint16_t, int16_t) {
+void onMax(void* user, uint16_t) {
     static_cast<UiState*>(user)->opMaximize = true;
 }
 
@@ -16,20 +16,20 @@ void onMax(void* user, uint16_t, int16_t) {
 
 uint16_t uiWindowChrome(UiState& s, uint16_t parent) {
     UiFlex row{};
-    row.direction = 1;
-    row.widthMode = static_cast<uint8_t>(UiSize::Px);
+    row.direction = UiFlexDir::Row;
+    row.widthMode = UiSize::Px;
     row.width = 100.0f;
-    row.heightMode = static_cast<uint8_t>(UiSize::Px);
+    row.heightMode = UiSize::Px;
     row.height = 28.0f;
     row.shrink = 0.0f;
-    row.align = 1;
-    row.justify = 1;
+    row.align = UiAlign::Center;
+    row.justify = UiJustify::Center;
     row.gap = 4.0f;
     row.marginR = 8.0f;
-    const uint16_t cluster = spawn(s, parent, row, paint(UiRole::Hidden, 0, 0, 0));
-    const uint16_t minB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiRole::Button, UiToken::Chrome, s.look.radiusSm));
-    const uint16_t maxB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiRole::Button, UiToken::Chrome, s.look.radiusSm));
-    const uint16_t closeB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiRole::Close, UiToken::Close, s.look.radiusSm));
+    const uint16_t cluster = spawn(s, parent, row, paintClear());
+    const uint16_t minB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiToken::Chrome, s.look.radiusSm));
+    const uint16_t maxB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiToken::Chrome, s.look.radiusSm));
+    const uint16_t closeB = spawn(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiToken::Close, s.look.radiusSm));
     if (auto* icon = s.ent[minB].try_get_mut<UiPaint>()) {
         icon->icon = 1;
     }
@@ -61,12 +61,11 @@ void uiMarkTab(UiState& s, uint16_t strip, uint16_t tab) {
         if (s.parentOf[id] != strip) {
             continue;
         }
-        const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-        if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Button)) {
+        if (!s.ent[id].has<UiFocusable>()) {
             continue;
         }
         if (auto* live = s.ent[id].try_get_mut<UiPaint>()) {
-            live->token = static_cast<uint8_t>(id == tab ? UiToken::Accent : UiToken::Button);
+            live->token = id == tab ? UiToken::Accent : UiToken::Button;
             s.visualDirty = true;
         }
     }

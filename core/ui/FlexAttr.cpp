@@ -1,4 +1,4 @@
-#include "core/ui/FlexAttr.hpp"
+#include "ui/FlexAttr.hpp"
 #include <cstring>
 
 namespace burnhope {

@@ -1,77 +1,60 @@
 #include "ui/widget/Button.hpp"
-#include "ui/widget/Detail.hpp"
 #include "ui/widget/Image.hpp"
+#include "ui/Hover.hpp"
+#include "ui/Panel.hpp"
+#include "ui/State.hpp"
+#include "ui/Text.hpp"
 
 namespace burnhope {
 
 void activate(UiState& s, uint16_t id) {
-    const UiPaint* p = s.ent[id].try_get<UiPaint>();
-    if (p == nullptr || p->disabled != 0) {
+    if (id >= s.count) {
         return;
     }
-    if (p->role == static_cast<uint8_t>(UiRole::Check)) {
-        auto* check = s.ent[id].try_get_mut<UiCheck>();
-        if (check != nullptr) {
-            if (check->kind == static_cast<uint8_t>(UiCheckKind::Radio)) {
-                check->on = 1;
-                // Обходим только сущности с компонентом UiCheck через Flecs Each:
-                s.world.each([&](flecs::entity e, UiCheck& mate) {
-                    if (e.id() != id && mate.kind == static_cast<uint8_t>(UiCheckKind::Radio) && mate.group == check->group) {
-                        mate.on = 0;
-                    }
-                });
-            } else {
-                check->on = check->on == 0 ? 1 : 0;
-            }
-        }
-        s.visualDirty = true;
+    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+    if (paint != nullptr && paint->disabled) {
+        return;
     }
     uiTrace(s, "activate", id);
     if (const UiAction* act = s.ent[id].try_get<UiAction>(); act != nullptr && act->fn != nullptr) {
-        act->fn(act->user, id, p->tag);
-        return;
-    }
-    if (p->role == static_cast<uint8_t>(UiRole::Button) && s.onClick != nullptr) {
-        s.onClick(s.clickUser, id, p->tag);
+        act->fn(act->user, id);
+    } else if (s.onClick != nullptr) {
+        s.onClick(s.clickUser, id);
     }
 }
 
 uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
     UiFlex flex{};
     flex.shrink = 0.0f;
-    flex.align = static_cast<uint8_t>(UiAlign::Center);
-    flex.justify = static_cast<uint8_t>(UiJustify::Center);
+    flex.align = UiAlign::Center;
+    flex.justify = UiJustify::Center;
     if (cfg.fillHeight) {
-        flex.heightMode = static_cast<uint8_t>(UiSize::Percent);
+        flex.heightMode = UiSize::Percent;
         flex.height = 100.0f;
     } else {
-        flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+        flex.heightMode = UiSize::Px;
         flex.height = cfg.height > 0.0f ? cfg.height : 28.0f;
     }
     
     if (cfg.fillWidth) {
-        flex.widthMode = static_cast<uint8_t>(UiSize::Percent);
+        flex.widthMode = UiSize::Percent;
         flex.width = 100.0f;
         flex.grow = 1.0f;
     } else if (cfg.width > 0.0f) {
-        flex.widthMode = static_cast<uint8_t>(UiSize::Px);
+        flex.widthMode = UiSize::Px;
         flex.width = cfg.width;
     }
-    const uint16_t id = spawn(s, parent, flex, paintToken(s.look, UiRole::Button, UiToken::Button, s.look.radiusSm));
+    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Button, s.look.radiusSm));
     if (id == kUiNone) {
         return id;
     }
-    addText(s, id, cfg.label != nullptr ? cfg.label : "");
-    if (cfg.iconSlot < kPhotoSlots) {
-        (void)uiIcon(s, id, cfg.iconSlot, 16.0f, 16.0f); // Иконка перехватывает хит-тест!
-    }
-    
-    // СТАЛО:
+    uiText(s, id, cfg.label != nullptr ? cfg.label : "");
+    uiHover(s, id);
+    s.ent[id].add<UiFocusable>();
     if (cfg.iconSlot < kPhotoSlots) {
         const uint16_t iconId = uiIcon(s, id, cfg.iconSlot, 16.0f, 16.0f);
         if (iconId != kUiNone) {
-            // Иконка нематериальна: все клики и наведения падают строго на родительскую кнопку!
-            s.ent[iconId].set<UiNoHit>({});
+            s.ent[iconId].add<UiNoHit>();
         }
     }
     if (cfg.onClick != nullptr) {
@@ -98,20 +81,42 @@ uint16_t uiIconButton(UiState& s, uint16_t parent, uint8_t iconSlot, UiClickFn f
     return uiButton(s, parent, cfg);
 }
 
-// СТАЛО:
-uint16_t uiCheck(UiState& s, uint16_t parent, const char* text, UiCheckKind kind, uint8_t group, bool on) {
-    // 1. Создаем ноду с дефолтными стилями
-    const uint16_t id = spawn(s, parent, {}, paintToken(s.look, UiRole::Check, UiToken::Check, s.look.radiusSm));
+uint16_t uiCheck(UiState& s, uint16_t parent, const char* text, uint8_t kind, uint8_t group, bool on) {
+    const uint16_t id = uiPanel(s, parent, {}, paintToken(s.look, UiToken::Check, s.look.radiusSm));
     if (id == kUiNone) {
         return id;
     }
-    
-    // 2. Навешиваем текст
-    addText(s, id, text != nullptr ? text : "");
-    
-    // 3. Вызываем единую функцию настройки (никакого дублирования flex-свойств!)
-    uiBindCheck(s, id, 0, group, on);
+    uiText(s, id, text != nullptr ? text : "");
+    uiHover(s, id);
+    s.ent[id].add<UiFocusable>();
+    uiBindCheck(s, id, kind, group, on);
     return id;
+}
+
+static void onCheck(void* user, uint16_t id) {
+    auto& s = *static_cast<UiState*>(user);
+    UiCheck* self = id < s.count ? s.ent[id].try_get_mut<UiCheck>() : nullptr;
+    if (self == nullptr) {
+        return;
+    }
+    if (self->group != 0) {
+        const uint8_t group = self->group;
+        for (uint16_t other = 0; other < s.count; ++other) {
+            if (other == id) {
+                continue;
+            }
+            if (auto* check = s.ent[other].try_get_mut<UiCheck>(); check != nullptr && check->group == group) {
+                check->on = 0;
+            }
+        }
+        self = s.ent[id].try_get_mut<UiCheck>();
+        if (self != nullptr) {
+            self->on = 1;
+        }
+    } else {
+        self->on = self->on == 0 ? 1 : 0;
+    }
+    s.visualDirty = true;
 }
 
 void uiBindCheck(UiState& s, uint16_t id, uint8_t kind, uint8_t group, bool on) {
@@ -119,11 +124,12 @@ void uiBindCheck(UiState& s, uint16_t id, uint8_t kind, uint8_t group, bool on) 
         return;
     }
     s.ent[id].set<UiCheck>({on ? uint8_t{1} : uint8_t{0}, kind, group});
+    uiBind(s, id, onCheck, &s);
     auto* flex = s.ent[id].try_get_mut<UiFlex>();
     if (flex != nullptr) {
-        flex->widthMode = static_cast<uint8_t>(UiSize::Percent);
+        flex->widthMode = UiSize::Percent;
         flex->width = 100.0f;
-        flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+        flex->heightMode = UiSize::Px;
         flex->height = 32.0f;
     }
     s.layoutDirty = true;

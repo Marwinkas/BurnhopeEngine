@@ -1,8 +1,8 @@
 #pragma once
 
-#include "core/platform/Input.hpp"
-#include "core/ui/Interaction.hpp"
-#include "core/ui/Style.hpp"
+#include "platform/Input.hpp"
+#include "ui/Interaction.hpp"
+#include "ui/Style.hpp"
 #include <cstdint>
 
 namespace burnhope {

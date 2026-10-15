@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/ui/Geometry.hpp"
+#include "ui/Geometry.hpp"
 #include <cstdint>
 #include <type_traits>
 
@@ -78,6 +78,27 @@ struct UiDropTarget {
     char kind[16]{};
 };
 struct UiTextInput {};
+struct UiHoverable {};
+struct UiTitleBar {};
+struct UiPopup {};
+struct UiTab { uint16_t index = 0; };
+
+enum class UiEvent : uint8_t { None = 0, Close = 1 };
+
+inline constexpr uint8_t kUiInCursor = 1;
+inline constexpr uint8_t kUiInEarly = 2;
+inline constexpr uint8_t kUiInEscape = 3;
+inline constexpr uint8_t kUiInMenu = 4;
+inline constexpr uint8_t kUiInChrome = 5;
+inline constexpr uint8_t kUiInPress = 6;
+inline constexpr uint8_t kUiInPressLate = 7;
+inline constexpr uint8_t kUiInFocus = 8;
+inline constexpr uint8_t kUiInDrag = 9;
+inline constexpr uint8_t kUiInRelease = 10;
+inline constexpr uint8_t kUiInWheel = 11;
+inline constexpr uint8_t kUiInKey = 12;
+inline constexpr uint8_t kUiInClip = 13;
+inline constexpr uint8_t kUiInSync = 14;
 
 struct WindowOps {
     bool close = false;

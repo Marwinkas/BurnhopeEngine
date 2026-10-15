@@ -9,7 +9,7 @@
 namespace burnhope {
 namespace {
 
-void onCell(void* user, uint16_t id, int16_t) {
+void onCell(void* user, uint16_t id) {
     auto* s = static_cast<UiState*>(user);
     if (s == nullptr || id >= s->count) {
         return;
@@ -41,12 +41,12 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
     const float tile = itemW < itemH ? itemW : itemH;
     UiFlex cell = px(tile > 12.0f ? tile - 4.0f : tile, tile > 12.0f ? tile - 4.0f : tile);
     cell.shrink = 0.0f;
-    cell.direction = 0;
-    cell.align = 1;
-    cell.justify = 1;
+    cell.direction = UiFlexDir::Column;
+    cell.align = UiAlign::Center;
+    cell.justify = UiJustify::Center;
     cell.pad = 6.0f;
     cell.gap = 4.0f;
-    UiPaint ink = paintToken(s.look, UiRole::Button, UiToken::Item, s.look.radiusSm);
+    UiPaint ink = paintToken(s.look, UiToken::Item, s.look.radiusSm);
     ink.a = 0.0f;
     ink.borderW = 0.0f;
     const uint16_t slot = spawn(s, inner, cell, ink);
@@ -66,13 +66,13 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
         }
     }
     UiFlex lab{};
-    lab.self = 1;
-    lab.heightMode = static_cast<uint8_t>(UiSize::Px);
+    lab.self = UiAlignSelf::Stretch;
+    lab.heightMode = UiSize::Px;
     lab.height = 18.0f;
     lab.shrink = 1.0f;
-    const uint16_t label = spawn(s, slot, lab, paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f));
+    const uint16_t label = spawn(s, slot, lab, paintToken(s.look, UiToken::Text, 0.0f));
     addText(s, label, " ");
-    uiTextStyle(s, label, 1, 1, 1, 0, 0, 1.0f);
+    uiTextStyle(s, label, UiTextAlign::Center, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     s.ent[slot].set<UiParts>({icon, kUiNone, label});
     uiBind(s, slot, onCell, &s);
     s.ent[slot].set<UiVirtRow>({});
@@ -89,7 +89,7 @@ float uiGridContentH(const UiState& s, uint16_t id) {
 uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& cfg) {
     const float itemW = cfg.itemW < 32.0f ? 84.0f : cfg.itemW;
     const float itemH = cfg.itemH < 32.0f ? 96.0f : cfg.itemH;
-    const uint16_t scroll = uiVirtualHostCreate(s, parent, UiRole::Scroll, UiToken::Content, s.look.radiusSm);
+    const uint16_t scroll = uiVirtualHostCreate(s, parent, UiToken::Content, s.look.radiusSm);
     if (scroll == kUiNone) {
         return scroll;
     }
@@ -152,14 +152,14 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
         const float tileW = rows ? (viewW > 24.0f ? viewW : grid->itemW) : square;
         const float tileH = rows ? grid->itemH - 4.0f : square;
         if (auto* flex = s.ent[slot].try_get_mut<UiFlex>()) {
-            flex->position = 1;
+            flex->position = UiPosition::Absolute;
             flex->posX = rows ? 4.0f : static_cast<float>(col) * grid->itemW + 8.0f;
             flex->posY = static_cast<float>(row) * grid->itemH - scroll->offset + (rows ? 2.0f : 8.0f);
-            flex->widthMode = static_cast<uint8_t>(UiSize::Px);
-            flex->heightMode = static_cast<uint8_t>(UiSize::Px);
-            flex->direction = rows ? 1 : 0;
-            flex->align = 1;
-            flex->justify = rows ? 0 : 1;
+            flex->widthMode = UiSize::Px;
+            flex->heightMode = UiSize::Px;
+            flex->direction = rows ? UiFlexDir::Row : UiFlexDir::Column;
+            flex->align = UiAlign::Center;
+            flex->justify = rows ? UiJustify::Start : UiJustify::Center;
             flex->gap = rows ? 6.0f : 4.0f;
             flex->pad = rows ? 8.0f : 6.0f;
             flex->width = tileW > 8.0f ? tileW : 8.0f;
@@ -175,13 +175,13 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
             }
             if (parts->label < s.count) {
                 if (auto* lab = s.ent[parts->label].try_get_mut<UiFlex>()) {
-                    lab->self = 1;
-                    lab->heightMode = static_cast<uint8_t>(UiSize::Px);
+                    lab->self = UiAlignSelf::Stretch;
+                    lab->heightMode = UiSize::Px;
                     lab->height = 18.0f;
                     lab->grow = rows ? 1.0f : 0.0f;
                     lab->shrink = 1.0f;
                 }
-                uiTextStyle(s, parts->label, rows ? 0 : 1, 1, 1, 0, 0, 1.0f);
+                uiTextStyle(s, parts->label, rows ? UiTextAlign::Left : UiTextAlign::Center, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
             }
         }
         s.ent[slot].set<UiVirtRow>({index});

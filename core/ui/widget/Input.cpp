@@ -131,9 +131,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
     }
     if (press && hit != kUiNone && !plugAte && !chromeTook) {
         const UiPaint* p = s.ent[hit].try_get<UiPaint>();
-        if (p != nullptr && p->disabled != 0) {
-        } else if (p != nullptr && p->role == static_cast<uint8_t>(UiRole::Close)) {
-            return UiEvent::Close;
+        if (p != nullptr && p->disabled) {
         } else if (probe(s, in, hit, kUiInPress, unused, true)) {
         } else if (p != nullptr && s.ent[hit].try_get<UiDrag>() != nullptr) {
             s.capture = hit;
@@ -142,17 +140,10 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             const UiDrag* drag = s.ent[hit].try_get<UiDrag>();
             drag->fn(drag->user, hit, in.pointer.x, in.pointer.y);
         } else if (probe(s, in, hit, kUiInPressLate, unused, true)) {
-        } else if (p != nullptr && focusable(p->role)) {
+        } else if (s.ent[hit].has<UiFocusable>()) {
             uiFocus(s, hit);
             if (!probe(s, in, hit, kUiInFocus, unused, true)) {
-                const UiRange* range = s.ent[hit].try_get<UiRange>();
-                if (range != nullptr && range->step > 0.0f) {
-                    s.capture = hit;
-                    s.grabX = in.pointer.x;
-                    s.relative = 1;
-                } else {
-                    activate(s, hit);
-                }
+                activate(s, hit);
             }
         } else {
             uiFocus(s, kUiNone);
@@ -183,10 +174,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
 
     if (in.clicks >= 2 && hit < s.count) {
         const bool onTitle = s.ent[hit].has<UiTitleBar>() || uiAncestorHas<UiTitleBar>(s, hit);
-        const UiPaint* node = s.ent[hit].try_get<UiPaint>();
-        const bool chrome = node != nullptr
-            && (node->role == static_cast<uint8_t>(UiRole::Close) || node->role == static_cast<uint8_t>(UiRole::Button));
-        if (onTitle && !chrome) {
+        if (onTitle && !s.ent[hit].has<UiHoverable>()) {
             s.opMaximize = true;
         }
     }

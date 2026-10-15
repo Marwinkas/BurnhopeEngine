@@ -1,4 +1,6 @@
+#include "ui/widget/Button.hpp"
 #include "ui/widget/Widgets.hpp"
+#include "ui/UiBin.hpp"
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Curve.hpp"
 #include "ui/widget/Docking.hpp"
@@ -9,36 +11,36 @@
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Splitter.hpp"
 #include "ui/widget/VirtualGrid.hpp"
-#include "ui/Layout.hpp"
+#include "ui/LayoutBridge.hpp"
 
 namespace burnhope {
 namespace {
 
-void hostText(UiState& s, uint16_t id, uint8_t align, uint8_t ellipsis) {
+void hostText(UiState& s, uint16_t id, UiTextAlign align, UiTextEllipsis ellipsis) {
     if (s.ent[id].try_get<UiText>() != nullptr) {
         return;
     }
     UiText host{};
     host.align = align;
     host.ellipsis = ellipsis;
-    host.valign = 1;
+    host.valign = UiTextValign::Center;
     s.ent[id].set<UiText>(host);
 }
 
 void adornButton(UiState& s, uint16_t id) {
-    hostText(s, id, 1, 1);
+    hostText(s, id, UiTextAlign::Center, UiTextEllipsis::End);
 }
 
 void adornClose(UiState& s, uint16_t id) {
-    hostText(s, id, 1, 1);
+    hostText(s, id, UiTextAlign::Center, UiTextEllipsis::End);
 }
 
 void adornField(UiState& s, uint16_t id) {
-    hostText(s, id, 0, 0);
+    hostText(s, id, UiTextAlign::Left, UiTextEllipsis::None);
 }
 
 void adornCheck(UiState& s, uint16_t id) {
-    hostText(s, id, 0, 1);
+    hostText(s, id, UiTextAlign::Left, UiTextEllipsis::End);
     if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
         if (flex->padL < 32.0f) {
             flex->padL = 32.0f;
@@ -47,7 +49,7 @@ void adornCheck(UiState& s, uint16_t id) {
 }
 
 void finishField(UiState& s, uint16_t id, const BinNode* spec, const char* text, const char* hint) {
-    hostText(s, id, 0, 0);
+    hostText(s, id, UiTextAlign::Left, UiTextEllipsis::None);
     uint8_t flags = 0;
     uint8_t filter = 0;
     uint8_t maxChars = 0;
@@ -88,14 +90,14 @@ void finishRange(UiState& s, uint16_t id, const BinNode* spec, const char*, cons
 } // namespace
 
 void uiWidgetsInit(UiState& s) {
-    uiRegisterSpawnHook(s, static_cast<uint8_t>(UiRole::Button), adornButton);
-    uiRegisterSpawnHook(s, static_cast<uint8_t>(UiRole::Close), adornClose);
-    uiRegisterSpawnHook(s, static_cast<uint8_t>(UiRole::Field), adornField);
-    uiRegisterSpawnHook(s, static_cast<uint8_t>(UiRole::Check), adornCheck);
-    uiRegisterRoleFinish(s, static_cast<uint8_t>(UiRole::Field), finishField);
-    uiRegisterRoleFinish(s, static_cast<uint8_t>(UiRole::Check), finishCheck);
-    uiRegisterRoleFinish(s, static_cast<uint8_t>(UiRole::Slider), finishRange);
-    uiRegisterRoleFinish(s, static_cast<uint8_t>(UiRole::Progress), finishRange);
+    uiRegisterSpawnHook(s, kBinSlotButton, adornButton);
+    uiRegisterSpawnHook(s, kBinSlotClose, adornClose);
+    uiRegisterSpawnHook(s, kBinSlotField, adornField);
+    uiRegisterSpawnHook(s, kBinSlotCheck, adornCheck);
+    uiRegisterRoleFinish(s, kBinSlotField, finishField);
+    uiRegisterRoleFinish(s, kBinSlotCheck, finishCheck);
+    uiRegisterRoleFinish(s, kBinSlotSlider, finishRange);
+    uiRegisterRoleFinish(s, kBinSlotProgress, finishRange);
     uiInstallChromeBin(s);
     uiInstallDockOverlay(s);
     uiDrawDecorAdd(s, uiFieldDecor);

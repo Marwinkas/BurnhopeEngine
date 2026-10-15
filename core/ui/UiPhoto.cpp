@@ -1,6 +1,7 @@
-#include "core/ui/UiPhoto.hpp"
-#include "core/ui/Primitive.hpp"
-#include "core/image/ImageFile.hpp"
+#include "ui/UiPhoto.hpp"
+#include "ui/State.hpp"
+#include "image/ImageFile.hpp"
+#include "image/ImageUpload.hpp"
 #include <spdlog/spdlog.h>
 
 namespace burnhope {
@@ -52,6 +53,29 @@ bool uiPhotoLoad(
 
     imageCpuFree(cpu);
     return ok;
+}
+
+void uiPhotoTick(UiState& s) {
+    float dt = s.time - s.prevTime;
+    if (s.prevTime <= 0.0f || dt < 0.0f || dt > 0.5f) {
+        dt = 0.0f;
+    }
+    s.prevTime = s.time;
+    s.world.each([&](flecs::entity, UiImage& image) {
+        if (image.frames < 2) {
+            return;
+        }
+        image.acc += dt * 1000.0f;
+        uint16_t delay = image.delayMs[image.frame];
+        if (delay < 20) {
+            delay = 100;
+        }
+        if (image.acc >= static_cast<float>(delay)) {
+            image.acc = 0.0f;
+            image.frame = static_cast<uint8_t>((image.frame + 1u) % image.frames);
+            s.visualDirty = true;
+        }
+    });
 }
 
 } // namespace burnhope

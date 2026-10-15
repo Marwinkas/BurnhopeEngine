@@ -1,5 +1,5 @@
-#include "core/ui/UiWindowBridge.hpp"
-#include "core/ui/State.hpp"
+#include "ui/UiWindowBridge.hpp"
+#include "ui/State.hpp"
 #include <cstring>
 
 namespace burnhope {

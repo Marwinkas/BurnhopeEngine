@@ -1,232 +1,108 @@
 #include "ui/Panel.hpp"
-#include "ui/widget/Button.hpp"
-#include "ui/widget/Curve.hpp"
-#include "ui/widget/Field.hpp"
-#include "ui/widget/Slider.hpp"
+#include "ui/Interaction.hpp"
+#include "ui/PrimitiveBatch.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 
-void Panel::name(const char* text) const {
-    if (state != nullptr) {
-        uiName(*state, id, text);
+uint16_t uiPanel(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint) {
+    return spawn(s, parent, flex, paint);
+}
+
+uint16_t uiSpacer(UiState& s, uint16_t parent, const UiFlex& flex) {
+    const uint16_t id = uiPanel(s, parent, flex, paintClear());
+    if (id != kUiNone) {
+        s.ent[id].add<UiPass>();
     }
+    return id;
 }
 
-Panel Panel::find(UiState& state, const char* name) {
-    return at(state, uiFindName(state, name));
-}
-
-Panel Panel::at(UiState& state, uint16_t id) {
-    Panel panel{};
-    panel.state = &state;
-    panel.id = id;
-    return panel;
-}
-
-Panel Panel::make(UiState& state, uint16_t parent, const UiFlex& flex, const UiPaint& paint) {
-    Panel panel{};
-    panel.state = &state;
-    panel.id = uiNode(state, parent, flex, paint);
-    return panel;
-}
-
-Panel Panel::child(const UiFlex& flex, const UiPaint& paint) const {
-    Panel panel{};
-    panel.state = state;
-    if (state != nullptr) {
-        panel.id = uiNode(*state, id, flex, paint);
+uint32_t uiEmitPanel(
+    const UiState& s,
+    uint16_t id,
+    UiPrimitive* dst,
+    uint32_t n,
+    uint32_t cap,
+    const UiBox* clip,
+    float r,
+    float g,
+    float b,
+    float a) {
+    if (id >= s.count) {
+        return n;
     }
-    return panel;
-}
-
-Panel Panel::label(const char* text) const {
-    const UiLook look = state != nullptr ? state->look : UiLook{};
-    UiFlex flex{};
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
-    flex.height = look.glyphH;
-    flex.shrink = 0.0f;
-    UiPaint paint{};
-    paint.role = static_cast<uint8_t>(UiRole::Label);
-    paint.token = static_cast<uint8_t>(UiToken::Text);
-    paint.a = 1.0f;
-    paint.r = look.text[0];
-    paint.g = look.text[1];
-    paint.b = look.text[2];
-    Panel out = child(flex, paint);
-    out.setText(text);
-    if (state != nullptr) {
-        uiStamp(*state, out.id, UiToken::Text);
+    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+    if (paint == nullptr) {
+        return n;
     }
-    return out;
-}
-
-Panel Panel::textButton(const char* text) const {
-    Panel box{};
-    box.state = state;
-    if (state == nullptr) {
-        return box;
+    const UiBox& box = s.box[id];
+    if (paint->disabled) {
+        a *= 0.45f;
     }
-    UiButtonConfig cfg{};
-    cfg.label = text;
-    cfg.height = state->look.glyphH + 6.0f;
-    box.id = uiButton(*state, id, cfg);
-    if (box.id < state->count) {
-        if (auto* paint = state->ent[box.id].try_get_mut<UiPaint>()) {
-            paint->a = 0.0f;
+    if (paint->shadow > 0.5f && a > 0.02f) {
+        const float sh = paint->shadow;
+        n = emitMark(
+            dst, n, cap, box.x - sh, box.y - sh * 0.15f, box.w + sh * 2.0f, box.h + sh * 2.0f,
+            0.0f, 0.0f, 0.0f, 0.42f, paint->radius + sh, sh, kUiFlagShadow, clip);
+    }
+    const uint32_t before = n;
+    if (paint->ramp != UiRamp::None) {
+        n = emitRamp(
+            dst, n, cap, box.x, box.y, box.w, box.h, r, g, b,
+            static_cast<uint32_t>(paint->ramp), kUiFlagRamp);
+    } else if (a > 0.0f) {
+        n = emitRect(dst, n, cap, box.x, box.y, box.w, box.h, r, g, b, a, paint->radius, clip);
+    }
+    if (n > before && (paint->radiusTr >= 0.0f || paint->radiusBr >= 0.0f || paint->radiusBl >= 0.0f)) {
+        UiPrimitive& filled = dst[n - 1];
+        const float tl = paint->radius;
+        filled.corner[0] = tl;
+        filled.corner[1] = paint->effectiveRadiusTr();
+        filled.corner[2] = paint->effectiveRadiusBr();
+        filled.corner[3] = paint->effectiveRadiusBl();
+    }
+    const bool transformed = paint->angle != 0.0f || paint->scaleX != 1.0f || paint->scaleY != 1.0f
+        || paint->bright != 1.0f || paint->contrast != 1.0f;
+    if (n > before && transformed && clip == nullptr) {
+        UiPrimitive& filled = dst[n - 1];
+        filled.flags |= kUiFlagTransform;
+        uiPackTransform(filled.pad0, filled.pad1, paint->angle, paint->scaleX, paint->scaleY, paint->bright, paint->contrast);
+    }
+    if (paint->borderW > 0.4f) {
+        n = emitMark(
+            dst, n, cap, box.x, box.y, box.w, box.h,
+            paint->br, paint->bg, paint->bb, a > 0.2f ? a : 1.0f,
+            paint->radius, paint->borderW, kUiFlagStroke, clip);
+    }
+    if (paint->icon != 0 && n < cap) {
+        const float fit = box.w < box.h ? box.w : box.h;
+        float side = fit > 18.0f ? fit - 4.0f : 14.0f;
+        if (side > 72.0f) {
+            side = 72.0f;
+        }
+        if (side < 12.0f) {
+            side = 12.0f;
+        }
+        UiPrimitive& icon = dst[n++];
+        icon = {};
+        icon.posX = box.x + (box.w - side) * 0.5f;
+        icon.posY = box.y + (box.h - side) * 0.5f;
+        icon.sizeX = side;
+        icon.sizeY = side;
+        icon.color[0] = s.look.text[0];
+        icon.color[1] = s.look.text[1];
+        icon.color[2] = s.look.text[2];
+        icon.color[3] = 1.0f;
+        icon.texId = paint->icon;
+        icon.flags = kUiFlagIcon;
+        if (clip != nullptr) {
+            icon.flags |= kUiFlagClip;
+            icon.extra[1] = clip->x;
+            icon.extra[2] = clip->y;
+            icon.extra[3] = clip->w;
         }
     }
-    return box;
-}
-
-Panel Panel::button(const char* text, uint8_t icon) const {
-    Panel box{};
-    box.state = state;
-    if (state == nullptr) {
-        return box;
-    }
-    const bool labeled = text != nullptr && text[0] != '\0';
-    UiButtonConfig cfg{};
-    cfg.label = labeled ? text : nullptr;
-    cfg.height = 30.0f;
-    cfg.width = labeled ? 0.0f : 30.0f;
-    box.id = uiButton(*state, id, cfg);
-    if (box.id < state->count) {
-        if (auto* paint = state->ent[box.id].try_get_mut<UiPaint>()) {
-            *paint = paintToken(state->look, UiRole::Button, UiToken::Button, state->look.radiusSm);
-            paint->icon = icon;
-        }
-    }
-    return box;
-}
-
-Panel Panel::field(const char* text, uint8_t filter, bool clear) const {
-    Panel box{};
-    box.state = state;
-    if (state != nullptr) {
-        box.id = uiField(*state, id, text, filter, clear);
-    }
-    return box;
-}
-
-Panel Panel::check(const char* text) const {
-    Panel box{};
-    box.state = state;
-    if (state != nullptr) {
-        box.id = uiCheck(*state, id, text, 0, 0, false);
-    }
-    return box;
-}
-
-Panel Panel::radio(const char* text, uint8_t group) const {
-    Panel box{};
-    box.state = state;
-    if (state != nullptr) {
-        box.id = uiCheck(*state, id, text, 1, group, false);
-    }
-    return box;
-}
-
-Panel Panel::slider(float value, float minV, float maxV) const {
-    Panel box{};
-    box.state = state;
-    if (state != nullptr) {
-        box.id = uiSlider(*state, id, value, minV, maxV);
-    }
-    return box;
-}
-
-Panel Panel::spin(float value, float minV, float maxV, float step) const {
-    Panel box{};
-    box.state = state;
-    if (state != nullptr) {
-        box.id = uiSpin(*state, id, value, minV, maxV, step);
-    }
-    return box;
-}
-
-Panel Panel::curve() const {
-    Panel box{};
-    box.state = state;
-    if (state != nullptr) {
-        box.id = uiCurve(*state, id);
-    }
-    return box;
-}
-
-Panel Panel::gradient() const {
-    Panel box{};
-    box.state = state;
-    if (state != nullptr) {
-        box.id = uiGradient(*state, id);
-    }
-    return box;
-}
-
-void Panel::setText(const char* text) const {
-    if (state != nullptr) {
-        uiText(*state, id, text);
-    }
-}
-
-void Panel::color(float r, float g, float b, float a) const {
-    if (state == nullptr || id >= state->count) {
-        return;
-    }
-    auto* paint = state->ent[id].try_get_mut<UiPaint>();
-    if (paint == nullptr) {
-        return;
-    }
-    paint->r = r;
-    paint->g = g;
-    paint->b = b;
-    paint->a = a;
-    paint->token = static_cast<uint8_t>(UiToken::Custom);
-    state->visualDirty = true;
-}
-
-void Panel::animate(float r, float g, float b, float a) const {
-    if (state != nullptr) {
-        uiMotionTo(*state, id, r, g, b, a);
-    }
-}
-
-void Panel::transform(float angle, float scaleX, float scaleY) const {
-    if (state == nullptr || id >= state->count) {
-        return;
-    }
-    auto* paint = state->ent[id].try_get_mut<UiPaint>();
-    if (paint == nullptr) {
-        return;
-    }
-    paint->angle = angle;
-    paint->scaleX = scaleX;
-    paint->scaleY = scaleY;
-    state->visualDirty = true;
-}
-
-void Panel::filter(float bright, float contrast) const {
-    if (state == nullptr || id >= state->count) {
-        return;
-    }
-    auto* paint = state->ent[id].try_get_mut<UiPaint>();
-    if (paint == nullptr) {
-        return;
-    }
-    paint->bright = bright;
-    paint->contrast = contrast;
-    state->visualDirty = true;
-}
-
-void Panel::blur(float blur) const {
-    if (state == nullptr || id >= state->count) {
-        return;
-    }
-    auto* paint = state->ent[id].try_get_mut<UiPaint>();
-    if (paint == nullptr) {
-        return;
-    }
-    paint->blur = blur < 0.0f ? 0.0f : (blur > 1.0f ? 1.0f : blur);
-    state->visualDirty = true;
+    return n;
 }
 
 } // namespace burnhope

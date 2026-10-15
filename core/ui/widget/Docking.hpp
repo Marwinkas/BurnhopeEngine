@@ -4,6 +4,8 @@
 
 namespace burnhope {
 
+struct UiResizable {};
+
 struct UiDock {
     uint16_t home = kUiNone;
     uint16_t panel = kUiNone;

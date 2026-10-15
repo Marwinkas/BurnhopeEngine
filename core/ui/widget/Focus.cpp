@@ -23,7 +23,10 @@ void uiFocusStep(UiState& s, int dir) {
     uint16_t n = 0;
     for (uint16_t id = 0; id < s.count; ++id) {
         const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-        if (paint == nullptr || paint->disabled != 0 || !focusable(paint->role) || !nodeShown(s, id)) {
+        if (!s.ent[id].has<UiFocusable>() || !nodeShown(s, id)) {
+            continue;
+        }
+        if (paint != nullptr && paint->disabled) {
             continue;
         }
         const UiTab* tab = s.ent[id].try_get<UiTab>();

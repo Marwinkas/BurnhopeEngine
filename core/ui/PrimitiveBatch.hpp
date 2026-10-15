@@ -57,42 +57,7 @@ uint32_t emitMark(
     float spread,
     uint32_t flag,
     const UiBox* clip);
-uint32_t emitPhoto(
-    UiPrimitive* dst,
-    uint32_t n,
-    uint32_t cap,
-    const UiBox& box,
-    const UiImage& image,
-    const UiBox* clip,
-    float blur,
-    float tintR = 1.0f,
-    float tintG = 1.0f,
-    float tintB = 1.0f);
 [[nodiscard]] bool uiClipBox(const UiState& s, uint16_t id, UiBox& out);
 [[nodiscard]] uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap);
-[[nodiscard]] uint32_t uiEmitText(
-    UiState& s,
-    UiPrimitive* dst,
-    uint32_t n,
-    uint32_t cap,
-    const char* text,
-    uint8_t len,
-    const UiBox& box,
-    float r,
-    float g,
-    float b,
-    const UiBox* clip,
-    bool center);
-[[nodiscard]] uint32_t uiEmitRun(
-    UiState& s,
-    UiPrimitive* dst,
-    uint32_t n,
-    uint32_t cap,
-    const TextRun& run,
-    float r,
-    float g,
-    float b,
-    float a,
-    const UiBox* clip);
 
 } // namespace burnhope

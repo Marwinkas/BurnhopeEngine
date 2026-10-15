@@ -1,9 +1,9 @@
-#include "core/ui/Canvas.hpp"
-#include "core/ui/LayoutBridge.hpp"
-#include "core/ui/PrimitiveBatch.hpp"
-#include "core/ui/Font.hpp"
-#include "core/ui/State.hpp"
-#include "core/platform/Trace.hpp"
+#include "ui/Canvas.hpp"
+#include "ui/LayoutBridge.hpp"
+#include "ui/PrimitiveBatch.hpp"
+#include "ui/Font.hpp"
+#include "ui/State.hpp"
+#include "platform/Trace.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -207,6 +207,7 @@ UiEvent canvasConsume(
     }
 
     // 3. Анимации цвета и GIF
+    uiPhotoTick(s);
     if (uiTickMotion(s)) {
         s.visualDirty = true;
     }

@@ -22,8 +22,8 @@ int childIndex(const UiState& s, uint16_t id) {
 }
 
 bool sized(const UiFlex& flex, bool vertical) {
-    const uint8_t mode = vertical ? flex.heightMode : flex.widthMode;
-    return mode == static_cast<uint8_t>(UiSize::Px) && flex.grow < 0.5f;
+    const UiSize mode = vertical ? flex.heightMode : flex.widthMode;
+    return mode == UiSize::Px && flex.grow < 0.5f;
 }
 
 float axisFloor(const UiState& s, uint16_t id, bool vertical, bool ignoreFixed, int depth) {
@@ -35,15 +35,15 @@ float axisFloor(const UiState& s, uint16_t id, bool vertical, bool ignoreFixed, 
         return 0.0f;
     }
     const float stated = vertical ? flex->minH : flex->minW;
-    const uint8_t mode = vertical ? flex->heightMode : flex->widthMode;
+    const UiSize mode = vertical ? flex->heightMode : flex->widthMode;
     const float px = vertical ? flex->height : flex->width;
     float base = 64.0f;
     if (stated > 1.0f) {
         base = stated;
-    } else if (!ignoreFixed && mode == static_cast<uint8_t>(UiSize::Px) && flex->shrink < 0.5f && px > 1.0f) {
+    } else if (!ignoreFixed && mode == UiSize::Px && flex->shrink < 0.5f && px > 1.0f) {
         base = px;
     }
-    const bool column = flex->direction == 0 || flex->direction == 2;
+    const bool column = flex->direction == UiFlexDir::Column || flex->direction == UiFlexDir::ColumnReverse;
     const bool along = vertical == column;
     float acc = along ? 0.0f : base;
     int kids = 0;
@@ -72,12 +72,12 @@ float axisFloor(const UiState& s, uint16_t id, bool vertical, bool ignoreFixed, 
 
 void writeSize(UiFlex& flex, bool vertical, float size) {
     if (vertical) {
-        flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+        flex.heightMode = UiSize::Px;
         flex.height = size;
         flex.shrink = 0.0f;
         return;
     }
-    flex.widthMode = static_cast<uint8_t>(UiSize::Px);
+    flex.widthMode = UiSize::Px;
     flex.width = size;
     flex.shrink = 0.0f;
 }
@@ -98,7 +98,7 @@ bool splitVertical(const UiState& s, uint16_t split) {
     if (flex == nullptr) {
         return false;
     }
-    return flex->direction == 0 || flex->direction == 2;
+    return flex->direction == UiFlexDir::Column || flex->direction == UiFlexDir::ColumnReverse;
 }
 
 uint8_t splitCursor(const UiState& s, uint16_t split) {
@@ -137,9 +137,9 @@ float paneSize(const UiState& s, uint16_t pane, bool vertical) {
     if (flex == nullptr) {
         return vertical ? s.box[pane].h : s.box[pane].w;
     }
-    const uint8_t mode = vertical ? flex->heightMode : flex->widthMode;
+    const UiSize mode = vertical ? flex->heightMode : flex->widthMode;
     const float px = vertical ? flex->height : flex->width;
-    if (mode == static_cast<uint8_t>(UiSize::Px) && px > 1.0f) {
+    if (mode == UiSize::Px && px > 1.0f) {
         return px;
     }
     return vertical ? s.box[pane].h : s.box[pane].w;
@@ -236,12 +236,12 @@ void splitPaint(UiState& s, uint16_t id, bool hot) {
     if (paint == nullptr) {
         return;
     }
-    const auto token = static_cast<uint8_t>(hot ? UiToken::Accent : UiToken::Muted);
-    if (paint->role == static_cast<uint8_t>(UiRole::Panel) && paint->token == token) {
+    const UiToken token = hot ? UiToken::Accent : UiToken::Muted;
+    if (paint->token == token) {
         return;
     }
     const float radius = paint->radius;
-    *paint = paintToken(s.look, UiRole::Panel, static_cast<UiToken>(token), radius);
+    *paint = paintToken(s.look, token, radius);
     paint->a = hot ? 0.9f : 0.16f;
     s.visualDirty = true;
 }

@@ -6,6 +6,12 @@ namespace burnhope {
 
 struct UiState;
 
+struct UiCheck {
+    uint8_t on = 0;
+    uint8_t kind = 0;
+    uint8_t group = 0;
+};
+
 struct UiButtonConfig {
     const char* label = nullptr;
     float width = 0.0f;

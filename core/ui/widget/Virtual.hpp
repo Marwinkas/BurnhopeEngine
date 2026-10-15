@@ -1,8 +1,17 @@
 #pragma once
 
 #include "ui/State.hpp"
+#include "ui/widget/Scroll.hpp"
 
 namespace burnhope {
+
+inline constexpr uint16_t kUiPoolCap = 32;
+
+struct UiVirtualPool {
+    void (*refresh)(UiState& s, uint16_t id) = nullptr;
+    float (*contentHeight)(const UiState& s, uint16_t id) = nullptr;
+    uint8_t follow = 1;
+};
 
 struct UiVirtualBase {
     uint32_t count = 0;
@@ -128,24 +137,24 @@ inline uint16_t uiVirtualSlots(float viewH, float itemH, uint8_t cols = 1) {
     return static_cast<uint16_t>(n);
 }
 
-inline uint16_t uiVirtualHostCreate(UiState& s, uint16_t parent, UiRole role, UiToken token, float radius) {
+inline uint16_t uiVirtualHostCreate(UiState& s, uint16_t parent, UiToken token, float radius) {
     UiFlex host{};
     host.grow = 1.0f;
     host.shrink = 1.0f;
-    host.overflow = 2;
-    host.position = 2;
-    const uint16_t scroll = spawn(s, parent, host, paintToken(s.look, role, token, radius));
+    host.overflow = UiOverflow::Scroll;
+    host.position = UiPosition::Relative;
+    const uint16_t scroll = spawn(s, parent, host, paintToken(s.look, token, radius));
     if (scroll == kUiNone) {
         return kUiNone;
     }
     UiFlex spacer{};
-    spacer.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    spacer.widthMode = UiSize::Percent;
     spacer.width = 100.0f;
-    spacer.heightMode = static_cast<uint8_t>(UiSize::Px);
+    spacer.heightMode = UiSize::Px;
     spacer.height = 1.0f;
     spacer.shrink = 0.0f;
-    spacer.position = 2;
-    const uint16_t inner = spawn(s, scroll, spacer, paint(UiRole::Hidden, 0, 0, 0));
+    spacer.position = UiPosition::Relative;
+    const uint16_t inner = spawn(s, scroll, spacer, paintClear());
     s.ent[scroll].set<UiScroll>({0.0f, inner});
     return scroll;
 }

@@ -10,10 +10,10 @@ bool insideParents(const UiState& s, uint16_t id, float x, float y) {
     float x1 = 0;
     float y1 = 0;
     for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-        const UiPaint* paint = s.ent[p].try_get<UiPaint>();
+        const UiScissor* scissor = s.ent[p].try_get<UiScissor>();
         const UiFlex* flex = s.ent[p].try_get<UiFlex>();
-        const bool clip = (paint != nullptr && paint->role == static_cast<uint8_t>(UiRole::Scroll))
-            || (flex != nullptr && (flex->overflow == 1 || flex->overflow == 2));
+        const bool clip = (scissor != nullptr && scissor->enabled)
+            || (flex != nullptr && (flex->overflow == UiOverflow::Hidden || flex->overflow == UiOverflow::Scroll));
         if (!clip) {
             continue;
         }
@@ -57,27 +57,11 @@ uint16_t hitTest(const UiState& s, float x, float y) {
             if (p == nullptr) {
                 continue;
             }
-            if (s.ent[id].has<UiNoHit>()) {
-                continue; // Пропускаем нематериальные иконки!
-            }
-            const auto role = static_cast<UiRole>(p->role);
-            if (role == UiRole::Hidden || role == UiRole::Label || role == UiRole::Progress) {
-                continue;
-            }
-            const UiImage* image = s.ent[id].try_get<UiImage>();
-            if (image != nullptr && image->minimap == 0 && s.ent[id].try_get<UiImageMinimap>() == nullptr) {
+            if (s.ent[id].has<UiNoHit>() || s.ent[id].has<UiPass>()) {
                 continue;
             }
             if (!insideParents(s, id, x, y)) {
                 continue;
-            }
-            if (role == UiRole::Button && p->icon != 0) {
-                const uint16_t parent = s.parentOf[id];
-                const UiPaint* host = parent < s.count ? s.ent[parent].try_get<UiPaint>() : nullptr;
-                if (host != nullptr
-                    && (host->role == static_cast<uint8_t>(UiRole::Button) || host->role == static_cast<uint8_t>(UiRole::Panel))) {
-                    continue;
-                }
             }
             bool hidden = false;
             for (uint16_t up = id; up != kUiNone && up < s.count; up = s.parentOf[up]) {

@@ -1,6 +1,7 @@
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Scroll.hpp"
+#include "ui/widget/Virtual.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -19,7 +20,7 @@ float scrollContentH(const UiState& s, uint16_t inner) {
         }
         float h = 0.0f;
         if (const UiFlex* flex = s.ent[id].try_get<UiFlex>()) {
-            if (flex->heightMode == static_cast<uint8_t>(UiSize::Px) && flex->height > 1.0f) {
+            if (flex->heightMode == UiSize::Px && flex->height > 1.0f) {
                 h = flex->height;
             }
         }
@@ -36,7 +37,7 @@ float scrollContentH(const UiState& s, uint16_t inner) {
     if (const UiFlex* host = s.ent[inner].try_get<UiFlex>()) {
         gap = host->gap > 0.0f ? host->gap : 0.0f;
         pad = host->pad > 0.0f ? host->pad : 0.0f;
-        if (host->heightMode == static_cast<uint8_t>(UiSize::Px) && host->height > sum) {
+        if (host->heightMode == UiSize::Px && host->height > sum) {
             sum = host->height;
         }
     }
@@ -144,8 +145,8 @@ void scrollBy(UiState& s, uint16_t id, float wheel) {
     }
     auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>();
     const float next = -scroll->offset;
-    if (flex != nullptr && (flex->position != 0 || std::fabs(flex->posY) > 0.5f || std::fabs(flex->marginT - next) > 0.5f)) {
-        flex->position = 0;
+    if (flex != nullptr && (flex->position != UiPosition::Static || std::fabs(flex->posY) > 0.5f || std::fabs(flex->marginT - next) > 0.5f)) {
+        flex->position = UiPosition::Static;
         flex->posX = 0.0f;
         flex->posY = 0.0f;
         flex->marginT = next;
@@ -209,7 +210,7 @@ void dragScroll(UiState& s, uint16_t id, float y) {
         return;
     }
     if (auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>()) {
-        flex->position = 0;
+        flex->position = UiPosition::Static;
         flex->posX = 0.0f;
         flex->posY = 0.0f;
         flex->marginT = -scroll->offset;
@@ -236,7 +237,7 @@ uint16_t scrollOwner(const UiState& s, uint16_t id) {
 void uiScrollOverlay(UiState& s, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
     for (uint16_t id = 0; id < s.count; ++id) {
         const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-        if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Scroll)) {
+        if (s.ent[id].try_get<UiScroll>() == nullptr) {
             continue;
         }
         bool shown = s.box[id].w >= 1.0f && s.box[id].h >= 1.0f;
@@ -266,15 +267,11 @@ bool uiScrollInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase,
         if (owner == kUiNone || owner >= s.count) {
             return false;
         }
-        const UiPaint* ownerPaint = s.ent[owner].try_get<UiPaint>();
-        if (ownerPaint == nullptr || ownerPaint->role != static_cast<uint8_t>(UiRole::Scroll)) {
+        if (s.ent[owner].try_get<UiScroll>() == nullptr) {
             return false;
         }
-        if (id != owner) {
-            const UiPaint* hitPaint = s.ent[id].try_get<UiPaint>();
-            if (hitPaint != nullptr && focusable(hitPaint->role)) {
-                return false;
-            }
+        if (id != owner && s.ent[id].has<UiFocusable>()) {
+            return false;
         }
         UiBox thumb{};
         if (scrollThumb(s, owner, thumb) && hitBox(thumb, in.pointer.x, in.pointer.y)) {
@@ -289,7 +286,7 @@ bool uiScrollInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase,
             return false;
         }
         const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-        if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Scroll)) {
+        if (s.ent[id].try_get<UiScroll>() == nullptr) {
             return false;
         }
         dragScroll(s, id, in.pointer.y);

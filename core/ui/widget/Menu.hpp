@@ -6,6 +6,12 @@
 
 namespace burnhope {
 
+struct UiMenuBar {};
+
+struct UiMenuCmd {
+    uint8_t index = 0;
+};
+
 inline constexpr uint8_t kUiMenuCap = 32;
 
 struct UiMenuMetrics {

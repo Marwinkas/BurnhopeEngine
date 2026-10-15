@@ -1144,7 +1144,7 @@ void filesLoadIcons(Canvas& c) {
     }
     auto loadIcon = [&](uint8_t slot, const char* const* paths, int n) {
         for (int i = 0; i < n; ++i) {
-            if (canvasLoadImage(c, slot, paths[i])) {
+            if (canvasLoadPhoto(c, slot, paths[i])) {
                 return true;
             }
         }

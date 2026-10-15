@@ -7,6 +7,20 @@
 
 namespace burnhope {
 
+bool uiRange(const UiState& s, uint16_t id, float& value, float& minV, float& maxV) {
+    if (id >= s.count) {
+        return false;
+    }
+    const UiRange* range = s.ent[id].try_get<UiRange>();
+    if (range == nullptr) {
+        return false;
+    }
+    value = range->value;
+    minV = range->min;
+    maxV = range->max;
+    return true;
+}
+
 void dragSlider(UiState& s, uint16_t id, float x) {
     auto* range = s.ent[id].try_get_mut<UiRange>();
     if (range == nullptr) {
@@ -67,17 +81,17 @@ void dragSpin(UiState& s, uint16_t id, float x) {
 uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float maxV, UiValueChangeFn onChange, void* user, float width) {
     UiFlex flex{};
     if (width > 1.0f) {
-        flex.widthMode = static_cast<uint8_t>(UiSize::Px);
+        flex.widthMode = UiSize::Px;
         flex.width = width;
         flex.grow = 0.0f;
     } else {
-        flex.widthMode = static_cast<uint8_t>(UiSize::Percent);
+        flex.widthMode = UiSize::Percent;
         flex.width = 100.0f;
     }
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.heightMode = UiSize::Px;
     flex.height = 18.0f;
     flex.shrink = 0.0f;
-    UiPaint body = paintToken(s.look, UiRole::Slider, UiToken::Slider, s.look.radiusSm);
+    UiPaint body = paintToken(s.look, UiToken::Slider, s.look.radiusSm);
     body.shadow = 3.0f;
     body.borderW = 2.0f;
     body.br = s.look.text[0];
@@ -102,11 +116,11 @@ uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float ma
 
 uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV, float step) {
     UiFlex flex{};
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.heightMode = UiSize::Px;
     flex.height = 30.0f;
     flex.shrink = 0.0f;
-    flex.align = 1;
-    UiPaint body = paintToken(s.look, UiRole::Button, UiToken::Button, s.look.radiusSm);
+    flex.align = UiAlign::Center;
+    UiPaint body = paintToken(s.look, UiToken::Button, s.look.radiusSm);
     body.shadow = 4.0f;
     body.borderW = 2.0f;
     body.br = s.look.text[0];
@@ -131,9 +145,12 @@ bool uiSliderInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase,
     if (id >= s.count) {
         return false;
     }
-    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+    const UiRange* range = s.ent[id].try_get<UiRange>();
+    if (range == nullptr) {
+        return false;
+    }
     if (phase == kUiInPressLate) {
-        if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Slider)) {
+        if (range->step > 0.0f) {
             return false;
         }
         s.capture = id;
@@ -141,12 +158,9 @@ bool uiSliderInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase,
         return true;
     }
     if (phase == kUiInDrag) {
-        if (paint != nullptr && paint->role == static_cast<uint8_t>(UiRole::Button)) {
-            const UiRange* range = s.ent[id].try_get<UiRange>();
-            if (range != nullptr && range->step > 0.0f) {
-                const float x = s.relative != 0 ? s.grabX + in.pointer.dx : in.pointer.x;
-                dragSpin(s, id, x);
-            }
+        if (range->step > 0.0f) {
+            const float x = s.relative != 0 ? s.grabX + in.pointer.dx : in.pointer.x;
+            dragSpin(s, id, x);
             return true;
         }
         dragSlider(s, id, in.pointer.x);

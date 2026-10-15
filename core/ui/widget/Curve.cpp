@@ -78,10 +78,10 @@ void onGradient(void* user, uint16_t id, float x, float y) {
 
 uint16_t track(UiState& s, uint16_t parent, float h) {
     UiFlex flex{};
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.heightMode = UiSize::Px;
     flex.height = h;
     flex.shrink = 0.0f;
-    return spawn(s, parent, flex, paintToken(s.look, UiRole::Panel, UiToken::Content, 6.0f));
+    return spawn(s, parent, flex, paintToken(s.look, UiToken::Content, 6.0f));
 }
 
 } // namespace

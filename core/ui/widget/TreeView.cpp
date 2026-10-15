@@ -6,7 +6,7 @@
 namespace burnhope {
 namespace {
 
-void onRow(void* user, uint16_t id, int16_t) {
+void onRow(void* user, uint16_t id) {
     auto* s = static_cast<UiState*>(user);
     if (s == nullptr || id >= s->count) {
         return;
@@ -30,17 +30,17 @@ void onRow(void* user, uint16_t id, int16_t) {
 
 uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
     UiFlex row{};
-    row.position = 1;
-    row.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    row.position = UiPosition::Absolute;
+    row.widthMode = UiSize::Percent;
     row.width = 100.0f;
-    row.heightMode = static_cast<uint8_t>(UiSize::Px);
+    row.heightMode = UiSize::Px;
     row.height = itemH > 2.0f ? itemH - 2.0f : itemH;
     row.shrink = 0.0f;
-    row.direction = 1;
-    row.align = 1;
-    row.justify = 0;
+    row.direction = UiFlexDir::Row;
+    row.align = UiAlign::Center;
+    row.justify = UiJustify::Start;
     row.gap = 4.0f;
-    UiPaint rowPaint = paintToken(s.look, UiRole::Button, UiToken::Item, s.look.radiusSm);
+    UiPaint rowPaint = paintToken(s.look, UiToken::Item, s.look.radiusSm);
     rowPaint.a = 0.0f;
     rowPaint.borderW = 0.0f;
     const uint16_t slot = spawn(s, inner, row, rowPaint);
@@ -74,12 +74,12 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
     UiFlex caption{};
     caption.grow = 1.0f;
     caption.shrink = 1.0f;
-    caption.self = 1;
-    caption.heightMode = static_cast<uint8_t>(UiSize::Px);
+    caption.self = UiAlignSelf::Stretch;
+    caption.heightMode = UiSize::Px;
     caption.height = itemH > 6.0f ? itemH - 6.0f : itemH;
-    const uint16_t label = spawn(s, slot, caption, paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f));
+    const uint16_t label = spawn(s, slot, caption, paintToken(s.look, UiToken::Text, 0.0f));
     addText(s, label, " ");
-    uiTextStyle(s, label, 0, 1, 1, 0, 0, 1.0f);
+    uiTextStyle(s, label, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     uiBind(s, slot, onRow, &s);
     s.ent[slot].set<UiParts>({icon, chevron, label});
     s.ent[slot].set<UiVirtRow>({});
@@ -94,7 +94,7 @@ float uiTreeContentH(const UiState& s, uint16_t id) {
 }
 
 uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg) {
-    const uint16_t scroll = uiVirtualHostCreate(s, parent, UiRole::Scroll, UiToken::Side, s.look.radiusSm);
+    const uint16_t scroll = uiVirtualHostCreate(s, parent, UiToken::Side, s.look.radiusSm);
     if (scroll == kUiNone) {
         return scroll;
     }
@@ -137,14 +137,14 @@ void uiTreeViewRefresh(UiState& s, uint16_t id) {
             continue;
         }
         if (auto* flex = s.ent[slot].try_get_mut<UiFlex>()) {
-            flex->position = 1;
+            flex->position = UiPosition::Absolute;
             flex->posX = 0.0f;
             flex->posY = static_cast<float>(index) * tree->itemH - scroll->offset;
-            flex->widthMode = static_cast<uint8_t>(UiSize::Percent);
+            flex->widthMode = UiSize::Percent;
             flex->width = 100.0f;
-            flex->justify = 0;
-            flex->align = 1;
-            flex->direction = 1;
+            flex->justify = UiJustify::Start;
+            flex->align = UiAlign::Center;
+            flex->direction = UiFlexDir::Row;
             flex->height = tree->itemH > 2.0f ? tree->itemH - 2.0f : tree->itemH;
         }
         s.ent[slot].set<UiVirtRow>({index});

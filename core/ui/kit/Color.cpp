@@ -1,8 +1,9 @@
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/Layout.hpp"
+#include "ui/LayoutBridge.hpp"
 #include "ui/PrimitiveBatch.hpp"
+#include "ui/widget/Slider.hpp"
 #include "color/Color.hpp"
 
 #include <algorithm>
@@ -12,13 +13,13 @@
 
 namespace burnhope {
 namespace {
-constexpr uint8_t kRampColorWheel = 10;
-constexpr uint8_t kRampColorValue = 11;
-constexpr uint8_t kRampColorSwatch = 12;
-constexpr uint8_t kRampColorAlpha = 13;
+constexpr UiRamp kRampColorWheel = UiRamp::HueWheel;
+constexpr UiRamp kRampColorValue = UiRamp::ValueRamp;
+constexpr UiRamp kRampColorSwatch = UiRamp::Gradient;
+constexpr UiRamp kRampColorAlpha = UiRamp::Alpha;
 
-UiPaint colorRampPart(const UiLook& look, UiRole role, UiToken token, uint8_t ramp, float radius = 0.0f) {
-    UiPaint paint = paintToken(look, role, token, radius);
+UiPaint colorRampPart(const UiLook& look, UiToken token, UiRamp ramp, float radius = 0.0f) {
+    UiPaint paint = paintToken(look, token, radius);
     paint.ramp = ramp;
     return paint;
 }
@@ -101,9 +102,12 @@ void applyColor(UiState& s, bool fromHsv, bool publish = true) {
             paint->a = uiColor(s).colorA;
         }
     }
-    for (uint16_t id = 0; id < s.count; ++id) {
-        auto* ramp = s.ent[id].try_get_mut<UiPaint>();
-        if (ramp != nullptr && ramp->ramp >= 5 && ramp->ramp <= 7) {
+    for (uint16_t slot : {uiColor(s).colorRgb[0], uiColor(s).colorRgb[1], uiColor(s).colorRgb[2], uiColor(s).colorAlpha, uiColor(s).colorHsv[0], uiColor(s).colorHsv[1], uiColor(s).colorHsv[2]}) {
+        if (slot == kUiNone || slot >= s.count) {
+            continue;
+        }
+        auto* ramp = s.ent[slot].try_get_mut<UiPaint>();
+        if (ramp != nullptr) {
             ramp->r = uiColor(s).colorR;
             ramp->g = uiColor(s).colorG;
             ramp->b = uiColor(s).colorB;
@@ -282,7 +286,7 @@ void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& 
                 continue;
             }
             const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-            if (paint == nullptr || paint->role == static_cast<uint8_t>(UiRole::Hidden)) {
+            if (paint == nullptr || paint->a <= 0.0f || s.ent[id].has<UiPass>()) {
                 continue;
             }
             const UiBox& box = s.box[id];
@@ -395,7 +399,7 @@ void setBtnLabel(UiState& s, uint16_t id, const char* text) {
     const UiText* label = s.ent[id].try_get<UiText>();
     auto* flex = s.ent[id].try_get_mut<UiFlex>();
     if (label != nullptr && flex != nullptr) {
-        flex->widthMode = static_cast<uint8_t>(UiSize::Px);
+        flex->widthMode = UiSize::Px;
         flex->width = static_cast<float>(label->len) * s.look.advance + 20.0f;
     }
 }
@@ -469,7 +473,7 @@ void syncColor(UiState& s) {
     }
 }
 
-void colorOnOpen(void* user, uint16_t id, int16_t) {
+void colorOnOpen(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
     uiColor(s).colorAnchor = id;
     paintColor(s);
@@ -489,7 +493,7 @@ void colorOnOpen(void* user, uint16_t id, int16_t) {
     publishColor(s);
 }
 
-void colorOnClose(void* user, uint16_t, int16_t) {
+void colorOnClose(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     uiColor(s).colorPresent = 0;
     uiColor(s).colorApplied = 0;
@@ -500,7 +504,7 @@ void colorOnClose(void* user, uint16_t, int16_t) {
     }
 }
 
-void colorOnDrop(void* user, uint16_t, int16_t) {
+void colorOnDrop(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     uiColor(s).colorDrop = uiColor(s).colorDrop == 0 ? 1 : 0;
     publishColor(s);
@@ -512,7 +516,7 @@ void colorOnDrop(void* user, uint16_t, int16_t) {
     }
 }
 
-void colorOnMenu(void* user, uint16_t, int16_t) {
+void colorOnMenu(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     uiColor(s).colorMode = 0;
     uiColor(s).colorPresent = 1;
@@ -527,7 +531,7 @@ void colorOnMenu(void* user, uint16_t, int16_t) {
     }
 }
 
-void colorOnWindow(void* user, uint16_t, int16_t) {
+void colorOnWindow(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     uiColor(s).colorMode = 1;
     uiColor(s).colorPresent = 2;
@@ -641,78 +645,78 @@ bool colorGrab(void* user, uint16_t hit, float x, float y) {
 
 void fillColorBody(UiState& s, uint16_t parent) {
     UiFlex row{};
-    row.direction = 1;
+    row.direction = UiFlexDir::Row;
     auto chip = [&](uint16_t host, const char* name, UiClickFn fn) {
         UiFlex flex{};
-        flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+        flex.heightMode = UiSize::Px;
         flex.height = 28.0f;
         flex.shrink = 0.0f;
-        const uint16_t id = spawn(s, host, flex, paintToken(s.look, UiRole::Button, UiToken::Button, 6.0f));
+        const uint16_t id = spawn(s, host, flex, paintToken(s.look, UiToken::Button, 6.0f));
         UiText label{};
         copyText(label.bytes, label.len, name);
         s.ent[id].set<UiText>(label);
         auto* box = s.ent[id].try_get_mut<UiFlex>();
         if (box != nullptr) {
-            box->widthMode = static_cast<uint8_t>(UiSize::Px);
+            box->widthMode = UiSize::Px;
             box->width = static_cast<float>(label.len) * s.look.advance + 20.0f;
             box->height = 28.0f;
-            box->heightMode = static_cast<uint8_t>(UiSize::Px);
+            box->heightMode = UiSize::Px;
         }
         uiBind(s, id, fn, &s);
         return id;
     };
     UiFlex wheelRow = row;
-    wheelRow.heightMode = static_cast<uint8_t>(UiSize::Px);
+    wheelRow.heightMode = UiSize::Px;
     wheelRow.height = 220.0f;
     wheelRow.shrink = 0.0f;
     wheelRow.gap = 10.0f;
-    wheelRow.align = 1;
-    const uint16_t wheelRowId = spawn(s, parent, wheelRow, paint(UiRole::Hidden, 0, 0, 0));
+    wheelRow.align = UiAlign::Center;
+    const uint16_t wheelRowId = spawn(s, parent, wheelRow, paintClear());
     UiFlex wheel{};
-    wheel.widthMode = static_cast<uint8_t>(UiSize::Px);
-    wheel.heightMode = static_cast<uint8_t>(UiSize::Px);
+    wheel.widthMode = UiSize::Px;
+    wheel.heightMode = UiSize::Px;
     wheel.width = 220.0f;
     wheel.height = 220.0f;
     wheel.shrink = 0.0f;
-    uiColor(s).colorWheel = spawn(s, wheelRowId, wheel, colorRampPart(s.look, UiRole::Panel, UiToken::Content, kRampColorWheel));
+    uiColor(s).colorWheel = spawn(s, wheelRowId, wheel, colorRampPart(s.look, UiToken::Content, kRampColorWheel));
     uiDrag(s, uiColor(s).colorWheel, colorOnDrag, &s);
     UiFlex valBar{};
-    valBar.widthMode = static_cast<uint8_t>(UiSize::Px);
-    valBar.heightMode = static_cast<uint8_t>(UiSize::Px);
+    valBar.widthMode = UiSize::Px;
+    valBar.heightMode = UiSize::Px;
     valBar.width = 22.0f;
     valBar.height = 220.0f;
     valBar.shrink = 0.0f;
-    uiColor(s).colorVal = spawn(s, wheelRowId, valBar, colorRampPart(s.look, UiRole::Panel, UiToken::Content, kRampColorValue));
+    uiColor(s).colorVal = spawn(s, wheelRowId, valBar, colorRampPart(s.look, UiToken::Content, kRampColorValue));
     uiDrag(s, uiColor(s).colorVal, colorOnDrag, &s);
     UiFlex side{};
-    side.direction = 0;
-    side.widthMode = static_cast<uint8_t>(UiSize::Px);
+    side.direction = UiFlexDir::Column;
+    side.widthMode = UiSize::Px;
     side.width = 96.0f;
-    side.heightMode = static_cast<uint8_t>(UiSize::Px);
+    side.heightMode = UiSize::Px;
     side.height = 220.0f;
     side.gap = 8.0f;
     side.shrink = 0.0f;
-    const uint16_t sideId = spawn(s, wheelRowId, side, paint(UiRole::Hidden, 0, 0, 0));
+    const uint16_t sideId = spawn(s, wheelRowId, side, paintClear());
     UiFlex swatch{};
-    swatch.heightMode = static_cast<uint8_t>(UiSize::Px);
+    swatch.heightMode = UiSize::Px;
     swatch.height = 72.0f;
-    swatch.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    swatch.widthMode = UiSize::Percent;
     swatch.width = 100.0f;
     swatch.shrink = 0.0f;
     {
-        UiPaint swatchPaint = colorRampPart(s.look, UiRole::Panel, UiToken::Preview, kRampColorSwatch, 6.0f);
+        UiPaint swatchPaint = colorRampPart(s.look, UiToken::Preview, kRampColorSwatch, 6.0f);
         swatchPaint.r = uiColor(s).colorR;
         swatchPaint.g = uiColor(s).colorG;
         swatchPaint.b = uiColor(s).colorB;
         uiColor(s).colorSwatch = spawn(s, sideId, swatch, swatchPaint);
     }
     UiFlex pick{};
-    pick.heightMode = static_cast<uint8_t>(UiSize::Px);
+    pick.heightMode = UiSize::Px;
     pick.height = 32.0f;
-    pick.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    pick.widthMode = UiSize::Percent;
     pick.width = 100.0f;
     pick.shrink = 0.0f;
-    UiPaint pickPaint = paintToken(s.look, UiRole::Button, UiToken::Button, 6.0f);
+    UiPaint pickPaint = paintToken(s.look, UiToken::Button, 6.0f);
     pickPaint.icon = 7;
     const uint16_t pickId = spawn(s, sideId, pick, pickPaint);
     uiColor(s).colorPickBtn = pickId;
@@ -724,24 +728,20 @@ void fillColorBody(UiState& s, uint16_t parent) {
     const float starts[7] = {uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorA, uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV};
     for (int i = 0; i < 7; ++i) {
         UiFlex line = row;
-        line.heightMode = static_cast<uint8_t>(UiSize::Px);
+        line.heightMode = UiSize::Px;
         line.height = 26.0f;
         line.shrink = 0.0f;
-        line.align = 1;
+        line.align = UiAlign::Center;
         line.gap = 8.0f;
-        const uint16_t lineId = spawn(s, parent, line, paint(UiRole::Hidden, 0, 0, 0));
-        const uint16_t lab = spawn(s, lineId, UiFlex{}, paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f));
+        const uint16_t lineId = spawn(s, parent, line, paintClear());
+        const uint16_t lab = spawn(s, lineId, UiFlex{}, paintToken(s.look, UiToken::Text, 0.0f));
         addText(s, lab, names[i]);
         UiFlex slide{};
         slide.grow = 1.0f;
         slide.shrink = 1.0f;
-        slide.heightMode = static_cast<uint8_t>(UiSize::Px);
+        slide.heightMode = UiSize::Px;
         slide.height = 18.0f;
-        const uint16_t sliderId = spawn(s, lineId, slide, paintToken(s.look, UiRole::Slider, UiToken::Slider, 8.0f));
-        const uint8_t ramps[7] = {1, 2, 3, 7, 4, 5, 6};
-        if (auto* slidePaint = s.ent[sliderId].try_get_mut<UiPaint>()) {
-            slidePaint->ramp = ramps[i];
-        }
+        const uint16_t sliderId = spawn(s, lineId, slide, paintToken(s.look, UiToken::Slider, 8.0f));
         s.ent[sliderId].set<UiRange>({starts[i], 0.0f, 1.0f});
         if (i < 3) {
             uiColor(s).colorRgb[i] = sliderId;
@@ -751,12 +751,12 @@ void fillColorBody(UiState& s, uint16_t parent) {
             uiColor(s).colorHsv[i - 4] = sliderId;
         }
         UiFlex num{};
-        num.widthMode = static_cast<uint8_t>(UiSize::Px);
-        num.heightMode = static_cast<uint8_t>(UiSize::Px);
+        num.widthMode = UiSize::Px;
+        num.heightMode = UiSize::Px;
         num.width = 56.0f;
         num.height = 24.0f;
         num.shrink = 0.0f;
-        const uint16_t numId = spawn(s, lineId, num, paintToken(s.look, UiRole::Field, UiToken::Field, 4.0f));
+        const uint16_t numId = spawn(s, lineId, num, paintToken(s.look, UiToken::Field, 4.0f));
         UiField digits{};
         digits.padL = 6.0f;
         digits.padR = 4.0f;
@@ -767,12 +767,12 @@ void fillColorBody(UiState& s, uint16_t parent) {
         uiColor(s).colorNum[i] = numId;
     }
     UiFlex hexFlex{};
-    hexFlex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    hexFlex.heightMode = UiSize::Px;
     hexFlex.height = 32.0f;
-    hexFlex.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    hexFlex.widthMode = UiSize::Percent;
     hexFlex.width = 100.0f;
     hexFlex.shrink = 0.0f;
-    uiColor(s).colorHex = spawn(s, parent, hexFlex, paintToken(s.look, UiRole::Field, UiToken::Field, 6.0f));
+    uiColor(s).colorHex = spawn(s, parent, hexFlex, paintToken(s.look, UiToken::Field, 6.0f));
     UiField hex{};
     hex.padL = 10.0f;
     hex.padR = 10.0f;
@@ -780,11 +780,11 @@ void fillColorBody(UiState& s, uint16_t parent) {
     s.ent[uiColor(s).colorHex].set<UiField>(hex);
     uiEdit(s, uiColor(s).colorHex, colorOnEdit, &s);
     UiFlex modeRow = row;
-    modeRow.heightMode = static_cast<uint8_t>(UiSize::Px);
+    modeRow.heightMode = UiSize::Px;
     modeRow.height = 32.0f;
     modeRow.shrink = 0.0f;
     modeRow.gap = 6.0f;
-    const uint16_t modeId = spawn(s, parent, modeRow, paint(UiRole::Hidden, 0, 0, 0));
+    const uint16_t modeId = spawn(s, parent, modeRow, paintClear());
     uiColor(s).colorMenuBtn = chip(modeId, "MENU", colorOnMenu);
     uiColor(s).colorWinBtn = chip(modeId, "WINDOW", colorOnWindow);
     chip(parent, "CLOSE", colorOnClose);
@@ -801,29 +801,29 @@ void uiBuildColor(UiState& s) {
         rgbToHsv(uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV);
     }
     UiFlex col{};
-    col.direction = 0;
+    col.direction = UiFlexDir::Column;
     col.shrink = 1.0f;
     UiFlex row = col;
-    row.direction = 1;
+    row.direction = UiFlexDir::Row;
     UiFlex rootF = col;
     rootF.pad = 12.0f;
     rootF.gap = 8.0f;
-    const uint16_t root = spawn(s, kUiNone, rootF, paintToken(s.look, UiRole::Panel, UiToken::Menu, 0.0f));
+    const uint16_t root = spawn(s, kUiNone, rootF, paintToken(s.look, UiToken::Menu, 0.0f));
     UiFlex titleF = row;
-    titleF.heightMode = static_cast<uint8_t>(UiSize::Px);
+    titleF.heightMode = UiSize::Px;
     titleF.height = 36.0f;
     titleF.shrink = 0.0f;
-    titleF.align = 1;
-    const uint16_t title = spawn(s, root, titleF, paintToken(s.look, UiRole::Panel, UiToken::Title, 0.0f));
-    const uint16_t brand = spawn(s, title, UiFlex{}, paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f));
+    titleF.align = UiAlign::Center;
+    const uint16_t title = spawn(s, root, titleF, paintToken(s.look, UiToken::Title, 0.0f));
+    const uint16_t brand = spawn(s, title, UiFlex{}, paintToken(s.look, UiToken::Text, 0.0f));
     addText(s, brand, "COLOR");
     UiFlex gap{};
     gap.grow = 1.0f;
     gap.shrink = 1.0f;
-    gap.heightMode = static_cast<uint8_t>(UiSize::Px);
+    gap.heightMode = UiSize::Px;
     gap.height = 1.0f;
-    spawn(s, title, gap, paint(UiRole::Hidden, 0, 0, 0));
-    spawn(s, title, px(28.0f, 28.0f), paintToken(s.look, UiRole::Close, UiToken::Close, 6.0f));
+    spawn(s, title, gap, paintClear());
+    spawn(s, title, px(28.0f, 28.0f), paintToken(s.look, UiToken::Close, 6.0f));
     uiColor(s).colorPanel = root;
     uiColor(s).colorPresent = 2;
     uiColor(s).colorApplied = 2;
@@ -837,7 +837,7 @@ bool colorCustomDraw(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uin
         return false;
     }
     const UiPaint& paint = *paintPtr;
-    const uint8_t ramp = paint.ramp;
+    const UiRamp ramp = paint.ramp;
     if (ramp != kRampColorWheel && ramp != kRampColorValue && ramp != kRampColorSwatch && ramp != kRampColorAlpha) {
         return false;
     }
@@ -890,17 +890,17 @@ bool colorCustomDraw(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uin
 
 uint16_t loadColorBin(UiState& s, uint16_t parent, const BinNode& node, const char* name, void*) {
     UiFlex flex{};
-    flex.position = 1;
+    flex.position = UiPosition::Absolute;
     flex.posX = node.posX;
     flex.posY = node.posY;
-    flex.widthMode = static_cast<uint8_t>(UiSize::Px);
+    flex.widthMode = UiSize::Px;
     flex.width = node.width;
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.heightMode = UiSize::Px;
     flex.height = node.height;
     flex.pad = 10.0f;
     flex.gap = 6.0f;
     flex.shrink = 0.0f;
-    const uint16_t id = spawn(s, parent, flex, paint(UiRole::Panel, node.r, node.g, node.b, node.radius));
+    const uint16_t id = spawn(s, parent, flex, paintRgb(node.r, node.g, node.b, node.radius));
     if (uiColor(s).book == nullptr || uiColor(s).book->gen == 0) {
         rgbToHsv(uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV);
         uiColor(s).colorA = 1.0f;

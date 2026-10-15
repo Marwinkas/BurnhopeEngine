@@ -1,4 +1,6 @@
-#include "core/ui/Font.hpp"
+#include "ui/Font.hpp"
+#include "ui/Primitive.hpp"
+#include "image/ImageUpload.hpp"
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -11,8 +13,6 @@
 #include <vector>
 
 namespace burnhope {
-
-[[nodiscard]] bool gpuImageUploadR8(GpuImage& img, Device& d, const uint8_t* pixels, uint32_t width, uint32_t height);
 
 namespace {
 

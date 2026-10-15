@@ -8,12 +8,12 @@ uint16_t uiIcon(UiState& s, uint16_t parent, uint8_t slot, float w, float h) {
         return kUiNone;
     }
     UiFlex flex{};
-    flex.widthMode = static_cast<uint8_t>(UiSize::Px);
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.widthMode = UiSize::Px;
+    flex.heightMode = UiSize::Px;
     flex.width = w;
     flex.height = h;
     flex.shrink = 0.0f;
-    UiPaint ink = paintToken(s.look, UiRole::Panel, UiToken::Content, 4.0f);
+    UiPaint ink = paintToken(s.look, UiToken::Content, 4.0f);
     ink.a = 0.0f;
     ink.r = 1.0f;
     ink.g = 1.0f;

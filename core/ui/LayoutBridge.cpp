@@ -1,6 +1,6 @@
-#include "core/ui/LayoutBridge.hpp"
-#include "core/ui/State.hpp"
-#include "core/platform/Trace.hpp"
+#include "ui/LayoutBridge.hpp"
+#include "ui/State.hpp"
+#include "platform/Trace.hpp"
 
 #include <cstdint>
 #include <yoga/YGValue.h>
@@ -310,7 +310,7 @@ void uiLayout(UiState& s, float w, float h) {
 
             if (s.ent[id].has<UiContentMeasure>()) {
                 YGNodeSetMeasureFunc(s.yoga[id], yogaMeasureAdapter);
-            } else if (YGNodeGetMeasureFunc(s.yoga[id]) != nullptr) {
+            } else {
                 YGNodeSetMeasureFunc(s.yoga[id], nullptr);
             }
         }

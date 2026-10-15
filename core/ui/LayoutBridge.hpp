@@ -1,7 +1,7 @@
 #pragma once
 
-#include "core/ui/Flex.hpp"
-#include "core/ui/Geometry.hpp"
+#include "ui/Flex.hpp"
+#include "ui/Geometry.hpp"
 #include <cstdint>
 
 namespace burnhope {

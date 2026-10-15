@@ -10,7 +10,7 @@
 namespace burnhope {
 namespace {
 
-void onTree(void* user, uint16_t id, int16_t) {
+void onTree(void* user, uint16_t id) {
     auto* s = static_cast<UiState*>(user);
     if (s == nullptr || id >= s->count) {
         return;
@@ -27,19 +27,19 @@ void onTree(void* user, uint16_t id, int16_t) {
 
 uint16_t uiTreeRow(UiState& s, uint16_t parent, const char* text) {
     UiFlex row{};
-    row.direction = 1;
-    row.heightMode = static_cast<uint8_t>(UiSize::Px);
+    row.direction = UiFlexDir::Row;
+    row.heightMode = UiSize::Px;
     row.height = 28.0f;
     row.shrink = 0.0f;
-    row.align = 1;
+    row.align = UiAlign::Center;
     row.gap = 6.0f;
-    const uint16_t head = spawn(s, parent, row, paintToken(s.look, UiRole::Button, UiToken::Item, s.look.radiusSm));
+    const uint16_t head = spawn(s, parent, row, paintToken(s.look, UiToken::Item, s.look.radiusSm));
     addText(s, head, text != nullptr ? text : "");
     UiFlex body{};
-    body.direction = 0;
+    body.direction = UiFlexDir::Column;
     body.padL = 16.0f;
     body.shrink = 0.0f;
-    const uint16_t child = spawn(s, parent, body, paint(UiRole::Hidden, 0, 0, 0));
+    const uint16_t child = spawn(s, parent, body, paintClear());
     uiShow(s, child, false);
     s.ent[head].set<UiTree>({child, 0});
     uiBind(s, head, onTree, &s);
@@ -67,14 +67,14 @@ void uiFold(UiState& s, uint16_t id) {
         }
     }
     auto* flex = s.ent[panel].try_get_mut<UiFlex>();
-    if (flex != nullptr && flex->position != 0) {
+    if (flex != nullptr && flex->position != UiPosition::Static) {
         UiFoldState& fold = s.ent[panel].ensure<UiFoldState>();
         if (open) {
             fold.openH = flex->height > 56.0f ? flex->height : s.box[panel].h;
-            flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+            flex->heightMode = UiSize::Px;
             flex->height = 52.0f;
         } else if (fold.openH > 56.0f) {
-            flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+            flex->heightMode = UiSize::Px;
             flex->height = fold.openH;
         }
         s.layoutDirty = true;

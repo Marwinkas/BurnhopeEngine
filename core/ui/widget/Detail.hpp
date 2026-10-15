@@ -13,8 +13,6 @@ struct UiScrollMetrics {
     float t = 0;
     uint8_t shown = 0;
 };
-enum class UiAlign : uint8_t { Auto = 0, Center = 1, Start = 2, End = 3 };
-enum class UiJustify : uint8_t { Start = 0, Center = 1, End = 2, Between = 3 };
 
 UiScrollMetrics uiCalcScrollMetrics(float viewH, float contentH, float offset);
 void scrollClamp(UiState& s, uint16_t id);

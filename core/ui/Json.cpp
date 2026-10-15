@@ -2,6 +2,7 @@
 #include "io/File.hpp"
 #include "io/JsonCursor.hpp"
 #include "ui/LayoutBridge.hpp"
+#include "ui/FlexAttr.hpp"
 #include "ui/State.hpp"
 
 #include <spdlog/spdlog.h>
@@ -109,7 +110,7 @@ bool parseSizeFloat(const char* begin, const char* end, float& out) {
     return ec == std::errc() && ptr != begin;
 }
 
-void readSize(Cur& c, uint8_t& mode, float& value) {
+void readSize(Cur& c, UiSize& mode, float& value) {
     skip(c);
     if (c.p < c.end && *c.p == '"') {
         char buf[16]{};
@@ -118,17 +119,17 @@ void readSize(Cur& c, uint8_t& mode, float& value) {
             return;
         }
         if (n > 0 && buf[n - 1] == '%') {
-            mode = static_cast<uint8_t>(UiSize::Percent);
+            mode = UiSize::Percent;
             (void)parseSizeFloat(buf, buf + n - 1, value);
         } else {
-            mode = static_cast<uint8_t>(UiSize::Px);
+            mode = UiSize::Px;
             (void)parseSizeFloat(buf, buf + n, value);
         }
         return;
     }
     float v = 0.0f;
     if (parseUiNumber(c, v)) {
-        mode = static_cast<uint8_t>(UiSize::Px);
+        mode = UiSize::Px;
         value = v;
     }
 }
@@ -139,7 +140,7 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
     }
     UiFlex flex{};
     flex.shrink = 0.0f;
-    UiPaint paint = paintToken(s.look, UiRole::Panel, UiToken::Content, 0.0f);
+    UiPaint paint = paintToken(s.look, UiToken::Content, 0.0f);
     paint.a = 1.0f;
     const uint16_t id = uiNode(s, parent, flex, paint);
     if (id == kUiNone) {
@@ -148,8 +149,8 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
     }
     char text[96]{};
     uint8_t textLen = 0;
-    uint8_t wMode = 0;
-    uint8_t hMode = 0;
+    UiSize wMode = UiSize::Auto;
+    UiSize hMode = UiSize::Auto;
     float width = 0.0f;
     float height = 0.0f;
     bool sawW = false;
@@ -177,15 +178,15 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                     auto* node = s.ent[id].try_get_mut<UiPaint>();
                     if (node != nullptr) {
                         if (strSame(role, "button")) {
-                            *node = paintToken(s.look, UiRole::Button, UiToken::Button, 0.0f);
+                            *node = paintToken(s.look, UiToken::Button, 0.0f);
                         } else if (strSame(role, "label")) {
-                            *node = paintToken(s.look, UiRole::Label, UiToken::Text, 0.0f);
+                            *node = paintToken(s.look, UiToken::Text, 0.0f);
                         } else if (strSame(role, "field")) {
-                            *node = paintToken(s.look, UiRole::Field, UiToken::Field, 0.0f);
+                            *node = paintToken(s.look, UiToken::Field, 0.0f);
                         } else if (strSame(role, "check")) {
-                            *node = paintToken(s.look, UiRole::Check, UiToken::Check, 0.0f);
+                            *node = paintToken(s.look, UiToken::Check, 0.0f);
                         } else {
-                            *node = paintToken(s.look, UiRole::Panel, UiToken::Content, 0.0f);
+                            *node = paintToken(s.look, UiToken::Content, 0.0f);
                         }
                     }
                 }
@@ -228,11 +229,11 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                 readSize(c, hMode, height);
                 sawH = true;
             } else if (strSame(key, "basis") || strSame(key, "maxW") || strSame(key, "maxH")) {
-                uint8_t mode = 0;
+                UiSize mode = UiSize::Auto;
                 float value = 0.0f;
                 readSize(c, mode, value);
                 if (auto* node = s.ent[id].try_get_mut<UiFlex>()) {
-                    uiFlexApplyAttr(*node, key, mode, value);
+                    uiFlexApplyAttr(*node, key, static_cast<uint8_t>(mode), value);
                 }
             } else if (strSame(key, "gapRow") || strSame(key, "aspect") || strSame(key, "right") || strSame(key, "bottom") || strSame(key, "grow")) {
                 float v = 0.0f;
@@ -283,21 +284,16 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
             }
         }
     }
-    const UiPaint* node = s.ent[id].try_get<UiPaint>();
-    const uint8_t role = node != nullptr ? node->role : 0;
     if (textLen > 0) {
         uiText(s, id, text);
-    }
-    if (role < 16 && s.roleFinish[role] != nullptr) {
-        s.roleFinish[role](s, id, nullptr, text, nullptr);
     }
     auto* flexNode = s.ent[id].try_get_mut<UiFlex>();
     if (flexNode != nullptr) {
         if (sawW) {
-            uiFlexApplyAttr(*flexNode, "w", wMode, width);
+            uiFlexApplyAttr(*flexNode, "w", static_cast<uint8_t>(wMode), width);
         }
         if (sawH) {
-            uiFlexApplyAttr(*flexNode, "h", hMode, height);
+            uiFlexApplyAttr(*flexNode, "h", static_cast<uint8_t>(hMode), height);
         }
     }
     return id;

@@ -4,6 +4,15 @@
 
 namespace burnhope {
 
+struct UiSplitter {
+    uint16_t pane = kUiNone;
+    uint8_t useNext = 0;
+    uint8_t axis = 0;
+    uint8_t armed = 0;
+    float startSize = 0.0f;
+    float startMouse = 0.0f;
+};
+
 uint16_t splitTarget(const UiState& s, uint16_t split);
 void splitDrag(UiState& s, uint16_t split, float x, float y);
 bool splitAlive(const UiState& s, uint16_t split);

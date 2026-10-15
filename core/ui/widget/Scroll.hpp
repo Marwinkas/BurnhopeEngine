@@ -4,6 +4,11 @@
 
 namespace burnhope {
 
+struct UiScroll {
+    float offset = 0.0f;
+    uint16_t inner = kUiNone;
+};
+
 void uiBindScroll(UiState& s, uint16_t id, uint16_t inner);
 bool scrollThumb(const UiState& s, uint16_t id, UiBox& thumb);
 void dragScroll(UiState& s, uint16_t id, float y);

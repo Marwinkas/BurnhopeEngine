@@ -1,7 +1,7 @@
 #include "ui/widget/Docking.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/Domain.hpp"
-#include "ui/Layout.hpp"
+#include "ui/LayoutBridge.hpp"
 #include "ui/PrimitiveBatch.hpp"
 
 namespace burnhope {
@@ -18,19 +18,19 @@ void uiDockTo(UiState& s, uint8_t edge) {
         return;
     }
     const bool horizontal = edge == 1 || edge == 2;
-    host->direction = horizontal ? 1 : 0;
-    panel->position = 0;
+    host->direction = horizontal ? UiFlexDir::Row : UiFlexDir::Column;
+    panel->position = UiPosition::Static;
     panel->shrink = 0.0f;
     panel->grow = 0.0f;
     if (horizontal) {
-        panel->widthMode = static_cast<uint8_t>(UiSize::Px);
+        panel->widthMode = UiSize::Px;
         panel->width = 260.0f;
-        panel->heightMode = static_cast<uint8_t>(UiSize::Percent);
+        panel->heightMode = UiSize::Percent;
         panel->height = 100.0f;
     } else {
-        panel->widthMode = static_cast<uint8_t>(UiSize::Percent);
+        panel->widthMode = UiSize::Percent;
         panel->width = 100.0f;
-        panel->heightMode = static_cast<uint8_t>(UiSize::Px);
+        panel->heightMode = UiSize::Px;
         panel->height = 160.0f;
     }
     if (edge == 1 || edge == 3) {

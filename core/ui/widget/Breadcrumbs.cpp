@@ -7,7 +7,7 @@
 namespace burnhope {
 namespace {
 
-void onSeg(void* user, uint16_t id, int16_t) {
+void onSeg(void* user, uint16_t id) {
     auto* s = static_cast<UiState*>(user);
     if (s == nullptr || id >= s->count) {
         return;
@@ -70,19 +70,19 @@ void onSeg(void* user, uint16_t id, int16_t) {
 
 uint16_t uiBreadcrumbs(UiState& s, uint16_t parent, void (*nav)(void* user, const char* path), void* user) {
     UiFlex row{};
-    row.direction = 1;
+    row.direction = UiFlexDir::Row;
     row.grow = 1.0f;
     row.shrink = 1.0f;
-    row.align = 1;
-    row.justify = 0;
+    row.align = UiAlign::Center;
+    row.justify = UiJustify::Start;
     row.gap = 2.0f;
     row.padL = 8.0f;
     row.padR = 8.0f;
-    row.widthMode = static_cast<uint8_t>(UiSize::Percent);
+    row.widthMode = UiSize::Percent;
     row.width = 100.0f;
-    row.heightMode = static_cast<uint8_t>(UiSize::Px);
+    row.heightMode = UiSize::Px;
     row.height = 30.0f;
-    UiPaint bar = paintToken(s.look, UiRole::Panel, UiToken::Window, 0.0f);
+    UiPaint bar = paintToken(s.look, UiToken::Window, 0.0f);
     bar.a = 0.92f;
     const uint16_t id = spawn(s, parent, row, bar);
     UiCrumbs crumbs{};
@@ -146,11 +146,11 @@ void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* path, const char* roo
             }
             uiShow(s, crumbs->seg[i], false);
         }
-        crumbs->sep[i] = spawn(s, id, px(10.0f, 14.0f), paintToken(s.look, UiRole::Label, UiToken::Muted));
+        crumbs->sep[i] = spawn(s, id, px(10.0f, 14.0f), paintToken(s.look, UiToken::Muted));
         addText(s, crumbs->sep[i], ">");
         if (crumbs->sep[i] < s.count) {
             if (auto* sepFlex = s.ent[crumbs->sep[i]].try_get_mut<UiFlex>()) {
-                sepFlex->align = 1;
+                sepFlex->align = UiAlign::Center;
             }
         }
         uiShow(s, crumbs->sep[i], false);

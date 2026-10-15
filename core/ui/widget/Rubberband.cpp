@@ -1,4 +1,5 @@
 #include "ui/widget/Detail.hpp"
+#include "ui/widget/Field.hpp"
 #include "ui/widget/Rubberband.hpp"
 
 namespace burnhope {
@@ -16,7 +17,7 @@ void rubberPick(UiState& s, uint16_t host, UiRubber& band) {
         }
         const bool under = uiWithin(s, s.parentOf[id], host);
         const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-        if (!under || paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Button)) {
+        if (!under || paint == nullptr || !s.ent[id].has<UiFocusable>() || s.ent[id].try_get<UiField>() != nullptr) {
             continue;
         }
         if (overlaps(s.box[id], band.x0, band.y0, band.x1, band.y1)) {
@@ -40,8 +41,8 @@ uint16_t uiRubberband(UiState& s, uint16_t host, void (*pick)(void* user, uint16
         return kUiNone;
     }
     UiFlex flex = px(1.0f, 1.0f);
-    flex.position = 1;
-    UiPaint ink = paintToken(s.look, UiRole::Panel, UiToken::Accent, 2.0f);
+    flex.position = UiPosition::Absolute;
+    UiPaint ink = paintToken(s.look, UiToken::Accent, 2.0f);
     ink.a = 0.25f;
     ink.borderW = 2.0f;
     ink.br = s.look.accent[0][0];
@@ -73,8 +74,7 @@ bool uiRubberbandTrack(UiState& s, uint16_t host, const InputFrame& in) {
     if (s.hovered == host || uiWithin(s, s.hovered, host)) {
         empty = true;
         for (uint16_t p = s.hovered; p != kUiNone && p != host && p < s.count; p = s.parentOf[p]) {
-            const UiPaint* node = s.ent[p].try_get<UiPaint>();
-            if (node != nullptr && node->role == static_cast<uint8_t>(UiRole::Button)) {
+            if (s.ent[p].has<UiFocusable>() && s.ent[p].try_get<UiField>() == nullptr) {
                 empty = false;
                 break;
             }

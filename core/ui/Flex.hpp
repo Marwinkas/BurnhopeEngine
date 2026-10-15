@@ -149,4 +149,28 @@ struct UiFlex {
 
 static_assert(std::is_trivially_copyable_v<UiFlex>);
 
+inline UiFlex px(float w, float h) noexcept {
+    UiFlex flex{};
+    flex.widthMode = UiSize::Px;
+    flex.heightMode = UiSize::Px;
+    flex.width = w;
+    flex.height = h;
+    flex.shrink = 0.0f;
+    return flex;
+}
+
+inline void uiPadOf(const UiFlex& flex, float& left, float& right, float& top, float& bottom) noexcept {
+    if (flex.padL > 0.0f || flex.padR > 0.0f || flex.padT > 0.0f || flex.padB > 0.0f) {
+        left = flex.padL;
+        right = flex.padR;
+        top = flex.padT;
+        bottom = flex.padB;
+    } else {
+        left = flex.pad;
+        right = flex.pad;
+        top = flex.pad;
+        bottom = flex.pad;
+    }
+}
+
 } 

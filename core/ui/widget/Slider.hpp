@@ -4,6 +4,13 @@
 
 namespace burnhope {
 
+struct UiRange {
+    float value = 0.0f;
+    float min = 0.0f;
+    float max = 1.0f;
+    float step = 0.0f;
+};
+
 struct UiValueHook {
     void (*fn)(void* user, float value) = nullptr;
     void* user = nullptr;

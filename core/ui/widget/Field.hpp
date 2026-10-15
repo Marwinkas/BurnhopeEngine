@@ -4,6 +4,45 @@
 
 namespace burnhope {
 
+struct UiField {
+    char bytes[96]{};
+    uint8_t len = 0;
+    uint8_t caret = 0;
+    uint8_t anchor = 0;
+    uint8_t filter = 0;
+    uint8_t clear = 0;
+    uint8_t required = 0;
+    uint8_t readOnly = 0;
+    uint8_t password = 0;
+    uint8_t inForm = 0;
+    uint8_t maxChars = 0;
+    uint8_t hintLen = 0;
+    uint8_t multi = 0;
+    float scroll = 0.0f;
+    float padL = 12.0f;
+    float padR = 12.0f;
+    char hint[40]{};
+};
+
+inline float uiFieldWidth(const UiState& s, const UiField& field, uint8_t until) {
+    if (field.password == 0) {
+        return uiMeasure(s, field.bytes, field.len, until);
+    }
+    uint8_t count = 0;
+    uint8_t i = 0;
+    const uint8_t end = until < field.len ? until : field.len;
+    while (i < end) {
+        uint8_t step = 1;
+        uiReadUtf8(field.bytes, field.len, i, step);
+        if (step == 0) {
+            break;
+        }
+        ++count;
+        i = static_cast<uint8_t>(i + step);
+    }
+    return static_cast<float>(count) * uiAdvance(s, static_cast<uint32_t>('*'));
+}
+
 struct UiTextHook {
     void (*fn)(void* user, const char* text) = nullptr;
     void* user = nullptr;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/ui/Geometry.hpp"
+#include "ui/Geometry.hpp"
 #include <cstdint>
 #include <type_traits>
 
@@ -125,5 +125,75 @@ struct UiAnim {
 static_assert(std::is_trivially_copyable_v<UiPaint>);
 static_assert(std::is_trivially_copyable_v<UiLook>);
 static_assert(std::is_trivially_copyable_v<UiAnim>);
+
+inline void tokenRgb(const UiLook& look, UiToken token, float& r, float& g, float& b) noexcept {
+    const float* src = look.window;
+    switch (token) {
+    case UiToken::Title: src = look.title; break;
+    case UiToken::Side: src = look.side; break;
+    case UiToken::Content: src = look.content; break;
+    case UiToken::Button: src = look.button; break;
+    case UiToken::Field: src = look.field; break;
+    case UiToken::Menu: src = look.menu; break;
+    case UiToken::Close: src = look.close; break;
+    case UiToken::Text: src = look.text; break;
+    case UiToken::Muted: src = look.muted; break;
+    case UiToken::Item: src = look.item; break;
+    case UiToken::Preview: src = look.preview; break;
+    case UiToken::Status: src = look.status; break;
+    case UiToken::Slider: src = look.slider; break;
+    case UiToken::Check: src = look.check; break;
+    case UiToken::Scroll: src = look.content; break;
+    case UiToken::Chrome: src = look.chrome; break;
+    case UiToken::Accent: src = look.accent[0]; break;
+    default: break;
+    }
+    r = src[0];
+    g = src[1];
+    b = src[2];
+}
+
+inline UiPaint paintRgb(float r, float g, float b, float radius = 0.0f) noexcept {
+    UiPaint out{};
+    out.r = r;
+    out.g = g;
+    out.b = b;
+    out.a = 1.0f;
+    out.radius = radius;
+    return out;
+}
+
+inline UiPaint paintClear() noexcept {
+    UiPaint out{};
+    out.a = 0.0f;
+    return out;
+}
+
+inline UiPaint paintToken(const UiLook& look, UiToken token, float radius = 0.0f) noexcept {
+    UiPaint out = paintRgb(0.0f, 0.0f, 0.0f, radius);
+    out.token = token;
+    tokenRgb(look, token, out.r, out.g, out.b);
+    return out;
+}
+
+inline UiLook uiLookWarm() noexcept {
+    UiLook look{};
+    look.window[0] = 0.16f;
+    look.window[1] = 0.12f;
+    look.window[2] = 0.09f;
+    look.title[0] = 0.22f;
+    look.title[1] = 0.16f;
+    look.title[2] = 0.11f;
+    look.content[0] = 0.14f;
+    look.content[1] = 0.11f;
+    look.content[2] = 0.08f;
+    look.button[0] = 0.28f;
+    look.button[1] = 0.20f;
+    look.button[2] = 0.14f;
+    look.text[0] = 0.96f;
+    look.text[1] = 0.93f;
+    look.text[2] = 0.86f;
+    return look;
+}
 
 } // namespace burnhope

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "core/ui/Typography.hpp"
-#include "core/ui/Style.hpp"
-#include "core/rhi/DescriptorHeap.hpp"
-#include "core/rhi/GpuImage.hpp"
-#include "core/rhi/Device.hpp"
+#include "ui/Typography.hpp"
+#include "ui/Style.hpp"
+#include "rhi/DescriptorHeap.hpp"
+#include "rhi/GpuImage.hpp"
+#include "rhi/Device.hpp"
 
 #include <cstdint>
 

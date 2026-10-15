@@ -216,10 +216,15 @@ bh_module(ui
     core/ui/LayoutBridge.cpp
     core/ui/PrimitiveBatch.cpp
     core/ui/Font.cpp
+    core/ui/Text.cpp
+    core/ui/Hover.cpp
     core/ui/Panel.cpp
     core/ui/Json.cpp
     core/io/Json.cpp
-    core/ui/Layout.cpp
+    core/ui/UiBin.cpp
+    core/ui/UiPhoto.cpp
+    core/ui/UiWindowBridge.cpp
+    core/ui/FlexAttr.cpp
     core/ui/widget/Chrome.cpp
     core/ui/widget/Docking.cpp
     core/ui/widget/Node.cpp

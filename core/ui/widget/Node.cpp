@@ -63,103 +63,11 @@ uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& p
     e.set<UiFlex>(flex);
     e.set<UiPaint>(paint);
     s.ent[id] = e;
-    if (paint.role < 16 && s.onSpawn[paint.role] != nullptr) {
-        s.onSpawn[paint.role](s, id);
-    }
     return id;
 }
 
 void addText(UiState& s, uint16_t id, const char* text) {
-    if (id >= s.count) {
-        return;
-    }
-    char bytes[96]{};
-    const uint8_t n = uiStrCopy(bytes, text);
-    UiText* live = s.ent[id].try_get_mut<UiText>();
-    if (live != nullptr && live->len == n && (n == 0 || std::memcmp(live->bytes, bytes, n) == 0)) {
-        return;
-    }
-    if (live == nullptr) {
-        UiText created{};
-        std::memcpy(created.bytes, bytes, static_cast<size_t>(n) + 1u);
-        created.len = n;
-        s.ent[id].set<UiText>(created);
-        live = s.ent[id].try_get_mut<UiText>();
-        if (live == nullptr) {
-            return;
-        }
-    } else {
-        std::memcpy(live->bytes, bytes, static_cast<size_t>(n) + 1u);
-        live->len = n;
-    }
-    s.visualDirty = true;
-    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-    if (paint != nullptr
-        && (paint->role == static_cast<uint8_t>(UiRole::Button) || paint->role == static_cast<uint8_t>(UiRole::Close)
-            || paint->role == static_cast<uint8_t>(UiRole::Check))) {
-        auto* host = s.ent[id].try_get_mut<UiFlex>();
-        if (host != nullptr && host->widthMode == static_cast<uint8_t>(UiSize::Auto) && live->len > 0) {
-            host->widthMode = static_cast<uint8_t>(UiSize::Px);
-            host->width = uiMeasure(s, live->bytes, live->len, live->len) + 16.0f;
-            s.layoutDirty = true;
-        }
-    }
-    if (paint == nullptr || paint->role != static_cast<uint8_t>(UiRole::Label)) {
-        return;
-    }
-    auto* flex = s.ent[id].try_get_mut<UiFlex>();
-    if (flex == nullptr) {
-        return;
-    }
-    if (live->wrap != 0) {
-        s.layoutDirty = true;
-        return;
-    }
-    const float measured = uiMeasure(s, live->bytes, live->len, live->len);
-    const bool wasPx = flex->widthMode == static_cast<uint8_t>(UiSize::Px);
-    const float oldW = flex->width;
-    const float oldH = flex->height;
-    flex->widthMode = static_cast<uint8_t>(UiSize::Px);
-    flex->width = measured;
-    flex->heightMode = static_cast<uint8_t>(UiSize::Px);
-    flex->height = s.look.glyphH;
-    if (wasPx && std::fabs(oldW - measured) <= 0.5f && std::fabs(oldH - s.look.glyphH) <= 0.5f) {
-        return;
-    }
-    const uint16_t parent = s.parentOf[id];
-    const UiFlex* pflex = parent < s.count ? s.ent[parent].try_get<UiFlex>() : nullptr;
-    if (wasPx && pflex != nullptr && pflex->direction == 0 && std::fabs(oldH - s.look.glyphH) <= 0.5f) {
-        s.box[id].w = measured;
-        return;
-    }
-    s.layoutDirty = true;
-}
-
-void tokenRgb(const UiLook& look, UiToken token, float& r, float& g, float& b) {
-    const float* src = look.window;
-    switch (token) {
-    case UiToken::Title: src = look.title; break;
-    case UiToken::Side: src = look.side; break;
-    case UiToken::Content: src = look.content; break;
-    case UiToken::Button: src = look.button; break;
-    case UiToken::Field: src = look.field; break;
-    case UiToken::Menu: src = look.menu; break;
-    case UiToken::Close: src = look.close; break;
-    case UiToken::Text: src = look.text; break;
-    case UiToken::Muted: src = look.muted; break;
-    case UiToken::Item: src = look.item; break;
-    case UiToken::Preview: src = look.preview; break;
-    case UiToken::Status: src = look.status; break;
-    case UiToken::Slider: src = look.slider; break;
-    case UiToken::Check: src = look.check; break;
-    case UiToken::Scroll: src = look.content; break;
-    case UiToken::Chrome: src = look.chrome; break;
-    case UiToken::Accent: src = look.accent[0]; break;
-    default: break;
-    }
-    r = src[0];
-    g = src[1];
-    b = src[2];
+    uiText(s, id, text);
 }
 
 void stamp(UiState& s, uint16_t id, UiToken token) {
@@ -168,7 +76,7 @@ void stamp(UiState& s, uint16_t id, UiToken token) {
     }
     auto* paint = s.ent[id].try_get_mut<UiPaint>();
     if (paint != nullptr) {
-        paint->token = static_cast<uint8_t>(token);
+        paint->token = token;
     }
     if (token == UiToken::Title) {
         s.ent[id].set<UiTitleBar>({});
@@ -274,10 +182,6 @@ void uiSyncInput(UiState& s) {
         } else {
             ent.remove<UiCapture>();
         }
-        const UiPaint* paint = ent.try_get<UiPaint>();
-        if (paint != nullptr && paint->role == static_cast<uint8_t>(UiRole::Hidden)) {
-            ent.add<UiPass>();
-        }
         if (id == s.capture) {
             ent.set<UiPressed>({1, s.grabX, s.grabY});
         } else {
@@ -301,42 +205,27 @@ void uiRestyle(UiState& s) {
             continue;
         }
         auto* paint = s.ent[id].try_get_mut<UiPaint>();
-        if (paint == nullptr || paint->token == static_cast<uint8_t>(UiToken::Custom) || paint->a <= 0.0f) {
+        if (paint == nullptr || paint->token == UiToken::Custom || paint->a <= 0.0f) {
             continue;
         }
-        if (paint->token == static_cast<uint8_t>(UiToken::Accent) && paint->tag >= 0 && paint->tag < 3) {
-            const float* src = s.look.accent[paint->tag];
-            paint->r = src[0];
-            paint->g = src[1];
-            paint->b = src[2];
-        } else {
-            tokenRgb(s.look, static_cast<UiToken>(paint->token), paint->r, paint->g, paint->b);
-        }
-        if (paint->token == static_cast<uint8_t>(UiToken::Button)
-            || paint->token == static_cast<uint8_t>(UiToken::Field)
-            || paint->token == static_cast<uint8_t>(UiToken::Menu)
-            || paint->token == static_cast<uint8_t>(UiToken::Check)
-            || paint->token == static_cast<uint8_t>(UiToken::Item)
-            || paint->token == static_cast<uint8_t>(UiToken::Close)
-            || paint->token == static_cast<uint8_t>(UiToken::Chrome)) {
+        tokenRgb(s.look, paint->token, paint->r, paint->g, paint->b);
+        if (paint->token == UiToken::Button
+            || paint->token == UiToken::Field
+            || paint->token == UiToken::Menu
+            || paint->token == UiToken::Check
+            || paint->token == UiToken::Item
+            || paint->token == UiToken::Close
+            || paint->token == UiToken::Chrome) {
             paint->radius = s.look.radiusSm;
-        } else if (paint->token == static_cast<uint8_t>(UiToken::Preview) || paint->token == static_cast<uint8_t>(UiToken::Scroll)) {
+        } else if (paint->token == UiToken::Preview || paint->token == UiToken::Scroll) {
             paint->radius = s.look.radius;
         }
-        auto* text = s.ent[id].try_get_mut<UiText>();
         auto* flex = s.ent[id].try_get_mut<UiFlex>();
-        if (text != nullptr && flex != nullptr && paint->role == static_cast<uint8_t>(UiRole::Label) && text->wrap == 0
-            && flex->widthMode != static_cast<uint8_t>(UiSize::Percent)) {
-            flex->width = uiMeasure(s, text->bytes, text->len, text->len);
-            flex->height = s.look.glyphH;
-            flex->widthMode = static_cast<uint8_t>(UiSize::Px);
-            flex->heightMode = static_cast<uint8_t>(UiSize::Px);
-        }
-        if (paint->token == static_cast<uint8_t>(UiToken::Title)) {
+        if (paint->token == UiToken::Title) {
             s.ent[id].set<UiTitleBar>({});
             if (flex != nullptr) {
                 flex->height = s.look.titleBar;
-                flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+                flex->heightMode = UiSize::Px;
             }
         }
     }
@@ -435,10 +324,6 @@ void uiEdit(UiState& s, uint16_t id, UiEditFn fn, void* user) {
     s.ent[id].set<UiEdit>({fn, user});
 }
 
-void uiText(UiState& s, uint16_t id, const char* text) {
-    addText(s, id, text);
-}
-
 void uiBlur(UiState& s, uint16_t id, float blur) {
     if (id >= s.count) {
         return;
@@ -490,7 +375,7 @@ void uiSetPaint(UiState& s, uint16_t id, float r, float g, float b, float a) {
     paint->g = g;
     paint->b = b;
     paint->a = a;
-    paint->token = static_cast<uint8_t>(UiToken::Custom);
+    paint->token = UiToken::Custom;
     s.visualDirty = true;
 }
 
@@ -501,7 +386,7 @@ uint16_t uiTextId(const UiState& s, uint16_t id) {
     return id;
 }
 
-void uiTextStyle(UiState& s, uint16_t id, uint8_t align, uint8_t ellipsis, uint8_t valign, uint8_t wrap, uint8_t deco, float leading) {
+void uiTextStyle(UiState& s, uint16_t id, UiTextAlign align, UiTextEllipsis ellipsis, UiTextValign valign, bool wrap, UiTextDeco deco, float leading) {
     const uint16_t part = uiTextId(s, id);
     if (part == kUiNone) {
         return;
@@ -592,18 +477,18 @@ void uiPlace(UiState& s, uint16_t id, bool absolute, float x, float y, float w, 
     if (flex == nullptr) {
         return;
     }
-    flex->position = absolute ? 1 : 0;
+    flex->position = absolute ? UiPosition::Absolute : UiPosition::Static;
     flex->posX = x;
     flex->posY = y;
     if (w > 0.0f) {
-        flex->widthMode = static_cast<uint8_t>(UiSize::Px);
+        flex->widthMode = UiSize::Px;
         flex->width = w;
     } else if (!absolute) {
-        flex->widthMode = static_cast<uint8_t>(UiSize::Percent);
+        flex->widthMode = UiSize::Percent;
         flex->width = 100.0f;
     }
     if (h > 0.0f) {
-        flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+        flex->heightMode = UiSize::Px;
         flex->height = h;
     }
     flex->shrink = 0.0f;
@@ -621,7 +506,7 @@ void uiSetHeight(UiState& s, uint16_t id, float h) {
     if (flex == nullptr) {
         return;
     }
-    flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex->heightMode = UiSize::Px;
     flex->height = h;
     s.layoutDirty = true;
     s.visualDirty = true;
@@ -633,23 +518,9 @@ void uiSetDrop(UiState& s, uint16_t id, uint8_t drop) {
     }
     auto* flex = s.ent[id].try_get_mut<UiFlex>();
     if (flex != nullptr) {
-        flex->drop = drop;
+        flex->drop = static_cast<UiFlexDrop>(drop);
         s.layoutDirty = true;
     }
-}
-
-bool uiRange(const UiState& s, uint16_t id, float& value, float& minV, float& maxV) {
-    if (id >= s.count) {
-        return false;
-    }
-    const UiRange* range = s.ent[id].try_get<UiRange>();
-    if (range == nullptr) {
-        return false;
-    }
-    value = range->value;
-    minV = range->min;
-    maxV = range->max;
-    return true;
 }
 
 void uiGrow(UiState& s, uint16_t id, float extraW, float h) {
@@ -659,36 +530,10 @@ void uiGrow(UiState& s, uint16_t id, float extraW, float h) {
     }
     flex->width += extraW;
     if (h > 0.0f) {
-        flex->heightMode = static_cast<uint8_t>(UiSize::Px);
+        flex->heightMode = UiSize::Px;
         flex->height = h;
     }
     s.layoutDirty = true;
-}
-
-const char* roleName(uint8_t role) {
-    switch (static_cast<UiRole>(role)) {
-    case UiRole::Panel:
-        return "panel";
-    case UiRole::Button:
-        return "button";
-    case UiRole::Label:
-        return "label";
-    case UiRole::Slider:
-        return "slider";
-    case UiRole::Check:
-        return "check";
-    case UiRole::Field:
-        return "field";
-    case UiRole::Close:
-        return "close";
-    case UiRole::Scroll:
-        return "scroll";
-    case UiRole::Hidden:
-        return "hidden";
-    case UiRole::Progress:
-        return "progress";
-    }
-    return "role";
 }
 
 void nodeLabel(const UiState& s, uint16_t id, char* dst, int cap) {
@@ -730,17 +575,12 @@ void uiTrace(const UiState& s, const char* fn, uint16_t id) {
     }
     char name[32];
     nodeLabel(s, id, name, 32);
-    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
     const UiBox& box = s.box[id];
-    const int tag = paint != nullptr ? paint->tag : -1;
-    const char* role = paint != nullptr ? roleName(paint->role) : "-";
     log->info(
-        "ui fn={} id={} name={} role={} tag={} parent={} box={:.1f},{:.1f} {:.1f}x{:.1f}",
+        "ui fn={} id={} name={} parent={} box={:.1f},{:.1f} {:.1f}x{:.1f}",
         fn != nullptr ? fn : "-",
         static_cast<unsigned>(id),
         name,
-        role,
-        tag,
         static_cast<unsigned>(s.parentOf[id]),
         box.x,
         box.y,
@@ -771,19 +611,10 @@ void uiDumpLayout(const UiState& s) {
         if (buried) {
             continue;
         }
-        const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-        if (paint == nullptr) {
-            continue;
-        }
-        const auto role = static_cast<UiRole>(paint->role);
         const UiName* name = s.ent[id].try_get<UiName>();
         const bool named = name != nullptr && name->len > 0;
-        const bool control = role == UiRole::Button || role == UiRole::Slider || role == UiRole::Field || role == UiRole::Check
-            || role == UiRole::Close || role == UiRole::Scroll;
+        const bool control = s.ent[id].has<UiFocusable>();
         if (!named && !control) {
-            continue;
-        }
-        if (role == UiRole::Hidden || role == UiRole::Label) {
             continue;
         }
         char label[32];
@@ -793,11 +624,10 @@ void uiDumpLayout(const UiState& s) {
             || (s.laidW > 0.0f && box.x > s.laidW) || (s.laidH > 0.0f && box.y > s.laidH);
         log->log(
             bad ? spdlog::level::warn : spdlog::level::info,
-            "ui {} id={} name={} role={} parent={} box={:.1f},{:.1f} {:.1f}x{:.1f}",
+            "ui {} id={} name={} parent={} box={:.1f},{:.1f} {:.1f}x{:.1f}",
             bad ? "miss" : "box",
             static_cast<unsigned>(id),
             label,
-            roleName(paint->role),
             static_cast<unsigned>(s.parentOf[id]),
             box.x,
             box.y,

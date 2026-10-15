@@ -1,23 +1,21 @@
 #pragma once
 
-#include "core/platform/Input.hpp"
-#include "core/rhi/Swapchain.hpp"
-#include "core/rhi/DescriptorHeap.hpp"
-#include "core/ui/Style.hpp"
-#include "core/ui/Interaction.hpp"
-#include "core/ui/UiPhoto.hpp"
-#include "core/ui/UiWindowBridge.hpp"
-#include "core/ui/rhi/UiRenderer.hpp"
+#include "platform/Input.hpp"
+#include "rhi/Swapchain.hpp"
+#include "rhi/DescriptorHeap.hpp"
+#include "ui/Style.hpp"
+#include "ui/Interaction.hpp"
+#include "ui/UiPhoto.hpp"
+#include "ui/UiWindowBridge.hpp"
+#include "ui/State.hpp"
+#include "ui/rhi/UiRenderer.hpp"
 
 #include <cstdint>
 #include <memory>
 
 namespace burnhope {
 
-struct UiState;
-
-// Canvas — координатор кадра интерфейса (Surface / Viewport).
-// Связывает состояние элементов (UiState) с видеокартой (UiRenderer).
+// Canvas — координатор кадра. Сам ничего не рисует: зовёт верстку, ввод, движение и сборку примитивов.
 struct Canvas {
     std::unique_ptr<UiState> state;
     UiRenderer rhi{};

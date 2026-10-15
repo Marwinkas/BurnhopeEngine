@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/State.hpp"
+#include "ui/UiPhoto.hpp"
 
 namespace burnhope {
 

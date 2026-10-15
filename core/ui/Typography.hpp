@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/ui/Geometry.hpp"
+#include "ui/Geometry.hpp"
 #include <cstdint>
 #include <type_traits>
 

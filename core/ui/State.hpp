@@ -1,8 +1,10 @@
 #pragma once
 
 #include "platform/Input.hpp"
-#include "ui/Layout.hpp"
+#include "ui/LayoutBridge.hpp"
 #include "ui/Model.hpp"
+#include "ui/Text.hpp"
+#include "ui/UiBin.hpp"
 
 #include <flecs.h>
 
@@ -132,6 +134,7 @@ struct UiState {
     bool visualDirty = true;
     uint8_t dumpLayout = 0;
     uint16_t layoutFrom = kUiNone;
+    UiLayoutFinishHook layoutFinishHook{};
     UiDrop dropBus{};
     char ime[64]{};
     uint8_t imeLen = 0;
@@ -214,7 +217,6 @@ void uiInputAdd(UiState& s, UiInputHookFn fn);
 bool nodeShown(const UiState& s, uint16_t id);
 uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
 void addText(UiState& s, uint16_t id, const char* text);
-void tokenRgb(const UiLook& look, UiToken token, float& r, float& g, float& b);
 uint16_t hitTest(const UiState& s, float x, float y);
 void activate(UiState& s, uint16_t id);
 uint32_t uiNodeChildCount(const UiState& s, uint16_t parent);
@@ -223,7 +225,6 @@ void uiNodeMoveChild(UiState& s, uint16_t parent, uint16_t child, uint32_t newIn
 
 void uiClear(UiState& s);
 uint16_t uiNode(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
-void uiText(UiState& s, uint16_t id, const char* text);
 void stamp(UiState& s, uint16_t id, UiToken token);
 void uiStamp(UiState& s, uint16_t id, UiToken token);
 void uiBlur(UiState& s, uint16_t id, float blur);
@@ -251,138 +252,11 @@ inline void uiApplyLook(UiState& s, bool warm) {
 void uiMotionTo(UiState& s, uint16_t id, float r, float g, float b, float a);
 [[nodiscard]] bool uiTickMotion(UiState& s);
 [[nodiscard]] uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap);
-[[nodiscard]] uint32_t uiEmitText(
-    UiState& s,
-    UiPrimitive* dst,
-    uint32_t n,
-    uint32_t cap,
-    const char* text,
-    uint8_t len,
-    const UiBox& box,
-    float r,
-    float g,
-    float b,
-    const UiBox* clip,
-    bool center);
 
 bool uiListen(UiState& s, UiValueFn fn, void* user);
-[[nodiscard]] TextRun textRun(const UiState& s, const UiText& text, const UiBox& slot);
-[[nodiscard]] uint32_t uiEmitRun(
-    UiState& s,
-    UiPrimitive* dst,
-    uint32_t n,
-    uint32_t cap,
-    const TextRun& run,
-    float r,
-    float g,
-    float b,
-    float a,
-    const UiBox* clip);
-void uiTextStyle(UiState& s, uint16_t id, uint8_t align, uint8_t ellipsis, uint8_t valign, uint8_t wrap, uint8_t deco, float leading);
+void uiTextStyle(UiState& s, uint16_t id, UiTextAlign align, UiTextEllipsis ellipsis, UiTextValign valign, bool wrap, UiTextDeco deco, float leading);
 [[nodiscard]] uint16_t uiTextId(const UiState& s, uint16_t id);
-void textInk(float r, float g, float b, bool hot, float& tr, float& tg, float& tb);
 
-struct UiWrapCut {
-    int end = 0;
-    int next = 0;
-    float width = 0;
-};
-
-inline UiWrapCut uiWrapCut(const float* ps, const uint8_t* kind, int n, int at, float limit, int breakAll) {
-    UiWrapCut cut{};
-    if (ps == nullptr || kind == nullptr || at >= n) {
-        return cut;
-    }
-    if (kind[at] == 1) {
-        cut.end = at;
-        cut.next = at + 1;
-        return cut;
-    }
-    int j = at;
-    int lastSpace = -1;
-    while (j < n && kind[j] != 1 && (ps[j + 1] - ps[at]) <= limit + 0.01f) {
-        if (breakAll == 0 && kind[j] == 2) {
-            lastSpace = j;
-        }
-        ++j;
-    }
-    int end = j;
-    int next = j;
-    if (j < n && kind[j] == 1) {
-        next = j + 1;
-    } else if (j < n && lastSpace > at) {
-        end = lastSpace;
-        next = lastSpace + 1;
-    }
-    if (end == at) {
-        end = at + 1;
-        next = end;
-    }
-    cut.end = end;
-    cut.next = next;
-    cut.width = ps[end] - ps[at];
-    return cut;
-}
-
-inline float uiAdvance(const UiState& s, uint32_t cp) {
-    int gi = uiGlyphIndex(cp);
-    if (gi < 0 || gi >= static_cast<int>(kUiFontGlyphs)) {
-        gi = static_cast<int>('?' - 32);
-    }
-    const float scale = s.font.ready && s.font.fontPx > 1.0f ? s.look.glyphH / s.font.fontPx : 1.0f;
-    return s.font.ready ? s.font.glyphs[gi].advance * scale : s.look.advance;
-}
-
-inline float uiMeasure(const UiState& s, const char* text, uint8_t len, uint8_t until) {
-    float w = 0.0f;
-    uint8_t i = 0;
-    const uint8_t end = until < len ? until : len;
-    while (i < end) {
-        uint8_t step = 1;
-        const uint32_t cp = uiReadUtf8(text, len, i, step);
-        if (step == 0) {
-            break;
-        }
-        w += uiAdvance(s, cp);
-        i = static_cast<uint8_t>(i + step);
-    }
-    return w;
-}
-
-inline float uiFieldWidth(const UiState& s, const UiField& field, uint8_t until) {
-    if (field.password == 0) {
-        return uiMeasure(s, field.bytes, field.len, until);
-    }
-    uint8_t count = 0;
-    uint8_t i = 0;
-    const uint8_t end = until < field.len ? until : field.len;
-    while (i < end) {
-        uint8_t step = 1;
-        uiReadUtf8(field.bytes, field.len, i, step);
-        if (step == 0) {
-            break;
-        }
-        ++count;
-        i = static_cast<uint8_t>(i + step);
-    }
-    return static_cast<float>(count) * uiAdvance(s, static_cast<uint32_t>('*'));
-}
-
-inline void uiPadOf(const UiFlex& flex, float& left, float& right, float& top, float& bottom) {
-    if (flex.padL > 0.0f || flex.padR > 0.0f || flex.padT > 0.0f || flex.padB > 0.0f) {
-        left = flex.padL;
-        right = flex.padR;
-        top = flex.padT;
-        bottom = flex.padB;
-    } else {
-        left = flex.pad;
-        right = flex.pad;
-        top = flex.pad;
-        bottom = flex.pad;
-    }
-}
-
-// Прямоугольник детей: край рамки Yoga минус padding. Абсолютный left/top считается отсюда.
 inline UiBox uiContent(const UiState& s, uint16_t id) {
     UiBox box = id < s.count ? s.box[id] : UiBox{};
     if (id >= s.count) {
@@ -408,34 +282,6 @@ inline UiBox uiContent(const UiState& s, uint16_t id) {
         box.h = 0.0f;
     }
     return box;
-}
-
-inline UiFlex px(float w, float h) {
-    UiFlex f{};
-    f.widthMode = static_cast<uint8_t>(UiSize::Px);
-    f.heightMode = static_cast<uint8_t>(UiSize::Px);
-    f.width = w;
-    f.height = h;
-    f.shrink = 0.0f;
-    return f;
-}
-
-inline UiPaint paint(UiRole role, float r, float g, float b, float radius = 0.0f) {
-    UiPaint out{};
-    out.r = r;
-    out.g = g;
-    out.b = b;
-    out.a = 1.0f;
-    out.radius = radius;
-    out.role = static_cast<uint8_t>(role);
-    return out;
-}
-
-inline UiPaint paintToken(const UiLook& look, UiRole role, UiToken token, float radius = 0.0f) {
-    UiPaint p = paint(role, 0.0f, 0.0f, 0.0f, radius);
-    p.token = static_cast<uint8_t>(token);
-    tokenRgb(look, token, p.r, p.g, p.b);
-    return p;
 }
 
 template <typename T>
@@ -505,7 +351,7 @@ inline bool uiWithin(const UiState& s, uint16_t id, uint16_t ancestor) {
 inline bool uiIsOverlay(const UiState& s, uint16_t id) {
     for (uint16_t p = id; p != kUiNone; p = s.parentOf[p]) {
         const UiFlex* flex = s.ent[p].try_get<UiFlex>();
-        if (flex != nullptr && flex->position != 0) {
+        if (flex != nullptr && flex->position != UiPosition::Static) {
             return true;
         }
     }

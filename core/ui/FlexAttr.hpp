@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/ui/Flex.hpp"
+#include "ui/Flex.hpp"
 #include <cstdint>
 
 namespace burnhope {

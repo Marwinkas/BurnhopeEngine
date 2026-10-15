@@ -5,14 +5,14 @@ namespace burnhope {
 
 uint16_t uiTip(UiState& s, uint16_t parent) {
     UiFlex flex{};
-    flex.position = 1;
+    flex.position = UiPosition::Absolute;
     flex.pad = 6.0f;
     flex.shrink = 0.0f;
-    flex.widthMode = static_cast<uint8_t>(UiSize::Px);
-    flex.heightMode = static_cast<uint8_t>(UiSize::Px);
+    flex.widthMode = UiSize::Px;
+    flex.heightMode = UiSize::Px;
     flex.width = 8.0f;
     flex.height = 8.0f;
-    UiPaint body = paintToken(s.look, UiRole::Panel, UiToken::Menu, s.look.radiusSm);
+    UiPaint body = paintToken(s.look, UiToken::Menu, s.look.radiusSm);
     body.shadow = 10.0f;
     body.borderW = 1.0f;
     body.br = s.look.muted[0];
