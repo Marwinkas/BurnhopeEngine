@@ -1,18 +1,18 @@
 #include "render/SceneFrameImpl.hpp"
 
+#include "render/Gtao.hpp"
 #include "render/Sky.hpp"
 #include "rhi/GpuProfiler.hpp"
 
 namespace burnhope {
 
-void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes, bool restirDi) {
-    (void)gtaoOn;
+void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, GtaoPass& gtao, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes, bool restirDi, float fovY) {
     imageBarrier(ctx.cmd, shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     imageBarrier(ctx.cmd, depth, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
         VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT);
     {
         GpuZone zone(ctx.profiler, ctx.cmd, "GTAO");
-        shadeAoRecord(ctx.cmd, ctx.extent, shade);
+        gtaoRecord(ctx.cmd, gtao, ctx.device, ctx.flight, shade.ao, gtaoOn, fovY, ctx.view.cameraPos[3], ctx.post.gtao);
     }
     {
         GpuZone zone(ctx.profiler, ctx.cmd, "Sky");

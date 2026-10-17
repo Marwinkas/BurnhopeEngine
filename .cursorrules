@@ -349,3 +349,4 @@ NEVER shade a cloud shadow from a 2D hash (the blotch misses the cloud in the sk
 NEVER resolve a VXGI atom by the linear voxel id (the scroll torus writes a different texel and the street breaks a few meters from the camera); ALWAYS the scrolled texel, 16 bytes rgba.
 NEVER voxelize VXGI from one mip-2 albedo for the whole triangle (the bounce is a flat wash and bricks disappear); ALWAYS a barycentric UV, normal map and ORM per voxel, lod 0 on the 0.125 m cascade, 12 bytes rgb.
 NEVER show a radiance-cascade pixel without sky chroma (Lit and GI stay gray in shadow); ALWAYS add albedo times sky chroma times sun intensity 0.16 in rc_shade after the probe sum, 12 bytes rgb, and keep that term out of the trace input.
+NEVER pow an XeGTAO visibility again in shade (FinalValuePower already shapes the contact and a second pow only darkens); ALWAYS lerp(1, visibility, strength) times material AO, 4 bytes.

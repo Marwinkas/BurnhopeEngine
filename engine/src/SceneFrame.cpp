@@ -655,7 +655,14 @@ bool bindHeap(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
         && heapWriteStorage(heaps, device, HeapBuf::Indirect, s.indirect)
         && s.shadowIndirect.address != 0
         && heapWriteStorage(heaps, device, HeapBuf::ShadowIndirect, s.shadowIndirect);
-    if (!(extra && cascades && pictures && lamps && heapWriteSampler(heaps, device, static_cast<uint32_t>(HeapSamp::Linear), sampler) && heapWriteSampler(heaps, device, static_cast<uint32_t>(HeapSamp::Wrap), wrap))) {
+    VkSamplerCreateInfo nearest = sampler;
+    nearest.magFilter = VK_FILTER_NEAREST;
+    nearest.minFilter = VK_FILTER_NEAREST;
+    nearest.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    if (!(extra && cascades && pictures && lamps
+        && heapWriteSampler(heaps, device, static_cast<uint32_t>(HeapSamp::Nearest), nearest)
+        && heapWriteSampler(heaps, device, static_cast<uint32_t>(HeapSamp::Linear), sampler)
+        && heapWriteSampler(heaps, device, static_cast<uint32_t>(HeapSamp::Wrap), wrap))) {
         return false;
     }
     bool volumes = s.voxel.atoms.address != 0 && s.voxel.clip.address != 0
@@ -1420,6 +1427,7 @@ void sceneFrameReleaseGpu(SceneFrame* scene, Device& device) {
     radianceDestroy(scene->radiance, device);
     restirDestroy(scene->restir, device);
     fsrDestroy(scene->fsr, device);
+    gtaoDestroy(scene->gtao, device);
     voxelDestroy(scene->voxel, device);
     hizPassDestroy(scene->hiz, device);
     cubePassDestroy(scene->cube, device);
@@ -1788,6 +1796,7 @@ void sceneFrameRecord(
                 VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
             && restirResize(scene->restir, device, renderExtent)
             && fsrResize(scene->fsr, device, scene->gpuHeap, renderExtent, swap.extent)
+            && gtaoResize(scene->gtao, device, scene->gpuHeap, renderExtent)
             && bindHeap(*scene, device, scene->gpuHeap);
         if (resized) {
             scene->extent = renderExtent;
@@ -1865,7 +1874,7 @@ void sceneFrameRecord(
             && recreateImage(scene->hizMax[0].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
             && recreateImage(scene->hizMax[1].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
         if (!descriptorHeapsCreate(scene->gpuHeap, device, HeapLayout{
-                .buffers = 68,
+                .buffers = 70,
                 .images = static_cast<uint32_t>(HeapImg::Count),
                 .samplers = 3,
             })) {
@@ -1878,6 +1887,7 @@ void sceneFrameRecord(
             && radianceCreate(scene->radiance, device, scene->gpuHeap)
             && restirCreate(scene->restir, device, scene->gpuHeap, swap.extent)
             && fsrCreate(scene->fsr, device, scene->gpuHeap, swap.extent)
+            && gtaoCreate(scene->gtao, device, scene->gpuHeap, swap.extent)
             && voxelCreate(scene->voxel, device, scene->gpuHeap)
             && hizPassCreate(scene->hiz, device, scene->gpuHeap)
             && occlPassCreate(scene->occl, device, scene->gpuHeap)
@@ -2345,7 +2355,7 @@ void sceneFrameRecord(
         scene->instanceCount, culled.twoPhase, scene->showHiz, culled.draw, culled.lateDraw);
     const bool restirOn = (scene->passMask & kPassRestir) != 0u && scene->restir.di.handle != VK_NULL_HANDLE;
     const bool gtaoOn = (scene->passMask & 524288u) == 0u && scene->lightProfile != 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
-    framePassShade(ctx, scene->shade, scene->sky, scene->vis.targets.vis, scene->vis.targets.depth, gtaoOn, scene->probeBuf.buffer, scene->probeBuf.size, restirOn);
+    framePassShade(ctx, scene->shade, scene->sky, scene->gtao, scene->vis.targets.vis, scene->vis.targets.depth, gtaoOn, scene->probeBuf.buffer, scene->probeBuf.size, restirOn, pose.fovYRad);
     const bool worldRc = (scene->passMask & 128u) != 0u && (scene->passMask & 262144u) != 0u && !restirOn;
     const bool worldVx = (scene->passMask & 524288u) != 0u && (scene->passMask & 262144u) != 0u && !worldRc && !restirOn;
     if (!restirOn) {

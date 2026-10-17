@@ -205,6 +205,7 @@ bh_module(render
     engine/src/Restir.cpp
     engine/src/PassRestir.cpp
     engine/src/Fsr.cpp
+    engine/src/Gtao.cpp
     RTXDI/Libraries/Rtxdi/Source/ReSTIRDI.cpp
     RTXDI/Libraries/Rtxdi/Source/RtxdiUtils.cpp
     engine/src/Voxel.cpp
@@ -526,6 +527,39 @@ add_custom_command(
         ${SHADER_DIR}/fsr_motion.slang
     COMMENT "slangc FSR 3.1.5 upscaler → SPIR-V 1.6"
 )
+set(XE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/XeGTAO/Source/Rendering/Shaders)
+set(XE_FLAGS
+    -I ${XE_DIR}
+    -DXE_GTAO_USE_HALF_FLOAT_PRECISION=0
+    -DXE_GTAO_DEFAULT_THIN_OBJECT_HEURISTIC=0
+    -fvk-b-shift 0 0 -fvk-s-shift 4 0 -fvk-t-shift 8 0 -fvk-u-shift 24 0
+    -target spirv -profile spirv_1_6+spvImageGatherExtended -stage compute)
+add_custom_command(
+    OUTPUT
+        ${SHADER_OUT_DIR}/xegtao.prefilter.comp.spv
+        ${SHADER_OUT_DIR}/xegtao.normals.comp.spv
+        ${SHADER_OUT_DIR}/xegtao.low.comp.spv
+        ${SHADER_OUT_DIR}/xegtao.medium.comp.spv
+        ${SHADER_OUT_DIR}/xegtao.high.comp.spv
+        ${SHADER_OUT_DIR}/xegtao.ultra.comp.spv
+        ${SHADER_OUT_DIR}/xegtao.denoise.comp.spv
+        ${SHADER_OUT_DIR}/xegtao.denoise_last.comp.spv
+        ${SHADER_OUT_DIR}/xegtao.resolve.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/xegtao.hlsl ${XE_FLAGS} -DXE_ENTRY=0 -entry CSPrefilter -o ${SHADER_OUT_DIR}/xegtao.prefilter.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/xegtao.hlsl ${XE_FLAGS} -DXE_ENTRY=1 -entry CSNormals -o ${SHADER_OUT_DIR}/xegtao.normals.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/xegtao.hlsl ${XE_FLAGS} -DXE_ENTRY=2 -entry CSGTAOLow -o ${SHADER_OUT_DIR}/xegtao.low.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/xegtao.hlsl ${XE_FLAGS} -DXE_ENTRY=2 -entry CSGTAOMedium -o ${SHADER_OUT_DIR}/xegtao.medium.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/xegtao.hlsl ${XE_FLAGS} -DXE_ENTRY=2 -entry CSGTAOHigh -o ${SHADER_OUT_DIR}/xegtao.high.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/xegtao.hlsl ${XE_FLAGS} -DXE_ENTRY=2 -entry CSGTAOUltra -o ${SHADER_OUT_DIR}/xegtao.ultra.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/xegtao.hlsl ${XE_FLAGS} -DXE_ENTRY=3 -entry CSDenoise -o ${SHADER_OUT_DIR}/xegtao.denoise.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/xegtao.hlsl ${XE_FLAGS} -DXE_ENTRY=3 -entry CSDenoiseLast -o ${SHADER_OUT_DIR}/xegtao.denoise_last.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/xegtao.hlsl ${XE_FLAGS} -DXE_ENTRY=4 -entry CSResolve -o ${SHADER_OUT_DIR}/xegtao.resolve.comp.spv
+    DEPENDS
+        ${SHADER_DIR}/xegtao.hlsl
+        ${XE_DIR}/XeGTAO.h
+        ${XE_DIR}/XeGTAO.hlsli
+    COMMENT "slangc XeGTAO → SPIR-V 1.6"
+)
 add_custom_target(BurnhopeSpv ALL DEPENDS
     ${SHADER_OUT_DIR}/visbuffer.mesh.spv
     ${SHADER_OUT_DIR}/visbuffer.late.mesh.spv
@@ -545,6 +579,15 @@ add_custom_target(BurnhopeSpv ALL DEPENDS
     ${SHADER_OUT_DIR}/fsr.accumulate.comp.spv
     ${SHADER_OUT_DIR}/fsr.rcas.comp.spv
     ${SHADER_OUT_DIR}/fsr.motion.comp.spv
+    ${SHADER_OUT_DIR}/xegtao.prefilter.comp.spv
+    ${SHADER_OUT_DIR}/xegtao.normals.comp.spv
+    ${SHADER_OUT_DIR}/xegtao.low.comp.spv
+    ${SHADER_OUT_DIR}/xegtao.medium.comp.spv
+    ${SHADER_OUT_DIR}/xegtao.high.comp.spv
+    ${SHADER_OUT_DIR}/xegtao.ultra.comp.spv
+    ${SHADER_OUT_DIR}/xegtao.denoise.comp.spv
+    ${SHADER_OUT_DIR}/xegtao.denoise_last.comp.spv
+    ${SHADER_OUT_DIR}/xegtao.resolve.comp.spv
     ${SHADER_OUT_DIR}/shade.fog.comp.spv
     ${SHADER_OUT_DIR}/resolve.comp.spv
     ${SHADER_OUT_DIR}/cull.comp.spv

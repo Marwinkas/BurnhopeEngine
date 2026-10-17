@@ -19,6 +19,7 @@
 #include "render/Hiz.hpp"
 #include "render/Radiance.hpp"
 #include "render/Fsr.hpp"
+#include "render/Gtao.hpp"
 #include "render/Restir.hpp"
 #include "render/Voxel.hpp"
 #include "render/SceneFrame.hpp"
@@ -59,6 +60,7 @@ struct SceneFrameImpl {
     RadiancePass radiance{};
     RestirPass restir{};
     FsrPass fsr{};
+    GtaoPass gtao{};
     VoxelPass voxel{};
     CubePass cube{};
     TonemapPass tone{};
@@ -273,7 +275,7 @@ void framePassVis(
     bool showHiz,
     const VisInstanceDraw& draw,
     const VisInstanceDraw& lateDraw);
-void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes, bool restirDi);
+void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, GtaoPass& gtao, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes, bool restirDi, float fovY);
 void framePassRestir(const RenderContext& ctx, RestirPass& restir, const FrameView& view, const LightGpuData* lights, uint32_t lightCount, uint32_t passMask, VkDeviceAddress tlas);
 void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky);
 void framePassRadiance(const RenderContext& ctx, RadiancePass& rad, TrackedImage& hdrA, bool worldRc, float rays, float spacing, float intensity, float maxDist, float sunScale, float bounce);

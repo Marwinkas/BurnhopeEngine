@@ -19408,3 +19408,1448 @@ cpu record  0.15
 [2026-10-18 01:34:48.594] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18390 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
 [2026-10-18 01:34:49.818] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.15 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
 [2026-10-18 01:34:49.819] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.15 vis 1980 late 1980
+[2026-10-18 01:34:50.532] [info] frame 33.2 ms (30.1 fps)
+gpu 9.29 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.69
+Visbuffer      0.06
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.64
+Sky            0.07
+Contact        0.03
+Sun            1.13
+ReSTIR         2.79
+Fog            0.32
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.16
+[2026-10-18 01:34:50.600] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18420 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:34:51.859] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.12 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:34:51.859] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.12 vis 1981 late 1981
+[2026-10-18 01:34:52.539] [info] frame 33.2 ms (30.1 fps)
+gpu 9.83 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.52
+Visbuffer      0.29
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.40
+Sky            0.07
+Contact        0.03
+Sun            1.37
+ReSTIR         2.59
+Fog            1.00
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.10
+cpu record  0.16
+[2026-10-18 01:34:52.607] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18449 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:34:53.903] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.23 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:34:53.903] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.23 vis 1980 late 1980
+[2026-10-18 01:34:54.551] [info] frame 35.2 ms (28.4 fps)
+gpu 6.87 ms
+Light_Cull     0.01
+Shadow_Cull    0.07
+Mesh_Cull      0.05
+CSM            3.07
+Visbuffer      0.27
+HiZ_Max        0.06
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.32
+Sky            0.05
+Contact        0.03
+Sun            0.96
+ReSTIR         1.49
+Fog            0.29
+Clouds         0.08
+Bloom          0.07
+Tonemap        0.04
+cpu record  0.21
+[2026-10-18 01:34:54.619] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18479 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:34:55.947] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.22 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:34:55.947] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.22 vis 1981 late 1981
+[2026-10-18 01:34:56.560] [info] frame 33.2 ms (30.1 fps)
+gpu 10.78 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.66
+Visbuffer      1.01
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.03
+Sun            1.93
+ReSTIR         2.81
+Fog            0.32
+Clouds         0.13
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.16
+[2026-10-18 01:34:56.629] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18508 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:34:57.985] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.13 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:34:57.985] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.13 vis 1980 late 1980
+[2026-10-18 01:34:58.561] [info] frame 35.2 ms (28.4 fps)
+gpu 10.11 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.58
+Visbuffer      0.58
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.36
+Sky            0.07
+Contact        0.03
+Sun            1.99
+ReSTIR         2.65
+Fog            0.31
+Clouds         0.09
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.14
+[2026-10-18 01:34:58.630] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18538 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:00.026] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.12 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:00.026] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.12 vis 1981 late 1981
+[2026-10-18 01:35:00.569] [info] frame 35.2 ms (28.4 fps)
+gpu 10.35 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.60
+Visbuffer      0.47
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.00
+GTAO           0.36
+Sky            0.07
+Contact        0.20
+Sun            1.66
+ReSTIR         2.87
+Fog            0.60
+Clouds         0.09
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.12
+[2026-10-18 01:35:00.637] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18567 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:02.064] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.18 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:02.064] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.18 vis 1980 late 1980
+[2026-10-18 01:35:02.575] [info] frame 33.2 ms (30.1 fps)
+gpu 10.12 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.65
+Visbuffer      0.06
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           1.64
+Sky            0.07
+Contact        0.20
+Sun            1.39
+ReSTIR         2.25
+Fog            0.32
+Clouds         0.09
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.23
+[2026-10-18 01:35:02.644] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18597 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:04.109] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.15 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:04.109] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.15 vis 1981 late 1981
+[2026-10-18 01:35:04.585] [info] frame 35.2 ms (28.4 fps)
+gpu 9.46 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.61
+Visbuffer      0.46
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.00
+GTAO           0.36
+Sky            0.07
+Contact        0.20
+Sun            1.37
+ReSTIR         2.30
+Fog            0.56
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.12
+[2026-10-18 01:35:04.653] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18626 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:06.152] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.20 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:06.152] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.20 vis 1980 late 1980
+[2026-10-18 01:35:06.595] [info] frame 33.2 ms (30.1 fps)
+gpu 10.09 ms
+Light_Cull     0.01
+Shadow_Cull    0.10
+Mesh_Cull      0.07
+CSM            3.61
+Visbuffer      0.80
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.03
+Sun            1.75
+ReSTIR         2.31
+Fog            0.60
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.22
+[2026-10-18 01:35:06.663] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18656 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:08.198] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.17 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:08.198] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.17 vis 1981 late 1981
+[2026-10-18 01:35:08.606] [info] frame 33.2 ms (30.1 fps)
+gpu 8.81 ms
+Light_Cull     0.01
+Shadow_Cull    0.07
+Mesh_Cull      0.05
+CSM            3.30
+Visbuffer      0.68
+HiZ_Max        0.07
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.34
+Sky            0.05
+Contact        0.03
+Sun            1.31
+ReSTIR         2.27
+Fog            0.40
+Clouds         0.09
+Bloom          0.08
+Tonemap        0.05
+cpu record  0.15
+[2026-10-18 01:35:08.674] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18685 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:10.242] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.22 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:10.242] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.22 vis 1980 late 1980
+[2026-10-18 01:35:10.616] [info] frame 35.2 ms (28.4 fps)
+gpu 7.24 ms
+Light_Cull     0.01
+Shadow_Cull    0.07
+Mesh_Cull      0.05
+CSM            3.14
+Visbuffer      0.05
+HiZ_Max        0.07
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.33
+Sky            0.05
+Contact        0.03
+Sun            1.02
+ReSTIR         1.91
+Fog            0.29
+Clouds         0.08
+Bloom          0.07
+Tonemap        0.05
+cpu record  0.15
+[2026-10-18 01:35:10.684] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18715 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:12.282] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.15 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:12.282] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.15 vis 1981 late 1981
+[2026-10-18 01:35:12.621] [info] frame 35.2 ms (28.4 fps)
+gpu 9.39 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.60
+Visbuffer      0.32
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.36
+Sky            0.07
+Contact        0.03
+Sun            1.11
+ReSTIR         2.58
+Fog            0.78
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.15
+[2026-10-18 01:35:12.689] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18744 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:14.319] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.18 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:14.319] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.18 vis 1980 late 1980
+[2026-10-18 01:35:14.624] [info] frame 35.2 ms (28.4 fps)
+gpu 9.67 ms
+Light_Cull     0.01
+Shadow_Cull    0.10
+Mesh_Cull      0.07
+CSM            3.68
+Visbuffer      0.06
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.03
+Sun            1.45
+ReSTIR         3.14
+Fog            0.33
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.17
+[2026-10-18 01:35:14.692] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18774 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:16.361] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.20 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:16.361] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.20 vis 1981 late 1981
+[2026-10-18 01:35:16.634] [info] frame 33.2 ms (30.1 fps)
+gpu 9.41 ms
+Light_Cull     0.01
+Shadow_Cull    0.10
+Mesh_Cull      0.07
+CSM            3.80
+Visbuffer      0.48
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.39
+Sky            0.07
+Contact        0.22
+Sun            1.18
+ReSTIR         2.35
+Fog            0.34
+Clouds         0.13
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.22
+[2026-10-18 01:35:16.703] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18803 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:18.407] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.23 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:18.408] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.23 vis 1980 late 1980
+[2026-10-18 01:35:18.647] [info] frame 33.2 ms (30.1 fps)
+gpu 8.92 ms
+Light_Cull     0.01
+Shadow_Cull    0.08
+Mesh_Cull      0.05
+CSM            3.28
+Visbuffer      0.59
+HiZ_Max        0.07
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.34
+Sky            0.05
+Contact        0.19
+Sun            1.46
+ReSTIR         2.28
+Fog            0.30
+Clouds         0.09
+Bloom          0.07
+Tonemap        0.05
+cpu record  0.25
+[2026-10-18 01:35:18.715] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18833 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:20.462] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.25 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:20.462] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.25 vis 1981 late 1981
+[2026-10-18 01:35:20.668] [info] frame 33.2 ms (30.1 fps)
+gpu 9.68 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.63
+Visbuffer      0.06
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.36
+Sky            0.07
+Contact        0.20
+Sun            1.67
+ReSTIR         2.83
+Fog            0.32
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.24
+[2026-10-18 01:35:20.737] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18862 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:22.506] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.18 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:22.506] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.18 vis 1980 late 1980
+[2026-10-18 01:35:22.677] [info] frame 33.2 ms (30.1 fps)
+gpu 8.43 ms
+Light_Cull     0.01
+Shadow_Cull    0.08
+Mesh_Cull      0.06
+CSM            3.33
+Visbuffer      0.48
+HiZ_Max        0.07
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.35
+Sky            0.05
+Contact        0.03
+Sun            1.62
+ReSTIR         1.83
+Fog            0.30
+Clouds         0.09
+Bloom          0.07
+Tonemap        0.05
+cpu record  0.25
+[2026-10-18 01:35:22.746] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18892 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:24.553] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.18 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:24.553] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.18 vis 1981 late 1981
+[2026-10-18 01:35:24.689] [info] frame 33.2 ms (30.1 fps)
+gpu 10.03 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.81
+Visbuffer      0.32
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.39
+Sky            0.07
+Contact        0.03
+Sun            1.48
+ReSTIR         2.65
+Fog            0.73
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.21
+[2026-10-18 01:35:24.758] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18921 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:26.594] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.23 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:26.594] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.23 vis 1980 late 1980
+[2026-10-18 01:35:26.697] [info] frame 35.2 ms (28.4 fps)
+gpu 11.82 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.54
+Visbuffer      0.62
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.35
+Sky            0.07
+Contact        0.03
+Sun            2.09
+ReSTIR         2.88
+Fog            1.03
+Clouds         0.09
+Bloom          0.77
+Tonemap        0.07
+cpu record  0.24
+[2026-10-18 01:35:26.765] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18951 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:28.642] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.23 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:28.642] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.23 vis 1981 late 1981
+[2026-10-18 01:35:28.710] [info] frame 33.2 ms (30.1 fps)
+gpu 10.80 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.69
+Visbuffer      0.54
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.03
+Sun            1.88
+ReSTIR         3.33
+Fog            0.34
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.24
+[2026-10-18 01:35:28.779] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 18980 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:30.685] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.20 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:30.685] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.20 vis 1980 late 1980
+[2026-10-18 01:35:30.719] [info] frame 33.2 ms (30.1 fps)
+gpu 8.93 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.07
+CSM            3.57
+Visbuffer      0.06
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.75
+Sky            0.07
+Contact        0.03
+Sun            1.35
+ReSTIR         2.25
+Fog            0.31
+Clouds         0.09
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.27
+[2026-10-18 01:35:30.787] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19010 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:32.728] [info] frame 35.2 ms (28.4 fps)
+gpu 6.61 ms
+Light_Cull     0.01
+Shadow_Cull    0.06
+Mesh_Cull      0.04
+CSM            2.70
+Visbuffer      0.04
+HiZ_Max        0.06
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.62
+Sky            0.05
+Contact        0.15
+Sun            0.85
+ReSTIR         1.59
+Fog            0.24
+Clouds         0.07
+Bloom          0.06
+Tonemap        0.04
+cpu record  0.20
+[2026-10-18 01:35:32.728] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.20 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:32.728] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.20 vis 1981 late 1981
+[2026-10-18 01:35:32.796] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19039 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:34.739] [info] frame 33.2 ms (30.1 fps)
+gpu 9.22 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.55
+Visbuffer      0.29
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.00
+GTAO           0.36
+Sky            0.07
+Contact        0.20
+Sun            1.09
+ReSTIR         2.53
+Fog            0.62
+Clouds         0.09
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.23
+[2026-10-18 01:35:34.773] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.26 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:34.773] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.26 vis 1980 late 1980
+[2026-10-18 01:35:34.807] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19069 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:36.749] [info] frame 35.2 ms (28.4 fps)
+gpu 6.55 ms
+Light_Cull     0.01
+Shadow_Cull    0.06
+Mesh_Cull      0.04
+CSM            2.69
+Visbuffer      0.34
+HiZ_Max        0.06
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.28
+Sky            0.05
+Contact        0.15
+Sun            1.04
+ReSTIR         1.39
+Fog            0.24
+Clouds         0.07
+Bloom          0.06
+Tonemap        0.04
+cpu record  0.22
+[2026-10-18 01:35:36.818] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.22 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:36.818] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.22 vis 1981 late 1981
+[2026-10-18 01:35:36.818] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19098 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:38.755] [info] frame 35.2 ms (28.4 fps)
+gpu 9.29 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.57
+Visbuffer      0.06
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.36
+Sky            0.07
+Contact        0.03
+Sun            1.43
+ReSTIR         2.93
+Fog            0.31
+Clouds         0.09
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.22
+[2026-10-18 01:35:38.823] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19128 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:38.857] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.21 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:38.857] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.21 vis 1980 late 1980
+[2026-10-18 01:35:40.763] [info] frame 35.2 ms (28.4 fps)
+gpu 10.14 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.70
+Visbuffer      0.31
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.03
+Sun            1.39
+ReSTIR         2.92
+Fog            0.82
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.20
+[2026-10-18 01:35:40.832] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19157 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:40.901] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.25 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:40.901] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.25 vis 1981 late 1981
+[2026-10-18 01:35:42.777] [info] frame 33.2 ms (30.1 fps)
+gpu 9.74 ms
+Light_Cull     0.01
+Shadow_Cull    0.11
+Mesh_Cull      0.08
+CSM            3.60
+Visbuffer      0.49
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.36
+Sky            0.07
+Contact        0.03
+Sun            1.10
+ReSTIR         2.95
+Fog            0.57
+Clouds         0.09
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.18
+[2026-10-18 01:35:42.845] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19187 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:42.947] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.21 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:42.947] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.21 vis 1980 late 1980
+[2026-10-18 01:35:44.791] [info] frame 33.2 ms (30.1 fps)
+gpu 7.56 ms
+Light_Cull     0.01
+Shadow_Cull    0.07
+Mesh_Cull      0.05
+CSM            3.19
+Visbuffer      0.42
+HiZ_Max        0.07
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.33
+Sky            0.05
+Contact        0.03
+Sun            0.99
+ReSTIR         1.55
+Fog            0.56
+Clouds         0.08
+Bloom          0.07
+Tonemap        0.08
+cpu record  0.20
+[2026-10-18 01:35:44.859] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19216 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:44.995] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.23 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:44.995] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.23 vis 1981 late 1981
+[2026-10-18 01:35:46.802] [info] frame 33.2 ms (30.1 fps)
+gpu 10.11 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.66
+Visbuffer      0.58
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.03
+Sun            1.74
+ReSTIR         2.80
+Fog            0.32
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.24
+[2026-10-18 01:35:46.870] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19246 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:47.040] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.24 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:47.040] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.24 vis 1980 late 1980
+[2026-10-18 01:35:48.818] [info] frame 33.2 ms (30.1 fps)
+gpu 8.32 ms
+Light_Cull     0.01
+Shadow_Cull    0.08
+Mesh_Cull      0.05
+CSM            3.32
+Visbuffer      0.28
+HiZ_Max        0.07
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.35
+Sky            0.05
+Contact        0.19
+Sun            1.57
+ReSTIR         1.84
+Fog            0.30
+Clouds         0.09
+Bloom          0.07
+Tonemap        0.05
+cpu record  0.24
+[2026-10-18 01:35:48.886] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19275 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:49.090] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.24 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:49.090] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.24 vis 1981 late 1981
+[2026-10-18 01:35:50.833] [info] frame 33.2 ms (30.1 fps)
+gpu 10.81 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.77
+Visbuffer      0.64
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.38
+Sky            0.07
+Contact        0.21
+Sun            1.70
+ReSTIR         3.16
+Fog            0.34
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.22
+[2026-10-18 01:35:50.901] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19305 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:51.140] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.23 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:51.140] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.23 vis 1980 late 1980
+[2026-10-18 01:35:52.851] [info] frame 35.2 ms (28.4 fps)
+gpu 9.51 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.52
+Visbuffer      0.06
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.00
+GTAO           0.35
+Sky            0.47
+Contact        0.20
+Sun            1.50
+ReSTIR         2.58
+Fog            0.31
+Clouds         0.09
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.20
+[2026-10-18 01:35:52.921] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19334 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:53.193] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.26 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:53.193] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.26 vis 1981 late 1981
+[2026-10-18 01:35:54.868] [info] frame 35.2 ms (28.4 fps)
+gpu 8.65 ms
+Light_Cull     0.01
+Shadow_Cull    0.08
+Mesh_Cull      0.06
+CSM            3.36
+Visbuffer      0.61
+HiZ_Max        0.07
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.35
+Sky            0.05
+Contact        0.03
+Sun            1.30
+ReSTIR         2.20
+Fog            0.30
+Clouds         0.09
+Bloom          0.07
+Tonemap        0.05
+cpu record  0.26
+[2026-10-18 01:35:54.937] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19364 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:55.243] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.16 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:55.243] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.16 vis 1980 late 1980
+[2026-10-18 01:35:56.879] [info] frame 33.2 ms (30.1 fps)
+gpu 9.54 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.60
+Visbuffer      0.37
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.40
+Sky            0.07
+Contact        0.03
+Sun            1.39
+ReSTIR         2.83
+Fog            0.32
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.16
+[2026-10-18 01:35:56.947] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19393 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:57.288] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.13 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:57.288] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.13 vis 1981 late 1981
+[2026-10-18 01:35:58.887] [info] frame 33.2 ms (30.1 fps)
+gpu 9.92 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.70
+Visbuffer      0.44
+HiZ_Max        0.10
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.03
+Sun            1.59
+ReSTIR         2.83
+Fog            0.33
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.14
+[2026-10-18 01:35:58.955] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19423 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:35:59.330] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.13 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:35:59.330] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.13 vis 1980 late 1980
+[2026-10-18 01:36:00.895] [info] frame 33.2 ms (30.1 fps)
+gpu 9.08 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.75
+Visbuffer      0.51
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.38
+Sky            0.07
+Contact        0.03
+Sun            1.15
+ReSTIR         2.32
+Fog            0.33
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.17
+[2026-10-18 01:36:00.963] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19452 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:01.371] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.18 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:01.371] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.18 vis 1981 late 1981
+[2026-10-18 01:36:02.902] [info] frame 35.2 ms (28.4 fps)
+gpu 10.51 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.07
+CSM            3.65
+Visbuffer      0.06
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           1.19
+Sky            0.07
+Contact        0.03
+Sun            1.87
+ReSTIR         2.78
+Fog            0.32
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.25
+[2026-10-18 01:36:02.970] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19482 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:03.412] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.15 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:03.413] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.15 vis 1980 late 1980
+[2026-10-18 01:36:04.911] [info] frame 33.2 ms (30.1 fps)
+gpu 9.14 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.49
+Visbuffer      0.49
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.35
+Sky            0.07
+Contact        0.19
+Sun            1.45
+ReSTIR         2.27
+Fog            0.30
+Clouds         0.09
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.16
+[2026-10-18 01:36:04.980] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19511 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:05.456] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.14 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:05.457] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.14 vis 1981 late 1981
+[2026-10-18 01:36:06.922] [info] frame 33.2 ms (30.1 fps)
+gpu 9.74 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.47
+Visbuffer      0.42
+HiZ_Max        0.11
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.35
+Sky            0.07
+Contact        0.19
+Sun            1.50
+ReSTIR         2.88
+Fog            0.31
+Clouds         0.09
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.17
+[2026-10-18 01:36:06.990] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19541 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:07.500] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.15 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:07.500] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.15 vis 1980 late 1980
+[2026-10-18 01:36:08.928] [info] frame 35.2 ms (28.4 fps)
+gpu 10.00 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.59
+Visbuffer      0.50
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.36
+Sky            0.07
+Contact        0.20
+Sun            1.39
+ReSTIR         3.06
+Fog            0.31
+Clouds         0.09
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.12
+[2026-10-18 01:36:08.996] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19570 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:09.539] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.13 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:09.539] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.13 vis 1981 late 1981
+[2026-10-18 01:36:10.935] [info] frame 35.2 ms (28.4 fps)
+gpu 9.87 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.62
+Visbuffer      0.31
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.03
+Sun            1.65
+ReSTIR         2.71
+Fog            0.57
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.16
+[2026-10-18 01:36:11.003] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19600 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:11.583] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.15 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:11.583] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.15 vis 1980 late 1980
+[2026-10-18 01:36:12.947] [info] frame 33.2 ms (30.1 fps)
+gpu 9.70 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.58
+Visbuffer      0.35
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.36
+Sky            0.07
+Contact        0.03
+Sun            1.38
+ReSTIR         2.70
+Fog            0.69
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.13
+[2026-10-18 01:36:13.015] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19629 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:13.628] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.17 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:13.628] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.17 vis 1981 late 1981
+[2026-10-18 01:36:14.954] [info] frame 33.2 ms (30.1 fps)
+gpu 9.82 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.67
+Visbuffer      0.72
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.03
+Sun            1.55
+ReSTIR         2.55
+Fog            0.32
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.12
+[2026-10-18 01:36:15.022] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19659 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:15.668] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.16 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:15.668] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.16 vis 1980 late 1980
+[2026-10-18 01:36:16.960] [info] frame 35.2 ms (28.4 fps)
+gpu 9.78 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.73
+Visbuffer      0.68
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.38
+Sky            0.07
+Contact        0.03
+Sun            1.42
+ReSTIR         2.32
+Fog            0.62
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.15
+[2026-10-18 01:36:17.029] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19688 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:17.709] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.12 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:17.709] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.12 vis 1981 late 1981
+[2026-10-18 01:36:18.968] [info] frame 35.2 ms (28.4 fps)
+gpu 9.56 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.54
+Visbuffer      0.69
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.36
+Sky            0.07
+Contact        0.03
+Sun            1.49
+ReSTIR         2.28
+Fog            0.57
+Clouds         0.09
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.12
+[2026-10-18 01:36:19.036] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19718 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:19.751] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.18 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:19.751] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.18 vis 1980 late 1980
+[2026-10-18 01:36:20.976] [info] frame 35.2 ms (28.4 fps)
+gpu 8.04 ms
+Light_Cull     0.01
+Shadow_Cull    0.08
+Mesh_Cull      0.05
+CSM            3.28
+Visbuffer      0.43
+HiZ_Max        0.07
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.34
+Sky            0.05
+Contact        0.19
+Sun            1.45
+ReSTIR         1.58
+Fog            0.31
+Clouds         0.09
+Bloom          0.07
+Tonemap        0.05
+cpu record  0.12
+[2026-10-18 01:36:21.044] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19747 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:21.792] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.15 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:21.792] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.15 vis 1981 late 1981
+[2026-10-18 01:36:22.983] [info] frame 33.2 ms (30.1 fps)
+gpu 9.92 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.49
+Visbuffer      0.49
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.35
+Sky            0.07
+Contact        0.19
+Sun            1.31
+ReSTIR         2.89
+Fog            0.61
+Clouds         0.09
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.13
+[2026-10-18 01:36:23.051] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19777 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:23.835] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.12 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:23.835] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.12 vis 1980 late 1980
+[2026-10-18 01:36:24.991] [info] frame 33.2 ms (30.1 fps)
+gpu 10.04 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.61
+Visbuffer      0.46
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.36
+Sky            0.07
+Contact        0.20
+Sun            1.38
+ReSTIR         3.10
+Fog            0.32
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.23
+[2026-10-18 01:36:25.059] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19806 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:25.876] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.18 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:25.876] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.18 vis 1981 late 1981
+[2026-10-18 01:36:27.003] [info] frame 35.2 ms (28.4 fps)
+gpu 9.87 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.56
+Visbuffer      0.70
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.36
+Sky            0.07
+Contact        0.03
+Sun            1.51
+ReSTIR         2.25
+Fog            0.58
+Clouds         0.09
+Bloom          0.39
+Tonemap        0.07
+cpu record  0.17
+[2026-10-18 01:36:27.071] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19836 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:27.922] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.19 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:27.922] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.19 vis 1980 late 1980
+[2026-10-18 01:36:29.010] [info] frame 35.2 ms (28.4 fps)
+gpu 9.15 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.70
+Visbuffer      0.06
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.99
+Sky            0.07
+Contact        0.03
+Sun            1.13
+ReSTIR         2.31
+Fog            0.33
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.24
+[2026-10-18 01:36:29.078] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19865 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:29.965] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.21 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:29.965] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.21 vis 1981 late 1981
+[2026-10-18 01:36:31.025] [info] frame 33.2 ms (30.1 fps)
+gpu 9.90 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.67
+Visbuffer      0.70
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.03
+Sun            1.60
+ReSTIR         2.32
+Fog            0.60
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.25
+[2026-10-18 01:36:31.094] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19895 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:32.016] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.20 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:32.016] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.20 vis 1980 late 1980
+[2026-10-18 01:36:33.033] [info] frame 33.2 ms (30.1 fps)
+gpu 8.44 ms
+Light_Cull     0.01
+Shadow_Cull    0.08
+Mesh_Cull      0.05
+CSM            3.23
+Visbuffer      0.41
+HiZ_Max        0.07
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.34
+Sky            0.05
+Contact        0.03
+Sun            1.25
+ReSTIR         1.96
+Fog            0.73
+Clouds         0.09
+Bloom          0.07
+Tonemap        0.05
+cpu record  0.22
+[2026-10-18 01:36:33.101] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19924 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:34.049] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.23 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:34.049] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.23 vis 1981 late 1981
+[2026-10-18 01:36:35.037] [info] frame 33.2 ms (30.1 fps)
+gpu 9.79 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.07
+CSM            3.66
+Visbuffer      0.44
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.03
+Sun            1.59
+ReSTIR         2.77
+Fog            0.32
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.25
+[2026-10-18 01:36:35.106] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19954 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:36.093] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.19 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:36.093] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.19 vis 1980 late 1980
+[2026-10-18 01:36:37.046] [info] frame 33.2 ms (30.1 fps)
+gpu 10.11 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.74
+Visbuffer      0.44
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.00
+GTAO           0.38
+Sky            0.07
+Contact        0.21
+Sun            1.41
+ReSTIR         2.99
+Fog            0.33
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.22
+[2026-10-18 01:36:37.115] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 19983 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:38.135] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.16 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:38.135] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.16 vis 1981 late 1981
+[2026-10-18 01:36:39.053] [info] frame 35.2 ms (28.4 fps)
+gpu 10.36 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.71
+Visbuffer      0.58
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.00
+GTAO           0.37
+Sky            0.07
+Contact        0.21
+Sun            1.57
+ReSTIR         2.99
+Fog            0.33
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.20
+[2026-10-18 01:36:39.122] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 20013 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:40.178] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.24 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:40.178] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.24 vis 1980 late 1980
+[2026-10-18 01:36:41.063] [info] frame 35.2 ms (28.4 fps)
+gpu 11.10 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.62
+Visbuffer      0.53
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.20
+Sun            1.61
+ReSTIR         3.85
+Fog            0.32
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.24
+[2026-10-18 01:36:41.132] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 20042 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:42.231] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.27 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:42.232] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.27 vis 1981 late 1981
+[2026-10-18 01:36:43.087] [info] frame 35.2 ms (28.4 fps)
+gpu 7.63 ms
+Light_Cull     0.01
+Shadow_Cull    0.08
+Mesh_Cull      0.05
+CSM            3.11
+Visbuffer      0.39
+HiZ_Max        0.07
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.32
+Sky            0.05
+Contact        0.03
+Sun            1.49
+ReSTIR         1.53
+Fog            0.28
+Clouds         0.08
+Bloom          0.07
+Tonemap        0.05
+cpu record  0.22
+[2026-10-18 01:36:43.155] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 20072 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:44.280] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.23 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:44.280] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.23 vis 1980 late 1980
+[2026-10-18 01:36:45.098] [info] frame 33.2 ms (30.1 fps)
+gpu 9.68 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.59
+Visbuffer      0.30
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.36
+Sky            0.07
+Contact        0.03
+Sun            1.38
+ReSTIR         2.58
+Fog            0.84
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.19
+[2026-10-18 01:36:45.166] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 20101 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:46.326] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.19 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:46.326] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.19 vis 1981 late 1981
+[2026-10-18 01:36:47.113] [info] frame 35.2 ms (28.4 fps)
+gpu 10.02 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.69
+Visbuffer      0.51
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.03
+Sun            1.42
+ReSTIR         2.83
+Fog            0.57
+Clouds         0.10
+Bloom          0.11
+Tonemap        0.07
+cpu record  0.21
+[2026-10-18 01:36:47.181] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 20131 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:48.366] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.14 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:48.366] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.14 vis 1980 late 1980
+[2026-10-18 01:36:49.119] [info] frame 33.2 ms (30.1 fps)
+gpu 10.10 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.46
+Visbuffer      0.29
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.35
+Sky            0.07
+Contact        0.03
+Sun            1.59
+ReSTIR         2.83
+Fog            0.54
+Clouds         0.09
+Bloom          0.52
+Tonemap        0.07
+cpu record  0.25
+[2026-10-18 01:36:49.188] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 20160 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:50.422] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.22 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:50.422] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.22 vis 1981 late 1981
+[2026-10-18 01:36:51.132] [info] frame 33.2 ms (30.1 fps)
+gpu 10.02 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.07
+CSM            3.67
+Visbuffer      0.29
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.03
+Sun            1.42
+ReSTIR         2.90
+Fog            0.72
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.13
+[2026-10-18 01:36:51.200] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 20190 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:52.458] [info] cull in 91568 early 1980 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7790 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.23 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:52.458] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.23 vis 1980 late 1980
+[2026-10-18 01:36:53.139] [info] frame 35.2 ms (28.4 fps)
+gpu 10.02 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.68
+Visbuffer      0.32
+HiZ_Max        0.09
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.00
+GTAO           0.37
+Sky            0.07
+Contact        0.21
+Sun            1.42
+ReSTIR         3.09
+Fog            0.33
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.22
+[2026-10-18 01:36:53.208] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 20219 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
+[2026-10-18 01:36:54.502] [info] cull in 91568 early 1981 late 0 | skipE 0 skipL 0 | lod 52212 behind 29583 frust 7789 cone 3 hiz 0 near 3830 subpx 0 | sun 20913 51675 14847 | cpu 0.23 | profile 3 hiz 1 cone 1 lodc 1 frc 1 small 1 sh 1 mode 0
+[2026-10-18 01:36:54.502] [info] shadow cache 0 inst 91568/91568 center 52.4 -9.9 31.4 split 30.0 99.0 343.0 eye 42.7 2.8 30.7 mode 0 sscs 1.00 sh 1 zen 35.0 az 30.0 sun 0.71 0.57 0.41 | c0 0.10 -1.18 0.47 | c1 -0.05 -0.65 0.47 | c2 -0.10 -0.49 0.49 | cpu 0.23 vis 1981 late 1981
+[2026-10-18 01:36:55.148] [info] frame 33.2 ms (30.1 fps)
+gpu 10.37 ms
+Light_Cull     0.01
+Shadow_Cull    0.09
+Mesh_Cull      0.06
+CSM            3.65
+Visbuffer      0.31
+HiZ_Max        0.08
+Mesh_Cull_Late   0.01
+Visbuffer_Late   0.01
+GTAO           0.37
+Sky            0.07
+Contact        0.20
+Sun            1.42
+ReSTIR         3.49
+Fog            0.32
+Clouds         0.10
+Bloom          0.10
+Tonemap        0.07
+cpu record  0.16
+[2026-10-18 01:36:55.215] [info] ReSTIR лок 0/0 T1 S1 кип1 солн1 лучи 1 диск 0.50 Tист 20 Tгл 0.10 Tн 0.90 Tлуч 1 Sсос 3 Sрад 4 Sлуч 3 кадр 20249 tlas 1 истор 1 пов 1962240 жив 0 вид 0 тень 0 M 0.0 W 0.00
