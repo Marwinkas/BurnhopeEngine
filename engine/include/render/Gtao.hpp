@@ -55,6 +55,7 @@ struct GtaoPass {
     GpuBuffer constants{};
     uint32_t frame = 0;
     uint32_t mips = 0;
+    char lastLog[96]{};
 };
 
 [[nodiscard]] bool gtaoCreate(GtaoPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent);

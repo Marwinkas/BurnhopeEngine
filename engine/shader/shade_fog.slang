@@ -37,23 +37,24 @@ void shadeFog(uint3 dtid : SV_DispatchThreadID) {
         rayDir = ray / farLen;
         rayLen = 64.0;
     }
-    const float march = min(rayLen, 64.0);
-    const int fogSteps = 16;
-    const float stepLen = march / float(fogSteps);
-    float transmit = 1.0;
-    float3 fogLight = 0.0;
-    [loop]
-    for (int i = 0; i < fogSteps; ++i) {
-        const float t = (float(i) + 0.5) * stepLen;
-        const float3 Q = cam + rayDir * t;
-        const float height = exp(-max(Q.y - gShade.fogHeight, 0.0) * 0.12);
-        const float optical = gShade.fogDensity * height * stepLen;
-        const float absorb = 1.0 - exp(-optical);
-        const float sunVis = gFrame.disableShadow == 0 ? cascadeFogLit(Q) : 1.0;
-        const float3 sun = gSun.sunColor.xyz * gSun.sunDirIntensity.w * sunVis * gShade.fogScatter;
-        fogLight += transmit * absorb * (sun + float3(0.04, 0.045, 0.05));
-        transmit *= 1.0 - absorb;
+    const float falloff = 0.12;
+    const float density = gShade.fogDensity;
+    const float3 view = rayDir * rayLen;
+    const float atCam = density * exp(-falloff * (cam.y - gShade.fogHeight));
+    const float fh = falloff * view.y;
+    float opticalPerMeter = atCam;
+    if (abs(fh) > 0.00125) {
+        const float atEnd = density * exp(-falloff * (cam.y + view.y - gShade.fogHeight));
+        opticalPerMeter = (atCam - atEnd) / fh;
     }
+    const float optical = max(opticalPerMeter, 0.0) * rayLen;
+    const float transmit = exp(-optical);
+    const float opacity = saturate(1.0 - transmit);
+    const float sunVis = gFrame.disableShadow == 0 ? cascadeFogLit(cam + view) : 1.0;
+    const float3 sunDir = gSun.sunDirIntensity.xyz;
+    const float sunAmt = pow(saturate(dot(rayDir, sunDir)), 8.0);
+    const float3 sunCol = gSun.sunColor.xyz * gSun.sunDirIntensity.w * sunVis * gShade.fogScatter;
+    const float3 fogCol = (float3(0.62, 0.68, 0.74) * 0.08 + sunCol * sunAmt) * opacity;
     const float4 hdr = gHdr[px];
-    gHdr[px] = float4(hdr.rgb * transmit + fogLight, hdr.a);
+    gHdr[px] = float4(hdr.rgb * transmit + fogCol, hdr.a);
 }

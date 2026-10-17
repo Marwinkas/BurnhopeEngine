@@ -20,7 +20,7 @@ struct alignas(16) LightGpuData {
     uint32_t type = kLightPoint;
     uint32_t flags = 0;
     int32_t shadowMapIndex = -1;
-    uint32_t pad = 0;
+    float sourceRadius = 0.0f;
 };
 
 static_assert(std::is_trivially_copyable_v<LightGpuData>);

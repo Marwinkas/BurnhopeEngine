@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <span>
 
+#include <spdlog/spdlog.h>
+
 namespace burnhope {
 namespace {
 
@@ -323,6 +325,9 @@ void onMenuCommand(void* user, uint16_t id) {
 
 bool uiCommandAdd(UiState& s, const char* name, UiCommandFn fn, void* user) {
     if (s.cmdCount >= kUiCmdCap || s.menu == kUiNone) {
+        if (s.cmdCount >= kUiCmdCap) {
+            spdlog::warn("ui command cap {} full, dropped {}", static_cast<unsigned>(kUiCmdCap), name != nullptr ? name : "");
+        }
         return false;
     }
     const uint8_t index = s.cmdCount;

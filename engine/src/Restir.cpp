@@ -214,14 +214,16 @@ void splitLights(const LightGpuData* lights, uint32_t count, uint32_t& localFirs
             localB = static_cast<int>(i) + 1;
         }
     }
-    if (!localGap && localA >= 0) {
+    if (localA >= 0) {
         localFirst = static_cast<uint32_t>(localA);
         localCount = static_cast<uint32_t>(localB - localA);
     }
-    if (!infGap && infA >= 0) {
+    if (infA >= 0) {
         infFirst = static_cast<uint32_t>(infA);
         infCount = static_cast<uint32_t>(infB - infA);
     }
+    (void)localGap;
+    (void)infGap;
 }
 
 void fillPdf(RestirPass& p, const LightGpuData* lights, uint32_t lightCount, uint32_t passMask) {

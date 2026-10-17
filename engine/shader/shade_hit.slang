@@ -342,7 +342,8 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
         }
     }
     const float normalGap = saturate(1.0 - normalLen);
-    roughness = min(sqrt(roughness * roughness + gShade.toksvig * normalGap * normalGap * 0.5), 1.0);
+    const float kernelRough = min(2.0 * normalGap * normalGap * max(gShade.toksvig, 0.0), 0.18);
+    roughness = sqrt(saturate(roughness * roughness + kernelRough));
     const float a = max(roughness * roughness, 0.002);
     const float3 f0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
     const float3 F = F_Schlick(VdotH, f0);
@@ -365,8 +366,6 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     spec = spec * (1.0 - fCoat) + float3(coatSpec, coatSpec, coatSpec);
 
     const float left = (1.0 - fCoat);
-    // Micro-occlusion on direct diffuse (soft cavity darkening without killing sunlit surfaces)
-    const float directMicroAo = lerp(1.0, gtao, 0.35);
 
     hit.N = N;
     hit.P = P;
@@ -374,7 +373,7 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     hit.L = L;
     hit.albedo = albedo;
     hit.spec = spec;
-    hit.diff = albedo * hammonDiffuse(NdotL, NdotV, dot(V, L), roughness) * (1.0 - F) * (1.0 - metallic) * directMicroAo * left;
+    hit.diff = albedo * (1.0 - F) * (1.0 - metallic) * Fd_Lambert() * gtao * left;
     hit.f0 = f0;
     hit.emissive = mat.baseColor.rgb * mat.emissive * 8.0;
     if (mat.emissiveTex > 0u && mat.emissiveTex < 768u) {

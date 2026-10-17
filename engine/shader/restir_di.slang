@@ -140,19 +140,18 @@ void restirShadePixel(uint2 px) {
                 RAB_LightSample sample = RAB_SamplePolymorphicLight(info, surface, RTXDI_GetDIReservoirSampleUV(reservoir));
                 uint rays = max(gRestir.shadowRays, 1u);
                 float visSum = 0.0;
-                float3 axis = abs(sample.normal.y) < 0.9 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
                 float3 toL = sample.position - surface.worldPos;
                 float dist = length(toL);
-                float3 dir = dist > 1e-4 ? toL / dist : float3(0.0, 1.0, 0.0);
-                float3 tangent = normalize(cross(axis, dir));
-                float3 bitangent = cross(dir, tangent);
-                float radius = info.posRadius.w;
+                float3 toCenter = info.posRadius.xyz - surface.worldPos;
+                float centerDist = length(toCenter);
+                float3 dir = centerDist > 1e-4 ? toCenter / centerDist : float3(0.0, 1.0, 0.0);
+                float source = restirSourceRadius(info);
                 for (uint ray = 0u; ray < rays; ++ray) {
                     RAB_LightSample cast = sample;
-                    if (rays > 1u && radius > 1e-3) {
-                        float ang = (float(ray) + 0.5) * 6.2831853 / float(rays);
-                        float rad = radius * sqrt((float(ray) + 0.5) / float(rays));
-                        cast.position = sample.position + (tangent * cos(ang) + bitangent * sin(ang)) * rad;
+                    if (ray > 0u) {
+                        float u = (float(ray) + 0.5) / float(rays);
+                        float v = frac(0.5 + float(ray) * 0.754877666);
+                        cast.position = restirLightDisk(info.posRadius.xyz, dir, source, u, v);
                     }
                     visSum += RAB_GetConservativeVisibility(surface, cast) ? 1.0 : 0.0;
                 }
@@ -161,8 +160,6 @@ void restirShadePixel(uint2 px) {
                 sampleM = reservoir.M;
                 radiance = sample.radiance;
                 add = restirShade(sample, surface) * invPdf * visible;
-                float3 toL = sample.position - surface.worldPos;
-                float dist = length(toL);
                 float facing = dist > 1e-4 ? saturate(dot(surface.normal, toL / dist)) : 0.0;
                 litAmt = visible * facing;
                 restirStat(1u, 1u);

@@ -21,6 +21,45 @@ struct LightGpu {
     uint4 meta;
 };
 
+float pointShadowLit(float2 uv, float receiver) {
+    const float closest = gPointShadow.SampleLevel(gSamp, uv, 0.0);
+    return closest >= 0.998 || receiver <= closest + 0.004 ? 1.0 : 0.0;
+}
+
+float pointShadowPcss(float2 uv, float receiver, float sourceRadius, float range) {
+    const float texel = 1.0 / 512.0;
+    const float2 searchOfs[5] = {
+        float2(0.0, 0.0), float2(texel, 0.0), float2(-texel, 0.0), float2(0.0, texel), float2(0.0, -texel)
+    };
+    float blocker = 0.0;
+    float weight = 0.0;
+    [unroll]
+    for (int i = 0; i < 5; ++i) {
+        const float d = gPointShadow.SampleLevel(gSamp, uv + searchOfs[i] * 2.0, 0.0);
+        if (d < receiver && d < 0.998) {
+            blocker += d;
+            weight += 1.0;
+        }
+    }
+    float filter = texel;
+    if (weight > 0.5) {
+        blocker /= weight;
+        const float penumbra = sourceRadius * max(receiver - blocker, 0.0) / max(blocker * range, 1e-3);
+        filter = clamp(penumbra, texel, texel * 8.0);
+    }
+    const float2 tap[9] = {
+        float2(-1.0, -1.0), float2(0.0, -1.0), float2(1.0, -1.0),
+        float2(-1.0, 0.0), float2(0.0, 0.0), float2(1.0, 0.0),
+        float2(-1.0, 1.0), float2(0.0, 1.0), float2(1.0, 1.0)
+    };
+    float vis = 0.0;
+    [unroll]
+    for (int t = 0; t < 9; ++t) {
+        vis += pointShadowLit(uv + tap[t] * filter, receiver);
+    }
+    return vis / 9.0;
+}
+
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
@@ -78,16 +117,22 @@ void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) 
             continue;
         }
         Lp = toLight / dist;
-        atten = saturate(1.0 - dist / radius);
-        atten *= atten;
+        atten = filamentDistanceAttenuation(dist, radius);
         if (kind == 1u && (gPass.passMask & 512u) == 0u) {
             continue;
         }
         if (kind == 2u && (gPass.passMask & 65536u) == 0u) {
             continue;
         }
-        if (kind == 2 && dot(Lp, -normalize(lamp.dirAngle.xyz)) < cos(max(lamp.dirAngle.w, 0.05))) {
-            continue;
+        if (kind == 2u) {
+            const float cd = dot(Lp, -normalize(lamp.dirAngle.xyz));
+            const float outer = cos(max(lamp.dirAngle.w, 0.05));
+            if (cd < outer) {
+                continue;
+            }
+            const float inner = max(outer + 0.12, cos(max(lamp.dirAngle.w * 0.55, 0.02)));
+            const float cone = saturate((cd - outer) / max(inner - outer, 1e-3));
+            atten *= cone * cone;
         }
         shadowSlot = int(lamp.meta.z);
         float pshadow = 1.0;
@@ -113,8 +158,8 @@ void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) 
             local *= page;
             if (inside && local.x < page && local.y < page) {
                 const float2 pUv = float2(local.x, (local.y + float(shadowSlot)) / 3.0);
-                const float closest = gPointShadow.SampleLevel(gSamp, pUv, 0.0);
-                pshadow = closest >= 0.998 ? 1.0 : receiverZ <= closest + 0.012 ? 1.0 : 0.0;
+                const float source = asfloat(lamp.meta.w) > 1e-4 ? asfloat(lamp.meta.w) : 0.15;
+                pshadow = pointShadowPcss(pUv, receiverZ, source, radius);
             }
         }
         const float ndl = saturate(dot(N, Lp));
@@ -140,19 +185,18 @@ void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) 
         const float3 H2 = normalize(V + Lp);
         const float3 F2 = F_Schlick(saturate(dot(V, H2)), f0);
         const float D2 = D_GGX(saturate(dot(N, H2)), a);
-        const float G2 = G_Smith(NdotV, ndl, a);
-        float3 specL = min((D2 * G2 * F2) / max(4.0 * NdotV * ndl, 1e-4), float3(2.0, 2.0, 2.0));
+        const float Vis2 = V_SmithGGXCorrelated(NdotV, ndl, a);
+        float3 specL = min(D2 * Vis2 * F2, float3(8.0, 8.0, 8.0));
         specL *= lerp(float3(1.0, 1.0, 1.0), energyCompensation(f0, NdotV, roughness), saturate(gShade.ggx));
         specL *= lerp(1.0, specOcclusion(NdotV, gtao, roughness), saturate(gShade.specOcc));
-        const float3 diffL = albedo * hammonDiffuse(ndl, NdotV, dot(V, Lp), roughness) * (1.0 - F2) * (1.0 - metallic);
+        float3 diffL = albedo * (1.0 - F2) * (1.0 - metallic) * Fd_Lambert();
+        diffL = coloredPenumbra(diffL, albedo, pshadow);
         float3 lampRad = lamp.colorIntensity.rgb * lamp.colorIntensity.w;
         const float lampPeak = max(lampRad.r, max(lampRad.g, lampRad.b));
         const float lampCap = lerp(1.2, 8.0, saturate(gShade.lamp));
         if (lampPeak > lampCap) {
             lampRad *= lampCap / lampPeak;
         }
-        const float core = saturate(1.0 - dist / 0.35) * saturate(gShade.lamp);
-        color += lamp.colorIntensity.rgb * core * core * 8.0;
         color += (diffL * ormAo + specL) * ndl * atten * lampRad * pshadow;
         if (!lampContact && dist < 6.0 && ndl > 0.05) {
             lampContact = true;

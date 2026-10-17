@@ -77,6 +77,58 @@ float3 ggxReflect(float3 N, float3 V, float roughness, float2 u) {
 }
 
 // Earl Hammon Jr. 2017: PBR Diffuse Lighting for GGX+Smith Microsurfaces
+float Fd_Lambert() {
+    return 1.0 / kPi;
+}
+
+float schlickWeight(float f0, float f90, float cosine) {
+    const float x = 1.0 - saturate(cosine);
+    const float x2 = x * x;
+    return f0 + (f90 - f0) * x2 * x2 * x;
+}
+
+float Fd_Burley(float roughness, float NdotV, float NdotL, float LoH) {
+    const float f90 = 0.5 + 2.0 * roughness * LoH * LoH;
+    return schlickWeight(1.0, f90, NdotL) * schlickWeight(1.0, f90, NdotV) / kPi;
+}
+
+float filamentDistanceAttenuation(float dist, float radius) {
+    const float dist2 = max(dist * dist, 1e-4);
+    const float falloff = 1.0 / max(radius * radius, 1e-4);
+    const float factor = dist2 * falloff;
+    const float smoothFactor = saturate(1.0 - factor * factor);
+    return (smoothFactor * smoothFactor) / dist2;
+}
+
+float D_Charlie(float roughness, float NdotH) {
+    const float invAlpha = 1.0 / max(roughness, 0.045);
+    const float cos2h = NdotH * NdotH;
+    const float sin2h = max(1.0 - cos2h, 0.0078125);
+    return (2.0 + invAlpha) * pow(sin2h, invAlpha * 0.5) / (2.0 * kPi);
+}
+
+float V_Neubelt(float NdotV, float NdotL) {
+    return 1.0 / max(4.0 * (NdotL + NdotV - NdotL * NdotV), 1e-4);
+}
+
+float3 clothSheen(float roughness, float3 sheenColor, float NdotV, float NdotL, float NdotH) {
+    return D_Charlie(roughness, NdotH) * V_Neubelt(NdotV, NdotL) * sheenColor;
+}
+
+float D_GGXAniso(float at, float ab, float TdotH, float BdotH, float NdotH) {
+    const float a2 = at * ab;
+    const float3 d = float3(ab * TdotH, at * BdotH, a2 * NdotH);
+    const float d2 = max(dot(d, d), 1e-8);
+    const float b2 = a2 / d2;
+    return a2 * b2 * b2 / kPi;
+}
+
+float3 coloredPenumbra(float3 diffuse, float3 albedo, float occlusion) {
+    const float3 penumbra = min(float3(1.0 / kPi, 1.0 / kPi, 1.0 / kPi), diffuse / max(2.0 * (1.0 - albedo), float3(1e-3, 1e-3, 1e-3)));
+    const float edge = pow(saturate(occlusion), 4.0);
+    return lerp(penumbra, diffuse, edge);
+}
+
 float hammonDiffuse(float NdotL, float NdotV, float VdotL, float roughness) {
     const float nl = saturate(NdotL);
     const float nv = max(NdotV, 1e-4);

@@ -58,25 +58,27 @@ float3 agx(float3 val) {
 [shader("fragment")]
 float4 tonemapFs(VertOut vin) : SV_Target0 {
     const float2 d = vin.uv - 0.5;
+    const uint2 screen = gFrame.padExt.x > 0u ? gFrame.padExt : gFrame.extent;
+    const float2 invPx = 1.0 / float2(screen);
     const float ca = gTone.ca;
-    const float2 shift = d * ca * gFrame.invExtent;
+    const float2 shift = d * ca * invPx;
     float3 hdr;
     hdr.r = gHdr.SampleLevel(gLinear, vin.uv + shift, 0.0).r;
     hdr.g = gHdr.SampleLevel(gLinear, vin.uv, 0.0).g;
     hdr.b = gHdr.SampleLevel(gLinear, vin.uv - shift, 0.0).b;
     if (gTone.cas > 0.001) {
-        const float3 n0 = gHdr.SampleLevel(gLinear, vin.uv + float2(gFrame.invExtent.x, 0.0), 0.0).rgb;
-        const float3 n1 = gHdr.SampleLevel(gLinear, vin.uv - float2(gFrame.invExtent.x, 0.0), 0.0).rgb;
-        const float3 n2 = gHdr.SampleLevel(gLinear, vin.uv + float2(0.0, gFrame.invExtent.y), 0.0).rgb;
-        const float3 n3 = gHdr.SampleLevel(gLinear, vin.uv - float2(0.0, gFrame.invExtent.y), 0.0).rgb;
+        const float3 n0 = gHdr.SampleLevel(gLinear, vin.uv + float2(invPx.x, 0.0), 0.0).rgb;
+        const float3 n1 = gHdr.SampleLevel(gLinear, vin.uv - float2(invPx.x, 0.0), 0.0).rgb;
+        const float3 n2 = gHdr.SampleLevel(gLinear, vin.uv + float2(0.0, invPx.y), 0.0).rgb;
+        const float3 n3 = gHdr.SampleLevel(gLinear, vin.uv - float2(0.0, invPx.y), 0.0).rgb;
         const float3 blur = (n0 + n1 + n2 + n3) * 0.25;
         hdr += (hdr - blur) * gTone.cas;
     }
     if (gTone.bloomMix > 0.001 && (gPass.passMask & 32u) != 0u) {
-        const uint h0 = max(gFrame.extent.y >> 1, 1u);
-        const uint h1 = max(gFrame.extent.y >> 2, 1u);
-        const uint h2 = max(gFrame.extent.y >> 3, 1u);
-        const uint h3 = max(gFrame.extent.y >> 4, 1u);
+        const uint h0 = max(screen.y >> 1, 1u);
+        const uint h1 = max(screen.y >> 2, 1u);
+        const uint h2 = max(screen.y >> 3, 1u);
+        const uint h3 = max(screen.y >> 4, 1u);
         const float span = float(h0 + h1 + h2 + h3);
         const float2 uvb = float2(vin.uv.x, vin.uv.y * (float(h0) / span));
         hdr += gBloom.SampleLevel(gLinear, uvb, 0.0).rgb * gTone.bloomMix;
@@ -95,9 +97,12 @@ float4 tonemapFs(VertOut vin) : SV_Target0 {
     float3 color = mapped;
     const float lum = luma(color);
     if (gTone.grain > 0.001) {
-        const float n = frac(sin(dot(vin.uv * float2(gFrame.extent.xy) + gFrame.cameraPos.xy, float2(12.9898, 78.233))) * 43758.5453);
+        const float n = frac(sin(dot(vin.uv * float2(screen) + gFrame.cameraPos.xy, float2(12.9898, 78.233))) * 43758.5453);
         color += (n - 0.5) * gTone.grain * saturate(1.15 - lum);
     }
     color *= saturate(1.15 - dot(d, d) * gTone.vignette);
+    if (gTone.f5 > 0.5) {
+        color = pow(max(color, 0.0), 1.0 / 2.2);
+    }
     return float4(saturate(color), 1.0);
 }

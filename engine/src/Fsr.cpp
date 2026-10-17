@@ -616,7 +616,7 @@ void fsrJitter(FsrPass& p, float& ndcX, float& ndcY, VkExtent2D render, VkExtent
     p.prevJitterY = p.jitterY;
     p.jitterX = halton(sample, 2) - 0.5f;
     p.jitterY = halton(sample, 3) - 0.5f;
-    ndcX = p.jitterX * 2.0f / static_cast<float>(render.width);
+    ndcX = -p.jitterX * 2.0f / static_cast<float>(render.width);
     ndcY = p.jitterY * 2.0f / static_cast<float>(render.height);
 }
 

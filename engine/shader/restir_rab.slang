@@ -78,7 +78,10 @@ struct RAB_LightInfo {
     float4 posRadius;
     float4 colorIntensity;
     float4 dirAngle;
-    uint4 meta;
+    uint type;
+    uint flags;
+    int shadowMap;
+    float sourceRadius;
 };
 
 struct RAB_LightSample {
@@ -271,14 +274,27 @@ float3 restirShade(RAB_LightSample lightSample, RAB_Surface surface) {
     float3 H = normalize(V + L);
     float3 F = F_Schlick(saturate(dot(V, H)), surface.material.specularF0);
     float D = D_GGX(saturate(dot(surface.normal, H)), a);
-    float G = G_Smith(max(surface.NdotV, 1e-3), ndl, a);
-    float3 spec = min((D * G * F) / max(4.0 * max(surface.NdotV, 1e-3) * max(ndl, 1e-3), 1e-4), float3(2.0, 2.0, 2.0));
-    float3 diff = surface.material.diffuseAlbedo * hammonDiffuse(ndl, max(surface.NdotV, 1e-3), saturate(dot(V, L)), rough) * (1.0 - F);
+    float Vis = V_SmithGGXCorrelated(max(surface.NdotV, 1e-3), ndl, a);
+    float3 spec = min(D * Vis * F, float3(2.0, 2.0, 2.0));
+    float3 diff = surface.material.diffuseAlbedo * (1.0 - F) * Fd_Lambert();
     return (diff + spec) * ndl * lightSample.radiance / lightSample.solidAnglePdf;
 }
 
 float RAB_GetLightSampleTargetPdfForSurface(RAB_LightSample lightSample, RAB_Surface surface) {
     return restirLuma(restirShade(lightSample, surface));
+}
+
+float restirSourceRadius(RAB_LightInfo lightInfo) {
+    return lightInfo.sourceRadius > 1e-4 ? lightInfo.sourceRadius : 0.15;
+}
+
+float3 restirLightDisk(float3 center, float3 dir, float radius, float u, float v) {
+    float3 axis = abs(dir.y) < 0.9 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+    float3 tangent = normalize(cross(axis, dir));
+    float3 bitangent = cross(dir, tangent);
+    float rad = sqrt(saturate(u)) * radius;
+    float ang = v * 6.2831853;
+    return center + (tangent * cos(ang) + bitangent * sin(ang)) * rad;
 }
 
 void RAB_GetLightDirDistance(RAB_Surface surface, RAB_LightSample lightSample, out float3 o_lightDir, out float o_lightDistance) {
@@ -288,9 +304,8 @@ void RAB_GetLightDirDistance(RAB_Surface surface, RAB_LightSample lightSample, o
 }
 
 RAB_LightSample RAB_SamplePolymorphicLight(RAB_LightInfo lightInfo, RAB_Surface surface, float2 uv) {
-    (void)uv;
     RAB_LightSample sample = RAB_EmptyLightSample();
-    uint kind = lightInfo.meta.x;
+    uint kind = lightInfo.type;
     if (kind == 0u) {
         return sample;
     }
@@ -300,7 +315,7 @@ RAB_LightSample RAB_SamplePolymorphicLight(RAB_LightInfo lightInfo, RAB_Surface 
     if (kind == 2u && (gPass.passMask & 65536u) == 0u) {
         return sample;
     }
-    if ((lightInfo.meta.y & 1u) != 0u && (gPass.passMask & 131072u) == 0u) {
+    if ((lightInfo.flags & 1u) != 0u && (gPass.passMask & 131072u) == 0u) {
         return sample;
     }
     float3 toL = lightInfo.posRadius.xyz - surface.worldPos;
@@ -310,18 +325,24 @@ RAB_LightSample RAB_SamplePolymorphicLight(RAB_LightInfo lightInfo, RAB_Surface 
         return sample;
     }
     float3 L = toL / dist;
-    if (kind == 2u && dot(L, -normalize(lightInfo.dirAngle.xyz)) < cos(max(lightInfo.dirAngle.w, 0.05))) {
-        return sample;
+    float atten = filamentDistanceAttenuation(dist, radius);
+    if (kind == 2u) {
+        float cd = dot(L, -normalize(lightInfo.dirAngle.xyz));
+        float outer = cos(max(lightInfo.dirAngle.w, 0.05));
+        if (cd < outer) {
+            return sample;
+        }
+        float inner = max(outer + 0.12, cos(max(lightInfo.dirAngle.w * 0.55, 0.02)));
+        float cone = saturate((cd - outer) / max(inner - outer, 1e-3));
+        atten *= cone * cone;
     }
-    float atten = saturate(1.0 - dist / radius);
-    atten *= atten;
     float3 radiance = lightInfo.colorIntensity.rgb * lightInfo.colorIntensity.w;
     float peak = max(radiance.r, max(radiance.g, radiance.b));
     float cap = lerp(1.2, 8.0, saturate(gShade.lamp));
     if (peak > cap) {
         radiance *= cap / peak;
     }
-    sample.position = lightInfo.posRadius.xyz;
+    sample.position = restirLightDisk(lightInfo.posRadius.xyz, L, restirSourceRadius(lightInfo), uv.x, uv.y);
     sample.normal = -L;
     sample.radiance = radiance * atten;
     sample.solidAnglePdf = 1.0;
@@ -372,9 +393,9 @@ bool RAB_GetConservativeVisibility(RAB_Surface surface, RAB_LightSample lightSam
 }
 
 bool RAB_GetConservativeVisibility(RAB_Surface surface, float3 samplePosition) {
-    (void)surface;
-    (void)samplePosition;
-    return true;
+    RAB_LightSample sample = RAB_EmptyLightSample();
+    sample.position = samplePosition;
+    return RAB_GetConservativeVisibility(surface, sample);
 }
 
 bool RAB_GetTemporalConservativeVisibility(RAB_Surface curSurface, RAB_Surface prevSurface, RAB_LightSample lightSample) {
@@ -383,10 +404,8 @@ bool RAB_GetTemporalConservativeVisibility(RAB_Surface curSurface, RAB_Surface p
 }
 
 bool RAB_GetTemporalConservativeVisibility(RAB_Surface curSurface, RAB_Surface prevSurface, float3 samplePosition) {
-    (void)curSurface;
     (void)prevSurface;
-    (void)samplePosition;
-    return true;
+    return RAB_GetConservativeVisibility(curSurface, samplePosition);
 }
 
 float3 restirTangent(RAB_Surface surface, float3 h) {

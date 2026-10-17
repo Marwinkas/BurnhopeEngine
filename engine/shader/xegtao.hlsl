@@ -36,6 +36,12 @@ RWTexture2D<uint> g_outNormalmap : register(u0);
 [numthreads(XE_GTAO_NUMTHREADS_X, XE_GTAO_NUMTHREADS_Y, 1)]
 void CSNormals(uint2 pixCoord : SV_DispatchThreadID) {
     float3 viewspaceNormal = XeGTAO_ComputeViewspaceNormal(pixCoord, g_GTAOConsts, g_srcRawDepth, g_samplerPointClamp);
+    const float2 uv = (float2(pixCoord) + 0.5) * g_GTAOConsts.ViewportPixelSize;
+    const float viewZ = max(XeGTAO_ScreenSpaceToViewSpaceDepth(g_srcRawDepth.Load(int3(pixCoord, 0)), g_GTAOConsts), 1e-3);
+    const float3 viewVec = normalize(-XeGTAO_ComputeViewspacePosition(uv, viewZ, g_GTAOConsts));
+    if (dot(viewspaceNormal, viewVec) < 0.0) {
+        viewspaceNormal = -viewspaceNormal;
+    }
     g_outNormalmap[pixCoord] = XeGTAO_FLOAT3_to_R11G11B10_UNORM(saturate(viewspaceNormal * 0.5 + 0.5));
 }
 #endif
@@ -108,6 +114,6 @@ RWTexture2D<float> g_ao : register(u0);
 [numthreads(8, 8, 1)]
 void CSResolve(uint2 pixCoord : SV_DispatchThreadID) {
     uint packed = g_srcWorkingAOTerm.Load(int3(pixCoord, 0)).x;
-    g_ao[pixCoord] = saturate((float(packed) / 255.0) / 1.5);
+    g_ao[pixCoord] = saturate(float(packed) / 255.0);
 }
 #endif

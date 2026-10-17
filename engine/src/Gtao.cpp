@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 
 #include <spdlog/spdlog.h>
@@ -301,6 +302,8 @@ void gtaoRecord(
         && extent.width >= 16u && extent.height >= 16u && fovY > 0.01f && zn > 0.0f;
     if (!ready) {
         clearAo(cmd, ao);
+        std::snprintf(p.lastLog, sizeof(p.lastLog), "XeGTAO clear on %u mips %u %ux%u",
+            on ? 1u : 0u, p.mips, extent.width, extent.height);
         return;
     }
     const float tanY = std::tan(fovY * 0.5f);
@@ -326,11 +329,12 @@ void gtaoRecord(
     constants.falloff = std::clamp(params.falloff, 0.05f, 1.0f);
     constants.radiusMul = 1.457f;
     constants.power = std::clamp(params.power, 0.5f, 4.0f);
-    constants.denoiseBeta = denoise == 0 ? 10000.0f : 1.2f;
+    const float beta[] = {10000.0f, 1.2f, 0.55f, 0.22f};
+    constants.denoiseBeta = beta[denoise];
     constants.samplePower = 2.0f;
     constants.thin = 0.0f;
     constants.mipOffset = 3.30f;
-    constants.noise = denoise > 0 ? static_cast<int32_t>(p.frame % 64u) : 0;
+    constants.noise = 0;
     if (flight < 2u && p.constants.mapped != nullptr) {
         std::memcpy(static_cast<std::byte*>(p.constants.mapped) + kStride * flight, &constants, sizeof(constants));
         gpuBufferFlush(p.constants, d, kStride * flight, kStride);
@@ -366,6 +370,9 @@ void gtaoRecord(
     imageBarrier(cmd, ao, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     dispatch(cmd, p.resolve[finalSide], groupsOf(extent.width, 8u), groupsOf(extent.height, 8u));
     imageBarrier(cmd, ao, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    std::snprintf(p.lastLog, sizeof(p.lastLog), "XeGTAO %ux%u r %.2f sl %.0f st %.0f den %d q %u",
+        extent.width, extent.height, static_cast<double>(constants.radius), static_cast<double>(params.slices),
+        static_cast<double>(params.steps), denoise, quality);
 }
 
 } // namespace burnhope

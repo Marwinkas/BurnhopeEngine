@@ -183,7 +183,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         const float skyLum = dot(skyLit, float3(0.2126, 0.7152, 0.0722));
         const float3 skyChroma = skyLum > 0.05 ? skyLit / skyLum : float3(0.45, 0.62, 1.0);
         const float wrap = saturate(hit.N.y * 0.4 + 0.6);
-        const float ambOcc = lerp(0.55, 1.0, saturate(hit.gtao));
+        const float ambOcc = saturate(hit.gtao);
         skyAmb = hit.albedo * (1.0 - hit.metallic) * skyChroma * (inten * 0.16) * wrap * ambOcc;
         if (!sunOn) {
             skyAmb *= 0.15;
@@ -194,7 +194,8 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     if (hit.foliage > 0.5) {
         sunFace = max(sunFace, saturate(dot(-hit.N, hit.L)) * 0.45);
     }
-    float3 direct = (hit.diff + hit.spec) * sunFace * shadow * radiance;
+    const float3 sunDiff = coloredPenumbra(hit.diff, hit.albedo, shadow);
+    float3 direct = (sunDiff + hit.spec) * sunFace * shadow * radiance;
     if (!all(direct == direct)) {
         direct = 0.0;
     }

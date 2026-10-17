@@ -1780,6 +1780,22 @@ void sceneFrameRecord(
     const bool fsrLive = (scene->passMask & kPassFsr) != 0u && scene->fsr.prepare.handle != VK_NULL_HANDLE;
     const VkExtent2D renderExtent = fsrLive ? fsrRenderExtent(scene->fsr.quality, swap.extent) : swap.extent;
     if (scene->ready && (scene->extent.width != renderExtent.width || scene->extent.height != renderExtent.height)) {
+        const uint32_t other = frame.flight ^ 1u;
+        VkResult otherFence = VK_SUCCESS;
+        if (swap.flightFence[other] != VK_NULL_HANDLE) {
+            otherFence = vkWaitForFences(device.device, 1, &swap.flightFence[other], VK_TRUE, 500'000'000ull);
+        }
+        if (otherFence != VK_SUCCESS) {
+            spdlog::error("FSR resize held flight {} fence {} want {}x{} have {}x{}",
+                other, static_cast<int>(otherFence), renderExtent.width, renderExtent.height,
+                scene->extent.width, scene->extent.height);
+            if (otherFence == VK_ERROR_DEVICE_LOST) {
+                deviceMarkLost(device, "FSR resize", static_cast<int32_t>(otherFence));
+            }
+        } else {
+        spdlog::info("FSR resize quality {} display {}x{} render {}x{} was {}x{}",
+            scene->fsr.quality, swap.extent.width, swap.extent.height,
+            renderExtent.width, renderExtent.height, scene->extent.width, scene->extent.height);
         const VkExtent2D hizExtent{renderExtent.width, renderExtent.height * 2u};
         const VkExtent2D bloomExtent{
             std::max(swap.extent.width / 2u, 1u),
@@ -1801,7 +1817,9 @@ void sceneFrameRecord(
         if (resized) {
             scene->extent = renderExtent;
         } else {
+            spdlog::error("FSR resize failed quality {} render {}x{}", scene->fsr.quality, renderExtent.width, renderExtent.height);
             scene->ready = false;
+        }
         }
     }
     const bool propMoved = syncPropInstance(scene);
@@ -1945,7 +1963,7 @@ void sceneFrameRecord(
     pose.eye[1] = scene->fly.eye[1];
     pose.eye[2] = scene->fly.eye[2];
     flyCamTarget(scene->fly, pose.target);
-    pose.aspect = static_cast<float>(swap.extent.width) / static_cast<float>(swap.extent.height);
+    pose.aspect = static_cast<float>(scene->extent.width) / static_cast<float>(scene->extent.height);
     pose.zn = 0.1f;
     pose.zf = scene->farPlane;
     if (fsrLive) {
@@ -1997,11 +2015,15 @@ void sceneFrameRecord(
     gpu.viewPad[0] = static_cast<float>(scene->instanceCount);
     gpu.viewPad[1] = static_cast<float>(flight * 2u * strideU);
     gpu.padInv[1] = 0.0f;
-    gpu.extent[0] = swap.extent.width;
-    gpu.extent[1] = swap.extent.height;
+    gpu.extent[0] = scene->extent.width;
+    gpu.extent[1] = scene->extent.height;
+    gpu.padExt[0] = swap.extent.width;
+    gpu.padExt[1] = swap.extent.height;
     scene->shadowSlot = 0;
-    gpu.padExt[0] = 0.0f;
-    gpu.padExt[1] = 0;
+    const bool linearTarget = swap.format == VK_FORMAT_B8G8R8A8_UNORM
+        || swap.format == VK_FORMAT_R8G8B8A8_UNORM
+        || swap.format == VK_FORMAT_A2B10G10R10_UNORM_PACK32
+        || swap.format == VK_FORMAT_A2R10G10B10_UNORM_PACK32;
     const float sliceNear[3] = {0.1f, 12.0f, 48.0f};
     const float sliceFar[3] = {16.0f, 64.0f, 240.0f};
     const float casterPad[3] = {8.0f, 16.0f, 32.0f};
@@ -2087,6 +2109,7 @@ void sceneFrameRecord(
     knob.bloom.vignette = scene->hud.vignette;
     knob.bloom.ca = scene->hud.ca;
     knob.bloom.pad[0] = scene->hud.brightness;
+    knob.bloom.pad[1] = linearTarget ? 1.0f : 0.0f;
     gpu.debugPad[0] = scene->decalCount;
     gpu.debugPad[1] = kProbeGrid;
     gpu.debugPad[2] = sectorVisibleMask(scene->sectors, scene->sectorCount, scene->portals, scene->portalCount, &cam.planes[0][0]);
@@ -2318,9 +2341,9 @@ void sceneFrameRecord(
     }
     static std::chrono::steady_clock::time_point gpuLog{};
     const auto gpuNow = std::chrono::steady_clock::now();
-    if (scene->gpuTime.count > 0 && gpuNow - gpuLog >= std::chrono::seconds(2)) {
+    const bool logFrame = scene->gpuTime.count > 0 && gpuNow - gpuLog >= std::chrono::seconds(2);
+    if (logFrame) {
         gpuLog = gpuNow;
-        spdlog::info("frame {:.1f} ms ({:.1f} fps)\n{}", scene->fps > 1.0f ? 1000.0f / scene->fps : 0.0, static_cast<double>(scene->fps), scene->gpuText);
     }
     bufferBarrierHostToShader(cmd, scene->postBuf.buffer, scene->postBuf.size);
     bufferBarrierHostToShader(cmd, scene->frameBuf.buffer, scene->frameBuf.size);
@@ -2328,7 +2351,7 @@ void sceneFrameRecord(
     bufferBarrierHostToShader(cmd, scene->atmBuf.buffer, scene->atmBuf.size);
     bufferBarrierHostToShader(cmd, scene->lightBuf.buffer, scene->lightBuf.size,
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
-    const RenderContext ctx{cmd, device, scene->gpuHeap, scene->gpuTime, swap.extent, flight, scene->freeze, gpu, lit, knob};
+    const RenderContext ctx{cmd, device, scene->gpuHeap, scene->gpuTime, scene->extent, flight, scene->freeze, gpu, lit, knob};
     framePassClusters(ctx, scene->clusters, scene->cellBuf, scene->lightIndex);
     CullBuffers cullBufs{scene->shadowIndirect, scene->shadowVisible, scene->indirect, scene->candidates, scene->visible, scene->instanceCount, strideU, sunKeep};
     CullResults culled{};
@@ -2389,6 +2412,21 @@ void sceneFrameRecord(
         const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
         if (used + 2u < sizeof(scene->gpuText)) {
             std::snprintf(scene->gpuText + used, sizeof(scene->gpuText) - used, "\n%s", scene->fsr.lastLog);
+        }
+    }
+    if (scene->gtao.lastLog[0] != '\0') {
+        const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
+        if (used + 2u < sizeof(scene->gpuText)) {
+            std::snprintf(scene->gpuText + used, sizeof(scene->gpuText) - used, "\n%s", scene->gtao.lastLog);
+        }
+    }
+    if (logFrame) {
+        spdlog::info("frame {:.1f} ms ({:.1f} fps)\n{}", scene->fps > 1.0f ? 1000.0f / scene->fps : 0.0, static_cast<double>(scene->fps), scene->gpuText);
+        if (scene->fsr.lastLog[0] != '\0') {
+            spdlog::info("{}", scene->fsr.lastLog);
+        }
+        if (scene->gtao.lastLog[0] != '\0') {
+            spdlog::info("{}", scene->gtao.lastLog);
         }
     }
     gizmoPassRecord(cmd, swap, frame, scene->gizmo, scene->actors);
