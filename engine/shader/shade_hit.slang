@@ -353,8 +353,7 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     if ((gPass.passMask & 16u) != 0u && gShade.gtaoAmt > 0.001) {
         aoTex = gAo.Load(int3(px, 0)).r;
     }
-    const float gtaoAmt = max(gShade.gtaoAmt, 0.0);
-    const float gtao = (gtaoAmt > 0.001 ? pow(clamp(aoTex, 0.04, 1.0), gtaoAmt) : 1.0) * ao;
+    const float gtao = lerp(1.0, saturate(aoTex), saturate(gShade.gtaoAmt)) * ao;
 
     float3 spec = min(D * Vis * F, float3(8.0, 8.0, 8.0));
     spec *= lerp(float3(1.0, 1.0, 1.0), energyCompensation(f0, NdotV, roughness), saturate(gShade.ggx));

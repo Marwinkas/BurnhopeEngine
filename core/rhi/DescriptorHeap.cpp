@@ -200,7 +200,8 @@ bool heapWriteImageFlight(
     const GpuImage& img,
     VkImageLayout layout,
     VkImageAspectFlags aspect,
-    uint32_t mipLevels) {
+    uint32_t mipLevels,
+    uint32_t baseMip) {
     if (flight >= kFramesInFlight) {
         return false;
     }
@@ -216,7 +217,7 @@ bool heapWriteImageFlight(
         .image = img.image,
         .viewType = img.depth > 1u ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D,
         .format = img.format,
-        .subresourceRange = {aspect, 0, mipLevels, 0, 1},
+        .subresourceRange = {aspect, baseMip, mipLevels, 0, 1},
     };
     const VkImageDescriptorInfoEXT imageInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_DESCRIPTOR_INFO_EXT,
@@ -248,12 +249,13 @@ bool heapWriteImage(
     const GpuImage& img,
     VkImageLayout layout,
     VkImageAspectFlags aspect,
-    uint32_t mipLevels) {
+    uint32_t mipLevels,
+    uint32_t baseMip) {
     for (uint32_t flight = 0; flight < kFramesInFlight; ++flight) {
         if (h.resources[flight].mapped == nullptr) {
             continue;
         }
-        if (!heapWriteImageFlight(h, d, flight, slot, type, img, layout, aspect, mipLevels)) {
+        if (!heapWriteImageFlight(h, d, flight, slot, type, img, layout, aspect, mipLevels, baseMip)) {
             return false;
         }
     }

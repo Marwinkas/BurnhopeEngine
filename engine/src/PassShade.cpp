@@ -5,7 +5,7 @@
 
 namespace burnhope {
 
-void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes) {
+void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes, bool restirDi) {
     (void)gtaoOn;
     imageBarrier(ctx.cmd, shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     imageBarrier(ctx.cmd, depth, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -39,7 +39,7 @@ void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, Tr
     imageBarrier(ctx.cmd, shade.surf0, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, false);
     imageBarrier(ctx.cmd, shade.surf1, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, false);
     imageBarrier(ctx.cmd, shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, false);
-    {
+    if (!restirDi) {
         GpuZone zone(ctx.profiler, ctx.cmd, "Lamps");
         shadePunctualRecord(ctx.cmd, ctx.extent, shade);
     }
@@ -47,7 +47,7 @@ void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, Tr
 
 void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky) {
     const VkAccessFlags2 hdrUse = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
-    if (ctx.post.flags.lightProfile >= 1u && (ctx.post.flags.passMask & 8192u) != 0u) {
+    if (ctx.post.flags.lightProfile >= 1u && ctx.post.flags.lightProfile <= 2u && (ctx.post.flags.passMask & 8192u) != 0u) {
         imageBarrier(ctx.cmd, shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, false);
         GpuZone zone(ctx.profiler, ctx.cmd, "Reflect");
         reflectRecord(ctx.cmd, ctx.extent, shade, ctx.post.flags.lightProfile);

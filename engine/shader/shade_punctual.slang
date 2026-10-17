@@ -14,8 +14,6 @@
 [[vk::binding(25, 0)]] StructuredBuffer<LightGpu> gLights;
 [[vk::binding(26, 0)]] StructuredBuffer<uint4> gCells;
 [[vk::binding(27, 0)]] StructuredBuffer<uint> gLightIds;
-[[vk::binding(32, 0)]] Texture2D<float> gAo;
-
 struct LightGpu {
     float4 posRadius;
     float4 colorIntensity;
@@ -49,9 +47,7 @@ void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) 
     const float3 V = normalize(gFrame.cameraPos.xyz - P);
     const float NdotV = saturate(dot(N, V));
     const float3 f0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
-    const float aoTex = gAo.Load(int3(px, 0)).r;
-    const float gtaoAmt = max(gShade.gtaoAmt, 0.0);
-    const float gtao = (gtaoAmt > 0.001 ? pow(max(aoTex, 0.02), gtaoAmt) : 1.0) * ormAo;
+    const float gtao = ormAo;
     const float a = max(roughness * roughness, 0.002);
     float3 color = gHdr[px].rgb;
     const float4 clipP = worldToClip(P);

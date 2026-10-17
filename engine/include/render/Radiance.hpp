@@ -77,6 +77,7 @@ struct RadiancePass {
     GpuBuffer check{};
     VkAccelerationStructureKHR blas = VK_NULL_HANDLE;
     VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
+    VkDeviceAddress tlasAddress = 0;
     GpuBuffer tlasBuf{};
     GpuBuffer tlasScratch{};
     GpuBuffer tlasInst{};

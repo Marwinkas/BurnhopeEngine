@@ -229,7 +229,7 @@ Blend: additive is `SRC = ONE`, `DST = ONE`. Multiply is `SRC = DST_COLOR`, `DST
 
 Volumetric noise is one GPU dispatch of `cloud_noise.comp` into `HeapBuf::CloudNoise`. Never fill a 128³ Worley volume on the CPU.
 
-HUD and tick code use cached `uint16_t` ids (`HudIds`: `mode[15]`, `stat[12]`, and the slider ids). No `snprintf` and no `uiFindName` inside `engineTick`. HUD hit records live on `Engine::hud` as a `std::deque`. No global `T[8]` / `T[16]`.
+HUD and tick code use cached `uint16_t` ids (`HudIds`: `mode[20]`, `stat[12]`, and the slider ids). No `snprintf` and no `uiFindName` inside `engineTick`. HUD hit records live on `Engine::hud` as a `std::deque`. No global `T[8]` / `T[16]`.
 
 Scene CPU buffers (`meshletGpu`, `visibleCpu`, `ownedVert`, `textures`) are `std::vector`. No `new[]` / `delete[]`.
 

@@ -273,6 +273,7 @@ void rcFreeGeometry(RadiancePass& p, Device& d) {
     }
     p.tlas = VK_NULL_HANDLE;
     p.blas = VK_NULL_HANDLE;
+    p.tlasAddress = 0;
     gpuBufferDestroy(p.table, d);
     gpuBufferDestroy(p.staging, d);
     gpuBufferDestroy(p.indices, d);
@@ -681,6 +682,7 @@ void radianceArm(
         .accelerationStructure = p.tlas,
     };
     const VkDeviceAddress tlasAddr = vkGetAccelerationStructureDeviceAddressKHR(d.device, &taddr);
+    p.tlasAddress = tlasAddr;
     std::memcpy(&header.blasLo, &tlasAddr, sizeof(tlasAddr));
     std::memcpy(p.staging.mapped, &header, sizeof(header));
     gpuBufferFlush(p.staging, d, 0, p.staging.size);

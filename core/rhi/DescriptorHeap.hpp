@@ -61,7 +61,8 @@ void descriptorHeapsDestroy(DescriptorHeaps& h, Device& d);
     const GpuImage& img,
     VkImageLayout layout,
     VkImageAspectFlags aspect,
-    uint32_t mipLevels = 1);
+    uint32_t mipLevels = 1,
+    uint32_t baseMip = 0);
 
 // Пишет картинку только в копию кучи этого кадра. Соседний кадр свой вид не трогает.
 [[nodiscard]] bool heapWriteImageFlight(
@@ -73,7 +74,8 @@ void descriptorHeapsDestroy(DescriptorHeaps& h, Device& d);
     const GpuImage& img,
     VkImageLayout layout,
     VkImageAspectFlags aspect,
-    uint32_t mipLevels = 1);
+    uint32_t mipLevels = 1,
+    uint32_t baseMip = 0);
 
 [[nodiscard]] bool heapWriteSampler(
     DescriptorHeaps& h,

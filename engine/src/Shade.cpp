@@ -89,7 +89,6 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     punctual.storageBuf(25, HeapBuf::Lights);
     punctual.storageBuf(26, HeapBuf::Clusters);
     punctual.storageBuf(27, HeapBuf::ClusterIndex);
-    punctual.sampledImg(32, HeapImg::Ao);
     punctual.knob(50, HeapBuf::Flags);
     punctual.knob(55, HeapBuf::Shade);
     PassBindings fog{heaps};
@@ -254,7 +253,7 @@ void contactRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p) {
 }
 
 void reflectRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p, uint32_t lightProfile) {
-    if (lightProfile < 1u) {
+    if (lightProfile < 1u || lightProfile > 2u) {
         return;
     }
     (void)lightProfile;

@@ -226,6 +226,13 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         gHdr[px] = float4(hit.emissive, 1.0);
         return;
     }
+    if (gFrame.debugMode >= 15u && gFrame.debugMode <= 19u) {
+        gHdr[px] = float4(0.15, 0.25, 0.85, 1.0);
+        return;
+    }
+    if (gPass.lightProfile == 3u && (gPass.passMask & 2097152u) != 0u) {
+        direct = 0.0;
+    }
     float3 color = indirect + direct;
     if (!worldRc && !voxelGi && (gPass.passMask & 8192u) != 0u && gPass.lightProfile < 1u) {
         const float gloss = saturate(1.0 - hit.roughness);

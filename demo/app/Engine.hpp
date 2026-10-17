@@ -55,9 +55,9 @@ struct FileAct {
 // Состояние HUD одного окна сцены. Кнопки держат указатели на элементы deque:
 // push_back их не сдвигает.
 struct HudIds {
-    uint16_t mode[15]{};
+    uint16_t mode[20]{};
     uint16_t tone[4]{};
-    uint16_t prof[3]{};
+    uint16_t prof[4]{};
     uint16_t stat[12]{};
     uint16_t bright = kUiNone;
     uint16_t grain = kUiNone;
@@ -92,6 +92,34 @@ struct HudIds {
     uint16_t rcMax = kUiNone;
     uint16_t rcSun = kUiNone;
     uint16_t rcBounce = kUiNone;
+    uint16_t rsLocal = kUiNone;
+    uint16_t rsSpatial = kUiNone;
+    uint16_t rsRadius = kUiNone;
+    uint16_t rsHistory = kUiNone;
+    uint16_t rsBoil = kUiNone;
+    uint16_t rsTDepth = kUiNone;
+    uint16_t rsTNorm = kUiNone;
+    uint16_t rsTBias = kUiNone;
+    uint16_t rsSDepth = kUiNone;
+    uint16_t rsSNorm = kUiNone;
+    uint16_t rsSBias = kUiNone;
+    uint16_t rsSBoost = kUiNone;
+    uint16_t rsSun = kUiNone;
+    uint16_t rsSunRays = kUiNone;
+    uint16_t rsShadowRays = kUiNone;
+    uint16_t rsShadowRange = kUiNone;
+    uint16_t rsShadowBias = kUiNone;
+    uint16_t rsPermTh = kUiNone;
+    uint16_t rsTarget = kUiNone;
+    uint16_t rsTOn = kUiNone;
+    uint16_t rsSOn = kUiNone;
+    uint16_t rsBoilOn = kUiNone;
+    uint16_t rsVis = kUiNone;
+    uint16_t rsPerm = kUiNone;
+    uint16_t rsShort = kUiNone;
+    uint16_t rsMat = kUiNone;
+    uint16_t rsNaive = kUiNone;
+    uint16_t rsSunOn = kUiNone;
     uint16_t bloomth = kUiNone;
     uint16_t fog = kUiNone;
     uint16_t fogH = kUiNone;
@@ -110,7 +138,11 @@ struct HudIds {
     uint16_t probes = kUiNone;
     uint16_t gien = kUiNone;
     uint16_t cmaa = kUiNone;
+    uint16_t fsr = kUiNone;
+    uint16_t fsrq[5]{};
+    uint16_t fsrSharp = kUiNone;
     uint16_t gtaoen = kUiNone;
+    uint16_t gtaoDn = kUiNone;
     uint16_t bloomen = kUiNone;
     uint16_t smaa = kUiNone;
     uint16_t sun = kUiNone;

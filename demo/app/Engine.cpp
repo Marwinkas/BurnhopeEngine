@@ -393,26 +393,54 @@ void toneReinhard(void* user) { applyTone(*static_cast<UiState*>(user), 2); }
 void toneLinear(void* user) { applyTone(*static_cast<UiState*>(user), 3); }
 
 void applyAa(UiState& s, int which) {
+    if (which < 0) {
+        which = 0;
+    }
+    if (which > 3) {
+        which = 3;
+    }
     uiBindCheck(s, uiFindName(s, "smaa"), 0, 0, which == 1);
     uiBindCheck(s, uiFindName(s, "cmaa"), 0, 0, which == 2);
-    const char* caps[] = {"Off", "SMAA", "CMAA"};
+    uiBindCheck(s, uiFindName(s, "fsr"), 0, 0, which == 3);
+    const char* caps[] = {"Off", "SMAA", "CMAA", "FSR"};
     setMenuCaption(s, "aaBtn", caps[which]);
+}
+
+void applyFsrQ(UiState& s, int which) {
+    const char* names[] = {"fsrq0", "fsrq1", "fsrq2", "fsrq3", "fsrq4"};
+    const char* caps[] = {"Native", "Quality", "Balanced", "Performance", "Ultra"};
+    if (which < 0) {
+        which = 0;
+    }
+    if (which > 4) {
+        which = 4;
+    }
+    for (int i = 0; i < 5; ++i) {
+        uiBindCheck(s, uiFindName(s, names[i]), 1, 4, i == which);
+    }
+    setMenuCaption(s, "fsrBtn", caps[which]);
 }
 
 void aaOff(void* user) { applyAa(*static_cast<UiState*>(user), 0); }
 void aaSmaa(void* user) { applyAa(*static_cast<UiState*>(user), 1); }
 void aaCmaa(void* user) { applyAa(*static_cast<UiState*>(user), 2); }
+void aaFsr(void* user) { applyAa(*static_cast<UiState*>(user), 3); }
+void fsrNative(void* user) { applyFsrQ(*static_cast<UiState*>(user), 0); }
+void fsrQuality(void* user) { applyFsrQ(*static_cast<UiState*>(user), 1); }
+void fsrBalanced(void* user) { applyFsrQ(*static_cast<UiState*>(user), 2); }
+void fsrPerformance(void* user) { applyFsrQ(*static_cast<UiState*>(user), 3); }
+void fsrUltra(void* user) { applyFsrQ(*static_cast<UiState*>(user), 4); }
 
 void applyGi(UiState& s, int which) {
-    const char* names[] = {"prof0", "prof1", "prof2"};
-    const char* caps[] = {"Выкл", "VXGI", "Каскады"};
+    const char* names[] = {"prof0", "prof1", "prof2", "prof3"};
+    const char* caps[] = {"Выкл", "VXGI", "Каскады", "ReSTIR"};
     if (which < 0) {
         which = 0;
     }
-    if (which > 2) {
-        which = 2;
+    if (which > 3) {
+        which = 3;
     }
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         uiBindCheck(s, uiFindName(s, names[i]), 1, 3, i == which);
     }
     setMenuCaption(s, "giBtn", caps[which]);
@@ -421,11 +449,12 @@ void applyGi(UiState& s, int which) {
 void giOff(void* user) { applyGi(*static_cast<UiState*>(user), 0); }
 void giVx(void* user) { applyGi(*static_cast<UiState*>(user), 1); }
 void giRc(void* user) { applyGi(*static_cast<UiState*>(user), 2); }
+void giRs(void* user) { applyGi(*static_cast<UiState*>(user), 3); }
 
 void bindHudIds(HudContext& hud, UiState& state) {
     auto id = [&](const char* name) { return uiFindName(state, name); };
     char name[8];
-    for (uint32_t i = 0; i < 15; ++i) {
+    for (uint32_t i = 0; i < 20; ++i) {
         std::snprintf(name, sizeof(name), "mode%u", i);
         hud.ids.mode[i] = id(name);
     }
@@ -433,7 +462,7 @@ void bindHudIds(HudContext& hud, UiState& state) {
         std::snprintf(name, sizeof(name), "tone%u", i);
         hud.ids.tone[i] = id(name);
     }
-    for (uint32_t i = 0; i < 3; ++i) {
+    for (uint32_t i = 0; i < 4; ++i) {
         std::snprintf(name, sizeof(name), "prof%u", i);
         hud.ids.prof[i] = id(name);
     }
@@ -474,6 +503,34 @@ void bindHudIds(HudContext& hud, UiState& state) {
     hud.ids.rcMax = id("rcMax");
     hud.ids.rcSun = id("rcSun");
     hud.ids.rcBounce = id("rcBounce");
+    hud.ids.rsLocal = id("rsLocal");
+    hud.ids.rsSpatial = id("rsSpatial");
+    hud.ids.rsRadius = id("rsRadius");
+    hud.ids.rsHistory = id("rsHistory");
+    hud.ids.rsBoil = id("rsBoil");
+    hud.ids.rsTDepth = id("rsTDepth");
+    hud.ids.rsTNorm = id("rsTNorm");
+    hud.ids.rsTBias = id("rsTBias");
+    hud.ids.rsSDepth = id("rsSDepth");
+    hud.ids.rsSNorm = id("rsSNorm");
+    hud.ids.rsSBias = id("rsSBias");
+    hud.ids.rsSBoost = id("rsSBoost");
+    hud.ids.rsSun = id("rsSun");
+    hud.ids.rsSunRays = id("rsSunRays");
+    hud.ids.rsShadowRays = id("rsShadowRays");
+    hud.ids.rsShadowRange = id("rsShadowRange");
+    hud.ids.rsShadowBias = id("rsShadowBias");
+    hud.ids.rsPermTh = id("rsPermTh");
+    hud.ids.rsTarget = id("rsTarget");
+    hud.ids.rsTOn = id("rsTOn");
+    hud.ids.rsSOn = id("rsSOn");
+    hud.ids.rsBoilOn = id("rsBoilOn");
+    hud.ids.rsVis = id("rsVis");
+    hud.ids.rsPerm = id("rsPerm");
+    hud.ids.rsShort = id("rsShort");
+    hud.ids.rsMat = id("rsMat");
+    hud.ids.rsNaive = id("rsNaive");
+    hud.ids.rsSunOn = id("rsSunOn");
     hud.ids.bloomth = id("bloomth");
     hud.ids.fog = id("fog");
     hud.ids.fogH = id("fogH");
@@ -492,7 +549,15 @@ void bindHudIds(HudContext& hud, UiState& state) {
     hud.ids.probes = id("probes");
     hud.ids.gien = id("gien");
     hud.ids.cmaa = id("cmaa");
+    hud.ids.fsr = id("fsr");
+    hud.ids.fsrq[0] = id("fsrq0");
+    hud.ids.fsrq[1] = id("fsrq1");
+    hud.ids.fsrq[2] = id("fsrq2");
+    hud.ids.fsrq[3] = id("fsrq3");
+    hud.ids.fsrq[4] = id("fsrq4");
+    hud.ids.fsrSharp = id("fsrSharp");
     hud.ids.gtaoen = id("gtaoen");
+    hud.ids.gtaoDn = id("gtaoDn");
     hud.ids.bloomen = id("bloomen");
     hud.ids.smaa = id("smaa");
     hud.ids.sun = id("sun");
@@ -518,6 +583,7 @@ const ViewMode kViews[] = {
     {0, "Lit"}, {1, "Primitive ID"}, {2, "Normals"}, {4, "GI"}, {5, "каскады"}, {6, "контакт"},
     {7, "луч"}, {8, "прямой"}, {9, "альбедо"}, {10, "солнце"}, {11, "шероховатость"},
     {12, "металл"}, {13, "AO"}, {14, "свечение"},
+    {15, "ReSTIR свет"}, {16, "ReSTIR вес"}, {17, "ReSTIR M"}, {18, "ReSTIR тень"}, {19, "ReSTIR индекс"},
 };
 
 void onObjectPage(void* user, uint16_t) {
@@ -968,15 +1034,17 @@ void sceneHud(Canvas& canvas, void* user) {
     rowSlide(*canvas.state, panel, "GI яркость", "giGain", 2.0f, 0.0f, 6.0f);
     panel = giBody;
     hideCheck("Выкл", "prof0", 1, 3, false);
-    hideCheck("VXGI", "prof1", 1, 3, true);
+    hideCheck("VXGI", "prof1", 1, 3, false);
     hideCheck("Каскады", "prof2", 1, 3, false);
+    hideCheck("ReSTIR", "prof3", 1, 3, true);
     hideCheck("radiance", "rcen", 0, 0, false);
     {
         const uint16_t menu = uiMakeMenu(*canvas.state);
         uiCommandAddTo(*canvas.state, menu, "Выкл", giOff, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "VXGI", giVx, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "Каскады", giRc, canvas.state.get());
-        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Режим", "VXGI", menu), "giBtn");
+        uiCommandAddTo(*canvas.state, menu, "ReSTIR", giRs, canvas.state.get());
+        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Режим", "ReSTIR", menu), "giBtn");
     }
     rowSlide(*canvas.state, panel, "RC лучи", "rcRays", 1.0f, 1.0f, 16.0f);
     rowSlide(*canvas.state, panel, "RC клетка м", "rcCell", 0.8f, 0.1f, 4.0f);
@@ -984,17 +1052,62 @@ void sceneHud(Canvas& canvas, void* user) {
     rowSlide(*canvas.state, panel, "RC длина м", "rcMax", 48.0f, 0.5f, 200.0f);
     rowSlide(*canvas.state, panel, "RC солнце", "rcSun", 1.0f, 0.0f, 2.0f);
     rowSlide(*canvas.state, panel, "RC отскок", "rcBounce", 1.0f, 0.0f, 2.0f);
+    tick("T вкл", "rsTOn", true);
+    tick("S вкл", "rsSOn", true);
+    tick("Кипение", "rsBoilOn", true);
+    tick("Пробы видимость", "rsVis", false);
+    tick("T перестановка", "rsPerm", true);
+    tick("T ярлык", "rsShort", false);
+    tick("S материал", "rsMat", true);
+    tick("S наивные", "rsNaive", true);
+    tick("Солнце луч", "rsSunOn", true);
+    rowSlide(*canvas.state, panel, "ReSTIR пробы", "rsLocal", 8.0f, 0.0f, 16.0f);
+    rowSlide(*canvas.state, panel, "T история", "rsHistory", 20.0f, 1.0f, 40.0f);
+    rowSlide(*canvas.state, panel, "T глубина", "rsTDepth", 0.1f, 0.01f, 0.5f);
+    rowSlide(*canvas.state, panel, "T нормаль", "rsTNorm", 0.9f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "T луч", "rsTBias", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "T порог", "rsPermTh", 0.9f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "T кипение", "rsBoil", 0.2f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "S соседи", "rsSpatial", 3.0f, 0.0f, 8.0f);
+    rowSlide(*canvas.state, panel, "S радиус", "rsRadius", 4.0f, 1.0f, 32.0f);
+    rowSlide(*canvas.state, panel, "S глубина", "rsSDepth", 0.1f, 0.01f, 0.5f);
+    rowSlide(*canvas.state, panel, "S нормаль", "rsSNorm", 0.9f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "S луч", "rsSBias", 3.0f, 0.0f, 3.0f);
+    rowSlide(*canvas.state, panel, "S буст", "rsSBoost", 3.0f, 0.0f, 16.0f);
+    rowSlide(*canvas.state, panel, "S цель", "rsTarget", 20.0f, 1.0f, 40.0f);
+    rowSlide(*canvas.state, panel, "Солнце диск", "rsSun", 0.5f, 0.0f, 4.0f);
+    rowSlide(*canvas.state, panel, "Солнце лучи", "rsSunRays", 1.0f, 1.0f, 8.0f);
+    rowSlide(*canvas.state, panel, "Тень лучи", "rsShadowRays", 1.0f, 1.0f, 8.0f);
+    rowSlide(*canvas.state, panel, "Тень длина м", "rsShadowRange", 0.0f, 0.0f, 200.0f);
+    rowSlide(*canvas.state, panel, "Тень отступ м", "rsShadowBias", 0.05f, 0.02f, 2.0f);
     panel = postBody;
     tick("GTAO", "gtaoen", true);
     hideCheck("SMAA", "smaa", 0, 0, false);
-    hideCheck("CMAA", "cmaa", 0, 0, true);
+    hideCheck("CMAA", "cmaa", 0, 0, false);
+    hideCheck("FSR", "fsr", 0, 0, true);
+    hideCheck("Native", "fsrq0", 1, 4, true);
+    hideCheck("Quality", "fsrq1", 1, 4, false);
+    hideCheck("Balanced", "fsrq2", 1, 4, false);
+    hideCheck("Performance", "fsrq3", 1, 4, false);
+    hideCheck("Ultra", "fsrq4", 1, 4, false);
     {
         const uint16_t menu = uiMakeMenu(*canvas.state);
         uiCommandAddTo(*canvas.state, menu, "Off", aaOff, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "SMAA", aaSmaa, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "CMAA", aaCmaa, canvas.state.get());
-        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Сглаживание", "CMAA", menu), "aaBtn");
+        uiCommandAddTo(*canvas.state, menu, "FSR", aaFsr, canvas.state.get());
+        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Сглаживание", "FSR", menu), "aaBtn");
     }
+    {
+        const uint16_t menu = uiMakeMenu(*canvas.state);
+        uiCommandAddTo(*canvas.state, menu, "Native", fsrNative, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Quality", fsrQuality, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Balanced", fsrBalanced, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Performance", fsrPerformance, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Ultra", fsrUltra, canvas.state.get());
+        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "FSR масштаб", "Native", menu), "fsrBtn");
+    }
+    rowSlide(*canvas.state, panel, "FSR резкость", "fsrSharp", 0.2f, 0.0f, 1.0f);
     tick("Bloom", "bloomen", true);
     panel = sunBody;
     tick("солнце", "sun", true);
@@ -1034,6 +1147,11 @@ void sceneHud(Canvas& canvas, void* user) {
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "металл", 1, 1, false), "mode12");
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "AO", 1, 1, false), "mode13");
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "свечение", 1, 1, false), "mode14");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "ReSTIR свет", 1, 1, false), "mode15");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "ReSTIR вес", 1, 1, false), "mode16");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "ReSTIR M", 1, 1, false), "mode17");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "ReSTIR тень", 1, 1, false), "mode18");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "ReSTIR индекс", 1, 1, false), "mode19");
     panel = postBody;
     hideCheck("AgX", "tone0", 1, 2, true);
     hideCheck("ACES", "tone1", 1, 2, false);
@@ -1062,12 +1180,13 @@ void sceneHud(Canvas& canvas, void* user) {
     rowSlide(*canvas.state, panel, "Toksvig", "tok", 1.0f, 0.0f, 1.0f);
     rowSlide(*canvas.state, panel, "параллакс", "pom", 0.35f, 0.0f, 1.0f);
     rowSlide(*canvas.state, panel, "multi-scatter", "ggx", 1.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "радиус GTAO", "gtaor", 2.5f, 0.2f, 20.0f);
-    rowSlide(*canvas.state, panel, "GTAO срезы", "gtaoSl", 6.0f, 1.0f, 8.0f);
-    rowSlide(*canvas.state, panel, "GTAO шаги", "gtaoSt", 6.0f, 1.0f, 12.0f);
-    rowSlide(*canvas.state, panel, "GTAO сила", "gtaoPw", 1.6f, 0.2f, 4.0f);
-    rowSlide(*canvas.state, panel, "GTAO край", "gtaoFa", 1.0f, 0.1f, 1.0f);
-    rowSlide(*canvas.state, panel, "GTAO", "gtao", 1.2f, 0.0f, 4.0f);
+    rowSlide(*canvas.state, panel, "радиус GTAO", "gtaor", 0.5f, 0.05f, 4.0f);
+    rowSlide(*canvas.state, panel, "GTAO срезы", "gtaoSl", 3.0f, 1.0f, 9.0f);
+    rowSlide(*canvas.state, panel, "GTAO шаги", "gtaoSt", 3.0f, 1.0f, 4.0f);
+    rowSlide(*canvas.state, panel, "GTAO сила", "gtaoPw", 2.2f, 0.5f, 4.0f);
+    rowSlide(*canvas.state, panel, "GTAO край", "gtaoFa", 0.615f, 0.05f, 1.0f);
+    rowSlide(*canvas.state, panel, "GTAO денуаз", "gtaoDn", 1.0f, 0.0f, 3.0f);
+    rowSlide(*canvas.state, panel, "GTAO", "gtao", 1.0f, 0.0f, 1.0f);
     panel = light;
     rowSlide(*canvas.state, panel, "свечи", "lamp", 1.0f, 0.0f, 1.0f);
     panel = sky;
@@ -1083,14 +1202,16 @@ void sceneHud(Canvas& canvas, void* user) {
         std::snprintf(name, sizeof(name), "g%d", i);
         uiName(*canvas.state, uiLabel(*canvas.state, panel, ""), name);
     }
-    const char* on[] = {"hiz", "cone", "lod", "frust", "small", "shadow", "cluster", "probes", "gtaoen", "cmaa", "bloomen"};
+    const char* on[] = {"hiz", "cone", "lod", "frust", "small", "shadow", "cluster", "probes", "gtaoen", "fsr", "bloomen"};
     for (const char* name : on) {
         if (canvas.state != nullptr) {
             uiBindCheck(*canvas.state, uiFindName(*canvas.state, name), 0, 0, true);
         }
     }
     if (canvas.state != nullptr) {
-        uiBindCheck(*canvas.state, uiFindName(*canvas.state, "prof1"), 1, 3, true);
+        applyGi(*canvas.state, 3);
+        applyAa(*canvas.state, 3);
+        applyFsrQ(*canvas.state, 0);
         uiBindCheck(*canvas.state, uiFindName(*canvas.state, "mode0"), 1, 1, true);
         uiBindCheck(*canvas.state, uiFindName(*canvas.state, "tone0"), 1, 2, true);
         bindHudIds(*hud, *canvas.state);
@@ -1171,7 +1292,7 @@ bool engineTick(Engine& e) {
         }
         const HudIds& id = e.hud.ids;
         uint32_t mode = 0;
-        for (uint32_t i = 0; i < 15; ++i) {
+        for (uint32_t i = 0; i < 20; ++i) {
             if (checkOn(hud, id.mode[i], false)) {
                 mode = i;
             }
@@ -1200,11 +1321,12 @@ bool engineTick(Engine& e) {
         sceneFrameTune(e.scene, hudPost);
         SceneTweaks tweaks{};
         tweaks.forceLod = static_cast<int32_t>(slideAt(hud, id.lodf, -1.0f));
-        tweaks.gtaoRadius = slideAt(hud, id.gtaor, 2.5f);
-        tweaks.gtaoSteps = slideAt(hud, id.gtaoSt, 6.0f);
-        tweaks.gtaoSlices = slideAt(hud, id.gtaoSl, 6.0f);
-        tweaks.gtaoPower = slideAt(hud, id.gtaoPw, 1.6f);
-        tweaks.gtaoFalloff = slideAt(hud, id.gtaoFa, 1.0f);
+        tweaks.gtaoRadius = slideAt(hud, id.gtaor, 0.5f);
+        tweaks.gtaoSteps = slideAt(hud, id.gtaoSt, 3.0f);
+        tweaks.gtaoSlices = slideAt(hud, id.gtaoSl, 3.0f);
+        tweaks.gtaoPower = slideAt(hud, id.gtaoPw, 2.2f);
+        tweaks.gtaoFalloff = slideAt(hud, id.gtaoFa, 0.615f);
+        tweaks.gtaoDenoise = slideAt(hud, id.gtaoDn, 1.0f);
         tweaks.sscsReach = slideAt(hud, id.sscsR, 0.2f);
         tweaks.sscsThick = slideAt(hud, id.sscsT, 0.02f);
         tweaks.sscsSteps = slideAt(hud, id.sscsS, 12.0f);
@@ -1216,6 +1338,34 @@ bool engineTick(Engine& e) {
         tweaks.rcMax = slideAt(hud, id.rcMax, 48.0f);
         tweaks.rcSun = slideAt(hud, id.rcSun, 1.0f);
         tweaks.rcBounce = slideAt(hud, id.rcBounce, 1.0f);
+        tweaks.restirLocal = slideAt(hud, id.rsLocal, 8.0f);
+        tweaks.restirSpatial = slideAt(hud, id.rsSpatial, 3.0f);
+        tweaks.restirRadius = slideAt(hud, id.rsRadius, 4.0f);
+        tweaks.restirHistory = slideAt(hud, id.rsHistory, 20.0f);
+        tweaks.restirBoil = slideAt(hud, id.rsBoil, 0.2f);
+        tweaks.restirTemporalDepth = slideAt(hud, id.rsTDepth, 0.1f);
+        tweaks.restirTemporalNormal = slideAt(hud, id.rsTNorm, 0.9f);
+        tweaks.restirTemporalBias = slideAt(hud, id.rsTBias, 1.0f);
+        tweaks.restirSpatialDepth = slideAt(hud, id.rsSDepth, 0.1f);
+        tweaks.restirSpatialNormal = slideAt(hud, id.rsSNorm, 0.9f);
+        tweaks.restirSpatialBias = slideAt(hud, id.rsSBias, 3.0f);
+        tweaks.restirSpatialBoost = slideAt(hud, id.rsSBoost, 3.0f);
+        tweaks.restirSunDisk = slideAt(hud, id.rsSun, 0.5f);
+        tweaks.restirSunRays = slideAt(hud, id.rsSunRays, 1.0f);
+        tweaks.restirShadowRays = slideAt(hud, id.rsShadowRays, 1.0f);
+        tweaks.restirShadowRange = slideAt(hud, id.rsShadowRange, 0.0f);
+        tweaks.restirShadowBias = slideAt(hud, id.rsShadowBias, 0.05f);
+        tweaks.restirPermTh = slideAt(hud, id.rsPermTh, 0.9f);
+        tweaks.restirTarget = slideAt(hud, id.rsTarget, 20.0f);
+        tweaks.restirTemporal = checkOn(hud, id.rsTOn, true);
+        tweaks.restirSpatialOn = checkOn(hud, id.rsSOn, true);
+        tweaks.restirBoilOn = checkOn(hud, id.rsBoilOn, true);
+        tweaks.restirInitVis = checkOn(hud, id.rsVis, false);
+        tweaks.restirPerm = checkOn(hud, id.rsPerm, true);
+        tweaks.restirShortcut = checkOn(hud, id.rsShort, false);
+        tweaks.restirMaterial = checkOn(hud, id.rsMat, true);
+        tweaks.restirNaive = checkOn(hud, id.rsNaive, true);
+        tweaks.restirSunOn = checkOn(hud, id.rsSunOn, true);
         tweaks.bloomThreshold = slideAt(hud, id.bloomth, 0.35f);
         tweaks.fogDensity = slideAt(hud, id.fog, 0.002f);
         tweaks.fogHeight = slideAt(hud, id.fogH, 4.0f);
@@ -1251,7 +1401,9 @@ bool engineTick(Engine& e) {
         if (checkOn(hud, id.gien, true)) {
             tweaks.passMask |= 262144u;
         }
-        if (checkOn(hud, id.cmaa, true)) {
+        if (checkOn(hud, id.fsr, true)) {
+            tweaks.passMask |= 4194304u;
+        } else if (checkOn(hud, id.cmaa, false)) {
             tweaks.passMask |= 8u;
         }
         if (checkOn(hud, id.gtaoen, true)) {
@@ -1260,9 +1412,16 @@ bool engineTick(Engine& e) {
         if (checkOn(hud, id.bloomen, true)) {
             tweaks.passMask |= 32u;
         }
-        if (checkOn(hud, id.smaa, false)) {
+        if (checkOn(hud, id.fsr, true) == false && checkOn(hud, id.smaa, false)) {
             tweaks.passMask |= 4u;
         }
+        tweaks.fsrQuality = 0;
+        for (uint32_t q = 0; q < 5u; ++q) {
+            if (checkOn(hud, id.fsrq[q], q == 0u)) {
+                tweaks.fsrQuality = q;
+            }
+        }
+        tweaks.fsrSharpness = slideAt(hud, id.fsrSharp, 0.2f);
         if (checkOn(hud, id.sun, true)) {
             tweaks.passMask |= 256u;
         }
@@ -1294,19 +1453,25 @@ bool engineTick(Engine& e) {
             tweaks.passMask |= 32768u;
         }
         tweaks.lightProfile = 0;
-        for (uint32_t i = 0; i < 3; ++i) {
-            if (checkOn(hud, id.prof[i], false)) {
+        for (uint32_t i = 0; i < 4; ++i) {
+            if (checkOn(hud, id.prof[i], i == 3u)) {
                 tweaks.lightProfile = i;
             }
         }
         if (checkOn(hud, id.rcen, false)) {
             tweaks.passMask |= 128u;
         }
-        if (tweaks.lightProfile >= 2u && (tweaks.passMask & 262144u) != 0u) {
+        if (tweaks.lightProfile == 2u && (tweaks.passMask & 262144u) != 0u) {
             tweaks.passMask |= 128u;
         }
         if (tweaks.lightProfile == 1u && (tweaks.passMask & 262144u) != 0u && (tweaks.passMask & 128u) == 0u) {
             tweaks.passMask |= 524288u;
+        }
+        if (tweaks.lightProfile == 3u && (tweaks.passMask & 262144u) != 0u) {
+            tweaks.passMask |= 1048576u;
+            if (tweaks.restirSunOn) {
+                tweaks.passMask |= 2097152u;
+            }
         }
         tweaks.tonemapper = 0;
         for (uint32_t i = 0; i < 4; ++i) {

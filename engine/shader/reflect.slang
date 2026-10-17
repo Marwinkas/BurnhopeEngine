@@ -41,7 +41,7 @@ float3 sampleWorld(float3 dir, float rough) {
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void reflectTrace(uint3 dtid : SV_DispatchThreadID) {
-    if (gPass.lightProfile < 1u || (gFrame.debugMode != 0u && gFrame.debugMode != 7u)) {
+    if (gPass.lightProfile < 1u || gPass.lightProfile > 2u || (gFrame.debugMode != 0u && gFrame.debugMode != 7u)) {
         return;
     }
     const uint2 px = dtid.xy;

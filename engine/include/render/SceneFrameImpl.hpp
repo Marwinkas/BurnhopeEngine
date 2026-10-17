@@ -18,6 +18,8 @@
 #include "render/Sky.hpp"
 #include "render/Hiz.hpp"
 #include "render/Radiance.hpp"
+#include "render/Fsr.hpp"
+#include "render/Restir.hpp"
 #include "render/Voxel.hpp"
 #include "render/SceneFrame.hpp"
 #include "render/Gizmo.hpp"
@@ -55,6 +57,8 @@ struct SceneFrameImpl {
     AtmosphereParams atmosphere{};
     float skyTime = 0.0f;
     RadiancePass radiance{};
+    RestirPass restir{};
+    FsrPass fsr{};
     VoxelPass voxel{};
     CubePass cube{};
     TonemapPass tone{};
@@ -182,11 +186,12 @@ struct SceneFrameImpl {
     float freezeVp[16]{};
     int32_t forceLod = -1;
     uint32_t passMask = 63u;
-    float gtaoRadius = 2.5f;
-    float gtaoSteps = 6.0f;
-    float gtaoSlices = 6.0f;
-    float gtaoPower = 1.6f;
-    float gtaoFalloff = 1.0f;
+    float gtaoRadius = 0.5f;
+    float gtaoSteps = 3.0f;
+    float gtaoSlices = 3.0f;
+    float gtaoPower = 2.2f;
+    float gtaoFalloff = 0.615f;
+    float gtaoDenoise = 1.0f;
     float ssrCutoff = 0.82f;
     float ssrSteps = 32.0f;
     float ssrStride = 0.025f;
@@ -268,10 +273,11 @@ void framePassVis(
     bool showHiz,
     const VisInstanceDraw& draw,
     const VisInstanceDraw& lateDraw);
-void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes);
+void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes, bool restirDi);
+void framePassRestir(const RenderContext& ctx, RestirPass& restir, const FrameView& view, const LightGpuData* lights, uint32_t lightCount, uint32_t passMask, VkDeviceAddress tlas);
 void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky);
 void framePassRadiance(const RenderContext& ctx, RadiancePass& rad, TrackedImage& hdrA, bool worldRc, float rays, float spacing, float intensity, float maxDist, float sunScale, float bounce);
 void framePassVoxel(const RenderContext& ctx, VoxelPass& voxel, TrackedImage& hdrA, bool worldVx, uint32_t instances, bool moved);
-void framePassTonemap(const RenderContext& ctx, TonemapPass& tone, TrackedImage& hdrA, TrackedImage& hdrB, const Swapchain& swap, const FrameContext& frame, bool bloomOn);
+void framePassTonemap(const RenderContext& ctx, TonemapPass& tone, TrackedImage& hdrA, TrackedImage& hdrB, const Swapchain& swap, const FrameContext& frame, bool bloomOn, bool skipAa);
 
 } // namespace burnhope

@@ -202,13 +202,22 @@ bh_module(render
     engine/src/PassVis.cpp
     engine/src/PassShade.cpp
     engine/src/PassRadiance.cpp
+    engine/src/Restir.cpp
+    engine/src/PassRestir.cpp
+    engine/src/Fsr.cpp
+    RTXDI/Libraries/Rtxdi/Source/ReSTIRDI.cpp
+    RTXDI/Libraries/Rtxdi/Source/RtxdiUtils.cpp
     engine/src/Voxel.cpp
     engine/src/PassVoxel.cpp
     engine/src/PassTonemap.cpp
     engine/src/PassGizmo.cpp
     engine/src/SceneFrame.cpp
 )
-target_include_directories(bh_render PUBLIC ${BH_ENGINE} ${BH_ENGINE}/include)
+target_include_directories(bh_render PUBLIC ${BH_ENGINE} ${BH_ENGINE}/include ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include)
+set_source_files_properties(
+    RTXDI/Libraries/Rtxdi/Source/ReSTIRDI.cpp
+    RTXDI/Libraries/Rtxdi/Source/RtxdiUtils.cpp
+    PROPERTIES COMPILE_OPTIONS "-w")
 target_compile_definitions(bh_render PUBLIC "BH_SHADER_DIR=\"${CMAKE_CURRENT_BINARY_DIR}/shaders\"")
 target_link_libraries(bh_render PUBLIC flecs_static)
 bh_module(ui
@@ -303,6 +312,8 @@ add_custom_command(
         ${SHADER_OUT_DIR}/shade.sky.comp.spv
         ${SHADER_OUT_DIR}/shade.sun.comp.spv
         ${SHADER_OUT_DIR}/shade.punctual.comp.spv
+        ${SHADER_OUT_DIR}/restir.presample.comp.spv
+        ${SHADER_OUT_DIR}/restir.di.comp.spv
         ${SHADER_OUT_DIR}/shade.fog.comp.spv
         ${SHADER_OUT_DIR}/resolve.comp.spv
         ${SHADER_OUT_DIR}/cull.comp.spv
@@ -357,6 +368,8 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_sky.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadeSky -o ${SHADER_OUT_DIR}/shade.sky.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_sun.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadeSun -o ${SHADER_OUT_DIR}/shade.sun.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_punctual.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadePunctual -o ${SHADER_OUT_DIR}/shade.punctual.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/restir_presample.slang -I ${SHADER_DIR}/restir_inc -I ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR+spvGroupNonUniform+spvGroupNonUniformShuffle+spvGroupNonUniformBallot+spvGroupNonUniformArithmetic -stage compute -entry main -o ${SHADER_OUT_DIR}/restir.presample.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/restir_di.slang -I ${SHADER_DIR}/restir_inc -I ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR+spvGroupNonUniform+spvGroupNonUniformShuffle+spvGroupNonUniformBallot+spvGroupNonUniformArithmetic -stage compute -entry main -o ${SHADER_OUT_DIR}/restir.di.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_fog.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadeFog -o ${SHADER_OUT_DIR}/shade.fog.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/contact.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry contactCs -o ${SHADER_OUT_DIR}/contact.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/resolve.slang -target spirv -profile spirv_1_6 -stage compute -entry resolveCs -o ${SHADER_OUT_DIR}/resolve.comp.spv
@@ -411,6 +424,10 @@ add_custom_command(
         ${SHADER_DIR}/shade_sky.slang
         ${SHADER_DIR}/shade_sun.slang
         ${SHADER_DIR}/shade_punctual.slang
+        ${SHADER_DIR}/restir_rab.slang
+        ${SHADER_DIR}/restir_presample.slang
+        ${SHADER_DIR}/restir_di.slang
+        ${SHADER_DIR}/restir_inc/Rtxdi/DI/ReservoirStorage.hlsli
         ${SHADER_DIR}/shade_fog.slang
         ${SHADER_DIR}/contact.slang
         ${SHADER_DIR}/sky_probe.slang
@@ -457,6 +474,58 @@ add_custom_command(
         ${SHADER_DIR}/shade_tile.slang
     COMMENT "slangc vis/shade/ssr/tonemap → SPIR-V 1.6"
 )
+set(FSR_GPU ${CMAKE_CURRENT_SOURCE_DIR}/FidelityFX-SDK/Kits/FidelityFX/upscalers/fsr3/include/gpu)
+set(FSR_API ${CMAKE_CURRENT_SOURCE_DIR}/FidelityFX-SDK/Kits/FidelityFX/api/internal/gpu)
+set(FSR_PASS ${CMAKE_CURRENT_SOURCE_DIR}/FidelityFX-SDK/Kits/FidelityFX/upscalers/fsr3/internal/shaders)
+set(FSR_FLAGS
+    -I ${FSR_GPU} -I ${FSR_API}
+    -DFFX_GPU=1 -DFFX_HLSL=1 -DFFX_HALF=0 -DFFX_HLSL_SM=62
+    -DFFX_IMPLICIT_SHADER_REGISTER_BINDING_HLSL=0
+    -DFFX_FSR3UPSCALER_OPTION_HDR_COLOR_INPUT=1
+    -DFFX_FSR3UPSCALER_OPTION_INVERTED_DEPTH=1
+    -DFFX_FSR3UPSCALER_OPTION_LOW_RESOLUTION_MOTION_VECTORS=1
+    -DFFX_FSR3UPSCALER_OPTION_JITTERED_MOTION_VECTORS=0
+    -DFFX_FSR3UPSCALER_OPTION_APPLY_SHARPENING=0
+    -DFFX_FSR3UPSCALER_OPTION_UPSAMPLE_USE_LANCZOS_TYPE=2
+    -DFFX_FSR3UPSCALER_OPTION_REPROJECT_USE_LANCZOS_TYPE=0
+    -DFFX_FSR3UPSCALER_OPTION_REPROJECT_SAMPLERS_USE_DATA_HALF=0
+    -fvk-b-shift 0 0 -fvk-s-shift 4 0 -fvk-t-shift 8 0 -fvk-u-shift 24 0
+    -target spirv -profile spirv_1_6+spvGroupNonUniform+spvGroupNonUniformBallot+spvGroupNonUniformShuffle+spvGroupNonUniformArithmetic
+    -stage compute -entry CS)
+add_custom_command(
+    OUTPUT
+        ${SHADER_OUT_DIR}/fsr.prepare.comp.spv
+        ${SHADER_OUT_DIR}/fsr.luma.comp.spv
+        ${SHADER_OUT_DIR}/fsr.shading_pyramid.comp.spv
+        ${SHADER_OUT_DIR}/fsr.shading.comp.spv
+        ${SHADER_OUT_DIR}/fsr.reactivity.comp.spv
+        ${SHADER_OUT_DIR}/fsr.instability.comp.spv
+        ${SHADER_OUT_DIR}/fsr.accumulate.comp.spv
+        ${SHADER_OUT_DIR}/fsr.rcas.comp.spv
+        ${SHADER_OUT_DIR}/fsr.motion.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${FSR_PASS}/ffx_fsr3upscaler_prepare_inputs_pass.hlsl ${FSR_FLAGS} -o ${SHADER_OUT_DIR}/fsr.prepare.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${FSR_PASS}/ffx_fsr3upscaler_luma_pyramid_pass.hlsl ${FSR_FLAGS} -o ${SHADER_OUT_DIR}/fsr.luma.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${FSR_PASS}/ffx_fsr3upscaler_shading_change_pyramid_pass.hlsl ${FSR_FLAGS} -o ${SHADER_OUT_DIR}/fsr.shading_pyramid.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${FSR_PASS}/ffx_fsr3upscaler_shading_change_pass.hlsl ${FSR_FLAGS} -o ${SHADER_OUT_DIR}/fsr.shading.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${FSR_PASS}/ffx_fsr3upscaler_prepare_reactivity_pass.hlsl ${FSR_FLAGS} -o ${SHADER_OUT_DIR}/fsr.reactivity.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${FSR_PASS}/ffx_fsr3upscaler_luma_instability_pass.hlsl ${FSR_FLAGS} -o ${SHADER_OUT_DIR}/fsr.instability.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${FSR_PASS}/ffx_fsr3upscaler_accumulate_pass.hlsl ${FSR_FLAGS} -o ${SHADER_OUT_DIR}/fsr.accumulate.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${FSR_PASS}/ffx_fsr3upscaler_rcas_pass.hlsl ${FSR_FLAGS} -o ${SHADER_OUT_DIR}/fsr.rcas.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/fsr_motion.slang -target spirv -profile spirv_1_6 -stage compute -entry main -o ${SHADER_OUT_DIR}/fsr.motion.comp.spv
+    DEPENDS
+        ${FSR_PASS}/ffx_fsr3upscaler_prepare_inputs_pass.hlsl
+        ${FSR_PASS}/ffx_fsr3upscaler_luma_pyramid_pass.hlsl
+        ${FSR_PASS}/ffx_fsr3upscaler_shading_change_pyramid_pass.hlsl
+        ${FSR_PASS}/ffx_fsr3upscaler_shading_change_pass.hlsl
+        ${FSR_PASS}/ffx_fsr3upscaler_prepare_reactivity_pass.hlsl
+        ${FSR_PASS}/ffx_fsr3upscaler_luma_instability_pass.hlsl
+        ${FSR_PASS}/ffx_fsr3upscaler_accumulate_pass.hlsl
+        ${FSR_PASS}/ffx_fsr3upscaler_rcas_pass.hlsl
+        ${FSR_GPU}/fsr3upscaler/ffx_fsr3upscaler_prepare_reactivity.h
+        ${FSR_GPU}/fsr3upscaler/ffx_fsr3upscaler_upsample.h
+        ${SHADER_DIR}/fsr_motion.slang
+    COMMENT "slangc FSR 3.1.5 upscaler → SPIR-V 1.6"
+)
 add_custom_target(BurnhopeSpv ALL DEPENDS
     ${SHADER_OUT_DIR}/visbuffer.mesh.spv
     ${SHADER_OUT_DIR}/visbuffer.late.mesh.spv
@@ -465,6 +534,17 @@ add_custom_target(BurnhopeSpv ALL DEPENDS
     ${SHADER_OUT_DIR}/shade.sky.comp.spv
     ${SHADER_OUT_DIR}/shade.sun.comp.spv
     ${SHADER_OUT_DIR}/shade.punctual.comp.spv
+    ${SHADER_OUT_DIR}/restir.presample.comp.spv
+    ${SHADER_OUT_DIR}/restir.di.comp.spv
+    ${SHADER_OUT_DIR}/fsr.prepare.comp.spv
+    ${SHADER_OUT_DIR}/fsr.luma.comp.spv
+    ${SHADER_OUT_DIR}/fsr.shading_pyramid.comp.spv
+    ${SHADER_OUT_DIR}/fsr.shading.comp.spv
+    ${SHADER_OUT_DIR}/fsr.reactivity.comp.spv
+    ${SHADER_OUT_DIR}/fsr.instability.comp.spv
+    ${SHADER_OUT_DIR}/fsr.accumulate.comp.spv
+    ${SHADER_OUT_DIR}/fsr.rcas.comp.spv
+    ${SHADER_OUT_DIR}/fsr.motion.comp.spv
     ${SHADER_OUT_DIR}/shade.fog.comp.spv
     ${SHADER_OUT_DIR}/resolve.comp.spv
     ${SHADER_OUT_DIR}/cull.comp.spv

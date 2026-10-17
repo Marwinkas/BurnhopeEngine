@@ -1,0 +1,292 @@
+#define RTXDI_ENABLE_BOILING_FILTER
+#define RTXDI_BOILING_FILTER_GROUP_SIZE 8
+
+#include "restir_rab.slang"
+#include "Rtxdi/LightSampling/RISBuffer.hlsli"
+#include "Rtxdi/DI/InitialSampling.hlsli"
+#include "Rtxdi/DI/TemporalResampling.hlsli"
+#include "Rtxdi/DI/SpatialResampling.hlsli"
+#include "Rtxdi/DI/BoilingFilter.hlsli"
+
+static const uint kRestirInitialSeed = 1u;
+static const uint kRestirTemporalSeed = 2u;
+static const uint kRestirSpatialSeed = 3u;
+
+bool restirInside(uint2 px) {
+    return px.x < gFrame.extent.x && px.y < gFrame.extent.y;
+}
+
+void restirInitial(uint2 px) {
+    RTXDI_RandomSamplerState rng = RTXDI_InitRandomSampler(px, gRestir.runtime.frameIndex, kRestirInitialSeed);
+    RTXDI_RandomSamplerState tileRng = RTXDI_InitRandomSampler(px / RTXDI_TILE_SIZE_IN_PIXELS, gRestir.runtime.frameIndex, kRestirInitialSeed);
+    RAB_Surface surface = RAB_GetGBufferSurface(int2(px), false);
+    RAB_LightSample lightSample;
+    RTXDI_DIReservoir reservoir = RTXDI_EmptyDIReservoir();
+    if (RAB_IsSurfaceValid(surface) && gRestir.lightCount > 0u) {
+        reservoir = RTXDI_SampleLightsForSurface(
+            rng, tileRng, surface, gRestir.initial, gRestir.lights, gRestir.localRis, gRestir.envRis, lightSample);
+    }
+    RTXDI_StoreDIReservoir(reservoir, gRestir.reservoir, px, restirBuf(gRestir.indices.initialSamplingOutputBufferIndex));
+}
+
+void restirTemporal(uint2 px, uint2 local, bool inside) {
+    RTXDI_DIReservoir temporal = RTXDI_EmptyDIReservoir();
+    if (inside) {
+        RTXDI_RandomSamplerState rng = RTXDI_InitRandomSampler(px, gRestir.runtime.frameIndex, kRestirTemporalSeed);
+        RAB_Surface surface = RAB_GetGBufferSurface(int2(px), false);
+        if (RAB_IsSurfaceValid(surface)) {
+            RTXDI_DIReservoir current = RTXDI_LoadDIReservoir(
+                gRestir.reservoir, px, restirBuf(gRestir.indices.initialSamplingOutputBufferIndex));
+            int2 temporalPixel = int2(-1, -1);
+            RAB_LightSample selected = (RAB_LightSample)0;
+            temporal = RTXDI_DITemporalResampling(
+                px, surface, current, rng, gRestir.runtime, gRestir.reservoir, restirMotion(px, surface),
+                restirBuf(gRestir.indices.temporalResamplingInputBufferIndex), gRestir.temporal, temporalPixel, selected);
+        }
+    }
+    if (gRestir.boiling.enableBoilingFilter != 0u) {
+        RTXDI_BoilingFilter(local, gRestir.boiling.boilingFilterStrength, temporal);
+    }
+    if (inside) {
+        RTXDI_StoreDIReservoir(temporal, gRestir.reservoir, px, restirBuf(gRestir.indices.temporalResamplingOutputBufferIndex));
+    }
+}
+
+void restirSpatial(uint2 px) {
+    RTXDI_RandomSamplerState rng = RTXDI_InitRandomSampler(px, gRestir.runtime.frameIndex, kRestirSpatialSeed);
+    RAB_Surface surface = RAB_GetGBufferSurface(int2(px), false);
+    RTXDI_DIReservoir spatial = RTXDI_EmptyDIReservoir();
+    if (RAB_IsSurfaceValid(surface)) {
+        RTXDI_DIReservoir center = RTXDI_LoadDIReservoir(
+            gRestir.reservoir, px, restirBuf(gRestir.indices.spatialResamplingInputBufferIndex));
+        RAB_LightSample selected = (RAB_LightSample)0;
+        spatial = RTXDI_DISpatialResampling(
+            px, surface, center, rng, gRestir.runtime, gRestir.reservoir,
+            restirBuf(gRestir.indices.spatialResamplingInputBufferIndex), gRestir.spatial, selected);
+    }
+    RTXDI_StoreDIReservoir(spatial, gRestir.reservoir, px, restirBuf(gRestir.indices.spatialResamplingOutputBufferIndex));
+}
+
+void restirStat(uint slot, uint n) {
+    uint ignored;
+    uint index = gRestir.localRis.tileSize * gRestir.localRis.tileCount + slot;
+    InterlockedAdd(gRis[index].x, n, ignored);
+}
+
+float3 restirIdColor(uint lightIndex) {
+    const float3 palette[8] = {
+        float3(1.0, 0.82, 0.15),
+        float3(0.25, 0.55, 1.0),
+        float3(1.0, 0.28, 0.18),
+        float3(0.2, 0.9, 0.35),
+        float3(0.85, 0.3, 0.95),
+        float3(0.2, 0.9, 0.9),
+        float3(1.0, 0.5, 0.1),
+        float3(0.95, 0.95, 0.95),
+    };
+    return palette[lightIndex & 7u];
+}
+
+float3 restirViz(uint mode, bool validRes, float3 radiance, float invPdf, float sampleM, float litAmt, float visible, uint lightIndex) {
+    float3 miss = float3(0.02, 0.06, 0.22);
+    if (!validRes) {
+        return miss;
+    }
+    if (mode == 15u) {
+        float3 col = radiance * litAmt;
+        float peak = max(col.r, max(col.g, col.b));
+        return col / (1.0 + peak);
+    }
+    if (mode == 16u) {
+        float w = saturate(invPdf * litAmt / 0.45);
+        return lerp(float3(0.04, 0.06, 0.16), float3(1.0, 0.72, 0.12), w);
+    }
+    if (mode == 17u) {
+        float t = saturate(sampleM / 20.0);
+        return lerp(float3(0.12, 0.22, 1.0), float3(1.0, 0.92, 0.25), t);
+    }
+    if (mode == 18u) {
+        return visible > 0.5 ? float3(0.12, 0.9, 0.22) : float3(0.92, 0.1, 0.08);
+    }
+    return restirIdColor(lightIndex);
+}
+
+void restirShadePixel(uint2 px) {
+    float depth = gDepth.Load(int3(px, 0));
+    float4 s0 = gSurf0[px];
+    float4 s1 = gSurf1[px];
+    RAB_Surface surface = RAB_GetGBufferSurface(int2(px), false);
+    uint mode = gFrame.debugMode;
+    bool debugView = mode >= 15u && mode <= 19u;
+    bool lit = mode == 0u || mode == 4u || mode == 8u || debugView;
+    float3 add = 0.0;
+    bool validRes = false;
+    float visible = 0.0;
+    float invPdf = 0.0;
+    float sampleM = 0.0;
+    float litAmt = 0.0;
+    uint lightIndex = 0u;
+    float3 radiance = 0.0;
+    bool surfaceOn = RAB_IsSurfaceValid(surface) && depth > 0.0001;
+    if (surfaceOn) {
+        restirStat(0u, 1u);
+        if (lit) {
+            RTXDI_DIReservoir reservoir = RTXDI_LoadDIReservoir(
+                gRestir.reservoir, px, restirBuf(gRestir.indices.shadingInputBufferIndex));
+            validRes = RTXDI_IsValidDIReservoir(reservoir);
+            if (validRes) {
+                lightIndex = RTXDI_GetDIReservoirLightIndex(reservoir);
+                RAB_LightInfo info = RAB_LoadLightInfo(lightIndex, false);
+                RAB_LightSample sample = RAB_SamplePolymorphicLight(info, surface, RTXDI_GetDIReservoirSampleUV(reservoir));
+                uint rays = max(gRestir.shadowRays, 1u);
+                float visSum = 0.0;
+                float3 axis = abs(sample.normal.y) < 0.9 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+                float3 toL = sample.position - surface.worldPos;
+                float dist = length(toL);
+                float3 dir = dist > 1e-4 ? toL / dist : float3(0.0, 1.0, 0.0);
+                float3 tangent = normalize(cross(axis, dir));
+                float3 bitangent = cross(dir, tangent);
+                float radius = info.posRadius.w;
+                for (uint ray = 0u; ray < rays; ++ray) {
+                    RAB_LightSample cast = sample;
+                    if (rays > 1u && radius > 1e-3) {
+                        float ang = (float(ray) + 0.5) * 6.2831853 / float(rays);
+                        float rad = radius * sqrt((float(ray) + 0.5) / float(rays));
+                        cast.position = sample.position + (tangent * cos(ang) + bitangent * sin(ang)) * rad;
+                    }
+                    visSum += RAB_GetConservativeVisibility(surface, cast) ? 1.0 : 0.0;
+                }
+                visible = visSum / float(rays);
+                invPdf = max(RTXDI_GetDIReservoirInvPdf(reservoir), 0.0);
+                sampleM = reservoir.M;
+                radiance = sample.radiance;
+                add = restirShade(sample, surface) * invPdf * visible;
+                float3 toL = sample.position - surface.worldPos;
+                float dist = length(toL);
+                float facing = dist > 1e-4 ? saturate(dot(surface.normal, toL / dist)) : 0.0;
+                litAmt = visible * facing;
+                restirStat(1u, 1u);
+                restirStat(visible > 0.5 ? 2u : 3u, 1u);
+                restirStat(4u, uint(min(max(sampleM, 0.0), 4096.0)));
+                restirStat(5u, uint(min(invPdf, 64.0) * 1000.0));
+                restirStat(6u, 1u);
+            }
+        }
+    }
+    if (debugView) {
+        float3 viz = surfaceOn ? restirViz(mode, validRes, radiance, invPdf, sampleM, litAmt, visible, lightIndex) : 0.0;
+        gHdr[px] = float4(viz, 1.0);
+    } else if (mode == 4u && validRes) {
+        gHdr[px] = float4(max(add, 0.0), 1.0);
+    } else if (lit) {
+        float4 hdr = gHdr[px];
+        hdr.rgb += max(add, 0.0);
+        gHdr[px] = hdr;
+    }
+    restirWriteHistory(px, surface, s0.rgb, s0.w, s1.z);
+}
+
+float3 restirSunDir(uint2 px, float3 L, uint ray) {
+    float halfA = radians(max(gRestir.sunDisk, 0.0)) * 0.5;
+    if (halfA < 1e-5) {
+        return L;
+    }
+    RTXDI_RandomSamplerState rng = RTXDI_InitRandomSampler(px, gRestir.runtime.frameIndex, 4u + ray);
+    float u = RTXDI_GetNextRandom(rng);
+    float v = RTXDI_GetNextRandom(rng);
+    float radius = sqrt(u) * halfA;
+    float phi = v * 6.2831853;
+    float3 up = abs(L.y) < 0.999 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+    float3 tangent = normalize(cross(up, L));
+    float3 bitangent = cross(L, tangent);
+    return normalize(L + tangent * (radius * cos(phi)) + bitangent * (radius * sin(phi)));
+}
+
+void restirSun(uint2 px) {
+    uint mode = gFrame.debugMode;
+    bool showShadow = mode == 18u;
+    bool addLight = mode == 0u;
+    if (!showShadow && !addLight) {
+        return;
+    }
+    float depth = gDepth.Load(int3(px, 0));
+    RAB_Surface surface = RAB_GetGBufferSurface(int2(px), false);
+    if (depth <= 0.0001 || !RAB_IsSurfaceValid(surface)) {
+        return;
+    }
+    float3 L = gSun.sunDirIntensity.xyz;
+    float len = length(L);
+    if (len < 1e-4) {
+        return;
+    }
+    L /= len;
+    float3 origin = surface.worldPos + surface.geoNormal * 0.02;
+    uint rays = max(gRestir.pad2, 1u);
+    float vis = 0.0;
+    for (uint ray = 0u; ray < rays; ++ray) {
+        float3 dir = restirSunDir(px, L, ray);
+        float sunFar = gRestir.shadowRange > 0.0 ? gRestir.shadowRange : 20000.0;
+        vis += restirTrace(origin, dir, max(gRestir.shadowBias, 0.02), sunFar) ? 0.0 : 1.0;
+    }
+    vis /= float(rays);
+    uint age = 1u;
+    bool temporalOn = (gRestir.pad1 & 1u) != 0u;
+    if (temporalOn && gRestir.historyValid != 0u) {
+        float3 motion = restirMotion(px, surface);
+        int2 prev = int2(round(float2(px) + motion.xy));
+        if (all(prev >= int2(0, 0)) && all(prev < int2(gFrame.extent))) {
+            uint2 at = restirSliceOrigin(gRestir.readSlice) + uint2(prev);
+            float4 pos = gHistPos[at];
+            uint4 mat = gHistMat[at];
+            float prevDepth = pos.w;
+            float depthSpan = gRestir.temporal.depthThreshold * max(surface.viewDepth, 1e-3);
+            bool depthOk = prevDepth > 0.0 && abs(prevDepth - surface.viewDepth) <= depthSpan;
+            bool normalOk = dot(restirUnpackOct(mat.x), surface.normal) >= gRestir.temporal.normalThreshold;
+            if (depthOk && normalOk) {
+                float prevVis = float(mat.w & 0xffffu) / 65535.0;
+                uint prevAge = mat.w >> 16;
+                age = min(prevAge + 1u, max(gRestir.temporal.maxHistoryLength, 1u));
+                vis = lerp(prevVis, vis, 1.0 / float(age));
+            }
+        }
+    }
+    uint2 writeAt = restirSliceOrigin(gRestir.writeSlice) + px;
+    uint4 stored = gHistMat[writeAt];
+    stored.w = min(uint(saturate(vis) * 65535.0 + 0.5), 65535u) | (age << 16);
+    gHistMat[writeAt] = stored;
+    if (showShadow) {
+        gHdr[px] = float4(vis > 0.5 ? float3(0.12, 0.9, 0.22) : float3(0.92, 0.1, 0.08), 1.0);
+        return;
+    }
+    RAB_LightSample sample = RAB_EmptyLightSample();
+    sample.position = surface.worldPos + L * 20000.0;
+    sample.normal = -L;
+    sample.radiance = max(gSun.sunColor.rgb, 0.0) * max(gSun.sunDirIntensity.w, 0.0);
+    sample.solidAnglePdf = 1.0;
+    float4 hdr = gHdr[px];
+    hdr.rgb += max(restirShade(sample, surface) * vis, 0.0);
+    gHdr[px] = hdr;
+}
+
+[shader("compute")]
+[numthreads(8, 8, 1)]
+void main(uint3 dtid : SV_DispatchThreadID, uint3 gtid : SV_GroupThreadID) {
+    uint2 px = dtid.xy;
+    bool inside = restirInside(px);
+    if (gPush.pass == 1u) {
+        restirTemporal(px, gtid.xy, inside);
+        return;
+    }
+    if (!inside) {
+        return;
+    }
+    if (gPush.pass == 0u) {
+        restirInitial(px);
+    } else if (gPush.pass == 2u) {
+        restirSpatial(px);
+    } else if (gPush.pass == 4u) {
+        restirSun(px);
+    } else {
+        restirShadePixel(px);
+    }
+}

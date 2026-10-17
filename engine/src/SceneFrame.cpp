@@ -678,7 +678,7 @@ bool bindHeap(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
             return false;
         }
     }
-    return true;
+    return restirBind(s.restir, device, heaps);
 }
 
 uint32_t uploadLights(SceneFrameImpl& s, uint32_t flight) {
@@ -1328,6 +1328,7 @@ void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
     scene->gtaoSlices = tweaks.gtaoSlices;
     scene->gtaoPower = tweaks.gtaoPower;
     scene->gtaoFalloff = tweaks.gtaoFalloff;
+    scene->gtaoDenoise = tweaks.gtaoDenoise;
     scene->ssrCutoff = tweaks.ssrCutoff;
     scene->ssrSteps = tweaks.ssrSteps;
     scene->ssrStride = tweaks.ssrStride;
@@ -1349,6 +1350,36 @@ void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
     scene->rcSun = tweaks.rcSun;
     scene->rcBounce = tweaks.rcBounce;
     scene->giGain = tweaks.giGain;
+    scene->restir.knobLocal = static_cast<uint32_t>(std::clamp(tweaks.restirLocal, 0.0f, 16.0f));
+    scene->restir.knobSpatial = static_cast<uint32_t>(std::clamp(tweaks.restirSpatial, 0.0f, 32.0f));
+    scene->restir.knobRadius = std::clamp(tweaks.restirRadius, 1.0f, 64.0f);
+    scene->restir.knobHistory = static_cast<uint32_t>(std::clamp(tweaks.restirHistory, 1.0f, 64.0f));
+    scene->restir.knobBoil = std::clamp(tweaks.restirBoil, 0.0f, 1.0f);
+    scene->restir.knobTemporalDepth = std::clamp(tweaks.restirTemporalDepth, 0.001f, 1.0f);
+    scene->restir.knobTemporalNormal = std::clamp(tweaks.restirTemporalNormal, 0.0f, 1.0f);
+    scene->restir.knobTemporalBias = static_cast<uint32_t>(std::clamp(tweaks.restirTemporalBias, 0.0f, 2.0f));
+    scene->restir.knobSpatialDepth = std::clamp(tweaks.restirSpatialDepth, 0.001f, 1.0f);
+    scene->restir.knobSpatialNormal = std::clamp(tweaks.restirSpatialNormal, 0.0f, 1.0f);
+    scene->restir.knobSpatialBias = static_cast<uint32_t>(std::clamp(tweaks.restirSpatialBias, 0.0f, 3.0f));
+    scene->restir.knobSpatialBoost = static_cast<uint32_t>(std::clamp(tweaks.restirSpatialBoost, 0.0f, 32.0f));
+    scene->restir.knobSunDisk = std::clamp(tweaks.restirSunDisk, 0.0f, 4.0f);
+    scene->restir.knobSunRays = static_cast<uint32_t>(std::clamp(tweaks.restirSunRays, 1.0f, 8.0f));
+    scene->restir.knobShadowRays = static_cast<uint32_t>(std::clamp(tweaks.restirShadowRays, 1.0f, 8.0f));
+    scene->restir.knobShadowRange = std::clamp(tweaks.restirShadowRange, 0.0f, 200.0f);
+    scene->restir.knobShadowBias = std::clamp(tweaks.restirShadowBias, 0.02f, 2.0f);
+    scene->restir.knobPermTh = std::clamp(tweaks.restirPermTh, 0.0f, 1.0f);
+    scene->restir.knobTarget = static_cast<uint32_t>(std::clamp(tweaks.restirTarget, 1.0f, 64.0f));
+    scene->restir.knobTemporalOn = tweaks.restirTemporal ? 1u : 0u;
+    scene->restir.knobSpatialOn = tweaks.restirSpatialOn ? 1u : 0u;
+    scene->restir.knobBoilOn = tweaks.restirBoilOn ? 1u : 0u;
+    scene->restir.knobInitVis = tweaks.restirInitVis ? 1u : 0u;
+    scene->restir.knobPerm = tweaks.restirPerm ? 1u : 0u;
+    scene->restir.knobShortcut = tweaks.restirShortcut ? 1u : 0u;
+    scene->restir.knobMaterial = tweaks.restirMaterial ? 1u : 0u;
+    scene->restir.knobNaive = tweaks.restirNaive ? 1u : 0u;
+    scene->restir.knobSunOn = tweaks.restirSunOn ? 1u : 0u;
+    scene->fsr.quality = tweaks.fsrQuality > 4u ? 0u : tweaks.fsrQuality;
+    scene->fsr.sharpness = std::clamp(tweaks.fsrSharpness, 0.0f, 1.0f);
     scene->bloomThreshold = tweaks.bloomThreshold;
     scene->fogDensity = tweaks.fogDensity;
     scene->fogHeight = tweaks.fogHeight;
@@ -1387,6 +1418,8 @@ void sceneFrameReleaseGpu(SceneFrame* scene, Device& device) {
     shadePassDestroy(scene->shade, device);
     skyPassDestroy(scene->sky, device);
     radianceDestroy(scene->radiance, device);
+    restirDestroy(scene->restir, device);
+    fsrDestroy(scene->fsr, device);
     voxelDestroy(scene->voxel, device);
     hizPassDestroy(scene->hiz, device);
     cubePassDestroy(scene->cube, device);
@@ -1592,7 +1625,7 @@ void sceneFrameDebug(SceneFrame* scene, bool hiz, bool cone, bool lod, bool frus
     if (scene == nullptr) {
         return;
     }
-    if (mode > 14u) {
+    if (mode > 19u) {
         mode = 0;
     }
     if (scene->showHiz == hiz && scene->showCone == cone
@@ -1736,24 +1769,28 @@ void sceneFrameRecord(
     }
     (void)heaps;
     CpuScope recordCpu("sceneFrameRecord", &scene->cpuRecordMs);
-    if (scene->ready && (scene->extent.width != swap.extent.width || scene->extent.height != swap.extent.height)) {
-        const VkExtent2D hizExtent{swap.extent.width, swap.extent.height * 2u};
+    const bool fsrLive = (scene->passMask & kPassFsr) != 0u && scene->fsr.prepare.handle != VK_NULL_HANDLE;
+    const VkExtent2D renderExtent = fsrLive ? fsrRenderExtent(scene->fsr.quality, swap.extent) : swap.extent;
+    if (scene->ready && (scene->extent.width != renderExtent.width || scene->extent.height != renderExtent.height)) {
+        const VkExtent2D hizExtent{renderExtent.width, renderExtent.height * 2u};
         const VkExtent2D bloomExtent{
             std::max(swap.extent.width / 2u, 1u),
             std::max(swap.extent.height / 2u, 1u) + std::max(swap.extent.height / 4u, 1u)
                 + std::max(swap.extent.height / 8u, 1u) + std::max(swap.extent.height / 16u, 1u)};
-        const bool resized = visPassResize(scene->vis, device, swap.extent)
-            && shadePassResize(scene->shade, device, swap.extent)
-            && skyPassResize(scene->sky, device, swap.extent)
+        const bool resized = visPassResize(scene->vis, device, renderExtent)
+            && shadePassResize(scene->shade, device, renderExtent)
+            && skyPassResize(scene->sky, device, renderExtent)
             && recreateTracked(scene->hizMax[0], device, hizExtent, VK_FORMAT_R32_SFLOAT,
                 VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
             && recreateTracked(scene->hizMax[1], device, hizExtent, VK_FORMAT_R32_SFLOAT,
                 VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
             && recreateTracked(scene->tone.bloom, device, bloomExtent, VK_FORMAT_R16G16B16A16_SFLOAT,
                 VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+            && restirResize(scene->restir, device, renderExtent)
+            && fsrResize(scene->fsr, device, scene->gpuHeap, renderExtent, swap.extent)
             && bindHeap(*scene, device, scene->gpuHeap);
         if (resized) {
-            scene->extent = swap.extent;
+            scene->extent = renderExtent;
         } else {
             scene->ready = false;
         }
@@ -1828,7 +1865,7 @@ void sceneFrameRecord(
             && recreateImage(scene->hizMax[0].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
             && recreateImage(scene->hizMax[1].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
         if (!descriptorHeapsCreate(scene->gpuHeap, device, HeapLayout{
-                .buffers = 64,
+                .buffers = 68,
                 .images = static_cast<uint32_t>(HeapImg::Count),
                 .samplers = 3,
             })) {
@@ -1839,6 +1876,8 @@ void sceneFrameRecord(
             && shadePassCreate(scene->shade, device, scene->gpuHeap, swap.extent)
             && skyPassCreate(scene->sky, device, scene->gpuHeap, swap.extent)
             && radianceCreate(scene->radiance, device, scene->gpuHeap)
+            && restirCreate(scene->restir, device, scene->gpuHeap, swap.extent)
+            && fsrCreate(scene->fsr, device, scene->gpuHeap, swap.extent)
             && voxelCreate(scene->voxel, device, scene->gpuHeap)
             && hizPassCreate(scene->hiz, device, scene->gpuHeap)
             && occlPassCreate(scene->occl, device, scene->gpuHeap)
@@ -1899,7 +1938,18 @@ void sceneFrameRecord(
     pose.aspect = static_cast<float>(swap.extent.width) / static_cast<float>(swap.extent.height);
     pose.zn = 0.1f;
     pose.zf = scene->farPlane;
+    if (fsrLive) {
+        fsrJitter(scene->fsr, pose.jitterX, pose.jitterY, scene->extent, swap.extent);
+    }
+    CameraPose bare = pose;
+    bare.jitterX = 0.0f;
+    bare.jitterY = 0.0f;
+    const CameraCull unjit = cameraCullBuild(bare, nullptr);
     const CameraCull cam = cameraCullBuild(pose, nullptr);
+    float unjitVp[16]{};
+    float jitInv[16]{};
+    std::memcpy(unjitVp, unjit.viewProj.m, sizeof(unjitVp));
+    std::memcpy(jitInv, cam.invViewProj.m, sizeof(jitInv));
     sceneActorSetCamera(scene->actors, cam, static_cast<float>(swap.extent.width), static_cast<float>(swap.extent.height));
 
     const uint32_t flight = frame.flight & 1u;
@@ -1931,8 +1981,8 @@ void sceneFrameRecord(
     gpu.cameraPos[1] = cam.pos[1];
     gpu.cameraPos[2] = cam.pos[2];
     gpu.cameraPos[3] = pose.zn;
-    gpu.invExtent[0] = 1.0f / static_cast<float>(swap.extent.width);
-    gpu.invExtent[1] = 1.0f / static_cast<float>(swap.extent.height);
+    gpu.invExtent[0] = 1.0f / static_cast<float>(scene->extent.width);
+    gpu.invExtent[1] = 1.0f / static_cast<float>(scene->extent.height);
     gpu.padInv[0] = static_cast<float>(strideU);
     gpu.viewPad[0] = static_cast<float>(scene->instanceCount);
     gpu.viewPad[1] = static_cast<float>(flight * 2u * strideU);
@@ -1985,6 +2035,7 @@ void sceneFrameRecord(
     knob.gtao.power = scene->gtaoPower;
     knob.gtao.falloff = scene->gtaoFalloff;
     knob.gtao.intensity = scene->hud.gtao;
+    knob.gtao.pad[0] = scene->gtaoDenoise;
     knob.ssr.cutoff = scene->ssrCutoff;
     knob.ssr.steps = scene->ssrSteps;
     knob.ssr.stride = scene->ssrStride;
@@ -2227,7 +2278,9 @@ void sceneFrameRecord(
             scene->shadowStampValid = 0;
         }
     }
-    gpu.padInv[1] = static_cast<float>(uploadLights(*scene, flight));
+    const LightGpuData* lightSrc = scene->importedCount > 0 ? scene->imported : scene->world.lights;
+    const uint32_t lightCount = uploadLights(*scene, flight);
+    gpu.padInv[1] = static_cast<float>(lightCount);
     std::memcpy(static_cast<uint8_t*>(scene->frameBuf.mapped) + sizeof(FrameView) * flight, &gpu, sizeof(gpu));
     std::memcpy(static_cast<uint8_t*>(scene->sunBuf.mapped) + sizeof(FrameSun) * flight, &lit, sizeof(lit));
     std::memcpy(static_cast<uint8_t*>(scene->postBuf.mapped) + sizeof(FramePost) * flight, &knob, sizeof(knob));
@@ -2290,18 +2343,44 @@ void sceneFrameRecord(
     }
     framePassVis(ctx, scene->vis, scene->occl, scene->hiz, scene->hizMax[flight], scene->indirect, scene->candidates, scene->visible,
         scene->instanceCount, culled.twoPhase, scene->showHiz, culled.draw, culled.lateDraw);
-    const bool gtaoOn = (scene->passMask & 524288u) == 0u && scene->lightProfile < 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
-    framePassShade(ctx, scene->shade, scene->sky, scene->vis.targets.vis, scene->vis.targets.depth, gtaoOn, scene->probeBuf.buffer, scene->probeBuf.size);
-    const bool worldRc = (scene->passMask & 128u) != 0u && (scene->passMask & 262144u) != 0u;
-    const bool worldVx = (scene->passMask & 524288u) != 0u && (scene->passMask & 262144u) != 0u && !worldRc;
-    if (worldVx) {
+    const bool restirOn = (scene->passMask & kPassRestir) != 0u && scene->restir.di.handle != VK_NULL_HANDLE;
+    const bool gtaoOn = (scene->passMask & 524288u) == 0u && scene->lightProfile != 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
+    framePassShade(ctx, scene->shade, scene->sky, scene->vis.targets.vis, scene->vis.targets.depth, gtaoOn, scene->probeBuf.buffer, scene->probeBuf.size, restirOn);
+    const bool worldRc = (scene->passMask & 128u) != 0u && (scene->passMask & 262144u) != 0u && !restirOn;
+    const bool worldVx = (scene->passMask & 524288u) != 0u && (scene->passMask & 262144u) != 0u && !worldRc && !restirOn;
+    if (!restirOn) {
+        restirNote(scene->restir, scene->lightProfile, (scene->passMask & kPassRestir) != 0u ? "нет шейдера" : "выкл");
+    }
+    if (restirOn) {
+        const VkDeviceAddress tlas = scene->radiance.geometry ? scene->radiance.tlasAddress : 0;
+        framePassRestir(ctx, scene->restir, gpu, lightSrc, lightCount, scene->passMask, tlas);
+    } else if (worldVx) {
         framePassVoxel(ctx, scene->voxel, scene->shade.hdrA, true, scene->instanceCount, propMoved);
     } else {
         framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax, scene->rcSun, scene->rcBounce);
     }
     framePassShadeLate(ctx, scene->shade, scene->sky);
     const bool bloomOn = (knob.flags.passMask & 32u) != 0u && scene->hud.bloom > 0.001f;
-    framePassTonemap(ctx, scene->tone, scene->shade.hdrA, scene->shade.hdrB, swap, frame, bloomOn);
+    if (fsrLive) {
+        const float dt = scene->fps > 1.0f ? 1.0f / scene->fps : 1.0f / 60.0f;
+        fsrRecord(cmd, scene->fsr, device, heaps, flight, scene->vis.targets.depth, scene->shade.hdrA, dt, pose.fovYRad, pose.zn, unjitVp, jitInv);
+    } else {
+        fsrRestoreColor(scene->fsr, device, heaps, flight, scene->shade.hdrA.image);
+        scene->fsr.lastLog[0] = '\0';
+    }
+    framePassTonemap(ctx, scene->tone, scene->shade.hdrA, scene->shade.hdrB, swap, frame, bloomOn, fsrLive);
+    if (scene->restir.lastLog[0] != '\0') {
+        const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
+        if (used + 2u < sizeof(scene->gpuText)) {
+            std::snprintf(scene->gpuText + used, sizeof(scene->gpuText) - used, "\n%s", scene->restir.lastLog);
+        }
+    }
+    if (scene->fsr.lastLog[0] != '\0') {
+        const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
+        if (used + 2u < sizeof(scene->gpuText)) {
+            std::snprintf(scene->gpuText + used, sizeof(scene->gpuText) - used, "\n%s", scene->fsr.lastLog);
+        }
+    }
     gizmoPassRecord(cmd, swap, frame, scene->gizmo, scene->actors);
 }
 
