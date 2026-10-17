@@ -1,56 +1,17 @@
 #include "frame.slang"
 #include "camera.slang"
-#include "core/math.slang"
-#include "core/atmosphere.slang"
+#include "core/brdf.slang"
 #include "rc_common.slang"
+#include "rc_geom.slang"
 
 [[vk::binding(1, 0)]] Texture2D<uint> gVis;
 [[vk::binding(2, 0)]] Texture2D<float> gDepth;
-[[vk::binding(3, 0)]] RWTexture2D<float4> gHdr;
+[[vk::binding(3, 0)]] Texture2D<float4> gHdrIn;
 [[vk::binding(4, 0)]] RWTexture2D<float4> gSurf0;
 [[vk::binding(5, 0)]] RWTexture2D<float4> gSurf1;
+[[vk::binding(12, 0)]] Texture2D<float4> gTex[768];
 [[vk::binding(14, 0)]] StructuredBuffer<MaterialGpu> gMat;
-[[vk::binding(15, 0)]] Texture2D<float> gShadow0;
-[[vk::binding(23, 0)]] SamplerState gClamp;
-[[vk::binding(42, 0)]] Texture2D<float4> gSkyView;
-
-#include "shade_shadow.slang"
-#include "rc_surface.slang"
-
-// Split RC, как у Chandra.
-// Луч несёт исходящую яркость J и пропускание β.
-// Попадание: J = альбедо * (солнце * карта теней * N·L + прошлый отскок), β = 0.
-// Пустой интервал: J = 0, β = 1, дальний свет проходит.
-// Промах последнего каскада: только небо, β = 0.
-// Несколько лучей одного бина усредняют β: ближе к предмету доля попаданий выше, тень темнее.
-
-float4 rcPos(uint vertex) {
-    const uint byteOff = rcPosByte() + vertex * 16u;
-    return float4(asfloat(rcLoad(byteOff)), asfloat(rcLoad(byteOff + 4u)), asfloat(rcLoad(byteOff + 8u)), asfloat(rcLoad(byteOff + 12u)));
-}
-
-float3 rcSky(float3 dir) {
-    const float3 s = gSkyView.SampleLevel(gClamp, atmSkyUv(dir), 0.0).rgb;
-    return min(max(s, 0.0), float3(8.0, 8.0, 8.0));
-}
-
-float3 rcIrrTexel(uint probe, uint x, uint y) {
-    const uint off = sliceBase() + rcIrrRel() + probe * rcIrrStride() + (y * 6u + x) * 16u;
-    return float3(asfloat(rcLoad(off)), asfloat(rcLoad(off + 4u)), asfloat(rcLoad(off + 8u)));
-}
-
-float3 rcBounce(uint probe, float3 N) {
-    const float2 octTexel = octEncode(N) * 4.0 + 1.0;
-    const float2 p = clamp(octTexel - 0.5, 0.0, 4.999);
-    const uint2 i = uint2(p);
-    const float2 f = frac(p);
-    const uint2 i1 = min(i + 1u, uint2(5u, 5u));
-    const float3 a = rcIrrTexel(probe, i.x, i.y);
-    const float3 b = rcIrrTexel(probe, i1.x, i.y);
-    const float3 c = rcIrrTexel(probe, i.x, i1.y);
-    const float3 d = rcIrrTexel(probe, i1.x, i1.y);
-    return max(lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y), 0.0);
-}
+[[vk::binding(24, 0)]] SamplerState gWrap;
 
 float3 rcSunDir() {
     const float3 sunRaw = gSun.sunDirIntensity.xyz;
@@ -65,6 +26,11 @@ float3 rcSunColor() {
     return sunCol;
 }
 
+float rcReach(uint tag) {
+    const uint lod = rcTagLod(tag);
+    return max(gPush.baseLength, 0.5) * exp2(float(lod));
+}
+
 float rcSunIntensity() {
     float inten = gSun.sunDirIntensity.w;
     if (inten < 0.05) {
@@ -73,396 +39,306 @@ float rcSunIntensity() {
     return inten;
 }
 
-float rcReach() {
-    return max(max(gRcParams.maxDist, 16.0), 4.0);
-}
-
-uint rcRayCount() {
-    return (uint)clamp(gRcParams.rays + 0.5, 1.0, 4.0);
-}
-
-// Та же видимость, что у прямого солнца. Луч к солнцу из BLAS её не повторял.
-float rcSunVis(float3 P, float3 N, float ndl) {
-    if (ndl <= 0.01) {
-        return 0.0;
-    }
-    if (gFrame.disableShadow != 0u) {
-        return 1.0;
-    }
-    const float slope = sqrt(saturate(1.0 - ndl * ndl));
-    const float3 p0 = P + N * max(gSun.sunSplit[0], 1.0) * 2.0 / 4096.0 * slope;
-    const float o0 = cascadeOutside(0u, p0);
-    if (o0 <= 0.0) {
-        const float w = saturate(-o0 / 0.1);
-        float shadow = cascadeShadow(0u, p0);
-        if (w < 0.999) {
-            const float3 p1 = P + N * max(gSun.sunSplit[1], 1.0) * 2.0 / 4096.0 * slope;
-            shadow = lerp(cascadeShadow(1u, p1), shadow, w);
+uint rcHitCascade(float t, uint tag) {
+    float limit = rcT0(tag);
+    [unroll]
+    for (uint n = 0u; n < 3u; ++n) {
+        if (t <= limit) {
+            return n;
         }
-        return shadow;
-    }
-    const float3 p1 = P + N * max(gSun.sunSplit[1], 1.0) * 2.0 / 4096.0 * slope;
-    const float o1 = cascadeOutside(1u, p1);
-    if (o1 <= 0.0) {
-        const float w = saturate(-o1 / 0.1);
-        float shadow = cascadeShadow(1u, p1);
-        if (w < 0.999) {
-            const float3 p2 = P + N * max(gSun.sunSplit[2], 1.0) * 2.0 / 4096.0 * slope;
-            shadow = lerp(cascadeShadow(2u, p2), shadow, w);
-        }
-        return shadow;
-    }
-    const float3 p2 = P + N * max(gSun.sunSplit[2], 1.0) * 2.0 / 4096.0 * slope;
-    return cascadeOutside(2u, p2) <= 0.0 ? cascadeShadow(2u, p2) : cascadeShadowCover(2u, p2);
-}
-
-float3 rcHemisphere(float2 u, float3 N) {
-    const float z = u.y * 2.0 - 1.0;
-    const float rad = sqrt(max(1.0 - z * z, 0.0));
-    const float phi = u.x * 6.28318530718;
-    float3 dir = float3(rad * cos(phi), rad * sin(phi), z);
-    if (dot(dir, N) < 0.0) {
-        dir = -dir;
-    }
-    return dir;
-}
-
-uint rcHitCascade(float hitT, float t0, bool miss) {
-    if (miss) {
-        return 3u;
-    }
-    if (hitT <= t0) {
-        return 0u;
-    }
-    if (hitT <= t0 * 4.0) {
-        return 1u;
-    }
-    if (hitT <= t0 * 16.0) {
-        return 2u;
+        limit *= 4.0;
     }
     return 3u;
-}
-
-void rcDepositChain(uint probe, uint lod, float3 dir, float hitT, float3 Le, bool miss) {
-    if (probe == kInvalid) {
-        return;
-    }
-    const float t0 = max(rcT0(lod), 0.04);
-    const uint hitC = rcHitCascade(hitT, t0, miss);
-    uint cursor = probe;
-    [unroll]
-    for (uint k = 0u; k < 4u; ++k) {
-        if (k > hitC || cursor == kInvalid) {
-            break;
-        }
-        const bool atHit = k == hitC;
-        const float3 J = atHit ? Le : float3(0.0, 0.0, 0.0);
-        const float beta = atHit ? 0.0 : 1.0;
-        rcDeposit(k, cursor, rcDirIndex(dir, k), J, beta);
-        if (k == 0u) {
-            rcStore(rcMetaAddr(0u, cursor) + 24u, 1u);
-        }
-        if (k < 3u) {
-            cursor = rcParent(k, cursor);
-        }
-    }
-}
-
-void rcReadShaded(uint2 px, float depth, out float3 lit, out float3 albedo, out float metal, out float3 shadingN) {
-    lit = max(gHdr[px].rgb, 0.0);
-    albedo = max(gSurf0[px].rgb, 0.0);
-    metal = saturate(gSurf1[px].z);
-    shadingN = octDecode(gSurf1[px].xy);
-    if (dot(shadingN, shadingN) < 0.5) {
-        shadingN = reconstructNormalFromDepth(gDepth, px, reconstructWorld(px, depth));
-    }
-}
-
-bool rcShadeView() {
-    return gFrame.debugMode == 0u || gFrame.debugMode == 4u;
-}
-
-// Пиксель уже содержит PBR: нормаль карты, микротень, каскад солнца, лампы.
-// Окно 5×5 и допуск по глубине вида, иначе точка луча промахивается на тексель
-// и каскад снова считает плоский треугольник.
-bool rcScreenLit(float3 hitP, out float3 lit, out float3 albedo, out float metal, out float3 shadingN) {
-    lit = 0.0;
-    albedo = float3(0.5, 0.5, 0.5);
-    metal = 0.0;
-    shadingN = float3(0.0, 1.0, 0.0);
-    if (!rcShadeView()) {
-        return false;
-    }
-    const float4 clip = worldToClip(hitP);
-    if (clip.w <= 0.001) {
-        return false;
-    }
-    const float2 uv = clip.xy / clip.w * 0.5 + 0.5;
-    if (uv.x < -0.02 || uv.y < -0.02 || uv.x > 1.02 || uv.y > 1.02) {
-        return false;
-    }
-    const int2 center = int2(uv * float2(gFrame.extent.xy));
-    const float tol = max(0.45, clip.w * 0.05);
-    float best = tol;
-    bool found = false;
-    [loop]
-    for (int dy = -2; dy <= 2; ++dy) {
-        [loop]
-        for (int dx = -2; dx <= 2; ++dx) {
-            const int2 ip = center + int2(dx, dy);
-            if (ip.x < 0 || ip.y < 0 || ip.x >= int(gFrame.extent.x) || ip.y >= int(gFrame.extent.y)) {
-                continue;
-            }
-            const uint2 px = uint2(ip);
-            float depth = 0.0;
-            if (!rcPixel(px, depth)) {
-                continue;
-            }
-            const float3 surf = reconstructWorld(px, depth);
-            const float err = length(surf - hitP);
-            const float viewSurf = worldToClip(surf).w;
-            if (err >= best || abs(viewSurf - clip.w) > tol) {
-                continue;
-            }
-            best = err;
-            rcReadShaded(px, depth, lit, albedo, metal, shadingN);
-            found = true;
-        }
-    }
-    return found;
-}
-
-// Луч BLAS промахнулся или сел не в тот тексель. Шаг по глубине экрана
-// берёт тот пиксель, который камера уже закрасила.
-bool rcMarchShaded(float3 origin, float3 dir, float reach, out float hitT, out float3 lit, out float3 albedo, out float metal, out float3 shadingN) {
-    hitT = reach;
-    lit = 0.0;
-    albedo = float3(0.5, 0.5, 0.5);
-    metal = 0.0;
-    shadingN = float3(0.0, 1.0, 0.0);
-    if (!rcShadeView()) {
-        return false;
-    }
-    float t = 0.06;
-    [loop]
-    for (uint s = 0u; s < 14u; ++s) {
-        t *= 1.55;
-        if (t > reach) {
-            return false;
-        }
-        const float3 Q = origin + dir * t;
-        const float4 clip = worldToClip(Q);
-        if (clip.w <= 0.001) {
-            return false;
-        }
-        const float2 uv = clip.xy / clip.w * 0.5 + 0.5;
-        if (uv.x < 0.0 || uv.y < 0.0 || uv.x >= 1.0 || uv.y >= 1.0) {
-            return false;
-        }
-        const uint2 px = min(uint2(uv * float2(gFrame.extent.xy)), gFrame.extent - 1u);
-        float depth = 0.0;
-        if (!rcPixel(px, depth)) {
-            continue;
-        }
-        const float3 surf = reconstructWorld(px, depth);
-        const float along = dot(surf - origin, dir);
-        if (along < 0.05 || along > t) {
-            continue;
-        }
-        const float side = length(surf - origin - dir * along);
-        if (side > max(0.1, along * 0.025)) {
-            continue;
-        }
-        hitT = along;
-        rcReadShaded(px, depth, lit, albedo, metal, shadingN);
-        return true;
-    }
-    return false;
-}
-
-// Исходящий свет поверхности. На экране это готовый пиксель. За экраном — солнце и карта теней.
-float3 rcBounceAt(float3 hitP, float3 n) {
-    if (gPush.cascadeIndex == 0u) {
-        return 0.0;
-    }
-    const uint hitLod = rcLod(hitP);
-    const uint hp = rcLookup(0u, rcPackKey(rcCell(hitP, 0u, hitLod), hitLod));
-    if (hp == kInvalid || rcLoad(rcMetaAddr(0u, hp) + 24u) == 0u) {
-        return 0.0;
-    }
-    return rcBounce(hp, n);
-}
-
-float3 rcLeShaded(float3 hitP, float3 lit, float3 albedo, float metal, float3 shadingN) {
-    const float3 bounceIn = rcBounceAt(hitP, shadingN);
-    return min(max(lit + albedo * (1.0 - metal) * bounceIn, 0.0), kRadMax);
-}
-
-float3 rcLeOffscreen(float3 hitP, float3 n, float3 albedo, float metal, float emissive) {
-    const float3 sun = rcSunDir();
-    const float ndl = saturate(dot(n, sun));
-    const float vis = rcSunVis(hitP, n, ndl);
-    const float3 bounceIn = rcBounceAt(hitP, n);
-    const float3 incoming = ndl * vis * rcSunColor() * rcSunIntensity() * 0.318309886 + bounceIn;
-    float3 Le = albedo * (1.0 - metal) * incoming;
-    Le += min(albedo * emissive * 4.0, kRadMax);
-    return min(max(Le, 0.0), kRadMax);
 }
 
 RaytracingAccelerationStructure rcScene() {
     return RaytracingAccelerationStructure(uint64_t(rcLoad(112u)) | (uint64_t(rcLoad(116u)) << 32));
 }
 
-void rcCast(float3 origin, float3 dir, float reach, out float hitT, out float3 Le, out bool miss) {
-    RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
+float rcSunVis(float3 P, float3 N, float ndl) {
+    if (ndl <= 0.005) {
+        return 0.0;
+    }
+    if (gFrame.disableShadow != 0u) {
+        return 1.0;
+    }
+    RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> q;
     RayDesc ray;
-    ray.Origin = origin;
-    ray.Direction = dir;
-    ray.TMin = 0.01;
-    ray.TMax = reach;
-    q.TraceRayInline(rcScene(), RAY_FLAG_FORCE_OPAQUE, 0xff, ray);
+    ray.Origin = P + N * 0.03;
+    ray.Direction = rcSunDir();
+    ray.TMin = 0.02;
+    ray.TMax = 500.0;
+    q.TraceRayInline(rcScene(), RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, 0xff, ray);
     q.Proceed();
-    hitT = reach;
-    Le = rcSky(dir);
-    miss = true;
-    const bool hw = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
-    float hwT = reach;
-    float3 hwP = origin;
-    float3 hwN = -dir;
-    float3 hwAlbedo = float3(0.5, 0.5, 0.5);
-    float hwMetal = 0.0;
-    float hwEmissive = 0.0;
-    if (hw) {
-        hwT = q.CommittedRayT();
-        hwP = origin + dir * hwT;
-        const uint prim = q.CommittedPrimitiveIndex();
-        const float4 a = rcPos(prim * 3u);
-        const float3 b = rcPos(prim * 3u + 1u).xyz;
-        const float3 c = rcPos(prim * 3u + 2u).xyz;
-        hwN = cross(b - a.xyz, c - a.xyz);
-        hwN = dot(hwN, hwN) > 1e-12 ? normalize(hwN) : -dir;
-        if (dot(hwN, dir) > 0.0) {
-            hwN = -hwN;
-        }
-        uint matCount;
-        uint matStride;
-        gMat.GetDimensions(matCount, matStride);
-        const uint matId = asuint(a.w);
-        MaterialGpu mat;
-        mat.baseColor = float4(0.5, 0.5, 0.5, 1.0);
-        mat.roughness = 1.0;
-        mat.metallic = 0.0;
-        mat.emissive = 0.0;
-        if (matCount > 0u) {
-            mat = gMat[min(matId, matCount - 1u)];
-        }
-        hwAlbedo = mat.baseColor.rgb;
-        hwMetal = saturate(mat.metallic);
-        hwEmissive = mat.emissive;
-        float3 lit;
-        float3 albedo;
-        float metal;
-        float3 shadingN;
-        if (rcScreenLit(hwP, lit, albedo, metal, shadingN)) {
-            miss = false;
-            hitT = hwT;
-            Le = rcLeShaded(hwP, lit, albedo, metal, shadingN);
-            return;
-        }
-    }
-    float marchT;
-    float3 lit;
-    float3 albedo;
-    float metal;
-    float3 shadingN;
-    if (rcMarchShaded(origin, dir, reach, marchT, lit, albedo, metal, shadingN) && (!hw || marchT <= hwT + 0.2)) {
-        miss = false;
-        hitT = marchT;
-        Le = rcLeShaded(origin + dir * marchT, lit, albedo, metal, shadingN);
-        return;
-    }
-    if (!hw) {
-        return;
-    }
-    miss = false;
-    hitT = hwT;
-    Le = rcLeOffscreen(hwP, hwN, hwAlbedo, hwMetal, hwEmissive);
+    return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0 : 1.0;
 }
 
-void rcShoot(float3 P, float3 N, float3 dir) {
-    if (dot(dir, N) <= 0.0) {
+void rcTally(bool tally, bool miss, float3 Le, float ndl, float vis, float albedoPeak, float metal, float dist) {
+    if (!tally || gPush.frameIndex != 0u) {
         return;
     }
-    float hitT;
-    float3 Le;
-    bool miss;
-    rcCast(P + N * 0.01, dir, rcReach(), hitT, Le, miss);
-    const uint lod0 = rcLod(P);
-    const uint lod1 = min(lod0 + 1u, 5u);
-    rcDepositChain(rcLookup(0u, rcPackKey(rcCell(P, 0u, lod0), lod0)), lod0, dir, hitT, Le, miss);
-    if (lod1 != lod0) {
-        rcDepositChain(rcLookup(0u, rcPackKey(rcCell(P, 0u, lod1), lod1)), lod1, dir, hitT, Le, miss);
+    uint ignored = 0u;
+    if (miss) {
+        gRc.InterlockedAdd(180u, 1u, ignored);
+        return;
+    }
+    gRc.InterlockedAdd(176u, 1u, ignored);
+    const float lum = min(max(Le.r, max(Le.g, Le.b)), 64.0);
+    if (lum < 1e-4) {
+        gRc.InterlockedAdd(184u, 1u, ignored);
+    }
+    gRc.InterlockedAdd(188u, uint(lum * 256.0 + 0.5), ignored);
+    gRc.InterlockedAdd(192u, uint(saturate(vis) * 256.0 + 0.5), ignored);
+    gRc.InterlockedAdd(196u, uint(saturate(ndl) * 256.0 + 0.5), ignored);
+    gRc.InterlockedAdd(232u, uint(min(dist, 512.0) * 256.0 + 0.5), ignored);
+    uint prev = 0u;
+    gRc.InterlockedCompareExchange(216u, 0u, 1u, prev);
+    if (prev == 0u) {
+        rcStore(200u, asuint(albedoPeak));
+        rcStore(204u, asuint(vis));
+        rcStore(208u, asuint(ndl));
+        rcStore(212u, asuint(metal));
     }
 }
 
-bool rcSurface(uint2 px, out float3 P, out float3 N) {
-    P = 0.0;
-    N = float3(0.0, 1.0, 0.0);
-    float depth = 0.0;
-    if (!rcPixel(px, depth)) {
-        return false;
+float3 rcLeWorld(float3 hitP, float3 n, float3 dir, float3 albedo, float metal, float rough, float emissive) {
+    const float3 L = rcSunDir();
+    const float3 V = -dir;
+    const float ndl = saturate(dot(n, L));
+    const float ndv = saturate(dot(n, V));
+    const float diff = hammonDiffuse(ndl, max(ndv, 0.15), dot(V, L), rough);
+    // Усиливаем чистоту цвета при отскоке, чтобы цветные объекты (жёлтый, красный, синий кубы и стены) давали яркий рефлекс!
+    const float luma = dot(albedo, float3(0.299, 0.587, 0.114));
+    const float3 satAlbedo = max(lerp(float3(luma, luma, luma), albedo, 1.35), 0.0);
+    const float3 tint = satAlbedo * lerp(1.0, 0.75, metal);
+    const float3 color = tint * max(diff, 0.0);
+    const float vis = rcSunVis(hitP, n, ndl);
+    const float bounceScale = max(gRcParams.bounce, 0.1) * 3.2;
+    const float3 bounced = color * vis * rcSunColor() * rcSunIntensity() * max(gRcParams.sunScale, 0.0) * bounceScale;
+    const float3 glow = max(albedo, 0.0) * max(emissive, 0.0) * 4.0;
+    return max(bounced + glow, 0.0);
+}
+
+bool rcHitColor(uint prim, float2 bary, float3 dir, out float3 albedo, out float metal, out float rough, out float emissive, out float3 n) {
+    const RcHitVert a = rcVert(prim * 3u);
+    const RcHitVert b = rcVert(prim * 3u + 1u);
+    const RcHitVert c = rcVert(prim * 3u + 2u);
+    const float w0 = saturate(1.0 - bary.x - bary.y);
+    const float w1 = saturate(bary.x);
+    const float w2 = saturate(bary.y);
+    const float2 uv = float2(a.u, a.v) * w0 + float2(b.u, b.v) * w1 + float2(c.u, c.v) * w2;
+    const float3 face = cross(b.p - a.p, c.p - a.p);
+    float3 geomN = dot(face, face) > 1e-12 ? normalize(face) : float3(0.0, 1.0, 0.0);
+    const float3 vN = a.n * w0 + b.n * w1 + c.n * w2;
+    if (dot(vN, vN) > 1e-4) {
+        if (dot(geomN, vN) < 0.0) {
+            geomN = -geomN;
+        }
+        n = normalize(vN);
+    } else {
+        n = geomN;
     }
-    P = reconstructWorld(px, depth);
-    N = octDecode(gSurf1[px].xy);
-    if (dot(N, N) < 0.5) {
-        N = reconstructNormalFromDepth(gDepth, px, P);
+
+    uint matCount;
+    uint matStride;
+    gMat.GetDimensions(matCount, matStride);
+    MaterialGpu mat;
+    mat.baseColor = float4(0.5, 0.5, 0.5, 1.0);
+    mat.roughness = 1.0;
+    mat.metallic = 0.0;
+    mat.emissive = 0.0;
+    mat.flags = 0u;
+    mat.albedo = 0u;
+    mat.normalTex = 0u;
+    mat.orm = 0u;
+    mat.emissiveTex = 0u;
+    mat.pad0 = 0u;
+    mat.pad1 = 0u;
+    mat.pad2 = 0u;
+    mat.pad3 = 0u;
+    if (matCount > 0u) {
+        mat = gMat[min(a.mat, matCount - 1u)];
     }
-    N = orientNormal(N, gFrame.cameraPos.xyz - P);
+    const bool foliage = (mat.flags & 32u) != 0u;
+    metal = saturate(mat.metallic);
+    rough = saturate(mat.roughness);
+    emissive = max(mat.emissive, 0.0);
+    albedo = max(mat.baseColor.rgb, 0.0);
+    if (mat.albedo < 768u) {
+        const float4 texel = gTex[NonUniformResourceIndex(mat.albedo)].SampleLevel(gWrap, uv, 0.0);
+        if (texel.a < 0.35 && (foliage || mat.albedo > 0u)) {
+            return false;
+        }
+        const float peak = max(texel.r, max(texel.g, texel.b));
+        if (peak > 0.0) {
+            albedo *= max(texel.rgb, 0.0);
+        }
+    }
+    if (foliage) {
+        if (dot(n, dir) > 0.0) {
+            n = -n;
+        }
+    } else if (dot(geomN, dir) > 0.05) {
+        albedo = 0.0;
+        emissive = 0.0;
+    }
     return true;
 }
 
-// 32 направления якоря. Полусфера зонда заполнена, пустой бин не становится небом.
+void rcCast(float3 origin, float3 dir, float reach, float backSkip, bool tally, out float hitT, out float3 Le, out bool miss) {
+    hitT = reach;
+    Le = 0.0;
+    miss = true;
+    float traveled = 0.0;
+    [loop]
+    for (uint hop = 0u; hop < 6u; ++hop) {
+        RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
+        RayDesc ray;
+        ray.Origin = origin + dir * traveled;
+        ray.Direction = dir;
+        ray.TMin = 0.005;
+        ray.TMax = max(reach - traveled, 0.006);
+        q.TraceRayInline(rcScene(), RAY_FLAG_FORCE_OPAQUE, 0xff, ray);
+        q.Proceed();
+        if (q.CommittedStatus() != COMMITTED_TRIANGLE_HIT) {
+            rcTally(tally, true, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+            return;
+        }
+        const float hwT = q.CommittedRayT();
+        const bool front = q.CommittedTriangleFrontFace();
+        if (!front && (traveled + hwT) < backSkip) {
+            traveled += hwT + 0.02;
+            if (traveled >= reach) {
+                rcTally(tally, true, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+                return;
+            }
+            continue;
+        }
+        const uint prim = q.CommittedPrimitiveIndex();
+        const float2 bary = q.CommittedTriangleBarycentrics();
+        float3 albedo;
+        float metal;
+        float rough;
+        float emissive;
+        float3 n;
+        if (!rcHitColor(prim, bary, dir, albedo, metal, rough, emissive, n)) {
+            traveled += hwT + 0.02;
+            if (traveled >= reach) {
+                rcTally(tally, true, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+                return;
+            }
+            continue;
+        }
+        const float3 hitP = origin + dir * (traveled + hwT);
+        miss = false;
+        hitT = traveled + hwT;
+        Le = rcLeWorld(hitP, n, dir, albedo, metal, rough, emissive);
+        const float ndl = saturate(dot(n, rcSunDir()));
+        const float vis = tally ? rcSunVis(hitP, n, ndl) : 0.0;
+        rcTally(tally, false, Le, ndl, vis, max(albedo.r, max(albedo.g, albedo.b)), metal, hitT);
+        return;
+    }
+    rcTally(tally, true, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+}
+
+// Все 32 луча ориентированы в полусферу нормали N (Алгоритм 3 статьи):
+// ни один луч не тратится впустую в землю под собой, поэтому цвет передаётся максимально ярко!
+float3 rcSampleDir(uint dirId, uint subRay, uint cellSeed, float3 N) {
+    const float2 jitter = subRay == 0u ? float2(0.5, 0.5) : rcR2(cellSeed * 256u + dirId * 8u + subRay);
+    const float u = (float(dirId & 7u) + jitter.x) / 8.0;
+    const float v = (float(dirId >> 3u) + jitter.y) / 4.0;
+    float3 w = rcDecodeDir(float2(u, v));
+    if (dot(w, N) < 0.0) {
+        w = -w;
+    }
+    return w;
+}
+
+void rcSplitDeposit(uint probe0, uint tag, float3 dir, float hitT, float3 Le, bool miss) {
+    if (probe0 == kInvalid) {
+        return;
+    }
+    if (miss) {
+        const float skyUp = saturate(dir.y);
+        const float sunCos = saturate(dot(dir, rcSunDir()));
+        const float sunLobe = pow(sunCos, 8.0) * step(0.0, dir.y);
+        const float3 dome = float3(0.018, 0.028, 0.048) * (0.3 + 0.7 * skyUp);
+        const float3 solar = rcSunColor() * (0.09 * sunLobe);
+        const float3 skyCol = (dome + solar) * rcSunIntensity() * max(gRcParams.sunScale, 0.0);
+        uint probe = probe0;
+        [unroll]
+        for (uint k = 0u; k < 4u; ++k) {
+            if (probe == kInvalid) {
+                return;
+            }
+            if (k < 3u) {
+                rcDeposit(k, probe, rcDirIndex(dir, k), float3(0.0, 0.0, 0.0), 1.0);
+            } else {
+                rcDeposit(3u, probe, rcDirIndex(dir, 3u), skyCol, 0.0);
+            }
+            rcStore(rcMetaAddr(k, probe) + 24u, 1u);
+            probe = rcParent(k, probe);
+        }
+        return;
+    }
+
+    const uint n = rcHitCascade(hitT, tag);
+    uint probe = probe0;
+    [unroll]
+    for (uint k = 0u; k < 4u; ++k) {
+        if (probe == kInvalid) {
+            return;
+        }
+        if (k < n) {
+            rcDeposit(k, probe, rcDirIndex(dir, k), float3(0.0, 0.0, 0.0), 1.0);
+        } else if (k == n) {
+            rcDeposit(k, probe, rcDirIndex(dir, k), max(Le, 0.0), 0.0);
+        } else {
+            return;
+        }
+        rcStore(rcMetaAddr(k, probe) + 24u, 1u);
+        if (k == n) {
+            return;
+        }
+        probe = rcParent(k, probe);
+    }
+}
+
 [shader("compute")]
 [numthreads(64, 1, 1)]
 void rcTrace(uint3 dtid : SV_DispatchThreadID) {
     const uint dirId = dtid.x & 31u;
     const uint probe = dtid.x >> 5u;
-    if (probe >= min(rcCount(0u), rcProbeCap(0u))) {
+    if (probe >= min(min(rcCount(0u), rcProbeCap(0u)), 65535u)) {
         return;
     }
     const uint meta = rcMetaAddr(0u, probe);
-    const uint score = rcLoad(meta + 28u);
-    const uint width = gFrame.extent.x;
-    if (score == 0xFFFFFFFFu || width == 0u) {
+    if (rcLoad(meta + 28u) == 0u) {
         return;
     }
-    const uint2 px = uint2(score % width, score / width);
-    float3 P;
-    float3 N;
-    if (!rcSurface(px, P, N)) {
-        return;
+    const int3 cell = int3(asint(rcLoad(meta)), asint(rcLoad(meta + 4u)), asint(rcLoad(meta + 8u)));
+    const uint tag = rcLoad(meta + 12u);
+    const float3 P = float3(asfloat(rcLoad(meta + 32u)), asfloat(rcLoad(meta + 36u)), asfloat(rcLoad(meta + 40u)));
+    float3 N = float3(asfloat(rcLoad(meta + 44u)), asfloat(rcLoad(meta + 48u)), asfloat(rcLoad(meta + 52u)));
+    if (dot(N, N) < 0.5) {
+        N = float3(0.0, 1.0, 0.0);
+    } else {
+        N = normalize(N);
     }
-    if (dirId == 0u) {
-        rcStore(meta + 24u, 1u);
-    }
-    const float3 dir = rcDecodeGrid(0u, dirId);
-    rcShoot(P, N, dir);
-}
-
-// Один стабильный луч R2 на пиксель и на слот слайдера. Лучи клетки падают в одни бины,
-// поэтому β — доля промахов: у предмета тень плотнее, дальше родитель просвечивает.
-[shader("compute")]
-[numthreads(8, 8, 1)]
-void rcTracePixels(uint3 dtid : SV_DispatchThreadID) {
-    float3 P;
-    float3 N;
-    if (!rcSurface(dtid.xy, P, N)) {
-        return;
-    }
-    const uint nRays = rcRayCount();
-    const uint pix = dtid.y * gFrame.extent.x + dtid.x;
+    const float sp = max(rcSpacing(0u, tag), 0.1);
+    const float3 rayOrigin = P + N * max(0.03, sp * 0.08);
+    const float backSkip = max(0.20, sp * 0.5);
+    const uint64_t key = rcPackKey(cell, tag);
+    const uint cellSeed = rcSlot(uint(key), uint(key >> 32), 0xFFFFu);
+    const uint rayMult = clamp(gPush.cascadeIndex, 1u, 8u);
+    const float reach = rcReach(tag);
     [loop]
-    for (uint r = 0u; r < nRays; ++r) {
-        rcShoot(P, N, rcHemisphere(rcR2(pix * nRays + r), N));
+    for (uint r = 0u; r < rayMult; ++r) {
+        const float3 dir = rcSampleDir(dirId, r, cellSeed, N);
+        float hitT;
+        float3 Le;
+        bool miss;
+        rcCast(rayOrigin, dir, reach, backSkip, r == 0u && dirId == 0u && (probe & 31u) == 0u, hitT, Le, miss);
+        rcSplitDeposit(probe, tag, dir, hitT, Le, miss);
     }
 }

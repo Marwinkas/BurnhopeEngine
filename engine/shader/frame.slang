@@ -89,7 +89,9 @@ struct RcParams {
     float intensity;
     float maxDist;
     float cap;
-    float d0; float d1; float d2; float d3; float d4; float d5;
+    float sunScale;
+    float bounce;
+    float d2; float d3; float d4; float d5;
     float d6; float d7; float d8; float d9; float d10;
 };
 struct ShadeParams {

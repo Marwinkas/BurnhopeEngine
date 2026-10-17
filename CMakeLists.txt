@@ -338,7 +338,6 @@ add_custom_command(
         ${SHADER_OUT_DIR}/rc.alloc.comp.spv
         ${SHADER_OUT_DIR}/rc.prefix.comp.spv
         ${SHADER_OUT_DIR}/rc.trace.comp.spv
-        ${SHADER_OUT_DIR}/rc.tracepx.comp.spv
         ${SHADER_OUT_DIR}/rc.merge.comp.spv
         ${SHADER_OUT_DIR}/rc.oct.comp.spv
         ${SHADER_OUT_DIR}/rc.shade.comp.spv
@@ -382,7 +381,6 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_alloc_probes.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcAlloc -o ${SHADER_OUT_DIR}/rc.alloc.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_prefix.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcPrefix -o ${SHADER_OUT_DIR}/rc.prefix.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_trace_split.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry rcTrace -o ${SHADER_OUT_DIR}/rc.trace.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_trace_split.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry rcTracePixels -o ${SHADER_OUT_DIR}/rc.tracepx.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_merge.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvGroupNonUniform+spvGroupNonUniformShuffle -stage compute -entry rcMerge -o ${SHADER_OUT_DIR}/rc.merge.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_octahedral.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcOctahedral -o ${SHADER_OUT_DIR}/rc.oct.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_shade.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcShade -o ${SHADER_OUT_DIR}/rc.shade.comp.spv
@@ -426,6 +424,7 @@ add_custom_command(
         ${SHADER_DIR}/cloud_noise.slang
         ${SHADER_DIR}/core/atmosphere.slang
         ${SHADER_DIR}/rc_common.slang
+        ${SHADER_DIR}/rc_geom.slang
         ${SHADER_DIR}/rc_surface.slang
         ${SHADER_DIR}/rc_alloc_probes.slang
         ${SHADER_DIR}/rc_prefix.slang
@@ -460,9 +459,8 @@ add_custom_target(BurnhopeSpv ALL DEPENDS
     ${SHADER_OUT_DIR}/cmaa2.comp.spv
     ${SHADER_OUT_DIR}/rc.alloc.comp.spv
     ${SHADER_OUT_DIR}/rc.prefix.comp.spv
-    ${SHADER_OUT_DIR}/rc.trace.comp.spv
-    ${SHADER_OUT_DIR}/rc.tracepx.comp.spv
-    ${SHADER_OUT_DIR}/rc.merge.comp.spv
+        ${SHADER_OUT_DIR}/rc.trace.comp.spv
+        ${SHADER_OUT_DIR}/rc.merge.comp.spv
     ${SHADER_OUT_DIR}/rc.oct.comp.spv
     ${SHADER_OUT_DIR}/rc.shade.comp.spv
     ${SHADER_OUT_DIR}/tonemap.mesh.spv

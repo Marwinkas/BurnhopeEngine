@@ -229,7 +229,9 @@ bool engineInit(Engine& e, int argc, char** argv) {
     }
     if (wantScene(argc, argv)) {
         e.scene = sceneFrameCreate();
-        (void)sceneFrameLoadBhop(e.scene, "cache/bistro-gltf.bhop");
+        if (sceneFrameLoadBhop(e.scene, "cache/bistro-gltf.bhop")) {
+            sceneFramePlantCubes(e.scene);
+        }
         ViewDesc main{};
         main.name = "scene";
         main.window.title = "Burnhope scene  RMB look  WASD fly";
@@ -363,13 +365,26 @@ void setSlide(Canvas& canvas, uint16_t id, float value) {
     canvas.state->visualDirty = 1;
 }
 
+void setMenuCaption(UiState& s, const char* name, const char* text) {
+    const uint16_t id = uiFindName(s, name);
+    if (id == kUiNone || id >= s.count) {
+        return;
+    }
+    for (uint16_t child = 0; child < s.count; ++child) {
+        if (s.parentOf[child] == id && s.ent[child].try_get<UiText>() != nullptr) {
+            uiText(s, child, text);
+            return;
+        }
+    }
+}
+
 void applyTone(UiState& s, int which) {
     const char* names[] = {"tone0", "tone1", "tone2", "tone3"};
     const char* caps[] = {"AgX", "ACES", "Reinhard", "Linear"};
     for (int i = 0; i < 4; ++i) {
         uiBindCheck(s, uiFindName(s, names[i]), 1, 2, i == which);
     }
-    uiText(s, uiFindName(s, "toneBtn"), caps[which]);
+    setMenuCaption(s, "toneBtn", caps[which]);
 }
 
 void toneAgx(void* user) { applyTone(*static_cast<UiState*>(user), 0); }
@@ -381,7 +396,7 @@ void applyAa(UiState& s, int which) {
     uiBindCheck(s, uiFindName(s, "smaa"), 0, 0, which == 1);
     uiBindCheck(s, uiFindName(s, "cmaa"), 0, 0, which == 2);
     const char* caps[] = {"Off", "SMAA", "CMAA"};
-    uiText(s, uiFindName(s, "aaBtn"), caps[which]);
+    setMenuCaption(s, "aaBtn", caps[which]);
 }
 
 void aaOff(void* user) { applyAa(*static_cast<UiState*>(user), 0); }
@@ -438,6 +453,8 @@ void bindHudIds(HudContext& hud, UiState& state) {
     hud.ids.rcGain = id("rcGain");
     hud.ids.giGain = id("giGain");
     hud.ids.rcMax = id("rcMax");
+    hud.ids.rcSun = id("rcSun");
+    hud.ids.rcBounce = id("rcBounce");
     hud.ids.bloomth = id("bloomth");
     hud.ids.fog = id("fog");
     hud.ids.fogH = id("fogH");
@@ -936,10 +953,12 @@ void sceneHud(Canvas& canvas, void* user) {
     uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Баланс", 1, 3, false), "prof1");
     uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Ультра", 1, 3, false), "prof2");
     tick("radiance", "rcen", true);
-    rowSlide(*canvas.state, panel, "RC лучи", "rcRays", 1.0f, 1.0f, 4.0f);
-    rowSlide(*canvas.state, panel, "RC клетка м", "rcCell", 0.45f, 0.1f, 4.0f);
+    rowSlide(*canvas.state, panel, "RC лучи", "rcRays", 1.0f, 1.0f, 16.0f);
+    rowSlide(*canvas.state, panel, "RC клетка м", "rcCell", 0.8f, 0.1f, 4.0f);
     rowSlide(*canvas.state, panel, "RC сила", "rcGain", 1.0f, 0.0f, 4.0f);
-    rowSlide(*canvas.state, panel, "RC длина м", "rcMax", 48.0f, 2.0f, 200.0f);
+    rowSlide(*canvas.state, panel, "RC длина м", "rcMax", 48.0f, 0.5f, 200.0f);
+    rowSlide(*canvas.state, panel, "RC солнце", "rcSun", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "RC отскок", "rcBounce", 1.0f, 0.0f, 2.0f);
     panel = postBody;
     tick("GTAO", "gtaoen", true);
     hideCheck("SMAA", "smaa", 0, 0, false);
@@ -1166,10 +1185,12 @@ bool engineTick(Engine& e) {
         tweaks.sscsSteps = slideAt(hud, id.sscsS, 12.0f);
         tweaks.sscsPx = slideAt(hud, id.sscsP, 128.0f);
         tweaks.rcRays = slideAt(hud, id.rcRays, 1.0f);
-        tweaks.rcSpacing = slideAt(hud, id.rcCell, 0.45f);
+        tweaks.rcSpacing = slideAt(hud, id.rcCell, 0.8f);
         tweaks.rcIntensity = slideAt(hud, id.rcGain, 1.0f);
         tweaks.giGain = slideAt(hud, id.giGain, 2.0f);
         tweaks.rcMax = slideAt(hud, id.rcMax, 48.0f);
+        tweaks.rcSun = slideAt(hud, id.rcSun, 1.0f);
+        tweaks.rcBounce = slideAt(hud, id.rcBounce, 1.0f);
         tweaks.bloomThreshold = slideAt(hud, id.bloomth, 0.35f);
         tweaks.fogDensity = slideAt(hud, id.fog, 0.002f);
         tweaks.fogHeight = slideAt(hud, id.fogH, 4.0f);

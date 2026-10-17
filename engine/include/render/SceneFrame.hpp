@@ -13,6 +13,7 @@ struct SceneFrame;
 
 [[nodiscard]] SceneFrame* sceneFrameCreate();
 [[nodiscard]] bool sceneFrameLoadBhop(SceneFrame* scene, const char* path);
+void sceneFramePlantCubes(SceneFrame* scene);
 void sceneFrameDestroy(SceneFrame* scene, Device& device);
 void sceneFrameReleaseGpu(SceneFrame* scene, Device& device);
 [[nodiscard]] bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt);
@@ -55,9 +56,11 @@ struct SceneTweaks {
     float ssrcCap = 0.6f;
     float ssrcSteps = 8.0f;
     float rcRays = 1.0f;
-    float rcSpacing = 0.45f;
+    float rcSpacing = 0.2f;
     float rcIntensity = 1.0f;
     float rcMax = 48.0f;
+    float rcSun = 1.0f;
+    float rcBounce = 1.0f;
     float giGain = 2.0f;
     uint32_t lightProfile = 0;
     float bloomThreshold = 0.35f;

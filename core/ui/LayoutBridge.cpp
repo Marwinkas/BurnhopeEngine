@@ -319,7 +319,7 @@ void uiLayout(UiState& s, float w, float h) {
             }
             applyFlex(s.yoga[id], *flex);
 
-            if (s.ent[id].has<UiContentMeasure>()) {
+            if (s.ent[id].has<UiContentMeasure>() && YGNodeGetChildCount(s.yoga[id]) == 0) {
                 YGNodeSetMeasureFunc(s.yoga[id], yogaMeasureAdapter);
             } else {
                 YGNodeSetMeasureFunc(s.yoga[id], nullptr);

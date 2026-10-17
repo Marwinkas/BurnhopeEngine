@@ -105,6 +105,28 @@ void pushBlob(SceneFrameImpl& s, const MeshletBlob& blob, float x, float y, floa
     s.instanceCount += 1;
 }
 
+void linkProp(SceneFrameImpl& s, uint32_t instance, const char* name) {
+    if (s.propCount >= kPropCap || instance >= s.instanceCount) {
+        return;
+    }
+    const float pos[3] = {
+        s.cpuInstances[instance].world[3],
+        s.cpuInstances[instance].world[7],
+        s.cpuInstances[instance].world[11],
+    };
+    const uint8_t actor = sceneActorAdd(s.actors, SceneActorKind::Prop, pos, name);
+    if (actor == kSceneActorNone) {
+        return;
+    }
+    SceneFrameImpl::PropLink& link = s.props[s.propCount];
+    link.instance = instance;
+    link.actor = actor;
+    link.radius = s.cpuInstances[instance].sphere[3];
+    link.pose = sceneActorXform(s.actors, actor);
+    s.propCount += 1;
+}
+
+
 void uploadStatic(SceneFrameImpl& s) {
     if (s.vertSrc == nullptr || s.verts.mapped == nullptr) {
         return;
@@ -678,13 +700,9 @@ SceneFrame* sceneFrameCreate() {
     pushBlob(*scene, scene->world.cubes[0], scene->world.objects[1].x, scene->world.objects[1].y, scene->world.objects[1].z);
     pushBlob(*scene, scene->world.cubes[1], scene->world.objects[2].x, scene->world.objects[2].y, scene->world.objects[2].z);
     pushBlob(*scene, scene->world.cubes[2], scene->world.objects[3].x, scene->world.objects[3].y, scene->world.objects[3].z);
-    const float cubePos[3] = {scene->world.objects[1].x, scene->world.objects[1].y, scene->world.objects[1].z};
-    scene->propActor = sceneActorAdd(scene->actors, SceneActorKind::Prop, cubePos, "Cube");
-    scene->actors.selected = 0;
-    if (scene->propActor != kSceneActorNone && scene->instanceCount > 1) {
-        scene->propInstance = 1;
-        scene->propRadius = scene->cpuInstances[1].sphere[3];
-        scene->propPose = sceneActorXform(scene->actors, scene->propActor);
+    if (scene->instanceCount > 1) {
+        linkProp(*scene, 1, "Cube");
+        scene->actors.selected = 0;
     }
     for (uint32_t i = 0; i < scene->world.lightCount; ++i) {
         scene->world.lights[i].radius = 8.0f;
@@ -697,6 +715,7 @@ SceneFrame* sceneFrameCreate() {
     scene->visibleCpu.assign(scene->visibleCap, 0u);
     const float palette[4][3] = {{0.35f, 0.34f, 0.32f}, {0.80f, 0.25f, 0.20f}, {0.20f, 0.45f, 0.85f}, {0.85f, 0.75f, 0.30f}};
     for (uint32_t i = 0; i < 4; ++i) {
+        scene->fallbackMat[i] = {};
         scene->fallbackMat[i].baseColor[0] = palette[i][0];
         scene->fallbackMat[i].baseColor[1] = palette[i][1];
         scene->fallbackMat[i].baseColor[2] = palette[i][2];
@@ -837,12 +856,167 @@ bool sceneFrameLoadBhop(SceneFrame* scene, const char* path) {
     scene->fly.pitch = -0.15f;
     scene->fly.speed = std::max(4.0f, extent * 0.02f);
     placeActors(*scene);
-    scene->propInstance = 0xffffffffu;
-    scene->propActor = 0xff;
+    scene->propCount = 0;
     scene->propPhase = 0;
     scene->propDirty = 0;
     scene->ready = false;
     return true;
+}
+
+void sceneFramePlantCubes(SceneFrame* scene) {
+    if (scene == nullptr || scene->vertSrc == nullptr || scene->instanceCount == 0 || scene->indexSrc == nullptr
+        || scene->meshletSrc == nullptr) {
+        return;
+    }
+    const uint32_t v0 = scene->vertCount;
+    const uint32_t i0 = scene->indexCount;
+    const uint32_t n0 = scene->instanceCount;
+    const uint32_t m0 = scene->materialCount;
+    uint32_t mesh0 = n0;
+    if (scene->meshletSrc == scene->meshletGpu.data() && !scene->meshletGpu.empty()) {
+        mesh0 = static_cast<uint32_t>(scene->meshletGpu.size());
+    }
+    constexpr uint32_t kExtraN = 4u;
+    std::vector<GpuVertex> verts;
+    std::vector<uint32_t> indices;
+    std::vector<GpuInstance> instances(n0 + kExtraN);
+    std::vector<GpuMeshlet> meshlets(std::max(mesh0, n0) + kExtraN);
+    std::vector<MaterialGpuData> materials(m0 + kExtraN);
+    verts.assign(scene->vertSrc, scene->vertSrc + v0);
+    indices.assign(scene->indexSrc, scene->indexSrc + i0);
+    std::memcpy(instances.data(), scene->instSrc, sizeof(GpuInstance) * n0);
+    const uint32_t meshCopy = mesh0 < n0 ? mesh0 : n0;
+    std::memcpy(meshlets.data(), scene->meshletSrc, sizeof(GpuMeshlet) * meshCopy);
+    if (scene->materialSrc != nullptr && m0 > 0) {
+        std::memcpy(materials.data(), scene->materialSrc, sizeof(MaterialGpuData) * m0);
+    }
+    auto paint = [&](uint32_t slot, float r, float g, float b, float rough, float metal) {
+        MaterialGpuData& mat = materials[m0 + slot];
+        mat = {};
+        mat.baseColor[0] = r;
+        mat.baseColor[1] = g;
+        mat.baseColor[2] = b;
+        mat.baseColor[3] = 1.0f;
+        mat.roughness = rough;
+        mat.metallic = metal;
+    };
+    paint(0, 0.45f, 0.45f, 0.43f, 0.9f, 0.0f);
+    paint(1, 0.82f, 0.16f, 0.08f, 0.45f, 0.0f);
+    paint(2, 0.16f, 0.38f, 0.82f, 0.25f, 0.8f);
+    paint(3, 0.86f, 0.72f, 0.18f, 0.55f, 0.0f);
+    const float ox = scene->fly.eye[0];
+    const float oy = scene->fly.eye[1] - 1.8f;
+    const float oz = scene->fly.eye[2] - 10.0f;
+    uint32_t added = 0;
+    auto finish = [&](float cx, float cy, float cz, float radius, uint32_t matSlot, uint32_t base, uint32_t ind, uint32_t vcount, uint32_t tris) {
+        const uint32_t inst = n0 + added;
+        GpuMeshlet& mesh = meshlets[inst];
+        mesh = {};
+        mesh.vertexOffset = base;
+        mesh.indexOffset = ind;
+        mesh.vertexCount = vcount;
+        mesh.triangleCount = tris;
+        mesh.coneCutoff = -1.0f;
+        instanceSet(instances[inst], cx, cy, cz, radius, m0 + matSlot, inst);
+        added += 1;
+    };
+    auto emitBox = [&](float cx, float cy, float cz, float hx, float hy, float hz, uint32_t matSlot) {
+        struct Face {
+            float cx, cy, cz, ux, uy, uz, vx, vy, vz;
+        };
+        const Face faces[6] = {
+            {0.0f, hy, 0.0f, hx, 0.0f, 0.0f, 0.0f, 0.0f, -hz},
+            {0.0f, -hy, 0.0f, hx, 0.0f, 0.0f, 0.0f, 0.0f, hz},
+            {hx, 0.0f, 0.0f, 0.0f, hy, 0.0f, 0.0f, 0.0f, hz},
+            {-hx, 0.0f, 0.0f, 0.0f, hy, 0.0f, 0.0f, 0.0f, -hz},
+            {0.0f, 0.0f, hz, hx, 0.0f, 0.0f, 0.0f, hy, 0.0f},
+            {0.0f, 0.0f, -hz, hx, 0.0f, 0.0f, 0.0f, -hy, 0.0f},
+        };
+        const float corner[4][2] = {{-1.0f, -1.0f}, {1.0f, -1.0f}, {1.0f, 1.0f}, {-1.0f, 1.0f}};
+        const uint32_t base = static_cast<uint32_t>(verts.size());
+        const uint32_t ind = static_cast<uint32_t>(indices.size());
+        for (const Face& face : faces) {
+            float nx = face.uy * face.vz - face.uz * face.vy;
+            float ny = face.uz * face.vx - face.ux * face.vz;
+            float nz = face.ux * face.vy - face.uy * face.vx;
+            const float nlen = std::sqrt(nx * nx + ny * ny + nz * nz);
+            if (nlen > 1.0e-6f) {
+                nx /= nlen;
+                ny /= nlen;
+                nz /= nlen;
+            } else {
+                ny = 1.0f;
+            }
+            const uint32_t faceBase = static_cast<uint32_t>(verts.size()) - base;
+            for (uint32_t c = 0; c < 4; ++c) {
+                GpuVertex v{};
+                v.px = face.cx + corner[c][0] * face.ux + corner[c][1] * face.vx;
+                v.py = face.cy + corner[c][0] * face.uy + corner[c][1] * face.vy;
+                v.pz = face.cz + corner[c][0] * face.uz + corner[c][1] * face.vz;
+                v.nx = nx;
+                v.ny = ny;
+                v.nz = nz;
+                verts.push_back(v);
+            }
+            const uint32_t local[6] = {0, 1, 2, 0, 2, 3};
+            for (uint32_t t = 0; t < 6; ++t) {
+                indices.push_back(faceBase + local[t]);
+            }
+        }
+        const float radius = std::sqrt(hx * hx + hy * hy + hz * hz);
+        finish(cx, cy, cz, radius, matSlot, base, ind, 24, 12);
+    };
+    const uint32_t floorBase = static_cast<uint32_t>(verts.size());
+    const uint32_t floorInd = static_cast<uint32_t>(indices.size());
+    const float floorN[4][3] = {{-3.0f, 0.0f, -3.0f}, {3.0f, 0.0f, -3.0f}, {3.0f, 0.0f, 3.0f}, {-3.0f, 0.0f, 3.0f}};
+    for (uint32_t i = 0; i < 4; ++i) {
+        GpuVertex v{};
+        v.px = floorN[i][0];
+        v.py = floorN[i][1];
+        v.pz = floorN[i][2];
+        v.ny = 1.0f;
+        verts.push_back(v);
+    }
+    const uint32_t floorTri[6] = {0, 2, 1, 0, 3, 2};
+    for (uint32_t t = 0; t < 6; ++t) {
+        indices.push_back(floorTri[t]);
+    }
+    finish(ox, oy, oz, 5.0f, 0, floorBase, floorInd, 4, 2);
+    emitBox(ox - 1.5f, oy + 0.6f, oz, 0.6f, 0.6f, 0.6f, 1);
+    emitBox(ox + 1.4f, oy + 0.4f, oz - 1.2f, 0.4f, 0.4f, 0.4f, 2);
+    emitBox(ox + 0.2f, oy + 0.8f, oz + 1.4f, 0.8f, 0.8f, 0.8f, 3);
+    const SceneTexName* texNames = scene->texNames;
+    const uint32_t texCount = scene->texNameCount;
+    scene->ownedVert = std::move(verts);
+    scene->ownedIndex = std::move(indices);
+    scene->ownedInst = std::move(instances);
+    scene->ownedMesh = std::move(meshlets);
+    scene->ownedMat = std::move(materials);
+    scene->vertSrc = scene->ownedVert.data();
+    scene->indexSrc = scene->ownedIndex.data();
+    scene->instSrc = scene->ownedInst.data();
+    scene->meshletSrc = scene->ownedMesh.data();
+    scene->materialSrc = scene->ownedMat.data();
+    scene->texNames = texNames;
+    scene->texNameCount = texCount;
+    scene->vertCount = static_cast<uint32_t>(scene->ownedVert.size());
+    scene->indexCount = static_cast<uint32_t>(scene->ownedIndex.size());
+    scene->instanceCount = n0 + added;
+    scene->materialCount = m0 + kExtraN;
+    scene->visibleCpu.assign(scene->instanceCount, 0u);
+    scene->visibleCap = scene->instanceCount;
+    scene->meshletGpu.clear();
+    scene->cones = nullptr;
+    scene->coneCount = 0;
+    scene->boxMin[0] = std::min(scene->boxMin[0], ox - 6.0f);
+    scene->boxMin[1] = std::min(scene->boxMin[1], oy - 1.0f);
+    scene->boxMin[2] = std::min(scene->boxMin[2], oz - 6.0f);
+    scene->boxMax[0] = std::max(scene->boxMax[0], ox + 6.0f);
+    scene->boxMax[1] = std::max(scene->boxMax[1], oy + 3.0f);
+    scene->boxMax[2] = std::max(scene->boxMax[2], oz + 6.0f);
+    linkProp(*scene, n0 + 1u, "Cube");
+    scene->actors.selected = 0;
+    scene->ready = false;
 }
 
 void freeOwned(SceneFrame& s) {
@@ -1053,8 +1227,7 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
     scene->vertSrc = scene->ownedVert.data();
     scene->indexSrc = scene->ownedIndex.data();
     scene->instSrc = scene->ownedInst.data();
-    scene->propInstance = 0xffffffffu;
-    scene->propActor = 0xff;
+    scene->propCount = 0;
     scene->propPhase = 0;
     scene->propDirty = 0;
     scene->meshletSrc = scene->ownedMesh.data();
@@ -1159,6 +1332,8 @@ void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
     scene->rcSpacing = tweaks.rcSpacing;
     scene->rcIntensity = tweaks.rcIntensity;
     scene->rcMax = tweaks.rcMax;
+    scene->rcSun = tweaks.rcSun;
+    scene->rcBounce = tweaks.rcBounce;
     scene->giGain = tweaks.giGain;
     scene->bloomThreshold = tweaks.bloomThreshold;
     scene->fogDensity = tweaks.fogDensity;
@@ -1460,60 +1635,78 @@ void sceneFrameKick(SceneFrame* scene, Device& device) {
     RadiancePass& rad = scene->radiance;
     const bool loaded = scene->kickHeaps != nullptr && scene->vertSrc != nullptr;
     if (loaded && !rad.geometry && rad.buildTask.stage == 0) {
-        radianceArm(rad, device, *scene->kickHeaps, scene->vertSrc, scene->indexSrc, scene->instSrc, scene->meshletSrc, scene->instanceCount);
+        uint32_t meshCount = scene->instanceCount;
+        if (scene->meshletSrc == scene->meshletGpu.data()) {
+            meshCount = static_cast<uint32_t>(scene->meshletGpu.size());
+        } else if (scene->meshletSrc == scene->ownedMesh.data()) {
+            meshCount = static_cast<uint32_t>(scene->ownedMesh.size());
+        }
+        radianceArm(rad, device, *scene->kickHeaps, scene->vertSrc, scene->indexSrc, scene->instSrc, scene->meshletSrc,
+            scene->instanceCount, scene->vertCount, scene->indexCount, meshCount);
     }
     radianceKick(rad, device);
 }
 
 bool syncPropInstance(SceneFrame* scene) {
-    if (scene->propActor == 0xff || scene->propInstance >= scene->instanceCount) {
+    GpuInstance* table = nullptr;
+    if (scene->instSrc == scene->cpuInstances) {
+        table = scene->cpuInstances;
+    } else if (!scene->ownedInst.empty() && scene->instSrc == scene->ownedInst.data()) {
+        table = scene->ownedInst.data();
+    }
+    if (scene->propCount == 0 || table == nullptr) {
         return false;
     }
-    if (scene->instSrc != scene->cpuInstances) {
-        return false;
+    bool moved = false;
+    for (uint8_t n = 0; n < scene->propCount; ++n) {
+        SceneFrameImpl::PropLink& link = scene->props[n];
+        if (link.actor == 0xff || link.instance >= scene->instanceCount) {
+            continue;
+        }
+        const Xform pose = sceneActorXform(scene->actors, link.actor);
+        const Xform& prev = link.pose;
+        const float dp = (pose.pos[0] - prev.pos[0]) * (pose.pos[0] - prev.pos[0])
+            + (pose.pos[1] - prev.pos[1]) * (pose.pos[1] - prev.pos[1])
+            + (pose.pos[2] - prev.pos[2]) * (pose.pos[2] - prev.pos[2]);
+        const float de = (pose.euler[0] - prev.euler[0]) * (pose.euler[0] - prev.euler[0])
+            + (pose.euler[1] - prev.euler[1]) * (pose.euler[1] - prev.euler[1])
+            + (pose.euler[2] - prev.euler[2]) * (pose.euler[2] - prev.euler[2]);
+        const float ds = (pose.scale[0] - prev.scale[0]) * (pose.scale[0] - prev.scale[0])
+            + (pose.scale[1] - prev.scale[1]) * (pose.scale[1] - prev.scale[1])
+            + (pose.scale[2] - prev.scale[2]) * (pose.scale[2] - prev.scale[2]);
+        if (dp < 1.0e-8f && de < 1.0e-6f && ds < 1.0e-8f) {
+            continue;
+        }
+        float axisX[3]{};
+        float axisY[3]{};
+        float axisZ[3]{};
+        actorBasis(pose.euler, axisX, axisY, axisZ);
+        GpuInstance& cpu = table[link.instance];
+        cpu.world[0] = axisX[0] * pose.scale[0];
+        cpu.world[4] = axisX[1] * pose.scale[0];
+        cpu.world[8] = axisX[2] * pose.scale[0];
+        cpu.world[1] = axisY[0] * pose.scale[1];
+        cpu.world[5] = axisY[1] * pose.scale[1];
+        cpu.world[9] = axisY[2] * pose.scale[1];
+        cpu.world[2] = axisZ[0] * pose.scale[2];
+        cpu.world[6] = axisZ[1] * pose.scale[2];
+        cpu.world[10] = axisZ[2] * pose.scale[2];
+        cpu.world[3] = pose.pos[0];
+        cpu.world[7] = pose.pos[1];
+        cpu.world[11] = pose.pos[2];
+        cpu.sphere[0] = pose.pos[0];
+        cpu.sphere[1] = pose.pos[1];
+        cpu.sphere[2] = pose.pos[2];
+        const float smax = std::max(pose.scale[0], std::max(pose.scale[1], pose.scale[2]));
+        cpu.sphere[3] = link.radius * std::max(smax, 0.001f);
+        if (scene->instances.mapped != nullptr) {
+            auto* gpu = static_cast<GpuInstance*>(scene->instances.mapped);
+            gpu[link.instance] = cpu;
+        }
+        link.pose = pose;
+        moved = true;
     }
-    const Xform pose = sceneActorXform(scene->actors, scene->propActor);
-    const Xform& prev = scene->propPose;
-    const float dp = (pose.pos[0] - prev.pos[0]) * (pose.pos[0] - prev.pos[0])
-        + (pose.pos[1] - prev.pos[1]) * (pose.pos[1] - prev.pos[1])
-        + (pose.pos[2] - prev.pos[2]) * (pose.pos[2] - prev.pos[2]);
-    const float de = (pose.euler[0] - prev.euler[0]) * (pose.euler[0] - prev.euler[0])
-        + (pose.euler[1] - prev.euler[1]) * (pose.euler[1] - prev.euler[1])
-        + (pose.euler[2] - prev.euler[2]) * (pose.euler[2] - prev.euler[2]);
-    const float ds = (pose.scale[0] - prev.scale[0]) * (pose.scale[0] - prev.scale[0])
-        + (pose.scale[1] - prev.scale[1]) * (pose.scale[1] - prev.scale[1])
-        + (pose.scale[2] - prev.scale[2]) * (pose.scale[2] - prev.scale[2]);
-    if (dp < 1.0e-8f && de < 1.0e-6f && ds < 1.0e-8f) {
-        return false;
-    }
-    float axisX[3]{};
-    float axisY[3]{};
-    float axisZ[3]{};
-    actorBasis(pose.euler, axisX, axisY, axisZ);
-    GpuInstance& cpu = scene->cpuInstances[scene->propInstance];
-    cpu.world[0] = axisX[0] * pose.scale[0];
-    cpu.world[4] = axisX[1] * pose.scale[0];
-    cpu.world[8] = axisX[2] * pose.scale[0];
-    cpu.world[1] = axisY[0] * pose.scale[1];
-    cpu.world[5] = axisY[1] * pose.scale[1];
-    cpu.world[9] = axisY[2] * pose.scale[1];
-    cpu.world[2] = axisZ[0] * pose.scale[2];
-    cpu.world[6] = axisZ[1] * pose.scale[2];
-    cpu.world[10] = axisZ[2] * pose.scale[2];
-    cpu.world[3] = pose.pos[0];
-    cpu.world[7] = pose.pos[1];
-    cpu.world[11] = pose.pos[2];
-    cpu.sphere[0] = pose.pos[0];
-    cpu.sphere[1] = pose.pos[1];
-    cpu.sphere[2] = pose.pos[2];
-    const float smax = std::max(pose.scale[0], std::max(pose.scale[1], pose.scale[2]));
-    cpu.sphere[3] = scene->propRadius * std::max(smax, 0.001f);
-    if (scene->instances.mapped != nullptr) {
-        auto* gpu = static_cast<GpuInstance*>(scene->instances.mapped);
-        gpu[scene->propInstance] = cpu;
-    }
-    scene->propPose = pose;
-    return true;
+    return moved;
 }
 
 void sceneFrameRecord(
@@ -1551,9 +1744,8 @@ void sceneFrameRecord(
         }
     }
     const bool propMoved = syncPropInstance(scene);
-    if (propMoved && scene->instances.mapped != nullptr) {
-        const VkDeviceSize offset = sizeof(GpuInstance) * scene->propInstance;
-        gpuBufferFlush(scene->instances, device, offset, sizeof(GpuInstance));
+    if (propMoved && scene->instances.mapped != nullptr && scene->instanceCount > 0) {
+        gpuBufferFlush(scene->instances, device, 0, sizeof(GpuInstance) * scene->instanceCount);
     }
     if (propMoved) {
         scene->propDirty = 1;
@@ -1809,6 +2001,8 @@ void sceneFrameRecord(
     knob.rc.intensity = scene->rcIntensity;
     knob.rc.maxDist = scene->rcMax;
     knob.rc.cap = 8.0f;
+    knob.rc.sunScale = scene->rcSun;
+    knob.rc.bounce = scene->rcBounce;
     knob.bloom.threshold = scene->bloomThreshold;
     knob.bloom.tonemapper = scene->tonemapper;
     knob.bloom.grain = scene->hud.grain;
@@ -2083,7 +2277,7 @@ void sceneFrameRecord(
     const bool gtaoOn = scene->lightProfile < 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
     framePassShade(ctx, scene->shade, scene->sky, scene->vis.targets.vis, scene->vis.targets.depth, gtaoOn, scene->probeBuf.buffer, scene->probeBuf.size);
     const bool worldRc = (scene->passMask & 128u) != 0u && (scene->passMask & 262144u) != 0u;
-    framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax);
+    framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax, scene->rcSun, scene->rcBounce);
     framePassShadeLate(ctx, scene->shade, scene->sky);
     const bool bloomOn = (knob.flags.passMask & 32u) != 0u && scene->hud.bloom > 0.001f;
     framePassTonemap(ctx, scene->tone, scene->shade.hdrA, scene->shade.hdrB, swap, frame, bloomOn);

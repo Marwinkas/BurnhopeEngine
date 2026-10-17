@@ -29,28 +29,37 @@ int2 rcBorderSrc(int x, int y) {
     return int2(1, 1);
 }
 
+// Косинус по всем 32 бинам. Пустой бин — ноль в числителе и остаётся в знаменателе,
+// иначе один жёлтый удар закрашивает всю полусферу.
 float3 rcConvolve(uint probe, float3 axis) {
     float3 acc = 0.0;
     float w = 0.0;
     [loop]
     for (uint d = 0u; d < 32u; ++d) {
+        const float rawNd = max(dot(rcDecodeGrid(0u, d), axis), 0.0);
+        const float nd = rawNd * sqrt(rawNd);
+        w += nd;
         float3 I;
         float valid;
         rcLoadMerged(0u, probe, d, I, valid);
         if (valid < 0.5) {
             continue;
         }
-        const float nd = max(dot(rcDecodeGrid(0u, d), axis), 0.0);
         acc += I * nd;
-        w += nd;
     }
     return w > 1e-4 ? acc / w : 0.0;
 }
-
 [shader("compute")]
 [numthreads(64, 1, 1)]
 void rcOctahedral(uint3 dtid : SV_DispatchThreadID) {
     const uint probe = dtid.x;
+    if (probe == 0u) {
+        rcStore(220u, rcLoad(rcMetaAddr(0u, 0u) + 24u));
+        rcStore(228u, rcCount(0u));
+        rcStore(240u, rcCount(1u));
+        rcStore(244u, rcCount(2u));
+        rcStore(248u, rcCount(3u));
+    }
     if (probe >= min(rcCount(0u), rcProbeCap(0u)) || rcLoad(rcMetaAddr(0u, probe) + 24u) == 0u) {
         return;
     }
@@ -77,6 +86,9 @@ void rcOctahedral(uint3 dtid : SV_DispatchThreadID) {
             const int2 src = rcBorderSrc(int(x), int(y));
             tex[y * 6u + x] = tex[uint(src.y) * 6u + uint(src.x)];
         }
+    }
+    if (probe == 0u) {
+        rcStore(224u, asuint(tex[7].x));
     }
     const uint base = sliceBase() + rcIrrRel() + probe * rcIrrStride();
     [loop]

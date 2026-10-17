@@ -47,6 +47,62 @@ uint rcPosByte() {
     return rcLoad(12u);
 }
 
+uint rcTriCount() {
+    return rcLoad(168u);
+}
+
+float rcBaseSpacing() {
+    return max(gPush.baseSpacing, 0.05);
+}
+
+// Одна мировая сетка. Камера в LOD не входит.
+// 0..5 по главной оси нормали: пол и стены не перезаписывают друг друга
+uint rcNormalFace(float3 N) {
+    const float3 a = abs(N);
+    if (a.x >= a.y && a.x >= a.z) {
+        return N.x >= 0.0 ? 0u : 1u;
+    }
+    if (a.y >= a.z) {
+        return N.y >= 0.0 ? 2u : 3u;
+    }
+    return N.z >= 0.0 ? 4u : 5u;
+}
+
+// Упаковка (Chebyshev LOD 0..5) и (Normal Face 0..5) в 9-битное поле lod ключа
+uint rcMakeTag(uint lod, uint face) {
+    return (lod & 7u) | ((face & 7u) << 3u);
+}
+
+uint rcTagLod(uint tag) {
+    return tag & 7u;
+}
+
+// Расстояние Чебышёва от камеры (Секция 4.1 статьи, стр. 7)
+float rcChebDist(float3 P, float3 camPos) {
+    const float3 d = abs(P - camPos);
+    return max(d.x, max(d.y, d.z));
+}
+
+float rcLodBaseRadius() {
+    return max(rcBaseSpacing() * 48.0, 18.0);
+}
+
+uint rcLod(float3 P) {
+    return 0u;
+}
+
+float rcSpacing(uint cascade, uint tag) {
+    const uint lod = rcTagLod(tag);
+    return rcBaseSpacing() * exp2(float(cascade + lod));
+}
+
+int3 rcCell(float3 world, uint cascade, uint tag) {
+    return int3(floor(world / max(rcSpacing(cascade, tag), 1e-3)));
+}
+
+float3 rcCenter(int3 cell, uint cascade, uint tag) {
+    return (float3(cell) + 0.5) * rcSpacing(cascade, tag);
+}
 uint rcHashRel(uint cascade) {
     return rcLoad(16u + cascade * 4u);
 }
@@ -158,10 +214,11 @@ uint rcSlot(uint keyLo, uint keyHi, uint mask) {
     return h & mask;
 }
 
-float rcT0(uint lod) {
-    return gPush.baseLength * exp2(float(lod));
+float rcT0(uint tag) {
+    const uint lod = rcTagLod(tag);
+    const float reachScale = clamp(gPush.baseLength / 48.0, 0.1, 8.0);
+    return 1.6 * rcSpacing(0u, lod) * reachScale;
 }
-
 // 18+18+18 бит клетки и 9 бит LOD. Бит 63 держит keyHi ненулевым.
 // Младшее слово не бывает 0 и не бывает 0xFFFFFFFF: это пустой слот и замок вставки.
 uint64_t rcPackKey(int3 cell, uint lod) {
@@ -171,9 +228,14 @@ uint64_t rcPackKey(int3 cell, uint lod) {
     const uint64_t z = uint64_t(uint(cell.z + bias) & 0x3ffffu);
     const uint64_t L = uint64_t(lod & 0x1ffu);
     uint64_t key = x | (y << 18) | (z << 36) | (L << 54) | (uint64_t(1) << 63);
+    key ^= key >> 30;
+    key *= 0xbf58476d1ce4e5b9ULL;
+    key ^= key >> 27;
+    key *= 0x94d049bb133111ebULL;
+    key ^= key >> 31;
     const uint lo = uint(key);
     if (lo == 0u || lo == 0xFFFFFFFFu) {
-        key ^= 1u;
+        key ^= 1ULL;
     }
     return key;
 }
@@ -295,7 +357,9 @@ uint rcLookup(uint cascade, uint64_t key) {
     return kInvalid;
 }
 
-uint rcInsert(uint cascade, uint64_t key, int3 cell, uint lod) {
+// Lockless вставка без спин-лока: возвращает true только тому потоку, который первым создал зонд!
+bool rcEnsureProbe(uint cascade, int3 cell, uint tag, float3 P, float3 N) {
+    const uint64_t key = rcPackKey(cell, tag);
     const uint keyLo = uint(key);
     const uint keyHi = uint(key >> 32);
     const uint mask = rcHashCap() - 1u;
@@ -306,67 +370,52 @@ uint rcInsert(uint cascade, uint64_t key, int3 cell, uint lod) {
     [loop]
     for (uint i = 0u; i < kHashWalk; ++i) {
         const uint off = base + ((h + i) & mask) * stride;
+        const uint cur = rcLoad(off);
+        if (cur == keyLo) {
+            return false;
+        }
+        if (cur != 0u) {
+            continue;
+        }
         uint prev = 0u;
-        gRc.InterlockedCompareExchange(off, 0u, kLock, prev);
-        if (prev == 0u) {
-            uint ignored = 0u;
-            gRc.InterlockedExchange(off + 4u, keyHi, ignored);
-            uint idx = 0u;
-            gRc.InterlockedAdd(rcCountAddr(cascade), 1u, idx);
-            if (idx < cap) {
-                const uint meta = rcMetaAddr(cascade, idx);
-                rcStore(meta, asuint(cell.x));
-                rcStore(meta + 4u, asuint(cell.y));
-                rcStore(meta + 8u, asuint(cell.z));
-                rcStore(meta + 12u, lod);
-                rcStore(meta + 16u, kInvalid);
-                rcStore(meta + 24u, 0u);
-                rcStore(meta + 28u, 0xFFFFFFFFu);
-                DeviceMemoryBarrier();
-                gRc.InterlockedExchange(off + 8u, idx + 1u, ignored);
-            } else {
-                gRc.InterlockedExchange(off + 8u, kOverCap, ignored);
-            }
-            DeviceMemoryBarrier();
-            gRc.InterlockedExchange(off, keyLo, ignored);
-            return idx < cap ? idx : kInvalid;
+        gRc.InterlockedCompareExchange(off, 0u, keyLo, prev);
+        if (prev == keyLo) {
+            return false;
         }
-        uint seen = prev;
-        [loop]
-        for (uint s = 0u; s < 256u; ++s) {
-            if (seen != 0u && seen != kLock) {
-                break;
-            }
-            gRc.InterlockedCompareExchange(off, 0u, 0u, seen);
-        }
-        if (seen != keyLo) {
+        if (prev != 0u) {
             continue;
         }
-        uint hi = 0u;
-        [loop]
-        for (uint s = 0u; s < 64u; ++s) {
-            gRc.InterlockedCompareExchange(off + 4u, 0u, 0u, hi);
-            if (hi != 0u) {
-                break;
+        rcStore(off + 4u, keyHi);
+        uint idx = 0u;
+        gRc.InterlockedAdd(rcCountAddr(cascade), 1u, idx);
+        if (idx < cap) {
+            const uint meta = rcMetaAddr(cascade, idx);
+            rcStore(meta, asuint(cell.x));
+            rcStore(meta + 4u, asuint(cell.y));
+            rcStore(meta + 8u, asuint(cell.z));
+            rcStore(meta + 12u, tag);
+            rcStore(meta + 16u, kInvalid);
+            rcStore(meta + 20u, 32u);
+            rcStore(meta + 24u, 0u);
+            rcStore(meta + 28u, 0u);
+            rcStore(meta + 32u, asuint(P.x));
+            rcStore(meta + 36u, asuint(P.y));
+            rcStore(meta + 40u, asuint(P.z));
+            rcStore(meta + 44u, asuint(N.x));
+            rcStore(meta + 48u, asuint(N.y));
+            rcStore(meta + 52u, asuint(N.z));
+            rcStore(off + 8u, idx + 1u);
+            return true;
+        } else {
+            rcStore(off + 8u, kOverCap);
+            if (cascade == 0u) {
+                uint ignored = 0u;
+                gRc.InterlockedAdd(236u, 1u, ignored);
             }
+            return false;
         }
-        if (hi != keyHi) {
-            continue;
-        }
-        uint state = 0u;
-        [loop]
-        for (uint s = 0u; s < 64u; ++s) {
-            gRc.InterlockedCompareExchange(off + 8u, 0u, 0u, state);
-            if (state != 0u) {
-                break;
-            }
-        }
-        if (state == 0u || state >= kOverCap) {
-            return kInvalid;
-        }
-        return state - 1u;
     }
-    return kInvalid;
+    return false;
 }
 
 void rcDeposit(uint cascade, uint probe, uint dir, float3 rad, float beta) {
@@ -419,9 +468,15 @@ void rcLoadMerged(uint cascade, uint probe, uint dir, out float3 value, out floa
     valid = asfloat(rcLoad(off + 12u));
 }
 
+// Находит родительский зонд в каскаде cascade + 1 напрямую по хеш-таблице после барьера
 uint rcParent(uint cascade, uint probe) {
-    if (probe == kInvalid || probe >= rcProbeCap(cascade)) {
+    if (probe == kInvalid || cascade >= 3u || probe >= rcProbeCap(cascade)) {
         return kInvalid;
     }
-    return rcLoad(rcMetaAddr(cascade, probe) + 16u);
+    const uint meta = rcMetaAddr(cascade, probe);
+    const int3 cell = int3(asint(rcLoad(meta)), asint(rcLoad(meta + 4u)), asint(rcLoad(meta + 8u)));
+    const uint tag = rcLoad(meta + 12u);
+    const float3 at = rcCenter(cell, cascade, tag);
+    const int3 up = rcCell(at, cascade + 1u, tag);
+    return rcLookup(cascade + 1u, rcPackKey(up, tag));
 }

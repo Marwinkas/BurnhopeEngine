@@ -80,11 +80,13 @@ struct SsrcParams {
 };
 struct RcParams {
     float rays = 1.0f;
-    float spacing = 0.45f;
+    float spacing = 0.2f;
     float intensity = 1.0f;
     float maxDist = 48.0f;
     float cap = 0.6f;
-    float pad[11]{};
+    float sunScale = 1.0f;
+    float bounce = 1.0f;
+    float pad[9]{};
 };
 struct ShadeParams {
     float sscsReach = 0.2f;

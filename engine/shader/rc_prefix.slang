@@ -33,7 +33,7 @@ void rcPrefix(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex, uint3
         }
         return;
     }
-    if (pass == 1u) {
+        if (pass == 1u) {
         if (gtid != 0u) {
             return;
         }
@@ -46,18 +46,17 @@ void rcPrefix(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex, uint3
         }
         [unroll]
         for (uint c = 0u; c < 4u; ++c) {
-            const uint n = min(rcCount(c), rcProbeCap(c));
+            const uint n = min(min(rcCount(c), rcProbeCap(c)), 65535u);
             const uint dirs = c == 3u ? rcDirCount(3u) : rcDirCount(c + 1u);
-            const uint groups = (n * dirs + 63u) / 64u;
             const uint addr = rcArgsAddr(c);
-            rcStore(addr, groups);
-            rcStore(addr + 4u, 1u);
+            rcStore(addr, n);                 // X: зонды (всегда <= 65535!)
+            rcStore(addr + 4u, dirs / 64u);   // Y: блоки направлений (2..32)
             rcStore(addr + 8u, 1u);
             rcStore(addr + 12u, 0u);
         }
-        const uint live = min(rcCount(0u), rcProbeCap(0u));
+        const uint live = min(min(rcCount(0u), rcProbeCap(0u)), 65535u);
         const uint traceAddr = rcArgsAddr(5u);
-        rcStore(traceAddr, (live * 32u + 63u) / 64u);
+        rcStore(traceAddr, (live * 32u + 63u) / 64u); // Всегда <= 32768!
         rcStore(traceAddr + 4u, 1u);
         rcStore(traceAddr + 8u, 1u);
         rcStore(traceAddr + 12u, 0u);

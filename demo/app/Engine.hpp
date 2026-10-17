@@ -90,6 +90,8 @@ struct HudIds {
     uint16_t rcGain = kUiNone;
     uint16_t giGain = kUiNone;
     uint16_t rcMax = kUiNone;
+    uint16_t rcSun = kUiNone;
+    uint16_t rcBounce = kUiNone;
     uint16_t bloomth = kUiNone;
     uint16_t fog = kUiNone;
     uint16_t fogH = kUiNone;

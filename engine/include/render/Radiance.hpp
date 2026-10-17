@@ -56,30 +56,33 @@ struct alignas(16) RcMerged {
 };
 static_assert(sizeof(RcMerged) == 16);
 
-// 16 байт. Индекс каскада, шаг зонда, t0 на LOD 0, кадр.
-// Бит 0 frameIndex — номер flight (два среза в одном буфере). Остальные биты — временной индекс R2.
-// Живое число зондов в push не кладётся: его считает атомар на GPU.
+// 16 байт. Индекс каскада, шаг зонда, t0, номер среза.
+// Бит 0 frameIndex — номер flight. Срез печётся один раз и дальше только читается.
 struct RcPushConstants {
     uint32_t cascadeIndex = 0;
-    float baseSpacing = 0.45f;
+    float baseSpacing = 0.2f;
     float baseLength = 0.72f;
     uint32_t frameIndex = 0;
 };
 static_assert(sizeof(RcPushConstants) == 16);
 
 // Split Radiance Cascades. Один BLAS статической сцены, луч — ray query из compute.
-// Буфер устройства сидит в HeapBuf::Rc (слот 18). Два среза на два кадра в полёте.
+// Буфер устройства сидит в HeapBuf::Rc (слот 18). Два среза: каждый печётся один раз.
 struct RadiancePass {
     GpuBuffer table{};
     GpuBuffer staging{};
     GpuBuffer indices{};
     GpuBuffer scratch{};
     GpuBuffer asBuf{};
+    GpuBuffer check{};
     VkAccelerationStructureKHR blas = VK_NULL_HANDLE;
+    VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
+    GpuBuffer tlasBuf{};
+    GpuBuffer tlasScratch{};
+    GpuBuffer tlasInst{};
     ShaderExt alloc{};
     ShaderExt prefix{};
     ShaderExt trace{};
-    ShaderExt tracePixels{};
     ShaderExt merge{};
     ShaderExt octahedral{};
     ShaderExt shade{};
@@ -90,9 +93,23 @@ struct RadiancePass {
     uint32_t clearBytes = 0;
     uint32_t temporal = 0;
     uint32_t slots = 32768;
+    float logSpace = -1.0f;
+    float logReach = -1.0f;
+    float logRays = -1.0f;
+    float logGain = -1.0f;
+    float logSun = -1.0f;
+    float logBounce = -1.0f;
     bool geometry = false;
     uint8_t pause = 0;
+    uint8_t bakedMask = 0;
     bool hashLive = false;
+    float bakeSpacing = -1.0f;
+    float bakeT0 = -1.0f;
+    float bakeSun = -1.0f;
+    float bakeBounce = -1.0f;
+    float bakeSunX = -1.0f;
+    float bakeSunY = -1.0f;
+    float bakeSunZ = -1.0f;
     GpuTask buildTask{};
 };
 
@@ -109,10 +126,13 @@ void radianceArm(
     const uint32_t* indices,
     const GpuInstance* instances,
     const GpuMeshlet* meshlets,
-    uint32_t instanceCount);
+    uint32_t instanceCount,
+    uint32_t vertCount,
+    uint32_t indexCount,
+    uint32_t meshletCount);
 // Сабмит сборки. Пока fence не сигналит, geometry остаётся false.
 void radianceKick(RadiancePass& p, Device& d);
-// Пять стадий: зонды, префикс R2, ray split, слияние, октаэдр. В буфер кадра.
+// Печь мира один раз на срез: треугольники, ray split, слияние, октаэдр. Потом только shade.
 void radianceTraceArm(
     RadiancePass& p,
     Device& d,
@@ -123,6 +143,11 @@ void radianceTraceArm(
     float spacing,
     float intensity,
     float maxDist,
+    float sunScale,
+    float bounce,
+    float sunX,
+    float sunY,
+    float sunZ,
     VkCommandBuffer cmd);
 // Восьмой тап по зондам в HdrA. Только если этот кадр уже дописал октаэдр.
 void radianceRecord(VkCommandBuffer cmd, VkExtent2D extent, RadiancePass& p, bool freeze);

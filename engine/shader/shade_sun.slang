@@ -129,6 +129,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     float3 bounce = giOn ? shAmbient(hit.N, hit.P) * 0.4 : 0.0;
     if (worldRc) {
         bounce = 0.0;
+        skyFill = 0.0;
     }
     if (!sunOn) {
         bounce *= 0.02;
@@ -182,7 +183,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         return;
     }
     float3 color = indirect + direct;
-    if ((gPass.passMask & 8192u) != 0u && gPass.lightProfile < 1u) {
+    if (!worldRc && (gPass.passMask & 8192u) != 0u && gPass.lightProfile < 1u) {
         const float gloss = saturate(1.0 - hit.roughness);
         const float3 env = sampleEnv(boxProjectDir(hit.P, reflect(-hit.V, hit.N)), hit.roughness) * hit.f0 * gloss * 0.35;
         if (all(env == env)) {
