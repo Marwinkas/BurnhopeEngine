@@ -403,6 +403,25 @@ void aaOff(void* user) { applyAa(*static_cast<UiState*>(user), 0); }
 void aaSmaa(void* user) { applyAa(*static_cast<UiState*>(user), 1); }
 void aaCmaa(void* user) { applyAa(*static_cast<UiState*>(user), 2); }
 
+void applyGi(UiState& s, int which) {
+    const char* names[] = {"prof0", "prof1", "prof2"};
+    const char* caps[] = {"Выкл", "VXGI", "Каскады"};
+    if (which < 0) {
+        which = 0;
+    }
+    if (which > 2) {
+        which = 2;
+    }
+    for (int i = 0; i < 3; ++i) {
+        uiBindCheck(s, uiFindName(s, names[i]), 1, 3, i == which);
+    }
+    setMenuCaption(s, "giBtn", caps[which]);
+}
+
+void giOff(void* user) { applyGi(*static_cast<UiState*>(user), 0); }
+void giVx(void* user) { applyGi(*static_cast<UiState*>(user), 1); }
+void giRc(void* user) { applyGi(*static_cast<UiState*>(user), 2); }
+
 void bindHudIds(HudContext& hud, UiState& state) {
     auto id = [&](const char* name) { return uiFindName(state, name); };
     char name[8];
@@ -948,11 +967,17 @@ void sceneHud(Canvas& canvas, void* user) {
     tick("GI", "gien", true);
     rowSlide(*canvas.state, panel, "GI яркость", "giGain", 2.0f, 0.0f, 6.0f);
     panel = giBody;
-    head("профиль света", "h3");
-    uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Низкий", 1, 3, false), "prof0");
-    uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Баланс", 1, 3, false), "prof1");
-    uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Ультра", 1, 3, false), "prof2");
-    tick("radiance", "rcen", true);
+    hideCheck("Выкл", "prof0", 1, 3, false);
+    hideCheck("VXGI", "prof1", 1, 3, true);
+    hideCheck("Каскады", "prof2", 1, 3, false);
+    hideCheck("radiance", "rcen", 0, 0, false);
+    {
+        const uint16_t menu = uiMakeMenu(*canvas.state);
+        uiCommandAddTo(*canvas.state, menu, "Выкл", giOff, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "VXGI", giVx, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Каскады", giRc, canvas.state.get());
+        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Режим", "VXGI", menu), "giBtn");
+    }
     rowSlide(*canvas.state, panel, "RC лучи", "rcRays", 1.0f, 1.0f, 16.0f);
     rowSlide(*canvas.state, panel, "RC клетка м", "rcCell", 0.8f, 0.1f, 4.0f);
     rowSlide(*canvas.state, panel, "RC сила", "rcGain", 1.0f, 0.0f, 4.0f);
@@ -1065,7 +1090,7 @@ void sceneHud(Canvas& canvas, void* user) {
         }
     }
     if (canvas.state != nullptr) {
-        uiBindCheck(*canvas.state, uiFindName(*canvas.state, "prof0"), 1, 3, true);
+        uiBindCheck(*canvas.state, uiFindName(*canvas.state, "prof1"), 1, 3, true);
         uiBindCheck(*canvas.state, uiFindName(*canvas.state, "mode0"), 1, 1, true);
         uiBindCheck(*canvas.state, uiFindName(*canvas.state, "tone0"), 1, 2, true);
         bindHudIds(*hud, *canvas.state);
@@ -1274,8 +1299,14 @@ bool engineTick(Engine& e) {
                 tweaks.lightProfile = i;
             }
         }
-        if (checkOn(hud, id.rcen, true)) {
+        if (checkOn(hud, id.rcen, false)) {
             tweaks.passMask |= 128u;
+        }
+        if (tweaks.lightProfile >= 2u && (tweaks.passMask & 262144u) != 0u) {
+            tweaks.passMask |= 128u;
+        }
+        if (tweaks.lightProfile == 1u && (tweaks.passMask & 262144u) != 0u && (tweaks.passMask & 128u) == 0u) {
+            tweaks.passMask |= 524288u;
         }
         tweaks.tonemapper = 0;
         for (uint32_t i = 0; i < 4; ++i) {

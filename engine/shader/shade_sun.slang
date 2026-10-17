@@ -37,12 +37,57 @@ float3 sampleEnv(float3 dir, float roughness) {
 
 [[vk::binding(42, 0)]] Texture2D<float4> gSkyView;
 [[vk::binding(23, 0)]] SamplerState gClamp;
+[[vk::binding(46, 0)]] StructuredBuffer<float> gNoise;
 [[vk::binding(47, 0)]] Texture2D<float> gContact;
+[[vk::binding(58, 0)]] ConstantBuffer<AtmosphereParams> gAtm;
 
 float3 shadowPoint(uint cascade, float3 P, float3 N, float NdotL) {
     const float texel = max(gSun.sunSplit[cascade], 1.0) * 2.0 / 4096.0;
     const float slope = sqrt(saturate(1.0 - NdotL * NdotL));
     return P + N * texel * slope;
+}
+
+float cloudNoiseAt(float3 uv, uint res, uint base) {
+    const float3 q = frac(uv) * float(res);
+    const uint3 i = uint3(q) % res;
+    return gNoise[base + i.x + i.y * res + i.z * res * res];
+}
+
+float cloudDensityAt(float3 world, float height01) {
+    const float3 wind = float3(gAtm.cloudSpeedX, height01 * 8.0, gAtm.cloudSpeedZ) * gAtm.time;
+    const float3 p = world + wind;
+    const float worley = cloudNoiseAt(p / 1800.0, 128u, 0u);
+    const float shape = saturate((0.62 - worley) * 2.4);
+    const float detail = cloudNoiseAt(p / 320.0 + 19.0, 32u, 128u * 128u * 128u);
+    const float base = shape * gAtm.cloudCoverage * 1.6 - detail * gAtm.cloudDetail * (0.2 + height01);
+    return saturate(base) * gAtm.cloudDensity * 14.0;
+}
+
+// Тот же слой, что рисует cloudMarch: луч солнца через низ и верх облаков.
+float cloudGroundShadow(float3 worldPos, float3 L) {
+    if ((gPass.passMask & 2048u) == 0u || L.y <= 0.05) {
+        return 1.0;
+    }
+    if (gAtm.cloudCoverage <= 0.01 || gAtm.cloudDensity <= 0.0005) {
+        return 1.0;
+    }
+    const float bottom = gAtm.cloudBottom;
+    const float top = max(gAtm.cloudTop, bottom + 200.0);
+    const float span = top - bottom;
+    const float dt = span / 6.0;
+    float optical = 0.0;
+    [unroll]
+    for (int i = 0; i < 6; ++i) {
+        const float u = (float(i) + 0.5) / 6.0;
+        const float h = bottom + span * u;
+        const float t = (h - worldPos.y) / L.y;
+        if (t <= 0.0) {
+            continue;
+        }
+        optical += cloudDensityAt(worldPos + L * t, u) * dt * 0.012;
+    }
+    const float trans = exp(-optical);
+    return lerp(0.42, 1.0, trans);
 }
 
 [shader("compute")]
@@ -60,41 +105,33 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     float shadow = 1.0;
     if (gFrame.disableShadow == 0) {
         const float3 p0 = shadowPoint(0u, hit.P, hit.N, hit.NdotL);
+        const float3 p1 = shadowPoint(1u, hit.P, hit.N, hit.NdotL);
+        const float3 p2 = shadowPoint(2u, hit.P, hit.N, hit.NdotL);
         const float o0 = cascadeOutside(0u, p0);
+        const float o1 = cascadeOutside(1u, p1);
+        const float o2 = cascadeOutside(2u, p2);
+
+        const float s2 = o2 <= 0.0 ? cascadeShadow(2u, p2) : cascadeShadowCover(2u, p2);
+        const float s1 = o1 <= 0.0 ? min(cascadeShadow(1u, p1), s2) : s2;
+
         if (o0 <= 0.0) {
-            const float w = saturate(-o0 / 0.1);
-            shadow = cascadeShadow(0u, p0);
-            sunCascade = 0u;
-            if (w < 0.999) {
-                shadow = lerp(cascadeShadow(1u, shadowPoint(1u, hit.P, hit.N, hit.NdotL)), shadow, w);
-                if (w <= 0.5) {
-                    sunCascade = 1u;
-                }
-            }
+            const float w = saturate(-o0 / 0.12);
+            const float s0 = min(cascadeShadow(0u, p0), s1);
+            shadow = lerp(s1, s0, w);
+            sunCascade = w > 0.5 ? 0u : 1u;
+        } else if (o1 <= 0.0) {
+            const float w = saturate(-o1 / 0.12);
+            shadow = lerp(s2, s1, w);
+            sunCascade = w > 0.5 ? 1u : 2u;
         } else {
-            const float3 p1 = shadowPoint(1u, hit.P, hit.N, hit.NdotL);
-            const float o1 = cascadeOutside(1u, p1);
-            if (o1 <= 0.0) {
-                const float w = saturate(-o1 / 0.1);
-                shadow = cascadeShadow(1u, p1);
-                sunCascade = 1u;
-                if (w < 0.999) {
-                    shadow = lerp(cascadeShadow(2u, shadowPoint(2u, hit.P, hit.N, hit.NdotL)), shadow, w);
-                    if (w <= 0.5) {
-                        sunCascade = 2u;
-                    }
-                }
-            } else {
-                const float3 p2 = shadowPoint(2u, hit.P, hit.N, hit.NdotL);
-                shadow = cascadeOutside(2u, p2) <= 0.0 ? cascadeShadow(2u, p2) : cascadeShadowCover(2u, p2);
-                sunCascade = 2u;
-            }
+            shadow = s2;
+            sunCascade = 2u;
         }
     }
     if ((gPass.passMask & 16384u) != 0u && gShade.sscsAmt > 0.001 && hit.NdotL > 0.05) {
         const float crease = gContact.Load(int3(px, 0));
         if (crease == crease && crease > 0.02) {
-            shadow *= crease;
+            shadow *= saturate(crease);
         }
     }
     if (gFrame.debugMode == 6) {
@@ -106,6 +143,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     if (gFrame.disableShadow != 0) {
         shadow = 1.0;
     }
+    shadow *= cloudGroundShadow(hit.P, hit.L);
     float3 sunCol = gSun.sunColor.xyz;
     if (max(sunCol.r, max(sunCol.g, sunCol.b)) < 0.02) {
         sunCol = float3(1.0, 0.97, 0.92);
@@ -120,37 +158,43 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         radiance = 0.0;
     }
     const bool giOn = (gPass.passMask & 262144u) != 0u;
-    const float3 skyUp = gSkyView.SampleLevel(gClamp, atmSkyUv(float3(0.0, 1.0, 0.0)), 0.0).rgb;
-    const float3 skyN = gSkyView.SampleLevel(gClamp, atmSkyUv(float3(0.0, 0.35, 0.94)), 0.0).rgb;
-    const float3 skyE = gSkyView.SampleLevel(gClamp, atmSkyUv(float3(0.94, 0.35, 0.0)), 0.0).rgb;
-    const float3 sky = min((skyUp + skyN + skyE) * (1.0 / 3.0), float3(1.2, 1.2, 1.2));
-    float3 skyFill = giOn ? sky * 0.04 * hit.ao : 0.0;
     const bool worldRc = giOn && (gPass.passMask & 128u) != 0u;
-    float3 bounce = giOn ? shAmbient(hit.N, hit.P) * 0.4 : 0.0;
+    const bool voxelGi = giOn && (gPass.passMask & 524288u) != 0u;
+    const float3 multiAo = gtaoMultiBounce(hit.gtao, hit.albedo);
+    float3 bounce = giOn ? shAmbient(hit.N, hit.P) * 0.4 * multiAo : 0.0;
     if (worldRc) {
         bounce = 0.0;
-        skyFill = 0.0;
     }
     if (!sunOn) {
         bounce *= 0.02;
-        skyFill *= 0.02;
     }
-    if (giOn && !worldRc && gFrame.disableShadow == 0 && shadow < 0.98) {
-        const float reach = max(shadowSkyReach(sunCascade, hit.P, hit.N, px), 0.05);
+    if (giOn && !worldRc && !voxelGi && gFrame.disableShadow == 0 && shadow < 0.95) {
+        const float reach = max(shadowSkyReach(sunCascade, hit.P, hit.N, px), 0.15);
         const float skyVis = lerp(reach, 1.0, saturate(shadow));
-        skyFill *= skyVis;
         bounce *= skyVis;
     }
     const float giGain = giOn ? max(gShade.pad1, 0.0) : 0.0;
-    skyFill *= giGain;
     bounce *= giGain;
-    const float3 diffuse = hit.albedo * (bounce * hit.ao + skyFill * (worldRc ? 0.2 : 0.55));
-    float3 indirect = diffuse * sunCol * saturate(inten / 8.0) + hit.emissive;
+    const float3 bounceLit = hit.albedo * (1.0 - hit.metallic) * bounce * sunCol * saturate(inten / 8.0);
+    float3 skyAmb = 0.0;
+    if (!worldRc) {
+        const float3 skyDir = normalize(float3(hit.N.x, hit.N.y + 1.15, hit.N.z));
+        const float3 skyLit = max(gSkyView.SampleLevel(gClamp, atmSkyUv(skyDir), 0.0).rgb, 0.0);
+        const float skyLum = dot(skyLit, float3(0.2126, 0.7152, 0.0722));
+        const float3 skyChroma = skyLum > 0.05 ? skyLit / skyLum : float3(0.45, 0.62, 1.0);
+        const float wrap = saturate(hit.N.y * 0.4 + 0.6);
+        const float ambOcc = lerp(0.55, 1.0, saturate(hit.gtao));
+        skyAmb = hit.albedo * (1.0 - hit.metallic) * skyChroma * (inten * 0.16) * wrap * ambOcc;
+        if (!sunOn) {
+            skyAmb *= 0.15;
+        }
+    }
+    float3 indirect = bounceLit + skyAmb + hit.emissive;
     float sunFace = hit.NdotL;
     if (hit.foliage > 0.5) {
         sunFace = max(sunFace, saturate(dot(-hit.N, hit.L)) * 0.45);
     }
-    float3 direct = (hit.diff * hit.ao + hit.spec) * sunFace * shadow * radiance;
+    float3 direct = (hit.diff + hit.spec) * sunFace * shadow * radiance;
     if (!all(direct == direct)) {
         direct = 0.0;
     }
@@ -183,15 +227,18 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         return;
     }
     float3 color = indirect + direct;
-    if (!worldRc && (gPass.passMask & 8192u) != 0u && gPass.lightProfile < 1u) {
+    if (!worldRc && !voxelGi && (gPass.passMask & 8192u) != 0u && gPass.lightProfile < 1u) {
         const float gloss = saturate(1.0 - hit.roughness);
-        const float3 env = sampleEnv(boxProjectDir(hit.P, reflect(-hit.V, hit.N)), hit.roughness) * hit.f0 * gloss * 0.35;
+        const float2 dfg = dfgEnv(hit.NdotV, hit.roughness);
+        const float3 envSpec = hit.f0 * dfg.x + dfg.y;
+        const float specAo = specOcclusion(hit.NdotV, hit.gtao, hit.roughness);
+        const float3 env = sampleEnv(boxProjectDir(hit.P, reflect(-hit.V, hit.N)), hit.roughness) * envSpec * specAo * gloss * 0.35;
         if (all(env == env)) {
             color += max(env, 0.0);
         }
         if (hit.mirror > 0.5) {
             const float3 floorR = float3(-hit.V.x, hit.V.y, -hit.V.z);
-            color += sampleEnv(boxProjectDir(hit.P, floorR), hit.roughness) * hit.f0 * 0.35;
+            color += sampleEnv(boxProjectDir(hit.P, floorR), hit.roughness) * envSpec * specAo * 0.35;
         }
     }
     if (gFrame.debugMode == 1) {

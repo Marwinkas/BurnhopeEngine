@@ -5,7 +5,27 @@ float shadowTexelLit(int2 sp, int y0, float receiver, float bias) {
     sp.x = clamp(sp.x, 0, 4095);
     sp.y = clamp(sp.y, y0, y0 + 4095);
     const float mapDepth = gShadow0.Load(int3(sp, 0));
+    if (mapDepth <= 1e-6) {
+        return 1.0;
+    }
     return (receiver + bias) >= mapDepth ? 1.0 : 0.0;
+}
+
+float shadowBilinearLit(float2 coord, int y0, float receiver, float bias) {
+    const int2 ip = int2(floor(coord));
+    const float2 f = frac(coord);
+    const float s00 = shadowTexelLit(int2(ip.x,     ip.y + y0),     y0, receiver, bias);
+    const float s10 = shadowTexelLit(int2(ip.x + 1, ip.y + y0),     y0, receiver, bias);
+    const float s01 = shadowTexelLit(int2(ip.x,     ip.y + 1 + y0), y0, receiver, bias);
+    const float s11 = shadowTexelLit(int2(ip.x + 1, ip.y + 1 + y0), y0, receiver, bias);
+    return lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y);
+}
+
+float cascadeOutside(uint cascade, float3 world) {
+    const float4 sunClip = worldToSun(cascade, world);
+    const float sunW = sunClip.w == 0.0 ? 1.0 : sunClip.w;
+    const float2 sunLocal = sunClip.xy / sunW * 0.5 + 0.5;
+    return max(max(-sunLocal.x, sunLocal.x - 1.0), max(-sunLocal.y, sunLocal.y - 1.0));
 }
 
 float cascadeShadow(uint cascade, float3 world) {
@@ -17,51 +37,41 @@ float cascadeShadow(uint cascade, float3 world) {
         return 1.0;
     }
     const float receiver = sunClip.z / sunW;
+    if (receiver <= 0.0 || receiver >= 1.0) {
+        return 1.0;
+    }
     const float extent = max(gSun.sunSplit[cascade], 1.0);
     const float bias = 0.05 / (extent * 8.0);
     const int y0 = int(cascade) * 4096;
     const float2 coord = saturate(sunLocal) * 4096.0 - 0.5;
-    const int2 ip = int2(floor(coord));
+
+    // 3x3 Bilinear Tent Filter (equivalent to 4x4 smooth PCF, 100% noise-free and rotation-invariant)
+    const float w[3] = {0.25, 0.5, 0.25};
     float acc = 0.0;
     [unroll]
-    for (int y = -2; y <= 2; ++y) {
+    for (int y = -1; y <= 1; ++y) {
         [unroll]
-        for (int x = -2; x <= 2; ++x) {
-            acc += shadowTexelLit(int2(ip.x + x, ip.y + y + y0), y0, receiver, bias);
+        for (int x = -1; x <= 1; ++x) {
+            const float weight = w[x + 1] * w[y + 1];
+            acc += shadowBilinearLit(coord + float2(float(x), float(y)), y0, receiver, bias) * weight;
         }
     }
-    return acc * (1.0 / 25.0);
+    return acc;
 }
 
 float cascadeShadowCover(uint cascade, float3 world) {
-    const float4 sunClip = worldToSun(cascade, world);
-    const float sunW = sunClip.w == 0.0 ? 1.0 : sunClip.w;
-    const float2 sunLocal = saturate(sunClip.xy / sunW * 0.5 + 0.5);
-    const float receiver = sunClip.z / sunW;
-    const float extent = max(gSun.sunSplit[cascade], 1.0);
-    const float bias = 0.05 / (extent * 8.0);
-    const int y0 = int(cascade) * 4096;
-    const float2 coord = sunLocal * 4096.0 - 0.5;
-    const int2 ip = int2(floor(coord));
-    float acc = 0.0;
-    [unroll]
-    for (int y = -2; y <= 2; ++y) {
-        [unroll]
-        for (int x = -2; x <= 2; ++x) {
-            acc += shadowTexelLit(int2(ip.x + x, ip.y + y + y0), y0, receiver, bias);
-        }
+    const float outDist = cascadeOutside(cascade, world);
+    if (outDist > 0.0) {
+        return 1.0;
     }
-    return acc * (1.0 / 25.0);
-}
-
-float cascadeOutside(uint cascade, float3 world) {
-    const float4 sunClip = worldToSun(cascade, world);
-    const float sunW = sunClip.w == 0.0 ? 1.0 : sunClip.w;
-    const float2 sunLocal = sunClip.xy / sunW * 0.5 + 0.5;
-    return max(max(-sunLocal.x, sunLocal.x - 1.0), max(-sunLocal.y, sunLocal.y - 1.0));
+    const float fade = saturate(-outDist / 0.08);
+    return lerp(1.0, cascadeShadow(cascade, world), fade);
 }
 
 float cascadeLit(uint cascade, float3 world) {
+    if (cascadeOutside(cascade, world) > 0.0) {
+        return 1.0;
+    }
     const float4 sunClip = worldToSun(cascade, world);
     const float sunW = sunClip.w == 0.0 ? 1.0 : sunClip.w;
     const float2 sunLocal = saturate(sunClip.xy / sunW * 0.5 + 0.5);
@@ -72,8 +82,6 @@ float cascadeLit(uint cascade, float3 world) {
     return shadowTexelLit(sp, y0, receiver, bias);
 }
 
-// Доля неба в тени. По каждому лучу — расстояние до света, среднее exp по лучам.
-// Минимум по четырём кольцам давал пояса, вес только ближних проб стирал глубину.
 float shadowSkyReach(uint cascade, float3 P, float3 N, uint2 px) {
     const float3 L = normalize(gSun.sunDirIntensity.xyz);
     float3 side = cross(L, float3(0.0, 1.0, 0.0));
@@ -92,7 +100,7 @@ float shadowSkyReach(uint cascade, float3 P, float3 N, uint2 px) {
         float dist = 13.0;
         [unroll]
         for (uint ring = 0u; ring < 10u; ++ring) {
-            const float3 q = P + dir * radii[ring] + N * 0.08;
+            const float3 q = P + dir * radii[ring] + N * 0.15;
             float lit = 1.0;
             [unroll]
             for (uint c = cascade; c < 3u; ++c) {
@@ -106,9 +114,9 @@ float shadowSkyReach(uint cascade, float3 P, float3 N, uint2 px) {
                 break;
             }
         }
-        sum += exp(-dist * 0.62);
+        sum += exp(-dist * 0.55);
     }
-    return sum * 0.125;
+    return clamp(sum * 0.125, 0.15, 1.0);
 }
 
 float cascadeFogLit(float3 world) {

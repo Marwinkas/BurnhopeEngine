@@ -40,6 +40,43 @@ inline void rhiImageBarrier(
     vkCmdPipelineBarrier2(cmd, &dep);
 }
 
+// Диапазон мипов одной картинки. 3D-объём клипмапа переводит mip 0 и хвост отдельно.
+inline void rhiImageBarrierMips(
+    VkCommandBuffer cmd,
+    VkImage image,
+    VkImageLayout oldL,
+    VkImageLayout newL,
+    VkPipelineStageFlags2 srcStage,
+    VkAccessFlags2 srcAccess,
+    VkPipelineStageFlags2 dstStage,
+    VkAccessFlags2 dstAccess,
+    uint32_t baseMip,
+    uint32_t mipCount,
+    VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT) {
+    if (image == VK_NULL_HANDLE || mipCount == 0u) {
+        return;
+    }
+    VkImageMemoryBarrier2 b{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask = srcStage,
+        .srcAccessMask = srcAccess,
+        .dstStageMask = dstStage,
+        .dstAccessMask = dstAccess,
+        .oldLayout = oldL,
+        .newLayout = newL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange = {aspect, baseMip, mipCount, 0, 1},
+    };
+    VkDependencyInfo dep{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &b,
+    };
+    vkCmdPipelineBarrier2(cmd, &dep);
+}
+
 inline void rhiBufferBarrier(
     VkCommandBuffer cmd,
     VkBuffer buffer,

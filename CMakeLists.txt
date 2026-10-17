@@ -202,6 +202,8 @@ bh_module(render
     engine/src/PassVis.cpp
     engine/src/PassShade.cpp
     engine/src/PassRadiance.cpp
+    engine/src/Voxel.cpp
+    engine/src/PassVoxel.cpp
     engine/src/PassTonemap.cpp
     engine/src/PassGizmo.cpp
     engine/src/SceneFrame.cpp
@@ -341,6 +343,10 @@ add_custom_command(
         ${SHADER_OUT_DIR}/rc.merge.comp.spv
         ${SHADER_OUT_DIR}/rc.oct.comp.spv
         ${SHADER_OUT_DIR}/rc.shade.comp.spv
+        ${SHADER_OUT_DIR}/vx.clear.comp.spv
+        ${SHADER_OUT_DIR}/vx.voxel.comp.spv
+        ${SHADER_OUT_DIR}/vx.resolve.comp.spv
+        ${SHADER_OUT_DIR}/vx.trace.comp.spv
         ${SHADER_OUT_DIR}/tonemap.mesh.spv
         ${SHADER_OUT_DIR}/tonemap.frag.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry visMesh -o ${SHADER_OUT_DIR}/visbuffer.mesh.spv
@@ -384,6 +390,10 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_merge.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvGroupNonUniform+spvGroupNonUniformShuffle -stage compute -entry rcMerge -o ${SHADER_OUT_DIR}/rc.merge.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_octahedral.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcOctahedral -o ${SHADER_OUT_DIR}/rc.oct.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_shade.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcShade -o ${SHADER_OUT_DIR}/rc.shade.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_clear.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry vxClear -o ${SHADER_OUT_DIR}/vx.clear.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_voxel.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry vxVoxel -o ${SHADER_OUT_DIR}/vx.voxel.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_resolve.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry vxResolve -o ${SHADER_OUT_DIR}/vx.resolve.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_trace.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry vxTrace -o ${SHADER_OUT_DIR}/vx.trace.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry tonemapMesh -o ${SHADER_OUT_DIR}/tonemap.mesh.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry tonemapFs -o ${SHADER_OUT_DIR}/tonemap.frag.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gizmo.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry gizmoMesh -o ${SHADER_OUT_DIR}/gizmo.mesh.spv
@@ -432,6 +442,11 @@ add_custom_command(
         ${SHADER_DIR}/rc_merge.slang
         ${SHADER_DIR}/rc_octahedral.slang
         ${SHADER_DIR}/rc_shade.slang
+        ${SHADER_DIR}/vx_common.slang
+        ${SHADER_DIR}/vx_clear.slang
+        ${SHADER_DIR}/vx_voxel.slang
+        ${SHADER_DIR}/vx_resolve.slang
+        ${SHADER_DIR}/vx_trace.slang
         ${SHADER_DIR}/tonemap.slang
         ${SHADER_DIR}/gizmo.slang
         ${SHADER_DIR}/camera.slang
@@ -463,6 +478,10 @@ add_custom_target(BurnhopeSpv ALL DEPENDS
         ${SHADER_OUT_DIR}/rc.merge.comp.spv
     ${SHADER_OUT_DIR}/rc.oct.comp.spv
     ${SHADER_OUT_DIR}/rc.shade.comp.spv
+    ${SHADER_OUT_DIR}/vx.clear.comp.spv
+    ${SHADER_OUT_DIR}/vx.voxel.comp.spv
+    ${SHADER_OUT_DIR}/vx.resolve.comp.spv
+    ${SHADER_OUT_DIR}/vx.trace.comp.spv
     ${SHADER_OUT_DIR}/tonemap.mesh.spv
     ${SHADER_OUT_DIR}/tonemap.frag.spv
 )

@@ -72,8 +72,10 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     sun.sampledImg(42, HeapImg::SkyViewSample);
     sun.sampler(23, HeapSamp::Linear);
     sun.sampledImg(47, HeapImg::ContactSample);
+    sun.storageBuf(46, HeapBuf::CloudNoise);
     sun.knob(50, HeapBuf::Flags);
     sun.knob(55, HeapBuf::Shade);
+    sun.knob(58, HeapBuf::Atm);
     PassBindings punctual{heaps};
     punctual.ubo(0, HeapBuf::Frame);
     punctual.sun();

@@ -29,6 +29,8 @@ enum class HeapBuf : uint32_t {
     Clusters = 20,
     ClusterIndex = 21,
     Rc = 18,
+    Voxel = 17,
+    VxClip = 22,
     Post = 31,
     Flags = 32,
     Gtao = 33,
@@ -60,6 +62,10 @@ static_assert(static_cast<uint32_t>(HeapBuf::Sun) >= 16u && static_cast<uint32_t
 static_assert(static_cast<uint32_t>(HeapBuf::Rc) >= 16u && static_cast<uint32_t>(HeapBuf::Rc) < 32u);
 static_assert(static_cast<uint32_t>(HeapBuf::Sun) != static_cast<uint32_t>(HeapBuf::Rc));
 static_assert(static_cast<uint32_t>(HeapBuf::Rc) != kUiDescPrims);
+static_assert(static_cast<uint32_t>(HeapBuf::Voxel) == 17u && static_cast<uint32_t>(HeapBuf::Voxel) < 32u);
+static_assert(static_cast<uint32_t>(HeapBuf::VxClip) == 22u && static_cast<uint32_t>(HeapBuf::VxClip) < 32u);
+static_assert(static_cast<uint32_t>(HeapBuf::Voxel) != static_cast<uint32_t>(HeapBuf::Rc));
+static_assert(static_cast<uint32_t>(HeapBuf::VxClip) != static_cast<uint32_t>(HeapBuf::Sun));
 static_assert(static_cast<uint32_t>(HeapBuf::CloudNoise) == 41u && static_cast<uint32_t>(HeapBuf::CloudNoise) < 48u);
 static_assert(static_cast<uint32_t>(HeapBuf::Flags) >= 32u && static_cast<uint32_t>(HeapBuf::Bloom) < 48u);
 static_assert(static_cast<uint32_t>(HeapBuf::Atm) == 40u && static_cast<uint32_t>(HeapBuf::Atm) < 48u);
@@ -136,7 +142,10 @@ enum class HeapImg : uint32_t {
     ContactSample = 904,
     Reflect = 905,
     ReflectSample = 906,
-    Count = 912,
+    // 6 выборок и 6 storage: flight * 3 + cascade. Два кадра в полёте не делят один объём.
+    VoxelSample = 912,
+    VoxelStore = 918,
+    Count = 928,
 };
 
 static_assert(static_cast<uint32_t>(HeapImg::Cascade) + 8u <= static_cast<uint32_t>(HeapImg::Textures));
@@ -148,7 +157,18 @@ static_assert(static_cast<uint32_t>(HeapImg::SsrHalf) == static_cast<uint32_t>(H
 static_assert(static_cast<uint32_t>(HeapImg::BloomStorage) == static_cast<uint32_t>(HeapImg::SsrHalf) + 16u);
 static_assert(static_cast<uint32_t>(HeapImg::Surf0) == static_cast<uint32_t>(HeapImg::BloomStorage) + 16u);
 static_assert(static_cast<uint32_t>(HeapImg::SkyTrans) == static_cast<uint32_t>(HeapImg::Surf0) + 16u);
-static_assert(static_cast<uint32_t>(HeapImg::Count) == static_cast<uint32_t>(HeapImg::SkyTrans) + 16u);
+static_assert(static_cast<uint32_t>(HeapImg::Count) == static_cast<uint32_t>(HeapImg::SkyTrans) + 32u);
+static_assert(static_cast<uint32_t>(HeapImg::VoxelSample) == 912u);
+static_assert(static_cast<uint32_t>(HeapImg::VoxelStore) == 918u);
+static_assert(static_cast<uint32_t>(HeapImg::VoxelStore) + 6u < static_cast<uint32_t>(HeapImg::Count));
+
+// flight 0..1, cascade 0..2. Выборка и storage — разные слоты одной картинки.
+[[nodiscard]] inline uint32_t voxelImageSlot(bool store, uint32_t flight, uint32_t cascade) {
+    const uint32_t base = store
+        ? static_cast<uint32_t>(HeapImg::VoxelStore)
+        : static_cast<uint32_t>(HeapImg::VoxelSample);
+    return base + (flight & 1u) * 3u + (cascade < 3u ? cascade : 2u);
+}
 
 inline bool imageSlotLive(uint32_t slot) {
     if (slot < 16u) {
@@ -157,7 +177,7 @@ inline bool imageSlotLive(uint32_t slot) {
     if (slot >= 16u && slot < 784u) {
         return true;
     }
-    const uint32_t base[] = {784u, 800u, 816u, 832u, 848u, 864u, 880u, 896u};
+    const uint32_t base[] = {784u, 800u, 816u, 832u, 848u, 864u, 880u, 896u, 912u};
     for (uint32_t b : base) {
         if (slot >= b && slot < b + 16u) {
             return true;

@@ -209,7 +209,7 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     const float3 L = dot(sunRaw, sunRaw) > 1e-8 ? normalize(sunRaw) : float3(0.0, 1.0, 0.0);
     const float3 H = normalize(V + L);
     const float NdotL = saturate(dot(N, L));
-    const float NdotV = saturate(dot(N, V));
+    const float NdotV = max(dot(N, V), 1e-4);
     const float NdotH = saturate(dot(N, H));
     const float VdotH = saturate(dot(V, H));
     float3 albedo = mat.baseColor.rgb;
@@ -327,13 +327,13 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
         }
     }
     float ao = 1.0;
-    float metallic = mat.metallic;
-    float roughness = max(mat.roughness, 0.04);
+    float metallic = saturate(mat.metallic);
+    float roughness = clamp(mat.roughness, 0.04, 1.0);
     if (mat.orm > 0 && mat.orm < 768) {
         const float3 orm = sampleGrad(mat.orm, uv, uvDdx, uvDdy).rgb;
         if ((mat.flags & 4u) != 0u) {
             ao = orm.r > 0.02 ? saturate(orm.r) : 1.0;
-            roughness = max(orm.g, 0.04);
+            roughness = clamp(orm.g, 0.04, 1.0);
             metallic = saturate(orm.b);
         } else {
             const float peak = max(orm.r, max(orm.g, orm.b));
@@ -342,32 +342,40 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
         }
     }
     const float normalGap = saturate(1.0 - normalLen);
-    roughness = min(sqrt(roughness * roughness + gShade.toksvig * normalGap * normalGap), 1.0);
+    roughness = min(sqrt(roughness * roughness + gShade.toksvig * normalGap * normalGap * 0.5), 1.0);
     const float a = max(roughness * roughness, 0.002);
     const float3 f0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
     const float3 F = F_Schlick(VdotH, f0);
     const float D = D_GGX(NdotH, a);
-    const float G = G_Smith(NdotV, NdotL, a);
+    const float Vis = V_SmithGGXCorrelated(NdotV, NdotL, a);
+
     float aoTex = 1.0;
     if ((gPass.passMask & 16u) != 0u && gShade.gtaoAmt > 0.001) {
         aoTex = gAo.Load(int3(px, 0)).r;
     }
     const float gtaoAmt = max(gShade.gtaoAmt, 0.0);
-    const float gtao = (gtaoAmt > 0.001 ? pow(max(aoTex, 0.02), gtaoAmt) : 1.0) * ao;
-    float3 spec = min((D * G * F) / max(4.0 * NdotV * NdotL, 1e-4), float3(2.0, 2.0, 2.0));
+    const float gtao = (gtaoAmt > 0.001 ? pow(clamp(aoTex, 0.04, 1.0), gtaoAmt) : 1.0) * ao;
+
+    float3 spec = min(D * Vis * F, float3(8.0, 8.0, 8.0));
     spec *= lerp(float3(1.0, 1.0, 1.0), energyCompensation(f0, NdotV, roughness), saturate(gShade.ggx));
     spec *= lerp(1.0, specOcclusion(NdotV, gtao, roughness), saturate(gShade.specOcc));
-    const float coatRaw = asfloat(mat.pad0);
-    const float coat = coatRaw == coatRaw ? saturate(coatRaw) : 0.0;
-    const float left = coatLeft(NdotV, coat);
-    hit.tri = hit.tri;
+
+    const float coat = (mat.flags & 64u) != 0u ? 0.5 : 0.0;
+    float fCoat = 0.0;
+    const float coatSpec = clearcoatLobe(NdotH, VdotH, coat, 0.08, fCoat);
+    spec = spec * (1.0 - fCoat) + float3(coatSpec, coatSpec, coatSpec);
+
+    const float left = (1.0 - fCoat);
+    // Micro-occlusion on direct diffuse (soft cavity darkening without killing sunlit surfaces)
+    const float directMicroAo = lerp(1.0, gtao, 0.35);
+
     hit.N = N;
     hit.P = P;
     hit.V = V;
     hit.L = L;
     hit.albedo = albedo;
     hit.spec = spec;
-    hit.diff = albedo * hammonDiffuse(NdotL, NdotV, dot(V, L), roughness) * (1.0 - F) * (1.0 - metallic) * gtao * left;
+    hit.diff = albedo * hammonDiffuse(NdotL, NdotV, dot(V, L), roughness) * (1.0 - F) * (1.0 - metallic) * directMicroAo * left;
     hit.f0 = f0;
     hit.emissive = mat.baseColor.rgb * mat.emissive * 8.0;
     if (mat.emissiveTex > 0u && mat.emissiveTex < 768u) {
@@ -375,7 +383,7 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     }
     hit.roughness = roughness;
     hit.metallic = metallic;
-    hit.ao = ao;
+    hit.ao = gtao;
     hit.gtao = gtao;
     hit.NdotL = NdotL;
     hit.NdotV = NdotV;

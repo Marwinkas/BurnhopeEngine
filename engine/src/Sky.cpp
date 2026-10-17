@@ -171,14 +171,19 @@ void skyProbeRecord(VkCommandBuffer cmd, SkyPass& p, VkBuffer probes, VkDeviceSi
     bufferBarrierComputeWriteToRead(cmd, probes, 0, size);
 }
 
-void cloudRecord(VkCommandBuffer cmd, SkyPass& p, VkExtent2D extent) {
-    if (!p.noiseReady && p.noise.buffer != VK_NULL_HANDLE && p.noiseCs.handle != VK_NULL_HANDLE) {
-        bufferBarrierHostToShader(cmd, p.noise.buffer, p.noise.size, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-        cmdBindCompute(cmd, p.noiseCs.handle);
-        vkCmdDispatch(cmd, 32, 32, 32);
-        bufferBarrierComputeWriteToRead(cmd, p.noise.buffer, 0, p.noise.size);
-        p.noiseReady = true;
+void cloudNoiseEnsure(VkCommandBuffer cmd, SkyPass& p) {
+    if (p.noiseReady || p.noise.buffer == VK_NULL_HANDLE || p.noiseCs.handle == VK_NULL_HANDLE) {
+        return;
     }
+    bufferBarrierHostToShader(cmd, p.noise.buffer, p.noise.size, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    cmdBindCompute(cmd, p.noiseCs.handle);
+    vkCmdDispatch(cmd, 32, 32, 32);
+    bufferBarrierComputeWriteToRead(cmd, p.noise.buffer, 0, p.noise.size);
+    p.noiseReady = true;
+}
+
+void cloudRecord(VkCommandBuffer cmd, SkyPass& p, VkExtent2D extent) {
+    cloudNoiseEnsure(cmd, p);
     imageBarrier(cmd, p.cloud, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
         VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     dispatchCompute2D(cmd, p.cloudMarch, halfExtent(extent), 8u);

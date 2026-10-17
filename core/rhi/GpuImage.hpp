@@ -12,6 +12,7 @@ struct GpuImage {
     VmaAllocation alloc = VK_NULL_HANDLE;
     VkFormat format = VK_FORMAT_UNDEFINED;
     VkExtent2D extent{};
+    uint32_t depth = 1;
     uint32_t mips = 1;
 };
 
@@ -31,6 +32,15 @@ struct TrackedImage {
     VkImageUsageFlags usage,
     VkImageAspectFlags aspect,
     uint32_t mipLevels = 1);
+
+// Плотный 3D-объём со всей цепочкой мипов. Сторона — степень двойки. Вид один, на все мипы.
+[[nodiscard]] bool gpuImageCreateVolume(
+    GpuImage& img,
+    Device& d,
+    uint32_t side,
+    VkFormat format,
+    VkImageUsageFlags usage,
+    VkImageAspectFlags aspect);
 
 void gpuImageDestroy(GpuImage& img, Device& d);
 

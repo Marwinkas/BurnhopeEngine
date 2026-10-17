@@ -393,6 +393,8 @@ bool radianceCreate(RadiancePass& p, Device& d, const DescriptorHeaps& heaps) {
     shade.storageImg(5, HeapImg::Surf1);
     shade.storageBuf(30, HeapBuf::Rc, false);
     shade.sampledImg(32, HeapImg::Ao);
+    shade.sampler(23, HeapSamp::Linear);
+    shade.sampledImg(42, HeapImg::SkyViewSample);
     shade.sampledImg(47, HeapImg::ContactSample);
     shade.knob(50, HeapBuf::Flags);
     shade.knob(54, HeapBuf::RcParams);

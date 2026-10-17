@@ -214,7 +214,7 @@ bool heapWriteImageFlight(
     const VkImageViewCreateInfo viewCi{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = img.image,
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .viewType = img.depth > 1u ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D,
         .format = img.format,
         .subresourceRange = {aspect, 0, mipLevels, 0, 1},
     };

@@ -36,6 +36,7 @@ void atmosphereApply(FrameSun& sun, const AtmosphereParams& atm);
 void skyPassDestroy(SkyPass& p, Device& d);
 void skyLutRecord(VkCommandBuffer cmd, SkyPass& p);
 void skyProbeRecord(VkCommandBuffer cmd, SkyPass& p, VkBuffer probes, VkDeviceSize size);
+void cloudNoiseEnsure(VkCommandBuffer cmd, SkyPass& p);
 void cloudRecord(VkCommandBuffer cmd, SkyPass& p, VkExtent2D extent);
 
 } // namespace burnhope

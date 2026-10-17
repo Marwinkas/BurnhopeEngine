@@ -658,6 +658,20 @@ bool bindHeap(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
     if (!(extra && cascades && pictures && lamps && heapWriteSampler(heaps, device, static_cast<uint32_t>(HeapSamp::Linear), sampler) && heapWriteSampler(heaps, device, static_cast<uint32_t>(HeapSamp::Wrap), wrap))) {
         return false;
     }
+    bool volumes = s.voxel.atoms.address != 0 && s.voxel.clip.address != 0
+        && heapWriteStorage(heaps, device, HeapBuf::Voxel, s.voxel.atoms)
+        && heapWriteBufferFlight(heaps, device, 0, static_cast<uint32_t>(HeapBuf::VxClip), VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, s.voxel.clip.address, 256)
+        && heapWriteBufferFlight(heaps, device, 1, static_cast<uint32_t>(HeapBuf::VxClip), VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, s.voxel.clip.address + 256, 256);
+    for (uint32_t flight = 0; volumes && flight < 2u; ++flight) {
+        for (uint32_t cascade = 0; volumes && cascade < 3u; ++cascade) {
+            const GpuImage& pic = s.voxel.volume[flight][cascade].image;
+            volumes = heapImage(heaps, device, s, voxelImageSlot(false, flight, cascade), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, pic, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+                && heapImage(heaps, device, s, voxelImageSlot(true, flight, cascade), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, pic, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
+        }
+    }
+    if (!volumes) {
+        return false;
+    }
     for (uint32_t i = 0; i < s.textureSlots; ++i) {
         const GpuImage& tex = s.textures[i].image != VK_NULL_HANDLE ? s.textures[i] : s.textures[0];
         if (!heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Textures) + i, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, tex, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)) {
@@ -1373,6 +1387,7 @@ void sceneFrameReleaseGpu(SceneFrame* scene, Device& device) {
     shadePassDestroy(scene->shade, device);
     skyPassDestroy(scene->sky, device);
     radianceDestroy(scene->radiance, device);
+    voxelDestroy(scene->voxel, device);
     hizPassDestroy(scene->hiz, device);
     cubePassDestroy(scene->cube, device);
     tonemapPassDestroy(scene->tone, device);
@@ -1824,6 +1839,7 @@ void sceneFrameRecord(
             && shadePassCreate(scene->shade, device, scene->gpuHeap, swap.extent)
             && skyPassCreate(scene->sky, device, scene->gpuHeap, swap.extent)
             && radianceCreate(scene->radiance, device, scene->gpuHeap)
+            && voxelCreate(scene->voxel, device, scene->gpuHeap)
             && hizPassCreate(scene->hiz, device, scene->gpuHeap)
             && occlPassCreate(scene->occl, device, scene->gpuHeap)
             && clusterPassCreate(scene->clusters, device, scene->gpuHeap)
@@ -2274,10 +2290,15 @@ void sceneFrameRecord(
     }
     framePassVis(ctx, scene->vis, scene->occl, scene->hiz, scene->hizMax[flight], scene->indirect, scene->candidates, scene->visible,
         scene->instanceCount, culled.twoPhase, scene->showHiz, culled.draw, culled.lateDraw);
-    const bool gtaoOn = scene->lightProfile < 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
+    const bool gtaoOn = (scene->passMask & 524288u) == 0u && scene->lightProfile < 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
     framePassShade(ctx, scene->shade, scene->sky, scene->vis.targets.vis, scene->vis.targets.depth, gtaoOn, scene->probeBuf.buffer, scene->probeBuf.size);
     const bool worldRc = (scene->passMask & 128u) != 0u && (scene->passMask & 262144u) != 0u;
-    framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax, scene->rcSun, scene->rcBounce);
+    const bool worldVx = (scene->passMask & 524288u) != 0u && (scene->passMask & 262144u) != 0u && !worldRc;
+    if (worldVx) {
+        framePassVoxel(ctx, scene->voxel, scene->shade.hdrA, true, scene->instanceCount, propMoved);
+    } else {
+        framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax, scene->rcSun, scene->rcBounce);
+    }
     framePassShadeLate(ctx, scene->shade, scene->sky);
     const bool bloomOn = (knob.flags.passMask & 32u) != 0u && scene->hud.bloom > 0.001f;
     framePassTonemap(ctx, scene->tone, scene->shade.hdrA, scene->shade.hdrB, swap, frame, bloomOn);

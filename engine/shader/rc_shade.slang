@@ -1,6 +1,7 @@
 #include "frame.slang"
 #include "camera.slang"
 #include "core/math.slang"
+#include "core/atmosphere.slang"
 #include "rc_common.slang"
 
 [[vk::binding(1, 0)]] Texture2D<uint> gVis;
@@ -8,8 +9,27 @@
 [[vk::binding(3, 0)]] RWTexture2D<float4> gHdr;
 [[vk::binding(4, 0)]] RWTexture2D<float4> gSurf0;
 [[vk::binding(5, 0)]] RWTexture2D<float4> gSurf1;
+[[vk::binding(23, 0)]] SamplerState gClamp;
 [[vk::binding(32, 0)]] Texture2D<float> gAo;
+[[vk::binding(42, 0)]] Texture2D<float4> gSkyView;
 [[vk::binding(47, 0)]] Texture2D<float> gContact;
+
+float3 rcSkyAmb(float3 N, float3 albedo, float metal) {
+    float inten = gSun.sunDirIntensity.w;
+    if (inten < 0.05) {
+        inten = 8.0;
+    }
+    const float3 skyDir = normalize(float3(N.x, N.y + 1.15, N.z));
+    const float3 skyLit = max(gSkyView.SampleLevel(gClamp, atmSkyUv(skyDir), 0.0).rgb, 0.0);
+    const float skyLum = dot(skyLit, float3(0.2126, 0.7152, 0.0722));
+    const float3 skyChroma = skyLum > 0.05 ? skyLit / skyLum : float3(0.45, 0.62, 1.0);
+    const float wrap = saturate(N.y * 0.4 + 0.6);
+    float3 sky = albedo * (1.0 - metal) * skyChroma * (inten * 0.16) * wrap;
+    if ((gPass.passMask & 256u) == 0u) {
+        sky *= 0.15;
+    }
+    return sky;
+}
 
 #include "rc_surface.slang"
 
@@ -195,14 +215,15 @@ void rcShade(uint3 dtid : SV_DispatchThreadID) {
     const float shInt = gShade.pad1 > 1e-4 ? gShade.pad1 : 1.0;
     const float gain = rcInt * shInt;
     const float3 gi = incoming * tint * gain * aoMod;
+    const float3 sky = rcSkyAmb(N, albedo, metal);
     if (gFrame.debugMode == 4u) {
-        gHdr[px] = float4(max(gi, 0.0), 1.0);
-        return;
-    }
-    if (w0 <= 1e-5) {
+        gHdr[px] = float4(max(gi, 0.0) + sky, 1.0);
         return;
     }
     float4 hdr = gHdr[px];
-    hdr.rgb += max(gi, 0.0);
+    if (w0 > 1e-5) {
+        hdr.rgb += max(gi, 0.0);
+    }
+    hdr.rgb += sky;
     gHdr[px] = hdr;
 }

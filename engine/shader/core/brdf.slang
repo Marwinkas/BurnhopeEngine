@@ -2,12 +2,22 @@
 
 float D_GGX(float NdotH, float a) {
     const float a2 = a * a;
-    const float d = NdotH * NdotH * (a2 - 1.0) + 1.0;
-    return a2 / (kPi * d * d);
+    const float d = (NdotH * a2 - NdotH) * NdotH + 1.0;
+    return a2 / max(kPi * d * d, 1e-7);
 }
 
+// Height-Correlated Smith GGX visibility function V = G / (4 * NdotV * NdotL)
+float V_SmithGGXCorrelated(float NdotV, float NdotL, float a) {
+    const float a2 = a * a;
+    const float ggxV = NdotL * sqrt(NdotV * NdotV * (1.0 - a2) + a2);
+    const float ggxL = NdotV * sqrt(NdotL * NdotL * (1.0 - a2) + a2);
+    return 0.5 / max(ggxV + ggxL, 1e-5);
+}
+
+// Backwards-compatible separable Smith G (fixed to convert alpha back to roughness for Disney k)
 float G_Smith(float NdotV, float NdotL, float a) {
-    const float r = a + 1.0;
+    const float rough = sqrt(saturate(a));
+    const float r = rough + 1.0;
     const float k = (r * r) / 8.0;
     const float gv = NdotV / (NdotV * (1.0 - k) + k);
     const float gl = NdotL / (NdotL * (1.0 - k) + k);
@@ -15,11 +25,25 @@ float G_Smith(float NdotV, float NdotL, float a) {
 }
 
 float3 F_Schlick(float VdotH, float3 f0) {
-    return f0 + (1.0 - f0) * pow(1.0 - VdotH, 5.0);
+    const float f90 = saturate(dot(f0, float3(50.0 * 0.33, 50.0 * 0.33, 50.0 * 0.33)));
+    const float x = 1.0 - saturate(VdotH);
+    const float x2 = x * x;
+    const float f = x2 * x2 * x;
+    return f0 + (f90 - f0) * f;
 }
 
 float specOcclusion(float NdotV, float ao, float roughness) {
-    return saturate(pow(NdotV + ao, exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
+    return saturate(pow(max(NdotV + ao, 1e-4), exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
+}
+
+// Jiménez et al. 2016: Practical Real-Time Strategies for Accurate Indirect Occlusion
+// Multi-bounce colored ambient occlusion to prevent gray/muddy crevices
+float3 gtaoMultiBounce(float visibility, float3 albedo) {
+    const float3 a =  2.0404 * albedo - 0.3324;
+    const float3 b = -4.7951 * albedo + 0.6417;
+    const float3 c =  2.7552 * albedo + 0.6903;
+    const float v = saturate(visibility);
+    return max(float3(v, v, v), ((v * a + b) * v + c) * v);
 }
 
 float2 dfgEnv(float NdotV, float roughness) {
@@ -52,12 +76,16 @@ float3 ggxReflect(float3 N, float3 V, float roughness, float2 u) {
     return reflect(-V, H);
 }
 
+// Earl Hammon Jr. 2017: PBR Diffuse Lighting for GGX+Smith Microsurfaces
 float hammonDiffuse(float NdotL, float NdotV, float VdotL, float roughness) {
+    const float nl = saturate(NdotL);
+    const float nv = max(NdotV, 1e-4);
     const float facing = 0.5 + 0.5 * VdotL;
     const float rough = saturate(roughness);
-    const float single = (1.05 / kPi) * (1.0 - pow(1.0 - saturate(NdotL), 5.0)) * (1.0 - pow(1.0 - saturate(NdotV), 5.0));
-    const float retro = rough * rough * facing / kPi;
-    return single * (1.0 - rough) + retro;
+    const float smoothTerm = 1.05 * (1.0 - pow(1.0 - nl, 5.0)) * (1.0 - pow(1.0 - nv, 5.0));
+    const float roughTerm = rough * (0.9 - 0.4 * facing) * ((0.5 + nl) / max(nl, 0.1));
+    const float multi = 0.1159 * rough;
+    return ((1.0 - rough) * smoothTerm + rough * roughTerm + multi) / kPi;
 }
 
 float coatLeft(float NdotV, float coat) {
@@ -66,7 +94,23 @@ float coatLeft(float NdotV, float coat) {
     return 1.0 - f * saturate(coat);
 }
 
+float clearcoatLobe(float NdotH, float LdotH, float coat, float coatRoughness, out float fCoat) {
+    const float c = saturate(coat);
+    if (c <= 1e-4) {
+        fCoat = 0.0;
+        return 0.0;
+    }
+    const float a = max(coatRoughness * coatRoughness, 0.002);
+    const float d = D_GGX(NdotH, a);
+    const float x = 1.0 - saturate(LdotH);
+    const float f = 0.04 + 0.96 * (x * x * x * x * x);
+    // Kelemen geometry approximation for clearcoat
+    const float v = 0.25 / max(LdotH * LdotH, 1e-4);
+    fCoat = f * c;
+    return d * v * fCoat;
+}
+
 float3 energyCompensation(float3 f0, float NdotV, float roughness) {
     const float2 dfg = dfgEnv(NdotV, roughness);
-    return min(1.0 + f0 * (1.0 / max(dfg.y, 1e-3) - 1.0), float3(4.0, 4.0, 4.0));
+    return min(1.0 + f0 * (1.0 / max(dfg.y, 1e-3) - 1.0), float3(3.0, 3.0, 3.0));
 }

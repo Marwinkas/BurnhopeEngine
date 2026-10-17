@@ -18,6 +18,7 @@
 #include "render/Sky.hpp"
 #include "render/Hiz.hpp"
 #include "render/Radiance.hpp"
+#include "render/Voxel.hpp"
 #include "render/SceneFrame.hpp"
 #include "render/Gizmo.hpp"
 #include "render/Tonemap.hpp"
@@ -54,6 +55,7 @@ struct SceneFrameImpl {
     AtmosphereParams atmosphere{};
     float skyTime = 0.0f;
     RadiancePass radiance{};
+    VoxelPass voxel{};
     CubePass cube{};
     TonemapPass tone{};
     GpuBuffer frameBuf{};
@@ -269,6 +271,7 @@ void framePassVis(
 void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes);
 void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky);
 void framePassRadiance(const RenderContext& ctx, RadiancePass& rad, TrackedImage& hdrA, bool worldRc, float rays, float spacing, float intensity, float maxDist, float sunScale, float bounce);
+void framePassVoxel(const RenderContext& ctx, VoxelPass& voxel, TrackedImage& hdrA, bool worldVx, uint32_t instances, bool moved);
 void framePassTonemap(const RenderContext& ctx, TonemapPass& tone, TrackedImage& hdrA, TrackedImage& hdrB, const Swapchain& swap, const FrameContext& frame, bool bloomOn);
 
 } // namespace burnhope
