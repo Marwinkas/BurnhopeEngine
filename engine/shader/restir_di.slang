@@ -8,6 +8,9 @@
 #include "Rtxdi/DI/SpatialResampling.hlsli"
 #include "Rtxdi/DI/BoilingFilter.hlsli"
 
+[[vk::binding(26, 0)]] RWTexture2D<float4> gSigmaPenumbra;
+[[vk::binding(27, 0)]] RWTexture2D<float4> gSigmaSun;
+
 static const uint kRestirInitialSeed = 1u;
 static const uint kRestirTemporalSeed = 2u;
 static const uint kRestirSpatialSeed = 3u;
@@ -211,34 +214,44 @@ float3 restirSunDir(uint2 px, float3 L, uint ray) {
     return normalize(L + tangent * (radius * cos(phi)) + bitangent * (radius * sin(phi)));
 }
 
+void restirSigmaStore(uint2 px, float vis, float penumbra, float3 sunRgb, float valid) {
+    const uint2 at = uint2(px.x, px.y + gPush.pad0 * gFrame.extent.y);
+    gSigmaPenumbra[at] = float4(saturate(vis), penumbra, 0.0, valid);
+    gSigmaSun[at] = float4(max(sunRgb, 0.0), valid);
+}
+
 void restirSun(uint2 px) {
-    uint mode = gFrame.debugMode;
-    bool showShadow = mode == 18u;
-    bool addLight = mode == 0u;
-    if (!showShadow && !addLight) {
-        return;
-    }
     float depth = gDepth.Load(int3(px, 0));
     RAB_Surface surface = RAB_GetGBufferSurface(int2(px), false);
     if (depth <= 0.0001 || !RAB_IsSurfaceValid(surface)) {
+        restirSigmaStore(px, 0.0, 0.0, 0.0, 0.0);
         return;
     }
     float3 L = gSun.sunDirIntensity.xyz;
     float len = length(L);
     if (len < 1e-4) {
+        restirSigmaStore(px, 0.0, 0.0, 0.0, 0.0);
         return;
     }
     L /= len;
     float3 origin = surface.worldPos + surface.geoNormal * 0.02;
     uint rays = max(gRestir.pad2, 1u);
     float3 tint = 0.0;
+    float closest = -1.0;
     for (uint ray = 0u; ray < rays; ++ray) {
         float3 dir = restirSunDir(px, L, ray);
         float sunFar = gRestir.shadowRange > 0.0 ? gRestir.shadowRange : 20000.0;
-        tint += restirAnyHit(origin, dir, max(gRestir.shadowBias, 0.02), sunFar);
+        RestirOcclusion occ = restirSunOcclusion(origin, dir, max(gRestir.shadowBias, 0.02), sunFar);
+        tint += occ.tint;
+        if (occ.distance >= 0.0) {
+            closest = closest < 0.0 ? occ.distance : min(closest, occ.distance);
+        }
     }
     tint /= float(rays);
     float vis = restirLuma(tint);
+    const float rayVis = vis;
+    const float3 rayTint = tint;
+    const float rayClosest = closest;
     uint age = 1u;
     bool temporalOn = (gRestir.pad1 & 1u) != 0u;
     if (temporalOn && gRestir.historyValid != 0u) {
@@ -266,18 +279,24 @@ void restirSun(uint2 px) {
     uint4 stored = gHistMat[writeAt];
     stored.w = min(uint(saturate(vis) * 65535.0 + 0.5), 65535u) | (age << 16);
     gHistMat[writeAt] = stored;
-    if (showShadow) {
-        gHdr[px] = float4(saturate(gHdr[px].rgb * tint), 1.0);
-        return;
+    float ndl = dot(surface.geoNormal, L);
+    float halfA = radians(max(gRestir.sunDisk, 0.0)) * 0.5;
+    float penumbra = 4096.0;
+    float sigmaVis = rayVis;
+    if (ndl <= 0.0) {
+        sigmaVis = 0.0;
+        penumbra = 0.0;
+    } else if (rayClosest >= 0.0) {
+        penumbra = rayClosest * tan(halfA) * 0.5;
     }
     RAB_LightSample sample = RAB_EmptyLightSample();
     sample.position = surface.worldPos + L * 20000.0;
     sample.normal = -L;
     sample.radiance = max(gSun.sunColor.rgb, 0.0) * max(gSun.sunDirIntensity.w, 0.0);
     sample.solidAnglePdf = 1.0;
-    float4 hdr = gHdr[px];
-    hdr.rgb += max(restirShade(sample, surface) * tint, 0.0);
-    gHdr[px] = hdr;
+    float3 shade = max(restirShade(sample, surface), 0.0);
+    float3 sunRgb = sigmaVis > 1e-3 ? shade * rayTint / sigmaVis : shade;
+    restirSigmaStore(px, sigmaVis, penumbra, sunRgb, 1.0);
 }
 
 [shader("compute")]

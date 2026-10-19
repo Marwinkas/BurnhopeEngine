@@ -27,6 +27,7 @@ struct ShadePass {
     ShaderExt contactCs;
     ShaderExt reflectTrace;
     ShaderExt reflectUp;
+    ShaderExt relax;
 };
 
 [[nodiscard]] bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkExtent2D extent);

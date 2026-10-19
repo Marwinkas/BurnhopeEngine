@@ -19,10 +19,12 @@ constexpr uint32_t kSharcHashSlot = 70u;
 constexpr uint32_t kSharcAccumSlot = 71u;
 constexpr uint32_t kSharcResolvedSlot = 72u;
 constexpr uint32_t kSharcParamSlot = 73u;
+// Экранный add: три среза по 16 байт, rgb как в resolved, смещения 0, 4, 8.
+constexpr uint32_t kSharcColorSlot = 74u;
 // 2^22 записей, как в сэмпле RTXGI. Хеш 8 байт, накопление 16, resolved 32 (три float rgb).
 constexpr uint32_t kSharcCapacity = 1u << 22;
 
-// 80 байт, скалярная раскладка. Поля совпадают с SharcGpuParams в sharc_params.slang.
+// 176 байт, скалярная раскладка. Поля совпадают с SharcGpuParams в sharc_params.slang.
 struct alignas(16) SharcGpuParams {
     float camX = 0.0f;
     float camY = 0.0f;
@@ -45,21 +47,32 @@ struct alignas(16) SharcGpuParams {
     float giGain = 1.0f;
     uint32_t lightCount = 0u;
     float prevVp[16]{};
+    uint32_t restirSlice = 0u;
+    uint32_t restirOn = 0u;
+    float shadowBias = 0.05f;
+    float shadowRange = 0.0f;
+    float sunDisk = 0.0f;
+    uint32_t sunRays = 1u;
+    uint32_t padSun0 = 0u;
+    uint32_t padSun1 = 0u;
 };
-static_assert(sizeof(SharcGpuParams) == 144);
+static_assert(sizeof(SharcGpuParams) == 176);
 static_assert(alignof(SharcGpuParams) == 16);
 static_assert(offsetof(SharcGpuParams, prevVp) == 80);
+static_assert(offsetof(SharcGpuParams, restirSlice) == 144);
 
 struct SharcPass {
     GpuBuffer hash{};
     GpuBuffer accum{};
     GpuBuffer resolved{};
     GpuBuffer params{};
+    GpuBuffer color{};
     ShaderExt update{};
     ShaderExt resolve{};
     ShaderExt query{};
     ShaderExt relaxTemporal{};
     ShaderExt relaxSpatial{};
+    ShaderExt reblur{};
     TrackedImage raw{};
     TrackedImage history{};
     TrackedImage temporal{};
@@ -70,6 +83,7 @@ struct SharcPass {
     uint32_t frameIndex = 0u;
     bool hasPrev = false;
     bool cleared = false;
+    bool screenCleared = false;
     bool live = false;
     char lastLog[96]{};
 };
@@ -91,6 +105,13 @@ void sharcRecord(
     float giGain,
     uint32_t lightCount,
     VkDeviceAddress tlas,
-    bool freeze);
+    bool freeze,
+    uint32_t restirSlice,
+    uint32_t restirOn,
+    float shadowBias,
+    float shadowRange,
+    float sunDisk,
+    uint32_t sunRays,
+    uint32_t denoise);
 
 } // namespace burnhope

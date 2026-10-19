@@ -447,6 +447,64 @@ float3 restirAnyHit(float3 origin, float3 direction, float tMin, float tMax) {
     return tint;
 }
 
+struct RestirOcclusion {
+    float3 tint;
+    float distance;
+};
+
+// Тот же any-hit, плюс дистанция ближайшего непрозрачного блока. Промах: distance < 0.
+RestirOcclusion restirSunOcclusion(float3 origin, float3 direction, float tMin, float tMax) {
+    RestirOcclusion hit;
+    hit.tint = 1.0;
+    hit.distance = -1.0;
+    if (gRestir.tlasLo == 0u && gRestir.tlasHi == 0u) {
+        return hit;
+    }
+    RayDesc ray;
+    ray.Origin = origin;
+    ray.Direction = direction;
+    ray.TMin = tMin;
+    ray.TMax = max(tMax, tMin);
+    RayQuery<RAY_FLAG_FORCE_NON_OPAQUE> query;
+    query.TraceRayInline(restirScene(), RAY_FLAG_FORCE_NON_OPAQUE, 0xff, ray);
+    float3 tint = 1.0;
+    uint hops = 0u;
+    while (query.Proceed()) {
+        if (query.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE) {
+            continue;
+        }
+        hops += 1u;
+        const float t = query.CandidateTriangleRayT();
+        if (hops > 12u) {
+            hit.tint = tint;
+            hit.distance = t;
+            return hit;
+        }
+        const RestirGlass glass = restirGlass(query.CandidatePrimitiveIndex(), query.CandidateTriangleBarycentrics());
+        if (!glass.hit || glass.alpha <= 0.02) {
+            continue;
+        }
+        if (glass.alpha >= 0.97) {
+            hit.tint = 0.0;
+            hit.distance = t;
+            return hit;
+        }
+        tint *= lerp(float3(1.0, 1.0, 1.0), glass.albedo, glass.alpha);
+        if (max(tint.r, max(tint.g, tint.b)) < 0.02) {
+            hit.tint = 0.0;
+            hit.distance = t;
+            return hit;
+        }
+    }
+    if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
+        hit.tint = 0.0;
+        hit.distance = query.CommittedRayT();
+        return hit;
+    }
+    hit.tint = tint;
+    return hit;
+}
+
 bool restirTrace(float3 origin, float3 direction, float tMin, float tMax) {
     if (gRestir.tlasLo == 0u && gRestir.tlasHi == 0u) {
         return false;

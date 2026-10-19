@@ -152,6 +152,9 @@ enum class HeapImg : uint32_t {
     ReflectSample = 906,
     ReflectHist0 = 907,
     ReflectHist1 = 908,
+    SigmaPenumbra = 909,
+    SigmaSun = 910,
+    SigmaHist = 911,
     // 6 выборок и 6 storage: flight * 3 + cascade. Два кадра в полёте не делят один объём.
     VoxelSample = 912,
     VoxelStore = 918,
@@ -179,6 +182,10 @@ static_assert(static_cast<uint32_t>(HeapImg::Count) == static_cast<uint32_t>(Hea
 static_assert(static_cast<uint32_t>(HeapImg::ReflectHist0) == 907u);
 static_assert(static_cast<uint32_t>(HeapImg::ReflectHist1) == 908u);
 static_assert(static_cast<uint32_t>(HeapImg::ReflectHist1) < static_cast<uint32_t>(HeapImg::VoxelSample));
+static_assert(static_cast<uint32_t>(HeapImg::SigmaPenumbra) == 909u);
+static_assert(static_cast<uint32_t>(HeapImg::SigmaSun) == 910u);
+static_assert(static_cast<uint32_t>(HeapImg::SigmaHist) == 911u);
+static_assert(static_cast<uint32_t>(HeapImg::SigmaHist) < static_cast<uint32_t>(HeapImg::VoxelSample));
 static_assert(static_cast<uint32_t>(HeapImg::VoxelSample) == 912u);
 static_assert(static_cast<uint32_t>(HeapImg::VoxelStore) == 918u);
 static_assert(static_cast<uint32_t>(HeapImg::VoxelStore) + 6u < static_cast<uint32_t>(HeapImg::Count));

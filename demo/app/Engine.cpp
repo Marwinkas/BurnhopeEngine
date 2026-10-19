@@ -515,6 +515,7 @@ void bindHudIds(HudContext& hud, UiState& state) {
     hud.ids.rcCell = id("rcCell");
     hud.ids.rcGain = id("rcGain");
     hud.ids.giGain = id("giGain");
+    hud.ids.denoise = id("denoise");
     hud.ids.rcMax = id("rcMax");
     hud.ids.rcSun = id("rcSun");
     hud.ids.rcBounce = id("rcBounce");
@@ -1085,6 +1086,7 @@ void sceneHud(Canvas& canvas, void* user) {
     panel = giBody;
     tick("зонды SH", "probes", true);
     tick("GI", "gien", true);
+    tick("шумодав", "denoise", true);
     rowSlide(*canvas.state, panel, "GI яркость", "giGain", 2.0f, 0.0f, 6.0f);
     panel = giBody;
     hideCheck("Выкл", "prof0", 1, 3, false);
@@ -1476,6 +1478,7 @@ bool engineTick(Engine& e) {
         tweaks.rcSpacing = slideAt(hud, id.rcCell, 0.8f);
         tweaks.rcIntensity = slideAt(hud, id.rcGain, 1.0f);
         tweaks.giGain = slideAt(hud, id.giGain, 2.0f);
+        tweaks.sharcDenoise = checkOn(hud, id.denoise, true);
         tweaks.rcMax = slideAt(hud, id.rcMax, 48.0f);
         tweaks.rcSun = slideAt(hud, id.rcSun, 1.0f);
         tweaks.rcBounce = slideAt(hud, id.rcBounce, 1.0f);

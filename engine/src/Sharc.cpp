@@ -51,9 +51,21 @@ void bindHit(PassBindings& bind) {
     bind.storageBuf(30, HeapBuf::Rc);
 }
 
+bool sharcScreen(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent) {
+    gpuBufferDestroy(p.color, d);
+    p.screenCleared = false;
+    const VkDeviceSize pixels = static_cast<VkDeviceSize>(extent.width) * static_cast<VkDeviceSize>(extent.height);
+    const VkDeviceSize bytes = pixels * 16u * 3u;
+    if (bytes == 0u || !createDefaultGpuBuffer(p.color, d, bytes, false, VK_BUFFER_USAGE_TRANSFER_DST_BIT)) {
+        return false;
+    }
+    return heapWriteStorage(heaps, d, kSharcColorSlot, p.color.address, p.color.size);
+}
+
 bool sharcImage(TrackedImage& img, Device& d, VkExtent2D extent) {
     return recreateTracked(img, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
-        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 bool bindSharcImages(SharcPass& p, Device& d, DescriptorHeaps& heaps) {
@@ -92,6 +104,7 @@ bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
         || !createDefaultGpuBuffer(p.accum, d, accumBytes, false, VK_BUFFER_USAGE_TRANSFER_DST_BIT)
         || !createDefaultGpuBuffer(p.resolved, d, resolvedBytes, false, VK_BUFFER_USAGE_TRANSFER_DST_BIT)
         || !createDefaultGpuBuffer(p.params, d, kParamStride * 2u, true)
+        || !sharcScreen(p, d, heaps, extent)
         || !sharcImage(p.raw, d, extent)
         || !sharcImage(p.history, d, extent)
         || !sharcImage(p.temporal, d, extent)) {
@@ -119,6 +132,7 @@ bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
     queryBind.storageImg(3, HeapImg::HdrAStorage);
     queryBind.storageImg(4, HeapImg::Surf0);
     queryBind.storageImg(5, HeapImg::Surf1);
+    queryBind.storageBuf(77, kSharcColorSlot, false);
     queryBind.storageBuf(70, kSharcHashSlot, false);
     queryBind.storageBuf(72, kSharcResolvedSlot, false);
     queryBind.ubo(73, static_cast<HeapBuf>(kSharcParamSlot));
@@ -141,11 +155,21 @@ bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
     spatialBind.ubo(73, static_cast<HeapBuf>(kSharcParamSlot));
     spatialBind.storageImg(76, HeapImg::SharcTemporal);
     spatialBind.storageImg(77, HeapImg::SharcHist);
+    PassBindings reblurBind{heaps};
+    reblurBind.ubo(0, HeapBuf::Frame);
+    reblurBind.sampledImg(1, HeapImg::Vis);
+    reblurBind.sampledImg(2, HeapImg::Depth);
+    reblurBind.storageImg(3, HeapImg::HdrAStorage);
+    reblurBind.storageImg(5, HeapImg::Surf1);
+    reblurBind.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
+        heapBufOffset(*reblurBind.raw.heaps, kGradeSlot), static_cast<uint32_t>(reblurBind.raw.heaps->bufferDescSize));
+    reblurBind.storageBuf(77, kSharcColorSlot, false);
     const bool shaders = sharcShader(d, BH_SHADER_DIR "/sharc.resolve.comp.spv", resolveBind, p.resolve)
         && sharcShader(d, BH_SHADER_DIR "/sharc.update.comp.spv", updateBind, p.update)
-        && sharcShader(d, BH_SHADER_DIR "/sharc.query.comp.spv", queryBind, p.query)
+        && sharcShader(d, BH_SHADER_DIR "/sharc.query.comp.spv", queryBind, p.query, 16u)
         && sharcShader(d, BH_SHADER_DIR "/sharc.relax.temporal.comp.spv", temporalBind, p.relaxTemporal)
-        && sharcShader(d, BH_SHADER_DIR "/sharc.relax.spatial.comp.spv", spatialBind, p.relaxSpatial, 16u);
+        && sharcShader(d, BH_SHADER_DIR "/sharc.relax.spatial.comp.spv", spatialBind, p.relaxSpatial, 16u)
+        && sharcShader(d, BH_SHADER_DIR "/reblur.comp.spv", reblurBind, p.reblur, 16u);
     if (!shaders) {
         spdlog::error("sharc shaders failed");
         sharcDestroy(p, d);
@@ -160,7 +184,9 @@ bool sharcResize(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
     if (!p.live) {
         return true;
     }
-    if (!sharcImage(p.raw, d, extent) || !sharcImage(p.history, d, extent) || !sharcImage(p.temporal, d, extent)
+    if (!sharcScreen(p, d, heaps, extent)
+        || !sharcImage(p.raw, d, extent) || !sharcImage(p.history, d, extent)
+        || !sharcImage(p.temporal, d, extent)
         || !bindSharcImages(p, d, heaps)) {
         spdlog::error("sharc resize failed");
         return false;
@@ -171,11 +197,13 @@ bool sharcResize(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
 }
 
 void sharcDestroy(SharcPass& p, Device& d) {
+    shaderDestroy(d, p.reblur);
     shaderDestroy(d, p.relaxSpatial);
     shaderDestroy(d, p.relaxTemporal);
     shaderDestroy(d, p.query);
     shaderDestroy(d, p.resolve);
     shaderDestroy(d, p.update);
+    gpuBufferDestroy(p.color, d);
     gpuBufferDestroy(p.params, d);
     gpuBufferDestroy(p.resolved, d);
     gpuBufferDestroy(p.accum, d);
@@ -183,6 +211,7 @@ void sharcDestroy(SharcPass& p, Device& d) {
     destroyTracked(d, {&p.raw, &p.history, &p.temporal});
     p.hasPrev = false;
     p.cleared = false;
+    p.screenCleared = false;
     p.live = false;
     p.frameIndex = 0u;
     p.lastLog[0] = '\0';
@@ -202,9 +231,17 @@ void sharcRecord(
     float giGain,
     uint32_t lightCount,
     VkDeviceAddress tlas,
-    bool freeze) {
+    bool freeze,
+    uint32_t restirSlice,
+    uint32_t restirOn,
+    float shadowBias,
+    float shadowRange,
+    float sunDisk,
+    uint32_t sunRays,
+    uint32_t denoise) {
     if (cmd == VK_NULL_HANDLE || !p.live || p.update.handle == VK_NULL_HANDLE || p.resolve.handle == VK_NULL_HANDLE
         || p.query.handle == VK_NULL_HANDLE || p.relaxTemporal.handle == VK_NULL_HANDLE || p.relaxSpatial.handle == VK_NULL_HANDLE
+        || p.reblur.handle == VK_NULL_HANDLE
         || tlas == 0 || extent.width == 0 || extent.height == 0 || deviceLost(d)) {
         if (p.live) {
             std::snprintf(p.lastLog, sizeof(p.lastLog), "sharc ждёт геометрию");
@@ -241,6 +278,12 @@ void sharcRecord(
     params.tlasHi = static_cast<uint32_t>(tlas >> 32);
     params.giGain = giGain > 0.0f ? giGain : 1.0f;
     params.lightCount = lightCount < kLightCap ? lightCount : kLightCap;
+    params.restirSlice = restirSlice;
+    params.restirOn = restirOn;
+    params.shadowBias = shadowBias > 0.0f ? shadowBias : 0.02f;
+    params.shadowRange = shadowRange;
+    params.sunDisk = sunDisk;
+    params.sunRays = sunRays == 0u ? 1u : sunRays;
     std::memcpy(params.prevVp, p.prevVp, sizeof(params.prevVp));
     const uint32_t slot = flight & 1u;
     std::memcpy(static_cast<uint8_t*>(p.params.mapped) + kParamStride * slot, &params, sizeof(params));
@@ -257,6 +300,22 @@ void sharcRecord(
         fillZero(cmd, p.resolved);
         p.cleared = true;
     }
+    if (!p.screenCleared && p.color.buffer != VK_NULL_HANDLE) {
+        fillZero(cmd, p.color);
+        p.screenCleared = true;
+    }
+    if (p.history.layout == VK_IMAGE_LAYOUT_UNDEFINED || p.raw.layout == VK_IMAGE_LAYOUT_UNDEFINED
+        || p.temporal.layout == VK_IMAGE_LAYOUT_UNDEFINED) {
+        const VkClearColorValue zero{};
+        const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        TrackedImage* pics[] = {&p.raw, &p.history, &p.temporal};
+        for (TrackedImage* pic : pics) {
+            imageBarrier(cmd, *pic, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+            vkCmdClearColorImage(cmd, pic->image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero, 1, &range);
+            imageBarrier(cmd, *pic, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+        }
+    }
     const uint32_t down = params.downscale;
     const uint32_t coarseX = (extent.width + down - 1u) / down;
     const uint32_t coarseY = (extent.height + down - 1u) / down;
@@ -270,7 +329,20 @@ void sharcRecord(
     bufferBarrierComputeWriteToReadWrite(cmd, p.resolved.buffer, p.resolved.size);
     bufferBarrierComputeWriteToReadWrite(cmd, p.accum.buffer, p.accum.size);
     cmdBindCompute(cmd, p.query.handle);
+    cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, denoise, 0u);
     dispatch2D(cmd, extent, 8u);
+    if (denoise != 0u && p.color.buffer != VK_NULL_HANDLE) {
+        bufferBarrierComputeWriteToReadWrite(cmd, p.color.buffer, p.color.size);
+        cmdBindCompute(cmd, p.reblur.handle);
+        for (uint32_t pass = 0u; pass < 5u; ++pass) {
+            cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight, pass);
+            dispatch2D(cmd, extent, 8u);
+            if (pass == 4u) {
+                break;
+            }
+            bufferBarrierComputeWriteToReadWrite(cmd, p.color.buffer, p.color.size);
+        }
+    }
     if (!freeze) {
         p.prevX = camX;
         p.prevY = camY;
@@ -280,7 +352,7 @@ void sharcRecord(
         }
     }
     p.frameIndex += 1u;
-    std::snprintf(p.lastLog, sizeof(p.lastLog), "sharc %u  %ux%u / %u", kSharcCapacity, extent.width, extent.height, down);
+    std::snprintf(p.lastLog, sizeof(p.lastLog), "sharc %u  %ux%u / %u  %s", kSharcCapacity, extent.width, extent.height, down, denoise != 0u ? "шум" : "сырой");
 }
 
 } // namespace burnhope

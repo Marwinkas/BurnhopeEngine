@@ -1,4 +1,4 @@
-// 80 байт. Совпадает с SharcGpuParams в render/Sharc.hpp. Скалярная раскладка.
+// 176 байт. Совпадает с SharcGpuParams в render/Sharc.hpp. Скалярная раскладка.
 
 struct SharcGpuParams {
     float camX;
@@ -22,4 +22,12 @@ struct SharcGpuParams {
     float giGain;
     uint lightCount;
     float4x4 prevViewProj;
+    uint restirSlice;
+    uint restirOn;
+    float shadowBias;
+    float shadowRange;
+    float sunDisk;
+    uint sunRays;
+    uint padSun0;
+    uint padSun1;
 };

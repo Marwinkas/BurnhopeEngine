@@ -112,8 +112,16 @@ void destroyScreen(RestirPass& p, Device& d) {
     gpuBufferDestroy(p.reservoirs, d);
     gpuImageDestroy(p.histPos, d);
     gpuImageDestroy(p.histMat, d);
+    gpuImageDestroy(p.sigmaPenumbra, d);
+    gpuImageDestroy(p.sigmaSun, d);
+    gpuImageDestroy(p.sigmaHist, d);
     p.histPosLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     p.histMatLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    p.sigmaPenumbraLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    p.sigmaSunLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    p.sigmaHistLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    p.sigmaPing[0] = 0;
+    p.sigmaPing[1] = 0;
     p.cleared = false;
     p.statReady[0] = 0;
     p.statReady[1] = 0;
@@ -129,12 +137,18 @@ bool createScreen(RestirPass& p, Device& d, VkExtent2D extent) {
     const RTXDI_ReservoirBufferParameters reservoir = p.ctx[0]->GetReservoirBufferParameters();
     const VkDeviceSize bytes = VkDeviceSize{reservoir.reservoirArrayPitch} * 3u * 2u * sizeof(RestirSlot);
     const VkExtent2D hist{extent.width * 2u, extent.height * 2u};
+    const VkExtent2D sigmaPair{extent.width, extent.height * 2u};
+    const VkExtent2D sigmaHist{extent.width, extent.height * 4u};
+    const VkImageUsageFlags sigmaUse = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     const bool ok = gpuBufferCreate(p.reservoirs, d, bytes,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, false)
         && gpuImageCreate(p.histPos, d, hist, VK_FORMAT_R32G32B32A32_SFLOAT,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
         && gpuImageCreate(p.histMat, d, hist, VK_FORMAT_R32G32B32A32_UINT,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+        && gpuImageCreate(p.sigmaPenumbra, d, sigmaPair, VK_FORMAT_R16G16B16A16_SFLOAT, sigmaUse, VK_IMAGE_ASPECT_COLOR_BIT)
+        && gpuImageCreate(p.sigmaSun, d, sigmaPair, VK_FORMAT_R16G16B16A16_SFLOAT, sigmaUse, VK_IMAGE_ASPECT_COLOR_BIT)
+        && gpuImageCreate(p.sigmaHist, d, sigmaHist, VK_FORMAT_R16G16B16A16_SFLOAT, sigmaUse, VK_IMAGE_ASPECT_COLOR_BIT);
     if (!ok) {
         spdlog::error("restir screen buffers failed");
         destroyScreen(p, d);
@@ -175,14 +189,33 @@ void clearHistory(VkCommandBuffer cmd, RestirPass& p) {
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, 1);
     const VkClearColorValue zero{};
     const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    imageLayout(cmd, p.sigmaPenumbra.image, p.sigmaPenumbraLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, 1);
+    imageLayout(cmd, p.sigmaSun.image, p.sigmaSunLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, 1);
+    imageLayout(cmd, p.sigmaHist.image, p.sigmaHistLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, 1);
     vkCmdClearColorImage(cmd, p.histPos.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero, 1, &range);
     vkCmdClearColorImage(cmd, p.histMat.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero, 1, &range);
+    vkCmdClearColorImage(cmd, p.sigmaPenumbra.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero, 1, &range);
+    vkCmdClearColorImage(cmd, p.sigmaSun.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero, 1, &range);
+    vkCmdClearColorImage(cmd, p.sigmaHist.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero, 1, &range);
     imageLayout(cmd, p.histPos.image, p.histPosLayout, VK_IMAGE_LAYOUT_GENERAL,
         VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, 1);
     imageLayout(cmd, p.histMat.image, p.histMatLayout, VK_IMAGE_LAYOUT_GENERAL,
         VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, 1);
+    const VkAccessFlags2 sigmaRw = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+    imageLayout(cmd, p.sigmaPenumbra.image, p.sigmaPenumbraLayout, VK_IMAGE_LAYOUT_GENERAL,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, sigmaRw, 1);
+    imageLayout(cmd, p.sigmaSun.image, p.sigmaSunLayout, VK_IMAGE_LAYOUT_GENERAL,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, sigmaRw, 1);
+    imageLayout(cmd, p.sigmaHist.image, p.sigmaHistLayout, VK_IMAGE_LAYOUT_GENERAL,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, sigmaRw, 1);
 }
 
 LightGpuData lightAt(const void* lights, uint32_t index) {
@@ -408,6 +441,16 @@ bool restirCreate(RestirPass& p, Device& d, const DescriptorHeaps& heaps, VkExte
     di.ubo(15, HeapBuf::RestirConst);
     di.storageImg(16, HeapImg::RestirPos);
     di.storageImg(17, HeapImg::RestirMat);
+    di.storageImg(26, HeapImg::SigmaPenumbra);
+    di.storageImg(27, HeapImg::SigmaSun);
+    PassBindings sigma{heaps};
+    sigma.ubo(0, HeapBuf::Frame);
+    sigma.sampledImg(2, HeapImg::Depth);
+    sigma.storageImg(3, HeapImg::HdrAStorage);
+    sigma.storageImg(5, HeapImg::Surf1);
+    sigma.storageImg(26, HeapImg::SigmaPenumbra);
+    sigma.storageImg(27, HeapImg::SigmaSun);
+    sigma.storageImg(28, HeapImg::SigmaHist);
     di.storageBuf(19, HeapBuf::Lights, true);
     di.storageBuf(20, HeapBuf::Materials, true);
     di.sampledImg(21, HeapImg::Textures);
@@ -416,7 +459,8 @@ bool restirCreate(RestirPass& p, Device& d, const DescriptorHeaps& heaps, VkExte
     di.knob(50, HeapBuf::Flags);
     di.knob(55, HeapBuf::Shade);
     if (!shaderOf(d, presample, BH_SHADER_DIR "/restir.presample.comp.spv", p.presample)
-        || !shaderOf(d, di, BH_SHADER_DIR "/restir.di.comp.spv", p.di)) {
+        || !shaderOf(d, di, BH_SHADER_DIR "/restir.di.comp.spv", p.di)
+        || !shaderOf(d, sigma, BH_SHADER_DIR "/sigma.comp.spv", p.sigma)) {
         spdlog::error("restir shaders failed");
         restirDestroy(p, d);
         return false;
@@ -478,6 +522,7 @@ void restirDestroy(RestirPass& p, Device& d) {
     destroyScreen(p, d);
     shaderDestroy(d, p.presample);
     shaderDestroy(d, p.di);
+    shaderDestroy(d, p.sigma);
     gpuBufferDestroy(p.neighbors, d);
     gpuBufferDestroy(p.ris, d);
     gpuBufferDestroy(p.statRead, d);
@@ -525,7 +570,13 @@ bool restirBind(RestirPass& p, Device& d, DescriptorHeaps& heaps) {
         && heapWriteImage(heaps, d, static_cast<uint32_t>(HeapImg::RestirPos), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
             p.histPos, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT, 1)
         && heapWriteImage(heaps, d, static_cast<uint32_t>(HeapImg::RestirMat), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-            p.histMat, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+            p.histMat, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && heapWriteImage(heaps, d, static_cast<uint32_t>(HeapImg::SigmaPenumbra), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            p.sigmaPenumbra, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && heapWriteImage(heaps, d, static_cast<uint32_t>(HeapImg::SigmaSun), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            p.sigmaSun, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && heapWriteImage(heaps, d, static_cast<uint32_t>(HeapImg::SigmaHist), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            p.sigmaHist, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     if (!history) {
         spdlog::error("restir descriptor bind failed");
     }
@@ -715,8 +766,37 @@ void restirRecord(
     if (p.knobSunOn != 0u) {
         storageBarrier(cmd);
         push.pass = 4;
+        push.pad0 = flight;
         bindCompute(cmd, p.di, push);
         dispatch2D(cmd, extent, 8u);
+        p.sunSlice[flight] = constants.writeSlice;
+        if (p.sigma.handle != VK_NULL_HANDLE) {
+            const VkAccessFlags2 rw = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+            imageLayout(cmd, p.sigmaPenumbra.image, p.sigmaPenumbraLayout, VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw, 1);
+            imageLayout(cmd, p.sigmaSun.image, p.sigmaSunLayout, VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw, 1);
+            imageLayout(cmd, p.sigmaHist.image, p.sigmaHistLayout, VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw, 1);
+            const uint32_t ping = p.sigmaPing[flight] & 1u;
+            RestirPush denoise{};
+            denoise.pass = 0;
+            denoise.pad0 = flight;
+            denoise.pad1 = flight * 2u + ping;
+            denoise.pad2 = flight * 2u + (1u - ping);
+            bindCompute(cmd, p.sigma, denoise);
+            dispatch2D(cmd, extent, 8u);
+            imageLayout(cmd, p.sigmaHist.image, p.sigmaHistLayout, VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw, 1);
+            denoise.pass = 1;
+            bindCompute(cmd, p.sigma, denoise);
+            dispatch2D(cmd, extent, 8u);
+            p.sigmaPing[flight] ^= 1u;
+        }
     }
     rhiBufferBarrier(cmd, p.ris.buffer, statOff, kRisStatBytes,
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,

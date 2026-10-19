@@ -92,6 +92,14 @@ struct DescriptorHeaps;
 struct RestirPass {
     ShaderExt presample{};
     ShaderExt di{};
+    ShaderExt sigma{};
+    GpuImage sigmaPenumbra{};
+    GpuImage sigmaSun{};
+    GpuImage sigmaHist{};
+    VkImageLayout sigmaPenumbraLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout sigmaSunLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout sigmaHistLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    uint32_t sigmaPing[2]{};
     GpuBuffer reservoirs{};
     GpuBuffer neighbors{};
     GpuBuffer ris{};
@@ -116,6 +124,7 @@ struct RestirPass {
     float prevCamera[2][4]{};
     GpuBuffer statRead{};
     uint32_t parity[2]{};
+    uint32_t sunSlice[2]{};
     uint32_t historyValid[2]{};
     uint32_t statReady[2]{};
     uint32_t knobLocal = 8;

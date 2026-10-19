@@ -1532,6 +1532,7 @@ void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
     scene->rcSun = tweaks.rcSun;
     scene->rcBounce = tweaks.rcBounce;
     scene->giGain = tweaks.giGain;
+    scene->sharcDenoise = tweaks.sharcDenoise;
     scene->restir.knobLocal = static_cast<uint32_t>(std::clamp(tweaks.restirLocal, 0.0f, 16.0f));
     scene->restir.knobSpatial = static_cast<uint32_t>(std::clamp(tweaks.restirSpatial, 0.0f, 32.0f));
     scene->restir.knobRadius = std::clamp(tweaks.restirRadius, 1.0f, 64.0f);
@@ -2082,7 +2083,7 @@ void sceneFrameRecord(
             && recreateImage(scene->hizMax[0].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
             && recreateImage(scene->hizMax[1].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
         if (!descriptorHeapsCreate(scene->gpuHeap, device, HeapLayout{
-                .buffers = 74,
+                .buffers = 75,
                 .images = static_cast<uint32_t>(HeapImg::Count),
                 .samplers = 3,
             })) {
@@ -2655,19 +2656,19 @@ void sceneFrameRecord(
     if (!restirOn) {
         restirNote(scene->restir, scene->lightProfile, (scene->passMask & kPassRestir) != 0u ? "нет шейдера" : "выкл");
     }
-    if (worldSharc) {
-        framePassSharc(ctx, scene->sharc, scene->shade.hdrA, scene->giGain, lightCount, tlas);
-    } else if (worldVx) {
-        framePassVoxel(ctx, scene->voxel, scene->shade.hdrA, true, scene->instanceCount, propMoved);
-    } else {
-        framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax, scene->rcSun, scene->rcBounce);
-    }
     if (restirOn) {
         const void* gpuLights = lightSrc;
         if (scene->lightBuf.mapped != nullptr) {
             gpuLights = static_cast<const uint8_t*>(scene->lightBuf.mapped) + sizeof(LightGpuData) * kLightCap * flight;
         }
         framePassRestir(ctx, scene->restir, gpu, gpuLights, lightCount, scene->passMask, tlas);
+    }
+    if (worldSharc) {
+        framePassSharc(ctx, scene->sharc, scene->shade.hdrA, scene->giGain, lightCount, tlas, scene->restir, restirOn ? 1u : 0u, scene->sharcDenoise ? 1u : 0u);
+    } else if (worldVx) {
+        framePassVoxel(ctx, scene->voxel, scene->shade.hdrA, true, scene->instanceCount, propMoved);
+    } else {
+        framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax, scene->rcSun, scene->rcBounce);
     }
     framePassShadeLate(ctx, scene->shade, scene->sky);
     const bool bloomOn = (knob.flags.passMask & 32u) != 0u && scene->hud.bloom > 0.001f;

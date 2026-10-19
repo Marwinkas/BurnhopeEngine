@@ -218,6 +218,7 @@ struct SceneFrameImpl {
     float rcSun = 1.0f;
     float rcBounce = 1.0f;
     float giGain = 2.0f;
+    bool sharcDenoise = true;
     float bloomThreshold = 0.35f;
     float fogDensity = 0.06f;
     float fogHeight = 0.0f;
@@ -290,7 +291,7 @@ void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, Gt
 void framePassRestir(const RenderContext& ctx, RestirPass& restir, const FrameView& view, const void* lights, uint32_t lightCount, uint32_t passMask, VkDeviceAddress tlas);
 void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky);
 void framePassRadiance(const RenderContext& ctx, RadiancePass& rad, TrackedImage& hdrA, bool worldRc, float rays, float spacing, float intensity, float maxDist, float sunScale, float bounce);
-void framePassSharc(const RenderContext& ctx, SharcPass& sharc, TrackedImage& hdrA, float giGain, uint32_t lightCount, VkDeviceAddress tlas);
+void framePassSharc(const RenderContext& ctx, SharcPass& sharc, TrackedImage& hdrA, float giGain, uint32_t lightCount, VkDeviceAddress tlas, const RestirPass& restir, uint32_t restirOn, uint32_t denoise);
 void framePassVoxel(const RenderContext& ctx, VoxelPass& voxel, TrackedImage& hdrA, bool worldVx, uint32_t instances, bool moved);
 void framePassTonemap(const RenderContext& ctx, TonemapPass& tone, TrackedImage& hdrA, TrackedImage& hdrB, const Swapchain& swap, const FrameContext& frame, bool bloomOn, bool skipAa, bool taaOn);
 

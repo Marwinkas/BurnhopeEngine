@@ -13,19 +13,33 @@
 [[vk::binding(71, 0)]] globallycoherent RWByteAddressBuffer gAcc;
 [[vk::binding(72, 0)]] RWByteAddressBuffer gResolved;
 [[vk::binding(73, 0)]] ConstantBuffer<SharcGpuParams> gSharc;
+[[vk::binding(77, 0)]] RWByteAddressBuffer gColor;
 
 #include "sharc_cache.slang"
 #include "sharc_hit.slang"
 
-// SHaRC Query. Прямой свет первичного хита уже в HdrA. Дальше путь сэмпла:
-// луч короче диагонали вокселя или уже конуса шероховатости не берёт кэш,
-// годный хит добавляет SharcGetCachedRadiance на один BRDF-вес и обрывает путь.
-// Промах пишет 0, без неба. Денойза нет.
+struct QueryPush {
+    uint denoise;
+    uint pad0;
+    uint pad1;
+    uint pad2;
+};
+
+[[vk::push_constant]]
+QueryPush gPush;
 
 void sharcAddHdr(uint2 px, float3 indirect) {
     float3 add = max(indirect, 0.0);
     if (!all(add == add)) {
         add = 0.0;
+    }
+    if (gPush.denoise != 0u) {
+        const uint o = (px.y * gFrame.extent.x + px.x) * 16u;
+        gColor.Store(o, asuint(add.r));
+        gColor.Store(o + 4u, asuint(add.g));
+        gColor.Store(o + 8u, asuint(add.b));
+        gColor.Store(o + 12u, asuint(1.0));
+        return;
     }
     if (gFrame.debugMode == 4u) {
         gHdr[px] = float4(add.r * 0.8, add.g * 0.8, add.b * 0.8, 1.0);
@@ -49,15 +63,15 @@ void sharcQuery(uint3 dtid : SV_DispatchThreadID) {
         return;
     }
     if (gVis.Load(int3(px, 0)) == 0u || (gSharc.tlasLo == 0u && gSharc.tlasHi == 0u)) {
-        if (gFrame.debugMode == 4u) {
-            gHdr[px] = 0.0;
+        if (gFrame.debugMode == 4u || gPush.denoise != 0u) {
+            sharcAddHdr(px, 0.0);
         }
         return;
     }
     float depth = gDepth.Load(int3(px, 0));
     if (depth <= 0.0) {
-        if (gFrame.debugMode == 4u) {
-            gHdr[px] = 0.0;
+        if (gFrame.debugMode == 4u || gPush.denoise != 0u) {
+            sharcAddHdr(px, 0.0);
         }
         return;
     }

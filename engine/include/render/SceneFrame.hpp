@@ -63,6 +63,7 @@ struct SceneTweaks {
     float rcSun = 1.0f;
     float rcBounce = 1.0f;
     float giGain = 2.0f;
+    bool sharcDenoise = true;
     float restirLocal = 8.0f;
     float restirSpatial = 3.0f;
     float restirRadius = 4.0f;

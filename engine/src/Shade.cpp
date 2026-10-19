@@ -159,6 +159,17 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     reflectUp.ubo(52, HeapBuf::Ssr);
     reflectUp.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
         heapBufOffset(*reflectUp.raw.heaps, kGradeSlot), static_cast<uint32_t>(reflectUp.raw.heaps->bufferDescSize));
+    PassBindings relaxBind{heaps};
+    relaxBind.ubo(0, HeapBuf::Frame);
+    relaxBind.sampledImg(2, HeapImg::Depth);
+    relaxBind.storageImg(3, HeapImg::HdrAStorage);
+    relaxBind.storageImg(4, HeapImg::Surf0);
+    relaxBind.storageImg(5, HeapImg::Surf1);
+    relaxBind.storageImg(36, HeapImg::Reflect);
+    relaxBind.storageImg(37, HeapImg::ReflectHist0);
+    relaxBind.storageImg(38, HeapImg::ReflectHist1);
+    relaxBind.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
+        heapBufOffset(*relaxBind.raw.heaps, kGradeSlot), static_cast<uint32_t>(relaxBind.raw.heaps->bufferDescSize));
     const ShaderCreateDesc contactDesc{
         .path = BH_SHADER_DIR "/contact.comp.spv",
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -205,6 +216,15 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
         .pushBytes = sizeof(FlightPush),
         .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
     };
+    const ShaderCreateDesc relaxDesc{
+        .path = BH_SHADER_DIR "/relax.comp.spv",
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .mappingCount = relaxBind.raw.count,
+        .mappings = relaxBind.raw.mappings,
+        .entry = "main",
+        .pushBytes = sizeof(FlightPush),
+        .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
+    };
     const ShaderCreateDesc fogDesc{
         .path = BH_SHADER_DIR "/shade.fog.comp.spv",
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -213,7 +233,8 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     };
     if (!shaderCreate(d, skyDesc, p.sky) || !shaderCreate(d, sunDesc, p.sun) || !shaderCreate(d, punctualDesc, p.punctual)
         || !shaderCreate(d, fogDesc, p.fog) || !shaderCreate(d, gtaoDesc, p.gtao) || !shaderCreate(d, contactDesc, p.contactCs)
-        || !shaderCreate(d, reflectTraceDesc, p.reflectTrace) || !shaderCreate(d, reflectUpDesc, p.reflectUp)) {
+        || !shaderCreate(d, reflectTraceDesc, p.reflectTrace) || !shaderCreate(d, reflectUpDesc, p.reflectUp)
+        || !shaderCreate(d, relaxDesc, p.relax)) {
         spdlog::error("shade compute shader failed");
         shadePassDestroy(p, d);
         return false;
@@ -222,6 +243,7 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
 }
 
 void shadePassDestroy(ShadePass& p, Device& d) {
+    shaderDestroy(d, p.relax);
     shaderDestroy(d, p.reflectUp);
     shaderDestroy(d, p.reflectTrace);
     shaderDestroy(d, p.contactCs);
@@ -306,10 +328,19 @@ void reflectRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p, uint32_
     cmdPushFlight(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight);
     dispatch2D(cmd, extent, 8u);
     imageBarrier(cmd, p.reflect, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use, VK_IMAGE_ASPECT_COLOR_BIT, true);
-    imageBarrier(cmd, p.reflectHist[0], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use);
-    imageBarrier(cmd, p.reflectHist[1], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use);
-    cmdBindCompute(cmd, p.reflectUp.handle);
+    imageBarrier(cmd, p.reflectHist[0], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use, VK_IMAGE_ASPECT_COLOR_BIT, true);
+    imageBarrier(cmd, p.reflectHist[1], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use, VK_IMAGE_ASPECT_COLOR_BIT, true);
+    cmdBindCompute(cmd, p.relax.handle);
     cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight, 0u);
+    dispatch2D(cmd, extent, 8u);
+    imageBarrier(cmd, p.reflectHist[flight & 1u], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use, VK_IMAGE_ASPECT_COLOR_BIT, true);
+    cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight, 1u);
+    dispatch2D(cmd, extent, 8u);
+    imageBarrier(cmd, p.reflect, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use, VK_IMAGE_ASPECT_COLOR_BIT, true);
+    cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight, 2u);
+    dispatch2D(cmd, extent, 8u);
+    imageBarrier(cmd, p.reflectHist[flight & 1u], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use, VK_IMAGE_ASPECT_COLOR_BIT, true);
+    cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight, 3u);
     dispatch2D(cmd, extent, 8u);
 }
 
