@@ -97,8 +97,10 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     fog.sampledImg(1, HeapImg::Vis);
     fog.sampledImg(2, HeapImg::Depth);
     fog.storageImg(3, HeapImg::HdrAStorage);
-    fog.sampledImg(15, HeapImg::Shadow);
+    fog.sampler(13, HeapSamp::Linear);
+    fog.sampledImg(42, HeapImg::SkyViewSample);
     fog.knob(50, HeapBuf::Flags);
+    fog.knob(54, HeapBuf::RcParams);
     fog.knob(55, HeapBuf::Shade);
     PassBindings gtao{heaps};
     gtao.ubo(0, HeapBuf::Frame);
@@ -109,13 +111,10 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     PassBindings contact{heaps};
     contact.ubo(0, HeapBuf::Frame);
     contact.sun();
-    contact.sampledImg(1, HeapImg::Vis);
     contact.sampledImg(2, HeapImg::Depth);
-    contact.storageBuf(7, HeapBuf::Verts);
-    contact.storageBuf(8, HeapBuf::Indices);
-    contact.storageBuf(9, HeapBuf::Meshlets);
-    contact.storageBuf(10, HeapBuf::Instances);
+    contact.sampler(13, HeapSamp::Nearest);
     contact.storageImg(46, HeapImg::Contact);
+    contact.knob(50, HeapBuf::Flags);
     contact.knob(55, HeapBuf::Shade);
     PassBindings reflectTrace{heaps};
     reflectTrace.ubo(0, HeapBuf::Frame);

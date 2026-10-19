@@ -7,15 +7,9 @@
 
 namespace burnhope {
 
-bool shaderCreate(Device& d, const ShaderCreateDesc& desc, ShaderExt& out) {
-    MappedFile mapped{};
-    if (desc.path == nullptr || !fileMapReadOnly(desc.path, &mapped)) {
-        spdlog::error("SPIR-V missing or cannot map: {}", desc.path != nullptr ? desc.path : "null");
-        return false;
-    }
-    if (mapped.size == 0 || (mapped.size % 4) != 0) {
-        fileUnmap(&mapped);
-        spdlog::error("SPIR-V size is not a multiple of 4: {}", desc.path);
+bool shaderCreateCode(Device& d, const ShaderCreateDesc& desc, const void* code, uint64_t codeBytes, ShaderExt& out) {
+    if (code == nullptr || codeBytes == 0 || (codeBytes % 4) != 0) {
+        spdlog::error("SPIR-V size is not a multiple of 4");
         return false;
     }
 
@@ -45,21 +39,37 @@ bool shaderCreate(Device& d, const ShaderCreateDesc& desc, ShaderExt& out) {
         .stage = desc.stage,
         .nextStage = desc.nextStage,
         .codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT,
-        .codeSize = mapped.size,
-        .pCode = reinterpret_cast<const uint32_t*>(mapped.data),
+        .codeSize = codeBytes,
+        .pCode = code,
         .pName = desc.entry != nullptr ? desc.entry : "main",
         .pushConstantRangeCount = desc.pushBytes > 0 ? 1u : 0u,
         .pPushConstantRanges = desc.pushBytes > 0 ? &pushRange : nullptr,
     };
 
     const VkResult r = vkCreateShadersEXT(d.device, 1, &ci, nullptr, &out.handle);
-    fileUnmap(&mapped);
     if (r != VK_SUCCESS) {
-        spdlog::error("vkCreateShadersEXT {} failed: {}", desc.path, static_cast<int>(r));
+        out.handle = VK_NULL_HANDLE;
+        spdlog::error("vkCreateShadersEXT {} failed: {}", desc.path != nullptr ? desc.path : "nrd", static_cast<int>(r));
         return false;
     }
     out.stage = desc.stage;
     return true;
+}
+
+bool shaderCreate(Device& d, const ShaderCreateDesc& desc, ShaderExt& out) {
+    MappedFile mapped{};
+    if (desc.path == nullptr || !fileMapReadOnly(desc.path, &mapped)) {
+        spdlog::error("SPIR-V missing or cannot map: {}", desc.path != nullptr ? desc.path : "null");
+        return false;
+    }
+    if (mapped.size == 0 || (mapped.size % 4) != 0) {
+        fileUnmap(&mapped);
+        spdlog::error("SPIR-V size is not a multiple of 4: {}", desc.path);
+        return false;
+    }
+    const bool ok = shaderCreateCode(d, desc, mapped.data, mapped.size, out);
+    fileUnmap(&mapped);
+    return ok;
 }
 
 bool shaderCreateSpvFile(

@@ -1,9 +1,26 @@
 #include "core/math.slang"
 
-float D_GGX(float NdotH, float a) {
-    const float a2 = a * a;
-    const float d = (NdotH * a2 - NdotH) * NdotH + 1.0;
-    return a2 / max(kPi * d * d, 1e-7);
+float D_GGX(float NdotH, float alpha) {
+    const float oneMinus = 1.0 - NdotH * NdotH;
+    const float a = NdotH * alpha;
+    const float k = min(alpha / max(oneMinus + a * a, 1e-7), 453.5);
+    return k * k * (1.0 / kPi);
+}
+
+float computeDielectricF0(float reflectance) {
+    return 0.16 * reflectance * reflectance;
+}
+
+float3 computeF0(float3 baseColor, float metallic, float reflectance) {
+    return baseColor * metallic + reflectance * (1.0 - metallic);
+}
+
+float3 computeDiffuseColor(float3 baseColor, float metallic) {
+    return baseColor * (1.0 - metallic);
+}
+
+float3 f0ClearCoatToSurface(float3 f0) {
+    return saturate(f0 * (f0 * (0.941892 - 0.263008 * f0) + 0.346479) - 0.0285998);
 }
 
 // Height-Correlated Smith GGX visibility function V = G / (4 * NdotV * NdotL)

@@ -85,7 +85,7 @@ void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) 
     const float3 P = reconstructWorld(px, depth);
     const float3 V = normalize(gFrame.cameraPos.xyz - P);
     const float NdotV = saturate(dot(N, V));
-    const float3 f0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    const float3 f0 = computeF0(albedo, metallic, computeDielectricF0(0.5));
     const float gtao = ormAo;
     const float a = max(roughness * roughness, 0.002);
     float3 color = gHdr[px].rgb;
@@ -186,10 +186,10 @@ void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) 
         const float3 F2 = F_Schlick(saturate(dot(V, H2)), f0);
         const float D2 = D_GGX(saturate(dot(N, H2)), a);
         const float Vis2 = V_SmithGGXCorrelated(NdotV, ndl, a);
-        float3 specL = min(D2 * Vis2 * F2, float3(8.0, 8.0, 8.0));
-        specL *= lerp(float3(1.0, 1.0, 1.0), energyCompensation(f0, NdotV, roughness), saturate(gShade.ggx));
+        float3 specL = D2 * Vis2 * F2;
+        specL *= energyCompensation(f0, NdotV, roughness);
         specL *= lerp(1.0, specOcclusion(NdotV, gtao, roughness), saturate(gShade.specOcc));
-        float3 diffL = albedo * (1.0 - F2) * (1.0 - metallic) * Fd_Lambert();
+        float3 diffL = computeDiffuseColor(albedo, metallic) * Fd_Lambert();
         diffL = coloredPenumbra(diffL, albedo, pshadow);
         float3 lampRad = lamp.colorIntensity.rgb * lamp.colorIntensity.w;
         const float lampPeak = max(lampRad.r, max(lampRad.g, lampRad.b));

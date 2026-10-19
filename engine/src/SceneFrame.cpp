@@ -537,6 +537,11 @@ bool writeKnob(DescriptorHeaps& heaps, Device& device, const GpuBuffer& post) {
             return false;
         }
     }
+    const VkDeviceAddress gradeAt = post.address + sizeof(FramePost) * 2;
+    if (!heapWriteBufferFlight(heaps, device, 0, kGradeSlot, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, gradeAt, sizeof(GradeBlock))
+        || !heapWriteBufferFlight(heaps, device, 1, kGradeSlot, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, gradeAt + sizeof(GradeBlock), sizeof(GradeBlock))) {
+        return false;
+    }
     return true;
 }
 
@@ -699,6 +704,72 @@ uint32_t uploadLights(SceneFrameImpl& s, uint32_t flight) {
     }
     auto* dst = static_cast<uint8_t*>(s.lightBuf.mapped) + sizeof(LightGpuData) * kLightCap * flight;
     std::memcpy(dst, src, sizeof(LightGpuData) * count);
+    if ((s.passMask & kPassRestir) != 0u && s.materialSrc != nullptr && s.materialCount > 0u) {
+        uint32_t pick[32]{};
+        float score[32]{};
+        uint32_t picked = 0;
+        for (uint32_t i = 0; i < s.instanceCount; ++i) {
+            const GpuInstance& inst = s.cpuInstances[i];
+            if (inst.materialId >= s.materialCount || inst.sphere[3] < 0.02f) {
+                continue;
+            }
+            const MaterialGpuData& mat = s.materialSrc[inst.materialId];
+            const float luma = 0.2126f * mat.baseColor[0] + 0.7152f * mat.baseColor[1] + 0.0722f * mat.baseColor[2];
+            const float rank = mat.emissiveIntensity * std::max(luma, 0.05f);
+            if (rank <= 0.02f) {
+                continue;
+            }
+            if (picked < 32u) {
+                pick[picked] = i;
+                score[picked] = rank;
+                picked += 1u;
+                continue;
+            }
+            uint32_t worst = 0;
+            for (uint32_t k = 1; k < 32u; ++k) {
+                if (score[k] < score[worst]) {
+                    worst = k;
+                }
+            }
+            if (rank > score[worst]) {
+                pick[worst] = i;
+                score[worst] = rank;
+            }
+        }
+        for (uint32_t n = 0; n < picked && count < kLightCap; ++n) {
+            const GpuInstance& inst = s.cpuInstances[pick[n]];
+            const MaterialGpuData& mat = s.materialSrc[inst.materialId];
+            bool near = false;
+            for (uint32_t l = 0; l < count; ++l) {
+                LightGpuData prev{};
+                std::memcpy(&prev, dst + sizeof(LightGpuData) * l, sizeof(prev));
+                const float dx = prev.pos[0] - inst.sphere[0];
+                const float dy = prev.pos[1] - inst.sphere[1];
+                const float dz = prev.pos[2] - inst.sphere[2];
+                if (dx * dx + dy * dy + dz * dz < 0.25f) {
+                    near = true;
+                    break;
+                }
+            }
+            if (near) {
+                continue;
+            }
+            LightGpuData lamp{};
+            lamp.pos[0] = inst.sphere[0];
+            lamp.pos[1] = inst.sphere[1];
+            lamp.pos[2] = inst.sphere[2];
+            lamp.radius = std::max(inst.sphere[3] * 8.0f, 4.0f);
+            lamp.color[0] = mat.baseColor[0];
+            lamp.color[1] = mat.baseColor[1];
+            lamp.color[2] = mat.baseColor[2];
+            lamp.intensity = mat.emissiveIntensity * 8.0f;
+            lamp.type = kLightPoint;
+            lamp.sourceRadius = std::max(inst.sphere[3] * 0.35f, 0.15f);
+            lamp.shadowMapIndex = -1;
+            std::memcpy(dst + sizeof(LightGpuData) * count, &lamp, sizeof(lamp));
+            count += 1u;
+        }
+    }
     if (count < kLightCap) {
         std::memset(dst + sizeof(LightGpuData) * count, 0, sizeof(LightGpuData) * (kLightCap - count));
     }
@@ -1391,11 +1462,19 @@ void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
     scene->fogDensity = tweaks.fogDensity;
     scene->fogHeight = tweaks.fogHeight;
     scene->fogScatter = tweaks.fogScatter;
+    scene->fogFalloff = tweaks.fogFalloff;
+    scene->fogR = tweaks.fogR;
+    scene->fogG = tweaks.fogG;
+    scene->fogB = tweaks.fogB;
+    scene->fogLum = tweaks.fogLum;
+    scene->fogStart = tweaks.fogStart;
+    scene->fogOpacity = tweaks.fogOpacity;
+    scene->fogInStart = tweaks.fogInStart;
     scene->atmosphere.sunZenith = tweaks.sunZenith;
     scene->atmosphere.sunAzimuth = tweaks.sunAzimuth;
     scene->atmosphere.cloudCoverage = tweaks.cloudCoverage;
     scene->atmosphere.cloudDensity = tweaks.cloudDensity;
-    scene->tonemapper = tweaks.tonemapper > 3u ? 0u : tweaks.tonemapper;
+    scene->tonemapper = tweaks.tonemapper > 7u ? 0u : tweaks.tonemapper;
     scene->freeze = tweaks.freeze;
 }
 
@@ -1810,12 +1889,17 @@ void sceneFrameRecord(
                 VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
             && recreateTracked(scene->tone.bloom, device, bloomExtent, VK_FORMAT_R16G16B16A16_SFLOAT,
                 VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+            && recreateTracked(scene->tone.history[0], device, renderExtent, VK_FORMAT_R16G16B16A16_SFLOAT,
+                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+            && recreateTracked(scene->tone.history[1], device, renderExtent, VK_FORMAT_R16G16B16A16_SFLOAT,
+                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
             && restirResize(scene->restir, device, renderExtent)
             && fsrResize(scene->fsr, device, scene->gpuHeap, renderExtent, swap.extent)
             && gtaoResize(scene->gtao, device, scene->gpuHeap, renderExtent)
             && bindHeap(*scene, device, scene->gpuHeap);
         if (resized) {
             scene->extent = renderExtent;
+            scene->tone.taaReady = 0;
         } else {
             spdlog::error("FSR resize failed quality {} render {}x{}", scene->fsr.quality, renderExtent.width, renderExtent.height);
             scene->ready = false;
@@ -1854,7 +1938,7 @@ void sceneFrameRecord(
         const bool buffers =
             createDefaultGpuBuffer(scene->frameBuf, device, sizeof(FrameView) * 2)
             && createDefaultGpuBuffer(scene->sunBuf, device, sizeof(FrameSun) * 2)
-            && createDefaultGpuBuffer(scene->postBuf, device, sizeof(FramePost) * 2)
+            && createDefaultGpuBuffer(scene->postBuf, device, sizeof(FramePost) * 2 + sizeof(GradeBlock) * 2)
             && createDefaultGpuBuffer(scene->atmBuf, device, sizeof(AtmosphereParams) * 2)
             && createDefaultGpuBuffer(scene->verts, device, vertBytes)
             && createDefaultGpuBuffer(scene->indices, device, indexBytes)
@@ -1892,7 +1976,7 @@ void sceneFrameRecord(
             && recreateImage(scene->hizMax[0].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
             && recreateImage(scene->hizMax[1].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
         if (!descriptorHeapsCreate(scene->gpuHeap, device, HeapLayout{
-                .buffers = 70,
+                .buffers = 71,
                 .images = static_cast<uint32_t>(HeapImg::Count),
                 .samplers = 3,
             })) {
@@ -1919,7 +2003,11 @@ void sceneFrameRecord(
                 std::max(swap.extent.width / 2u, 1u),
                 std::max(swap.extent.height / 2u, 1u) + std::max(swap.extent.height / 4u, 1u)
                     + std::max(swap.extent.height / 8u, 1u) + std::max(swap.extent.height / 16u, 1u)},
-                VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);;
+                VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+            && recreateTracked(scene->tone.history[0], device, swap.extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+            && recreateTracked(scene->tone.history[1], device, swap.extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
         if (!targets || !loadTextures(*scene, device) || !bindHeap(*scene, device, scene->gpuHeap)) {
             return;
         }
@@ -1966,8 +2054,12 @@ void sceneFrameRecord(
     pose.aspect = static_cast<float>(scene->extent.width) / static_cast<float>(scene->extent.height);
     pose.zn = 0.1f;
     pose.zf = scene->farPlane;
-    if (fsrLive) {
+    const bool taaLive = (static_cast<uint32_t>(scene->hud.gradeFlags) & 8u) != 0u && !fsrLive;
+    if (fsrLive || taaLive) {
         fsrJitter(scene->fsr, pose.jitterX, pose.jitterY, scene->extent, swap.extent);
+    }
+    if (!taaLive) {
+        scene->tone.taaReady = 0;
     }
     CameraPose bare = pose;
     bare.jitterX = 0.0f;
@@ -2102,6 +2194,15 @@ void sceneFrameRecord(
     knob.rc.cap = 8.0f;
     knob.rc.sunScale = scene->rcSun;
     knob.rc.bounce = scene->rcBounce;
+    knob.rc.fogFalloff = scene->fogFalloff;
+    knob.rc.fogR = scene->fogR;
+    knob.rc.fogG = scene->fogG;
+    knob.rc.fogB = scene->fogB;
+    knob.rc.fogLum = scene->fogLum;
+    knob.rc.fogStart = scene->fogStart;
+    knob.rc.fogOpacity = scene->fogOpacity;
+    knob.rc.fogInStart = scene->fogInStart;
+    knob.rc.fogInSize = scene->fogScatter;
     knob.bloom.threshold = scene->bloomThreshold;
     knob.bloom.tonemapper = scene->tonemapper;
     knob.bloom.grain = scene->hud.grain;
@@ -2110,6 +2211,25 @@ void sceneFrameRecord(
     knob.bloom.ca = scene->hud.ca;
     knob.bloom.pad[0] = scene->hud.brightness;
     knob.bloom.pad[1] = linearTarget ? 1.0f : 0.0f;
+    knob.bloom.pad[2] = -scene->fsr.jitterX;
+    knob.bloom.pad[3] = scene->fsr.jitterY;
+    knob.bloom.pad[4] = scene->tone.taaReady != 0u ? 0.12f : 1.0f;
+    knob.sliders.exposure = scene->hud.exposure;
+    knob.sliders.temperature = scene->hud.temperature;
+    knob.sliders.tint = scene->hud.tint;
+    knob.sliders.contrast = scene->hud.contrast;
+    knob.sliders.saturation = scene->hud.saturation;
+    knob.sliders.night = scene->hud.night;
+    knob.sliders.shadows = scene->hud.shadows;
+    knob.sliders.midtones = scene->hud.midtones;
+    knob.sliders.highlights = scene->hud.highlights;
+    knob.sliders.slope = scene->hud.slope;
+    knob.sliders.cdlOffset = scene->hud.cdlOffset;
+    knob.sliders.power = scene->hud.power;
+    knob.sliders.dofFocus = scene->hud.dofFocus;
+    knob.sliders.dofAmount = scene->hud.dofAmount;
+    knob.sliders.flare = scene->hud.flare;
+    knob.sliders.flags = scene->hud.gradeFlags;
     gpu.debugPad[0] = scene->decalCount;
     gpu.debugPad[1] = kProbeGrid;
     gpu.debugPad[2] = sectorVisibleMask(scene->sectors, scene->sectorCount, scene->portals, scene->portalCount, &cam.planes[0][0]);
@@ -2317,6 +2437,41 @@ void sceneFrameRecord(
     std::memcpy(static_cast<uint8_t*>(scene->frameBuf.mapped) + sizeof(FrameView) * flight, &gpu, sizeof(gpu));
     std::memcpy(static_cast<uint8_t*>(scene->sunBuf.mapped) + sizeof(FrameSun) * flight, &lit, sizeof(lit));
     std::memcpy(static_cast<uint8_t*>(scene->postBuf.mapped) + sizeof(FramePost) * flight, &knob, sizeof(knob));
+    GradeBlock grade{};
+    const float bleed = scene->hud.mix;
+    grade.mixR[0] = 1.0f;
+    grade.mixR[1] = bleed;
+    grade.mixR[2] = bleed;
+    grade.mixG[0] = bleed;
+    grade.mixG[1] = 1.0f;
+    grade.mixG[2] = bleed;
+    grade.mixB[0] = bleed;
+    grade.mixB[1] = bleed;
+    grade.mixB[2] = 1.0f;
+    grade.shadows[0] = grade.shadows[1] = grade.shadows[2] = scene->hud.shadows;
+    grade.midtones[0] = grade.midtones[1] = grade.midtones[2] = scene->hud.midtones;
+    grade.highlights[0] = grade.highlights[1] = grade.highlights[2] = scene->hud.highlights;
+    grade.slope[0] = grade.slope[1] = grade.slope[2] = scene->hud.slope;
+    grade.offset[0] = grade.offset[1] = grade.offset[2] = scene->hud.cdlOffset;
+    grade.power[0] = grade.power[1] = grade.power[2] = scene->hud.power;
+    grade.ranges[0] = 0.0f;
+    grade.ranges[1] = 0.333f;
+    grade.ranges[2] = 0.55f;
+    grade.ranges[3] = 1.0f;
+    grade.generic[0] = scene->hud.genContrast;
+    grade.generic[1] = scene->hud.midIn;
+    grade.generic[2] = scene->hud.midOut;
+    grade.generic[3] = scene->hud.hdrMax;
+    grade.curves[0] = 1.0f;
+    grade.curves[1] = 1.0f;
+    grade.curves[2] = 1.0f;
+    grade.curves[3] = scene->hud.vibrance;
+    std::memcpy(grade.prev0, scene->prevVp + 0, sizeof(float) * 4);
+    std::memcpy(grade.prev1, scene->prevVp + 4, sizeof(float) * 4);
+    std::memcpy(grade.prev2, scene->prevVp + 8, sizeof(float) * 4);
+    std::memcpy(grade.prev3, scene->prevVp + 12, sizeof(float) * 4);
+    std::memcpy(static_cast<uint8_t*>(scene->postBuf.mapped) + sizeof(FramePost) * 2 + sizeof(GradeBlock) * flight, &grade, sizeof(grade));
+    std::memcpy(scene->prevVp, cam.viewProj.m, sizeof(scene->prevVp));
     if (scene->atmBuf.mapped != nullptr) {
         std::memcpy(static_cast<uint8_t*>(scene->atmBuf.mapped) + sizeof(AtmosphereParams) * flight, &scene->atmosphere, sizeof(AtmosphereParams));
     }
@@ -2329,6 +2484,13 @@ void sceneFrameRecord(
     }
     if (scene->gpuTime.pool == VK_NULL_HANDLE) {
         (void)gpuProfilerCreate(scene->gpuTime, device);
+    }
+    bool taaBound = false;
+    if (taaLive && scene->tone.history[0].image.image != VK_NULL_HANDLE) {
+        const uint32_t curr = flight & 1u;
+        const uint32_t prev = curr ^ 1u;
+        taaBound = heapWriteImageFlight(heaps, device, flight, 866u, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, scene->tone.history[prev].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
+            && heapWriteImageFlight(heaps, device, flight, 868u, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, scene->tone.history[curr].image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
     }
     heapBind(cmd, scene->gpuHeap, flight);
     gpuProfilerBegin(scene->gpuTime, device, cmd, flight);
@@ -2379,18 +2541,23 @@ void sceneFrameRecord(
     const bool restirOn = (scene->passMask & kPassRestir) != 0u && scene->restir.di.handle != VK_NULL_HANDLE;
     const bool gtaoOn = (scene->passMask & 524288u) == 0u && scene->lightProfile != 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
     framePassShade(ctx, scene->shade, scene->sky, scene->gtao, scene->vis.targets.vis, scene->vis.targets.depth, gtaoOn, scene->probeBuf.buffer, scene->probeBuf.size, restirOn, pose.fovYRad);
-    const bool worldRc = (scene->passMask & 128u) != 0u && (scene->passMask & 262144u) != 0u && !restirOn;
-    const bool worldVx = (scene->passMask & 524288u) != 0u && (scene->passMask & 262144u) != 0u && !worldRc && !restirOn;
+    const VkDeviceAddress tlas = scene->radiance.geometry ? scene->radiance.tlasAddress : 0;
+    const bool worldRc = (scene->passMask & 128u) != 0u && (scene->passMask & 262144u) != 0u;
+    const bool worldVx = (scene->passMask & 524288u) != 0u && (scene->passMask & 262144u) != 0u && !worldRc;
     if (!restirOn) {
         restirNote(scene->restir, scene->lightProfile, (scene->passMask & kPassRestir) != 0u ? "нет шейдера" : "выкл");
     }
-    if (restirOn) {
-        const VkDeviceAddress tlas = scene->radiance.geometry ? scene->radiance.tlasAddress : 0;
-        framePassRestir(ctx, scene->restir, gpu, lightSrc, lightCount, scene->passMask, tlas);
-    } else if (worldVx) {
+    if (worldVx) {
         framePassVoxel(ctx, scene->voxel, scene->shade.hdrA, true, scene->instanceCount, propMoved);
     } else {
         framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax, scene->rcSun, scene->rcBounce);
+    }
+    if (restirOn) {
+        const void* gpuLights = lightSrc;
+        if (scene->lightBuf.mapped != nullptr) {
+            gpuLights = static_cast<const uint8_t*>(scene->lightBuf.mapped) + sizeof(LightGpuData) * kLightCap * flight;
+        }
+        framePassRestir(ctx, scene->restir, gpu, gpuLights, lightCount, scene->passMask, tlas);
     }
     framePassShadeLate(ctx, scene->shade, scene->sky);
     const bool bloomOn = (knob.flags.passMask & 32u) != 0u && scene->hud.bloom > 0.001f;
@@ -2401,7 +2568,7 @@ void sceneFrameRecord(
         fsrRestoreColor(scene->fsr, device, heaps, flight, scene->shade.hdrA.image);
         scene->fsr.lastLog[0] = '\0';
     }
-    framePassTonemap(ctx, scene->tone, scene->shade.hdrA, scene->shade.hdrB, swap, frame, bloomOn, fsrLive);
+    framePassTonemap(ctx, scene->tone, scene->shade.hdrA, scene->shade.hdrB, swap, frame, bloomOn, fsrLive, taaLive && taaBound);
     if (scene->restir.lastLog[0] != '\0') {
         const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
         if (used + 2u < sizeof(scene->gpuText)) {

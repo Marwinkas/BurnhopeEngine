@@ -103,6 +103,10 @@ struct RAB_LightSample {
 [[vk::binding(17, 0)]] RWTexture2D<uint4> gHistMat;
 [[vk::binding(18, 0)]] Texture2D gPdf;
 [[vk::binding(19, 0)]] StructuredBuffer<RAB_LightInfo> gLights;
+[[vk::binding(20, 0)]] StructuredBuffer<MaterialGpu> gGlassMat;
+[[vk::binding(21, 0)]] Texture2D<float4> gGlassTex[768];
+[[vk::binding(24, 0)]] SamplerState gGlassSamp;
+[[vk::binding(30, 0)]] ByteAddressBuffer gGeom;
 [[vk::push_constant]] RestirPush gPush;
 
 #define RTXDI_LIGHT_RESERVOIR_BUFFER gReservoir
@@ -275,8 +279,8 @@ float3 restirShade(RAB_LightSample lightSample, RAB_Surface surface) {
     float3 F = F_Schlick(saturate(dot(V, H)), surface.material.specularF0);
     float D = D_GGX(saturate(dot(surface.normal, H)), a);
     float Vis = V_SmithGGXCorrelated(max(surface.NdotV, 1e-3), ndl, a);
-    float3 spec = min(D * Vis * F, float3(2.0, 2.0, 2.0));
-    float3 diff = surface.material.diffuseAlbedo * (1.0 - F) * Fd_Lambert();
+    float3 spec = D * Vis * F * energyCompensation(surface.material.specularF0, max(surface.NdotV, 1e-3), rough);
+    float3 diff = surface.material.diffuseAlbedo * Fd_Lambert();
     return (diff + spec) * ndl * lightSample.radiance / lightSample.solidAnglePdf;
 }
 
@@ -353,6 +357,96 @@ RaytracingAccelerationStructure restirScene() {
     return RaytracingAccelerationStructure(uint64_t(gRestir.tlasLo) | (uint64_t(gRestir.tlasHi) << 32));
 }
 
+struct RestirGlass {
+    float3 albedo;
+    float alpha;
+    bool hit;
+};
+
+RestirGlass restirGlass(uint prim, float2 bary) {
+    RestirGlass glass;
+    glass.albedo = 1.0;
+    glass.alpha = 1.0;
+    glass.hit = false;
+    const uint tris = gGeom.Load(168u);
+    const uint posByte = gGeom.Load(12u);
+    if (prim >= tris || posByte < 48u) {
+        return glass;
+    }
+    const uint o = posByte + prim * 3u * 48u;
+    const float u0 = asfloat(gGeom.Load(o + 12u));
+    const float v0 = asfloat(gGeom.Load(o + 28u));
+    const float u1 = asfloat(gGeom.Load(o + 48u + 12u));
+    const float v1 = asfloat(gGeom.Load(o + 48u + 28u));
+    const float u2 = asfloat(gGeom.Load(o + 96u + 12u));
+    const float v2 = asfloat(gGeom.Load(o + 96u + 28u));
+    const float w0 = saturate(1.0 - bary.x - bary.y);
+    const float w1 = saturate(bary.x);
+    const float w2 = saturate(bary.y);
+    const float2 uv = float2(u0, v0) * w0 + float2(u1, v1) * w1 + float2(u2, v2) * w2;
+    const uint matId = gGeom.Load(o + 32u);
+    uint matCount;
+    uint matStride;
+    gGlassMat.GetDimensions(matCount, matStride);
+    if (matCount == 0u) {
+        glass.hit = true;
+        return glass;
+    }
+    const MaterialGpu mat = gGlassMat[min(matId, matCount - 1u)];
+    glass.albedo = max(mat.baseColor.rgb, 0.0);
+    glass.alpha = saturate(mat.baseColor.a);
+    if (mat.albedo > 0u && mat.albedo < 768u) {
+        const float4 texel = gGlassTex[NonUniformResourceIndex(mat.albedo)].SampleLevel(gGlassSamp, uv, 0.0);
+        glass.albedo *= max(texel.rgb, 0.0);
+        glass.alpha *= saturate(texel.a);
+        if ((mat.flags & 32u) != 0u && texel.a < 0.35) {
+            glass.alpha = 0.0;
+        }
+    }
+    glass.hit = true;
+    return glass;
+}
+
+// Any-hit теневого луча. Непрозрачное глушит свет. Стекло красится альбедо и луч идёт дальше.
+float3 restirAnyHit(float3 origin, float3 direction, float tMin, float tMax) {
+    if (gRestir.tlasLo == 0u && gRestir.tlasHi == 0u) {
+        return 1.0;
+    }
+    RayDesc ray;
+    ray.Origin = origin;
+    ray.Direction = direction;
+    ray.TMin = tMin;
+    ray.TMax = max(tMax, tMin);
+    RayQuery<RAY_FLAG_FORCE_NON_OPAQUE> query;
+    query.TraceRayInline(restirScene(), RAY_FLAG_FORCE_NON_OPAQUE, 0xff, ray);
+    float3 tint = 1.0;
+    uint hops = 0u;
+    while (query.Proceed()) {
+        if (query.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE) {
+            continue;
+        }
+        hops += 1u;
+        if (hops > 12u) {
+            return tint;
+        }
+        const RestirGlass glass = restirGlass(query.CandidatePrimitiveIndex(), query.CandidateTriangleBarycentrics());
+        if (!glass.hit || glass.alpha <= 0.02) {
+            continue;
+        }
+        if (glass.alpha >= 0.97) {
+            return 0.0;
+        }
+        tint *= lerp(float3(1.0, 1.0, 1.0), glass.albedo, glass.alpha);
+        if (max(tint.r, max(tint.g, tint.b)) < 0.02) {
+            return 0.0;
+        }
+    }
+    if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
+        return 0.0;
+    }
+    return tint;
+}
+
 bool restirTrace(float3 origin, float3 direction, float tMin, float tMax) {
     if (gRestir.tlasLo == 0u && gRestir.tlasHi == 0u) {
         return false;
@@ -389,7 +483,7 @@ bool RAB_GetConservativeVisibility(RAB_Surface surface, RAB_LightSample lightSam
         reach = min(reach, gRestir.shadowRange);
     }
     float3 origin = surface.worldPos + surface.geoNormal * 0.02;
-    return !restirTrace(origin, toL / dist, tMin, reach);
+    return restirLuma(restirAnyHit(origin, toL / dist, tMin, reach)) > 0.04;
 }
 
 bool RAB_GetConservativeVisibility(RAB_Surface surface, float3 samplePosition) {
@@ -440,7 +534,7 @@ RAB_Surface restirSurfaceFrom(float3 worldPos, float viewDepth, float3 normal, f
     surface.viewDir = normalize(gFrame.cameraPos.xyz - worldPos);
     surface.NdotV = saturate(dot(normal, surface.viewDir));
     surface.material.diffuseAlbedo = albedo * (1.0 - metallic);
-    surface.material.specularF0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    surface.material.specularF0 = computeF0(albedo, metallic, computeDielectricF0(0.5));
     surface.material.roughness = roughness;
     float diffuseWeight = restirLuma(surface.material.diffuseAlbedo);
     float specularWeight = restirLuma(surface.material.specularF0);

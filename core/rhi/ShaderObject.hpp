@@ -26,6 +26,7 @@ struct ShaderCreateDesc {
 };
 
 [[nodiscard]] bool shaderCreate(Device& d, const ShaderCreateDesc& desc, ShaderExt& out);
+[[nodiscard]] bool shaderCreateCode(Device& d, const ShaderCreateDesc& desc, const void* code, uint64_t codeBytes, ShaderExt& out);
 
 [[nodiscard]] bool shaderCreateSpvFile(
     Device& d,

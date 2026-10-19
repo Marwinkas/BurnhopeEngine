@@ -141,6 +141,7 @@ struct SceneFrameImpl {
     uint32_t visibleCap = 0;
     MappedFile bhop{};
     float farPlane = 80.0f;
+    float prevVp[16]{};
     float shadowExtent = 20.0f;
     GpuBuffer materialsBuf{};
     GpuImage shadowColor[2]{};
@@ -216,9 +217,17 @@ struct SceneFrameImpl {
     float rcBounce = 1.0f;
     float giGain = 2.0f;
     float bloomThreshold = 0.35f;
-    float fogDensity = 0.002f;
-    float fogHeight = 4.0f;
-    float fogScatter = 1.0f;
+    float fogDensity = 0.06f;
+    float fogHeight = 0.0f;
+    float fogScatter = 40.0f;
+    float fogFalloff = 0.08f;
+    float fogR = 0.62f;
+    float fogG = 0.72f;
+    float fogB = 0.86f;
+    float fogLum = 1.4f;
+    float fogStart = 0.0f;
+    float fogOpacity = 0.92f;
+    float fogInStart = 0.0f;
     uint32_t tonemapper = 0;
     std::vector<GpuVertex> ownedVert;
     std::vector<uint32_t> ownedIndex;
@@ -276,10 +285,10 @@ void framePassVis(
     const VisInstanceDraw& draw,
     const VisInstanceDraw& lateDraw);
 void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, GtaoPass& gtao, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes, bool restirDi, float fovY);
-void framePassRestir(const RenderContext& ctx, RestirPass& restir, const FrameView& view, const LightGpuData* lights, uint32_t lightCount, uint32_t passMask, VkDeviceAddress tlas);
+void framePassRestir(const RenderContext& ctx, RestirPass& restir, const FrameView& view, const void* lights, uint32_t lightCount, uint32_t passMask, VkDeviceAddress tlas);
 void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky);
 void framePassRadiance(const RenderContext& ctx, RadiancePass& rad, TrackedImage& hdrA, bool worldRc, float rays, float spacing, float intensity, float maxDist, float sunScale, float bounce);
 void framePassVoxel(const RenderContext& ctx, VoxelPass& voxel, TrackedImage& hdrA, bool worldVx, uint32_t instances, bool moved);
-void framePassTonemap(const RenderContext& ctx, TonemapPass& tone, TrackedImage& hdrA, TrackedImage& hdrB, const Swapchain& swap, const FrameContext& frame, bool bloomOn, bool skipAa);
+void framePassTonemap(const RenderContext& ctx, TonemapPass& tone, TrackedImage& hdrA, TrackedImage& hdrB, const Swapchain& swap, const FrameContext& frame, bool bloomOn, bool skipAa, bool taaOn);
 
 } // namespace burnhope

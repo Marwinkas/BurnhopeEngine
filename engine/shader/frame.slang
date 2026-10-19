@@ -91,8 +91,15 @@ struct RcParams {
     float cap;
     float sunScale;
     float bounce;
-    float d2; float d3; float d4; float d5;
-    float d6; float d7; float d8; float d9; float d10;
+    float fogFalloff;
+    float fogR;
+    float fogG;
+    float fogB;
+    float fogLum;
+    float fogStart;
+    float fogOpacity;
+    float fogInStart;
+    float fogInSize;
 };
 struct ShadeParams {
     float sscsReach;
@@ -112,6 +119,25 @@ struct ShadeParams {
     float pad0;
     float pad1;
 };
+struct GradeBlock {
+    float4 prev0;
+    float4 prev1;
+    float4 prev2;
+    float4 prev3;
+    float4 mixR;
+    float4 mixG;
+    float4 mixB;
+    float4 shadows;
+    float4 midtones;
+    float4 highlights;
+    float4 slope;
+    float4 offset;
+    float4 power;
+    float4 ranges;
+    float4 generic;
+    float4 curves;
+};
+
 struct BloomParams {
     float threshold;
     uint tonemapper;

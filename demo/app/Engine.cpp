@@ -379,9 +379,15 @@ void setMenuCaption(UiState& s, const char* name, const char* text) {
 }
 
 void applyTone(UiState& s, int which) {
-    const char* names[] = {"tone0", "tone1", "tone2", "tone3"};
-    const char* caps[] = {"AgX", "ACES", "Reinhard", "Linear"};
-    for (int i = 0; i < 4; ++i) {
+    const char* names[] = {"tone0", "tone1", "tone2", "tone3", "tone4", "tone5", "tone6", "tone7"};
+    const char* caps[] = {"AgX", "ACES", "Filmic", "Linear", "PBR Neutral", "GT7", "Generic", "Reinhard"};
+    if (which < 0) {
+        which = 0;
+    }
+    if (which > 7) {
+        which = 0;
+    }
+    for (int i = 0; i < 8; ++i) {
         uiBindCheck(s, uiFindName(s, names[i]), 1, 2, i == which);
     }
     setMenuCaption(s, "toneBtn", caps[which]);
@@ -389,20 +395,26 @@ void applyTone(UiState& s, int which) {
 
 void toneAgx(void* user) { applyTone(*static_cast<UiState*>(user), 0); }
 void toneAces(void* user) { applyTone(*static_cast<UiState*>(user), 1); }
-void toneReinhard(void* user) { applyTone(*static_cast<UiState*>(user), 2); }
+void toneFilmic(void* user) { applyTone(*static_cast<UiState*>(user), 2); }
 void toneLinear(void* user) { applyTone(*static_cast<UiState*>(user), 3); }
+void toneNeutral(void* user) { applyTone(*static_cast<UiState*>(user), 4); }
+void toneGt7(void* user) { applyTone(*static_cast<UiState*>(user), 5); }
+void toneGeneric(void* user) { applyTone(*static_cast<UiState*>(user), 6); }
+void toneReinhard(void* user) { applyTone(*static_cast<UiState*>(user), 7); }
 
 void applyAa(UiState& s, int which) {
     if (which < 0) {
         which = 0;
     }
-    if (which > 3) {
-        which = 3;
+    if (which > 5) {
+        which = 5;
     }
     uiBindCheck(s, uiFindName(s, "smaa"), 0, 0, which == 1);
     uiBindCheck(s, uiFindName(s, "cmaa"), 0, 0, which == 2);
     uiBindCheck(s, uiFindName(s, "fsr"), 0, 0, which == 3);
-    const char* caps[] = {"Off", "SMAA", "CMAA", "FSR"};
+    uiBindCheck(s, uiFindName(s, "taa"), 0, 0, which == 4);
+    uiBindCheck(s, uiFindName(s, "fxaa"), 0, 0, which == 5);
+    const char* caps[] = {"Off", "SMAA", "CMAA", "FSR", "TAA", "FXAA"};
     setMenuCaption(s, "aaBtn", caps[which]);
 }
 
@@ -425,6 +437,8 @@ void aaOff(void* user) { applyAa(*static_cast<UiState*>(user), 0); }
 void aaSmaa(void* user) { applyAa(*static_cast<UiState*>(user), 1); }
 void aaCmaa(void* user) { applyAa(*static_cast<UiState*>(user), 2); }
 void aaFsr(void* user) { applyAa(*static_cast<UiState*>(user), 3); }
+void aaTaa(void* user) { applyAa(*static_cast<UiState*>(user), 4); }
+void aaFxaa(void* user) { applyAa(*static_cast<UiState*>(user), 5); }
 void fsrNative(void* user) { applyFsrQ(*static_cast<UiState*>(user), 0); }
 void fsrQuality(void* user) { applyFsrQ(*static_cast<UiState*>(user), 1); }
 void fsrBalanced(void* user) { applyFsrQ(*static_cast<UiState*>(user), 2); }
@@ -433,7 +447,7 @@ void fsrUltra(void* user) { applyFsrQ(*static_cast<UiState*>(user), 4); }
 
 void applyGi(UiState& s, int which) {
     const char* names[] = {"prof0", "prof1", "prof2", "prof3"};
-    const char* caps[] = {"Выкл", "VXGI", "Каскады", "ReSTIR"};
+    const char* caps[] = {"Выкл", "VXGI", "Каскады", "SHARC"};
     if (which < 0) {
         which = 0;
     }
@@ -458,7 +472,7 @@ void bindHudIds(HudContext& hud, UiState& state) {
         std::snprintf(name, sizeof(name), "mode%u", i);
         hud.ids.mode[i] = id(name);
     }
-    for (uint32_t i = 0; i < 4; ++i) {
+    for (uint32_t i = 0; i < 8; ++i) {
         std::snprintf(name, sizeof(name), "tone%u", i);
         hud.ids.tone[i] = id(name);
     }
@@ -531,10 +545,19 @@ void bindHudIds(HudContext& hud, UiState& state) {
     hud.ids.rsMat = id("rsMat");
     hud.ids.rsNaive = id("rsNaive");
     hud.ids.rsSunOn = id("rsSunOn");
+    hud.ids.restiren = id("restiren");
     hud.ids.bloomth = id("bloomth");
     hud.ids.fog = id("fog");
     hud.ids.fogH = id("fogH");
     hud.ids.fogS = id("fogS");
+    hud.ids.fogFall = id("fogFall");
+    hud.ids.fogR = id("fogR");
+    hud.ids.fogG = id("fogG");
+    hud.ids.fogB = id("fogB");
+    hud.ids.fogLum = id("fogLum");
+    hud.ids.fogStart = id("fogStart");
+    hud.ids.fogOp = id("fogOp");
+    hud.ids.fogIn = id("fogIn");
     hud.ids.zenith = id("zenith");
     hud.ids.azimuth = id("azimuth");
     hud.ids.clouds = id("clouds");
@@ -560,6 +583,31 @@ void bindHudIds(HudContext& hud, UiState& state) {
     hud.ids.gtaoDn = id("gtaoDn");
     hud.ids.bloomen = id("bloomen");
     hud.ids.smaa = id("smaa");
+    hud.ids.fxaa = id("fxaa");
+    hud.ids.taa = id("taa");
+    hud.ids.lumScale = id("lumScale");
+    hud.ids.gamut = id("gamut");
+    hud.ids.exposure = id("exposure");
+    hud.ids.temperature = id("temperature");
+    hud.ids.tint = id("tint");
+    hud.ids.contrast = id("contrast");
+    hud.ids.saturation = id("saturation");
+    hud.ids.night = id("night");
+    hud.ids.shadows = id("shadows");
+    hud.ids.midtones = id("midtones");
+    hud.ids.highlights = id("highlights");
+    hud.ids.slope = id("slope");
+    hud.ids.cdlOffset = id("cdlOffset");
+    hud.ids.power = id("power");
+    hud.ids.dofFocus = id("dofFocus");
+    hud.ids.dofAmount = id("dofAmount");
+    hud.ids.flare = id("flare");
+    hud.ids.mix = id("mix");
+    hud.ids.genContrast = id("genContrast");
+    hud.ids.midIn = id("midIn");
+    hud.ids.midOut = id("midOut");
+    hud.ids.hdrMax = id("hdrMax");
+    hud.ids.vibrance = id("vibrance");
     hud.ids.sun = id("sun");
     hud.ids.points = id("points");
     hud.ids.spots = id("spots");
@@ -1036,16 +1084,17 @@ void sceneHud(Canvas& canvas, void* user) {
     hideCheck("Выкл", "prof0", 1, 3, false);
     hideCheck("VXGI", "prof1", 1, 3, false);
     hideCheck("Каскады", "prof2", 1, 3, false);
-    hideCheck("ReSTIR", "prof3", 1, 3, true);
+    hideCheck("SHARC", "prof3", 1, 3, true);
     hideCheck("radiance", "rcen", 0, 0, false);
     {
         const uint16_t menu = uiMakeMenu(*canvas.state);
         uiCommandAddTo(*canvas.state, menu, "Выкл", giOff, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "VXGI", giVx, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "Каскады", giRc, canvas.state.get());
-        uiCommandAddTo(*canvas.state, menu, "ReSTIR", giRs, canvas.state.get());
-        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Режим", "ReSTIR", menu), "giBtn");
+        uiCommandAddTo(*canvas.state, menu, "SHARC", giRs, canvas.state.get());
+        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Режим", "SHARC", menu), "giBtn");
     }
+    tick("ReSTIR", "restiren", true);
     rowSlide(*canvas.state, panel, "RC лучи", "rcRays", 1.0f, 1.0f, 16.0f);
     rowSlide(*canvas.state, panel, "RC клетка м", "rcCell", 0.8f, 0.1f, 4.0f);
     rowSlide(*canvas.state, panel, "RC сила", "rcGain", 1.0f, 0.0f, 4.0f);
@@ -1085,6 +1134,8 @@ void sceneHud(Canvas& canvas, void* user) {
     hideCheck("SMAA", "smaa", 0, 0, false);
     hideCheck("CMAA", "cmaa", 0, 0, false);
     hideCheck("FSR", "fsr", 0, 0, true);
+    hideCheck("FXAA", "fxaa", 0, 0, false);
+    hideCheck("TAA", "taa", 0, 0, false);
     hideCheck("Native", "fsrq0", 1, 4, true);
     hideCheck("Quality", "fsrq1", 1, 4, false);
     hideCheck("Balanced", "fsrq2", 1, 4, false);
@@ -1096,6 +1147,8 @@ void sceneHud(Canvas& canvas, void* user) {
         uiCommandAddTo(*canvas.state, menu, "SMAA", aaSmaa, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "CMAA", aaCmaa, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "FSR", aaFsr, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "TAA", aaTaa, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "FXAA", aaFxaa, canvas.state.get());
         uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Сглаживание", "FSR", menu), "aaBtn");
     }
     {
@@ -1137,7 +1190,7 @@ void sceneHud(Canvas& canvas, void* user) {
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "Normals", 1, 1, false), "mode2");
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "Primitive ID", 1, 1, false), "mode1");
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "GI", 1, 1, false), "mode4");
-    uiName(*canvas.state, uiCheck(*canvas.state, panel, "каскады", 1, 1, false), "mode5");
+    uiName(*canvas.state, uiCheck(*canvas.state, panel, "SHARC сетка", 1, 1, false), "mode5");
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "контакт", 1, 1, false), "mode6");
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "луч", 1, 1, false), "mode7");
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "прямой", 1, 1, false), "mode8");
@@ -1155,27 +1208,56 @@ void sceneHud(Canvas& canvas, void* user) {
     panel = postBody;
     hideCheck("AgX", "tone0", 1, 2, true);
     hideCheck("ACES", "tone1", 1, 2, false);
-    hideCheck("Reinhard", "tone2", 1, 2, false); 
+    hideCheck("Filmic", "tone2", 1, 2, false);
     hideCheck("Linear", "tone3", 1, 2, false);
+    hideCheck("PBR Neutral", "tone4", 1, 2, false);
+    hideCheck("GT7", "tone5", 1, 2, false);
+    hideCheck("Generic", "tone6", 1, 2, false);
+    hideCheck("Reinhard", "tone7", 1, 2, false);
     {
         const uint16_t menu = uiMakeMenu(*canvas.state);
         uiCommandAddTo(*canvas.state, menu, "AgX", toneAgx, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "ACES", toneAces, canvas.state.get());
-        uiCommandAddTo(*canvas.state, menu, "Reinhard", toneReinhard, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Filmic", toneFilmic, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "Linear", toneLinear, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "PBR Neutral", toneNeutral, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "GT7", toneGt7, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Generic", toneGeneric, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Reinhard", toneReinhard, canvas.state.get());
         uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Цветокор", "AgX", menu), "toneBtn");
     }
+    tick("люминанс", "lumScale", false);
+    tick("гамма-охват", "gamut", false);
     rowSlide(*canvas.state, panel, "яркость", "bright", 1.0f, 0.05f, 4.0f);
+    rowSlide(*canvas.state, panel, "экспозиция EV", "exposure", 0.0f, -8.0f, 8.0f);
+    rowSlide(*canvas.state, panel, "температура", "temperature", 0.0f, -1.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "тинт", "tint", 0.0f, -1.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "ночь", "night", 0.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "контраст", "contrast", 1.0f, 0.5f, 1.5f);
+    rowSlide(*canvas.state, panel, "насыщенность", "saturation", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "смешение", "mix", 0.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "вибранс", "vibrance", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "generic контраст", "genContrast", 1.0f, 0.5f, 2.0f);
+    rowSlide(*canvas.state, panel, "generic середина in", "midIn", 0.18f, 0.01f, 1.0f);
+    rowSlide(*canvas.state, panel, "generic середина out", "midOut", 0.18f, 0.01f, 1.0f);
+    rowSlide(*canvas.state, panel, "generic hdr", "hdrMax", 10.0f, 1.0f, 64.0f);
+    rowSlide(*canvas.state, panel, "тени", "shadows", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "средние", "midtones", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "света", "highlights", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "CDL наклон", "slope", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "CDL сдвиг", "cdlOffset", 0.0f, -0.5f, 0.5f);
+    rowSlide(*canvas.state, panel, "CDL степень", "power", 1.0f, 0.2f, 2.0f);
+    rowSlide(*canvas.state, panel, "фокус м", "dofFocus", 8.0f, 0.2f, 80.0f);
+    rowSlide(*canvas.state, panel, "боке", "dofAmount", 0.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "блики", "flare", 0.0f, 0.0f, 1.0f);
     rowSlide(*canvas.state, panel, "зерно", "grain", 0.0f, 0.0f, 0.12f);
     rowSlide(*canvas.state, panel, "блюм", "bloom", 0.15f, 0.0f, 0.80f);
     rowSlide(*canvas.state, panel, "порог блюма", "bloomth", 0.35f, 0.0f, 2.0f);
     rowSlide(*canvas.state, panel, "виньетка", "vig", 0.35f, 0.0f, 2.0f);
     rowSlide(*canvas.state, panel, "хромат. пкс", "ca", 2.0f, 0.0f, 4.0f);
-    rowSlide(*canvas.state, panel, "SSCS", "contact", 1.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "SSCS длина м", "sscsR", 0.2f, 0.05f, 2.0f);
-    rowSlide(*canvas.state, panel, "SSCS толщина", "sscsT", 0.02f, 0.005f, 0.2f);
-    rowSlide(*canvas.state, panel, "SSCS шаги", "sscsS", 12.0f, 4.0f, 16.0f);
-    rowSlide(*canvas.state, panel, "SSCS экран px", "sscsP", 128.0f, 4.0f, 256.0f);
+    rowSlide(*canvas.state, panel, "контакт", "contact", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "контакт м", "sscsR", 1.0f, 0.05f, 8.0f);
+    rowSlide(*canvas.state, panel, "контакт шаги", "sscsS", 8.0f, 1.0f, 32.0f);
     rowSlide(*canvas.state, panel, "окклюзия блика", "spec", 1.0f, 0.0f, 1.0f);
     rowSlide(*canvas.state, panel, "Toksvig", "tok", 1.0f, 0.0f, 1.0f);
     rowSlide(*canvas.state, panel, "параллакс", "pom", 0.35f, 0.0f, 1.0f);
@@ -1193,9 +1275,17 @@ void sceneHud(Canvas& canvas, void* user) {
     rowSlide(*canvas.state, panel, "облака", "clouds", 0.42f, 0.0f, 0.95f);
     rowSlide(*canvas.state, panel, "плотность", "cdens", 0.08f, 0.0f, 0.3f);
     panel = fogBody;
-    rowSlide(*canvas.state, panel, "туман", "fog", 0.002f, 0.0f, 0.08f);
-    rowSlide(*canvas.state, panel, "высота тумана", "fogH", 4.0f, -30.0f, 40.0f);
-    rowSlide(*canvas.state, panel, "свет в тумане", "fogS", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "плотность", "fog", 0.06f, 0.0f, 0.5f);
+    rowSlide(*canvas.state, panel, "высота", "fogH", 0.0f, -40.0f, 40.0f);
+    rowSlide(*canvas.state, panel, "спад", "fogFall", 0.08f, 0.0f, 1.5f);
+    rowSlide(*canvas.state, panel, "старт м", "fogStart", 0.0f, 0.0f, 80.0f);
+    rowSlide(*canvas.state, panel, "потолок", "fogOp", 0.92f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "цвет R", "fogR", 0.62f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "цвет G", "fogG", 0.72f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "цвет B", "fogB", 0.86f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "яркость", "fogLum", 1.4f, 0.0f, 8.0f);
+    rowSlide(*canvas.state, panel, "лучи солнца", "fogS", 40.0f, 0.0f, 128.0f);
+    rowSlide(*canvas.state, panel, "старт лучей", "fogIn", 0.0f, 0.0f, 80.0f);
     panel = stats;
     for (int i = 0; i < 12; ++i) {
         char name[8];
@@ -1318,6 +1408,41 @@ bool engineTick(Engine& e) {
         hudPost.sunR = slideAt(hud, id.sunR, 1.0f);
         hudPost.sunG = slideAt(hud, id.sunG, 0.97f);
         hudPost.sunB = slideAt(hud, id.sunB, 0.92f);
+        hudPost.exposure = slideAt(hud, id.exposure, 0.0f);
+        hudPost.temperature = slideAt(hud, id.temperature, 0.0f);
+        hudPost.tint = slideAt(hud, id.tint, 0.0f);
+        hudPost.contrast = slideAt(hud, id.contrast, 1.0f);
+        hudPost.saturation = slideAt(hud, id.saturation, 1.0f);
+        hudPost.night = slideAt(hud, id.night, 0.0f);
+        hudPost.shadows = slideAt(hud, id.shadows, 1.0f);
+        hudPost.midtones = slideAt(hud, id.midtones, 1.0f);
+        hudPost.highlights = slideAt(hud, id.highlights, 1.0f);
+        hudPost.slope = slideAt(hud, id.slope, 1.0f);
+        hudPost.cdlOffset = slideAt(hud, id.cdlOffset, 0.0f);
+        hudPost.power = slideAt(hud, id.power, 1.0f);
+        hudPost.dofFocus = slideAt(hud, id.dofFocus, 8.0f);
+        hudPost.dofAmount = slideAt(hud, id.dofAmount, 0.0f);
+        hudPost.flare = slideAt(hud, id.flare, 0.0f);
+        hudPost.mix = slideAt(hud, id.mix, 0.0f);
+        hudPost.genContrast = slideAt(hud, id.genContrast, 1.0f);
+        hudPost.midIn = slideAt(hud, id.midIn, 0.18f);
+        hudPost.midOut = slideAt(hud, id.midOut, 0.18f);
+        hudPost.hdrMax = slideAt(hud, id.hdrMax, 10.0f);
+        hudPost.vibrance = slideAt(hud, id.vibrance, 1.0f);
+        float gradeFlags = 0.0f;
+        if (checkOn(hud, id.fxaa, false)) {
+            gradeFlags += 1.0f;
+        }
+        if (checkOn(hud, id.lumScale, false)) {
+            gradeFlags += 2.0f;
+        }
+        if (checkOn(hud, id.gamut, false)) {
+            gradeFlags += 4.0f;
+        }
+        if (checkOn(hud, id.taa, false)) {
+            gradeFlags += 8.0f;
+        }
+        hudPost.gradeFlags = gradeFlags;
         sceneFrameTune(e.scene, hudPost);
         SceneTweaks tweaks{};
         tweaks.forceLod = static_cast<int32_t>(slideAt(hud, id.lodf, -1.0f));
@@ -1327,9 +1452,9 @@ bool engineTick(Engine& e) {
         tweaks.gtaoPower = slideAt(hud, id.gtaoPw, 2.2f);
         tweaks.gtaoFalloff = slideAt(hud, id.gtaoFa, 0.615f);
         tweaks.gtaoDenoise = slideAt(hud, id.gtaoDn, 1.0f);
-        tweaks.sscsReach = slideAt(hud, id.sscsR, 0.2f);
+        tweaks.sscsReach = slideAt(hud, id.sscsR, 1.0f);
         tweaks.sscsThick = slideAt(hud, id.sscsT, 0.02f);
-        tweaks.sscsSteps = slideAt(hud, id.sscsS, 12.0f);
+        tweaks.sscsSteps = slideAt(hud, id.sscsS, 8.0f);
         tweaks.sscsPx = slideAt(hud, id.sscsP, 128.0f);
         tweaks.rcRays = slideAt(hud, id.rcRays, 1.0f);
         tweaks.rcSpacing = slideAt(hud, id.rcCell, 0.8f);
@@ -1367,9 +1492,17 @@ bool engineTick(Engine& e) {
         tweaks.restirNaive = checkOn(hud, id.rsNaive, true);
         tweaks.restirSunOn = checkOn(hud, id.rsSunOn, true);
         tweaks.bloomThreshold = slideAt(hud, id.bloomth, 0.35f);
-        tweaks.fogDensity = slideAt(hud, id.fog, 0.002f);
-        tweaks.fogHeight = slideAt(hud, id.fogH, 4.0f);
-        tweaks.fogScatter = slideAt(hud, id.fogS, 1.0f);
+        tweaks.fogDensity = slideAt(hud, id.fog, 0.06f);
+        tweaks.fogHeight = slideAt(hud, id.fogH, 0.0f);
+        tweaks.fogScatter = slideAt(hud, id.fogS, 40.0f);
+        tweaks.fogFalloff = slideAt(hud, id.fogFall, 0.08f);
+        tweaks.fogR = slideAt(hud, id.fogR, 0.62f);
+        tweaks.fogG = slideAt(hud, id.fogG, 0.72f);
+        tweaks.fogB = slideAt(hud, id.fogB, 0.86f);
+        tweaks.fogLum = slideAt(hud, id.fogLum, 1.4f);
+        tweaks.fogStart = slideAt(hud, id.fogStart, 0.0f);
+        tweaks.fogOpacity = slideAt(hud, id.fogOp, 0.92f);
+        tweaks.fogInStart = slideAt(hud, id.fogIn, 0.0f);
         float zenith = slideAt(hud, id.zenith, 35.0f);
         float azimuth = slideAt(hud, id.azimuth, 30.0f);
         if (sunIndex != kSceneActorNone) {
@@ -1461,20 +1594,20 @@ bool engineTick(Engine& e) {
         if (checkOn(hud, id.rcen, false)) {
             tweaks.passMask |= 128u;
         }
-        if (tweaks.lightProfile == 2u && (tweaks.passMask & 262144u) != 0u) {
-            tweaks.passMask |= 128u;
-        }
-        if (tweaks.lightProfile == 1u && (tweaks.passMask & 262144u) != 0u && (tweaks.passMask & 128u) == 0u) {
+        if ((tweaks.passMask & 262144u) != 0u && tweaks.lightProfile == 1u && (tweaks.passMask & 128u) == 0u) {
             tweaks.passMask |= 524288u;
         }
-        if (tweaks.lightProfile == 3u && (tweaks.passMask & 262144u) != 0u) {
+        if ((tweaks.passMask & 262144u) != 0u && tweaks.lightProfile == 2u) {
+            tweaks.passMask |= 128u;
+        }
+        if (checkOn(hud, id.restiren, true)) {
             tweaks.passMask |= 1048576u;
             if (tweaks.restirSunOn) {
                 tweaks.passMask |= 2097152u;
             }
         }
         tweaks.tonemapper = 0;
-        for (uint32_t i = 0; i < 4; ++i) {
+        for (uint32_t i = 0; i < 8; ++i) {
             if (checkOn(hud, id.tone[i], false)) {
                 tweaks.tonemapper = i;
             }

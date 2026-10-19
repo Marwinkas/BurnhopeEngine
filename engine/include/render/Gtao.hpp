@@ -10,7 +10,7 @@ namespace burnhope {
 
 struct DescriptorHeaps;
 
-constexpr uint32_t kGtaoConstSlot = 68u;
+constexpr uint32_t kGtaoConstSlot = 69u;
 
 struct alignas(16) GtaoConstants {
     int32_t viewportW = 0;

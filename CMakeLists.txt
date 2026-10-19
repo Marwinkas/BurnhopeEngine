@@ -410,6 +410,8 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_trace.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry vxTrace -o ${SHADER_OUT_DIR}/vx.trace.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry tonemapMesh -o ${SHADER_OUT_DIR}/tonemap.mesh.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry tonemapFs -o ${SHADER_OUT_DIR}/tonemap.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/taa.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry taaCs -o ${SHADER_OUT_DIR}/taa.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/taa.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry taaCopy -o ${SHADER_OUT_DIR}/taacopy.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gizmo.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry gizmoMesh -o ${SHADER_OUT_DIR}/gizmo.mesh.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gizmo.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry gizmoFs -o ${SHADER_OUT_DIR}/gizmo.frag.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomDown -DBLOOM_LEVEL=0 -o ${SHADER_OUT_DIR}/bloom0.comp.spv
@@ -466,6 +468,8 @@ add_custom_command(
         ${SHADER_DIR}/vx_resolve.slang
         ${SHADER_DIR}/vx_trace.slang
         ${SHADER_DIR}/tonemap.slang
+        ${SHADER_DIR}/taa.slang
+        ${SHADER_DIR}/core/grade.slang
         ${SHADER_DIR}/gizmo.slang
         ${SHADER_DIR}/camera.slang
         ${SHADER_DIR}/core/math.slang

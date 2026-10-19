@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 
@@ -184,7 +185,15 @@ void clearHistory(VkCommandBuffer cmd, RestirPass& p) {
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, 1);
 }
 
-void splitLights(const LightGpuData* lights, uint32_t count, uint32_t& localFirst, uint32_t& localCount, uint32_t& infFirst, uint32_t& infCount) {
+LightGpuData lightAt(const void* lights, uint32_t index) {
+    LightGpuData lamp{};
+    if (lights != nullptr) {
+        std::memcpy(&lamp, static_cast<const std::byte*>(lights) + sizeof(LightGpuData) * index, sizeof(lamp));
+    }
+    return lamp;
+}
+
+void splitLights(const void* lights, uint32_t count, uint32_t& localFirst, uint32_t& localCount, uint32_t& infFirst, uint32_t& infCount) {
     localFirst = 0;
     localCount = 0;
     infFirst = 0;
@@ -196,8 +205,9 @@ void splitLights(const LightGpuData* lights, uint32_t count, uint32_t& localFirs
     bool localGap = false;
     bool infGap = false;
     for (uint32_t i = 0; i < count; ++i) {
-        const bool infinite = lights[i].type == kLightDirectional;
-        const bool local = lights[i].type == kLightPoint || lights[i].type == kLightSpot || (lights[i].flags & 1u) != 0u;
+        const LightGpuData lamp = lightAt(lights, i);
+        const bool infinite = lamp.type == kLightDirectional;
+        const bool local = lamp.type == kLightPoint || lamp.type == kLightSpot || (lamp.flags & 1u) != 0u;
         if (infinite) {
             if (infA < 0) {
                 infA = static_cast<int>(i);
@@ -226,7 +236,7 @@ void splitLights(const LightGpuData* lights, uint32_t count, uint32_t& localFirs
     (void)infGap;
 }
 
-void fillPdf(RestirPass& p, const LightGpuData* lights, uint32_t lightCount, uint32_t passMask) {
+void fillPdf(RestirPass& p, const void* lights, uint32_t lightCount, uint32_t passMask) {
     std::fill(p.pdfCpu.begin(), p.pdfCpu.end(), 0.0f);
     p.powered = 0;
     p.powerSum = 0.0f;
@@ -235,7 +245,7 @@ void fillPdf(RestirPass& p, const LightGpuData* lights, uint32_t lightCount, uin
         uint32_t x = 0;
         uint32_t y = 0;
         linearToZCurve(i, x, y);
-        const float power = lightPower(lights[i], passMask);
+        const float power = lightPower(lightAt(lights, i), passMask);
         if (power > 0.0f) {
             p.powered += 1u;
             p.powerSum += power;
@@ -399,6 +409,10 @@ bool restirCreate(RestirPass& p, Device& d, const DescriptorHeaps& heaps, VkExte
     di.storageImg(16, HeapImg::RestirPos);
     di.storageImg(17, HeapImg::RestirMat);
     di.storageBuf(19, HeapBuf::Lights, true);
+    di.storageBuf(20, HeapBuf::Materials, true);
+    di.sampledImg(21, HeapImg::Textures);
+    di.sampler(24, HeapSamp::Wrap);
+    di.storageBuf(30, HeapBuf::Rc, true);
     di.knob(50, HeapBuf::Flags);
     di.knob(55, HeapBuf::Shade);
     if (!shaderOf(d, presample, BH_SHADER_DIR "/restir.presample.comp.spv", p.presample)
@@ -529,7 +543,7 @@ void restirRecord(
     RestirPass& p,
     Device& d,
     const FrameView& view,
-    const LightGpuData* lights,
+    const void* lights,
     uint32_t lightCount,
     uint32_t passMask,
     uint32_t flight,
@@ -643,6 +657,7 @@ void restirRecord(
     constants.shadowRays = p.knobShadowRays;
     constants.pad1 = p.knobTemporalOn;
     constants.pad2 = p.knobSunRays;
+    constants.pad3 = 0u;
     auto* dst = static_cast<uint8_t*>(p.constants.mapped) + kRestirConstStride * flight;
     std::memcpy(dst, &constants, sizeof(constants));
     gpuBufferFlush(p.constants, d, kRestirConstStride * flight, sizeof(constants));

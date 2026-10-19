@@ -17,7 +17,11 @@ struct TonemapPass {
     ShaderExt up[3];
     ShaderExt cmaa;
     ShaderExt smaa;
+    ShaderExt taa;
+    ShaderExt taaCopy;
     TrackedImage bloom;
+    TrackedImage history[2];
+    uint32_t taaReady = 0;
 };
 
 [[nodiscard]] bool tonemapPassCreate(TonemapPass& p, Device& d, const DescriptorHeaps& heaps);

@@ -87,7 +87,10 @@ float3 restirIdColor(uint lightIndex) {
     return palette[lightIndex & 7u];
 }
 
-float3 restirViz(uint mode, bool validRes, float3 radiance, float invPdf, float sampleM, float litAmt, float visible, uint lightIndex) {
+float3 restirViz(uint mode, bool validRes, float3 radiance, float invPdf, float sampleM, float litAmt, float visible, uint lightIndex, float3 shadowTint) {
+    if (mode == 18u) {
+        return validRes ? shadowTint : 1.0;
+    }
     float3 miss = float3(0.02, 0.06, 0.22);
     if (!validRes) {
         return miss;
@@ -105,9 +108,6 @@ float3 restirViz(uint mode, bool validRes, float3 radiance, float invPdf, float 
         float t = saturate(sampleM / 20.0);
         return lerp(float3(0.12, 0.22, 1.0), float3(1.0, 0.92, 0.25), t);
     }
-    if (mode == 18u) {
-        return visible > 0.5 ? float3(0.12, 0.9, 0.22) : float3(0.92, 0.1, 0.08);
-    }
     return restirIdColor(lightIndex);
 }
 
@@ -122,6 +122,7 @@ void restirShadePixel(uint2 px) {
     float3 add = 0.0;
     bool validRes = false;
     float visible = 0.0;
+    float3 shadowTint = 1.0;
     float invPdf = 0.0;
     float sampleM = 0.0;
     float litAmt = 0.0;
@@ -139,27 +140,38 @@ void restirShadePixel(uint2 px) {
                 RAB_LightInfo info = RAB_LoadLightInfo(lightIndex, false);
                 RAB_LightSample sample = RAB_SamplePolymorphicLight(info, surface, RTXDI_GetDIReservoirSampleUV(reservoir));
                 uint rays = max(gRestir.shadowRays, 1u);
-                float visSum = 0.0;
+                float3 tintSum = 0.0;
                 float3 toL = sample.position - surface.worldPos;
                 float dist = length(toL);
                 float3 toCenter = info.posRadius.xyz - surface.worldPos;
                 float centerDist = length(toCenter);
                 float3 dir = centerDist > 1e-4 ? toCenter / centerDist : float3(0.0, 1.0, 0.0);
                 float source = restirSourceRadius(info);
+                float tMin = max(gRestir.shadowBias, 0.02);
+                float3 origin = surface.worldPos + surface.geoNormal * 0.02;
                 for (uint ray = 0u; ray < rays; ++ray) {
-                    RAB_LightSample cast = sample;
+                    float3 castPos = sample.position;
                     if (ray > 0u) {
                         float u = (float(ray) + 0.5) / float(rays);
                         float v = frac(0.5 + float(ray) * 0.754877666);
-                        cast.position = restirLightDisk(info.posRadius.xyz, dir, source, u, v);
+                        castPos = restirLightDisk(info.posRadius.xyz, dir, source, u, v);
                     }
-                    visSum += RAB_GetConservativeVisibility(surface, cast) ? 1.0 : 0.0;
+                    float3 toCast = castPos - surface.worldPos;
+                    float castDist = length(toCast);
+                    float reach = max(castDist - tMin, tMin);
+                    if (gRestir.shadowRange > 0.0) {
+                        reach = min(reach, gRestir.shadowRange);
+                    }
+                    float3 castDir = castDist > 1e-4 ? toCast / castDist : dir;
+                    tintSum += restirAnyHit(origin, castDir, tMin, reach);
                 }
-                visible = visSum / float(rays);
+                float3 tint = tintSum / float(rays);
+                shadowTint = tint;
+                visible = restirLuma(tint);
                 invPdf = max(RTXDI_GetDIReservoirInvPdf(reservoir), 0.0);
                 sampleM = reservoir.M;
                 radiance = sample.radiance;
-                add = restirShade(sample, surface) * invPdf * visible;
+                add = restirShade(sample, surface) * invPdf * tint;
                 float facing = dist > 1e-4 ? saturate(dot(surface.normal, toL / dist)) : 0.0;
                 litAmt = visible * facing;
                 restirStat(1u, 1u);
@@ -171,7 +183,7 @@ void restirShadePixel(uint2 px) {
         }
     }
     if (debugView) {
-        float3 viz = surfaceOn ? restirViz(mode, validRes, radiance, invPdf, sampleM, litAmt, visible, lightIndex) : 0.0;
+        float3 viz = surfaceOn ? restirViz(mode, validRes, radiance, invPdf, sampleM, litAmt, visible, lightIndex, shadowTint) : 0.0;
         gHdr[px] = float4(viz, 1.0);
     } else if (mode == 4u && validRes) {
         gHdr[px] = float4(max(add, 0.0), 1.0);
@@ -219,13 +231,14 @@ void restirSun(uint2 px) {
     L /= len;
     float3 origin = surface.worldPos + surface.geoNormal * 0.02;
     uint rays = max(gRestir.pad2, 1u);
-    float vis = 0.0;
+    float3 tint = 0.0;
     for (uint ray = 0u; ray < rays; ++ray) {
         float3 dir = restirSunDir(px, L, ray);
         float sunFar = gRestir.shadowRange > 0.0 ? gRestir.shadowRange : 20000.0;
-        vis += restirTrace(origin, dir, max(gRestir.shadowBias, 0.02), sunFar) ? 0.0 : 1.0;
+        tint += restirAnyHit(origin, dir, max(gRestir.shadowBias, 0.02), sunFar);
     }
-    vis /= float(rays);
+    tint /= float(rays);
+    float vis = restirLuma(tint);
     uint age = 1u;
     bool temporalOn = (gRestir.pad1 & 1u) != 0u;
     if (temporalOn && gRestir.historyValid != 0u) {
@@ -243,7 +256,9 @@ void restirSun(uint2 px) {
                 float prevVis = float(mat.w & 0xffffu) / 65535.0;
                 uint prevAge = mat.w >> 16;
                 age = min(prevAge + 1u, max(gRestir.temporal.maxHistoryLength, 1u));
-                vis = lerp(prevVis, vis, 1.0 / float(age));
+                float blended = lerp(prevVis, vis, 1.0 / float(age));
+                tint *= blended / max(vis, 1e-3);
+                vis = blended;
             }
         }
     }
@@ -252,7 +267,7 @@ void restirSun(uint2 px) {
     stored.w = min(uint(saturate(vis) * 65535.0 + 0.5), 65535u) | (age << 16);
     gHistMat[writeAt] = stored;
     if (showShadow) {
-        gHdr[px] = float4(vis > 0.5 ? float3(0.12, 0.9, 0.22) : float3(0.92, 0.1, 0.08), 1.0);
+        gHdr[px] = float4(saturate(gHdr[px].rgb * tint), 1.0);
         return;
     }
     RAB_LightSample sample = RAB_EmptyLightSample();
@@ -261,7 +276,7 @@ void restirSun(uint2 px) {
     sample.radiance = max(gSun.sunColor.rgb, 0.0) * max(gSun.sunDirIntensity.w, 0.0);
     sample.solidAnglePdf = 1.0;
     float4 hdr = gHdr[px];
-    hdr.rgb += max(restirShade(sample, surface) * vis, 0.0);
+    hdr.rgb += max(restirShade(sample, surface) * tint, 0.0);
     gHdr[px] = hdr;
 }
 

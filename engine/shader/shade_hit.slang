@@ -61,6 +61,8 @@ struct ShadeHit {
     float pomShadow;
     float mirror;
     float foliage;
+    float3 coat;
+    float coatNoL;
 };
 
 float4 sampleHeap(uint id, float2 uv, float lod) {
@@ -69,6 +71,43 @@ float4 sampleHeap(uint id, float2 uv, float lod) {
 
 float4 sampleGrad(uint id, float2 uv, float2 ddx, float2 ddy) {
     return gTex[NonUniformResourceIndex(id)].SampleGrad(gWrap, uv, ddx, ddy);
+}
+
+float2 parallaxOcclusionUv(float2 uv, float2 uvDx, float2 uvDy, float3 viewTS, float ndotv, uint htex, float amount) {
+    const int nNumSteps = clamp(int(lerp(48.0, 8.0, saturate(ndotv))), 8, 48);
+    const float fStepSize = 1.0 / float(nNumSteps);
+    const float heightScale = 0.05 * amount / 0.35;
+    const float2 vParallaxOffsetTS = viewTS.xy * heightScale / max(viewTS.z, 0.05);
+    const float2 vTexOffsetPerStep = fStepSize * vParallaxOffsetTS;
+    float2 vTexCurrentOffset = uv;
+    float fPrevHeight = 1.0;
+    float fCurrentBound = 1.0;
+    float2 pt1 = 0.0;
+    float2 pt2 = 0.0;
+    bool hitLayer = false;
+    [loop]
+    for (int nStepIndex = 0; nStepIndex < nNumSteps; ++nStepIndex) {
+        vTexCurrentOffset -= vTexOffsetPerStep;
+        const float fCurrHeight = sampleGrad(htex, vTexCurrentOffset, uvDx, uvDy).r;
+        fCurrentBound -= fStepSize;
+        if (fCurrHeight > fCurrentBound) {
+            pt1 = float2(fCurrentBound, fCurrHeight);
+            pt2 = float2(fCurrentBound + fStepSize, fPrevHeight);
+            hitLayer = true;
+            break;
+        }
+        fPrevHeight = fCurrHeight;
+    }
+    float fParallaxAmount = 0.0;
+    if (hitLayer) {
+        const float fDelta2 = pt2.x - pt2.y;
+        const float fDelta1 = pt1.x - pt1.y;
+        const float fDenominator = fDelta2 - fDelta1;
+        if (abs(fDenominator) > 1e-5) {
+            fParallaxAmount = (pt1.x * fDelta2 - pt2.x * fDelta1) / fDenominator;
+        }
+    }
+    return uv - vParallaxOffsetTS * (1.0 - fParallaxAmount);
 }
 
 float shCoeff(ProbeGpu pr, uint i) {
@@ -129,6 +168,8 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     hit.pomShadow = 1.0;
     hit.mirror = 0.0;
     hit.foliage = 0.0;
+    hit.coat = 0.0;
+    hit.coatNoL = 0.0;
     const uint packed = vis - 1u;
     const float depth = gDepth.Load(int3(px, 0));
     const float3 P = reconstructWorld(px, depth);
@@ -176,31 +217,42 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
             }
             N = Ns;
         }
-        const uint ntex = mat.normalTex;
-        if ((mat.flags & 32u) == 0u && ntex > 0 && ntex < 768) {
-            const float2 uv0 = float2(gVerts[i0].u, gVerts[i0].v);
-            const float2 uv1 = float2(gVerts[i1].u, gVerts[i1].v);
-            const float2 uv2 = float2(gVerts[i2].u, gVerts[i2].v);
-            const float2 duv1 = uv1 - uv0;
-            const float2 duv2 = uv2 - uv0;
-            const float det = duv1.x * duv2.y - duv2.x * duv1.y;
-            if (abs(det) > 1e-8) {
-                const float invDet = 1.0 / det;
-                float3 T = (e1n * duv2.y - e2n * duv1.y) * invDet;
-                T = T - N * dot(N, T);
-                if (dot(T, T) > 1e-8) {
-                    T = normalize(T);
-                    tangent = T;
-                    const float3 B = cross(N, T);
-                    bitangent = B;
-                    const float2 nuv = uv0 * buC + uv1 * bvC + uv2 * bwC;
-                    const float2 rg = sampleGrad(ntex, nuv, uvDdx, uvDdy).rg * 2.0 - 1.0;
-                    normalLen = saturate(length(rg));
-                    const float nz = sqrt(max(1.0 - dot(rg, rg), 0.0));
-                    N = normalize(T * rg.x + B * rg.y + N * nz);
-                }
+        const float2 uv0 = float2(gVerts[i0].u, gVerts[i0].v);
+        const float2 uv1 = float2(gVerts[i1].u, gVerts[i1].v);
+        const float2 uv2 = float2(gVerts[i2].u, gVerts[i2].v);
+        const float2 duv1 = uv1 - uv0;
+        const float2 duv2 = uv2 - uv0;
+        const float det = duv1.x * duv2.y - duv2.x * duv1.y;
+        if (abs(det) > 1e-8) {
+            const float invDet = 1.0 / det;
+            float3 T = (e1n * duv2.y - e2n * duv1.y) * invDet;
+            T = T - N * dot(N, T);
+            if (dot(T, T) > 1e-8) {
+                T = normalize(T);
+                tangent = T;
+                bitangent = cross(N, T);
             }
         }
+    }
+    float3 albedo = mat.baseColor.rgb;
+    float2 uv = float2(
+        gVerts[i0].u * buC + gVerts[i1].u * bvC + gVerts[i2].u * bwC,
+        gVerts[i0].v * buC + gVerts[i1].v * bvC + gVerts[i2].v * bwC);
+    const uint htex = mat.pad0;
+    if (gShade.pom > 0.001 && htex > 0u && htex < 768u && dot(tangent, tangent) > 0.5) {
+        const float3 viewTS = float3(dot(V, tangent), dot(V, bitangent), dot(V, N));
+        uv = parallaxOcclusionUv(uv, uvDdx, uvDdy, viewTS, saturate(dot(V, N)), htex, saturate(gShade.pom));
+    }
+    const float3 geoN = dot(N, V) < 0.0 ? -N : N;
+    const uint ntex = mat.normalTex;
+    if ((mat.flags & 32u) == 0u && ntex > 0u && ntex < 768u && dot(tangent, tangent) > 0.5) {
+        float3 tN = sampleGrad(ntex, uv, uvDdx, uvDdy).xyz * 2.0 - 1.0;
+        tN.y = -tN.y;
+        if (dot(tN.xy, tN.xy) > 1e-4 && tN.z < 0.05) {
+            tN.z = sqrt(max(1.0 - dot(tN.xy, tN.xy), 0.0));
+        }
+        normalLen = saturate(length(tN.xy));
+        N = normalize(tangent * tN.x + bitangent * tN.y + N * tN.z);
     }
     if (dot(N, V) < 0.0) {
         N = -N;
@@ -212,66 +264,6 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     const float NdotV = max(dot(N, V), 1e-4);
     const float NdotH = saturate(dot(N, H));
     const float VdotH = saturate(dot(V, H));
-    float3 albedo = mat.baseColor.rgb;
-    float2 uv = float2(
-        gVerts[i0].u * buC + gVerts[i1].u * bvC + gVerts[i2].u * bwC,
-        gVerts[i0].v * buC + gVerts[i1].v * bvC + gVerts[i2].v * bwC);
-    const uint htex = mat.pad0;
-    const float camDist = length(gFrame.cameraPos.xyz - P);
-    if (gShade.pom > 0.001 && htex > 0u && htex < 768u && camDist < 12.0 && dot(tangent, tangent) > 0.5) {
-        const int steps = 8;
-        const float worldLen = max(length(w1 - w0), 1e-3);
-        const float uvLen = length(float2(gVerts[i1].u - gVerts[i0].u, gVerts[i1].v - gVerts[i0].v));
-        const float uvPerM = min(uvLen / worldLen, 2.0);
-        const float depthM = 0.004 * saturate(gShade.pom);
-        const float3 vT = float3(dot(V, tangent), dot(V, bitangent), max(dot(V, N), 0.45));
-        float2 shift = (vT.xy / vT.z) * (depthM * uvPerM);
-        shift = clamp(shift, float2(-0.006, -0.006), float2(0.006, 0.006));
-        const float2 duv = shift / float(steps);
-        float h = 1.0;
-        float hPrev = 1.0;
-        float2 uvPrev = uv;
-        const float stepH = 1.0 / float(steps);
-        [loop]
-        for (int i = 0; i < steps; ++i) {
-            const float sampled = sampleHeap(htex, uv, 0.0).r;
-            if (sampled >= h) {
-                break;
-            }
-            hPrev = h;
-            uvPrev = uv;
-            h -= stepH;
-            uv -= duv;
-        }
-        [unroll]
-        for (int r = 0; r < 4; ++r) {
-            const float hm = (hPrev + h) * 0.5;
-            const float2 uvm = (uvPrev + uv) * 0.5;
-            if (sampleHeap(htex, uvm, 0.0).r >= hm) {
-                h = hm;
-                uv = uvm;
-            } else {
-                hPrev = hm;
-                uvPrev = uvm;
-            }
-        }
-        const float3 lT = float3(dot(L, tangent), dot(L, bitangent), dot(L, N));
-        if (lT.z > 0.05) {
-            float2 suv = uv;
-            float sh = h;
-            const int shadeSteps = max(int(lerp(4.0, 8.0, saturate(gShade.pom))), 1);
-            const float2 lduv = (lT.xy / lT.z) * (depthM * uvPerM / float(shadeSteps));
-            [loop]
-            for (int k = 0; k < shadeSteps; ++k) {
-                suv += lduv;
-                sh += stepH;
-                if (sampleHeap(htex, suv, 0.0).r > sh) {
-                    hit.pomShadow = lerp(1.0, 0.35, saturate(gShade.pom));
-                    break;
-                }
-            }
-        }
-    }
     const uint tex = mat.albedo;
     if (tex < 768) {
         float lod = 0.0;
@@ -328,12 +320,12 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     }
     float ao = 1.0;
     float metallic = saturate(mat.metallic);
-    float roughness = clamp(mat.roughness, 0.04, 1.0);
+    float roughness = clamp(mat.roughness, 0.045, 1.0);
     if (mat.orm > 0 && mat.orm < 768) {
         const float3 orm = sampleGrad(mat.orm, uv, uvDdx, uvDdy).rgb;
         if ((mat.flags & 4u) != 0u) {
             ao = orm.r > 0.02 ? saturate(orm.r) : 1.0;
-            roughness = clamp(orm.g, 0.04, 1.0);
+            roughness = clamp(orm.g, 0.045, 1.0);
             metallic = saturate(orm.b);
         } else {
             const float peak = max(orm.r, max(orm.g, orm.b));
@@ -344,8 +336,21 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     const float normalGap = saturate(1.0 - normalLen);
     const float kernelRough = min(2.0 * normalGap * normalGap * max(gShade.toksvig, 0.0), 0.18);
     roughness = sqrt(saturate(roughness * roughness + kernelRough));
-    const float a = max(roughness * roughness, 0.002);
-    const float3 f0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    const float coat = (mat.flags & 64u) != 0u ? 1.0 : 0.0;
+    const float coatPerceptual = 0.045;
+    if (coat > 0.0) {
+        roughness = lerp(roughness, max(roughness, coatPerceptual), coat);
+    }
+    roughness = clamp(roughness, 0.045, 1.0);
+    const float a = roughness * roughness;
+    float reflectance = asfloat(mat.pad1);
+    if (reflectance < 0.01 || reflectance > 1.0) {
+        reflectance = 0.5;
+    }
+    float3 f0 = computeF0(albedo, metallic, computeDielectricF0(reflectance));
+    if (coat > 0.0) {
+        f0 = lerp(f0, f0ClearCoatToSurface(f0), coat);
+    }
     const float3 F = F_Schlick(VdotH, f0);
     const float D = D_GGX(NdotH, a);
     const float Vis = V_SmithGGXCorrelated(NdotV, NdotL, a);
@@ -356,16 +361,14 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     }
     const float gtao = lerp(1.0, saturate(aoTex), saturate(gShade.gtaoAmt)) * ao;
 
-    float3 spec = min(D * Vis * F, float3(8.0, 8.0, 8.0));
-    spec *= lerp(float3(1.0, 1.0, 1.0), energyCompensation(f0, NdotV, roughness), saturate(gShade.ggx));
+    float3 spec = D * Vis * F;
+    spec *= energyCompensation(f0, NdotV, roughness);
     spec *= lerp(1.0, specOcclusion(NdotV, gtao, roughness), saturate(gShade.specOcc));
 
-    const float coat = (mat.flags & 64u) != 0u ? 0.5 : 0.0;
+    const float coatNoH = saturate(dot(geoN, H));
     float fCoat = 0.0;
-    const float coatSpec = clearcoatLobe(NdotH, VdotH, coat, 0.08, fCoat);
-    spec = spec * (1.0 - fCoat) + float3(coatSpec, coatSpec, coatSpec);
-
-    const float left = (1.0 - fCoat);
+    const float coatSpec = clearcoatLobe(coatNoH, VdotH, coat, coatPerceptual, fCoat);
+    spec *= (1.0 - fCoat);
 
     hit.N = N;
     hit.P = P;
@@ -373,7 +376,9 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     hit.L = L;
     hit.albedo = albedo;
     hit.spec = spec;
-    hit.diff = albedo * (1.0 - F) * (1.0 - metallic) * Fd_Lambert() * gtao * left;
+    hit.coat = float3(coatSpec, coatSpec, coatSpec);
+    hit.coatNoL = saturate(dot(geoN, L));
+    hit.diff = computeDiffuseColor(albedo, metallic) * Fd_Lambert() * gtao * (1.0 - fCoat);
     hit.f0 = f0;
     hit.emissive = mat.baseColor.rgb * mat.emissive * 8.0;
     if (mat.emissiveTex > 0u && mat.emissiveTex < 768u) {

@@ -169,7 +169,7 @@ void restirRecord(
     RestirPass& p,
     Device& d,
     const FrameView& view,
-    const LightGpuData* lights,
+    const void* lights,
     uint32_t lightCount,
     uint32_t passMask,
     uint32_t flight,

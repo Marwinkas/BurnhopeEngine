@@ -8,7 +8,7 @@ void framePassRestir(
     const RenderContext& ctx,
     RestirPass& restir,
     const FrameView& view,
-    const LightGpuData* lights,
+    const void* lights,
     uint32_t lightCount,
     uint32_t passMask,
     VkDeviceAddress tlas) {

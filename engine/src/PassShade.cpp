@@ -52,7 +52,7 @@ void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky
         GpuZone zone(ctx.profiler, ctx.cmd, "Reflect");
         reflectRecord(ctx.cmd, ctx.extent, shade, ctx.post.flags.lightProfile);
     }
-    if ((ctx.post.flags.passMask & 4096u) != 0u && ctx.post.shade.fogDensity > 0.0008f) {
+    if ((ctx.post.flags.passMask & 4096u) != 0u) {
         imageBarrier(ctx.cmd, shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, false);
         GpuZone zone(ctx.profiler, ctx.cmd, "Fog");
         shadeFogRecord(ctx.cmd, ctx.extent, shade);

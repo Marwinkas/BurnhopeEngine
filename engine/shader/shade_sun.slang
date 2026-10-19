@@ -175,7 +175,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     }
     const float giGain = giOn ? max(gShade.pad1, 0.0) : 0.0;
     bounce *= giGain;
-    const float3 bounceLit = hit.albedo * (1.0 - hit.metallic) * bounce * sunCol * saturate(inten / 8.0);
+    float3 bounceLit = hit.albedo * (1.0 - hit.metallic) * bounce * sunCol * saturate(inten / 8.0);
     float3 skyAmb = 0.0;
     if (!worldRc) {
         const float3 skyDir = normalize(float3(hit.N.x, hit.N.y + 1.15, hit.N.z));
@@ -189,13 +189,17 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
             skyAmb *= 0.15;
         }
     }
+    if (giOn && (gPass.passMask & 8388608u) != 0u) {
+        bounceLit = 0.0;
+        skyAmb = 0.0;
+    }
     float3 indirect = bounceLit + skyAmb + hit.emissive;
     float sunFace = hit.NdotL;
     if (hit.foliage > 0.5) {
         sunFace = max(sunFace, saturate(dot(-hit.N, hit.L)) * 0.45);
     }
     const float3 sunDiff = coloredPenumbra(hit.diff, hit.albedo, shadow);
-    float3 direct = (sunDiff + hit.spec) * sunFace * shadow * radiance;
+    float3 direct = ((sunDiff + hit.spec) * sunFace + hit.coat * hit.coatNoL) * shadow * radiance;
     if (!all(direct == direct)) {
         direct = 0.0;
     }

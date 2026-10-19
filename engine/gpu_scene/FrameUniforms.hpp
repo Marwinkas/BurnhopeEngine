@@ -86,7 +86,15 @@ struct RcParams {
     float cap = 0.6f;
     float sunScale = 1.0f;
     float bounce = 1.0f;
-    float pad[9]{};
+    float fogFalloff = 0.08f;
+    float fogR = 0.62f;
+    float fogG = 0.72f;
+    float fogB = 0.86f;
+    float fogLum = 1.4f;
+    float fogStart = 0.0f;
+    float fogOpacity = 0.92f;
+    float fogInStart = 0.0f;
+    float fogInSize = 40.0f;
 };
 struct ShadeParams {
     float sscsReach = 0.2f;
@@ -106,9 +114,43 @@ struct ShadeParams {
     float pad0 = 0.0f;
     float pad1 = 0.0f;
 };
+struct GradeBlock {
+    float prev0[4]{};
+    float prev1[4]{};
+    float prev2[4]{};
+    float prev3[4]{};
+    float mixR[4]{1.0f, 0.0f, 0.0f, 0.0f};
+    float mixG[4]{0.0f, 1.0f, 0.0f, 0.0f};
+    float mixB[4]{0.0f, 0.0f, 1.0f, 0.0f};
+    float shadows[4]{1.0f, 1.0f, 1.0f, 0.0f};
+    float midtones[4]{1.0f, 1.0f, 1.0f, 0.0f};
+    float highlights[4]{1.0f, 1.0f, 1.0f, 0.0f};
+    float slope[4]{1.0f, 1.0f, 1.0f, 0.0f};
+    float offset[4]{};
+    float power[4]{1.0f, 1.0f, 1.0f, 0.0f};
+    float ranges[4]{0.0f, 0.333f, 0.55f, 1.0f};
+    float generic[4]{1.0f, 0.18f, 0.18f, 10.0f};
+    float curves[4]{1.0f, 1.0f, 1.0f, 1.0f};
+};
+static_assert(sizeof(GradeBlock) == 256);
+
 struct PostPack {
-    float post[12]{};
-    float pad[4]{};
+    float exposure = 0.0f;
+    float temperature = 0.0f;
+    float tint = 0.0f;
+    float contrast = 1.0f;
+    float saturation = 1.0f;
+    float night = 0.0f;
+    float shadows = 1.0f;
+    float midtones = 1.0f;
+    float highlights = 1.0f;
+    float slope = 1.0f;
+    float cdlOffset = 0.0f;
+    float power = 1.0f;
+    float dofFocus = 8.0f;
+    float dofAmount = 0.0f;
+    float flare = 0.0f;
+    float flags = 0.0f;
 };
 // Свой блок, 192 байта, binding 58. В FrameView и в соседние ползунки не входит.
 struct AtmosphereParams {

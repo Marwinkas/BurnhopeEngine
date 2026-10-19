@@ -1,21 +1,15 @@
-// Контактная тень в R8. Солнце только умножает готовое значение.
+// Filament screenSpaceContactShadow. Луч в экранном пространстве, сравнение с глубиной.
 
 #include "frame.slang"
 #include "camera.slang"
-#include "core/math.slang"
 
-[[vk::binding(1, 0)]] Texture2D<uint> gVis;
 [[vk::binding(2, 0)]] Texture2D<float> gDepth;
-[[vk::binding(7, 0)]] StructuredBuffer<Vertex> gVerts;
-[[vk::binding(8, 0)]] StructuredBuffer<uint> gIdx;
-[[vk::binding(9, 0)]] StructuredBuffer<MeshletRef> gMeshlets;
-[[vk::binding(10, 0)]] StructuredBuffer<GpuInstance> gInstances;
+[[vk::binding(13, 0)]] SamplerState gNearest;
 [[vk::binding(46, 0)]] RWTexture2D<float> gContact;
 
-#include "core/vis_surface.slang"
-
-float ignContact(uint2 px) {
-    return frac(52.9829189 * frac(0.06711056 * float(px.x) + 0.00583715 * float(px.y)));
+float ignContact(float2 px) {
+    const float3 m = float3(0.06711056, 0.00583715, 52.9829189);
+    return frac(m.z * frac(dot(px, m.xy)));
 }
 
 [shader("compute")]
@@ -25,8 +19,7 @@ void contactCs(uint3 dtid : SV_DispatchThreadID) {
         return;
     }
     const uint2 px = dtid.xy;
-    const uint centerVis = gVis.Load(int3(px, 0));
-    if ((gPass.passMask & 16384u) == 0u || centerVis == 0u || gShade.sscsAmt <= 0.001 || gFrame.disableShadow != 0) {
+    if ((gPass.passMask & 16384u) == 0u || gShade.sscsAmt <= 0.001 || gFrame.disableShadow != 0u) {
         gContact[px] = 1.0;
         return;
     }
@@ -37,78 +30,50 @@ void contactCs(uint3 dtid : SV_DispatchThreadID) {
     }
     const float3 P = reconstructWorld(px, depth);
     const float3 toCam = gFrame.cameraPos.xyz - P;
-    const float viewDist = max(length(toCam), 0.1);
-    const float distFade = 1.0 - saturate((viewDist - 24.0) / 12.0);
-    if (distFade <= 0.001) {
+    const float viewDist = max(length(toCam), 0.05);
+    const float3 sunRaw = gSun.sunDirIntensity.xyz;
+    const float3 L = dot(sunRaw, sunRaw) > 1e-8 ? normalize(sunRaw) : float3(0.0, 1.0, 0.0);
+
+    const int steps = int(clamp(gShade.sscsSteps, 1.0, 32.0));
+    const float reach = clamp(gShade.sscsReach, 0.02, 16.0);
+    const float dt = 1.0 / float(steps);
+    const float3 wsEnd = P + L * reach;
+    const float4 csStart = worldToClip(P);
+    const float4 csEnd = worldToClip(wsEnd);
+    if (csStart.w <= 1e-4 || csEnd.w <= 1e-4) {
         gContact[px] = 1.0;
         return;
     }
+    const float3 ssStart = csStart.xyz / csStart.w;
+    const float3 ssEnd = csEnd.xyz / csEnd.w;
+    const float3 uvStart = float3(ssStart.xy * 0.5 + 0.5, ssStart.z);
+    const float3 uvEnd = float3(ssEnd.xy * 0.5 + 0.5, ssEnd.z);
+    const float3 uvRay = uvEnd - uvStart;
+    const float3 viewDir = -toCam / viewDist;
+    const float4 csViewEnd = worldToClip(P + viewDir * reach);
+    const float viewZ = csViewEnd.z / max(csViewEnd.w, 1e-4);
+    const float tolerance = max(abs(viewZ - ssStart.z) * dt, 1e-5);
 
-    const uint packed = centerVis - 1u;
-    const VisTri tri = loadVisTri(packed & 0xFFFFFu, packed >> 20u, P);
-    float3 N = tri.faceN;
-    const float3 V = toCam / viewDist;
-    if (dot(N, V) < 0.0) {
-        N = -N;
-    }
-    const float3 L = normalize(gSun.sunDirIntensity.xyz);
-    const float NdotL = dot(N, L);
-    if (NdotL <= 0.06) {
-        gContact[px] = 1.0;
-        return;
-    }
-
-    const float mPerPx = viewDist * gFrame.invExtent.y * 2.0;
-    const float maxPx = clamp(gShade.sscsPx, 16.0, 256.0);
-    const float reach = clamp(min(gShade.sscsReach, maxPx * mPerPx), 0.04, 1.2);
-    const int steps = int(clamp(gShade.sscsSteps, 8.0, 16.0));
-
-    // Reject hits lying on the receiver's own triangle plane (eliminates stair-stepping)
-    const float planeTolerance = max(mPerPx * 2.0, 0.005);
-    const float depthBias = max(mPerPx * 1.5, 0.002 * viewDist);
-    const float maxThick = max(gShade.sscsThick * 10.0, reach * 0.9);
-    const float jitter = ignContact(px);
-
-    float occ = 1.0;
+    const float dither = ignContact(float2(px) + 0.5) - 0.5;
+    float t = dt * dither + dt;
+    float occlusion = 0.0;
+    float2 edgeUv = uvStart.xy;
     [loop]
-    for (int s = 1; s <= steps; ++s) {
-        const float sFrac = (float(s) - 0.5 + (jitter - 0.5) * 0.5) / float(steps);
-        const float t = sFrac * reach;
-        const float3 Q = P + L * t;
-        const float4 clipQ = worldToClip(Q);
-        if (clipQ.w <= 1e-3) {
+    for (int i = 0; i < steps; ++i) {
+        const float3 ray = uvStart + uvRay * t;
+        edgeUv = ray.xy;
+        if (ray.x <= 0.0 || ray.y <= 0.0 || ray.x >= 1.0 || ray.y >= 1.0) {
             break;
         }
-        const float2 uv = clipQ.xy / clipQ.w * 0.5 + 0.5;
-        if (uv.x <= 0.005 || uv.y <= 0.005 || uv.x >= 0.995 || uv.y >= 0.995) {
+        const float z = gDepth.SampleLevel(gNearest, ray.xy, 0.0);
+        const float dz = z - ray.z;
+        if (abs(tolerance - dz) < tolerance) {
+            occlusion = 1.0;
             break;
         }
-        const uint2 sp = uint2(uv * float2(gFrame.extent.xy));
-        const uint sampleVis = gVis.Load(int3(sp, 0));
-        if (sampleVis == 0u || sampleVis == centerVis) {
-            continue;
-        }
-        const float sd = gDepth.Load(int3(sp, 0));
-        if (sd <= 1e-6) {
-            continue;
-        }
-        const float3 sceneP = reconstructWorld(sp, sd);
-
-        // Must be above the receiver's surface plane so flat walls never self-occlude
-        if (dot(sceneP - P, N) <= planeTolerance) {
-            continue;
-        }
-
-        const float4 clipScene = worldToClip(sceneP);
-        const float depthDelta = clipQ.w - clipScene.w;
-        if (depthDelta > depthBias && depthDelta < maxThick) {
-            if (length(sceneP - Q) < maxThick * 1.25) {
-                const float fade = saturate(1.0 - sFrac * 0.65);
-                occ = min(occ, 1.0 - fade);
-                break;
-            }
-        }
+        t += dt;
     }
-
-    gContact[px] = lerp(1.0, occ, saturate(gShade.sscsAmt) * distFade * saturate((NdotL - 0.06) * 6.0));
+    const float2 fade = max(12.0 * abs(edgeUv - 0.5) - 5.0, 0.0);
+    occlusion *= saturate(1.0 - dot(fade, fade));
+    gContact[px] = 1.0 - occlusion * saturate(gShade.sscsAmt);
 }

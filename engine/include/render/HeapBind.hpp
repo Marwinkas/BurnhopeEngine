@@ -84,7 +84,7 @@ static_assert(static_cast<uint32_t>(HeapBuf::RestirRis) == 14u);
 static_assert(static_cast<uint32_t>(HeapBuf::RestirConst) == 15u);
 static_assert(static_cast<uint32_t>(HeapBuf::Gizmo) == 47u);
 static_assert(static_cast<uint32_t>(HeapBuf::Count) <= 48u);
-
+constexpr uint32_t kGradeSlot = 68u;
 // Каскад 0 остаётся в ShadowVisible. +1 и +2 попадали в Decals и Probes.
 [[nodiscard]] inline uint32_t shadowListSlot(uint32_t cascade) {
     if (cascade == 1u) {
