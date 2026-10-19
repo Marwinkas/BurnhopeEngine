@@ -232,6 +232,7 @@ void fillCaps(VkPhysicalDevice pd, DeviceCaps& caps) {
         && robust2.nullDescriptor == VK_TRUE;
     caps.samplerAnisotropy = feats.features.samplerAnisotropy == VK_TRUE;
     caps.shaderInt64 = feats.features.shaderInt64 == VK_TRUE;
+    caps.shaderBufferInt64Atomics = f12.shaderBufferInt64Atomics == VK_TRUE;
     caps.shaderFloat16 = f12.shaderFloat16 == VK_TRUE;
     caps.storageBuffer16 = f11.storageBuffer16BitAccess == VK_TRUE;
 }
@@ -253,7 +254,7 @@ void deviceDumpCaps(const Device& d) {
     spdlog::info("maintenance6: {}  hostImageCopy: {}", c.maintenance6, c.hostImageCopy);
     spdlog::info("swapchainMaintenance1: {}  nestedCommandBuffer: {}  depthClampControl: {}  barycentric: {}  cooperativeMatrix(discover-only): {}",
         c.swapchainMaintenance1, c.nestedCommandBuffer, c.depthClampControl, c.fragmentShaderBarycentric, c.cooperativeMatrix);
-    spdlog::info("robustness2: {}  int64: {}  float16: {}  storage16: {}", c.robustness2, c.shaderInt64, c.shaderFloat16, c.storageBuffer16);
+    spdlog::info("robustness2: {}  int64: {}  int64atom: {}  float16: {}  storage16: {}", c.robustness2, c.shaderInt64, c.shaderBufferInt64Atomics, c.shaderFloat16, c.storageBuffer16);
     if (d.heapProps.imageDescriptorSize != 0) {
         spdlog::info("heap: imgDesc={} bufDesc={} sampDesc={} resAlign={} reservedRes={}",
             static_cast<unsigned long long>(d.heapProps.imageDescriptorSize),
@@ -516,6 +517,7 @@ bool deviceCreate(Device& d, VkSurfaceKHR surface) {
     f12.runtimeDescriptorArray = VK_TRUE;
     f12.scalarBlockLayout = VK_TRUE;
     f12.shaderFloat16 = d.caps.shaderFloat16 ? VK_TRUE : VK_FALSE;
+    f12.shaderBufferInt64Atomics = d.caps.shaderBufferInt64Atomics ? VK_TRUE : VK_FALSE;
 
     VkPhysicalDeviceVulkan11Features f11{};
     f11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;

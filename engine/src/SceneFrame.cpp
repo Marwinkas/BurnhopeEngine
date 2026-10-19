@@ -1504,6 +1504,7 @@ void sceneFrameReleaseGpu(SceneFrame* scene, Device& device) {
     shadePassDestroy(scene->shade, device);
     skyPassDestroy(scene->sky, device);
     radianceDestroy(scene->radiance, device);
+    sharcDestroy(scene->sharc, device);
     restirDestroy(scene->restir, device);
     fsrDestroy(scene->fsr, device);
     gtaoDestroy(scene->gtao, device);
@@ -1976,7 +1977,7 @@ void sceneFrameRecord(
             && recreateImage(scene->hizMax[0].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
             && recreateImage(scene->hizMax[1].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
         if (!descriptorHeapsCreate(scene->gpuHeap, device, HeapLayout{
-                .buffers = 71,
+                .buffers = 74,
                 .images = static_cast<uint32_t>(HeapImg::Count),
                 .samplers = 3,
             })) {
@@ -1987,6 +1988,7 @@ void sceneFrameRecord(
             && shadePassCreate(scene->shade, device, scene->gpuHeap, swap.extent)
             && skyPassCreate(scene->sky, device, scene->gpuHeap, swap.extent)
             && radianceCreate(scene->radiance, device, scene->gpuHeap)
+            && sharcCreate(scene->sharc, device, scene->gpuHeap)
             && restirCreate(scene->restir, device, scene->gpuHeap, swap.extent)
             && fsrCreate(scene->fsr, device, scene->gpuHeap, swap.extent)
             && gtaoCreate(scene->gtao, device, scene->gpuHeap, swap.extent)
@@ -2542,12 +2544,15 @@ void sceneFrameRecord(
     const bool gtaoOn = (scene->passMask & 524288u) == 0u && scene->lightProfile != 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
     framePassShade(ctx, scene->shade, scene->sky, scene->gtao, scene->vis.targets.vis, scene->vis.targets.depth, gtaoOn, scene->probeBuf.buffer, scene->probeBuf.size, restirOn, pose.fovYRad);
     const VkDeviceAddress tlas = scene->radiance.geometry ? scene->radiance.tlasAddress : 0;
-    const bool worldRc = (scene->passMask & 128u) != 0u && (scene->passMask & 262144u) != 0u;
-    const bool worldVx = (scene->passMask & 524288u) != 0u && (scene->passMask & 262144u) != 0u && !worldRc;
+    const bool worldSharc = (scene->passMask & kPassSharc) != 0u;
+    const bool worldRc = !worldSharc && (scene->passMask & 128u) != 0u && (scene->passMask & 262144u) != 0u;
+    const bool worldVx = !worldSharc && (scene->passMask & 524288u) != 0u && (scene->passMask & 262144u) != 0u && !worldRc;
     if (!restirOn) {
         restirNote(scene->restir, scene->lightProfile, (scene->passMask & kPassRestir) != 0u ? "нет шейдера" : "выкл");
     }
-    if (worldVx) {
+    if (worldSharc) {
+        framePassSharc(ctx, scene->sharc, scene->shade.hdrA, scene->giGain, lightCount, tlas);
+    } else if (worldVx) {
         framePassVoxel(ctx, scene->voxel, scene->shade.hdrA, true, scene->instanceCount, propMoved);
     } else {
         framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax, scene->rcSun, scene->rcBounce);
@@ -2585,6 +2590,12 @@ void sceneFrameRecord(
         const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
         if (used + 2u < sizeof(scene->gpuText)) {
             std::snprintf(scene->gpuText + used, sizeof(scene->gpuText) - used, "\n%s", scene->gtao.lastLog);
+        }
+    }
+    if (worldSharc && scene->sharc.lastLog[0] != '\0') {
+        const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
+        if (used + 2u < sizeof(scene->gpuText)) {
+            std::snprintf(scene->gpuText + used, sizeof(scene->gpuText) - used, "\n%s", scene->sharc.lastLog);
         }
     }
     if (logFrame) {

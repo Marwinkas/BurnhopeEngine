@@ -33,6 +33,7 @@ struct DeviceCaps {
     bool robustness2 = false;
     bool samplerAnisotropy = false;
     bool shaderInt64 = false;
+    bool shaderBufferInt64Atomics = false;
     bool shaderFloat16 = false;
     bool storageBuffer16 = false;
     bool shaderDemote = false;

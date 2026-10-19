@@ -3,6 +3,7 @@
 #include "app/Shell.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
+#include "render/Sharc.hpp"
 #include "rhi/Device.hpp"
 #include "files/Browser.hpp"
 #include "files/FileDomain.hpp"
@@ -1599,6 +1600,9 @@ bool engineTick(Engine& e) {
         }
         if ((tweaks.passMask & 262144u) != 0u && tweaks.lightProfile == 2u) {
             tweaks.passMask |= 128u;
+        }
+        if ((tweaks.passMask & 262144u) != 0u && tweaks.lightProfile == 3u) {
+            tweaks.passMask |= kPassSharc;
         }
         if (checkOn(hud, id.restiren, true)) {
             tweaks.passMask |= 1048576u;

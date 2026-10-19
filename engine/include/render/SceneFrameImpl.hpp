@@ -18,6 +18,7 @@
 #include "render/Sky.hpp"
 #include "render/Hiz.hpp"
 #include "render/Radiance.hpp"
+#include "render/Sharc.hpp"
 #include "render/Fsr.hpp"
 #include "render/Gtao.hpp"
 #include "render/Restir.hpp"
@@ -58,6 +59,7 @@ struct SceneFrameImpl {
     AtmosphereParams atmosphere{};
     float skyTime = 0.0f;
     RadiancePass radiance{};
+    SharcPass sharc{};
     RestirPass restir{};
     FsrPass fsr{};
     GtaoPass gtao{};
@@ -288,6 +290,7 @@ void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, Gt
 void framePassRestir(const RenderContext& ctx, RestirPass& restir, const FrameView& view, const void* lights, uint32_t lightCount, uint32_t passMask, VkDeviceAddress tlas);
 void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky);
 void framePassRadiance(const RenderContext& ctx, RadiancePass& rad, TrackedImage& hdrA, bool worldRc, float rays, float spacing, float intensity, float maxDist, float sunScale, float bounce);
+void framePassSharc(const RenderContext& ctx, SharcPass& sharc, TrackedImage& hdrA, float giGain, uint32_t lightCount, VkDeviceAddress tlas);
 void framePassVoxel(const RenderContext& ctx, VoxelPass& voxel, TrackedImage& hdrA, bool worldVx, uint32_t instances, bool moved);
 void framePassTonemap(const RenderContext& ctx, TonemapPass& tone, TrackedImage& hdrA, TrackedImage& hdrB, const Swapchain& swap, const FrameContext& frame, bool bloomOn, bool skipAa, bool taaOn);
 

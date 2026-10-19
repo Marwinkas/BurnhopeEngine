@@ -21,7 +21,6 @@ emeraldcity/
 *.log
 .vscode/
 docs/
-t.txt
 Falcor/
 XeGTAO/
 RTXGI/
