@@ -19,7 +19,7 @@ constexpr uint32_t kSharcHashSlot = 70u;
 constexpr uint32_t kSharcAccumSlot = 71u;
 constexpr uint32_t kSharcResolvedSlot = 72u;
 constexpr uint32_t kSharcParamSlot = 73u;
-// 2^22 записей, как в сэмпле RTXGI. Хеш 8 байт, накопление и resolved по 16.
+// 2^22 записей, как в сэмпле RTXGI. Хеш 8 байт, накопление 16, resolved 32 (три float rgb).
 constexpr uint32_t kSharcCapacity = 1u << 22;
 
 // 80 байт, скалярная раскладка. Поля совпадают с SharcGpuParams в sharc_params.slang.
@@ -36,7 +36,7 @@ struct alignas(16) SharcGpuParams {
     uint32_t accumulationFrameNum = 20u;
     uint32_t staleFrameNum = 60u;
     uint32_t frameIndex = 0u;
-    float radianceScale = 1000.0f;
+    float radianceScale = 100000.0f;
     float roughnessThreshold = 0.4f;
     uint32_t downscale = 5u;
     uint32_t bouncesMax = 4u;

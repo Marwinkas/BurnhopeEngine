@@ -168,9 +168,21 @@ float3 sharcSunDir() {
     return dot(sun, sun) > 1e-8 ? normalize(sun) : float3(0.0, 1.0, 0.0);
 }
 
-float3 sharcSky(float3 direction) {
-    (void)direction;
-    return 0.0;
+float3 sharcSunEnergy(float3 sunCol) {
+    float lum = dot(max(sunCol, 0.0), float3(0.2126, 0.7152, 0.0722));
+    return float3(lum, lum, lum);
+}
+
+float3 sharcSkyFill() {
+    float inten = gSun.sunDirIntensity.w;
+    if (inten < 0.05) {
+        inten = 8.0;
+    }
+    float3 sky = float3(0.78, 0.82, 0.88) * (inten * 0.055);
+    if ((gPass.passMask & 256u) == 0u) {
+        sky *= 0.15;
+    }
+    return sky;
 }
 
 float3 sharcBasis(float3 normal, float3 h) {
@@ -209,7 +221,9 @@ float3 sharcDirect(SharcSurf surf, float3 view, inout uint rng) {
     float spec = D_GGX(saturate(dot(surf.geoNormal, H)), a)
         * V_SmithGGXCorrelated(ndv, ndl, a)
         * sharcLuma(F_Schlick(saturate(dot(view, H)), f0));
-    float3 direct = (diffuse * diff + f0 * spec * ndl) * vis * sunCol * inten;
+    float3 direct = (diffuse * diff + f0 * spec * ndl) * vis * sharcSunEnergy(sunCol) * inten;
+    float wrap = saturate(surf.geoNormal.y * 0.4 + 0.6);
+    direct += diffuse * sharcSkyFill() * wrap;
     direct += surf.albedo * surf.emissive;
     if (gSharc.lightCount > 0u && (gPass.passMask & 1u) != 0u) {
         uint index = sharcRng(rng) % gSharc.lightCount;
@@ -251,17 +265,17 @@ float3 sharcDirect(SharcSurf surf, float3 view, inout uint rng) {
     return max(direct, 0.0);
 }
 
-bool sharcSampleBounce(SharcSurf surf, float3 view, inout uint rng, out float3 direction, out float3 weight, out float lobeRough) {
+bool sharcSampleBounce(SharcSurf surf, float3 view, inout uint rng, out float3 direction, out float3 weight, out uint diffuseLobe) {
     direction = surf.geoNormal;
     weight = 0.0;
-    lobeRough = 1.0;
+    diffuseLobe = 1u;
     float3 f0 = computeF0(surf.albedo, surf.metallic, computeDielectricF0(0.5));
     float specProb = saturate(max(f0.r, max(f0.g, f0.b)));
     specProb *= saturate(1.0 - surf.roughness);
     float2 u = float2(sharcRand(rng), sharcRand(rng));
     if (sharcRand(rng) < specProb) {
         direction = ggxReflect(surf.geoNormal, view, surf.roughness, u);
-        lobeRough = surf.roughness;
+        diffuseLobe = 0u;
         float ndl = saturate(dot(surf.geoNormal, direction));
         if (ndl < 0.02) {
             return false;
@@ -271,7 +285,7 @@ bool sharcSampleBounce(SharcSurf surf, float3 view, inout uint rng, out float3 d
         return true;
     }
     direction = sharcCosine(surf.geoNormal, u);
-    lobeRough = 1.0;
+    diffuseLobe = 1u;
     weight = surf.albedo * (1.0 - surf.metallic) / max(1.0 - specProb, 1e-3);
     return dot(surf.geoNormal, direction) > 0.02;
 }

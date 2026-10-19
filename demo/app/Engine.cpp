@@ -617,6 +617,11 @@ void bindHudIds(HudContext& hud, UiState& state) {
     hud.ids.clouden = id("clouden");
     hud.ids.fogen = id("fogen");
     hud.ids.reflecten = id("reflecten");
+    hud.ids.ssrCut = id("ssrCut");
+    hud.ids.ssrSteps = id("ssrSteps");
+    hud.ids.ssrThick = id("ssrThick");
+    hud.ids.ssrMax = id("ssrMax");
+    hud.ids.ssrBlur = id("ssrBlur");
     hud.ids.contacten = id("contacten");
     hud.ids.vt = id("vt");
     hud.ids.freeze = id("freeze");
@@ -1182,6 +1187,11 @@ void sceneHud(Canvas& canvas, void* user) {
     tick("туман", "fogen", true);
     panel = giBody;
     tick("отражение", "reflecten", true);
+    rowSlide(*canvas.state, panel, "SSR шероховатость", "ssrCut", 0.82f, 0.05f, 1.0f);
+    rowSlide(*canvas.state, panel, "SSR шаги", "ssrSteps", 128.0f, 16.0f, 256.0f);
+    rowSlide(*canvas.state, panel, "SSR толщина", "ssrThick", 0.6f, 0.05f, 2.0f);
+    rowSlide(*canvas.state, panel, "SSR длина", "ssrMax", 80.0f, 4.0f, 200.0f);
+    rowSlide(*canvas.state, panel, "SSR блюр", "ssrBlur", 1.0f, 0.0f, 3.0f);
     panel = postBody;
     tick("контакт", "contacten", true);
     panel = cull;
@@ -1453,6 +1463,11 @@ bool engineTick(Engine& e) {
         tweaks.gtaoPower = slideAt(hud, id.gtaoPw, 2.2f);
         tweaks.gtaoFalloff = slideAt(hud, id.gtaoFa, 0.615f);
         tweaks.gtaoDenoise = slideAt(hud, id.gtaoDn, 1.0f);
+        tweaks.ssrCutoff = slideAt(hud, id.ssrCut, 0.82f);
+        tweaks.ssrSteps = slideAt(hud, id.ssrSteps, 128.0f);
+        tweaks.ssrThick = slideAt(hud, id.ssrThick, 0.6f);
+        tweaks.ssrMax = slideAt(hud, id.ssrMax, 80.0f);
+        tweaks.ssrStride = slideAt(hud, id.ssrBlur, 1.0f);
         tweaks.sscsReach = slideAt(hud, id.sscsR, 1.0f);
         tweaks.sscsThick = slideAt(hud, id.sscsT, 0.02f);
         tweaks.sscsSteps = slideAt(hud, id.sscsS, 8.0f);

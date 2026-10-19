@@ -11,7 +11,9 @@
 [[vk::binding(75, 0)]] Texture2D<float4> gHist;
 [[vk::binding(76, 0)]] RWTexture2D<float4> gOut;
 
-// История RELAX: репроекция и зажим по дисперсии соседства. Луч каждый кадр новый, свет держит история.
+// RELAX Anti-Firefly + TemporalAccumulation.
+// Альфа — длина истории 1..32. Цвет истории зажимается по дисперсии окрестности,
+// без отсечения по оттенку: иначе первый красный семпл не пускает зелёный и синий.
 
 float3 sharcNormal(uint2 px, float3 position) {
     float3 normal = octDecode(gSurf1[px].xy);
@@ -54,6 +56,10 @@ void sharcRelaxTemporal(uint3 dtid : SV_DispatchThreadID) {
         mean /= count;
         sigma = sqrt(max(moment / count - mean * mean, 0.0));
     }
+    float3 current = count > 0.0 ? mean : max(raw.rgb, 0.0);
+    if (count >= 4.0 && raw.a > 0.5) {
+        current = clamp(max(raw.rgb, 0.0), mean - sigma * 1.5, mean + sigma * 1.5);
+    }
     float depth = gDepth.Load(int3(px, 0));
     float3 position = depth > 0.0 ? reconstructWorld(px, depth) : gFrame.cameraPos.xyz;
     float3 normal = depth > 0.0 ? sharcNormal(px, position) : float3(0.0, 1.0, 0.0);
@@ -65,10 +71,9 @@ void sharcRelaxTemporal(uint3 dtid : SV_DispatchThreadID) {
             float2 prevUv = prevClip.xy / prevClip.w * 0.5 + 0.5;
             if (prevUv.x > 0.0 && prevUv.y > 0.0 && prevUv.x < 1.0 && prevUv.y < 1.0) {
                 hist = gHist.SampleLevel(gLinear, prevUv, 0.0);
-                uint2 prevPx = uint2(prevUv * float2(gFrame.extent));
-                prevPx = min(prevPx, gFrame.extent - 1u);
+                uint2 prevPx = min(uint2(prevUv * float2(gFrame.extent)), gFrame.extent - 1u);
                 float prevDepth = gDepth.Load(int3(prevPx, 0));
-                if (prevDepth > 0.0 && hist.a > 0.5) {
+                if (prevDepth > 0.0 && hist.a >= 1.0) {
                     float3 prevPos = reconstructWorld(prevPx, prevDepth);
                     float3 prevN = sharcNormal(prevPx, prevPos);
                     float z0 = length(gFrame.cameraPos.xyz - position);
@@ -78,27 +83,17 @@ void sharcRelaxTemporal(uint3 dtid : SV_DispatchThreadID) {
             }
         }
     }
-    if (!accept) {
-        float2 uv = (float2(px) + 0.5) * gFrame.invExtent;
-        float4 same = gHist.SampleLevel(gLinear, uv, 0.0);
-        if (same.a > 0.5 && gSharc.frameIndex > 0u) {
-            hist = same;
-            accept = true;
-        }
-    }
-    float3 color = raw.rgb;
-    float valid = raw.a;
+    float3 color = max(current, 0.0);
+    float lengthHist = raw.a > 0.5 || count > 0.0 ? 1.0 : 0.0;
     if (accept) {
-        float3 kept = hist.rgb;
-        if (raw.a > 0.5 && count >= 6.0) {
-            kept = clamp(hist.rgb, mean - sigma * 3.0, mean + sigma * 3.0);
+        float3 kept = max(hist.rgb, 0.0);
+        if (count >= 4.0) {
+            kept = clamp(kept, mean - sigma * 2.0, mean + sigma * 2.0);
         }
-        if (raw.a > 0.5) {
-            color = lerp(raw.rgb, kept, 0.92);
-        } else {
-            color = kept;
-        }
-        valid = 1.0;
+        float histLen = min(hist.a, 32.0);
+        float weight = histLen / (histLen + 1.0);
+        color = lerp(color, kept, weight);
+        lengthHist = min(histLen + 1.0, 32.0);
     }
-    gOut[px] = float4(max(color, 0.0), valid);
+    gOut[px] = float4(max(color, 0.0), lengthHist);
 }

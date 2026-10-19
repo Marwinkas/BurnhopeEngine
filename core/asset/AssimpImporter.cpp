@@ -437,6 +437,33 @@ bool appendSceneMeshes(
             dst.ormTexIndex = textureSlot(textures, ormName.C_Str());
             dst.flags |= 4u;
         }
+        const char* roughKinds[] = {"Roughness", "Rough"};
+        for (const char* kind : roughKinds) {
+            siblingFile(fileNameOf(tex.C_Str()), kind, extra, sizeof(extra));
+            if (texOnDisk(texSearch, extra)) {
+                dst.pad[2] = textureSlot(textures, extra);
+                break;
+            }
+        }
+        const char* metalKinds[] = {"Metallic", "Metalness", "Metal"};
+        for (const char* kind : metalKinds) {
+            siblingFile(fileNameOf(tex.C_Str()), kind, extra, sizeof(extra));
+            if (texOnDisk(texSearch, extra)) {
+                dst.pad[3] = textureSlot(textures, extra);
+                break;
+            }
+        }
+        if ((dst.flags & 4u) == 0u) {
+            const char* ormKinds[] = {"MetallicRoughness", "ORM"};
+            for (const char* kind : ormKinds) {
+                siblingFile(fileNameOf(tex.C_Str()), kind, extra, sizeof(extra));
+                if (texOnDisk(texSearch, extra)) {
+                    dst.ormTexIndex = textureSlot(textures, extra);
+                    dst.flags |= 4u;
+                    break;
+                }
+            }
+        }
     }
     for (unsigned m = 0; m < scene->mNumMeshes; ++m) {
         const aiMesh* mesh = scene->mMeshes[m];

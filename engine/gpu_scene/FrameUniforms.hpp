@@ -63,10 +63,10 @@ struct GtaoParams {
 };
 struct SsrParams {
     float cutoff = 0.82f;
-    float steps = 32.0f;
-    float stride = 0.025f;
-    float thick = 0.06f;
-    float maxDist = 180.0f;
+    float steps = 128.0f;
+    float stride = 1.0f;
+    float thick = 0.6f;
+    float maxDist = 80.0f;
     float bias = 0.15f;
     float pad[10]{};
 };

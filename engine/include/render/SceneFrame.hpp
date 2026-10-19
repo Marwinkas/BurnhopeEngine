@@ -43,10 +43,10 @@ struct SceneTweaks {
     float gtaoFalloff = 0.615f;
     float gtaoDenoise = 1.0f;
     float ssrCutoff = 0.82f;
-    float ssrSteps = 32.0f;
-    float ssrStride = 0.025f;
-    float ssrThick = 0.06f;
-    float ssrMax = 180.0f;
+    float ssrSteps = 128.0f;
+    float ssrStride = 1.0f;
+    float ssrThick = 0.6f;
+    float ssrMax = 80.0f;
     float ssrBias = 0.15f;
     float sscsReach = 30.0f;
     float sscsThick = 1.0f;

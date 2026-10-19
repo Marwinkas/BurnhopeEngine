@@ -193,7 +193,6 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     }
     if (giOn && (gPass.passMask & 8388608u) != 0u) {
         bounceLit = 0.0;
-        skyAmb = 0.0;
     }
     float3 indirect = bounceLit + skyAmb + hit.emissive;
     float sunFace = hit.NdotL;

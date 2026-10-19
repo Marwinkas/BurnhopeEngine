@@ -187,6 +187,11 @@ struct HudIds {
     uint16_t clouden = kUiNone;
     uint16_t fogen = kUiNone;
     uint16_t reflecten = kUiNone;
+    uint16_t ssrCut = kUiNone;
+    uint16_t ssrSteps = kUiNone;
+    uint16_t ssrThick = kUiNone;
+    uint16_t ssrMax = kUiNone;
+    uint16_t ssrBlur = kUiNone;
     uint16_t contacten = kUiNone;
     uint16_t vt = kUiNone;
     uint16_t freeze = kUiNone;

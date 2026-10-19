@@ -1,7 +1,8 @@
 // SHaRC 1.8.3. Порт RTXGI Libraries/Sharc (HashGridCommon.h, SharcCommon.h, SharcTypes.h)
 // при дефайнах сэмпла Pathtracer: 64-битный ключ, 64-битный CAS, нормали в ключе,
 // без SH, без responsive lighting, separate emissive выключен, material demodulation включена,
-// resampling на update, propagation depth 2, blend соседних уровней, fp16 через упаковку half.
+// resampling на update, propagation depth 2, blend соседних уровней.
+// Resolved — 32 байта: три float rgb, float числа проб, кадры и stale. Упаковки fp16 нет.
 // Буферы объявляет проход до include: gHash, gAcc, gResolved, gSharc.
 
 static const uint kSharcPosBits = 17u;
@@ -77,6 +78,18 @@ float sharcVoxelSize(uint level, SharcGrid grid) {
     return exp2(exponent) / grid.sceneScale;
 }
 
+bool sharcCacheEligible(float hitDistance, float3 position, float roughPrev, SharcGrid grid) {
+    float voxel = sharcVoxelSize(sharcLevel(position, grid), grid);
+    if (hitDistance <= voxel * 1.7320508) {
+        return false;
+    }
+    float rough = min(max(roughPrev, 0.0), 0.99);
+    float alpha = rough * rough;
+    float denom = max(1.0 - alpha * alpha, 1e-4);
+    float spread = sqrt((0.5 * alpha * alpha) / denom);
+    return hitDistance * spread > voxel;
+}
+
 int sharcSignPos(int packed) {
     return (packed << (32 - int(kSharcPosBits))) >> (32 - int(kSharcPosBits));
 }
@@ -144,28 +157,39 @@ bool sharcInsertEntry(float3 position, float3 normal, SharcGrid grid, out uint64
     return sharcInsert(key, sharcBaseSlot(key, gSharc.capacity), kSharcBucket, cacheIndex);
 }
 
-uint sharcPackFloat16(float value) {
-    return f32tof16(value) & 0xffffu;
-}
-
-float sharcUnpackFloat16(uint encoded) {
-    return f16tof32(encoded & 0xffffu);
-}
-
-uint sharcPackPair(float a, float b) {
-    return sharcPackFloat16(a) | (sharcPackFloat16(b) << 16);
-}
-
 float sharcLuma(float3 color) {
     return dot(color, float3(0.213, 0.715, 0.072));
 }
 
-float4 sharcUnpackRadiance(uint4 packed) {
+uint sharcResByte(uint entry) {
+    return entry * 32u;
+}
+
+float4 sharcLoadRadiance(uint entry) {
+    uint o = sharcResByte(entry);
     return float4(
-        sharcUnpackFloat16(packed.x),
-        sharcUnpackFloat16(packed.x >> 16),
-        sharcUnpackFloat16(packed.y),
-        sharcUnpackFloat16(packed.y >> 16));
+        asfloat(gResolved.Load(o)),
+        asfloat(gResolved.Load(o + 4u)),
+        asfloat(gResolved.Load(o + 8u)),
+        asfloat(gResolved.Load(o + 12u)));
+}
+
+void sharcLoadMeta(uint entry, out uint frames, out uint stale) {
+    uint o = sharcResByte(entry) + 16u;
+    frames = gResolved.Load(o);
+    stale = gResolved.Load(o + 4u);
+}
+
+void sharcStoreResolved(uint entry, float3 radiance, float sampleNum, uint frames, uint stale) {
+    uint o = sharcResByte(entry);
+    gResolved.Store(o, asuint(max(radiance.r, 0.0)));
+    gResolved.Store(o + 4u, asuint(max(radiance.g, 0.0)));
+    gResolved.Store(o + 8u, asuint(max(radiance.b, 0.0)));
+    gResolved.Store(o + 12u, asuint(max(sampleNum, 0.0)));
+    gResolved.Store(o + 16u, frames);
+    gResolved.Store(o + 20u, stale);
+    gResolved.Store(o + 24u, 0u);
+    gResolved.Store(o + 28u, 0u);
 }
 
 uint sharcAccByte(uint entry) {
@@ -185,13 +209,21 @@ void sharcStoreAcc(uint entry, uint4 value) {
     gAcc.Store(o + 12u, value.w);
 }
 
+uint sharcQuant(float value) {
+    if (value <= 0.0) {
+        return 0u;
+    }
+    uint q = uint(value + 0.5);
+    return q > 0u ? q : 1u;
+}
+
 void sharcAddVoxel(uint cacheIndex, float3 sampleValue, float3 sampleWeight, uint sampleData) {
     float3 weighted = max(sampleValue * sampleWeight, float3(0.0, 0.0, 0.0)) * gSharc.radianceScale;
     uint o = sharcAccByte(cacheIndex);
     uint ignored = 0u;
-    uint red = uint(weighted.r);
-    uint green = uint(weighted.g);
-    uint blue = uint(weighted.b);
+    uint red = sharcQuant(weighted.r);
+    uint green = sharcQuant(weighted.g);
+    uint blue = sharcQuant(weighted.b);
     if (red != 0u) {
         gAcc.InterlockedAdd(o, red, ignored);
     }
@@ -234,14 +266,17 @@ bool sharcUpdateHit(inout SharcState state, SharcHitData hit, float3 directLight
     bool keepTracing = true;
     uint resampleDepth = uint(round(lerp(float(kSharcResampleMin), float(kSharcDepth), random)));
     if (resampleDepth <= state.pathLength) {
-        float4 stored = sharcUnpackRadiance(gResolved[cacheIndex]);
+        float4 stored = sharcLoadRadiance(cacheIndex);
         if (stored.w > kSharcSampleGate) {
             radiance = max(stored.xyz, 0.0) * demod;
             keepTracing = false;
         }
     }
     if (keepTracing) {
-        sharcAddVoxel(cacheIndex, directLighting * inverseDemod, float3(1.0, 1.0, 1.0), 1u);
+        float3 contrib = max(directLighting * inverseDemod, 0.0);
+        if (sharcLuma(contrib) > 1e-4) {
+            sharcAddVoxel(cacheIndex, contrib, float3(1.0, 1.0, 1.0), 1u);
+        }
     }
     [loop]
     for (uint i = 0u; i < state.pathLength; ++i) {
@@ -278,7 +313,7 @@ bool sharcGetCachedRadiance(SharcHitData hit, SharcGrid grid, out float3 radianc
     if (!sharcFind(key, sharcBaseSlot(key, gSharc.capacity), kSharcBucket, cacheIndex, bucketOffset)) {
         return false;
     }
-    float4 stored = sharcUnpackRadiance(gResolved[cacheIndex]);
+    float4 stored = sharcLoadRadiance(cacheIndex);
     if (stored.w <= kSharcSampleGate) {
         return false;
     }
@@ -317,17 +352,6 @@ uint64_t sharcAdjacentKey(uint64_t key, SharcGrid grid, float3 cameraPrev) {
     return modified;
 }
 
-uint4 sharcPackVoxel(float3 radiance, float sampleNum, uint accumulatedFrames, uint staleFrames) {
-    const float halfMax = 65504.0;
-    float4 clamped = min(float4(max(radiance, 0.0), sampleNum), float4(halfMax, halfMax, halfMax, halfMax));
-    uint4 packed;
-    packed.x = sharcPackPair(clamped.x, clamped.y);
-    packed.y = sharcPackPair(clamped.z, clamped.w);
-    packed.z = accumulatedFrames | (staleFrames << 16);
-    packed.w = 0u;
-    return packed;
-}
-
 void sharcResolveEntry(uint entryIndex) {
     if (entryIndex >= gSharc.capacity) {
         return;
@@ -337,22 +361,23 @@ void sharcResolveEntry(uint entryIndex) {
         return;
     }
     uint4 accumulated = sharcLoadAcc(entryIndex);
-    uint4 resolved = gResolved[entryIndex];
-    float4 resolvedRad = sharcUnpackRadiance(resolved);
+    float4 resolvedRad = sharcLoadRadiance(entryIndex);
+    uint accumulatedFrames = 0u;
+    uint staleFrames = 0u;
+    sharcLoadMeta(entryIndex, accumulatedFrames, staleFrames);
     float sampleNum = float(accumulated.w);
     float sampleNumPrev = resolvedRad.w;
-    uint accumulatedFrames = (resolved.z & 0xffffu) + 1u;
-    uint staleFrames = resolved.z >> 16;
+    accumulatedFrames += 1u;
     staleFrames = sampleNum != 0.0 ? 0u : staleFrames + 1u;
     uint staleLimit = uint(clamp(gSharc.staleFrameNum, kSharcStaleMin, kSharcStaleMax));
     if (staleFrames >= staleLimit) {
         gHash[entryIndex] = uint64_t(0);
         sharcStoreAcc(entryIndex, uint4(0, 0, 0, 0));
-        gResolved[entryIndex] = uint4(0, 0, 0, 0);
+        sharcStoreResolved(entryIndex, float3(0.0, 0.0, 0.0), 0.0, 0u, 0u);
         return;
     }
     if (sampleNum == 0.0) {
-        gResolved[entryIndex].z = resolved.z + (1u | (1u << 16));
+        sharcStoreResolved(entryIndex, resolvedRad.xyz, sampleNumPrev, accumulatedFrames, staleFrames);
         return;
     }
     if (sampleNumPrev == 0.0) {
@@ -360,17 +385,17 @@ void sharcResolveEntry(uint entryIndex) {
         [loop]
         for (uint probe = entryIndex + 1u; probe < searchEnd; ++probe) {
             if (gHash[probe] == key) {
-                resolved = gResolved[probe];
-                resolvedRad = sharcUnpackRadiance(resolved);
+                resolvedRad = sharcLoadRadiance(probe);
                 sampleNumPrev = resolvedRad.w;
-                accumulatedFrames = (resolved.z & 0xffffu) + 1u;
+                sharcLoadMeta(probe, accumulatedFrames, staleFrames);
+                accumulatedFrames += 1u;
                 staleFrames = 0u;
                 break;
             }
         }
     }
     float scale = 1.0 / max(gSharc.radianceScale * max(sampleNum, 1e-6), 1e-6);
-    float3 radianceNow = float3(accumulated.xyz) * scale;
+    float3 radianceNow = float3(float(accumulated.x), float(accumulated.y), float(accumulated.z)) * scale;
     float3 radiancePrev = resolvedRad.xyz;
     uint accumulationLimit = uint(clamp(gSharc.accumulationFrameNum, kSharcAccumMin, kSharcAccumMax));
     if (accumulatedFrames > accumulationLimit) {
@@ -393,7 +418,7 @@ void sharcResolveEntry(uint entryIndex) {
         uint adjacentIndex = kSharcInvalid;
         uint adjacentOffset = 0u;
         if (sharcFind(adjacent, sharcBaseSlot(adjacent, gSharc.capacity), kSharcBucket, adjacentIndex, adjacentOffset)) {
-            float4 adjacentRad = sharcUnpackRadiance(gResolved[adjacentIndex]);
+            float4 adjacentRad = sharcLoadRadiance(adjacentIndex);
             if (adjacentRad.w > kSharcSampleGate) {
                 float blend = 1.0 / (adjacentRad.w + accumulatedSamples);
                 blended = adjacentRad.xyz * (adjacentRad.w * blend) + blended * (accumulatedSamples * blend);
@@ -401,7 +426,7 @@ void sharcResolveEntry(uint entryIndex) {
             }
         }
     }
-    gResolved[entryIndex] = sharcPackVoxel(blended, accumulatedSamples, accumulatedFrames, staleFrames);
+    sharcStoreResolved(entryIndex, blended, accumulatedSamples, accumulatedFrames, staleFrames);
     sharcStoreAcc(entryIndex, uint4(0, 0, 0, 0));
 }
 

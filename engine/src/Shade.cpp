@@ -4,6 +4,7 @@
 #include "render/HeapBind.hpp"
 #include "render/PassTargets.hpp"
 #include "render/PassCommon.hpp"
+#include "render/Sharc.hpp"
 #include "rhi/ShaderObject.hpp"
 
 #include <algorithm>
@@ -20,7 +21,13 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
             p.contact, d, extent, VK_FORMAT_R8_UNORM,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
         && recreateTracked(
-            p.reflect, d, halfExtent(extent), VK_FORMAT_R16G16B16A16_SFLOAT,
+            p.reflect, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+        && recreateTracked(
+            p.reflectHist[0], d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+        && recreateTracked(
+            p.reflectHist[1], d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
     const bool hdrOk = recreateTracked(
             p.hdrA, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
@@ -34,6 +41,7 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
         && recreateTracked(
             p.surf1, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
             VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+    p.reflectHistClear = true;
     if (!aoOk || !hdrOk) {
         shadePassDestroy(p, d);
         return false;
@@ -123,15 +131,34 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     reflectTrace.storageImg(3, HeapImg::HdrAStorage);
     reflectTrace.storageImg(4, HeapImg::Surf0);
     reflectTrace.storageImg(5, HeapImg::Surf1);
-    reflectTrace.sampledImg(16, HeapImg::Cube);
+    reflectTrace.sampledImg(6, HeapImg::HiZMaxSample);
+    reflectTrace.sampledImg(12, HeapImg::Textures);
+    reflectTrace.storageBuf(14, HeapBuf::Materials);
+    reflectTrace.sampler(23, HeapSamp::Linear);
     reflectTrace.sampler(24, HeapSamp::Wrap);
+    reflectTrace.storageBuf(25, HeapBuf::Lights);
+    reflectTrace.storageBuf(30, HeapBuf::Rc);
+    reflectTrace.sampledImg(31, HeapImg::HiZMaxSample1);
+    reflectTrace.storageImg(36, HeapImg::Reflect);
+    reflectTrace.sampledImg(42, HeapImg::SkyViewSample);
+    reflectTrace.sun();
     reflectTrace.knob(50, HeapBuf::Flags);
+    reflectTrace.ubo(52, HeapBuf::Ssr);
+    reflectTrace.storageBuf(70, kSharcHashSlot, false);
+    reflectTrace.storageBuf(72, kSharcResolvedSlot, false);
+    reflectTrace.ubo(73, static_cast<HeapBuf>(kSharcParamSlot));
     PassBindings reflectUp{heaps};
     reflectUp.ubo(0, HeapBuf::Frame);
     reflectUp.sampledImg(2, HeapImg::Depth);
     reflectUp.storageImg(3, HeapImg::HdrAStorage);
+    reflectUp.storageImg(4, HeapImg::Surf0);
+    reflectUp.storageImg(5, HeapImg::Surf1);
     reflectUp.storageImg(36, HeapImg::Reflect);
-    reflectUp.knob(50, HeapBuf::Flags);
+    reflectUp.storageImg(37, HeapImg::ReflectHist0);
+    reflectUp.storageImg(38, HeapImg::ReflectHist1);
+    reflectUp.ubo(52, HeapBuf::Ssr);
+    reflectUp.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
+        heapBufOffset(*reflectUp.raw.heaps, kGradeSlot), static_cast<uint32_t>(reflectUp.raw.heaps->bufferDescSize));
     const ShaderCreateDesc contactDesc{
         .path = BH_SHADER_DIR "/contact.comp.spv",
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -167,12 +194,16 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
         .mappingCount = reflectTrace.raw.count,
         .mappings = reflectTrace.raw.mappings,
+        .pushBytes = sizeof(FlightPush),
+        .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
     };
     const ShaderCreateDesc reflectUpDesc{
         .path = BH_SHADER_DIR "/reflect.up.comp.spv",
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
         .mappingCount = reflectUp.raw.count,
         .mappings = reflectUp.raw.mappings,
+        .pushBytes = sizeof(FlightPush),
+        .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
     };
     const ShaderCreateDesc fogDesc{
         .path = BH_SHADER_DIR "/shade.fog.comp.spv",
@@ -199,7 +230,7 @@ void shadePassDestroy(ShadePass& p, Device& d) {
     shaderDestroy(d, p.punctual);
     shaderDestroy(d, p.sun);
     shaderDestroy(d, p.sky);
-    destroyTracked(d, {&p.surf1, &p.surf0, &p.reflect, &p.contact, &p.ao, &p.hdrB, &p.hdrA});
+    destroyTracked(d, {&p.surf1, &p.surf0, &p.reflectHist[1], &p.reflectHist[0], &p.reflect, &p.contact, &p.ao, &p.hdrB, &p.hdrA});
 }
 
 bool shadePassResize(ShadePass& p, Device& d, VkExtent2D extent) {
@@ -210,8 +241,15 @@ bool shadePassResize(ShadePass& p, Device& d, VkExtent2D extent) {
             p.contact, d, extent, VK_FORMAT_R8_UNORM,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
         && recreateTracked(
-            p.reflect, d, halfExtent(extent), VK_FORMAT_R16G16B16A16_SFLOAT,
+            p.reflect, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+        && recreateTracked(
+            p.reflectHist[0], d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+        && recreateTracked(
+            p.reflectHist[1], d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+    p.reflectHistClear = true;
     return recreateTracked(
             p.hdrA, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
@@ -251,13 +289,28 @@ void contactRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p) {
     imageBarrier(cmd, p.contact, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
 }
 
-void reflectRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p, uint32_t lightProfile) {
-    if (lightProfile < 1u || lightProfile > 2u) {
-        return;
+void reflectRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p, uint32_t flight) {
+    const VkAccessFlags2 use = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+    if (p.reflectHistClear) {
+        imageBarrier(cmd, p.reflectHist[0], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+        imageBarrier(cmd, p.reflectHist[1], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+        cmdBindCompute(cmd, p.reflectUp.handle);
+        cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight, 2u);
+        dispatch2D(cmd, extent, 8u);
+        p.reflectHistClear = false;
+        imageBarrier(cmd, p.reflectHist[0], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use, VK_IMAGE_ASPECT_COLOR_BIT, true);
+        imageBarrier(cmd, p.reflectHist[1], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use, VK_IMAGE_ASPECT_COLOR_BIT, true);
     }
-    (void)lightProfile;
     imageBarrier(cmd, p.reflect, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-    dispatchCompute2D(cmd, p.reflectTrace, extent, 8u);
+    cmdBindCompute(cmd, p.reflectTrace.handle);
+    cmdPushFlight(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight);
+    dispatch2D(cmd, extent, 8u);
+    imageBarrier(cmd, p.reflect, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use, VK_IMAGE_ASPECT_COLOR_BIT, true);
+    imageBarrier(cmd, p.reflectHist[0], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use);
+    imageBarrier(cmd, p.reflectHist[1], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use);
+    cmdBindCompute(cmd, p.reflectUp.handle);
+    cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight, 0u);
+    dispatch2D(cmd, extent, 8u);
 }
 
 void shadeFogRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p) {

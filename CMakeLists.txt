@@ -403,8 +403,8 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cloudUp -o ${SHADER_OUT_DIR}/cloud.up.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud_noise.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cloudNoise -o ${SHADER_OUT_DIR}/cloud.noise.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_probe.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry skyProbe -o ${SHADER_OUT_DIR}/sky.probe.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reflect.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry reflectTrace -o ${SHADER_OUT_DIR}/reflect.trace.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reflect.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry reflectUp -o ${SHADER_OUT_DIR}/reflect.up.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reflect.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry reflectTrace -o ${SHADER_OUT_DIR}/reflect.trace.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reflect.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry reflectUp -o ${SHADER_OUT_DIR}/reflect.up.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_alloc_probes.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcAlloc -o ${SHADER_OUT_DIR}/rc.alloc.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_prefix.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcPrefix -o ${SHADER_OUT_DIR}/rc.prefix.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_trace_split.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry rcTrace -o ${SHADER_OUT_DIR}/rc.trace.comp.spv

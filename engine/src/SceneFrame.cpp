@@ -421,7 +421,17 @@ bool loadTextures(SceneFrameImpl& s, Device& device) {
         }
         char cache[512];
         ddsCachePath(cache, sizeof(cache), path);
-        const bool precise = nameHas(name, "normal") || nameHas(name, "nrm") || nameHas(name, "orm")
+        bool dataMap = false;
+        if (s.materialSrc != nullptr) {
+            for (uint32_t m = 0; m < s.materialCount; ++m) {
+                const MaterialGpuData& mat = s.materialSrc[m];
+                if (mat.normalTexIndex == i || mat.ormTexIndex == i || mat.pad[0] == i || mat.pad[2] == i || mat.pad[3] == i) {
+                    dataMap = true;
+                    break;
+                }
+            }
+        }
+        const bool precise = dataMap || nameHas(name, "normal") || nameHas(name, "nrm") || nameHas(name, "orm")
             || nameHas(name, "rough") || nameHas(name, "metal") || nameHas(name, "spec");
         const bool srgb = !precise;
         bool loaded = imageLoadDds(s.textures[i], device, cache, srgb);
@@ -616,6 +626,8 @@ bool bindHeap(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Contact), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.contact.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::ContactSample), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.shade.contact.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Reflect), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.reflect.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::ReflectHist0), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.reflectHist[0].image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::ReflectHist1), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.reflectHist[1].image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Surf0), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.surf0.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Surf1), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.shade.surf1.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::SkyTrans), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.sky.transmittance.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
@@ -968,7 +980,7 @@ void sceneFramePlantCubes(SceneFrame* scene) {
     if (scene->meshletSrc == scene->meshletGpu.data() && !scene->meshletGpu.empty()) {
         mesh0 = static_cast<uint32_t>(scene->meshletGpu.size());
     }
-    constexpr uint32_t kExtraN = 4u;
+    constexpr uint32_t kExtraN = 5u;
     std::vector<GpuVertex> verts;
     std::vector<uint32_t> indices;
     std::vector<GpuInstance> instances(n0 + kExtraN);
@@ -996,6 +1008,7 @@ void sceneFramePlantCubes(SceneFrame* scene) {
     paint(1, 0.82f, 0.16f, 0.08f, 0.45f, 0.0f);
     paint(2, 0.16f, 0.38f, 0.82f, 0.25f, 0.8f);
     paint(3, 0.86f, 0.72f, 0.18f, 0.55f, 0.0f);
+    paint(4, 1.0f, 1.0f, 1.0f, 0.04f, 1.0f);
     const float ox = scene->fly.eye[0];
     const float oy = scene->fly.eye[1] - 1.8f;
     const float oz = scene->fly.eye[2] - 10.0f;
@@ -1077,6 +1090,95 @@ void sceneFramePlantCubes(SceneFrame* scene) {
     emitBox(ox - 1.5f, oy + 0.6f, oz, 0.6f, 0.6f, 0.6f, 1);
     emitBox(ox + 1.4f, oy + 0.4f, oz - 1.2f, 0.4f, 0.4f, 0.4f, 2);
     emitBox(ox + 0.2f, oy + 0.8f, oz + 1.4f, 0.8f, 0.8f, 0.8f, 3);
+    float mirrorX = ox + 2.8f;
+    float mirrorY = oy + 0.7f;
+    float mirrorZ = oz;
+    int bestRank = 0;
+    float bestDist = 1.0e30f;
+    const float eyeX = scene->fly.eye[0];
+    const float eyeZ = scene->fly.eye[2];
+    for (uint32_t i = 0; i < n0; ++i) {
+        const uint32_t matId = instances[i].materialId;
+        if (matId >= m0) {
+            continue;
+        }
+        const float radius = instances[i].sphere[3];
+        if (radius < 0.8f || radius > 22.0f) {
+            continue;
+        }
+        bool namedTree = false;
+        if (scene->texNames != nullptr) {
+            const uint32_t tex = materials[matId].albedoTexIndex;
+            if (tex > 0u && tex < scene->texNameCount) {
+                const char* file = scene->texNames[tex].file;
+                namedTree = nameHas(file, "tree") || nameHas(file, "linden") || (file[0] == 'd' && file[1] == '/');
+            }
+        }
+        const bool foliage = (materials[matId].flags & 32u) != 0u;
+        const int rank = namedTree ? 2 : (foliage ? 1 : 0);
+        if (rank == 0) {
+            continue;
+        }
+        const float dx = instances[i].sphere[0] - eyeX;
+        const float dz = instances[i].sphere[2] - eyeZ;
+        const float dist = dx * dx + dz * dz;
+        if (rank < bestRank || (rank == bestRank && dist >= bestDist)) {
+            continue;
+        }
+        float trunkX = instances[i].sphere[0];
+        float trunkZ = instances[i].sphere[2];
+        float bottom = instances[i].sphere[1] - radius;
+        const uint32_t meshId = instances[i].meshId;
+        if (meshId < meshlets.size()) {
+            const GpuMeshlet& mesh = meshlets[meshId];
+            const uint32_t end = mesh.vertexOffset + mesh.vertexCount;
+            if (mesh.vertexCount > 0u && end <= verts.size()) {
+                float low = 1.0e9f;
+                for (uint32_t v = 0; v < mesh.vertexCount; ++v) {
+                    low = std::min(low, verts[mesh.vertexOffset + v].py);
+                }
+                float ax = 0.0f;
+                float az = 0.0f;
+                float n = 0.0f;
+                for (uint32_t v = 0; v < mesh.vertexCount; ++v) {
+                    const GpuVertex& vert = verts[mesh.vertexOffset + v];
+                    if (vert.py > low + 0.35f) {
+                        continue;
+                    }
+                    ax += vert.px;
+                    az += vert.pz;
+                    n += 1.0f;
+                }
+                if (n > 0.0f) {
+                    trunkX = ax / n;
+                    trunkZ = az / n;
+                    bottom = low;
+                }
+            }
+        }
+        const float ground = scene->boxMin[1];
+        if (bottom > ground + 0.5f && bottom < ground + 15.0f) {
+            bottom = ground;
+        }
+        float sx = eyeX - trunkX;
+        float sz = eyeZ - trunkZ;
+        const float sl = std::sqrt(sx * sx + sz * sz);
+        if (sl > 0.5f) {
+            sx /= sl;
+            sz /= sl;
+        } else {
+            sx = 1.0f;
+            sz = 0.0f;
+        }
+        const float sideX = -sz;
+        const float sideZ = sx;
+        bestRank = rank;
+        bestDist = dist;
+        mirrorX = trunkX + sideX * 2.0f + sx * 1.2f;
+        mirrorY = bottom + 0.7f;
+        mirrorZ = trunkZ + sideZ * 2.0f + sz * 1.2f;
+    }
+    emitBox(mirrorX, mirrorY, mirrorZ, 0.7f, 0.7f, 0.7f, 4);
     const SceneTexName* texNames = scene->texNames;
     const uint32_t texCount = scene->texNameCount;
     scene->ownedVert = std::move(verts);
@@ -1100,12 +1202,12 @@ void sceneFramePlantCubes(SceneFrame* scene) {
     scene->meshletGpu.clear();
     scene->cones = nullptr;
     scene->coneCount = 0;
-    scene->boxMin[0] = std::min(scene->boxMin[0], ox - 6.0f);
-    scene->boxMin[1] = std::min(scene->boxMin[1], oy - 1.0f);
-    scene->boxMin[2] = std::min(scene->boxMin[2], oz - 6.0f);
-    scene->boxMax[0] = std::max(scene->boxMax[0], ox + 6.0f);
-    scene->boxMax[1] = std::max(scene->boxMax[1], oy + 3.0f);
-    scene->boxMax[2] = std::max(scene->boxMax[2], oz + 6.0f);
+    scene->boxMin[0] = std::min(scene->boxMin[0], std::min(ox - 6.0f, mirrorX - 1.0f));
+    scene->boxMin[1] = std::min(scene->boxMin[1], std::min(oy - 1.0f, mirrorY - 1.0f));
+    scene->boxMin[2] = std::min(scene->boxMin[2], std::min(oz - 6.0f, mirrorZ - 1.0f));
+    scene->boxMax[0] = std::max(scene->boxMax[0], std::max(ox + 6.0f, mirrorX + 1.0f));
+    scene->boxMax[1] = std::max(scene->boxMax[1], std::max(oy + 3.0f, mirrorY + 1.0f));
+    scene->boxMax[2] = std::max(scene->boxMax[2], std::max(oz + 6.0f, mirrorZ + 1.0f));
     linkProp(*scene, n0 + 1u, "Cube");
     scene->actors.selected = 0;
     scene->ready = false;
@@ -1261,6 +1363,8 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
         dst.ormTexIndex = remapTex(dst.ormTexIndex, texBase);
         dst.emissiveTexIndex = remapTex(dst.emissiveTexIndex, texBase);
         dst.pad[0] = remapTex(dst.pad[0], texBase);
+        dst.pad[2] = remapTex(dst.pad[2], texBase);
+        dst.pad[3] = remapTex(dst.pad[3], texBase);
     }
     const uint32_t mirrorVert = vertBase + view.info->vertexCount;
     const uint32_t mirrorIndex = indexBase + view.info->indexCount;

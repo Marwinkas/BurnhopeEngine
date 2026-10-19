@@ -15,6 +15,8 @@ struct ShadePass {
     TrackedImage ao;
     TrackedImage contact;
     TrackedImage reflect;
+    TrackedImage reflectHist[2];
+    bool reflectHistClear = true;
     TrackedImage surf0;
     TrackedImage surf1;
     ShaderExt sky;
@@ -36,6 +38,6 @@ void shadeSunRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p);
 void shadePunctualRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p);
 void shadeFogRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p);
 void contactRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p);
-void reflectRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p, uint32_t lightProfile);
+void reflectRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p, uint32_t flight);
 
 } // namespace burnhope

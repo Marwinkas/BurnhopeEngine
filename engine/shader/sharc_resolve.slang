@@ -2,7 +2,7 @@
 
 [[vk::binding(70, 0)]] RWStructuredBuffer<uint64_t> gHash;
 [[vk::binding(71, 0)]] globallycoherent RWByteAddressBuffer gAcc;
-[[vk::binding(72, 0)]] RWStructuredBuffer<uint4> gResolved;
+[[vk::binding(72, 0)]] RWByteAddressBuffer gResolved;
 [[vk::binding(73, 0)]] ConstantBuffer<SharcGpuParams> gSharc;
 
 #include "sharc_cache.slang"

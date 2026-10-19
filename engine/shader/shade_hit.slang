@@ -323,15 +323,18 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     float roughness = clamp(mat.roughness, 0.045, 1.0);
     if (mat.orm > 0 && mat.orm < 768) {
         const float3 orm = sampleGrad(mat.orm, uv, uvDdx, uvDdy).rgb;
-        if ((mat.flags & 4u) != 0u) {
-            ao = orm.r > 0.02 ? saturate(orm.r) : 1.0;
-            roughness = clamp(orm.g, 0.045, 1.0);
-            metallic = saturate(orm.b);
-        } else {
-            const float peak = max(orm.r, max(orm.g, orm.b));
-            roughness = lerp(0.82, 0.22, saturate(peak));
-            metallic = peak > 0.92 ? saturate((peak - 0.92) / 0.08) : 0.0;
-        }
+        ao = orm.r > 0.02 ? saturate(orm.r) : 1.0;
+        roughness = clamp(orm.g, 0.045, 1.0);
+        metallic = saturate(orm.b);
+    }
+    if (mat.pad2 > 0u && mat.pad2 < 768u) {
+        const float3 roughTex = sampleGrad(mat.pad2, uv, uvDdx, uvDdy).rgb;
+        const float packed = roughTex.g > 0.02 ? roughTex.g : roughTex.r;
+        roughness = clamp(packed, 0.045, 1.0);
+    }
+    if (mat.pad3 > 0u && mat.pad3 < 768u) {
+        const float3 metalTex = sampleGrad(mat.pad3, uv, uvDdx, uvDdy).rgb;
+        metallic = saturate(max(metalTex.r, metalTex.b));
     }
     const float normalGap = saturate(1.0 - normalLen);
     const float kernelRough = min(2.0 * normalGap * normalGap * max(gShade.toksvig, 0.0), 0.18);

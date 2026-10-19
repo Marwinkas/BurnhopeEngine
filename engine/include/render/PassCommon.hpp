@@ -43,6 +43,11 @@ inline void cmdPushFlight(VkCommandBuffer cmd, VkShaderStageFlags stage, uint32_
     vkCmdPushConstants(cmd, VK_NULL_HANDLE, stage, 0, sizeof(push), &push);
 }
 
+inline void cmdPushFlightMode(VkCommandBuffer cmd, VkShaderStageFlags stage, uint32_t flight, uint32_t mode) {
+    const FlightPush push{flight & 1u, mode, 0, 0};
+    vkCmdPushConstants(cmd, VK_NULL_HANDLE, stage, 0, sizeof(push), &push);
+}
+
 // Разовая работа видеокарты вне буфера кадра. Свой пул, буфер и fence.
 // Модуль — структура и функции, не базовый класс.
 struct GpuTask {

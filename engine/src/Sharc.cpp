@@ -19,12 +19,14 @@ namespace {
 
 constexpr VkDeviceSize kParamStride = 256;
 
-bool sharcShader(Device& d, const char* path, const PassBindings& bind, ShaderExt& out) {
+bool sharcShader(Device& d, const char* path, const PassBindings& bind, ShaderExt& out, uint32_t pushBytes = 0) {
     const ShaderCreateDesc desc{
         .path = path,
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
         .mappingCount = bind.raw.count,
         .mappings = bind.raw.mappings,
+        .pushBytes = pushBytes,
+        .pushStages = pushBytes > 0u ? static_cast<VkShaderStageFlags>(VK_SHADER_STAGE_COMPUTE_BIT) : VkShaderStageFlags{0},
     };
     return shaderCreate(d, desc, out);
 }
@@ -84,10 +86,11 @@ bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
         return true;
     }
     const VkDeviceSize hashBytes = VkDeviceSize{kSharcCapacity} * 8u;
-    const VkDeviceSize voxelBytes = VkDeviceSize{kSharcCapacity} * 16u;
+    const VkDeviceSize accumBytes = VkDeviceSize{kSharcCapacity} * 16u;
+    const VkDeviceSize resolvedBytes = VkDeviceSize{kSharcCapacity} * 32u;
     if (!createDefaultGpuBuffer(p.hash, d, hashBytes, false, VK_BUFFER_USAGE_TRANSFER_DST_BIT)
-        || !createDefaultGpuBuffer(p.accum, d, voxelBytes, false, VK_BUFFER_USAGE_TRANSFER_DST_BIT)
-        || !createDefaultGpuBuffer(p.resolved, d, voxelBytes, false, VK_BUFFER_USAGE_TRANSFER_DST_BIT)
+        || !createDefaultGpuBuffer(p.accum, d, accumBytes, false, VK_BUFFER_USAGE_TRANSFER_DST_BIT)
+        || !createDefaultGpuBuffer(p.resolved, d, resolvedBytes, false, VK_BUFFER_USAGE_TRANSFER_DST_BIT)
         || !createDefaultGpuBuffer(p.params, d, kParamStride * 2u, true)
         || !sharcImage(p.raw, d, extent)
         || !sharcImage(p.history, d, extent)
@@ -110,18 +113,15 @@ bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
     bindHit(updateBind);
     bindCache(updateBind, true);
     PassBindings queryBind{heaps};
-    queryBind.ubo(0, HeapBuf::Frame);
+    bindHit(queryBind);
     queryBind.sampledImg(1, HeapImg::Vis);
     queryBind.sampledImg(2, HeapImg::Depth);
+    queryBind.storageImg(3, HeapImg::HdrAStorage);
+    queryBind.storageImg(4, HeapImg::Surf0);
     queryBind.storageImg(5, HeapImg::Surf1);
-    queryBind.sampledImg(12, HeapImg::Textures);
-    queryBind.storageBuf(14, HeapBuf::Materials);
-    queryBind.sampler(24, HeapSamp::Wrap);
-    queryBind.storageBuf(30, HeapBuf::Rc);
     queryBind.storageBuf(70, kSharcHashSlot, false);
     queryBind.storageBuf(72, kSharcResolvedSlot, false);
     queryBind.ubo(73, static_cast<HeapBuf>(kSharcParamSlot));
-    queryBind.storageImg(74, HeapImg::SharcRaw);
     PassBindings temporalBind{heaps};
     temporalBind.ubo(0, HeapBuf::Frame);
     temporalBind.sampledImg(2, HeapImg::Depth);
@@ -145,14 +145,14 @@ bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
         && sharcShader(d, BH_SHADER_DIR "/sharc.update.comp.spv", updateBind, p.update)
         && sharcShader(d, BH_SHADER_DIR "/sharc.query.comp.spv", queryBind, p.query)
         && sharcShader(d, BH_SHADER_DIR "/sharc.relax.temporal.comp.spv", temporalBind, p.relaxTemporal)
-        && sharcShader(d, BH_SHADER_DIR "/sharc.relax.spatial.comp.spv", spatialBind, p.relaxSpatial);
+        && sharcShader(d, BH_SHADER_DIR "/sharc.relax.spatial.comp.spv", spatialBind, p.relaxSpatial, 16u);
     if (!shaders) {
         spdlog::error("sharc shaders failed");
         sharcDestroy(p, d);
         return false;
     }
     p.live = true;
-    spdlog::info("sharc: {} entries, {:.1f} MiB", kSharcCapacity, static_cast<double>(hashBytes + voxelBytes * 2u) / (1024.0 * 1024.0));
+    spdlog::info("sharc: {} entries, {:.1f} MiB", kSharcCapacity, static_cast<double>(hashBytes + accumBytes + resolvedBytes) / (1024.0 * 1024.0));
     return true;
 }
 
@@ -233,7 +233,7 @@ void sharcRecord(
     params.accumulationFrameNum = 20u;
     params.staleFrameNum = 60u;
     params.frameIndex = p.frameIndex;
-    params.radianceScale = 1000.0f;
+    params.radianceScale = 100000.0f;
     params.roughnessThreshold = 0.4f;
     params.downscale = 5u;
     params.bouncesMax = 4u;
@@ -269,21 +269,7 @@ void sharcRecord(
     bufferBarrierComputeWriteToReadWrite(cmd, p.hash.buffer, p.hash.size);
     bufferBarrierComputeWriteToReadWrite(cmd, p.resolved.buffer, p.resolved.size);
     bufferBarrierComputeWriteToReadWrite(cmd, p.accum.buffer, p.accum.size);
-    imageBarrier(cmd, p.raw, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     cmdBindCompute(cmd, p.query.handle);
-    dispatch2D(cmd, extent, 8u);
-    imageBarrier(cmd, p.raw, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT, true);
-    imageBarrier(cmd, p.history, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT, true);
-    imageBarrier(cmd, p.temporal, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-    cmdBindCompute(cmd, p.relaxTemporal.handle);
-    dispatch2D(cmd, extent, 8u);
-    imageBarrier(cmd, p.temporal, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT, true);
-    imageBarrier(cmd, p.history, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT, true);
-    cmdBindCompute(cmd, p.relaxSpatial.handle);
     dispatch2D(cmd, extent, 8u);
     if (!freeze) {
         p.prevX = camX;
