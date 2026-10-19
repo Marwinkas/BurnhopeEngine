@@ -156,6 +156,11 @@ enum class HeapImg : uint32_t {
     LightPdf = 924,
     RestirPos = 925,
     RestirMat = 926,
+    SharcRawSample = 928,
+    SharcHistSample = 929,
+    SharcTemporal = 930,
+    SharcRaw = 931,
+    SharcHist = 932,
     Count = 992,
 };
 
@@ -176,6 +181,9 @@ static_assert(static_cast<uint32_t>(HeapImg::LightPdf) == 924u);
 static_assert(static_cast<uint32_t>(HeapImg::RestirPos) == 925u);
 static_assert(static_cast<uint32_t>(HeapImg::RestirMat) == 926u);
 static_assert(static_cast<uint32_t>(HeapImg::RestirMat) < static_cast<uint32_t>(HeapImg::Count));
+static_assert(static_cast<uint32_t>(HeapImg::SharcRawSample) == 928u);
+static_assert(static_cast<uint32_t>(HeapImg::SharcHist) == 932u);
+static_assert(static_cast<uint32_t>(HeapImg::SharcHist) < static_cast<uint32_t>(HeapImg::Count));
 
 // flight 0..1, cascade 0..2. Выборка и storage — разные слоты одной картинки.
 [[nodiscard]] inline uint32_t voxelImageSlot(bool store, uint32_t flight, uint32_t cascade) {

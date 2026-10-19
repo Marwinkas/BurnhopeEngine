@@ -360,6 +360,8 @@ add_custom_command(
         ${SHADER_OUT_DIR}/sharc.update.comp.spv
         ${SHADER_OUT_DIR}/sharc.resolve.comp.spv
         ${SHADER_OUT_DIR}/sharc.query.comp.spv
+        ${SHADER_OUT_DIR}/sharc.relax.temporal.comp.spv
+        ${SHADER_OUT_DIR}/sharc.relax.spatial.comp.spv
         ${SHADER_OUT_DIR}/vx.clear.comp.spv
         ${SHADER_OUT_DIR}/vx.voxel.comp.spv
         ${SHADER_OUT_DIR}/vx.resolve.comp.spv
@@ -412,6 +414,8 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_update.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry sharcUpdate -o ${SHADER_OUT_DIR}/sharc.update.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_resolve.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry sharcResolve -o ${SHADER_OUT_DIR}/sharc.resolve.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_query.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry sharcQuery -o ${SHADER_OUT_DIR}/sharc.query.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_relax_temporal.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry sharcRelaxTemporal -o ${SHADER_OUT_DIR}/sharc.relax.temporal.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_relax_spatial.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry sharcRelaxSpatial -o ${SHADER_OUT_DIR}/sharc.relax.spatial.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_clear.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry vxClear -o ${SHADER_OUT_DIR}/vx.clear.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_voxel.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry vxVoxel -o ${SHADER_OUT_DIR}/vx.voxel.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_resolve.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry vxResolve -o ${SHADER_OUT_DIR}/vx.resolve.comp.spv
@@ -476,6 +480,8 @@ add_custom_command(
         ${SHADER_DIR}/sharc_update.slang
         ${SHADER_DIR}/sharc_resolve.slang
         ${SHADER_DIR}/sharc_query.slang
+        ${SHADER_DIR}/sharc_relax_temporal.slang
+        ${SHADER_DIR}/sharc_relax_spatial.slang
         ${SHADER_DIR}/vx_common.slang
         ${SHADER_DIR}/vx_clear.slang
         ${SHADER_DIR}/vx_voxel.slang
@@ -622,6 +628,8 @@ add_custom_target(BurnhopeSpv ALL DEPENDS
     ${SHADER_OUT_DIR}/sharc.update.comp.spv
     ${SHADER_OUT_DIR}/sharc.resolve.comp.spv
     ${SHADER_OUT_DIR}/sharc.query.comp.spv
+    ${SHADER_OUT_DIR}/sharc.relax.temporal.comp.spv
+    ${SHADER_OUT_DIR}/sharc.relax.spatial.comp.spv
     ${SHADER_OUT_DIR}/vx.clear.comp.spv
     ${SHADER_OUT_DIR}/vx.voxel.comp.spv
     ${SHADER_OUT_DIR}/vx.resolve.comp.spv

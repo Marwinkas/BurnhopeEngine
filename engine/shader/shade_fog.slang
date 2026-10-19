@@ -79,7 +79,7 @@ void shadeFog(uint3 dtid : SV_DispatchThreadID) {
         const float sunIn = pow(sunAmount, inSize);
         float3 sunCol = gSun.sunColor.xyz;
         if (max(sunCol.r, max(sunCol.g, sunCol.b)) < 0.02) {
-            sunCol = float3(1.0, 0.97, 0.92);
+            sunCol = float3(1.0, 0.92, 0.76);
         }
         float inten = gSun.sunDirIntensity.w;
         if (inten < 0.05) {

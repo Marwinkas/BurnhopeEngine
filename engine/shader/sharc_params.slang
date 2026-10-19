@@ -21,4 +21,5 @@ struct SharcGpuParams {
     uint tlasHi;
     float giGain;
     uint lightCount;
+    float4x4 prevViewProj;
 };

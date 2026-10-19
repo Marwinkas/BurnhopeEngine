@@ -135,9 +135,9 @@ struct HudPost {
     float lamp = 1.0f;
     float sunGain = 1.0f;
     float sunR = 1.0f;
-    float sunG = 0.97f;
-    float sunB = 0.92f;
-    float exposure = 0.0f;
+    float sunG = 0.92f;
+    float sunB = 0.76f;
+    float exposure = -1.0f;
     float temperature = 0.0f;
     float tint = 0.0f;
     float contrast = 1.0f;

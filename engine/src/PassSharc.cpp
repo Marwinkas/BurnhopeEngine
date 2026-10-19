@@ -26,7 +26,7 @@ void framePassSharc(
             | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR);
     GpuZone zone(ctx.profiler, ctx.cmd, "SHaRC");
     sharcRecord(ctx.cmd, sharc, ctx.device, ctx.heaps, ctx.flight, ctx.extent,
-        ctx.view.cameraPos[0], ctx.view.cameraPos[1], ctx.view.cameraPos[2],
+        ctx.view.cameraPos[0], ctx.view.cameraPos[1], ctx.view.cameraPos[2], ctx.view.viewProj,
         giGain, lightCount, tlas, ctx.freeze);
 }
 

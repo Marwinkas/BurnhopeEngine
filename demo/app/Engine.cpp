@@ -1167,8 +1167,8 @@ void sceneHud(Canvas& canvas, void* user) {
     tick("солнце", "sun", true);
     rowSlide(*canvas.state, panel, "солнце", "sunI", 1.0f, 0.0f, 4.0f);
     rowSlide(*canvas.state, panel, "солнце R", "sunR", 1.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "солнце G", "sunG", 0.97f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "солнце B", "sunB", 0.92f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "солнце G", "sunG", 0.92f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "солнце B", "sunB", 0.76f, 0.0f, 1.0f);
     rowSlide(*canvas.state, panel, "солнце зенит", "zenith", 35.0f, -10.0f, 80.0f);
     rowSlide(*canvas.state, panel, "солнце азимут", "azimuth", 30.0f, 0.0f, 360.0f);
     panel = light;
@@ -1230,7 +1230,7 @@ void sceneHud(Canvas& canvas, void* user) {
     tick("люминанс", "lumScale", false);
     tick("гамма-охват", "gamut", false);
     rowSlide(*canvas.state, panel, "яркость", "bright", 1.0f, 0.05f, 4.0f);
-    rowSlide(*canvas.state, panel, "экспозиция EV", "exposure", 0.0f, -8.0f, 8.0f);
+    rowSlide(*canvas.state, panel, "экспозиция EV", "exposure", -1.0f, -8.0f, 8.0f);
     rowSlide(*canvas.state, panel, "температура", "temperature", 0.0f, -1.0f, 1.0f);
     rowSlide(*canvas.state, panel, "тинт", "tint", 0.0f, -1.0f, 1.0f);
     rowSlide(*canvas.state, panel, "ночь", "night", 0.0f, 0.0f, 1.0f);
@@ -1407,9 +1407,9 @@ bool engineTick(Engine& e) {
         hudPost.lamp = slideAt(hud, id.lamp, hudPost.lamp);
         hudPost.sunGain = slideAt(hud, id.sunI, 1.0f);
         hudPost.sunR = slideAt(hud, id.sunR, 1.0f);
-        hudPost.sunG = slideAt(hud, id.sunG, 0.97f);
-        hudPost.sunB = slideAt(hud, id.sunB, 0.92f);
-        hudPost.exposure = slideAt(hud, id.exposure, 0.0f);
+        hudPost.sunG = slideAt(hud, id.sunG, 0.92f);
+        hudPost.sunB = slideAt(hud, id.sunB, 0.76f);
+        hudPost.exposure = slideAt(hud, id.exposure, -1.0f);
         hudPost.temperature = slideAt(hud, id.temperature, 0.0f);
         hudPost.tint = slideAt(hud, id.tint, 0.0f);
         hudPost.contrast = slideAt(hud, id.contrast, 1.0f);

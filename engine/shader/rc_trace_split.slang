@@ -21,7 +21,7 @@ float3 rcSunDir() {
 float3 rcSunColor() {
     float3 sunCol = gSun.sunColor.rgb;
     if (max(sunCol.r, max(sunCol.g, sunCol.b)) < 0.02) {
-        sunCol = float3(1.0, 0.97, 0.92);
+        sunCol = float3(1.0, 0.92, 0.76);
     }
     return sunCol;
 }

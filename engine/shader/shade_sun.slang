@@ -146,7 +146,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     shadow *= cloudGroundShadow(hit.P, hit.L);
     float3 sunCol = gSun.sunColor.xyz;
     if (max(sunCol.r, max(sunCol.g, sunCol.b)) < 0.02) {
-        sunCol = float3(1.0, 0.97, 0.92);
+        sunCol = float3(1.0, 0.92, 0.76);
     }
     float inten = gSun.sunDirIntensity.w;
     if (inten < 0.05) {
@@ -181,10 +181,12 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         const float3 skyDir = normalize(float3(hit.N.x, hit.N.y + 1.15, hit.N.z));
         const float3 skyLit = max(gSkyView.SampleLevel(gClamp, atmSkyUv(skyDir), 0.0).rgb, 0.0);
         const float skyLum = dot(skyLit, float3(0.2126, 0.7152, 0.0722));
-        const float3 skyChroma = skyLum > 0.05 ? skyLit / skyLum : float3(0.45, 0.62, 1.0);
+        const float3 skyNeutral = float3(0.78, 0.82, 0.88);
+        const float3 skyChroma = skyLum > 0.05 ? skyLit / skyLum : skyNeutral;
+        const float3 skyTint = lerp(skyNeutral, skyChroma, 0.35);
         const float wrap = saturate(hit.N.y * 0.4 + 0.6);
         const float ambOcc = saturate(hit.gtao);
-        skyAmb = hit.albedo * (1.0 - hit.metallic) * skyChroma * (inten * 0.16) * wrap * ambOcc;
+        skyAmb = hit.albedo * (1.0 - hit.metallic) * skyTint * (inten * 0.055) * wrap * ambOcc;
         if (!sunOn) {
             skyAmb *= 0.15;
         }

@@ -423,7 +423,7 @@ bool loadTextures(SceneFrameImpl& s, Device& device) {
         ddsCachePath(cache, sizeof(cache), path);
         const bool precise = nameHas(name, "normal") || nameHas(name, "nrm") || nameHas(name, "orm")
             || nameHas(name, "rough") || nameHas(name, "metal") || nameHas(name, "spec");
-        const bool srgb = false;
+        const bool srgb = !precise;
         bool loaded = imageLoadDds(s.textures[i], device, cache, srgb);
         if (loaded && precise && s.textures[i].format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK) {
             gpuImageDestroy(s.textures[i], device);
@@ -1897,6 +1897,7 @@ void sceneFrameRecord(
             && restirResize(scene->restir, device, renderExtent)
             && fsrResize(scene->fsr, device, scene->gpuHeap, renderExtent, swap.extent)
             && gtaoResize(scene->gtao, device, scene->gpuHeap, renderExtent)
+            && sharcResize(scene->sharc, device, scene->gpuHeap, renderExtent)
             && bindHeap(*scene, device, scene->gpuHeap);
         if (resized) {
             scene->extent = renderExtent;
@@ -1988,7 +1989,7 @@ void sceneFrameRecord(
             && shadePassCreate(scene->shade, device, scene->gpuHeap, swap.extent)
             && skyPassCreate(scene->sky, device, scene->gpuHeap, swap.extent)
             && radianceCreate(scene->radiance, device, scene->gpuHeap)
-            && sharcCreate(scene->sharc, device, scene->gpuHeap)
+            && sharcCreate(scene->sharc, device, scene->gpuHeap, swap.extent)
             && restirCreate(scene->restir, device, scene->gpuHeap, swap.extent)
             && fsrCreate(scene->fsr, device, scene->gpuHeap, swap.extent)
             && gtaoCreate(scene->gtao, device, scene->gpuHeap, swap.extent)

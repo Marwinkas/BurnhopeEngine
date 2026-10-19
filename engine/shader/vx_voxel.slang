@@ -199,7 +199,7 @@ void vxRaster(VxCascade cas, float3 a, float3 b, float3 c, float2 uv0, float2 uv
     const float3 L = dot(sunRaw, sunRaw) > 1e-8 ? normalize(sunRaw) : float3(0.0, 1.0, 0.0);
     float3 sunCol = gSun.sunColor.xyz;
     if (max(sunCol.r, max(sunCol.g, sunCol.b)) < 0.02) {
-        sunCol = float3(1.0, 0.97, 0.92);
+        sunCol = float3(1.0, 0.92, 0.76);
     }
     const float3 va = a / cas.voxel;
     const float3 vb = b / cas.voxel;

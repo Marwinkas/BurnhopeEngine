@@ -144,36 +144,16 @@ bool sharcInsertEntry(float3 position, float3 normal, SharcGrid grid, out uint64
     return sharcInsert(key, sharcBaseSlot(key, gSharc.capacity), kSharcBucket, cacheIndex);
 }
 
-uint sharcF32ToF16(float value) {
-    uint bits = asuint(value);
-    uint sign = (bits >> 16) & 0x8000u;
-    int exponent = int((bits >> 23) & 0xffu) - 127 + 15;
-    uint mantissa = bits & 0x7fffffu;
-    if (exponent <= 0) {
-        return sign;
-    }
-    if (exponent >= 31) {
-        return sign | 0x7c00u;
-    }
-    return sign | (uint(exponent) << 10) | (mantissa >> 13);
+uint sharcPackFloat16(float value) {
+    return f32tof16(value) & 0xffffu;
 }
 
-float sharcF16ToF32(uint encoded) {
-    uint bits = encoded & 0xffffu;
-    uint sign = (bits & 0x8000u) << 16;
-    uint exponent = (bits >> 10) & 0x1fu;
-    uint mantissa = bits & 0x3ffu;
-    if (exponent == 0u) {
-        return asfloat(sign);
-    }
-    if (exponent == 31u) {
-        return asfloat(sign | 0x7f800000u);
-    }
-    return asfloat(sign | ((exponent + 112u) << 23) | (mantissa << 13));
+float sharcUnpackFloat16(uint encoded) {
+    return f16tof32(encoded & 0xffffu);
 }
 
 uint sharcPackPair(float a, float b) {
-    return sharcF32ToF16(a) | (sharcF32ToF16(b) << 16);
+    return sharcPackFloat16(a) | (sharcPackFloat16(b) << 16);
 }
 
 float sharcLuma(float3 color) {
@@ -182,26 +162,47 @@ float sharcLuma(float3 color) {
 
 float4 sharcUnpackRadiance(uint4 packed) {
     return float4(
-        sharcF16ToF32(packed.x),
-        sharcF16ToF32(packed.x >> 16),
-        sharcF16ToF32(packed.y),
-        sharcF16ToF32(packed.y >> 16));
+        sharcUnpackFloat16(packed.x),
+        sharcUnpackFloat16(packed.x >> 16),
+        sharcUnpackFloat16(packed.y),
+        sharcUnpackFloat16(packed.y >> 16));
+}
+
+uint sharcAccByte(uint entry) {
+    return entry * 16u;
+}
+
+uint4 sharcLoadAcc(uint entry) {
+    uint o = sharcAccByte(entry);
+    return uint4(gAcc.Load(o), gAcc.Load(o + 4u), gAcc.Load(o + 8u), gAcc.Load(o + 12u));
+}
+
+void sharcStoreAcc(uint entry, uint4 value) {
+    uint o = sharcAccByte(entry);
+    gAcc.Store(o, value.x);
+    gAcc.Store(o + 4u, value.y);
+    gAcc.Store(o + 8u, value.z);
+    gAcc.Store(o + 12u, value.w);
 }
 
 void sharcAddVoxel(uint cacheIndex, float3 sampleValue, float3 sampleWeight, uint sampleData) {
-    uint3 scaled = uint3(max(sampleValue * sampleWeight * gSharc.radianceScale, float3(0.0, 0.0, 0.0)));
+    float3 weighted = max(sampleValue * sampleWeight, float3(0.0, 0.0, 0.0)) * gSharc.radianceScale;
+    uint o = sharcAccByte(cacheIndex);
     uint ignored = 0u;
-    if (scaled.x != 0u) {
-        InterlockedAdd(gAcc[cacheIndex].x, scaled.x, ignored);
+    uint red = uint(weighted.r);
+    uint green = uint(weighted.g);
+    uint blue = uint(weighted.b);
+    if (red != 0u) {
+        gAcc.InterlockedAdd(o, red, ignored);
     }
-    if (scaled.y != 0u) {
-        InterlockedAdd(gAcc[cacheIndex].y, scaled.y, ignored);
+    if (green != 0u) {
+        gAcc.InterlockedAdd(o + 4u, green, ignored);
     }
-    if (scaled.z != 0u) {
-        InterlockedAdd(gAcc[cacheIndex].z, scaled.z, ignored);
+    if (blue != 0u) {
+        gAcc.InterlockedAdd(o + 8u, blue, ignored);
     }
     if (sampleData != 0u) {
-        InterlockedAdd(gAcc[cacheIndex].w, sampleData, ignored);
+        gAcc.InterlockedAdd(o + 12u, sampleData, ignored);
     }
 }
 
@@ -335,7 +336,7 @@ void sharcResolveEntry(uint entryIndex) {
     if (key == uint64_t(0)) {
         return;
     }
-    uint4 accumulated = gAcc[entryIndex];
+    uint4 accumulated = sharcLoadAcc(entryIndex);
     uint4 resolved = gResolved[entryIndex];
     float4 resolvedRad = sharcUnpackRadiance(resolved);
     float sampleNum = float(accumulated.w);
@@ -346,7 +347,7 @@ void sharcResolveEntry(uint entryIndex) {
     uint staleLimit = uint(clamp(gSharc.staleFrameNum, kSharcStaleMin, kSharcStaleMax));
     if (staleFrames >= staleLimit) {
         gHash[entryIndex] = uint64_t(0);
-        gAcc[entryIndex] = uint4(0, 0, 0, 0);
+        sharcStoreAcc(entryIndex, uint4(0, 0, 0, 0));
         gResolved[entryIndex] = uint4(0, 0, 0, 0);
         return;
     }
@@ -401,7 +402,7 @@ void sharcResolveEntry(uint entryIndex) {
         }
     }
     gResolved[entryIndex] = sharcPackVoxel(blended, accumulatedSamples, accumulatedFrames, staleFrames);
-    gAcc[entryIndex] = uint4(0, 0, 0, 0);
+    sharcStoreAcc(entryIndex, uint4(0, 0, 0, 0));
 }
 
 SharcGrid sharcGrid() {

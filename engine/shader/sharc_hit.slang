@@ -169,14 +169,8 @@ float3 sharcSunDir() {
 }
 
 float3 sharcSky(float3 direction) {
-    if ((gPass.passMask & 1024u) == 0u) {
-        return float3(0.03, 0.035, 0.045);
-    }
-    float3 sky = max(gSkyView.SampleLevel(gClamp, atmSkyUv(direction), 0.0).rgb, 0.0);
-    if ((gPass.passMask & 256u) == 0u) {
-        sky *= 0.03;
-    }
-    return sky;
+    (void)direction;
+    return 0.0;
 }
 
 float3 sharcBasis(float3 normal, float3 h) {
@@ -201,7 +195,7 @@ float3 sharcDirect(SharcSurf surf, float3 view, inout uint rng) {
     float3 f0 = computeF0(surf.albedo, surf.metallic, computeDielectricF0(0.5));
     float3 sunCol = gSun.sunColor.rgb;
     if (max(sunCol.r, max(sunCol.g, sunCol.b)) < 0.02) {
-        sunCol = float3(1.0, 0.97, 0.92);
+        sunCol = float3(1.0, 0.92, 0.76);
     }
     float inten = gSun.sunDirIntensity.w;
     if (inten < 0.05) {

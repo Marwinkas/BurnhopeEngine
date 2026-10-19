@@ -24,8 +24,8 @@ void atmosphereApply(FrameSun& sun, const AtmosphereParams& atm) {
     sun.sunDirIntensity[2] = dir[2];
     sun.sunDirIntensity[3] = (atm.sunIntensity / 5000.0f) * std::max(fade, 0.02f);
     sun.sunColor[0] = 1.0f;
-    sun.sunColor[1] = 0.97f + (0.35f - 0.97f) * warm * (1.0f - fade * 0.5f);
-    sun.sunColor[2] = 0.92f + (0.12f - 0.92f) * warm * (1.0f - fade * 0.5f);
+    sun.sunColor[1] = 0.92f + (0.35f - 0.92f) * warm * (1.0f - fade * 0.5f);
+    sun.sunColor[2] = 0.76f + (0.12f - 0.76f) * warm * (1.0f - fade * 0.5f);
 }
 
 bool skyPassCreate(SkyPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent2D extent) {

@@ -5,7 +5,7 @@
 #include "sharc_params.slang"
 
 [[vk::binding(70, 0)]] RWStructuredBuffer<uint64_t> gHash;
-[[vk::binding(71, 0)]] RWStructuredBuffer<uint4> gAcc;
+[[vk::binding(71, 0)]] globallycoherent RWByteAddressBuffer gAcc;
 [[vk::binding(72, 0)]] RWStructuredBuffer<uint4> gResolved;
 [[vk::binding(73, 0)]] ConstantBuffer<SharcGpuParams> gSharc;
 
@@ -44,7 +44,7 @@ void sharcUpdate(uint3 dtid : SV_DispatchThreadID) {
         float2 bary = 0.0;
         bool hit = sharcTrace(origin, direction, bounce == 0u ? 0.0 : 0.02, 1000.0, hitT, prim, bary);
         if (!hit) {
-            sharcUpdateMiss(state, sharcSky(direction));
+            sharcUpdateMiss(state, 0.0);
             break;
         }
         float3 position = origin + direction * hitT;

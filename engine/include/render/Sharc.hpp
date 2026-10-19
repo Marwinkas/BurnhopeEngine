@@ -2,8 +2,10 @@
 
 #include "rhi/Device.hpp"
 #include "rhi/GpuBuffer.hpp"
+#include "rhi/GpuImage.hpp"
 #include "rhi/ShaderObject.hpp"
 
+#include <cstddef>
 #include <cstdint>
 
 namespace burnhope {
@@ -42,9 +44,11 @@ struct alignas(16) SharcGpuParams {
     uint32_t tlasHi = 0u;
     float giGain = 1.0f;
     uint32_t lightCount = 0u;
+    float prevVp[16]{};
 };
-static_assert(sizeof(SharcGpuParams) == 80);
+static_assert(sizeof(SharcGpuParams) == 144);
 static_assert(alignof(SharcGpuParams) == 16);
+static_assert(offsetof(SharcGpuParams, prevVp) == 80);
 
 struct SharcPass {
     GpuBuffer hash{};
@@ -54,6 +58,12 @@ struct SharcPass {
     ShaderExt update{};
     ShaderExt resolve{};
     ShaderExt query{};
+    ShaderExt relaxTemporal{};
+    ShaderExt relaxSpatial{};
+    TrackedImage raw{};
+    TrackedImage history{};
+    TrackedImage temporal{};
+    float prevVp[16]{};
     float prevX = 0.0f;
     float prevY = 0.0f;
     float prevZ = 0.0f;
@@ -64,7 +74,8 @@ struct SharcPass {
     char lastLog[96]{};
 };
 
-[[nodiscard]] bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps);
+[[nodiscard]] bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent);
+[[nodiscard]] bool sharcResize(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent);
 void sharcDestroy(SharcPass& p, Device& d);
 void sharcRecord(
     VkCommandBuffer cmd,
@@ -76,6 +87,7 @@ void sharcRecord(
     float camX,
     float camY,
     float camZ,
+    const float viewProj[16],
     float giGain,
     uint32_t lightCount,
     VkDeviceAddress tlas,

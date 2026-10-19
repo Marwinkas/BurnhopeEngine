@@ -91,7 +91,7 @@ void skyView(uint3 dtid : SV_DispatchThreadID) {
     const float sunDot = dot(rd, sun);
     if (sunDot > disk && rd.y > -0.05) {
         const float core = saturate((sunDot - disk) / max(1.0 - disk, 1e-4));
-        color += atmSunIllum(gAtm, sun) * atmSampleTrans(gTransRead, gClamp, ro, sun) * (4.0 + core * 40.0);
+        color += atmSunIllum(gAtm, sun) * atmSampleTrans(gTransRead, gClamp, ro, sun) * (0.15 + core * 0.85);
     }
     if (sun.y < -0.02 && rd.y > 0.05) {
         const float3 cell = floor(rd * 280.0);
