@@ -8,7 +8,7 @@
 #include <spdlog/spdlog.h>
 
 namespace burnhope {
-
+ 
 bool hizPassCreate(HizPass& p, Device& d, const DescriptorHeaps& heaps) {
     hizPassDestroy(p, d);
     PassBindings maxBind{heaps};
