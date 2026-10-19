@@ -9,6 +9,7 @@
 [[vk::binding(1, 0)]] Texture2D<uint> gVis;
 [[vk::binding(2, 0)]] Texture2D<float> gDepth;
 [[vk::binding(3, 0)]] RWTexture2D<float4> gHdr;
+[[vk::binding(4, 0)]] RWTexture2D<float4> gSurf0;
 [[vk::binding(5, 0)]] RWTexture2D<float4> gSurf1;
 [[vk::binding(77, 0)]] RWByteAddressBuffer gColor;
 
@@ -107,8 +108,31 @@ float svgfSrcA(int2 p) {
     return svgfLoadA(svgfAt(p, slice));
 }
 
-void svgfComposite(uint2 px, float3 add) {
-    float3 gi = max(add, 0.0);
+float3 svgfHistBilinear(float2 uv) {
+    const float2 p = uv * float2(gFrame.extent.xy) - 0.5;
+    const int2 i = int2(floor(p));
+    const float2 f = saturate(p - float2(i));
+    const int2 ext = int2(gFrame.extent.xy) - int2(1, 1);
+    const float3 c00 = max(svgfLoad(svgfAt(clamp(i, int2(0, 0), ext), 1u)), 0.0);
+    const float3 c10 = max(svgfLoad(svgfAt(clamp(i + int2(1, 0), int2(0, 0), ext), 1u)), 0.0);
+    const float3 c01 = max(svgfLoad(svgfAt(clamp(i + int2(0, 1), int2(0, 0), ext), 1u)), 0.0);
+    const float3 c11 = max(svgfLoad(svgfAt(clamp(i + int2(1, 1), int2(0, 0), ext), 1u)), 0.0);
+    return lerp(lerp(c00, c10, f.x), lerp(c01, c11, f.x), f.y);
+}
+
+float svgfGradZ(int2 ip, float z) {
+    const float zl = svgfViewZ(ip + int2(-1, 0));
+    const float zr = svgfViewZ(ip + int2(1, 0));
+    const float zu = svgfViewZ(ip + int2(0, -1));
+    const float zd = svgfViewZ(ip + int2(0, 1));
+    const float gx = (zl > 0.0 && zr > 0.0) ? abs(zr - zl) * 0.5 : 0.0;
+    const float gy = (zu > 0.0 && zd > 0.0) ? abs(zd - zu) * 0.5 : 0.0;
+    return max(max(gx, gy), 0.01);
+}
+
+void svgfComposite(uint2 px, float3 radiance) {
+    const float3 denom = max(gSurf0[px].rgb, float3(0.01, 0.01, 0.01));
+    float3 gi = max(radiance, 0.0) * denom;
     if (!all(gi == gi)) {
         gi = 0.0;
     }
@@ -133,7 +157,6 @@ void svgfTemporal(int2 ip) {
     const float3 n = svgfNormal(ip);
     const float sigmaZ = max(z, 0.05) * 0.02;
     float3 sum = 0.0;
-    float3 moment = 0.0;
     float wsum = 0.0;
     [unroll]
     for (int y = -1; y <= 1; ++y) {
@@ -144,45 +167,38 @@ void svgfTemporal(int2 ip) {
                 continue;
             }
             const float3 c = svgfSample(q);
-            const float wn = (x == 0 && y == 0) ? 1.0 : pow(max(dot(n, svgfNormal(q)), 0.0), 128.0);
             const float zq = (x == 0 && y == 0) ? z : svgfViewZ(q);
-            const float wd = (x == 0 && y == 0) ? 1.0 : exp(-abs(z - zq) / sigmaZ);
-            const float w = wn * wd;
+            const float wd = (x == 0 && y == 0 || zq < 0.0) ? 1.0 : exp(-abs(z - zq) / sigmaZ);
+            const float w = wd;
             sum += c * w;
-            moment += c * c * w;
             wsum += w;
         }
     }
-    const float3 mean = sum / max(wsum, 1e-5);
-    const float3 variance = max(moment / max(wsum, 1e-5) - mean * mean, 0.0);
-    const float3 sigma = sqrt(variance);
-    const float3 lo = max(mean - sigma, 0.0);
-    const float3 hi = mean + sigma;
-    const float3 clipped = clamp(svgfSample(ip), lo, hi);
-    const float spatialVar = svgfLuma(variance);
+    const float3 current = sum / max(wsum, 1e-5);
     const float3 P = reconstructWorld(uint2(ip), gDepth.Load(int3(ip, 0)));
+    const float2 currUv = (float2(ip) + 0.5) * gFrame.invExtent;
     const float2 prevUv = nrdPrevUv(P);
+    const float speed = length((currUv - prevUv) * float2(gFrame.extent.xy));
     float alpha = 0.0;
-    float3 hist = clipped;
-    float histVar = spatialVar;
+    float histLen = 1.0;
+    float3 hist = current;
     if (nrdInside(prevUv)) {
         const int2 prev = nrdUvPx(prevUv);
-        const uint ho = svgfAt(prev, 1u);
-        const float histA = svgfLoadA(ho);
+        const float histA = svgfLoadA(svgfAt(prev, 1u));
         const float zPrev = svgfViewZ(prev);
         const float nd = dot(n, svgfNormal(prev));
         const float dz = abs(z - zPrev) / max(z, 1e-3);
-        if (histA > 0.0 && zPrev > 1e-3 && nd >= 0.9 && dz <= 0.05) {
-            const float2 currUv = (float2(ip) + 0.5) * gFrame.invExtent;
-            const float speed = length((currUv - prevUv) * float2(gFrame.extent.xy));
-            alpha = speed > 4.0 ? 0.5 : 0.9;
-            hist = clamp(max(svgfLoad(ho), 0.0), lo, hi);
-            histVar = max(histA - 1.0, 0.0);
+        if (histA >= 1.0 && zPrev > 1e-3 && nd >= 0.85 && dz <= 0.15) {
+            hist = svgfHistBilinear(prevUv);
+            histLen = min(histA + 1.0, 64.0);
+            alpha = histLen / (histLen + 1.0);
+            if (speed > 1.0) {
+                alpha = min(alpha, 1.0 / (1.0 + speed * 0.25));
+            }
         }
     }
-    const float3 accum = lerp(clipped, hist, alpha);
-    const float varOut = lerp(spatialVar, histVar, alpha * alpha);
-    svgfStore(svgfAt(ip, 2u), max(accum, 0.0), varOut + 1.0);
+    const float3 accum = lerp(current, hist, alpha);
+    svgfStore(svgfAt(ip, 2u), max(accum, 0.0), histLen);
 }
 
 void svgfCommit(int2 ip) {
@@ -198,7 +214,7 @@ void svgfAtrous(uint2 px, int2 ip) {
     const float3 center = svgfSrc(ip);
     const float centerA = svgfSrcA(ip);
     if (!svgfLive(ip)) {
-        if (gPush.pass == 4u) {
+        if (gPush.pass == 3u) {
             svgfComposite(px, 0.0);
         } else if (gPush.pass == 2u) {
             svgfStore(svgfAt(ip, 0u), 0.0, 0.0);
@@ -207,10 +223,10 @@ void svgfAtrous(uint2 px, int2 ip) {
         }
         return;
     }
-    const int step = 1 << int(gPush.pass - 2u);
+    const int step = gPush.pass == 2u ? 1 : 2;
     const float z = svgfViewZ(ip);
     const float3 n = svgfNormal(ip);
-    const float sigmaZ = max(z, 0.05) * 0.01;
+    const float sigmaZ = svgfGradZ(ip, z);
     float3 acc = 0.0;
     float wsum = 0.0;
     [loop]
@@ -227,8 +243,8 @@ void svgfAtrous(uint2 px, int2 ip) {
             }
             const float3 srgb = svgfSrc(q);
             const float wk = svgfKernel(x) * svgfKernel(y);
-            const float wn = pow(max(dot(n, svgfNormal(q)), 0.0), 128.0);
-            const float wd = exp(-abs(z - zq) / sigmaZ);
+            const float wn = pow(max(dot(n, svgfNormal(q)), 0.0), 16.0);
+            const float wd = exp(-abs(z - zq) / (sigmaZ * float(step) + 0.0001));
             const float w = wk * wn * wd;
             acc += srgb * w;
             wsum += w;
@@ -237,10 +253,6 @@ void svgfAtrous(uint2 px, int2 ip) {
     const float3 blurred = wsum > 1e-5 ? acc / wsum : center;
     if (gPush.pass == 2u) {
         svgfStore(svgfAt(ip, 0u), blurred, centerA);
-        return;
-    }
-    if (gPush.pass == 3u) {
-        svgfStore(svgfAt(ip, 2u), blurred, centerA);
         return;
     }
     svgfComposite(px, blurred);

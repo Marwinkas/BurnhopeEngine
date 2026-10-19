@@ -28,16 +28,18 @@ struct QueryPush {
 [[vk::push_constant]]
 QueryPush gPush;
 
-void sharcAddHdr(uint2 px, float3 indirect) {
+void sharcAddHdr(uint2 px, float3 indirect, float3 albedo) {
     float3 add = max(indirect, 0.0);
     if (!all(add == add)) {
         add = 0.0;
     }
     if (gPush.denoise != 0u) {
+        const float3 denom = max(albedo, float3(0.01, 0.01, 0.01));
+        const float3 irr = add / denom;
         const uint o = (px.y * gFrame.extent.x + px.x) * 16u;
-        gColor.Store(o, asuint(add.r));
-        gColor.Store(o + 4u, asuint(add.g));
-        gColor.Store(o + 8u, asuint(add.b));
+        gColor.Store(o, asuint(irr.r));
+        gColor.Store(o + 4u, asuint(irr.g));
+        gColor.Store(o + 8u, asuint(irr.b));
         gColor.Store(o + 12u, asuint(1.0));
         return;
     }
@@ -64,14 +66,14 @@ void sharcQuery(uint3 dtid : SV_DispatchThreadID) {
     }
     if (gVis.Load(int3(px, 0)) == 0u || (gSharc.tlasLo == 0u && gSharc.tlasHi == 0u)) {
         if (gFrame.debugMode == 4u || gPush.denoise != 0u) {
-            sharcAddHdr(px, 0.0);
+            sharcAddHdr(px, 0.0, float3(1.0, 1.0, 1.0));
         }
         return;
     }
     float depth = gDepth.Load(int3(px, 0));
     if (depth <= 0.0) {
         if (gFrame.debugMode == 4u || gPush.denoise != 0u) {
-            sharcAddHdr(px, 0.0);
+            sharcAddHdr(px, 0.0, float3(1.0, 1.0, 1.0));
         }
         return;
     }
@@ -99,61 +101,66 @@ void sharcQuery(uint3 dtid : SV_DispatchThreadID) {
     primary.roughness = rough;
     primary.metallic = metal;
     primary.hit = true;
-    uint rng = px.x * 1973u ^ px.y * 9277u ^ gSharc.frameIndex * 26699u ^ 0x85ebca6bu;
-    float3 direction = 0.0;
-    float3 throughput = 0.0;
-    uint diffuseLobe = 1u;
-    if (!sharcSampleBounce(primary, view, rng, direction, throughput, diffuseLobe)) {
-        sharcAddHdr(px, 0.0);
-        return;
-    }
-    float roughPrev = diffuseLobe != 0u ? 1.0 : rough;
     float gain = gSharc.giGain > 0.0 ? gSharc.giGain : 1.0;
-    throughput *= ao * gain;
-    float3 origin = position + normal * 0.02;
     SharcGrid grid = sharcGrid();
     uint bounces = max(gSharc.bouncesMax, 1u);
+    const uint kRays = 4u;
     float3 indirect = 0.0;
     [loop]
-    for (uint bounce = 0u; bounce < bounces; ++bounce) {
-        float hitT = 0.0;
-        uint prim = 0u;
-        float2 bary = 0.0;
-        if (!sharcTrace(origin, direction, 0.05, 1000.0, hitT, prim, bary)) {
-            break;
+    for (uint ray = 0u; ray < kRays; ++ray) {
+        uint rng = px.x * 1973u ^ px.y * 9277u ^ (gSharc.frameIndex * kRays + ray) * 26699u ^ 0x85ebca6bu;
+        float3 direction = 0.0;
+        float3 throughput = 0.0;
+        uint diffuseLobe = 1u;
+        if (!sharcSampleBounce(primary, view, rng, direction, throughput, diffuseLobe)) {
+            continue;
         }
-        float3 hitP = origin + direction * hitT;
-        float3 hitView = -direction;
-        SharcSurf hit = sharcSurface(prim, bary, hitP, hitView);
-        if (!hit.hit) {
-            break;
-        }
-        if (sharcCacheEligible(hitT, hitP, roughPrev, grid)) {
-            SharcHitData sharcHit;
-            sharcHit.positionWorld = hitP;
-            sharcHit.normalWorld = hit.geoNormal;
-            sharcHit.materialDemodulation = hit.demod;
-            float3 cached = 0.0;
-            if (sharcGetCachedRadiance(sharcHit, grid, cached) && sharcLuma(max(cached, 0.0)) > 1e-3) {
-                indirect += max(cached, 0.0) * throughput;
+        float roughPrev = diffuseLobe != 0u ? 1.0 : rough;
+        throughput *= ao * gain;
+        float3 origin = position + normal * 0.02;
+        float3 sample = 0.0;
+        [loop]
+        for (uint bounce = 0u; bounce < bounces; ++bounce) {
+            float hitT = 0.0;
+            uint prim = 0u;
+            float2 bary = 0.0;
+            if (!sharcTrace(origin, direction, 0.05, 1000.0, hitT, prim, bary)) {
                 break;
             }
+            float3 hitP = origin + direction * hitT;
+            float3 hitView = -direction;
+            SharcSurf hit = sharcSurface(prim, bary, hitP, hitView);
+            if (!hit.hit) {
+                break;
+            }
+            if (sharcCacheEligible(hitT, hitP, roughPrev, grid)) {
+                SharcHitData sharcHit;
+                sharcHit.positionWorld = hitP;
+                sharcHit.normalWorld = hit.geoNormal;
+                sharcHit.materialDemodulation = hit.demod;
+                float3 cached = 0.0;
+                if (sharcGetCachedRadiance(sharcHit, grid, cached) && sharcLuma(max(cached, 0.0)) > 1e-3) {
+                    sample += max(cached, 0.0) * throughput;
+                    break;
+                }
+            }
+            float3 direct = sharcDirect(hit, hitView, rng);
+            sample += sharcClampFirefly(max(direct, 0.0) * throughput);
+            if (bounce + 1u == bounces) {
+                break;
+            }
+            float3 nextDir = 0.0;
+            float3 weight = 0.0;
+            uint nextDiffuse = 1u;
+            if (!sharcSampleBounce(hit, hitView, rng, nextDir, weight, nextDiffuse)) {
+                break;
+            }
+            throughput *= weight;
+            roughPrev += nextDiffuse != 0u ? 1.0 : hit.roughness;
+            origin = hitP + hit.geoNormal * 0.02;
+            direction = nextDir;
         }
-        float3 direct = sharcDirect(hit, hitView, rng);
-        indirect += max(direct, 0.0) * throughput;
-        if (bounce + 1u == bounces) {
-            break;
-        }
-        float3 nextDir = 0.0;
-        float3 weight = 0.0;
-        uint nextDiffuse = 1u;
-        if (!sharcSampleBounce(hit, hitView, rng, nextDir, weight, nextDiffuse)) {
-            break;
-        }
-        throughput *= weight;
-        roughPrev += nextDiffuse != 0u ? 1.0 : hit.roughness;
-        origin = hitP + hit.geoNormal * 0.02;
-        direction = nextDir;
+        indirect += sample;
     }
-    sharcAddHdr(px, indirect);
+    sharcAddHdr(px, indirect / float(kRays), albedo);
 }

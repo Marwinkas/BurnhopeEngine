@@ -339,9 +339,6 @@ void reflectRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p, uint32_
     imageBarrier(cmd, p.reflect, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use, VK_IMAGE_ASPECT_COLOR_BIT, true);
     cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight, 2u);
     dispatch2D(cmd, extent, 8u);
-    imageBarrier(cmd, p.reflectHist[flight & 1u], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, use, VK_IMAGE_ASPECT_COLOR_BIT, true);
-    cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight, 3u);
-    dispatch2D(cmd, extent, 8u);
 }
 
 void shadeFogRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p) {

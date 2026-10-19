@@ -63,16 +63,20 @@ void relaxDst(int2 p, float4 v) {
 
 float3 relaxClamp(int2 ip, float3 hist, float4 srcCenter) {
     const int2 ext = int2(gFrame.extent.xy) - int2(1, 1);
-    float3 lo = srcCenter.rgb;
-    float3 hi = lo;
+    float3 sum = 0.0;
+    float3 moment = 0.0;
+    float wsum = 0.0;
     for (int y = -1; y <= 1; ++y) {
         for (int x = -1; x <= 1; ++x) {
             const float3 c = max(gReflect[clamp(ip + int2(x, y), int2(0, 0), ext)].rgb, 0.0);
-            lo = min(lo, c);
-            hi = max(hi, c);
+            sum += c;
+            moment += c * c;
+            wsum += 1.0;
         }
     }
-    return clamp(hist, lo, hi);
+    const float3 mean = sum / max(wsum, 1e-5);
+    const float3 sigma = sqrt(max(moment / max(wsum, 1e-5) - mean * mean, 0.0));
+    return clamp(hist, max(mean - sigma * 1.5, 0.0), mean + sigma * 1.5);
 }
 
 void relaxComposite(uint2 px, float3 resolved, float rough, float hitDist) {
@@ -113,7 +117,7 @@ void main(uint3 dtid : SV_DispatchThreadID) {
     if (depth <= 0.0 || raw.a <= 0.0) {
         if (gPush.pass == 0u) {
             relaxStoreHist(ip, 0.0);
-        } else if (gPush.pass == 3u) {
+        } else if (gPush.pass == 2u) {
             relaxDst(ip, 0.0);
         }
         return;
@@ -144,7 +148,7 @@ void main(uint3 dtid : SV_DispatchThreadID) {
         relaxStoreHist(ip, float4(max(signal, 0.0), age));
         return;
     }
-    const float base = gPush.pass == 1u ? 1.0 : (gPush.pass == 2u ? 2.0 : 4.0);
+    const float base = gPush.pass == 1u ? 1.0 : 2.0;
     const float radius = mirror ? 0.0 : base * saturate(rough * 2.0);
     const float4 center = relaxSrc(ip);
     float3 acc = max(center.rgb, 0.0);
@@ -173,7 +177,7 @@ void main(uint3 dtid : SV_DispatchThreadID) {
     const float3 blurred = acc / max(wsum, 1e-4);
     const float4 outv = float4(blurred, max(center.a, 1.0));
     relaxDst(ip, outv);
-    if (gPush.pass == 3u) {
+    if (gPush.pass == 2u) {
         relaxComposite(px, blurred, rough, raw.a);
     }
 }

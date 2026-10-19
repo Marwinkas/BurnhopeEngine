@@ -160,6 +160,7 @@ bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
     reblurBind.sampledImg(1, HeapImg::Vis);
     reblurBind.sampledImg(2, HeapImg::Depth);
     reblurBind.storageImg(3, HeapImg::HdrAStorage);
+    reblurBind.storageImg(4, HeapImg::Surf0);
     reblurBind.storageImg(5, HeapImg::Surf1);
     reblurBind.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
         heapBufOffset(*reblurBind.raw.heaps, kGradeSlot), static_cast<uint32_t>(reblurBind.raw.heaps->bufferDescSize));
@@ -334,10 +335,10 @@ void sharcRecord(
     if (denoise != 0u && p.color.buffer != VK_NULL_HANDLE) {
         bufferBarrierComputeWriteToReadWrite(cmd, p.color.buffer, p.color.size);
         cmdBindCompute(cmd, p.reblur.handle);
-        for (uint32_t pass = 0u; pass < 5u; ++pass) {
+        for (uint32_t pass = 0u; pass < 4u; ++pass) {
             cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight, pass);
             dispatch2D(cmd, extent, 8u);
-            if (pass == 4u) {
+            if (pass == 3u) {
                 break;
             }
             bufferBarrierComputeWriteToReadWrite(cmd, p.color.buffer, p.color.size);
