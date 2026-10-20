@@ -99,14 +99,20 @@ float3 svgfSample(int2 ip) {
     return max(svgfLoad(svgfAt(ip, 0u)), 0.0);
 }
 
+uint svgfReadSlice() {
+    return 1u + (gPush.flight & 1u);
+}
+
+uint svgfWriteSlice() {
+    return 1u + ((gPush.flight ^ 1u) & 1u);
+}
+
 float3 svgfSrc(int2 p) {
-    const uint slice = gPush.pass == 3u ? 0u : 2u;
-    return max(svgfLoad(svgfAt(p, slice)), 0.0);
+    return max(svgfLoad(svgfAt(p, svgfWriteSlice())), 0.0);
 }
 
 float svgfSrcA(int2 p) {
-    const uint slice = gPush.pass == 3u ? 0u : 2u;
-    return svgfLoadA(svgfAt(p, slice));
+    return svgfLoadA(svgfAt(p, svgfWriteSlice()));
 }
 
 float3 svgfHistBilinear(float2 uv) {
@@ -114,10 +120,11 @@ float3 svgfHistBilinear(float2 uv) {
     const int2 i = int2(floor(p));
     const float2 f = saturate(p - float2(i));
     const int2 ext = int2(gFrame.extent.xy) - int2(1, 1);
-    const float3 c00 = max(svgfLoad(svgfAt(clamp(i, int2(0, 0), ext), 1u)), 0.0);
-    const float3 c10 = max(svgfLoad(svgfAt(clamp(i + int2(1, 0), int2(0, 0), ext), 1u)), 0.0);
-    const float3 c01 = max(svgfLoad(svgfAt(clamp(i + int2(0, 1), int2(0, 0), ext), 1u)), 0.0);
-    const float3 c11 = max(svgfLoad(svgfAt(clamp(i + int2(1, 1), int2(0, 0), ext), 1u)), 0.0);
+    const uint slice = svgfReadSlice();
+    const float3 c00 = max(svgfLoad(svgfAt(clamp(i, int2(0, 0), ext), slice)), 0.0);
+    const float3 c10 = max(svgfLoad(svgfAt(clamp(i + int2(1, 0), int2(0, 0), ext), slice)), 0.0);
+    const float3 c01 = max(svgfLoad(svgfAt(clamp(i + int2(0, 1), int2(0, 0), ext), slice)), 0.0);
+    const float3 c11 = max(svgfLoad(svgfAt(clamp(i + int2(1, 1), int2(0, 0), ext), slice)), 0.0);
     return lerp(lerp(c00, c10, f.x), lerp(c01, c11, f.x), f.y);
 }
 
@@ -151,33 +158,14 @@ void svgfComposite(uint2 px, float3 radiance) {
 
 void svgfTemporal(int2 ip) {
     if (!svgfLive(ip)) {
-        svgfStore(svgfAt(ip, 2u), 0.0, 0.0);
+        svgfStore(svgfAt(ip, svgfWriteSlice()), 0.0, 0.0);
         return;
     }
-    const int2 ext = int2(gFrame.extent.xy) - int2(1, 1);
     const float z = svgfViewZ(ip);
     const float3 n = svgfNormal(ip);
-    const float sigmaZ = max(z, 0.05) * 0.02;
-    float3 sum = 0.0;
-    float wsum = 0.0;
-    [unroll]
-    for (int y = -1; y <= 1; ++y) {
-        [unroll]
-        for (int x = -1; x <= 1; ++x) {
-            const int2 q = clamp(ip + int2(x, y), int2(0, 0), ext);
-            if ((x != 0 || y != 0) && !svgfLive(q)) {
-                continue;
-            }
-            const float3 c = svgfSample(q);
-            const float zq = (x == 0 && y == 0) ? z : svgfViewZ(q);
-            const float wd = (x == 0 && y == 0 || zq < 0.0) ? 1.0 : exp(-abs(z - zq) / sigmaZ);
-            const float w = wd;
-            sum += c * w;
-            wsum += w;
-        }
-    }
-    const float3 current = sum / max(wsum, 1e-5);
-    const float3 P = reconstructWorld(uint2(ip), gDepth.Load(int3(ip, 0)));
+    const float3 current = svgfSample(ip);
+    const float depth = gDepth.Load(int3(ip, 0));
+    const float3 P = reconstructWorld(uint2(ip), depth);
     const float2 currUv = (float2(ip) + 0.5) * gFrame.invExtent;
     const float2 prevUv = nrdPrevUv(P);
     const float speed = length((currUv - prevUv) * float2(gFrame.extent.xy));
@@ -186,7 +174,7 @@ void svgfTemporal(int2 ip) {
     float3 hist = current;
     if (nrdInside(prevUv)) {
         const int2 prev = nrdUvPx(prevUv);
-        const float histA = svgfLoadA(svgfAt(prev, 1u));
+        const float histA = svgfLoadA(svgfAt(prev, svgfReadSlice()));
         const float zPrev = svgfViewZ(prev);
         const float nd = dot(n, svgfNormal(prev));
         const float dz = abs(z - zPrev) / max(z, 1e-3);
@@ -200,16 +188,7 @@ void svgfTemporal(int2 ip) {
         }
     }
     const float3 accum = lerp(current, hist, alpha);
-    svgfStore(svgfAt(ip, 2u), max(accum, 0.0), histLen);
-}
-
-void svgfCommit(int2 ip) {
-    if (!svgfLive(ip)) {
-        svgfStore(svgfAt(ip, 1u), 0.0, 0.0);
-        return;
-    }
-    const uint src = svgfAt(ip, 2u);
-    svgfStore(svgfAt(ip, 1u), svgfLoad(src), svgfLoadA(src));
+    svgfStore(svgfAt(ip, svgfWriteSlice()), max(accum, 0.0), histLen);
 }
 
 void svgfAtrous(int2 ip) {
@@ -219,9 +198,8 @@ void svgfAtrous(int2 ip) {
         svgfStore(svgfAt(ip, 0u), 0.0, 0.0);
         return;
     }
-    const float z = svgfViewZ(ip);
+    const float depth = gDepth.Load(int3(ip, 0));
     const float3 n = svgfNormal(ip);
-    const float sigmaZ = svgfGradZ(ip, z);
     const float ang = svgfIgn(ip) * 6.2831853;
     const float cs = cos(ang);
     const float sn = sin(ang);
@@ -236,12 +214,12 @@ void svgfAtrous(int2 ip) {
         if (!svgfInside(q)) {
             continue;
         }
-        const float zq = svgfViewZ(q);
-        if (zq < 0.0) {
+        const float zq = gDepth.Load(int3(q, 0));
+        if (zq <= 0.0) {
             continue;
         }
         const float wn = pow(max(dot(n, svgfNormal(q)), 0.0), 16.0);
-        const float wd = exp(-abs(z - zq) / (sigmaZ * radius + 0.0001));
+        const float wd = exp(-abs(depth - zq) / max(depth * 0.04, 1e-4));
         const float w = wn * wd * exp(-dot(disk, disk));
         acc += svgfSrc(q) * w;
         wsum += w;
@@ -255,7 +233,7 @@ void svgfUpsample(uint2 px, int2 ip) {
         return;
     }
     const int2 base = (ip / 2) * 2;
-    const float z = svgfViewZ(ip);
+    const float depth = gDepth.Load(int3(ip, 0));
     const float3 n = svgfNormal(ip);
     const int2 tap[4] = { base, base + int2(2, 0), base + int2(0, 2), base + int2(2, 2) };
     float3 acc = 0.0;
@@ -265,12 +243,12 @@ void svgfUpsample(uint2 px, int2 ip) {
         if (!svgfInside(tap[i])) {
             continue;
         }
-        const float zq = svgfViewZ(tap[i]);
-        if (zq < 0.0) {
+        const float zq = gDepth.Load(int3(tap[i], 0));
+        if (zq <= 0.0) {
             continue;
         }
         const float wn = pow(max(dot(n, svgfNormal(tap[i])), 0.0), 32.0);
-        const float wd = exp(-abs(z - zq) / max(z * 0.02, 1e-3));
+        const float wd = exp(-abs(depth - zq) / max(depth * 0.02, 1e-4));
         const float w = max(wn * wd, 0.0);
         acc += max(svgfLoad(svgfAt(tap[i], 0u)), 0.0) * w;
         wsum += w;
@@ -285,7 +263,7 @@ void main(uint3 dtid : SV_DispatchThreadID) {
     if (gFrame.debugMode != 0u && gFrame.debugMode != 4u) {
         return;
     }
-    if (gPush.pass == 2u) {
+    if (gPush.pass == 1u) {
         const uint2 half = max(gFrame.extent.xy / 2u, uint2(1u, 1u));
         if (dtid.x >= half.x || dtid.y >= half.y) {
             return;
@@ -299,10 +277,6 @@ void main(uint3 dtid : SV_DispatchThreadID) {
     const int2 ip = int2(dtid.xy);
     if (gPush.pass == 0u) {
         svgfTemporal(ip);
-        return;
-    }
-    if (gPush.pass == 1u) {
-        svgfCommit(ip);
         return;
     }
     svgfUpsample(dtid.xy, ip);

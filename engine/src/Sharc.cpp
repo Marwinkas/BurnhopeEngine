@@ -352,16 +352,15 @@ void sharcRecord(
         bufferBarrierComputeWriteToReadWrite(cmd, p.color.buffer, p.color.size);
         cmdBindCompute(cmd, p.reblur.handle);
         GpuZone zone(profiler, cmd, "GI denoise");
-        for (uint32_t pass = 0u; pass < 4u; ++pass) {
+        for (uint32_t pass = 0u; pass < 3u; ++pass) {
             cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight, pass);
-            const VkExtent2D denoiseExtent = pass == 2u
+            const VkExtent2D denoiseExtent = pass == 1u
                 ? VkExtent2D{std::max(extent.width / 2u, 1u), std::max(extent.height / 2u, 1u)}
                 : extent;
             dispatch2D(cmd, denoiseExtent, 8u);
-            if (pass == 3u) {
-                break;
+            if (pass + 1u < 3u) {
+                bufferBarrierComputeWriteToReadWrite(cmd, p.color.buffer, p.color.size);
             }
-            bufferBarrierComputeWriteToReadWrite(cmd, p.color.buffer, p.color.size);
         }
     }
     if (!freeze) {

@@ -415,3 +415,5 @@ NEVER send a matte reflection miss through the TLAS (a wall in front of the came
 NEVER filter SHaRC at full resolution with a 5x5 (the pass spends about 1.5 ms on bandwidth); ALWAYS one half-resolution pass of 8 taps and a bilateral upsample, 12 bytes rgb.
 NEVER skip a sun ray on a flat 4x4 and leave that pixel without a shadow (the wall becomes one flat color with dots); ALWAYS trace every geometry pixel, 4 bytes vis.
 NEVER let one screen tile claim a SHaRC cell for the frame (the color appears and vanishes as the camera turns); ALWAYS let every tile of that cell deposit, 12 bytes rgb.
+NEVER run a full-resolution 3x3 and a separate history copy in the SHaRC denoiser (a wall filling the frame stays near 1 ms); ALWAYS one temporal pass that writes the next history, a half-resolution 8-tap, and a depth upsample, 12 bytes rgb.
+NEVER smooth a ReSTIR shadow edge with only the adjacent pixel (the penumbra stays a binary speckle); ALWAYS extend the cross to 2 px where the local visibility range is above 0.2, on the same surface, 4 bytes vis.

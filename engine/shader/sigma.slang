@@ -136,13 +136,35 @@ void sigmaSpatial(uint2 px) {
     const float z = sigmaViewZ(ip);
     const float3 n = nrdNormal(gSurf1, gDepth, ip);
     const int2 ext = int2(gFrame.extent.xy) - int2(1, 1);
-    float sum = 0.0;
-    float wsum = 0.0;
+    const int2 cross[4] = { int2(1, 0), int2(-1, 0), int2(0, 1), int2(0, -1) };
+    float sum = vis;
+    float wsum = 1.0;
+    float vmin = vis;
+    float vmax = vis;
     [unroll]
-    for (int y = -1; y <= 1; ++y) {
+    for (uint i = 0u; i < 4u; ++i) {
+        const int2 q = clamp(ip + cross[i], int2(0, 0), ext);
+        const float4 nb = gShadowHist[sigmaAt(gPush.writeSlice, uint2(q))];
+        if (nb.a < 0.5) {
+            continue;
+        }
+        const float zq = sigmaViewZ(q);
+        if (zq < 0.0) {
+            continue;
+        }
+        const float sample = saturate(nb.r);
+        vmin = min(vmin, sample);
+        vmax = max(vmax, sample);
+        const float wn = pow(max(dot(n, nrdNormal(gSurf1, gDepth, q)), 0.0), 32.0);
+        const float dz = abs(z - zq) / max(z * 0.02, 1e-3);
+        const float w = wn * exp(-dz * dz);
+        sum += sample * w;
+        wsum += w;
+    }
+    if (vmax - vmin > 0.2) {
         [unroll]
-        for (int x = -1; x <= 1; ++x) {
-            const int2 q = clamp(ip + int2(x, y), int2(0, 0), ext);
+        for (uint i = 0u; i < 4u; ++i) {
+            const int2 q = clamp(ip + cross[i] * 2, int2(0, 0), ext);
             const float4 nb = gShadowHist[sigmaAt(gPush.writeSlice, uint2(q))];
             if (nb.a < 0.5) {
                 continue;
@@ -151,9 +173,9 @@ void sigmaSpatial(uint2 px) {
             if (zq < 0.0) {
                 continue;
             }
-            const float wn = pow(max(dot(n, nrdNormal(gSurf1, gDepth, q)), 0.0), 64.0);
+            const float wn = pow(max(dot(n, nrdNormal(gSurf1, gDepth, q)), 0.0), 32.0);
             const float dz = abs(z - zq) / max(z * 0.02, 1e-3);
-            const float w = wn * exp(-dz * dz);
+            const float w = wn * exp(-dz * dz) * 0.5;
             sum += saturate(nb.r) * w;
             wsum += w;
         }
