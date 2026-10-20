@@ -185,7 +185,7 @@ struct SceneFrameImpl {
     HudPost hud{.gtao = 0.55f};
     GpuProfiler gpuTime{};
     float cpuRecordMs = 0.0f;
-    char gpuText[1024]{};
+    char gpuText[4096]{};
     bool freeze = false;
     bool freezeHeld = false;
     float freezeVp[16]{};

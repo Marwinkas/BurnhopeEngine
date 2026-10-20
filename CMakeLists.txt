@@ -317,6 +317,7 @@ add_custom_command(
         ${SHADER_OUT_DIR}/shade.punctual.comp.spv
         ${SHADER_OUT_DIR}/restir.presample.comp.spv
         ${SHADER_OUT_DIR}/restir.di.comp.spv
+        ${SHADER_OUT_DIR}/restir.fast.comp.spv
         ${SHADER_OUT_DIR}/shade.fog.comp.spv
         ${SHADER_OUT_DIR}/resolve.comp.spv
         ${SHADER_OUT_DIR}/cull.comp.spv
@@ -381,6 +382,7 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_punctual.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadePunctual -o ${SHADER_OUT_DIR}/shade.punctual.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/restir_presample.slang -I ${SHADER_DIR}/restir_inc -I ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR+spvGroupNonUniform+spvGroupNonUniformShuffle+spvGroupNonUniformBallot+spvGroupNonUniformArithmetic -stage compute -entry main -o ${SHADER_OUT_DIR}/restir.presample.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/restir_di.slang -I ${SHADER_DIR}/restir_inc -I ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR+spvGroupNonUniform+spvGroupNonUniformShuffle+spvGroupNonUniformBallot+spvGroupNonUniformArithmetic -stage compute -entry main -o ${SHADER_OUT_DIR}/restir.di.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/restir_fast.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry main -o ${SHADER_OUT_DIR}/restir.fast.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_fog.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadeFog -o ${SHADER_OUT_DIR}/shade.fog.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/contact.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry contactCs -o ${SHADER_OUT_DIR}/contact.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/resolve.slang -target spirv -profile spirv_1_6 -stage compute -entry resolveCs -o ${SHADER_OUT_DIR}/resolve.comp.spv
@@ -448,6 +450,7 @@ add_custom_command(
         ${SHADER_DIR}/restir_rab.slang
         ${SHADER_DIR}/restir_presample.slang
         ${SHADER_DIR}/restir_di.slang
+        ${SHADER_DIR}/restir_fast.slang
         ${SHADER_DIR}/restir_inc/Rtxdi/DI/ReservoirStorage.hlsli
         ${SHADER_DIR}/shade_fog.slang
         ${SHADER_DIR}/contact.slang
@@ -604,6 +607,7 @@ add_custom_target(BurnhopeSpv ALL DEPENDS
     ${SHADER_OUT_DIR}/shade.punctual.comp.spv
     ${SHADER_OUT_DIR}/restir.presample.comp.spv
     ${SHADER_OUT_DIR}/restir.di.comp.spv
+    ${SHADER_OUT_DIR}/restir.fast.comp.spv
     ${SHADER_OUT_DIR}/fsr.prepare.comp.spv
     ${SHADER_OUT_DIR}/fsr.luma.comp.spv
     ${SHADER_OUT_DIR}/fsr.shading_pyramid.comp.spv

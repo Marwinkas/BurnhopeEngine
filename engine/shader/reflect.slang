@@ -24,6 +24,7 @@
 [[vk::binding(5, 0)]] RWTexture2D<float4> gSurf1;
 [[vk::binding(6, 0)]] Texture2D<float> gHiZ0;
 [[vk::binding(31, 0)]] Texture2D<float> gHiZ1;
+[[vk::binding(15, 0)]] RWStructuredBuffer<uint2> gRayStat;
 [[vk::binding(36, 0)]] RWTexture2D<float4> gReflect;
 [[vk::binding(37, 0)]] RWTexture2D<float4> gHist0;
 [[vk::binding(38, 0)]] RWTexture2D<float4> gHist1;
@@ -247,6 +248,8 @@ float3 sssrRt(float3 P, float3 N, float3 worldDir, float2 uv, uint2 px, out floa
     float2 bary = 0.0;
     const float3 origin = P + N * 0.02 + worldDir * 0.08;
     const float tMax = max(gSsr.maxDist, 4.0);
+    uint ignored;
+    InterlockedAdd(gRayStat[1024u * 128u + 10u].x, 1u, ignored);
     if (!sharcTrace(origin, worldDir, 0.05, tMax, hitT, prim, bary)) {
         travel = tMax;
         return sssrSky(worldDir);

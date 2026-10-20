@@ -69,13 +69,11 @@ uint sharcBaseSlot(uint64_t key, uint capacity) {
 }
 
 uint sharcLevel(float3 position, SharcGrid grid) {
-    float dist = length(grid.camera - position);
-    float raw = clamp(dist * 0.015, 0.25, 4.0);
-    return uint(clamp(floor(log2(raw / 0.25)) + 1.0, 1.0, 5.0));
+    return 1u;
 }
 
 float sharcVoxelSize(uint level, SharcGrid grid) {
-    return 0.25 * exp2(float(level - 1u));
+    return 0.5;
 }
 
 bool sharcCacheEligible(float hitDistance, float3 position, float roughPrev, SharcGrid grid) {
@@ -94,6 +92,14 @@ int sharcSignPos(int packed) {
     return (packed << (32 - int(kSharcPosBits))) >> (32 - int(kSharcPosBits));
 }
 
+uint sharcNormalAxis(float3 normal) {
+    float3 a = abs(normal);
+    if (a.y >= a.x && a.y >= a.z) {
+        return 1u;
+    }
+    return a.x >= a.z ? 0u : 2u;
+}
+
 uint64_t sharcSpatialKey(float3 position, float3 normal, SharcGrid grid, out float voxelSize) {
     float3 biased = position + float3(kSharcPosBias, kSharcPosBias, kSharcPosBias);
     uint level = sharcLevel(biased, grid);
@@ -103,7 +109,7 @@ uint64_t sharcSpatialKey(float3 position, float3 normal, SharcGrid grid, out flo
         | (uint64_t(uint(cell.y) & kSharcPosMask) << (kSharcPosBits * 1u))
         | (uint64_t(uint(cell.z) & kSharcPosMask) << (kSharcPosBits * 2u))
         | (uint64_t(level & kSharcLevelMask) << kSharcLevelShift);
-    key |= uint64_t(0u) << kSharcNormalShift;
+    key |= uint64_t(sharcNormalAxis(normal)) << kSharcNormalShift;
     return key;
 }
 
@@ -255,7 +261,7 @@ bool sharcQueueRadiance(SharcHitData hit, float3 directLighting, SharcGrid grid,
     return true;
 }
 
-void sharcPaintEnergy(float3 position, float3 normal, float3 energy) {
+void sharcPaintEnergy(float3 position, float3 normal, float3 energy, bool spread) {
     SharcGrid grid = sharcGrid();
     uint level = sharcLevel(position, grid);
     float voxel = max(sharcVoxelSize(level, grid), 1e-3);
@@ -263,11 +269,17 @@ void sharcPaintEnergy(float3 position, float3 normal, float3 energy) {
     float3 axis = abs(n.y) < 0.999 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
     float3 tangent = normalize(cross(axis, n));
     float3 bitangent = cross(n, tangent);
+    int reach = spread ? 1 : 0;
+    int homeY = int(floor(position.y / voxel));
+    bool wall = abs(n.y) < 0.7;
     [loop]
-    for (int y = -1; y <= 1; ++y) {
+    for (int y = -reach; y <= reach; ++y) {
         [loop]
-        for (int x = -1; x <= 1; ++x) {
+        for (int x = -reach; x <= reach; ++x) {
             float3 at = position + (tangent * float(x) + bitangent * float(y)) * voxel;
+            if (wall && int(floor(at.y / voxel)) != homeY) {
+                continue;
+            }
             SharcHitData hit;
             hit.positionWorld = at;
             hit.normalWorld = n;
@@ -435,7 +447,7 @@ bool sharcGetCachedRadiance(SharcHitData hit, SharcGrid grid, out float3 radianc
     float3 local = biased / max(voxelSize, 1e-6);
     int3 cell = int3(floor(local));
     float3 frac = local - float3(cell);
-    uint normalBits = 0u;
+    uint normalBits = sharcNormalAxis(hit.normalWorld);
     float3 sum = 0.0;
     float weightSum = 0.0;
     [unroll]
@@ -469,7 +481,7 @@ bool sharcGetCachedRadiance(SharcHitData hit, SharcGrid grid, out float3 radianc
             float otherSize = sharcVoxelSize(other, grid);
             int3 otherCell = int3(floor(biased / max(otherSize, 1e-6)));
             float3 corner = 0.0;
-            if (sharcLookupCell(otherCell, other, 0u, corner)) {
+            if (sharcLookupCell(otherCell, other, normalBits, corner)) {
                 sum += corner;
                 weightSum += 1.0;
             }

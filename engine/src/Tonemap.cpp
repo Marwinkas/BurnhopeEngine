@@ -102,7 +102,8 @@ bool tonemapPassCreate(TonemapPass& p, Device& d, const DescriptorHeaps& heaps) 
     taaBind.ubo(0, HeapBuf::Frame);
     taaBind.sampler(1, HeapSamp::Linear, 1);
     taaBind.sampledImg(2, HeapImg::Depth);
-    taaBind.sampledImg(6, HeapImg::HdrASampled);
+    taaBind.storageImg(3, HeapImg::HdrAStorage);
+    taaBind.storageImg(4, HeapImg::HdrBStorage);
     taaBind.sampledImg(34, 866u);
     taaBind.storageImg(35, 868u);
     taaBind.knob(57, HeapBuf::Bloom);
@@ -121,7 +122,7 @@ bool tonemapPassCreate(TonemapPass& p, Device& d, const DescriptorHeaps& heaps) 
     PassBindings copyBind{heaps};
     copyBind.ubo(0, HeapBuf::Frame);
     copyBind.storageImg(3, HeapImg::HdrAStorage);
-    copyBind.storageImg(35, 868u);
+    copyBind.storageImg(4, HeapImg::HdrBStorage);
     VkDescriptorSetAndBindingMappingEXT copyMaps[4];
     for (uint32_t i = 0; i < copyBind.raw.count && i < 4u; ++i) {
         copyMaps[i] = copyBind.raw.mappings[i];

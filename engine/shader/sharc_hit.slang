@@ -203,7 +203,8 @@ float3 sharcDirectLite(SharcSurf surf, float3 view) {
     float3 sunDir = sharcSunDir();
     float ndl = saturate(dot(surf.geoNormal, sunDir));
     float ndv = saturate(dot(surf.geoNormal, view));
-    float3 diffuse = surf.albedo * (1.0 - surf.metallic);
+    float3 f0 = computeF0(surf.albedo, surf.metallic, computeDielectricF0(0.5));
+    float3 diffuse = lerp(surf.albedo * (1.0 - surf.metallic), f0, surf.metallic);
     float3 sunCol = gSun.sunColor.rgb;
     if (max(sunCol.r, max(sunCol.g, sunCol.b)) < 0.02) {
         sunCol = float3(1.0, 0.92, 0.76);

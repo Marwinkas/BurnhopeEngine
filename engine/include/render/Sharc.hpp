@@ -88,6 +88,8 @@ struct SharcPass {
     char lastLog[96]{};
 };
 
+struct GpuProfiler;
+
 [[nodiscard]] bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent);
 [[nodiscard]] bool sharcResize(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent);
 void sharcDestroy(SharcPass& p, Device& d);
@@ -112,6 +114,7 @@ void sharcRecord(
     float shadowRange,
     float sunDisk,
     uint32_t sunRays,
-    uint32_t denoise);
+    uint32_t denoise,
+    GpuProfiler& profiler);
 
 } // namespace burnhope

@@ -465,6 +465,8 @@ RestirOcclusion restirSunOcclusion(float3 origin, float3 direction, float tMin, 
     ray.Direction = direction;
     ray.TMin = tMin;
     ray.TMax = max(tMax, tMin);
+    uint ignored;
+    InterlockedAdd(gRis[1024u * 128u + 8u].x, 1u, ignored);
     RayQuery<RAY_FLAG_FORCE_NON_OPAQUE> query;
     query.TraceRayInline(restirScene(), RAY_FLAG_FORCE_NON_OPAQUE, 0xff, ray);
     float3 tint = 1.0;

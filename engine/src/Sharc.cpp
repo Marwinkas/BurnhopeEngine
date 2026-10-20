@@ -8,6 +8,7 @@
 #include "render/PassTargets.hpp"
 #include "rhi/Barrier.hpp"
 #include "rhi/DescriptorHeap.hpp"
+#include "rhi/GpuProfiler.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -127,6 +128,7 @@ bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
     updateBind.sampledImg(1, HeapImg::Vis);
     updateBind.sampledImg(2, HeapImg::Depth);
     updateBind.storageImg(5, HeapImg::Surf1);
+    updateBind.storageBuf(15, HeapBuf::RestirRis, false);
     bindCache(updateBind, true);
     PassBindings queryBind{heaps};
     bindHit(queryBind);
@@ -243,7 +245,8 @@ void sharcRecord(
     float shadowRange,
     float sunDisk,
     uint32_t sunRays,
-    uint32_t denoise) {
+    uint32_t denoise,
+    GpuProfiler& profiler) {
     if (cmd == VK_NULL_HANDLE || !p.live || p.update.handle == VK_NULL_HANDLE || p.resolve.handle == VK_NULL_HANDLE
         || p.query.handle == VK_NULL_HANDLE || p.relaxTemporal.handle == VK_NULL_HANDLE || p.relaxSpatial.handle == VK_NULL_HANDLE
         || p.reblur.handle == VK_NULL_HANDLE
@@ -324,21 +327,31 @@ void sharcRecord(
     const uint32_t down = params.downscale;
     const uint32_t coarseX = (extent.width + down - 1u) / down;
     const uint32_t coarseY = (extent.height + down - 1u) / down;
-    cmdBindCompute(cmd, p.update.handle);
-    dispatch2D(cmd, VkExtent2D{coarseX, coarseY}, 8u);
+    {
+        GpuZone zone(profiler, cmd, "GI update");
+        cmdBindCompute(cmd, p.update.handle);
+        dispatch2D(cmd, VkExtent2D{coarseX, coarseY}, 8u);
+    }
     bufferBarrierComputeWriteToReadWrite(cmd, p.hash.buffer, p.hash.size);
     bufferBarrierComputeWriteToReadWrite(cmd, p.accum.buffer, p.accum.size);
-    cmdBindCompute(cmd, p.resolve.handle);
-    dispatch1D(cmd, kSharcCapacity, 256u);
+    {
+        GpuZone zone(profiler, cmd, "GI resolve");
+        cmdBindCompute(cmd, p.resolve.handle);
+        dispatch1D(cmd, kSharcCapacity, 256u);
+    }
     bufferBarrierComputeWriteToReadWrite(cmd, p.hash.buffer, p.hash.size);
     bufferBarrierComputeWriteToReadWrite(cmd, p.resolved.buffer, p.resolved.size);
     bufferBarrierComputeWriteToReadWrite(cmd, p.accum.buffer, p.accum.size);
-    cmdBindCompute(cmd, p.query.handle);
-    cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, denoise, 0u);
-    dispatch2D(cmd, extent, 8u);
+    {
+        GpuZone zone(profiler, cmd, "GI query");
+        cmdBindCompute(cmd, p.query.handle);
+        cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, denoise, 0u);
+        dispatch2D(cmd, extent, 8u);
+    }
     if (denoise != 0u && p.color.buffer != VK_NULL_HANDLE) {
         bufferBarrierComputeWriteToReadWrite(cmd, p.color.buffer, p.color.size);
         cmdBindCompute(cmd, p.reblur.handle);
+        GpuZone zone(profiler, cmd, "GI denoise");
         for (uint32_t pass = 0u; pass < 4u; ++pass) {
             cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight, pass);
             dispatch2D(cmd, extent, 8u);

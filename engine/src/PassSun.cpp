@@ -9,7 +9,8 @@
 namespace burnhope {
 
 void framePassSun(const RenderContext& ctx, SceneFrameImpl& scene, VisPass& vis, SunPassData& sun) {
-    if (!scene.showShadow) {
+    const bool restirSun = (ctx.post.flags.passMask & kPassRestir) != 0u && (ctx.post.flags.passMask & (1u << 21)) != 0u;
+    if (!scene.showShadow || restirSun) {
         sun.stampValid = 0;
         return;
     }

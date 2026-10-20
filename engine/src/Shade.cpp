@@ -134,6 +134,7 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     reflectTrace.sampledImg(6, HeapImg::HiZMaxSample);
     reflectTrace.sampledImg(12, HeapImg::Textures);
     reflectTrace.storageBuf(14, HeapBuf::Materials);
+    reflectTrace.storageBuf(15, HeapBuf::RestirRis, false);
     reflectTrace.sampler(23, HeapSamp::Linear);
     reflectTrace.sampler(24, HeapSamp::Wrap);
     reflectTrace.storageBuf(25, HeapBuf::Lights);

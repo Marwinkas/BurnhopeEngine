@@ -15,8 +15,7 @@ void framePassRestir(
     if (restir.di.handle == VK_NULL_HANDLE) {
         return;
     }
-    GpuZone zone(ctx.profiler, ctx.cmd, "ReSTIR");
-    restirRecord(ctx.cmd, restir, ctx.device, view, lights, lightCount, passMask, ctx.flight, ctx.extent, tlas);
+    restirRecord(ctx.cmd, restir, ctx.device, view, lights, lightCount, passMask, ctx.flight, ctx.extent, tlas, ctx.profiler);
 }
 
 } // namespace burnhope

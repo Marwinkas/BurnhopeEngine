@@ -11,6 +11,7 @@
 [[vk::binding(71, 0)]] globallycoherent RWByteAddressBuffer gAcc;
 [[vk::binding(72, 0)]] RWByteAddressBuffer gResolved;
 [[vk::binding(73, 0)]] ConstantBuffer<SharcGpuParams> gSharc;
+[[vk::binding(15, 0)]] RWStructuredBuffer<uint2> gRayStat;
 
 #include "sharc_cache.slang"
 #include "sharc_hit.slang"
@@ -42,26 +43,45 @@ void sharcUpdate(uint3 dtid : SV_DispatchThreadID) {
             if (dot(normal, view) < 0.0) {
                 normal = -normal;
             }
-            uint rng = uint(abs(position.x) * 32.0) * 1973u ^ uint(abs(position.y) * 32.0) * 9277u ^ uint(abs(position.z) * 32.0) * 26699u;
-            float3 direction = sharcCosine(normal, float2(sharcRand(rng), sharcRand(rng)));
-            float hitT = 0.0;
-            uint prim = 0u;
-            float2 bary = 0.0;
+            int3 bin = int3(floor(position / 0.5));
+            uint rng = uint(bin.x) * 1973u ^ uint(bin.y) * 9277u ^ uint(bin.z) * 26699u;
+            float turn = sharcRand(rng) * 6.2831853;
+            float cs = cos(turn);
+            float sn = sin(turn);
             float3 origin = position + normal * 0.02;
-            float3 direct = sharcSkyFill();
             float inten = gSun.sunDirIntensity.w;
             if (inten < 0.05) {
                 inten = 8.0;
             }
-            direct /= inten;
-            if (sharcTrace(origin, direction, 0.05, 80.0, hitT, prim, bary) && hitT >= 0.15) {
+            float3 sky = sharcSkyFill() / inten;
+            float3 color = 0.0;
+            uint hits = 0u;
+            [loop]
+            for (uint ray = 0u; ray < 4u; ++ray) {
+                float2 disk = float2(float(ray & 1u) + 0.5, float(ray >> 1u) + 0.5) * 0.5 - 0.5;
+                float2 spun = float2(cs * disk.x - sn * disk.y, sn * disk.x + cs * disk.y) + 0.5;
+                float3 direction = sharcCosine(normal, saturate(spun));
+                float hitT = 0.0;
+                uint prim = 0u;
+                float2 bary = 0.0;
+                uint ignored;
+                InterlockedAdd(gRayStat[1024u * 128u + 9u].x, 1u, ignored);
+                if (!sharcTrace(origin, direction, 0.05, 80.0, hitT, prim, bary) || hitT < 0.15) {
+                    continue;
+                }
                 float3 hitP = origin + direction * hitT;
                 SharcSurf surf = sharcSurface(prim, bary, hitP, -direction);
-                if (surf.hit) {
-                    direct = sharcDirectLite(surf, -direction);
+                if (!surf.hit) {
+                    continue;
                 }
+                color += max(sharcDirectLite(surf, -direction) - sky, 0.0);
+                hits += 1u;
             }
-            sharcPaintEnergy(position, normal, direct);
+            if (hits > 0u) {
+                sharcPaintEnergy(position, normal, color / float(hits) * 2.5, true);
+            } else {
+                sharcPaintEnergy(position, normal, sky * 0.35, false);
+            }
         }
     }
     sharcFlushWave(cacheIndex, packed);

@@ -103,7 +103,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     gSurf1[px] = float4(octEncode(hit.N), hit.metallic, hit.ao);
     uint sunCascade = 2u;
     float shadow = 1.0;
-    if (gFrame.disableShadow == 0) {
+    if (gFrame.disableShadow == 0 && (gPass.passMask & 2097152u) == 0u) {
         const float3 p0 = shadowPoint(0u, hit.P, hit.N, hit.NdotL);
         const float3 p1 = shadowPoint(1u, hit.P, hit.N, hit.NdotL);
         const float3 p2 = shadowPoint(2u, hit.P, hit.N, hit.NdotL);
@@ -236,7 +236,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         gHdr[px] = float4(0.15, 0.25, 0.85, 1.0);
         return;
     }
-    if (gPass.lightProfile == 3u && (gPass.passMask & 2097152u) != 0u) {
+    if ((gPass.passMask & 2097152u) != 0u) {
         direct = 0.0;
     }
     float3 color = indirect + direct;

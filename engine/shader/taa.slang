@@ -4,10 +4,16 @@
 
 [[vk::binding(1, 1)]] SamplerState gLinear;
 [[vk::binding(2, 0)]] Texture2D<float> gDepth;
-[[vk::binding(6, 0)]] Texture2D<float4> gColor;
+[[vk::binding(3, 0)]] RWTexture2D<float4> gHdr;
+[[vk::binding(4, 0)]] RWTexture2D<float4> gHold;
 [[vk::binding(34, 0)]] Texture2D<float4> gHistory;
 [[vk::binding(35, 0)]] RWTexture2D<float4> gOut;
 [[vk::binding(60, 0)]] ConstantBuffer<GradeBlock> gBlock;
+
+float3 taaHdr(int2 p, int2 ext) {
+    const int2 c = clamp(p, int2(0, 0), ext);
+    return max(gHdr[uint2(c)].rgb, 0.0);
+}
 
 float lanczos2(float v) {
     const float x2 = v * v;
@@ -97,17 +103,18 @@ void taaCs(uint3 dtid : SV_DispatchThreadID) {
     const float2 jitter = float2(gTone.f6, gTone.f7);
     const float2 reconstructed = uv * size;
     const float2 closest = floor(reconstructed - jitter) + 0.5;
-    const float2 p = closest * invPx;
     const float2 dcenter = (closest + jitter) - reconstructed;
-    float3 s0 = gColor.SampleLevel(gLinear, p, 0.0).rgb;
-    float3 s1 = gColor.SampleLevel(gLinear, p + float2(0.0, -invPx.y), 0.0).rgb;
-    float3 s2 = gColor.SampleLevel(gLinear, p + float2(-invPx.x, 0.0), 0.0).rgb;
-    float3 s3 = gColor.SampleLevel(gLinear, p + float2(invPx.x, 0.0), 0.0).rgb;
-    float3 s4 = gColor.SampleLevel(gLinear, p + float2(0.0, invPx.y), 0.0).rgb;
-    float3 s5 = gColor.SampleLevel(gLinear, p + float2(-invPx.x, -invPx.y), 0.0).rgb;
-    float3 s6 = gColor.SampleLevel(gLinear, p + float2(invPx.x, -invPx.y), 0.0).rgb;
-    float3 s7 = gColor.SampleLevel(gLinear, p + float2(-invPx.x, invPx.y), 0.0).rgb;
-    float3 s8 = gColor.SampleLevel(gLinear, p + float2(invPx.x, invPx.y), 0.0).rgb;
+    const int2 ext = max(int2(gFrame.extent.xy) - 1, int2(0, 0));
+    const int2 base = clamp(int2(floor(reconstructed - jitter)), int2(0, 0), ext);
+    float3 s0 = taaHdr(base, ext);
+    float3 s1 = taaHdr(base + int2(0, -1), ext);
+    float3 s2 = taaHdr(base + int2(-1, 0), ext);
+    float3 s3 = taaHdr(base + int2(1, 0), ext);
+    float3 s4 = taaHdr(base + int2(0, 1), ext);
+    float3 s5 = taaHdr(base + int2(-1, -1), ext);
+    float3 s6 = taaHdr(base + int2(1, -1), ext);
+    float3 s7 = taaHdr(base + int2(-1, 1), ext);
+    float3 s8 = taaHdr(base + int2(1, 1), ext);
     const float3 box5min = min(s0, min(min(s1, s2), min(s3, s4)));
     const float3 box5max = max(s0, max(max(s1, s2), max(s3, s4)));
     const float3 box9min = min(box5min, min(min(s5, s6), min(s7, s8)));
@@ -123,7 +130,16 @@ void taaCs(uint3 dtid : SV_DispatchThreadID) {
         + (s2 * w0 + s0 * w1 + s3 * w2) * w4
         + (s7 * w0 + s4 * w1 + s8 * w2) * w5) / sum;
     filtered = clamp(filtered, box9min, box9max);
+    const float3 center = max(gHdr[px].rgb, 0.0);
+    const float centerLuma = dot(center, float3(0.2126, 0.7152, 0.0722));
+    const float filteredLuma = dot(max(filtered, 0.0), float3(0.2126, 0.7152, 0.0722));
+    if (filteredLuma < centerLuma * 0.05) {
+        filtered = center;
+    }
     float4 history = inHistory ? catmull5(historyUv, size) : float4(filtered, 1.0);
+    if (!inHistory || history.a < 0.5 || any(history.rgb != history.rgb)) {
+        history = float4(filtered, 1.0);
+    }
     float3 m0 = s0 + s1 + s2 + s3 + s4;
     float3 m1 = s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3 + s4 * s4;
     const float3 mean = m0 * 0.2;
@@ -131,12 +147,24 @@ void taaCs(uint3 dtid : SV_DispatchThreadID) {
     const float3 boxMin = max(lerp(box5min, box9min, 0.5), mean - dev);
     const float3 boxMax = min(lerp(box5max, box9max, 0.5), mean + dev);
     history = clipBox(boxMin, boxMax, float4(filtered, 1.0), history);
-    const float alpha = saturate(gTone.f8);
-    const float3 mixed = taaUntonemap(lerp(taaTonemap(max(history.rgb, 0.0)), taaTonemap(filtered), alpha));
-    gOut[px] = float4(max(mixed, 0.0), 1.0);
+    float alpha = saturate(gTone.f8);
+    if (history.a < 0.5) {
+        alpha = 1.0;
+    }
+    float3 curT = taaTonemap(max(filtered, 0.0));
+    float3 histT = taaTonemap(max(history.rgb, 0.0));
+    float3 mixedT = lerp(histT, curT, alpha);
+    const float peak = max(mixedT.r, max(mixedT.g, mixedT.b));
+    if (peak > 0.97) {
+        mixedT *= 0.97 / peak;
+    }
+    const float3 mixed = taaUntonemap(mixedT);
+    const float3 shown = max(mixed, 0.0);
+    const float shownLuma = dot(shown, float3(0.2126, 0.7152, 0.0722));
+    const float3 outRgb = shownLuma < centerLuma * 0.05 ? center : shown;
+    gHold[px] = float4(outRgb, 1.0);
+    gOut[px] = float4(outRgb, 1.0);
 }
-
-[[vk::binding(3, 0)]] RWTexture2D<float4> gHdr;
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
@@ -144,5 +172,5 @@ void taaCopy(uint3 dtid : SV_DispatchThreadID) {
     if (dtid.x >= gFrame.extent.x || dtid.y >= gFrame.extent.y) {
         return;
     }
-    gHdr[dtid.xy] = gOut[dtid.xy];
+    gHdr[dtid.xy] = gHold[dtid.xy];
 }

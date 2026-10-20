@@ -488,7 +488,7 @@ void bindHudIds(HudContext& hud, UiState& state) {
         std::snprintf(name, sizeof(name), "prof%u", i);
         hud.ids.prof[i] = id(name);
     }
-    for (uint32_t i = 0; i < 12; ++i) {
+    for (uint32_t i = 0; i < 40; ++i) {
         std::snprintf(name, sizeof(name), "g%u", i);
         hud.ids.stat[i] = id(name);
     }
@@ -1307,10 +1307,24 @@ void sceneHud(Canvas& canvas, void* user) {
     rowSlide(*canvas.state, panel, "лучи солнца", "fogS", 40.0f, 0.0f, 128.0f);
     rowSlide(*canvas.state, panel, "старт лучей", "fogIn", 0.0f, 0.0f, 80.0f);
     panel = stats;
-    for (int i = 0; i < 12; ++i) {
+    UiFlex statScrollFlex{};
+    statScrollFlex.grow = 1.0f;
+    statScrollFlex.shrink = 1.0f;
+    statScrollFlex.minH = 240.0f;
+    statScrollFlex.heightMode = UiSize::Px;
+    statScrollFlex.height = 640.0f;
+    const uint16_t statView = uiPanel(*canvas.state, panel, statScrollFlex, hiddenPaint());
+    UiFlex statLinesFlex{};
+    statLinesFlex.gap = 2.0f;
+    statLinesFlex.shrink = 0.0f;
+    const uint16_t statLines = uiPanel(*canvas.state, statView, statLinesFlex, hiddenPaint());
+    if (canvas.state != nullptr) {
+        uiBindScroll(*canvas.state, statView, statLines);
+    }
+    for (int i = 0; i < 40; ++i) {
         char name[8];
         std::snprintf(name, sizeof(name), "g%d", i);
-        uiName(*canvas.state, uiLabel(*canvas.state, panel, ""), name);
+        uiName(*canvas.state, uiLabel(*canvas.state, statLines, ""), name);
     }
     const char* on[] = {"hiz", "cone", "lod", "frust", "small", "shadow", "cluster", "probes", "gtaoen", "fsr", "bloomen"};
     for (const char* name : on) {
@@ -1644,10 +1658,10 @@ bool engineTick(Engine& e) {
         sceneFrameTweaks(e.scene, tweaks);
         sceneFrameKick(e.scene, e.host.device);
         const char* gpuText = sceneFrameGpuText(e.scene);
-        char lines[12][96]{};
+        char lines[40][96]{};
         uint32_t line = 0;
         const char* cursor = gpuText != nullptr ? gpuText : "";
-        while (line < 12 && cursor[0] != '\0') {
+        while (line < 40 && cursor[0] != '\0') {
             const char* nl = std::strchr(cursor, '\n');
             const size_t n = nl != nullptr ? static_cast<size_t>(nl - cursor) : std::strlen(cursor);
             const size_t copy = n < 95 ? n : 95;
@@ -1660,7 +1674,7 @@ bool engineTick(Engine& e) {
             cursor = nl + 1;
         }
         if (hud.state != nullptr) {
-            for (uint32_t i = 0; i < 12; ++i) {
+            for (uint32_t i = 0; i < 40; ++i) {
                 uiText(*hud.state, id.stat[i], lines[i]);
             }
         }

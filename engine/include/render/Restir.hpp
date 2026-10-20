@@ -92,6 +92,7 @@ struct DescriptorHeaps;
 struct RestirPass {
     ShaderExt presample{};
     ShaderExt di{};
+    ShaderExt fast{};
     ShaderExt sigma{};
     GpuImage sigmaPenumbra{};
     GpuImage sigmaSun{};
@@ -166,13 +167,22 @@ struct RestirPass {
     float powerSum = 0.0f;
     char lastLog[512]{};
     bool cleared = false;
+    bool statOpen = false;
+    uint32_t shownDi = 0;
+    uint32_t shownSun = 0;
+    uint32_t shownGi = 0;
+    uint32_t shownRefl = 0;
 };
+
+struct GpuProfiler;
 
 [[nodiscard]] bool restirCreate(RestirPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent2D extent);
 void restirDestroy(RestirPass& p, Device& d);
 [[nodiscard]] bool restirResize(RestirPass& p, Device& d, VkExtent2D extent);
 [[nodiscard]] bool restirBind(RestirPass& p, Device& d, DescriptorHeaps& heaps);
 void restirNote(RestirPass& p, uint32_t profile, const char* why);
+void restirStatReset(VkCommandBuffer cmd, RestirPass& p, Device& d, uint32_t flight);
+void restirStatFlush(VkCommandBuffer cmd, RestirPass& p, uint32_t flight);
 void restirRecord(
     VkCommandBuffer cmd,
     RestirPass& p,
@@ -183,6 +193,7 @@ void restirRecord(
     uint32_t passMask,
     uint32_t flight,
     VkExtent2D extent,
-    VkDeviceAddress tlas);
+    VkDeviceAddress tlas,
+    GpuProfiler& profiler);
 
 } // namespace burnhope

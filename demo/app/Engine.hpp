@@ -58,7 +58,7 @@ struct HudIds {
     uint16_t mode[20]{};
     uint16_t tone[8]{};
     uint16_t prof[4]{};
-    uint16_t stat[12]{};
+    uint16_t stat[40]{};
     uint16_t bright = kUiNone;
     uint16_t grain = kUiNone;
     uint16_t bloom = kUiNone;

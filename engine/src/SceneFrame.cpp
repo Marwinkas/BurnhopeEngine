@@ -2617,17 +2617,13 @@ void sceneFrameRecord(
         const uint32_t curr = flight & 1u;
         const uint32_t prev = curr ^ 1u;
         taaBound = heapWriteImageFlight(heaps, device, flight, 866u, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, scene->tone.history[prev].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
+            && heapWriteImageFlight(heaps, device, flight, 867u, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, scene->tone.history[curr].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
             && heapWriteImageFlight(heaps, device, flight, 868u, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, scene->tone.history[curr].image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
     }
     heapBind(cmd, scene->gpuHeap, flight);
     gpuProfilerBegin(scene->gpuTime, device, cmd, flight);
-    (void)gpuProfilerFormat(scene->gpuTime, scene->gpuText, sizeof(scene->gpuText));
-    {
-        const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
-        if (used + 32 < sizeof(scene->gpuText)) {
-            std::snprintf(scene->gpuText + used, sizeof(scene->gpuText) - used, "\ncpu record %5.2f", static_cast<double>(scene->cpuRecordMs));
-        }
-    }
+    char zoneText[3584];
+    (void)gpuProfilerFormat(scene->gpuTime, zoneText, sizeof(zoneText));
     static std::chrono::steady_clock::time_point gpuLog{};
     const auto gpuNow = std::chrono::steady_clock::now();
     const bool logFrame = scene->gpuTime.count > 0 && gpuNow - gpuLog >= std::chrono::seconds(2);
@@ -2676,6 +2672,7 @@ void sceneFrameRecord(
     if (!restirOn) {
         restirNote(scene->restir, scene->lightProfile, (scene->passMask & kPassRestir) != 0u ? "нет шейдера" : "выкл");
     }
+    restirStatReset(cmd, scene->restir, device, flight);
     if (restirOn) {
         const void* gpuLights = lightSrc;
         if (scene->lightBuf.mapped != nullptr) {
@@ -2691,6 +2688,18 @@ void sceneFrameRecord(
         framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax, scene->rcSun, scene->rcBounce);
     }
     framePassShadeLate(ctx, scene->shade, scene->sky);
+    restirStatFlush(cmd, scene->restir, flight);
+    if (scene->restir.lastLog[0] != '\0') {
+        std::snprintf(scene->gpuText, sizeof(scene->gpuText), "%s\n%s", scene->restir.lastLog, zoneText);
+    } else {
+        std::snprintf(scene->gpuText, sizeof(scene->gpuText), "%s", zoneText);
+    }
+    {
+        const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
+        if (used + 32 < sizeof(scene->gpuText)) {
+            std::snprintf(scene->gpuText + used, sizeof(scene->gpuText) - used, "\ncpu record %5.2f", static_cast<double>(scene->cpuRecordMs));
+        }
+    }
     const bool bloomOn = (knob.flags.passMask & 32u) != 0u && scene->hud.bloom > 0.001f;
     if (fsrLive) {
         const float dt = scene->fps > 1.0f ? 1.0f / scene->fps : 1.0f / 60.0f;
@@ -2700,12 +2709,6 @@ void sceneFrameRecord(
         scene->fsr.lastLog[0] = '\0';
     }
     framePassTonemap(ctx, scene->tone, scene->shade.hdrA, scene->shade.hdrB, swap, frame, bloomOn, fsrLive, taaLive && taaBound);
-    if (scene->restir.lastLog[0] != '\0') {
-        const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
-        if (used + 2u < sizeof(scene->gpuText)) {
-            std::snprintf(scene->gpuText + used, sizeof(scene->gpuText) - used, "\n%s", scene->restir.lastLog);
-        }
-    }
     if (scene->fsr.lastLog[0] != '\0') {
         const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
         if (used + 2u < sizeof(scene->gpuText)) {

@@ -3,6 +3,7 @@
 #include "render/HeapBind.hpp"
 #include "rhi/Barrier.hpp"
 #include "rhi/DescriptorHeap.hpp"
+#include "rhi/GpuProfiler.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -460,8 +461,25 @@ bool restirCreate(RestirPass& p, Device& d, const DescriptorHeaps& heaps, VkExte
     di.storageBuf(30, HeapBuf::Rc, true);
     di.knob(50, HeapBuf::Flags);
     di.knob(55, HeapBuf::Shade);
+    PassBindings fast{heaps};
+    fast.ubo(0, HeapBuf::Frame);
+    fast.sun();
+    fast.sampledImg(2, HeapImg::Depth);
+    fast.storageImg(3, HeapImg::HdrAStorage);
+    fast.storageImg(4, HeapImg::Surf0);
+    fast.storageImg(5, HeapImg::Surf1);
+    fast.storageBuf(11, HeapBuf::RestirReservoir, false);
+    fast.storageBuf(14, HeapBuf::RestirRis, false);
+    fast.storageBuf(19, HeapBuf::Lights, true);
+    fast.storageBuf(22, HeapBuf::Clusters, true);
+    fast.storageBuf(23, HeapBuf::ClusterIndex, true);
+    fast.storageImg(26, HeapImg::SigmaPenumbra);
+    fast.storageImg(28, HeapImg::SigmaHist);
+    fast.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
+        heapBufOffset(*fast.raw.heaps, kGradeSlot), static_cast<uint32_t>(fast.raw.heaps->bufferDescSize));
     if (!shaderOf(d, presample, BH_SHADER_DIR "/restir.presample.comp.spv", p.presample)
         || !shaderOf(d, di, BH_SHADER_DIR "/restir.di.comp.spv", p.di)
+        || !shaderOf(d, fast, BH_SHADER_DIR "/restir.fast.comp.spv", p.fast)
         || !shaderOf(d, sigma, BH_SHADER_DIR "/sigma.comp.spv", p.sigma)) {
         spdlog::error("restir shaders failed");
         restirDestroy(p, d);
@@ -524,6 +542,7 @@ void restirDestroy(RestirPass& p, Device& d) {
     destroyScreen(p, d);
     shaderDestroy(d, p.presample);
     shaderDestroy(d, p.di);
+    shaderDestroy(d, p.fast);
     shaderDestroy(d, p.sigma);
     gpuBufferDestroy(p.neighbors, d);
     gpuBufferDestroy(p.ris, d);
@@ -591,6 +610,51 @@ void restirNote(RestirPass& p, uint32_t profile, const char* why) {
     publishLog(p, 0u, 0u, 0u, 0u, 0u, 3u + profile, line);
 }
 
+void writeRayLog(RestirPass& p) {
+    char line[160];
+    std::snprintf(line, sizeof(line), "лучи DI %u  солн %u  GI %u  отр %u", p.shownDi, p.shownSun, p.shownGi, p.shownRefl);
+    publishLog(p, p.shownDi, p.shownSun, p.shownGi, p.shownRefl, 0u, 0u, line);
+}
+
+void restirStatReset(VkCommandBuffer cmd, RestirPass& p, Device& d, uint32_t flight) {
+    if (cmd == VK_NULL_HANDLE || p.ris.buffer == VK_NULL_HANDLE || p.statRead.buffer == VK_NULL_HANDLE || flight > 1u) {
+        return;
+    }
+    if (p.statReady[flight] != 0u && p.statRead.mapped != nullptr) {
+        gpuBufferInvalidate(p.statRead, d, kRisStatBytes * flight, kRisStatBytes);
+        const auto* base = static_cast<const uint8_t*>(p.statRead.mapped) + kRisStatBytes * flight;
+        p.shownDi = statAt(base, 7u);
+        p.shownSun = statAt(base, 8u);
+        p.shownGi = statAt(base, 9u);
+        p.shownRefl = statAt(base, 10u);
+    }
+    writeRayLog(p);
+    const VkDeviceSize statOff = kRisFlight * flight + kRisPayload;
+    vkCmdFillBuffer(cmd, p.ris.buffer, statOff, kRisStatBytes, 0u);
+    rhiBufferBarrier(cmd, p.ris.buffer, statOff, kRisStatBytes,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    p.statOpen = true;
+}
+
+void restirStatFlush(VkCommandBuffer cmd, RestirPass& p, uint32_t flight) {
+    if (!p.statOpen || cmd == VK_NULL_HANDLE || p.ris.buffer == VK_NULL_HANDLE || p.statRead.buffer == VK_NULL_HANDLE || flight > 1u) {
+        return;
+    }
+    p.statOpen = false;
+    const VkDeviceSize statOff = kRisFlight * flight + kRisPayload;
+    rhiBufferBarrier(cmd, p.ris.buffer, statOff, kRisStatBytes,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
+    const VkBufferCopy statCopy{
+        .srcOffset = statOff,
+        .dstOffset = kRisStatBytes * flight,
+        .size = kRisStatBytes,
+    };
+    vkCmdCopyBuffer(cmd, p.ris.buffer, p.statRead.buffer, 1u, &statCopy);
+    p.statReady[flight] = 1u;
+}
+
 void restirRecord(
     VkCommandBuffer cmd,
     RestirPass& p,
@@ -601,7 +665,8 @@ void restirRecord(
     uint32_t passMask,
     uint32_t flight,
     VkExtent2D extent,
-    VkDeviceAddress tlas) {
+    VkDeviceAddress tlas,
+    GpuProfiler& profiler) {
     if (p.di.handle == VK_NULL_HANDLE || p.presample.handle == VK_NULL_HANDLE || flight > 1u || !p.ctx[flight].has_value()) {
         publishLog(p, 0u, 0u, 0u, 0u, 0u, 1u, "ReSTIR пропуск: нет шейдера или контекста");
         return;
@@ -609,22 +674,6 @@ void restirRecord(
     if (extent.width != p.width || extent.height != p.height || lights == nullptr) {
         publishLog(p, 0u, lightCount, 0u, 0u, 0u, 2u, "ReSTIR пропуск: размер кадра не совпал или список света пуст");
         return;
-    }
-    uint32_t surf = 0;
-    uint32_t valid = 0;
-    uint32_t vis = 0;
-    uint32_t shadow = 0;
-    uint32_t mSum = 0;
-    uint32_t weightMilli = 0;
-    if (p.statReady[flight] != 0u && p.statRead.mapped != nullptr) {
-        gpuBufferInvalidate(p.statRead, d, kRisStatBytes * flight, kRisStatBytes);
-        const auto* base = static_cast<const uint8_t*>(p.statRead.mapped) + kRisStatBytes * flight;
-        surf = statAt(base, 0u);
-        valid = statAt(base, 1u);
-        vis = statAt(base, 2u);
-        shadow = statAt(base, 3u);
-        mSum = statAt(base, 4u);
-        weightMilli = statAt(base, 5u);
     }
     if (!p.cleared) {
         vkCmdFillBuffer(cmd, p.reservoirs.buffer, 0, VK_WHOLE_SIZE, 0u);
@@ -729,48 +778,71 @@ void restirRecord(
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, 1);
 
     RestirPush push{};
-    if (localCount > 0u) {
-        bindCompute(cmd, p.presample, push);
-        vkCmdDispatch(cmd, kRestirTileSize / 256u, kRestirTileCount, 1u);
-    }
-    rhiBufferBarrier(cmd, p.ris.buffer, kRisFlight * flight, kRisPayload,
-        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-
-    push.pass = 0;
-    bindCompute(cmd, p.di, push);
-    dispatch2D(cmd, extent, 8u);
-    reservoirBarrier(cmd, p);
-
-    if (p.knobTemporalOn != 0u) {
-        push.pass = 1;
+    if (p.fast.handle != VK_NULL_HANDLE) {
+        const VkAccessFlags2 rw = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+        imageLayout(cmd, p.sigmaPenumbra.image, p.sigmaPenumbraLayout, VK_IMAGE_LAYOUT_GENERAL,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw, 1);
+        imageLayout(cmd, p.sigmaHist.image, p.sigmaHistLayout, VK_IMAGE_LAYOUT_GENERAL,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw, 1);
+        push.pad0 = p.parity[0];
+        p.parity[0] += 1u;
+        push.pad1 = static_cast<uint32_t>(tlas);
+        push.pad2 = static_cast<uint32_t>(tlas >> 32);
+        const char* passName[7] = {"R init", "R temporal", "R spatial", "R trace", "R rebuild", "R vis", "R blur"};
+        for (uint32_t pass = 0u; pass < 7u; ++pass) {
+            GpuZone zone(profiler, cmd, passName[pass]);
+            push.pass = pass;
+            bindCompute(cmd, p.fast, push);
+            dispatch2D(cmd, extent, 8u);
+            if (pass < 3u) {
+                reservoirBarrier(cmd, p);
+            } else {
+                storageBarrier(cmd);
+            }
+        }
+    } else {
+        if (localCount > 0u) {
+            bindCompute(cmd, p.presample, push);
+            vkCmdDispatch(cmd, kRestirTileSize / 256u, kRestirTileCount, 1u);
+        }
+        rhiBufferBarrier(cmd, p.ris.buffer, kRisFlight * flight, kRisPayload,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+        push.pass = 0;
         bindCompute(cmd, p.di, push);
         dispatch2D(cmd, extent, 8u);
         reservoirBarrier(cmd, p);
+        if (p.knobTemporalOn != 0u) {
+            push.pass = 1;
+            bindCompute(cmd, p.di, push);
+            dispatch2D(cmd, extent, 8u);
+            reservoirBarrier(cmd, p);
+        }
+        if (p.knobSpatialOn != 0u) {
+            push.pass = 2;
+            bindCompute(cmd, p.di, push);
+            dispatch2D(cmd, extent, 8u);
+            reservoirBarrier(cmd, p);
+        }
     }
-
-    if (p.knobSpatialOn != 0u) {
-        push.pass = 2;
-        bindCompute(cmd, p.di, push);
-        dispatch2D(cmd, extent, 8u);
-        reservoirBarrier(cmd, p);
-    }
-
-    const VkDeviceSize statOff = kRisFlight * flight + kRisPayload;
-    vkCmdFillBuffer(cmd, p.ris.buffer, statOff, kRisStatBytes, 0u);
-    rhiBufferBarrier(cmd, p.ris.buffer, statOff, kRisStatBytes,
-        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
 
     push.pass = 3;
-    bindCompute(cmd, p.di, push);
-    dispatch2D(cmd, extent, 8u);
+    if (p.fast.handle == VK_NULL_HANDLE) {
+        GpuZone zone(profiler, cmd, "R shade");
+        bindCompute(cmd, p.di, push);
+        dispatch2D(cmd, extent, 8u);
+    }
     if (p.knobSunOn != 0u) {
         storageBarrier(cmd);
         push.pass = 4;
         push.pad0 = flight;
-        bindCompute(cmd, p.di, push);
-        dispatch2D(cmd, extent, 8u);
+        {
+            GpuZone zone(profiler, cmd, "R sun");
+            bindCompute(cmd, p.di, push);
+            dispatch2D(cmd, extent, 8u);
+        }
         p.sunSlice[flight] = constants.writeSlice;
         if (p.sigma.handle != VK_NULL_HANDLE) {
             const VkAccessFlags2 rw = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
@@ -789,40 +861,25 @@ void restirRecord(
             denoise.pad0 = flight;
             denoise.pad1 = ping;
             denoise.pad2 = 1u - ping;
-            bindCompute(cmd, p.sigma, denoise);
-            dispatch2D(cmd, extent, 8u);
+            {
+                GpuZone zone(profiler, cmd, "R sigmaT");
+                bindCompute(cmd, p.sigma, denoise);
+                dispatch2D(cmd, extent, 8u);
+            }
             imageLayout(cmd, p.sigmaHist.image, p.sigmaHistLayout, VK_IMAGE_LAYOUT_GENERAL,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw, 1);
             denoise.pass = 1;
-            bindCompute(cmd, p.sigma, denoise);
-            dispatch2D(cmd, extent, 8u);
+            {
+                GpuZone zone(profiler, cmd, "R sigmaS");
+                bindCompute(cmd, p.sigma, denoise);
+                dispatch2D(cmd, extent, 8u);
+            }
             p.sigmaPing[0] ^= 1u;
         }
     }
-    rhiBufferBarrier(cmd, p.ris.buffer, statOff, kRisStatBytes,
-        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
-    const VkBufferCopy statCopy{
-        .srcOffset = statOff,
-        .dstOffset = kRisStatBytes * flight,
-        .size = kRisStatBytes,
-    };
-    vkCmdCopyBuffer(cmd, p.ris.buffer, p.statRead.buffer, 1u, &statCopy);
-    p.statReady[flight] = 1u;
-
-    const uint32_t hist = p.historyValid[flight];
-    const float mAvg = valid > 0u ? static_cast<float>(mSum) / static_cast<float>(valid) : 0.0f;
-    const float wAvg = valid > 0u ? (static_cast<float>(weightMilli) / 1000.0f) / static_cast<float>(valid) : 0.0f;
-    char line[512];
-    std::snprintf(line, sizeof(line),
-        "ReSTIR лок %u/%u T%u S%u кип%u солн%u лучи %u диск %.2f Tист %u Tгл %.2f Tн %.2f Tлуч %u Sсос %u Sрад %.0f Sлуч %u кадр %u tlas %u истор %u пов %u жив %u вид %u тень %u M %.1f W %.2f",
-        p.powered, localCount, p.knobTemporalOn, p.knobSpatialOn, p.knobBoilOn, p.knobSunOn, p.knobSunRays,
-        static_cast<double>(p.knobSunDisk), p.knobHistory, static_cast<double>(p.knobTemporalDepth),
-        static_cast<double>(p.knobTemporalNormal), p.knobTemporalBias, p.knobSpatial, static_cast<double>(p.knobRadius),
-        p.knobSpatialBias, ctx.GetFrameIndex(),
-        tlas != 0u ? 1u : 0u, hist, surf, valid, vis, shadow, static_cast<double>(mAvg), static_cast<double>(wAvg));
-    publishLog(p, 1u, localCount, infCount, tlas != 0u ? 1u : 0u, valid > 0u ? 1u : 0u, 0u, line);
+    writeRayLog(p);
+    (void)infCount;
 
     std::memcpy(p.prevViewProj[flight], view.viewProj, sizeof(view.viewProj));
     std::memcpy(p.prevInvViewProj[flight], view.invViewProj, sizeof(view.invViewProj));
