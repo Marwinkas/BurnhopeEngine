@@ -790,8 +790,11 @@ void restirRecord(
         p.parity[0] += 1u;
         push.pad1 = static_cast<uint32_t>(tlas);
         push.pad2 = static_cast<uint32_t>(tlas >> 32);
-        const char* passName[7] = {"R init", "R temporal", "R spatial", "R trace", "R rebuild", "R vis", "R blur"};
+        const char* passName[7] = {"R init", "R temporal", "R spatial", "R trace", "R vis", "R vis", "R blur"};
         for (uint32_t pass = 0u; pass < 7u; ++pass) {
+            if (pass == 5u) {
+                continue;
+            }
             GpuZone zone(profiler, cmd, passName[pass]);
             push.pass = pass;
             bindCompute(cmd, p.fast, push);

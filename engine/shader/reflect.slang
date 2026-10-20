@@ -173,10 +173,13 @@ float3 sssrMarch(float3 origin, float3 direction, int mostDetailed, out bool val
     float currentT;
     float3 position;
     sssrInitialAdvance(origin, direction, invDirection, mipRes, mipInv, floorOffset, uvOffset, position, currentT);
-    const int stepCap = int(clamp(gSsr.steps, 16.0, 256.0));
+    const int stepCap = int(clamp(min(gSsr.steps, 32.0), 8.0, 32.0));
     int i = 0;
     validHit = false;
     while (i < stepCap && currentMip >= mostDetailed) {
+        if (position.x < 0.0 || position.y < 0.0 || position.x > 1.0 || position.y > 1.0) {
+            break;
+        }
         const float2 mipPos = mipRes * position.xy;
         const float surfaceZ = sssrLoadDepth(mipPos, currentMip);
         bool skipped = sssrAdvance(origin, direction, invDirection, mipPos, mipInv, floorOffset, uvOffset, surfaceZ, position, currentT);
@@ -197,8 +200,8 @@ float3 sssrMarch(float3 origin, float3 direction, int mostDetailed, out bool val
     return position;
 }
 
-bool sssrTakesRay(float rough, float metal) {
-    return rough <= clamp(gSsr.cutoff, 0.05, 1.0) || metal > 0.45;
+bool sssrTakesRay(float rough) {
+    return rough <= 0.65;
 }
 
 float sssrValidate(float3 hit, float2 uv, float3 worldDir, float2 screen) {
@@ -289,23 +292,39 @@ float3 sssrRt(float3 P, float3 N, float3 worldDir, float2 uv, uint2 px, out floa
     return max(direct + max(indirect, 0.0), 0.0);
 }
 
+groupshared uint tileGloss;
+
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void reflectTrace(uint3 dtid : SV_DispatchThreadID) {
-    const uint2 px = dtid.xy;
-    if (px.x >= gFrame.extent.x || px.y >= gFrame.extent.y) {
-        return;
+void reflectTrace(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
+    if (gtid == 0u) {
+        tileGloss = 0u;
     }
+    GroupMemoryBarrierWithGroupSync();
+    const uint2 px = dtid.xy;
+    const bool inside = px.x < gFrame.extent.x && px.y < gFrame.extent.y;
     const int2 ip = int2(px);
-    if (gFrame.debugMode != 0u && gFrame.debugMode != 7u) {
-        gReflect[ip] = 0.0;
+    const bool litView = gFrame.debugMode == 0u || gFrame.debugMode == 7u;
+    if (inside && litView) {
+        const uint vis = gVis.Load(int3(ip, 0));
+        const float depth = gDepth.Load(int3(ip, 0));
+        const float rough = gSurf0[ip].w;
+        if (vis != 0u && depth > 0.0 && sssrTakesRay(rough)) {
+            uint ignored;
+            InterlockedOr(tileGloss, 1u, ignored);
+        }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (!inside || tileGloss == 0u || !litView) {
+        if (inside) {
+            gReflect[ip] = 0.0;
+        }
         return;
     }
     const uint vis = gVis.Load(int3(ip, 0));
     const float depth = gDepth.Load(int3(ip, 0));
     const float rough = gSurf0[ip].w;
-    const float metal = saturate(gSurf1[ip].z);
-    if (vis == 0u || depth <= 0.0 || !sssrTakesRay(rough, metal)) {
+    if (vis == 0u || depth <= 0.0 || !sssrTakesRay(rough)) {
         gReflect[ip] = 0.0;
         return;
     }
@@ -317,8 +336,11 @@ void reflectTrace(uint3 dtid : SV_DispatchThreadID) {
     }
     N = normalize(N);
     const float3 V = normalize(gFrame.cameraPos.xyz - P);
-    const float3 worldDir = sssrReflect(V, N, rough, ip);
+    float3 worldDir = sssrReflect(V, N, rough, ip);
     if (dot(worldDir, N) <= 0.0 || dot(worldDir, worldDir) < 1e-8) {
+        worldDir = reflect(-V, N);
+    }
+    if (dot(worldDir, worldDir) < 1e-8) {
         gReflect[ip] = 0.0;
         return;
     }
@@ -350,11 +372,15 @@ void reflectTrace(uint3 dtid : SV_DispatchThreadID) {
             radiance = max(gHdr[hitPx].rgb, 0.0) * confidence;
         }
     }
-    if (confidence <= 0.0 && rough <= 0.4) {
+    if (confidence <= 0.0 && rough < 0.25) {
         float travel = 0.0;
         radiance = sssrRt(P, N, worldDir, uv, px, travel);
         rayLength = travel;
         confidence = rayLength > 0.0 ? 1.0 : 0.0;
+    } else if (confidence <= 0.0) {
+        radiance = sssrSky(worldDir);
+        rayLength = max(gSsr.maxDist, 4.0);
+        confidence = 1.0;
     }
     gReflect[ip] = float4(radiance, confidence > 0.0 ? rayLength : 0.0);
 }
@@ -459,12 +485,12 @@ void reflectUp(uint3 dtid : SV_DispatchThreadID) {
     const float4 surfN = gSurf1[ip];
     const float rough = surf.w;
     const float metal = saturate(surfN.z);
-    if (!sssrTakesRay(rough, metal)) {
+    if (!sssrTakesRay(rough)) {
         sssrStoreHist(ip, 0.0);
         return;
     }
     const float2 screen = float2(gFrame.extent.xy);
-    const float blur = max(gSsr.stride, 0.25);
+    const float blur = max(gSsr.stride, 0.25) * lerp(1.0, 3.0, saturate((rough - 0.25) / 0.40));
     const float variance = rough <= kSssrMirror ? 0.0 : rough * rough;
     float3 resolved = raw.rgb;
     float3 avg = raw.rgb;

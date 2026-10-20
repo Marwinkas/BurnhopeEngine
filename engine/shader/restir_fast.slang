@@ -244,7 +244,10 @@ void fastTemporal(uint2 px) {
         fastStore(cur, px, now);
         return;
     }
-    if (abs(viewZ - prevZ) > viewZ * 0.02 || dot(n, prevN) < 0.9) {
+    const float3 toCam = gFrame.cameraPos.xyz - pos;
+    const float facing = saturate(dot(n, dot(toCam, toCam) > 1e-8 ? normalize(toCam) : n));
+    const float depthTol = lerp(0.06, 0.02, facing);
+    if (abs(viewZ - prevZ) > viewZ * depthTol || dot(n, prevN) < 0.9) {
         fastStore(cur, px, now);
         return;
     }
@@ -383,11 +386,10 @@ void fastTrace(uint2 px) {
     gRaw[px] = float4(vis, blocker, 0.0, active ? 1.0 : 0.0);
 }
 
-void fastRebuild(uint2 px) {
+float4 fastRebuild(uint2 px) {
     float4 raw = gRaw[px];
     if (raw.g >= 0.0) {
-        gRaw[fastAt(1u, px)] = raw;
-        return;
+        return raw;
     }
     float3 pos;
     float3 n;
@@ -410,7 +412,7 @@ void fastRebuild(uint2 px) {
         if (nb.g < 0.0) {
             continue;
         }
-        float w = 1.0;
+        float w = 0.0;
         if (live) {
             float3 qPos;
             float3 qN;
@@ -418,10 +420,13 @@ void fastRebuild(uint2 px) {
             float qMetal;
             float qZ;
             if (fastSurface(uint2(q), qPos, qN, qAlbedo, qMetal, qZ)) {
+                const float nd = saturate(dot(n, qN));
                 const float depthW = exp(-abs(viewZ - qZ) / max(viewZ * 0.02, 1e-3));
-                const float normalW = pow(saturate(dot(n, qN)), 32.0);
-                w = depthW * normalW;
+                w = depthW * pow(nd, 32.0);
             }
+        }
+        if (w <= 1e-4) {
+            continue;
         }
         vis += nb.r * w;
         blocker += nb.g * w;
@@ -431,11 +436,11 @@ void fastRebuild(uint2 px) {
     if (weight > 1e-4) {
         raw = float4(vis / weight, blocker / weight, reach / weight, 1.0);
     }
-    gRaw[fastAt(1u, px)] = raw;
+    return raw;
 }
 
 void fastTemporalVis(uint2 px) {
-    const float4 cur = gRaw[fastAt(1u, px)];
+    const float4 cur = fastRebuild(px);
     float vis = saturate(cur.r);
     float mean = 0.0;
     float moment = 0.0;
@@ -448,7 +453,11 @@ void fastTemporalVis(uint2 px) {
             if (q.x < 0 || q.y < 0 || q.x >= int(gFrame.extent.x) || q.y >= int(gFrame.extent.y)) {
                 continue;
             }
-            const float s = saturate(gRaw[fastAt(1u, uint2(q))].r);
+            const float4 nb = gRaw[uint2(q)];
+            if (nb.g < 0.0) {
+                continue;
+            }
+            const float s = saturate(nb.r);
             mean += s;
             moment += s * s;
             count += 1.0;
@@ -477,8 +486,11 @@ void fastTemporalVis(uint2 px) {
             float prevMetal;
             float prevZ;
             const bool prevLive = fastSurface(uint2(prev), prevPos, prevN, prevAlbedo, prevMetal, prevZ);
+            const float3 toCam = gFrame.cameraPos.xyz - pos;
+            const float facing = saturate(dot(n, dot(toCam, toCam) > 1e-8 ? normalize(toCam) : n));
+            const float depthTol = lerp(0.06, 0.02, facing);
             const float dz = abs(viewZ - prevZ) / max(viewZ, 1e-3);
-            if (hist.a >= 1.0 && prevLive && dot(n, prevN) >= 0.95 && dz <= 0.02) {
+            if (hist.a >= 1.0 && prevLive && dot(n, prevN) >= 0.95 && dz <= depthTol) {
                 histLen = clamp(hist.a, 1.0, 8.0);
                 const float kept = saturate(hist.r);
                 const float weight = histLen / (histLen + 1.0);
@@ -529,6 +541,28 @@ void fastBlur(uint2 px) {
         if (weight > 1e-4) {
             vis = saturate(sum / weight);
         }
+        if (cur.a < 4.0) {
+            const int2 cross[4] = { int2(2, 0), int2(-2, 0), int2(0, 2), int2(0, -2) };
+            [unroll]
+            for (uint i = 0u; i < 4u; ++i) {
+                const int2 q = clamp(int2(px) + cross[i], int2(0, 0), ext);
+                float3 qPos;
+                float3 qN;
+                float3 qAlbedo;
+                float qMetal;
+                float qZ;
+                if (!fastSurface(uint2(q), qPos, qN, qAlbedo, qMetal, qZ)) {
+                    continue;
+                }
+                const float dz = abs(viewZ - qZ) / max(viewZ * 0.02, 1e-3);
+                const float w = pow(saturate(dot(n, qN)), 32.0) * exp(-dz * dz) * 0.5;
+                sum += gRaw[fastAt(1u, uint2(q))].r * w;
+                weight += w;
+            }
+            if (weight > 1e-4) {
+                vis = saturate(sum / weight);
+            }
+        }
     }
     if (!live) {
         return;
@@ -565,8 +599,6 @@ void main(uint3 dtid : SV_DispatchThreadID) {
     } else if (gPush.pass == 3u) {
         fastTrace(px);
     } else if (gPush.pass == 4u) {
-        fastRebuild(px);
-    } else if (gPush.pass == 5u) {
         fastTemporalVis(px);
     } else {
         fastBlur(px);

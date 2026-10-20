@@ -104,9 +104,12 @@ void sigmaTemporal(uint2 px) {
         const int2 prev = nrdUvPx(prevUv);
         const float4 hist = gShadowHist[sigmaAt(gPush.readSlice, uint2(prev))];
         const float zPrev = sigmaViewZ(prev);
+        const float3 toCam = gFrame.cameraPos.xyz - P;
+        const float facing = saturate(dot(n, dot(toCam, toCam) > 1e-8 ? normalize(toCam) : n));
+        const float depthTol = lerp(0.06, 0.02, facing);
         const float nd = dot(n, nrdNormal(gSurf1, gDepth, prev));
         const float dz = abs(z - zPrev) / max(z, 1e-3);
-        if (hist.a >= 0.5 && zPrev > 1e-3 && nd >= 0.95 && dz <= 0.02) {
+        if (hist.a >= 0.5 && zPrev > 1e-3 && nd >= 0.95 && dz <= depthTol) {
             histLen = clamp(hist.b, 1.0, 8.0);
             const float kept = saturate(hist.r);
             const float weight = histLen / (histLen + 1.0);
@@ -161,10 +164,12 @@ void sigmaSpatial(uint2 px) {
         sum += sample * w;
         wsum += w;
     }
-    if (vmax - vmin > 0.2) {
+    const float histLen = clamp(acc.b, 1.0, 8.0);
+    if (vmax - vmin > 0.2 || histLen < 4.0) {
+        const int reach = histLen < 4.0 ? 3 : 2;
         [unroll]
         for (uint i = 0u; i < 4u; ++i) {
-            const int2 q = clamp(ip + cross[i] * 2, int2(0, 0), ext);
+            const int2 q = clamp(ip + cross[i] * reach, int2(0, 0), ext);
             const float4 nb = gShadowHist[sigmaAt(gPush.writeSlice, uint2(q))];
             if (nb.a < 0.5) {
                 continue;
