@@ -350,7 +350,7 @@ void reflectTrace(uint3 dtid : SV_DispatchThreadID) {
             radiance = max(gHdr[hitPx].rgb, 0.0) * confidence;
         }
     }
-    if (confidence <= 0.0) {
+    if (confidence <= 0.0 && rough <= 0.4) {
         float travel = 0.0;
         radiance = sssrRt(P, N, worldDir, uv, px, travel);
         rayLength = travel;

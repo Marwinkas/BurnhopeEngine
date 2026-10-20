@@ -101,6 +101,19 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     const ShadeHit hit = shadeHit(px, vis, gtid, true);
     gSurf0[px] = float4(hit.albedo, hit.roughness);
     gSurf1[px] = float4(octEncode(hit.N), hit.metallic, hit.ao);
+    if ((gPass.passMask & 2097152u) != 0u && (gFrame.debugMode == 0u || gFrame.debugMode == 4u)) {
+        float inten = gSun.sunDirIntensity.w;
+        if (inten < 0.05) {
+            inten = 8.0;
+        }
+        const float wrap = saturate(hit.N.y * 0.4 + 0.6);
+        float3 skyAmb = hit.albedo * (1.0 - hit.metallic) * float3(0.78, 0.82, 0.88) * (inten * 0.055) * wrap * saturate(hit.gtao);
+        if ((gPass.passMask & 256u) == 0u) {
+            skyAmb *= 0.15;
+        }
+        gHdr[px] = float4(max(skyAmb + hit.emissive, 0.0), hit.roughness);
+        return;
+    }
     uint sunCascade = 2u;
     float shadow = 1.0;
     if (gFrame.disableShadow == 0 && (gPass.passMask & 2097152u) == 0u) {

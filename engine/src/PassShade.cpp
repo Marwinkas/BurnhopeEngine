@@ -32,7 +32,8 @@ void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, Gt
     imageBarrier(ctx.cmd, shade.surf0, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     imageBarrier(ctx.cmd, shade.surf1, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     {
-        GpuZone zone(ctx.profiler, ctx.cmd, "Sun");
+        const bool restirSun = (ctx.post.flags.passMask & (1u << 21)) != 0u;
+        GpuZone zone(ctx.profiler, ctx.cmd, restirSun ? "Surf" : "Sun");
         cloudNoiseEnsure(ctx.cmd, sky);
         shadeSunRecord(ctx.cmd, ctx.extent, shade);
     }

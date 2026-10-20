@@ -50,14 +50,15 @@ float svgfLuma(float3 c) {
     return dot(max(c, 0.0), float3(0.2126, 0.7152, 0.0722));
 }
 
-float svgfKernel(int tap) {
-    if (tap == -2 || tap == 2) {
-        return 1.0 / 16.0;
-    }
-    if (tap == -1 || tap == 1) {
-        return 4.0 / 16.0;
-    }
-    return 6.0 / 16.0;
+static const float2 kSvgfPoisson[8] = {
+    float2(-0.94201624, -0.39906216), float2(0.94558609, -0.76890725),
+    float2(-0.09418410, -0.92938870), float2(0.34495938, 0.29387760),
+    float2(-0.91588581, 0.45771432), float2(-0.81544232, -0.87912464),
+    float2(-0.38277543, 0.27676845), float2(0.97484398, 0.75648379)
+};
+
+float svgfIgn(int2 p) {
+    return frac(52.9829189 * frac(0.06711056 * float(p.x) + 0.00583715 * float(p.y)));
 }
 
 bool svgfInside(int2 p) {
@@ -211,64 +212,88 @@ void svgfCommit(int2 ip) {
     svgfStore(svgfAt(ip, 1u), svgfLoad(src), svgfLoadA(src));
 }
 
-void svgfAtrous(uint2 px, int2 ip) {
+void svgfAtrous(int2 ip) {
     const float3 center = svgfSrc(ip);
     const float centerA = svgfSrcA(ip);
     if (!svgfLive(ip)) {
-        if (gPush.pass == 3u) {
-            svgfComposite(px, 0.0);
-        } else if (gPush.pass == 2u) {
-            svgfStore(svgfAt(ip, 0u), 0.0, 0.0);
-        } else {
-            svgfStore(svgfAt(ip, 2u), 0.0, 0.0);
-        }
+        svgfStore(svgfAt(ip, 0u), 0.0, 0.0);
         return;
-    }
-    int step = gPush.pass == 2u ? 1 : 2;
-    if (centerA < 16.0) {
-        step *= 4;
     }
     const float z = svgfViewZ(ip);
     const float3 n = svgfNormal(ip);
     const float sigmaZ = svgfGradZ(ip, z);
-    float3 acc = 0.0;
-    float wsum = 0.0;
-    [loop]
-    for (int y = -2; y <= 2; ++y) {
-        [loop]
-        for (int x = -2; x <= 2; ++x) {
-            const int2 q = ip + int2(x, y) * step;
-            if (!svgfInside(q)) {
-                continue;
-            }
-            const float zq = svgfViewZ(q);
-            if (zq < 0.0) {
-                continue;
-            }
-            const float3 srgb = svgfSrc(q);
-            const float wk = svgfKernel(x) * svgfKernel(y);
-            const float wn = pow(max(dot(n, svgfNormal(q)), 0.0), 16.0);
-            const float wd = exp(-abs(z - zq) / (sigmaZ * float(step) + 0.0001));
-            const float w = wk * wn * wd;
-            acc += srgb * w;
-            wsum += w;
+    const float ang = svgfIgn(ip) * 6.2831853;
+    const float cs = cos(ang);
+    const float sn = sin(ang);
+    const float radius = centerA < 16.0 ? 6.0 : 3.0;
+    float3 acc = center;
+    float wsum = 1.0;
+    [unroll]
+    for (uint i = 0u; i < 8u; ++i) {
+        const float2 disk = kSvgfPoisson[i];
+        const float2 rot = float2(cs * disk.x - sn * disk.y, sn * disk.x + cs * disk.y);
+        const int2 q = ip + int2(round(rot * radius));
+        if (!svgfInside(q)) {
+            continue;
         }
+        const float zq = svgfViewZ(q);
+        if (zq < 0.0) {
+            continue;
+        }
+        const float wn = pow(max(dot(n, svgfNormal(q)), 0.0), 16.0);
+        const float wd = exp(-abs(z - zq) / (sigmaZ * radius + 0.0001));
+        const float w = wn * wd * exp(-dot(disk, disk));
+        acc += svgfSrc(q) * w;
+        wsum += w;
     }
-    const float3 blurred = wsum > 1e-5 ? acc / wsum : center;
-    if (gPush.pass == 2u) {
-        svgfStore(svgfAt(ip, 0u), blurred, centerA);
+    svgfStore(svgfAt(ip, 0u), wsum > 1e-5 ? acc / wsum : center, centerA);
+}
+
+void svgfUpsample(uint2 px, int2 ip) {
+    if (!svgfLive(ip)) {
+        svgfComposite(px, 0.0);
         return;
     }
-    svgfComposite(px, blurred);
+    const int2 base = (ip / 2) * 2;
+    const float z = svgfViewZ(ip);
+    const float3 n = svgfNormal(ip);
+    const int2 tap[4] = { base, base + int2(2, 0), base + int2(0, 2), base + int2(2, 2) };
+    float3 acc = 0.0;
+    float wsum = 0.0;
+    [unroll]
+    for (uint i = 0u; i < 4u; ++i) {
+        if (!svgfInside(tap[i])) {
+            continue;
+        }
+        const float zq = svgfViewZ(tap[i]);
+        if (zq < 0.0) {
+            continue;
+        }
+        const float wn = pow(max(dot(n, svgfNormal(tap[i])), 0.0), 32.0);
+        const float wd = exp(-abs(z - zq) / max(z * 0.02, 1e-3));
+        const float w = max(wn * wd, 0.0);
+        acc += max(svgfLoad(svgfAt(tap[i], 0u)), 0.0) * w;
+        wsum += w;
+    }
+    const float3 center = max(svgfLoad(svgfAt(base, 0u)), 0.0);
+    svgfComposite(px, wsum > 1e-5 ? acc / wsum : center);
 }
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void main(uint3 dtid : SV_DispatchThreadID) {
-    if (dtid.x >= gFrame.extent.x || dtid.y >= gFrame.extent.y) {
+    if (gFrame.debugMode != 0u && gFrame.debugMode != 4u) {
         return;
     }
-    if (gFrame.debugMode != 0u && gFrame.debugMode != 4u) {
+    if (gPush.pass == 2u) {
+        const uint2 half = max(gFrame.extent.xy / 2u, uint2(1u, 1u));
+        if (dtid.x >= half.x || dtid.y >= half.y) {
+            return;
+        }
+        svgfAtrous(int2(dtid.xy) * 2);
+        return;
+    }
+    if (dtid.x >= gFrame.extent.x || dtid.y >= gFrame.extent.y) {
         return;
     }
     const int2 ip = int2(dtid.xy);
@@ -280,5 +305,5 @@ void main(uint3 dtid : SV_DispatchThreadID) {
         svgfCommit(ip);
         return;
     }
-    svgfAtrous(dtid.xy, ip);
+    svgfUpsample(dtid.xy, ip);
 }

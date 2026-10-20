@@ -218,7 +218,7 @@ struct SceneFrameImpl {
     float rcSun = 1.0f;
     float rcBounce = 1.0f;
     float giGain = 2.0f;
-    bool sharcDenoise = true;
+    bool sharcDenoise = false;
     float bloomThreshold = 0.35f;
     float fogDensity = 0.06f;
     float fogHeight = 0.0f;

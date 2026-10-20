@@ -436,9 +436,10 @@ void fastRebuild(uint2 px) {
 
 void fastTemporalVis(uint2 px) {
     const float4 cur = gRaw[fastAt(1u, px)];
-    float vis = cur.r;
-    float lo = vis;
-    float hi = vis;
+    float vis = saturate(cur.r);
+    float mean = 0.0;
+    float moment = 0.0;
+    float count = 0.0;
     [unroll]
     for (int y = -1; y <= 1; ++y) {
         [unroll]
@@ -447,10 +448,16 @@ void fastTemporalVis(uint2 px) {
             if (q.x < 0 || q.y < 0 || q.x >= int(gFrame.extent.x) || q.y >= int(gFrame.extent.y)) {
                 continue;
             }
-            const float s = gRaw[fastAt(1u, uint2(q))].r;
-            lo = min(lo, s);
-            hi = max(hi, s);
+            const float s = saturate(gRaw[fastAt(1u, uint2(q))].r);
+            mean += s;
+            moment += s * s;
+            count += 1.0;
         }
+    }
+    float dev = 0.0;
+    if (count > 0.0) {
+        mean /= count;
+        dev = sqrt(max(moment / count - mean * mean, 0.0));
     }
     float3 pos;
     float3 n;
@@ -459,18 +466,31 @@ void fastTemporalVis(uint2 px) {
     float viewZ;
     const uint histSlice = 2u + (gPush.hist & 1u);
     const uint destSlice = 2u + ((gPush.hist ^ 1u) & 1u);
+    float histLen = 1.0;
     if (fastSurface(px, pos, n, albedo, metal, viewZ)) {
         const int2 prev = fastPrevPx(pos);
-        if (prev.x >= 0) {
+        if (prev.x >= 0 && prev.x < int(gFrame.extent.x) && prev.y >= 0 && prev.y < int(gFrame.extent.y)) {
             const float4 hist = gHist[fastAt(histSlice, uint2(prev))];
-            if (hist.a > 0.5) {
-                const float kept = clamp(hist.r, lo, hi);
-                vis = lerp(vis, kept, 0.85);
+            float3 prevPos;
+            float3 prevN;
+            float3 prevAlbedo;
+            float prevMetal;
+            float prevZ;
+            const bool prevLive = fastSurface(uint2(prev), prevPos, prevN, prevAlbedo, prevMetal, prevZ);
+            const float dz = abs(viewZ - prevZ) / max(viewZ, 1e-3);
+            if (hist.a >= 1.0 && prevLive && dot(n, prevN) >= 0.95 && dz <= 0.02) {
+                histLen = clamp(hist.a, 1.0, 8.0);
+                const float kept = saturate(hist.r);
+                const float weight = histLen / (histLen + 1.0);
+                vis = lerp(vis, kept, weight);
+                histLen = min(histLen + 1.0, 8.0);
             }
         }
     }
-    gHist[fastAt(destSlice, px)] = float4(vis, cur.g, cur.b, 1.0);
-    gRaw[fastAt(1u, px)] = float4(vis, cur.g, cur.b, 1.0);
+    const float band = max(dev * 2.0, 0.12);
+    vis = count > 0.0 ? clamp(vis, mean - band, mean + band) : vis;
+    gHist[fastAt(destSlice, px)] = float4(vis, cur.g, cur.b, histLen);
+    gRaw[fastAt(1u, px)] = float4(vis, cur.g, cur.b, histLen);
 }
 
 void fastBlur(uint2 px) {
@@ -483,37 +503,28 @@ void fastBlur(uint2 px) {
     float viewZ;
     FastRes r = fastLoad(0u, px);
     const bool live = fastSurface(px, pos, n, albedo, metal, viewZ);
-    const float lightRadius = 0.15;
-    const float blocker = cur.g;
-    const float receiver = cur.b;
-    float radius = 0.0;
-    if (blocker > 0.02 && receiver > blocker && vis < 0.999) {
-        radius = clamp((receiver - blocker) / blocker * lightRadius, 0.0, 12.0);
-    }
-    if (radius >= 0.5 && live) {
-        const float ang = fastIgn(int2(px)) * 6.2831853;
-        const float cs = cos(ang);
-        const float sn = sin(ang);
+    if (live) {
+        const int2 ext = int2(gFrame.extent.xy) - int2(1, 1);
         float sum = 0.0;
         float weight = 0.0;
         [unroll]
-        for (uint i = 0u; i < 8u; ++i) {
-            const float2 spun = float2(cs * kPoisson[i].x - sn * kPoisson[i].y, sn * kPoisson[i].x + cs * kPoisson[i].y);
-            const int2 q = int2(px) + int2(round(spun * radius));
-            if (q.x < 0 || q.y < 0 || q.x >= int(gFrame.extent.x) || q.y >= int(gFrame.extent.y)) {
-                continue;
+        for (int y = -1; y <= 1; ++y) {
+            [unroll]
+            for (int x = -1; x <= 1; ++x) {
+                const int2 q = clamp(int2(px) + int2(x, y), int2(0, 0), ext);
+                float3 qPos;
+                float3 qN;
+                float3 qAlbedo;
+                float qMetal;
+                float qZ;
+                if (!fastSurface(uint2(q), qPos, qN, qAlbedo, qMetal, qZ)) {
+                    continue;
+                }
+                const float dz = abs(viewZ - qZ) / max(viewZ * 0.02, 1e-3);
+                const float w = pow(saturate(dot(n, qN)), 64.0) * exp(-dz * dz);
+                sum += gRaw[fastAt(1u, uint2(q))].r * w;
+                weight += w;
             }
-            float3 qPos;
-            float3 qN;
-            float3 qAlbedo;
-            float qMetal;
-            float qZ;
-            float w = 1.0;
-            if (fastSurface(uint2(q), qPos, qN, qAlbedo, qMetal, qZ)) {
-                w = pow(saturate(dot(n, qN)), 32.0) * exp(-abs(viewZ - qZ) / max(viewZ * 0.02, 1e-3));
-            }
-            sum += gRaw[fastAt(1u, uint2(q))].r * w;
-            weight += w;
         }
         if (weight > 1e-4) {
             vis = saturate(sum / weight);
