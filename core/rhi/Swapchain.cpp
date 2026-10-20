@@ -217,6 +217,8 @@ bool swapchainCreate(Swapchain& sc, Device& d, VkSurfaceKHR surface, uint32_t w,
     sc.frame = 0;
     sc.orderValue = 0;
     sc.presentId = 0;
+    sc.presentTick = 0;
+    sc.presentDt = 0.0f;
     return true;
 }
 
@@ -512,6 +514,13 @@ bool swapchainSubmitPresent(Swapchain& sc, Device& d, FrameContext& fc, bool pac
         }
         return false;
     }
+    const uint64_t shown = platformCounter();
+    const uint64_t freq = platformFrequency();
+    if (sc.presentTick != 0 && freq != 0 && shown > sc.presentTick) {
+        sc.presentDt = static_cast<float>(static_cast<double>(shown - sc.presentTick) / static_cast<double>(freq));
+        sc.presentGen += 1u;
+    }
+    sc.presentTick = shown;
     if (sc.clickTick != 0 && d.caps.presentWait && d.caps.presentId) {
         const uint64_t freq = platformFrequency();
         if (vkWaitForPresentKHR(d.device, sc.handle, pid, 50'000'000ull) == VK_SUCCESS && freq != 0) {

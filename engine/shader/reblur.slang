@@ -132,7 +132,8 @@ float svgfGradZ(int2 ip, float z) {
 
 void svgfComposite(uint2 px, float3 radiance) {
     const float3 denom = max(gSurf0[px].rgb, float3(0.01, 0.01, 0.01));
-    float3 gi = max(radiance, 0.0) * denom;
+    const float gain = max(gShade.pad1, 0.0);
+    float3 gi = max(radiance, 0.0) * denom * gain;
     if (!all(gi == gi)) {
         gi = 0.0;
     }
@@ -188,12 +189,12 @@ void svgfTemporal(int2 ip) {
         const float zPrev = svgfViewZ(prev);
         const float nd = dot(n, svgfNormal(prev));
         const float dz = abs(z - zPrev) / max(z, 1e-3);
-        if (histA >= 1.0 && zPrev > 1e-3 && nd >= 0.85 && dz <= 0.15) {
+        if (histA >= 1.0 && zPrev > 1e-3 && nd >= 0.8 && dz <= 0.5) {
             hist = svgfHistBilinear(prevUv);
             histLen = min(histA + 1.0, 64.0);
             alpha = histLen / (histLen + 1.0);
-            if (speed > 1.0) {
-                alpha = min(alpha, 1.0 / (1.0 + speed * 0.25));
+            if (speed < 0.5 && histLen >= 16.0) {
+                alpha = 1.0;
             }
         }
     }
@@ -223,7 +224,10 @@ void svgfAtrous(uint2 px, int2 ip) {
         }
         return;
     }
-    const int step = gPush.pass == 2u ? 1 : 2;
+    int step = gPush.pass == 2u ? 1 : 2;
+    if (centerA < 16.0) {
+        step *= 4;
+    }
     const float z = svgfViewZ(ip);
     const float3 n = svgfNormal(ip);
     const float sigmaZ = svgfGradZ(ip, z);

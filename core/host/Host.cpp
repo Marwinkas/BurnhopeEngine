@@ -600,16 +600,19 @@ bool hostTick(Host& host) {
         }
     }
     frameArenaReset(host.arena);
-    const float now = platformSeconds();
-    float dt = host.clock > 0.0f ? now - host.clock : 0.0f;
-    if (dt < 0.0f) {
-        dt = 0.0f;
+    const uint64_t tick = platformCounter();
+    const uint64_t freq = platformFrequency();
+    double dt = 0.0;
+    if (host.clockTick != 0 && freq != 0 && tick > host.clockTick) {
+        dt = static_cast<double>(tick - host.clockTick) / static_cast<double>(freq);
     }
-    if (dt > 0.1f) {
-        dt = 0.1f;
+    host.clockTick = tick;
+    if (dt > 0.1) {
+        dt = 0.1;
     }
-    host.clock = now;
-    host.frameDt = dt;
+    host.seconds += dt;
+    host.frameDt = static_cast<float>(dt);
+    const float now = static_cast<float>(host.seconds);
     for (int i = 0; i < kHostSlots; ++i) {
         if (i != host.primary && host.view[i].on && host.view[i].window.closeRequested) {
             destroyView(host, i, true);

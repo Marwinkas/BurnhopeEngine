@@ -124,6 +124,9 @@ bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
     bindCache(resolveBind, true);
     PassBindings updateBind{heaps};
     bindHit(updateBind);
+    updateBind.sampledImg(1, HeapImg::Vis);
+    updateBind.sampledImg(2, HeapImg::Depth);
+    updateBind.storageImg(5, HeapImg::Surf1);
     bindCache(updateBind, true);
     PassBindings queryBind{heaps};
     bindHit(queryBind);
@@ -162,6 +165,7 @@ bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
     reblurBind.storageImg(3, HeapImg::HdrAStorage);
     reblurBind.storageImg(4, HeapImg::Surf0);
     reblurBind.storageImg(5, HeapImg::Surf1);
+    reblurBind.knob(55, HeapBuf::Shade);
     reblurBind.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
         heapBufOffset(*reblurBind.raw.heaps, kGradeSlot), static_cast<uint32_t>(reblurBind.raw.heaps->bufferDescSize));
     reblurBind.storageBuf(77, kSharcColorSlot, false);
@@ -273,8 +277,8 @@ void sharcRecord(
     params.frameIndex = p.frameIndex;
     params.radianceScale = 100000.0f;
     params.roughnessThreshold = 0.4f;
-    params.downscale = 5u;
-    params.bouncesMax = 4u;
+    params.downscale = 8u;
+    params.bouncesMax = 1u;
     params.tlasLo = static_cast<uint32_t>(tlas);
     params.tlasHi = static_cast<uint32_t>(tlas >> 32);
     params.giGain = giGain > 0.0f ? giGain : 1.0f;

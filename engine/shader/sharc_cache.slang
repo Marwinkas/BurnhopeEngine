@@ -14,6 +14,8 @@ static const uint kSharcNormalMask = (1u << kSharcNormalBits) - 1u;
 static const uint kSharcLevelShift = kSharcPosBits * 3u;
 static const uint kSharcNormalShift = kSharcLevelShift + kSharcLevelBits;
 static const uint kSharcBucket = 16u;
+static const uint kSharcProbe = 3u;
+static const uint kSharcEvictStale = 16u;
 static const uint kSharcInvalid = 0xffffffffu;
 static const uint kSharcEmptyLimit = 2u;
 static const float kSharcPosBias = 1e-4;
@@ -67,15 +69,13 @@ uint sharcBaseSlot(uint64_t key, uint capacity) {
 }
 
 uint sharcLevel(float3 position, SharcGrid grid) {
-    float3 delta = grid.camera - position;
-    float distance2 = max(dot(delta, delta), 1e-10);
-    float level = 0.5 * log2(distance2) / log2(grid.logBase) + grid.levelBias;
-    return uint(clamp(level, 1.0, float(kSharcLevelMask)));
+    float dist = length(grid.camera - position);
+    float raw = clamp(dist * 0.015, 0.25, 4.0);
+    return uint(clamp(floor(log2(raw / 0.25)) + 1.0, 1.0, 5.0));
 }
 
 float sharcVoxelSize(uint level, SharcGrid grid) {
-    float exponent = log2(grid.logBase) * (float(level) - grid.levelBias);
-    return exp2(exponent) / grid.sceneScale;
+    return 0.25 * exp2(float(level - 1u));
 }
 
 bool sharcCacheEligible(float hitDistance, float3 position, float roughPrev, SharcGrid grid) {
@@ -103,12 +103,14 @@ uint64_t sharcSpatialKey(float3 position, float3 normal, SharcGrid grid, out flo
         | (uint64_t(uint(cell.y) & kSharcPosMask) << (kSharcPosBits * 1u))
         | (uint64_t(uint(cell.z) & kSharcPosMask) << (kSharcPosBits * 2u))
         | (uint64_t(level & kSharcLevelMask) << kSharcLevelShift);
-    uint normalBits = (normal.x + kSharcNormalBias >= 0.0 ? 0u : 1u)
-        + (normal.y + kSharcNormalBias >= 0.0 ? 0u : 2u)
-        + (normal.z + kSharcNormalBias >= 0.0 ? 0u : 4u);
-    key |= uint64_t(normalBits) << kSharcNormalShift;
+    key |= uint64_t(0u) << kSharcNormalShift;
     return key;
 }
+
+void sharcLoadMeta(uint entry, out uint frames, out uint stale);
+void sharcStoreAcc(uint entry, uint4 value);
+void sharcStoreResolved(uint entry, float3 radiance, float sampleNum, uint frames, uint stale);
+void sharcAddVoxel(uint cacheIndex, float3 sampleValue, float3 sampleWeight, uint sampleData);
 
 void sharcCas(uint slot, uint64_t compareValue, uint64_t value, out uint64_t original) {
     InterlockedCompareExchange(gHash[slot], compareValue, value, original);
@@ -116,15 +118,31 @@ void sharcCas(uint slot, uint64_t compareValue, uint64_t value, out uint64_t ori
 
 bool sharcInsert(uint64_t key, uint baseSlot, uint probeRange, out uint cacheIndex) {
     cacheIndex = kSharcInvalid;
-    probeRange = min(probeRange, kSharcBucket);
+    uint steps = min(probeRange, kSharcProbe);
     [loop]
-    for (uint offset = 0u; offset < probeRange; ++offset) {
+    for (uint offset = 0u; offset < steps; ++offset) {
+        uint slot = baseSlot + offset;
         uint64_t previous = 0;
-        sharcCas(baseSlot + offset, uint64_t(0), key, previous);
+        sharcCas(slot, uint64_t(0), key, previous);
         if (previous == uint64_t(0) || previous == key) {
-            cacheIndex = baseSlot + offset;
+            cacheIndex = slot;
             return true;
         }
+        uint frames = 0u;
+        uint stale = 0u;
+        sharcLoadMeta(slot, frames, stale);
+        if (stale < kSharcEvictStale) {
+            continue;
+        }
+        uint64_t raced = 0;
+        sharcCas(slot, previous, key, raced);
+        if (raced != previous) {
+            continue;
+        }
+        sharcStoreAcc(slot, uint4(0, 0, 0, 0));
+        sharcStoreResolved(slot, float3(0.0, 0.0, 0.0), 0.0, 0u, 0u);
+        cacheIndex = slot;
+        return true;
     }
     return false;
 }
@@ -132,18 +150,10 @@ bool sharcInsert(uint64_t key, uint baseSlot, uint probeRange, out uint cacheInd
 bool sharcFind(uint64_t key, uint baseSlot, uint probeRange, out uint cacheIndex, out uint bucketOffset) {
     cacheIndex = kSharcInvalid;
     bucketOffset = 0u;
-    probeRange = min(probeRange, kSharcBucket);
-    uint emptyEntries = 0u;
+    uint steps = min(probeRange, kSharcProbe);
     [loop]
-    for (bucketOffset = 0u; bucketOffset < probeRange; ++bucketOffset) {
-        uint64_t stored = gHash[baseSlot + bucketOffset];
-        if (stored == uint64_t(0)) {
-            if (emptyEntries > kSharcEmptyLimit) {
-                break;
-            }
-            emptyEntries += 1u;
-        }
-        if (stored == key) {
+    for (bucketOffset = 0u; bucketOffset < steps; ++bucketOffset) {
+        if (gHash[baseSlot + bucketOffset] == key) {
             cacheIndex = baseSlot + bucketOffset;
             return true;
         }
@@ -224,6 +234,86 @@ float3 sharcClampFirefly(float3 sampleValue) {
         color *= 20.0 / luma;
     }
     return color;
+}
+
+bool sharcQueueRadiance(SharcHitData hit, float3 directLighting, SharcGrid grid, out uint cacheIndex, out uint4 packed) {
+    cacheIndex = kSharcInvalid;
+    packed = 0;
+    uint64_t key = 0;
+    if (!sharcInsertEntry(hit.positionWorld, hit.normalWorld, grid, key, cacheIndex)) {
+        cacheIndex = kSharcInvalid;
+        return false;
+    }
+    float3 demod = max(hit.materialDemodulation, float3(1e-3, 1e-3, 1e-3));
+    float3 contrib = max(directLighting / demod, 0.0);
+    if (sharcLuma(contrib) <= 1e-4) {
+        cacheIndex = kSharcInvalid;
+        return false;
+    }
+    float3 weighted = sharcClampFirefly(contrib) * gSharc.radianceScale;
+    packed = uint4(sharcQuant(weighted.r), sharcQuant(weighted.g), sharcQuant(weighted.b), 1u);
+    return true;
+}
+
+void sharcPaintEnergy(float3 position, float3 normal, float3 energy) {
+    SharcGrid grid = sharcGrid();
+    uint level = sharcLevel(position, grid);
+    float voxel = max(sharcVoxelSize(level, grid), 1e-3);
+    float3 n = dot(normal, normal) > 1e-8 ? normalize(normal) : float3(0.0, 1.0, 0.0);
+    float3 axis = abs(n.y) < 0.999 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+    float3 tangent = normalize(cross(axis, n));
+    float3 bitangent = cross(n, tangent);
+    [loop]
+    for (int y = -1; y <= 1; ++y) {
+        [loop]
+        for (int x = -1; x <= 1; ++x) {
+            float3 at = position + (tangent * float(x) + bitangent * float(y)) * voxel;
+            SharcHitData hit;
+            hit.positionWorld = at;
+            hit.normalWorld = n;
+            hit.materialDemodulation = float3(1.0, 1.0, 1.0);
+            uint cacheIndex = kSharcInvalid;
+            uint4 packed = 0;
+            if (sharcQueueRadiance(hit, energy, grid, cacheIndex, packed)) {
+                sharcAddVoxel(cacheIndex, energy, float3(1.0, 1.0, 1.0), 1u);
+            }
+        }
+    }
+}
+
+void sharcFlushWave(uint cacheIndex, uint4 packed) {
+    uint lane = WaveGetLaneIndex();
+    uint lanes = WaveGetLaneCount();
+    uint first = lane;
+    uint4 sum = 0;
+    [loop]
+    for (uint i = 0u; i < lanes; ++i) {
+        uint other = WaveReadLaneAt(cacheIndex, i);
+        uint4 part = WaveReadLaneAt(packed, i);
+        if (other == cacheIndex) {
+            if (i < first) {
+                first = i;
+            }
+            sum += part;
+        }
+    }
+    if (first != lane || cacheIndex == kSharcInvalid) {
+        return;
+    }
+    uint o = sharcAccByte(cacheIndex);
+    uint ignored = 0u;
+    if (sum.x != 0u) {
+        gAcc.InterlockedAdd(o, sum.x, ignored);
+    }
+    if (sum.y != 0u) {
+        gAcc.InterlockedAdd(o + 4u, sum.y, ignored);
+    }
+    if (sum.z != 0u) {
+        gAcc.InterlockedAdd(o + 8u, sum.z, ignored);
+    }
+    if (sum.w != 0u) {
+        gAcc.InterlockedAdd(o + 12u, sum.w, ignored);
+    }
 }
 
 void sharcAddVoxel(uint cacheIndex, float3 sampleValue, float3 sampleWeight, uint sampleData) {
@@ -345,9 +435,7 @@ bool sharcGetCachedRadiance(SharcHitData hit, SharcGrid grid, out float3 radianc
     float3 local = biased / max(voxelSize, 1e-6);
     int3 cell = int3(floor(local));
     float3 frac = local - float3(cell);
-    uint normalBits = (hit.normalWorld.x + kSharcNormalBias >= 0.0 ? 0u : 1u)
-        + (hit.normalWorld.y + kSharcNormalBias >= 0.0 ? 0u : 2u)
-        + (hit.normalWorld.z + kSharcNormalBias >= 0.0 ? 0u : 4u);
+    uint normalBits = 0u;
     float3 sum = 0.0;
     float weightSum = 0.0;
     [unroll]
@@ -368,6 +456,22 @@ bool sharcGetCachedRadiance(SharcHitData hit, SharcGrid grid, out float3 radianc
                 }
                 sum += corner * weight;
                 weightSum += weight;
+            }
+        }
+    }
+    if (weightSum <= 0.0) {
+        [unroll]
+        for (uint side = 0u; side < 2u; ++side) {
+            uint other = side == 0u ? (level > 1u ? level - 1u : 1u) : min(level + 1u, 5u);
+            if (other == level) {
+                continue;
+            }
+            float otherSize = sharcVoxelSize(other, grid);
+            int3 otherCell = int3(floor(biased / max(otherSize, 1e-6)));
+            float3 corner = 0.0;
+            if (sharcLookupCell(otherCell, other, 0u, corner)) {
+                sum += corner;
+                weightSum += 1.0;
             }
         }
     }

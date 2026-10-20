@@ -287,7 +287,7 @@ void restirSun(uint2 px) {
         sigmaVis = 0.0;
         penumbra = 0.0;
     } else if (rayClosest >= 0.0) {
-        penumbra = rayClosest * tan(halfA) * 0.5;
+        penumbra = rayClosest * tan(halfA);
     }
     RAB_LightSample sample = RAB_EmptyLightSample();
     sample.position = surface.worldPos + L * 20000.0;

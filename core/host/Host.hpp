@@ -63,7 +63,8 @@ struct Host {
     HostView view[kHostSlots]{};
     int primary = -1;
     bool ready = false;
-    float clock = 0.0f;
+    uint64_t clockTick = 0;
+    double seconds = 0.0;
     float frameDt = 0.0f;
     uint64_t paceNext = 0;
     HostReleaseFn releaseGpu = nullptr;

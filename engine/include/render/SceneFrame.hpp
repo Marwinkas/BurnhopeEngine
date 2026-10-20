@@ -17,6 +17,8 @@ void sceneFramePlantCubes(SceneFrame* scene);
 void sceneFrameDestroy(SceneFrame* scene, Device& device);
 void sceneFrameReleaseGpu(SceneFrame* scene, Device& device);
 [[nodiscard]] bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt);
+// Один показанный кадр. dt — секунды между vkQueuePresentKHR, не между тиками хоста.
+void sceneFramePresented(SceneFrame* scene, float dt);
 [[nodiscard]] uint8_t sceneFrameActorCount(const SceneFrame* scene);
 void sceneFrameActorName(const SceneFrame* scene, uint8_t index, char* name, uint8_t cap, uint8_t* kind);
 void sceneFrameActorSelect(SceneFrame* scene, uint8_t index);

@@ -52,6 +52,10 @@ struct Swapchain {
     VkSemaphore orderSem = VK_NULL_HANDLE;
     uint64_t orderValue = 0;
     uint64_t presentId = 0;
+    // Интервал между успешными vkQueuePresentKHR. Тик, который не дождался забора, сюда не входит.
+    uint64_t presentTick = 0;
+    float presentDt = 0.0f;
+    uint32_t presentGen = 0;
     // 1 пока кадр в полёте и этот тик его не дождался. Resize не ждёт вечно.
     uint8_t gpuBusy = 0;
     uint64_t clickTick = 0;

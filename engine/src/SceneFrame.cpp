@@ -1676,12 +1676,24 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
         (input.pointer.released & kPointerLeft) != 0 ? 1 : 0);
     flyCamUpdate(scene->fly, input, dt);
     if (dt > 1.0e-4f) {
-        scene->fps = 1.0f / dt;
-        scene->frameMs[scene->frameCursor % 128u] = dt * 1000.0f;
-        scene->frameCursor += 1;
         scene->skyTime += dt;
     }
     return (input.pointer.down & kPointerRight) != 0;
+}
+
+void sceneFramePresented(SceneFrame* scene, float dt) {
+    if (scene == nullptr || dt <= 1.0e-4f) {
+        return;
+    }
+    scene->frameMs[scene->frameCursor % 128u] = dt * 1000.0f;
+    scene->frameCursor += 1;
+    const uint32_t filled = scene->frameCursor < 128u ? scene->frameCursor : 128u;
+    const uint32_t recent = filled < 32u ? filled : 32u;
+    double sum = 0.0;
+    for (uint32_t i = 0; i < recent; ++i) {
+        sum += static_cast<double>(scene->frameMs[(scene->frameCursor - 1u - i) % 128u]);
+    }
+    scene->fps = sum > 0.0 ? static_cast<float>((1000.0 * static_cast<double>(recent)) / sum) : 0.0f;
 }
 
 uint8_t sceneFrameActorCount(const SceneFrame* scene) {
@@ -1864,8 +1876,15 @@ void sceneFrameStats(const SceneFrame* scene, char* out, size_t cap) {
         copy[j] = key;
     }
     const float low = worst > 0.0f ? 1000.0f / worst : scene->fps;
-    const uint32_t at = n > 100u ? n / 100u : 0u;
-    const float one = n > 0 && copy[at] > 0.0f ? 1000.0f / copy[at] : scene->fps;
+    uint32_t slowN = n / 100u;
+    if (slowN < 1u && n > 0u) {
+        slowN = 1u;
+    }
+    float slowSum = 0.0f;
+    for (uint32_t i = 0; i < slowN; ++i) {
+        slowSum += copy[i];
+    }
+    const float one = slowSum > 0.0f ? (1000.0f * static_cast<float>(slowN)) / slowSum : scene->fps;
     std::snprintf(out, cap, "fps %.0f   low %.0f   1%% %.0f   mesh %u/%u", scene->fps, low, one, scene->visibleCount, scene->instanceCount);
 }
 
@@ -2633,6 +2652,7 @@ void sceneFrameRecord(
     stats.visibleMeshlets = scene->visibleCount;
     stats.activeLights = scene->world.lightCount;
     stats.fps = scene->fps;
+    stats.frameTimeMs = scene->fps > 1.0f ? 1000.0f / scene->fps : 0.0f;
     debugFormatStats(stats, scene->title, sizeof(scene->title));
     const float sunC[3] = {sunCx, sunCy, sunCz};
     SunPassData sunData{scene->shadowDepth[flight], scene->instances, scene->shadowVisible, scene->shadowIndirect, scene->shadowStamp, scene->shadowStampValid, scene->shadowStampCount, strideU, sunC, splits};

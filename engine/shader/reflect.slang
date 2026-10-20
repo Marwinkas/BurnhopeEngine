@@ -1,5 +1,5 @@
 // Гибрид: FFX-SSSR по MAX Hi-Z, на промахе один непрозрачный луч в TLAS.
-// Попадание в экран берёт HdrA. Вне экрана прямой свет — тот же список ламп, непрямой — кэш SHaRC.
+// Попадание в экран берёт готовый HdrA (PBR, ReSTIR, SHaRC). Вне экрана — тот же прямой свет, что и SHaRC, плюс кэш.
 // Промах луча — купол неба. Вторичных лучей нет. Y не переворачивается.
 
 #include "frame.slang"
@@ -237,60 +237,6 @@ float3 sssrSky(float3 dir) {
     return sky;
 }
 
-float3 sssrWorldDirect(SharcSurf surf, float3 view, uint2 px) {
-    const float3 sunRaw = gSun.sunDirIntensity.xyz;
-    const float3 sunDir = dot(sunRaw, sunRaw) > 1e-8 ? normalize(sunRaw) : float3(0.0, 1.0, 0.0);
-    const float ndl = saturate(dot(surf.geoNormal, sunDir));
-    const float ndv = saturate(dot(surf.geoNormal, view));
-    const float rough = max(surf.roughness, 0.045);
-    const float3 diffuse = surf.albedo * (1.0 - surf.metallic);
-    const float3 f0 = computeF0(surf.albedo, surf.metallic, computeDielectricF0(0.5));
-    float3 sunCol = gSun.sunColor.rgb;
-    if (max(sunCol.r, max(sunCol.g, sunCol.b)) < 0.02) {
-        sunCol = float3(1.0, 0.92, 0.76);
-    }
-    float inten = gSun.sunDirIntensity.w;
-    if (inten < 0.05) {
-        inten = 8.0;
-    }
-    const float diff = hammonDiffuse(ndl, max(ndv, 0.15), dot(view, sunDir), rough);
-    const float3 H = normalize(sunDir + view);
-    const float a = max(rough * rough, 0.002);
-    const float spec = D_GGX(saturate(dot(surf.geoNormal, H)), a)
-        * V_SmithGGXCorrelated(ndv, ndl, a)
-        * max(dot(F_Schlick(saturate(dot(view, H)), f0), float3(0.299, 0.587, 0.114)), 0.0);
-    float3 direct = (diffuse * diff + f0 * spec * ndl) * sunCol * inten;
-    if (gSharc.lightCount > 0u && (gPass.passMask & 1u) != 0u) {
-        const uint index = (px.x * 1973u ^ px.y * 9277u ^ gSharc.frameIndex) % gSharc.lightCount;
-        const LightGpu lamp = gLights[index];
-        const uint kind = lamp.meta.x;
-        const float3 toLight = lamp.posRadius.xyz - surf.position;
-        const float dist = length(toLight);
-        const float radius = lamp.posRadius.w;
-        if (kind != 0u && radius > 0.0 && dist < radius && dist > 1e-3) {
-            const float3 L = toLight / dist;
-            const float lampNdl = saturate(dot(surf.geoNormal, L));
-            float atten = filamentDistanceAttenuation(dist, radius);
-            if (kind == 2u) {
-                const float cd = dot(L, -normalize(lamp.dirAngle.xyz));
-                const float outer = cos(max(lamp.dirAngle.w, 0.05));
-                const float inner = max(outer + 0.12, cos(max(lamp.dirAngle.w * 0.55, 0.02)));
-                const float cone = saturate((cd - outer) / max(inner - outer, 1e-3));
-                atten *= cd < outer ? 0.0 : cone * cone;
-            }
-            const float lampDiff = hammonDiffuse(lampNdl, max(ndv, 0.15), dot(view, L), rough);
-            const float3 lampCol = lamp.colorIntensity.rgb * lamp.colorIntensity.w;
-            float3 lampRad = diffuse * lampDiff * atten * lampCol * float(gSharc.lightCount);
-            const float peak = max(lampRad.r, max(lampRad.g, lampRad.b));
-            if (peak > 8.0) {
-                lampRad *= 8.0 / peak;
-            }
-            direct += lampRad;
-        }
-    }
-    return max(direct, 0.0);
-}
-
 float3 sssrRt(float3 P, float3 N, float3 worldDir, float2 uv, uint2 px, out float travel) {
     travel = 0.0;
     if (gSharc.tlasLo == 0u && gSharc.tlasHi == 0u) {
@@ -315,8 +261,13 @@ float3 sssrRt(float3 P, float3 N, float3 worldDir, float2 uv, uint2 px, out floa
         if (huv.x >= 0.0 && huv.y >= 0.0 && huv.x <= 1.0 && huv.y <= 1.0
             && (man.x >= 2.0 / screen.x || man.y >= 2.0 / screen.y)) {
             const int2 hp = clamp(int2(screen * huv), int2(0, 0), int2(screen) - int2(1, 1));
-            if (gVis.Load(int3(hp, 0)) != 0u && gDepth.Load(int3(hp, 0)) > 0.0) {
-                return max(gHdr[hp].rgb, 0.0);
+            const float sceneZ = gDepth.Load(int3(hp, 0));
+            if (sceneZ > 0.0) {
+                const float3 sceneP = reconstructWorld(huv, sceneZ);
+                const float gap = length(sceneP - hitP);
+                if (gap < max(0.35, hitT * 0.04)) {
+                    return max(gHdr[hp].rgb, 0.0);
+                }
             }
         }
     }
@@ -324,7 +275,8 @@ float3 sssrRt(float3 P, float3 N, float3 worldDir, float2 uv, uint2 px, out floa
     if (!surf.hit) {
         return sssrSky(worldDir);
     }
-    const float3 direct = sssrWorldDirect(surf, -worldDir, px);
+    uint rng = px.x * 1973u ^ px.y * 9277u ^ gSharc.frameIndex;
+    const float3 direct = sharcDirect(surf, -worldDir, rng);
     SharcHitData sharcHit;
     sharcHit.positionWorld = hitP;
     sharcHit.normalWorld = surf.geoNormal;

@@ -16,7 +16,6 @@
 [[vk::binding(77, 0)]] RWByteAddressBuffer gColor;
 
 #include "sharc_cache.slang"
-#include "sharc_hit.slang"
 
 struct QueryPush {
     uint denoise;
@@ -43,6 +42,8 @@ void sharcAddHdr(uint2 px, float3 indirect, float3 albedo) {
         gColor.Store(o + 12u, asuint(1.0));
         return;
     }
+    const float gain = max(gSharc.giGain, 0.0);
+    add *= gain;
     if (gFrame.debugMode == 4u) {
         gHdr[px] = float4(add.r * 0.8, add.g * 0.8, add.b * 0.8, 1.0);
         return;
@@ -80,7 +81,6 @@ void sharcQuery(uint3 dtid : SV_DispatchThreadID) {
     float4 surf0 = gSurf0[px];
     float4 surf1 = gSurf1[px];
     float3 albedo = max(surf0.rgb, 0.0);
-    float rough = saturate(surf0.w);
     float metal = saturate(surf1.z);
     float ao = saturate(surf1.w);
     float3 position = reconstructWorld(px, depth);
@@ -90,77 +90,18 @@ void sharcQuery(uint3 dtid : SV_DispatchThreadID) {
     } else {
         normal = normalize(normal);
     }
-    float3 view = normalize(gFrame.cameraPos.xyz - position);
+    float3 view = gFrame.cameraPos.xyz - position;
     if (dot(normal, view) < 0.0) {
         normal = -normal;
     }
-    SharcSurf primary = sharcMissSurf();
-    primary.position = position;
-    primary.geoNormal = normal;
-    primary.albedo = albedo;
-    primary.roughness = rough;
-    primary.metallic = metal;
-    primary.hit = true;
-    float gain = gSharc.giGain > 0.0 ? gSharc.giGain : 1.0;
-    SharcGrid grid = sharcGrid();
-    uint bounces = max(gSharc.bouncesMax, 1u);
-    const uint kRays = 4u;
-    float3 indirect = 0.0;
-    [loop]
-    for (uint ray = 0u; ray < kRays; ++ray) {
-        uint rng = px.x * 1973u ^ px.y * 9277u ^ (gSharc.frameIndex * kRays + ray) * 26699u ^ 0x85ebca6bu;
-        float3 direction = 0.0;
-        float3 throughput = 0.0;
-        uint diffuseLobe = 1u;
-        if (!sharcSampleBounce(primary, view, rng, direction, throughput, diffuseLobe)) {
-            continue;
-        }
-        float roughPrev = diffuseLobe != 0u ? 1.0 : rough;
-        throughput *= ao * gain;
-        float3 origin = position + normal * 0.02;
-        float3 sample = 0.0;
-        [loop]
-        for (uint bounce = 0u; bounce < bounces; ++bounce) {
-            float hitT = 0.0;
-            uint prim = 0u;
-            float2 bary = 0.0;
-            if (!sharcTrace(origin, direction, 0.05, 1000.0, hitT, prim, bary)) {
-                break;
-            }
-            float3 hitP = origin + direction * hitT;
-            float3 hitView = -direction;
-            SharcSurf hit = sharcSurface(prim, bary, hitP, hitView);
-            if (!hit.hit) {
-                break;
-            }
-            if (sharcCacheEligible(hitT, hitP, roughPrev, grid)) {
-                SharcHitData sharcHit;
-                sharcHit.positionWorld = hitP;
-                sharcHit.normalWorld = hit.geoNormal;
-                sharcHit.materialDemodulation = hit.demod;
-                float3 cached = 0.0;
-                if (sharcGetCachedRadiance(sharcHit, grid, cached) && sharcLuma(max(cached, 0.0)) > 1e-3) {
-                    sample += max(cached, 0.0) * throughput;
-                    break;
-                }
-            }
-            float3 direct = sharcDirect(hit, hitView, rng);
-            sample += sharcClampFirefly(max(direct, 0.0) * throughput);
-            if (bounce + 1u == bounces) {
-                break;
-            }
-            float3 nextDir = 0.0;
-            float3 weight = 0.0;
-            uint nextDiffuse = 1u;
-            if (!sharcSampleBounce(hit, hitView, rng, nextDir, weight, nextDiffuse)) {
-                break;
-            }
-            throughput *= weight;
-            roughPrev += nextDiffuse != 0u ? 1.0 : hit.roughness;
-            origin = hitP + hit.geoNormal * 0.02;
-            direction = nextDir;
-        }
-        indirect += sample;
+    SharcHitData sharcHit;
+    sharcHit.positionWorld = position;
+    sharcHit.normalWorld = normal;
+    sharcHit.materialDemodulation = max(albedo, float3(0.05, 0.05, 0.05));
+    float3 cached = 0.0;
+    if (!sharcGetCachedRadiance(sharcHit, sharcGrid(), cached) || sharcLuma(max(cached, 0.0)) <= 1e-3) {
+        sharcAddHdr(px, 0.0, albedo);
+        return;
     }
-    sharcAddHdr(px, indirect / float(kRays), albedo);
+    sharcAddHdr(px, max(cached, 0.0) * ao * (1.0 - metal), albedo);
 }

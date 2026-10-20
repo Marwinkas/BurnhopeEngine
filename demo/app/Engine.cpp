@@ -177,6 +177,13 @@ bool sceneTick(void* user, const InputFrame& input, float dt) {
         canvasMaskScene(*canvas, sceneInput);
     }
     const bool flyLook = sceneFrameTick(view->scene, sceneInput, dt);
+    if (view->host != nullptr && view->slot >= 0) {
+        const Swapchain& shown = view->host->view[view->slot].swap;
+        if (shown.presentGen != view->presentSeen) {
+            view->presentSeen = shown.presentGen;
+            sceneFramePresented(view->scene, shown.presentDt);
+        }
+    }
     if ((input.pointer.pressed & kPointerRight) != 0 && canvas != nullptr && canvas->builder != nullptr && !canvasPointerOver(*canvas)) {
         view->lookGrab = 1;
         view->lookX = input.pointer.x;
@@ -658,9 +665,9 @@ void onStats(void* user, uint16_t) {
     uiShow(*hit->canvas->state, hit->page, hit->open != 0);
     auto* flex = hit->canvas->state->ent[hit->dock].try_get_mut<UiFlex>();
     if (flex != nullptr) {
-        flex->width += hit->open != 0 ? 220.0f : -220.0f;
-        if (flex->width < 220.0f) {
-            flex->width = 220.0f;
+        flex->width += hit->open != 0 ? 420.0f : -420.0f;
+        if (flex->width < 300.0f) {
+            flex->width = 300.0f;
         }
     }
 }
@@ -921,9 +928,9 @@ void sceneHud(Canvas& canvas, void* user) {
     UiFlex statsFlex{};
     statsFlex.direction = UiFlexDir::Column;
     statsFlex.widthMode = UiSize::Px;
-    statsFlex.width = 220.0f;
+    statsFlex.width = 420.0f;
     statsFlex.shrink = 0.0f;
-    statsFlex.minW = 180.0f;
+    statsFlex.minW = 360.0f;
     const uint16_t statsPane = uiPanel(*canvas.state, dock, statsFlex, dockPaint());
     uiShow(*canvas.state, statsPane, false);
     UiFlex statsCol{};

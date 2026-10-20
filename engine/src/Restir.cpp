@@ -451,6 +451,8 @@ bool restirCreate(RestirPass& p, Device& d, const DescriptorHeaps& heaps, VkExte
     sigma.storageImg(26, HeapImg::SigmaPenumbra);
     sigma.storageImg(27, HeapImg::SigmaSun);
     sigma.storageImg(28, HeapImg::SigmaHist);
+    sigma.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
+        heapBufOffset(*sigma.raw.heaps, kGradeSlot), static_cast<uint32_t>(sigma.raw.heaps->bufferDescSize));
     di.storageBuf(19, HeapBuf::Lights, true);
     di.storageBuf(20, HeapBuf::Materials, true);
     di.sampledImg(21, HeapImg::Textures);
@@ -781,12 +783,12 @@ void restirRecord(
             imageLayout(cmd, p.sigmaHist.image, p.sigmaHistLayout, VK_IMAGE_LAYOUT_GENERAL,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw, 1);
-            const uint32_t ping = p.sigmaPing[flight] & 1u;
+            const uint32_t ping = p.sigmaPing[0] & 1u;
             RestirPush denoise{};
             denoise.pass = 0;
             denoise.pad0 = flight;
-            denoise.pad1 = flight * 2u + ping;
-            denoise.pad2 = flight * 2u + (1u - ping);
+            denoise.pad1 = ping;
+            denoise.pad2 = 1u - ping;
             bindCompute(cmd, p.sigma, denoise);
             dispatch2D(cmd, extent, 8u);
             imageLayout(cmd, p.sigmaHist.image, p.sigmaHistLayout, VK_IMAGE_LAYOUT_GENERAL,
@@ -795,7 +797,7 @@ void restirRecord(
             denoise.pass = 1;
             bindCompute(cmd, p.sigma, denoise);
             dispatch2D(cmd, extent, 8u);
-            p.sigmaPing[flight] ^= 1u;
+            p.sigmaPing[0] ^= 1u;
         }
     }
     rhiBufferBarrier(cmd, p.ris.buffer, statOff, kRisStatBytes,

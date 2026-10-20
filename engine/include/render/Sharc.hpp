@@ -40,8 +40,8 @@ struct alignas(16) SharcGpuParams {
     uint32_t frameIndex = 0u;
     float radianceScale = 100000.0f;
     float roughnessThreshold = 0.4f;
-    uint32_t downscale = 5u;
-    uint32_t bouncesMax = 4u;
+    uint32_t downscale = 8u;
+    uint32_t bouncesMax = 1u;
     uint32_t tlasLo = 0u;
     uint32_t tlasHi = 0u;
     float giGain = 1.0f;

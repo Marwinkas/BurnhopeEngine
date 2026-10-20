@@ -205,6 +205,7 @@ struct HudContext {
     int slot = -1;
     uint8_t lookGrab = 0;
     uint8_t toolGrab = 0;
+    uint32_t presentSeen = 0;
     float lookX = 0.0f;
     float lookY = 0.0f;
     uint8_t shown = 0xff;
