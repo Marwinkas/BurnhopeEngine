@@ -231,15 +231,15 @@ void sceneHud(Canvas& canvas, void*);
 
 bool engineImportScene() {
     const char* paths[] = {
-        "scene/scene.gltf",
-        "scene/lighter/vintage_lighter_1k.gltf",
+        "testscene/assets/bistro/BistroExterior.gltf",
+        "testscene/assets/bistro/BistroInterior.gltf",
     };
     std::error_code ec;
     std::filesystem::create_directories("cache", ec);
-    if (!sceneImportFbxList(paths, 2, "cache/scene.bhop.tmp")) {
+    if (!sceneImportFbxList(paths, 2, "cache/BistroExterior.bhop.tmp")) {
         return false;
     }
-    std::filesystem::rename("cache/scene.bhop.tmp", "cache/scene.bhop", ec);
+    std::filesystem::rename("cache/BistroExterior.bhop.tmp", "cache/BistroExterior.bhop", ec);
     return !ec;
 }
 
@@ -253,14 +253,14 @@ bool engineInit(Engine& e, int argc, char** argv) {
     }
     if (wantScene(argc, argv)) {
         e.scene = sceneFrameCreate();
-        if (!std::filesystem::exists("cache/scene.bhop")) {
-            spdlog::info("import scene/scene.gltf");
+        if (!std::filesystem::exists("cache/BistroExterior.bhop")) {
+            spdlog::info("import testscene/BistroExterior.fbx");
             if (!engineImportScene()) {
                 spdlog::error("scene import failed");
             }
         }
-        if (!sceneFrameLoadBhop(e.scene, "cache/scene.bhop")) {
-            spdlog::error("cache/scene.bhop missing");
+        if (!sceneFrameLoadBhop(e.scene, "cache/BistroExterior.bhop")) {
+            spdlog::error("cache/BistroExterior.bhop missing");
         }
         ViewDesc main{};
         main.name = "scene";
@@ -1290,7 +1290,7 @@ void sceneHud(Canvas& canvas, void* user) {
     rowSlide(*canvas.state, panel, "Strength", "gtao", 1.0f, 0.0f, 1.0f);
     const uint16_t sscsFold = uiFoldBody(*canvas.state, effects, "SSCS");
     panel = sscsFold;
-    tick("Enabled", "contacten", true);
+    tick("Enabled", "contacten", false);
     panel = group(sscsFold, "sscsBody");
     rowSlide(*canvas.state, panel, "Strength", "contact", 1.0f, 0.0f, 1.0f);
     rowSlide(*canvas.state, panel, "Radius m", "sscsR", 1.0f, 0.05f, 8.0f);
@@ -1375,7 +1375,7 @@ void sceneHud(Canvas& canvas, void* user) {
         uiCommandAddTo(*canvas.state, menu, "FSR", aaFsr, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "TAA", aaTaa, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "FXAA", aaFxaa, canvas.state.get());
-        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Anti-aliasing", "FSR", menu), "aaBtn");
+        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Anti-aliasing", "TAA", menu), "aaBtn");
     }
     panel = group(finalBody, "fsrBody");
     {

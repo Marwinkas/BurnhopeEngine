@@ -16,8 +16,6 @@
 #include "sharc_cache.slang"
 #include "sharc_hit.slang"
 
-// Тайл читает глубину. Один непрозрачный луч уходит в полусферу нормали. Энергия пишется в ячейку этой точки.
-
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void sharcUpdate(uint3 dtid : SV_DispatchThreadID) {
@@ -27,28 +25,39 @@ void sharcUpdate(uint3 dtid : SV_DispatchThreadID) {
     uint2 coarse = uint2((gFrame.extent.x + down - 1u) / down, (gFrame.extent.y + down - 1u) / down);
     bool live = (gSharc.tlasLo != 0u || gSharc.tlasHi != 0u) && dtid.x < coarse.x && dtid.y < coarse.y;
     if (live) {
-        uint2 px = dtid.xy * down + uint2(down / 2u, down / 2u);
+        // Равномерный обход субпикселей тайла, чтобы ни один участок стены не оставался без лучей
+        uint phase = (gSharc.frameIndex + dtid.x * 3u + dtid.y * 5u) & 15u;
+        uint2 subOff = uint2((phase & 3u) * 2u + 1u, (phase >> 2u) * 2u + 1u) % down;
+        uint2 px = dtid.xy * down + subOff;
         px = min(px, gFrame.extent.xy - uint2(1, 1));
+
         float depth = gDepth.Load(int3(px, 0));
         if (gVis.Load(int3(px, 0)) != 0u && depth > 0.0) {
             float2 uv = (float2(px) + 0.5) * gFrame.invExtent;
             float3 position = reconstructWorld(uv, depth);
-            float3 normal = octDecode(gSurf1[px].xy);
-            if (dot(normal, normal) < 0.5) {
-                normal = reconstructNormalFromDepth(gDepth, px, position);
+
+            float3 geoNormal = reconstructNormalFromDepth(gDepth, px, position);
+            float3 surfNormal = octDecode(gSurf1[px].xy);
+            if (dot(geoNormal, geoNormal) < 0.5) {
+                geoNormal = dot(surfNormal, surfNormal) >= 0.5 ? normalize(surfNormal) : float3(0.0, 1.0, 0.0);
+            } else {
+                geoNormal = normalize(geoNormal);
             }
-            normal = normalize(normal);
+
             float3 view = gFrame.cameraPos.xyz - position;
-            view = dot(view, view) > 1e-8 ? normalize(view) : normal;
-            if (dot(normal, view) < 0.0) {
-                normal = -normal;
+            view = dot(view, view) > 1e-8 ? normalize(view) : geoNormal;
+            if (dot(geoNormal, view) < 0.0) {
+                geoNormal = -geoNormal;
             }
+
             int3 bin = int3(floor(position / 0.5));
             uint rng = uint(bin.x) * 1973u ^ uint(bin.y) * 9277u ^ uint(bin.z) * 26699u;
             float turn = sharcRand(rng) * 6.2831853;
             float cs = cos(turn);
             float sn = sin(turn);
-            float3 origin = position + normal * 0.02;
+
+            SharcGrid grid = sharcGrid();
+            float3 origin = position + geoNormal * 0.03;
             float inten = gSun.sunDirIntensity.w;
             if (inten < 0.05) {
                 inten = 8.0;
@@ -56,32 +65,48 @@ void sharcUpdate(uint3 dtid : SV_DispatchThreadID) {
             float3 sky = sharcSkyFill() / inten;
             float3 color = 0.0;
             uint hits = 0u;
+
             [loop]
             for (uint ray = 0u; ray < 4u; ++ray) {
                 float2 disk = float2(float(ray & 1u) + 0.5, float(ray >> 1u) + 0.5) * 0.5 - 0.5;
                 float2 spun = float2(cs * disk.x - sn * disk.y, sn * disk.x + cs * disk.y) + 0.5;
-                float3 direction = sharcCosine(normal, saturate(spun));
+                float3 direction = sharcCosine(geoNormal, saturate(spun));
                 float hitT = 0.0;
                 uint prim = 0u;
                 float2 bary = 0.0;
                 uint ignored;
                 InterlockedAdd(gRayStat[1024u * 128u + 9u].x, 1u, ignored);
-                if (!sharcTrace(origin, direction, 0.05, 80.0, hitT, prim, bary) || hitT < 0.15) {
+
+                if (!sharcTrace(origin, direction, 0.04, 100.0, hitT, prim, bary)) {
+                    color += sky * 0.35;
                     continue;
                 }
                 float3 hitP = origin + direction * hitT;
                 SharcSurf surf = sharcSurface(prim, bary, hitP, -direction);
                 if (!surf.hit) {
+                    color += sky * 0.35;
                     continue;
                 }
-                color += max(sharcDirectLite(surf, -direction) - sky, 0.0);
+
+                // Без вычитания `- sky`, которое убивало цвет кирпичей в ноль!
+                float3 bounceRad = sharcDirectLite(surf, -direction);
+
+                // Подхватываем вторичный отскок из кэша с безопасным коэффициентом 0.35
+                SharcHitData secondHit;
+                secondHit.positionWorld = hitP;
+                secondHit.normalWorld = surf.geoNormal;
+                secondHit.materialDemodulation = surf.albedo * (1.0 - surf.metallic);
+                float3 multiBounce = 0.0;
+                if (sharcGetCachedRadiance(secondHit, grid, multiBounce)) {
+                    bounceRad += multiBounce * 0.35;
+                }
+
+                color += bounceRad;
                 hits += 1u;
             }
-            if (hits > 0u) {
-                sharcPaintEnergy(position, normal, color / float(hits) * 2.5, true);
-            } else {
-                sharcPaintEnergy(position, normal, sky * 0.35, false);
-            }
+
+            float3 avgEnergy = (color * 0.25) * 1.35;
+            sharcPaintEnergy(position, geoNormal, avgEnergy, true);
         }
     }
     sharcFlushWave(cacheIndex, packed);

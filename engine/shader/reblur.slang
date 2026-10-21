@@ -1,5 +1,5 @@
-// SVGF для SHaRC. Цвет — тот же add, что запрос пишет в HDR: три float, смещения 0, 4, 8.
-// Срез 0 сырой, срез 1 история, срез 2 накопление. Проекция как в TAA.
+// SVGF / ReBLUR для SHaRC.
+// Полностью детерминированный пространственно-временной фильтр без кипения.
 
 #include "frame.slang"
 #include "camera.slang"
@@ -46,21 +46,6 @@ void svgfStore(uint o, float3 c, float a) {
     gColor.Store(o + 12u, asuint(a));
 }
 
-float svgfLuma(float3 c) {
-    return dot(max(c, 0.0), float3(0.2126, 0.7152, 0.0722));
-}
-
-static const float2 kSvgfPoisson[8] = {
-    float2(-0.94201624, -0.39906216), float2(0.94558609, -0.76890725),
-    float2(-0.09418410, -0.92938870), float2(0.34495938, 0.29387760),
-    float2(-0.91588581, 0.45771432), float2(-0.81544232, -0.87912464),
-    float2(-0.38277543, 0.27676845), float2(0.97484398, 0.75648379)
-};
-
-float svgfIgn(int2 p) {
-    return frac(52.9829189 * frac(0.06711056 * float(p.x) + 0.00583715 * float(p.y)));
-}
-
 bool svgfInside(int2 p) {
     return p.x >= 0 && p.y >= 0 && p.x < int(gFrame.extent.x) && p.y < int(gFrame.extent.y);
 }
@@ -80,19 +65,19 @@ float svgfViewZ(int2 ip) {
     return max(length(P - gFrame.cameraPos.xyz), 1e-3);
 }
 
-float3 svgfNormal(int2 ip) {
-    float3 n = octDecode(gSurf1[ip].xy);
+float3 svgfGeoNormal(int2 ip) {
     const float depth = gDepth.Load(int3(ip, 0));
     const float3 P = reconstructWorld(uint2(ip), max(depth, 1e-5));
-    if (dot(n, n) < 0.5 || depth <= 0.0) {
-        return reconstructNormalFromDepth(gDepth, uint2(ip), P);
+    float3 geoN = reconstructNormalFromDepth(gDepth, uint2(ip), P);
+    if (dot(geoN, geoN) < 0.5) {
+        geoN = octDecode(gSurf1[ip].xy);
     }
-    n = normalize(n);
+    geoN = dot(geoN, geoN) > 1e-8 ? normalize(geoN) : float3(0.0, 1.0, 0.0);
     const float3 view = gFrame.cameraPos.xyz - P;
-    if (dot(n, view) < 0.0) {
-        n = -n;
+    if (dot(geoN, view) < 0.0) {
+        geoN = -geoN;
     }
-    return n;
+    return geoN;
 }
 
 float3 svgfSample(int2 ip) {
@@ -128,31 +113,20 @@ float3 svgfHistBilinear(float2 uv) {
     return lerp(lerp(c00, c10, f.x), lerp(c01, c11, f.x), f.y);
 }
 
-float svgfGradZ(int2 ip, float z) {
-    const float zl = svgfViewZ(ip + int2(-1, 0));
-    const float zr = svgfViewZ(ip + int2(1, 0));
-    const float zu = svgfViewZ(ip + int2(0, -1));
-    const float zd = svgfViewZ(ip + int2(0, 1));
-    const float gx = (zl > 0.0 && zr > 0.0) ? abs(zr - zl) * 0.5 : 0.0;
-    const float gy = (zu > 0.0 && zd > 0.0) ? abs(zd - zu) * 0.5 : 0.0;
-    return max(max(gx, gy), 0.01);
-}
-
-void svgfComposite(uint2 px, float3 radiance) {
-    const float3 denom = max(gSurf0[px].rgb, float3(0.01, 0.01, 0.01));
+void svgfComposite(uint2 px, float3 irradiance) {
+    const float3 albedo = max(gSurf0[px].rgb, float3(0.02, 0.02, 0.02));
+    const float metal = saturate(gSurf1[px].z);
     const float gain = max(gShade.pad1, 0.0);
-    float3 gi = max(radiance, 0.0) * denom * gain;
-    if (!all(gi == gi)) {
+    float3 gi = max(irradiance, 0.0) * albedo * (1.0 - metal) * gain;
+    if (any(isnan(gi)) || any(isinf(gi))) {
         gi = 0.0;
     }
     if (gFrame.debugMode == 4u) {
-        gHdr[px] = float4(gi.r * 0.8, gi.g * 0.8, gi.b * 0.8, 1.0);
+        gHdr[px] = float4(gi * 0.8, 1.0);
         return;
     }
     float4 hdr = gHdr[px];
-    hdr.r = hdr.r + gi.r;
-    hdr.g = hdr.g + gi.g;
-    hdr.b = hdr.b + gi.b;
+    hdr.rgb += gi;
     gHdr[px] = hdr;
 }
 
@@ -162,13 +136,12 @@ void svgfTemporal(int2 ip) {
         return;
     }
     const float z = svgfViewZ(ip);
-    const float3 n = svgfNormal(ip);
+    const float3 n = svgfGeoNormal(ip);
     const float3 current = svgfSample(ip);
     const float depth = gDepth.Load(int3(ip, 0));
     const float3 P = reconstructWorld(uint2(ip), depth);
-    const float2 currUv = (float2(ip) + 0.5) * gFrame.invExtent;
     const float2 prevUv = nrdPrevUv(P);
-    const float speed = length((currUv - prevUv) * float2(gFrame.extent.xy));
+
     float alpha = 0.0;
     float histLen = 1.0;
     float3 hist = current;
@@ -176,22 +149,20 @@ void svgfTemporal(int2 ip) {
         const int2 prev = nrdUvPx(prevUv);
         const float histA = svgfLoadA(svgfAt(prev, svgfReadSlice()));
         const float zPrev = svgfViewZ(prev);
-        const float nd = dot(n, svgfNormal(prev));
+        const float nd = dot(n, svgfGeoNormal(prev));
         const float dz = abs(z - zPrev) / max(z, 1e-3);
-        if (histA >= 1.0 && zPrev > 1e-3 && nd >= 0.8 && dz <= 0.5) {
+        if (histA >= 1.0 && zPrev > 1e-3 && nd >= 0.8 && dz <= 0.25) {
             hist = svgfHistBilinear(prevUv);
             histLen = min(histA + 1.0, 64.0);
-            alpha = histLen / (histLen + 1.0);
-            if (speed < 0.5 && histLen >= 16.0) {
-                alpha = 1.0;
-            }
+            alpha = min(histLen / (histLen + 1.0), 0.96);
         }
     }
     const float3 accum = lerp(current, hist, alpha);
     svgfStore(svgfAt(ip, svgfWriteSlice()), max(accum, 0.0), histLen);
 }
 
-void svgfAtrous(int2 ip) {
+// Проход 1: Регулярный 3x3 A-Trous фильтр с шагом 4 пикселя (без вращающегося шума!)
+void svgfAtrousWide(int2 ip) {
     const float3 center = svgfSrc(ip);
     const float centerA = svgfSrcA(ip);
     if (!svgfLive(ip)) {
@@ -199,61 +170,71 @@ void svgfAtrous(int2 ip) {
         return;
     }
     const float depth = gDepth.Load(int3(ip, 0));
-    const float3 n = svgfNormal(ip);
-    const float ang = svgfIgn(ip) * 6.2831853;
-    const float cs = cos(ang);
-    const float sn = sin(ang);
-    const float radius = centerA < 16.0 ? 6.0 : 3.0;
+    const float3 n = svgfGeoNormal(ip);
     float3 acc = center;
     float wsum = 1.0;
+
     [unroll]
-    for (uint i = 0u; i < 8u; ++i) {
-        const float2 disk = kSvgfPoisson[i];
-        const float2 rot = float2(cs * disk.x - sn * disk.y, sn * disk.x + cs * disk.y);
-        const int2 q = ip + int2(round(rot * radius));
-        if (!svgfInside(q)) {
-            continue;
+    for (int dy = -1; dy <= 1; ++dy) {
+        [unroll]
+        for (int dx = -1; dx <= 1; ++dx) {
+            if (dx == 0 && dy == 0) {
+                continue;
+            }
+            const int2 q = ip + int2(dx, dy) * 4;
+            if (!svgfInside(q)) {
+                continue;
+            }
+            const float zq = gDepth.Load(int3(q, 0));
+            if (zq <= 0.0) {
+                continue;
+            }
+            const float wn = pow(max(dot(n, svgfGeoNormal(q)), 0.0), 8.0);
+            const float wd = exp(-abs(depth - zq) / max(depth * 0.04, 1e-4));
+            const float wk = (dx == 0 || dy == 0) ? 0.5 : 0.25;
+            const float w = wn * wd * wk;
+            acc += svgfSrc(q) * w;
+            wsum += w;
         }
-        const float zq = gDepth.Load(int3(q, 0));
-        if (zq <= 0.0) {
-            continue;
-        }
-        const float wn = pow(max(dot(n, svgfNormal(q)), 0.0), 16.0);
-        const float wd = exp(-abs(depth - zq) / max(depth * 0.04, 1e-4));
-        const float w = wn * wd * exp(-dot(disk, disk));
-        acc += svgfSrc(q) * w;
-        wsum += w;
     }
     svgfStore(svgfAt(ip, 0u), wsum > 1e-5 ? acc / wsum : center, centerA);
 }
 
-void svgfUpsample(uint2 px, int2 ip) {
+// Проход 2: Финальный регулярный 3x3 A-Trous фильтр с шагом 1 пиксель и композитинг
+void svgfFinalize(uint2 px, int2 ip) {
     if (!svgfLive(ip)) {
         svgfComposite(px, 0.0);
         return;
     }
-    const int2 base = (ip / 2) * 2;
     const float depth = gDepth.Load(int3(ip, 0));
-    const float3 n = svgfNormal(ip);
-    const int2 tap[4] = { base, base + int2(2, 0), base + int2(0, 2), base + int2(2, 2) };
-    float3 acc = 0.0;
-    float wsum = 0.0;
+    const float3 n = svgfGeoNormal(ip);
+    const float3 center = max(svgfLoad(svgfAt(ip, 0u)), 0.0);
+    float3 acc = center;
+    float wsum = 1.0;
+
     [unroll]
-    for (uint i = 0u; i < 4u; ++i) {
-        if (!svgfInside(tap[i])) {
-            continue;
+    for (int dy = -1; dy <= 1; ++dy) {
+        [unroll]
+        for (int dx = -1; dx <= 1; ++dx) {
+            if (dx == 0 && dy == 0) {
+                continue;
+            }
+            const int2 q = ip + int2(dx, dy);
+            if (!svgfInside(q)) {
+                continue;
+            }
+            const float zq = gDepth.Load(int3(q, 0));
+            if (zq <= 0.0) {
+                continue;
+            }
+            const float wn = pow(max(dot(n, svgfGeoNormal(q)), 0.0), 8.0);
+            const float wd = exp(-abs(depth - zq) / max(depth * 0.03, 1e-4));
+            const float wk = (dx == 0 || dy == 0) ? 0.5 : 0.25;
+            const float w = wn * wd * wk;
+            acc += max(svgfLoad(svgfAt(q, 0u)), 0.0) * w;
+            wsum += w;
         }
-        const float zq = gDepth.Load(int3(tap[i], 0));
-        if (zq <= 0.0) {
-            continue;
-        }
-        const float wn = pow(max(dot(n, svgfNormal(tap[i])), 0.0), 32.0);
-        const float wd = exp(-abs(depth - zq) / max(depth * 0.02, 1e-4));
-        const float w = max(wn * wd, 0.0);
-        acc += max(svgfLoad(svgfAt(tap[i], 0u)), 0.0) * w;
-        wsum += w;
     }
-    const float3 center = max(svgfLoad(svgfAt(base, 0u)), 0.0);
     svgfComposite(px, wsum > 1e-5 ? acc / wsum : center);
 }
 
@@ -261,14 +242,6 @@ void svgfUpsample(uint2 px, int2 ip) {
 [numthreads(8, 8, 1)]
 void main(uint3 dtid : SV_DispatchThreadID) {
     if (gFrame.debugMode != 0u && gFrame.debugMode != 4u) {
-        return;
-    }
-    if (gPush.pass == 1u) {
-        const uint2 half = max(gFrame.extent.xy / 2u, uint2(1u, 1u));
-        if (dtid.x >= half.x || dtid.y >= half.y) {
-            return;
-        }
-        svgfAtrous(int2(dtid.xy) * 2);
         return;
     }
     if (dtid.x >= gFrame.extent.x || dtid.y >= gFrame.extent.y) {
@@ -279,5 +252,9 @@ void main(uint3 dtid : SV_DispatchThreadID) {
         svgfTemporal(ip);
         return;
     }
-    svgfUpsample(dtid.xy, ip);
+    if (gPush.pass == 1u) {
+        svgfAtrousWide(ip);
+        return;
+    }
+    svgfFinalize(dtid.xy, ip);
 }

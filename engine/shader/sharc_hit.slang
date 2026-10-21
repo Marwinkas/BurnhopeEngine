@@ -1,5 +1,4 @@
 // Попадание в тот же TLAS, что и каскады: 48 байт на вершину в HeapBuf::Rc.
-// Прямой свет — солнце с теневым лучом, эмиссия и один аналитический источник, как в сэмпле SHaRC.
 
 [[vk::binding(12, 0)]] Texture2D<float4> gTex[768];
 [[vk::binding(14, 0)]] StructuredBuffer<MaterialGpu> gMat;
@@ -102,28 +101,26 @@ SharcSurf sharcSurface(uint prim, float2 bary, float3 position, float3 view) {
         metal = saturate(mat.metallic);
         emissive = max(mat.emissive, 0.0);
         if (mat.albedo > 0u && mat.albedo < 768u) {
-            float4 texel = gTex[NonUniformResourceIndex(mat.albedo)].SampleLevel(gWrap, uv, 0.0);
+            float4 texel = gTex[NonUniformResourceIndex(mat.albedo)].SampleLevel(gWrap, uv, 2.0);
             albedo *= max(texel.rgb, 0.0);
         }
         if (mat.orm > 0u && mat.orm < 768u) {
-            float3 orm = gTex[NonUniformResourceIndex(mat.orm)].SampleLevel(gWrap, uv, 0.0).rgb;
+            float3 orm = gTex[NonUniformResourceIndex(mat.orm)].SampleLevel(gWrap, uv, 2.0).rgb;
             rough = saturate(orm.g);
             metal = saturate(orm.b);
         }
         if (mat.emissiveTex > 0u && mat.emissiveTex < 768u) {
-            emissive *= max(gTex[NonUniformResourceIndex(mat.emissiveTex)].SampleLevel(gWrap, uv, 0.0).r, 0.0);
+            emissive *= max(gTex[NonUniformResourceIndex(mat.emissiveTex)].SampleLevel(gWrap, uv, 2.0).r, 0.0);
         }
     }
     float3 diffuse = albedo * (1.0 - metal);
-    float3 f0 = computeF0(albedo, metal, computeDielectricF0(0.5));
-    float3 fAvg = f0 + (1.0 - f0) * (1.0 / 21.0);
     surf.position = position;
     surf.geoNormal = face;
-    surf.albedo = albedo;
-    surf.demod = max(diffuse, float3(0.05, 0.05, 0.05)) + max(f0, float3(0.02, 0.02, 0.02)) * sharcLuma(fAvg);
+    surf.albedo = clamp(albedo, 0.02, 0.95);
+    surf.demod = clamp(diffuse, float3(0.1, 0.1, 0.1), float3(1.0, 1.0, 1.0));
     surf.roughness = rough;
     surf.metallic = metal;
-    surf.emissive = emissive;
+    surf.emissive = min(emissive, 2.0);
     surf.hit = true;
     return surf;
 }
@@ -153,14 +150,17 @@ bool sharcTrace(float3 origin, float3 direction, float tMin, float tMax, out flo
 }
 
 float sharcSunVis(float3 position, float3 normal, float3 sunDir, float ndl) {
-    if (ndl <= 0.005 || gFrame.disableShadow != 0u || (gPass.passMask & 256u) == 0u) {
-        return ndl > 0.005 && (gPass.passMask & 256u) != 0u ? 1.0 : 0.0;
+    if (ndl <= 0.005 || (gPass.passMask & 256u) == 0u) {
+        return 0.0;
+    }
+    if (gFrame.disableShadow != 0u) {
+        return 1.0;
     }
     float hitT = 0.0;
     uint prim = 0u;
     float2 bary = 0.0;
-    bool blocked = sharcTrace(position + normal * 0.02, sunDir, 0.05, 500.0, hitT, prim, bary);
-    return blocked ? 0.0 : 1.0;
+    bool blocked = sharcTrace(position + normal * 0.03, sunDir, 0.04, 150.0, hitT, prim, bary);
+    return blocked ? 0.15 : 1.0;
 }
 
 float3 sharcSunDir() {
@@ -169,8 +169,7 @@ float3 sharcSunDir() {
 }
 
 float3 sharcSunEnergy(float3 sunCol) {
-    float lum = dot(max(sunCol, 0.0), float3(0.2126, 0.7152, 0.0722));
-    return float3(lum, lum, lum);
+    return max(sunCol, 0.0);
 }
 
 float3 sharcSkyFill() {
@@ -178,7 +177,7 @@ float3 sharcSkyFill() {
     if (inten < 0.05) {
         inten = 8.0;
     }
-    float3 sky = float3(0.78, 0.82, 0.88) * (inten * 0.055);
+    float3 sky = float3(0.78, 0.82, 0.88) * (inten * 0.06);
     if ((gPass.passMask & 256u) == 0u) {
         sky *= 0.15;
     }
@@ -199,58 +198,12 @@ float3 sharcCosine(float3 normal, float2 u) {
     return sharcBasis(normal, float3(radius * cos(phi), radius * sin(phi), z));
 }
 
+// Полный расчёт прямого света в точке отскока: учитывает солнце + ВСЕ лампы в радиусе досягаемости (без мёртвых зон!)
 float3 sharcDirectLite(SharcSurf surf, float3 view) {
     float3 sunDir = sharcSunDir();
     float ndl = saturate(dot(surf.geoNormal, sunDir));
     float ndv = saturate(dot(surf.geoNormal, view));
-    float3 f0 = computeF0(surf.albedo, surf.metallic, computeDielectricF0(0.5));
-    float3 diffuse = lerp(surf.albedo * (1.0 - surf.metallic), f0, surf.metallic);
-    float3 sunCol = gSun.sunColor.rgb;
-    if (max(sunCol.r, max(sunCol.g, sunCol.b)) < 0.02) {
-        sunCol = float3(1.0, 0.92, 0.76);
-    }
-    float inten = gSun.sunDirIntensity.w;
-    if (inten < 0.05) {
-        inten = 8.0;
-    }
-    float rough = max(surf.roughness, 0.045);
-    float diff = hammonDiffuse(ndl, max(ndv, 0.15), dot(view, sunDir), rough);
-    float3 direct = (diffuse * diff) * sharcSunEnergy(sunCol) * inten;
-    float wrap = saturate(surf.geoNormal.y * 0.4 + 0.6);
-    direct += diffuse * sharcSkyFill() * wrap;
-    direct += surf.albedo * surf.emissive;
-    if (gSharc.lightCount > 0u && (gPass.passMask & 1u) != 0u) {
-        uint index = (asuint(surf.position.x) ^ asuint(surf.position.y) ^ asuint(surf.position.z)) % gSharc.lightCount;
-        LightGpu lamp = gLights[index];
-        uint kind = lamp.meta.x;
-        float3 toLight = lamp.posRadius.xyz - surf.position;
-        float dist = length(toLight);
-        float radius = lamp.posRadius.w;
-        if (kind != 0u && radius > 0.0 && dist < radius && dist > 1e-3) {
-            float3 L = toLight / dist;
-            float lampNdl = saturate(dot(surf.geoNormal, L));
-            float atten = filamentDistanceAttenuation(dist, radius);
-            if (kind == 2u) {
-                float cd = dot(L, -normalize(lamp.dirAngle.xyz));
-                float outer = cos(max(lamp.dirAngle.w, 0.05));
-                float inner = max(outer + 0.12, cos(max(lamp.dirAngle.w * 0.55, 0.02)));
-                float cone = saturate((cd - outer) / max(inner - outer, 1e-3));
-                atten *= cd < outer ? 0.0 : cone * cone;
-            }
-            float lampDiff = hammonDiffuse(lampNdl, max(ndv, 0.15), dot(view, L), rough);
-            float3 lampCol = lamp.colorIntensity.rgb * lamp.colorIntensity.w;
-            direct += diffuse * lampDiff * atten * lampCol;
-        }
-    }
-    return max(direct, 0.0) / inten;
-}
-
-float3 sharcDirect(SharcSurf surf, float3 view, inout uint rng) {
-    float3 sunDir = sharcSunDir();
-    float ndl = saturate(dot(surf.geoNormal, sunDir));
-    float ndv = saturate(dot(surf.geoNormal, view));
     float3 diffuse = surf.albedo * (1.0 - surf.metallic);
-    float3 f0 = computeF0(surf.albedo, surf.metallic, computeDielectricF0(0.5));
     float3 sunCol = gSun.sunColor.rgb;
     if (max(sunCol.r, max(sunCol.g, sunCol.b)) < 0.02) {
         sunCol = float3(1.0, 0.92, 0.76);
@@ -262,25 +215,34 @@ float3 sharcDirect(SharcSurf surf, float3 view, inout uint rng) {
     float vis = sharcSunVis(surf.position, surf.geoNormal, sunDir, ndl);
     float rough = max(surf.roughness, 0.045);
     float diff = hammonDiffuse(ndl, max(ndv, 0.15), dot(view, sunDir), rough);
-    float3 H = normalize(sunDir + view);
-    float a = max(rough * rough, 0.002);
-    float spec = D_GGX(saturate(dot(surf.geoNormal, H)), a)
-        * V_SmithGGXCorrelated(ndv, ndl, a)
-        * sharcLuma(F_Schlick(saturate(dot(view, H)), f0));
-    float3 direct = (diffuse * diff + f0 * spec * ndl) * vis * sharcSunEnergy(sunCol) * inten;
+    float3 direct = (diffuse * diff) * vis * sharcSunEnergy(sunCol) * inten;
+
     float wrap = saturate(surf.geoNormal.y * 0.4 + 0.6);
     direct += diffuse * sharcSkyFill() * wrap;
-    direct += surf.albedo * surf.emissive;
+    direct += surf.albedo * min(surf.emissive, 1.5);
+
     if (gSharc.lightCount > 0u && (gPass.passMask & 1u) != 0u) {
-        uint index = sharcRng(rng) % gSharc.lightCount;
-        LightGpu lamp = gLights[index];
-        uint kind = lamp.meta.x;
-        float3 toLight = lamp.posRadius.xyz - surf.position;
-        float dist = length(toLight);
-        float radius = lamp.posRadius.w;
-        if (kind != 0u && radius > 0.0 && dist < radius && dist > 1e-3) {
+        uint count = min(gSharc.lightCount, 64u);
+        float3 lampSum = 0.0;
+        [loop]
+        for (uint i = 0u; i < count; ++i) {
+            LightGpu lamp = gLights[i];
+            uint kind = lamp.meta.x;
+            float radius = lamp.posRadius.w;
+            if (kind == 0u || radius <= 0.0) {
+                continue;
+            }
+            float3 toLight = lamp.posRadius.xyz - surf.position;
+            float dist2 = dot(toLight, toLight);
+            if (dist2 >= radius * radius || dist2 <= 1e-6) {
+                continue;
+            }
+            float dist = sqrt(dist2);
             float3 L = toLight / dist;
             float lampNdl = saturate(dot(surf.geoNormal, L));
+            if (lampNdl <= 0.0) {
+                continue;
+            }
             float atten = filamentDistanceAttenuation(dist, radius);
             if (kind == 2u) {
                 float cd = dot(L, -normalize(lamp.dirAngle.xyz));
@@ -289,49 +251,23 @@ float3 sharcDirect(SharcSurf surf, float3 view, inout uint rng) {
                 float cone = saturate((cd - outer) / max(inner - outer, 1e-3));
                 atten *= cd < outer ? 0.0 : cone * cone;
             }
-            float lampVis = 1.0;
-            if (lampNdl > 0.005 && gFrame.disableShadow == 0u) {
-                float lampT = 0.0;
-                uint lampPrim = 0u;
-                float2 lampBary = 0.0;
-                if (sharcTrace(surf.position + surf.geoNormal * 0.02, L, 0.02, max(dist - 0.04, 0.05), lampT, lampPrim, lampBary)) {
-                    lampVis = 0.0;
-                }
-            }
             float lampDiff = hammonDiffuse(lampNdl, max(ndv, 0.15), dot(view, L), rough);
             float3 lampCol = lamp.colorIntensity.rgb * lamp.colorIntensity.w;
-            float3 lampRad = diffuse * lampDiff * atten * lampVis * lampCol * float(gSharc.lightCount);
-            float peak = max(lampRad.r, max(lampRad.g, lampRad.b));
-            if (peak > 8.0) {
-                lampRad *= 8.0 / peak;
-            }
-            direct += lampRad;
+            lampSum += diffuse * lampDiff * atten * lampCol;
         }
+        direct += min(lampSum, float3(inten * 0.8, inten * 0.8, inten * 0.8));
     }
-    return max(direct, 0.0);
+    return sharcClampFirefly(max(direct, 0.0) / inten);
+}
+
+float3 sharcDirect(SharcSurf surf, float3 view, inout uint rng) {
+    return sharcDirectLite(surf, view);
 }
 
 bool sharcSampleBounce(SharcSurf surf, float3 view, inout uint rng, out float3 direction, out float3 weight, out uint diffuseLobe) {
-    direction = surf.geoNormal;
-    weight = 0.0;
-    diffuseLobe = 1u;
-    float3 f0 = computeF0(surf.albedo, surf.metallic, computeDielectricF0(0.5));
-    float specProb = saturate(max(f0.r, max(f0.g, f0.b)));
-    specProb *= saturate(1.0 - surf.roughness);
     float2 u = float2(sharcRand(rng), sharcRand(rng));
-    if (sharcRand(rng) < specProb) {
-        direction = ggxReflect(surf.geoNormal, view, surf.roughness, u);
-        diffuseLobe = 0u;
-        float ndl = saturate(dot(surf.geoNormal, direction));
-        if (ndl < 0.02) {
-            return false;
-        }
-        float3 H = normalize(direction + view);
-        weight = F_Schlick(saturate(dot(view, H)), f0) / max(specProb, 1e-3);
-        return true;
-    }
     direction = sharcCosine(surf.geoNormal, u);
     diffuseLobe = 1u;
-    weight = surf.albedo * (1.0 - surf.metallic) / max(1.0 - specProb, 1e-3);
+    weight = surf.albedo * (1.0 - surf.metallic);
     return dot(surf.geoNormal, direction) > 0.02;
 }

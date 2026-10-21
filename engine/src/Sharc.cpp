@@ -275,13 +275,13 @@ void sharcRecord(
     params.prevZ = p.prevZ;
     params.levelBias = 0.0f;
     params.capacity = kSharcCapacity;
-    params.accumulationFrameNum = 20u;
-    params.staleFrameNum = 60u;
+    params.accumulationFrameNum = 32u;
+    params.staleFrameNum = 128u;
     params.frameIndex = p.frameIndex;
-    params.radianceScale = 100000.0f;
+    params.radianceScale = 1000.0f; // Канонический SHARC_RADIANCE_SCALE = 1e3f (исключает переполнение uint32)
     params.roughnessThreshold = 0.4f;
     params.downscale = 8u;
-    params.bouncesMax = 1u;
+    params.bouncesMax = 2u;
     params.tlasLo = static_cast<uint32_t>(tlas);
     params.tlasHi = static_cast<uint32_t>(tlas >> 32);
     params.giGain = giGain > 0.0f ? giGain : 1.0f;
@@ -354,10 +354,7 @@ void sharcRecord(
         GpuZone zone(profiler, cmd, "GI denoise");
         for (uint32_t pass = 0u; pass < 3u; ++pass) {
             cmdPushFlightMode(cmd, VK_SHADER_STAGE_COMPUTE_BIT, flight, pass);
-            const VkExtent2D denoiseExtent = pass == 1u
-                ? VkExtent2D{std::max(extent.width / 2u, 1u), std::max(extent.height / 2u, 1u)}
-                : extent;
-            dispatch2D(cmd, denoiseExtent, 8u);
+            dispatch2D(cmd, extent, 8u);
             if (pass + 1u < 3u) {
                 bufferBarrierComputeWriteToReadWrite(cmd, p.color.buffer, p.color.size);
             }

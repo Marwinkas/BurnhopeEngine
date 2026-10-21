@@ -27,31 +27,34 @@ struct QueryPush {
 [[vk::push_constant]]
 QueryPush gPush;
 
-void sharcAddHdr(uint2 px, float3 indirect, float3 albedo) {
-    float3 add = max(indirect, 0.0);
-    if (!all(add == add)) {
-        add = 0.0;
+// Статичный пространственный Interleaved Gradient Noise (БЕЗ frameIndex — никогда не мигает во времени!)
+float2 querySpatialDither(uint2 px) {
+    float u = frac(52.9829189 * frac(0.06711056 * float(px.x) + 0.00583715 * float(px.y))) - 0.5;
+    float v = frac(52.9829189 * frac(0.00583715 * float(px.x) + 0.06711056 * float(px.y))) - 0.5;
+    return float2(u, v);
+}
+
+void sharcAddHdr(uint2 px, float3 irradiance, float3 albedo, float metal) {
+    float3 cleanIrr = max(irradiance, 0.0);
+    if (any(isnan(cleanIrr)) || any(isinf(cleanIrr))) {
+        cleanIrr = 0.0;
     }
     if (gPush.denoise != 0u) {
-        const float3 denom = max(albedo, float3(0.01, 0.01, 0.01));
-        const float3 irr = add / denom;
         const uint o = (px.y * gFrame.extent.x + px.x) * 16u;
-        gColor.Store(o, asuint(irr.r));
-        gColor.Store(o + 4u, asuint(irr.g));
-        gColor.Store(o + 8u, asuint(irr.b));
+        gColor.Store(o, asuint(cleanIrr.r));
+        gColor.Store(o + 4u, asuint(cleanIrr.g));
+        gColor.Store(o + 8u, asuint(cleanIrr.b));
         gColor.Store(o + 12u, asuint(1.0));
         return;
     }
     const float gain = max(gSharc.giGain, 0.0);
-    add *= gain;
+    float3 add = cleanIrr * max(albedo, float3(0.02, 0.02, 0.02)) * (1.0 - metal) * gain;
     if (gFrame.debugMode == 4u) {
-        gHdr[px] = float4(add.r * 0.8, add.g * 0.8, add.b * 0.8, 1.0);
+        gHdr[px] = float4(add * 0.8, 1.0);
         return;
     }
     float4 hdr = gHdr[px];
-    hdr.r = hdr.r + add.r;
-    hdr.g = hdr.g + add.g;
-    hdr.b = hdr.b + add.b;
+    hdr.rgb += add;
     gHdr[px] = hdr;
 }
 
@@ -67,14 +70,14 @@ void sharcQuery(uint3 dtid : SV_DispatchThreadID) {
     }
     if (gVis.Load(int3(px, 0)) == 0u || (gSharc.tlasLo == 0u && gSharc.tlasHi == 0u)) {
         if (gFrame.debugMode == 4u || gPush.denoise != 0u) {
-            sharcAddHdr(px, 0.0, float3(1.0, 1.0, 1.0));
+            sharcAddHdr(px, 0.0, float3(1.0, 1.0, 1.0), 0.0);
         }
         return;
     }
     float depth = gDepth.Load(int3(px, 0));
     if (depth <= 0.0) {
         if (gFrame.debugMode == 4u || gPush.denoise != 0u) {
-            sharcAddHdr(px, 0.0, float3(1.0, 1.0, 1.0));
+            sharcAddHdr(px, 0.0, float3(1.0, 1.0, 1.0), 0.0);
         }
         return;
     }
@@ -84,24 +87,42 @@ void sharcQuery(uint3 dtid : SV_DispatchThreadID) {
     float metal = saturate(surf1.z);
     float ao = saturate(surf1.w);
     float3 position = reconstructWorld(px, depth);
-    float3 normal = octDecode(surf1.xy);
-    if (dot(normal, normal) < 0.5) {
-        normal = reconstructNormalFromDepth(gDepth, px, position);
+
+    float3 geoNormal = reconstructNormalFromDepth(gDepth, px, position);
+    float3 surfNormal = octDecode(surf1.xy);
+    if (dot(geoNormal, geoNormal) < 0.5) {
+        geoNormal = dot(surfNormal, surfNormal) >= 0.5 ? normalize(surfNormal) : float3(0.0, 1.0, 0.0);
     } else {
-        normal = normalize(normal);
+        geoNormal = normalize(geoNormal);
     }
+
     float3 view = gFrame.cameraPos.xyz - position;
-    if (dot(normal, view) < 0.0) {
-        normal = -normal;
+    if (dot(geoNormal, view) < 0.0) {
+        geoNormal = -geoNormal;
     }
+
+    SharcGrid grid = sharcGrid();
+    float3 queryPos = position;
+
+    // Статичный пространственный дизер в касательной плоскости (сглаживается фильтрами без покадрового шума)
+    if (gPush.denoise != 0u) {
+        float voxel = sharcVoxelSize(sharcLevel(position, grid), grid);
+        float3 axis = abs(geoNormal.y) < 0.999 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+        float3 tangent = normalize(cross(axis, geoNormal));
+        float3 bitangent = cross(geoNormal, tangent);
+        float2 j = querySpatialDither(px) * (voxel * 0.25);
+        queryPos += tangent * j.x + bitangent * j.y;
+    }
+
     SharcHitData sharcHit;
-    sharcHit.positionWorld = position;
-    sharcHit.normalWorld = normal;
-    sharcHit.materialDemodulation = max(albedo, float3(0.05, 0.05, 0.05));
+    sharcHit.positionWorld = queryPos;
+    sharcHit.normalWorld = geoNormal;
+    sharcHit.materialDemodulation = float3(1.0, 1.0, 1.0);
+
     float3 cached = 0.0;
-    if (!sharcGetCachedRadiance(sharcHit, sharcGrid(), cached) || sharcLuma(max(cached, 0.0)) <= 1e-3) {
-        sharcAddHdr(px, 0.0, albedo);
+    if (!sharcGetCachedRadiance(sharcHit, grid, cached) || sharcLuma(max(cached, 0.0)) <= 1e-4) {
+        sharcAddHdr(px, 0.0, albedo, metal);
         return;
     }
-    sharcAddHdr(px, max(cached, 0.0) * ao * (1.0 - metal), albedo);
+    sharcAddHdr(px, max(cached, 0.0) * ao, albedo, metal);
 }
