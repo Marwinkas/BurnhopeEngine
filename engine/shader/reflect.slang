@@ -42,7 +42,6 @@ FlightPush gPush;
 
 static const float kSssrFloatMax = 3.402823466e+38;
 static const float kSssrMirror = 0.06;
-static const float kSssrThickness = 0.60;
 static const int kSssrMaxMip = 5;
 static const int2 kSssrPrefilter[15] = {
     int2(0, 1), int2(-2, 1), int2(2, -3), int2(-3, 0), int2(1, 2), int2(-1, -2), int2(3, 0), int2(-3, 3),
@@ -173,7 +172,7 @@ float3 sssrMarch(float3 origin, float3 direction, int mostDetailed, out bool val
     float currentT;
     float3 position;
     sssrInitialAdvance(origin, direction, invDirection, mipRes, mipInv, floorOffset, uvOffset, position, currentT);
-    const int stepCap = int(clamp(min(gSsr.steps, 32.0), 8.0, 32.0));
+    const int stepCap = int(clamp(gSsr.steps, 8.0, 96.0));
     int i = 0;
     validHit = false;
     while (i < stepCap && currentMip >= mostDetailed) {
@@ -200,8 +199,12 @@ float3 sssrMarch(float3 origin, float3 direction, int mostDetailed, out bool val
     return position;
 }
 
-bool sssrTakesRay(float rough) {
-    return rough <= 0.65;
+bool sssrTakesRay(float rough, float metal) {
+    return rough <= clamp(gSsr.cutoff, 0.02, 1.0) || metal >= clamp(gSsr.b1, 0.0, 1.0);
+}
+
+bool sssrHardware(float rough, float metal) {
+    return rough <= clamp(gSsr.b0, 0.0, 1.0) || metal >= clamp(gSsr.b1, 0.0, 1.0);
 }
 
 float sssrValidate(float3 hit, float2 uv, float3 worldDir, float2 screen) {
@@ -221,16 +224,18 @@ float sssrValidate(float3 hit, float2 uv, float3 worldDir, float2 screen) {
     if (dot(hitNormal, worldDir) > 0.0) {
         return 0.0;
     }
+    const float3 cam = gFrame.cameraPos.xyz;
     const float3 surfaceP = reconstructWorld(hit.xy, surfaceZ);
     const float3 hitP = reconstructWorld(hit.xy, hit.z);
-    const float distance = length(surfaceP - hitP);
-    const float camDist = max(length(hitP - gFrame.cameraPos.xyz), 0.05);
-    const float thick = max(max(gSsr.thick, kSssrThickness), camDist * 0.02);
-    const float2 fov = 0.05 * float2(screen.y / max(screen.x, 1.0), 1.0);
-    const float2 border = smoothstep(0.0, fov, hit.xy) * (1.0 - smoothstep(1.0 - fov, 1.0, hit.xy));
-    float confidence = 1.0 - smoothstep(0.0, thick, distance);
-    confidence *= confidence;
-    return border.x * border.y * confidence;
+    const float sceneDist = max(length(surfaceP - cam), 0.05);
+    const float behind = length(hitP - cam) - sceneDist;
+    const float thick = max(gSsr.thick, 0.02);
+    if (behind < -0.02 || behind > thick) {
+        return 0.0;
+    }
+    const float edge = max(gSsr.b2, 0.0);
+    const float2 edgePx = min(hit.xy, float2(1.0, 1.0) - hit.xy) * screen;
+    return edge <= 0.5 ? 1.0 : saturate(min(edgePx.x, edgePx.y) / edge);
 }
 
 float3 sssrSky(float3 dir) {
@@ -292,39 +297,24 @@ float3 sssrRt(float3 P, float3 N, float3 worldDir, float2 uv, uint2 px, out floa
     return max(direct + max(indirect, 0.0), 0.0);
 }
 
-groupshared uint tileGloss;
-
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void reflectTrace(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
-    if (gtid == 0u) {
-        tileGloss = 0u;
-    }
-    GroupMemoryBarrierWithGroupSync();
+void reflectTrace(uint3 dtid : SV_DispatchThreadID) {
     const uint2 px = dtid.xy;
-    const bool inside = px.x < gFrame.extent.x && px.y < gFrame.extent.y;
+    if (px.x >= gFrame.extent.x || px.y >= gFrame.extent.y) {
+        return;
+    }
     const int2 ip = int2(px);
     const bool litView = gFrame.debugMode == 0u || gFrame.debugMode == 7u;
-    if (inside && litView) {
-        const uint vis = gVis.Load(int3(ip, 0));
-        const float depth = gDepth.Load(int3(ip, 0));
-        const float rough = gSurf0[ip].w;
-        if (vis != 0u && depth > 0.0 && sssrTakesRay(rough)) {
-            uint ignored;
-            InterlockedOr(tileGloss, 1u, ignored);
-        }
-    }
-    GroupMemoryBarrierWithGroupSync();
-    if (!inside || tileGloss == 0u || !litView) {
-        if (inside) {
-            gReflect[ip] = 0.0;
-        }
+    if (!litView) {
+        gReflect[ip] = 0.0;
         return;
     }
     const uint vis = gVis.Load(int3(ip, 0));
     const float depth = gDepth.Load(int3(ip, 0));
     const float rough = gSurf0[ip].w;
-    if (vis == 0u || depth <= 0.0 || !sssrTakesRay(rough)) {
+    const float metal = saturate(gSurf1[ip].z);
+    if (vis == 0u || depth <= 0.0 || !sssrTakesRay(rough, metal)) {
         gReflect[ip] = 0.0;
         return;
     }
@@ -360,29 +350,28 @@ void reflectTrace(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         confidence = 0.0;
     }
     float3 radiance = 0.0;
-    if (confidence > 0.0) {
+    float screenW = 0.0;
+    if (confidence > 0.0 && hit.x >= 0.0 && hit.y >= 0.0 && hit.x <= 1.0 && hit.y <= 1.0) {
         const int2 hitPx = clamp(int2(screen * hit.xy), int2(0, 0), int2(screen) - int2(1, 1));
         const float hitDepth = gDepth.Load(int3(hitPx, 0));
         const float3 hitWorld = reconstructWorld(hit.xy, hitDepth);
         const float3 hitN = sssrLoadNormal(hitPx);
         const bool sameFace = abs(dot(hitWorld - P, N)) < 0.12 && dot(hitN, N) > 0.85;
-        if (sameFace) {
-            confidence = 0.0;
-        } else {
-            radiance = max(gHdr[hitPx].rgb, 0.0) * confidence;
+        if (!sameFace) {
+            radiance = max(gHdr[hitPx].rgb, 0.0);
+            screenW = confidence;
         }
     }
-    if (confidence <= 0.0 && rough < 0.25) {
+    if (screenW < 0.98 && sssrHardware(rough, metal)) {
         float travel = 0.0;
-        radiance = sssrRt(P, N, worldDir, uv, px, travel);
-        rayLength = travel;
-        confidence = rayLength > 0.0 ? 1.0 : 0.0;
-    } else if (confidence <= 0.0) {
+        const float3 traced = sssrRt(P, N, worldDir, uv, px, travel);
+        radiance = lerp(traced, radiance, screenW);
+        rayLength = lerp(travel, rayLength, screenW);
+    } else if (screenW <= 0.0) {
         radiance = sssrSky(worldDir);
         rayLength = max(gSsr.maxDist, 4.0);
-        confidence = 1.0;
     }
-    gReflect[ip] = float4(radiance, confidence > 0.0 ? rayLength : 0.0);
+    gReflect[ip] = float4(max(radiance, 0.0), rayLength > 0.0 ? rayLength : 0.0);
 }
 
 float sssrLuma(float3 color) {
@@ -485,7 +474,7 @@ void reflectUp(uint3 dtid : SV_DispatchThreadID) {
     const float4 surfN = gSurf1[ip];
     const float rough = surf.w;
     const float metal = saturate(surfN.z);
-    if (!sssrTakesRay(rough)) {
+    if (!sssrTakesRay(rough, metal)) {
         sssrStoreHist(ip, 0.0);
         return;
     }
@@ -493,18 +482,18 @@ void reflectUp(uint3 dtid : SV_DispatchThreadID) {
     const float blur = max(gSsr.stride, 0.25) * lerp(1.0, 3.0, saturate((rough - 0.25) / 0.40));
     const float variance = rough <= kSssrMirror ? 0.0 : rough * rough;
     float3 resolved = raw.rgb;
-    float3 avg = raw.rgb;
     if (raw.a > 0.0 && variance > 0.0) {
         const float3 n0 = sssrLoadNormal(ip);
         const float d0 = gDepth.Load(int3(ip, 0));
         const float varianceWeight = max(0.1, 1.0 - exp(-(variance * 4.4)));
         float wSum = sssrRadianceWeight(raw.rgb, raw.rgb, variance);
         float3 acc = raw.rgb * wSum;
-        float avgW = 1.0;
-        float3 avgAcc = raw.rgb;
         for (int i = 0; i < 15; ++i) {
             const int2 delta = int2(round(float2(kSssrPrefilter[i]) * blur));
-            const int2 tap = clamp(ip + delta, int2(0, 0), int2(screen) - int2(1, 1));
+            const int2 tap = ip + delta;
+            if (tap.x < 0 || tap.y < 0 || tap.x >= int(screen.x) || tap.y >= int(screen.y)) {
+                continue;
+            }
             const float4 nb = gReflect[tap];
             if (nb.a <= 0.0) {
                 continue;
@@ -516,11 +505,8 @@ void reflectUp(uint3 dtid : SV_DispatchThreadID) {
             w *= varianceWeight * spatial;
             wSum += w;
             acc += nb.rgb * w;
-            avgW += 1.0;
-            avgAcc += nb.rgb;
         }
         resolved = acc / max(wSum, 1e-4);
-        avg = avgAcc / max(avgW, 1e-4);
     }
     float numSamples = 1.0;
     if (raw.a > 0.0 && rough > kSssrMirror) {
@@ -533,108 +519,45 @@ void reflectUp(uint3 dtid : SV_DispatchThreadID) {
         }
         N = normalize(N);
         const float3 V = normalize(gFrame.cameraPos.xyz - P);
-        const float3 mirrorDir = reflect(-V, N);
-        const float2 surfaceUv = sssrPrevUv(P);
-        const float2 hitUv = sssrPrevUv(P + mirrorDir * raw.a);
-        const float linearDepth = max(length(P - gFrame.cameraPos.xyz), 1e-3);
-        float3 mean = 0.0;
-        float3 moment = 0.0;
-        float weightSum = 0.0;
-        for (int y = -4; y <= 4; ++y) {
-            for (int x = -4; x <= 4; ++x) {
-                const int2 tap = clamp(ip + int2(x, y), int2(0, 0), int2(screen) - int2(1, 1));
+        float3 worldDir = sssrReflect(V, N, rough, ip);
+        if (dot(worldDir, N) <= 0.0) {
+            worldDir = reflect(-V, N);
+        }
+        const float4 prevClip = mul(sssrPrevVp(), float4(P + worldDir * raw.a, 1.0));
+        const float2 hitUv = prevClip.xy / max(prevClip.w, 1e-5) * 0.5 + 0.5;
+        float3 lo = resolved;
+        float3 hi = resolved;
+        [unroll]
+        for (int y = -1; y <= 1; ++y) {
+            [unroll]
+            for (int x = -1; x <= 1; ++x) {
+                const int2 tap = ip + int2(x, y);
+                if (tap.x < 0 || tap.y < 0 || tap.x >= int(screen.x) || tap.y >= int(screen.y)) {
+                    continue;
+                }
                 const float4 nb = gReflect[tap];
                 if (nb.a <= 0.0) {
                     continue;
                 }
-                const float w = sssrKernel(x) * sssrKernel(y);
-                weightSum += w;
-                mean += nb.rgb * w;
-                moment += nb.rgb * nb.rgb * w;
+                lo = min(lo, nb.rgb);
+                hi = max(hi, nb.rgb);
             }
         }
-        if (weightSum > 0.0) {
-            mean /= weightSum;
-            moment /= weightSum;
-        } else {
-            mean = resolved;
-        }
-        const float3 localVar = abs(moment - mean * mean);
-        float2 historyUv = surfaceUv;
-        float4 history = 0.0;
-        float factor = 0.0;
-        bool picked = false;
-        const bool surfaceOk = sssrInside(surfaceUv);
-        const bool hitOk = sssrInside(hitUv);
-        if (surfaceOk || hitOk) {
-            const int2 surfacePx = sssrUvPx(surfaceUv, screen);
-            const int2 hitPx = sssrUvPx(hitUv, screen);
-            const float3 surfaceN = sssrLoadNormal(surfacePx);
-            const float3 hitN = sssrLoadNormal(hitPx);
-            const float surfaceSim = dot(surfaceN, N);
-            const float hitSim = dot(hitN, N);
-            const float surfaceRough = gSurf0[surfacePx].w;
-            const float hitRough = gSurf0[hitPx].w;
-            const float4 surfaceHist = surfaceOk ? sssrLoadHist(surfacePx) : 0.0;
-            const float4 hitHist = hitOk ? sssrLoadHist(hitPx) : 0.0;
-            const bool hitMatch = hitOk && hitSim > 0.9999 && hitSim + 1.0e-3 > surfaceSim && abs(hitRough - rough) < abs(surfaceRough - rough) + 1.0e-3;
-            if (hitMatch) {
-                historyUv = hitUv;
-                history = hitHist;
-                picked = true;
-            } else if (surfaceOk) {
-                const float3 delta = surfaceHist.rgb - mean;
-                if (dot(delta, delta) < 1.5 * length(localVar)) {
-                    historyUv = surfaceUv;
-                    history = surfaceHist;
-                    picked = true;
-                }
-            }
-            if (picked && history.a >= 1.0) {
-                const int2 hp = sssrUvPx(historyUv, screen);
-                const float3 hn = sssrLoadNormal(hp);
-                const float hd = max(length(reconstructWorld(historyUv, gDepth.Load(int3(hp, 0))) - gFrame.cameraPos.xyz), 1e-3);
-                factor = sssrDisocclude(N, hn, linearDepth, hd);
-                if (factor < 0.9) {
-                    float best = factor;
-                    float2 bestUv = historyUv;
-                    for (int sy = -1; sy <= 1; ++sy) {
-                        for (int sx = -1; sx <= 1; ++sx) {
-                            const float2 u = historyUv + float2(sx, sy) / screen;
-                            if (!sssrInside(u)) {
-                                continue;
-                            }
-                            const int2 sp = sssrUvPx(u, screen);
-                            const float sd = max(length(reconstructWorld(u, gDepth.Load(int3(sp, 0))) - gFrame.cameraPos.xyz), 1e-3);
-                            const float w = sssrDisocclude(N, sssrLoadNormal(sp), linearDepth, sd);
-                            if (w > best) {
-                                best = w;
-                                bestUv = u;
-                            }
-                        }
-                    }
-                    historyUv = bestUv;
-                    history = sssrLoadHist(sssrUvPx(historyUv, screen));
-                    factor = best;
+        if (prevClip.w > 1e-3 && sssrInside(hitUv)) {
+            const float4 history = sssrLoadHist(sssrUvPx(hitUv, screen));
+            if (history.a >= 1.0) {
+                const float3 kept = clamp(history.rgb, lo, hi);
+                const float cap = max(8.0, 32.0 * (1.0 - exp(-rough * 100.0)));
+                numSamples = min(cap, history.a + 1.0);
+                const float speed = 1.0 / max(numSamples, 1.0);
+                resolved = lerp(resolved, kept, 1.0 - speed);
+                if (any(isnan(resolved)) || any(isinf(resolved))) {
+                    resolved = raw.rgb;
+                    numSamples = 1.0;
                 }
             }
         }
-        if (factor >= 0.9 && history.a >= 1.0) {
-            const float cap = max(8.0, 32.0 * (1.0 - exp(-rough * 100.0)));
-            numSamples = min(cap, history.a * factor + 1.0);
-            const float3 colorStd = (sqrt(localVar) + length(mean - avg)) * 1.4;
-            const float3 boxMean = lerp(mean, avg, 0.2);
-            const float3 clipped = sssrClipAabb(boxMean - colorStd, boxMean + colorStd, history.rgb);
-            const float speed = 1.0 / max(numSamples, 1.0);
-            float3 signal = lerp(resolved, avg, 1.0 / max(numSamples + 1.0, 1.0));
-            signal = sssrClipAabb(avg - colorStd, avg + colorStd, signal);
-            resolved = lerp(signal, clipped, 1.0 - speed);
-            if (any(isnan(resolved)) || any(isinf(resolved))) {
-                resolved = raw.rgb;
-                numSamples = 1.0;
-            }
-        }
-    } else {
+    } else if (raw.a <= 0.0) {
         resolved = 0.0;
     }
     sssrStoreHist(ip, float4(max(resolved, 0.0), numSamples));

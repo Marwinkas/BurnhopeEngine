@@ -105,25 +105,130 @@ void pushBlob(SceneFrameImpl& s, const MeshletBlob& blob, float x, float y, floa
     s.instanceCount += 1;
 }
 
-void linkProp(SceneFrameImpl& s, uint32_t instance, const char* name) {
-    if (s.propCount >= kPropCap || instance >= s.instanceCount) {
-        return;
+MaterialGpuData* materialAt(SceneFrameImpl& s, uint32_t id) {
+    if (s.materialSrc == nullptr || id >= s.materialCount) {
+        return nullptr;
     }
-    const float pos[3] = {
-        s.cpuInstances[instance].world[3],
-        s.cpuInstances[instance].world[7],
-        s.cpuInstances[instance].world[11],
+    if (!s.ownedMat.empty() && s.materialSrc == s.ownedMat.data() && id < s.ownedMat.size()) {
+        return &s.ownedMat[id];
+    }
+    if (s.materialSrc == s.fallbackMat && id < 4u) {
+        return &s.fallbackMat[id];
+    }
+    return nullptr;
+}
+
+void armEditorRoom(SceneFrameImpl& s) {
+    const uint32_t vRoom = kEditorSpare * 24u;
+    const uint32_t iRoom = kEditorSpare * 36u;
+    if (!s.ownedVert.empty() && s.vertSrc == s.ownedVert.data()) {
+        s.ownedVert.reserve(s.ownedVert.size() + vRoom);
+        s.ownedIndex.reserve(s.ownedIndex.size() + iRoom);
+        s.ownedInst.reserve(s.ownedInst.size() + kEditorSpare);
+        s.ownedMesh.reserve(s.ownedMesh.size() + kEditorSpare);
+        s.ownedMat.reserve(s.ownedMat.size() + kEditorSpare);
+        s.vertSrc = s.ownedVert.data();
+        s.indexSrc = s.ownedIndex.data();
+        s.instSrc = s.ownedInst.data();
+        s.meshletSrc = s.ownedMesh.data();
+        s.materialSrc = s.ownedMat.data();
+        s.vertCap = s.vertCount + vRoom;
+        s.indexCap = s.indexCount + iRoom;
+        s.instanceCap = s.instanceCount + kEditorSpare;
+        s.materialCap = s.materialCount + kEditorSpare;
+    } else if (s.vertSrc == s.cpuVerts) {
+        s.vertCap = kSceneVerts;
+        s.indexCap = kSceneTris * 3u;
+        s.instanceCap = kSceneInstances;
+        s.materialCap = s.materialCount + kEditorSpare;
+    }
+    if (s.instanceCap > s.visibleCap) {
+        s.visibleCpu.resize(s.instanceCap, 0u);
+        s.visibleCap = s.instanceCap;
+    }
+}
+
+void writeCube(GpuVertex* vert, uint32_t* idx, float half) {
+    struct Face {
+        float cx, cy, cz, ux, uy, uz, vx, vy, vz;
     };
+    const Face faces[6] = {
+        {0.0f, half, 0.0f, half, 0.0f, 0.0f, 0.0f, 0.0f, -half},
+        {0.0f, -half, 0.0f, half, 0.0f, 0.0f, 0.0f, 0.0f, half},
+        {half, 0.0f, 0.0f, 0.0f, half, 0.0f, 0.0f, 0.0f, half},
+        {-half, 0.0f, 0.0f, 0.0f, half, 0.0f, 0.0f, 0.0f, -half},
+        {0.0f, 0.0f, half, half, 0.0f, 0.0f, 0.0f, half, 0.0f},
+        {0.0f, 0.0f, -half, half, 0.0f, 0.0f, 0.0f, -half, 0.0f},
+    };
+    const float corner[4][2] = {{-1.0f, -1.0f}, {1.0f, -1.0f}, {1.0f, 1.0f}, {-1.0f, 1.0f}};
+    const uint32_t local[6] = {0u, 1u, 2u, 0u, 2u, 3u};
+    uint32_t vcount = 0;
+    uint32_t icount = 0;
+    for (const Face& face : faces) {
+        float nx = face.uy * face.vz - face.uz * face.vy;
+        float ny = face.uz * face.vx - face.ux * face.vz;
+        float nz = face.ux * face.vy - face.uy * face.vx;
+        const float nlen = std::sqrt(nx * nx + ny * ny + nz * nz);
+        if (nlen > 1.0e-6f) {
+            nx /= nlen;
+            ny /= nlen;
+            nz /= nlen;
+        } else {
+            ny = 1.0f;
+        }
+        const uint32_t faceBase = vcount;
+        for (uint32_t c = 0; c < 4u; ++c) {
+            GpuVertex& v = vert[vcount];
+            v = {};
+            v.px = face.cx + corner[c][0] * face.ux + corner[c][1] * face.vx;
+            v.py = face.cy + corner[c][0] * face.uy + corner[c][1] * face.vy;
+            v.pz = face.cz + corner[c][0] * face.uz + corner[c][1] * face.vz;
+            v.pad0 = corner[c][0] * 0.5f + 0.5f;
+            v.nx = nx;
+            v.ny = ny;
+            v.nz = nz;
+            v.pad1 = corner[c][1] * 0.5f + 0.5f;
+            vcount += 1;
+        }
+        for (uint32_t t = 0; t < 6u; ++t) {
+            idx[icount] = faceBase + local[t];
+            icount += 1;
+        }
+    }
+}
+
+uint8_t linkProp(SceneFrameImpl& s, uint32_t instance, const char* name) {
+    if (s.propCount >= kPropCap || instance >= s.instanceCount || s.instSrc == nullptr) {
+        return kSceneActorNone;
+    }
+    const GpuInstance& inst = s.instSrc[instance];
+    const float pos[3] = {inst.world[3], inst.world[7], inst.world[11]};
     const uint8_t actor = sceneActorAdd(s.actors, SceneActorKind::Prop, pos, name);
     if (actor == kSceneActorNone) {
-        return;
+        return kSceneActorNone;
     }
     SceneFrameImpl::PropLink& link = s.props[s.propCount];
     link.instance = instance;
+    link.material = inst.materialId;
     link.actor = actor;
-    link.radius = s.cpuInstances[instance].sphere[3];
+    link.radius = inst.sphere[3];
     link.pose = sceneActorXform(s.actors, actor);
     s.propCount += 1;
+    if (actor < s.actors.count && s.actors.ent[actor].is_alive()) {
+        const MaterialGpuData* src = materialAt(s, inst.materialId);
+        if (src != nullptr) {
+            Material pbr{};
+            pbr.base[0] = src->baseColor[0];
+            pbr.base[1] = src->baseColor[1];
+            pbr.base[2] = src->baseColor[2];
+            pbr.base[3] = src->baseColor[3];
+            pbr.roughness = src->roughness;
+            pbr.metallic = src->metallic;
+            pbr.emissive = src->emissiveIntensity;
+            s.actors.ent[actor].set<Material>(pbr);
+        }
+    }
+    return actor;
 }
 
 
@@ -139,14 +244,15 @@ void uploadStatic(SceneFrameImpl& s) {
         std::memcpy(s.materialsBuf.mapped, s.materialSrc, sizeof(MaterialGpuData) * s.materialCount);
         auto* mats = static_cast<MaterialGpuData*>(s.materialsBuf.mapped);
         for (uint32_t i = 0; i < s.materialCount; ++i) {
-            const uint32_t tex = mats[i].albedoTexIndex;
-            if (tex == 0 || tex >= s.texNameCount || s.texNames == nullptr) {
-                continue;
-            }
-            const char* file = s.texNames[tex].file;
-            if (nameHas(file, "leaf") || nameHas(file, "foliage") || nameHas(file, "grass") || nameHas(file, "hedge")
-                || nameHas(file, "fern") || nameHas(file, "azalea") || nameHas(file, "linden")) {
-                mats[i].flags |= 32u;
+            if (s.texNames != nullptr) {
+                const uint32_t tex = mats[i].albedoTexIndex;
+                if (tex > 0u && tex < s.texNameCount) {
+                    const char* file = s.texNames[tex].file;
+                    if (nameHas(file, "leaf") || nameHas(file, "foliage") || nameHas(file, "grass") || nameHas(file, "hedge")
+                        || nameHas(file, "fern") || nameHas(file, "azalea") || nameHas(file, "linden")) {
+                        mats[i].flags |= 32u;
+                    }
+                }
             }
         }
     }
@@ -804,10 +910,6 @@ SceneFrame* sceneFrameCreate() {
     pushBlob(*scene, scene->world.cubes[0], scene->world.objects[1].x, scene->world.objects[1].y, scene->world.objects[1].z);
     pushBlob(*scene, scene->world.cubes[1], scene->world.objects[2].x, scene->world.objects[2].y, scene->world.objects[2].z);
     pushBlob(*scene, scene->world.cubes[2], scene->world.objects[3].x, scene->world.objects[3].y, scene->world.objects[3].z);
-    if (scene->instanceCount > 1) {
-        linkProp(*scene, 1, "Cube");
-        scene->actors.selected = 0;
-    }
     for (uint32_t i = 0; i < scene->world.lightCount; ++i) {
         scene->world.lights[i].radius = 8.0f;
     }
@@ -828,6 +930,11 @@ SceneFrame* sceneFrameCreate() {
     }
     scene->materialSrc = scene->fallbackMat;
     scene->materialCount = 4;
+    if (scene->instanceCount > 1) {
+        linkProp(*scene, 1, "Cube");
+        scene->actors.selected = 0;
+    }
+    armEditorRoom(*scene);
     return scene;
 }
 
@@ -1209,7 +1316,11 @@ void sceneFramePlantCubes(SceneFrame* scene) {
     scene->boxMax[1] = std::max(scene->boxMax[1], std::max(oy + 3.0f, mirrorY + 1.0f));
     scene->boxMax[2] = std::max(scene->boxMax[2], std::max(oz + 6.0f, mirrorZ + 1.0f));
     linkProp(*scene, n0 + 1u, "Cube");
+    linkProp(*scene, n0 + 2u, "Cube 2");
+    linkProp(*scene, n0 + 3u, "Cube 3");
+    linkProp(*scene, n0 + 4u, "Metal");
     scene->actors.selected = 0;
+    armEditorRoom(*scene);
     scene->ready = false;
 }
 
@@ -1494,6 +1605,7 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
     scene->boxMax[1] = std::max(scene->boxMax[1], maxY);
     scene->boxMax[2] = std::max(scene->boxMax[2], maxZ);
     fileUnmap(&mapped);
+    armEditorRoom(*scene);
     scene->ready = false;
     return true;
 }
@@ -1515,6 +1627,9 @@ void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
     scene->ssrSteps = tweaks.ssrSteps;
     scene->ssrStride = tweaks.ssrStride;
     scene->ssrThick = tweaks.ssrThick;
+    scene->ssrMetal = tweaks.ssrMetal;
+    scene->ssrRt = tweaks.ssrRt;
+    scene->ssrEdge = tweaks.ssrEdge;
     scene->ssrMax = tweaks.ssrMax;
     scene->ssrBias = tweaks.ssrBias;
     scene->sscsReach = tweaks.sscsReach;
@@ -1784,6 +1899,179 @@ void sceneFrameActorSetEuler(SceneFrame* scene, uint8_t index, float pitch, floa
     sceneActorWriteXform(scene->actors, index, pose);
 }
 
+bool sceneFrameActorPose(const SceneFrame* scene, uint8_t index, ActorPose& out) {
+    if (scene == nullptr || index >= scene->actors.count) {
+        return false;
+    }
+    const Xform pose = sceneActorXform(scene->actors, index);
+    out.pos[0] = pose.pos[0];
+    out.pos[1] = pose.pos[1];
+    out.pos[2] = pose.pos[2];
+    out.euler[0] = pose.euler[0];
+    out.euler[1] = pose.euler[1];
+    out.euler[2] = pose.euler[2];
+    out.scale[0] = pose.scale[0];
+    out.scale[1] = pose.scale[1];
+    out.scale[2] = pose.scale[2];
+    return true;
+}
+
+void sceneFrameActorSetPose(SceneFrame* scene, uint8_t index, const ActorPose& pose) {
+    if (scene == nullptr || index >= scene->actors.count) {
+        return;
+    }
+    Xform next = sceneActorXform(scene->actors, index);
+    next.pos[0] = pose.pos[0];
+    next.pos[1] = pose.pos[1];
+    next.pos[2] = pose.pos[2];
+    next.euler[0] = pose.euler[0];
+    next.euler[1] = pose.euler[1];
+    next.euler[2] = pose.euler[2];
+    next.scale[0] = pose.scale[0] < 0.05f ? 0.05f : pose.scale[0];
+    next.scale[1] = pose.scale[1] < 0.05f ? 0.05f : pose.scale[1];
+    next.scale[2] = pose.scale[2] < 0.05f ? 0.05f : pose.scale[2];
+    sceneActorWriteXform(scene->actors, index, next);
+}
+
+bool sceneFrameActorPbr(const SceneFrame* scene, uint8_t index, ActorPbr& out) {
+    if (scene == nullptr || index >= scene->actors.count) {
+        return false;
+    }
+    flecs::entity ent = scene->actors.ent[index];
+    if (!ent.is_alive() || !ent.has<Material>()) {
+        return false;
+    }
+    const Material& mat = ent.get<Material>();
+    out.base[0] = mat.base[0];
+    out.base[1] = mat.base[1];
+    out.base[2] = mat.base[2];
+    out.roughness = mat.roughness;
+    out.metallic = mat.metallic;
+    out.emissive = mat.emissive;
+    return true;
+}
+
+void sceneFrameActorSetPbr(SceneFrame* scene, uint8_t index, const ActorPbr& pbr) {
+    if (scene == nullptr || index >= scene->actors.count) {
+        return;
+    }
+    flecs::entity ent = scene->actors.ent[index];
+    if (!ent.is_alive()) {
+        return;
+    }
+    Material mat{};
+    if (ent.has<Material>()) {
+        mat = ent.get<Material>();
+    }
+    mat.base[0] = pbr.base[0];
+    mat.base[1] = pbr.base[1];
+    mat.base[2] = pbr.base[2];
+    mat.base[3] = 1.0f;
+    mat.roughness = pbr.roughness;
+    mat.metallic = pbr.metallic;
+    mat.emissive = pbr.emissive;
+    ent.set<Material>(mat);
+}
+
+uint8_t sceneFrameSpawnCube(SceneFrame* scene) {
+    if (scene == nullptr || scene->instSrc == nullptr || scene->vertSrc == nullptr || scene->indexSrc == nullptr
+        || scene->meshletSrc == nullptr || scene->propCount >= kPropCap) {
+        return kSceneActorNone;
+    }
+    const bool cpuMesh = scene->vertSrc == scene->cpuVerts && scene->instSrc == scene->cpuInstances
+        && scene->meshletSrc == scene->cpuMeshlets;
+    const bool ownedMesh = !scene->ownedVert.empty() && scene->vertSrc == scene->ownedVert.data()
+        && !scene->ownedInst.empty() && scene->instSrc == scene->ownedInst.data()
+        && scene->meshletSrc == scene->ownedMesh.data();
+    if (!cpuMesh && !ownedMesh) {
+        return kSceneActorNone;
+    }
+    const uint32_t vertLimit = scene->vertCap > scene->vertCount ? scene->vertCap : scene->vertCount;
+    const uint32_t indexLimit = scene->indexCap > scene->indexCount ? scene->indexCap : scene->indexCount;
+    const uint32_t instLimit = scene->instanceCap > scene->instanceCount ? scene->instanceCap : scene->instanceCount;
+    const uint32_t matLimit = scene->materialCap > scene->materialCount ? scene->materialCap : scene->materialCount;
+    if (scene->vertCount + 24u > vertLimit || scene->indexCount + 36u > indexLimit
+        || scene->instanceCount >= instLimit || scene->materialCount >= matLimit) {
+        return kSceneActorNone;
+    }
+    const uint32_t matId = scene->materialCount;
+    if (scene->materialSrc == scene->fallbackMat) {
+        scene->ownedMat.assign(scene->fallbackMat, scene->fallbackMat + scene->materialCount);
+        scene->ownedMat.reserve(matLimit);
+        scene->materialSrc = scene->ownedMat.data();
+    }
+    if (scene->ownedMat.empty() || scene->materialSrc != scene->ownedMat.data()) {
+        return kSceneActorNone;
+    }
+    scene->ownedMat.push_back({});
+    scene->materialSrc = scene->ownedMat.data();
+    MaterialGpuData& mat = scene->ownedMat.back();
+    mat = {};
+    mat.baseColor[0] = mat.baseColor[1] = mat.baseColor[2] = mat.baseColor[3] = 1.0f;
+    mat.roughness = 0.08f;
+    mat.metallic = 1.0f;
+    scene->materialCount = static_cast<uint32_t>(scene->ownedMat.size());
+    const uint32_t vBase = scene->vertCount;
+    const uint32_t iBase = scene->indexCount;
+    const uint32_t inst = scene->instanceCount;
+    if (ownedMesh) {
+        scene->ownedVert.resize(vBase + 24u);
+        scene->ownedIndex.resize(iBase + 36u);
+        if (scene->ownedInst.size() <= inst) {
+            scene->ownedInst.resize(inst + 1u);
+        }
+        if (scene->ownedMesh.size() <= inst) {
+            scene->ownedMesh.resize(inst + 1u);
+        }
+        scene->vertSrc = scene->ownedVert.data();
+        scene->indexSrc = scene->ownedIndex.data();
+        scene->instSrc = scene->ownedInst.data();
+        scene->meshletSrc = scene->ownedMesh.data();
+        writeCube(scene->ownedVert.data() + vBase, scene->ownedIndex.data() + iBase, 0.45f);
+    } else {
+        writeCube(scene->cpuVerts + vBase, scene->cpuIndex + iBase, 0.45f);
+    }
+    GpuInstance* table = ownedMesh ? scene->ownedInst.data() : scene->cpuInstances;
+    GpuMeshlet* meshes = ownedMesh ? scene->ownedMesh.data() : scene->cpuMeshlets;
+    float fx = 0.0f;
+    float fy = 0.0f;
+    float fz = -1.0f;
+    flyCamForward(scene->fly, fx, fy, fz);
+    const float x = scene->fly.eye[0] + fx * 3.0f;
+    const float y = scene->fly.eye[1] + fy * 3.0f;
+    const float z = scene->fly.eye[2] + fz * 3.0f;
+    instanceSet(table[inst], x, y, z, 0.45f * 1.7320508f, matId, inst);
+    GpuMeshlet& mesh = meshes[inst];
+    mesh = {};
+    mesh.vertexOffset = vBase;
+    mesh.indexOffset = iBase;
+    mesh.vertexCount = 24;
+    mesh.triangleCount = 12;
+    mesh.coneCutoff = -1.0f;
+    scene->vertCount = vBase + 24u;
+    scene->indexCount = iBase + 36u;
+    scene->instanceCount = inst + 1u;
+    if (scene->verts.mapped != nullptr) {
+        std::memcpy(static_cast<GpuVertex*>(scene->verts.mapped) + vBase, scene->vertSrc + vBase, sizeof(GpuVertex) * 24u);
+    }
+    if (scene->indices.mapped != nullptr) {
+        std::memcpy(static_cast<uint32_t*>(scene->indices.mapped) + iBase, scene->indexSrc + iBase, sizeof(uint32_t) * 36u);
+    }
+    if (scene->instances.mapped != nullptr) {
+        static_cast<GpuInstance*>(scene->instances.mapped)[inst] = table[inst];
+    }
+    if (scene->meshlets.mapped != nullptr) {
+        static_cast<GpuMeshlet*>(scene->meshlets.mapped)[inst] = mesh;
+    }
+    if (scene->materialsBuf.mapped != nullptr) {
+        static_cast<MaterialGpuData*>(scene->materialsBuf.mapped)[matId] = mat;
+    }
+    scene->editorDirty = static_cast<uint8_t>(scene->editorDirty | 2u);
+    char name[24];
+    std::snprintf(name, sizeof(name), "Cube %u", static_cast<unsigned>(scene->propCount + 1u));
+    return linkProp(*scene, inst, name);
+}
+
 const char* sceneFrameTitle(const SceneFrame* scene) {
     return scene != nullptr ? scene->title : "";
 }
@@ -1969,6 +2257,47 @@ bool syncPropInstance(SceneFrame* scene) {
     return moved;
 }
 
+void syncPropMaterial(SceneFrame& scene) {
+    auto* gpu = scene.materialsBuf.mapped != nullptr ? static_cast<MaterialGpuData*>(scene.materialsBuf.mapped) : nullptr;
+    for (uint8_t n = 0; n < scene.propCount; ++n) {
+        SceneFrameImpl::PropLink& link = scene.props[n];
+        if (link.actor >= scene.actors.count || link.material >= scene.materialCount) {
+            continue;
+        }
+        flecs::entity ent = scene.actors.ent[link.actor];
+        if (!ent.is_alive() || !ent.has<Material>()) {
+            continue;
+        }
+        const Material& pbr = ent.get<Material>();
+        auto store = [](MaterialGpuData& dst, const Material& src) {
+            if (dst.baseColor[0] == src.base[0] && dst.baseColor[1] == src.base[1] && dst.baseColor[2] == src.base[2]
+                && dst.roughness == src.roughness && dst.metallic == src.metallic && dst.emissiveIntensity == src.emissive) {
+                return false;
+            }
+            dst.baseColor[0] = src.base[0];
+            dst.baseColor[1] = src.base[1];
+            dst.baseColor[2] = src.base[2];
+            dst.baseColor[3] = 1.0f;
+            dst.roughness = src.roughness;
+            dst.metallic = src.metallic;
+            dst.emissiveIntensity = src.emissive;
+            return true;
+        };
+        bool dirty = false;
+        if (MaterialGpuData* cpu = materialAt(scene, link.material)) {
+            if (store(*cpu, pbr)) {
+                dirty = true;
+            }
+        }
+        if (gpu != nullptr && store(gpu[link.material], pbr)) {
+            dirty = true;
+        }
+        if (dirty) {
+            scene.editorDirty = static_cast<uint8_t>(scene.editorDirty | 1u);
+        }
+    }
+}
+
 void sceneFrameRecord(
     SceneFrame* scene,
     VkCommandBuffer cmd,
@@ -2033,32 +2362,39 @@ void sceneFrameRecord(
         }
     }
     const bool propMoved = syncPropInstance(scene);
+    syncPropMaterial(*scene);
     if (propMoved && scene->instances.mapped != nullptr && scene->instanceCount > 0) {
         gpuBufferFlush(scene->instances, device, 0, sizeof(GpuInstance) * scene->instanceCount);
     }
-    if (propMoved) {
-        scene->propDirty = 1;
+    if ((scene->editorDirty & 2u) != 0u) {
+        if (scene->verts.mapped != nullptr && scene->vertCount > 0) {
+            gpuBufferFlush(scene->verts, device, 0, sizeof(GpuVertex) * scene->vertCount);
+        }
+        if (scene->indices.mapped != nullptr && scene->indexCount > 0) {
+            gpuBufferFlush(scene->indices, device, 0, sizeof(uint32_t) * scene->indexCount);
+        }
+        if (scene->instances.mapped != nullptr && scene->instanceCount > 0) {
+            gpuBufferFlush(scene->instances, device, 0, sizeof(GpuInstance) * scene->instanceCount);
+        }
+        if (scene->meshlets.mapped != nullptr && scene->instanceCount > 0) {
+            gpuBufferFlush(scene->meshlets, device, 0, sizeof(GpuMeshlet) * scene->instanceCount);
+        }
     }
-    if (scene->propDirty != 0 && scene->radiance.geometry && scene->propPhase != 2) {
-        scene->propPhase = 1;
-        scene->radiance.pause = 0;
-        scene->propDirty = 0;
-    } else if (scene->propPhase == 1) {
-        scene->radiance.pause = 1;
-        scene->propPhase = 2;
-    } else if (scene->propPhase == 2) {
-        radianceDrop(scene->radiance, device);
-        scene->propPhase = 0;
-        scene->propDirty = 0;
-    } else {
-        scene->radiance.pause = 0;
+    if ((scene->editorDirty & 1u) != 0u && scene->materialsBuf.mapped != nullptr && scene->materialCount > 0) {
+        gpuBufferFlush(scene->materialsBuf, device, 0, sizeof(MaterialGpuData) * scene->materialCount);
     }
+    scene->editorDirty = 0;
+    scene->radiance.pause = 0;
     if (!scene->ready) {
         sceneFrameReleaseGpu(scene, device);
-        const VkDeviceSize vertBytes = sizeof(GpuVertex) * scene->vertCount;
-        const VkDeviceSize indexBytes = sizeof(uint32_t) * scene->indexCount;
-        const VkDeviceSize instanceBytes = sizeof(GpuInstance) * scene->instanceCount;
-        const VkDeviceSize meshletBytes = sizeof(GpuMeshlet) * scene->instanceCount;
+        const uint32_t vertAlloc = scene->vertCap > scene->vertCount ? scene->vertCap : scene->vertCount;
+        const uint32_t indexAlloc = scene->indexCap > scene->indexCount ? scene->indexCap : scene->indexCount;
+        const uint32_t instAlloc = scene->instanceCap > scene->instanceCount ? scene->instanceCap : scene->instanceCount;
+        const uint32_t matAlloc = scene->materialCap > scene->materialCount ? scene->materialCap : std::max(scene->materialCount, 1u);
+        const VkDeviceSize vertBytes = sizeof(GpuVertex) * vertAlloc;
+        const VkDeviceSize indexBytes = sizeof(uint32_t) * indexAlloc;
+        const VkDeviceSize instanceBytes = sizeof(GpuInstance) * instAlloc;
+        const VkDeviceSize meshletBytes = sizeof(GpuMeshlet) * instAlloc;
         const VkDeviceSize visibleBytes = sizeof(uint32_t) * alignUp(scene->visibleCap);
         const VkDeviceSize listBytes = alignUp(visibleBytes);
         const bool buffers =
@@ -2082,11 +2418,11 @@ void sceneFrameRecord(
             && createDefaultGpuBuffer(scene->lightIndex, device, sizeof(uint32_t) * 16 * 9 * 24 * 72)
             && createDefaultGpuBuffer(scene->decalBuf, device, sizeof(DecalGpu) * kDecalCap)
             && createDefaultGpuBuffer(scene->probeBuf, device, sizeof(ProbeGpu) * kProbeCount)
-            && createDefaultGpuBuffer(scene->sectorBuf, device, sizeof(uint32_t) * std::max(scene->instanceCount, 1u))
+            && createDefaultGpuBuffer(scene->sectorBuf, device, sizeof(uint32_t) * std::max(instAlloc, 1u))
             && createDefaultGpuBuffer(scene->shadowPageBuf, device, sizeof(uint32_t) * 1024)
             && createDefaultGpuBuffer(scene->texPageBuf, device, sizeof(uint32_t) * 64)
             && createDefaultGpuBuffer(scene->texFeedbackBuf, device, sizeof(uint32_t) * 64)
-            && createDefaultGpuBuffer(scene->materialsBuf, device, sizeof(MaterialGpuData) * std::max(scene->materialCount, 1u));
+            && createDefaultGpuBuffer(scene->materialsBuf, device, sizeof(MaterialGpuData) * matAlloc);
         const VkExtent2D pointExtent{512, 1536};
         const VkExtent2D cubeExtent{3072, 512};
         const VkExtent2D hizExtent{swap.extent.width, swap.extent.height * 2};
@@ -2291,6 +2627,9 @@ void sceneFrameRecord(
     knob.ssr.steps = scene->ssrSteps;
     knob.ssr.stride = scene->ssrStride;
     knob.ssr.thick = scene->ssrThick;
+    knob.ssr.pad[0] = scene->ssrRt;
+    knob.ssr.pad[1] = scene->ssrMetal;
+    knob.ssr.pad[2] = scene->ssrEdge;
     knob.ssr.maxDist = scene->ssrMax;
     knob.ssr.bias = scene->ssrBias;
     knob.shade.sscsReach = scene->sscsReach;

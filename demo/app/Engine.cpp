@@ -328,6 +328,8 @@ bool addActorButton(HudContext& hud, uint16_t objects, uint8_t index, const char
         hit.page = hud.tool.sunPage;
     } else if (kind == static_cast<uint8_t>(SceneActorKind::Post)) {
         hit.page = hud.tool.postPage;
+    } else if (kind == static_cast<uint8_t>(SceneActorKind::Prop)) {
+        hit.page = hud.tool.propPage;
     }
     uiBind(*canvas.state, rowBtn, onActor, &hit);
     return true;
@@ -339,6 +341,23 @@ void onGizmoMode(void* user, uint16_t) {
         return;
     }
     sceneFrameActorGizmo(hit->tool->scene, hit->mode);
+}
+
+void onSpawnCube(void* user, uint16_t) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr || hud->tool.scene == nullptr) {
+        return;
+    }
+    const uint8_t index = sceneFrameSpawnCube(hud->tool.scene);
+    if (index == kSceneActorNone) {
+        return;
+    }
+    char name[24];
+    uint8_t kind = 0;
+    sceneFrameActorName(hud->tool.scene, index, name, sizeof(name), &kind);
+    if (addActorButton(*hud, hud->tool.objects, index, name, kind)) {
+        onActor(&hud->objects.back(), 0);
+    }
 }
 
 void onDuplicate(void* user, uint16_t) {
@@ -630,6 +649,24 @@ void bindHudIds(HudContext& hud, UiState& state) {
     hud.ids.ssrThick = id("ssrThick");
     hud.ids.ssrMax = id("ssrMax");
     hud.ids.ssrBlur = id("ssrBlur");
+    hud.ids.ssrMetal = id("ssrMetal");
+    hud.ids.ssrRt = id("ssrRt");
+    hud.ids.ssrEdge = id("ssrEdge");
+    hud.ids.pbrR = id("pbrR");
+    hud.ids.pbrG = id("pbrG");
+    hud.ids.pbrB = id("pbrB");
+    hud.ids.pbrRough = id("pbrRough");
+    hud.ids.pbrMetal = id("pbrMetal");
+    hud.ids.pbrEm = id("pbrEm");
+    hud.ids.pbrPx = id("pbrPx");
+    hud.ids.pbrPy = id("pbrPy");
+    hud.ids.pbrPz = id("pbrPz");
+    hud.ids.pbrEx = id("pbrEx");
+    hud.ids.pbrEy = id("pbrEy");
+    hud.ids.pbrEz = id("pbrEz");
+    hud.ids.pbrSx = id("pbrSx");
+    hud.ids.pbrSy = id("pbrSy");
+    hud.ids.pbrSz = id("pbrSz");
     hud.ids.contacten = id("contacten");
     hud.ids.vt = id("vt");
     hud.ids.freeze = id("freeze");
@@ -724,6 +761,12 @@ uint16_t foldOpen(UiState& s, uint16_t parent, const char* title) {
     }
     uiShow(s, body, true);
     return body;
+}
+
+uint16_t rowFine(UiState& s, uint16_t panel, const char* text, const char* name, float value, float minV, float maxV, float step) {
+    const uint16_t id = uiPropNumber(s, panel, text, value, minV, maxV, step);
+    uiName(s, id, name);
+    return id;
 }
 
 uint16_t rowSlide(UiState& s, uint16_t panel, const char* text, const char* name, float value, float minV, float maxV) {
@@ -982,7 +1025,7 @@ void sceneHud(Canvas& canvas, void* user) {
     (void)splitBar(side, false);
     UiFlex inspFlex{};
     inspFlex.heightMode = UiSize::Px;
-    inspFlex.height = 280.0f;
+    inspFlex.height = 420.0f;
     inspFlex.minH = 40.0f;
     inspFlex.shrink = 1.0f;
     const uint16_t insp = uiPanel(*canvas.state, side, inspFlex, hiddenPaint());
@@ -991,16 +1034,19 @@ void sceneHud(Canvas& canvas, void* user) {
     const uint16_t lightInner = scrollPage(insp, false);
     const uint16_t skyInner = scrollPage(insp, false);
     const uint16_t cullInner = scrollPage(insp, false);
+    const uint16_t propInner = scrollPage(insp, false);
     uint16_t post = uiPropHost(*canvas.state, postInner);
     uint16_t sun = uiPropHost(*canvas.state, sunInner);
     uint16_t light = uiPropHost(*canvas.state, lightInner);
     uint16_t sky = uiPropHost(*canvas.state, skyInner);
     uint16_t cull = uiPropHost(*canvas.state, cullInner);
+    uint16_t prop = uiPropHost(*canvas.state, propInner);
     const uint16_t postView = uiParent(*canvas.state, postInner);
     const uint16_t sunView = uiParent(*canvas.state, sunInner);
     const uint16_t lightView = uiParent(*canvas.state, lightInner);
     const uint16_t skyView = uiParent(*canvas.state, skyInner);
     const uint16_t cullView = uiParent(*canvas.state, cullInner);
+    const uint16_t propView = uiParent(*canvas.state, propInner);
     auto pick = [&](const char* title, uint16_t view) {
         uint16_t rowBtn = uiButton(*canvas.state, objects, { .label = title, .fillWidth = true });
         uiSetHeight(*canvas.state, rowBtn, 28.0f);
@@ -1015,6 +1061,14 @@ void sceneHud(Canvas& canvas, void* user) {
     };
     hud->tool.postPage = postView;
     hud->tool.sunPage = sunView;
+    hud->tool.propPage = propView;
+    if (canvas.state != nullptr) {
+        uint16_t cubeBtn = uiButton(*canvas.state, objects, { .label = "Куб", .fillWidth = true });
+        uiSetHeight(*canvas.state, cubeBtn, 28.0f);
+        if (cubeBtn != kUiNone) {
+            uiBind(*canvas.state, cubeBtn, onSpawnCube, hud);
+        }
+    }
     if (hud->tool.scene != nullptr) {
         const uint8_t count = sceneFrameActorCount(hud->tool.scene);
         for (uint8_t i = 0; i < count; ++i) {
@@ -1032,6 +1086,23 @@ void sceneHud(Canvas& canvas, void* user) {
     uint16_t postBody = foldOpen(*canvas.state, post, "Пост");
     uint16_t giBody = foldOpen(*canvas.state, post, "GI");
     uint16_t sunBody = foldOpen(*canvas.state, sun, "Солнце");
+    (void)uiLabel(*canvas.state, prop, "Материал");
+    rowSlide(*canvas.state, prop, "Цвет R", "pbrR", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, prop, "Цвет G", "pbrG", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, prop, "Цвет B", "pbrB", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, prop, "Шероховатость", "pbrRough", 0.5f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, prop, "Металл", "pbrMetal", 0.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, prop, "Эмиссия", "pbrEm", 0.0f, 0.0f, 8.0f);
+    (void)uiLabel(*canvas.state, prop, "Трансформ");
+    rowFine(*canvas.state, prop, "Позиция X", "pbrPx", 0.0f, -4000.0f, 4000.0f, 0.05f);
+    rowFine(*canvas.state, prop, "Позиция Y", "pbrPy", 0.0f, -4000.0f, 4000.0f, 0.05f);
+    rowFine(*canvas.state, prop, "Позиция Z", "pbrPz", 0.0f, -4000.0f, 4000.0f, 0.05f);
+    rowFine(*canvas.state, prop, "Поворот X", "pbrEx", 0.0f, -180.0f, 180.0f, 0.5f);
+    rowFine(*canvas.state, prop, "Поворот Y", "pbrEy", 0.0f, -180.0f, 180.0f, 0.5f);
+    rowFine(*canvas.state, prop, "Поворот Z", "pbrEz", 0.0f, -180.0f, 180.0f, 0.5f);
+    rowFine(*canvas.state, prop, "Масштаб X", "pbrSx", 1.0f, 0.05f, 20.0f, 0.05f);
+    rowFine(*canvas.state, prop, "Масштаб Y", "pbrSy", 1.0f, 0.05f, 20.0f, 0.05f);
+    rowFine(*canvas.state, prop, "Масштаб Z", "pbrSz", 1.0f, 0.05f, 20.0f, 0.05f);
     (void)splitBar(root, false);
     UiFlex fileFlex{};
     fileFlex.direction = UiFlexDir::Column;
@@ -1197,10 +1268,13 @@ void sceneHud(Canvas& canvas, void* user) {
     panel = giBody;
     tick("отражение", "reflecten", true);
     rowSlide(*canvas.state, panel, "SSR шероховатость", "ssrCut", 0.82f, 0.05f, 1.0f);
-    rowSlide(*canvas.state, panel, "SSR шаги", "ssrSteps", 128.0f, 16.0f, 256.0f);
-    rowSlide(*canvas.state, panel, "SSR толщина", "ssrThick", 0.6f, 0.05f, 2.0f);
+    rowSlide(*canvas.state, panel, "SSR шаги", "ssrSteps", 64.0f, 16.0f, 96.0f);
+    rowSlide(*canvas.state, panel, "SSR толщина", "ssrThick", 0.02f, 0.02f, 2.0f);
     rowSlide(*canvas.state, panel, "SSR длина", "ssrMax", 80.0f, 4.0f, 200.0f);
     rowSlide(*canvas.state, panel, "SSR блюр", "ssrBlur", 1.0f, 0.0f, 3.0f);
+    rowSlide(*canvas.state, panel, "SSR металл", "ssrMetal", 0.35f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "SSR луч", "ssrRt", 0.45f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "SSR край", "ssrEdge", 24.0f, 0.0f, 64.0f);
     panel = postBody;
     tick("контакт", "contacten", true);
     panel = cull;
@@ -1357,6 +1431,140 @@ bool checkOn(const Canvas& canvas, uint16_t id, bool fallback) {
     return on < 0 ? fallback : on != 0;
 }
 
+void pullProp(HudContext& hud, Canvas& canvas, uint8_t index) {
+    ActorPose pose{};
+    ActorPbr pbr{};
+    pbr.base[0] = pbr.base[1] = pbr.base[2] = 1.0f;
+    pbr.roughness = 0.5f;
+    (void)sceneFrameActorPose(hud.tool.scene, index, pose);
+    (void)sceneFrameActorPbr(hud.tool.scene, index, pbr);
+    const HudIds& id = hud.ids;
+    setSlide(canvas, id.pbrR, pbr.base[0]);
+    setSlide(canvas, id.pbrG, pbr.base[1]);
+    setSlide(canvas, id.pbrB, pbr.base[2]);
+    setSlide(canvas, id.pbrRough, pbr.roughness);
+    setSlide(canvas, id.pbrMetal, pbr.metallic);
+    setSlide(canvas, id.pbrEm, pbr.emissive);
+    setSlide(canvas, id.pbrPx, pose.pos[0]);
+    setSlide(canvas, id.pbrPy, pose.pos[1]);
+    setSlide(canvas, id.pbrPz, pose.pos[2]);
+    setSlide(canvas, id.pbrEx, pose.euler[0]);
+    setSlide(canvas, id.pbrEy, pose.euler[1]);
+    setSlide(canvas, id.pbrEz, pose.euler[2]);
+    setSlide(canvas, id.pbrSx, pose.scale[0]);
+    setSlide(canvas, id.pbrSy, pose.scale[1]);
+    setSlide(canvas, id.pbrSz, pose.scale[2]);
+    hud.propLast[0] = pbr.base[0];
+    hud.propLast[1] = pbr.base[1];
+    hud.propLast[2] = pbr.base[2];
+    hud.propLast[3] = pbr.roughness;
+    hud.propLast[4] = pbr.metallic;
+    hud.propLast[5] = pbr.emissive;
+    hud.propLast[6] = pose.pos[0];
+    hud.propLast[7] = pose.pos[1];
+    hud.propLast[8] = pose.pos[2];
+    hud.propLast[9] = pose.euler[0];
+    hud.propLast[10] = pose.euler[1];
+    hud.propLast[11] = pose.euler[2];
+    hud.propLast[12] = pose.scale[0];
+    hud.propLast[13] = pose.scale[1];
+    hud.propLast[14] = pose.scale[2];
+    hud.propSel = index;
+}
+
+void syncProp(Engine& e, Canvas& canvas) {
+    if (e.scene == nullptr) {
+        return;
+    }
+    const uint8_t selected = sceneFrameActorSelected(e.scene);
+    if (sceneFrameActorKind(e.scene, selected) != static_cast<uint8_t>(SceneActorKind::Prop)) {
+        e.hud.propSel = 0xff;
+        return;
+    }
+    if (e.hud.propSel != selected) {
+        pullProp(e.hud, canvas, selected);
+        return;
+    }
+    const HudIds& id = e.hud.ids;
+    float cur[15] = {
+        slideAt(canvas, id.pbrR, e.hud.propLast[0]),
+        slideAt(canvas, id.pbrG, e.hud.propLast[1]),
+        slideAt(canvas, id.pbrB, e.hud.propLast[2]),
+        slideAt(canvas, id.pbrRough, e.hud.propLast[3]),
+        slideAt(canvas, id.pbrMetal, e.hud.propLast[4]),
+        slideAt(canvas, id.pbrEm, e.hud.propLast[5]),
+        slideAt(canvas, id.pbrPx, e.hud.propLast[6]),
+        slideAt(canvas, id.pbrPy, e.hud.propLast[7]),
+        slideAt(canvas, id.pbrPz, e.hud.propLast[8]),
+        slideAt(canvas, id.pbrEx, e.hud.propLast[9]),
+        slideAt(canvas, id.pbrEy, e.hud.propLast[10]),
+        slideAt(canvas, id.pbrEz, e.hud.propLast[11]),
+        slideAt(canvas, id.pbrSx, e.hud.propLast[12]),
+        slideAt(canvas, id.pbrSy, e.hud.propLast[13]),
+        slideAt(canvas, id.pbrSz, e.hud.propLast[14]),
+    };
+    bool moved = false;
+    for (int i = 0; i < 15; ++i) {
+        if (std::fabs(cur[i] - e.hud.propLast[i]) > 0.0005f) {
+            moved = true;
+        }
+    }
+    if (moved) {
+        ActorPbr pbr{};
+        pbr.base[0] = cur[0];
+        pbr.base[1] = cur[1];
+        pbr.base[2] = cur[2];
+        pbr.roughness = cur[3];
+        pbr.metallic = cur[4];
+        pbr.emissive = cur[5];
+        ActorPose pose{};
+        pose.pos[0] = cur[6];
+        pose.pos[1] = cur[7];
+        pose.pos[2] = cur[8];
+        pose.euler[0] = cur[9];
+        pose.euler[1] = cur[10];
+        pose.euler[2] = cur[11];
+        pose.scale[0] = cur[12];
+        pose.scale[1] = cur[13];
+        pose.scale[2] = cur[14];
+        sceneFrameActorSetPbr(e.scene, selected, pbr);
+        sceneFrameActorSetPose(e.scene, selected, pose);
+        for (int i = 0; i < 15; ++i) {
+            e.hud.propLast[i] = cur[i];
+        }
+        return;
+    }
+    ActorPose pose{};
+    if (!sceneFrameActorPose(e.scene, selected, pose)) {
+        return;
+    }
+    const float got[9] = {
+        pose.pos[0], pose.pos[1], pose.pos[2], pose.euler[0], pose.euler[1], pose.euler[2],
+        pose.scale[0], pose.scale[1], pose.scale[2],
+    };
+    bool drift = false;
+    for (int i = 0; i < 9; ++i) {
+        if (std::fabs(got[i] - e.hud.propLast[6 + i]) > 0.0005f) {
+            drift = true;
+        }
+    }
+    if (!drift) {
+        return;
+    }
+    setSlide(canvas, id.pbrPx, pose.pos[0]);
+    setSlide(canvas, id.pbrPy, pose.pos[1]);
+    setSlide(canvas, id.pbrPz, pose.pos[2]);
+    setSlide(canvas, id.pbrEx, pose.euler[0]);
+    setSlide(canvas, id.pbrEy, pose.euler[1]);
+    setSlide(canvas, id.pbrEz, pose.euler[2]);
+    setSlide(canvas, id.pbrSx, pose.scale[0]);
+    setSlide(canvas, id.pbrSy, pose.scale[1]);
+    setSlide(canvas, id.pbrSz, pose.scale[2]);
+    for (int i = 0; i < 9; ++i) {
+        e.hud.propLast[6 + i] = got[i];
+    }
+}
+
 bool engineTick(Engine& e) {
     char picked[512]{};
     if (windowTakeFile(picked, static_cast<int>(sizeof(picked))) && e.demo.fileDialogSlot >= 0) {
@@ -1397,11 +1605,14 @@ bool engineTick(Engine& e) {
                 page = e.hud.tool.sunPage;
             } else if (kind == static_cast<uint8_t>(SceneActorKind::Post)) {
                 page = e.hud.tool.postPage;
+            } else if (kind == static_cast<uint8_t>(SceneActorKind::Prop)) {
+                page = e.hud.tool.propPage;
             }
             if (page != kUiNone) {
                 uiShowOnly(*hud.state, page);
             }
         }
+        syncProp(e, hud);
         uint8_t sunIndex = kSceneActorNone;
         if (sceneFrameActorKind(e.scene, selected) == static_cast<uint8_t>(SceneActorKind::Sun)) {
             sunIndex = selected;
@@ -1487,8 +1698,11 @@ bool engineTick(Engine& e) {
         tweaks.gtaoFalloff = slideAt(hud, id.gtaoFa, 0.615f);
         tweaks.gtaoDenoise = slideAt(hud, id.gtaoDn, 1.0f);
         tweaks.ssrCutoff = slideAt(hud, id.ssrCut, 0.82f);
-        tweaks.ssrSteps = slideAt(hud, id.ssrSteps, 128.0f);
-        tweaks.ssrThick = slideAt(hud, id.ssrThick, 0.6f);
+        tweaks.ssrSteps = slideAt(hud, id.ssrSteps, 64.0f);
+        tweaks.ssrThick = slideAt(hud, id.ssrThick, 0.02f);
+        tweaks.ssrMetal = slideAt(hud, id.ssrMetal, 0.35f);
+        tweaks.ssrRt = slideAt(hud, id.ssrRt, 0.45f);
+        tweaks.ssrEdge = slideAt(hud, id.ssrEdge, 24.0f);
         tweaks.ssrMax = slideAt(hud, id.ssrMax, 80.0f);
         tweaks.ssrStride = slideAt(hud, id.ssrBlur, 1.0f);
         tweaks.sscsReach = slideAt(hud, id.sscsR, 1.0f);

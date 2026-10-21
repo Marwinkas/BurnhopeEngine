@@ -158,6 +158,7 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     reflectUp.storageImg(37, HeapImg::ReflectHist0);
     reflectUp.storageImg(38, HeapImg::ReflectHist1);
     reflectUp.ubo(52, HeapBuf::Ssr);
+    reflectUp.ubo(73, static_cast<HeapBuf>(kSharcParamSlot));
     reflectUp.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
         heapBufOffset(*reflectUp.raw.heaps, kGradeSlot), static_cast<uint32_t>(reflectUp.raw.heaps->bufferDescSize));
     PassBindings relaxBind{heaps};

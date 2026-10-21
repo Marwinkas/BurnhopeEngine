@@ -23,6 +23,25 @@ struct Xform {
     float scale[3]{1.0f, 1.0f, 1.0f};
 };
 
+// Поза актора. Гизмо пишет Xform, инспектор пишет тот же набор через Transform.
+struct alignas(16) Transform {
+    float pos[3]{};
+    float pad0 = 0.0f;
+    float euler[3]{};
+    float pad1 = 0.0f;
+    float scale[3]{1.0f, 1.0f, 1.0f};
+    float pad2 = 0.0f;
+};
+
+// PBR куба. Текстуры остаются в MaterialGpuData, здесь ползунки инспектора.
+struct alignas(16) Material {
+    float base[4]{1.0f, 1.0f, 1.0f, 1.0f};
+    float roughness = 0.5f;
+    float metallic = 0.0f;
+    float emissive = 0.0f;
+    float reflectance = 0.5f;
+};
+
 struct ActorKind {
     uint8_t v = 0;
     uint8_t slot = 0;
@@ -37,6 +56,10 @@ struct PostObj {};
 struct PropObj {};
 
 static_assert(std::is_trivially_copyable_v<Xform>);
+static_assert(std::is_trivially_copyable_v<Transform>);
+static_assert(std::is_trivially_copyable_v<Material>);
+static_assert(sizeof(Transform) == 48);
+static_assert(sizeof(Material) == 32);
 static_assert(std::is_trivially_copyable_v<ActorKind>);
 static_assert(std::is_trivially_copyable_v<ActorName>);
 
@@ -192,6 +215,19 @@ inline void actorStoreXform(SceneActors& world, uint8_t slot, const Xform& src) 
     if (Xform* x = actorXformMut(world, slot)) {
         *x = src;
     }
+    if (slot >= world.count || !world.ent[slot].is_alive() || !world.ent[slot].has<Transform>()) {
+        return;
+    }
+    Transform& pose = world.ent[slot].get_mut<Transform>();
+    pose.pos[0] = src.pos[0];
+    pose.pos[1] = src.pos[1];
+    pose.pos[2] = src.pos[2];
+    pose.euler[0] = src.euler[0];
+    pose.euler[1] = src.euler[1];
+    pose.euler[2] = src.euler[2];
+    pose.scale[0] = src.scale[0];
+    pose.scale[1] = src.scale[1];
+    pose.scale[2] = src.scale[2];
 }
 
 inline Xform sceneActorXform(const SceneActors& world, uint8_t index) {
@@ -234,6 +270,23 @@ inline uint8_t sceneActorAdd(SceneActors& world, SceneActorKind kind, const floa
     actorCopyName(label.text, name);
     flecs::entity ent = world.world.entity();
     ent.set<Xform>(xform);
+    Transform pose{};
+    pose.pos[0] = xform.pos[0];
+    pose.pos[1] = xform.pos[1];
+    pose.pos[2] = xform.pos[2];
+    pose.euler[0] = xform.euler[0];
+    pose.euler[1] = xform.euler[1];
+    pose.euler[2] = xform.euler[2];
+    pose.scale[0] = xform.scale[0];
+    pose.scale[1] = xform.scale[1];
+    pose.scale[2] = xform.scale[2];
+    ent.set<Transform>(pose);
+    if (kind == SceneActorKind::Prop) {
+        Material mat{};
+        mat.base[0] = mat.base[1] = mat.base[2] = mat.base[3] = 1.0f;
+        mat.roughness = 0.5f;
+        ent.set<Material>(mat);
+    }
     ent.set<ActorKind>(tag);
     ent.set<ActorName>(label);
     if (kind == SceneActorKind::Sun) {

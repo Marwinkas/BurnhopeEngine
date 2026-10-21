@@ -47,6 +47,9 @@ void uiName(UiState& s, uint16_t id, const char* name) {
 }
 
 uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint) {
+    if (s.count >= kUiCap) {
+        return kUiNone;
+    }
     const uint16_t id = s.count++;
     YGNodeRef node = YGNodeNew();
     YGNodeSetContext(node, reinterpret_cast<void*>(static_cast<uintptr_t>(id)));
@@ -302,7 +305,8 @@ uint16_t uiFindName(const UiState& s, const char* name) {
             return slot->index;
         }
     }
-    for (uint16_t id = 0; id < s.count; ++id) {
+    const uint16_t n = s.count < kUiCap ? s.count : kUiCap;
+    for (uint16_t id = 0; id < n; ++id) {
         const UiName* stored = s.ent[id].try_get<UiName>();
         if (stored != nullptr && std::strcmp(stored->bytes, name) == 0) {
             return id;

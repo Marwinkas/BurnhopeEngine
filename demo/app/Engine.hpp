@@ -33,6 +33,7 @@ struct ToolHit {
     uint16_t objects = kUiNone;
     uint16_t postPage = kUiNone;
     uint16_t sunPage = kUiNone;
+    uint16_t propPage = kUiNone;
 };
 
 struct GizmoHit {
@@ -193,6 +194,24 @@ struct HudIds {
     uint16_t ssrThick = kUiNone;
     uint16_t ssrMax = kUiNone;
     uint16_t ssrBlur = kUiNone;
+    uint16_t ssrMetal = kUiNone;
+    uint16_t ssrRt = kUiNone;
+    uint16_t ssrEdge = kUiNone;
+    uint16_t pbrR = kUiNone;
+    uint16_t pbrG = kUiNone;
+    uint16_t pbrB = kUiNone;
+    uint16_t pbrRough = kUiNone;
+    uint16_t pbrMetal = kUiNone;
+    uint16_t pbrEm = kUiNone;
+    uint16_t pbrPx = kUiNone;
+    uint16_t pbrPy = kUiNone;
+    uint16_t pbrPz = kUiNone;
+    uint16_t pbrEx = kUiNone;
+    uint16_t pbrEy = kUiNone;
+    uint16_t pbrEz = kUiNone;
+    uint16_t pbrSx = kUiNone;
+    uint16_t pbrSy = kUiNone;
+    uint16_t pbrSz = kUiNone;
     uint16_t contacten = kUiNone;
     uint16_t vt = kUiNone;
     uint16_t freeze = kUiNone;
@@ -209,6 +228,8 @@ struct HudContext {
     float lookX = 0.0f;
     float lookY = 0.0f;
     uint8_t shown = 0xff;
+    uint8_t propSel = 0xff;
+    float propLast[15]{};
     ToolHit tool{};
     StatsHit stats{};
     std::deque<PageHit> pages;

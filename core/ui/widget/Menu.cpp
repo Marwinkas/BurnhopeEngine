@@ -345,7 +345,10 @@ bool uiCommandAdd(UiState& s, const char* name, UiCommandFn fn, void* user) {
     itemF.justify = UiJustify::Start;
     itemF.padL = 8.0f;
     const uint16_t item = spawn(s, s.menu, itemF, paintToken(s.look, UiToken::Item, s.look.radiusSm));
-    if (auto* rowPaint = item < s.count ? s.ent[item].try_get_mut<UiPaint>() : nullptr) {
+    if (item == kUiNone || item >= s.count) {
+        return false;
+    }
+    if (auto* rowPaint = s.ent[item].try_get_mut<UiPaint>()) {
         rowPaint->a = 0.0f;
         rowPaint->borderW = 0.0f;
     }

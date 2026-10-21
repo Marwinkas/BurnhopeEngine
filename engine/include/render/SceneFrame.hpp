@@ -29,6 +29,25 @@ void sceneFrameActorGizmo(SceneFrame* scene, uint8_t mode);
 [[nodiscard]] bool sceneFrameActorDragging(const SceneFrame* scene);
 void sceneFrameActorEuler(const SceneFrame* scene, uint8_t index, float& pitch, float& yaw);
 void sceneFrameActorSetEuler(SceneFrame* scene, uint8_t index, float pitch, float yaw);
+
+struct ActorPose {
+    float pos[3]{};
+    float euler[3]{};
+    float scale[3]{1.0f, 1.0f, 1.0f};
+};
+
+struct ActorPbr {
+    float base[3]{1.0f, 1.0f, 1.0f};
+    float roughness = 0.5f;
+    float metallic = 0.0f;
+    float emissive = 0.0f;
+};
+
+[[nodiscard]] bool sceneFrameActorPose(const SceneFrame* scene, uint8_t index, ActorPose& out);
+void sceneFrameActorSetPose(SceneFrame* scene, uint8_t index, const ActorPose& pose);
+[[nodiscard]] bool sceneFrameActorPbr(const SceneFrame* scene, uint8_t index, ActorPbr& out);
+void sceneFrameActorSetPbr(SceneFrame* scene, uint8_t index, const ActorPbr& pbr);
+[[nodiscard]] uint8_t sceneFrameSpawnCube(SceneFrame* scene);
 [[nodiscard]] const char* sceneFrameTitle(const SceneFrame* scene);
 void sceneFrameStats(const SceneFrame* scene, char* out, size_t cap);
 void sceneFrameDebug(SceneFrame* scene, bool hiz, bool cone, bool lod, bool frustum, bool subpixel, bool shadow, uint32_t mode);
@@ -45,9 +64,12 @@ struct SceneTweaks {
     float gtaoFalloff = 0.615f;
     float gtaoDenoise = 1.0f;
     float ssrCutoff = 0.82f;
-    float ssrSteps = 128.0f;
+    float ssrSteps = 64.0f;
     float ssrStride = 1.0f;
-    float ssrThick = 0.6f;
+    float ssrThick = 0.02f;
+    float ssrMetal = 0.35f;
+    float ssrRt = 0.45f;
+    float ssrEdge = 24.0f;
     float ssrMax = 80.0f;
     float ssrBias = 0.15f;
     float sscsReach = 30.0f;

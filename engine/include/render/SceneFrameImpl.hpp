@@ -44,7 +44,8 @@ namespace burnhope {
 constexpr uint32_t kSceneVerts = 512;
 constexpr uint32_t kSceneTris = 256;
 constexpr uint32_t kSceneInstances = 48;
-constexpr uint32_t kPropCap = 4;
+constexpr uint32_t kPropCap = 16;
+constexpr uint32_t kEditorSpare = 8;
 
 struct SceneFrameImpl {
     bool ready = false;
@@ -123,8 +124,14 @@ struct SceneFrameImpl {
     uint32_t vertCount = 0;
     uint32_t indexCount = 0;
     uint32_t instanceCount = 0;
+    uint32_t vertCap = 0;
+    uint32_t indexCap = 0;
+    uint32_t instanceCap = 0;
+    uint32_t materialCap = 0;
+    uint8_t editorDirty = 0;
     struct PropLink {
         uint32_t instance = 0xffffffffu;
+        uint32_t material = 0xffffffffu;
         uint8_t actor = 0xff;
         float radius = 1.0f;
         Xform pose{};
@@ -198,9 +205,12 @@ struct SceneFrameImpl {
     float gtaoFalloff = 0.615f;
     float gtaoDenoise = 1.0f;
     float ssrCutoff = 0.82f;
-    float ssrSteps = 128.0f;
+    float ssrSteps = 64.0f;
     float ssrStride = 1.0f;
-    float ssrThick = 0.6f;
+    float ssrThick = 0.02f;
+    float ssrMetal = 0.35f;
+    float ssrRt = 0.45f;
+    float ssrEdge = 24.0f;
     float ssrMax = 80.0f;
     float ssrBias = 0.15f;
     float sscsReach = 30.0f;

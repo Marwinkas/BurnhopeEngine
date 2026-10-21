@@ -6,7 +6,7 @@
 
 namespace burnhope {
 
-constexpr uint16_t kUiCap = 1024;
+constexpr uint16_t kUiCap = 2048;
 constexpr uint8_t kUiCmdCap = 128;
 
 // Индекс сущности в плоских массивах ядра
