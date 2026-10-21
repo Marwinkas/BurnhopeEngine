@@ -1,6 +1,7 @@
 #include "app/Engine.hpp"
 
 #include "app/Shell.hpp"
+#include "asset/AssimpImporter.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
 #include "render/Sharc.hpp"
@@ -31,6 +32,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <system_error>
 
 namespace burnhope {
@@ -227,6 +229,20 @@ void releaseScene(void* user, Device& device) {
 
 void sceneHud(Canvas& canvas, void*);
 
+bool engineImportScene() {
+    const char* paths[] = {
+        "scene/scene.gltf",
+        "scene/lighter/vintage_lighter_1k.gltf",
+    };
+    std::error_code ec;
+    std::filesystem::create_directories("cache", ec);
+    if (!sceneImportFbxList(paths, 2, "cache/scene.bhop.tmp")) {
+        return false;
+    }
+    std::filesystem::rename("cache/scene.bhop.tmp", "cache/scene.bhop", ec);
+    return !ec;
+}
+
 bool engineInit(Engine& e, int argc, char** argv) {
     (void)argc;
     (void)argv;
@@ -237,8 +253,14 @@ bool engineInit(Engine& e, int argc, char** argv) {
     }
     if (wantScene(argc, argv)) {
         e.scene = sceneFrameCreate();
-        if (sceneFrameLoadBhop(e.scene, "cache/bistro-gltf.bhop")) {
-            sceneFramePlantCubes(e.scene);
+        if (!std::filesystem::exists("cache/scene.bhop")) {
+            spdlog::info("import scene/scene.gltf");
+            if (!engineImportScene()) {
+                spdlog::error("scene import failed");
+            }
+        }
+        if (!sceneFrameLoadBhop(e.scene, "cache/scene.bhop")) {
+            spdlog::error("cache/scene.bhop missing");
         }
         ViewDesc main{};
         main.name = "scene";
@@ -300,8 +322,8 @@ void onActor(void* user, uint16_t) {
         return;
     }
     sceneFrameActorSelect(hit->scene, hit->index);
-    if (hit->page != kUiNone) {
-        uiShowOnly(*hit->canvas->state, hit->page);
+    if (hit->canvas->state != nullptr) {
+        uiPropShowMask(*hit->canvas->state, sceneFrameActorSections(hit->scene, hit->index));
     }
 }
 
@@ -429,6 +451,13 @@ void toneGt7(void* user) { applyTone(*static_cast<UiState*>(user), 5); }
 void toneGeneric(void* user) { applyTone(*static_cast<UiState*>(user), 6); }
 void toneReinhard(void* user) { applyTone(*static_cast<UiState*>(user), 7); }
 
+void showNamed(UiState& s, const char* name, bool on) {
+    const uint16_t id = uiFindName(s, name);
+    if (id != kUiNone) {
+        uiShow(s, id, on);
+    }
+}
+
 void applyAa(UiState& s, int which) {
     if (which < 0) {
         which = 0;
@@ -443,6 +472,7 @@ void applyAa(UiState& s, int which) {
     uiBindCheck(s, uiFindName(s, "fxaa"), 0, 0, which == 5);
     const char* caps[] = {"Off", "SMAA", "CMAA", "FSR", "TAA", "FXAA"};
     setMenuCaption(s, "aaBtn", caps[which]);
+    showNamed(s, "fsrBody", which == 3);
 }
 
 void applyFsrQ(UiState& s, int which) {
@@ -474,7 +504,7 @@ void fsrUltra(void* user) { applyFsrQ(*static_cast<UiState*>(user), 4); }
 
 void applyGi(UiState& s, int which) {
     const char* names[] = {"prof0", "prof1", "prof2", "prof3"};
-    const char* caps[] = {"Выкл", "VXGI", "Каскады", "SHARC"};
+    const char* caps[] = {"None", "VXGI", "Cascades", "Sharc"};
     if (which < 0) {
         which = 0;
     }
@@ -484,13 +514,49 @@ void applyGi(UiState& s, int which) {
     for (int i = 0; i < 4; ++i) {
         uiBindCheck(s, uiFindName(s, names[i]), 1, 3, i == which);
     }
+    uiBindCheck(s, uiFindName(s, "gien"), 0, 0, which == 3);
     setMenuCaption(s, "giBtn", caps[which]);
+    showNamed(s, "indBody", which == 3);
+}
+
+void applyDirect(UiState& s, int which) {
+    const bool restir = which == 1;
+    uiBindCheck(s, uiFindName(s, "restiren"), 0, 0, restir);
+    setMenuCaption(s, "diBtn", restir ? "Restir" : "None");
+    showNamed(s, "diBody", restir);
+}
+
+void applyReflect(UiState& s, int which) {
+    if (which < 0) {
+        which = 0;
+    }
+    if (which > 2) {
+        which = 2;
+    }
+    uiBindCheck(s, uiFindName(s, "reflecten"), 0, 0, which != 0);
+    uiBindCheck(s, uiFindName(s, "reflRt"), 0, 0, which == 2);
+    const char* caps[] = {"None", "SSSR", "SSSR + RT"};
+    setMenuCaption(s, "reflBtn", caps[which]);
+    showNamed(s, "reflBody", which != 0);
+    showNamed(s, "rtBody", which == 2);
+}
+
+void applyAo(UiState& s, int which) {
+    const bool on = which == 1;
+    uiBindCheck(s, uiFindName(s, "gtaoen"), 0, 0, on);
+    setMenuCaption(s, "aoBtn", on ? "XeGTAO" : "None");
+    showNamed(s, "aoBody", on);
 }
 
 void giOff(void* user) { applyGi(*static_cast<UiState*>(user), 0); }
-void giVx(void* user) { applyGi(*static_cast<UiState*>(user), 1); }
-void giRc(void* user) { applyGi(*static_cast<UiState*>(user), 2); }
 void giRs(void* user) { applyGi(*static_cast<UiState*>(user), 3); }
+void diOff(void* user) { applyDirect(*static_cast<UiState*>(user), 0); }
+void diRestir(void* user) { applyDirect(*static_cast<UiState*>(user), 1); }
+void reflOff(void* user) { applyReflect(*static_cast<UiState*>(user), 0); }
+void reflSssr(void* user) { applyReflect(*static_cast<UiState*>(user), 1); }
+void reflRt(void* user) { applyReflect(*static_cast<UiState*>(user), 2); }
+void aoOff(void* user) { applyAo(*static_cast<UiState*>(user), 0); }
+void aoGtao(void* user) { applyAo(*static_cast<UiState*>(user), 1); }
 
 void bindHudIds(HudContext& hud, UiState& state) {
     auto id = [&](const char* name) { return uiFindName(state, name); };
@@ -595,6 +661,9 @@ void bindHudIds(HudContext& hud, UiState& state) {
     hud.ids.lod = id("lod");
     hud.ids.frust = id("frust");
     hud.ids.small = id("small");
+    hud.ids.backface = id("backf");
+    hud.ids.screen = id("scrn");
+    hud.ids.behind = id("behind");
     hud.ids.shadow = id("shadow");
     hud.ids.cluster = id("cluster");
     hud.ids.probes = id("probes");
@@ -667,6 +736,9 @@ void bindHudIds(HudContext& hud, UiState& state) {
     hud.ids.pbrSx = id("pbrSx");
     hud.ids.pbrSy = id("pbrSy");
     hud.ids.pbrSz = id("pbrSz");
+    hud.ids.xfStatic = id("xfStatic");
+    hud.ids.reflRt = id("reflRt");
+    hud.ids.fogSwatch = id("fogSwatch");
     hud.ids.contacten = id("contacten");
     hud.ids.vt = id("vt");
     hud.ids.freeze = id("freeze");
@@ -684,14 +756,6 @@ const ViewMode kViews[] = {
     {12, "металл"}, {13, "AO"}, {14, "свечение"},
     {15, "ReSTIR свет"}, {16, "ReSTIR вес"}, {17, "ReSTIR M"}, {18, "ReSTIR тень"}, {19, "ReSTIR индекс"},
 };
-
-void onObjectPage(void* user, uint16_t) {
-    auto* hit = static_cast<PageHit*>(user);
-    if (hit == nullptr || hit->canvas == nullptr || hit->page == kUiNone) {
-        return;
-    }
-    uiShowOnly(*hit->canvas->state, hit->page);
-}
 
 void onStats(void* user, uint16_t) {
     auto* hit = static_cast<StatsHit*>(user);
@@ -734,33 +798,23 @@ void onMode(void* user) {
     }
 }
 
-uint16_t foldOpen(UiState& s, uint16_t parent, const char* title) {
-    const uint16_t body = uiTreeRow(s, parent, title);
-    for (uint16_t id = 0; id < s.count; ++id) {
-        auto* tree = s.ent[id].try_get_mut<UiTree>();
-        if (tree != nullptr && tree->body == body) {
-            tree->open = 1;
-            for (uint16_t child = 0; child < s.count; ++child) {
-                if (s.parentOf[child] != id) {
-                    continue;
-                }
-                uiText(s, child, "");
-                if (auto* paint = s.ent[child].try_get_mut<UiPaint>()) {
-                    paint->a = 0.0f;
-                    paint->borderW = 0.0f;
-                    paint->shadow = 0.0f;
-                    paint->icon = 11;
-                    paint->r = s.look.accent[0][0];
-                    paint->g = s.look.accent[0][1];
-                    paint->b = s.look.accent[0][2];
-                }
-                break;
-            }
-            break;
-        }
+float slideAt(const Canvas& canvas, uint16_t id, float fallback);
+
+void onFogSwatch(void* user, uint16_t id) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr || hud->tool.canvas == nullptr || hud->tool.canvas->state == nullptr) {
+        return;
     }
-    uiShow(s, body, true);
-    return body;
+    UiState& s = *hud->tool.canvas->state;
+    ColorBook* book = uiColor(s).book;
+    if (book != nullptr) {
+        book->r = slideAt(*hud->tool.canvas, uiFindName(s, "fogR"), 0.62f);
+        book->g = slideAt(*hud->tool.canvas, uiFindName(s, "fogG"), 0.72f);
+        book->b = slideAt(*hud->tool.canvas, uiFindName(s, "fogB"), 0.86f);
+        book->a = 1.0f;
+        book->gen += 1;
+    }
+    colorOnOpen(&s, id);
 }
 
 uint16_t rowFine(UiState& s, uint16_t panel, const char* text, const char* name, float value, float minV, float maxV, float step) {
@@ -841,7 +895,8 @@ void sceneHud(Canvas& canvas, void* user) {
         UiFlex viewFlex{};
         viewFlex.grow = 1.0f;
         viewFlex.shrink = 1.0f;
-        viewFlex.minH = 36.0f;
+        viewFlex.minH = 0.0f;
+        viewFlex.overflow = UiOverflow::Scroll;
         UiPaint scroll{};
         scroll.r = look.content[0];
         scroll.g = look.content[1];
@@ -1024,44 +1079,20 @@ void sceneHud(Canvas& canvas, void* user) {
     hud->tool.objects = objects;
     (void)splitBar(side, false);
     UiFlex inspFlex{};
+    inspFlex.direction = UiFlexDir::Column;
+    inspFlex.overflow = UiOverflow::Hidden;
     inspFlex.heightMode = UiSize::Px;
     inspFlex.height = 420.0f;
     inspFlex.minH = 40.0f;
     inspFlex.shrink = 1.0f;
     const uint16_t insp = uiPanel(*canvas.state, side, inspFlex, hiddenPaint());
-    const uint16_t postInner = scrollPage(insp, true);
-    const uint16_t sunInner = scrollPage(insp, false);
-    const uint16_t lightInner = scrollPage(insp, false);
-    const uint16_t skyInner = scrollPage(insp, false);
-    const uint16_t cullInner = scrollPage(insp, false);
-    const uint16_t propInner = scrollPage(insp, false);
-    uint16_t post = uiPropHost(*canvas.state, postInner);
-    uint16_t sun = uiPropHost(*canvas.state, sunInner);
-    uint16_t light = uiPropHost(*canvas.state, lightInner);
-    uint16_t sky = uiPropHost(*canvas.state, skyInner);
-    uint16_t cull = uiPropHost(*canvas.state, cullInner);
-    uint16_t prop = uiPropHost(*canvas.state, propInner);
-    const uint16_t postView = uiParent(*canvas.state, postInner);
-    const uint16_t sunView = uiParent(*canvas.state, sunInner);
-    const uint16_t lightView = uiParent(*canvas.state, lightInner);
-    const uint16_t skyView = uiParent(*canvas.state, skyInner);
-    const uint16_t cullView = uiParent(*canvas.state, cullInner);
-    const uint16_t propView = uiParent(*canvas.state, propInner);
-    auto pick = [&](const char* title, uint16_t view) {
-        uint16_t rowBtn = uiButton(*canvas.state, objects, { .label = title, .fillWidth = true });
-        uiSetHeight(*canvas.state, rowBtn, 28.0f);
-        if (rowBtn == kUiNone || canvas.state == nullptr) {
-            return;
-        }
-        hud->pages.push_back({});
-        PageHit& hit = hud->pages.back();
-        hit.canvas = &canvas;
-        hit.page = view;
-        uiBind(*canvas.state, rowBtn, onObjectPage, &hit);
-    };
-    hud->tool.postPage = postView;
-    hud->tool.sunPage = sunView;
-    hud->tool.propPage = propView;
+    (void)uiPropFilterBar(*canvas.state, insp);
+    const uint16_t detailsInner = scrollPage(insp, true);
+    uint16_t details = uiPropHost(*canvas.state, detailsInner);
+    const uint16_t detailsView = uiParent(*canvas.state, detailsInner);
+    hud->tool.postPage = detailsView;
+    hud->tool.sunPage = detailsView;
+    hud->tool.propPage = detailsView;
     if (canvas.state != nullptr) {
         uint16_t cubeBtn = uiButton(*canvas.state, objects, { .label = "Куб", .fillWidth = true });
         uiSetHeight(*canvas.state, cubeBtn, 28.0f);
@@ -1078,31 +1109,6 @@ void sceneHud(Canvas& canvas, void* user) {
             (void)addActorButton(*hud, objects, i, name, kind);
         }
     }
-    pick("Light", lightView);
-    pick("Sky", skyView);
-    pick("Cull", cullView);
-    uiShowOnly(*canvas.state, sunView);
-    uint16_t fogBody = foldOpen(*canvas.state, post, "Туман");
-    uint16_t postBody = foldOpen(*canvas.state, post, "Пост");
-    uint16_t giBody = foldOpen(*canvas.state, post, "GI");
-    uint16_t sunBody = foldOpen(*canvas.state, sun, "Солнце");
-    (void)uiLabel(*canvas.state, prop, "Материал");
-    rowSlide(*canvas.state, prop, "Цвет R", "pbrR", 1.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, prop, "Цвет G", "pbrG", 1.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, prop, "Цвет B", "pbrB", 1.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, prop, "Шероховатость", "pbrRough", 0.5f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, prop, "Металл", "pbrMetal", 0.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, prop, "Эмиссия", "pbrEm", 0.0f, 0.0f, 8.0f);
-    (void)uiLabel(*canvas.state, prop, "Трансформ");
-    rowFine(*canvas.state, prop, "Позиция X", "pbrPx", 0.0f, -4000.0f, 4000.0f, 0.05f);
-    rowFine(*canvas.state, prop, "Позиция Y", "pbrPy", 0.0f, -4000.0f, 4000.0f, 0.05f);
-    rowFine(*canvas.state, prop, "Позиция Z", "pbrPz", 0.0f, -4000.0f, 4000.0f, 0.05f);
-    rowFine(*canvas.state, prop, "Поворот X", "pbrEx", 0.0f, -180.0f, 180.0f, 0.5f);
-    rowFine(*canvas.state, prop, "Поворот Y", "pbrEy", 0.0f, -180.0f, 180.0f, 0.5f);
-    rowFine(*canvas.state, prop, "Поворот Z", "pbrEz", 0.0f, -180.0f, 180.0f, 0.5f);
-    rowFine(*canvas.state, prop, "Масштаб X", "pbrSx", 1.0f, 0.05f, 20.0f, 0.05f);
-    rowFine(*canvas.state, prop, "Масштаб Y", "pbrSy", 1.0f, 0.05f, 20.0f, 0.05f);
-    rowFine(*canvas.state, prop, "Масштаб Z", "pbrSz", 1.0f, 0.05f, 20.0f, 0.05f);
     (void)splitBar(root, false);
     UiFlex fileFlex{};
     fileFlex.direction = UiFlexDir::Column;
@@ -1122,19 +1128,6 @@ void sceneHud(Canvas& canvas, void* user) {
     uiShow(*canvas.state, modeHost, false);
     uint16_t modes = modeHost;
     uint16_t panel = stats;
-    auto head = [&](const char* text, const char* id) {
-        uint16_t lab = uiLabel(*canvas.state, panel, text);
-        if (id != nullptr) {
-            uiName(*canvas.state, lab, id);
-        }
-        if (auto* paint = canvas.state->ent[lab].try_get_mut<UiPaint>()) {
-            paint->token = UiToken::Custom;
-            paint->r = look.accent[0][0];
-            paint->g = look.accent[0][1];
-            paint->b = look.accent[0][2];
-            paint->a = 0.0f;
-        }
-    };
     uiName(*canvas.state, uiLabel(*canvas.state, panel, "fps"), "stats");
     uiName(*canvas.state, uiLabel(*canvas.state, panel, "mem"), "mem");
     uiName(*canvas.state, uiLabel(*canvas.state, panel, "gpu"), "load");
@@ -1147,76 +1140,223 @@ void sceneHud(Canvas& canvas, void* user) {
         uiName(*canvas.state, box, id);
         uiShow(*canvas.state, box, false);
     };
-    panel = cull;
-    head("кулинг", "h1");
-    uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Freeze Frustum"), "freeze");
-    tick("конус", "cone", true);
-    tick("Hi-Z", "hiz", true);
-    tick("LOD", "lod", true);
-    uiName(*canvas.state, uiPropNumber(*canvas.state, panel, "Force LOD", -1.0f, -1.0f, 3.0f, 1.0f), "lodf");
-    tick("пирамида", "frust", true);
-    tick("мелкие", "small", true);
-    panel = light;
-    head("свет", "h2");
-    tick("кластер ламп", "cluster", true);
-    panel = sun;
-    tick("тени", "shadow", true);
-    panel = giBody;
-    tick("зонды SH", "probes", true);
-    tick("GI", "gien", true);
-    tick("шумодав", "denoise", true);
-    rowSlide(*canvas.state, panel, "GI яркость", "giGain", 2.0f, 0.0f, 6.0f);
-    panel = giBody;
-    hideCheck("Выкл", "prof0", 1, 3, false);
-    hideCheck("VXGI", "prof1", 1, 3, false);
-    hideCheck("Каскады", "prof2", 1, 3, false);
-    hideCheck("SHARC", "prof3", 1, 3, true);
-    hideCheck("radiance", "rcen", 0, 0, false);
+    auto hideSlide = [&](const char* id, float value, float minV, float maxV) {
+        const uint16_t num = uiNumber(*canvas.state, modeHost, value, minV, maxV, 0.01f);
+        uiName(*canvas.state, num, id);
+        uiShow(*canvas.state, num, false);
+    };
+    auto group = [&](uint16_t parent, const char* name) {
+        UiFlex col{};
+        col.direction = UiFlexDir::Column;
+        col.shrink = 0.0f;
+        col.widthMode = UiSize::Percent;
+        col.width = 100.0f;
+        const uint16_t id = uiPanel(*canvas.state, parent, col, hiddenPaint());
+        if (name != nullptr) {
+            uiName(*canvas.state, id, name);
+        }
+        return id;
+    };
+    auto vec = [&](uint16_t host, const char* label, const char* nx, const char* ny, const char* nz, float x, float y, float z, float minV, float maxV, float step) {
+        const UiPropVec3 row = uiPropVec3(*canvas.state, host, label, x, y, z, minV, maxV, step);
+        uiName(*canvas.state, row.x, nx);
+        uiName(*canvas.state, row.y, ny);
+        uiName(*canvas.state, row.z, nz);
+    };
+    const uint8_t catGeneral = static_cast<uint8_t>(UiPropCat::General);
+    const uint8_t catActor = static_cast<uint8_t>(UiPropCat::Actor);
+    const uint8_t catLod = static_cast<uint8_t>(UiPropCat::Lod);
+    const uint8_t catMisc = static_cast<uint8_t>(UiPropCat::Misc);
+    const uint8_t catRender = static_cast<uint8_t>(UiPropCat::Rendering);
+    const uint8_t catStream = static_cast<uint8_t>(UiPropCat::Streaming);
+    panel = uiPropSection(*canvas.state, details, "Transform", catGeneral, kSecTransform);
+    vec(panel, "Location", "pbrPx", "pbrPy", "pbrPz", 0.0f, 0.0f, 0.0f, -4000.0f, 4000.0f, 0.05f);
+    vec(panel, "Rotation", "pbrEx", "pbrEy", "pbrEz", 0.0f, 0.0f, 0.0f, -180.0f, 180.0f, 0.5f);
+    vec(panel, "Scale", "pbrSx", "pbrSy", "pbrSz", 1.0f, 1.0f, 1.0f, 0.05f, 20.0f, 0.05f);
+    tick("Static", "xfStatic", false);
+    panel = uiPropSection(*canvas.state, details, "Material", catActor, kSecMaterial);
+    rowSlide(*canvas.state, panel, "Color R", "pbrR", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Color G", "pbrG", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Color B", "pbrB", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Roughness", "pbrRough", 0.5f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Metallic", "pbrMetal", 0.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Emissive", "pbrEm", 0.0f, 0.0f, 8.0f);
+    panel = uiPropSection(*canvas.state, details, "Sun", catRender, kSecSun);
+    tick("Enabled", "sun", true);
+    tick("Shadows", "shadow", true);
+    rowSlide(*canvas.state, panel, "Intensity", "sunI", 1.0f, 0.0f, 4.0f);
+    rowSlide(*canvas.state, panel, "Color R", "sunR", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Color G", "sunG", 0.92f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Color B", "sunB", 0.76f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Zenith", "zenith", 35.0f, -10.0f, 80.0f);
+    rowSlide(*canvas.state, panel, "Azimuth", "azimuth", 30.0f, 0.0f, 360.0f);
+    const uint16_t postBody = uiPropSection(*canvas.state, details, "PostProcessing", catRender, kSecPost);
+    const uint16_t giBody = uiFoldBody(*canvas.state, postBody, "GI");
+    const uint16_t directBody = uiFoldBody(*canvas.state, giBody, "Direct Illumination");
     {
         const uint16_t menu = uiMakeMenu(*canvas.state);
-        uiCommandAddTo(*canvas.state, menu, "Выкл", giOff, canvas.state.get());
-        uiCommandAddTo(*canvas.state, menu, "VXGI", giVx, canvas.state.get());
-        uiCommandAddTo(*canvas.state, menu, "Каскады", giRc, canvas.state.get());
-        uiCommandAddTo(*canvas.state, menu, "SHARC", giRs, canvas.state.get());
-        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Режим", "SHARC", menu), "giBtn");
+        uiCommandAddTo(*canvas.state, menu, "None", diOff, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Restir", diRestir, canvas.state.get());
+        uiName(*canvas.state, uiPropMenu(*canvas.state, directBody, "Mode", "Restir", menu), "diBtn");
     }
-    tick("ReSTIR", "restiren", true);
-    rowSlide(*canvas.state, panel, "RC лучи", "rcRays", 1.0f, 1.0f, 16.0f);
-    rowSlide(*canvas.state, panel, "RC клетка м", "rcCell", 0.8f, 0.1f, 4.0f);
-    rowSlide(*canvas.state, panel, "RC сила", "rcGain", 1.0f, 0.0f, 4.0f);
-    rowSlide(*canvas.state, panel, "RC длина м", "rcMax", 48.0f, 0.5f, 200.0f);
-    rowSlide(*canvas.state, panel, "RC солнце", "rcSun", 1.0f, 0.0f, 2.0f);
-    rowSlide(*canvas.state, panel, "RC отскок", "rcBounce", 1.0f, 0.0f, 2.0f);
-    tick("T вкл", "rsTOn", true);
-    tick("S вкл", "rsSOn", true);
-    tick("Кипение", "rsBoilOn", true);
-    tick("Пробы видимость", "rsVis", false);
-    tick("T перестановка", "rsPerm", true);
-    tick("T ярлык", "rsShort", false);
-    tick("S материал", "rsMat", true);
-    tick("S наивные", "rsNaive", true);
-    tick("Солнце луч", "rsSunOn", true);
-    rowSlide(*canvas.state, panel, "ReSTIR пробы", "rsLocal", 8.0f, 0.0f, 16.0f);
-    rowSlide(*canvas.state, panel, "T история", "rsHistory", 20.0f, 1.0f, 40.0f);
-    rowSlide(*canvas.state, panel, "T глубина", "rsTDepth", 0.1f, 0.01f, 0.5f);
-    rowSlide(*canvas.state, panel, "T нормаль", "rsTNorm", 0.9f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "T луч", "rsTBias", 1.0f, 0.0f, 2.0f);
-    rowSlide(*canvas.state, panel, "T порог", "rsPermTh", 0.9f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "T кипение", "rsBoil", 0.2f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "S соседи", "rsSpatial", 3.0f, 0.0f, 8.0f);
-    rowSlide(*canvas.state, panel, "S радиус", "rsRadius", 4.0f, 1.0f, 32.0f);
-    rowSlide(*canvas.state, panel, "S глубина", "rsSDepth", 0.1f, 0.01f, 0.5f);
-    rowSlide(*canvas.state, panel, "S нормаль", "rsSNorm", 0.9f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "S луч", "rsSBias", 3.0f, 0.0f, 3.0f);
-    rowSlide(*canvas.state, panel, "S буст", "rsSBoost", 3.0f, 0.0f, 16.0f);
-    rowSlide(*canvas.state, panel, "S цель", "rsTarget", 20.0f, 1.0f, 40.0f);
-    rowSlide(*canvas.state, panel, "Солнце диск", "rsSun", 0.5f, 0.0f, 4.0f);
-    rowSlide(*canvas.state, panel, "Солнце лучи", "rsSunRays", 1.0f, 1.0f, 8.0f);
-    rowSlide(*canvas.state, panel, "Тень лучи", "rsShadowRays", 1.0f, 1.0f, 8.0f);
-    rowSlide(*canvas.state, panel, "Тень длина м", "rsShadowRange", 0.0f, 0.0f, 200.0f);
-    rowSlide(*canvas.state, panel, "Тень отступ м", "rsShadowBias", 0.05f, 0.02f, 2.0f);
-    panel = postBody;
-    tick("GTAO", "gtaoen", true);
+    hideCheck("ReSTIR", "restiren", 0, 0, true);
+    panel = group(directBody, "diBody");
+    tick("Temporal", "rsTOn", true);
+    tick("Spatial", "rsSOn", true);
+    tick("Boil", "rsBoilOn", true);
+    tick("Visibility", "rsVis", false);
+    tick("Permutation", "rsPerm", true);
+    tick("Shortcut", "rsShort", false);
+    tick("Material", "rsMat", true);
+    tick("Naive", "rsNaive", true);
+    tick("Sun ray", "rsSunOn", true);
+    rowSlide(*canvas.state, panel, "Candidates", "rsLocal", 8.0f, 0.0f, 16.0f);
+    rowSlide(*canvas.state, panel, "History", "rsHistory", 20.0f, 1.0f, 40.0f);
+    rowSlide(*canvas.state, panel, "Temporal depth", "rsTDepth", 0.1f, 0.01f, 0.5f);
+    rowSlide(*canvas.state, panel, "Temporal normal", "rsTNorm", 0.9f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Temporal ray", "rsTBias", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "Permute threshold", "rsPermTh", 0.9f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Boil", "rsBoil", 0.2f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Neighbors", "rsSpatial", 3.0f, 0.0f, 8.0f);
+    rowSlide(*canvas.state, panel, "Radius", "rsRadius", 4.0f, 1.0f, 32.0f);
+    rowSlide(*canvas.state, panel, "Spatial depth", "rsSDepth", 0.1f, 0.01f, 0.5f);
+    rowSlide(*canvas.state, panel, "Spatial normal", "rsSNorm", 0.9f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Spatial ray", "rsSBias", 3.0f, 0.0f, 3.0f);
+    rowSlide(*canvas.state, panel, "Boost", "rsSBoost", 3.0f, 0.0f, 16.0f);
+    rowSlide(*canvas.state, panel, "Target", "rsTarget", 20.0f, 1.0f, 40.0f);
+    rowSlide(*canvas.state, panel, "Sun disk", "rsSun", 0.5f, 0.0f, 4.0f);
+    rowSlide(*canvas.state, panel, "Sun rays", "rsSunRays", 1.0f, 1.0f, 8.0f);
+    rowSlide(*canvas.state, panel, "Shadow rays", "rsShadowRays", 1.0f, 1.0f, 8.0f);
+    rowSlide(*canvas.state, panel, "Shadow range m", "rsShadowRange", 0.0f, 0.0f, 200.0f);
+    rowSlide(*canvas.state, panel, "Shadow bias m", "rsShadowBias", 0.05f, 0.02f, 2.0f);
+    const uint16_t indirectBody = uiFoldBody(*canvas.state, giBody, "Indirect Illumination");
+    {
+        const uint16_t menu = uiMakeMenu(*canvas.state);
+        uiCommandAddTo(*canvas.state, menu, "None", giOff, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Sharc", giRs, canvas.state.get());
+        uiName(*canvas.state, uiPropMenu(*canvas.state, indirectBody, "Mode", "Sharc", menu), "giBtn");
+    }
+    hideCheck("Off", "prof0", 1, 3, false);
+    hideCheck("VXGI", "prof1", 1, 3, false);
+    hideCheck("Cascades", "prof2", 1, 3, false);
+    hideCheck("SHARC", "prof3", 1, 3, true);
+    hideCheck("GI", "gien", 0, 0, true);
+    hideCheck("probes", "probes", 0, 0, true);
+    hideCheck("radiance", "rcen", 0, 0, false);
+    hideSlide("rcRays", 1.0f, 1.0f, 16.0f);
+    hideSlide("rcCell", 0.8f, 0.1f, 4.0f);
+    hideSlide("rcGain", 1.0f, 0.0f, 4.0f);
+    hideSlide("rcMax", 48.0f, 0.5f, 200.0f);
+    hideSlide("rcSun", 1.0f, 0.0f, 2.0f);
+    hideSlide("rcBounce", 1.0f, 0.0f, 2.0f);
+    panel = group(indirectBody, "indBody");
+    tick("Denoise", "denoise", true);
+    rowSlide(*canvas.state, panel, "GI brightness", "giGain", 2.0f, 0.0f, 6.0f);
+    const uint16_t reflectFold = uiFoldBody(*canvas.state, giBody, "Reflection");
+    {
+        const uint16_t menu = uiMakeMenu(*canvas.state);
+        uiCommandAddTo(*canvas.state, menu, "None", reflOff, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "SSSR", reflSssr, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "SSSR + RT", reflRt, canvas.state.get());
+        uiName(*canvas.state, uiPropMenu(*canvas.state, reflectFold, "Mode", "SSSR + RT", menu), "reflBtn");
+    }
+    hideCheck("reflect", "reflecten", 0, 0, true);
+    hideCheck("rt", "reflRt", 0, 0, true);
+    panel = group(reflectFold, "reflBody");
+    rowSlide(*canvas.state, panel, "Roughness", "ssrCut", 0.82f, 0.05f, 1.0f);
+    rowSlide(*canvas.state, panel, "Steps", "ssrSteps", 64.0f, 16.0f, 96.0f);
+    rowSlide(*canvas.state, panel, "Thickness", "ssrThick", 0.02f, 0.02f, 2.0f);
+    rowSlide(*canvas.state, panel, "Distance", "ssrMax", 80.0f, 4.0f, 200.0f);
+    rowSlide(*canvas.state, panel, "Blur", "ssrBlur", 1.0f, 0.0f, 3.0f);
+    rowSlide(*canvas.state, panel, "Metal", "ssrMetal", 0.35f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Edge px", "ssrEdge", 24.0f, 0.0f, 64.0f);
+    panel = group(reflectFold, "rtBody");
+    rowSlide(*canvas.state, panel, "Ray roughness", "ssrRt", 0.45f, 0.0f, 1.0f);
+    const uint16_t effects = uiFoldBody(*canvas.state, postBody, "Effects");
+    {
+        const uint16_t menu = uiMakeMenu(*canvas.state);
+        uiCommandAddTo(*canvas.state, menu, "None", aoOff, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "XeGTAO", aoGtao, canvas.state.get());
+        uiName(*canvas.state, uiPropMenu(*canvas.state, effects, "Ambient Occlusion", "XeGTAO", menu), "aoBtn");
+    }
+    hideCheck("GTAO", "gtaoen", 0, 0, true);
+    panel = group(effects, "aoBody");
+    rowSlide(*canvas.state, panel, "Radius", "gtaor", 0.5f, 0.05f, 4.0f);
+    rowSlide(*canvas.state, panel, "Slices", "gtaoSl", 3.0f, 1.0f, 9.0f);
+    rowSlide(*canvas.state, panel, "Steps", "gtaoSt", 3.0f, 1.0f, 4.0f);
+    rowSlide(*canvas.state, panel, "Power", "gtaoPw", 2.2f, 0.5f, 4.0f);
+    rowSlide(*canvas.state, panel, "Falloff", "gtaoFa", 0.615f, 0.05f, 1.0f);
+    rowSlide(*canvas.state, panel, "Denoise", "gtaoDn", 1.0f, 0.0f, 3.0f);
+    rowSlide(*canvas.state, panel, "Strength", "gtao", 1.0f, 0.0f, 1.0f);
+    const uint16_t sscsFold = uiFoldBody(*canvas.state, effects, "SSCS");
+    panel = sscsFold;
+    tick("Enabled", "contacten", true);
+    panel = group(sscsFold, "sscsBody");
+    rowSlide(*canvas.state, panel, "Strength", "contact", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Radius m", "sscsR", 1.0f, 0.05f, 8.0f);
+    rowSlide(*canvas.state, panel, "Steps", "sscsS", 8.0f, 1.0f, 32.0f);
+    rowSlide(*canvas.state, panel, "Thickness", "sscsT", 0.02f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Pixels", "sscsP", 128.0f, 1.0f, 256.0f);
+    rowSlide(*canvas.state, panel, "Spec occlusion", "spec", 1.0f, 0.0f, 1.0f);
+    const uint16_t bloomFold = uiFoldBody(*canvas.state, effects, "Bloom");
+    panel = bloomFold;
+    tick("Enabled", "bloomen", true);
+    panel = group(bloomFold, "bloomBody");
+    rowSlide(*canvas.state, panel, "Strength", "bloom", 0.15f, 0.0f, 0.80f);
+    rowSlide(*canvas.state, panel, "Threshold", "bloomth", 0.35f, 0.0f, 2.0f);
+    const uint16_t lens = uiFoldBody(*canvas.state, effects, "Lens");
+    panel = lens;
+    rowSlide(*canvas.state, panel, "Focus m", "dofFocus", 8.0f, 0.2f, 80.0f);
+    rowSlide(*canvas.state, panel, "Bokeh", "dofAmount", 0.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Flare", "flare", 0.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Grain", "grain", 0.0f, 0.0f, 0.12f);
+    rowSlide(*canvas.state, panel, "Vignette", "vig", 0.35f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "Chromatic px", "ca", 2.0f, 0.0f, 4.0f);
+    const uint16_t toneBody = uiFoldBody(*canvas.state, postBody, "Tonemapping");
+    panel = toneBody;
+    hideCheck("AgX", "tone0", 1, 2, true);
+    hideCheck("ACES", "tone1", 1, 2, false);
+    hideCheck("Filmic", "tone2", 1, 2, false);
+    hideCheck("Linear", "tone3", 1, 2, false);
+    hideCheck("PBR Neutral", "tone4", 1, 2, false);
+    hideCheck("GT7", "tone5", 1, 2, false);
+    hideCheck("Generic", "tone6", 1, 2, false);
+    hideCheck("Reinhard", "tone7", 1, 2, false);
+    {
+        const uint16_t menu = uiMakeMenu(*canvas.state);
+        uiCommandAddTo(*canvas.state, menu, "AgX", toneAgx, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "ACES", toneAces, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Filmic", toneFilmic, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Linear", toneLinear, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "PBR Neutral", toneNeutral, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "GT7", toneGt7, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Generic", toneGeneric, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Reinhard", toneReinhard, canvas.state.get());
+        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Operator", "AgX", menu), "toneBtn");
+    }
+    tick("Luminance", "lumScale", false);
+    tick("Gamut", "gamut", false);
+    rowSlide(*canvas.state, panel, "Brightness", "bright", 1.0f, 0.05f, 4.0f);
+    rowSlide(*canvas.state, panel, "Exposure EV", "exposure", -1.0f, -8.0f, 8.0f);
+    rowSlide(*canvas.state, panel, "Temperature", "temperature", 0.0f, -1.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Tint", "tint", 0.0f, -1.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Night", "night", 0.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Contrast", "contrast", 1.0f, 0.5f, 1.5f);
+    rowSlide(*canvas.state, panel, "Saturation", "saturation", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "Mix", "mix", 0.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Vibrance", "vibrance", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "Generic contrast", "genContrast", 1.0f, 0.5f, 2.0f);
+    rowSlide(*canvas.state, panel, "Generic mid in", "midIn", 0.18f, 0.01f, 1.0f);
+    rowSlide(*canvas.state, panel, "Generic mid out", "midOut", 0.18f, 0.01f, 1.0f);
+    rowSlide(*canvas.state, panel, "Generic HDR", "hdrMax", 10.0f, 1.0f, 64.0f);
+    rowSlide(*canvas.state, panel, "Shadows", "shadows", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "Midtones", "midtones", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "Highlights", "highlights", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "CDL slope", "slope", 1.0f, 0.0f, 2.0f);
+    rowSlide(*canvas.state, panel, "CDL offset", "cdlOffset", 0.0f, -0.5f, 0.5f);
+    rowSlide(*canvas.state, panel, "CDL power", "power", 1.0f, 0.2f, 2.0f);
+    const uint16_t finalBody = uiFoldBody(*canvas.state, postBody, "Final");
+    panel = finalBody;
     hideCheck("SMAA", "smaa", 0, 0, false);
     hideCheck("CMAA", "cmaa", 0, 0, false);
     hideCheck("FSR", "fsr", 0, 0, true);
@@ -1235,8 +1375,9 @@ void sceneHud(Canvas& canvas, void* user) {
         uiCommandAddTo(*canvas.state, menu, "FSR", aaFsr, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "TAA", aaTaa, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "FXAA", aaFxaa, canvas.state.get());
-        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Сглаживание", "FSR", menu), "aaBtn");
+        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Anti-aliasing", "FSR", menu), "aaBtn");
     }
+    panel = group(finalBody, "fsrBody");
     {
         const uint16_t menu = uiMakeMenu(*canvas.state);
         uiCommandAddTo(*canvas.state, menu, "Native", fsrNative, canvas.state.get());
@@ -1244,41 +1385,59 @@ void sceneHud(Canvas& canvas, void* user) {
         uiCommandAddTo(*canvas.state, menu, "Balanced", fsrBalanced, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "Performance", fsrPerformance, canvas.state.get());
         uiCommandAddTo(*canvas.state, menu, "Ultra", fsrUltra, canvas.state.get());
-        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "FSR масштаб", "Native", menu), "fsrBtn");
+        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "FSR scale", "Native", menu), "fsrBtn");
     }
-    rowSlide(*canvas.state, panel, "FSR резкость", "fsrSharp", 0.2f, 0.0f, 1.0f);
-    tick("Bloom", "bloomen", true);
-    panel = sunBody;
-    tick("солнце", "sun", true);
-    rowSlide(*canvas.state, panel, "солнце", "sunI", 1.0f, 0.0f, 4.0f);
-    rowSlide(*canvas.state, panel, "солнце R", "sunR", 1.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "солнце G", "sunG", 0.92f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "солнце B", "sunB", 0.76f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "солнце зенит", "zenith", 35.0f, -10.0f, 80.0f);
-    rowSlide(*canvas.state, panel, "солнце азимут", "azimuth", 30.0f, 0.0f, 360.0f);
-    panel = light;
-    tick("точки", "points", true);
-    tick("прожекторы", "spots", true);
-    tick("площадь", "area", true);
-    panel = sky;
-    tick("небо", "sky", true);
-    tick("облака", "clouden", true);
-    panel = fogBody;
-    tick("туман", "fogen", true);
-    panel = giBody;
-    tick("отражение", "reflecten", true);
-    rowSlide(*canvas.state, panel, "SSR шероховатость", "ssrCut", 0.82f, 0.05f, 1.0f);
-    rowSlide(*canvas.state, panel, "SSR шаги", "ssrSteps", 64.0f, 16.0f, 96.0f);
-    rowSlide(*canvas.state, panel, "SSR толщина", "ssrThick", 0.02f, 0.02f, 2.0f);
-    rowSlide(*canvas.state, panel, "SSR длина", "ssrMax", 80.0f, 4.0f, 200.0f);
-    rowSlide(*canvas.state, panel, "SSR блюр", "ssrBlur", 1.0f, 0.0f, 3.0f);
-    rowSlide(*canvas.state, panel, "SSR металл", "ssrMetal", 0.35f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "SSR луч", "ssrRt", 0.45f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "SSR край", "ssrEdge", 24.0f, 0.0f, 64.0f);
-    panel = postBody;
-    tick("контакт", "contacten", true);
-    panel = cull;
-    uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "вирт. текстуры"), "vt");
+    rowSlide(*canvas.state, panel, "Sharpness", "fsrSharp", 0.2f, 0.0f, 1.0f);
+    const uint16_t atmo = uiPropSection(*canvas.state, details, "Atmosphere", catRender, kSecAtmo);
+    const uint16_t fogFold = uiFoldBody(*canvas.state, atmo, "Fog");
+    panel = fogFold;
+    tick("Enabled", "fogen", false);
+    panel = group(fogFold, "fogBody");
+    rowSlide(*canvas.state, panel, "Fog Density", "fog", 0.06f, 0.0f, 0.5f);
+    rowSlide(*canvas.state, panel, "Fog Falloff", "fogFall", 0.08f, 0.0f, 1.5f);
+    {
+        const uint16_t swatch = uiPropSwatch(*canvas.state, panel, "Fog Color", 0.62f, 0.72f, 0.86f);
+        uiName(*canvas.state, swatch, "fogSwatch");
+        uiBind(*canvas.state, swatch, onFogSwatch, hud);
+    }
+    hideSlide("fogR", 0.62f, 0.0f, 1.0f);
+    hideSlide("fogG", 0.72f, 0.0f, 1.0f);
+    hideSlide("fogB", 0.86f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Fog Height", "fogH", 0.0f, -40.0f, 40.0f);
+    rowSlide(*canvas.state, panel, "Fog Start", "fogStart", 0.0f, 0.0f, 80.0f);
+    rowSlide(*canvas.state, panel, "Fog Opacity", "fogOp", 0.92f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Fog Luminance", "fogLum", 1.4f, 0.0f, 8.0f);
+    rowSlide(*canvas.state, panel, "Sun Shafts", "fogS", 40.0f, 0.0f, 128.0f);
+    rowSlide(*canvas.state, panel, "Shaft Start", "fogIn", 0.0f, 0.0f, 80.0f);
+    const uint16_t cloudFold = uiFoldBody(*canvas.state, atmo, "Clouds");
+    panel = cloudFold;
+    tick("Enabled", "clouden", true);
+    tick("Sky", "sky", true);
+    rowSlide(*canvas.state, panel, "Coverage", "clouds", 0.42f, 0.0f, 0.95f);
+    rowSlide(*canvas.state, panel, "Density", "cdens", 0.08f, 0.0f, 0.3f);
+    panel = uiPropSection(*canvas.state, details, "Lights", catRender, kSecPost);
+    tick("Cluster", "cluster", true);
+    tick("Points", "points", true);
+    tick("Spots", "spots", true);
+    tick("Area", "area", true);
+    rowSlide(*canvas.state, panel, "Candles", "lamp", 1.0f, 0.0f, 1.0f);
+    panel = uiPropSection(*canvas.state, details, "LOD", catLod, kSecPost);
+    uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Freeze Frustum"), "freeze");
+    tick("Cone", "cone", true);
+    tick("Hi-Z", "hiz", true);
+    tick("LOD", "lod", true);
+    uiName(*canvas.state, uiPropNumber(*canvas.state, panel, "Force LOD", -1.0f, -1.0f, 3.0f, 1.0f), "lodf");
+    tick("Frustum", "frust", true);
+    tick("Small", "small", true);
+    tick("Backface", "backf", true);
+    tick("Screen", "scrn", true);
+    tick("Behind", "behind", true);
+    panel = uiPropSection(*canvas.state, details, "Streaming", catStream, kSecPost);
+    uiName(*canvas.state, uiPropCheck(*canvas.state, panel, "Virtual textures"), "vt");
+    panel = uiPropSection(*canvas.state, details, "Shading", catMisc, kSecPost);
+    rowSlide(*canvas.state, panel, "Toksvig", "tok", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Parallax", "pom", 0.35f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Multi-scatter", "ggx", 1.0f, 0.0f, 1.0f);
     panel = modes;
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "Lit", 1, 1, false), "mode0");
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "Normals", 1, 1, false), "mode2");
@@ -1299,87 +1458,6 @@ void sceneHud(Canvas& canvas, void* user) {
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "ReSTIR M", 1, 1, false), "mode17");
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "ReSTIR тень", 1, 1, false), "mode18");
     uiName(*canvas.state, uiCheck(*canvas.state, panel, "ReSTIR индекс", 1, 1, false), "mode19");
-    panel = postBody;
-    hideCheck("AgX", "tone0", 1, 2, true);
-    hideCheck("ACES", "tone1", 1, 2, false);
-    hideCheck("Filmic", "tone2", 1, 2, false);
-    hideCheck("Linear", "tone3", 1, 2, false);
-    hideCheck("PBR Neutral", "tone4", 1, 2, false);
-    hideCheck("GT7", "tone5", 1, 2, false);
-    hideCheck("Generic", "tone6", 1, 2, false);
-    hideCheck("Reinhard", "tone7", 1, 2, false);
-    {
-        const uint16_t menu = uiMakeMenu(*canvas.state);
-        uiCommandAddTo(*canvas.state, menu, "AgX", toneAgx, canvas.state.get());
-        uiCommandAddTo(*canvas.state, menu, "ACES", toneAces, canvas.state.get());
-        uiCommandAddTo(*canvas.state, menu, "Filmic", toneFilmic, canvas.state.get());
-        uiCommandAddTo(*canvas.state, menu, "Linear", toneLinear, canvas.state.get());
-        uiCommandAddTo(*canvas.state, menu, "PBR Neutral", toneNeutral, canvas.state.get());
-        uiCommandAddTo(*canvas.state, menu, "GT7", toneGt7, canvas.state.get());
-        uiCommandAddTo(*canvas.state, menu, "Generic", toneGeneric, canvas.state.get());
-        uiCommandAddTo(*canvas.state, menu, "Reinhard", toneReinhard, canvas.state.get());
-        uiName(*canvas.state, uiPropMenu(*canvas.state, panel, "Цветокор", "AgX", menu), "toneBtn");
-    }
-    tick("люминанс", "lumScale", false);
-    tick("гамма-охват", "gamut", false);
-    rowSlide(*canvas.state, panel, "яркость", "bright", 1.0f, 0.05f, 4.0f);
-    rowSlide(*canvas.state, panel, "экспозиция EV", "exposure", -1.0f, -8.0f, 8.0f);
-    rowSlide(*canvas.state, panel, "температура", "temperature", 0.0f, -1.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "тинт", "tint", 0.0f, -1.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "ночь", "night", 0.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "контраст", "contrast", 1.0f, 0.5f, 1.5f);
-    rowSlide(*canvas.state, panel, "насыщенность", "saturation", 1.0f, 0.0f, 2.0f);
-    rowSlide(*canvas.state, panel, "смешение", "mix", 0.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "вибранс", "vibrance", 1.0f, 0.0f, 2.0f);
-    rowSlide(*canvas.state, panel, "generic контраст", "genContrast", 1.0f, 0.5f, 2.0f);
-    rowSlide(*canvas.state, panel, "generic середина in", "midIn", 0.18f, 0.01f, 1.0f);
-    rowSlide(*canvas.state, panel, "generic середина out", "midOut", 0.18f, 0.01f, 1.0f);
-    rowSlide(*canvas.state, panel, "generic hdr", "hdrMax", 10.0f, 1.0f, 64.0f);
-    rowSlide(*canvas.state, panel, "тени", "shadows", 1.0f, 0.0f, 2.0f);
-    rowSlide(*canvas.state, panel, "средние", "midtones", 1.0f, 0.0f, 2.0f);
-    rowSlide(*canvas.state, panel, "света", "highlights", 1.0f, 0.0f, 2.0f);
-    rowSlide(*canvas.state, panel, "CDL наклон", "slope", 1.0f, 0.0f, 2.0f);
-    rowSlide(*canvas.state, panel, "CDL сдвиг", "cdlOffset", 0.0f, -0.5f, 0.5f);
-    rowSlide(*canvas.state, panel, "CDL степень", "power", 1.0f, 0.2f, 2.0f);
-    rowSlide(*canvas.state, panel, "фокус м", "dofFocus", 8.0f, 0.2f, 80.0f);
-    rowSlide(*canvas.state, panel, "боке", "dofAmount", 0.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "блики", "flare", 0.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "зерно", "grain", 0.0f, 0.0f, 0.12f);
-    rowSlide(*canvas.state, panel, "блюм", "bloom", 0.15f, 0.0f, 0.80f);
-    rowSlide(*canvas.state, panel, "порог блюма", "bloomth", 0.35f, 0.0f, 2.0f);
-    rowSlide(*canvas.state, panel, "виньетка", "vig", 0.35f, 0.0f, 2.0f);
-    rowSlide(*canvas.state, panel, "хромат. пкс", "ca", 2.0f, 0.0f, 4.0f);
-    rowSlide(*canvas.state, panel, "контакт", "contact", 1.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "контакт м", "sscsR", 1.0f, 0.05f, 8.0f);
-    rowSlide(*canvas.state, panel, "контакт шаги", "sscsS", 8.0f, 1.0f, 32.0f);
-    rowSlide(*canvas.state, panel, "окклюзия блика", "spec", 1.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "Toksvig", "tok", 1.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "параллакс", "pom", 0.35f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "multi-scatter", "ggx", 1.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "радиус GTAO", "gtaor", 0.5f, 0.05f, 4.0f);
-    rowSlide(*canvas.state, panel, "GTAO срезы", "gtaoSl", 3.0f, 1.0f, 9.0f);
-    rowSlide(*canvas.state, panel, "GTAO шаги", "gtaoSt", 3.0f, 1.0f, 4.0f);
-    rowSlide(*canvas.state, panel, "GTAO сила", "gtaoPw", 2.2f, 0.5f, 4.0f);
-    rowSlide(*canvas.state, panel, "GTAO край", "gtaoFa", 0.615f, 0.05f, 1.0f);
-    rowSlide(*canvas.state, panel, "GTAO денуаз", "gtaoDn", 1.0f, 0.0f, 3.0f);
-    rowSlide(*canvas.state, panel, "GTAO", "gtao", 1.0f, 0.0f, 1.0f);
-    panel = light;
-    rowSlide(*canvas.state, panel, "свечи", "lamp", 1.0f, 0.0f, 1.0f);
-    panel = sky;
-    rowSlide(*canvas.state, panel, "облака", "clouds", 0.42f, 0.0f, 0.95f);
-    rowSlide(*canvas.state, panel, "плотность", "cdens", 0.08f, 0.0f, 0.3f);
-    panel = fogBody;
-    rowSlide(*canvas.state, panel, "плотность", "fog", 0.06f, 0.0f, 0.5f);
-    rowSlide(*canvas.state, panel, "высота", "fogH", 0.0f, -40.0f, 40.0f);
-    rowSlide(*canvas.state, panel, "спад", "fogFall", 0.08f, 0.0f, 1.5f);
-    rowSlide(*canvas.state, panel, "старт м", "fogStart", 0.0f, 0.0f, 80.0f);
-    rowSlide(*canvas.state, panel, "потолок", "fogOp", 0.92f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "цвет R", "fogR", 0.62f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "цвет G", "fogG", 0.72f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "цвет B", "fogB", 0.86f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "яркость", "fogLum", 1.4f, 0.0f, 8.0f);
-    rowSlide(*canvas.state, panel, "лучи солнца", "fogS", 40.0f, 0.0f, 128.0f);
-    rowSlide(*canvas.state, panel, "старт лучей", "fogIn", 0.0f, 0.0f, 80.0f);
     panel = stats;
     UiFlex statScrollFlex{};
     statScrollFlex.grow = 1.0f;
@@ -1400,19 +1478,30 @@ void sceneHud(Canvas& canvas, void* user) {
         std::snprintf(name, sizeof(name), "g%d", i);
         uiName(*canvas.state, uiLabel(*canvas.state, statLines, ""), name);
     }
-    const char* on[] = {"hiz", "cone", "lod", "frust", "small", "shadow", "cluster", "probes", "gtaoen", "fsr", "bloomen"};
+    const char* on[] = {"hiz", "cone", "lod", "frust", "small", "backf", "scrn", "behind", "shadow", "cluster", "probes", "gtaoen", "fsr", "bloomen"};
     for (const char* name : on) {
         if (canvas.state != nullptr) {
             uiBindCheck(*canvas.state, uiFindName(*canvas.state, name), 0, 0, true);
         }
     }
     if (canvas.state != nullptr) {
+        applyDirect(*canvas.state, 1);
         applyGi(*canvas.state, 3);
+        applyReflect(*canvas.state, 2);
+        applyAo(*canvas.state, 1);
         applyAa(*canvas.state, 3);
         applyFsrQ(*canvas.state, 0);
         uiBindCheck(*canvas.state, uiFindName(*canvas.state, "mode0"), 1, 1, true);
         uiBindCheck(*canvas.state, uiFindName(*canvas.state, "tone0"), 1, 2, true);
         bindHudIds(*hud, *canvas.state);
+        uint8_t mask = kSecTransform;
+        if (hud->tool.scene != nullptr) {
+            const uint8_t sel = sceneFrameActorSelected(hud->tool.scene);
+            if (sel != kSceneActorNone) {
+                mask = sceneFrameActorSections(hud->tool.scene, sel);
+            }
+        }
+        uiPropShowMask(*canvas.state, mask);
     }
 }
 
@@ -1454,6 +1543,10 @@ void pullProp(HudContext& hud, Canvas& canvas, uint8_t index) {
     setSlide(canvas, id.pbrSx, pose.scale[0]);
     setSlide(canvas, id.pbrSy, pose.scale[1]);
     setSlide(canvas, id.pbrSz, pose.scale[2]);
+    if (canvas.state != nullptr) {
+        uiBindCheck(*canvas.state, id.xfStatic, 0, 0, pose.isStatic != 0);
+    }
+    hud.propStatic = pose.isStatic;
     hud.propLast[0] = pbr.base[0];
     hud.propLast[1] = pbr.base[1];
     hud.propLast[2] = pbr.base[2];
@@ -1477,10 +1570,11 @@ void syncProp(Engine& e, Canvas& canvas) {
         return;
     }
     const uint8_t selected = sceneFrameActorSelected(e.scene);
-    if (sceneFrameActorKind(e.scene, selected) != static_cast<uint8_t>(SceneActorKind::Prop)) {
+    if (selected >= sceneFrameActorCount(e.scene)) {
         e.hud.propSel = 0xff;
         return;
     }
+    const bool prop = sceneFrameActorKind(e.scene, selected) == static_cast<uint8_t>(SceneActorKind::Prop);
     if (e.hud.propSel != selected) {
         pullProp(e.hud, canvas, selected);
         return;
@@ -1503,8 +1597,8 @@ void syncProp(Engine& e, Canvas& canvas) {
         slideAt(canvas, id.pbrSy, e.hud.propLast[13]),
         slideAt(canvas, id.pbrSz, e.hud.propLast[14]),
     };
-    bool moved = false;
-    for (int i = 0; i < 15; ++i) {
+    bool moved = checkOn(canvas, id.xfStatic, false) != (e.hud.propStatic != 0);
+    for (int i = prop ? 0 : 6; i < 15; ++i) {
         if (std::fabs(cur[i] - e.hud.propLast[i]) > 0.0005f) {
             moved = true;
         }
@@ -1527,8 +1621,12 @@ void syncProp(Engine& e, Canvas& canvas) {
         pose.scale[0] = cur[12];
         pose.scale[1] = cur[13];
         pose.scale[2] = cur[14];
-        sceneFrameActorSetPbr(e.scene, selected, pbr);
+        pose.isStatic = checkOn(canvas, id.xfStatic, false) ? 1 : 0;
+        if (prop) {
+            sceneFrameActorSetPbr(e.scene, selected, pbr);
+        }
         sceneFrameActorSetPose(e.scene, selected, pose);
+        e.hud.propStatic = pose.isStatic;
         for (int i = 0; i < 15; ++i) {
             e.hud.propLast[i] = cur[i];
         }
@@ -1599,18 +1697,14 @@ bool engineTick(Engine& e) {
         const uint8_t selected = sceneFrameActorSelected(e.scene);
         if (selected != e.hud.shown && selected != kSceneActorNone) {
             e.hud.shown = selected;
-            const uint8_t kind = sceneFrameActorKind(e.scene, selected);
-            uint16_t page = kUiNone;
-            if (kind == static_cast<uint8_t>(SceneActorKind::Sun)) {
-                page = e.hud.tool.sunPage;
-            } else if (kind == static_cast<uint8_t>(SceneActorKind::Post)) {
-                page = e.hud.tool.postPage;
-            } else if (kind == static_cast<uint8_t>(SceneActorKind::Prop)) {
-                page = e.hud.tool.propPage;
+            if (hud.state != nullptr) {
+                uiPropShowMask(*hud.state, sceneFrameActorSections(e.scene, selected));
             }
-            if (page != kUiNone) {
-                uiShowOnly(*hud.state, page);
-            }
+        }
+        if (hud.state != nullptr) {
+            showNamed(*hud.state, "bloomBody", checkOn(hud, e.hud.ids.bloomen, true));
+            showNamed(*hud.state, "sscsBody", checkOn(hud, e.hud.ids.contacten, true));
+            showNamed(*hud.state, "fogBody", checkOn(hud, e.hud.ids.fogen, true));
         }
         syncProp(e, hud);
         uint8_t sunIndex = kSceneActorNone;
@@ -1635,6 +1729,7 @@ bool engineTick(Engine& e) {
         sceneFrameDebug(e.scene,
             checkOn(hud, id.hiz, true), checkOn(hud, id.cone, true),
             checkOn(hud, id.lod, true), checkOn(hud, id.frust, true), checkOn(hud, id.small, true), checkOn(hud, id.shadow, true),
+            checkOn(hud, id.backface, true), checkOn(hud, id.screen, true), checkOn(hud, id.behind, true),
             mode);
         HudPost hudPost{};
         hudPost.brightness = slideAt(hud, id.bright, 1.0f);
@@ -1701,7 +1796,7 @@ bool engineTick(Engine& e) {
         tweaks.ssrSteps = slideAt(hud, id.ssrSteps, 64.0f);
         tweaks.ssrThick = slideAt(hud, id.ssrThick, 0.02f);
         tweaks.ssrMetal = slideAt(hud, id.ssrMetal, 0.35f);
-        tweaks.ssrRt = slideAt(hud, id.ssrRt, 0.45f);
+        tweaks.ssrRt = checkOn(hud, id.reflRt, true) ? slideAt(hud, id.ssrRt, 0.45f) : 0.0f;
         tweaks.ssrEdge = slideAt(hud, id.ssrEdge, 24.0f);
         tweaks.ssrMax = slideAt(hud, id.ssrMax, 80.0f);
         tweaks.ssrStride = slideAt(hud, id.ssrBlur, 1.0f);
@@ -1750,6 +1845,17 @@ bool engineTick(Engine& e) {
         tweaks.fogHeight = slideAt(hud, id.fogH, 0.0f);
         tweaks.fogScatter = slideAt(hud, id.fogS, 40.0f);
         tweaks.fogFalloff = slideAt(hud, id.fogFall, 0.08f);
+        if (hud.state != nullptr) {
+            UiState& state = *hud.state;
+            const uint16_t swatch = id.fogSwatch;
+            UiColorPickerComponent& picker = uiColor(state);
+            if (swatch != kUiNone && picker.colorAnchor == swatch && picker.book != nullptr && picker.colorPresent != 0) {
+                setSlide(hud, id.fogR, picker.book->r);
+                setSlide(hud, id.fogG, picker.book->g);
+                setSlide(hud, id.fogB, picker.book->b);
+                uiPaintRgb(state, swatch, picker.book->r, picker.book->g, picker.book->b);
+            }
+        }
         tweaks.fogR = slideAt(hud, id.fogR, 0.62f);
         tweaks.fogG = slideAt(hud, id.fogG, 0.72f);
         tweaks.fogB = slideAt(hud, id.fogB, 0.86f);
@@ -1859,7 +1965,7 @@ bool engineTick(Engine& e) {
         }
         if (checkOn(hud, id.restiren, true)) {
             tweaks.passMask |= 1048576u;
-            if (tweaks.restirSunOn) {
+            if (tweaks.restirSunOn && (tweaks.passMask & 256u) != 0u) {
                 tweaks.passMask |= 2097152u;
             }
         }

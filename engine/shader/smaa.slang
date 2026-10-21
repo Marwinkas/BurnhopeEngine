@@ -24,7 +24,7 @@ void smaaCs(uint3 dtid : SV_DispatchThreadID) {
     if ((gPass.passMask & 4u) == 0u) {
         return;
     }
-    const int2 jitter = (gFrame.debugAlign0 & 1u) == 0u ? int2(1, 0) : int2(0, 1);
+    const int2 jitter = (gFrame.frameParity & 1u) == 0u ? int2(1, 0) : int2(0, 1);
     const float l = luma(src.rgb);
     const float threshold = max(0.02, l * 0.05);
     float3 color = src.rgb;

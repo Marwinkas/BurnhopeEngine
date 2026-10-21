@@ -21,10 +21,10 @@ struct FrameView {
     uint debugPad0;
     uint debugPad1;
     uint debugPad2;
-    uint debugAlign0;
-    uint debugAlign1;
-    uint debugAlign2;
-    uint debugAlign3;
+    uint frameParity;
+    uint disableBackface;
+    uint disableScreen;
+    uint disableBehind;
     float4x4 freezeVp;
     float4 viewTail0;
     float4 viewTail1;
@@ -190,6 +190,7 @@ struct MeshletRef {
     uint vertexCount;
     uint triangleCount;
     float4 cone;
+    float4 groupSphere;
 };
 
 struct GpuInstance {

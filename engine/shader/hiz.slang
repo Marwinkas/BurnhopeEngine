@@ -30,7 +30,6 @@ void hizStore(uint2 p, float v) {
 uint mipY(uint mip) {
     return atlasMipY(mip, gFrame.extent.y);
 }
-
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void hizCs(uint3 dtid : SV_DispatchThreadID) {
@@ -39,7 +38,8 @@ void hizCs(uint3 dtid : SV_DispatchThreadID) {
     if (dtid.x >= ext.x || dtid.y >= ext.y) {
         return;
     }
-    float d = 1.0;
+    // Reverse-Z (1.0 = near, 0.0 = far): консервативный Hi-Z обязан хранить MIN (самую дальнюю глубину в тайле)
+    float d = 0.0;
     if (mip == 0) {
         d = gDepth.Load(int3(dtid.xy, 0));
     } else {
@@ -50,7 +50,7 @@ void hizCs(uint3 dtid : SV_DispatchThreadID) {
         const float b = hizLoad(int2(int(min(base.x + 1, prev.x - 1)), int(y + min(base.y, prev.y - 1))));
         const float c = hizLoad(int2(int(min(base.x, prev.x - 1)), int(y + min(base.y + 1, prev.y - 1))));
         const float e = hizLoad(int2(int(min(base.x + 1, prev.x - 1)), int(y + min(base.y + 1, prev.y - 1))));
-        d = max(max(d, b), max(c, e));
+        d = min(min(d, b), min(c, e));
     }
     hizStore(uint2(dtid.x, mipY(mip) + dtid.y), d);
 }

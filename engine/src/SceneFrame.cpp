@@ -822,12 +822,17 @@ uint32_t uploadLights(SceneFrameImpl& s, uint32_t flight) {
     }
     auto* dst = static_cast<uint8_t*>(s.lightBuf.mapped) + sizeof(LightGpuData) * kLightCap * flight;
     std::memcpy(dst, src, sizeof(LightGpuData) * count);
-    if ((s.passMask & kPassRestir) != 0u && s.materialSrc != nullptr && s.materialCount > 0u) {
+    if (s.handOn && count < kLightCap) {
+        std::memcpy(dst + sizeof(LightGpuData) * count, &s.handLamp, sizeof(s.handLamp));
+        count += 1u;
+    }
+    const GpuInstance* lamps = s.instSrc != nullptr ? s.instSrc : s.cpuInstances;
+    if ((s.passMask & kPassRestir) != 0u && s.materialSrc != nullptr && s.materialCount > 0u && lamps != nullptr) {
         uint32_t pick[32]{};
         float score[32]{};
         uint32_t picked = 0;
         for (uint32_t i = 0; i < s.instanceCount; ++i) {
-            const GpuInstance& inst = s.cpuInstances[i];
+            const GpuInstance& inst = lamps[i];
             if (inst.materialId >= s.materialCount || inst.sphere[3] < 0.02f) {
                 continue;
             }
@@ -855,7 +860,7 @@ uint32_t uploadLights(SceneFrameImpl& s, uint32_t flight) {
             }
         }
         for (uint32_t n = 0; n < picked && count < kLightCap; ++n) {
-            const GpuInstance& inst = s.cpuInstances[pick[n]];
+            const GpuInstance& inst = lamps[pick[n]];
             const MaterialGpuData& mat = s.materialSrc[inst.materialId];
             bool near = false;
             for (uint32_t l = 0; l < count; ++l) {
@@ -892,6 +897,76 @@ uint32_t uploadLights(SceneFrameImpl& s, uint32_t flight) {
         std::memset(dst + sizeof(LightGpuData) * count, 0, sizeof(LightGpuData) * (kLightCap - count));
     }
     return count;
+}
+
+void writeGroupSpheres(const GpuInstance* instances, GpuMeshlet* meshlets, uint32_t begin, uint32_t count, uint32_t meshletCount) {
+    struct Box {
+        uint32_t group = 0;
+        float minX = 1.0e30f;
+        float minY = 1.0e30f;
+        float minZ = 1.0e30f;
+        float maxX = -1.0e30f;
+        float maxY = -1.0e30f;
+        float maxZ = -1.0e30f;
+    };
+    std::vector<Box> boxes;
+    boxes.reserve(64);
+    for (uint32_t n = 0; n < count; ++n) {
+        const GpuInstance& inst = instances[begin + n];
+        if (inst.meshId >= meshletCount) {
+            continue;
+        }
+        const uint32_t group = inst.pad[1] & 0x0fffffffu;
+        Box* box = nullptr;
+        for (Box& item : boxes) {
+            if (item.group == group) {
+                box = &item;
+                break;
+            }
+        }
+        if (box == nullptr) {
+            boxes.push_back({});
+            box = &boxes.back();
+            box->group = group;
+            box->minX = box->minY = box->minZ = 1.0e30f;
+            box->maxX = box->maxY = box->maxZ = -1.0e30f;
+        }
+        const float x = inst.sphere[0];
+        const float y = inst.sphere[1];
+        const float z = inst.sphere[2];
+        const float r = inst.sphere[3];
+        box->minX = std::min(box->minX, x - r);
+        box->minY = std::min(box->minY, y - r);
+        box->minZ = std::min(box->minZ, z - r);
+        box->maxX = std::max(box->maxX, x + r);
+        box->maxY = std::max(box->maxY, y + r);
+        box->maxZ = std::max(box->maxZ, z + r);
+    }
+    for (uint32_t n = 0; n < count; ++n) {
+        const GpuInstance& inst = instances[begin + n];
+        if (inst.meshId >= meshletCount) {
+            continue;
+        }
+        const uint32_t group = inst.pad[1] & 0x0fffffffu;
+        const Box* box = nullptr;
+        for (const Box& item : boxes) {
+            if (item.group == group) {
+                box = &item;
+                break;
+            }
+        }
+        if (box == nullptr) {
+            continue;
+        }
+        GpuMeshlet& mesh = meshlets[inst.meshId];
+        mesh.groupCenter[0] = (box->minX + box->maxX) * 0.5f;
+        mesh.groupCenter[1] = (box->minY + box->maxY) * 0.5f;
+        mesh.groupCenter[2] = (box->minZ + box->maxZ) * 0.5f;
+        const float dx = box->maxX - mesh.groupCenter[0];
+        const float dy = box->maxY - mesh.groupCenter[1];
+        const float dz = box->maxZ - mesh.groupCenter[2];
+        mesh.groupRadius = std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
 }
 
 } // namespace
@@ -976,6 +1051,7 @@ bool sceneFrameLoadBhop(SceneFrame* scene, const char* path) {
         dst.coneAxis[2] = src.coneAxis[2];
         dst.coneCutoff = src.coneCutoff;
     }
+    writeGroupSpheres(reinterpret_cast<const GpuInstance*>(view.instances), scene->meshletGpu.data(), 0, view.info->instanceCount, view.info->meshletCount);
     for (uint32_t i = 0; i < view.info->instanceCount; ++i) {
         const float x = view.instances[i].sphere[0];
         const float y = view.instances[i].sphere[1];
@@ -1463,6 +1539,7 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
         dst.coneAxis[2] = src.coneAxis[2];
         dst.coneCutoff = src.coneCutoff;
     }
+    writeGroupSpheres(instances.data(), meshlets.data(), instBase, view.info->instanceCount, static_cast<uint32_t>(meshlets.size()));
     for (uint32_t i = 0; i < addTex; ++i) {
         names[texBase + i] = view.textures[i + 1u];
     }
@@ -1899,6 +1976,33 @@ void sceneFrameActorSetEuler(SceneFrame* scene, uint8_t index, float pitch, floa
     sceneActorWriteXform(scene->actors, index, pose);
 }
 
+uint8_t sceneFrameActorSections(const SceneFrame* scene, uint8_t index) {
+    uint8_t mask = 0;
+    if (scene == nullptr || index >= scene->actors.count) {
+        return mask;
+    }
+    const flecs::entity ent = scene->actors.ent[index];
+    if (!ent.is_alive()) {
+        return mask;
+    }
+    if (ent.has<Transform>()) {
+        mask |= kSecTransform;
+    }
+    if (ent.has<Material>()) {
+        mask |= kSecMaterial;
+    }
+    if (ent.has<PostProcess>()) {
+        mask |= kSecPost;
+    }
+    if (ent.has<Atmosphere>()) {
+        mask |= kSecAtmo;
+    }
+    if (ent.has<SunObj>()) {
+        mask |= kSecSun;
+    }
+    return mask;
+}
+
 bool sceneFrameActorPose(const SceneFrame* scene, uint8_t index, ActorPose& out) {
     if (scene == nullptr || index >= scene->actors.count) {
         return false;
@@ -1913,6 +2017,11 @@ bool sceneFrameActorPose(const SceneFrame* scene, uint8_t index, ActorPose& out)
     out.scale[0] = pose.scale[0];
     out.scale[1] = pose.scale[1];
     out.scale[2] = pose.scale[2];
+    out.isStatic = 0;
+    const flecs::entity ent = scene->actors.ent[index];
+    if (ent.is_alive() && ent.has<Transform>()) {
+        out.isStatic = ent.get<Transform>().isStatic;
+    }
     return true;
 }
 
@@ -1931,6 +2040,10 @@ void sceneFrameActorSetPose(SceneFrame* scene, uint8_t index, const ActorPose& p
     next.scale[1] = pose.scale[1] < 0.05f ? 0.05f : pose.scale[1];
     next.scale[2] = pose.scale[2] < 0.05f ? 0.05f : pose.scale[2];
     sceneActorWriteXform(scene->actors, index, next);
+    flecs::entity ent = scene->actors.ent[index];
+    if (ent.is_alive() && ent.has<Transform>()) {
+        ent.get_mut<Transform>().isStatic = pose.isStatic;
+    }
 }
 
 bool sceneFrameActorPbr(const SceneFrame* scene, uint8_t index, ActorPbr& out) {
@@ -2114,7 +2227,7 @@ void sceneFrameSetSectors(SceneFrame* scene, const Sector* sectors, uint32_t sec
     }
 }
 
-void sceneFrameDebug(SceneFrame* scene, bool hiz, bool cone, bool lod, bool frustum, bool subpixel, bool shadow, uint32_t mode) {
+void sceneFrameDebug(SceneFrame* scene, bool hiz, bool cone, bool lod, bool frustum, bool subpixel, bool shadow, bool backface, bool screen, bool behind, uint32_t mode) {
     if (scene == nullptr) {
         return;
     }
@@ -2123,7 +2236,9 @@ void sceneFrameDebug(SceneFrame* scene, bool hiz, bool cone, bool lod, bool frus
     }
     if (scene->showHiz == hiz && scene->showCone == cone
         && scene->showLod == lod && scene->showFrustum == frustum && scene->showSubpixel == subpixel
-        && scene->showShadow == shadow && scene->debugMode == mode) {
+        && scene->showShadow == shadow && scene->showBackface == backface
+        && scene->showScreen == screen && scene->showBehind == behind
+        && scene->debugMode == mode) {
         return;
     }
     scene->showHiz = hiz;
@@ -2132,6 +2247,9 @@ void sceneFrameDebug(SceneFrame* scene, bool hiz, bool cone, bool lod, bool frus
     scene->showFrustum = frustum;
     scene->showSubpixel = subpixel;
     scene->showShadow = shadow;
+    scene->showBackface = backface;
+    scene->showScreen = screen;
+    scene->showBehind = behind;
     scene->debugMode = mode;
     spdlog::info("debug profile {} hiz {} cone {} lod {} frust {} small {} shadow {} mode {}",
         scene->lightProfile, hiz ? 1 : 0, cone ? 1 : 0, lod ? 1 : 0, frustum ? 1 : 0, subpixel ? 1 : 0, shadow ? 1 : 0, mode);
@@ -2298,6 +2416,75 @@ void syncPropMaterial(SceneFrame& scene) {
     }
 }
 
+void followHandLamp(SceneFrameImpl& s) {
+    s.handOn = false;
+    if (s.instSrc == nullptr || s.instanceCount == 0 || s.cones == nullptr) {
+        return;
+    }
+    if (s.ownedInst.size() != s.instanceCount || s.instSrc != s.ownedInst.data()) {
+        s.ownedInst.assign(s.instSrc, s.instSrc + s.instanceCount);
+        s.instSrc = s.ownedInst.data();
+    }
+    float fx = 0.0f;
+    float fy = 0.0f;
+    float fz = 0.0f;
+    flyCamForward(s.fly, fx, fy, fz);
+    const float rx = -fz;
+    const float rz = fx;
+    const float px = s.fly.eye[0] + rx * 0.55f - fx * 0.40f;
+    const float py = s.fly.eye[1] - 0.25f;
+    const float pz = s.fly.eye[2] + rz * 0.55f - fz * 0.40f;
+    constexpr float kScale = 5.0f;
+    const float cy = std::cos(s.fly.yaw);
+    const float sy = std::sin(s.fly.yaw);
+    auto* gpu = s.instances.mapped != nullptr ? static_cast<GpuInstance*>(s.instances.mapped) : nullptr;
+    for (uint32_t i = 0; i < s.instanceCount; ++i) {
+        GpuInstance& inst = s.ownedInst[i];
+        if ((inst.pad[1] & 0x0fffffffu) < kSceneLighterGroup || inst.meshId >= s.coneCount) {
+            continue;
+        }
+        const Meshlet& mesh = s.cones[inst.meshId];
+        inst.world[0] = cy * kScale;
+        inst.world[1] = 0.0f;
+        inst.world[2] = sy * kScale;
+        inst.world[3] = px;
+        inst.world[4] = 0.0f;
+        inst.world[5] = kScale;
+        inst.world[6] = 0.0f;
+        inst.world[7] = py;
+        inst.world[8] = -sy * kScale;
+        inst.world[9] = 0.0f;
+        inst.world[10] = cy * kScale;
+        inst.world[11] = pz;
+        const float lx = mesh.center[0];
+        const float ly = mesh.center[1];
+        const float lz = mesh.center[2];
+        inst.sphere[0] = px + inst.world[0] * lx + inst.world[1] * ly + inst.world[2] * lz;
+        inst.sphere[1] = py + inst.world[4] * lx + inst.world[5] * ly + inst.world[6] * lz;
+        inst.sphere[2] = pz + inst.world[8] * lx + inst.world[9] * ly + inst.world[10] * lz;
+        inst.sphere[3] = mesh.radius * kScale;
+        if (gpu != nullptr) {
+            gpu[i] = inst;
+        }
+        s.handOn = true;
+    }
+    if (!s.handOn) {
+        return;
+    }
+    s.handLamp = {};
+    s.handLamp.pos[0] = px;
+    s.handLamp.pos[1] = py;
+    s.handLamp.pos[2] = pz;
+    s.handLamp.radius = 8.0f;
+    s.handLamp.color[0] = 1.0f;
+    s.handLamp.color[1] = 0.72f;
+    s.handLamp.color[2] = 0.38f;
+    s.handLamp.intensity = 24.0f;
+    s.handLamp.type = kLightPoint;
+    s.handLamp.shadowMapIndex = -1;
+    s.handLamp.sourceRadius = 0.15f;
+}
+
 void sceneFrameRecord(
     SceneFrame* scene,
     VkCommandBuffer cmd,
@@ -2307,6 +2494,10 @@ void sceneFrameRecord(
     const FrameContext& frame) {
     if (scene == nullptr || swap.extent.width == 0 || swap.extent.height == 0) {
         return;
+    }
+    followHandLamp(*scene);
+    if (scene->handOn && scene->instances.mapped != nullptr && scene->instanceCount > 0) {
+        gpuBufferFlush(scene->instances, device, 0, sizeof(GpuInstance) * scene->instanceCount);
     }
     (void)heaps;
     CpuScope recordCpu("sceneFrameRecord", &scene->cpuRecordMs);
@@ -2590,7 +2781,7 @@ void sceneFrameRecord(
     float splits[3] = {36.0f, 180.0f, 2500.0f};
     lit.sunSplit[3] = static_cast<float>(flight * 16u);
     gpu.debugMode = scene->debugMode;
-    gpu.debugAlign[0] = scene->frameCursor & 1u;
+    gpu.frameParity = scene->frameCursor & 1u;
     gpu.disableSSR = 1u;
     gpu.disableSSRC = 1u;
     gpu.disableHiZ = scene->showHiz ? 0u : 1u;
@@ -2599,6 +2790,9 @@ void sceneFrameRecord(
     gpu.disableFrustum = scene->showFrustum ? 0u : 1u;
     gpu.disableSubpixel = scene->showSubpixel ? 0u : 1u;
     gpu.disableShadow = scene->showShadow ? 0u : 1u;
+    gpu.disableBackface = scene->showBackface ? 0u : 1u;
+    gpu.disableScreen = scene->showScreen ? 0u : 1u;
+    gpu.disableBehind = scene->showBehind ? 0u : 1u;
     if (scene->freeze) {
         if (!scene->freezeHeld) {
             std::memcpy(scene->freezeVp, cam.viewProj.m, sizeof(scene->freezeVp));

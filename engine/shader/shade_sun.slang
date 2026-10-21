@@ -102,14 +102,11 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     gSurf0[px] = float4(hit.albedo, hit.roughness);
     gSurf1[px] = float4(octEncode(hit.N), hit.metallic, hit.ao);
     if ((gPass.passMask & 2097152u) != 0u && (gFrame.debugMode == 0u || gFrame.debugMode == 4u)) {
-        float inten = gSun.sunDirIntensity.w;
-        if (inten < 0.05) {
-            inten = 8.0;
-        }
-        const float wrap = saturate(hit.N.y * 0.4 + 0.6);
-        float3 skyAmb = hit.albedo * (1.0 - hit.metallic) * float3(0.78, 0.82, 0.88) * (inten * 0.055) * wrap * saturate(hit.gtao);
-        if ((gPass.passMask & 256u) == 0u) {
-            skyAmb *= 0.15;
+        float3 skyAmb = 0.0;
+        if ((gPass.passMask & 1024u) != 0u) {
+            const float inten = gSun.sunDirIntensity.w;
+            const float wrap = saturate(hit.N.y * 0.4 + 0.6);
+            skyAmb = hit.albedo * (1.0 - hit.metallic) * float3(0.78, 0.82, 0.88) * (inten * 0.055) * wrap * saturate(hit.gtao);
         }
         gHdr[px] = float4(max(skyAmb + hit.emissive, 0.0), hit.roughness);
         return;
@@ -161,10 +158,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     if (max(sunCol.r, max(sunCol.g, sunCol.b)) < 0.02) {
         sunCol = float3(1.0, 0.92, 0.76);
     }
-    float inten = gSun.sunDirIntensity.w;
-    if (inten < 0.05) {
-        inten = 8.0;
-    }
+    const float inten = gSun.sunDirIntensity.w;
     float3 radiance = sunCol * inten;
     const bool sunOn = (gPass.passMask & 256u) != 0u;
     if (!sunOn) {
@@ -179,7 +173,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         bounce = 0.0;
     }
     if (!sunOn) {
-        bounce *= 0.02;
+        bounce = 0.0;
     }
     if (giOn && !worldRc && !voxelGi && gFrame.disableShadow == 0 && shadow < 0.95) {
         const float reach = max(shadowSkyReach(sunCascade, hit.P, hit.N, px), 0.15);
@@ -200,8 +194,8 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         const float wrap = saturate(hit.N.y * 0.4 + 0.6);
         const float ambOcc = saturate(hit.gtao);
         skyAmb = hit.albedo * (1.0 - hit.metallic) * skyTint * (inten * 0.055) * wrap * ambOcc;
-        if (!sunOn) {
-            skyAmb *= 0.15;
+        if ((gPass.passMask & 1024u) == 0u) {
+            skyAmb = 0.0;
         }
     }
     if (giOn && (gPass.passMask & 8388608u) != 0u) {

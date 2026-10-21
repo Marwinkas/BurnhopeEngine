@@ -30,7 +30,36 @@ struct alignas(16) Transform {
     float euler[3]{};
     float pad1 = 0.0f;
     float scale[3]{1.0f, 1.0f, 1.0f};
-    float pad2 = 0.0f;
+    uint8_t isStatic = 0;
+    uint8_t pad2[3]{};
+};
+
+// Режимы пост-обработки. Секция в инспекторе появляется, пока компонент висит на акторе.
+struct alignas(16) PostProcess {
+    uint8_t direct = 1;
+    uint8_t indirect = 1;
+    uint8_t reflect = 2;
+    uint8_t ao = 1;
+    uint8_t sscs = 1;
+    uint8_t bloom = 1;
+    uint8_t aa = 3;
+    uint8_t tone = 0;
+    uint8_t pad[8]{};
+};
+
+// Туман и облака. Отдельный модуль, не часть пост-обработки.
+struct alignas(16) Atmosphere {
+    float density = 0.06f;
+    float falloff = 0.08f;
+    float height = 0.0f;
+    float start = 0.0f;
+    float opacity = 0.92f;
+    float luminance = 1.4f;
+    float shafts = 40.0f;
+    float shaftStart = 0.0f;
+    float color[3]{0.62f, 0.72f, 0.86f};
+    uint8_t enabled = 1;
+    uint8_t pad[3]{};
 };
 
 // PBR куба. Текстуры остаются в MaterialGpuData, здесь ползунки инспектора.
@@ -60,6 +89,10 @@ static_assert(std::is_trivially_copyable_v<Transform>);
 static_assert(std::is_trivially_copyable_v<Material>);
 static_assert(sizeof(Transform) == 48);
 static_assert(sizeof(Material) == 32);
+static_assert(sizeof(PostProcess) == 16);
+static_assert(sizeof(Atmosphere) == 48);
+static_assert(std::is_trivially_copyable_v<PostProcess>);
+static_assert(std::is_trivially_copyable_v<Atmosphere>);
 static_assert(std::is_trivially_copyable_v<ActorKind>);
 static_assert(std::is_trivially_copyable_v<ActorName>);
 
@@ -294,6 +327,8 @@ inline uint8_t sceneActorAdd(SceneActors& world, SceneActorKind kind, const floa
     } else if (kind == SceneActorKind::Prop) {
         ent.add<PropObj>();
     } else {
+        ent.set<PostProcess>({});
+        ent.set<Atmosphere>({});
         ent.add<PostObj>();
     }
     world.ent.push_back(ent);

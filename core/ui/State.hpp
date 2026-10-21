@@ -175,6 +175,7 @@ void uiEdit(UiState& s, uint16_t id, UiEditFn fn, void* user);
 bool uiCommandAdd(UiState& s, const char* name, UiCommandFn fn, void* user);
 bool uiCommandAddTo(UiState& s, uint16_t menu, const char* name, UiCommandFn fn, void* user);
 void uiShow(UiState& s, uint16_t id, bool visible);
+void uiPaintRgb(UiState& s, uint16_t id, float r, float g, float b);
 void uiReparent(UiState& s, uint16_t id, uint16_t parent);
 void uiDrop(UiState& s, uint16_t id);
 void uiTrace(const UiState& s, const char* fn, uint16_t id);

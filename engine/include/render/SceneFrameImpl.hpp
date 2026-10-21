@@ -95,6 +95,9 @@ struct SceneFrameImpl {
     bool showFrustum = true;
     bool showSubpixel = true;
     bool showShadow = true;
+    bool showBackface = true;
+    bool showScreen = true;
+    bool showBehind = true;
     uint32_t debugMode = 0;
     GpuBuffer lightBuf{};
     GpuBuffer cellBuf{};
@@ -115,6 +118,8 @@ struct SceneFrameImpl {
     uint32_t portalCount = 0;
     LightGpuData imported[kLightCap]{};
     uint32_t importedCount = 0;
+    LightGpuData handLamp{};
+    bool handOn = false;
     float frameMs[128]{};
     uint32_t frameCursor = 0;
     GpuVertex cpuVerts[kSceneVerts]{};

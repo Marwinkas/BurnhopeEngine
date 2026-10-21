@@ -162,6 +162,57 @@ float3 shAmbient(float3 N, float3 P) {
     }
     return max(acc, 0.0);
 }
+bool evalHomogeneousUv(float4 c0, float4 c1, float4 c2, float2 uv0, float2 uv1, float2 uv2, float2 ndc, out float2 outUv) {
+    const float2 q0 = c0.xy - ndc * c0.w;
+    const float2 q1 = c1.xy - ndc * c1.w;
+    const float2 q2 = c2.xy - ndc * c2.w;
+    const float w0 = q1.x * q2.y - q1.y * q2.x;
+    const float w1 = q2.x * q0.y - q2.y * q0.x;
+    const float w2 = q0.x * q1.y - q0.y * q1.x;
+    const float sum = w0 + w1 + w2;
+    if (abs(sum) < 1e-12) {
+        outUv = uv0;
+        return false;
+    }
+    const float invSum = 1.0 / sum;
+    outUv = uv0 * (w0 * invSum) + uv1 * (w1 * invSum) + uv2 * (w2 * invSum);
+    return true;
+}
+
+void uvScreenGrad(float3 w0, float3 w1, float3 w2, float2 uv0, float2 uv1, float2 uv2, uint2 px, out float2 ddx, out float2 ddy) {
+    ddx = float2(1.0e-5, 0.0);
+    ddy = float2(0.0, 1.0e-5);
+
+    const float4 c0 = worldToClip(w0);
+    const float4 c1 = worldToClip(w1);
+    const float4 c2 = worldToClip(w2);
+
+    const float2 ndcC = (float2(px) + float2(0.5, 0.5)) * gFrame.invExtent * 2.0 - 1.0;
+    const float2 ndcX = (float2(px) + float2(1.5, 0.5)) * gFrame.invExtent * 2.0 - 1.0;
+    const float2 ndcY = (float2(px) + float2(0.5, 1.5)) * gFrame.invExtent * 2.0 - 1.0;
+
+    float2 uvC, uvX, uvY;
+    if (!evalHomogeneousUv(c0, c1, c2, uv0, uv1, uv2, ndcC, uvC) ||
+        !evalHomogeneousUv(c0, c1, c2, uv0, uv1, uv2, ndcX, uvX) ||
+        !evalHomogeneousUv(c0, c1, c2, uv0, uv1, uv2, ndcY, uvY)) {
+        return;
+    }
+
+    ddx = uvX - uvC;
+    ddy = uvY - uvC;
+
+    if (any(isnan(ddx)) || any(isnan(ddy)) || any(isinf(ddx)) || any(isinf(ddy))) {
+        ddx = float2(1.0e-5, 0.0);
+        ddy = float2(0.0, 1.0e-5);
+        return;
+    }
+    const float span = max(length(ddx), length(ddy));
+    if (span > 1.0) {
+        const float scale = 1.0 / span;
+        ddx *= scale;
+        ddy *= scale;
+    }
+}
 
 ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     ShadeHit hit;
@@ -173,7 +224,7 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     const uint packed = vis - 1u;
     const float depth = gDepth.Load(int3(px, 0));
     const float3 P = reconstructWorld(px, depth);
-    const VisTri tri = loadVisTri(packed & 0xFFFFF, packed >> 20, P);
+    const VisTri tri = loadVisTri(packed & 0xFFFFF, packed >> 20, px);
     hit.tri = tri.triId;
     const GpuInstance inst = tri.inst;
     const uint i0 = tri.i0;
@@ -182,7 +233,7 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     const float3 w0 = tri.w0;
     const float3 w1 = tri.w1;
     const float3 w2 = tri.w2;
-    float3 N = tri.faceN;
+    float3 N = tri.smoothN;
     const float3 n0 = tri.n0;
     const float3 n1 = tri.n1;
     const float3 n2 = tri.n2;
@@ -199,11 +250,9 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     const float2 uv0e = float2(gVerts[i0].u, gVerts[i0].v);
     const float2 uv1e = float2(gVerts[i1].u, gVerts[i1].v);
     const float2 uv2e = float2(gVerts[i2].u, gVerts[i2].v);
-    const float uvPerM0 = max(length(uv1e - uv0e), length(uv2e - uv0e)) / max(max(length(e1n), length(e2n)), 1e-4);
-    const float mPerPx = max(length(gFrame.cameraPos.xyz - P), 0.2) * gFrame.invExtent.y * 2.0;
-    const float grad = clamp(uvPerM0 * mPerPx, 1e-5, 0.02);
-    float2 uvDdx = float2(grad, 0.0);
-    float2 uvDdy = float2(0.0, grad);
+    float2 uvDdx;
+    float2 uvDdy;
+    uvScreenGrad(w0, w1, w2, uv0e, uv1e, uv2e, px, uvDdx, uvDdy);
     const MaterialGpu mat = gMat[inst.materialId];
     float3 tangent = 0.0;
     float3 bitangent = 0.0;
@@ -226,11 +275,12 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
         if (abs(det) > 1e-8) {
             const float invDet = 1.0 / det;
             float3 T = (e1n * duv2.y - e2n * duv1.y) * invDet;
+            float3 B = (e2n * duv1.x - e1n * duv2.x) * invDet;
             T = T - N * dot(N, T);
-            if (dot(T, T) > 1e-8) {
-                T = normalize(T);
-                tangent = T;
-                bitangent = cross(N, T);
+            B = B - N * dot(N, B);
+            if (dot(T, T) > 1e-8 && dot(B, B) > 1e-8) {
+                tangent = normalize(T);
+                bitangent = normalize(B);
             }
         }
     }
@@ -394,5 +444,6 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     hit.NdotL = NdotL;
     hit.NdotV = NdotV;
     hit.mirror = (mat.flags & 16u) != 0u ? 1.0 : 0.0;
+  
     return hit;
 }

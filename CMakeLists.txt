@@ -301,6 +301,7 @@ target_link_libraries(bh_rhi PUBLIC Vulkan::Vulkan)
 target_link_libraries(bh_platform PUBLIC SDL3::SDL3)
 
 find_program(SLANGC_EXECUTABLE slangc REQUIRED)
+set(BH_SPV spirv_1_6+spvRayQueryKHR+spvGroupNonUniform+spvGroupNonUniformBallot+spvGroupNonUniformShuffle+spvGroupNonUniformArithmetic+spvDerivativeControl+spvImageQuery+spvImageGatherExtended+spvSparseResidency+spvMinLod+spvFragmentFullyCoveredEXT+SPV_GOOGLE_user_type)
 set(SHADER_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
 file(MAKE_DIRECTORY ${SHADER_OUT_DIR})
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/engine/shader)
@@ -372,75 +373,75 @@ add_custom_command(
         ${SHADER_OUT_DIR}/vx.trace.comp.spv
         ${SHADER_OUT_DIR}/tonemap.mesh.spv
         ${SHADER_OUT_DIR}/tonemap.frag.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry visMesh -o ${SHADER_OUT_DIR}/visbuffer.mesh.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry visMesh -DLATE=1 -o ${SHADER_OUT_DIR}/visbuffer.late.mesh.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry shadowMesh -DSHADOW_CASCADE=0 -o ${SHADER_OUT_DIR}/visbuffer.shadow.mesh.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry shadowFs -o ${SHADER_OUT_DIR}/visbuffer.shadow.frag.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry visFs -o ${SHADER_OUT_DIR}/visbuffer.frag.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_sky.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadeSky -o ${SHADER_OUT_DIR}/shade.sky.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_sun.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadeSun -o ${SHADER_OUT_DIR}/shade.sun.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_punctual.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadePunctual -o ${SHADER_OUT_DIR}/shade.punctual.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/restir_presample.slang -I ${SHADER_DIR}/restir_inc -I ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR+spvGroupNonUniform+spvGroupNonUniformShuffle+spvGroupNonUniformBallot+spvGroupNonUniformArithmetic -stage compute -entry main -o ${SHADER_OUT_DIR}/restir.presample.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/restir_di.slang -I ${SHADER_DIR}/restir_inc -I ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR+spvGroupNonUniform+spvGroupNonUniformShuffle+spvGroupNonUniformBallot+spvGroupNonUniformArithmetic -stage compute -entry main -o ${SHADER_OUT_DIR}/restir.di.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/restir_fast.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry main -o ${SHADER_OUT_DIR}/restir.fast.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_fog.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadeFog -o ${SHADER_OUT_DIR}/shade.fog.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/contact.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry contactCs -o ${SHADER_OUT_DIR}/contact.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/resolve.slang -target spirv -profile spirv_1_6 -stage compute -entry resolveCs -o ${SHADER_OUT_DIR}/resolve.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry meshletCull -o ${SHADER_OUT_DIR}/cull.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry meshletCullLate -o ${SHADER_OUT_DIR}/cull.late.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cullClear -o ${SHADER_OUT_DIR}/cull.clear.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cluster.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry clusterCs -o ${SHADER_OUT_DIR}/cluster.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shadowcull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadowCull -o ${SHADER_OUT_DIR}/shadowcull.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shadowcull.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry shadowClear -o ${SHADER_OUT_DIR}/shadowcull.clear.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gtao.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry gtaoCs -o ${SHADER_OUT_DIR}/gtao.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cmaa2.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cmaa2Cs -o ${SHADER_OUT_DIR}/cmaa2.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/smaa.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry smaaCs -o ${SHADER_OUT_DIR}/smaa.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry hizCs -o ${SHADER_OUT_DIR}/hizmax.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry pointMesh -DPOINT_LIGHT=0 -o ${SHADER_OUT_DIR}/visbuffer.point.mesh.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry cubeMesh -o ${SHADER_OUT_DIR}/cube.mesh.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry cubeFs -o ${SHADER_OUT_DIR}/cube.frag.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube_fill.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cubeFill -o ${SHADER_OUT_DIR}/cube.fill.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/probe.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry probeBake -o ${SHADER_OUT_DIR}/probe.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_lut.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry skyTransmittance -o ${SHADER_OUT_DIR}/sky.trans.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_lut.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry skyMulti -o ${SHADER_OUT_DIR}/sky.ms.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_lut.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry skyView -o ${SHADER_OUT_DIR}/sky.view.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cloudMarch -o ${SHADER_OUT_DIR}/cloud.march.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cloudUp -o ${SHADER_OUT_DIR}/cloud.up.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud_noise.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry cloudNoise -o ${SHADER_OUT_DIR}/cloud.noise.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_probe.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry skyProbe -o ${SHADER_OUT_DIR}/sky.probe.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reflect.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry reflectTrace -o ${SHADER_OUT_DIR}/reflect.trace.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reflect.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry reflectUp -o ${SHADER_OUT_DIR}/reflect.up.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_alloc_probes.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcAlloc -o ${SHADER_OUT_DIR}/rc.alloc.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_prefix.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcPrefix -o ${SHADER_OUT_DIR}/rc.prefix.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_trace_split.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry rcTrace -o ${SHADER_OUT_DIR}/rc.trace.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_merge.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvGroupNonUniform+spvGroupNonUniformShuffle -stage compute -entry rcMerge -o ${SHADER_OUT_DIR}/rc.merge.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_octahedral.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcOctahedral -o ${SHADER_OUT_DIR}/rc.oct.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_shade.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry rcShade -o ${SHADER_OUT_DIR}/rc.shade.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_update.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry sharcUpdate -o ${SHADER_OUT_DIR}/sharc.update.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_resolve.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry sharcResolve -o ${SHADER_OUT_DIR}/sharc.resolve.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_query.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6+spvRayQueryKHR -stage compute -entry sharcQuery -o ${SHADER_OUT_DIR}/sharc.query.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_relax_temporal.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry sharcRelaxTemporal -o ${SHADER_OUT_DIR}/sharc.relax.temporal.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_relax_spatial.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry sharcRelaxSpatial -o ${SHADER_OUT_DIR}/sharc.relax.spatial.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reblur.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry main -o ${SHADER_OUT_DIR}/reblur.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sigma.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry main -o ${SHADER_OUT_DIR}/sigma.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/relax.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry main -o ${SHADER_OUT_DIR}/relax.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_clear.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry vxClear -o ${SHADER_OUT_DIR}/vx.clear.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_voxel.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry vxVoxel -o ${SHADER_OUT_DIR}/vx.voxel.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_resolve.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry vxResolve -o ${SHADER_OUT_DIR}/vx.resolve.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_trace.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry vxTrace -o ${SHADER_OUT_DIR}/vx.trace.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry tonemapMesh -o ${SHADER_OUT_DIR}/tonemap.mesh.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry tonemapFs -o ${SHADER_OUT_DIR}/tonemap.frag.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/taa.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry taaCs -o ${SHADER_OUT_DIR}/taa.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/taa.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry taaCopy -o ${SHADER_OUT_DIR}/taacopy.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gizmo.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage mesh -entry gizmoMesh -o ${SHADER_OUT_DIR}/gizmo.mesh.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gizmo.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage fragment -entry gizmoFs -o ${SHADER_OUT_DIR}/gizmo.frag.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomDown -DBLOOM_LEVEL=0 -o ${SHADER_OUT_DIR}/bloom0.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomDown -DBLOOM_LEVEL=1 -o ${SHADER_OUT_DIR}/bloom1.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomDown -DBLOOM_LEVEL=2 -o ${SHADER_OUT_DIR}/bloom2.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomDown -DBLOOM_LEVEL=3 -o ${SHADER_OUT_DIR}/bloom3.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomUp -DBLOOM_LEVEL=0 -o ${SHADER_OUT_DIR}/bloomup0.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomUp -DBLOOM_LEVEL=1 -o ${SHADER_OUT_DIR}/bloomup1.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile spirv_1_6 -stage compute -entry bloomUp -DBLOOM_LEVEL=2 -o ${SHADER_OUT_DIR}/bloomup2.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage mesh -entry visMesh -o ${SHADER_OUT_DIR}/visbuffer.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage mesh -entry visMesh -DLATE=1 -o ${SHADER_OUT_DIR}/visbuffer.late.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage mesh -entry shadowMesh -DSHADOW_CASCADE=0 -o ${SHADER_OUT_DIR}/visbuffer.shadow.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage fragment -entry shadowFs -o ${SHADER_OUT_DIR}/visbuffer.shadow.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage fragment -entry visFs -o ${SHADER_OUT_DIR}/visbuffer.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_sky.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry shadeSky -o ${SHADER_OUT_DIR}/shade.sky.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_sun.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry shadeSun -o ${SHADER_OUT_DIR}/shade.sun.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_punctual.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry shadePunctual -o ${SHADER_OUT_DIR}/shade.punctual.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/restir_presample.slang -I ${SHADER_DIR}/restir_inc -I ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry main -o ${SHADER_OUT_DIR}/restir.presample.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/restir_di.slang -I ${SHADER_DIR}/restir_inc -I ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry main -o ${SHADER_OUT_DIR}/restir.di.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/restir_fast.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry main -o ${SHADER_OUT_DIR}/restir.fast.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shade_fog.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry shadeFog -o ${SHADER_OUT_DIR}/shade.fog.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/contact.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry contactCs -o ${SHADER_OUT_DIR}/contact.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/resolve.slang -target spirv -profile ${BH_SPV} -stage compute -entry resolveCs -o ${SHADER_OUT_DIR}/resolve.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry meshletCull -o ${SHADER_OUT_DIR}/cull.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry meshletCullLate -o ${SHADER_OUT_DIR}/cull.late.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cull.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry cullClear -o ${SHADER_OUT_DIR}/cull.clear.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cluster.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry clusterCs -o ${SHADER_OUT_DIR}/cluster.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shadowcull.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry shadowCull -o ${SHADER_OUT_DIR}/shadowcull.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/shadowcull.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry shadowClear -o ${SHADER_OUT_DIR}/shadowcull.clear.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gtao.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry gtaoCs -o ${SHADER_OUT_DIR}/gtao.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cmaa2.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry cmaa2Cs -o ${SHADER_OUT_DIR}/cmaa2.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/smaa.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry smaaCs -o ${SHADER_OUT_DIR}/smaa.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/hiz.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry hizCs -o ${SHADER_OUT_DIR}/hizmax.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/visbuffer.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage mesh -entry pointMesh -DPOINT_LIGHT=0 -o ${SHADER_OUT_DIR}/visbuffer.point.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage mesh -entry cubeMesh -o ${SHADER_OUT_DIR}/cube.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage fragment -entry cubeFs -o ${SHADER_OUT_DIR}/cube.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cube_fill.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry cubeFill -o ${SHADER_OUT_DIR}/cube.fill.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/probe.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry probeBake -o ${SHADER_OUT_DIR}/probe.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_lut.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry skyTransmittance -o ${SHADER_OUT_DIR}/sky.trans.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_lut.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry skyMulti -o ${SHADER_OUT_DIR}/sky.ms.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_lut.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry skyView -o ${SHADER_OUT_DIR}/sky.view.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry cloudMarch -o ${SHADER_OUT_DIR}/cloud.march.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry cloudUp -o ${SHADER_OUT_DIR}/cloud.up.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud_noise.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry cloudNoise -o ${SHADER_OUT_DIR}/cloud.noise.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_probe.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry skyProbe -o ${SHADER_OUT_DIR}/sky.probe.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reflect.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry reflectTrace -o ${SHADER_OUT_DIR}/reflect.trace.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reflect.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry reflectUp -o ${SHADER_OUT_DIR}/reflect.up.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_alloc_probes.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry rcAlloc -o ${SHADER_OUT_DIR}/rc.alloc.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_prefix.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry rcPrefix -o ${SHADER_OUT_DIR}/rc.prefix.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_trace_split.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry rcTrace -o ${SHADER_OUT_DIR}/rc.trace.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_merge.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry rcMerge -o ${SHADER_OUT_DIR}/rc.merge.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_octahedral.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry rcOctahedral -o ${SHADER_OUT_DIR}/rc.oct.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rc_shade.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry rcShade -o ${SHADER_OUT_DIR}/rc.shade.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_update.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry sharcUpdate -o ${SHADER_OUT_DIR}/sharc.update.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_resolve.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry sharcResolve -o ${SHADER_OUT_DIR}/sharc.resolve.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_query.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry sharcQuery -o ${SHADER_OUT_DIR}/sharc.query.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_relax_temporal.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry sharcRelaxTemporal -o ${SHADER_OUT_DIR}/sharc.relax.temporal.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sharc_relax_spatial.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry sharcRelaxSpatial -o ${SHADER_OUT_DIR}/sharc.relax.spatial.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/reblur.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry main -o ${SHADER_OUT_DIR}/reblur.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sigma.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry main -o ${SHADER_OUT_DIR}/sigma.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/relax.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry main -o ${SHADER_OUT_DIR}/relax.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_clear.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry vxClear -o ${SHADER_OUT_DIR}/vx.clear.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_voxel.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry vxVoxel -o ${SHADER_OUT_DIR}/vx.voxel.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_resolve.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry vxResolve -o ${SHADER_OUT_DIR}/vx.resolve.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/vx_trace.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry vxTrace -o ${SHADER_OUT_DIR}/vx.trace.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage mesh -entry tonemapMesh -o ${SHADER_OUT_DIR}/tonemap.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage fragment -entry tonemapFs -o ${SHADER_OUT_DIR}/tonemap.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/taa.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry taaCs -o ${SHADER_OUT_DIR}/taa.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/taa.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry taaCopy -o ${SHADER_OUT_DIR}/taacopy.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gizmo.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage mesh -entry gizmoMesh -o ${SHADER_OUT_DIR}/gizmo.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gizmo.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage fragment -entry gizmoFs -o ${SHADER_OUT_DIR}/gizmo.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry bloomDown -DBLOOM_LEVEL=0 -o ${SHADER_OUT_DIR}/bloom0.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry bloomDown -DBLOOM_LEVEL=1 -o ${SHADER_OUT_DIR}/bloom1.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry bloomDown -DBLOOM_LEVEL=2 -o ${SHADER_OUT_DIR}/bloom2.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry bloomDown -DBLOOM_LEVEL=3 -o ${SHADER_OUT_DIR}/bloom3.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry bloomUp -DBLOOM_LEVEL=0 -o ${SHADER_OUT_DIR}/bloomup0.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry bloomUp -DBLOOM_LEVEL=1 -o ${SHADER_OUT_DIR}/bloomup1.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry bloomUp -DBLOOM_LEVEL=2 -o ${SHADER_OUT_DIR}/bloomup2.comp.spv
     DEPENDS
         ${SHADER_DIR}/visbuffer.slang
         ${SHADER_DIR}/frame.slang
@@ -527,8 +528,9 @@ set(FSR_FLAGS
     -DFFX_FSR3UPSCALER_OPTION_UPSAMPLE_USE_LANCZOS_TYPE=2
     -DFFX_FSR3UPSCALER_OPTION_REPROJECT_USE_LANCZOS_TYPE=0
     -DFFX_FSR3UPSCALER_OPTION_REPROJECT_SAMPLERS_USE_DATA_HALF=0
+    -D__XBATG_EXTRA_16_BIT_OPTIMISATION=0
     -fvk-b-shift 0 0 -fvk-s-shift 4 0 -fvk-t-shift 8 0 -fvk-u-shift 24 0
-    -target spirv -profile spirv_1_6+spvGroupNonUniform+spvGroupNonUniformBallot+spvGroupNonUniformShuffle+spvGroupNonUniformArithmetic
+    -target spirv -profile spirv_1_6+spvGroupNonUniform+spvGroupNonUniformBallot+spvGroupNonUniformShuffle+spvGroupNonUniformArithmetic+spvGroupNonUniformQuad
     -stage compute -entry CS)
 add_custom_command(
     OUTPUT
@@ -549,7 +551,7 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${FSR_PASS}/ffx_fsr3upscaler_luma_instability_pass.hlsl ${FSR_FLAGS} -o ${SHADER_OUT_DIR}/fsr.instability.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${FSR_PASS}/ffx_fsr3upscaler_accumulate_pass.hlsl ${FSR_FLAGS} -o ${SHADER_OUT_DIR}/fsr.accumulate.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${FSR_PASS}/ffx_fsr3upscaler_rcas_pass.hlsl ${FSR_FLAGS} -o ${SHADER_OUT_DIR}/fsr.rcas.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/fsr_motion.slang -target spirv -profile spirv_1_6 -stage compute -entry main -o ${SHADER_OUT_DIR}/fsr.motion.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/fsr_motion.slang -target spirv -profile ${BH_SPV} -stage compute -entry main -o ${SHADER_OUT_DIR}/fsr.motion.comp.spv
     DEPENDS
         ${FSR_PASS}/ffx_fsr3upscaler_prepare_inputs_pass.hlsl
         ${FSR_PASS}/ffx_fsr3upscaler_luma_pyramid_pass.hlsl
@@ -663,11 +665,11 @@ add_custom_command(
         ${SHADER_OUT_DIR}/ui.mesh.spv
         ${SHADER_OUT_DIR}/msdf.mesh.spv
         ${SHADER_OUT_DIR}/msdf.frag.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${UI_SHADER} -target spirv -profile spirv_1_6 -stage vertex -entry uiVs -o ${SHADER_OUT_DIR}/ui.vert.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${UI_SHADER} -target spirv -profile spirv_1_6 -stage fragment -entry uiFs -o ${SHADER_OUT_DIR}/ui.frag.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${UI_SHADER} -target spirv -profile spirv_1_6 -stage mesh -entry uiMs -o ${SHADER_OUT_DIR}/ui.mesh.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/core/text/msdf.slang -target spirv -profile spirv_1_6 -stage mesh -entry glyphMs -o ${SHADER_OUT_DIR}/msdf.mesh.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/core/text/msdf.slang -target spirv -profile spirv_1_6 -stage fragment -entry glyphFs -o ${SHADER_OUT_DIR}/msdf.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${UI_SHADER} -target spirv -profile ${BH_SPV} -stage vertex -entry uiVs -o ${SHADER_OUT_DIR}/ui.vert.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${UI_SHADER} -target spirv -profile ${BH_SPV} -stage fragment -entry uiFs -o ${SHADER_OUT_DIR}/ui.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${UI_SHADER} -target spirv -profile ${BH_SPV} -stage mesh -entry uiMs -o ${SHADER_OUT_DIR}/ui.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/core/text/msdf.slang -target spirv -profile ${BH_SPV} -stage mesh -entry glyphMs -o ${SHADER_OUT_DIR}/msdf.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/core/text/msdf.slang -target spirv -profile ${BH_SPV} -stage fragment -entry glyphFs -o ${SHADER_OUT_DIR}/msdf.frag.spv
     DEPENDS ${UI_SHADER} ${CMAKE_CURRENT_SOURCE_DIR}/core/text/msdf.slang
     COMMENT "slangc ui + msdf → SPIR-V 1.6"
 )
@@ -688,12 +690,12 @@ add_custom_command(
         ${SHADER_OUT_DIR}/compress_bc5.comp.spv
         ${SHADER_OUT_DIR}/compress_bc7.comp.spv
         ${SHADER_OUT_DIR}/compress_bc6h.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile spirv_1_6 -stage compute -entry csBc1 -o ${SHADER_OUT_DIR}/compress.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile spirv_1_6 -stage compute -entry csBc3 -o ${SHADER_OUT_DIR}/compress_bc3.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile spirv_1_6 -stage compute -entry csBc4 -o ${SHADER_OUT_DIR}/compress_bc4.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile spirv_1_6 -stage compute -entry csBc5 -o ${SHADER_OUT_DIR}/compress_bc5.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile spirv_1_6 -stage compute -entry csBc7 -o ${SHADER_OUT_DIR}/compress_bc7.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile spirv_1_6 -stage compute -entry csBc6h -o ${SHADER_OUT_DIR}/compress_bc6h.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile ${BH_SPV} -stage compute -entry csBc1 -o ${SHADER_OUT_DIR}/compress.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile ${BH_SPV} -stage compute -entry csBc3 -o ${SHADER_OUT_DIR}/compress_bc3.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile ${BH_SPV} -stage compute -entry csBc4 -o ${SHADER_OUT_DIR}/compress_bc4.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile ${BH_SPV} -stage compute -entry csBc5 -o ${SHADER_OUT_DIR}/compress_bc5.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile ${BH_SPV} -stage compute -entry csBc7 -o ${SHADER_OUT_DIR}/compress_bc7.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${COMPRESS_SHADER} -target spirv -profile ${BH_SPV} -stage compute -entry csBc6h -o ${SHADER_OUT_DIR}/compress_bc6h.comp.spv
     DEPENDS ${COMPRESS_SHADER}
     COMMENT "slangc compress BC1/3/4/5/7 + BC6H mode 11"
 )

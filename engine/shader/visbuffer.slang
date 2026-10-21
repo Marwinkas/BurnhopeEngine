@@ -44,37 +44,40 @@ struct VertOut {
 [[vk::binding(12, 0)]] Texture2D<float4> gTex[768];
 [[vk::binding(14, 0)]] StructuredBuffer<MaterialGpu> gMat;
 [[vk::binding(24, 0)]] SamplerState gWrap;
+float lodPixels(GpuInstance inst) {
+    const MeshletRef meshlet = gMeshlets[inst.meshId];
+    float3 center = inst.sphere.xyz;
+    float radius = inst.sphere.w;
+    if (meshlet.groupSphere.w > 1e-4) {
+        const float4 h = float4(meshlet.groupSphere.xyz, 1.0);
+        const float sx = length(inst.world0.xyz);
+        const float sy = length(inst.world1.xyz);
+        const float sz = length(inst.world2.xyz);
+        radius = meshlet.groupSphere.w * max(sx, max(sy, sz));
+        center = float3(dot(inst.world0, h), dot(inst.world1, h), dot(inst.world2, h));
+    }
+    const float4 clip = worldToClip(center);
+    const float z = max(abs(clip.w), 0.1);
+    const float4 up = mul(gFrame.viewProj, float4(center + float3(0.0, radius, 0.0), 1.0));
+    const float2 d = up.xy / max(abs(up.w), 0.1) - clip.xy / z;
+    return length(d) * float(gFrame.extent.y) * 0.5;
+}
 
 float lodFade(GpuInstance inst) {
-    if ((inst.pad.y & 0x80000000u) == 0u) {
-        return 1.0;
-    }
-    const float4 clip = worldToClip(inst.sphere.xyz);
-    const float px = inst.sphere.w / max(clip.w, 1e-3) * float(gFrame.extent.y) * 2.0;
-    const uint lod = inst.pad.x;
-    const uint maxLod = ((inst.pad.y >> 28) & 7u) == 0u ? 1u : (inst.pad.y >> 28) & 7u;
-    const float lo = lod == 0u ? 28.0 : lod == 1u ? 12.0 : 4.0;
-    const float hi = lo + 8.0;
-    if (lod < maxLod && px >= lo && px <= hi) {
-        return saturate((px - lo) / 8.0);
-    }
-    if (lod > 0u && px >= (lod == 1u ? 28.0 : lod == 2u ? 12.0 : 4.0) && px <= (lod == 1u ? 36.0 : lod == 2u ? 20.0 : 12.0)) {
-        return saturate((px - (lod == 1u ? 28.0 : lod == 2u ? 12.0 : 4.0)) / 8.0);
-    }
+    (void)inst;
     return 1.0;
 }
 
 uint lodCoarse(GpuInstance inst) {
-    if ((inst.pad.y & 0x80000000u) == 0u || inst.pad.x == 0u) {
-        return 0u;
-    }
-    const float4 clip = worldToClip(inst.sphere.xyz);
-    const float px = inst.sphere.w / max(clip.w, 1e-3) * float(gFrame.extent.y) * 2.0;
-    const uint lod = inst.pad.x;
-    const float lo = lod == 1u ? 28.0 : lod == 2u ? 12.0 : 4.0;
-    const float hi = lo + 8.0;
-    return px >= lo && px <= hi ? 1u : 0u;
+    (void)inst;
+    return 0u;
 }
+
+bool instanceFlippedWinding(GpuInstance inst) {
+    const float3 c = cross(inst.world0.xyz, inst.world1.xyz);
+    return dot(c, inst.world2.xyz) < 0.0;
+}
+
 
 struct PrimOut {
     nointerpolation uint primId : COLOR1;
@@ -87,9 +90,10 @@ uint packVis(uint instanceId, uint primitiveId) {
 groupshared float4 gClip[64];
 groupshared uint gKept;
 
-float2 clipScreen(float4 c) {
+float2 clipPixel(float4 c) {
     const float w = max(abs(c.w), 1e-6);
-    return (c.xy / w) * float2(gFrame.extent.xy) * 0.5;
+    const float2 ndc = c.xy / w;
+    return (ndc * 0.5 + 0.5) * float2(gFrame.extent.xy);
 }
 
 bool clipFinite(float4 c) {
@@ -97,7 +101,7 @@ bool clipFinite(float4 c) {
         && abs(c.x) < 1e8 && abs(c.y) < 1e8 && abs(c.z) < 1e8 && abs(c.w) < 1e8;
 }
 
-bool triKeep(uint3 tri, uint vertCount, bool dropSmall) {
+bool triKeep(uint3 tri, uint vertCount, bool dropSmall, bool twoSided, bool flippedWinding) {
     if (tri.x >= vertCount || tri.y >= vertCount || tri.z >= vertCount) {
         return false;
     }
@@ -110,24 +114,54 @@ bool triKeep(uint3 tri, uint vertCount, bool dropSmall) {
     if (a.w <= 1e-4 && b.w <= 1e-4 && c.w <= 1e-4) {
         return false;
     }
-    const float2 sa = clipScreen(a);
-    const float2 sb = clipScreen(b);
-    const float2 sc = clipScreen(c);
+    const bool inFront = a.w > 1e-4 && b.w > 1e-4 && c.w > 1e-4;
+    if (!inFront) {
+        return true;
+    }
+    const float2 sa = clipPixel(a);
+    const float2 sb = clipPixel(b);
+    const float2 sc = clipPixel(c);
     const float area = (sb.x - sa.x) * (sc.y - sa.y) - (sb.y - sa.y) * (sc.x - sa.x);
-    if (abs(area) < 1e-6) {
+    if (abs(area) < 1e-7) {
         return false;
     }
-    if (gFrame.disableSubpixel != 0) {
-        return true;
-    }
-    if (!dropSmall || a.w <= gFrame.cameraPos.w || b.w <= gFrame.cameraPos.w || c.w <= gFrame.cameraPos.w) {
-        return true;
+    // Backface culling только для основной камеры (dropSmall == true) и с учетом знака определителя матрицы инстанса
+    if (dropSmall && gFrame.disableConeCull == 0 && !twoSided) {
+        const bool backfacing = flippedWinding ? (area <= 0.0) : (area >= 0.0);
+        if (backfacing) {
+            return false;
+        }
     }
     const float minx = min(sa.x, min(sb.x, sc.x));
     const float maxx = max(sa.x, max(sb.x, sc.x));
     const float miny = min(sa.y, min(sb.y, sc.y));
     const float maxy = max(sa.y, max(sb.y, sc.y));
-    return (maxx - minx) >= 0.75 || (maxy - miny) >= 0.75;
+    if (dropSmall) {
+        const float2 ext = float2(gFrame.extent.xy);
+        if (maxx < 0.0 || minx >= ext.x || maxy < 0.0 || miny >= ext.y) {
+            return false;
+        }
+    }
+    if (gFrame.disableSubpixel != 0 || !dropSmall || a.w <= gFrame.cameraPos.w || b.w <= gFrame.cameraPos.w || c.w <= gFrame.cameraPos.w) {
+        return true;
+    }
+    // Консервативный допуск 1/256 пикселя под фиксированную сетку растеризатора GPU
+    const float eps = 1.0 / 256.0;
+    const float ix0 = ceil((minx - eps) - 0.5);
+    const float ix1 = floor((maxx + eps) - 0.5);
+    const float iy0 = ceil((miny - eps) - 0.5);
+    const float iy1 = floor((maxy + eps) - 0.5);
+    return ix0 <= ix1 && iy0 <= iy1;
+}
+uint meshletSlot(bool keep) {
+    const uint count = WaveActiveCountBits(keep);
+    const uint prefix = WavePrefixCountBits(keep);
+    uint base = 0;
+    if (WaveIsFirstLane() && count > 0u) {
+        InterlockedAdd(gKept, count, base);
+    }
+    base = WaveReadLaneFirst(base);
+    return base + prefix;
 }
 
 #if SHADOW_CASCADE >= 0
@@ -182,12 +216,10 @@ void emitMeshlet(uint gtid, uint gid, float4x4 viewProj, bool dropSmall,
     if (gtid < triCount) {
         const uint at = meshlet.indexOffset + gtid * 3;
         tri = uint3(gIdx[at], gIdx[at + 1], gIdx[at + 2]);
-        keep = triKeep(tri, vertCount, dropSmall);
+        const bool twoSided = (gMat[inst.materialId].flags & 2u) != 0u;
+        keep = triKeep(tri, vertCount, dropSmall, twoSided,instanceFlippedWinding(inst));
     }
-    uint slot = 0;
-    if (keep) {
-        InterlockedAdd(gKept, 1, slot);
-    }
+    const uint slot = meshletSlot(keep);
     GroupMemoryBarrierWithGroupSync();
     if (gtid == 0) {
         SetMeshOutputCounts(vertCount, gKept);
@@ -300,12 +332,10 @@ void pointMesh(
     if (gtid < triCount) {
         const uint at = meshlet.indexOffset + gtid * 3;
         tri = uint3(gIdx[at], gIdx[at + 1], gIdx[at + 2]);
-        keep = triKeep(tri, vertCount, false);
+        const bool twoSided = (gMat[inst.materialId].flags & 2u) != 0u;
+        keep = triKeep(tri, vertCount, false, twoSided,instanceFlippedWinding(inst));
     }
-    uint slot = 0;
-    if (keep) {
-        InterlockedAdd(gKept, 1, slot);
-    }
+    const uint slot = meshletSlot(keep);
     GroupMemoryBarrierWithGroupSync();
     if (gtid == 0) {
         SetMeshOutputCounts(vertCount, gKept);
@@ -329,7 +359,7 @@ void pointMesh(
 void shadowFs(VertOut vin) {
     const GpuInstance inst = gInstanceBuf[vin.instanceId];
     const MaterialGpu mat = gMat[inst.materialId];
-    if (mat.albedo > 0u && mat.albedo < 768u) {
+    if ((mat.flags & 32u) != 0u && mat.albedo > 0u && mat.albedo < 768u) {
         const float alpha = gTex[NonUniformResourceIndex(mat.albedo)].Sample(gWrap, vin.uv).a;
         if (alpha < 0.5) {
             discard;
@@ -351,7 +381,7 @@ uint visFs(VertOut vin, nointerpolation uint primId : COLOR1) : SV_Target0 {
     }
     const GpuInstance inst = gInstanceBuf[vin.instanceId];
     const MaterialGpu mat = gMat[inst.materialId];
-    if (mat.albedo > 0u && mat.albedo < 768u) {
+    if ((mat.flags & 32u) != 0u && mat.albedo > 0u && mat.albedo < 768u) {
         const float alpha = gTex[NonUniformResourceIndex(mat.albedo)].Sample(gWrap, vin.uv).a;
         if (alpha < 0.5) {
             discard;

@@ -174,7 +174,7 @@ void restirShadePixel(uint2 px) {
                 invPdf = max(RTXDI_GetDIReservoirInvPdf(reservoir), 0.0);
                 sampleM = reservoir.M;
                 radiance = sample.radiance;
-                add = restirShade(sample, surface) * invPdf * tint;
+                add = restirShade(sample, surface) * invPdf * visible;
                 float facing = dist > 1e-4 ? saturate(dot(surface.normal, toL / dist)) : 0.0;
                 litAmt = visible * facing;
                 restirStat(1u, 1u);
@@ -250,7 +250,6 @@ void restirSun(uint2 px) {
     tint /= float(rays);
     float vis = restirLuma(tint);
     const float rayVis = vis;
-    const float3 rayTint = tint;
     const float rayClosest = closest;
     uint age = 1u;
     bool temporalOn = (gRestir.pad1 & 1u) != 0u;
@@ -282,7 +281,7 @@ void restirSun(uint2 px) {
     float ndl = dot(surface.geoNormal, L);
     float halfA = radians(max(gRestir.sunDisk, 0.0)) * 0.5;
     float penumbra = 4096.0;
-    float sigmaVis = rayVis;
+    float sigmaVis = vis;
     if (ndl <= 0.0) {
         sigmaVis = 0.0;
         penumbra = 0.0;
@@ -295,8 +294,7 @@ void restirSun(uint2 px) {
     sample.radiance = max(gSun.sunColor.rgb, 0.0) * max(gSun.sunDirIntensity.w, 0.0);
     sample.solidAnglePdf = 1.0;
     float3 shade = max(restirShade(sample, surface), 0.0);
-    float3 sunRgb = sigmaVis > 1e-3 ? shade * rayTint / sigmaVis : shade;
-    restirSigmaStore(px, sigmaVis, penumbra, sunRgb, 1.0);
+    restirSigmaStore(px, sigmaVis, penumbra, shade, 1.0);
 }
 
 [shader("compute")]

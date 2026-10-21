@@ -38,6 +38,19 @@ float sigmaViewZ(int2 ip) {
     return max(length(reconstructWorld(uint2(ip), depth) - gFrame.cameraPos.xyz), 1e-3);
 }
 
+float3 sigmaFace(int2 ip, float depth, float3 P) {
+    if (depth <= 0.0) {
+        return float3(0.0, 1.0, 0.0);
+    }
+    return reconstructNormalFromDepth(gDepth, uint2(ip), P);
+}
+
+float sigmaSame(float3 n, float3 P, float3 Q) {
+    const float span = max(length(Q - P), 1e-3);
+    const float gap = abs(dot(n, Q - P));
+    return exp(-pow(gap / (span * 0.35), 2.0));
+}
+
 void sigmaComposite(uint2 px, float vis) {
     vis = saturate(vis);
     if (gFrame.debugMode == 18u) {
@@ -97,19 +110,18 @@ void sigmaTemporal(uint2 px) {
     float vis = saturate(current);
     float histLen = 1.0;
     const float z = sigmaViewZ(ip);
-    const float3 n = nrdNormal(gSurf1, gDepth, ip);
     const float3 P = reconstructWorld(px, depth);
+    const float3 n = sigmaFace(ip, depth, P);
     const float2 prevUv = nrdPrevUv(P);
     if (nrdInside(prevUv) && z > 0.0) {
         const int2 prev = nrdUvPx(prevUv);
         const float4 hist = gShadowHist[sigmaAt(gPush.readSlice, uint2(prev))];
-        const float zPrev = sigmaViewZ(prev);
-        const float3 toCam = gFrame.cameraPos.xyz - P;
-        const float facing = saturate(dot(n, dot(toCam, toCam) > 1e-8 ? normalize(toCam) : n));
-        const float depthTol = lerp(0.06, 0.02, facing);
-        const float nd = dot(n, nrdNormal(gSurf1, gDepth, prev));
-        const float dz = abs(z - zPrev) / max(z, 1e-3);
-        if (hist.a >= 0.5 && zPrev > 1e-3 && nd >= 0.95 && dz <= depthTol) {
+        const float prevDepth = gDepth.Load(int3(prev, 0));
+        const float3 prevP = reconstructWorld(uint2(prev), max(prevDepth, 1e-5));
+        const float3 nPrev = sigmaFace(prev, prevDepth, prevP);
+        const float gap = abs(dot(n, prevP - P));
+        const float span = max(length(prevP - P), 0.01);
+        if (hist.a >= 0.5 && prevDepth > 0.0 && dot(n, nPrev) >= 0.5 && gap <= span * 0.5) {
             histLen = clamp(hist.b, 1.0, 8.0);
             const float kept = saturate(hist.r);
             const float weight = histLen / (histLen + 1.0);
@@ -136,8 +148,8 @@ void sigmaSpatial(uint2 px) {
         return;
     }
     const int2 ip = int2(px);
-    const float z = sigmaViewZ(ip);
-    const float3 n = nrdNormal(gSurf1, gDepth, ip);
+    const float3 P = reconstructWorld(px, depth);
+    const float3 n = sigmaFace(ip, depth, P);
     const int2 ext = int2(gFrame.extent.xy) - int2(1, 1);
     const int2 cross[4] = { int2(1, 0), int2(-1, 0), int2(0, 1), int2(0, -1) };
     float sum = vis;
@@ -151,16 +163,16 @@ void sigmaSpatial(uint2 px) {
         if (nb.a < 0.5) {
             continue;
         }
-        const float zq = sigmaViewZ(q);
-        if (zq < 0.0) {
+        const float dq = gDepth.Load(int3(q, 0));
+        if (dq <= 0.0) {
             continue;
         }
+        const float3 Q = reconstructWorld(uint2(q), dq);
         const float sample = saturate(nb.r);
         vmin = min(vmin, sample);
         vmax = max(vmax, sample);
-        const float wn = pow(max(dot(n, nrdNormal(gSurf1, gDepth, q)), 0.0), 32.0);
-        const float dz = abs(z - zq) / max(z * 0.02, 1e-3);
-        const float w = wn * exp(-dz * dz);
+        const float wn = pow(max(dot(n, sigmaFace(q, dq, Q)), 0.0), 8.0);
+        const float w = wn * sigmaSame(n, P, Q);
         sum += sample * w;
         wsum += w;
     }
@@ -174,13 +186,13 @@ void sigmaSpatial(uint2 px) {
             if (nb.a < 0.5) {
                 continue;
             }
-            const float zq = sigmaViewZ(q);
-            if (zq < 0.0) {
+            const float dq = gDepth.Load(int3(q, 0));
+            if (dq <= 0.0) {
                 continue;
             }
-            const float wn = pow(max(dot(n, nrdNormal(gSurf1, gDepth, q)), 0.0), 32.0);
-            const float dz = abs(z - zq) / max(z * 0.02, 1e-3);
-            const float w = wn * exp(-dz * dz) * 0.5;
+            const float3 Q = reconstructWorld(uint2(q), dq);
+            const float wn = pow(max(dot(n, sigmaFace(q, dq, Q)), 0.0), 8.0);
+            const float w = wn * sigmaSame(n, P, Q) * 0.5;
             sum += saturate(nb.r) * w;
             wsum += w;
         }

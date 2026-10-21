@@ -16,16 +16,12 @@ void shadeSky(uint3 dtid : SV_DispatchThreadID) {
         return;
     }
     if ((gPass.passMask & 1024u) == 0u) {
-        gHdr[dtid.xy] = float4(0.03, 0.035, 0.045, 1.0);
+        gHdr[dtid.xy] = float4(0.0, 0.0, 0.0, 1.0);
         return;
     }
     const float2 uv = (float2(dtid.xy) + 0.5) * gFrame.invExtent;
     const float3 farP = reconstructWorld(uv, 0.0);
     const float3 rd = normalize(farP - gFrame.cameraPos.xyz);
-    float3 sky = gSkyView.SampleLevel(gClamp, atmSkyUv(rd), 0.0).rgb;
-    const bool sunOn = (gPass.passMask & 256u) != 0u;
-    if (!sunOn) {
-        sky *= 0.03;
-    }
+    const float3 sky = gSkyView.SampleLevel(gClamp, atmSkyUv(rd), 0.0).rgb;
     gHdr[dtid.xy] = float4(max(sky, float3(0.0, 0.0, 0.0)), 1.0);
 }

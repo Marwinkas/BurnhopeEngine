@@ -3,6 +3,7 @@
 // Cascade cull. The ortho matrix already covers casters whose shadow
 // reaches the camera slice, including meshes outside the view frustum.
 
+[[vk::binding(9, 0)]] StructuredBuffer<MeshletRef> gMeshlets;
 [[vk::binding(10, 0)]] StructuredBuffer<GpuInstance> gInstances;
 [[vk::binding(18, 0)]] RWStructuredBuffer<uint> gShadow;
 [[vk::binding(32, 0)]] RWStructuredBuffer<uint> gArgs;
@@ -44,22 +45,23 @@ void shadowCull(uint3 id : SV_DispatchThreadID) {
     const bool chain = (inst.pad.y & 0x80000000u) != 0u;
     const uint maxLod = (inst.pad.y >> 28) & 7u;
     const float stride = gFrame.padInv.x;
-    const float radius = inst.sphere.w;
+    const float groupRadius = gMeshlets[inst.meshId].groupSphere.w;
+    const float radius = groupRadius > 1e-4 ? groupRadius : inst.sphere.w;
     [unroll]
     for (uint c = 0; c < 3; ++c) {
-        if (chain && c == 0u && lod > 1u) {
+        if (gFrame.disableLod == 0 && chain && c == 0u && lod > 1u) {
             continue;
         }
-        if (chain && c == 1u && lod > 2u) {
+        if (gFrame.disableLod == 0 && chain && c == 1u && lod > 2u) {
             continue;
         }
-        if (chain && c == 0u && lod == 0u && maxLod > 0u && radius < 0.2) {
+        if (gFrame.disableLod == 0 && chain && c == 0u && lod == 0u && maxLod > 0u && radius < 0.2) {
             continue;
         }
-        if (chain && c >= 1u && lod == 0u && maxLod > 0u && radius < 1.5) {
+        if (gFrame.disableLod == 0 && chain && c >= 1u && lod == 0u && maxLod > 0u && radius < 1.5) {
             continue;
         }
-        if (chain && c == 2u) {
+        if (gFrame.disableLod == 0 && chain && c == 2u) {
             const uint farLod = maxLod == 0u ? 0u : min(maxLod, 2u);
             if (lod != farLod) {
                 continue;
@@ -68,10 +70,10 @@ void shadowCull(uint3 id : SV_DispatchThreadID) {
         const float extent = max(gSun.sunSplit[c], 1.0);
         const float pixels = radius / extent * 4096.0;
         const float minPx = c == 0u ? 1.0 : c == 1u ? 1.0 : 0.5;
-        if (pixels < minPx) {
+        if (gFrame.disableSubpixel == 0 && pixels < minPx) {
             continue;
         }
-        if (cascadeOut(gSun.sunCascade[c], inst.sphere.xyz, radius, extent)) {
+        if (gFrame.disableFrustum == 0 && cascadeOut(gSun.sunCascade[c], inst.sphere.xyz, radius, extent)) {
             continue;
         }
         uint slot;

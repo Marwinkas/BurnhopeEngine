@@ -712,8 +712,28 @@ void uiVirtualSetShown(UiState& s, uint16_t slot, bool on) {
     }
 }
 
+void uiPaintRgb(UiState& s, uint16_t id, float r, float g, float b) {
+    if (id >= s.count) {
+        return;
+    }
+    auto* paint = s.ent[id].try_get_mut<UiPaint>();
+    if (paint == nullptr) {
+        return;
+    }
+    paint->token = UiToken::Custom;
+    paint->r = r;
+    paint->g = g;
+    paint->b = b;
+    paint->a = 1.0f;
+    s.visualDirty = 1;
+}
+
 void uiShow(UiState& s, uint16_t id, bool visible) {
     if (id >= s.count || s.yoga[id] == nullptr) {
+        return;
+    }
+    const bool shown = YGNodeStyleGetDisplay(s.yoga[id]) != YGDisplayNone;
+    if (shown == visible) {
         return;
     }
     YGNodeStyleSetDisplay(s.yoga[id], visible ? YGDisplayFlex : YGDisplayNone);

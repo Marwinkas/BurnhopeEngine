@@ -30,10 +30,17 @@ void sceneFrameActorGizmo(SceneFrame* scene, uint8_t mode);
 void sceneFrameActorEuler(const SceneFrame* scene, uint8_t index, float& pitch, float& yaw);
 void sceneFrameActorSetEuler(SceneFrame* scene, uint8_t index, float pitch, float yaw);
 
+constexpr uint8_t kSecTransform = 1u;
+constexpr uint8_t kSecMaterial = 2u;
+constexpr uint8_t kSecPost = 4u;
+constexpr uint8_t kSecAtmo = 8u;
+constexpr uint8_t kSecSun = 16u;
+
 struct ActorPose {
     float pos[3]{};
     float euler[3]{};
     float scale[3]{1.0f, 1.0f, 1.0f};
+    uint8_t isStatic = 0;
 };
 
 struct ActorPbr {
@@ -43,6 +50,7 @@ struct ActorPbr {
     float emissive = 0.0f;
 };
 
+[[nodiscard]] uint8_t sceneFrameActorSections(const SceneFrame* scene, uint8_t index);
 [[nodiscard]] bool sceneFrameActorPose(const SceneFrame* scene, uint8_t index, ActorPose& out);
 void sceneFrameActorSetPose(SceneFrame* scene, uint8_t index, const ActorPose& pose);
 [[nodiscard]] bool sceneFrameActorPbr(const SceneFrame* scene, uint8_t index, ActorPbr& out);
@@ -50,7 +58,7 @@ void sceneFrameActorSetPbr(SceneFrame* scene, uint8_t index, const ActorPbr& pbr
 [[nodiscard]] uint8_t sceneFrameSpawnCube(SceneFrame* scene);
 [[nodiscard]] const char* sceneFrameTitle(const SceneFrame* scene);
 void sceneFrameStats(const SceneFrame* scene, char* out, size_t cap);
-void sceneFrameDebug(SceneFrame* scene, bool hiz, bool cone, bool lod, bool frustum, bool subpixel, bool shadow, uint32_t mode);
+void sceneFrameDebug(SceneFrame* scene, bool hiz, bool cone, bool lod, bool frustum, bool subpixel, bool shadow, bool backface, bool screen, bool behind, uint32_t mode);
 
 struct SceneTweaks {
     int32_t forceLod = -1;

@@ -25,7 +25,10 @@ struct FrameView {
     uint32_t disableSubpixel = 0;
     uint32_t disableShadow = 0;
     uint32_t debugPad[3]{};
-    uint32_t debugAlign[4]{};
+    uint32_t frameParity = 0;
+    uint32_t disableBackface = 0;
+    uint32_t disableScreen = 0;
+    uint32_t disableBehind = 0;
     float freezeVp[16]{};
     float viewTail[16]{};
     float viewPad[4]{};

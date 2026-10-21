@@ -39,6 +39,8 @@ inline void meshletBuildAppend(
         uint32_t indexBase = 0;
     };
     Cursor cursor{};
+    cursor.vertBase = static_cast<uint32_t>(build.vertices.size());
+    cursor.indexBase = static_cast<uint32_t>(build.indices.size());
     const auto find = [](const Cursor& c, uint32_t src) -> int {
         for (uint32_t i = 0; i < c.count; ++i) {
             if (c.src[i] == src) {
@@ -124,7 +126,7 @@ inline void meshletBuildAppend(
         instance.materialId = materialId;
         instance.meshId = meshId;
         instance.pad[0] = lod;
-        instance.pad[1] = group;
+        instance.pad[1] = group & 0x0fffffffu;
         build.instances.push_back(instance);
         cursor = {};
         cursor.vertBase = static_cast<uint32_t>(build.vertices.size());

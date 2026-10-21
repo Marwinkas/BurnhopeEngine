@@ -144,6 +144,9 @@ struct HudIds {
     uint16_t lod = kUiNone;
     uint16_t frust = kUiNone;
     uint16_t small = kUiNone;
+    uint16_t backface = kUiNone;
+    uint16_t screen = kUiNone;
+    uint16_t behind = kUiNone;
     uint16_t shadow = kUiNone;
     uint16_t cluster = kUiNone;
     uint16_t probes = kUiNone;
@@ -212,6 +215,9 @@ struct HudIds {
     uint16_t pbrSx = kUiNone;
     uint16_t pbrSy = kUiNone;
     uint16_t pbrSz = kUiNone;
+    uint16_t xfStatic = kUiNone;
+    uint16_t reflRt = kUiNone;
+    uint16_t fogSwatch = kUiNone;
     uint16_t contacten = kUiNone;
     uint16_t vt = kUiNone;
     uint16_t freeze = kUiNone;
@@ -229,6 +235,7 @@ struct HudContext {
     float lookY = 0.0f;
     uint8_t shown = 0xff;
     uint8_t propSel = 0xff;
+    uint8_t propStatic = 0;
     float propLast[15]{};
     ToolHit tool{};
     StatsHit stats{};
@@ -251,6 +258,7 @@ struct Engine {
     HudContext hud{};
 };
 
+[[nodiscard]] bool engineImportScene();
 [[nodiscard]] bool engineInit(Engine& e, int argc, char** argv);
 void engineShutdown(Engine& e);
 [[nodiscard]] bool engineTick(Engine& e);

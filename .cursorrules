@@ -430,3 +430,14 @@ NEVER read a specular color map as metallic-roughness (blue stays 0 and a textur
 NEVER let spawn increment past kUiCap (the node walks off ent[] and flecs dies in ecs_get_world); ALWAYS stop at 2048 and return kUiNone, 2 bytes.
 NEVER drop radiance geometry when a prop instance moves (the city BLAS of 4999445 triangles rebuilds and the device is lost); ALWAYS write that instance's 64-byte world matrix and leave the acceleration structure.
 NEVER clear a Specular file out of the ORM slot (that map is the packed metallic-roughness, the factor stays at 1 and the city goes full metal); ALWAYS keep it as orm, roughness in G and metal in B, 4 bytes.
+NEVER leave a property number at the 36 px field height inside a shorter row (the glyphs center in that box and the clip shows them low); ALWAYS set that field height to the row slot, 4 bytes.
+NEVER keep a scroll view's yoga root top of 0 (the view covers the category bar and the strip slides down); ALWAYS the screen position the parent layout stored, 8 bytes.
+NEVER simplify a mesh or a 50000-triangle slice before meshlets (borders split and the model disappears); ALWAYS meshlets first, partitionClusters of 8, then meshopt_simplify with SimplifyLockBorder on that cluster, 4 bytes.
+NEVER shade a far ReSTIR sun shadow from a coarse LOD or the occluder tint (the pixel changes color every frame and the blur only averages visibility); ALWAYS the receiver shade times scalar visibility, one meshlet cut of the original mesh, and the depth-plane normal, 12 bytes rgb.
+NEVER clamp a visibility-buffer UV gradient to 0.02 (each triangle takes its own mip and the texture breaks into facets); ALWAYS the perspective-correct ddx and ddy from the three clip positions, 8 bytes.
+NEVER drop a triangle whose cross-product length is under 1e-8 (an apple stem is 1e-10 and the triangle is gone from the bhop); ALWAYS reject only a zero area2 at or below 1e-24, 4 bytes.
+NEVER discard a visibility pixel from albedo alpha on every material (BC alpha under 0.5 punches holes in opaque meshes); ALWAYS test alpha when flags bit 32 is set, 4 bytes.
+NEVER drop a meshlet triangle smaller than 0.75 px (a 0.4 px face that covers a pixel center is a hole); ALWAYS keep the triangle when a pixel center lies inside its screen bounds, 8 bytes.
+NEVER treat a positive framebuffer area as the front face (projection Y is negated, glTF CCW lands clockwise, and every model renders inside-out); ALWAYS drop area >= 0 when the material is single-sided, 4 bytes.
+NEVER keep a triangle whose face normal opposes the authored vertex normals (three apple faces vanish under backface as the camera turns); ALWAYS swap the last two indices when that dot is negative, 12 bytes.
+NEVER tie triangle backface or the screen box to the cone checkbox (those tests keep dropping faces after every cull flag is off); ALWAYS disableBackface, disableScreen and disableBehind in the three spare FrameView dwords, 12 bytes.

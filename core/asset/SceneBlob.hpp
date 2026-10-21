@@ -35,6 +35,9 @@ struct SceneInstance {
     uint32_t pad[2]{};
 };
 
+// pad[1] low 28 bits. The lighter file is tagged so a frame can move it without a scene search.
+constexpr uint32_t kSceneLighterGroup = 1u << 20;
+
 struct SceneBlobInfo {
     uint32_t meshletCount = 0;
     uint32_t vertexCount = 0;

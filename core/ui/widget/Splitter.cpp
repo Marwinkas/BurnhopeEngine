@@ -306,7 +306,7 @@ void splitPaint(UiState& s, uint16_t id, bool hot) {
         return;
     }
     auto* paint = s.ent[id].try_get_mut<UiPaint>();
-    if (paint == nullptr) {
+    if (paint == nullptr || s.ent[id].has<UiSplitShare>()) {
         return;
     }
     const UiToken token = hot ? UiToken::Accent : UiToken::Muted;

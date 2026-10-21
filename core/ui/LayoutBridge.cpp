@@ -294,10 +294,26 @@ void uiLayout(UiState& s, float w, float h) {
         };
 
         applySub(applySub, root);
+        const float keepX = s.box[root].x;
+        const float keepY = s.box[root].y;
         const float layW = s.box[root].w > kUiLayoutEpsilon ? s.box[root].w : YGUndefined;
         const float layH = s.box[root].h > kUiLayoutEpsilon ? s.box[root].h : YGUndefined;
         YGNodeCalculateLayout(s.yoga[root], layW, layH, YGDirectionLTR);
-        cacheSub(cacheSub, root);
+        cacheBox(s, root);
+        s.box[root].x = keepX;
+        s.box[root].y = keepY;
+        s.ent[root].set<UiBounds>({keepX, keepY, s.box[root].w, s.box[root].h});
+        if (auto* scissor = s.ent[root].try_get_mut<UiScissor>()) {
+            scissor->minX = keepX;
+            scissor->minY = keepY;
+            scissor->maxX = keepX + s.box[root].w;
+            scissor->maxY = keepY + s.box[root].h;
+        }
+        for (uint16_t child = 0; child < s.count; ++child) {
+            if (s.parentOf[child] == root) {
+                cacheSub(cacheSub, child);
+            }
+        }
 
         s.layoutFrom = kUiNone;
         s.layoutDirty = false;

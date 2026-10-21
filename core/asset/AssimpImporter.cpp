@@ -2,7 +2,6 @@
 
 #include "gfx/Light.hpp"
 #include "gfx/MeshletBuilder.hpp"
-#include "platform/Jobs.hpp"
 #include "platform/PlatformUtil.hpp"
 
 #include <assimp/GltfMaterial.h>
@@ -11,8 +10,6 @@
 #include <assimp/material.h>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
-#include <meshoptimizer.h>
-
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -130,21 +127,31 @@ uint32_t textureSlot(std::vector<SceneTexName>& names, const char* path) {
     names.push_back(name);
     return static_cast<uint32_t>(names.size() - 1);
 }
-
-void repairMesh(std::vector<float>& xyz, std::vector<float>& nrm, std::vector<uint32_t>& idx) {
+void repairMesh(std::vector<float>& xyz, std::vector<float>& nrm, std::vector<uint32_t>& idx, bool flipWinding) {
     const uint32_t vertCount = static_cast<uint32_t>(xyz.size() / 3u);
     const uint32_t triCount = static_cast<uint32_t>(idx.size() / 3u);
-    if (vertCount == 0 || triCount == 0) {
+    if (vertCount == 0 || triCount == 0 || nrm.size() < xyz.size()) {
         idx.clear();
         return;
     }
-    std::fill(nrm.begin(), nrm.end(), 0.0f);
+    bool authored = false;
+    for (uint32_t v = 0; v < vertCount; ++v) {
+        const float x = nrm[v * 3u];
+        const float y = nrm[v * 3u + 1u];
+        const float z = nrm[v * 3u + 2u];
+        if (x * x + y * y + z * z > 1.0e-8f) {
+            authored = true;
+            break;
+        }
+    }
+    std::vector<float> face(nrm.size(), 0.0f);
     std::vector<uint32_t> kept;
     kept.reserve(idx.size());
+
     for (uint32_t t = 0; t < triCount; ++t) {
         const uint32_t i0 = idx[static_cast<size_t>(t) * 3u];
-        const uint32_t i1 = idx[static_cast<size_t>(t) * 3u + 1u];
-        const uint32_t i2 = idx[static_cast<size_t>(t) * 3u + 2u];
+        const uint32_t i1 = idx[static_cast<size_t>(t) * 3u + (flipWinding ? 2u : 1u)];
+        const uint32_t i2 = idx[static_cast<size_t>(t) * 3u + (flipWinding ? 1u : 2u)];
         if (i0 >= vertCount || i1 >= vertCount || i2 >= vertCount || i0 == i1 || i1 == i2 || i2 == i0) {
             continue;
         }
@@ -157,28 +164,40 @@ void repairMesh(std::vector<float>& xyz, std::vector<float>& nrm, std::vector<ui
         const float nx = e1y * e2z - e1z * e2y;
         const float ny = e1z * e2x - e1x * e2z;
         const float nz = e1x * e2y - e1y * e2x;
-        const float area = std::sqrt(nx * nx + ny * ny + nz * nz);
-        if (area < 1.0e-8f) {
+        const float area2 = nx * nx + ny * ny + nz * nz;
+        if (area2 <= 1.0e-28f) {
             continue;
         }
-        nrm[i0 * 3u] += nx;
-        nrm[i0 * 3u + 1u] += ny;
-        nrm[i0 * 3u + 2u] += nz;
-        nrm[i1 * 3u] += nx;
-        nrm[i1 * 3u + 1u] += ny;
-        nrm[i1 * 3u + 2u] += nz;
-        nrm[i2 * 3u] += nx;
-        nrm[i2 * 3u + 1u] += ny;
-        nrm[i2 * 3u + 2u] += nz;
+        face[i0 * 3u] += nx;
+        face[i0 * 3u + 1u] += ny;
+        face[i0 * 3u + 2u] += nz;
+        face[i1 * 3u] += nx;
+        face[i1 * 3u + 1u] += ny;
+        face[i1 * 3u + 2u] += nz;
+        face[i2 * 3u] += nx;
+        face[i2 * 3u + 1u] += ny;
+        face[i2 * 3u + 2u] += nz;
+
         kept.push_back(i0);
         kept.push_back(i1);
         kept.push_back(i2);
     }
+
+    if (!authored) {
+        nrm.swap(face);
+    }
     for (uint32_t v = 0; v < vertCount; ++v) {
-        const float x = nrm[v * 3u];
-        const float y = nrm[v * 3u + 1u];
-        const float z = nrm[v * 3u + 2u];
-        const float len = std::sqrt(x * x + y * y + z * z);
+        float x = nrm[v * 3u];
+        float y = nrm[v * 3u + 1u];
+        float z = nrm[v * 3u + 2u];
+        float len = std::sqrt(x * x + y * y + z * z);
+        if (len < 1.0e-8f) {
+            // Если у отдельной вершины нормаль была нулевой — берем геометрическую нормаль из face
+            x = face[v * 3u];
+            y = face[v * 3u + 1u];
+            z = face[v * 3u + 2u];
+            len = std::sqrt(x * x + y * y + z * z);
+        }
         if (len < 1.0e-8f) {
             nrm[v * 3u] = 0.0f;
             nrm[v * 3u + 1u] = 1.0f;
@@ -191,36 +210,45 @@ void repairMesh(std::vector<float>& xyz, std::vector<float>& nrm, std::vector<ui
     }
     idx.swap(kept);
 }
+void bakePoint(const aiMatrix4x4& m, float x, float y, float z, float& ox, float& oy, float& oz) {
+    ox = m.a1 * x + m.a2 * y + m.a3 * z + m.a4;
+    oy = m.b1 * x + m.b2 * y + m.b3 * z + m.b4;
+    oz = m.c1 * x + m.c2 * y + m.c3 * z + m.c4;
+}
+bool matrixFlipsWinding(const aiMatrix4x4& m) {
+    const float c00 = m.b2 * m.c3 - m.b3 * m.c2;
+    const float c01 = m.b3 * m.c1 - m.b1 * m.c3;
+    const float c02 = m.b1 * m.c2 - m.b2 * m.c1;
+    const float det = m.a1 * c00 + m.a2 * c01 + m.a3 * c02;
+    return det < 0.0f;
+}
 
-constexpr uint32_t kSimTris = 50000;
+void bakeNormal(const aiMatrix4x4& m, float x, float y, float z, float& ox, float& oy, float& oz) {
+    const float c00 = m.b2 * m.c3 - m.b3 * m.c2;
+    const float c01 = m.b3 * m.c1 - m.b1 * m.c3;
+    const float c02 = m.b1 * m.c2 - m.b2 * m.c1;
+    const float c10 = m.a3 * m.c2 - m.a2 * m.c3;
+    const float c11 = m.a1 * m.c3 - m.a3 * m.c1;
+    const float c12 = m.a2 * m.c1 - m.a1 * m.c2;
+    const float c20 = m.a2 * m.b3 - m.a3 * m.b2;
+    const float c21 = m.a3 * m.b1 - m.a1 * m.b3;
+    const float c22 = m.a1 * m.b2 - m.a2 * m.b1;
+    const float det = m.a1 * c00 + m.a2 * c01 + m.a3 * c02;
+    const float sign = det < 0.0f ? -1.0f : 1.0f;
 
-struct SimChunk {
-    const float* xyz = nullptr;
-    size_t verts = 0;
-    const uint32_t* src = nullptr;
-    uint32_t tris = 0;
-    bool sloppy = false;
-    std::vector<uint32_t> kept;
-};
-
-void simOne(void* user) {
-    auto* chunk = static_cast<SimChunk*>(user);
-    chunk->kept.assign(static_cast<size_t>(chunk->tris) * 3u, 0u);
-    float error = 0.0f;
-    const size_t target = std::max<size_t>(3, (static_cast<size_t>(chunk->tris) * 3u) / 2u);
-    size_t n = 0;
-    if (chunk->sloppy) {
-        n = meshopt_simplifySloppy(
-            chunk->kept.data(), chunk->src, static_cast<size_t>(chunk->tris) * 3u,
-            chunk->xyz, chunk->verts, sizeof(float) * 3,
-            target, 0.02f, &error);
-    } else {
-        n = meshopt_simplify(
-            chunk->kept.data(), chunk->src, static_cast<size_t>(chunk->tris) * 3u,
-            chunk->xyz, chunk->verts, sizeof(float) * 3,
-            target, 0.05f, meshopt_SimplifyLockBorder, &error);
+    ox = (c00 * x + c01 * y + c02 * z) * sign;
+    oy = (c10 * x + c11 * y + c12 * z) * sign;
+    oz = (c20 * x + c21 * y + c22 * z) * sign;
+    const float len = std::sqrt(ox * ox + oy * oy + oz * oz);
+    if (len < 1.0e-8f) {
+        ox = 0.0f;
+        oy = 1.0f;
+        oz = 0.0f;
+        return;
     }
-    chunk->kept.resize(n >= 3 ? n : 0);
+    ox /= len;
+    oy /= len;
+    oz /= len;
 }
 
 bool nameHas(const char* text, const char* needle) {
@@ -362,6 +390,8 @@ bool appendSceneMeshes(
     std::vector<SceneTexName>& textures,
     std::vector<LightGpuData>& lights,
     MeshletBuild& build) {
+    const bool hand = nameHas(label, "lighter");
+    const uint32_t groupBase = hand ? kSceneLighterGroup : 0u;
     const uint32_t materialBase = static_cast<uint32_t>(materials.size());
     const uint32_t localCount = scene->mNumMaterials > 0 ? scene->mNumMaterials : 1u;
     materials.resize(materialBase + localCount);
@@ -464,9 +494,60 @@ bool appendSceneMeshes(
                 }
             }
         }
+        aiColor4D emit(0.0f, 0.0f, 0.0f, 1.0f);
+        const bool hasEmit = mat->Get(AI_MATKEY_COLOR_EMISSIVE, emit) == AI_SUCCESS;
+        const float emitPeak = std::max(emit.r, std::max(emit.g, emit.b));
+        float strength = 0.0f;
+        mat->Get(AI_MATKEY_EMISSIVE_INTENSITY, strength);
+        aiString emTex;
+        if (mat->GetTexture(aiTextureType_EMISSIVE, 0, &emTex) == AI_SUCCESS) {
+            dst.emissiveTexIndex = textureSlot(textures, emTex.C_Str());
+        }
+        if (dst.emissiveTexIndex != 0 || (hasEmit && emitPeak > 0.001f)) {
+            const float gain = strength > 0.0f ? strength : 1.0f;
+            const float peak = emitPeak > 0.001f ? emitPeak : 1.0f;
+            dst.emissiveIntensity = std::max(dst.emissiveIntensity, gain * peak);
+        }
+        float ior = 0.0f;
+        if (mat->Get(AI_MATKEY_REFRACTI, ior) == AI_SUCCESS && ior > 1.01f && ior < 3.0f) {
+            const float fresnel = (ior - 1.0f) / (ior + 1.0f);
+            const float perceptual = std::sqrt(std::max((fresnel * fresnel) / 0.16f, 0.0f));
+            std::memcpy(&dst.pad[1], &perceptual, sizeof(float));
+        }
+        if (hand && dst.emissiveIntensity < 2.0f) {
+            dst.emissiveIntensity = 2.5f;
+        }
     }
-    for (unsigned m = 0; m < scene->mNumMeshes; ++m) {
-        const aiMesh* mesh = scene->mMeshes[m];
+    struct Placement {
+        unsigned mesh = 0;
+        aiMatrix4x4 world{};
+        const char* name = "";
+    };
+    std::vector<Placement> placed;
+    const auto collectNodes = [&](auto&& self, const aiNode* node, const aiMatrix4x4& parent) -> void {
+        if (node == nullptr) {
+            return;
+        }
+        const aiMatrix4x4 world = parent * node->mTransformation;
+        for (unsigned i = 0; i < node->mNumMeshes; ++i) {
+            Placement item{};
+            item.mesh = node->mMeshes[i];
+            item.world = world;
+            item.name = node->mName.C_Str();
+            placed.push_back(item);
+        }
+        for (unsigned c = 0; c < node->mNumChildren; ++c) {
+            self(self, node->mChildren[c], world);
+        }
+    };
+    aiMatrix4x4 identity{};
+    collectNodes(collectNodes, scene->mRootNode, identity);
+    for (unsigned p = 0; p < placed.size(); ++p) {
+        const Placement& place = placed[p];
+        if (place.mesh >= scene->mNumMeshes) {
+            continue;
+        }
+        const aiMesh* mesh = scene->mMeshes[place.mesh];
         if (mesh == nullptr || mesh->mNumVertices == 0 || mesh->mNumFaces == 0) {
             continue;
         }
@@ -476,13 +557,11 @@ bool appendSceneMeshes(
         std::vector<uint32_t> idx;
         idx.reserve(static_cast<size_t>(mesh->mNumFaces) * 3u);
         for (unsigned v = 0; v < mesh->mNumVertices; ++v) {
-            xyz[static_cast<size_t>(v) * 3u + 0u] = mesh->mVertices[v].x;
-            xyz[static_cast<size_t>(v) * 3u + 1u] = mesh->mVertices[v].y;
-            xyz[static_cast<size_t>(v) * 3u + 2u] = mesh->mVertices[v].z;
+            bakePoint(place.world, mesh->mVertices[v].x, mesh->mVertices[v].y, mesh->mVertices[v].z,
+                xyz[static_cast<size_t>(v) * 3u + 0u], xyz[static_cast<size_t>(v) * 3u + 1u], xyz[static_cast<size_t>(v) * 3u + 2u]);
             if (mesh->mNormals != nullptr) {
-                nrm[static_cast<size_t>(v) * 3u + 0u] = mesh->mNormals[v].x;
-                nrm[static_cast<size_t>(v) * 3u + 1u] = mesh->mNormals[v].y;
-                nrm[static_cast<size_t>(v) * 3u + 2u] = mesh->mNormals[v].z;
+                bakeNormal(place.world, mesh->mNormals[v].x, mesh->mNormals[v].y, mesh->mNormals[v].z,
+                    nrm[static_cast<size_t>(v) * 3u + 0u], nrm[static_cast<size_t>(v) * 3u + 1u], nrm[static_cast<size_t>(v) * 3u + 2u]);
             } else {
                 nrm[static_cast<size_t>(v) * 3u + 1u] = 1.0f;
             }
@@ -497,8 +576,8 @@ bool appendSceneMeshes(
                 uv[static_cast<size_t>(v) * 2u + 0u] = uvSet[v].x;
                 uv[static_cast<size_t>(v) * 2u + 1u] = 1.0f - uvSet[v].y;
             } else {
-                uv[static_cast<size_t>(v) * 2u + 0u] = mesh->mVertices[v].x * 0.25f;
-                uv[static_cast<size_t>(v) * 2u + 1u] = mesh->mVertices[v].z * 0.25f;
+                uv[static_cast<size_t>(v) * 2u + 0u] = xyz[static_cast<size_t>(v) * 3u] * 0.25f;
+                uv[static_cast<size_t>(v) * 2u + 1u] = xyz[static_cast<size_t>(v) * 3u + 2u] * 0.25f;
             }
         }
         for (unsigned f = 0; f < mesh->mNumFaces; ++f) {
@@ -513,79 +592,20 @@ bool appendSceneMeshes(
         const uint32_t material = mesh->mMaterialIndex < static_cast<uint32_t>(materials.size() - materialBase)
             ? materialBase + mesh->mMaterialIndex
             : materialBase;
-        float minX = xyz[0];
-        float maxX = xyz[0];
-        float minY = xyz[1];
-        float maxY = xyz[1];
-        float minZ = xyz[2];
-        float maxZ = xyz[2];
-        for (size_t i = 0; i < xyz.size(); i += 3) {
-            minX = std::min(minX, xyz[i]);
-            maxX = std::max(maxX, xyz[i]);
-            minY = std::min(minY, xyz[i + 1]);
-            maxY = std::max(maxY, xyz[i + 1]);
-            minZ = std::min(minZ, xyz[i + 2]);
-            maxZ = std::max(maxZ, xyz[i + 2]);
-        }
-        repairMesh(xyz, nrm, idx);
+        repairMesh(xyz, nrm, idx, matrixFlipsWinding(place.world));
         if (idx.empty()) {
-            continue;
+            continue; 
         }
-        const bool sloppy = scene->mMaterials != nullptr && mesh->mMaterialIndex < scene->mNumMaterials
-            && foliageMaterial(scene->mMaterials[mesh->mMaterialIndex]);
-        const uint32_t lodBase = static_cast<uint32_t>(build.instances.size());
-        meshletBuildAppend(build, xyz.data(), nrm.data(), idx.data(), static_cast<uint32_t>(idx.size()), material, uv.data(), 0, m);
-        std::vector<uint32_t> level;
-        level.swap(idx);
-        uint32_t maxLod = 0;
-        for (uint32_t lod = 1; lod <= 3 && level.size() >= 12; ++lod) {
-            const uint32_t triCount = static_cast<uint32_t>(level.size() / 3);
-            const uint32_t chunks = (triCount + kSimTris - 1u) / kSimTris;
-            std::fprintf(stderr, "scene import: %s mesh %u lod %u  tris %u  jobs %u  sloppy %d  threads %d\n",
-                label, m + 1u, lod, triCount, chunks, sloppy ? 1 : 0, jobsWorkerCount());
-            std::vector<SimChunk> parts(chunks);
-            std::vector<Job> jobs(chunks);
-            for (uint32_t c = 0; c < chunks; ++c) {
-                const uint32_t t = c * kSimTris;
-                parts[c].xyz = xyz.data();
-                parts[c].verts = xyz.size() / 3u;
-                parts[c].src = level.data() + static_cast<size_t>(t) * 3u;
-                parts[c].tris = std::min(kSimTris, triCount - t);
-                parts[c].sloppy = sloppy;
-                jobs[c].fn = simOne;
-                jobs[c].user = &parts[c];
-            }
-            jobsRunAndWait(jobs.data(), static_cast<int>(jobs.size()));
-            std::vector<uint32_t> next;
-            size_t total = 0;
-            for (const SimChunk& part : parts) {
-                total += part.kept.size();
-            }
-            next.reserve(total);
-            for (SimChunk& part : parts) {
-                next.insert(next.end(), part.kept.begin(), part.kept.end());
-                std::vector<uint32_t>().swap(part.kept);
-            }
-            std::vector<SimChunk>().swap(parts);
-            if (next.size() < 3 || next.size() >= level.size()) {
-                break;
-            }
-            meshletBuildAppend(build, xyz.data(), nrm.data(), next.data(), static_cast<uint32_t>(next.size()), material, uv.data(), lod, m);
-            maxLod = lod;
-            level.swap(next);
-            std::vector<uint32_t>().swap(next);
-        }
-        std::vector<float>().swap(xyz);
-        std::vector<float>().swap(nrm);
-        std::vector<float>().swap(uv);
-        std::vector<uint32_t>().swap(level);
-        if (maxLod > 0) {
-            for (uint32_t i = lodBase; i < build.instances.size(); ++i) {
-                const uint32_t group = build.instances[i].pad[1] & 0x0fffffffu;
-                build.instances[i].pad[1] = group | 0x80000000u | (maxLod << 28);
+        const uint32_t group = groupBase + p;
+        const size_t meshletBefore = build.meshlets.size();
+        meshletBuildAppend(build, xyz.data(), nrm.data(), idx.data(), static_cast<uint32_t>(idx.size()), material, uv.data(), 0, group);
+        if ((materials[material].flags & 2u) != 0u) {
+            for (size_t s = meshletBefore; s < build.meshlets.size(); ++s) {
+                build.meshlets[s].coneCutoff = -1.0f;
             }
         }
-        std::fprintf(stderr, "scene import: %s mesh %u/%u  meshlets %zu\n", label, m + 1u, scene->mNumMeshes, build.meshlets.size());
+        std::fprintf(stderr, "scene import: %s %s  tris %zu  meshlets %zu\n",
+            label, place.name, idx.size() / 3u, build.meshlets.size());
     }
     if (scene->mLights != nullptr) {
         for (unsigned i = 0; i < scene->mNumLights && lights.size() < kLightCap; ++i) {
@@ -621,8 +641,7 @@ bool sceneImportFbxList(const char* const* fbxPaths, uint32_t count, const char*
         return false;
     }
     const unsigned flags = aiProcess_Triangulate | aiProcess_GenSmoothNormals
-        | aiProcess_JoinIdenticalVertices | aiProcess_PreTransformVertices | aiProcess_FindDegenerates
-        | aiProcess_FindInvalidData;
+        | aiProcess_JoinIdenticalVertices | aiProcess_FindInvalidData;
     std::vector<MaterialGpuData> materials;
     std::vector<SceneTexName> textures(1);
     std::vector<LightGpuData> lights;

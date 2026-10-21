@@ -1,5 +1,11 @@
 #define RTXDI_ENABLE_PRESAMPLING 1
 #define RTXDI_ALLOWED_BIAS_CORRECTION 3
+#define RTXDI_REGIR_DISABLED 0
+#define RTXDI_REGIR_GRID 1
+#define RTXDI_REGIR_ONION 2
+#ifndef RTXDI_REGIR_MODE
+#define RTXDI_REGIR_MODE RTXDI_REGIR_DISABLED
+#endif
 
 #include "frame.slang"
 #include "camera.slang"
