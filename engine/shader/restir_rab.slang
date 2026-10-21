@@ -12,6 +12,7 @@
 #include "core/brdf.slang"
 #include "Rtxdi/DI/ReSTIRDIParameters.h"
 #include "Rtxdi/Utils/RandomSamplerState.hlsli"
+#include "Rtxdi/Utils/Math.hlsli"
 
 struct RestirSlot {
     uint lightData;
@@ -230,8 +231,25 @@ float RAB_GetLightTargetPdfForVolume(RAB_LightInfo light, float3 volumeCenter, f
 }
 
 float RAB_EvaluateLocalLightSourcePdf(uint lightIndex) {
-    (void)lightIndex;
-    return 1.0 / max(float(gRestir.lights.localLightBufferRegion.numLights), 1.0);
+    uint first = gRestir.lights.localLightBufferRegion.firstLightIndex;
+    uint num = gRestir.lights.localLightBufferRegion.numLights;
+    if (num == 0u || lightIndex < first || lightIndex >= first + num) {
+        return 0.0;
+    }
+    if (gRestir.pdfWidth > 0u && gRestir.pdfHeight > 0u) {
+        uint2 tc = RTXDI_LinearIndexToZCurve(lightIndex - first);
+        if (tc.x < gRestir.pdfWidth && tc.y < gRestir.pdfHeight) {
+            float power = gPdf.Load(int3(tc, 0)).x;
+            uint maxDim = max(gRestir.pdfWidth, gRestir.pdfHeight);
+            uint topMip = uint(firstbithigh(maxDim));
+            float avgPower = gPdf.Load(int3(0, 0, int(topMip))).x;
+            float sumPower = avgPower * float(gRestir.pdfWidth * gRestir.pdfHeight);
+            if (sumPower > 1e-6) {
+                return max(power / sumPower, 1e-6);
+            }
+        }
+    }
+    return 1.0 / float(num);
 }
 
 float RAB_EvaluateEnvironmentMapSamplingPdf(float3 L) {
@@ -295,7 +313,7 @@ float RAB_GetLightSampleTargetPdfForSurface(RAB_LightSample lightSample, RAB_Sur
 }
 
 float restirSourceRadius(RAB_LightInfo lightInfo) {
-    return lightInfo.sourceRadius > 1e-4 ? lightInfo.sourceRadius : 0.15;
+    return lightInfo.sourceRadius > 1e-4 ? lightInfo.sourceRadius : 0.08;
 }
 
 float3 restirLightDisk(float3 center, float3 dir, float radius, float u, float v) {
@@ -313,7 +331,10 @@ void RAB_GetLightDirDistance(RAB_Surface surface, RAB_LightSample lightSample, o
     o_lightDir = toLight / max(o_lightDistance, 1e-6);
 }
 
+// Стабильная оценка точечного/прожекторного источника света без случайного сдвига позиции по диску,
+// чтобы при пространственном и темпоральном обмене резервуарами между соседями не возникал ложный дрейф PDF.
 RAB_LightSample RAB_SamplePolymorphicLight(RAB_LightInfo lightInfo, RAB_Surface surface, float2 uv) {
+    (void)uv;
     RAB_LightSample sample = RAB_EmptyLightSample();
     uint kind = lightInfo.type;
     if (kind == 0u) {
@@ -352,7 +373,7 @@ RAB_LightSample RAB_SamplePolymorphicLight(RAB_LightInfo lightInfo, RAB_Surface 
     if (peak > cap) {
         radiance *= cap / peak;
     }
-    sample.position = restirLightDisk(lightInfo.posRadius.xyz, L, restirSourceRadius(lightInfo), uv.x, uv.y);
+    sample.position = lightInfo.posRadius.xyz;
     sample.normal = -L;
     sample.radiance = radiance * atten;
     sample.solidAnglePdf = 1.0;
@@ -413,7 +434,6 @@ RestirGlass restirGlass(uint prim, float2 bary) {
     return glass;
 }
 
-// Any-hit теневого луча. Непрозрачное глушит свет. Стекло красится альбедо и луч идёт дальше.
 float3 restirAnyHit(float3 origin, float3 direction, float tMin, float tMax) {
     if (gRestir.tlasLo == 0u && gRestir.tlasHi == 0u) {
         return 1.0;
@@ -423,6 +443,8 @@ float3 restirAnyHit(float3 origin, float3 direction, float tMin, float tMax) {
     ray.Direction = direction;
     ray.TMin = tMin;
     ray.TMax = max(tMax, tMin);
+    uint ignored;
+    InterlockedAdd(gRis[1024u * 128u + 7u].x, 1u, ignored);
     RayQuery<RAY_FLAG_FORCE_NON_OPAQUE> query;
     query.TraceRayInline(restirScene(), RAY_FLAG_FORCE_NON_OPAQUE, 0xff, ray);
     float3 tint = 1.0;
@@ -458,7 +480,6 @@ struct RestirOcclusion {
     float distance;
 };
 
-// Тот же any-hit, плюс дистанция ближайшего непрозрачного блока. Промах: distance < 0.
 RestirOcclusion restirSunOcclusion(float3 origin, float3 direction, float tMin, float tMax) {
     RestirOcclusion hit;
     hit.tint = 1.0;
@@ -522,6 +543,8 @@ bool restirTrace(float3 origin, float3 direction, float tMin, float tMax) {
     ray.Direction = direction;
     ray.TMin = tMin;
     ray.TMax = max(tMax, tMin);
+    uint ignored;
+    InterlockedAdd(gRis[1024u * 128u + 7u].x, 1u, ignored);
     RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
     query.TraceRayInline(restirScene(), RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, 0xff, ray);
     query.Proceed();
@@ -543,13 +566,14 @@ bool RAB_GetConservativeVisibility(RAB_Surface surface, RAB_LightSample lightSam
     if (dist < 1e-3) {
         return false;
     }
+    float3 dir = toL / dist;
     float tMin = max(gRestir.shadowBias, 0.02);
-    float reach = max(dist - tMin, tMin);
+    float reach = max(dist - tMin * 2.0, tMin);
     if (gRestir.shadowRange > 0.0) {
         reach = min(reach, gRestir.shadowRange);
     }
-    float3 origin = surface.worldPos + surface.geoNormal * 0.02;
-    return restirLuma(restirAnyHit(origin, toL / dist, tMin, reach)) > 0.04;
+    float3 origin = surface.worldPos + surface.geoNormal * 0.02 + dir * 0.01;
+    return !restirTrace(origin, dir, tMin, reach);
 }
 
 bool RAB_GetConservativeVisibility(RAB_Surface surface, float3 samplePosition) {

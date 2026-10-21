@@ -58,19 +58,21 @@ void tuneContext(rtxdi::ReSTIRDIContext& ctx) {
     initial.numLocalLightSamples = 8;
     initial.numInfiniteLightSamples = 0;
     initial.numEnvironmentSamples = 0;
-    initial.numBrdfSamples = 0;
-    initial.enableInitialVisibility = 0;
+    initial.numBrdfSamples = 1;
+    initial.brdfCutoff = 0.02f;
+    initial.enableInitialVisibility = 1;
     initial.environmentMapImportanceSampling = 0;
     initial.localLightSamplingMode = ReSTIRDI_LocalLightSamplingMode::Power_RIS;
     ctx.SetInitialSamplingParameters(initial);
 
     RTXDI_DISpatialResamplingParameters spatial = ctx.GetSpatialResamplingParameters();
-    spatial.numSamples = 3;
-    spatial.numDisocclusionBoostSamples = 3;
-    spatial.samplingRadius = 4.0f;
+    spatial.numSamples = 4;
+    spatial.numDisocclusionBoostSamples = 8;
+    spatial.samplingRadius = 12.0f;
     spatial.depthThreshold = 0.1f;
     spatial.normalThreshold = 0.9f;
     spatial.biasCorrectionMode = ReSTIRDI_SpatialBiasCorrectionMode::Raytraced;
+    spatial.enableMaterialSimilarityTest = 1;
     ctx.SetSpatialResamplingParameters(spatial);
 
     RTXDI_DITemporalResamplingParameters temporal = ctx.GetTemporalResamplingParameters();
@@ -78,8 +80,15 @@ void tuneContext(rtxdi::ReSTIRDIContext& ctx) {
     temporal.depthThreshold = 0.1f;
     temporal.normalThreshold = 0.9f;
     temporal.enableVisibilityShortcut = 0;
-    temporal.biasCorrectionMode = ReSTIRDI_TemporalBiasCorrectionMode::Basic;
+    temporal.enablePermutationSampling = 1;
+    temporal.permutationSamplingThreshold = 0.9f;
+    temporal.biasCorrectionMode = ReSTIRDI_TemporalBiasCorrectionMode::Raytraced;
     ctx.SetTemporalResamplingParameters(temporal);
+
+    RTXDI_BoilingFilterParameters boiling = ctx.GetBoilingFilterParameters();
+    boiling.enableBoilingFilter = 1;
+    boiling.boilingFilterStrength = 0.2f;
+    ctx.SetBoilingFilterParameters(boiling);
 
     ctx.SetResamplingMode(rtxdi::ReSTIRDI_ResamplingMode::TemporalAndSpatial);
     ctx.SetFrameIndex(0);
@@ -236,8 +245,6 @@ void splitLights(const void* lights, uint32_t count, uint32_t& localFirst, uint3
     int localB = -1;
     int infA = -1;
     int infB = -1;
-    bool localGap = false;
-    bool infGap = false;
     for (uint32_t i = 0; i < count; ++i) {
         const LightGpuData lamp = lightAt(lights, i);
         const bool infinite = lamp.type == kLightDirectional;
@@ -245,15 +252,11 @@ void splitLights(const void* lights, uint32_t count, uint32_t& localFirst, uint3
         if (infinite) {
             if (infA < 0) {
                 infA = static_cast<int>(i);
-            } else if (static_cast<int>(i) != infB) {
-                infGap = true;
             }
             infB = static_cast<int>(i) + 1;
         } else if (local) {
             if (localA < 0) {
                 localA = static_cast<int>(i);
-            } else if (static_cast<int>(i) != localB) {
-                localGap = true;
             }
             localB = static_cast<int>(i) + 1;
         }
@@ -266,20 +269,18 @@ void splitLights(const void* lights, uint32_t count, uint32_t& localFirst, uint3
         infFirst = static_cast<uint32_t>(infA);
         infCount = static_cast<uint32_t>(infB - infA);
     }
-    (void)localGap;
-    (void)infGap;
 }
 
-void fillPdf(RestirPass& p, const void* lights, uint32_t lightCount, uint32_t passMask) {
+void fillPdf(RestirPass& p, const void* lights, uint32_t localFirst, uint32_t localCount, uint32_t passMask) {
     std::fill(p.pdfCpu.begin(), p.pdfCpu.end(), 0.0f);
     p.powered = 0;
     p.powerSum = 0.0f;
-    const uint32_t count = std::min(lightCount, kLightCap);
-    for (uint32_t i = 0; i < count; ++i) {
+    const uint32_t count = std::min(localCount, kLightCap);
+    for (uint32_t k = 0; k < count; ++k) {
         uint32_t x = 0;
         uint32_t y = 0;
-        linearToZCurve(i, x, y);
-        const float power = lightPower(lightAt(lights, i), passMask);
+        linearToZCurve(k, x, y);
+        const float power = lightPower(lightAt(lights, localFirst + k), passMask);
         if (power > 0.0f) {
             p.powered += 1u;
             p.powerSum += power;
@@ -667,7 +668,7 @@ void restirRecord(
     VkExtent2D extent,
     VkDeviceAddress tlas,
     GpuProfiler& profiler) {
-    if (p.di.handle == VK_NULL_HANDLE || p.presample.handle == VK_NULL_HANDLE || flight > 1u || !p.ctx[flight].has_value()) {
+    if (p.di.handle == VK_NULL_HANDLE || p.presample.handle == VK_NULL_HANDLE || flight > 1u || !p.ctx[0].has_value()) {
         publishLog(p, 0u, 0u, 0u, 0u, 0u, 1u, "ReSTIR пропуск: нет шейдера или контекста");
         return;
     }
@@ -683,16 +684,19 @@ void restirRecord(
         clearHistory(cmd, p);
         p.cleared = true;
     }
-    fillPdf(p, lights, lightCount, passMask);
-    uploadPdf(cmd, p, d, flight);
+
     uint32_t localFirst = 0;
     uint32_t localCount = 0;
     uint32_t infFirst = 0;
     uint32_t infCount = 0;
     splitLights(lights, lightCount, localFirst, localCount, infFirst, infCount);
     (void)infFirst;
+    (void)infCount;
 
-    rtxdi::ReSTIRDIContext& ctx = *p.ctx[flight];
+    fillPdf(p, lights, localFirst, localCount, passMask);
+    uploadPdf(cmd, p, d, flight);
+
+    rtxdi::ReSTIRDIContext& ctx = *p.ctx[0];
     rtxdi::ReSTIRDI_ResamplingMode mode = rtxdi::ReSTIRDI_ResamplingMode::None;
     if (p.knobTemporalOn != 0u && p.knobSpatialOn != 0u) {
         mode = rtxdi::ReSTIRDI_ResamplingMode::TemporalAndSpatial;
@@ -702,6 +706,9 @@ void restirRecord(
         mode = rtxdi::ReSTIRDI_ResamplingMode::Spatial;
     }
     ctx.SetResamplingMode(mode);
+
+    const uint32_t curParity = p.parity[0] & 1u;
+
     RestirConstants constants{};
     constants.runtime = ctx.GetRuntimeParams();
     constants.reservoir = ctx.GetReservoirBufferParameters();
@@ -714,45 +721,47 @@ void restirRecord(
     constants.lights.localLightBufferRegion.numLights = localCount;
     constants.lights.infiniteLightBufferRegion.firstLightIndex = 0;
     constants.lights.infiniteLightBufferRegion.numLights = 0;
-    constants.initial.numLocalLightSamples = localCount > 0u ? p.knobLocal : 0u;
+    constants.initial.numLocalLightSamples = localCount > 0u ? std::max(p.knobLocal, 8u) : 0u;
     constants.initial.numInfiniteLightSamples = 0;
-    constants.initial.enableInitialVisibility = p.knobInitVis;
-    constants.temporal.maxHistoryLength = p.knobHistory;
-    constants.temporal.depthThreshold = p.knobTemporalDepth;
-    constants.temporal.normalThreshold = p.knobTemporalNormal;
-    constants.temporal.biasCorrectionMode = temporalBias(p.knobTemporalBias);
-    constants.temporal.enablePermutationSampling = p.knobPerm;
-    constants.temporal.permutationSamplingThreshold = p.knobPermTh;
+    constants.initial.numBrdfSamples = localCount > 0u ? 1u : 0u;
+    constants.initial.brdfCutoff = 0.02f;
+    constants.initial.enableInitialVisibility = 1u;
+    constants.temporal.maxHistoryLength = std::max(p.knobHistory, 16u);
+    constants.temporal.depthThreshold = p.knobTemporalDepth > 0.0f ? p.knobTemporalDepth : 0.08f;
+    constants.temporal.normalThreshold = p.knobTemporalNormal > 0.0f ? p.knobTemporalNormal : 0.9f;
+    constants.temporal.biasCorrectionMode = temporalBias(std::max(p.knobTemporalBias, 2u));
+    constants.temporal.enablePermutationSampling = 1u;
+    constants.temporal.permutationSamplingThreshold = p.knobPermTh > 0.0f ? p.knobPermTh : 0.9f;
     constants.temporal.enableVisibilityShortcut = p.knobShortcut;
-    constants.spatial.numSamples = p.knobSpatialOn != 0u ? p.knobSpatial : 0u;
-    constants.spatial.numDisocclusionBoostSamples = p.knobSpatialOn != 0u ? p.knobSpatialBoost : 0u;
-    constants.spatial.samplingRadius = p.knobRadius;
-    constants.spatial.depthThreshold = p.knobSpatialDepth;
-    constants.spatial.normalThreshold = p.knobSpatialNormal;
-    constants.spatial.targetHistoryLength = p.knobTarget;
-    constants.spatial.biasCorrectionMode = spatialBias(p.knobSpatialBias);
-    constants.spatial.enableMaterialSimilarityTest = p.knobMaterial;
+    constants.spatial.numSamples = p.knobSpatialOn != 0u ? std::max(p.knobSpatial, 4u) : 0u;
+    constants.spatial.numDisocclusionBoostSamples = p.knobSpatialOn != 0u ? std::max(p.knobSpatialBoost, 8u) : 0u;
+    constants.spatial.samplingRadius = std::max(p.knobRadius, 12.0f);
+    constants.spatial.depthThreshold = p.knobSpatialDepth > 0.0f ? p.knobSpatialDepth : 0.08f;
+    constants.spatial.normalThreshold = p.knobSpatialNormal > 0.0f ? p.knobSpatialNormal : 0.9f;
+    constants.spatial.targetHistoryLength = std::max(p.knobTarget, 20u);
+    constants.spatial.biasCorrectionMode = spatialBias(std::max(p.knobSpatialBias, 3u));
+    constants.spatial.enableMaterialSimilarityTest = 1u;
     constants.spatial.discountNaiveSamples = p.knobNaive;
-    constants.boiling.boilingFilterStrength = p.knobBoil;
-    constants.boiling.enableBoilingFilter = p.knobBoilOn != 0u && p.knobBoil > 0.0f ? 1u : 0u;
+    constants.boiling.boilingFilterStrength = p.knobBoil > 0.0f ? p.knobBoil : 0.2f;
+    constants.boiling.enableBoilingFilter = 1u;
     constants.localRis.bufferOffset = 0;
     constants.localRis.tileSize = kRestirTileSize;
     constants.localRis.tileCount = kRestirTileCount;
     constants.envRis.bufferOffset = 0;
     constants.envRis.tileSize = 1;
     constants.envRis.tileCount = 1;
-    std::memcpy(constants.prevViewProj, p.prevViewProj[flight], sizeof(constants.prevViewProj));
-    std::memcpy(constants.prevInvViewProj, p.prevInvViewProj[flight], sizeof(constants.prevInvViewProj));
-    std::memcpy(constants.prevCamera, p.prevCamera[flight], sizeof(constants.prevCamera));
-    constants.historyValid = p.historyValid[flight];
-    constants.readSlice = flight * 2u + p.parity[flight];
-    constants.writeSlice = flight * 2u + (1u - p.parity[flight]);
+    std::memcpy(constants.prevViewProj, p.prevViewProj[0], sizeof(constants.prevViewProj));
+    std::memcpy(constants.prevInvViewProj, p.prevInvViewProj[0], sizeof(constants.prevInvViewProj));
+    std::memcpy(constants.prevCamera, p.prevCamera[0], sizeof(constants.prevCamera));
+    constants.historyValid = p.historyValid[0];
+    constants.readSlice = curParity;
+    constants.writeSlice = 1u - curParity;
     constants.pdfWidth = p.pdfW;
     constants.pdfHeight = p.pdfH;
     constants.tlasLo = static_cast<uint32_t>(tlas);
     constants.tlasHi = static_cast<uint32_t>(tlas >> 32);
-    constants.reservoirBase = flight * 3u;
-    constants.lightCount = localCount;
+    constants.reservoirBase = 0u;
+    constants.lightCount = lightCount;
     constants.sunDisk = p.knobSunDisk;
     constants.shadowRange = p.knobShadowRange;
     constants.shadowBias = p.knobShadowBias;
@@ -760,6 +769,7 @@ void restirRecord(
     constants.pad1 = p.knobTemporalOn;
     constants.pad2 = p.knobSunRays;
     constants.pad3 = 0u;
+
     auto* dst = static_cast<uint8_t*>(p.constants.mapped) + kRestirConstStride * flight;
     std::memcpy(dst, &constants, sizeof(constants));
     gpuBufferFlush(p.constants, d, kRestirConstStride * flight, sizeof(constants));
@@ -778,65 +788,45 @@ void restirRecord(
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, 1);
 
     RestirPush push{};
-    if (p.fast.handle != VK_NULL_HANDLE) {
-        const VkAccessFlags2 rw = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
-        imageLayout(cmd, p.sigmaPenumbra.image, p.sigmaPenumbraLayout, VK_IMAGE_LAYOUT_GENERAL,
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw, 1);
-        imageLayout(cmd, p.sigmaHist.image, p.sigmaHistLayout, VK_IMAGE_LAYOUT_GENERAL,
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw,
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw, 1);
-        push.pad0 = p.parity[0];
-        p.parity[0] += 1u;
-        push.pad1 = static_cast<uint32_t>(tlas);
-        push.pad2 = static_cast<uint32_t>(tlas >> 32);
-        const char* passName[7] = {"R init", "R temporal", "R spatial", "R trace", "R vis", "R vis", "R blur"};
-        for (uint32_t pass = 0u; pass < 7u; ++pass) {
-            if (pass == 5u) {
-                continue;
-            }
-            GpuZone zone(profiler, cmd, passName[pass]);
-            push.pass = pass;
-            bindCompute(cmd, p.fast, push);
-            dispatch2D(cmd, extent, 8u);
-            if (pass < 3u) {
-                reservoirBarrier(cmd, p);
-            } else {
-                storageBarrier(cmd);
-            }
-        }
-    } else {
-        if (localCount > 0u) {
-            bindCompute(cmd, p.presample, push);
-            vkCmdDispatch(cmd, kRestirTileSize / 256u, kRestirTileCount, 1u);
-        }
-        rhiBufferBarrier(cmd, p.ris.buffer, kRisFlight * flight, kRisPayload,
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    reservoirBarrier(cmd, p);
+    if (localCount > 0u) {
+        GpuZone zone(profiler, cmd, "R presample");
+        bindCompute(cmd, p.presample, push);
+        vkCmdDispatch(cmd, kRestirTileSize / 256u, kRestirTileCount, 1u);
+    }
+    rhiBufferBarrier(cmd, p.ris.buffer, kRisFlight * flight, kRisPayload,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+
+    {
+        GpuZone zone(profiler, cmd, "R init");
         push.pass = 0;
         bindCompute(cmd, p.di, push);
         dispatch2D(cmd, extent, 8u);
         reservoirBarrier(cmd, p);
-        if (p.knobTemporalOn != 0u) {
-            push.pass = 1;
-            bindCompute(cmd, p.di, push);
-            dispatch2D(cmd, extent, 8u);
-            reservoirBarrier(cmd, p);
-        }
-        if (p.knobSpatialOn != 0u) {
-            push.pass = 2;
-            bindCompute(cmd, p.di, push);
-            dispatch2D(cmd, extent, 8u);
-            reservoirBarrier(cmd, p);
-        }
     }
-
-    push.pass = 3;
-    if (p.fast.handle == VK_NULL_HANDLE) {
-        GpuZone zone(profiler, cmd, "R shade");
+    if (p.knobTemporalOn != 0u) {
+        GpuZone zone(profiler, cmd, "R temporal");
+        push.pass = 1;
         bindCompute(cmd, p.di, push);
         dispatch2D(cmd, extent, 8u);
+        reservoirBarrier(cmd, p);
     }
+    if (p.knobSpatialOn != 0u) {
+        GpuZone zone(profiler, cmd, "R spatial");
+        push.pass = 2;
+        bindCompute(cmd, p.di, push);
+        dispatch2D(cmd, extent, 8u);
+        reservoirBarrier(cmd, p);
+    }
+    {
+        GpuZone zone(profiler, cmd, "R shade");
+        push.pass = 3;
+        bindCompute(cmd, p.di, push);
+        dispatch2D(cmd, extent, 8u);
+        reservoirBarrier(cmd, p);
+    }
+
     if (p.knobSunOn != 0u) {
         storageBarrier(cmd);
         push.pass = 4;
@@ -874,7 +864,16 @@ void restirRecord(
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw, 1);
             denoise.pass = 1;
             {
-                GpuZone zone(profiler, cmd, "R sigmaS");
+                GpuZone zone(profiler, cmd, "R sigmaS1");
+                bindCompute(cmd, p.sigma, denoise);
+                dispatch2D(cmd, extent, 8u);
+            }
+            imageLayout(cmd, p.sigmaHist.image, p.sigmaHistLayout, VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, rw, 1);
+            denoise.pass = 2;
+            {
+                GpuZone zone(profiler, cmd, "R sigmaS2");
                 bindCompute(cmd, p.sigma, denoise);
                 dispatch2D(cmd, extent, 8u);
             }
@@ -882,13 +881,12 @@ void restirRecord(
         }
     }
     writeRayLog(p);
-    (void)infCount;
 
-    std::memcpy(p.prevViewProj[flight], view.viewProj, sizeof(view.viewProj));
-    std::memcpy(p.prevInvViewProj[flight], view.invViewProj, sizeof(view.invViewProj));
-    std::memcpy(p.prevCamera[flight], view.cameraPos, sizeof(view.cameraPos));
-    p.historyValid[flight] = 1;
-    p.parity[flight] ^= 1u;
+    std::memcpy(p.prevViewProj[0], view.viewProj, sizeof(view.viewProj));
+    std::memcpy(p.prevInvViewProj[0], view.invViewProj, sizeof(view.invViewProj));
+    std::memcpy(p.prevCamera[0], view.cameraPos, sizeof(view.cameraPos));
+    p.historyValid[0] = 1u;
+    p.parity[0] ^= 1u;
     ctx.SetFrameIndex(ctx.GetFrameIndex() + 1u);
 }
 

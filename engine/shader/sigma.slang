@@ -1,5 +1,6 @@
-// Полутень ReSTIR DI. Сырой луч — 0 или 1. Время копится отдельно от цвета,
-// радиус размытия — hitDistance * tan(полудиск солнца), контакт остаётся резким.
+// Полутень ReSTIR DI (Contact-Hardening À-Trous SVGF / REBLUR Denoiser).
+// Временная история хранит (vis, penumbraPx, histLen, viewZ).
+// На контакте (penumbraPx -> 0) тень остаётся бритвенно-резкой, вдали — мягко фильтруется без шума.
 
 #include "frame.slang"
 #include "camera.slang"
@@ -38,17 +39,17 @@ float sigmaViewZ(int2 ip) {
     return max(length(reconstructWorld(uint2(ip), depth) - gFrame.cameraPos.xyz), 1e-3);
 }
 
-float3 sigmaFace(int2 ip, float depth, float3 P) {
+float3 sigmaNormal(int2 ip, float depth, float3 P) {
     if (depth <= 0.0) {
         return float3(0.0, 1.0, 0.0);
     }
-    return reconstructNormalFromDepth(gDepth, uint2(ip), P);
+    return nrdNormal(gSurf1, gDepth, ip);
 }
 
 float sigmaSame(float3 n, float3 P, float3 Q) {
     const float span = max(length(Q - P), 1e-3);
     const float gap = abs(dot(n, Q - P));
-    return exp(-pow(gap / (span * 0.35), 2.0));
+    return exp(-pow(gap / max(span * 0.2, 0.015), 2.0));
 }
 
 void sigmaComposite(uint2 px, float vis) {
@@ -77,11 +78,14 @@ void sigmaTemporal(uint2 px) {
         gShadowHist[dest] = 0.0;
         return;
     }
+
     const int2 ip = int2(px);
     const int2 ext = int2(gFrame.extent.xy) - int2(1, 1);
     float mean = 0.0;
     float moment = 0.0;
+    float penSum = 0.0;
     float count = 0.0;
+
     [unroll]
     for (int y = -1; y <= 1; ++y) {
         [unroll]
@@ -94,96 +98,92 @@ void sigmaTemporal(uint2 px) {
             const float s = saturate(nb.r);
             mean += s;
             moment += s * s;
+            penSum += clamp(nb.g, 0.0, 16.0);
             count += 1.0;
         }
     }
+
     float dev = 0.0;
     float current = saturate(raw.r);
-    if (count >= 4.0) {
+    float pen = clamp(raw.g, 0.0, 16.0);
+    if (count > 0.0) {
         mean /= count;
         dev = sqrt(max(moment / count - mean * mean, 0.0));
-        current = clamp(current, mean - dev * 1.5, mean + dev * 1.5);
-    } else if (count > 0.0) {
-        mean /= count;
+        pen = max(pen, penSum / count);
     }
-    float pen = raw.g >= 512.0 ? 0.0 : max(raw.g, 0.0);
-    float vis = saturate(current);
+
+    float vis = current;
     float histLen = 1.0;
     const float z = sigmaViewZ(ip);
     const float3 P = reconstructWorld(px, depth);
-    const float3 n = sigmaFace(ip, depth, P);
     const float2 prevUv = nrdPrevUv(P);
+
     if (nrdInside(prevUv) && z > 0.0) {
         const int2 prev = nrdUvPx(prevUv);
         const float4 hist = gShadowHist[sigmaAt(gPush.readSlice, uint2(prev))];
-        const float prevDepth = gDepth.Load(int3(prev, 0));
-        const float3 prevP = reconstructWorld(uint2(prev), max(prevDepth, 1e-5));
-        const float3 nPrev = sigmaFace(prev, prevDepth, prevP);
-        const float gap = abs(dot(n, prevP - P));
-        const float span = max(length(prevP - P), 0.01);
-        if (hist.a >= 0.5 && prevDepth > 0.0 && dot(n, nPrev) >= 0.5 && gap <= span * 0.5) {
-            histLen = clamp(hist.b, 1.0, 8.0);
+        const float prevZ = hist.a;
+        const float dz = abs(z - prevZ) / max(z, 1e-3);
+        if (prevZ > 0.0 && dz <= 0.05) {
+            histLen = clamp(hist.b, 1.0, 24.0);
             const float kept = saturate(hist.r);
             const float weight = histLen / (histLen + 1.0);
             vis = lerp(vis, kept, weight);
-            const float histPen = hist.g >= 512.0 ? 0.0 : max(hist.g, 0.0);
+            const float histPen = clamp(hist.g, 0.0, 16.0);
             pen = lerp(pen, histPen, weight);
-            histLen = min(histLen + 1.0, 8.0);
+            histLen = min(histLen + 1.0, 24.0);
         }
     }
-    const float band = max(dev * 2.0, 0.12);
-    vis = clamp(vis, mean - band, mean + band);
-    gShadowHist[dest] = float4(saturate(vis), pen, histLen, 1.0);
+
+    const float band = max(dev * 2.5, 0.15);
+    vis = count > 0.0 ? clamp(vis, mean - band, mean + band) : vis;
+
+    // В альфа-канал записываем линейную глубину текущего кадра z для честного сравнения в следующем кадре
+    gShadowHist[dest] = float4(saturate(vis), pen, histLen, z);
 }
 
 void sigmaSpatial(uint2 px) {
     const uint2 src = sigmaAt(gPush.writeSlice, px);
     const float4 acc = gShadowHist[src];
-    if (acc.a < 0.5) {
-        return;
-    }
-    float vis = saturate(acc.r);
     const float depth = gDepth.Load(int3(px, 0));
-    if (depth <= 0.0) {
+    if (acc.a <= 0.0 || depth <= 0.0) {
         return;
     }
-    const int2 ip = int2(px);
-    const float3 P = reconstructWorld(px, depth);
-    const float3 n = sigmaFace(ip, depth, P);
-    const int2 ext = int2(gFrame.extent.xy) - int2(1, 1);
-    const int2 cross[4] = { int2(1, 0), int2(-1, 0), int2(0, 1), int2(0, -1) };
-    float sum = vis;
-    float wsum = 1.0;
-    float vmin = vis;
-    float vmax = vis;
-    [unroll]
-    for (uint i = 0u; i < 4u; ++i) {
-        const int2 q = clamp(ip + cross[i], int2(0, 0), ext);
-        const float4 nb = gShadowHist[sigmaAt(gPush.writeSlice, uint2(q))];
-        if (nb.a < 0.5) {
-            continue;
-        }
-        const float dq = gDepth.Load(int3(q, 0));
-        if (dq <= 0.0) {
-            continue;
-        }
-        const float3 Q = reconstructWorld(uint2(q), dq);
-        const float sample = saturate(nb.r);
-        vmin = min(vmin, sample);
-        vmax = max(vmax, sample);
-        const float wn = pow(max(dot(n, sigmaFace(q, dq, Q)), 0.0), 8.0);
-        const float w = wn * sigmaSame(n, P, Q);
-        sum += sample * w;
-        wsum += w;
+
+    float vis = saturate(acc.r);
+    const float pen = clamp(acc.g, 0.0, 16.0);
+    const float histLen = clamp(acc.b, 1.0, 24.0);
+
+    // На контакте (pen -> 0) при накопленной истории не размываем тень вообще — сохраняем максимальную четкость
+    const float disoccBoost = histLen < 4.0 ? 2.0 : 1.0;
+    const float filterRadius = pen * disoccBoost;
+    if (filterRadius < 0.2 && histLen >= 4.0) {
+        sigmaComposite(px, vis);
+        return;
     }
-    const float histLen = clamp(acc.b, 1.0, 8.0);
-    if (vmax - vmin > 0.2 || histLen < 4.0) {
-        const int reach = histLen < 4.0 ? 3 : 2;
+
+    const int2 ip = int2(px);
+    const int2 ext = int2(gFrame.extent.xy) - int2(1, 1);
+    const float3 P = reconstructWorld(px, depth);
+    const float3 n = sigmaNormal(ip, depth, P);
+
+    // Шаг фильтрации плавно растет с шириной полутени (Contact-Hardening)
+    const float stepScale = clamp(filterRadius * 0.35, 1.0, 3.0);
+    const float kKernel[5] = { 1.0 / 16.0, 4.0 / 16.0, 6.0 / 16.0, 4.0 / 16.0, 1.0 / 16.0 };
+
+    float sum = vis * (kKernel[2] * kKernel[2]);
+    float wsum = kKernel[2] * kKernel[2];
+
+    [unroll]
+    for (int y = -2; y <= 2; ++y) {
         [unroll]
-        for (uint i = 0u; i < 4u; ++i) {
-            const int2 q = clamp(ip + cross[i] * reach, int2(0, 0), ext);
+        for (int x = -2; x <= 2; ++x) {
+            if (x == 0 && y == 0) {
+                continue;
+            }
+            const int2 offset = int2(round(float2(float(x), float(y)) * stepScale));
+            const int2 q = clamp(ip + offset, int2(0, 0), ext);
             const float4 nb = gShadowHist[sigmaAt(gPush.writeSlice, uint2(q))];
-            if (nb.a < 0.5) {
+            if (nb.a <= 0.0) {
                 continue;
             }
             const float dq = gDepth.Load(int3(q, 0));
@@ -191,13 +191,19 @@ void sigmaSpatial(uint2 px) {
                 continue;
             }
             const float3 Q = reconstructWorld(uint2(q), dq);
-            const float wn = pow(max(dot(n, sigmaFace(q, dq, Q)), 0.0), 8.0);
-            const float w = wn * sigmaSame(n, P, Q) * 0.5;
+            const float3 nq = sigmaNormal(q, dq, Q);
+
+            const float kw = kKernel[x + 2] * kKernel[y + 2];
+            const float wn = pow(saturate(dot(n, nq)), 32.0);
+            const float wp = sigmaSame(n, P, Q);
+            const float w = kw * wn * wp;
+
             sum += saturate(nb.r) * w;
             wsum += w;
         }
     }
-    sigmaComposite(px, wsum > 1e-4 ? saturate(sum / wsum) : vis);
+
+    sigmaComposite(px, wsum > 1e-5 ? saturate(sum / wsum) : vis);
 }
 
 [shader("compute")]
