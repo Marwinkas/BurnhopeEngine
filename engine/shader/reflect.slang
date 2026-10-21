@@ -246,6 +246,14 @@ float3 sssrSky(float3 dir) {
     return sky;
 }
 
+bool reflectRoom(float3 P, float3 N) {
+    float hitT = 0.0;
+    uint prim = 0u;
+    float2 bary = 0.0;
+    float3 n = dot(N, N) > 0.5 ? normalize(N) : float3(0.0, 1.0, 0.0);
+    return sharcTrace(P + n * 0.05, float3(0.0, 1.0, 0.0), 0.05, 80.0, hitT, prim, bary);
+}
+
 float3 sssrRt(float3 P, float3 N, float3 worldDir, float2 uv, uint2 px, out float travel) {
     travel = 0.0;
     if (gSharc.tlasLo == 0u && gSharc.tlasHi == 0u) {
@@ -259,6 +267,10 @@ float3 sssrRt(float3 P, float3 N, float3 worldDir, float2 uv, uint2 px, out floa
     uint ignored;
     InterlockedAdd(gRayStat[1024u * 128u + 10u].x, 1u, ignored);
     if (!sharcTrace(origin, worldDir, 0.05, tMax, hitT, prim, bary)) {
+        if (reflectRoom(P, N)) {
+            travel = 0.0;
+            return 0.0;
+        }
         travel = tMax;
         return sssrSky(worldDir);
     }
@@ -284,6 +296,10 @@ float3 sssrRt(float3 P, float3 N, float3 worldDir, float2 uv, uint2 px, out floa
     }
     const SharcSurf surf = sharcSurface(prim, bary, hitP, -worldDir);
     if (!surf.hit) {
+        if (reflectRoom(P, N)) {
+            travel = 0.0;
+            return 0.0;
+        }
         return sssrSky(worldDir);
     }
     uint rng = px.x * 1973u ^ px.y * 9277u ^ gSharc.frameIndex;
@@ -368,8 +384,13 @@ void reflectTrace(uint3 dtid : SV_DispatchThreadID) {
         radiance = lerp(traced, radiance, screenW);
         rayLength = lerp(travel, rayLength, screenW);
     } else if (screenW <= 0.0) {
-        radiance = sssrSky(worldDir);
-        rayLength = max(gSsr.maxDist, 4.0);
+        if (reflectRoom(P, N)) {
+            radiance = 0.0;
+            rayLength = 0.0;
+        } else {
+            radiance = sssrSky(worldDir);
+            rayLength = max(gSsr.maxDist, 4.0);
+        }
     }
     gReflect[ip] = float4(max(radiance, 0.0), rayLength > 0.0 ? rayLength : 0.0);
 }
@@ -545,7 +566,9 @@ void reflectUp(uint3 dtid : SV_DispatchThreadID) {
         }
         if (prevClip.w > 1e-3 && sssrInside(hitUv)) {
             const float4 history = sssrLoadHist(sssrUvPx(hitUv, screen));
-            if (history.a >= 1.0) {
+            if (history.a >= 1.0 && sssrLuma(resolved) < 0.15 && sssrLuma(history.rgb) > 0.8) {
+                numSamples = 1.0;
+            } else if (history.a >= 1.0) {
                 const float3 kept = clamp(history.rgb, lo, hi);
                 const float cap = max(8.0, 32.0 * (1.0 - exp(-rough * 100.0)));
                 numSamples = min(cap, history.a + 1.0);

@@ -96,6 +96,7 @@ struct RAB_LightSample {
     float3 normal;
     float3 radiance;
     float solidAnglePdf;
+    uint flags;
 };
 
 [[vk::binding(2, 0)]] Texture2D<float> gDepth;
@@ -368,15 +369,18 @@ RAB_LightSample RAB_SamplePolymorphicLight(RAB_LightInfo lightInfo, RAB_Surface 
         atten *= cone * cone;
     }
     float3 radiance = lightInfo.colorIntensity.rgb * lightInfo.colorIntensity.w;
-    float peak = max(radiance.r, max(radiance.g, radiance.b));
-    float cap = lerp(1.2, 8.0, saturate(gShade.lamp));
-    if (peak > cap) {
-        radiance *= cap / peak;
+    if ((lightInfo.flags & 2u) == 0u) {
+        float peak = max(radiance.r, max(radiance.g, radiance.b));
+        float cap = lerp(1.2, 8.0, saturate(gShade.lamp));
+        if (peak > cap) {
+            radiance *= cap / peak;
+        }
     }
     sample.position = lightInfo.posRadius.xyz;
     sample.normal = -L;
     sample.radiance = radiance * atten;
     sample.solidAnglePdf = 1.0;
+    sample.flags = lightInfo.flags;
     return sample;
 }
 
@@ -431,10 +435,29 @@ RestirGlass restirGlass(uint prim, float2 bary) {
         }
     }
     glass.hit = true;
+    if ((mat.flags & 32u) == 0u && glass.alpha <= 0.02) {
+        glass.alpha = 1.0;
+    }
     return glass;
 }
 
-float3 restirAnyHit(float3 origin, float3 direction, float tMin, float tMax) {
+bool restirEmitter(uint prim) {
+    const uint tris = gGeom.Load(168u);
+    const uint posByte = gGeom.Load(12u);
+    if (prim >= tris || posByte < 48u) {
+        return false;
+    }
+    const uint matId = gGeom.Load(posByte + prim * 3u * 48u + 32u);
+    uint matCount;
+    uint matStride;
+    gGlassMat.GetDimensions(matCount, matStride);
+    if (matCount == 0u) {
+        return false;
+    }
+    return gGlassMat[min(matId, matCount - 1u)].emissive > 0.02;
+}
+
+float3 restirAnyHit(float3 origin, float3 direction, float tMin, float tMax, bool throughEmit) {
     if (gRestir.tlasLo == 0u && gRestir.tlasHi == 0u) {
         return 1.0;
     }
@@ -453,12 +476,19 @@ float3 restirAnyHit(float3 origin, float3 direction, float tMin, float tMax) {
         if (query.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE) {
             continue;
         }
+        const uint prim = query.CandidatePrimitiveIndex();
+        if (throughEmit && restirEmitter(prim)) {
+            continue;
+        }
         hops += 1u;
         if (hops > 12u) {
             return tint;
         }
-        const RestirGlass glass = restirGlass(query.CandidatePrimitiveIndex(), query.CandidateTriangleBarycentrics());
-        if (!glass.hit || glass.alpha <= 0.02) {
+        const RestirGlass glass = restirGlass(prim, query.CandidateTriangleBarycentrics());
+        if (!glass.hit) {
+            return 0.0;
+        }
+        if (glass.alpha <= 0.02) {
             continue;
         }
         if (glass.alpha >= 0.97) {
@@ -510,7 +540,12 @@ RestirOcclusion restirSunOcclusion(float3 origin, float3 direction, float tMin, 
             return hit;
         }
         const RestirGlass glass = restirGlass(query.CandidatePrimitiveIndex(), query.CandidateTriangleBarycentrics());
-        if (!glass.hit || glass.alpha <= 0.02) {
+        if (!glass.hit) {
+            hit.tint = 0.0;
+            hit.distance = t;
+            return hit;
+        }
+        if (glass.alpha <= 0.02) {
             continue;
         }
         if (glass.alpha >= 0.97) {
@@ -573,6 +608,9 @@ bool RAB_GetConservativeVisibility(RAB_Surface surface, RAB_LightSample lightSam
         reach = min(reach, gRestir.shadowRange);
     }
     float3 origin = surface.worldPos + surface.geoNormal * 0.02 + dir * 0.01;
+    if ((lightSample.flags & 2u) != 0u) {
+        return restirLuma(restirAnyHit(origin, dir, tMin, reach, true)) > 0.02;
+    }
     return !restirTrace(origin, dir, tMin, reach);
 }
 

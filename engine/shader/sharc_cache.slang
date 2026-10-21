@@ -255,10 +255,10 @@ float3 sharcClampFirefly(float3 sampleValue) {
     if (any(isnan(sampleValue)) || any(isinf(sampleValue))) {
         return 0.0;
     }
-    float3 color = clamp(sampleValue, 0.0, 2.5);
+    float3 color = clamp(sampleValue, 0.0, 8.0);
     float luma = sharcLuma(color);
-    if (luma > 1.5) {
-        color *= 1.5 / luma;
+    if (luma > 8.0) {
+        color *= 8.0 / luma;
     }
     return color;
 }

@@ -124,13 +124,19 @@ void sigmaTemporal(uint2 px) {
         const float prevZ = hist.a;
         const float dz = abs(z - prevZ) / max(z, 1e-3);
         if (prevZ > 0.0 && dz <= 0.05) {
-            histLen = clamp(hist.b, 1.0, 24.0);
             const float kept = saturate(hist.r);
-            const float weight = histLen / (histLen + 1.0);
-            vis = lerp(vis, kept, weight);
-            const float histPen = clamp(hist.g, 0.0, 16.0);
-            pen = lerp(pen, histPen, weight);
-            histLen = min(histLen + 1.0, 24.0);
+            if (kept > current + 0.35) {
+                vis = current;
+                pen = clamp(raw.g, 0.0, 16.0);
+                histLen = 1.0;
+            } else {
+                histLen = clamp(hist.b, 1.0, 24.0);
+                const float weight = histLen / (histLen + 1.0);
+                vis = lerp(vis, kept, weight);
+                const float histPen = clamp(hist.g, 0.0, 16.0);
+                pen = lerp(pen, histPen, weight);
+                histLen = min(histLen + 1.0, 24.0);
+            }
         }
     }
 

@@ -35,6 +35,26 @@ set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
 set(SPDLOG_NO_EXCEPTIONS ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(spdlog)
 
+FetchContent_Declare(JoltPhysics
+    GIT_REPOSITORY https://github.com/jrouwe/JoltPhysics.git
+    GIT_TAG v5.3.0
+    SOURCE_SUBDIR Build
+)
+set(TARGET_HELLO_WORLD OFF CACHE BOOL "" FORCE)
+set(TARGET_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(TARGET_SAMPLES OFF CACHE BOOL "" FORCE)
+set(TARGET_VIEWER OFF CACHE BOOL "" FORCE)
+set(TARGET_PERFORMANCE_TEST OFF CACHE BOOL "" FORCE)
+set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
+set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(JoltPhysics)
+if (TARGET Jolt)
+    set_target_properties(Jolt PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(Jolt PRIVATE -w)
+    endif()
+endif()
+
 FetchContent_Declare(flecs
     GIT_REPOSITORY https://github.com/SanderMertens/flecs.git
     GIT_TAG v4.1.1
@@ -214,15 +234,17 @@ bh_module(render
     engine/src/PassVoxel.cpp
     engine/src/PassTonemap.cpp
     engine/src/PassGizmo.cpp
+    engine/src/Physics.cpp
     engine/src/SceneFrame.cpp
 )
 target_include_directories(bh_render PUBLIC ${BH_ENGINE} ${BH_ENGINE}/include ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include)
 set_source_files_properties(
     RTXDI/Libraries/Rtxdi/Source/ReSTIRDI.cpp
     RTXDI/Libraries/Rtxdi/Source/RtxdiUtils.cpp
+    engine/src/Physics.cpp
     PROPERTIES COMPILE_OPTIONS "-w")
 target_compile_definitions(bh_render PUBLIC "BH_SHADER_DIR=\"${CMAKE_CURRENT_BINARY_DIR}/shaders\"")
-target_link_libraries(bh_render PUBLIC flecs_static)
+target_link_libraries(bh_render PUBLIC flecs_static Jolt)
 bh_module(ui
     core/ui/Canvas.cpp
     core/ui/Motion.cpp

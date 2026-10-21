@@ -3,6 +3,7 @@
 #include "render/PassAllocators.hpp"
 #include "render/PassBufferSync.hpp"
 #include "render/PassCommon.hpp"
+#include "render/Physics.hpp"
 #include "render/SceneFrame.hpp"
 #include "render/SceneFrameImpl.hpp"
 
@@ -827,43 +828,20 @@ uint32_t uploadLights(SceneFrameImpl& s, uint32_t flight) {
         count += 1u;
     }
     const GpuInstance* lamps = s.instSrc != nullptr ? s.instSrc : s.cpuInstances;
-    if ((s.passMask & kPassRestir) != 0u && s.materialSrc != nullptr && s.materialCount > 0u && lamps != nullptr) {
-        uint32_t pick[32]{};
-        float score[32]{};
-        uint32_t picked = 0;
-        for (uint32_t i = 0; i < s.instanceCount; ++i) {
+    const uint32_t authored = count;
+    if (((s.passMask & kPassRestir) != 0u || (s.passMask & kPassSharc) != 0u)
+        && s.materialSrc != nullptr && s.materialCount > 0u && lamps != nullptr) {
+        for (uint32_t i = 0; i < s.instanceCount && count < kLightCap; ++i) {
             const GpuInstance& inst = lamps[i];
             if (inst.materialId >= s.materialCount || inst.sphere[3] < 0.02f) {
                 continue;
             }
             const MaterialGpuData& mat = s.materialSrc[inst.materialId];
-            const float luma = 0.2126f * mat.baseColor[0] + 0.7152f * mat.baseColor[1] + 0.0722f * mat.baseColor[2];
-            const float rank = mat.emissiveIntensity * std::max(luma, 0.05f);
-            if (rank <= 0.02f) {
+            if (mat.emissiveIntensity <= 0.001f) {
                 continue;
             }
-            if (picked < 32u) {
-                pick[picked] = i;
-                score[picked] = rank;
-                picked += 1u;
-                continue;
-            }
-            uint32_t worst = 0;
-            for (uint32_t k = 1; k < 32u; ++k) {
-                if (score[k] < score[worst]) {
-                    worst = k;
-                }
-            }
-            if (rank > score[worst]) {
-                pick[worst] = i;
-                score[worst] = rank;
-            }
-        }
-        for (uint32_t n = 0; n < picked && count < kLightCap; ++n) {
-            const GpuInstance& inst = lamps[pick[n]];
-            const MaterialGpuData& mat = s.materialSrc[inst.materialId];
             bool near = false;
-            for (uint32_t l = 0; l < count; ++l) {
+            for (uint32_t l = 0; l < authored; ++l) {
                 LightGpuData prev{};
                 std::memcpy(&prev, dst + sizeof(LightGpuData) * l, sizeof(prev));
                 const float dx = prev.pos[0] - inst.sphere[0];
@@ -877,16 +855,18 @@ uint32_t uploadLights(SceneFrameImpl& s, uint32_t flight) {
             if (near) {
                 continue;
             }
+            const float luma = 0.2126f * mat.baseColor[0] + 0.7152f * mat.baseColor[1] + 0.0722f * mat.baseColor[2];
             LightGpuData lamp{};
             lamp.pos[0] = inst.sphere[0];
             lamp.pos[1] = inst.sphere[1];
             lamp.pos[2] = inst.sphere[2];
             lamp.radius = std::max(inst.sphere[3] * 8.0f, 4.0f);
-            lamp.color[0] = mat.baseColor[0];
-            lamp.color[1] = mat.baseColor[1];
-            lamp.color[2] = mat.baseColor[2];
+            lamp.color[0] = luma < 0.08f ? 1.0f : mat.baseColor[0];
+            lamp.color[1] = luma < 0.08f ? 1.0f : mat.baseColor[1];
+            lamp.color[2] = luma < 0.08f ? 1.0f : mat.baseColor[2];
             lamp.intensity = mat.emissiveIntensity * 8.0f;
             lamp.type = kLightPoint;
+            lamp.flags = 2u;
             lamp.sourceRadius = std::max(inst.sphere[3] * 0.35f, 0.15f);
             lamp.shadowMapIndex = -1;
             std::memcpy(dst + sizeof(LightGpuData) * count, &lamp, sizeof(lamp));
@@ -1147,6 +1127,9 @@ bool sceneFrameLoadBhop(SceneFrame* scene, const char* path) {
     scene->propPhase = 0;
     scene->propDirty = 0;
     scene->ready = false;
+    physicsDestroy(scene->physics);
+    scene->physics = nullptr;
+    sceneFramePlantCubes(scene);
     return true;
 }
 
@@ -1193,7 +1176,7 @@ void sceneFramePlantCubes(SceneFrame* scene) {
     paint(3, 0.86f, 0.72f, 0.18f, 0.55f, 0.0f);
     paint(4, 1.0f, 1.0f, 1.0f, 0.04f, 1.0f);
     const float ox = scene->fly.eye[0];
-    const float oy = scene->fly.eye[1] - 1.8f;
+    const float oy = scene->boxMin[1];
     const float oz = scene->fly.eye[2] - 10.0f;
     uint32_t added = 0;
     auto finish = [&](float cx, float cy, float cz, float radius, uint32_t matSlot, uint32_t base, uint32_t ind, uint32_t vcount, uint32_t tris) {
@@ -1269,10 +1252,10 @@ void sceneFramePlantCubes(SceneFrame* scene) {
     for (uint32_t t = 0; t < 6; ++t) {
         indices.push_back(floorTri[t]);
     }
-    finish(ox, oy, oz, 5.0f, 0, floorBase, floorInd, 4, 2);
-    emitBox(ox - 1.5f, oy + 0.6f, oz, 0.6f, 0.6f, 0.6f, 1);
-    emitBox(ox + 1.4f, oy + 0.4f, oz - 1.2f, 0.4f, 0.4f, 0.4f, 2);
-    emitBox(ox + 0.2f, oy + 0.8f, oz + 1.4f, 0.8f, 0.8f, 0.8f, 3);
+    finish(ox, oy + 0.02f, oz, 5.0f, 0, floorBase, floorInd, 4, 2);
+    emitBox(ox - 1.6f, oy + 2.4f, oz, 0.55f, 0.55f, 0.55f, 1);
+    emitBox(ox + 1.5f, oy + 3.6f, oz - 1.1f, 0.4f, 0.4f, 0.4f, 2);
+    emitBox(ox + 0.1f, oy + 5.0f, oz + 1.3f, 0.7f, 0.7f, 0.7f, 3);
     float mirrorX = ox + 2.8f;
     float mirrorY = oy + 0.7f;
     float mirrorZ = oz;
@@ -1361,7 +1344,7 @@ void sceneFramePlantCubes(SceneFrame* scene) {
         mirrorY = bottom + 0.7f;
         mirrorZ = trunkZ + sideZ * 2.0f + sz * 1.2f;
     }
-    emitBox(mirrorX, mirrorY, mirrorZ, 0.7f, 0.7f, 0.7f, 4);
+    emitBox(mirrorX, oy + 6.4f, mirrorZ, 0.7f, 0.7f, 0.7f, 4);
     const SceneTexName* texNames = scene->texNames;
     const uint32_t texCount = scene->texNameCount;
     scene->ownedVert = std::move(verts);
@@ -1398,6 +1381,33 @@ void sceneFramePlantCubes(SceneFrame* scene) {
     scene->actors.selected = 0;
     armEditorRoom(*scene);
     scene->ready = false;
+    physicsDestroy(scene->physics);
+    scene->physics = nullptr;
+    uint32_t dynamicInstance[kPropCap]{};
+    uint8_t dynamicActor[kPropCap]{};
+    uint32_t dynamicCount = 0;
+    for (uint8_t n = 0; n < scene->propCount && dynamicCount < kPropCap; ++n) {
+        dynamicInstance[dynamicCount] = scene->props[n].instance;
+        dynamicActor[dynamicCount] = scene->props[n].actor;
+        dynamicCount += 1u;
+    }
+    PhysicsCook cook{};
+    cook.verts = scene->vertSrc;
+    cook.indices = scene->indexSrc;
+    cook.instances = scene->instSrc;
+    cook.meshes = scene->meshletSrc;
+    cook.instanceCount = scene->instanceCount;
+    cook.meshCount = static_cast<uint32_t>(scene->ownedMesh.size());
+    cook.dynamicInstance = dynamicInstance;
+    cook.dynamicActor = dynamicActor;
+    cook.dynamicCount = dynamicCount;
+    cook.boundsMin[0] = scene->boxMin[0];
+    cook.boundsMin[1] = scene->boxMin[1];
+    cook.boundsMin[2] = scene->boxMin[2];
+    cook.boundsMax[0] = scene->boxMax[0];
+    cook.boundsMax[1] = scene->boxMax[1];
+    cook.boundsMax[2] = scene->boxMax[2];
+    scene->physics = physicsCreate(cook);
 }
 
 void freeOwned(SceneFrame& s) {
@@ -1848,6 +1858,8 @@ void sceneFrameDestroy(SceneFrame* scene, Device& device) {
         return;
     }
     sceneFrameReleaseGpu(scene, device);
+    physicsDestroy(scene->physics);
+    scene->physics = nullptr;
     fileUnmap(&scene->bhop);
     freeOwned(*scene);
     scene->meshletGpu.clear();
@@ -1866,6 +1878,43 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
         (input.pointer.down & kPointerLeft) != 0 ? 1 : 0,
         (input.pointer.pressed & kPointerLeft) != 0 ? 1 : 0,
         (input.pointer.released & kPointerLeft) != 0 ? 1 : 0);
+    if (scene->physics != nullptr) {
+        const uint32_t n = physicsBodyCount(scene->physics);
+        PhysicsPose poses[kPropCap]{};
+        const uint32_t count = n < kPropCap ? n : kPropCap;
+        for (uint32_t i = 0; i < count; ++i) {
+            const uint8_t actor = physicsBodyActor(scene->physics, i);
+            const Xform pose = sceneActorXform(scene->actors, actor);
+            poses[i].pos[0] = pose.pos[0];
+            poses[i].pos[1] = pose.pos[1];
+            poses[i].pos[2] = pose.pos[2];
+            poses[i].euler[0] = pose.euler[0];
+            poses[i].euler[1] = pose.euler[1];
+            poses[i].euler[2] = pose.euler[2];
+            poses[i].scale[0] = pose.scale[0];
+            poses[i].scale[1] = pose.scale[1];
+            poses[i].scale[2] = pose.scale[2];
+        }
+        const uint8_t held = scene->actors.drag <= 2 ? scene->actors.selected : kSceneActorNone;
+        physicsStep(scene->physics, dt, held, poses, count);
+        for (uint32_t i = 0; i < count; ++i) {
+            const uint8_t actor = physicsBodyActor(scene->physics, i);
+            if (actor == held || actor >= scene->actors.count) {
+                continue;
+            }
+            Xform pose = sceneActorXform(scene->actors, actor);
+            pose.pos[0] = poses[i].pos[0];
+            pose.pos[1] = poses[i].pos[1];
+            pose.pos[2] = poses[i].pos[2];
+            pose.euler[0] = poses[i].euler[0];
+            pose.euler[1] = poses[i].euler[1];
+            pose.euler[2] = poses[i].euler[2];
+            pose.scale[0] = poses[i].scale[0];
+            pose.scale[1] = poses[i].scale[1];
+            pose.scale[2] = poses[i].scale[2];
+            sceneActorWriteXform(scene->actors, actor, pose);
+        }
+    }
     flyCamUpdate(scene->fly, input, dt);
     if (dt > 1.0e-4f) {
         scene->skyTime += dt;
@@ -2182,7 +2231,11 @@ uint8_t sceneFrameSpawnCube(SceneFrame* scene) {
     scene->editorDirty = static_cast<uint8_t>(scene->editorDirty | 2u);
     char name[24];
     std::snprintf(name, sizeof(name), "Cube %u", static_cast<unsigned>(scene->propCount + 1u));
-    return linkProp(*scene, inst, name);
+    const uint8_t actor = linkProp(*scene, inst, name);
+    if (actor != kSceneActorNone && scene->physics != nullptr) {
+        physicsAddBox(scene->physics, inst, actor, table[inst], mesh, scene->vertSrc, scene->indexSrc);
+    }
+    return actor;
 }
 
 const char* sceneFrameTitle(const SceneFrame* scene) {

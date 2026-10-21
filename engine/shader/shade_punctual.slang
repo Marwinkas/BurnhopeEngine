@@ -163,6 +163,9 @@ void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) 
             }
         }
         const float ndl = saturate(dot(N, Lp));
+        if ((lamp.meta.y & 2u) != 0u && (gPass.passMask & 1048576u) != 0u) {
+            continue;
+        }
         if ((lamp.meta.y & 1u) != 0u && (gPass.passMask & 131072u) == 0u) {
             continue;
         }

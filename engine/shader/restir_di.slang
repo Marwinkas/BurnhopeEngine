@@ -2,6 +2,7 @@
 #define RTXDI_BOILING_FILTER_GROUP_SIZE 8
 
 #include "restir_rab.slang"
+#include "core/atmosphere.slang"
 #include "Rtxdi/LightSampling/RISBuffer.hlsli"
 #include "Rtxdi/DI/InitialSampling.hlsli"
 #include "Rtxdi/DI/TemporalResampling.hlsli"
@@ -10,6 +11,8 @@
 
 [[vk::binding(26, 0)]] RWTexture2D<float4> gSigmaPenumbra;
 [[vk::binding(27, 0)]] RWTexture2D<float4> gSigmaSun;
+[[vk::binding(23, 0)]] SamplerState gClamp;
+[[vk::binding(42, 0)]] Texture2D<float4> gSkyView;
 
 static const uint kRestirInitialSeed = 1u;
 static const uint kRestirTemporalSeed = 2u;
@@ -155,12 +158,48 @@ float3 restirEvalReservoir(uint2 px, RAB_Surface surface, RTXDI_DIReservoir rese
             reach = min(reach, gRestir.shadowRange);
         }
         float3 castDir = castDist > 1e-4 ? toCast / castDist : dir;
-        tintSum += restirAnyHit(origin, castDir, tMin, reach);
+        tintSum += restirAnyHit(origin, castDir, tMin, reach, (info.flags & 2u) != 0u);
     }
     outTint = tintSum / float(rays);
     outVis = restirLuma(outTint);
     float invPdf = clamp(RTXDI_GetDIReservoirInvPdf(reservoir), 0.0, 16.0);
     return restirShade(sample, surface) * invPdf * outTint;
+}
+
+bool restirRoom(RAB_Surface surface) {
+    float3 n = surface.normal;
+    if (dot(n, n) < 0.5) {
+        n = float3(0.0, 1.0, 0.0);
+    } else {
+        n = normalize(n);
+    }
+    return restirTrace(surface.worldPos + n * 0.05, float3(0.0, 1.0, 0.0), 0.05, 80.0);
+}
+
+float3 restirSkyTerm(uint2 px, RAB_Surface surface) {
+    if ((gPass.passMask & 1024u) == 0u) {
+        return 0.0;
+    }
+    const bool early = (gPass.passMask & 2097152u) != 0u;
+    const bool worldRc = (gPass.passMask & 262144u) != 0u && (gPass.passMask & 128u) != 0u;
+    if (!early && worldRc) {
+        return 0.0;
+    }
+    const float3 albedo = max(gSurf0[px].rgb, 0.0);
+    const float metal = saturate(gSurf1[px].z);
+    const float ao = saturate(gSurf1[px].w);
+    const float wrap = saturate(surface.normal.y * 0.4 + 0.6);
+    const float inten = gSun.sunDirIntensity.w;
+    float3 tint = float3(0.78, 0.82, 0.88);
+    if (!early) {
+        const float3 n = surface.normal;
+        const float3 skyDir = normalize(float3(n.x, n.y + 1.15, n.z));
+        const float3 skyLit = max(gSkyView.SampleLevel(gClamp, atmSkyUv(skyDir), 0.0).rgb, 0.0);
+        const float skyLum = dot(skyLit, float3(0.2126, 0.7152, 0.0722));
+        const float3 chroma = skyLum > 0.05 ? skyLit / skyLum : tint;
+        tint = lerp(tint, chroma, 0.35);
+    }
+    return albedo * (1.0 - metal) * tint * (inten * 0.055) * wrap * ao;
 }
 
 void restirShadePixel(uint2 px) {
@@ -184,6 +223,12 @@ void restirShadePixel(uint2 px) {
     if (surfaceOn) {
         restirStat(0u, 1u);
         if (lit) {
+            const bool room = restirRoom(surface);
+            if (room && (mode == 0u || mode == 4u)) {
+                float4 hdr = gHdr[px];
+                hdr.rgb = max(hdr.rgb - restirSkyTerm(px, surface), 0.0);
+                gHdr[px] = hdr;
+            }
             uint shadeBuf = restirBuf(gRestir.indices.shadingInputBufferIndex);
             RTXDI_DIReservoir reservoir = RTXDI_LoadDIReservoir(gRestir.reservoir, px, shadeBuf);
             validRes = RTXDI_IsValidDIReservoir(reservoir);
@@ -221,26 +266,26 @@ void restirShadePixel(uint2 px) {
             float3 curIrrad = add / demod;
             float wSum = 1.0;
 
-            const int2 offsets[2] = { int2(1, 0), int2(0, 1) };
-            uint parityShift = (px.x + px.y + gRestir.runtime.frameIndex) & 1u;
-            [unroll]
-            for (uint k = 0u; k < 2u; ++k) {
-                int2 dirOff = parityShift != 0u ? -offsets[k] : offsets[k];
-                int2 q = int2(px) + dirOff * 2;
-                if (all(q >= int2(0, 0)) && all(q < int2(gFrame.extent))) {
-                    RAB_Surface qSurf = RAB_GetGBufferSurface(q, false);
-                    if (RAB_IsSurfaceValid(qSurf)) {
-                        float dz = abs(qSurf.viewDepth - surface.viewDepth) / max(surface.viewDepth, 1e-3);
-                        float nd = dot(qSurf.normal, surface.normal);
-                        if (dz < 0.04 && nd > 0.92) {
-                            RTXDI_DIReservoir qRes = RTXDI_LoadDIReservoir(gRestir.reservoir, uint2(q), shadeBuf);
-                            if (RTXDI_IsValidDIReservoir(qRes) && RTXDI_GetDIReservoirLightIndex(qRes) != lightIndex) {
-                                float qVis = 0.0;
-                                float3 qTint = 1.0;
-                                float3 qAdd = restirEvalReservoir(px, surface, qRes, k + 1u, qVis, qTint);
-                                float w = 0.35 * pow(saturate(nd), 16.0);
-                                curIrrad += (qAdd / demod) * w;
-                                wSum += w;
+            if (!room) {
+                const int2 offsets[2] = { int2(1, 0), int2(0, 1) };
+                [unroll]
+                for (uint k = 0u; k < 2u; ++k) {
+                    int2 q = int2(px) + offsets[k] * 2;
+                    if (all(q >= int2(0, 0)) && all(q < int2(gFrame.extent))) {
+                        RAB_Surface qSurf = RAB_GetGBufferSurface(q, false);
+                        if (RAB_IsSurfaceValid(qSurf)) {
+                            float dz = abs(qSurf.viewDepth - surface.viewDepth) / max(surface.viewDepth, 1e-3);
+                            float nd = dot(qSurf.normal, surface.normal);
+                            if (dz < 0.04 && nd > 0.92) {
+                                RTXDI_DIReservoir qRes = RTXDI_LoadDIReservoir(gRestir.reservoir, uint2(q), shadeBuf);
+                                if (RTXDI_IsValidDIReservoir(qRes) && RTXDI_GetDIReservoirLightIndex(qRes) != lightIndex) {
+                                    float qVis = 0.0;
+                                    float3 qTint = 1.0;
+                                    float3 qAdd = restirEvalReservoir(px, surface, qRes, k + 1u, qVis, qTint);
+                                    float w = 0.35 * pow(saturate(nd), 16.0);
+                                    curIrrad += (qAdd / demod) * w;
+                                    wSum += w;
+                                }
                             }
                         }
                     }
@@ -271,7 +316,7 @@ void restirShadePixel(uint2 px) {
                         uint2 prevDiAt = restirSliceOrigin(gRestir.readSlice + 2u) + uint2(prev);
                         float4 prevDi = gHistPos[prevDiAt];
                         if (prevDi.w >= 1.0 && !any(isnan(prevDi.rgb)) && !any(isinf(prevDi.rgb))) {
-                            diAge = min(prevDi.w + 1.0, 12.0);
+                            diAge = min(prevDi.w + 1.0, room ? 64.0 : 12.0);
                             float alpha = 1.0 / diAge;
                             curIrrad = lerp(max(prevDi.rgb, 0.0), curIrrad, alpha);
                         }

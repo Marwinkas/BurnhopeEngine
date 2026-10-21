@@ -22,7 +22,7 @@ struct SharcSurf {
     float3 demod;
     float roughness;
     float metallic;
-    float emissive;
+    float3 emissive;
     bool hit;
 };
 
@@ -93,13 +93,13 @@ SharcSurf sharcSurface(uint prim, float2 bary, float3 position, float3 view) {
     float3 albedo = 0.6;
     float rough = 0.8;
     float metal = 0.0;
-    float emissive = 0.0;
+    float3 emissive = 0.0;
     if (matCount > 0u) {
         MaterialGpu mat = gMat[min(matId, matCount - 1u)];
         albedo = max(mat.baseColor.rgb, 0.0);
         rough = saturate(mat.roughness);
         metal = saturate(mat.metallic);
-        emissive = max(mat.emissive, 0.0);
+        emissive = max(mat.baseColor.rgb, 0.0) * max(mat.emissive, 0.0) * 8.0;
         if (mat.albedo > 0u && mat.albedo < 768u) {
             float4 texel = gTex[NonUniformResourceIndex(mat.albedo)].SampleLevel(gWrap, uv, 2.0);
             albedo *= max(texel.rgb, 0.0);
@@ -110,7 +110,7 @@ SharcSurf sharcSurface(uint prim, float2 bary, float3 position, float3 view) {
             metal = saturate(orm.b);
         }
         if (mat.emissiveTex > 0u && mat.emissiveTex < 768u) {
-            emissive *= max(gTex[NonUniformResourceIndex(mat.emissiveTex)].SampleLevel(gWrap, uv, 2.0).r, 0.0);
+            emissive *= max(gTex[NonUniformResourceIndex(mat.emissiveTex)].SampleLevel(gWrap, uv, 2.0).rgb, 0.0);
         }
     }
     float3 diffuse = albedo * (1.0 - metal);
@@ -120,7 +120,7 @@ SharcSurf sharcSurface(uint prim, float2 bary, float3 position, float3 view) {
     surf.demod = clamp(diffuse, float3(0.1, 0.1, 0.1), float3(1.0, 1.0, 1.0));
     surf.roughness = rough;
     surf.metallic = metal;
-    surf.emissive = min(emissive, 2.0);
+    surf.emissive = max(emissive, 0.0);
     surf.hit = true;
     return surf;
 }
@@ -219,7 +219,6 @@ float3 sharcDirectLite(SharcSurf surf, float3 view) {
 
     float wrap = saturate(surf.geoNormal.y * 0.4 + 0.6);
     direct += diffuse * sharcSkyFill() * wrap;
-    direct += surf.albedo * min(surf.emissive, 1.5);
 
     if (gSharc.lightCount > 0u && (gPass.passMask & 1u) != 0u) {
         uint count = min(gSharc.lightCount, 64u);
@@ -227,6 +226,9 @@ float3 sharcDirectLite(SharcSurf surf, float3 view) {
         [loop]
         for (uint i = 0u; i < count; ++i) {
             LightGpu lamp = gLights[i];
+            if ((lamp.meta.y & 2u) != 0u) {
+                continue;
+            }
             uint kind = lamp.meta.x;
             float radius = lamp.posRadius.w;
             if (kind == 0u || radius <= 0.0) {
@@ -257,7 +259,12 @@ float3 sharcDirectLite(SharcSurf surf, float3 view) {
         }
         direct += min(lampSum, float3(inten * 0.8, inten * 0.8, inten * 0.8));
     }
-    return sharcClampFirefly(max(direct, 0.0) / inten);
+    float3 glow = max(surf.emissive, 0.0);
+    float glowLuma = dot(glow, float3(0.2126, 0.7152, 0.0722));
+    if (glowLuma > 8.0) {
+        glow *= 8.0 / glowLuma;
+    }
+    return sharcClampFirefly(max(direct, 0.0) / inten) + glow;
 }
 
 float3 sharcDirect(SharcSurf surf, float3 view, inout uint rng) {

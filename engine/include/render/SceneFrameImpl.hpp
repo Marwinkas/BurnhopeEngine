@@ -41,6 +41,8 @@
 
 namespace burnhope {
 
+struct PhysicsWorld;
+
 constexpr uint32_t kSceneVerts = 512;
 constexpr uint32_t kSceneTris = 256;
 constexpr uint32_t kSceneInstances = 48;
@@ -142,6 +144,7 @@ struct SceneFrameImpl {
         Xform pose{};
     };
     PropLink props[kPropCap]{};
+    PhysicsWorld* physics = nullptr;
     uint8_t propCount = 0;
     uint8_t propPhase = 0;
     uint8_t propDirty = 0;
