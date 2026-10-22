@@ -1,4 +1,5 @@
 #include "ui/Hover.hpp"
+#include "ui/Interaction.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
@@ -7,6 +8,7 @@
 #include "ui/widget/List.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Field.hpp"
+#include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Splitter.hpp"
 #include "ui/widget/TreeView.hpp"
@@ -246,6 +248,7 @@ void propFitField(UiState& s, uint16_t id, bool compress) {
     if (auto* field = s.ent[id].try_get_mut<UiField>()) {
         field->align = 0;
     }
+    fieldSyncText(s, id);
 }
 
 void propHair(UiState& s, uint16_t column) {
@@ -292,42 +295,54 @@ void propPlace(UiState& s, uint16_t id, void*) {
     if (flex == nullptr) {
         return;
     }
-    float top = s.box[id].y;
-    float bot = top + (s.box[id].h > 4.0f ? s.box[id].h : flex->height);
-    for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-        const UiFlex* parentFlex = s.ent[p].try_get<UiFlex>();
-        if (parentFlex == nullptr || parentFlex->overflow != UiOverflow::Scroll || s.box[p].h < 4.0f) {
-            continue;
-        }
-        if (s.box[p].y > top) {
-            top = s.box[p].y;
-        }
-        const float viewBot = s.box[p].y + s.box[p].h;
-        if (viewBot < bot) {
-            bot = viewBot;
-        }
-        break;
-    }
-    for (uint16_t n = 0; n < s.count; ++n) {
-        if (!s.ent[n].is_alive() || !s.ent[n].has<UiPropFilterBar>() || s.box[n].h < 1.0f) {
-            continue;
-        }
-        const float barBot = s.box[n].y + s.box[n].h;
-        if (barBot > top && s.box[n].y < bot) {
-            top = barBot;
+    uint16_t scroll = kUiNone;
+    for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (s.ent[p].try_get<UiScroll>() != nullptr) {
+            scroll = p;
+            break;
         }
     }
-    if (bot < top + 1.0f) {
-        bot = top + 1.0f;
+    if (scroll != kUiNone && s.parentOf[grid->grip] != scroll) {
+        uiReparent(s, grid->grip, scroll);
+    }
+    float posY = 0.0f;
+    float span = flex->heightMode == UiSize::Px && flex->height > 8.0f ? flex->height : 0.0f;
+    if (scroll < s.count && s.box[scroll].h > 8.0f) {
+        float top = s.box[scroll].y;
+        const float bot = top + s.box[scroll].h;
+        const uint16_t insp = s.parentOf[scroll];
+        if (insp < s.count) {
+            for (uint16_t child = 0; child < s.count; ++child) {
+                if (s.parentOf[child] != insp || !s.ent[child].has<UiPropFilterBar>()) {
+                    continue;
+                }
+                if (s.box[child].h < 8.0f || s.box[child].h > 180.0f) {
+                    continue;
+                }
+                const float edge = s.box[child].y + s.box[child].h;
+                if (edge > top && edge + 8.0f < bot) {
+                    top = edge;
+                }
+                break;
+            }
+        }
+        posY = top - s.box[scroll].y;
+        if (posY < 0.0f) {
+            posY = 0.0f;
+        }
+        span = bot - (s.box[scroll].y + posY);
+    }
+    if (span < 8.0f) {
+        span = 360.0f;
     }
     flex->position = UiPosition::Absolute;
     flex->self = UiAlignSelf::Auto;
     flex->posX = grid->labelW + kPropIndent;
-    flex->posY = top - s.box[id].y;
+    flex->posY = posY;
     flex->widthMode = UiSize::Px;
     flex->width = 1.0f;
     flex->heightMode = UiSize::Px;
-    flex->height = bot - top;
+    flex->height = span;
     flex->shrink = 0.0f;
     const UiSplitter* drag = s.ent[grid->grip].try_get<UiSplitter>();
     const bool live = s.hovered == grid->grip || (drag != nullptr && drag->armed != 0);
@@ -374,7 +389,7 @@ uint16_t uiPropHost(UiState& s, uint16_t parent) {
             flex->widthMode = UiSize::Px;
             flex->width = 1.0f;
             flex->heightMode = UiSize::Px;
-            flex->height = 8.0f;
+            flex->height = 360.0f;
             flex->shrink = 0.0f;
         }
         if (auto* paint = s.ent[grip].try_get_mut<UiPaint>()) {
@@ -388,6 +403,16 @@ uint16_t uiPropHost(UiState& s, uint16_t parent) {
         }
         s.ent[grip].add<UiSplitShare>();
         s.ent[grip].add<UiPaintLast>();
+        uint16_t scroll = kUiNone;
+        for (uint16_t p = parent; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+            if (s.ent[p].try_get<UiScroll>() != nullptr) {
+                scroll = p;
+                break;
+            }
+        }
+        if (scroll != kUiNone) {
+            uiReparent(s, grip, scroll);
+        }
     }
     s.ent[id].set<UiPropGrid>({140.0f, grip, kUiNone, kUiNone});
     s.ent[id].set<UiLayoutRefresh>({propPlace, nullptr});
@@ -411,6 +436,9 @@ uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
     line.shrink = 0.0f;
     line.overflow = UiOverflow::Hidden;
     const uint16_t row = uiPanel(s, host, line, paintClear());
+    if (row < s.count) {
+        s.ent[row].add<UiRowHover>();
+    }
     UiFlex name{};
     name.widthMode = UiSize::Px;
     name.width = labelW;
@@ -471,22 +499,59 @@ uint16_t uiPropNumber(UiState& s, uint16_t host, const char* label, float value,
     return id;
 }
 
+float propMenuWidth(const UiState& s, uint16_t menu, const char* value) {
+    float widest = 0.0f;
+    auto consider = [&](const char* text, uint8_t len) {
+        if (text == nullptr || len == 0) {
+            return;
+        }
+        const float measured = uiMeasure(s, text, len, len);
+        if (measured > widest) {
+            widest = measured;
+        }
+    };
+    if (value != nullptr) {
+        uint8_t len = 0;
+        while (value[len] != '\0' && len < 48) {
+            ++len;
+        }
+        consider(value, len);
+    }
+    if (menu < s.count) {
+        for (uint16_t child = 0; child < s.count; ++child) {
+            if (s.parentOf[child] != menu) {
+                continue;
+            }
+            const UiText* text = s.ent[child].try_get<UiText>();
+            if (text != nullptr) {
+                consider(text->bytes, text->len);
+            }
+        }
+    }
+    return widest + 36.0f;
+}
+
 uint16_t uiPropMenu(UiState& s, uint16_t host, const char* label, const char* value, uint16_t menu) {
     const uint16_t slot = uiPropRow(s, host, label);
     const uint16_t id = uiMenuButton(s, slot, value, menu);
     uiSetHeight(s, id, kPropSlot);
+    const float width = propMenuWidth(s, menu, value);
     if (id < s.count) {
         if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
             flex->widthMode = UiSize::Px;
-            flex->width = kPropField;
+            flex->width = width;
             flex->maxWMode = UiSize::Px;
-            flex->maxW = kPropField;
+            flex->maxW = width;
             flex->grow = 0.0f;
             flex->shrink = 1.0f;
         }
     }
     if (menu < s.count) {
         s.ent[menu].add<UiMenuSlide>();
+        if (auto* flex = s.ent[menu].try_get_mut<UiFlex>()) {
+            flex->widthMode = UiSize::Px;
+            flex->width = width;
+        }
     }
     return id;
 }
@@ -625,8 +690,21 @@ UiPropVec3 uiPropVec3(UiState& s, uint16_t host, const char* label, float x, flo
         box.minW = kPropSlot;
         box.minH = kPropSlot;
         box.self = UiAlignSelf::Center;
-        UiPaint paint = paintToken(s.look, UiToken::Button, s.look.radiusSm);
+        UiPaint paint{};
+        paint.token = UiToken::Custom;
+        paint.r = s.look.text[0];
+        paint.g = s.look.text[1];
+        paint.b = s.look.text[2];
+        paint.a = 0.0f;
+        paint.borderW = 0.0f;
+        paint.shadow = 0.0f;
+        paint.radius = 0.0f;
         paint.icon = icon;
+        box.pad = 0.0f;
+        box.padL = 0.0f;
+        box.padR = 0.0f;
+        box.padT = 0.0f;
+        box.padB = 0.0f;
         const uint16_t id = uiPanel(s, row, box, paint);
         if (id < s.count) {
             uiHover(s, id);
@@ -810,7 +888,28 @@ uint16_t uiPropSection(UiState& s, uint16_t parent, const char* title, uint8_t c
         return wrap;
     }
     s.ent[wrap].set<UiPropSection>({cat, owner, 1, 0});
-    return uiFoldBody(s, wrap, title);
+    const uint16_t body = uiFoldBody(s, wrap, title);
+    for (uint16_t id = 0; id < s.count; ++id) {
+        const UiTree* tree = s.ent[id].try_get<UiTree>();
+        if (tree == nullptr || tree->body != body) {
+            continue;
+        }
+        if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
+            flex->padL = 0.0f;
+            flex->marginL = 0.0f;
+        }
+        break;
+    }
+    if (body < s.count) {
+        if (auto* flex = s.ent[body].try_get_mut<UiFlex>()) {
+            flex->pad = 0.0f;
+            flex->padL = 0.0f;
+            flex->padR = 0.0f;
+            flex->padT = 0.0f;
+            flex->padB = 0.0f;
+        }
+    }
+    return body;
 }
 
 const char* propSectionTitle(const UiState& s, uint16_t wrap) {
@@ -878,10 +977,66 @@ void uiPropRebuildFilters(UiState& s) {
     }
 }
 
+bool propQueryHas(const char* text, uint8_t len, const char* query, uint8_t qlen) {
+    if (qlen == 0) {
+        return true;
+    }
+    if (text == nullptr || len < qlen) {
+        return false;
+    }
+    for (uint8_t i = 0; i + qlen <= len; ++i) {
+        bool same = true;
+        for (uint8_t k = 0; k < qlen; ++k) {
+            char a = text[i + k];
+            char b = query[k];
+            if (a >= 'A' && a <= 'Z') {
+                a = static_cast<char>(a - 'A' + 'a');
+            }
+            if (b >= 'A' && b <= 'Z') {
+                b = static_cast<char>(b - 'A' + 'a');
+            }
+            if (a != b) {
+                same = false;
+                break;
+            }
+        }
+        if (same) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void propQueryOf(const UiState& s, const UiPropFilterBar& bar, const char*& text, uint8_t& len) {
+    text = nullptr;
+    len = 0;
+    if (bar.search >= s.count) {
+        return;
+    }
+    const UiField* field = s.ent[bar.search].try_get<UiField>();
+    if (field == nullptr || field->len == 0) {
+        return;
+    }
+    text = field->bytes;
+    len = field->len;
+}
+
+bool propUnder(const UiState& s, uint16_t id, uint16_t host) {
+    for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (p == host) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void uiPropFilterApply(UiState& s) {
     uint8_t which = 0xFF;
     uint8_t count = 0;
     const uint16_t* sections = nullptr;
+    const char* query = nullptr;
+    uint8_t qlen = 0;
+    bool searching = false;
     for (uint16_t id = 0; id < s.count; ++id) {
         const UiPropFilterBar* bar = s.ent[id].try_get<UiPropFilterBar>();
         if (bar == nullptr) {
@@ -890,6 +1045,8 @@ void uiPropFilterApply(UiState& s) {
         which = bar->which;
         count = bar->count;
         sections = bar->section;
+        propQueryOf(s, *bar, query, qlen);
+        searching = qlen > 0;
         for (uint8_t i = 0; i < count && i < 12; ++i) {
             const uint16_t button = bar->button[i];
             if (button >= s.count) {
@@ -905,8 +1062,35 @@ void uiPropFilterApply(UiState& s) {
         break;
     }
     for (uint16_t id = 0; id < s.count; ++id) {
+        if (!s.ent[id].is_alive() || !s.ent[id].has<UiPropLabel>()) {
+            continue;
+        }
+        const uint16_t row = s.parentOf[id];
+        if (row >= s.count) {
+            continue;
+        }
+        const UiText* text = s.ent[id].try_get<UiText>();
+        const bool match = !searching || (text != nullptr && propQueryHas(text->bytes, text->len, query, qlen));
+        uiShow(s, row, match);
+    }
+    for (uint16_t id = 0; id < s.count; ++id) {
         const UiPropSection* section = s.ent[id].try_get<UiPropSection>();
         if (section == nullptr) {
+            continue;
+        }
+        if (searching) {
+            bool any = false;
+            for (uint16_t label = 0; label < s.count; ++label) {
+                if (!s.ent[label].is_alive() || !s.ent[label].has<UiPropLabel>() || !propUnder(s, label, id)) {
+                    continue;
+                }
+                const UiText* text = s.ent[label].try_get<UiText>();
+                if (text != nullptr && propQueryHas(text->bytes, text->len, query, qlen)) {
+                    any = true;
+                    break;
+                }
+            }
+            uiShow(s, id, section->live != 0 && any);
             continue;
         }
         bool match = which == 0xFF;
@@ -917,12 +1101,22 @@ void uiPropFilterApply(UiState& s) {
     }
 }
 
+void onPropSearch(void* user, const char*) {
+    auto* s = static_cast<UiState*>(user);
+    if (s != nullptr) {
+        uiPropFilterApply(*s);
+    }
+}
+
 void onPropFilter(void* user, uint16_t id) {
     auto* s = static_cast<UiState*>(user);
     if (s == nullptr || id >= s->count) {
         return;
     }
-    const uint16_t bar = s->parentOf[id];
+    uint16_t bar = s->parentOf[id];
+    while (bar != kUiNone && bar < s->count && !s->ent[bar].has<UiPropFilterBar>()) {
+        bar = s->parentOf[bar];
+    }
     auto* filt = bar < s->count ? s->ent[bar].try_get_mut<UiPropFilterBar>() : nullptr;
     if (filt == nullptr) {
         return;
@@ -936,23 +1130,37 @@ void onPropFilter(void* user, uint16_t id) {
 }
 
 uint16_t uiPropFilterBar(UiState& s, uint16_t parent) {
-    UiFlex row{};
-    row.direction = UiFlexDir::Row;
-    row.wrap = UiFlexWrap::Wrap;
-    row.gap = 4.0f;
-    row.pad = 4.0f;
-    row.shrink = 0.0f;
-    row.minH = 30.0f;
-    row.widthMode = UiSize::Percent;
-    row.width = 100.0f;
-    const uint16_t bar = uiPanel(s, parent, row, paintToken(s.look, UiToken::Content, 0.0f));
+    UiFlex column{};
+    column.direction = UiFlexDir::Column;
+    column.shrink = 0.0f;
+    column.widthMode = UiSize::Percent;
+    column.width = 100.0f;
+    column.padL = 12.0f;
+    column.padR = 8.0f;
+    column.padT = 10.0f;
+    column.padB = 8.0f;
+    column.gap = 8.0f;
+    const uint16_t bar = uiPanel(s, parent, column, paintToken(s.look, UiToken::Content, 0.0f));
     if (bar == kUiNone) {
         return bar;
     }
     s.ent[bar].set<UiPropFilterBar>({});
     auto* filt = s.ent[bar].try_get_mut<UiPropFilterBar>();
+    const uint16_t search = uiSearchField(s, bar, "Search", onPropSearch, &s, -1.0f);
+    if (filt != nullptr) {
+        filt->search = search;
+    }
+    UiFlex row{};
+    row.direction = UiFlexDir::Row;
+    row.wrap = UiFlexWrap::Wrap;
+    row.gap = 4.0f;
+    row.shrink = 0.0f;
+    row.minH = 22.0f;
+    row.widthMode = UiSize::Percent;
+    row.width = 100.0f;
+    const uint16_t chips = uiPanel(s, bar, row, paintClear());
     for (uint8_t i = 0; i < 12; ++i) {
-        const uint16_t button = uiButton(s, bar, {.label = ""});
+        const uint16_t button = uiButton(s, chips, {.label = ""});
         uiSetHeight(s, button, 22.0f);
         uiBind(s, button, onPropFilter, &s);
         uiShow(s, button, false);

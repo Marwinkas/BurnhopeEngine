@@ -168,7 +168,7 @@ uint16_t uiNumber(UiState& s, uint16_t parent, float value, float minV, float ma
     }
     s.ent[id].set<UiRange>({value, minV, maxV, step, 1});
     if (auto* field = s.ent[id].try_get_mut<UiField>()) {
-        field->align = 1;
+        field->align = 0;
     }
     fieldSyncText(s, id);
     if (onChange != nullptr) {

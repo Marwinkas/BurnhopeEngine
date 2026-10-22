@@ -1385,6 +1385,8 @@ void sceneHud(Canvas& canvas, void* user) {
     toolFlex.align = UiAlign::Center;
     toolFlex.padL = 6.0f;
     toolFlex.padR = 6.0f;
+    toolFlex.padT = 4.0f;
+    toolFlex.padB = 4.0f;
     toolFlex.gap = 6.0f;
     const uint16_t toolbar = uiPanel(*canvas.state, viewCol, toolFlex, dockPaint());
     UiFlex toolLeftFlex{};
@@ -1393,6 +1395,7 @@ void sceneHud(Canvas& canvas, void* user) {
     toolLeftFlex.shrink = 1.0f;
     toolLeftFlex.minW = 0.0f;
     toolLeftFlex.align = UiAlign::Center;
+    toolLeftFlex.self = UiAlignSelf::Center;
     toolLeftFlex.gap = 4.0f;
     toolLeftFlex.overflow = UiOverflow::Hidden;
     const uint16_t toolLeft = uiPanel(*canvas.state, toolbar, toolLeftFlex, hiddenPaint());
@@ -1400,6 +1403,7 @@ void sceneHud(Canvas& canvas, void* user) {
     toolRightFlex.direction = UiFlexDir::Row;
     toolRightFlex.shrink = 0.0f;
     toolRightFlex.align = UiAlign::Center;
+    toolRightFlex.self = UiAlignSelf::Center;
     toolRightFlex.gap = 4.0f;
     const uint16_t toolRight = uiPanel(*canvas.state, toolbar, toolRightFlex, hiddenPaint());
     auto toolSep = [&](uint16_t parent) {
@@ -1542,6 +1546,9 @@ void sceneHud(Canvas& canvas, void* user) {
             flex->minW = 0.0f;
             flex->grow = 0.0f;
             flex->shrink = 0.0f;
+            flex->heightMode = UiSize::Px;
+            flex->height = 28.0f;
+            flex->self = UiAlignSelf::Center;
             flex->padL = 6.0f;
             flex->padR = 4.0f;
             flex->gap = 2.0f;
@@ -1624,13 +1631,14 @@ void sceneHud(Canvas& canvas, void* user) {
         const uint8_t picked = hud->snapPick[channel] < stepCount[channel] ? hud->snapPick[channel] : 0;
         hud->snapSent[channel] = stepTable[channel][picked];
         const uint16_t num = uiNumber(*canvas.state, toolLeft, hud->snapSent[channel], 0.001f, 10000.0f, channel == 1 ? 1.0f : 0.01f);
+        uiSetHeight(*canvas.state, num, 28.0f);
         hud->snapNum[channel] = num;
         uiNumberFill(*canvas.state, num, false);
         uiSetHeight(*canvas.state, num, 28.0f);
         if (num < canvas.state->count) {
             if (auto* flex = canvas.state->ent[num].try_get_mut<UiFlex>()) {
                 flex->widthMode = UiSize::Px;
-                flex->width = 72.0f;
+                flex->width = 108.0f;
                 flex->grow = 0.0f;
                 flex->shrink = 0.0f;
             }
@@ -1835,6 +1843,22 @@ void sceneHud(Canvas& canvas, void* user) {
             hud->statCheck[i] = uiCheck(*canvas.state, statsPop, statNames[i], 0, 0, false);
         }
     }
+    hud->toolBar = toolbar;
+    if (canvas.state != nullptr) {
+        const uint16_t bars[3] = {toolbar, toolLeft, toolRight};
+        for (uint16_t parent : bars) {
+            for (uint16_t id = 0; id < canvas.state->count; ++id) {
+                if (canvas.state->parentOf[id] != parent) {
+                    continue;
+                }
+                if (auto* flex = canvas.state->ent[id].try_get_mut<UiFlex>()) {
+                    flex->self = UiAlignSelf::Center;
+                    flex->marginT = 0.0f;
+                    flex->marginB = 0.0f;
+                }
+            }
+        }
+    }
     UiFlex camFlex{};
     camFlex.position = UiPosition::Absolute;
     camFlex.direction = UiFlexDir::Column;
@@ -1969,10 +1993,11 @@ void sceneHud(Canvas& canvas, void* user) {
     over.gap = 2.0f;
     over.shrink = 0.0f;
     over.posX = 8.0f;
-    over.posY = 8.0f;
+    over.posY = 80.0f;
     UiPaint veil = paintToken(look, UiToken::Content, look.radiusSm);
     veil.a = 0.72f;
-    hud->overlay = uiPanel(*canvas.state, viewPort, over, veil);
+    hud->overlay = uiPanel(*canvas.state, root, over, veil);
+    hud->viewPane = viewPort;
     if (hud->overlay < canvas.state->count) {
         canvas.state->ent[hud->overlay].add<UiPass>();
     }
@@ -2065,6 +2090,15 @@ void sceneHud(Canvas& canvas, void* user) {
     const uint16_t insp = uiPanel(*canvas.state, side, inspFlex, hiddenPaint());
     (void)uiPropFilterBar(*canvas.state, insp);
     const uint16_t detailsInner = scrollPage(insp, true);
+    if (canvas.state != nullptr && detailsInner < canvas.state->count) {
+        if (auto* flex = canvas.state->ent[detailsInner].try_get_mut<UiFlex>()) {
+            flex->pad = 0.0f;
+            flex->padL = 0.0f;
+            flex->padR = 0.0f;
+            flex->padT = 0.0f;
+            flex->padB = 0.0f;
+        }
+    }
     uint16_t details = uiPropHost(*canvas.state, detailsInner);
     const uint16_t detailsView = uiParent(*canvas.state, detailsInner);
     hud->tool.postPage = detailsView;
@@ -2794,6 +2828,30 @@ void syncProp(Engine& e, Canvas& canvas) {
     }
 }
 
+void placeStats(UiState& state, const HudContext& hud) {
+    if (hud.overlay >= state.count) {
+        return;
+    }
+    auto* flex = state.ent[hud.overlay].try_get_mut<UiFlex>();
+    if (flex == nullptr) {
+        return;
+    }
+    const uint16_t origin = state.parentOf[hud.overlay];
+    const float rootX = origin < state.count ? state.box[origin].x : 0.0f;
+    const float rootY = origin < state.count ? state.box[origin].y : 0.0f;
+    float x = 8.0f;
+    float y = 80.0f;
+    if (hud.viewPane < state.count && state.box[hud.viewPane].w > 1.0f) {
+        x = state.box[hud.viewPane].x + 8.0f - rootX;
+    }
+    if (hud.toolBar < state.count && state.box[hud.toolBar].h > 1.0f) {
+        y = state.box[hud.toolBar].y + state.box[hud.toolBar].h + 8.0f - rootY;
+    }
+    flex->position = UiPosition::Absolute;
+    flex->posX = x;
+    flex->posY = y;
+}
+
 void syncViewport(Engine& e, Canvas& canvas) {
     SceneFrame* scene = e.scene;
     UiState* state = canvas.state.get();
@@ -2983,11 +3041,7 @@ void syncViewport(Engine& e, Canvas& canvas) {
                 uiText(*state, hud.statLine[i], line[i]);
             }
         }
-        if (auto* flex = state->ent[hud.overlay].try_get_mut<UiFlex>()) {
-            flex->position = UiPosition::Absolute;
-            flex->posX = 8.0f;
-            flex->posY = 8.0f;
-        }
+        placeStats(*state, hud);
     }
     if (hud.statsWant == 2 && hud.statsPanel < state->count && (!state->menuOpen || uiMenuMetrics(*state).opened != hud.statsPanel)) {
         hud.statsWant = 0;

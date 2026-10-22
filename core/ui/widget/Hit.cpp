@@ -1,3 +1,4 @@
+#include "ui/Interaction.hpp"
 #include "ui/State.hpp"
 #include "platform/Trace.hpp"
 
@@ -60,7 +61,7 @@ uint16_t hitTest(const UiState& s, float x, float y) {
             if (s.ent[id].has<UiNoHit>() || s.ent[id].has<UiPass>()) {
                 continue;
             }
-            if (p->a <= 0.02f && !s.ent[id].has<UiFocusable>()) {
+            if (p->a <= 0.02f && !s.ent[id].has<UiFocusable>() && !s.ent[id].has<UiRowHover>()) {
                 continue;
             }
             if (!insideParents(s, id, x, y)) {

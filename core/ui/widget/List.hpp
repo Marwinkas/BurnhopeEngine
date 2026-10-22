@@ -70,6 +70,7 @@ struct UiPropFilterBar {
     uint8_t pad[2]{};
     uint16_t button[12]{};
     uint16_t section[12]{};
+    uint16_t search = kUiNone;
 };
 
 UiPropVec3 uiPropVec3(UiState& s, uint16_t host, const char* label, float x, float y, float z, float minV, float maxV, float step);

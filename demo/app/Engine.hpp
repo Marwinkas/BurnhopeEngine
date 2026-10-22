@@ -298,6 +298,8 @@ struct HudContext {
     uint16_t pauseBtn = kUiNone;
     uint16_t spawnBtn = kUiNone;
     uint16_t gearBtn = kUiNone;
+    uint16_t toolBar = kUiNone;
+    uint16_t viewPane = kUiNone;
     uint16_t statsPanel = kUiNone;
     uint16_t statCheck[6]{};
     uint16_t statLine[6]{};

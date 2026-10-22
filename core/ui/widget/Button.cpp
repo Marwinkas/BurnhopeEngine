@@ -176,9 +176,9 @@ bool uiCheckDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
         mark.posY = y + 1.0f;
         mark.sizeX = side - 2.0f;
         mark.sizeY = side - 2.0f;
-        mark.color[0] = s.look.text[0];
-        mark.color[1] = s.look.text[1];
-        mark.color[2] = s.look.text[2];
+        mark.color[0] = s.look.accent[0][0];
+        mark.color[1] = s.look.accent[0][1];
+        mark.color[2] = s.look.accent[0][2];
         mark.color[3] = 1.0f;
         mark.texId = 9;
         mark.flags = kUiFlagIcon;

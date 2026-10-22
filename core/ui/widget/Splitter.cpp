@@ -151,16 +151,65 @@ float paneSize(const UiState& s, uint16_t pane, bool vertical) {
     return vertical ? s.box[pane].h : s.box[pane].w;
 }
 
+struct PropGrip {
+    uint16_t host = kUiNone;
+    float label = 140.0f;
+    float indent = 28.0f;
+};
+
+PropGrip propGrip(const UiState& s, uint16_t split) {
+    PropGrip out{};
+    for (uint16_t id = 0; id < s.count; ++id) {
+        const UiPropGrid* grid = s.ent[id].try_get<UiPropGrid>();
+        if (grid == nullptr || grid->grip != split) {
+            continue;
+        }
+        out.host = id;
+        out.label = grid->labelW > 8.0f ? grid->labelW : out.label;
+        break;
+    }
+    if (out.host == kUiNone) {
+        return out;
+    }
+    for (uint16_t id = 0; id < s.count; ++id) {
+        if (!s.ent[id].is_alive() || !s.ent[id].has<UiPropLabel>()) {
+            continue;
+        }
+        bool under = false;
+        for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+            if (p == out.host) {
+                under = true;
+                break;
+            }
+        }
+        if (!under) {
+            continue;
+        }
+        const uint16_t row = s.parentOf[id];
+        if (row < s.count) {
+            if (const UiFlex* flex = s.ent[row].try_get<UiFlex>()) {
+                if (flex->padL > 1.0f) {
+                    out.indent = flex->padL;
+                }
+            }
+        }
+        break;
+    }
+    return out;
+}
+
 void shareResize(UiState& s, uint16_t split, float x) {
     auto* drag = s.ent[split].try_get_mut<UiSplitter>();
     if (drag == nullptr) {
         return;
     }
-    const uint16_t host = s.parentOf[split];
-    const UiBox& home = host < s.count ? s.box[host] : UiBox{};
-    float size = drag->armed != 0 ? drag->startSize + (x - drag->startMouse) : (x - home.x);
-    const float maxSize = std::max(96.0f, home.w - 96.0f);
+    const PropGrip prop = propGrip(s, split);
+    const uint16_t homeId = s.parentOf[split];
+    const float span = homeId < s.count ? s.box[homeId].w : 0.0f;
+    float size = drag->armed != 0 ? drag->startSize + (x - drag->startMouse) : prop.label;
+    const float maxSize = std::max(72.0f, span - prop.indent - 72.0f);
     size = std::clamp(size, 72.0f, maxSize);
+    const uint16_t host = prop.host;
     for (uint16_t id = 0; id < s.count; ++id) {
         if (!s.ent[id].is_alive() || !s.ent[id].has<UiPropLabel>()) {
             continue;
@@ -182,7 +231,7 @@ void shareResize(UiState& s, uint16_t split, float x) {
     }
     if (auto* bar = s.ent[split].try_get_mut<UiFlex>()) {
         bar->position = UiPosition::Absolute;
-        bar->posX = size;
+        bar->posX = size + prop.indent;
         bar->widthMode = UiSize::Px;
         bar->width = 1.0f;
     }
@@ -199,13 +248,13 @@ void shareResize(UiState& s, uint16_t split, float x) {
 void splitBegin(UiState& s, uint16_t split, float x, float y) {
     if (split < s.count && s.ent[split].has<UiSplitShare>()) {
         auto* drag = s.ent[split].try_get_mut<UiSplitter>();
-        const UiFlex* bar = s.ent[split].try_get<UiFlex>();
         if (drag == nullptr) {
             return;
         }
-        drag->pane = s.parentOf[split];
+        const PropGrip prop = propGrip(s, split);
+        drag->pane = prop.host != kUiNone ? prop.host : s.parentOf[split];
         drag->useNext = 0;
-        drag->startSize = bar != nullptr ? bar->posX : 140.0f;
+        drag->startSize = prop.label;
         drag->startMouse = x;
         drag->axis = 0;
         drag->armed = 1;

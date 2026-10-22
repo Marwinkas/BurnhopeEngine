@@ -79,6 +79,7 @@ struct UiDropTarget {
 };
 struct UiTextInput {};
 struct UiHoverable {};
+struct UiRowHover {};
 struct UiTitleBar {};
 struct UiPopup {};
 struct UiTab { uint16_t index = 0; };

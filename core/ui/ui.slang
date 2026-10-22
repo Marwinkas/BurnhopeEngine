@@ -349,17 +349,17 @@ float4 uiFs(VsOut i) : SV_Target0 {
             const float tc = saturate(dot(p - c, cb) / max(dot(cb, cb), 0.0001));
             cov = length(p - (a + ab * ta)) < 0.14 || length(p - (c + cb * tc)) < 0.14 ? 1.0 : 0.0;
         } else if (icon == 12u || icon == 13u) {
-            const bool body = abs(p.x) < 0.42 && p.y > -0.05 && p.y < 0.58 && (abs(p.x) > 0.24 || p.y < 0.12 || p.y > 0.40);
-            float2 q = p - float2(icon == 12u ? 0.16 : 0.0, -0.42);
+            const bool body = abs(p.x) < 0.62 && p.y > -0.22 && p.y < 0.78 && (abs(p.x) > 0.36 || p.y < 0.02 || p.y > 0.52);
+            float2 q = p - float2(icon == 12u ? 0.22 : 0.0, -0.62);
             const float arc = length(q);
-            const bool shackle = arc > 0.22 && arc < 0.40 && q.y < 0.05 && (icon == 13u || q.x < 0.02);
+            const bool shackle = arc > 0.30 && arc < 0.56 && q.y < 0.08 && (icon == 13u || q.x < 0.02);
             cov = body || shackle ? 1.0 : 0.0;
         } else if (icon == 14u) {
             const float ang = atan2(p.y, p.x);
             const float rad = length(p);
-            const bool arc = rad > 0.28 && rad < 0.50 && ang > -2.4 && ang < 2.6;
-            const float2 tip = p - float2(0.34, 0.22);
-            const bool head = abs(tip.x) < 0.22 && abs(tip.y) < 0.16 && tip.x < 0.08;
+            const bool arc = rad > 0.42 && rad < 0.78 && ang > -2.4 && ang < 2.6;
+            const float2 tip = p - float2(0.52, 0.34);
+            const bool head = abs(tip.x) < 0.30 && abs(tip.y) < 0.22 && tip.x < 0.10;
             cov = arc || head ? 1.0 : 0.0;
         } else if (icon == 15u) {
             const float ring = length(p);
