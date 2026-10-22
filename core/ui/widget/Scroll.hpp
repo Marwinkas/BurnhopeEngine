@@ -13,6 +13,7 @@ void uiBindScroll(UiState& s, uint16_t id, uint16_t inner);
 bool scrollThumb(const UiState& s, uint16_t id, UiBox& thumb);
 void dragScroll(UiState& s, uint16_t id, float y);
 void scrollBy(UiState& s, uint16_t id, float wheel);
+void scrollReset(UiState& s, uint16_t id);
 void scrollClamp(UiState& s, uint16_t id);
 void scrollClampAll(UiState& s);
 uint16_t scrollOwner(const UiState& s, uint16_t id);

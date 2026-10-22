@@ -314,6 +314,26 @@ void uiLayout(UiState& s, float w, float h) {
                 cacheSub(cacheSub, child);
             }
         }
+        for (uint16_t id = 0; id < s.count; ++id) {
+            if (!s.ent[id].is_alive()) {
+                continue;
+            }
+            bool under = false;
+            for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+                if (p == root) {
+                    under = true;
+                    break;
+                }
+            }
+            if (!under) {
+                continue;
+            }
+            if (const auto* r = s.ent[id].try_get<UiLayoutRefresh>()) {
+                if (r->fn != nullptr) {
+                    r->fn(s, id, r->user);
+                }
+            }
+        }
 
         s.layoutFrom = kUiNone;
         s.layoutDirty = false;
@@ -464,6 +484,16 @@ void uiLayout(UiState& s, float w, float h) {
     }
     if (refreshed) {
         measure();
+        for (uint16_t id = 0; id < s.count; ++id) {
+            if (!s.ent[id].is_alive()) {
+                continue;
+            }
+            if (const auto* r = s.ent[id].try_get<UiLayoutRefresh>()) {
+                if (r->fn != nullptr) {
+                    r->fn(s, id, r->user);
+                }
+            }
+        }
     }
 
     const bool resized = (s.laidW != w || s.laidH != h);

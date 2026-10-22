@@ -39,6 +39,9 @@ void uiHoverTint(const UiState& s, uint16_t id, float& r, float& g, float& b, fl
         return;
     }
     if (s.ent[id].has<UiIconChrome>()) {
+        if (a < 0.12f) {
+            a = 0.28f;
+        }
         return;
     }
     const UiPaint* paint = s.ent[id].try_get<UiPaint>();

@@ -446,6 +446,9 @@ void colorHead(UiState& s, uint16_t parent) {
     spawn(s, title, gap, paintClear());
     const uint16_t close = spawn(s, title, px(28.0f, 28.0f), paintToken(s.look, UiToken::Close, 6.0f));
     if (close < s.count) {
+        if (auto* paint = s.ent[close].try_get_mut<UiPaint>()) {
+            paint->icon = 3;
+        }
         uiHover(s, close);
         s.ent[close].add<UiFocusable>();
         uiBind(s, close, colorOnClose, &s);
@@ -734,27 +737,6 @@ bool colorGrab(void* user, uint16_t hit, float x, float y) {
 void fillColorBody(UiState& s, uint16_t parent) {
     UiFlex row{};
     row.direction = UiFlexDir::Row;
-    auto chip = [&](uint16_t host, const char* name, UiClickFn fn) {
-        UiFlex flex{};
-        flex.heightMode = UiSize::Px;
-        flex.height = 28.0f;
-        flex.shrink = 0.0f;
-        const uint16_t id = spawn(s, host, flex, paintToken(s.look, UiToken::Button, 6.0f));
-        UiText label{};
-        copyText(label.bytes, label.len, name);
-        s.ent[id].set<UiText>(label);
-        auto* box = s.ent[id].try_get_mut<UiFlex>();
-        if (box != nullptr) {
-            box->widthMode = UiSize::Px;
-            box->width = static_cast<float>(label.len) * s.look.advance + 20.0f;
-            box->height = 28.0f;
-            box->heightMode = UiSize::Px;
-        }
-        uiHover(s, id);
-        s.ent[id].add<UiFocusable>();
-        uiBind(s, id, fn, &s);
-        return id;
-    };
     UiFlex wheelRow = row;
     wheelRow.heightMode = UiSize::Px;
     wheelRow.height = 220.0f;
@@ -848,13 +830,15 @@ void fillColorBody(UiState& s, uint16_t parent) {
         num.width = kColorSide;
         num.height = 24.0f;
         num.shrink = 0.0f;
-        const uint16_t numId = spawn(s, lineId, num, paintToken(s.look, UiToken::Field, 4.0f));
+        const uint16_t numId = spawn(s, lineId, num, paintField(s.look));
         UiField digits{};
         digits.padL = 6.0f;
         digits.padR = 4.0f;
         digits.filter = 1;
         digits.maxChars = 3;
         s.ent[numId].set<UiField>(digits);
+        s.ent[numId].add<UiFocusable>();
+        s.ent[numId].add<UiTextInput>();
         uiEdit(s, numId, colorOnEdit, &s);
         uiColor(s).colorNum[i] = numId;
     }
@@ -864,22 +848,15 @@ void fillColorBody(UiState& s, uint16_t parent) {
     hexFlex.widthMode = UiSize::Percent;
     hexFlex.width = 100.0f;
     hexFlex.shrink = 0.0f;
-    uiColor(s).colorHex = spawn(s, parent, hexFlex, paintToken(s.look, UiToken::Field, 6.0f));
+    uiColor(s).colorHex = spawn(s, parent, hexFlex, paintField(s.look));
     UiField hex{};
     hex.padL = 10.0f;
     hex.padR = 10.0f;
     hex.maxChars = 9;
     s.ent[uiColor(s).colorHex].set<UiField>(hex);
+    s.ent[uiColor(s).colorHex].add<UiFocusable>();
+    s.ent[uiColor(s).colorHex].add<UiTextInput>();
     uiEdit(s, uiColor(s).colorHex, colorOnEdit, &s);
-    UiFlex modeRow = row;
-    modeRow.heightMode = UiSize::Px;
-    modeRow.height = 32.0f;
-    modeRow.shrink = 0.0f;
-    modeRow.gap = 6.0f;
-    const uint16_t modeId = spawn(s, parent, modeRow, paintClear());
-    uiColor(s).colorMenuBtn = chip(modeId, "MENU", colorOnMenu);
-    uiColor(s).colorWinBtn = chip(modeId, "WINDOW", colorOnWindow);
-    chip(parent, "CLOSE", colorOnClose);
     s.grabFn = colorGrab;
     s.grabUser = &s;
     applyColor(s, true, uiColor(s).colorSeen == 0);
@@ -920,6 +897,9 @@ void uiBuildColor(UiState& s) {
     spawn(s, title, gap, paintClear());
     const uint16_t close = spawn(s, title, px(28.0f, 28.0f), paintToken(s.look, UiToken::Close, 6.0f));
     if (close < s.count) {
+        if (auto* paint = s.ent[close].try_get_mut<UiPaint>()) {
+            paint->icon = 3;
+        }
         uiHover(s, close);
         s.ent[close].add<UiFocusable>();
         uiBind(s, close, colorOnClose, &s);

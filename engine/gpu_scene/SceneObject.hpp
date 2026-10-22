@@ -780,6 +780,7 @@ inline void sceneActorFitTool(SceneActors& world) {
     const bool sun = sceneActorSunRig(world);
     world.rotXY = sun ? 1 : 0;
     if (!sun) {
+        world.gizmo = world.tool > 4 ? 0 : world.tool;
         return;
     }
     uint8_t mode = world.tool > 4 ? 0 : world.tool;

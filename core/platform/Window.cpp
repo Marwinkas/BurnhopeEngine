@@ -825,9 +825,9 @@ void windowFinish(Window& w) {
     if (SDL_GetWindowSize(w.handle, &ww, &wh) && ww > 0 && wh > 0 && w.pixelW > 0 && w.pixelH > 0) {
         const float prevX = w.input.pointer.x;
         const float prevY = w.input.pointer.y;
-        w.input.pointer.x = mx * static_cast<float>(w.pixelW) / static_cast<float>(ww);
-        w.input.pointer.y = my * static_cast<float>(w.pixelH) / static_cast<float>(wh);
         if (w.relOn) {
+            w.input.pointer.x = w.relX * static_cast<float>(w.pixelW) / static_cast<float>(ww);
+            w.input.pointer.y = w.relY * static_cast<float>(w.pixelH) / static_cast<float>(wh);
             w.input.pointer.dx = w.motionDx;
             w.input.pointer.dy = w.motionDy;
             if (w.relEat) {
@@ -836,6 +836,8 @@ void windowFinish(Window& w) {
                 w.relEat = false;
             }
         } else {
+            w.input.pointer.x = mx * static_cast<float>(w.pixelW) / static_cast<float>(ww);
+            w.input.pointer.y = my * static_cast<float>(w.pixelH) / static_cast<float>(wh);
             w.input.pointer.dx = w.input.pointer.x - prevX;
             w.input.pointer.dy = w.input.pointer.y - prevY;
         }

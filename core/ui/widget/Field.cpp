@@ -356,9 +356,7 @@ uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChan
         flex.widthMode = UiSize::Px;
         flex.width = width > 1.0f ? width : 160.0f;
     }
-    UiPaint face = paintToken(s.look, UiToken::Field, s.look.radiusSm);
-    paintSunken(face);
-    const uint16_t id = uiPanel(s, parent, flex, face);
+    const uint16_t id = uiPanel(s, parent, flex, paintField(s.look));
     if (id == kUiNone) {
         return id;
     }
@@ -390,9 +388,7 @@ uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, 
     flex.heightMode = UiSize::Px;
     flex.height = s.metrics.fieldH;
     flex.shrink = 0.0f;
-    UiPaint face = paintToken(s.look, UiToken::Field, s.look.radiusSm);
-    paintSunken(face);
-    const uint16_t id = uiPanel(s, parent, flex, face);
+    const uint16_t id = uiPanel(s, parent, flex, paintField(s.look));
     if (id == kUiNone) {
         return id;
     }

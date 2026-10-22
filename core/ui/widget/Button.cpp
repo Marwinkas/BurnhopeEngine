@@ -52,15 +52,12 @@ uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
         flex.padL = padX;
         flex.padR = padX;
     }
-    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Button, s.look.radiusSm));
+    const uint16_t id = uiPanel(s, parent, flex, paintButton(s.look));
     if (id == kUiNone) {
         return id;
     }
     uiText(s, id, cfg.label != nullptr ? cfg.label : "");
     uiTextStyle(s, id, UiTextAlign::Center, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-    if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
-        paintRaised(*paint);
-    }
     uiHover(s, id);
     s.ent[id].add<UiFocusable>();
     if (cfg.iconSlot < kPhotoSlots) {

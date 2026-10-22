@@ -499,9 +499,7 @@ uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t m
     flex.padL = s.metrics.menuPadX;
     flex.padR = 8.0f;
     flex.gap = 6.0f;
-    UiPaint body = paintToken(s.look, UiToken::Button, s.look.radiusSm);
-    paintRaised(body);
-    const uint16_t id = uiPanel(s, parent, flex, body);
+    const uint16_t id = uiPanel(s, parent, flex, paintButton(s.look));
     if (id == kUiNone) {
         return id;
     }
@@ -513,7 +511,7 @@ uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t m
     caption.overflow = UiOverflow::Hidden;
     const uint16_t text = uiPanel(s, id, caption, paintLabel(s.look));
     uiText(s, text, label != nullptr ? label : "");
-    uiTextStyle(s, text, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+    uiTextStyle(s, text, UiTextAlign::Left, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     if (text < s.count) {
         s.ent[text].add<UiNoHit>();
     }

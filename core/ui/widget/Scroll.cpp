@@ -96,6 +96,23 @@ UiScrollMetrics uiCalcScrollMetrics(float viewH, float contentH, float offset) {
     return metrics;
 }
 
+void scrollReset(UiState& s, uint16_t id) {
+    auto* scroll = id < s.count ? s.ent[id].try_get_mut<UiScroll>() : nullptr;
+    if (scroll == nullptr) {
+        return;
+    }
+    scroll->offset = 0.0f;
+    if (scroll->inner < s.count) {
+        if (auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>()) {
+            flex->position = UiPosition::Static;
+            flex->posY = 0.0f;
+            flex->marginT = 0.0f;
+        }
+    }
+    uiMarkLayout(s, id);
+    s.visualDirty = true;
+}
+
 void scrollClamp(UiState& s, uint16_t id) {
     auto* scroll = id < s.count ? s.ent[id].try_get_mut<UiScroll>() : nullptr;
     if (scroll == nullptr || scroll->inner == kUiNone) {

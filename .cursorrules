@@ -475,7 +475,7 @@ NEVER keep a gizmo icon at 18 px (it vanishes beside the mesh); ALWAYS 72 px wit
 NEVER move the gizmo center by the pixel count in meters (a click on the white cube throws the actor); ALWAYS scale that screen solve by meters per pixel, 12 bytes.
 NEVER add a scene component and leave it out of play (Stop restores a partial actor and the new field survives); ALWAYS copy every flecs component on the actor through ecs_get_type into the play snapshot, size from ecs_get_type_info, 8 bytes.
 NEVER draw the selection box at the pivot handle (the outline slides when Pivot Offset changes); ALWAYS center it on the actor position, half extents from ActorBounds times scale, 12 bytes xyz.
-NEVER pass the Halton sample to FSR with the same sign as the projection term (Jitter() subtracts it and Native steps one pixel); ALWAYS jitterOffset = -jx, -jy while m[8] gets -2·jx/width and m[9] gets +2·jy/height, 8 bytes.
+NEVER negate the FSR jitter X (m[8] already turns -2·jx/width into a +jx pixel shift, and Jitter() subtracts that shift so Native walks the wrong way); ALWAYS jitter X = +jx and jitter Y = -jy, with m[8] = -2·jx/width and m[9] = +2·jy/height, 8 bytes.
 NEVER spawn the color popup before the window root (yoga[0] becomes the hidden picker and the chrome lays out at 0); ALWAYS parent it to node 0 after the root exists, 2 bytes.
 NEVER parent the orange stats readout to the view pane (its top stays inside the toolbar); ALWAYS parent it to node 0 and set posY to the toolbar bottom plus 8, 8 bytes.
 NEVER uiShow(false) a toolbar popup on dismiss (the close skips the slide and only the snap menu collapses); ALWAYS UiMenuSlide so menuDismiss runs uiReveal, 2 bytes.
@@ -483,3 +483,10 @@ NEVER mark a property row UiFocusable (the highlight eats the press, so the colu
 NEVER give the property grip a percent height (Yoga resolves it to 0, so the line shows only after a scroll and a click clears it); ALWAYS a pixel height of the scroll viewport, starting at the filter bottom, 4 bytes.
 NEVER leave a number field's glyphs centered after the caret is placed on the left (the text jumps when the value changes); ALWAYS align 0 and fieldSyncText, 1 byte.
 NEVER bind a color-panel button without UiFocusable (activate drops the click, so MENU, PICK, and the close stay dead); ALWAYS uiHover plus UiFocusable on a UiTitleBar header whose close sits on the right, 2 bytes.
+NEVER paint a color title with the ink color (the bar is white and the caption disappears); ALWAYS the dark paper title and icon 3 on the close, 1 byte.
+NEVER emit a color field without UiTextInput (the hex string draws twice and the box never takes keys); ALWAYS UiTextInput plus UiFocusable, 2 bytes.
+NEVER size a property menu to the caption alone (the chevron turns the label into ellipsis); ALWAYS add the arrow and the pads, 4 bytes.
+NEVER keep the property scroll when the actor changes (the next object opens past its header); ALWAYS scrollReset on that view, 4 bytes.
+NEVER leave the weather gizmo on the next actor (move stays selected and the ring remains); ALWAYS copy tool back into gizmo when the actor is not Weather, 1 byte.
+NEVER leave the property grip box to Yoga after the scroll pass (the line is clipped until a scroll and a click clears it); ALWAYS stamp the screen box from the scroll viewport after layout, 8 bytes.
+NEVER let a hidden look cursor keep moving (it reaches a panel, relative mode turns off, and the warp snaps the view back); ALWAYS pin the pointer at the grab point for the whole relative look, 8 bytes.

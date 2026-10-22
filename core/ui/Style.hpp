@@ -205,6 +205,33 @@ inline void paintSunken(UiPaint& paint) noexcept {
     paint.bb = paint.b * 0.35f;
 }
 
+inline UiPaint paintButton(const UiLook& look) noexcept {
+    UiPaint out = paintToken(look, UiToken::Button, look.radiusSm);
+    paintRaised(out);
+    return out;
+}
+
+inline UiPaint paintButtonFill(const UiLook& look) noexcept {
+    UiPaint out = paintToken(look, UiToken::Button, look.radiusSm);
+    out.borderW = 0.0f;
+    out.shadow = 0.0f;
+    return out;
+}
+
+inline UiPaint paintField(const UiLook& look) noexcept {
+    UiPaint out = paintToken(look, UiToken::Field, look.radiusSm);
+    paintSunken(out);
+    return out;
+}
+
+inline void paintGhost(UiPaint& paint) noexcept {
+    paint.token = UiToken::Custom;
+    paint.a = 0.0f;
+    paint.borderW = 0.0f;
+    paint.shadow = 0.0f;
+    paint.radius = 0.0f;
+}
+
 inline UiLook uiLookInk() noexcept {
     UiLook look{};
     const float paper[3]{0.11f, 0.11f, 0.12f};
@@ -214,9 +241,9 @@ inline UiLook uiLookInk() noexcept {
     look.window[0] = 0.07f;
     look.window[1] = 0.07f;
     look.window[2] = 0.08f;
-    look.title[0] = ink[0];
-    look.title[1] = ink[1];
-    look.title[2] = ink[2];
+    look.title[0] = paper[0];
+    look.title[1] = paper[1];
+    look.title[2] = paper[2];
     look.side[0] = paper[0];
     look.side[1] = paper[1];
     look.side[2] = paper[2];

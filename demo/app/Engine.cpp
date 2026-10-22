@@ -404,30 +404,19 @@ void paintTools(HudContext& hud) {
             }
         }
         if (hud.toolBtn[i] < s.count) {
+            s.ent[hud.toolBtn[i]].add<UiIconChrome>();
             if (auto* paint = s.ent[hud.toolBtn[i]].try_get_mut<UiPaint>()) {
-                paint->token = UiToken::Custom;
-                paint->r = 1.0f;
-                paint->g = 1.0f;
-                paint->b = 1.0f;
-                paint->a = 0.0f;
-                paint->borderW = 0.0f;
-                paint->shadow = 0.0f;
-                paint->radius = 0.0f;
+                paintGhost(*paint);
             }
         }
     }
     for (int i = 0; i < 3; ++i) {
         tintIcon(s, hud.snapIcon[i], hud.snapOn[i] != 0);
         if (hud.snapBtn[i] < s.count) {
+            s.ent[hud.snapBtn[i]].add<UiIconChrome>();
             if (auto* paint = s.ent[hud.snapBtn[i]].try_get_mut<UiPaint>()) {
-                paint->token = UiToken::Custom;
-                paint->r = 1.0f;
-                paint->g = 1.0f;
-                paint->b = 1.0f;
+                paintGhost(*paint);
                 paint->a = hud.snapOn[i] != 0 ? 0.18f : 0.0f;
-                paint->borderW = 0.0f;
-                paint->shadow = 0.0f;
-                paint->radius = 0.0f;
             }
         }
     }
@@ -1424,16 +1413,13 @@ void sceneHud(Canvas& canvas, void* user) {
                 flex->padT = 0.0f;
                 flex->padB = 0.0f;
             }
+            canvas.state->ent[plus].add<UiIconChrome>();
             if (auto* paint = canvas.state->ent[plus].try_get_mut<UiPaint>()) {
-                paint->token = UiToken::Custom;
+                paintGhost(*paint);
                 paint->icon = 16;
                 paint->r = 1.0f;
                 paint->g = 1.0f;
                 paint->b = 1.0f;
-                paint->a = 0.0f;
-                paint->borderW = 0.0f;
-                paint->shadow = 0.0f;
-                paint->radius = 0.0f;
             }
         }
         uint16_t menu = uiMakeMenu(*canvas.state);
@@ -1685,12 +1671,9 @@ void sceneHud(Canvas& canvas, void* user) {
                 flex->align = UiAlign::Center;
                 flex->justify = UiJustify::Center;
             }
+            canvas.state->ent[id].add<UiIconChrome>();
             if (auto* paint = canvas.state->ent[id].try_get_mut<UiPaint>()) {
-                paint->token = UiToken::Custom;
-                paint->a = 0.0f;
-                paint->borderW = 0.0f;
-                paint->shadow = 0.0f;
-                paint->radius = 0.0f;
+                paintGhost(*paint);
             }
         };
         uint16_t play = uiButton(*canvas.state, toolLeft, { .label = "", .width = 28.0f, .height = 28.0f });
@@ -3100,7 +3083,9 @@ bool engineTick(Engine& e) {
             e.hud.shown = selected;
             if (hud.state != nullptr) {
                 uiPropShowMask(*hud.state, sceneFrameActorSections(e.scene, selected));
+                scrollReset(*hud.state, e.hud.tool.propPage);
             }
+            sceneFrameActorGizmo(e.scene, e.hud.toolMode);
         }
         if (hud.state != nullptr) {
             showNamed(*hud.state, "bloomBody", checkOn(hud, e.hud.ids.bloomen, true));

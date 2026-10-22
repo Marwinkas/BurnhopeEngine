@@ -233,7 +233,7 @@ void shareResize(UiState& s, uint16_t split, float x) {
         bar->position = UiPosition::Absolute;
         bar->posX = size + prop.indent;
         bar->widthMode = UiSize::Px;
-        bar->width = 1.0f;
+        bar->width = 2.0f;
     }
     if (host < s.count) {
         if (auto* grid = s.ent[host].try_get_mut<UiPropGrid>()) {

@@ -340,10 +340,19 @@ void propPlace(UiState& s, uint16_t id, void*) {
     flex->posX = grid->labelW + kPropIndent;
     flex->posY = posY;
     flex->widthMode = UiSize::Px;
-    flex->width = 1.0f;
+    flex->width = 2.0f;
     flex->heightMode = UiSize::Px;
     flex->height = span;
     flex->shrink = 0.0f;
+    if (scroll < s.count && s.box[scroll].h > 8.0f && s.box[scroll].w > 8.0f) {
+        UiBox line{};
+        line.x = s.box[scroll].x + grid->labelW + kPropIndent;
+        line.y = s.box[scroll].y + posY;
+        line.w = 2.0f;
+        line.h = span;
+        s.box[grid->grip] = line;
+        s.ent[grid->grip].set<UiBounds>({line.x, line.y, line.w, line.h});
+    }
     const UiSplitter* drag = s.ent[grid->grip].try_get<UiSplitter>();
     const bool live = s.hovered == grid->grip || (drag != nullptr && drag->armed != 0);
     if (!live) {
@@ -387,7 +396,7 @@ uint16_t uiPropHost(UiState& s, uint16_t parent) {
             flex->posX = 140.0f + kPropIndent;
             flex->posY = 0.0f;
             flex->widthMode = UiSize::Px;
-            flex->width = 1.0f;
+            flex->width = 2.0f;
             flex->heightMode = UiSize::Px;
             flex->height = 360.0f;
             flex->shrink = 0.0f;
@@ -528,7 +537,7 @@ float propMenuWidth(const UiState& s, uint16_t menu, const char* value) {
             }
         }
     }
-    return widest + 36.0f;
+    return widest + 56.0f;
 }
 
 uint16_t uiPropMenu(UiState& s, uint16_t host, const char* label, const char* value, uint16_t menu) {

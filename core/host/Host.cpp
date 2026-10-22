@@ -199,15 +199,15 @@ void recordAndPresentView(DrawJobCtx& ctx) {
     }
     if (hasCanvas) {
         readCanvas(view, out, host.device, viewW, viewH, ctx.now, began ? frame.flight : 0u, began);
-        if (canvasWantsRelative(view.canvas)) {
+        if (sceneView && flyLook) {
+            out.wantsRelative = true;
+            out.cursor = 0;
+        } else if (canvasWantsRelative(view.canvas)) {
             out.wantsRelative = true;
         } else if (sceneView && canvasPointerOver(view.canvas)) {
             out.wantsRelative = false;
         } else if (sceneView) {
             out.wantsRelative = flyLook;
-            if (flyLook) {
-                out.cursor = 0;
-            }
         }
     } else if (view.sceneTick != nullptr) {
         out.wantsRelative = flyLook;
