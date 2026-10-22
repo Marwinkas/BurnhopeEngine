@@ -144,7 +144,7 @@ float fastTarget(float3 pos, float3 n, float3 albedo, float metal, uint light, o
         return 0.0;
     }
     const float atten = filamentDistanceAttenuation(dist, radius);
-    const float3 diffuse = albedo * (1.0 - metal) * ndl * atten * lamp.colorIntensity.rgb * lamp.colorIntensity.w;
+    const float3 diffuse = albedo * (1.0 - metal) * ndl * atten * lamp.colorIntensity.rgb * candelaScale(lamp.colorIntensity.w);
     return dot(max(diffuse, 0.0), float3(0.2126, 0.7152, 0.0722));
 }
 
@@ -162,7 +162,7 @@ float3 fastLe(float3 pos, float3 n, float3 albedo, float metal, uint light) {
     const float3 L = toL / dist;
     const float ndl = saturate(dot(n, L));
     const float atten = filamentDistanceAttenuation(dist, radius);
-    return max(albedo * (1.0 - metal) * ndl * atten * lamp.colorIntensity.rgb * lamp.colorIntensity.w, 0.0);
+    return max(albedo * (1.0 - metal) * ndl * atten * lamp.colorIntensity.rgb * candelaScale(lamp.colorIntensity.w), 0.0);
 }
 
 void fastInitial(uint2 px) {

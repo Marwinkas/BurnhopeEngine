@@ -214,6 +214,119 @@ void uvScreenGrad(float3 w0, float3 w1, float3 w2, float2 uv0, float2 uv1, float
     }
 }
 
+float rainHash(float2 p) {
+    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+}
+
+float rainNoise(float2 p) {
+    const float2 i = floor(p);
+    const float2 f = frac(p);
+    const float2 u = f * f * (3.0 - 2.0 * f);
+    const float a = rainHash(i);
+    const float b = rainHash(i + float2(1.0, 0.0));
+    const float c = rainHash(i + float2(0.0, 1.0));
+    const float d = rainHash(i + float2(1.0, 1.0));
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+}
+
+float rainFbm(float2 p) {
+    float n = 0.0;
+    float a = 0.52;
+    [unroll]
+    for (int i = 0; i < 3; ++i) {
+        n += a * rainNoise(p);
+        p = p * 2.07 + 11.3;
+        a *= 0.5;
+    }
+    return n;
+}
+
+float2 rainRipple(float2 xz, float time) {
+    float2 g = 0.0;
+    g.x += cos(dot(xz, float2(46.0, 7.0)) - time * 2.4) * 0.018;
+    g.y += cos(dot(xz, float2(-5.0, 63.0)) - time * 1.9) * 0.014;
+    g.x += cos(dot(xz, float2(21.0, -3.0)) - time * 1.3) * 0.01;
+    g.y += cos(dot(xz, float2(4.0, 27.0)) - time * 1.6) * 0.01;
+    return g;
+}
+
+bool rainRoof(float3 P) {
+    const uint lo = asuint(gFrame.viewTail0.x);
+    const uint hi = asuint(gFrame.viewTail0.y);
+    if (lo == 0u && hi == 0u) {
+        return false;
+    }
+    RayDesc ray;
+    ray.Origin = P + float3(0.0, 0.25, 0.0);
+    ray.Direction = float3(0.0, 1.0, 0.0);
+    ray.TMin = 0.08;
+    ray.TMax = 22.0;
+    RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> query;
+    query.TraceRayInline(
+        RaytracingAccelerationStructure(uint64_t(lo) | (uint64_t(hi) << 32)),
+        RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH,
+        0xff,
+        ray);
+    query.Proceed();
+    return query.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+}
+
+float rainSky(float3 P) {
+    float open = rainRoof(P) ? 0.0 : 1.0;
+    const float2 dir[4] = {
+        float2(0.72, 0.16),
+        float2(-0.20, 0.70),
+        float2(-0.58, -0.42),
+        float2(0.24, -0.66),
+    };
+    [unroll]
+    for (int i = 0; i < 4; ++i) {
+        open += rainRoof(P + float3(dir[i].x, 0.0, dir[i].y)) ? 0.0 : 1.0;
+    }
+    return open * 0.2;
+}
+
+float rainStream(float sideC, float along, float time, float freq, float salt, out float signedSide) {
+    const float u = sideC * freq;
+    const float id = floor(u);
+    const float f = frac(u) - 0.5;
+    const float h = rainHash(float2(id, salt));
+    const float width = lerp(0.04, 0.09, frac(h * 4.7));
+    const float line = exp(-(f * f) / (width * width));
+    const float gate = smoothstep(0.72, 0.88, h);
+    const float bead = 0.55 + 0.45 * sin(along * 6.5 - time * 2.4 + h * 19.0);
+    signedSide = f * line;
+    return line * gate * bead;
+}
+
+float rainDrip(float3 P, float3 N, float time, out float side, out float3 across) {
+    side = 0.0;
+    across = float3(1.0, 0.0, 0.0);
+    const float3 grav = float3(0.0, -1.0, 0.0);
+    float3 down = grav - N * dot(N, grav);
+    const float d2 = dot(down, down);
+    if (d2 < 0.06) {
+        return 0.0;
+    }
+    down *= rsqrt(d2);
+    across = cross(N, down);
+    const float a2 = dot(across, across);
+    if (a2 < 1e-6) {
+        return 0.0;
+    }
+    across *= rsqrt(a2);
+    const float sideC = dot(P, across);
+    const float along = dot(P, down);
+    float s0 = 0.0;
+    float s1 = 0.0;
+    float s2 = 0.0;
+    const float a = rainStream(sideC, along, time, 8.0, 1.7, s0);
+    const float b = rainStream(sideC, along, time, 14.0, 4.9, s1);
+    const float c = rainStream(sideC, along, time, 23.0, 8.2, s2);
+    side = clamp((s0 + s1 + s2) * 2.2, -1.0, 1.0);
+    return saturate(a * 0.22 + b * 0.16 + c * 0.12);
+}
+
 ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     ShadeHit hit;
     hit.pomShadow = 1.0;
@@ -303,6 +416,41 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
         }
         normalLen = saturate(length(tN.xy));
         N = normalize(tangent * tN.x + bitangent * tN.y + N * tN.z);
+    }
+    const float rainAmt = saturate(gFrame.viewPad.w);
+    const float rainTime = gFrame.viewPad.z;
+    const float wetScale = saturate(gFrame.viewTail0.z);
+    const float ripScale = saturate(gFrame.viewTail0.w);
+    const float openSky = (rainAmt > 0.05 || wetScale > 0.02) ? rainSky(P) : 1.0;
+    const float wetField = rainFbm(P.xz * 0.045 + float2(P.y, 0.0) * 0.02);
+    const float wet = wetScale * lerp(0.62, 1.0, wetField) * openSky;
+    const float upFace = saturate((geoN.y - 0.15) / 0.55);
+    const float puddle = upFace * openSky * saturate(wetScale - 0.35) * lerp(0.25, 1.0, wetField);
+    const float wall = saturate((0.72 - abs(geoN.y)) / 0.28) * rainAmt * openSky;
+    float dripSide = 0.0;
+    float3 dripAcross = float3(1.0, 0.0, 0.0);
+    const float drip = wall > 0.02 ? rainDrip(P, geoN, rainTime, dripSide, dripAcross) : 0.0;
+    if (dot(tangent, tangent) > 0.5) {
+        const float2 duv = uv * 24.0;
+        const float hC = frac(sin(dot(duv, float2(127.1, 311.7))) * 43758.5453);
+        const float hR = frac(sin(dot(duv + float2(0.5, 0.0), float2(127.1, 311.7))) * 43758.5453);
+        const float hU = frac(sin(dot(duv + float2(0.0, 0.5), float2(127.1, 311.7))) * 43758.5453);
+        float3 n1 = float3(0.0, 0.0, 1.0);
+        float3 n2 = normalize(float3(hC - hR, hC - hU, 0.55));
+        n1 += float3(0.0, 0.0, 1.0);
+        n2 *= float3(-1.0, -1.0, 1.0);
+        const float3 blended = n1 * dot(n1, n2) / max(n1.z, 1e-3) - n2;
+        const float3 detail = normalize(tangent * blended.x + bitangent * blended.y + N * blended.z);
+        N = normalize(lerp(N, detail, lerp(0.22, 0.05, wet)));
+    }
+    N = normalize(lerp(N, geoN, wet * 0.42));
+    if (upFace > 0.02 && ripScale > 0.001 && rainAmt > 0.02 && openSky > 0.0) {
+        const float2 rip = rainRipple(P.xz, rainTime) * ripScale;
+        const float3 water = normalize(float3(rip.x, 1.0, rip.y));
+        N = normalize(lerp(N, water, upFace * rainAmt * openSky * 0.12));
+    }
+    if (drip > 0.08) {
+        N = normalize(N + dripAcross * dripSide * drip * 0.08);
     }
     if (dot(N, V) < 0.0) {
         N = -N;
@@ -394,7 +542,12 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     if (coat > 0.0) {
         roughness = lerp(roughness, max(roughness, coatPerceptual), coat);
     }
-    roughness = clamp(roughness, 0.045, 1.0);
+    albedo = lerp(albedo, albedo * albedo, saturate(wet * 0.8 + puddle * 0.2));
+    albedo = lerp(albedo, albedo * 0.97, saturate(drip));
+    roughness = lerp(roughness, 0.2, wet * 0.85);
+    roughness = lerp(roughness, 0.03, puddle * lerp(0.35, 1.0, wetField));
+    roughness = lerp(roughness, roughness * 0.92, saturate(drip) * wall);
+    roughness = clamp(roughness, 0.02, 1.0);
     const float a = roughness * roughness;
     float reflectance = asfloat(mat.pad1);
     if (reflectance < 0.01 || reflectance > 1.0) {

@@ -1,10 +1,13 @@
+#include "audio/Audio.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "render/HeapBind.hpp"
 #include "render/PassAllocators.hpp"
 #include "render/PassBufferSync.hpp"
 #include "render/PassCommon.hpp"
+#include "render/Particles.hpp"
 #include "render/Physics.hpp"
 #include "render/SceneFrame.hpp"
+#include "render/Weather.hpp"
 #include "render/SceneFrameImpl.hpp"
 
 #include "debug/DebugStats.hpp"
@@ -65,7 +68,13 @@ void placeActors(SceneFrameImpl& scene) {
         sceneActorWriteXform(scene.actors, 0, pose);
     }
     sceneActorAdd(scene.actors, SceneActorKind::Post, post, "Post");
+    const float climate[3] = {post[0] + 3.0f, post[1], post[2]};
+    const uint8_t weather = sceneActorAdd(scene.actors, SceneActorKind::Weather, climate, "Weather");
     scene.actors.selected = 0;
+    if (weather < scene.actors.count) {
+        scene.weatherEnt = scene.actors.ent[weather];
+        scene.weatherEnt.set<Weather>(Weather{});
+    }
 }
 
 } // namespace
@@ -214,6 +223,12 @@ uint8_t linkProp(SceneFrameImpl& s, uint32_t instance, const char* name) {
     link.actor = actor;
     link.radius = inst.sphere[3];
     link.pose = sceneActorXform(s.actors, actor);
+    if (actor < s.actors.count && s.actors.ent[actor].is_alive()) {
+        const float half = link.radius > 0.02f ? link.radius / 1.7320508f : 0.5f;
+        ActorBounds box{};
+        box.half[0] = box.half[1] = box.half[2] = half;
+        s.actors.ent[actor].set<ActorBounds>(box);
+    }
     s.propCount += 1;
     if (actor < s.actors.count && s.actors.ent[actor].is_alive()) {
         const MaterialGpuData* src = materialAt(s, inst.materialId);
@@ -744,6 +759,8 @@ bool bindHeap(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::SkyViewSample), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.sky.skyView.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Cloud), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.sky.cloud.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::CloudSample), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.sky.cloud.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::CloudShadow), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.sky.shadow.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
+        && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::CloudShadowSample), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.sky.shadow.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::BloomStorage), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, s.tone.bloom.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Bloom), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.tone.bloom.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::PointShadow), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, s.pointDepth.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT)
@@ -829,6 +846,33 @@ uint32_t uploadLights(SceneFrameImpl& s, uint32_t flight) {
     }
     const GpuInstance* lamps = s.instSrc != nullptr ? s.instSrc : s.cpuInstances;
     const uint32_t authored = count;
+    for (uint32_t i = 0; i < authored; ++i) {
+        LightGpuData lamp{};
+        std::memcpy(&lamp, dst + sizeof(LightGpuData) * i, sizeof(lamp));
+        lightPromoteCandela(lamp);
+        std::memcpy(dst + sizeof(LightGpuData) * i, &lamp, sizeof(lamp));
+    }
+    for (uint32_t f = 0; f < s.particles.flashCount && count < kLightCap; ++f) {
+        const ParticleFlash& flash = s.particles.flash[f];
+        if (flash.life <= 0.0f || flash.maxLife <= 1.0e-4f) {
+            continue;
+        }
+        LightGpuData lamp{};
+        lamp.pos[0] = flash.pos[0];
+        lamp.pos[1] = flash.pos[1];
+        lamp.pos[2] = flash.pos[2];
+        lamp.radius = flash.radius;
+        lamp.color[0] = 1.0f;
+        lamp.color[1] = 0.62f;
+        lamp.color[2] = 0.28f;
+        lamp.intensity = flash.candela * (flash.life / flash.maxLife);
+        lamp.type = kLightPoint;
+        lamp.flags = 4u;
+        lamp.shadowMapIndex = -1;
+        lamp.sourceRadius = 0.45f;
+        std::memcpy(dst + sizeof(LightGpuData) * count, &lamp, sizeof(lamp));
+        count += 1u;
+    }
     if (((s.passMask & kPassRestir) != 0u || (s.passMask & kPassSharc) != 0u)
         && s.materialSrc != nullptr && s.materialCount > 0u && lamps != nullptr) {
         for (uint32_t i = 0; i < s.instanceCount && count < kLightCap; ++i) {
@@ -864,7 +908,7 @@ uint32_t uploadLights(SceneFrameImpl& s, uint32_t flight) {
             lamp.color[0] = luma < 0.08f ? 1.0f : mat.baseColor[0];
             lamp.color[1] = luma < 0.08f ? 1.0f : mat.baseColor[1];
             lamp.color[2] = luma < 0.08f ? 1.0f : mat.baseColor[2];
-            lamp.intensity = mat.emissiveIntensity * 8.0f;
+            lamp.intensity = mat.emissiveIntensity * 8.0f * kPhotometric;
             lamp.type = kLightPoint;
             lamp.flags = 2u;
             lamp.sourceRadius = std::max(inst.sphere[3] * 0.35f, 0.15f);
@@ -949,12 +993,123 @@ void writeGroupSpheres(const GpuInstance* instances, GpuMeshlet* meshlets, uint3
     }
 }
 
+void bakeAudio(SceneFrameImpl& scene) {
+    if (scene.audio == nullptr || scene.vertSrc == nullptr || scene.indexSrc == nullptr || scene.instSrc == nullptr || scene.meshletSrc == nullptr) {
+        return;
+    }
+    constexpr uint32_t kCap = 200000;
+    const uint32_t meshCount = scene.meshletSrc == scene.cpuMeshlets
+        ? kSceneInstances
+        : static_cast<uint32_t>(scene.ownedMesh.size());
+    uint32_t total = 0;
+    for (uint32_t i = 0; i < scene.instanceCount; ++i) {
+        const GpuInstance& inst = scene.instSrc[i];
+        if (inst.meshId >= meshCount) {
+            continue;
+        }
+        total += scene.meshletSrc[inst.meshId].triangleCount;
+    }
+    const uint32_t step = total > kCap ? (total + kCap - 1u) / kCap : 1u;
+    std::vector<float> xyz;
+    std::vector<int32_t> idx;
+    std::vector<int32_t> mat;
+    xyz.reserve(std::min(total, kCap) * 3u);
+    idx.reserve(std::min(total, kCap) * 3u);
+    mat.reserve(std::min(total, kCap));
+    uint32_t seen = 0;
+    for (uint32_t i = 0; i < scene.instanceCount; ++i) {
+        const GpuInstance& inst = scene.instSrc[i];
+        if (inst.meshId >= meshCount) {
+            continue;
+        }
+        const GpuMeshlet& mesh = scene.meshletSrc[inst.meshId];
+        if (mesh.vertexCount == 0 || mesh.triangleCount == 0) {
+            continue;
+        }
+        if (mesh.vertexOffset + mesh.vertexCount > scene.vertCount || mesh.indexOffset + mesh.triangleCount * 3u > scene.indexCount) {
+            continue;
+        }
+        for (uint32_t t = 0; t < mesh.triangleCount; ++t) {
+            const uint32_t keep = seen;
+            seen += 1u;
+            if ((keep % step) != 0u) {
+                continue;
+            }
+            const uint32_t at = mesh.indexOffset + t * 3u;
+            const uint32_t i0 = scene.indexSrc[at];
+            const uint32_t i1 = scene.indexSrc[at + 1u];
+            const uint32_t i2 = scene.indexSrc[at + 2u];
+            if (i0 >= mesh.vertexCount || i1 >= mesh.vertexCount || i2 >= mesh.vertexCount) {
+                continue;
+            }
+            const GpuVertex& a = scene.vertSrc[mesh.vertexOffset + i0];
+            const GpuVertex& b = scene.vertSrc[mesh.vertexOffset + i1];
+            const GpuVertex& c = scene.vertSrc[mesh.vertexOffset + i2];
+            float x0 = 0.0f, y0 = 0.0f, z0 = 0.0f;
+            float x1 = 0.0f, y1 = 0.0f, z1 = 0.0f;
+            float x2 = 0.0f, y2 = 0.0f, z2 = 0.0f;
+            x0 = inst.world[0] * a.px + inst.world[1] * a.py + inst.world[2] * a.pz + inst.world[3];
+            y0 = inst.world[4] * a.px + inst.world[5] * a.py + inst.world[6] * a.pz + inst.world[7];
+            z0 = inst.world[8] * a.px + inst.world[9] * a.py + inst.world[10] * a.pz + inst.world[11];
+            x1 = inst.world[0] * b.px + inst.world[1] * b.py + inst.world[2] * b.pz + inst.world[3];
+            y1 = inst.world[4] * b.px + inst.world[5] * b.py + inst.world[6] * b.pz + inst.world[7];
+            z1 = inst.world[8] * b.px + inst.world[9] * b.py + inst.world[10] * b.pz + inst.world[11];
+            x2 = inst.world[0] * c.px + inst.world[1] * c.py + inst.world[2] * c.pz + inst.world[3];
+            y2 = inst.world[4] * c.px + inst.world[5] * c.py + inst.world[6] * c.pz + inst.world[7];
+            z2 = inst.world[8] * c.px + inst.world[9] * c.py + inst.world[10] * c.pz + inst.world[11];
+            const float e1x = x1 - x0;
+            const float e1y = y1 - y0;
+            const float e1z = z1 - z0;
+            const float e2x = x2 - x0;
+            const float e2y = y2 - y0;
+            const float e2z = z2 - z0;
+            const float nx = e1y * e2z - e1z * e2y;
+            const float ny = e1z * e2x - e1x * e2z;
+            const float nz = e1x * e2y - e1y * e2x;
+            const float area2 = nx * nx + ny * ny + nz * nz;
+            if (area2 < 1.0e-8f) {
+                continue;
+            }
+            const int32_t base = static_cast<int32_t>(xyz.size() / 3u);
+            xyz.push_back(x0);
+            xyz.push_back(y0);
+            xyz.push_back(z0);
+            xyz.push_back(x1);
+            xyz.push_back(y1);
+            xyz.push_back(z1);
+            xyz.push_back(x2);
+            xyz.push_back(y2);
+            xyz.push_back(z2);
+            idx.push_back(base);
+            idx.push_back(base + 1);
+            idx.push_back(base + 2);
+            const float len = std::sqrt(area2);
+            mat.push_back(ny > 0.65f * len ? 1 : 0);
+            if (mat.size() >= kCap) {
+                break;
+            }
+        }
+        if (mat.size() >= kCap) {
+            break;
+        }
+    }
+    AudioMesh mesh{};
+    mesh.xyz = xyz.data();
+    mesh.vertexCount = static_cast<uint32_t>(xyz.size() / 3u);
+    mesh.indices = idx.data();
+    mesh.materialIndex = mat.data();
+    mesh.triangleCount = static_cast<uint32_t>(mat.size());
+    audioSetMesh(scene.audio, mesh);
+    spdlog::info("audio mesh {} triangles", mesh.triangleCount);
+}
+
 } // namespace
 
 struct SceneFrame : SceneFrameImpl {};
 
 SceneFrame* sceneFrameCreate() {
     SceneFrame* scene = new SceneFrame{};
+    scene->audio = audioCreate();
     testSceneBuild(scene->world);
     pointShadowAssign(scene->world.lights, scene->world.lightCount);
     scene->fly.eye[0] = scene->world.eye[0];
@@ -1408,6 +1563,7 @@ void sceneFramePlantCubes(SceneFrame* scene) {
     cook.boundsMax[1] = scene->boxMax[1];
     cook.boundsMax[2] = scene->boxMax[2];
     scene->physics = physicsCreate(cook);
+    bakeAudio(*scene);
 }
 
 void freeOwned(SceneFrame& s) {
@@ -1777,10 +1933,17 @@ void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
     scene->fogStart = tweaks.fogStart;
     scene->fogOpacity = tweaks.fogOpacity;
     scene->fogInStart = tweaks.fogInStart;
-    scene->atmosphere.sunZenith = tweaks.sunZenith;
-    scene->atmosphere.sunAzimuth = tweaks.sunAzimuth;
-    scene->atmosphere.cloudCoverage = tweaks.cloudCoverage;
-    scene->atmosphere.cloudDensity = tweaks.cloudDensity;
+    scene->rainRipple = std::clamp(tweaks.rainRipple, 0.0f, 1.0f);
+    if (Weather* climate = scene->weatherEnt.try_get_mut<Weather>()) {
+        weatherGoals(*climate, tweaks.cloudCoverage, tweaks.cloudDensity, tweaks.rainAmount, tweaks.rainWet, tweaks.fogDensity, tweaks.sunZenith, tweaks.sunAzimuth, tweaks.windSpeed, tweaks.windYaw, tweaks.temperatureC, tweaks.dayLength, tweaks.timeOfDay, tweaks.clockSun);
+    } else {
+        scene->rainAmount = std::clamp(tweaks.rainAmount, 0.0f, 4.0f);
+        scene->rainWet = std::clamp(tweaks.rainWet, 0.0f, 1.0f);
+        scene->atmosphere.sunZenith = tweaks.sunZenith;
+        scene->atmosphere.sunAzimuth = tweaks.sunAzimuth;
+        scene->atmosphere.cloudCoverage = tweaks.cloudCoverage;
+        scene->atmosphere.cloudDensity = tweaks.cloudDensity;
+    }
     scene->tonemapper = tweaks.tonemapper > 7u ? 0u : tweaks.tonemapper;
     scene->freeze = tweaks.freeze;
 }
@@ -1820,6 +1983,9 @@ void sceneFrameReleaseGpu(SceneFrame* scene, Device& device) {
     cubePassDestroy(scene->cube, device);
     tonemapPassDestroy(scene->tone, device);
     gizmoPassDestroy(scene->gizmo, device);
+    particlePassDestroy(scene->particles, device);
+    fogDestroy(scene->fog, device);
+    rainDestroy(scene->rain, device);
     destroyBuffers(device, {
         &scene->visible, &scene->shadowVisible, &scene->pointVisible, &scene->cubeVisible,
         &scene->candidates, &scene->indirect, &scene->shadowIndirect,
@@ -1860,6 +2026,8 @@ void sceneFrameDestroy(SceneFrame* scene, Device& device) {
     sceneFrameReleaseGpu(scene, device);
     physicsDestroy(scene->physics);
     scene->physics = nullptr;
+    audioDestroy(scene->audio);
+    scene->audio = nullptr;
     fileUnmap(&scene->bhop);
     freeOwned(*scene);
     scene->meshletGpu.clear();
@@ -1914,10 +2082,87 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
             pose.scale[2] = poses[i].scale[2];
             sceneActorWriteXform(scene->actors, actor, pose);
         }
+        for (uint32_t i = 0; i < count; ++i) {
+            const uint8_t actor = physicsBodyActor(scene->physics, i);
+            const float y = poses[i].pos[1];
+            const float vy = dt > 1.0e-4f ? (y - scene->impactY[i]) / dt : 0.0f;
+            if (actor != held && scene->impactVy[i] < -6.0f && vy > -0.8f) {
+                particleBurst(scene->particles, poses[i].pos[0], poses[i].pos[1], poses[i].pos[2]);
+            }
+            scene->impactY[i] = y;
+            scene->impactVy[i] = vy;
+        }
     }
     flyCamUpdate(scene->fly, input, dt);
     if (dt > 1.0e-4f) {
         scene->skyTime += dt;
+    }
+    scene->simDt = dt > 0.05f ? 0.05f : (dt < 0.0f ? 0.0f : dt);
+    if (Weather* climate = scene->weatherEnt.try_get_mut<Weather>()) {
+        weatherIntegrate(*climate, scene->simDt);
+    }
+    particleTick(scene->particles, scene->simDt);
+    if (scene->particles.seed > scene->camBursts) {
+        float kick = static_cast<float>(scene->particles.seed - scene->camBursts) * 0.08f;
+        if (kick > 0.35f) {
+            kick = 0.35f;
+        }
+        scene->camShock += kick;
+        if (scene->camShock > 0.55f) {
+            scene->camShock = 0.55f;
+        }
+        scene->camBursts = scene->particles.seed;
+    }
+    scene->camShockVel += -scene->camShock * 42.0f * scene->simDt;
+    scene->camShockVel *= std::exp(-6.5f * scene->simDt);
+    scene->camShock += scene->camShockVel * scene->simDt;
+    float fx = 0.0f;
+    float fy = 0.0f;
+    float fz = 1.0f;
+    flyCamForward(scene->fly, fx, fy, fz);
+    if (inputKeyEdge(input, 10)) {
+        particleBurst(
+            scene->particles,
+            scene->fly.eye[0] + fx * 6.0f,
+            scene->fly.eye[1] + fy * 6.0f,
+            scene->fly.eye[2] + fz * 6.0f);
+    }
+    if (scene->audio != nullptr) {
+        const float roof = physicsRoof(scene->physics, scene->fly.eye[0], scene->fly.eye[1], scene->fly.eye[2]) ? 1.0f : 0.0f;
+        AudioListener ear{};
+        ear.origin[0] = scene->fly.eye[0];
+        ear.origin[1] = scene->fly.eye[1];
+        ear.origin[2] = scene->fly.eye[2];
+        ear.ahead[0] = fx;
+        ear.ahead[1] = fy;
+        ear.ahead[2] = fz;
+        const float rx = -fz;
+        const float ry = 0.0f;
+        const float rz = fx;
+        ear.up[0] = ry * fz - rz * fy;
+        ear.up[1] = rz * fx - rx * fz;
+        ear.up[2] = rx * fy - ry * fx;
+        const float ul = std::sqrt(ear.up[0] * ear.up[0] + ear.up[1] * ear.up[1] + ear.up[2] * ear.up[2]);
+        if (ul < 1.0e-4f) {
+            ear.up[0] = 0.0f;
+            ear.up[1] = 1.0f;
+            ear.up[2] = 0.0f;
+        } else {
+            ear.up[0] /= ul;
+            ear.up[1] /= ul;
+            ear.up[2] /= ul;
+        }
+        audioSetListener(scene->audio, ear);
+        audioSetRain(scene->audio, 1.0f - roof, scene->rainAmount);
+        audioTick(scene->audio, scene->simDt);
+    }
+    if (scene->particles.intro == 0 && scene->skyTime > 0.6f) {
+        scene->particles.intro = 1;
+        particleBurst(
+            scene->particles,
+            scene->fly.eye[0] + fx * 8.0f,
+            scene->fly.eye[1] + fy * 8.0f - 1.0f,
+            scene->fly.eye[2] + fz * 8.0f);
     }
     return (input.pointer.down & kPointerRight) != 0;
 }
@@ -2046,10 +2291,46 @@ uint8_t sceneFrameActorSections(const SceneFrame* scene, uint8_t index) {
     if (ent.has<Atmosphere>()) {
         mask |= kSecAtmo;
     }
+    if (ent.has<WeatherObj>()) {
+        return kSecWeather;
+    }
     if (ent.has<SunObj>()) {
         mask |= kSecSun;
     }
     return mask;
+}
+
+void sceneFrameWeatherPreset(SceneFrame* scene, uint32_t preset) {
+    if (scene == nullptr) {
+        return;
+    }
+    if (Weather* climate = scene->weatherEnt.try_get_mut<Weather>()) {
+        weatherPreset(*climate, preset);
+    }
+}
+
+float sceneFrameWeatherTime(const SceneFrame* scene) {
+    if (scene == nullptr) {
+        return -1.0f;
+    }
+    const Weather* climate = scene->weatherEnt.try_get<Weather>();
+    return climate != nullptr ? climate->timeOfDay : -1.0f;
+}
+
+float sceneFrameWeatherZenith(const SceneFrame* scene) {
+    if (scene == nullptr) {
+        return 35.0f;
+    }
+    const Weather* climate = scene->weatherEnt.try_get<Weather>();
+    return climate != nullptr ? climate->sunZenith : 35.0f;
+}
+
+float sceneFrameWeatherAzimuth(const SceneFrame* scene) {
+    if (scene == nullptr) {
+        return 30.0f;
+    }
+    const Weather* climate = scene->weatherEnt.try_get<Weather>();
+    return climate != nullptr ? climate->sunAzimuth : 30.0f;
 }
 
 bool sceneFrameActorPose(const SceneFrame* scene, uint8_t index, ActorPose& out) {
@@ -2532,7 +2813,7 @@ void followHandLamp(SceneFrameImpl& s) {
     s.handLamp.color[0] = 1.0f;
     s.handLamp.color[1] = 0.72f;
     s.handLamp.color[2] = 0.38f;
-    s.handLamp.intensity = 24.0f;
+    s.handLamp.intensity = 24.0f * kPhotometric;
     s.handLamp.type = kLightPoint;
     s.handLamp.shadowMapIndex = -1;
     s.handLamp.sourceRadius = 0.15f;
@@ -2682,7 +2963,7 @@ void sceneFrameRecord(
             && recreateImage(scene->hizMax[0].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
             && recreateImage(scene->hizMax[1].image, device, hizExtent, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
         if (!descriptorHeapsCreate(scene->gpuHeap, device, HeapLayout{
-                .buffers = 75,
+                .buffers = 96,
                 .images = static_cast<uint32_t>(HeapImg::Count),
                 .samplers = 3,
             })) {
@@ -2705,6 +2986,9 @@ void sceneFrameRecord(
             && cubePassCreate(scene->cube, device, scene->gpuHeap)
             && tonemapPassCreate(scene->tone, device, scene->gpuHeap);
         (void)gizmoPassCreate(scene->gizmo, device, scene->gpuHeap);
+        (void)particlePassCreate(scene->particles, device, scene->gpuHeap);
+        (void)fogCreate(scene->fog, device, scene->gpuHeap);
+        (void)rainCreate(scene->rain, device, scene->gpuHeap);
         const bool targets = passes
             && recreateTracked(scene->tone.bloom, device, VkExtent2D{
                 std::max(swap.extent.width / 2u, 1u),
@@ -2757,7 +3041,24 @@ void sceneFrameRecord(
     pose.eye[0] = scene->fly.eye[0];
     pose.eye[1] = scene->fly.eye[1];
     pose.eye[2] = scene->fly.eye[2];
+    const float stepX = scene->fly.eye[0] - scene->camPrevEye[0];
+    const float stepY = scene->fly.eye[1] - scene->camPrevEye[1];
+    const float stepZ = scene->fly.eye[2] - scene->camPrevEye[2];
+    const float step = std::sqrt(stepX * stepX + stepY * stepY + stepZ * stepZ);
+    const float stepCap = step > 0.04f ? 0.04f : step;
+    if (stepCap > 0.001f) {
+        scene->camBob += stepCap * 4.0f;
+        if (scene->camBob > 6.2831853f) {
+            scene->camBob -= 6.2831853f;
+        }
+    }
+    scene->camPrevEye[0] = scene->fly.eye[0];
+    scene->camPrevEye[1] = scene->fly.eye[1];
+    scene->camPrevEye[2] = scene->fly.eye[2];
+    const float bob = std::sin(scene->camBob) * 0.01f;
+    pose.eye[1] += bob;
     flyCamTarget(scene->fly, pose.target);
+    pose.target[1] += bob + scene->camShock * 0.18f;
     pose.aspect = static_cast<float>(scene->extent.width) / static_cast<float>(scene->extent.height);
     pose.zn = 0.1f;
     pose.zf = scene->farPlane;
@@ -2797,6 +3098,9 @@ void sceneFrameRecord(
     FramePost knob{};
     std::memcpy(gpu.viewProj, cam.viewProj.m, sizeof(cam.viewProj.m));
     std::memcpy(gpu.invViewProj, cam.invViewProj.m, sizeof(cam.invViewProj.m));
+    if (const Weather* climate = scene->weatherEnt.try_get<Weather>()) {
+        weatherPublish(*climate, scene->atmosphere, scene->rainAmount, scene->rainWet, scene->fogDensity);
+    }
     scene->atmosphere.time = scene->skyTime;
     scene->atmosphere.parity = (scene->frameCursor & 1u) != 0u ? 1.0f : 0.0f;
     atmosphereApply(lit, scene->atmosphere);
@@ -2813,6 +3117,12 @@ void sceneFrameRecord(
     gpu.padInv[0] = static_cast<float>(strideU);
     gpu.viewPad[0] = static_cast<float>(scene->instanceCount);
     gpu.viewPad[1] = static_cast<float>(flight * 2u * strideU);
+    gpu.viewPad[2] = scene->skyTime;
+    gpu.viewPad[3] = scene->rainAmount;
+    const uint64_t roofTlas = scene->radiance.geometry ? static_cast<uint64_t>(scene->radiance.tlasAddress) : 0ull;
+    std::memcpy(&gpu.viewTail[0], &roofTlas, sizeof(roofTlas));
+    gpu.viewTail[2] = scene->rainWet;
+    gpu.viewTail[3] = scene->rainRipple;
     gpu.padInv[1] = 0.0f;
     gpu.extent[0] = scene->extent.width;
     gpu.extent[1] = scene->extent.height;
@@ -3059,7 +3369,11 @@ void sceneFrameRecord(
         lit.pointColor[i][0] = scene->world.lights[i].color[0];
         lit.pointColor[i][1] = scene->world.lights[i].color[1];
         lit.pointColor[i][2] = scene->world.lights[i].color[2];
-        lit.pointColor[i][3] = 2.0f;
+        float cd = scene->world.lights[i].intensity;
+        if (cd > 0.0f && cd < 64.0f) {
+            cd *= kPhotometric;
+        }
+        lit.pointColor[i][3] = cd / kPhotometric;
         const LightGpuData& lamp = scene->world.lights[i];
         const float dx = lamp.pos[0] - cam.pos[0];
         const float dy = lamp.pos[1] - cam.pos[1];
@@ -3273,7 +3587,9 @@ void sceneFrameRecord(
     } else {
         framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax, scene->rcSun, scene->rcBounce);
     }
-    framePassShadeLate(ctx, scene->shade, scene->sky);
+    framePassShadeLate(ctx, scene->shade, scene->sky, scene->fog);
+    particleRecord(cmd, device, scene->particles, scene->shade.hdrA, scene->extent, flight, scene->simDt);
+    rainRecord(cmd, scene->rain, scene->shade.hdrA, scene->extent, flight, scene->simDt);
     restirStatFlush(cmd, scene->restir, flight);
     if (scene->restir.lastLog[0] != '\0') {
         std::snprintf(scene->gpuText, sizeof(scene->gpuText), "%s\n%s", scene->restir.lastLog, zoneText);

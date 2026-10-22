@@ -58,6 +58,57 @@ bool gpuImageCreate(
     return true;
 }
 
+bool gpuImageCreateFroxel(
+    GpuImage& img,
+    Device& d,
+    uint32_t width,
+    uint32_t height,
+    uint32_t depth,
+    VkFormat format,
+    VkImageUsageFlags usage,
+    VkImageAspectFlags aspect) {
+    gpuImageDestroy(img, d);
+    if (width < 1u || height < 1u || depth < 1u) {
+        return false;
+    }
+    img.format = format;
+    img.extent = {width, height};
+    img.depth = depth;
+    img.mips = 1;
+    VkImageCreateInfo ci{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_3D,
+        .format = format,
+        .extent = {width, height, depth},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    VmaAllocationCreateInfo aci{};
+    aci.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    if (vmaCreateImage(d.allocator, &ci, &aci, &img.image, &img.alloc, nullptr) != VK_SUCCESS) {
+        spdlog::error("vmaCreateImage froxel failed");
+        return false;
+    }
+    VkImageViewCreateInfo vi{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = img.image,
+        .viewType = VK_IMAGE_VIEW_TYPE_3D,
+        .format = format,
+        .subresourceRange = {aspect, 0, 1, 0, 1},
+    };
+    if (vkCreateImageView(d.device, &vi, nullptr, &img.view) != VK_SUCCESS) {
+        spdlog::error("vkCreateImageView froxel failed");
+        gpuImageDestroy(img, d);
+        return false;
+    }
+    return true;
+}
+
 bool gpuImageCreateVolume(
     GpuImage& img,
     Device& d,

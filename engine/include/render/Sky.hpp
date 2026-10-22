@@ -17,12 +17,14 @@ struct SkyPass {
     TrackedImage multiScatter;
     TrackedImage skyView;
     TrackedImage cloud;
+    TrackedImage shadow;
     GpuBuffer noise;
     bool noiseReady = false;
     ShaderExt transmittanceCs;
     ShaderExt multiCs;
     ShaderExt skyViewCs;
     ShaderExt cloudMarch;
+    ShaderExt cloudShadow;
     ShaderExt cloudUp;
     ShaderExt noiseCs;
     ShaderExt skyProbe;
@@ -37,6 +39,7 @@ void skyPassDestroy(SkyPass& p, Device& d);
 void skyLutRecord(VkCommandBuffer cmd, SkyPass& p);
 void skyProbeRecord(VkCommandBuffer cmd, SkyPass& p, VkBuffer probes, VkDeviceSize size);
 void cloudNoiseEnsure(VkCommandBuffer cmd, SkyPass& p);
+void cloudShadowRecord(VkCommandBuffer cmd, SkyPass& p);
 void cloudRecord(VkCommandBuffer cmd, SkyPass& p, VkExtent2D extent);
 
 } // namespace burnhope

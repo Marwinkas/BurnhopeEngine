@@ -166,6 +166,8 @@ enum class HeapImg : uint32_t {
     SharcTemporal = 930,
     SharcRaw = 931,
     SharcHist = 932,
+    CloudShadow = 936,
+    CloudShadowSample = 937,
     Count = 992,
 };
 
@@ -195,6 +197,8 @@ static_assert(static_cast<uint32_t>(HeapImg::RestirMat) == 926u);
 static_assert(static_cast<uint32_t>(HeapImg::RestirMat) < static_cast<uint32_t>(HeapImg::Count));
 static_assert(static_cast<uint32_t>(HeapImg::SharcRawSample) == 928u);
 static_assert(static_cast<uint32_t>(HeapImg::SharcHist) == 932u);
+static_assert(static_cast<uint32_t>(HeapImg::CloudShadow) == 936u);
+static_assert(static_cast<uint32_t>(HeapImg::CloudShadowSample) == 937u);
 static_assert(static_cast<uint32_t>(HeapImg::SharcHist) < static_cast<uint32_t>(HeapImg::Count));
 
 // flight 0..1, cascade 0..2. Выборка и storage — разные слоты одной картинки.

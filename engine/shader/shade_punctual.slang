@@ -166,6 +166,9 @@ void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) 
         if ((lamp.meta.y & 2u) != 0u && (gPass.passMask & 1048576u) != 0u) {
             continue;
         }
+        if ((lamp.meta.y & 4u) != 0u && (gPass.passMask & 1048576u) != 0u) {
+            continue;
+        }
         if ((lamp.meta.y & 1u) != 0u && (gPass.passMask & 131072u) == 0u) {
             continue;
         }
@@ -182,7 +185,7 @@ void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) 
                 const float3 c = P + (tng * sx + bit * sy) * halfExt;
                 corner += saturate(dot(normalize(lamp.posRadius.xyz - c), N));
             }
-            color += albedo * ltcForm(ndl) * lamp.colorIntensity.rgb * lamp.colorIntensity.w * atten * (corner * 0.25);
+            color += albedo * ltcForm(ndl) * lamp.colorIntensity.rgb * candelaScale(lamp.colorIntensity.w) * atten * (corner * 0.25);
             continue;
         }
         const float3 H2 = normalize(V + Lp);
@@ -194,10 +197,10 @@ void shadePunctual(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) 
         specL *= lerp(1.0, specOcclusion(NdotV, gtao, roughness), saturate(gShade.specOcc));
         float3 diffL = computeDiffuseColor(albedo, metallic) * Fd_Lambert();
         diffL = coloredPenumbra(diffL, albedo, pshadow);
-        float3 lampRad = lamp.colorIntensity.rgb * lamp.colorIntensity.w;
+        float3 lampRad = lamp.colorIntensity.rgb * candelaScale(lamp.colorIntensity.w);
         const float lampPeak = max(lampRad.r, max(lampRad.g, lampRad.b));
         const float lampCap = lerp(1.2, 8.0, saturate(gShade.lamp));
-        if (lampPeak > lampCap) {
+        if ((lamp.meta.y & 4u) == 0u && lampPeak > lampCap) {
             lampRad *= lampCap / lampPeak;
         }
         color += (diffL * ormAo + specL) * ndl * atten * lampRad * pshadow;

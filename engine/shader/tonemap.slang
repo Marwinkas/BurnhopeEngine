@@ -84,6 +84,9 @@ float3 agx(float3 val) {
     val = log2(max(val, 1e-10));
     val = saturate((val - (-12.47393)) / (4.026069 - (-12.47393)));
     val = agxContrast(val);
+    const float punchLuma = dot(val, float3(0.2126, 0.7152, 0.0722));
+    val = pow(max(val, 0.0), 1.35);
+    val = punchLuma + 1.4 * (val - punchLuma);
     val = max(mul3(outset, val), 0.0);
     return pow(val, 2.2);
 }
@@ -372,7 +375,33 @@ float3 lensFlare(float2 uv) {
     return ghosts + halo * flareRing(distance(uvWeight, float2(0.5, 0.5)), 0.4, 0.1);
 }
 
+float2 rainLens(float2 uv) {
+    const float rain = saturate(gFrame.viewPad.w);
+    if (rain < 0.15) {
+        return uv;
+    }
+    const float time = gFrame.viewPad.z;
+    const float aspect = float(gFrame.extent.x) / max(float(gFrame.extent.y), 1.0);
+    float2 shift = 0.0;
+    [unroll]
+    for (int i = 0; i < 5; ++i) {
+        const float h = frac(float(i) * 0.173 + 0.11);
+        const float t = frac(time * 0.04 + h);
+        const float2 c = float2(frac(h * 3.17), frac(0.15 + h * 7.91 - t));
+        float2 d = uv - c;
+        d.x *= aspect;
+        const float rad = lerp(0.012, 0.028, frac(h * 5.3));
+        const float m = saturate(1.0 - length(d) / rad);
+        const float bulb = m * m;
+        shift += d * bulb * 0.09;
+        const float trail = saturate(1.0 - abs(d.x) / (rad * 0.3)) * saturate(d.y) * exp(-d.y * 26.0);
+        shift.y -= trail * 0.004;
+    }
+    return uv + shift * rain;
+}
+
 float3 sampleHdr(float2 uv, float2 invPx) {
+    uv = rainLens(uv);
     const float2 d = uv - 0.5;
     const float2 shift = d * gTone.ca * invPx;
     float3 hdr;
@@ -410,13 +439,19 @@ float3 display(float2 uv, float2 invPx, uint2 screen) {
     hdr *= max(gTone.f4, 0.0) * exp2(gGrade.exposure);
     hdr = gradeColor(hdr);
     float3 color = finishMap(hdr);
+    if (gTone.tonemapper == 0u) {
+        const float silver = luma(color);
+        const float3 overlay = silver < 0.5 ? 2.0 * color * silver : 1.0 - 2.0 * (1.0 - color) * (1.0 - silver);
+        color = lerp(color, overlay, 0.42);
+    }
     if ((uint(gGrade.flags + 0.5) & 4u) != 0u) {
         color = gamutClip(color);
     }
     const float lum = luma(color);
     if (gTone.grain > 0.001) {
-        const float n = frac(sin(dot(uv * float2(screen) + gFrame.cameraPos.xy, float2(12.9898, 78.233))) * 43758.5453);
-        color += (n - 0.5) * gTone.grain * saturate(1.15 - lum);
+        const float2 px = uv * float2(screen) + float(gFrame.frameParity);
+        const float n = frac(52.9829189 * frac(dot(px, float2(0.06711056, 0.00583715))));
+        color += (n - 0.5) * gTone.grain * saturate(1.2 - lum);
     }
     color *= saturate(1.15 - dot(uv - 0.5, uv - 0.5) * gTone.vignette);
     if (gTone.f5 > 0.5) {

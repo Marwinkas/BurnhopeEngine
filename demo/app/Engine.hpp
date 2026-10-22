@@ -135,6 +135,15 @@ struct HudIds {
     uint16_t fogStart = kUiNone;
     uint16_t fogOp = kUiNone;
     uint16_t fogIn = kUiNone;
+    uint16_t rain = kUiNone;
+    uint16_t rainWet = kUiNone;
+    uint16_t rainRip = kUiNone;
+    uint16_t wind = kUiNone;
+    uint16_t windYaw = kUiNone;
+    uint16_t wxTime = kUiNone;
+    uint16_t wxDay = kUiNone;
+    uint16_t wxTemp = kUiNone;
+    uint16_t wxClock = kUiNone;
     uint16_t zenith = kUiNone;
     uint16_t azimuth = kUiNone;
     uint16_t clouds = kUiNone;

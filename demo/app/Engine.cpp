@@ -352,6 +352,8 @@ bool addActorButton(HudContext& hud, uint16_t objects, uint8_t index, const char
         hit.page = hud.tool.postPage;
     } else if (kind == static_cast<uint8_t>(SceneActorKind::Prop)) {
         hit.page = hud.tool.propPage;
+    } else if (kind == static_cast<uint8_t>(SceneActorKind::Weather)) {
+        hit.page = hud.tool.postPage;
     }
     uiBind(*canvas.state, rowBtn, onActor, &hit);
     return true;
@@ -398,6 +400,38 @@ void onDuplicate(void* user, uint16_t) {
         onActor(&hud->objects.back(), 0);
     }
 }
+
+void setSlide(Canvas& canvas, uint16_t id, float value);
+void setMenuCaption(UiState& s, const char* name, const char* text);
+
+void slideName(Canvas& canvas, const char* name, float value) {
+    if (canvas.state == nullptr) {
+        return;
+    }
+    setSlide(canvas, uiFindName(*canvas.state, name), value);
+}
+
+void applyWeatherPreset(HudContext* hud, uint32_t preset, float coverage, float density, float rain, float wind, const char* caption) {
+    if (hud == nullptr || hud->tool.canvas == nullptr) {
+        return;
+    }
+    Canvas& canvas = *hud->tool.canvas;
+    slideName(canvas, "clouds", coverage);
+    slideName(canvas, "cdens", density);
+    slideName(canvas, "rain", rain);
+    slideName(canvas, "wind", wind);
+    if (canvas.state != nullptr) {
+        setMenuCaption(*canvas.state, "wxBtn", caption);
+    }
+    if (hud->tool.scene != nullptr) {
+        sceneFrameWeatherPreset(hud->tool.scene, preset);
+    }
+}
+
+void wxClear(void* user) { applyWeatherPreset(static_cast<HudContext*>(user), 0u, 0.12f, 0.04f, 0.0f, 2.0f, "Clear"); }
+void wxOvercast(void* user) { applyWeatherPreset(static_cast<HudContext*>(user), 1u, 0.70f, 0.10f, 0.4f, 5.0f, "Overcast"); }
+void wxRain(void* user) { applyWeatherPreset(static_cast<HudContext*>(user), 2u, 0.82f, 0.12f, 3.0f, 8.0f, "Rain"); }
+void wxStorm(void* user) { applyWeatherPreset(static_cast<HudContext*>(user), 3u, 0.95f, 0.18f, 4.0f, 14.0f, "Storm"); }
 
 void setSlide(Canvas& canvas, uint16_t id, float value) {
     if (canvas.state == nullptr || id == kUiNone || id >= canvas.state->count) {
@@ -652,6 +686,15 @@ void bindHudIds(HudContext& hud, UiState& state) {
     hud.ids.fogStart = id("fogStart");
     hud.ids.fogOp = id("fogOp");
     hud.ids.fogIn = id("fogIn");
+    hud.ids.rain = id("rain");
+    hud.ids.rainWet = id("rainWet");
+    hud.ids.rainRip = id("rainRip");
+    hud.ids.wind = id("wind");
+    hud.ids.windYaw = id("windYaw");
+    hud.ids.wxTime = id("wxTime");
+    hud.ids.wxDay = id("wxDay");
+    hud.ids.wxTemp = id("wxTemp");
+    hud.ids.wxClock = id("wxClock");
     hud.ids.zenith = id("zenith");
     hud.ids.azimuth = id("azimuth");
     hud.ids.clouds = id("clouds");
@@ -1188,7 +1231,7 @@ void sceneHud(Canvas& canvas, void* user) {
     rowSlide(*canvas.state, panel, "Color R", "sunR", 1.0f, 0.0f, 1.0f);
     rowSlide(*canvas.state, panel, "Color G", "sunG", 0.92f, 0.0f, 1.0f);
     rowSlide(*canvas.state, panel, "Color B", "sunB", 0.76f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "Zenith", "zenith", 35.0f, -10.0f, 80.0f);
+    rowSlide(*canvas.state, panel, "Zenith", "zenith", 35.0f, -70.0f, 80.0f);
     rowSlide(*canvas.state, panel, "Azimuth", "azimuth", 30.0f, 0.0f, 360.0f);
     const uint16_t postBody = uiPropSection(*canvas.state, details, "PostProcessing", catRender, kSecPost);
     const uint16_t giBody = uiFoldBody(*canvas.state, postBody, "GI");
@@ -1409,7 +1452,28 @@ void sceneHud(Canvas& canvas, void* user) {
     rowSlide(*canvas.state, panel, "Fog Luminance", "fogLum", 1.4f, 0.0f, 8.0f);
     rowSlide(*canvas.state, panel, "Sun Shafts", "fogS", 40.0f, 0.0f, 128.0f);
     rowSlide(*canvas.state, panel, "Shaft Start", "fogIn", 0.0f, 0.0f, 80.0f);
-    const uint16_t cloudFold = uiFoldBody(*canvas.state, atmo, "Clouds");
+    const uint16_t weather = uiPropSection(*canvas.state, details, "Weather", catRender, kSecWeather);
+    panel = weather;
+    {
+        const uint16_t menu = uiMakeMenu(*canvas.state);
+        uiCommandAddTo(*canvas.state, menu, "Clear", wxClear, hud);
+        uiCommandAddTo(*canvas.state, menu, "Overcast", wxOvercast, hud);
+        uiCommandAddTo(*canvas.state, menu, "Rain", wxRain, hud);
+        uiCommandAddTo(*canvas.state, menu, "Storm", wxStorm, hud);
+        uiName(*canvas.state, uiPropMenu(*canvas.state, weather, "Preset", "Rain", menu), "wxBtn");
+    }
+    rowSlide(*canvas.state, panel, "Time of day", "wxTime", 11.4f, 0.0f, 24.0f);
+    rowSlide(*canvas.state, panel, "Day length", "wxDay", 1200.0f, 60.0f, 7200.0f);
+    tick("Sun follows clock", "wxClock", false);
+    rowSlide(*canvas.state, panel, "Wind", "wind", 6.0f, 0.0f, 40.0f);
+    rowSlide(*canvas.state, panel, "Wind yaw", "windYaw", 23.0f, 0.0f, 360.0f);
+    rowSlide(*canvas.state, panel, "Temperature", "wxTemp", 12.0f, -20.0f, 45.0f);
+    const uint16_t rainFold = uiFoldBody(*canvas.state, weather, "Rain");
+    panel = rainFold;
+    rowSlide(*canvas.state, panel, "Amount", "rain", 3.0f, 0.0f, 4.0f);
+    rowSlide(*canvas.state, panel, "Wetness", "rainWet", 1.0f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, panel, "Ripples", "rainRip", 0.85f, 0.0f, 1.0f);
+    const uint16_t cloudFold = uiFoldBody(*canvas.state, weather, "Clouds");
     panel = cloudFold;
     tick("Enabled", "clouden", true);
     tick("Sky", "sky", true);
@@ -1863,9 +1927,21 @@ bool engineTick(Engine& e) {
         tweaks.fogStart = slideAt(hud, id.fogStart, 0.0f);
         tweaks.fogOpacity = slideAt(hud, id.fogOp, 0.92f);
         tweaks.fogInStart = slideAt(hud, id.fogIn, 0.0f);
+        tweaks.rainAmount = slideAt(hud, id.rain, 3.0f);
+        tweaks.rainWet = slideAt(hud, id.rainWet, 1.0f);
+        tweaks.rainRipple = slideAt(hud, id.rainRip, 0.85f);
+        const bool clockSun = checkOn(hud, id.wxClock, false);
         float zenith = slideAt(hud, id.zenith, 35.0f);
         float azimuth = slideAt(hud, id.azimuth, 30.0f);
-        if (sunIndex != kSceneActorNone) {
+        if (clockSun) {
+            zenith = sceneFrameWeatherZenith(e.scene);
+            azimuth = sceneFrameWeatherAzimuth(e.scene);
+            setSlide(hud, id.zenith, zenith);
+            setSlide(hud, id.azimuth, azimuth);
+            if (sunIndex != kSceneActorNone) {
+                sceneFrameActorSetEuler(e.scene, sunIndex, zenith, azimuth);
+            }
+        } else if (sunIndex != kSceneActorNone) {
             float pitch = zenith;
             float yaw = azimuth;
             sceneFrameActorEuler(e.scene, sunIndex, pitch, yaw);
@@ -1883,6 +1959,12 @@ bool engineTick(Engine& e) {
         tweaks.sunAzimuth = azimuth;
         tweaks.cloudCoverage = slideAt(hud, id.clouds, 0.42f);
         tweaks.cloudDensity = slideAt(hud, id.cdens, 0.08f);
+        tweaks.windSpeed = slideAt(hud, id.wind, 6.0f);
+        tweaks.windYaw = slideAt(hud, id.windYaw, 23.0f);
+        tweaks.temperatureC = slideAt(hud, id.wxTemp, 12.0f);
+        tweaks.dayLength = slideAt(hud, id.wxDay, 1200.0f);
+        tweaks.timeOfDay = slideAt(hud, id.wxTime, 11.4f);
+        tweaks.clockSun = checkOn(hud, id.wxClock, false) ? 1 : 0;
         tweaks.freeze = checkOn(hud, id.freeze, false);
         tweaks.passMask = 0;
         if (checkOn(hud, id.cluster, true)) {
@@ -1976,6 +2058,17 @@ bool engineTick(Engine& e) {
             }
         }
         sceneFrameTweaks(e.scene, tweaks);
+        const float shownTime = sceneFrameWeatherTime(e.scene);
+        if (shownTime >= 0.0f) {
+            setSlide(hud, id.wxTime, shownTime);
+            if (tweaks.clockSun != 0 && sunIndex != kSceneActorNone) {
+                const float zen = sceneFrameWeatherZenith(e.scene);
+                const float az = sceneFrameWeatherAzimuth(e.scene);
+                setSlide(hud, id.zenith, zen);
+                setSlide(hud, id.azimuth, az);
+                sceneFrameActorSetEuler(e.scene, sunIndex, zen, az);
+            }
+        }
         sceneFrameKick(e.scene, e.host.device);
         const char* gpuText = sceneFrameGpuText(e.scene);
         char lines[40][96]{};

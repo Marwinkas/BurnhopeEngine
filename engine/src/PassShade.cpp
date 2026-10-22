@@ -1,5 +1,6 @@
 #include "render/SceneFrameImpl.hpp"
 
+#include "render/Fog.hpp"
 #include "render/Gtao.hpp"
 #include "render/Sky.hpp"
 #include "rhi/GpuProfiler.hpp"
@@ -35,6 +36,9 @@ void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, Gt
         const bool restirSun = (ctx.post.flags.passMask & (1u << 21)) != 0u;
         GpuZone zone(ctx.profiler, ctx.cmd, restirSun ? "Surf" : "Sun");
         cloudNoiseEnsure(ctx.cmd, sky);
+        if ((ctx.post.flags.passMask & 2048u) != 0u) {
+            cloudShadowRecord(ctx.cmd, sky);
+        }
         shadeSunRecord(ctx.cmd, ctx.extent, shade);
     }
     imageBarrier(ctx.cmd, shade.surf0, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, false);
@@ -46,7 +50,7 @@ void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, Gt
     }
 }
 
-void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky) {
+void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, FogVolume& fog) {
     const VkAccessFlags2 hdrUse = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
     if ((ctx.post.flags.passMask & 8192u) != 0u) {
         imageBarrier(ctx.cmd, shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, false);
@@ -56,7 +60,11 @@ void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky
     if ((ctx.post.flags.passMask & 4096u) != 0u) {
         imageBarrier(ctx.cmd, shade.hdrA, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, hdrUse, VK_IMAGE_ASPECT_COLOR_BIT, false);
         GpuZone zone(ctx.profiler, ctx.cmd, "Fog");
-        shadeFogRecord(ctx.cmd, ctx.extent, shade);
+        if (fog.ready) {
+            fogRecord(ctx.cmd, fog, shade.hdrA, ctx.extent);
+        } else {
+            shadeFogRecord(ctx.cmd, ctx.extent, shade);
+        }
     }
     {
         GpuZone zone(ctx.profiler, ctx.cmd, "Clouds");

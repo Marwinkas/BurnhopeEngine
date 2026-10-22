@@ -40,4 +40,6 @@ bool physicsAddBox(PhysicsWorld* world, uint32_t instance, uint8_t actor, const 
 // heldActor == 0xff: every box is dynamic. Otherwise that actor is glued to its pose.
 void physicsStep(PhysicsWorld* world, float dt, uint8_t heldActor, PhysicsPose* poses, uint32_t count);
 
+[[nodiscard]] bool physicsRoof(const PhysicsWorld* world, float x, float y, float z);
+
 } // namespace burnhope

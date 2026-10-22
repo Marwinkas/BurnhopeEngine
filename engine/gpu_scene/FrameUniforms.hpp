@@ -161,11 +161,11 @@ struct AtmosphereParams {
     float sunAzimuth = 30.0f;
     float sunIntensity = 100000.0f;
     float sunDisk = 1.0f;
-    float rayleigh = 1.0f;
-    float mie = 1.0f;
-    float mieG = 0.8f;
+    float rayleigh = 0.62f;
+    float mie = 1.85f;
+    float mieG = 0.82f;
     float ozone = 1.0f;
-    float cloudCoverage = 0.42f;
+    float cloudCoverage = 0.58f;
     float cloudDensity = 0.08f;
     float cloudBottom = 1500.0f;
     float cloudTop = 4000.0f;

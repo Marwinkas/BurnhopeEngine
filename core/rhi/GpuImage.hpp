@@ -34,6 +34,16 @@ struct TrackedImage {
     uint32_t mipLevels = 1);
 
 // Плотный 3D-объём со всей цепочкой мипов. Сторона — степень двойки. Вид один, на все мипы.
+[[nodiscard]] bool gpuImageCreateFroxel(
+    GpuImage& img,
+    Device& d,
+    uint32_t width,
+    uint32_t height,
+    uint32_t depth,
+    VkFormat format,
+    VkImageUsageFlags usage,
+    VkImageAspectFlags aspect);
+
 [[nodiscard]] bool gpuImageCreateVolume(
     GpuImage& img,
     Device& d,

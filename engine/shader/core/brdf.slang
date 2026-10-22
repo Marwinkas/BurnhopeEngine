@@ -117,6 +117,11 @@ float filamentDistanceAttenuation(float dist, float radius) {
     return (smoothFactor * smoothFactor) / dist2;
 }
 
+// Кандела в единицы кадра. То же 5000, что kPhotometric и люкс солнца.
+float candelaScale(float candela) {
+    return candela * (1.0 / 5000.0);
+}
+
 float D_Charlie(float roughness, float NdotH) {
     const float invAlpha = 1.0 / max(roughness, 0.045);
     const float cos2h = NdotH * NdotH;

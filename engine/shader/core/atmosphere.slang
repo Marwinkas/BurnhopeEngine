@@ -143,5 +143,24 @@ float3 atmSunIllum(AtmosphereParams a, float3 sun) {
     const float day = atmSunFade(sun);
     const float warm = saturate(1.0 - sun.y * 3.0);
     const float3 color = lerp(float3(1.0, 0.92, 0.76), float3(1.0, 0.35, 0.12), warm * (1.0 - day * 0.5));
+    // 5000 — kPhotometric: люкс солнца в те же единицы, что и кандела ламп.
     return color * (a.sunIntensity / 5000.0) * max(day, 0.02);
+}
+
+float3 atmSunBody(AtmosphereParams a, float3 rd) {
+    const float3 sun = atmSunDir(a);
+    if (sun.y < -0.02) {
+        return float3(0.0, 0.0, 0.0);
+    }
+    const float mu = clamp(dot(rd, sun), -1.0, 1.0);
+    const float ang = acos(mu);
+    const float radius = 0.0048 * max(a.sunDisk, 0.4);
+    const float u = saturate(1.0 - ang / radius);
+    const float limb = u * u * (3.0 - 2.0 * u);
+    const float corona = exp(-ang / (radius * 3.5)) * 0.12;
+    const float body = limb * 6.0 + corona;
+    if (body < 0.01) {
+        return float3(0.0, 0.0, 0.0);
+    }
+    return atmSunIllum(a, sun) * body * atmSunFade(sun);
 }

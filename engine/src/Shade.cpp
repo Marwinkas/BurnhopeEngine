@@ -31,7 +31,7 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
     const bool hdrOk = recreateTracked(
             p.hdrA, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
         && recreateTracked(
             p.hdrB, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
@@ -80,7 +80,7 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     sun.sampledImg(42, HeapImg::SkyViewSample);
     sun.sampler(23, HeapSamp::Linear);
     sun.sampledImg(47, HeapImg::ContactSample);
-    sun.storageBuf(46, HeapBuf::CloudNoise);
+    sun.sampledImg(36, HeapImg::CloudShadowSample);
     sun.knob(50, HeapBuf::Flags);
     sun.knob(55, HeapBuf::Shade);
     sun.knob(58, HeapBuf::Atm);
@@ -276,7 +276,7 @@ bool shadePassResize(ShadePass& p, Device& d, VkExtent2D extent) {
     p.reflectHistClear = true;
     return recreateTracked(
             p.hdrA, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
         && recreateTracked(
             p.hdrB, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
             VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT)

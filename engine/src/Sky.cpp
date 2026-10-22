@@ -1,5 +1,7 @@
 #include "render/Sky.hpp"
 
+#include "gfx/Light.hpp"
+
 #include "render/RenderDefs.hpp"
 #include "render/HeapBind.hpp"
 #include "render/PassAllocators.hpp"
@@ -22,7 +24,7 @@ void atmosphereApply(FrameSun& sun, const AtmosphereParams& atm) {
     sun.sunDirIntensity[0] = dir[0];
     sun.sunDirIntensity[1] = dir[1];
     sun.sunDirIntensity[2] = dir[2];
-    sun.sunDirIntensity[3] = (atm.sunIntensity / 5000.0f) * std::max(fade, 0.02f);
+    sun.sunDirIntensity[3] = (atm.sunIntensity / kPhotometric) * std::max(fade, 0.02f);
     sun.sunColor[0] = 1.0f;
     sun.sunColor[1] = 0.92f + (0.35f - 0.92f) * warm * (1.0f - fade * 0.5f);
     sun.sunColor[2] = 0.76f + (0.12f - 0.76f) * warm * (1.0f - fade * 0.5f);
@@ -38,7 +40,8 @@ bool skyPassCreate(SkyPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
     const bool pics = recreateTracked(p.transmittance, d, trans, VK_FORMAT_R16G16B16A16_SFLOAT, usage, VK_IMAGE_ASPECT_COLOR_BIT)
         && recreateTracked(p.multiScatter, d, ms, VK_FORMAT_R16G16B16A16_SFLOAT, usage, VK_IMAGE_ASPECT_COLOR_BIT)
         && recreateTracked(p.skyView, d, view, VK_FORMAT_R16G16B16A16_SFLOAT, usage, VK_IMAGE_ASPECT_COLOR_BIT)
-        && recreateTracked(p.cloud, d, half, VK_FORMAT_R16G16B16A16_SFLOAT, usage, VK_IMAGE_ASPECT_COLOR_BIT);
+        && recreateTracked(p.cloud, d, half, VK_FORMAT_R16G16B16A16_SFLOAT, usage, VK_IMAGE_ASPECT_COLOR_BIT)
+        && recreateTracked(p.shadow, d, VkExtent2D{1024u, 1024u}, VK_FORMAT_R16_SFLOAT, usage, VK_IMAGE_ASPECT_COLOR_BIT);
     constexpr uint32_t kNoiseFloats = 128u * 128u * 128u + 32u * 32u * 32u;
     const bool noiseOk = pics && createDefaultGpuBuffer(p.noise, d, sizeof(float) * kNoiseFloats);
     if (!noiseOk || p.noise.mapped == nullptr) {
@@ -67,6 +70,11 @@ bool skyPassCreate(SkyPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
     marchBind.storageImg(44, HeapImg::Cloud);
     marchBind.storageBuf(46, HeapBuf::CloudNoise);
     marchBind.knob(58, HeapBuf::Atm);
+    PassBindings shadowBind{heaps};
+    shadowBind.ubo(0, HeapBuf::Frame);
+    shadowBind.storageImg(44, HeapImg::CloudShadow);
+    shadowBind.storageBuf(46, HeapBuf::CloudNoise);
+    shadowBind.knob(58, HeapBuf::Atm);
     PassBindings upBind{heaps};
     upBind.ubo(0, HeapBuf::Frame);
     upBind.sampledImg(1, HeapImg::Vis);
@@ -111,6 +119,12 @@ bool skyPassCreate(SkyPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
         .mappingCount = probeBind.raw.count,
         .mappings = probeBind.raw.mappings,
     };
+    const ShaderCreateDesc shadowDesc{
+        .path = BH_SHADER_DIR "/cloud.shadow.comp.spv",
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .mappingCount = shadowBind.raw.count,
+        .mappings = shadowBind.raw.mappings,
+    };
     const ShaderCreateDesc upDesc{
         .path = BH_SHADER_DIR "/cloud.up.comp.spv",
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -124,7 +138,7 @@ bool skyPassCreate(SkyPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
         .mappings = noiseBind.raw.mappings,
     };
     if (!shaderCreate(d, transDesc, p.transmittanceCs) || !shaderCreate(d, msDesc, p.multiCs) || !shaderCreate(d, viewDesc, p.skyViewCs)
-        || !shaderCreate(d, marchDesc, p.cloudMarch) || !shaderCreate(d, upDesc, p.cloudUp)
+        || !shaderCreate(d, marchDesc, p.cloudMarch) || !shaderCreate(d, shadowDesc, p.cloudShadow) || !shaderCreate(d, upDesc, p.cloudUp)
         || !shaderCreate(d, noiseDesc, p.noiseCs)
         || !shaderCreate(d, probeDesc, p.skyProbe)) {
         spdlog::error("sky shader failed");
@@ -144,10 +158,11 @@ void skyPassDestroy(SkyPass& p, Device& d) {
     shaderDestroy(d, p.noiseCs);
     shaderDestroy(d, p.cloudUp);
     shaderDestroy(d, p.cloudMarch);
+    shaderDestroy(d, p.cloudShadow);
     shaderDestroy(d, p.skyViewCs);
     shaderDestroy(d, p.multiCs);
     shaderDestroy(d, p.transmittanceCs);
-    destroyTracked(d, {&p.cloud, &p.skyView, &p.multiScatter, &p.transmittance});
+    destroyTracked(d, {&p.cloud, &p.shadow, &p.skyView, &p.multiScatter, &p.transmittance});
     destroyBuffers(d, {&p.noise});
     p.noiseReady = false;
 }
@@ -180,6 +195,16 @@ void cloudNoiseEnsure(VkCommandBuffer cmd, SkyPass& p) {
     vkCmdDispatch(cmd, 32, 32, 32);
     bufferBarrierComputeWriteToRead(cmd, p.noise.buffer, 0, p.noise.size);
     p.noiseReady = true;
+}
+
+void cloudShadowRecord(VkCommandBuffer cmd, SkyPass& p) {
+    if (p.cloudShadow.handle == VK_NULL_HANDLE || p.shadow.image.image == VK_NULL_HANDLE) {
+        return;
+    }
+    cloudNoiseEnsure(cmd, p);
+    imageBarrier(cmd, p.shadow, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+    dispatchCompute2D(cmd, p.cloudShadow, VkExtent2D{1024u, 1024u}, 8u);
+    imageBarrier(cmd, p.shadow, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT, true);
 }
 
 void cloudRecord(VkCommandBuffer cmd, SkyPass& p, VkExtent2D extent) {

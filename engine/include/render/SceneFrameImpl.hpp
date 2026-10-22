@@ -25,6 +25,9 @@
 #include "render/Voxel.hpp"
 #include "render/SceneFrame.hpp"
 #include "render/Gizmo.hpp"
+#include "render/Particles.hpp"
+#include "render/Fog.hpp"
+#include "render/Rain.hpp"
 #include "render/Tonemap.hpp"
 #include "render/Visbuffer.hpp"
 #include "rhi/Swapchain.hpp"
@@ -42,6 +45,7 @@
 namespace burnhope {
 
 struct PhysicsWorld;
+struct AudioWorld;
 
 constexpr uint32_t kSceneVerts = 512;
 constexpr uint32_t kSceneTris = 256;
@@ -53,6 +57,7 @@ struct SceneFrameImpl {
     bool ready = false;
     FlyCam fly{};
     SceneActors actors{};
+    flecs::entity weatherEnt{};
     GizmoPass gizmo{};
     TestScene world{};
     VisPass vis{};
@@ -145,6 +150,18 @@ struct SceneFrameImpl {
     };
     PropLink props[kPropCap]{};
     PhysicsWorld* physics = nullptr;
+    AudioWorld* audio = nullptr;
+    ParticlePass particles{};
+    FogVolume fog{};
+    RainPass rain{};
+    float simDt = 0.0f;
+    float camShock = 0.0f;
+    float camShockVel = 0.0f;
+    float camBob = 0.0f;
+    float camPrevEye[3]{};
+    uint32_t camBursts = 1;
+    float impactY[kPropCap]{};
+    float impactVy[kPropCap]{};
     uint8_t propCount = 0;
     uint8_t propPhase = 0;
     uint8_t propDirty = 0;
@@ -249,6 +266,9 @@ struct SceneFrameImpl {
     float fogStart = 0.0f;
     float fogOpacity = 0.92f;
     float fogInStart = 0.0f;
+    float rainAmount = 3.0f;
+    float rainWet = 1.0f;
+    float rainRipple = 0.85f;
     uint32_t tonemapper = 0;
     std::vector<GpuVertex> ownedVert;
     std::vector<uint32_t> ownedIndex;
@@ -307,7 +327,7 @@ void framePassVis(
     const VisInstanceDraw& lateDraw);
 void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, GtaoPass& gtao, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes, bool restirDi, float fovY);
 void framePassRestir(const RenderContext& ctx, RestirPass& restir, const FrameView& view, const void* lights, uint32_t lightCount, uint32_t passMask, VkDeviceAddress tlas);
-void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky);
+void framePassShadeLate(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, FogVolume& fog);
 void framePassRadiance(const RenderContext& ctx, RadiancePass& rad, TrackedImage& hdrA, bool worldRc, float rays, float spacing, float intensity, float maxDist, float sunScale, float bounce);
 void framePassSharc(const RenderContext& ctx, SharcPass& sharc, TrackedImage& hdrA, float giGain, uint32_t lightCount, VkDeviceAddress tlas, const RestirPass& restir, uint32_t restirOn, uint32_t denoise);
 void framePassVoxel(const RenderContext& ctx, VoxelPass& voxel, TrackedImage& hdrA, bool worldVx, uint32_t instances, bool moved);

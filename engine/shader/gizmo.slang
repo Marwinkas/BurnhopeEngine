@@ -47,6 +47,10 @@ float3 axisColor(int axis) {
     return float3(0.28, 0.48, 0.95);
 }
 
+float pxAt(float3 p) {
+    return max(length(p - gGizmo.cam.xyz), 0.2) * gGizmo.cam.w;
+}
+
 float3 sideOf(float3 dir, float3 at, float width) {
     float3 n = cross(dir, gGizmo.cam.xyz - at);
     if (dot(n, n) < 1e-8) {
@@ -92,6 +96,36 @@ void emitShaft(float3 from, float3 to, float width, float3 col) {
     emitQuad(from - s, from + s, to + s, to - s, col);
 }
 
+void emitEdge(float3 a, float3 b, float width, float3 col) {
+    emitShaft(a, b, width, col);
+}
+
+void emitBox(float3 o, float3 ax, float3 ay, float3 az, float hx, float hy, float hz, float width, float3 col) {
+    const float3 x = ax * hx;
+    const float3 y = ay * hy;
+    const float3 z = az * hz;
+    const float3 c000 = o - x - y - z;
+    const float3 c100 = o + x - y - z;
+    const float3 c010 = o - x + y - z;
+    const float3 c110 = o + x + y - z;
+    const float3 c001 = o - x - y + z;
+    const float3 c101 = o + x - y + z;
+    const float3 c011 = o - x + y + z;
+    const float3 c111 = o + x + y + z;
+    emitEdge(c000, c100, width, col);
+    emitEdge(c010, c110, width, col);
+    emitEdge(c001, c101, width, col);
+    emitEdge(c011, c111, width, col);
+    emitEdge(c000, c010, width, col);
+    emitEdge(c100, c110, width, col);
+    emitEdge(c001, c011, width, col);
+    emitEdge(c101, c111, width, col);
+    emitEdge(c000, c001, width, col);
+    emitEdge(c100, c101, width, col);
+    emitEdge(c010, c011, width, col);
+    emitEdge(c110, c111, width, col);
+}
+
 void emitRing(int axis, float radius, float width, float3 col) {
     const float3 dir = axisDir(axis);
     float3 u = cross(dir, abs(dir.y) < 0.9 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0));
@@ -115,7 +149,6 @@ void emitRing(int axis, float radius, float width, float3 col) {
 void gizmoMesh(out vertices VertOut verts[256], out indices uint3 prims[128]) {
     gNv = 0;
     gNp = 0;
-    const float mark = max(gGizmo.misc.x, 0.4) * 0.22;
     const int count = min(int(gGizmo.misc.w + 0.5), 8);
     for (int i = 0; i < 8; ++i) {
         if (i >= count) {
@@ -123,18 +156,26 @@ void gizmoMesh(out vertices VertOut verts[256], out indices uint3 prims[128]) {
         }
         const float3 p = gGizmo.marker[i].xyz;
         const int kind = int(gGizmo.marker[i].w + 0.5);
+        if (kind == 3) {
+            continue;
+        }
+        const float mark = pxAt(p) * 9.0;
         const bool here = gGizmo.origin.w > 0.5 && dot(p - gGizmo.origin.xyz, p - gGizmo.origin.xyz) < 0.02;
         const float3 faceUp = here ? gGizmo.ay.xyz : float3(0.0, 1.0, 0.0);
         if (kind == 1) {
             emitBillboard(p, faceUp, mark * 0.95, mark * 0.95, float3(0.95, 0.62, 0.18));
             emitBillboard(p, faceUp, mark * 0.38, mark * 0.38, float3(1.0, 0.9, 0.45));
         } else {
-            emitBillboard(p, faceUp, mark * 1.15, mark * 0.72, float3(0.22, 0.28, 0.36));
-            emitBillboard(p, faceUp, mark * 0.72, mark * 0.16, float3(0.95, 0.55, 0.22));
+            emitBillboard(p, faceUp, mark * 0.7, mark * 0.7, float3(0.55, 0.62, 0.72));
+            emitBillboard(p, faceUp, mark * 0.28, mark * 0.28, float3(0.95, 0.78, 0.42));
         }
     }
+    if (gGizmo.origin.w > 0.5 && gGizmo.ax.w > 0.001 && gGizmo.ay.w > 0.001 && gGizmo.az.w > 0.001) {
+        const float3 o = gGizmo.origin.xyz;
+        emitBox(o, gGizmo.ax.xyz, gGizmo.ay.xyz, gGizmo.az.xyz, gGizmo.ax.w, gGizmo.ay.w, gGizmo.az.w, pxAt(o) * 1.4, float3(0.95, 0.86, 0.42));
+    }
     if (gGizmo.origin.w > 0.5) {
-        const float hub = max(gGizmo.misc.x, 0.4) * 0.16;
+        const float hub = pxAt(gGizmo.origin.xyz) * 7.0;
         const float3 o = gGizmo.origin.xyz;
         emitBillboard(o, gGizmo.ay.xyz, hub * 0.45, hub * 0.45, float3(0.96, 0.96, 0.96));
         emitShaft(o, o + gGizmo.ax.xyz * hub, hub * 0.12, float3(0.93, 0.28, 0.22));
@@ -142,8 +183,8 @@ void gizmoMesh(out vertices VertOut verts[256], out indices uint3 prims[128]) {
         emitShaft(o, o + gGizmo.az.xyz * hub, hub * 0.12, float3(0.28, 0.48, 0.95));
     }
     if (gGizmo.origin.w > 0.5) {
-        const float len = max(gGizmo.misc.x, 0.4);
-        const float width = len * 0.035;
+        const float len = max(gGizmo.misc.x, 0.05);
+        const float width = pxAt(gGizmo.origin.xyz) * 2.2;
         const int mode = int(gGizmo.misc.y + 0.5);
         const float3 o = gGizmo.origin.xyz;
         [unroll]

@@ -9,6 +9,8 @@
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
 
@@ -510,6 +512,15 @@ void physicsStep(PhysicsWorld* world, float dt, uint8_t heldActor, PhysicsPose* 
         poses[i].scale[2] = dyn.scale[2];
     }
     world->heldLast = heldActor;
+}
+
+bool physicsRoof(const PhysicsWorld* world, float x, float y, float z) {
+    if (world == nullptr || !world->open) {
+        return false;
+    }
+    const JPH::RRayCast ray{JPH::RVec3(x, y + 0.2, z), JPH::Vec3(0.0f, 22.0f, 0.0f)};
+    JPH::RayCastResult hit;
+    return world->system.GetNarrowPhaseQuery().CastRay(ray, hit);
 }
 
 } // namespace burnhope

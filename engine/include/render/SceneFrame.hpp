@@ -35,6 +35,7 @@ constexpr uint8_t kSecMaterial = 2u;
 constexpr uint8_t kSecPost = 4u;
 constexpr uint8_t kSecAtmo = 8u;
 constexpr uint8_t kSecSun = 16u;
+constexpr uint8_t kSecWeather = 32u;
 
 struct ActorPose {
     float pos[3]{};
@@ -139,21 +140,34 @@ struct SceneTweaks {
     float fogStart = 0.0f;
     float fogOpacity = 0.92f;
     float fogInStart = 0.0f;
+    float rainAmount = 3.0f;
+    float rainWet = 1.0f;
+    float rainRipple = 0.85f;
     float sunZenith = 35.0f;
     float sunAzimuth = 30.0f;
     float cloudCoverage = 0.42f;
     float cloudDensity = 0.08f;
+    float windSpeed = 6.0f;
+    float windYaw = 23.0f;
+    float temperatureC = 12.0f;
+    float dayLength = 1200.0f;
+    float timeOfDay = 11.4f;
+    int clockSun = 0;
     uint32_t tonemapper = 0;
     bool freeze = false;
 };
 
 void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks);
+void sceneFrameWeatherPreset(SceneFrame* scene, uint32_t preset);
+[[nodiscard]] float sceneFrameWeatherTime(const SceneFrame* scene);
+[[nodiscard]] float sceneFrameWeatherZenith(const SceneFrame* scene);
+[[nodiscard]] float sceneFrameWeatherAzimuth(const SceneFrame* scene);
 [[nodiscard]] const char* sceneFrameGpuText(const SceneFrame* scene);
 void sceneFrameShift(SceneFrame* scene, float dx, float dy, float dz);
 [[nodiscard]] bool sceneFrameAppendBhop(SceneFrame* scene, const char* path);
 // Ползунки панели. Имена, не индексы post[12].
 struct HudPost {
-    float grain = 0.0f;
+    float grain = 0.04f;
     float brightness = 1.0f;
     float bloom = 0.15f;
     float vignette = 1.1f;

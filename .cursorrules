@@ -447,3 +447,26 @@ NEVER store a reflection miss as the sky LUT when the up-ray hits (the white sam
 NEVER mix two neighbor ReSTIR reservoirs inside a room (each lamp flips and the shade boils); ALWAYS keep that mix outdoors and raise the indoor history cap to 64, 12 bytes.
 NEVER keep an emissive mesh out of the light list or let its own surface block the shadow ray (the panel stays dark and the bounce drops the glow); ALWAYS one point light per emissive instance with flag bit 2, the ray continues through that material, and SHaRC adds baseColor times emissive times 8, 12 bytes.
 NEVER leave a released prop kinematic or skip the world triangles (the cube hangs or falls through the street); ALWAYS a Jolt static mesh of every non-prop instance plus a ground slab, and a dynamic box once the gizmo lets go, 12 bytes.
+NEVER offset the look target sideways from the step bob or leave that phase unwrapped (sin of a huge float snaps the view left and right every frame); ALWAYS the same vertical offset on the eye and the target, and wrap the phase to two pi, 8 bytes.
+NEVER mask rain wetness with the floor of a world cell (the ground becomes a grid of dry and wet squares); ALWAYS hermite value noise so every surface stays wet and only the amount changes, 4 bytes.
+NEVER sample an SSR lobe with the frame index (the same pixel picks a new direction every frame and the reflection boils); ALWAYS the pixel coordinate alone, 8 bytes.
+NEVER scroll a rain normal with a pair of plane waves or a stream in every floor cell (the surface becomes a checker that slides one way); ALWAYS the slope of stretched hermite noise, and a stream only on the ridge, 8 bytes.
+NEVER replace a rain drop with a new spawn on the impact frame (the streak pops off and no puddle is left); ALWAYS shrink that streak with its life over 0.26 s and leave a flat puddle of 3.5 to 6 cm, 8 bytes.
+NEVER scroll a wall drip as a 2D noise cell (a patch of meters slides down the wall); ALWAYS many thin streams across the surface, each a smooth bead moving along the projected gravity, 4 bytes.
+NEVER cap falling rain at 640 streaks (the air stays empty when the amount slider is high); ALWAYS 4096 slots and an amount of 0 to 4, 4 bytes.
+NEVER cut rain wetness with one roof ray (the dry patch ends in a hard line under a mesh); ALWAYS the mean of five rays spread 0.7 m so the edge fades, 4 bytes.
+NEVER swap the rain beds with one slew (the roof file replaces the weather in a step); ALWAYS a 1.8 s crossfade that keeps both above 0.16, 4 bytes.
+NEVER paint a wall drip as albedo times 0.28 (the streak is a solid gray stripe); ALWAYS a 3 percent darkening so the wall stays visible, 4 bytes.
+NEVER spawn rain in a 9 m cube on the camera (half the streaks sit behind the view); ALWAYS a box 2 to 16 m ahead, 16 m wide and 8 m tall, 12 bytes.
+NEVER keep rain in a horizontal slab 12 m above the camera (the upward view is empty and streaks show only on the ground); ALWAYS a view-aligned box 1 to 18 m along the look, 14 m wide and 12 m tall, 12 bytes.
+NEVER tie the rain box to the look (a downward view carries the drops and they crawl like confetti); ALWAYS a world cylinder 9 m across and 18 m tall, streak 0.08 s long, 8 bytes.
+NEVER stretch a rain streak by 0.08 s of fall (looking up draws rays from one point); ALWAYS a streak of 10 to 22 cm along the velocity, 4 bytes.
+NEVER sample cloud shape from one periodic 128³ cell (the same cube repeats across the sky); ALWAYS a weather-warped sample blended with a second phase at the tile edge, 12 bytes rgb.
+NEVER march a cloud shadow inside the sun shade (every pixel walks the volume and the shadow never sticks to the ground); ALWAYS a 1024² top-down transmittance at slot 936, 2 bytes per texel, sampled before the sun term.
+NEVER drive the clock sun by elevation alone (after noon it walks back down the same line); ALWAYS azimuth = hour * 15 degrees and elevation = sin((hour - 6) * pi / 12) * 62, 8 bytes.
+NEVER stamp the solar disk into the 192×108 sky LUT (the disk is a block of texels); ALWAYS a smooth limb at full resolution in the sky pass, 12 bytes rgb.
+NEVER scale surface wetness by the live rain amount (the ground is soaked the frame the slider moves); ALWAYS accumulate wetness from rain times cloud cover over 60 s, 4 bytes.
+NEVER leave air temperature unread (the slider does not change the air); ALWAYS thicken fog as Celsius falls below 12 and dry the ground faster as it rises, 4 bytes.
+NEVER size every gizmo icon from the selected span (a far pick inflates every marker); ALWAYS an 18 px icon from that marker's own depth, 4 bytes.
+NEVER draw a flat card on a mesh actor (the cube wears a billboard); ALWAYS a 12-edge box from ActorBounds when that actor is selected, 12 bytes xyz.
+NEVER abort actor picking when the selected gizmo is behind the camera (the click hits nothing); ALWAYS test the axes only when the origin projects, then the other actors, 4 bytes.

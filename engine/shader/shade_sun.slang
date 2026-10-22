@@ -37,7 +37,7 @@ float3 sampleEnv(float3 dir, float roughness) {
 
 [[vk::binding(42, 0)]] Texture2D<float4> gSkyView;
 [[vk::binding(23, 0)]] SamplerState gClamp;
-[[vk::binding(46, 0)]] StructuredBuffer<float> gNoise;
+[[vk::binding(36, 0)]] Texture2D<float> gCloudShadow;
 [[vk::binding(47, 0)]] Texture2D<float> gContact;
 [[vk::binding(58, 0)]] ConstantBuffer<AtmosphereParams> gAtm;
 
@@ -47,47 +47,22 @@ float3 shadowPoint(uint cascade, float3 P, float3 N, float NdotL) {
     return P + N * texel * slope;
 }
 
-float cloudNoiseAt(float3 uv, uint res, uint base) {
-    const float3 q = frac(uv) * float(res);
-    const uint3 i = uint3(q) % res;
-    return gNoise[base + i.x + i.y * res + i.z * res * res];
-}
-
-float cloudDensityAt(float3 world, float height01) {
-    const float3 wind = float3(gAtm.cloudSpeedX, height01 * 8.0, gAtm.cloudSpeedZ) * gAtm.time;
-    const float3 p = world + wind;
-    const float worley = cloudNoiseAt(p / 1800.0, 128u, 0u);
-    const float shape = saturate((0.62 - worley) * 2.4);
-    const float detail = cloudNoiseAt(p / 320.0 + 19.0, 32u, 128u * 128u * 128u);
-    const float base = shape * gAtm.cloudCoverage * 1.6 - detail * gAtm.cloudDetail * (0.2 + height01);
-    return saturate(base) * gAtm.cloudDensity * 14.0;
-}
-
-// Тот же слой, что рисует cloudMarch: луч солнца через низ и верх облаков.
+// Карта 1024², слот 937. Сдвиг вдоль солнца до низа слоя, та же сетка 8 м, что пишет cloudShadowCs.
 float cloudGroundShadow(float3 worldPos, float3 L) {
     if ((gPass.passMask & 2048u) == 0u || L.y <= 0.05) {
         return 1.0;
     }
-    if (gAtm.cloudCoverage <= 0.01 || gAtm.cloudDensity <= 0.0005) {
+    const float bottom = max(gAtm.cloudBottom, 1200.0);
+    const float cell = 8.0;
+    const float2 origin = floor(gFrame.cameraPos.xz / cell) * cell;
+    const float t = clamp((bottom - worldPos.y) / max(L.y, 0.2), 0.0, 12000.0);
+    const float2 xz = worldPos.xz + L.xz * t;
+    const float2 uv = (xz - origin) / 8192.0 + 0.5;
+    if (uv.x <= 0.0 || uv.y <= 0.0 || uv.x >= 1.0 || uv.y >= 1.0) {
         return 1.0;
     }
-    const float bottom = gAtm.cloudBottom;
-    const float top = max(gAtm.cloudTop, bottom + 200.0);
-    const float span = top - bottom;
-    const float dt = span / 6.0;
-    float optical = 0.0;
-    [unroll]
-    for (int i = 0; i < 6; ++i) {
-        const float u = (float(i) + 0.5) / 6.0;
-        const float h = bottom + span * u;
-        const float t = (h - worldPos.y) / L.y;
-        if (t <= 0.0) {
-            continue;
-        }
-        optical += cloudDensityAt(worldPos + L * t, u) * dt * 0.012;
-    }
-    const float trans = exp(-optical);
-    return lerp(0.42, 1.0, trans);
+    const float vis = gCloudShadow.Load(int3(int2(uv * 1024.0), 0));
+    return lerp(0.45, 1.0, saturate(vis));
 }
 
 [shader("compute")]
@@ -106,7 +81,8 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         if ((gPass.passMask & 1024u) != 0u) {
             const float inten = gSun.sunDirIntensity.w;
             const float wrap = saturate(hit.N.y * 0.4 + 0.6);
-            skyAmb = hit.albedo * (1.0 - hit.metallic) * float3(0.78, 0.82, 0.88) * (inten * 0.055) * wrap * saturate(hit.gtao);
+            const float3 skyChroma = lerp(float3(0.78, 0.82, 0.88), float3(0.50, 0.54, 0.60), saturate(gAtm.cloudCoverage));
+            skyAmb = hit.albedo * (1.0 - hit.metallic) * skyChroma * (inten * 0.055) * wrap * saturate(hit.gtao);
         }
         gHdr[px] = float4(max(skyAmb + hit.emissive, 0.0), hit.roughness);
         return;

@@ -14,7 +14,7 @@ namespace burnhope {
 
 constexpr uint8_t kSceneActorNone = 0xff;
 
-enum class SceneActorKind : uint8_t { Sun = 1, Post = 2, Prop = 3 };
+enum class SceneActorKind : uint8_t { Sun = 1, Post = 2, Prop = 3, Weather = 4 };
 
 // Одна поза на всех. Солнце и пост её подключают, свою копию не заводят.
 struct Xform {
@@ -83,6 +83,13 @@ struct ActorName {
 struct SunObj {};
 struct PostObj {};
 struct PropObj {};
+struct WeatherObj {};
+
+// Полурёбра меша в локальных осях, до scale. Обводка и клик читают только это.
+struct alignas(16) ActorBounds {
+    float half[3]{0.5f, 0.5f, 0.5f};
+    float pad = 0.0f;
+};
 
 static_assert(std::is_trivially_copyable_v<Xform>);
 static_assert(std::is_trivially_copyable_v<Transform>);
@@ -95,6 +102,8 @@ static_assert(std::is_trivially_copyable_v<PostProcess>);
 static_assert(std::is_trivially_copyable_v<Atmosphere>);
 static_assert(std::is_trivially_copyable_v<ActorKind>);
 static_assert(std::is_trivially_copyable_v<ActorName>);
+static_assert(std::is_trivially_copyable_v<ActorBounds>);
+static_assert(sizeof(ActorBounds) == 16);
 
 struct GizmoGpu {
     float viewProj[16]{};
@@ -325,7 +334,10 @@ inline uint8_t sceneActorAdd(SceneActors& world, SceneActorKind kind, const floa
     if (kind == SceneActorKind::Sun) {
         ent.add<SunObj>();
     } else if (kind == SceneActorKind::Prop) {
+        ent.set<ActorBounds>({});
         ent.add<PropObj>();
+    } else if (kind == SceneActorKind::Weather) {
+        ent.add<WeatherObj>();
     } else {
         ent.set<PostProcess>({});
         ent.set<Atmosphere>({});
@@ -505,15 +517,25 @@ inline float actorRayAxis(const float ro[3], const float rd[3], const float p0[3
     return actorLen(delta);
 }
 
-inline float actorSpan(const SceneActors& world, const float pos[3]) {
-    float d[3];
-    actorSub(pos, world.eye, d);
-    float len = actorLen(d) * 0.18f;
-    if (len < 0.75f) {
-        len = 0.75f;
+inline float actorMetersPerPx(const SceneActors& world, const float pos[3]) {
+    float delta[3];
+    actorSub(pos, world.eye, delta);
+    float dist = actorLen(delta);
+    if (dist < 0.2f) {
+        dist = 0.2f;
     }
-    if (len > 12.0f) {
-        len = 12.0f;
+    const float tanY = world.tanY > 1.0e-4f ? world.tanY : 0.57735026f;
+    const float height = world.extentH > 1.0f ? world.extentH : 1.0f;
+    return dist * (2.0f * tanY) / height;
+}
+
+inline float actorSpan(const SceneActors& world, const float pos[3]) {
+    float len = actorMetersPerPx(world, pos) * 72.0f;
+    if (len < 0.08f) {
+        len = 0.08f;
+    }
+    if (len > 48.0f) {
+        len = 48.0f;
     }
     return len;
 }
@@ -532,8 +554,8 @@ inline float actorPickPx(const SceneActors& world, const float origin[3], float 
         return 10.0f;
     }
     float px = std::sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) * 2.2f;
-    if (px < 8.0f) {
-        px = 8.0f;
+    if (px < 12.0f) {
+        px = 12.0f;
     }
     if (px > 16.0f) {
         px = 16.0f;
@@ -541,12 +563,13 @@ inline float actorPickPx(const SceneActors& world, const float origin[3], float 
     return px;
 }
 
-inline bool actorAlong(const SceneActors& world, float px, float py, const float origin[3], const float dir[3], float& along, uint8_t& screen) {
+inline bool actorAlong(const SceneActors& world, float px, float py, const float origin[3], const float dir[3], float& along, uint8_t& screen, int stick = -1) {
     float ro[3];
     float rd[3];
     actorRay(world, px, py, ro, rd);
     const float align = std::fabs(actorDot(rd, dir));
-    if (align > 0.92f) {
+    const bool useScreen = stick < 0 ? align > 0.92f : stick == 1;
+    if (useScreen) {
         float ax = 0.0f;
         float ay = 0.0f;
         float bx = 0.0f;
@@ -610,7 +633,9 @@ inline float actorRingAngle(const SceneActors& world, float px, float py, const 
 inline void sceneActorFillGpu(const SceneActors& world, GizmoGpu& gpu) {
     std::memcpy(gpu.viewProj, world.viewProj.m, sizeof(gpu.viewProj));
     std::memcpy(gpu.cam, world.eye, sizeof(float) * 3);
-    gpu.cam[3] = 1.0f;
+    const float tanY = world.tanY > 1.0e-4f ? world.tanY : 0.57735026f;
+    const float height = world.extentH > 1.0f ? world.extentH : 1.0f;
+    gpu.cam[3] = (2.0f * tanY) / height;
     gpu.origin[3] = 0.0f;
     gpu.misc[1] = static_cast<float>(world.gizmo);
     gpu.misc[2] = world.drag < 3 ? static_cast<float>(world.drag) : 3.0f;
@@ -644,6 +669,15 @@ inline void sceneActorFillGpu(const SceneActors& world, GizmoGpu& gpu) {
     std::memcpy(gpu.ax, x, sizeof(x));
     std::memcpy(gpu.ay, y, sizeof(y));
     std::memcpy(gpu.az, z, sizeof(z));
+    gpu.ax[3] = 0.0f;
+    gpu.ay[3] = 0.0f;
+    gpu.az[3] = 0.0f;
+    if (world.selected < world.count && world.ent[world.selected].is_alive() && world.ent[world.selected].has<ActorBounds>()) {
+        const ActorBounds& box = world.ent[world.selected].get<ActorBounds>();
+        gpu.ax[3] = box.half[0] * xform.scale[0];
+        gpu.ay[3] = box.half[1] * xform.scale[1];
+        gpu.az[3] = box.half[2] * xform.scale[2];
+    }
     gpu.misc[0] = actorSpan(world, xform.pos);
 }
 
@@ -663,8 +697,8 @@ inline uint8_t sceneActorHit(const SceneActors& world, float px, float py, uint8
         float ox = 0.0f;
         float oy = 0.0f;
         if (!actorProject(world, xform.pos, ox, oy)) {
-            return kSceneActorNone;
-        }
+            ox = -1.0e8f;
+        } else {
         for (uint8_t a = 0; a < 3; ++a) {
             if (world.gizmo == 1) {
                 float u[3];
@@ -741,8 +775,9 @@ inline uint8_t sceneActorHit(const SceneActors& world, float px, float py, uint8
                 axis = a;
             }
         }
-        if (axis != kSceneActorNone) {
-            return world.selected;
+            if (axis != kSceneActorNone) {
+                return world.selected;
+            }
         }
     }
     uint8_t found = kSceneActorNone;
@@ -752,25 +787,28 @@ inline uint8_t sceneActorHit(const SceneActors& world, float px, float py, uint8
         if (actor == nullptr) {
             continue;
         }
-        const float span = actorSpan(world, actor->pos);
         float sx = 0.0f;
         float sy = 0.0f;
-        float tx = 0.0f;
-        float ty = 0.0f;
-        const float arm[3] = {
-            actor->pos[0] + world.right[0] * span * 0.32f,
-            actor->pos[1] + world.right[1] * span * 0.32f,
-            actor->pos[2] + world.right[2] * span * 0.32f,
-        };
-        if (!actorProject(world, actor->pos, sx, sy) || !actorProject(world, arm, tx, ty)) {
+        if (!actorProject(world, actor->pos, sx, sy)) {
             continue;
         }
-        float radius = std::sqrt((tx - sx) * (tx - sx) + (ty - sy) * (ty - sy));
-        if (radius < 10.0f) {
-            radius = 10.0f;
-        }
-        if (radius > 28.0f) {
-            radius = 28.0f;
+        float radius = 16.0f;
+        if (world.ent[i].has<ActorBounds>()) {
+            const ActorBounds& box = world.ent[i].get<ActorBounds>();
+            const float reach = box.half[0] * actor->scale[0];
+            const float corner[3] = {
+                actor->pos[0] + world.right[0] * reach,
+                actor->pos[1] + world.right[1] * reach,
+                actor->pos[2] + world.right[2] * reach,
+            };
+            float tx = 0.0f;
+            float ty = 0.0f;
+            if (actorProject(world, corner, tx, ty)) {
+                radius = std::sqrt((tx - sx) * (tx - sx) + (ty - sy) * (ty - sy));
+                if (radius < 14.0f) {
+                    radius = 14.0f;
+                }
+            }
         }
         const float dist = std::sqrt((px - sx) * (px - sx) + (py - sy) * (py - sy));
         if (dist < radius && dist < best) {
@@ -844,7 +882,7 @@ inline void sceneActorPointer(SceneActors& world, float x, float y, uint8_t down
     }
     float along = 0.0f;
     uint8_t screen = 0;
-    actorAlong(world, x, y, world.grabPos, basis[axis], along, screen);
+    actorAlong(world, x, y, world.grabPos, basis[axis], along, screen, static_cast<int>(world.grabScreen));
     if (screen != world.grabScreen) {
         return;
     }

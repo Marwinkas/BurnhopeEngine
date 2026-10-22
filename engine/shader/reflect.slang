@@ -91,8 +91,7 @@ float3 sssrProject(float3 world) {
 }
 
 float sssrBlue(int2 pixel, uint salt) {
-    const uint frame = gSharc.frameIndex;
-    const int2 p = pixel + int2(int(frame & 255u) * 5, int((frame >> 8u) & 255u) * 3) + int2(int(salt), int(salt * 3u));
+    const int2 p = pixel + int2(int(salt), int(salt * 3u));
     return frac(52.9829189 * frac(0.06711056 * float(p.x) + 0.00583715 * float(p.y)));
 }
 
@@ -302,7 +301,7 @@ float3 sssrRt(float3 P, float3 N, float3 worldDir, float2 uv, uint2 px, out floa
         }
         return sssrSky(worldDir);
     }
-    uint rng = px.x * 1973u ^ px.y * 9277u ^ gSharc.frameIndex;
+    uint rng = px.x * 1973u ^ px.y * 9277u;
     const float3 direct = sharcDirect(surf, -worldDir, rng);
     SharcHitData sharcHit;
     sharcHit.positionWorld = hitP;
@@ -581,7 +580,13 @@ void reflectUp(uint3 dtid : SV_DispatchThreadID) {
             }
         }
     } else if (raw.a <= 0.0) {
-        resolved = 0.0;
+        const float4 kept = sssrLoadHist(ip);
+        if (kept.a >= 1.0) {
+            resolved = kept.rgb;
+            numSamples = min(kept.a, 16.0);
+        } else {
+            resolved = 0.0;
+        }
     }
     sssrStoreHist(ip, float4(max(resolved, 0.0), numSamples));
     if (gFrame.debugMode == 7u) {

@@ -254,7 +254,7 @@ float3 sharcDirectLite(SharcSurf surf, float3 view) {
                 atten *= cd < outer ? 0.0 : cone * cone;
             }
             float lampDiff = hammonDiffuse(lampNdl, max(ndv, 0.15), dot(view, L), rough);
-            float3 lampCol = lamp.colorIntensity.rgb * lamp.colorIntensity.w;
+            float3 lampCol = lamp.colorIntensity.rgb * candelaScale(lamp.colorIntensity.w);
             lampSum += diffuse * lampDiff * atten * lampCol;
         }
         direct += min(lampSum, float3(inten * 0.8, inten * 0.8, inten * 0.8));

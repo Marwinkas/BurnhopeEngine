@@ -48,6 +48,16 @@ set(TARGET_PERFORMANCE_TEST OFF CACHE BOOL "" FORCE)
 set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
 set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(JoltPhysics)
+
+FetchContent_Declare(miniaudio
+    GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+    GIT_TAG 0.11.22
+    GIT_SHALLOW TRUE
+)
+FetchContent_GetProperties(miniaudio)
+if(NOT miniaudio_POPULATED)
+    FetchContent_Populate(miniaudio)
+endif()
 if (TARGET Jolt)
     set_target_properties(Jolt PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
     if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
@@ -206,6 +216,19 @@ set_source_files_properties(core/image/ImageDecode.cpp PROPERTIES COMPILE_OPTION
 add_library(bh_gpu_scene INTERFACE)
 target_include_directories(bh_gpu_scene INTERFACE ${BH_INCLUDES} ${BH_ENGINE} ${BH_ENGINE}/include)
 target_compile_definitions(bh_gpu_scene INTERFACE ${BH_DEFS})
+bh_module(audio core/audio/Audio.cpp)
+target_include_directories(bh_audio PRIVATE
+    ${miniaudio_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/steamaudio/include
+)
+target_link_libraries(bh_audio PUBLIC
+    bh_platform
+    "${CMAKE_SOURCE_DIR}/steamaudio/lib/linux-x64/libphonon.so"
+    Threads::Threads
+    ${CMAKE_DL_LIBS}
+)
+set_source_files_properties(core/audio/Audio.cpp PROPERTIES COMPILE_OPTIONS "-w")
+
 bh_module(render
     engine/src/Visbuffer.cpp
     engine/src/Shade.cpp
@@ -235,6 +258,10 @@ bh_module(render
     engine/src/PassTonemap.cpp
     engine/src/PassGizmo.cpp
     engine/src/Physics.cpp
+    engine/src/Particles.cpp
+    engine/src/Fog.cpp
+    engine/src/Rain.cpp
+    engine/src/Weather.cpp
     engine/src/SceneFrame.cpp
 )
 target_include_directories(bh_render PUBLIC ${BH_ENGINE} ${BH_ENGINE}/include ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include)
@@ -244,7 +271,7 @@ set_source_files_properties(
     engine/src/Physics.cpp
     PROPERTIES COMPILE_OPTIONS "-w")
 target_compile_definitions(bh_render PUBLIC "BH_SHADER_DIR=\"${CMAKE_CURRENT_BINARY_DIR}/shaders\"")
-target_link_libraries(bh_render PUBLIC flecs_static Jolt)
+target_link_libraries(bh_render PUBLIC flecs_static Jolt bh_audio)
 bh_module(ui
     core/ui/Canvas.cpp
     core/ui/Motion.cpp
@@ -369,6 +396,7 @@ add_custom_command(
         ${SHADER_OUT_DIR}/sky.ms.comp.spv
         ${SHADER_OUT_DIR}/sky.view.comp.spv
         ${SHADER_OUT_DIR}/cloud.march.comp.spv
+        ${SHADER_OUT_DIR}/cloud.shadow.comp.spv
         ${SHADER_OUT_DIR}/cloud.up.comp.spv
         ${SHADER_OUT_DIR}/cloud.noise.comp.spv
         ${SHADER_OUT_DIR}/contact.comp.spv
@@ -427,7 +455,8 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_lut.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry skyTransmittance -o ${SHADER_OUT_DIR}/sky.trans.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_lut.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry skyMulti -o ${SHADER_OUT_DIR}/sky.ms.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_lut.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry skyView -o ${SHADER_OUT_DIR}/sky.view.comp.spv
-    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry cloudMarch -o ${SHADER_OUT_DIR}/cloud.march.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud_march.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry cloudMarchCs -o ${SHADER_OUT_DIR}/cloud.march.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud_shadow.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry cloudShadowCs -o ${SHADER_OUT_DIR}/cloud.shadow.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry cloudUp -o ${SHADER_OUT_DIR}/cloud.up.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/cloud_noise.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry cloudNoise -o ${SHADER_OUT_DIR}/cloud.noise.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/sky_probe.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry skyProbe -o ${SHADER_OUT_DIR}/sky.probe.comp.spv
@@ -455,6 +484,15 @@ add_custom_command(
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/tonemap.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage fragment -entry tonemapFs -o ${SHADER_OUT_DIR}/tonemap.frag.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/taa.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry taaCs -o ${SHADER_OUT_DIR}/taa.comp.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/taa.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry taaCopy -o ${SHADER_OUT_DIR}/taacopy.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/fog_volume.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry fogScatter -o ${SHADER_OUT_DIR}/fog.scatter.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/fog_volume.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry fogIntegrate -o ${SHADER_OUT_DIR}/fog.integrate.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/fog_volume.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry fogApply -o ${SHADER_OUT_DIR}/fog.apply.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rain.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry rainSim -o ${SHADER_OUT_DIR}/rain.sim.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rain.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage mesh -entry rainMesh -o ${SHADER_OUT_DIR}/rain.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/rain.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage fragment -entry rainFs -o ${SHADER_OUT_DIR}/rain.frag.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/particle.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry particleSim -o ${SHADER_OUT_DIR}/particle.sim.comp.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/particle.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage mesh -entry particleMesh -o ${SHADER_OUT_DIR}/particle.mesh.spv
+    COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/particle.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage fragment -entry particleFs -o ${SHADER_OUT_DIR}/particle.frag.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gizmo.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage mesh -entry gizmoMesh -o ${SHADER_OUT_DIR}/gizmo.mesh.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/gizmo.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage fragment -entry gizmoFs -o ${SHADER_OUT_DIR}/gizmo.frag.spv
     COMMAND ${SLANGC_EXECUTABLE} ${SHADER_DIR}/bloom.slang -I ${SHADER_DIR} -target spirv -profile ${BH_SPV} -stage compute -entry bloomDown -DBLOOM_LEVEL=0 -o ${SHADER_OUT_DIR}/bloom0.comp.spv
@@ -495,6 +533,9 @@ add_custom_command(
         ${SHADER_DIR}/probe.slang
         ${SHADER_DIR}/sky_lut.slang
         ${SHADER_DIR}/cloud.slang
+        ${SHADER_DIR}/cloud_march.slang
+        ${SHADER_DIR}/cloud_shadow.slang
+        ${SHADER_DIR}/cloud_density.slang
         ${SHADER_DIR}/cloud_noise.slang
         ${SHADER_DIR}/core/atmosphere.slang
         ${SHADER_DIR}/rc_common.slang
@@ -526,6 +567,9 @@ add_custom_command(
         ${SHADER_DIR}/tonemap.slang
         ${SHADER_DIR}/taa.slang
         ${SHADER_DIR}/core/grade.slang
+        ${SHADER_DIR}/fog_volume.slang
+        ${SHADER_DIR}/rain.slang
+        ${SHADER_DIR}/particle.slang
         ${SHADER_DIR}/gizmo.slang
         ${SHADER_DIR}/camera.slang
         ${SHADER_DIR}/core/math.slang
@@ -768,7 +812,7 @@ target_compile_definitions(bh_files PRIVATE "BH_UI_FILES=\"${UI_BIN_DIR}/files.u
 
 add_executable(BurnhopeEngine demo/app/Main.cpp demo/Sample.cpp)
 target_link_libraries(BurnhopeEngine PRIVATE
-    bh_app bh_host bh_files bh_ui bh_image bh_rhi bh_memory bh_platform bh_render bh_gpu_scene bh_asset bh_io
+    bh_app bh_host bh_files bh_ui bh_image bh_rhi bh_memory bh_platform bh_render bh_audio bh_gpu_scene bh_asset bh_io
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
@@ -778,6 +822,9 @@ target_compile_definitions(BurnhopeEngine PRIVATE ${BH_DEFS}
     "BH_UI_SAMPLE=\"${UI_BIN_DIR}/sample.uib\""
 )
 target_compile_options(BurnhopeEngine PRIVATE ${BH_OPTS})
+set_target_properties(BurnhopeEngine PROPERTIES
+    BUILD_RPATH "${CMAKE_SOURCE_DIR}/steamaudio/lib/linux-x64"
+)
 add_dependencies(BurnhopeEngine BurnhopeSpv UiSpv UiBin)
 
 set(BH_TEST_SOURCES

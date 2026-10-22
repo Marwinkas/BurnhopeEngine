@@ -368,8 +368,8 @@ RAB_LightSample RAB_SamplePolymorphicLight(RAB_LightInfo lightInfo, RAB_Surface 
         float cone = saturate((cd - outer) / max(inner - outer, 1e-3));
         atten *= cone * cone;
     }
-    float3 radiance = lightInfo.colorIntensity.rgb * lightInfo.colorIntensity.w;
-    if ((lightInfo.flags & 2u) == 0u) {
+    float3 radiance = lightInfo.colorIntensity.rgb * candelaScale(lightInfo.colorIntensity.w);
+    if ((lightInfo.flags & 2u) == 0u && (lightInfo.flags & 4u) == 0u) {
         float peak = max(radiance.r, max(radiance.g, radiance.b));
         float cap = lerp(1.2, 8.0, saturate(gShade.lamp));
         if (peak > cap) {
