@@ -25,6 +25,16 @@ using UiSpawnFn = void (*)(UiState& s, uint16_t id);
 using UiBootFn = void (*)(UiState& s);
 using UiRoleFinishFn = void (*)(UiState& s, uint16_t id, const BinNode* spec, const char* text, const char* hint);
 struct UiNoHit {}; // Пустой тег: объект нематериален для курсора мыши
+struct UiPaintLast {}; // Среди братьев рисуется последним, поверх непрозрачных строк.
+struct UiIconChrome {}; // Кнопка без плашки: состояние только на цвете иконки.
+struct UiMenuSlide {}; // Меню тулбара: высота и альфа при открытии и закрытии.
+struct UiReveal {
+    float full = 0.0f;
+    float from = 0.0f;
+    float to = 0.0f;
+    float t0 = -1.0f;
+    uint8_t phase = 0;
+};
 // A higher module (files, later others) plugs in here. Widgets never name it.
 struct UiPlug {
     UiInputFn handle = nullptr;
@@ -151,6 +161,7 @@ struct UiState {
     UiSpawnFn onSpawn[kUiBinRoleCap]{};
     UiRoleFinishFn roleFinish[kUiBinRoleCap]{};
     UiImportBag importBag{};
+    void (*beforeLayout)(UiState& s) = nullptr;
 
     UiState();
     ~UiState();
@@ -254,6 +265,8 @@ inline void uiApplyLook(UiState& s, bool warm) {
     uiRestyle(s);
 }
 void uiMotionTo(UiState& s, uint16_t id, float r, float g, float b, float a);
+void uiReveal(UiState& s, uint16_t id, float full, bool open);
+void uiRevealTick(UiState& s);
 [[nodiscard]] bool uiTickMotion(UiState& s);
 [[nodiscard]] uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap);
 

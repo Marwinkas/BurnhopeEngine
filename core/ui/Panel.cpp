@@ -29,7 +29,8 @@ uint32_t uiEmitPanel(
     float r,
     float g,
     float b,
-    float a) {
+    float a,
+    float glyphA) {
     if (id >= s.count) {
         return n;
     }
@@ -78,7 +79,8 @@ uint32_t uiEmitPanel(
     }
     if (paint->icon != 0 && n < cap) {
         const float fit = box.w < box.h ? box.w : box.h;
-        float side = fit > 18.0f ? fit - 4.0f : 14.0f;
+        const bool ghost = paint->a <= 0.02f && paint->borderW < 0.4f;
+        float side = ghost ? fit : (fit > 18.0f ? fit - 4.0f : 14.0f);
         if (side > 72.0f) {
             side = 72.0f;
         }
@@ -95,9 +97,12 @@ uint32_t uiEmitPanel(
         icon.color[0] = glyph ? paint->r : s.look.text[0];
         icon.color[1] = glyph ? paint->g : s.look.text[1];
         icon.color[2] = glyph ? paint->b : s.look.text[2];
-        icon.color[3] = 1.0f;
+        icon.color[3] = glyphA > 0.0f ? glyphA : 1.0f;
         icon.texId = paint->icon;
         icon.flags = kUiFlagIcon;
+        if (paint->angle != 0.0f) {
+            icon.pad1 = std::bit_cast<uint32_t>(paint->angle);
+        }
         if (clip != nullptr) {
             icon.flags |= kUiFlagClip;
             icon.extra[1] = clip->x;

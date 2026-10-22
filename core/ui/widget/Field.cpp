@@ -736,7 +736,7 @@ bool uiFieldDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
     }
     const UiBox inset = fieldInset(s, id, *field);
     const UiRange* range = s.ent[id].try_get<UiRange>();
-    if (range != nullptr && range->max > range->min + 0.0001f) {
+    if (range != nullptr && range->fill != 0 && range->max > range->min + 0.0001f && range->max - range->min < 1.0e8f) {
         float span = (range->value - range->min) / (range->max - range->min);
         if (span < 0.0f) {
             span = 0.0f;

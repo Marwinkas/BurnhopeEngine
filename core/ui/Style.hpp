@@ -107,6 +107,11 @@ struct UiLook {
     float glyphH = 18.0f;
 };
 
+// Множитель альфы узла и его детей. 1 — без изменений.
+struct UiFade {
+    float a = 1.0f;
+};
+
 // Плавная цветовая анимация
 struct UiAnim {
     float fr = 0.0f;

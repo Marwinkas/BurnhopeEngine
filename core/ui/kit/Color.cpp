@@ -1,4 +1,6 @@
 #include "ui/UiBin.hpp"
+#include "ui/Hover.hpp"
+#include "ui/Interaction.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Field.hpp"
@@ -18,6 +20,14 @@ constexpr UiRamp kRampColorWheel = UiRamp::HueWheel;
 constexpr UiRamp kRampColorValue = UiRamp::ValueRamp;
 constexpr UiRamp kRampColorSwatch = UiRamp::Gradient;
 constexpr UiRamp kRampColorAlpha = UiRamp::Alpha;
+constexpr float kColorSide = 96.0f;
+constexpr float kColorWheel = 220.0f;
+constexpr float kColorVal = 22.0f;
+constexpr float kColorGap = 10.0f;
+constexpr float kColorPad = 12.0f;
+constexpr float kColorTitle = 36.0f;
+constexpr float kColorW = kColorPad * 2.0f + kColorWheel + kColorGap + kColorVal + kColorGap + kColorSide;
+constexpr float kColorH = 634.0f;
 
 UiPaint colorRampPart(const UiLook& look, UiToken token, UiRamp ramp, float radius = 0.0f) {
     UiPaint paint = paintToken(look, token, radius);
@@ -28,6 +38,8 @@ UiPaint colorRampPart(const UiLook& look, UiToken token, UiRamp ramp, float radi
 
 void publishColor(UiState& s);
 void refreshColorChrome(UiState& s);
+void fillColorBody(UiState& s, uint16_t parent);
+void colorOnClose(void* user, uint16_t);
 
 void uiSetColorBook(UiState& s, ColorBook* book) {
     uiColor(s).book = book;
@@ -410,11 +422,41 @@ void refreshColorChrome(UiState& s) {
     setBtnLabel(s, uiColor(s).colorWinBtn, uiColor(s).colorMode == 1 ? "WINDOW *" : "WINDOW");
 }
 
+void colorHead(UiState& s, uint16_t parent) {
+    UiFlex titleF{};
+    titleF.direction = UiFlexDir::Row;
+    titleF.heightMode = UiSize::Px;
+    titleF.height = kColorTitle;
+    titleF.shrink = 0.0f;
+    titleF.align = UiAlign::Center;
+    titleF.padL = 12.0f;
+    titleF.padR = 4.0f;
+    const uint16_t title = spawn(s, parent, titleF, paintToken(s.look, UiToken::Title, 0.0f));
+    if (title >= s.count) {
+        return;
+    }
+    s.ent[title].add<UiTitleBar>();
+    const uint16_t brand = spawn(s, title, UiFlex{}, paintLabel(s.look));
+    addText(s, brand, "Color");
+    UiFlex gap{};
+    gap.grow = 1.0f;
+    gap.shrink = 1.0f;
+    gap.heightMode = UiSize::Px;
+    gap.height = 1.0f;
+    spawn(s, title, gap, paintClear());
+    const uint16_t close = spawn(s, title, px(28.0f, 28.0f), paintToken(s.look, UiToken::Close, 6.0f));
+    if (close < s.count) {
+        uiHover(s, close);
+        s.ent[close].add<UiFocusable>();
+        uiBind(s, close, colorOnClose, &s);
+    }
+}
+
 void placeColorMenu(UiState& s) {
     float x = 24.0f;
     float y = 48.0f;
-    const float w = 500.0f;
-    const float h = 720.0f;
+    const float w = kColorW;
+    const float h = kColorH;
     if (uiColor(s).colorAnchor != kUiNone && uiColor(s).colorAnchor < s.count) {
         const UiBox& b = s.box[uiColor(s).colorAnchor];
         x = b.x;
@@ -474,10 +516,55 @@ void syncColor(UiState& s) {
     }
 }
 
+void uiEnsureColorPopup(UiState& s) {
+    UiColorPickerComponent& picker = uiColor(s);
+    if (picker.colorPanel < s.count && s.ent[picker.colorPanel].is_alive()) {
+        return;
+    }
+    if (s.count == 0 || s.yoga[0] == nullptr) {
+        return;
+    }
+    picker.colorHost = 0;
+    if (picker.colorSeen == 0) {
+        rgbToHsv(picker.colorR, picker.colorG, picker.colorB, picker.colorH, picker.colorS, picker.colorV);
+    }
+    UiFlex root{};
+    root.position = UiPosition::Absolute;
+    root.direction = UiFlexDir::Column;
+    root.pad = 0.0f;
+    root.gap = 0.0f;
+    root.widthMode = UiSize::Px;
+    root.width = kColorW;
+    root.heightMode = UiSize::Px;
+    root.height = kColorH;
+    root.shrink = 0.0f;
+    const uint16_t id = spawn(s, 0, root, paintToken(s.look, UiToken::Menu, 0.0f));
+    if (id == kUiNone) {
+        return;
+    }
+    picker.colorPanel = id;
+    picker.colorPresent = 0;
+    picker.colorApplied = 0;
+    colorHead(s, id);
+    UiFlex body{};
+    body.direction = UiFlexDir::Column;
+    body.pad = kColorPad;
+    body.gap = 8.0f;
+    body.grow = 1.0f;
+    body.shrink = 1.0f;
+    const uint16_t bodyId = spawn(s, id, body, paintClear());
+    fillColorBody(s, bodyId);
+    uiShow(s, id, false);
+}
+
 void colorOnOpen(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
+    uiEnsureColorPopup(s);
+    if (uiColor(s).book != nullptr && uiColor(s).book->gen != uiColor(s).colorSeen) {
+        takeBook(s);
+    }
     uiColor(s).colorAnchor = id;
-    paintColor(s);
+    applyColor(s, false, false);
     if (uiColor(s).colorMode == 1) {
         uiColor(s).colorPresent = 2;
         uiColor(s).colorApplied = 2;
@@ -663,6 +750,8 @@ void fillColorBody(UiState& s, uint16_t parent) {
             box->height = 28.0f;
             box->heightMode = UiSize::Px;
         }
+        uiHover(s, id);
+        s.ent[id].add<UiFocusable>();
         uiBind(s, id, fn, &s);
         return id;
     };
@@ -676,25 +765,25 @@ void fillColorBody(UiState& s, uint16_t parent) {
     UiFlex wheel{};
     wheel.widthMode = UiSize::Px;
     wheel.heightMode = UiSize::Px;
-    wheel.width = 220.0f;
-    wheel.height = 220.0f;
+    wheel.width = kColorWheel;
+    wheel.height = kColorWheel;
     wheel.shrink = 0.0f;
     uiColor(s).colorWheel = spawn(s, wheelRowId, wheel, colorRampPart(s.look, UiToken::Content, kRampColorWheel));
     uiDrag(s, uiColor(s).colorWheel, colorOnDrag, &s);
     UiFlex valBar{};
     valBar.widthMode = UiSize::Px;
     valBar.heightMode = UiSize::Px;
-    valBar.width = 22.0f;
-    valBar.height = 220.0f;
+    valBar.width = kColorVal;
+    valBar.height = kColorWheel;
     valBar.shrink = 0.0f;
     uiColor(s).colorVal = spawn(s, wheelRowId, valBar, colorRampPart(s.look, UiToken::Content, kRampColorValue));
     uiDrag(s, uiColor(s).colorVal, colorOnDrag, &s);
     UiFlex side{};
     side.direction = UiFlexDir::Column;
     side.widthMode = UiSize::Px;
-    side.width = 96.0f;
+    side.width = kColorSide;
     side.heightMode = UiSize::Px;
-    side.height = 220.0f;
+    side.height = kColorWheel;
     side.gap = 8.0f;
     side.shrink = 0.0f;
     const uint16_t sideId = spawn(s, wheelRowId, side, paintClear());
@@ -724,6 +813,8 @@ void fillColorBody(UiState& s, uint16_t parent) {
     UiText pickLabel{};
     copyText(pickLabel.bytes, pickLabel.len, "PICK");
     s.ent[pickId].set<UiText>(pickLabel);
+    uiHover(s, pickId);
+    s.ent[pickId].add<UiFocusable>();
     uiBind(s, pickId, colorOnDrop, &s);
     const char* names[7] = {"R", "G", "B", "A", "H", "S", "V"};
     const float starts[7] = {uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorA, uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV};
@@ -754,7 +845,7 @@ void fillColorBody(UiState& s, uint16_t parent) {
         UiFlex num{};
         num.widthMode = UiSize::Px;
         num.heightMode = UiSize::Px;
-        num.width = 56.0f;
+        num.width = kColorSide;
         num.height = 24.0f;
         num.shrink = 0.0f;
         const uint16_t numId = spawn(s, lineId, num, paintToken(s.look, UiToken::Field, 4.0f));
@@ -816,6 +907,9 @@ void uiBuildColor(UiState& s) {
     titleF.shrink = 0.0f;
     titleF.align = UiAlign::Center;
     const uint16_t title = spawn(s, root, titleF, paintToken(s.look, UiToken::Title, 0.0f));
+    if (title < s.count) {
+        s.ent[title].add<UiTitleBar>();
+    }
     const uint16_t brand = spawn(s, title, UiFlex{}, paintLabel(s.look));
     addText(s, brand, "COLOR");
     UiFlex gap{};
@@ -824,7 +918,12 @@ void uiBuildColor(UiState& s) {
     gap.heightMode = UiSize::Px;
     gap.height = 1.0f;
     spawn(s, title, gap, paintClear());
-    spawn(s, title, px(28.0f, 28.0f), paintToken(s.look, UiToken::Close, 6.0f));
+    const uint16_t close = spawn(s, title, px(28.0f, 28.0f), paintToken(s.look, UiToken::Close, 6.0f));
+    if (close < s.count) {
+        uiHover(s, close);
+        s.ent[close].add<UiFocusable>();
+        uiBind(s, close, colorOnClose, &s);
+    }
     uiColor(s).colorPanel = root;
     uiColor(s).colorPresent = 2;
     uiColor(s).colorApplied = 2;

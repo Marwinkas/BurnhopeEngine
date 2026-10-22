@@ -58,22 +58,19 @@ namespace {
 
 void placeActors(SceneFrameImpl& scene) {
     sceneActorsClear(scene.actors);
-    const float sun[3] = {scene.fly.eye[0], scene.fly.eye[1] + 2.0f, scene.fly.eye[2] - 6.0f};
-    const float post[3] = {sun[0] + 3.0f, sun[1], sun[2]};
-    sceneActorAdd(scene.actors, SceneActorKind::Sun, sun, "Sun");
-    if (scene.actors.count > 0) {
-        Xform pose = sceneActorXform(scene.actors, 0);
-        pose.euler[0] = 35.0f;
-        pose.euler[1] = 30.0f;
-        sceneActorWriteXform(scene.actors, 0, pose);
-    }
+    const float post[3] = {scene.fly.eye[0], scene.fly.eye[1] + 2.0f, scene.fly.eye[2] - 6.0f};
     sceneActorAdd(scene.actors, SceneActorKind::Post, post, "Post");
     const float climate[3] = {post[0] + 3.0f, post[1], post[2]};
     const uint8_t weather = sceneActorAdd(scene.actors, SceneActorKind::Weather, climate, "Weather");
-    scene.actors.selected = 0;
+    scene.actors.selected = weather;
     if (weather < scene.actors.count) {
+        Xform pose = sceneActorXform(scene.actors, weather);
+        pose.euler[0] = 35.0f;
+        pose.euler[1] = 30.0f;
+        sceneActorWriteXform(scene.actors, weather, pose);
         scene.weatherEnt = scene.actors.ent[weather];
         scene.weatherEnt.set<Weather>(Weather{});
+        sceneActorFitTool(scene.actors);
     }
 }
 
@@ -81,6 +78,38 @@ void placeActors(SceneFrameImpl& scene) {
 namespace {
 
 bool nameHas(const char* text, const char* needle);
+
+void kelvinRgb(float kelvin, float& r, float& g, float& b) {
+    float t = kelvin;
+    if (t < 1500.0f) {
+        t = 1500.0f;
+    }
+    if (t > 12000.0f) {
+        t = 12000.0f;
+    }
+    t /= 100.0f;
+    auto sat = [](float v) {
+        if (v < 0.0f) {
+            return 0.0f;
+        }
+        if (v > 255.0f) {
+            return 255.0f;
+        }
+        return v;
+    };
+    if (t <= 66.0f) {
+        r = 255.0f;
+        g = sat(99.4708025861f * std::log(t) - 161.1195681661f);
+        b = t <= 19.0f ? 0.0f : sat(138.5177312231f * std::log(t - 10.0f) - 305.0447927307f);
+    } else {
+        r = sat(329.698727446f * std::pow(t - 60.0f, -0.1332047592f));
+        g = sat(288.1221695283f * std::pow(t - 60.0f, -0.0755148492f));
+        b = 255.0f;
+    }
+    r /= 255.0f;
+    g /= 255.0f;
+    b /= 255.0f;
+}
 
 void pushBlob(SceneFrameImpl& s, const MeshletBlob& blob, float x, float y, float z) {
     if (s.instanceCount >= kSceneInstances || s.vertCount + blob.vertexCount > kSceneVerts) {
@@ -1918,7 +1947,8 @@ void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
     scene->restir.knobShortcut = tweaks.restirShortcut ? 1u : 0u;
     scene->restir.knobMaterial = tweaks.restirMaterial ? 1u : 0u;
     scene->restir.knobNaive = tweaks.restirNaive ? 1u : 0u;
-    scene->restir.knobSunOn = tweaks.restirSunOn ? 1u : 0u;
+    scene->restir.knobSunOn = (tweaks.restirSunOn && tweaks.sunEnabled != 0 && tweaks.sunCsm == 0) ? 1u : 0u;
+    scene->restir.knobSunDisk = std::clamp(tweaks.sunAngle + tweaks.sunSoft, 0.0f, 8.0f);
     scene->fsr.quality = tweaks.fsrQuality > 4u ? 0u : tweaks.fsrQuality;
     scene->fsr.sharpness = std::clamp(tweaks.fsrSharpness, 0.0f, 1.0f);
     scene->bloomThreshold = tweaks.bloomThreshold;
@@ -1936,6 +1966,25 @@ void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
     scene->rainRipple = std::clamp(tweaks.rainRipple, 0.0f, 1.0f);
     if (Weather* climate = scene->weatherEnt.try_get_mut<Weather>()) {
         weatherGoals(*climate, tweaks.cloudCoverage, tweaks.cloudDensity, tweaks.rainAmount, tweaks.rainWet, tweaks.fogDensity, tweaks.sunZenith, tweaks.sunAzimuth, tweaks.windSpeed, tweaks.windYaw, tweaks.temperatureC, tweaks.dayLength, tweaks.timeOfDay, tweaks.clockSun);
+        if (tweaks.sunEnabled != 0) {
+            climate->flags |= 2u;
+        } else {
+            climate->flags &= ~2u;
+        }
+        if (tweaks.sunCast != 0) {
+            climate->flags |= 4u;
+        } else {
+            climate->flags &= ~4u;
+        }
+        if (tweaks.sunCsm != 0) {
+            climate->flags |= 8u;
+        } else {
+            climate->flags &= ~8u;
+        }
+        climate->kelvin = tweaks.sunKelvin;
+        climate->sunAngle = tweaks.sunAngle;
+        climate->softAngle = tweaks.sunSoft;
+        climate->indirect = tweaks.sunIndirect;
     } else {
         scene->rainAmount = std::clamp(tweaks.rainAmount, 0.0f, 4.0f);
         scene->rainWet = std::clamp(tweaks.rainWet, 0.0f, 1.0f);
@@ -1944,6 +1993,11 @@ void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
         scene->atmosphere.cloudCoverage = tweaks.cloudCoverage;
         scene->atmosphere.cloudDensity = tweaks.cloudDensity;
     }
+    scene->sunEnabled = tweaks.sunEnabled != 0;
+    scene->sunCast = tweaks.sunCast != 0;
+    scene->sunCsm = tweaks.sunCsm != 0;
+    scene->sunKelvin = tweaks.sunKelvin;
+    scene->sunIndirect = tweaks.sunIndirect;
     scene->tonemapper = tweaks.tonemapper > 7u ? 0u : tweaks.tonemapper;
     scene->freeze = tweaks.freeze;
 }
@@ -2039,6 +2093,22 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
     if (scene == nullptr) {
         return false;
     }
+    float gpu = 0.0f;
+    const uint32_t zones = scene->gpuTime.count < 48u ? scene->gpuTime.count : 48u;
+    for (uint32_t i = 0; i < zones; ++i) {
+        gpu += scene->gpuTime.ms[i];
+    }
+    scene->gpuMs = gpu;
+    if (scene->meshletSrc != nullptr && scene->instSrc != nullptr) {
+        uint32_t tris = 0;
+        for (uint32_t i = 0; i < scene->instanceCount; ++i) {
+            const uint32_t mesh = scene->instSrc[i].meshId;
+            if (mesh < scene->instanceCount) {
+                tris += scene->meshletSrc[mesh].triangleCount;
+            }
+        }
+        scene->sceneTris = tris;
+    }
     sceneActorPointer(
         scene->actors,
         input.pointer.x,
@@ -2046,7 +2116,7 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
         (input.pointer.down & kPointerLeft) != 0 ? 1 : 0,
         (input.pointer.pressed & kPointerLeft) != 0 ? 1 : 0,
         (input.pointer.released & kPointerLeft) != 0 ? 1 : 0);
-    if (scene->physics != nullptr) {
+    if (scene->physics != nullptr && scene->sim != 0) {
         const uint32_t n = physicsBodyCount(scene->physics);
         PhysicsPose poses[kPropCap]{};
         const uint32_t count = n < kPropCap ? n : kPropCap;
@@ -2063,8 +2133,11 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
             poses[i].scale[1] = pose.scale[1];
             poses[i].scale[2] = pose.scale[2];
         }
-        const uint8_t held = scene->actors.drag <= 2 ? scene->actors.selected : kSceneActorNone;
-        physicsStep(scene->physics, dt, held, poses, count);
+        const uint8_t held = scene->actors.drag <= 6 ? scene->actors.selected : kSceneActorNone;
+        const float stepDt = scene->sim == 2 ? 0.0f : dt;
+        const auto physicsBegan = std::chrono::steady_clock::now();
+        physicsStep(scene->physics, stepDt, held, poses, count);
+        scene->physicsMs = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - physicsBegan).count();
         for (uint32_t i = 0; i < count; ++i) {
             const uint8_t actor = physicsBodyActor(scene->physics, i);
             if (actor == held || actor >= scene->actors.count) {
@@ -2093,7 +2166,67 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
             scene->impactVy[i] = vy;
         }
     }
-    flyCamUpdate(scene->fly, input, dt);
+    const bool plan = scene->camFacing != 0 || scene->camOrtho != 0;
+    InputFrame moved = input;
+    if (plan && input.wheel != 0.0f) {
+        moved.wheel = 0.0f;
+        if (scene->camOrtho != 0) {
+            scene->camZoom *= std::exp(-input.wheel * 0.08f);
+            if (scene->camZoom < 0.05f) {
+                scene->camZoom = 0.05f;
+            }
+            if (scene->camZoom > 32.0f) {
+                scene->camZoom = 32.0f;
+            }
+        } else {
+            float fx = 0.0f;
+            float fy = 0.0f;
+            float fz = 0.0f;
+            flyCamForward(scene->fly, fx, fy, fz);
+            const float dolly = -input.wheel * scene->fly.speed * 0.35f;
+            scene->fly.eye[0] += fx * dolly;
+            scene->fly.eye[1] += fy * dolly;
+            scene->fly.eye[2] += fz * dolly;
+        }
+    }
+    if (plan) {
+        flyCamPan(scene->fly, moved, dt, scene->actors.right, scene->actors.up);
+    } else {
+        flyCamUpdate(scene->fly, moved, dt);
+    }
+    for (uint8_t i = 0; i < scene->actors.count; ++i) {
+        flecs::entity ent = scene->actors.ent[i];
+        if (!ent.is_alive() || !ent.has<LightLink>()) {
+            continue;
+        }
+        const LightLink link = ent.get<LightLink>();
+        if (link.index >= scene->importedCount) {
+            continue;
+        }
+        const Xform pose = sceneActorXform(scene->actors, i);
+        LightGpuData& lamp = scene->imported[link.index];
+        lamp.pos[0] = pose.pos[0];
+        lamp.pos[1] = pose.pos[1];
+        lamp.pos[2] = pose.pos[2];
+        if (lamp.type == kLightDirectional) {
+            float fx = 0.0f;
+            float fy = 0.0f;
+            float fz = 0.0f;
+            float bx[3]{};
+            float by[3]{};
+            float bz[3]{};
+            actorBasis(pose.euler, bx, by, bz);
+            fx = -by[0];
+            fy = -by[1];
+            fz = -by[2];
+            lamp.direction[0] = fx;
+            lamp.direction[1] = fy;
+            lamp.direction[2] = fz;
+            scene->world.sunDir[0] = fx;
+            scene->world.sunDir[1] = fy;
+            scene->world.sunDir[2] = fz;
+        }
+    }
     if (dt > 1.0e-4f) {
         scene->skyTime += dt;
     }
@@ -2234,8 +2367,172 @@ void sceneFrameActorGizmo(SceneFrame* scene, uint8_t mode) {
     if (scene == nullptr) {
         return;
     }
-    scene->actors.gizmo = mode > 2 ? 0 : mode;
+    scene->actors.tool = mode > 4 ? 0 : mode;
+    scene->actors.gizmo = scene->actors.tool;
     scene->actors.drag = kSceneActorNone;
+    sceneActorFitTool(scene->actors);
+}
+
+void sceneFrameGizmoSpace(SceneFrame* scene, uint8_t worldSpace) {
+    if (scene == nullptr) {
+        return;
+    }
+    scene->actors.space = worldSpace == 0 ? 0 : 1;
+    scene->actors.drag = kSceneActorNone;
+}
+
+void sceneFrameSnap(SceneFrame* scene, uint8_t channel, uint8_t enabled, float step) {
+    if (scene == nullptr || channel > 2) {
+        return;
+    }
+    scene->actors.snapOn[channel] = enabled != 0 ? 1 : 0;
+    if (step > 1.0e-5f) {
+        scene->actors.snapStep[channel] = step;
+    }
+}
+
+static float clampRange(float v, float lo, float hi) {
+    if (v < lo) {
+        return lo;
+    }
+    if (v > hi) {
+        return hi;
+    }
+    return v;
+}
+
+void sceneFrameCamera(SceneFrame* scene, float fovDeg, float nearZ, float farZ) {
+    if (scene == nullptr) {
+        return;
+    }
+    fovDeg = clampRange(fovDeg, 10.0f, 120.0f);
+    nearZ = clampRange(nearZ, 0.01f, 10.0f);
+    farZ = clampRange(farZ, 100.0f, 100000.0f);
+    if (nearZ >= farZ * 0.5f) {
+        nearZ = farZ * 0.01f;
+    }
+    scene->fovYRad = fovDeg * 0.017453292f;
+    scene->nearPlane = nearZ;
+    scene->farPlane = farZ;
+}
+
+void sceneFrameCameraSpeed(SceneFrame* scene, float speed) {
+    if (scene == nullptr) {
+        return;
+    }
+    scene->fly.speed = clampRange(speed, 0.05f, 200.0f);
+}
+
+void sceneFrameCameraView(SceneFrame* scene, uint8_t view) {
+    if (scene == nullptr) {
+        return;
+    }
+    if (view > 6) {
+        view = 0;
+    }
+    if (view == scene->camFacing) {
+        return;
+    }
+    if (view == 0) {
+        scene->camFacing = 0;
+        scene->camView = scene->camOrtho;
+        return;
+    }
+    float fx = 0.0f;
+    float fy = 0.0f;
+    float fz = 0.0f;
+    flyCamForward(scene->fly, fx, fy, fz);
+    constexpr float kDist = 14.0f;
+    const float pivot[3] = {
+        scene->fly.eye[0] + fx * kDist,
+        scene->fly.eye[1] + fy * kDist,
+        scene->fly.eye[2] + fz * kDist,
+    };
+    float yaw = 0.0f;
+    float pitch = 0.0f;
+    const uint8_t axis = static_cast<uint8_t>(view - 1);
+    if (axis == 0) {
+        pitch = -1.55f;
+    } else if (axis == 1) {
+        pitch = 1.55f;
+    } else if (axis == 2) {
+        yaw = -1.5707963f;
+    } else if (axis == 3) {
+        yaw = 1.5707963f;
+    } else if (axis == 5) {
+        yaw = 3.14159265f;
+    }
+    scene->fly.yaw = yaw;
+    scene->fly.pitch = pitch;
+    flyCamForward(scene->fly, fx, fy, fz);
+    scene->fly.eye[0] = pivot[0] - fx * kDist;
+    scene->fly.eye[1] = pivot[1] - fy * kDist;
+    scene->fly.eye[2] = pivot[2] - fz * kDist;
+    scene->camFacing = view;
+    scene->camView = scene->camOrtho;
+}
+
+void sceneFrameCameraProject(SceneFrame* scene, uint8_t ortho) {
+    if (scene == nullptr) {
+        return;
+    }
+    scene->camOrtho = ortho != 0 ? 1 : 0;
+    scene->camView = scene->camOrtho;
+}
+
+uint8_t sceneFrameCameraProject(const SceneFrame* scene) {
+    return scene != nullptr && scene->camOrtho != 0 ? 1 : 0;
+}
+
+void sceneFrameCameraRelease(SceneFrame* scene) {
+    if (scene == nullptr || scene->camFacing == 0) {
+        return;
+    }
+    scene->camFacing = 0;
+    scene->camView = scene->camOrtho;
+}
+
+uint8_t sceneFrameCameraMode(const SceneFrame* scene) {
+    return scene != nullptr ? scene->camFacing : 0;
+}
+
+void sceneFrameGizmoPivot(SceneFrame* scene, uint8_t center) {
+    if (scene == nullptr) {
+        return;
+    }
+    scene->actors.pivotSpace = center != 0 ? 1 : 0;
+    scene->actors.drag = kSceneActorNone;
+}
+
+bool sceneFrameActorPivot(const SceneFrame* scene, uint8_t index, float out[3]) {
+    if (scene == nullptr || out == nullptr || index >= scene->actors.count) {
+        return false;
+    }
+    actorPivotLocal(scene->actors, index, out);
+    return true;
+}
+
+void sceneFrameActorSetPivot(SceneFrame* scene, uint8_t index, const float local[3]) {
+    if (scene == nullptr || local == nullptr) {
+        return;
+    }
+    actorWritePivot(scene->actors, index, local);
+}
+
+float sceneFrameCameraFov(const SceneFrame* scene) {
+    return scene != nullptr ? scene->fovYRad * 57.2957795f : 60.0f;
+}
+
+float sceneFrameCameraNear(const SceneFrame* scene) {
+    return scene != nullptr ? scene->nearPlane : 0.1f;
+}
+
+float sceneFrameCameraFar(const SceneFrame* scene) {
+    return scene != nullptr ? scene->farPlane : 8000.0f;
+}
+
+float sceneFrameCameraSpeed(const SceneFrame* scene) {
+    return scene != nullptr ? scene->fly.speed : 4.0f;
 }
 
 uint8_t sceneFrameActorDuplicate(SceneFrame* scene) {
@@ -2246,7 +2543,7 @@ uint8_t sceneFrameActorDuplicate(SceneFrame* scene) {
 }
 
 bool sceneFrameActorDragging(const SceneFrame* scene) {
-    return scene != nullptr && scene->actors.drag < 3;
+    return scene != nullptr && scene->actors.drag <= 6;
 }
 
 void sceneFrameActorEuler(const SceneFrame* scene, uint8_t index, float& pitch, float& yaw) {
@@ -2416,8 +2713,145 @@ void sceneFrameActorSetPbr(SceneFrame* scene, uint8_t index, const ActorPbr& pbr
     ent.set<Material>(mat);
 }
 
-uint8_t sceneFrameSpawnCube(SceneFrame* scene) {
-    if (scene == nullptr || scene->instSrc == nullptr || scene->vertSrc == nullptr || scene->indexSrc == nullptr
+void writePlane(GpuVertex* vert, uint32_t* idx) {
+    writeCube(vert, idx, 0.02f);
+    for (uint32_t i = 0; i < 24u; ++i) {
+        vert[i].py = 0.0f;
+        vert[i].ny = 1.0f;
+        vert[i].nx = 0.0f;
+        vert[i].nz = 0.0f;
+    }
+}
+
+void writeSphereMesh(GpuVertex* vert, uint32_t* idx) {
+    constexpr int kSlice = 8;
+    constexpr int kStack = 4;
+    uint32_t vcount = 0;
+    for (int y = 0; y <= kStack; ++y) {
+        const float v = static_cast<float>(y) / static_cast<float>(kStack);
+        const float pitch = (v - 0.5f) * 3.14159265f;
+        const float cy = std::cos(pitch);
+        const float sy = std::sin(pitch);
+        for (int x = 0; x <= kSlice; ++x) {
+            const float u = static_cast<float>(x) / static_cast<float>(kSlice);
+            const float yaw = u * 6.2831853f;
+            GpuVertex& dst = vert[vcount++];
+            dst = {};
+            dst.px = std::cos(yaw) * cy * 0.5f;
+            dst.py = sy * 0.5f;
+            dst.pz = std::sin(yaw) * cy * 0.5f;
+            dst.nx = dst.px * 2.0f;
+            dst.ny = dst.py * 2.0f;
+            dst.nz = dst.pz * 2.0f;
+            dst.pad0 = u;
+            dst.pad1 = v;
+        }
+    }
+    uint32_t icount = 0;
+    for (int y = 0; y < kStack; ++y) {
+        for (int x = 0; x < kSlice; ++x) {
+            const uint32_t a = static_cast<uint32_t>(y * (kSlice + 1) + x);
+            const uint32_t b = a + static_cast<uint32_t>(kSlice + 1);
+            idx[icount++] = a;
+            idx[icount++] = b;
+            idx[icount++] = a + 1u;
+            idx[icount++] = a + 1u;
+            idx[icount++] = b;
+            idx[icount++] = b + 1u;
+        }
+    }
+}
+
+void writeCylinder(GpuVertex* vert, uint32_t* idx) {
+    constexpr int kSide = 8;
+    uint32_t vcount = 0;
+    for (int cap = 0; cap < 2; ++cap) {
+        const float y = cap == 0 ? -0.5f : 0.5f;
+        for (int i = 0; i < kSide; ++i) {
+            const float ang = static_cast<float>(i) * 6.2831853f / static_cast<float>(kSide);
+            GpuVertex& dst = vert[vcount++];
+            dst = {};
+            dst.px = std::cos(ang) * 0.5f;
+            dst.py = y;
+            dst.pz = std::sin(ang) * 0.5f;
+            dst.nx = dst.px * 2.0f;
+            dst.ny = 0.0f;
+            dst.nz = dst.pz * 2.0f;
+        }
+    }
+    GpuVertex& bottom = vert[vcount++];
+    bottom = {};
+    bottom.py = -0.5f;
+    bottom.ny = -1.0f;
+    GpuVertex& top = vert[vcount++];
+    top = {};
+    top.py = 0.5f;
+    top.ny = 1.0f;
+    uint32_t icount = 0;
+    for (int i = 0; i < kSide; ++i) {
+        const uint32_t n = static_cast<uint32_t>((i + 1) % kSide);
+        idx[icount++] = static_cast<uint32_t>(i);
+        idx[icount++] = n;
+        idx[icount++] = static_cast<uint32_t>(kSide) + n;
+        idx[icount++] = static_cast<uint32_t>(i);
+        idx[icount++] = static_cast<uint32_t>(kSide) + n;
+        idx[icount++] = static_cast<uint32_t>(kSide) + static_cast<uint32_t>(i);
+        idx[icount++] = static_cast<uint32_t>(kSide * 2);
+        idx[icount++] = n;
+        idx[icount++] = static_cast<uint32_t>(i);
+        idx[icount++] = static_cast<uint32_t>(kSide * 2 + 1);
+        idx[icount++] = static_cast<uint32_t>(kSide) + static_cast<uint32_t>(i);
+        idx[icount++] = static_cast<uint32_t>(kSide) + n;
+    }
+}
+
+uint8_t sceneFrameSpawn(SceneFrame* scene, uint8_t kind) {
+    if (scene == nullptr) {
+        return kSceneActorNone;
+    }
+    if (kind >= 4) {
+        float fx = 0.0f;
+        float fy = 0.0f;
+        float fz = -1.0f;
+        flyCamForward(scene->fly, fx, fy, fz);
+        const float pos[3] = {
+            scene->fly.eye[0] + fx * 8.0f,
+            scene->fly.eye[1] + fy * 8.0f,
+            scene->fly.eye[2] + fz * 8.0f,
+        };
+        if (kind == 6) {
+            return sceneActorAdd(scene->actors, SceneActorKind::Empty, pos, "Empty");
+        }
+        if (scene->importedCount >= kLightCap) {
+            return kSceneActorNone;
+        }
+        const uint32_t slot = scene->importedCount;
+        LightGpuData lamp{};
+        lamp.pos[0] = pos[0];
+        lamp.pos[1] = pos[1];
+        lamp.pos[2] = pos[2];
+        lamp.color[0] = lamp.color[1] = lamp.color[2] = 1.0f;
+        lamp.intensity = 8.0f;
+        if (kind == 4) {
+            lamp.type = kLightDirectional;
+            lamp.direction[0] = -0.3f;
+            lamp.direction[1] = -1.0f;
+            lamp.direction[2] = -0.2f;
+            lamp.intensity = 1.0f;
+        } else {
+            lamp.type = kLightPoint;
+            lamp.radius = 8.0f;
+        }
+        scene->imported[slot] = lamp;
+        scene->importedCount = slot + 1u;
+        const char* name = kind == 4 ? "Directional Light" : "Point Light";
+        const uint8_t actor = sceneActorAdd(scene->actors, SceneActorKind::Light, pos, name);
+        if (actor < scene->actors.count && scene->actors.ent[actor].is_alive()) {
+            scene->actors.ent[actor].set<LightLink>({slot, lamp.type});
+        }
+        return actor;
+    }
+    if (scene->instSrc == nullptr || scene->vertSrc == nullptr || scene->indexSrc == nullptr
         || scene->meshletSrc == nullptr || scene->propCount >= kPropCap) {
         return kSceneActorNone;
     }
@@ -2433,7 +2867,24 @@ uint8_t sceneFrameSpawnCube(SceneFrame* scene) {
     const uint32_t indexLimit = scene->indexCap > scene->indexCount ? scene->indexCap : scene->indexCount;
     const uint32_t instLimit = scene->instanceCap > scene->instanceCount ? scene->instanceCap : scene->instanceCount;
     const uint32_t matLimit = scene->materialCap > scene->materialCount ? scene->materialCap : scene->materialCount;
-    if (scene->vertCount + 24u > vertLimit || scene->indexCount + 36u > indexLimit
+    uint32_t vAdd = 24u;
+    uint32_t iAdd = 36u;
+    uint32_t tris = 12u;
+    const char* stem = "Cube";
+    if (kind == 1) {
+        vAdd = 45u;
+        iAdd = 192u;
+        tris = 64u;
+        stem = "Sphere";
+    } else if (kind == 2) {
+        stem = "Plane";
+    } else if (kind == 3) {
+        vAdd = 18u;
+        iAdd = 96u;
+        tris = 32u;
+        stem = "Cylinder";
+    }
+    if (scene->vertCount + vAdd > vertLimit || scene->indexCount + iAdd > indexLimit
         || scene->instanceCount >= instLimit || scene->materialCount >= matLimit) {
         return kSceneActorNone;
     }
@@ -2458,8 +2909,8 @@ uint8_t sceneFrameSpawnCube(SceneFrame* scene) {
     const uint32_t iBase = scene->indexCount;
     const uint32_t inst = scene->instanceCount;
     if (ownedMesh) {
-        scene->ownedVert.resize(vBase + 24u);
-        scene->ownedIndex.resize(iBase + 36u);
+        scene->ownedVert.resize(vBase + vAdd);
+        scene->ownedIndex.resize(iBase + iAdd);
         if (scene->ownedInst.size() <= inst) {
             scene->ownedInst.resize(inst + 1u);
         }
@@ -2470,9 +2921,29 @@ uint8_t sceneFrameSpawnCube(SceneFrame* scene) {
         scene->indexSrc = scene->ownedIndex.data();
         scene->instSrc = scene->ownedInst.data();
         scene->meshletSrc = scene->ownedMesh.data();
-        writeCube(scene->ownedVert.data() + vBase, scene->ownedIndex.data() + iBase, 0.45f);
+        GpuVertex* dstV = scene->ownedVert.data() + vBase;
+        uint32_t* dstI = scene->ownedIndex.data() + iBase;
+        if (kind == 1) {
+            writeSphereMesh(dstV, dstI);
+        } else if (kind == 2) {
+            writePlane(dstV, dstI);
+        } else if (kind == 3) {
+            writeCylinder(dstV, dstI);
+        } else {
+            writeCube(dstV, dstI, 0.45f);
+        }
     } else {
-        writeCube(scene->cpuVerts + vBase, scene->cpuIndex + iBase, 0.45f);
+        GpuVertex* dstV = scene->cpuVerts + vBase;
+        uint32_t* dstI = scene->cpuIndex + iBase;
+        if (kind == 1) {
+            writeSphereMesh(dstV, dstI);
+        } else if (kind == 2) {
+            writePlane(dstV, dstI);
+        } else if (kind == 3) {
+            writeCylinder(dstV, dstI);
+        } else {
+            writeCube(dstV, dstI, 0.45f);
+        }
     }
     GpuInstance* table = ownedMesh ? scene->ownedInst.data() : scene->cpuInstances;
     GpuMeshlet* meshes = ownedMesh ? scene->ownedMesh.data() : scene->cpuMeshlets;
@@ -2480,25 +2951,25 @@ uint8_t sceneFrameSpawnCube(SceneFrame* scene) {
     float fy = 0.0f;
     float fz = -1.0f;
     flyCamForward(scene->fly, fx, fy, fz);
-    const float x = scene->fly.eye[0] + fx * 3.0f;
-    const float y = scene->fly.eye[1] + fy * 3.0f;
-    const float z = scene->fly.eye[2] + fz * 3.0f;
+    const float x = scene->fly.eye[0] + fx * 8.0f;
+    const float y = scene->fly.eye[1] + fy * 8.0f;
+    const float z = scene->fly.eye[2] + fz * 8.0f;
     instanceSet(table[inst], x, y, z, 0.45f * 1.7320508f, matId, inst);
     GpuMeshlet& mesh = meshes[inst];
     mesh = {};
     mesh.vertexOffset = vBase;
     mesh.indexOffset = iBase;
-    mesh.vertexCount = 24;
-    mesh.triangleCount = 12;
+    mesh.vertexCount = vAdd;
+    mesh.triangleCount = tris;
     mesh.coneCutoff = -1.0f;
-    scene->vertCount = vBase + 24u;
-    scene->indexCount = iBase + 36u;
+    scene->vertCount = vBase + vAdd;
+    scene->indexCount = iBase + iAdd;
     scene->instanceCount = inst + 1u;
     if (scene->verts.mapped != nullptr) {
-        std::memcpy(static_cast<GpuVertex*>(scene->verts.mapped) + vBase, scene->vertSrc + vBase, sizeof(GpuVertex) * 24u);
+        std::memcpy(static_cast<GpuVertex*>(scene->verts.mapped) + vBase, scene->vertSrc + vBase, sizeof(GpuVertex) * vAdd);
     }
     if (scene->indices.mapped != nullptr) {
-        std::memcpy(static_cast<uint32_t*>(scene->indices.mapped) + iBase, scene->indexSrc + iBase, sizeof(uint32_t) * 36u);
+        std::memcpy(static_cast<uint32_t*>(scene->indices.mapped) + iBase, scene->indexSrc + iBase, sizeof(uint32_t) * iAdd);
     }
     if (scene->instances.mapped != nullptr) {
         static_cast<GpuInstance*>(scene->instances.mapped)[inst] = table[inst];
@@ -2511,12 +2982,139 @@ uint8_t sceneFrameSpawnCube(SceneFrame* scene) {
     }
     scene->editorDirty = static_cast<uint8_t>(scene->editorDirty | 2u);
     char name[24];
-    std::snprintf(name, sizeof(name), "Cube %u", static_cast<unsigned>(scene->propCount + 1u));
+    std::snprintf(name, sizeof(name), "%s %u", stem, static_cast<unsigned>(scene->propCount + 1u));
     const uint8_t actor = linkProp(*scene, inst, name);
     if (actor != kSceneActorNone && scene->physics != nullptr) {
         physicsAddBox(scene->physics, inst, actor, table[inst], mesh, scene->vertSrc, scene->indexSrc);
     }
     return actor;
+}
+
+uint8_t sceneFrameSpawnCube(SceneFrame* scene) {
+    return sceneFrameSpawn(scene, 0);
+}
+
+namespace {
+
+void captureActors(SceneFrameImpl& scene) {
+    scene.snapId.clear();
+    scene.snapActor.clear();
+    scene.snapSize.clear();
+    scene.snapBytes.clear();
+    ecs_world_t* world = scene.actors.world.c_ptr();
+    for (uint8_t actor = 0; actor < scene.actors.count; ++actor) {
+        flecs::entity ent = scene.actors.ent[actor];
+        if (!ent.is_alive()) {
+            continue;
+        }
+        const ecs_type_t* type = ecs_get_type(world, ent.id());
+        if (type == nullptr) {
+            continue;
+        }
+        for (int32_t i = 0; i < type->count; ++i) {
+            const ecs_id_t id = type->array[i];
+            const ecs_type_info_t* info = ecs_get_type_info(world, id);
+            if (info == nullptr || info->size <= 0 || info->size > 512) {
+                continue;
+            }
+            const void* src = ecs_get_id(world, ent.id(), id);
+            if (src == nullptr) {
+                continue;
+            }
+            const uint32_t at = static_cast<uint32_t>(scene.snapBytes.size());
+            scene.snapBytes.resize(at + static_cast<uint32_t>(info->size));
+            std::memcpy(scene.snapBytes.data() + at, src, static_cast<size_t>(info->size));
+            scene.snapId.push_back(id);
+            scene.snapActor.push_back(actor);
+            scene.snapSize.push_back(static_cast<uint16_t>(info->size));
+        }
+    }
+}
+
+void restoreActors(SceneFrameImpl& scene) {
+    ecs_world_t* world = scene.actors.world.c_ptr();
+    uint32_t at = 0;
+    for (size_t i = 0; i < scene.snapId.size(); ++i) {
+        const uint16_t actor = scene.snapActor[i];
+        const uint16_t size = scene.snapSize[i];
+        if (actor >= scene.actors.count || at + size > scene.snapBytes.size()) {
+            break;
+        }
+        flecs::entity ent = scene.actors.ent[actor];
+        if (ent.is_alive()) {
+            ecs_set_id(world, ent.id(), scene.snapId[i], size, scene.snapBytes.data() + at);
+        }
+        at += size;
+    }
+}
+
+} // namespace
+
+void sceneFramePlay(SceneFrame* scene) {
+    if (scene == nullptr || scene->sim != 0) {
+        return;
+    }
+    captureActors(*scene);
+    scene->sim = 1;
+}
+
+void sceneFrameStop(SceneFrame* scene) {
+    if (scene == nullptr || scene->sim == 0) {
+        return;
+    }
+    restoreActors(*scene);
+    scene->sim = 1;
+    if (scene->physics != nullptr) {
+        const uint32_t n = physicsBodyCount(scene->physics);
+        PhysicsPose poses[kPropCap]{};
+        const uint32_t count = n < kPropCap ? n : kPropCap;
+        for (uint32_t i = 0; i < count; ++i) {
+            const uint8_t actor = physicsBodyActor(scene->physics, i);
+            const Xform pose = sceneActorXform(scene->actors, actor);
+            poses[i].pos[0] = pose.pos[0];
+            poses[i].pos[1] = pose.pos[1];
+            poses[i].pos[2] = pose.pos[2];
+            poses[i].euler[0] = pose.euler[0];
+            poses[i].euler[1] = pose.euler[1];
+            poses[i].euler[2] = pose.euler[2];
+            poses[i].scale[0] = pose.scale[0];
+            poses[i].scale[1] = pose.scale[1];
+            poses[i].scale[2] = pose.scale[2];
+        }
+        physicsStep(scene->physics, 0.0f, kSceneActorNone, poses, count);
+    }
+    scene->sim = 0;
+}
+
+void sceneFramePause(SceneFrame* scene, uint8_t paused) {
+    if (scene == nullptr || scene->sim == 0) {
+        return;
+    }
+    scene->sim = paused != 0 ? 2 : 1;
+}
+
+uint8_t sceneFrameSim(const SceneFrame* scene) {
+    return scene != nullptr ? scene->sim : 0;
+}
+
+float sceneFrameFps(const SceneFrame* scene) {
+    return scene != nullptr ? scene->fps : 0.0f;
+}
+
+float sceneFramePhysicsMs(const SceneFrame* scene) {
+    return scene != nullptr ? scene->physicsMs : 0.0f;
+}
+
+float sceneFrameGpuMs(const SceneFrame* scene) {
+    return scene != nullptr ? scene->gpuMs : 0.0f;
+}
+
+uint32_t sceneFrameTriangles(const SceneFrame* scene) {
+    return scene != nullptr ? scene->sceneTris : 0;
+}
+
+uint32_t sceneFrameDraws(const SceneFrame* scene) {
+    return scene != nullptr ? scene->visibleCount : 0;
 }
 
 const char* sceneFrameTitle(const SceneFrame* scene) {
@@ -3060,8 +3658,20 @@ void sceneFrameRecord(
     flyCamTarget(scene->fly, pose.target);
     pose.target[1] += bob + scene->camShock * 0.18f;
     pose.aspect = static_cast<float>(scene->extent.width) / static_cast<float>(scene->extent.height);
-    pose.zn = 0.1f;
+    pose.fovYRad = scene->fovYRad;
+    pose.zn = scene->nearPlane > 1.0e-4f ? scene->nearPlane : 0.1f;
     pose.zf = scene->farPlane;
+    if (scene->camOrtho != 0) {
+        const float dx = pose.target[0] - pose.eye[0];
+        const float dy = pose.target[1] - pose.eye[1];
+        const float dz = pose.target[2] - pose.eye[2];
+        float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist < 0.5f) {
+            dist = 0.5f;
+        }
+        const float zoom = scene->camZoom > 0.02f ? scene->camZoom : 0.02f;
+        pose.orthoHalfY = dist * std::tan(pose.fovYRad * 0.5f) * zoom;
+    }
     const bool taaLive = (static_cast<uint32_t>(scene->hud.gradeFlags) & 8u) != 0u && !fsrLive;
     if (fsrLive || taaLive) {
         fsrJitter(scene->fsr, pose.jitterX, pose.jitterY, scene->extent, swap.extent);
@@ -3103,11 +3713,21 @@ void sceneFrameRecord(
     }
     scene->atmosphere.time = scene->skyTime;
     scene->atmosphere.parity = (scene->frameCursor & 1u) != 0u ? 1.0f : 0.0f;
+    if (!scene->sunEnabled) {
+        scene->atmosphere.sunIntensity = 0.0f;
+    }
     atmosphereApply(lit, scene->atmosphere);
     lit.sunDirIntensity[3] *= scene->hud.sunGain;
-    lit.sunColor[0] = scene->hud.sunR;
-    lit.sunColor[1] = scene->hud.sunG;
-    lit.sunColor[2] = scene->hud.sunB;
+    if (!scene->sunEnabled) {
+        lit.sunDirIntensity[3] = 0.0f;
+    }
+    float kelvinR = 1.0f;
+    float kelvinG = 1.0f;
+    float kelvinB = 1.0f;
+    kelvinRgb(scene->sunKelvin, kelvinR, kelvinG, kelvinB);
+    lit.sunColor[0] = scene->hud.sunR * kelvinR;
+    lit.sunColor[1] = scene->hud.sunG * kelvinG;
+    lit.sunColor[2] = scene->hud.sunB * kelvinB;
     gpu.cameraPos[0] = cam.pos[0];
     gpu.cameraPos[1] = cam.pos[1];
     gpu.cameraPos[2] = cam.pos[2];
@@ -3153,6 +3773,9 @@ void sceneFrameRecord(
     gpu.disableFrustum = scene->showFrustum ? 0u : 1u;
     gpu.disableSubpixel = scene->showSubpixel ? 0u : 1u;
     gpu.disableShadow = scene->showShadow ? 0u : 1u;
+    gpu.debugPad[0] = scene->sunEnabled && !scene->sunCast ? 1u : 0u;
+    const float sunIndirect = scene->sunIndirect;
+    std::memcpy(&gpu.debugPad[1], &sunIndirect, sizeof(sunIndirect));
     gpu.disableBackface = scene->showBackface ? 0u : 1u;
     gpu.disableScreen = scene->showScreen ? 0u : 1u;
     gpu.disableBehind = scene->showBehind ? 0u : 1u;
@@ -3638,7 +4261,7 @@ void sceneFrameRecord(
             spdlog::info("{}", scene->gtao.lastLog);
         }
     }
-    gizmoPassRecord(cmd, swap, frame, scene->gizmo, scene->actors);
+    gizmoPassRecord(cmd, device, swap, frame, scene->gizmo, scene->actors);
 }
 
 } // namespace burnhope

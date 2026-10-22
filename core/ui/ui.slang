@@ -145,7 +145,7 @@ VsOut uiPrimVertex(uint prim, float2 corner) {
         o.slot = packed.x;
         o.blur = asfloat(gUi.Load(base + 44));
         if ((packed.y & 2u) != 0) {
-            o.clip = color;
+            o.clip = asfloat(gUi.Load4(base + 64));
         }
     } else if ((packed.y & 4u) != 0 || (packed.y & 16u) != 0) {
         o.uv = float2((float)packed.x, 0.0);
@@ -248,11 +248,11 @@ float4 uiFs(VsOut i) : SV_Target0 {
         rgb = tex.rgb;
         const float photoLum = dot(rgb, float3(0.30, 0.59, 0.11));
         if (photoLum <= 0.55) {
-            rgb = float3(0.94, 0.94, 0.92);
+            rgb = float3(0.94, 0.94, 0.92) * i.color.rgb;
         } else if ((i.flags & 2u) == 0) {
             rgb *= i.color.rgb;
         }
-        alpha = tex.a;
+        alpha = tex.a * i.color.a;
         const float d = sdRound(i.local, i.size, i.radii);
         const float aa = max(fwidth(d), 0.0001);
         cov = saturate(0.5 - d / aa);
@@ -289,7 +289,13 @@ float4 uiFs(VsOut i) : SV_Target0 {
     } else if ((i.flags & 4u) != 0) {
         const float lum = dot(i.color.rgb, float3(0.30, 0.59, 0.11));
         rgb = lum > 0.12 ? i.color.rgb : float3(0.94, 0.94, 0.92);
-        const float2 p = i.local / max(i.size, float2(1.0, 1.0)) * 2.0 - 1.0;
+        float2 p = i.local / max(i.size, float2(1.0, 1.0)) * 2.0 - 1.0;
+        if (abs(i.spread) > 0.05) {
+            const float rad = radians(i.spread);
+            const float s = sin(rad);
+            const float c = cos(rad);
+            p = float2(p.x * c + p.y * s, -p.x * s + p.y * c);
+        }
         const uint icon = (uint)i.uv.x;
         if (icon == 1u) {
             cov = abs(p.y) < 0.16 && abs(p.x) < 0.62 ? 1.0 : 0.0;
@@ -342,6 +348,46 @@ float4 uiFs(VsOut i) : SV_Target0 {
             const float ta = saturate(dot(p - a, ab) / max(dot(ab, ab), 0.0001));
             const float tc = saturate(dot(p - c, cb) / max(dot(cb, cb), 0.0001));
             cov = length(p - (a + ab * ta)) < 0.14 || length(p - (c + cb * tc)) < 0.14 ? 1.0 : 0.0;
+        } else if (icon == 12u || icon == 13u) {
+            const bool body = abs(p.x) < 0.42 && p.y > -0.05 && p.y < 0.58 && (abs(p.x) > 0.24 || p.y < 0.12 || p.y > 0.40);
+            float2 q = p - float2(icon == 12u ? 0.16 : 0.0, -0.42);
+            const float arc = length(q);
+            const bool shackle = arc > 0.22 && arc < 0.40 && q.y < 0.05 && (icon == 13u || q.x < 0.02);
+            cov = body || shackle ? 1.0 : 0.0;
+        } else if (icon == 14u) {
+            const float ang = atan2(p.y, p.x);
+            const float rad = length(p);
+            const bool arc = rad > 0.28 && rad < 0.50 && ang > -2.4 && ang < 2.6;
+            const float2 tip = p - float2(0.34, 0.22);
+            const bool head = abs(tip.x) < 0.22 && abs(tip.y) < 0.16 && tip.x < 0.08;
+            cov = arc || head ? 1.0 : 0.0;
+        } else if (icon == 15u) {
+            const float ring = length(p);
+            const bool cross = abs(p.x) < 0.11 && abs(p.y) < 0.82 || abs(p.y) < 0.11 && abs(p.x) < 0.82;
+            cov = (ring < 0.78 && ring > 0.56) || cross ? 1.0 : 0.0;
+        } else if (icon == 16u) {
+            const float box = max(abs(p.x), abs(p.y));
+            const bool frame = box < 0.94 && box > 0.72;
+            const bool plus = abs(p.x) < 0.11 && abs(p.y) < 0.48 || abs(p.y) < 0.11 && abs(p.x) < 0.48;
+            cov = frame || plus ? 1.0 : 0.0;
+        } else if (icon == 17u) {
+            const float2 a = float2(-0.62, -0.72);
+            const float2 b = float2(0.78, 0.0);
+            const float2 c = float2(-0.62, 0.72);
+            const float2 ab = b - a;
+            const float2 cb = b - c;
+            const float ta = saturate(dot(p - a, ab) / max(dot(ab, ab), 0.0001));
+            const float tc = saturate(dot(p - c, cb) / max(dot(cb, cb), 0.0001));
+            cov = length(p - (a + ab * ta)) < 0.14 || length(p - (c + cb * tc)) < 0.14 || length(p - float2(-0.62, p.y)) < 0.14 && abs(p.y) < 0.72 ? 1.0 : 0.0;
+        } else if (icon == 18u) {
+            cov = abs(abs(p.x) - 0.36) < 0.16 && abs(p.y) < 0.74 ? 1.0 : 0.0;
+        } else if (icon == 19u) {
+            const float box = max(abs(p.x), abs(p.y));
+            cov = box < 0.68 ? 1.0 : 0.0;
+        } else if (icon == 20u) {
+            const float rad = length(p);
+            const float tooth = 0.42 + 0.16 * step(0.0, sin(atan2(p.y, p.x) * 6.0));
+            cov = (rad < tooth && rad > 0.28) || rad < 0.14 ? 1.0 : 0.0;
         } else if (icon == 10u) {
             const float2 a = float2(-0.18, -0.42);
             const float2 b = float2(0.28, 0.0);

@@ -31,10 +31,9 @@ bool emitShown(const UiState& s, uint16_t id) {
 bool clipAncestors(const UiState& s, uint16_t id, UiBox& out) {
     bool any = false;
     for (uint16_t p = s.parentOf[id]; p != kUiNone; p = s.parentOf[p]) {
-        const UiPaint* paint = s.ent[p].try_get<UiPaint>();
         const UiFlex* flex = s.ent[p].try_get<UiFlex>();
         const UiScissor* scissor = s.ent[p].try_get<UiScissor>();
-        const bool clip = scissor != nullptr && scissor->enabled
+        const bool clip = (scissor != nullptr && scissor->enabled)
             || (flex != nullptr && (flex->overflow == UiOverflow::Hidden || flex->overflow == UiOverflow::Scroll));
         if (!clip) {
             continue;
@@ -55,12 +54,6 @@ bool clipAncestors(const UiState& s, uint16_t id, UiBox& out) {
         out.h = y1 > y0 ? y1 - y0 : 0.0f;
     }
     return any;
-}
-
-void boost(float& r, float& g, float& b) {
-    r = r + 0.08f > 1.0f ? 1.0f : r + 0.08f;
-    g = g + 0.08f > 1.0f ? 1.0f : g + 0.08f;
-    b = b + 0.08f > 1.0f ? 1.0f : b + 0.08f;
 }
 } // namespace
 
@@ -194,7 +187,8 @@ uint32_t uiEmitSprite(
     float blur,
     float tintR,
     float tintG,
-    float tintB) {
+    float tintB,
+    float tintA) {
     if (n >= cap || box.w < 1.0f || box.h < 1.0f) {
         return n;
     }
@@ -210,7 +204,7 @@ uint32_t uiEmitSprite(
     p.color[0] = tintR;
     p.color[1] = tintG;
     p.color[2] = tintB;
-    p.color[3] = 1.0f;
+    p.color[3] = tintA;
     p.texId = image.slot;
     p.flags = kUiFlagPhoto;
     putFloat(p.pad1, std::clamp(blur, 0.0f, 1.0f));
@@ -220,10 +214,10 @@ uint32_t uiEmitSprite(
     p.extra[3] = base + (image.viewY + image.viewH) * span;
     if (clip != nullptr) {
         p.flags |= kUiFlagClip;
-        p.color[0] = clip->x;
-        p.color[1] = clip->y;
-        p.color[2] = clip->w;
-        p.color[3] = clip->h;
+        p.corner[0] = clip->x;
+        p.corner[1] = clip->y;
+        p.corner[2] = clip->w;
+        p.corner[3] = clip->h;
     }
     ++n;
     if (image.minimap == 0 || box.w < 120.0f || box.h < 90.0f || n >= cap) {
@@ -256,10 +250,10 @@ uint32_t uiEmitSprite(
     map.extra[3] = base + span;
     if (clip != nullptr) {
         map.flags |= kUiFlagClip;
-        map.color[0] = clip->x;
-        map.color[1] = clip->y;
-        map.color[2] = clip->w;
-        map.color[3] = clip->h;
+        map.corner[0] = clip->x;
+        map.corner[1] = clip->y;
+        map.corner[2] = clip->w;
+        map.corner[3] = clip->h;
     }
     const float vx = mx + image.viewX * kMapW;
     const float vy = my + image.viewY * kMapH;
@@ -335,16 +329,16 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
     }
     uint16_t roots[kUiCap];
     uint16_t nRoots = 0;
-    for (uint16_t id = 0; id < s.count && id < kUiCap; ++id) {
+    auto link = [&](uint16_t id) {
         if (!s.ent[id].is_alive()) {
-            continue;
+            return;
         }
         const uint16_t parent = s.parentOf[id];
         if (parent == kUiNone || parent >= s.count || !s.ent[parent].is_alive()) {
             if (nRoots < kUiCap) {
                 roots[nRoots++] = id;
             }
-            continue;
+            return;
         }
         childNext[id] = kUiNone;
         if (childHead[parent] == kUiNone) {
@@ -353,6 +347,16 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             childNext[childTail[parent]] = id;
         }
         childTail[parent] = id;
+    };
+    for (uint16_t id = 0; id < s.count && id < kUiCap; ++id) {
+        if (!s.ent[id].has<UiPaintLast>()) {
+            link(id);
+        }
+    }
+    for (uint16_t id = 0; id < s.count && id < kUiCap; ++id) {
+        if (s.ent[id].has<UiPaintLast>()) {
+            link(id);
+        }
     }
     uint16_t stack[kUiCap];
     uint16_t sp = 0;
@@ -427,6 +431,11 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             float g = paint->g;
             float b = paint->b;
             float a = paint->a;
+            for (uint16_t fadeAt = id; fadeAt != kUiNone && fadeAt < s.count; fadeAt = s.parentOf[fadeAt]) {
+                if (const UiFade* fade = s.ent[fadeAt].try_get<UiFade>()) {
+                    a *= fade->a;
+                }
+            }
             if (s.anim[id].on && s.anim[id].dur > 0.0f) {
                 float u = (s.time - s.anim[id].t0) / s.anim[id].dur;
                 if (u < 0.0f) {
@@ -442,10 +451,25 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                 a = s.anim[id].fa + (s.anim[id].ta - s.anim[id].fa) * u;
             }
             uiHoverTint(s, id, r, g, b, a);
+            float glyphA = 1.0f;
+            const uint16_t host = s.parentOf[id];
+            if (host < s.count && s.ent[host].has<UiIconChrome>()) {
+                glyphA = paint->bright > 0.02f ? paint->bright : 0.7f;
+                const bool selected = paint->r > 0.95f && paint->g < 0.75f && paint->b < 0.15f;
+                if (!selected && s.hovered == host) {
+                    glyphA = 1.0f;
+                    const UiBox& mark = s.box[id];
+                    const float side = (mark.w < mark.h ? mark.w : mark.h) + 10.0f;
+                    n = emitRect(
+                        dst, n, cap,
+                        mark.x + (mark.w - side) * 0.5f, mark.y + (mark.h - side) * 0.5f, side, side,
+                        1.0f, 1.0f, 1.0f, 0.22f, side * 0.5f, clip);
+                }
+            }
             if (const UiImage* image = s.ent[id].try_get<UiImage>()) {
-                n = uiEmitSprite(dst, n, cap, s.box[id], *image, clip, paint->blur, r, g, b);
+                n = uiEmitSprite(dst, n, cap, s.box[id], *image, clip, paint->blur, r, g, b, glyphA);
             } else {
-                n = uiEmitPanel(s, id, dst, n, cap, clip, r, g, b, a);
+                n = uiEmitPanel(s, id, dst, n, cap, clip, r, g, b, a, glyphA);
                 if (!s.ent[id].has<UiTextInput>()) {
                     n = uiEmitTextNode(s, id, dst, n, cap, clip, r, g, b, a);
                 }

@@ -385,6 +385,16 @@ void restirSun(uint2 px) {
         restirSigmaStore(px, 0.0, 0.0, 0.0, 1.0);
         return;
     }
+    if (gFrame.debugPad0 != 0u) {
+        RAB_LightSample open = RAB_EmptyLightSample();
+        open.position = surface.worldPos + L * 20000.0;
+        open.normal = -L;
+        open.radiance = max(gSun.sunColor.rgb, 0.0) * max(gSun.sunDirIntensity.w, 0.0);
+        open.solidAnglePdf = 1.0;
+        float3 openShade = max(restirShade(open, surface), 0.0);
+        restirSigmaStore(px, 1.0, 0.0, openShade, 1.0);
+        return;
+    }
     float3 origin = surface.worldPos + surface.geoNormal * 0.02 + L * 0.01;
     uint rays = max(gRestir.pad2, 1u);
     float3 tint = 0.0;

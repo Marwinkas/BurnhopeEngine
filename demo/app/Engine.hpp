@@ -9,6 +9,8 @@
 
 namespace burnhope {
 
+struct HudContext;
+
 struct PageHit {
     Canvas* canvas = nullptr;
     uint16_t page = kUiNone;
@@ -23,8 +25,10 @@ struct StatsHit {
 
 struct ModeHit {
     Canvas* canvas = nullptr;
+    HudContext* hud = nullptr;
     int index = 0;
     uint16_t label = kUiNone;
+    uint16_t radio = kUiNone;
 };
 
 struct ToolHit {
@@ -36,9 +40,25 @@ struct ToolHit {
     uint16_t propPage = kUiNone;
 };
 
+struct HudContext;
+
 struct GizmoHit {
     ToolHit* tool = nullptr;
+    HudContext* hud = nullptr;
     uint8_t mode = 0;
+};
+
+struct SnapHit {
+    HudContext* hud = nullptr;
+    uint8_t channel = 0;
+    uint8_t index = 0;
+    float step = 1.0f;
+    uint16_t caption = kUiNone;
+};
+
+struct SpawnHit {
+    HudContext* hud = nullptr;
+    uint8_t kind = 0;
 };
 
 struct ObjectHit {
@@ -224,9 +244,20 @@ struct HudIds {
     uint16_t pbrSx = kUiNone;
     uint16_t pbrSy = kUiNone;
     uint16_t pbrSz = kUiNone;
+    uint16_t pbrOx = kUiNone;
+    uint16_t pbrOy = kUiNone;
+    uint16_t pbrOz = kUiNone;
     uint16_t xfStatic = kUiNone;
     uint16_t reflRt = kUiNone;
     uint16_t fogSwatch = kUiNone;
+    uint16_t sunSwatch = kUiNone;
+    uint16_t sunCast = kUiNone;
+    uint16_t sunKelvin = kUiNone;
+    uint16_t sunAngle = kUiNone;
+    uint16_t sunSoft = kUiNone;
+    uint16_t sunIndirect = kUiNone;
+    uint16_t sunSh0 = kUiNone;
+    uint16_t sunSh1 = kUiNone;
     uint16_t contacten = kUiNone;
     uint16_t vt = kUiNone;
     uint16_t freeze = kUiNone;
@@ -236,6 +267,7 @@ struct HudIds {
 struct HudContext {
     SceneFrame* scene = nullptr;
     Host* host = nullptr;
+    ColorBook* book = nullptr;
     int slot = -1;
     uint8_t lookGrab = 0;
     uint8_t toolGrab = 0;
@@ -246,12 +278,60 @@ struct HudContext {
     uint8_t propSel = 0xff;
     uint8_t propStatic = 0;
     float propLast[15]{};
+    float propPivot[3]{};
     ToolHit tool{};
     StatsHit stats{};
     std::deque<PageHit> pages;
     std::deque<ModeHit> modes;
     std::deque<GizmoHit> gizmos;
+    std::deque<SnapHit> snaps;
+    std::deque<SpawnHit> spawns;
     std::deque<ObjectHit> objects;
+    uint16_t toolBtn[5]{};
+    uint16_t toolIcon[5]{};
+    uint16_t snapBtn[3]{};
+    uint16_t snapIcon[3]{};
+    uint16_t snapNum[3]{};
+    uint16_t xformLock[4]{};
+    uint16_t playBtn = kUiNone;
+    uint16_t playGlyph = kUiNone;
+    uint16_t pauseBtn = kUiNone;
+    uint16_t spawnBtn = kUiNone;
+    uint16_t gearBtn = kUiNone;
+    uint16_t statsPanel = kUiNone;
+    uint16_t statCheck[6]{};
+    uint16_t statLine[6]{};
+    uint16_t overlay = kUiNone;
+    uint16_t viewBtn = kUiNone;
+    uint16_t viewCap = kUiNone;
+    uint16_t viewPanel = kUiNone;
+    float viewPopH = 0.0f;
+    uint16_t camBtn = kUiNone;
+    uint16_t camPanel = kUiNone;
+    uint16_t camFov = kUiNone;
+    uint16_t camFovNum = kUiNone;
+    uint16_t camNear = kUiNone;
+    uint16_t camFar = kUiNone;
+    uint16_t camSpeed = kUiNone;
+    uint16_t camProj[2]{};
+    uint16_t camAxis[6]{};
+    uint8_t toolMode = 0;
+    uint8_t space = 0;
+    uint8_t pivotSpace = 0;
+    uint8_t snapOn[3]{};
+    uint8_t snapPick[3]{3, 2, 0};
+    float snapSent[3]{1.0f, 15.0f, 0.1f};
+    uint8_t statOn[6]{};
+    uint8_t statsWant = 0;
+    uint8_t camWant = 0;
+    uint8_t viewWant = 0;
+    uint8_t camBreak = 0;
+    uint8_t camInit = 0;
+    uint8_t viewSent = 0;
+    float fovSent = 60.0f;
+    float nearSent = 0.1f;
+    float farSent = 8000.0f;
+    float speedSent = 4.0f;
     FileAct fileNew{};
     FileAct fileOpen{};
     FileAct fileSave{};

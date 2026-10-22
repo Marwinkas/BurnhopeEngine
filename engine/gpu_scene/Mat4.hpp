@@ -53,6 +53,20 @@ inline Mat4 mat4PerspectiveReverseZ(float fovYRad, float aspect, float zn) {
     return r;
 }
 
+// Reverse-Z orthographic. Near maps to 1, far to 0. Y is flipped for Vulkan.
+inline Mat4 mat4OrthoReverseZ(float halfX, float halfY, float zn, float zf) {
+    Mat4 r{};
+    const float hx = halfX > 1.0e-4f ? halfX : 1.0e-4f;
+    const float hy = halfY > 1.0e-4f ? halfY : 1.0e-4f;
+    const float span = zf > zn ? zf - zn : 1.0f;
+    r.m[0] = 1.0f / hx;
+    r.m[5] = -1.0f / hy;
+    r.m[10] = 1.0f / span;
+    r.m[14] = zf / span;
+    r.m[15] = 1.0f;
+    return r;
+}
+
 inline Mat4 mat4OrthoRh(float left, float right, float bottom, float top, float zn, float zf) {
     Mat4 r{};
     r.m[0] = 2.0f / (right - left);

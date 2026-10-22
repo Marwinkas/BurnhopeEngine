@@ -196,6 +196,45 @@ inline void flyCamUpdate(FlyCam& cam, const InputFrame& input, float dt) {
     }
 }
 
+inline void flyCamPan(FlyCam& cam, const InputFrame& input, float dt, const float right[3], const float up[3]) {
+    if (dt < 0.0f) {
+        dt = 0.0f;
+    }
+    if (right == nullptr || up == nullptr) {
+        return;
+    }
+    float mx = 0.0f;
+    float my = 0.0f;
+    float mz = 0.0f;
+    if (inputKeyDown(input, kFlyKeyW)) {
+        mx += up[0];
+        my += up[1];
+        mz += up[2];
+    }
+    if (inputKeyDown(input, kFlyKeyS)) {
+        mx -= up[0];
+        my -= up[1];
+        mz -= up[2];
+    }
+    if (inputKeyDown(input, kFlyKeyD)) {
+        mx += right[0];
+        my += right[1];
+        mz += right[2];
+    }
+    if (inputKeyDown(input, kFlyKeyA)) {
+        mx -= right[0];
+        my -= right[1];
+        mz -= right[2];
+    }
+    const float len = std::sqrt(mx * mx + my * my + mz * mz);
+    if (len > 1.0e-6f) {
+        const float s = cam.speed * dt / len;
+        cam.eye[0] += mx * s;
+        cam.eye[1] += my * s;
+        cam.eye[2] += mz * s;
+    }
+}
+
 inline void flyCamTarget(const FlyCam& cam, float target[3]) {
     float fx = 0.0f;
     float fy = 0.0f;

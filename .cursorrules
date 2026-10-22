@@ -470,3 +470,14 @@ NEVER leave air temperature unread (the slider does not change the air); ALWAYS 
 NEVER size every gizmo icon from the selected span (a far pick inflates every marker); ALWAYS an 18 px icon from that marker's own depth, 4 bytes.
 NEVER draw a flat card on a mesh actor (the cube wears a billboard); ALWAYS a 12-edge box from ActorBounds when that actor is selected, 12 bytes xyz.
 NEVER abort actor picking when the selected gizmo is behind the camera (the click hits nothing); ALWAYS test the axes only when the origin projects, then the other actors, 4 bytes.
+NEVER scale the gizmo by a clamped world length or draw axis planes as camera-facing quads (the tool changes size with distance and the plane spins); ALWAYS screen length distance * tan(fov/2) * 108 px, cones on move, cubes on scale, a 32×8 torus, and a center cube, 12 bytes.
+NEVER keep a gizmo icon at 18 px (it vanishes beside the mesh); ALWAYS 72 px within 8 m lerping to 36 px by 48 m, clamped 32..80, 4 bytes.
+NEVER move the gizmo center by the pixel count in meters (a click on the white cube throws the actor); ALWAYS scale that screen solve by meters per pixel, 12 bytes.
+NEVER add a scene component and leave it out of play (Stop restores a partial actor and the new field survives); ALWAYS copy every flecs component on the actor through ecs_get_type into the play snapshot, size from ecs_get_type_info, 8 bytes.
+NEVER draw the selection box at the pivot handle (the outline slides when Pivot Offset changes); ALWAYS center it on the actor position, half extents from ActorBounds times scale, 12 bytes xyz.
+NEVER pass the Halton sample to FSR with the same sign as the projection term (Jitter() subtracts it and Native steps one pixel); ALWAYS jitterOffset = -jx, -jy while m[8] gets -2·jx/width and m[9] gets +2·jy/height, 8 bytes.
+NEVER spawn the color popup before the window root (yoga[0] becomes the hidden picker and the chrome lays out at 0); ALWAYS parent it to node 0 after the root exists, 2 bytes.
+NEVER parent the orange stats readout to the viewport column (y = 40 still covers the toolbar); ALWAYS parent it to the view pane under the toolbar, left 8 px and top 8 px, and keep the settings panel's right edge on the gear button, 8 bytes.
+NEVER uiShow(false) a toolbar popup on dismiss (the close skips the slide and only the snap menu collapses); ALWAYS UiMenuSlide so menuDismiss runs uiReveal, 2 bytes.
+NEVER let the property grip use the full content height (the line paints through the filter tabs and slides over their names); ALWAYS clip it to the scroll viewport and below the filter bar, 4 bytes.
+NEVER bind a color-panel button without UiFocusable (activate drops the click, so MENU, PICK, and the close stay dead); ALWAYS uiHover plus UiFocusable on a UiTitleBar header whose close sits on the right, 2 bytes.

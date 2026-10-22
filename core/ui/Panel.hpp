@@ -25,6 +25,7 @@ uint32_t uiEmitPanel(
     float r,
     float g,
     float b,
-    float a);
+    float a,
+    float glyphA = 1.0f);
 
 } // namespace burnhope

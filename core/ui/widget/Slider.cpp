@@ -166,7 +166,7 @@ uint16_t uiNumber(UiState& s, uint16_t parent, float value, float minV, float ma
     if (id == kUiNone) {
         return id;
     }
-    s.ent[id].set<UiRange>({value, minV, maxV, step});
+    s.ent[id].set<UiRange>({value, minV, maxV, step, 1});
     if (auto* field = s.ent[id].try_get_mut<UiField>()) {
         field->align = 1;
     }
@@ -175,6 +175,14 @@ uint16_t uiNumber(UiState& s, uint16_t parent, float value, float minV, float ma
         s.ent[id].set<UiValueHook>({onChange, user});
     }
     return id;
+}
+
+void uiNumberFill(UiState& s, uint16_t id, bool showFillProgress) {
+    auto* range = id < s.count ? s.ent[id].try_get_mut<UiRange>() : nullptr;
+    if (range == nullptr) {
+        return;
+    }
+    range->fill = showFillProgress ? 1 : 0;
 }
 
 uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV, float step) {

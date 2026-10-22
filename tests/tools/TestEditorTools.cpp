@@ -167,6 +167,56 @@ TEST_CASE("scene actor duplicate keeps the transform") {
     CHECK(actorDot(x, x1) == doctest::Approx(1.0f).epsilon(0.001));
     CHECK(actorDot(y, y1) < 0.95f);
 }
+TEST_CASE("gizmo keeps a constant screen length") {
+    CameraPose camPose{};
+    camPose.eye[2] = 8.0f;
+    camPose.aspect = 16.0f / 9.0f;
+    const CameraCull nearCam = cameraCullBuild(camPose, nullptr);
+    SceneActors world;
+    const float pos[3] = {0.0f, 0.0f, 0.0f};
+    CHECK(sceneActorAdd(world, SceneActorKind::Sun, pos, "Sun") == 0);
+    world.selected = 0;
+    sceneActorSetCamera(world, nearCam, 1600.0f, 900.0f);
+    const float nearPx = actorSpan(world, pos) / actorMetersPerPx(world, pos);
+    camPose.eye[2] = 40.0f;
+    const CameraCull farCam = cameraCullBuild(camPose, nullptr);
+    sceneActorSetCamera(world, farCam, 1600.0f, 900.0f);
+    const float farPx = actorSpan(world, pos) / actorMetersPerPx(world, pos);
+    CHECK(nearPx == doctest::Approx(108.0f).epsilon(0.01));
+    CHECK(farPx == doctest::Approx(108.0f).epsilon(0.01));
+}
+
+TEST_CASE("gizmo center follows the cursor in meters") {
+    CameraPose camPose{};
+    camPose.eye[1] = 2.0f;
+    camPose.eye[2] = 6.0f;
+    camPose.target[1] = 2.0f;
+    camPose.aspect = 1600.0f / 900.0f;
+    camPose.zn = 0.1f;
+    camPose.zf = 80.0f;
+    const CameraCull cam = cameraCullBuild(camPose, nullptr);
+    SceneActors world;
+    const float pos[3] = {0.0f, 2.0f, 0.0f};
+    CHECK(sceneActorAdd(world, SceneActorKind::Sun, pos, "Sun") == 0);
+    world.selected = 0;
+    world.gizmo = 0;
+    sceneActorSetCamera(world, cam, 1600.0f, 900.0f);
+    float ox = 0.0f;
+    float oy = 0.0f;
+    CHECK(actorProject(world, pos, ox, oy));
+    uint8_t part = kSceneActorNone;
+    CHECK(sceneActorHit(world, ox, oy, part) == 0);
+    CHECK(part == 6);
+    sceneActorPointer(world, ox, oy, 1, 1, 0);
+    CHECK(world.drag == 6);
+    sceneActorPointer(world, ox + 30.0f, oy, 1, 0, 0);
+    const Xform moved = sceneActorXform(world, 0);
+    const float mpp = actorMetersPerPx(world, pos);
+    CHECK(moved.pos[0] == doctest::Approx(30.0f * mpp).epsilon(0.2));
+    CHECK(std::fabs(moved.pos[0]) < 2.0f);
+    CHECK(moved.pos[1] == doctest::Approx(2.0f).epsilon(0.05));
+}
+
 TEST_CASE("gizmo axis follows the cursor") {
     CameraPose camPose{};
     camPose.eye[0] = 0.0f;

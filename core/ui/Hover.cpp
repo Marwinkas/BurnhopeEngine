@@ -15,6 +15,9 @@ void uiHoverTint(const UiState& s, uint16_t id, float& r, float& g, float& b, fl
     if (id >= s.count || !s.ent[id].has<UiHoverable>() || id != s.hovered) {
         return;
     }
+    if (s.ent[id].has<UiIconChrome>()) {
+        return;
+    }
     const UiPaint* paint = s.ent[id].try_get<UiPaint>();
     if (paint != nullptr && paint->disabled) {
         a *= 0.45f;

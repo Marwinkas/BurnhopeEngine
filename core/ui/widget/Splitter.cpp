@@ -184,7 +184,7 @@ void shareResize(UiState& s, uint16_t split, float x) {
         bar->position = UiPosition::Absolute;
         bar->posX = size;
         bar->widthMode = UiSize::Px;
-        bar->width = 2.0f;
+        bar->width = 1.0f;
     }
     if (host < s.count) {
         if (auto* grid = s.ent[host].try_get_mut<UiPropGrid>()) {
@@ -306,7 +306,23 @@ void splitPaint(UiState& s, uint16_t id, bool hot) {
         return;
     }
     auto* paint = s.ent[id].try_get_mut<UiPaint>();
-    if (paint == nullptr || s.ent[id].has<UiSplitShare>()) {
+    if (paint == nullptr) {
+        return;
+    }
+    if (s.ent[id].has<UiSplitShare>()) {
+        if (hot) {
+            *paint = paintToken(s.look, UiToken::Accent, 0.0f);
+            paint->a = 1.0f;
+        } else {
+            paint->token = UiToken::Custom;
+            paint->r = 1.0f;
+            paint->g = 1.0f;
+            paint->b = 1.0f;
+            paint->a = 0.08f;
+            paint->borderW = 0.0f;
+            paint->shadow = 0.0f;
+        }
+        s.visualDirty = true;
         return;
     }
     const UiToken token = hot ? UiToken::Accent : UiToken::Muted;

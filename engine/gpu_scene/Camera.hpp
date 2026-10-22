@@ -19,6 +19,7 @@ struct CameraPose {
     float aspect = 1.0f;
     float jitterX = 0.0f; // NDC added into projection, TAA / phase 13
     float jitterY = 0.0f;
+    float orthoHalfY = 0.0f; // > 0: orthographic half-height in meters
 };
 
 // Everything a later cull phase consumes. CPU frustum, cone, cascades, froxels,
@@ -43,6 +44,8 @@ struct CameraCull {
     float aspect = 1.0f;
     float tanHalfFovX = 1.0f;
     float tanHalfFovY = 1.0f;
+    float orthoHalfY = 0.0f;
+    uint8_t ortho = 0;
     float jitter[2]{};
     float cascadeSplit[5]{}; // zn .. zf, 4 cascades
     float froxelEdge[17]{};  // 16 slices, view-space z
@@ -75,9 +78,19 @@ inline CameraCull cameraCullBuild(const CameraPose& pose, const Mat4* prevViewPr
     const float zn = pose.zn > 1.0e-4f ? pose.zn : 0.1f;
     const float zf = pose.zf > zn ? pose.zf : zn + 1.0f;
     c.view = mat4LookAtYUpRh(pose.eye[0], pose.eye[1], pose.eye[2], pose.target[0], pose.target[1], pose.target[2]);
-    c.proj = mat4PerspectiveReverseZ(pose.fovYRad, aspect, zn);
-    c.proj.m[8] += pose.jitterX;
-    c.proj.m[9] += pose.jitterY;
+    if (pose.orthoHalfY > 1.0e-4f) {
+        const float halfY = pose.orthoHalfY;
+        const float halfX = halfY * aspect;
+        c.proj = mat4OrthoReverseZ(halfX, halfY, zn, zf);
+        c.proj.m[12] += pose.jitterX;
+        c.proj.m[13] += pose.jitterY;
+        c.ortho = 1;
+        c.orthoHalfY = halfY;
+    } else {
+        c.proj = mat4PerspectiveReverseZ(pose.fovYRad, aspect, zn);
+        c.proj.m[8] += pose.jitterX;
+        c.proj.m[9] += pose.jitterY;
+    }
     c.viewProj = mat4Mul(c.proj, c.view);
     c.invView = mat4Inverse(c.view);
     c.invProj = mat4Inverse(c.proj);

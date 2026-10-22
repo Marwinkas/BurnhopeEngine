@@ -64,6 +64,7 @@ inline const UiColorPickerComponent& uiColor(const UiState& s) {
 }
 
 void uiSetColorBook(UiState& s, ColorBook* book);
+void uiEnsureColorPopup(UiState& s);
 void uiBuildColor(UiState& s);
 void colorOnOpen(void* user, uint16_t id);
 void colorOnValue(void* user, uint16_t id, float value);

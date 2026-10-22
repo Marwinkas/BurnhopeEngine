@@ -2,6 +2,7 @@
 
 #include "gpu_scene/SceneObject.hpp"
 #include "rhi/GpuBuffer.hpp"
+#include "rhi/GpuImage.hpp"
 #include "rhi/ShaderObject.hpp"
 #include "rhi/Swapchain.hpp"
 
@@ -13,10 +14,11 @@ struct GizmoPass {
     ShaderExt mesh{};
     ShaderExt frag{};
     GpuBuffer buf{};
+    TrackedImage depth[2]{};
 };
 
 [[nodiscard]] bool gizmoPassCreate(GizmoPass& pass, Device& device, DescriptorHeaps& heaps);
 void gizmoPassDestroy(GizmoPass& pass, Device& device);
-void gizmoPassRecord(VkCommandBuffer cmd, const Swapchain& swap, const FrameContext& frame, GizmoPass& pass, const SceneActors& actors);
+void gizmoPassRecord(VkCommandBuffer cmd, Device& device, const Swapchain& swap, const FrameContext& frame, GizmoPass& pass, const SceneActors& actors);
 
 } // namespace burnhope

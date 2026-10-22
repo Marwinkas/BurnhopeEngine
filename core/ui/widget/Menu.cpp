@@ -100,10 +100,21 @@ void uiMarkMenuBar(UiState& s, uint16_t id) {
     }
 }
 
+static void menuDismiss(UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return;
+    }
+    if (s.ent[id].has<UiMenuSlide>()) {
+        uiReveal(s, id, 0.0f, false);
+        return;
+    }
+    uiShow(s, id, false);
+}
+
 void uiMenuClose(UiState& s) {
     const uint16_t id = uiFindName(s, "ui.menu");
     if (id != kUiNone) {
-        uiShow(s, id, false);
+        menuDismiss(s, id);
     }
     if (uiMenuMetrics(s).opened == id) {
         uiMenuMetrics(s).opened = kUiNone;
@@ -192,12 +203,13 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
         ++slot;
     }
     pop->n = slot;
+    float menuH = static_cast<float>(slot) * 30.0f + 8.0f;
     if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
         flex->position = UiPosition::Absolute;
         const float menuW = flex->width > 1.0f ? flex->width : 220.0f;
-        const float full = static_cast<float>(slot) * 30.0f + 8.0f;
+        const float full = menuH;
         const float limit = s.laidH > 64.0f ? s.laidH - 16.0f : full;
-        const float menuH = full < limit ? full : limit;
+        menuH = full < limit ? full : limit;
         float x = screenX;
         float y = screenY;
         if (x + menuW > s.laidW - 4.0f) {
@@ -217,9 +229,13 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
     if (slot > 0 && s.ent[id].try_get<UiFlex>() != nullptr && s.ent[id].try_get<UiFlex>()->overflow != UiOverflow::Visible) {
         s.ent[id].set<UiScroll>({0.0f, id});
     }
-    uiShow(s, id, true);
     uiMenuMetrics(s).opened = id;
     s.menuOpen = true;
+    if (s.ent[id].has<UiMenuSlide>()) {
+        uiReveal(s, id, menuH, true);
+    } else {
+        uiShow(s, id, true);
+    }
     uiMarkLayout(s, id);
 }
 
@@ -239,6 +255,7 @@ uint16_t uiMakeMenu(UiState& s) {
         menuShell(s, id);
         uiShow(s, id, false);
         s.ent[id].set<UiPopup>({});
+        s.ent[id].add<UiMenuSlide>();
     }
     return id;
 }
@@ -297,11 +314,15 @@ void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y, float above) {
     menuShell(s, menuId);
     uiMenuMetrics(s).opened = menuId;
     s.menuOpen = true;
-    uiShow(s, menuId, true);
-    const UiPaint* menuPaint = s.ent[menuId].try_get<UiPaint>();
-    if (menuPaint != nullptr) {
-        uiMotionTo(s, menuId, menuPaint->r, menuPaint->g, menuPaint->b, 1.0f);
-        s.anim[menuId].fa = 0.0f;
+    if (s.ent[menuId].has<UiMenuSlide>()) {
+        uiReveal(s, menuId, menuH, true);
+    } else {
+        uiShow(s, menuId, true);
+        const UiPaint* menuPaint = s.ent[menuId].try_get<UiPaint>();
+        if (menuPaint != nullptr) {
+            uiMotionTo(s, menuId, menuPaint->r, menuPaint->g, menuPaint->b, 1.0f);
+            s.anim[menuId].fa = 0.0f;
+        }
     }
 }
 
@@ -314,7 +335,7 @@ void onMenuCommand(void* user, uint16_t id) {
         s.cmds[cmd->index].fn(s.cmds[cmd->index].user);
     }
     if (uiMenuMetrics(s).opened != kUiNone) {
-        uiShow(s, uiMenuMetrics(s).opened, false);
+        menuDismiss(s, uiMenuMetrics(s).opened);
         uiMenuMetrics(s).opened = kUiNone;
         s.menuOpen = false;
     }
@@ -370,7 +391,7 @@ bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t hit, uint8_t phase, 
     (void)cursor;
     if (phase == kUiInEscape) {
         if (uiMenuMetrics(s).opened != kUiNone) {
-            uiShow(s, uiMenuMetrics(s).opened, false);
+            menuDismiss(s, uiMenuMetrics(s).opened);
             uiMenuMetrics(s).opened = kUiNone;
             s.menuOpen = false;
             s.layoutDirty = true;
@@ -435,12 +456,12 @@ bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t hit, uint8_t phase, 
     }
     if (((right && !barOnly) || barOpen) && contextMenu != kUiNone) {
         if (barOpen && s.menuOpen && uiMenuMetrics(s).opened == contextMenu) {
-            uiShow(s, uiMenuMetrics(s).opened, false);
+            menuDismiss(s, uiMenuMetrics(s).opened);
             uiMenuMetrics(s).opened = kUiNone;
             s.menuOpen = false;
             justOpened = true;
         } else if (uiMenuMetrics(s).opened != kUiNone && uiMenuMetrics(s).opened != contextMenu) {
-            uiShow(s, uiMenuMetrics(s).opened, false);
+            menuDismiss(s, uiMenuMetrics(s).opened);
         }
         if (!justOpened) {
             justOpened = true;
@@ -449,7 +470,7 @@ bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t hit, uint8_t phase, 
     }
     if (press && s.menuOpen && !justOpened && !inMenu(hit)) {
         if (uiMenuMetrics(s).opened != kUiNone) {
-            uiShow(s, uiMenuMetrics(s).opened, false);
+            menuDismiss(s, uiMenuMetrics(s).opened);
         }
         uiMenuMetrics(s).opened = kUiNone;
         s.menuOpen = false;
@@ -587,7 +608,7 @@ uint16_t uiChoice(UiState& s, uint16_t parent, const UiChoiceConfig& cfg) {
     }
     if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
         flex->widthMode = UiSize::Px;
-        flex->width = cfg.width > 48.0f ? cfg.width : 140.0f;
+        flex->width = cfg.width > 1.0f ? cfg.width : 140.0f;
         flex->grow = 0.0f;
         flex->shrink = 0.0f;
     }

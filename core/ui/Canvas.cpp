@@ -187,6 +187,7 @@ UiEvent canvasConsume(
     }
     UiState& s = *c.state;
     s.time = timeSec;
+    uiRevealTick(s);
     const float dpi = s.dpi < 0.5f ? 1.0f : s.dpi;
     const float pointsW = w / dpi;
     const float pointsH = h / dpi;
@@ -197,6 +198,9 @@ UiEvent canvasConsume(
     local.pointer.dx /= dpi;
     local.pointer.dy /= dpi;
 
+    if (s.beforeLayout != nullptr) {
+        s.beforeLayout(s);
+    }
     // 1. Верстка дерева через Yoga
     uiLayout(s, pointsW, pointsH);
 

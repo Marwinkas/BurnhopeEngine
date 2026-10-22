@@ -81,7 +81,11 @@ void weatherGoals(Weather& w, float coverage, float density, float rainAmount, f
         }
     }
     w.sliderTime = w.timeOfDay;
-    w.flags = clockSun != 0 ? 1u : 0u;
+    if (clockSun != 0) {
+        w.flags |= 1u;
+    } else {
+        w.flags &= ~1u;
+    }
 }
 
 void weatherIntegrate(Weather& w, float dt) {
@@ -161,7 +165,15 @@ void weatherPublish(const Weather& w, AtmosphereParams& atm, float& rainAmount, 
     }
     atm.sunZenith = w.sunZenith;
     atm.sunAzimuth = w.sunAzimuth;
-    atm.sunIntensity = lux;
+    atm.sunIntensity = (w.flags & 2u) != 0u ? lux : 0.0f;
+    float disk = w.sunAngle;
+    if (disk < 0.05f) {
+        disk = 0.05f;
+    }
+    if (disk > 8.0f) {
+        disk = 8.0f;
+    }
+    atm.sunDisk = disk;
     atm.cloudCoverage = clamp01(w.cloudCoverage);
     atm.cloudDensity = w.cloudDensity < 0.0f ? 0.0f : w.cloudDensity;
     atm.cloudDetail = 0.22f + clamp01(w.cloudDensity) * 0.45f;

@@ -159,6 +159,15 @@ bool uiCheckDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
     const float side = 22.0f;
     const float x = box.w < 40.0f ? box.x + (box.w - side) * 0.5f : box.x + 8.0f;
     const float y = box.y + (box.h - side) * 0.5f;
+    if (check->group != 0) {
+        n = emitMark(dst, n, cap, x, y, side, side, s.look.muted[0], s.look.muted[1], s.look.muted[2], 1.0f, side * 0.5f, 1.5f, kUiFlagStroke, clip);
+        if (check->on != 0) {
+            const float dot = 10.0f;
+            n = emitRect(dst, n, cap, x + (side - dot) * 0.5f, y + (side - dot) * 0.5f, dot, dot,
+                s.look.text[0], s.look.text[1], s.look.text[2], 1.0f, dot * 0.5f, clip);
+        }
+        return false;
+    }
     n = emitMark(dst, n, cap, x, y, side, side, s.look.muted[0], s.look.muted[1], s.look.muted[2], 1.0f, 2.0f, 1.0f, kUiFlagStroke, clip);
     if (check->on != 0 && n < cap) {
         UiPrimitive& mark = dst[n++];

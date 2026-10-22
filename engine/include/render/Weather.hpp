@@ -38,14 +38,18 @@ struct alignas(16) Weather {
     float sliderAzimuth = 30.0f;
     float padTail = 0.0f;
     uint32_t preset = 2;
-    uint32_t flags = 0;
+    uint32_t flags = 6;
     float goalWind = 6.0f;
     float sliderTime = 11.4f;
     float goalTemp = 12.0f;
     float padWx = 0.0f;
+    float kelvin = 5600.0f;
+    float sunAngle = 0.53f;
+    float softAngle = 0.5f;
+    float indirect = 1.0f;
 };
 
-static_assert(sizeof(Weather) == 144);
+static_assert(sizeof(Weather) == 160);
 static_assert(sizeof(Weather) % 16 == 0);
 static_assert(std::is_trivially_copyable_v<Weather>);
 

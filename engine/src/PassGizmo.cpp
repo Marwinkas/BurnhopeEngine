@@ -5,6 +5,7 @@
 #include "render/PassAllocators.hpp"
 #include "render/PassRendering.hpp"
 #include "rhi/Barrier.hpp"
+#include "rhi/GpuImage.hpp"
 #include "rhi/MeshDraw.hpp"
 
 #include <cstring>
@@ -27,6 +28,8 @@ bool gizmoPassCreate(GizmoPass& pass, Device& device, DescriptorHeaps& heaps) {
         .nextStage = VK_SHADER_STAGE_FRAGMENT_BIT,
         .mappingCount = bind.raw.count,
         .mappings = bind.raw.mappings,
+        .pushBytes = 16,
+        .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
     };
     const ShaderCreateDesc frag{
         .path = BH_SHADER_DIR "/gizmo.frag.spv",
@@ -52,9 +55,13 @@ void gizmoPassDestroy(GizmoPass& pass, Device& device) {
     shaderDestroy(device, pass.mesh);
     shaderDestroy(device, pass.frag);
     gpuBufferDestroy(pass.buf, device);
+    gpuImageDestroy(pass.depth[0].image, device);
+    gpuImageDestroy(pass.depth[1].image, device);
+    pass.depth[0] = {};
+    pass.depth[1] = {};
 }
 
-void gizmoPassRecord(VkCommandBuffer cmd, const Swapchain& swap, const FrameContext& frame, GizmoPass& pass, const SceneActors& actors) {
+void gizmoPassRecord(VkCommandBuffer cmd, Device& device, const Swapchain& swap, const FrameContext& frame, GizmoPass& pass, const SceneActors& actors) {
     if (pass.mesh.handle == VK_NULL_HANDLE || pass.buf.mapped == nullptr || frame.imageIndex >= 8) {
         return;
     }
@@ -71,10 +78,81 @@ void gizmoPassRecord(VkCommandBuffer cmd, const Swapchain& swap, const FrameCont
         VK_ACCESS_2_HOST_WRITE_BIT,
         VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT,
         VK_ACCESS_2_UNIFORM_READ_BIT);
-    VkClearValue clear{};
-    RenderingPass rendering = beginRenderingColorDepth(cmd, swap.extent, swap.views[frame.imageIndex], VK_NULL_HANDLE, clear, {}, false);
-    cmdSetGraphicsDynamic(cmd, swap.extent, 1, false);
-    meshDrawRecord(cmd, MeshDrawDesc{.mesh = pass.mesh.handle, .frag = pass.frag.handle, .groupCount = 1});
+    TrackedImage& depthImg = pass.depth[flight];
+    const bool depthOk = depthImg.image.extent.width == swap.extent.width && depthImg.image.extent.height == swap.extent.height
+        && depthImg.image.image != VK_NULL_HANDLE;
+    if (!depthOk) {
+        gpuImageDestroy(depthImg.image, device);
+        depthImg = {};
+        if (!gpuImageCreate(
+                depthImg.image,
+                device,
+                swap.extent,
+                VK_FORMAT_D32_SFLOAT,
+                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                VK_IMAGE_ASPECT_DEPTH_BIT)) {
+            depthImg = {};
+        }
+    }
+    const bool depth = depthImg.image.view != VK_NULL_HANDLE;
+    if (depth) {
+        imageBarrier(
+            cmd,
+            depthImg,
+            VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+            VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            VK_IMAGE_ASPECT_DEPTH_BIT,
+            true);
+    }
+    RenderingPass rendering;
+    rendering.cmd = cmd;
+    VkClearValue colorClear{};
+    fillAttachment(rendering.color, swap.views[frame.imageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ATTACHMENT_LOAD_OP_LOAD, colorClear);
+    if (depth) {
+        VkClearValue depthClear{};
+        depthClear.depthStencil.depth = 0.0f;
+        fillAttachment(
+            rendering.depth,
+            depthImg.image.view,
+            VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            VK_ATTACHMENT_LOAD_OP_CLEAR,
+            depthClear);
+    }
+    rendering.info = {};
+    rendering.info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    rendering.info.renderArea = {{0, 0}, swap.extent};
+    rendering.info.layerCount = 1;
+    rendering.info.colorAttachmentCount = 1;
+    rendering.retarget();
+    vkCmdBeginRendering(cmd, &rendering.info);
+    rendering.open = true;
+    struct GizmoPhase {
+        uint32_t phase = 0;
+        uint32_t pad0 = 0;
+        uint32_t pad1 = 0;
+        uint32_t pad2 = 0;
+    };
+    GizmoPhase phase{};
+    cmdSetGraphicsDynamic(cmd, swap.extent, 1, depth, false, BlendMode::None, true);
+    meshDrawRecord(cmd, MeshDrawDesc{
+        .mesh = pass.mesh.handle,
+        .frag = pass.frag.handle,
+        .groupCount = 11,
+        .pushData = &phase,
+        .pushBytes = 16,
+        .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
+    });
+    phase.phase = 1;
+    cmdSetGraphicsDynamic(cmd, swap.extent, 1, false, false, BlendMode::None, true);
+    meshDrawRecord(cmd, MeshDrawDesc{
+        .mesh = pass.mesh.handle,
+        .frag = pass.frag.handle,
+        .groupCount = 11,
+        .pushData = &phase,
+        .pushBytes = 16,
+        .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
+    });
     endRendering(rendering);
 }
 

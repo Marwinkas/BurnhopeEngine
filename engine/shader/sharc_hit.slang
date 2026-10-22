@@ -150,10 +150,13 @@ bool sharcTrace(float3 origin, float3 direction, float tMin, float tMax, out flo
 }
 
 float sharcSunVis(float3 position, float3 normal, float3 sunDir, float ndl) {
-    if (ndl <= 0.005 || (gPass.passMask & 256u) == 0u) {
+    if ((gPass.passMask & 256u) == 0u) {
         return 0.0;
     }
-    if (gFrame.disableShadow != 0u) {
+    if (ndl <= 0.005) {
+        return 0.0;
+    }
+    if (gFrame.disableShadow != 0u || gFrame.debugPad0 != 0u) {
         return 1.0;
     }
     float hitT = 0.0;
@@ -179,7 +182,7 @@ float3 sharcSkyFill() {
     }
     float3 sky = float3(0.78, 0.82, 0.88) * (inten * 0.06);
     if ((gPass.passMask & 256u) == 0u) {
-        sky *= 0.15;
+        return 0.0;
     }
     return sky;
 }
@@ -209,13 +212,15 @@ float3 sharcDirectLite(SharcSurf surf, float3 view) {
         sunCol = float3(1.0, 0.92, 0.76);
     }
     float inten = gSun.sunDirIntensity.w;
-    if (inten < 0.05) {
+    if ((gPass.passMask & 256u) == 0u) {
+        inten = 0.0;
+    } else if (inten < 0.05) {
         inten = 8.0;
     }
     float vis = sharcSunVis(surf.position, surf.geoNormal, sunDir, ndl);
     float rough = max(surf.roughness, 0.045);
     float diff = hammonDiffuse(ndl, max(ndv, 0.15), dot(view, sunDir), rough);
-    float3 direct = (diffuse * diff) * vis * sharcSunEnergy(sunCol) * inten;
+    float3 direct = (diffuse * diff) * vis * sharcSunEnergy(sunCol) * inten * max(asfloat(gFrame.debugPad1), 0.0);
 
     float wrap = saturate(surf.geoNormal.y * 0.4 + 0.6);
     direct += diffuse * sharcSkyFill() * wrap;

@@ -695,10 +695,10 @@ void fsrRecord(
     constants.deviceToViewDepth[1] = nearZ;
     constants.deviceToViewDepth[2] = aspect / cot;
     constants.deviceToViewDepth[3] = 1.0f / cot;
-    constants.jitter[0] = p.jitterX;
-    constants.jitter[1] = p.jitterY;
-    constants.previousFrameJitter[0] = p.prevJitterX;
-    constants.previousFrameJitter[1] = p.prevJitterY;
+    constants.jitter[0] = -p.jitterX;
+    constants.jitter[1] = -p.jitterY;
+    constants.previousFrameJitter[0] = -p.prevJitterX;
+    constants.previousFrameJitter[1] = -p.prevJitterY;
     constants.motionVectorScale[0] = 1.0f;
     constants.motionVectorScale[1] = 1.0f;
     constants.downscaleFactor[0] = static_cast<float>(p.renderW) / static_cast<float>(p.displayW);

@@ -1,6 +1,8 @@
 #include "ui/widget/Detail.hpp"
 #include "ui/widget/Field.hpp"
+#include "ui/widget/Slider.hpp"
 
+#include <charconv>
 #include <cstring>
 
 namespace burnhope {
@@ -160,38 +162,64 @@ void swapField(UiField& field, UiFieldUndo::Snap& snap) {
     snap.anchor = copy.anchor;
     std::memcpy(snap.bytes, copy.bytes, copy.len);
     snap.bytes[snap.len] = '\0';
-    snap.id = 0;
+}
+
+void syncRangeText(UiState& s, uint16_t id) {
+    auto* range = id < s.count ? s.ent[id].try_get_mut<UiRange>() : nullptr;
+    const UiField* field = id < s.count ? s.ent[id].try_get<UiField>() : nullptr;
+    if (range == nullptr || field == nullptr || range->step <= 0.0f) {
+        return;
+    }
+    float value = range->value;
+    const auto parsed = std::from_chars(field->bytes, field->bytes + field->len, value);
+    if (parsed.ec != std::errc{}) {
+        return;
+    }
+    if (range->max - range->min < 1.0e8f) {
+        if (value < range->min) {
+            value = range->min;
+        }
+        if (value > range->max) {
+            value = range->max;
+        }
+    }
+    range->value = value;
 }
 
 bool fieldUndo(UiState& s) {
     UiFieldUndo& undo = uiUndo(s);
-    if (undo.at == 0 || s.focused == kUiNone) {
+    if (undo.at == 0) {
         return false;
     }
-    auto* field = s.ent[s.focused].try_get_mut<UiField>();
+    const uint16_t id = undo.snap[undo.at - 1].id < s.count ? undo.snap[undo.at - 1].id : s.focused;
+    auto* field = id < s.count ? s.ent[id].try_get_mut<UiField>() : nullptr;
     if (field == nullptr) {
         return false;
     }
     --undo.at;
-    undo.snap[undo.at].id = s.focused;
+    undo.snap[undo.at].id = id;
     swapField(*field, undo.snap[undo.at]);
-    fieldSyncText(s, s.focused);
+    fieldSyncText(s, id);
+    syncRangeText(s, id);
     s.visualDirty = true;
     return true;
 }
 
 bool fieldRedo(UiState& s) {
     UiFieldUndo& undo = uiUndo(s);
-    if (undo.at >= undo.n || s.focused == kUiNone) {
+    if (undo.at >= undo.n) {
         return false;
     }
-    auto* field = s.ent[s.focused].try_get_mut<UiField>();
+    const uint16_t id = undo.snap[undo.at].id < s.count ? undo.snap[undo.at].id : s.focused;
+    auto* field = id < s.count ? s.ent[id].try_get_mut<UiField>() : nullptr;
     if (field == nullptr) {
         return false;
     }
     swapField(*field, undo.snap[undo.at]);
+    undo.snap[undo.at].id = id;
     ++undo.at;
-    fieldSyncText(s, s.focused);
+    fieldSyncText(s, id);
+    syncRangeText(s, id);
     s.visualDirty = true;
     return true;
 }

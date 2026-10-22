@@ -1,6 +1,9 @@
 #pragma once
 
 #include "debug/DebugStats.hpp"
+
+#include <cstdint>
+#include <vector>
 #include "gpu_scene/Camera.hpp"
 #include "gpu_scene/InstanceData.hpp"
 #include "gpu_scene/FrameUniforms.hpp"
@@ -102,6 +105,11 @@ struct SceneFrameImpl {
     bool showFrustum = true;
     bool showSubpixel = true;
     bool showShadow = true;
+    bool sunEnabled = true;
+    bool sunCast = true;
+    bool sunCsm = false;
+    float sunKelvin = 5600.0f;
+    float sunIndirect = 1.0f;
     bool showBackface = true;
     bool showScreen = true;
     bool showBehind = true;
@@ -175,6 +183,24 @@ struct SceneFrameImpl {
     uint32_t visibleCap = 0;
     MappedFile bhop{};
     float farPlane = 80.0f;
+    float nearPlane = 0.1f;
+    float fovYRad = 1.0471975512f;
+    float savedEye[3]{};
+    float savedYaw = 0.0f;
+    float savedPitch = 0.0f;
+    uint8_t camView = 0;
+    uint8_t camSaved = 0;
+    uint8_t camOrtho = 0;
+    uint8_t camFacing = 0;
+    float camZoom = 1.0f;
+    uint8_t sim = 0;
+    float physicsMs = 0.0f;
+    float gpuMs = 0.0f;
+    uint32_t sceneTris = 0;
+    std::vector<uint64_t> snapId;
+    std::vector<uint16_t> snapActor;
+    std::vector<uint16_t> snapSize;
+    std::vector<uint8_t> snapBytes;
     float prevVp[16]{};
     float shadowExtent = 20.0f;
     GpuBuffer materialsBuf{};

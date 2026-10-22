@@ -21,8 +21,11 @@
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/TreeView.hpp"
+#include "ui/Interaction.hpp"
 #include "ui/State.hpp"
 #include "ui/Canvas.hpp"
+#include "ui/Text.hpp"
+#include "ui/UiPhoto.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -196,6 +199,9 @@ bool sceneTick(void* user, const InputFrame& input, float dt) {
         view->lookX = input.pointer.x;
         view->lookY = input.pointer.y;
     }
+    if (lookHeld && (std::fabs(input.pointer.dx) > 0.5f || std::fabs(input.pointer.dy) > 0.5f)) {
+        view->camBreak = 1;
+    }
     if ((input.pointer.down & kPointerRight) == 0) {
         view->lookGrab = 0;
     }
@@ -274,6 +280,8 @@ bool engineInit(Engine& e, int argc, char** argv) {
         main.onDrop = shellDrop;
         main.sceneTick = sceneTick;
         main.sceneRecord = sceneRecord;
+        e.demo.colors = &e.colors;
+        e.hud.book = &e.colors;
         e.hud.scene = e.scene;
         e.hud.host = &e.host;
         e.hud.slot = -1;
@@ -359,12 +367,222 @@ bool addActorButton(HudContext& hud, uint16_t objects, uint8_t index, const char
     return true;
 }
 
+void tintIcon(UiState& s, uint16_t icon, bool on) {
+    auto* paint = icon < s.count ? s.ent[icon].try_get_mut<UiPaint>() : nullptr;
+    if (paint == nullptr) {
+        return;
+    }
+    paint->token = UiToken::Custom;
+    paint->r = 1.0f;
+    paint->g = on ? 0.533333f : 1.0f;
+    paint->b = on ? 0.0f : 1.0f;
+    paint->a = 0.0f;
+    s.visualDirty = true;
+}
+
+uint16_t iconChild(const UiState& s, uint16_t id) {
+    for (uint16_t child = 0; child < s.count; ++child) {
+        if (s.parentOf[child] == id && s.ent[child].try_get<UiImage>() != nullptr) {
+            return child;
+        }
+    }
+    return kUiNone;
+}
+
+void paintTools(HudContext& hud) {
+    if (hud.tool.canvas == nullptr || hud.tool.canvas->state == nullptr) {
+        return;
+    }
+    UiState& s = *hud.tool.canvas->state;
+    const uint8_t modes[5] = {3, 0, 1, 2, 4};
+    for (int i = 0; i < 5; ++i) {
+        const bool on = modes[i] == hud.toolMode;
+        tintIcon(s, hud.toolIcon[i], on);
+        if (hud.toolIcon[i] < s.count) {
+            if (auto* paint = s.ent[hud.toolIcon[i]].try_get_mut<UiPaint>()) {
+                paint->bright = on ? 1.0f : 0.7f;
+            }
+        }
+        if (hud.toolBtn[i] < s.count) {
+            if (auto* paint = s.ent[hud.toolBtn[i]].try_get_mut<UiPaint>()) {
+                paint->token = UiToken::Custom;
+                paint->r = 1.0f;
+                paint->g = 1.0f;
+                paint->b = 1.0f;
+                paint->a = 0.0f;
+                paint->borderW = 0.0f;
+                paint->shadow = 0.0f;
+                paint->radius = 0.0f;
+            }
+        }
+    }
+    for (int i = 0; i < 3; ++i) {
+        tintIcon(s, hud.snapIcon[i], hud.snapOn[i] != 0);
+        if (hud.snapBtn[i] < s.count) {
+            if (auto* paint = s.ent[hud.snapBtn[i]].try_get_mut<UiPaint>()) {
+                paint->token = UiToken::Custom;
+                paint->r = 1.0f;
+                paint->g = 1.0f;
+                paint->b = 1.0f;
+                paint->a = hud.snapOn[i] != 0 ? 0.18f : 0.0f;
+                paint->borderW = 0.0f;
+                paint->shadow = 0.0f;
+                paint->radius = 0.0f;
+            }
+        }
+    }
+}
+
 void onGizmoMode(void* user, uint16_t) {
     auto* hit = static_cast<GizmoHit*>(user);
     if (hit == nullptr || hit->tool == nullptr || hit->tool->scene == nullptr) {
         return;
     }
     sceneFrameActorGizmo(hit->tool->scene, hit->mode);
+    if (hit->hud != nullptr) {
+        hit->hud->toolMode = hit->mode;
+        paintTools(*hit->hud);
+    }
+}
+
+void onSpace(void* user, uint8_t index) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr) {
+        return;
+    }
+    hud->space = index;
+    if (hud->tool.scene != nullptr) {
+        sceneFrameGizmoSpace(hud->tool.scene, index);
+    }
+}
+
+void onSnapToggle(void* user, uint16_t) {
+    auto* hit = static_cast<GizmoHit*>(user);
+    if (hit == nullptr || hit->hud == nullptr || hit->mode > 2) {
+        return;
+    }
+    HudContext& hud = *hit->hud;
+    hud.snapOn[hit->mode] = hud.snapOn[hit->mode] == 0 ? 1 : 0;
+    paintTools(hud);
+    if (hud.tool.scene == nullptr) {
+        return;
+    }
+    sceneFrameSnap(hud.tool.scene, hit->mode, hud.snapOn[hit->mode], hud.snapSent[hit->mode]);
+}
+
+void setSlide(Canvas& canvas, uint16_t id, float value);
+
+void onSnapPick(void* user) {
+    auto* hit = static_cast<SnapHit*>(user);
+    if (hit == nullptr || hit->hud == nullptr || hit->channel > 2) {
+        return;
+    }
+    hit->hud->snapPick[hit->channel] = hit->index;
+    hit->hud->snapSent[hit->channel] = hit->step;
+    if (hit->hud->tool.canvas != nullptr) {
+        setSlide(*hit->hud->tool.canvas, hit->hud->snapNum[hit->channel], hit->step);
+    }
+    if (hit->hud->tool.scene != nullptr) {
+        sceneFrameSnap(hit->hud->tool.scene, hit->channel, hit->hud->snapOn[hit->channel], hit->step);
+    }
+}
+
+void onPivotSpace(void* user, uint8_t index) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr) {
+        return;
+    }
+    hud->pivotSpace = index == 0 ? 0 : 1;
+    if (hud->tool.scene != nullptr) {
+        sceneFrameGizmoPivot(hud->tool.scene, hud->pivotSpace);
+    }
+}
+
+void onSpawnKind(void* user) {
+    auto* hit = static_cast<SpawnHit*>(user);
+    if (hit == nullptr || hit->hud == nullptr || hit->hud->tool.scene == nullptr) {
+        return;
+    }
+    const uint8_t index = sceneFrameSpawn(hit->hud->tool.scene, hit->kind);
+    if (index == kSceneActorNone) {
+        return;
+    }
+    char name[24];
+    uint8_t kind = 0;
+    sceneFrameActorName(hit->hud->tool.scene, index, name, sizeof(name), &kind);
+    if (addActorButton(*hit->hud, hit->hud->tool.objects, index, name, kind)) {
+        onActor(&hit->hud->objects.back(), 0);
+    }
+}
+
+void onPlay(void* user, uint16_t) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr || hud->tool.scene == nullptr || hud->tool.canvas == nullptr || hud->tool.canvas->state == nullptr) {
+        return;
+    }
+    UiState& s = *hud->tool.canvas->state;
+    if (sceneFrameSim(hud->tool.scene) == 0) {
+        sceneFramePlay(hud->tool.scene);
+        uiShow(s, hud->pauseBtn, true);
+        if (auto* paint = s.ent[hud->playGlyph].try_get_mut<UiPaint>()) {
+            paint->icon = 19;
+        }
+    } else {
+        sceneFrameStop(hud->tool.scene);
+        uiShow(s, hud->pauseBtn, false);
+        if (auto* paint = s.ent[hud->playGlyph].try_get_mut<UiPaint>()) {
+            paint->icon = 17;
+        }
+    }
+    s.visualDirty = true;
+    s.layoutDirty = true;
+}
+
+void onPause(void* user, uint16_t) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr || hud->tool.scene == nullptr) {
+        return;
+    }
+    const uint8_t sim = sceneFrameSim(hud->tool.scene);
+    sceneFramePause(hud->tool.scene, sim == 1 ? 1 : 0);
+}
+
+void onGear(void* user, uint16_t) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr) {
+        return;
+    }
+    hud->statsWant = hud->statsWant == 2 ? 0 : 1;
+}
+
+void onCameraButton(void* user, uint16_t) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr) {
+        return;
+    }
+    hud->camWant = hud->camWant == 2 ? 0 : 1;
+}
+
+void onMode(void* user);
+
+void onViewButton(void* user, uint16_t) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr) {
+        return;
+    }
+    hud->viewWant = hud->viewWant == 2 ? 0 : 1;
+}
+
+void onViewRadio(void* user, uint16_t id) {
+    auto* hit = static_cast<ModeHit*>(user);
+    if (hit == nullptr || hit->canvas == nullptr || hit->canvas->state == nullptr) {
+        return;
+    }
+    uiCheckPress(*hit->canvas->state, id);
+    onMode(hit);
+    if (hit->hud != nullptr) {
+        hit->hud->viewWant = 0;
+    }
 }
 
 void onSpawnCube(void* user, uint16_t) {
@@ -448,6 +666,8 @@ void setSlide(Canvas& canvas, uint16_t id, float value) {
     canvas.state->visualDirty = 1;
 }
 
+void applySunShadow(UiState& s, int which);
+
 void setMenuCaption(UiState& s, const char* name, const char* text) {
     const uint16_t id = uiFindName(s, name);
     if (id == kUiNone || id >= s.count) {
@@ -460,6 +680,16 @@ void setMenuCaption(UiState& s, const char* name, const char* text) {
         }
     }
 }
+
+void applySunShadow(UiState& s, int which) {
+    const bool csm = which == 1;
+    uiBindCheck(s, uiFindName(s, "sunSh0"), 1, 11, !csm);
+    uiBindCheck(s, uiFindName(s, "sunSh1"), 1, 11, csm);
+    setMenuCaption(s, "sunShBtn", csm ? "Cascaded Shadow Maps" : "ReSTIR DI Shadows");
+}
+
+void sunShRestir(void* user) { applySunShadow(*static_cast<UiState*>(user), 0); }
+void sunShCsm(void* user) { applySunShadow(*static_cast<UiState*>(user), 1); }
 
 void applyTone(UiState& s, int which) {
     const char* names[] = {"tone0", "tone1", "tone2", "tone3", "tone4", "tone5", "tone6", "tone7"};
@@ -779,9 +1009,20 @@ void bindHudIds(HudContext& hud, UiState& state) {
     hud.ids.pbrSx = id("pbrSx");
     hud.ids.pbrSy = id("pbrSy");
     hud.ids.pbrSz = id("pbrSz");
+    hud.ids.pbrOx = id("pbrOx");
+    hud.ids.pbrOy = id("pbrOy");
+    hud.ids.pbrOz = id("pbrOz");
     hud.ids.xfStatic = id("xfStatic");
     hud.ids.reflRt = id("reflRt");
     hud.ids.fogSwatch = id("fogSwatch");
+    hud.ids.sunSwatch = id("sunSwatch");
+    hud.ids.sunCast = id("sunCast");
+    hud.ids.sunKelvin = id("sunK");
+    hud.ids.sunAngle = id("sunAngle");
+    hud.ids.sunSoft = id("sunSoft");
+    hud.ids.sunIndirect = id("sunIndirect");
+    hud.ids.sunSh0 = id("sunSh0");
+    hud.ids.sunSh1 = id("sunSh1");
     hud.ids.contacten = id("contacten");
     hud.ids.vt = id("vt");
     hud.ids.freeze = id("freeze");
@@ -800,6 +1041,10 @@ const ViewMode kViews[] = {
     {15, "ReSTIR свет"}, {16, "ReSTIR вес"}, {17, "ReSTIR M"}, {18, "ReSTIR тень"}, {19, "ReSTIR индекс"},
 };
 
+void onDuplicateCmd(void* user) {
+    onDuplicate(user, 0);
+}
+
 void onStats(void* user, uint16_t) {
     auto* hit = static_cast<StatsHit*>(user);
     if (hit == nullptr || hit->canvas == nullptr || hit->canvas->state == nullptr || hit->page == kUiNone) {
@@ -814,6 +1059,10 @@ void onStats(void* user, uint16_t) {
             flex->width = 300.0f;
         }
     }
+}
+
+void onStatsCmd(void* user) {
+    onStats(user, 0);
 }
 
 void onMode(void* user) {
@@ -834,30 +1083,61 @@ void onMode(void* user) {
             title = mode.name;
         }
     }
-    if (hit->label != kUiNone) {
-        if (hit->canvas->state != nullptr) {
-            uiText(*hit->canvas->state, hit->label, title);
+    if (hit->hud != nullptr && hit->canvas->state != nullptr) {
+        for (const ModeHit& mode : hit->hud->modes) {
+            if (mode.radio < hit->canvas->state->count) {
+                if (auto* check = hit->canvas->state->ent[mode.radio].try_get_mut<UiCheck>()) {
+                    check->on = mode.index == hit->index ? 1 : 0;
+                }
+            }
         }
+    }
+    if (hit->label != kUiNone && hit->canvas->state != nullptr) {
+        UiState& s = *hit->canvas->state;
+        uiText(s, hit->label, title);
+        uiTextStyle(s, hit->label, UiTextAlign::Left, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+        const uint16_t button = uiParent(s, hit->label);
+        uint8_t len = 0;
+        while (title[len] != '\0' && len < 48) {
+            ++len;
+        }
+        const float width = uiMeasure(s, title, len, len) + 38.0f;
+        if (button < s.count) {
+            if (auto* flex = s.ent[button].try_get_mut<UiFlex>()) {
+                flex->widthMode = UiSize::Px;
+                flex->width = width;
+                flex->grow = 0.0f;
+                flex->shrink = 0.0f;
+            }
+        }
+        s.layoutDirty = true;
     }
 }
 
 float slideAt(const Canvas& canvas, uint16_t id, float fallback);
 
-void onFogSwatch(void* user, uint16_t id) {
-    auto* hud = static_cast<HudContext*>(user);
+void openSwatch(HudContext* hud, uint16_t id, const char* rName, const char* gName, const char* bName, float r0, float g0, float b0) {
     if (hud == nullptr || hud->tool.canvas == nullptr || hud->tool.canvas->state == nullptr) {
         return;
     }
     UiState& s = *hud->tool.canvas->state;
     ColorBook* book = uiColor(s).book;
     if (book != nullptr) {
-        book->r = slideAt(*hud->tool.canvas, uiFindName(s, "fogR"), 0.62f);
-        book->g = slideAt(*hud->tool.canvas, uiFindName(s, "fogG"), 0.72f);
-        book->b = slideAt(*hud->tool.canvas, uiFindName(s, "fogB"), 0.86f);
+        book->r = slideAt(*hud->tool.canvas, uiFindName(s, rName), r0);
+        book->g = slideAt(*hud->tool.canvas, uiFindName(s, gName), g0);
+        book->b = slideAt(*hud->tool.canvas, uiFindName(s, bName), b0);
         book->a = 1.0f;
         book->gen += 1;
     }
     colorOnOpen(&s, id);
+}
+
+void onFogSwatch(void* user, uint16_t id) {
+    openSwatch(static_cast<HudContext*>(user), id, "fogR", "fogG", "fogB", 0.62f, 0.72f, 0.86f);
+}
+
+void onSunSwatch(void* user, uint16_t id) {
+    openSwatch(static_cast<HudContext*>(user), id, "sunR", "sunG", "sunB", 1.0f, 0.92f, 0.76f);
 }
 
 uint16_t rowFine(UiState& s, uint16_t panel, const char* text, const char* name, float value, float minV, float maxV, float step) {
@@ -877,6 +1157,35 @@ uint16_t rowSlide(UiState& s, uint16_t panel, const char* text, const char* name
     const uint16_t id = uiPropNumber(s, panel, text, value, minV, maxV, step);
     uiName(s, id, name);
     return id;
+}
+
+bool loadToolIcon(Canvas& canvas, uint8_t slot, const char* file) {
+    char rel[160]{};
+    std::snprintf(rel, sizeof(rel), "assets/icons/%s", file);
+    if (canvasLoadPhoto(canvas, slot, rel)) {
+        return true;
+    }
+    std::snprintf(rel, sizeof(rel), "../assets/icons/%s", file);
+    if (canvasLoadPhoto(canvas, slot, rel)) {
+        return true;
+    }
+    char dir[512]{};
+    if (!platformExePath(dir, sizeof(dir))) {
+        return false;
+    }
+    for (int up = 0; up < 5; ++up) {
+        char parent[512]{};
+        if (!pathParent(dir, parent, sizeof(parent))) {
+            break;
+        }
+        strCopyCap(dir, sizeof(dir), parent);
+        char face[640]{};
+        std::snprintf(face, sizeof(face), "%s/assets/icons/%s", dir, file);
+        if (canvasLoadPhoto(canvas, slot, face)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool fontBesideExe(Canvas& canvas) {
@@ -905,9 +1214,14 @@ void sceneHud(Canvas& canvas, void* user) {
     if (hud == nullptr || (!haveFont && !fontBesideExe(canvas) && !canvasUseFont(canvas, 20.0f)) || canvas.state == nullptr) {
         return;
     }
+    uiInstallColorBin(*canvas.state);
+    if (hud->book != nullptr) {
+        uiSetColorBook(*canvas.state, hud->book);
+    }
     hud->pages.clear();
     hud->modes.clear();
     hud->gizmos.clear();
+    hud->snaps.clear();
     hud->objects.clear();
     hud->shown = 0xff;
     hud->tool = {};
@@ -929,6 +1243,19 @@ void sceneHud(Canvas& canvas, void* user) {
         paint.b = look.content[2];
         paint.a = 0.94f;
         paint.borderW = 0.0f;
+        return paint;
+    };
+    auto veilPaint = [&]() {
+        UiPaint paint{};
+        paint.r = look.content[0];
+        paint.g = look.content[1];
+        paint.b = look.content[2];
+        paint.a = 0.72f;
+        paint.borderW = 1.0f;
+        paint.br = look.muted[0];
+        paint.bg = look.muted[1];
+        paint.bb = look.muted[2];
+        paint.radius = look.radiusSm;
         return paint;
     };
     auto splitBar = [&](uint16_t parent, bool vertical) {
@@ -967,18 +1294,19 @@ void sceneHud(Canvas& canvas, void* user) {
     rootFlex.heightMode = UiSize::Percent;
     rootFlex.height = 100.0f;
     const uint16_t root = uiPanel(*canvas.state, kUiNone, rootFlex, hiddenPaint());
-    UiFlex barFlex{};
-    barFlex.direction = UiFlexDir::Row;
-    barFlex.heightMode = UiSize::Px;
-    barFlex.height = 50.0f;
-    barFlex.minH = 50.0f;
-    barFlex.shrink = 0.0f;
-    barFlex.align = UiAlign::Center;
-    barFlex.pad = 12.0f;
-    barFlex.gap = 8.0f;
-    const uint16_t top = uiPanel(*canvas.state, root, barFlex, dockPaint());
-    uint16_t fileBtn = uiButton(*canvas.state, top, { .label = "File" });
-    uiSetHeight(*canvas.state, fileBtn, 28.0f);
+    UiFlex menuFlex{};
+    menuFlex.direction = UiFlexDir::Row;
+    menuFlex.heightMode = UiSize::Px;
+    menuFlex.height = 32.0f;
+    menuFlex.minH = 32.0f;
+    menuFlex.shrink = 0.0f;
+    menuFlex.align = UiAlign::Center;
+    menuFlex.padL = 8.0f;
+    menuFlex.padR = 8.0f;
+    menuFlex.gap = 4.0f;
+    const uint16_t menuBar = uiPanel(*canvas.state, root, menuFlex, dockPaint());
+    uint16_t fileBtn = uiButton(*canvas.state, menuBar, { .label = "File" });
+    uiSetHeight(*canvas.state, fileBtn, 26.0f);
     uint16_t fileMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
     if (canvas.state) {
         uiSetContextMenu(*canvas.state, fileBtn, fileMenu);
@@ -1014,48 +1342,655 @@ void sceneHud(Canvas& canvas, void* user) {
         (void)uiCommandAddTo(*canvas.state, fileMenu, "Save Scene", fileAct, &hud->fileSave);
         (void)uiCommandAddTo(*canvas.state, fileMenu, "Exit", fileAct, &hud->fileExit);
     }
-    uint16_t viewBtn = uiButton(*canvas.state, top, { .label = "Lit" });
-    uiSetHeight(*canvas.state, viewBtn, 28.0f);
-    uint16_t viewMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
-    if (canvas.state) {
-        uiSetContextMenu(*canvas.state, viewBtn, viewMenu);
-        uiMarkMenuBar(*canvas.state, viewBtn);
+    uint16_t editBtn = uiButton(*canvas.state, menuBar, { .label = "Edit" });
+    uiSetHeight(*canvas.state, editBtn, 26.0f);
+    uint16_t editMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
+    if (canvas.state != nullptr) {
+        uiSetContextMenu(*canvas.state, editBtn, editMenu);
+        uiMarkMenuBar(*canvas.state, editBtn);
+        (void)uiCommandAddTo(*canvas.state, editMenu, "Duplicate", onDuplicateCmd, hud);
     }
-    for (const ViewMode& mode : kViews) {
-        hud->modes.push_back({});
-        ModeHit& hit = hud->modes.back();
-        hit.canvas = &canvas;
-        hit.index = mode.index;
-        hit.label = viewBtn;
-        if (canvas.state != nullptr) {
-            (void)uiCommandAddTo(*canvas.state, viewMenu, mode.name, onMode, &hit);
-        }
+    uint16_t viewMenuBtn = uiButton(*canvas.state, menuBar, { .label = "View" });
+    uiSetHeight(*canvas.state, viewMenuBtn, 26.0f);
+    uint16_t appViewMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
+    if (canvas.state != nullptr) {
+        uiSetContextMenu(*canvas.state, viewMenuBtn, appViewMenu);
+        uiMarkMenuBar(*canvas.state, viewMenuBtn);
+        (void)uiCommandAddTo(*canvas.state, appViewMenu, "Stats", onStatsCmd, &hud->stats);
     }
-    uint16_t statsBtn = uiButton(*canvas.state, top, { .label = "Stats" });
-    uiSetHeight(*canvas.state, statsBtn, 28.0f);
-    const char* toolName[] = {"Move", "Rotate", "Scale"};
-    for (uint8_t i = 0; i < 3; ++i) {
-        uint16_t toolBtn = uiButton(*canvas.state, top, { .label = toolName[i] });
-        uiSetHeight(*canvas.state, toolBtn, 28.0f);
-        hud->gizmos.push_back({});
-        GizmoHit& gizmo = hud->gizmos.back();
-        gizmo.tool = &hud->tool;
-        gizmo.mode = i;
-        uiBind(*canvas.state, toolBtn, onGizmoMode, &gizmo);
-    }
-    uint16_t dupBtn = uiButton(*canvas.state, top, { .label = "Duplicate" });
-    uiSetHeight(*canvas.state, dupBtn, 28.0f);
-    uiBind(*canvas.state, dupBtn, onDuplicate, hud);
     UiFlex rowFlex{};
     rowFlex.direction = UiFlexDir::Row;
     rowFlex.grow = 1.0f;
     rowFlex.shrink = 1.0f;
     rowFlex.minH = 72.0f;
     const uint16_t row = uiPanel(*canvas.state, root, rowFlex, hiddenPaint());
+    UiFlex viewColFlex{};
+    viewColFlex.direction = UiFlexDir::Column;
+    viewColFlex.grow = 1.0f;
+    viewColFlex.shrink = 1.0f;
+    viewColFlex.minW = 0.0f;
+    const uint16_t viewCol = uiPanel(*canvas.state, row, viewColFlex, hiddenPaint());
+    (void)loadToolIcon(canvas, 2, "SelectMode.png");
+    (void)loadToolIcon(canvas, 3, "MoveMode.png");
+    (void)loadToolIcon(canvas, 4, "RotateMode.png");
+    (void)loadToolIcon(canvas, 5, "ScallingMode.png");
+    (void)loadToolIcon(canvas, 6, "Camera.png");
+    (void)loadToolIcon(canvas, 7, "Snap.png");
+    UiFlex toolFlex{};
+    toolFlex.direction = UiFlexDir::Row;
+    toolFlex.heightMode = UiSize::Px;
+    toolFlex.height = 36.0f;
+    toolFlex.minH = 36.0f;
+    toolFlex.shrink = 0.0f;
+    toolFlex.align = UiAlign::Center;
+    toolFlex.padL = 6.0f;
+    toolFlex.padR = 6.0f;
+    toolFlex.gap = 6.0f;
+    const uint16_t toolbar = uiPanel(*canvas.state, viewCol, toolFlex, dockPaint());
+    UiFlex toolLeftFlex{};
+    toolLeftFlex.direction = UiFlexDir::Row;
+    toolLeftFlex.grow = 1.0f;
+    toolLeftFlex.shrink = 1.0f;
+    toolLeftFlex.minW = 0.0f;
+    toolLeftFlex.align = UiAlign::Center;
+    toolLeftFlex.gap = 4.0f;
+    toolLeftFlex.overflow = UiOverflow::Hidden;
+    const uint16_t toolLeft = uiPanel(*canvas.state, toolbar, toolLeftFlex, hiddenPaint());
+    UiFlex toolRightFlex{};
+    toolRightFlex.direction = UiFlexDir::Row;
+    toolRightFlex.shrink = 0.0f;
+    toolRightFlex.align = UiAlign::Center;
+    toolRightFlex.gap = 4.0f;
+    const uint16_t toolRight = uiPanel(*canvas.state, toolbar, toolRightFlex, hiddenPaint());
+    auto toolSep = [&](uint16_t parent) {
+        UiPaint ink = paintToken(look, UiToken::Muted, 0.0f);
+        ink.a = 0.55f;
+        return uiPanel(*canvas.state, parent, px(1.0f, 18.0f), ink);
+    };
+    {
+        uint16_t plus = uiButton(*canvas.state, toolLeft, { .label = "", .width = 28.0f, .height = 28.0f });
+        hud->spawnBtn = plus;
+        if (plus < canvas.state->count) {
+            if (auto* flex = canvas.state->ent[plus].try_get_mut<UiFlex>()) {
+                flex->align = UiAlign::Center;
+                flex->justify = UiJustify::Center;
+                flex->pad = 0.0f;
+                flex->padL = 0.0f;
+                flex->padR = 0.0f;
+                flex->padT = 0.0f;
+                flex->padB = 0.0f;
+            }
+            if (auto* paint = canvas.state->ent[plus].try_get_mut<UiPaint>()) {
+                paint->token = UiToken::Custom;
+                paint->icon = 16;
+                paint->r = 1.0f;
+                paint->g = 1.0f;
+                paint->b = 1.0f;
+                paint->a = 0.0f;
+                paint->borderW = 0.0f;
+                paint->shadow = 0.0f;
+                paint->radius = 0.0f;
+            }
+        }
+        uint16_t menu = uiMakeMenu(*canvas.state);
+        if (menu != kUiNone) {
+            canvas.state->ent[menu].add<UiMenuSlide>();
+        }
+        const char* names[] = {"Cube", "Sphere", "Plane", "Cylinder", "Directional Light", "Point Light", "Empty Actor"};
+        for (uint8_t i = 0; i < 7; ++i) {
+            hud->spawns.push_back({});
+            SpawnHit& hit = hud->spawns.back();
+            hit.hud = hud;
+            hit.kind = i;
+            if (menu != kUiNone) {
+                (void)uiCommandAddTo(*canvas.state, menu, names[i], onSpawnKind, &hit);
+            }
+        }
+        uiSetContextMenu(*canvas.state, plus, menu);
+        uiMarkMenuBar(*canvas.state, plus);
+    }
+    (void)toolSep(toolLeft);
+    const uint8_t toolModes[5] = {3, 0, 1, 2, 4};
+    const uint8_t toolIcons[4] = {2, 3, 4, 5};
+    for (uint8_t i = 0; i < 4; ++i) {
+        uint16_t toolBtn = uiButton(*canvas.state, toolLeft, { .label = "", .width = 28.0f, .height = 28.0f, .iconSlot = toolIcons[i] });
+        hud->toolBtn[i] = toolBtn;
+        hud->toolIcon[i] = iconChild(*canvas.state, toolBtn);
+        if (toolBtn < canvas.state->count) {
+            if (auto* flex = canvas.state->ent[toolBtn].try_get_mut<UiFlex>()) {
+                flex->pad = 0.0f;
+                flex->padL = 0.0f;
+                flex->padR = 0.0f;
+                flex->padT = 0.0f;
+                flex->padB = 0.0f;
+                flex->align = UiAlign::Center;
+                flex->justify = UiJustify::Center;
+            }
+        }
+        if (hud->toolIcon[i] < canvas.state->count) {
+            if (auto* flex = canvas.state->ent[hud->toolIcon[i]].try_get_mut<UiFlex>()) {
+                flex->width = 28.0f;
+                flex->height = 28.0f;
+            }
+        }
+        hud->gizmos.push_back({});
+        GizmoHit& gizmo = hud->gizmos.back();
+        gizmo.tool = &hud->tool;
+        gizmo.hud = hud;
+        gizmo.mode = toolModes[i];
+        uiBind(*canvas.state, toolBtn, onGizmoMode, &gizmo);
+    }
+    {
+        uint16_t toolBtn = uiButton(*canvas.state, toolLeft, { .label = "", .width = 28.0f, .height = 28.0f });
+        hud->toolBtn[4] = toolBtn;
+        if (toolBtn < canvas.state->count) {
+            if (auto* flex = canvas.state->ent[toolBtn].try_get_mut<UiFlex>()) {
+                flex->pad = 0.0f;
+                flex->padL = 0.0f;
+                flex->padR = 0.0f;
+                flex->padT = 0.0f;
+                flex->padB = 0.0f;
+                flex->align = UiAlign::Center;
+                flex->justify = UiJustify::Center;
+            }
+        }
+        UiFlex mark{};
+        mark.widthMode = UiSize::Px;
+        mark.width = 28.0f;
+        mark.heightMode = UiSize::Px;
+        mark.height = 28.0f;
+        mark.shrink = 0.0f;
+        UiPaint glyph = paintClear();
+        glyph.icon = 15;
+        glyph.r = 1.0f;
+        glyph.g = 1.0f;
+        glyph.b = 1.0f;
+        hud->toolIcon[4] = uiPanel(*canvas.state, toolBtn, mark, glyph);
+        hud->gizmos.push_back({});
+        GizmoHit& gizmo = hud->gizmos.back();
+        gizmo.tool = &hud->tool;
+        gizmo.hud = hud;
+        gizmo.mode = 4;
+        uiBind(*canvas.state, toolBtn, onGizmoMode, &gizmo);
+    }
+    if (hud->tool.scene != nullptr) {
+        sceneFrameActorGizmo(hud->tool.scene, hud->toolMode);
+    }
+    paintTools(*hud);
+    (void)toolSep(toolLeft);
+    auto fitChoice = [&](const char* const* labels, int count) {
+        float widest = 0.0f;
+        for (int i = 0; i < count; ++i) {
+            uint8_t len = 0;
+            while (labels[i] != nullptr && labels[i][len] != '\0' && len < 48) {
+                ++len;
+            }
+            const float measured = uiMeasure(*canvas.state, labels[i], len, len);
+            if (measured > widest) {
+                widest = measured;
+            }
+        }
+        return widest + 26.0f;
+    };
+    auto slideChoice = [&](uint16_t button, float width) {
+        if (button >= canvas.state->count) {
+            return;
+        }
+        if (auto* flex = canvas.state->ent[button].try_get_mut<UiFlex>()) {
+            flex->widthMode = UiSize::Px;
+            flex->width = width;
+            flex->minW = 0.0f;
+            flex->grow = 0.0f;
+            flex->shrink = 0.0f;
+            flex->padL = 6.0f;
+            flex->padR = 4.0f;
+            flex->gap = 2.0f;
+        }
+        const UiChoice* choice = canvas.state->ent[button].try_get<UiChoice>();
+        if (choice != nullptr && choice->menu < canvas.state->count) {
+            canvas.state->ent[choice->menu].add<UiMenuSlide>();
+            if (auto* flex = canvas.state->ent[choice->menu].try_get_mut<UiFlex>()) {
+                flex->width = width;
+            }
+        }
+    };
+    const char* spaceLabels[] = {"Local", "World"};
+    const float spaceW = fitChoice(spaceLabels, 2);
+    slideChoice(uiChoice(*canvas.state, toolLeft, {
+        .labels = spaceLabels,
+        .count = 2,
+        .selected = hud->space,
+        .width = spaceW,
+        .onPick = onSpace,
+        .user = hud,
+    }), spaceW);
+    const char* pivotLabels[] = {"Pivot", "Center"};
+    const float pivotW = fitChoice(pivotLabels, 2);
+    slideChoice(uiChoice(*canvas.state, toolLeft, {
+        .labels = pivotLabels,
+        .count = 2,
+        .selected = hud->pivotSpace,
+        .width = pivotW,
+        .onPick = onPivotSpace,
+        .user = hud,
+    }), pivotW);
+    (void)toolSep(toolLeft);
+    const float moveSteps[] = {0.1f, 0.25f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f};
+    const float rotSteps[] = {5.0f, 10.0f, 15.0f, 30.0f, 45.0f, 90.0f};
+    const float scaleSteps[] = {0.1f, 0.25f, 0.5f, 1.0f};
+    const char* moveNames[] = {"0.1", "0.25", "0.5", "1.0", "2.0", "5.0", "10.0"};
+    const char* rotNames[] = {"5", "10", "15", "30", "45", "90"};
+    const char* scaleNames[] = {"0.1", "0.25", "0.5", "1.0"};
+    const float* stepTable[] = {moveSteps, rotSteps, scaleSteps};
+    const char* const* nameTable[] = {moveNames, rotNames, scaleNames};
+    const uint8_t stepCount[] = {7, 6, 4};
+    for (uint8_t channel = 0; channel < 3; ++channel) {
+        const uint8_t snapIcons[3] = {3, 4, 5};
+        uint16_t toggle = uiButton(*canvas.state, toolLeft, { .label = "", .width = 28.0f, .height = 28.0f, .iconSlot = snapIcons[channel] });
+        hud->snapBtn[channel] = toggle;
+        hud->snapIcon[channel] = iconChild(*canvas.state, toggle);
+        if (toggle < canvas.state->count) {
+            if (auto* paint = canvas.state->ent[toggle].try_get_mut<UiPaint>()) {
+                paint->token = UiToken::Custom;
+                paint->r = 1.0f;
+                paint->g = 1.0f;
+                paint->b = 1.0f;
+                paint->a = 0.0f;
+                paint->borderW = 0.0f;
+                paint->shadow = 0.0f;
+            }
+            if (auto* flex = canvas.state->ent[toggle].try_get_mut<UiFlex>()) {
+                flex->pad = 0.0f;
+                flex->padL = 0.0f;
+                flex->padR = 0.0f;
+                flex->padT = 0.0f;
+                flex->padB = 0.0f;
+                flex->align = UiAlign::Center;
+                flex->justify = UiJustify::Center;
+            }
+        }
+        if (hud->snapIcon[channel] < canvas.state->count) {
+            if (auto* flex = canvas.state->ent[hud->snapIcon[channel]].try_get_mut<UiFlex>()) {
+                flex->width = 28.0f;
+                flex->height = 28.0f;
+            }
+        }
+        hud->gizmos.push_back({});
+        GizmoHit& gizmo = hud->gizmos.back();
+        gizmo.tool = &hud->tool;
+        gizmo.hud = hud;
+        gizmo.mode = channel;
+        uiBind(*canvas.state, toggle, onSnapToggle, &gizmo);
+        const uint8_t picked = hud->snapPick[channel] < stepCount[channel] ? hud->snapPick[channel] : 0;
+        hud->snapSent[channel] = stepTable[channel][picked];
+        const uint16_t num = uiNumber(*canvas.state, toolLeft, hud->snapSent[channel], 0.001f, 10000.0f, channel == 1 ? 1.0f : 0.01f);
+        hud->snapNum[channel] = num;
+        uiNumberFill(*canvas.state, num, false);
+        uiSetHeight(*canvas.state, num, 28.0f);
+        if (num < canvas.state->count) {
+            if (auto* flex = canvas.state->ent[num].try_get_mut<UiFlex>()) {
+                flex->widthMode = UiSize::Px;
+                flex->width = 72.0f;
+                flex->grow = 0.0f;
+                flex->shrink = 0.0f;
+            }
+        }
+        uint16_t menu = uiMakeMenu(*canvas.state);
+        if (menu != kUiNone) {
+            canvas.state->ent[menu].add<UiMenuSlide>();
+            if (auto* flex = canvas.state->ent[menu].try_get_mut<UiFlex>()) {
+                flex->width = 108.0f;
+            }
+        }
+        uint16_t arrow = uiButton(*canvas.state, toolLeft, { .label = "", .width = 28.0f, .height = 28.0f });
+        if (arrow < canvas.state->count) {
+            if (auto* paint = canvas.state->ent[arrow].try_get_mut<UiPaint>()) {
+                paint->icon = 11;
+            }
+            uiSetContextMenu(*canvas.state, arrow, menu);
+            uiMarkMenuBar(*canvas.state, arrow);
+        }
+        for (uint8_t step = 0; step < stepCount[channel]; ++step) {
+            hud->snaps.push_back({});
+            SnapHit& pick = hud->snaps.back();
+            pick.hud = hud;
+            pick.channel = channel;
+            pick.index = step;
+            pick.step = stepTable[channel][step];
+            if (menu != kUiNone) {
+                (void)uiCommandAddTo(*canvas.state, menu, nameTable[channel][step], onSnapPick, &pick);
+            }
+        }
+    }
+    (void)toolSep(toolLeft);
+    {
+        auto transport = [&](uint16_t id) {
+            if (id >= canvas.state->count) {
+                return;
+            }
+            if (auto* flex = canvas.state->ent[id].try_get_mut<UiFlex>()) {
+                flex->pad = 0.0f;
+                flex->padL = 0.0f;
+                flex->padR = 0.0f;
+                flex->padT = 0.0f;
+                flex->padB = 0.0f;
+                flex->align = UiAlign::Center;
+                flex->justify = UiJustify::Center;
+            }
+            if (auto* paint = canvas.state->ent[id].try_get_mut<UiPaint>()) {
+                paint->token = UiToken::Custom;
+                paint->a = 0.0f;
+                paint->borderW = 0.0f;
+                paint->shadow = 0.0f;
+                paint->radius = 0.0f;
+            }
+        };
+        uint16_t play = uiButton(*canvas.state, toolLeft, { .label = "", .width = 28.0f, .height = 28.0f });
+        hud->playBtn = play;
+        transport(play);
+        UiFlex mark{};
+        mark.widthMode = UiSize::Px;
+        mark.width = 28.0f;
+        mark.heightMode = UiSize::Px;
+        mark.height = 28.0f;
+        mark.shrink = 0.0f;
+        UiPaint glyph = paintClear();
+        glyph.icon = 17;
+        glyph.r = 1.0f;
+        glyph.g = 1.0f;
+        glyph.b = 1.0f;
+        hud->playGlyph = uiPanel(*canvas.state, play, mark, glyph);
+        uiBind(*canvas.state, play, onPlay, hud);
+        uint16_t pause = uiButton(*canvas.state, toolLeft, { .label = "", .width = 28.0f, .height = 28.0f });
+        hud->pauseBtn = pause;
+        transport(pause);
+        glyph.icon = 18;
+        (void)uiPanel(*canvas.state, pause, mark, glyph);
+        uiBind(*canvas.state, pause, onPause, hud);
+        uiShow(*canvas.state, pause, false);
+    }
+    paintTools(*hud);
+    uint16_t camBtn = uiButton(*canvas.state, toolRight, { .label = "", .width = 52.0f, .height = 28.0f, .iconSlot = 6 });
+    hud->camBtn = camBtn;
+    if (camBtn < canvas.state->count) {
+        if (auto* flex = canvas.state->ent[camBtn].try_get_mut<UiFlex>()) {
+            flex->direction = UiFlexDir::Row;
+            flex->align = UiAlign::Center;
+            flex->justify = UiJustify::Center;
+            flex->gap = 2.0f;
+        }
+        UiFlex mark{};
+        mark.widthMode = UiSize::Px;
+        mark.width = 14.0f;
+        mark.heightMode = UiSize::Px;
+        mark.height = 14.0f;
+        mark.shrink = 0.0f;
+        UiPaint glyph = paintClear();
+        glyph.icon = 11;
+        glyph.r = look.text[0];
+        glyph.g = look.text[1];
+        glyph.b = look.text[2];
+        (void)uiPanel(*canvas.state, camBtn, mark, glyph);
+    }
+    tintIcon(*canvas.state, iconChild(*canvas.state, camBtn), false);
+    uiBind(*canvas.state, camBtn, onCameraButton, hud);
+    uint16_t viewBtn = uiMenuButton(*canvas.state, toolRight, "Lit", kUiNone);
+    hud->viewBtn = viewBtn;
+    uiBind(*canvas.state, viewBtn, onViewButton, hud);
+    uint16_t viewCap = kUiNone;
+    for (uint16_t child = 0; child < canvas.state->count; ++child) {
+        if (canvas.state->parentOf[child] == viewBtn && canvas.state->ent[child].try_get<UiText>() != nullptr) {
+            viewCap = child;
+            break;
+        }
+    }
+    hud->viewCap = viewCap;
+    float viewW = uiMeasure(*canvas.state, "Lit", 3, 3) + 38.0f;
+    for (const ViewMode& mode : kViews) {
+        uint8_t len = 0;
+        while (mode.name[len] != '\0' && len < 48) {
+            ++len;
+        }
+        const float measured = uiMeasure(*canvas.state, mode.name, len, len);
+        if (measured + 52.0f > viewW) {
+            viewW = measured + 52.0f;
+        }
+    }
+    if (viewBtn < canvas.state->count) {
+        if (auto* flex = canvas.state->ent[viewBtn].try_get_mut<UiFlex>()) {
+            flex->widthMode = UiSize::Px;
+            flex->width = uiMeasure(*canvas.state, "Lit", 3, 3) + 38.0f;
+            flex->grow = 0.0f;
+            flex->shrink = 0.0f;
+        }
+    }
+    if (viewCap != kUiNone) {
+        uiTextStyle(*canvas.state, viewCap, UiTextAlign::Left, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+    }
+    const float viewH = 16.0f + static_cast<float>(sizeof(kViews) / sizeof(kViews[0])) * 36.0f
+        + static_cast<float>(sizeof(kViews) / sizeof(kViews[0]) - 1) * 2.0f;
+    hud->viewPopH = viewH;
+    UiFlex viewPopFlex{};
+    viewPopFlex.position = UiPosition::Absolute;
+    viewPopFlex.direction = UiFlexDir::Column;
+    viewPopFlex.widthMode = UiSize::Px;
+    viewPopFlex.width = viewW;
+    viewPopFlex.heightMode = UiSize::Px;
+    viewPopFlex.height = viewH;
+    viewPopFlex.pad = 8.0f;
+    viewPopFlex.gap = 2.0f;
+    viewPopFlex.shrink = 0.0f;
+    const uint16_t viewPop = uiPanel(*canvas.state, root, viewPopFlex, veilPaint());
+    hud->viewPanel = viewPop;
+    canvas.state->ent[viewPop].add<UiMenuSlide>();
+    uiShow(*canvas.state, viewPop, false);
+    for (const ViewMode& mode : kViews) {
+        hud->modes.push_back({});
+        ModeHit& hit = hud->modes.back();
+        hit.canvas = &canvas;
+        hit.hud = hud;
+        hit.index = mode.index;
+        hit.label = viewCap;
+        const uint16_t radio = uiCheck(*canvas.state, viewPop, mode.name, 1, 12, mode.index == 0);
+        hit.radio = radio;
+        if (radio < canvas.state->count) {
+            if (auto* paint = canvas.state->ent[radio].try_get_mut<UiPaint>()) {
+                paint->a = 0.0f;
+            }
+            uiBind(*canvas.state, radio, onViewRadio, &hit);
+        }
+    }
+    {
+        uint16_t gear = uiButton(*canvas.state, toolRight, { .label = "", .width = 28.0f, .height = 28.0f });
+        hud->gearBtn = gear;
+        if (gear < canvas.state->count) {
+            if (auto* paint = canvas.state->ent[gear].try_get_mut<UiPaint>()) {
+                paint->icon = 20;
+            }
+        }
+        uiBind(*canvas.state, gear, onGear, hud);
+        UiFlex pop{};
+        pop.position = UiPosition::Absolute;
+        pop.direction = UiFlexDir::Column;
+        pop.widthMode = UiSize::Px;
+        pop.width = 280.0f;
+        pop.heightMode = UiSize::Px;
+        pop.height = 252.0f;
+        pop.pad = 8.0f;
+        pop.gap = 4.0f;
+        pop.shrink = 0.0f;
+        const uint16_t statsPop = uiPanel(*canvas.state, root, pop, veilPaint());
+        hud->statsPanel = statsPop;
+        canvas.state->ent[statsPop].add<UiMenuSlide>();
+        uiShow(*canvas.state, statsPop, false);
+        const char* statNames[] = {
+            "Show FPS / Frame Time",
+            "Show GPU Time",
+            "Show Draw Calls / Triangle Count",
+            "Show Physics Time (Jolt)",
+            "Show Memory",
+            "Show VRAM Memory",
+        };
+        for (uint8_t i = 0; i < 6; ++i) {
+            hud->statCheck[i] = uiCheck(*canvas.state, statsPop, statNames[i], 0, 0, false);
+        }
+    }
+    UiFlex camFlex{};
+    camFlex.position = UiPosition::Absolute;
+    camFlex.direction = UiFlexDir::Column;
+    camFlex.widthMode = UiSize::Px;
+    camFlex.width = 400.0f;
+    camFlex.heightMode = UiSize::Px;
+    camFlex.height = 500.0f;
+    camFlex.pad = 8.0f;
+    camFlex.gap = 6.0f;
+    camFlex.shrink = 0.0f;
+    const uint16_t camPanel = uiPanel(*canvas.state, root, camFlex, veilPaint());
+    hud->camPanel = camPanel;
+    canvas.state->ent[camPanel].add<UiMenuSlide>();
+    uiShow(*canvas.state, camPanel, false);
+    auto rule = [&]() {
+        UiFlex line{};
+        line.widthMode = UiSize::Percent;
+        line.width = 100.0f;
+        line.heightMode = UiSize::Px;
+        line.height = 1.0f;
+        line.shrink = 0.0f;
+        UiPaint ink = paintToken(look, UiToken::Muted, 0.0f);
+        ink.a = 0.45f;
+        return uiPanel(*canvas.state, camPanel, line, ink);
+    };
+    const char* freeViews[] = {"Perspective", "Orthographic"};
+    const char* axisViews[] = {"Top", "Bottom", "Left", "Right", "Front", "Back"};
+    for (uint8_t i = 0; i < 2; ++i) {
+        hud->camProj[i] = uiCheck(*canvas.state, camPanel, freeViews[i], 1, 9, i == 0);
+    }
+    (void)rule();
+    for (uint8_t i = 0; i < 6; ++i) {
+        hud->camAxis[i] = uiCheck(*canvas.state, camPanel, axisViews[i], 1, 10, false);
+    }
+    for (uint16_t id : hud->camProj) {
+        if (id < canvas.state->count) {
+            if (auto* paint = canvas.state->ent[id].try_get_mut<UiPaint>()) {
+                paint->a = 0.0f;
+            }
+        }
+    }
+    for (uint16_t id : hud->camAxis) {
+        if (id < canvas.state->count) {
+            if (auto* paint = canvas.state->ent[id].try_get_mut<UiPaint>()) {
+                paint->a = 0.0f;
+            }
+        }
+    }
+    auto labeledNumber = [&](const char* text, float value, float minV, float maxV, float step) {
+        UiFlex line{};
+        line.direction = UiFlexDir::Row;
+        line.align = UiAlign::Center;
+        line.widthMode = UiSize::Percent;
+        line.width = 100.0f;
+        line.heightMode = UiSize::Px;
+        line.height = 32.0f;
+        line.gap = 8.0f;
+        line.shrink = 0.0f;
+        const uint16_t host = uiPanel(*canvas.state, camPanel, line, hiddenPaint());
+        (void)uiLabel(*canvas.state, host, text);
+        UiFlex gap{};
+        gap.grow = 1.0f;
+        gap.shrink = 1.0f;
+        gap.widthMode = UiSize::Px;
+        gap.width = 8.0f;
+        gap.heightMode = UiSize::Px;
+        gap.height = 1.0f;
+        (void)uiSpacer(*canvas.state, host, gap);
+        const uint16_t num = uiNumber(*canvas.state, host, value, minV, maxV, step);
+        uiSetHeight(*canvas.state, num, 28.0f);
+        if (num < canvas.state->count) {
+            if (auto* flex = canvas.state->ent[num].try_get_mut<UiFlex>()) {
+                flex->widthMode = UiSize::Px;
+                flex->width = 72.0f;
+                flex->grow = 0.0f;
+                flex->shrink = 0.0f;
+            }
+        }
+        return num;
+    };
+    (void)rule();
+    {
+        UiFlex line{};
+        line.direction = UiFlexDir::Row;
+        line.align = UiAlign::Center;
+        line.widthMode = UiSize::Percent;
+        line.width = 100.0f;
+        line.heightMode = UiSize::Px;
+        line.height = 32.0f;
+        line.gap = 8.0f;
+        line.shrink = 0.0f;
+        const uint16_t host = uiPanel(*canvas.state, camPanel, line, hiddenPaint());
+        (void)uiLabel(*canvas.state, host, "Field of View");
+        hud->camFov = uiSlider(*canvas.state, host, 60.0f, 10.0f, 120.0f, nullptr, nullptr, 32.0f);
+        if (hud->camFov < canvas.state->count) {
+            if (auto* flex = canvas.state->ent[hud->camFov].try_get_mut<UiFlex>()) {
+                flex->widthMode = UiSize::Px;
+                flex->width = 32.0f;
+                flex->grow = 1.0f;
+                flex->shrink = 1.0f;
+                flex->minW = 24.0f;
+            }
+        }
+        hud->camFovNum = uiNumber(*canvas.state, host, 60.0f, 10.0f, 120.0f, 1.0f);
+        uiSetHeight(*canvas.state, hud->camFovNum, 28.0f);
+        if (hud->camFovNum < canvas.state->count) {
+            if (auto* flex = canvas.state->ent[hud->camFovNum].try_get_mut<UiFlex>()) {
+                flex->widthMode = UiSize::Px;
+                flex->width = 72.0f;
+                flex->grow = 0.0f;
+                flex->shrink = 0.0f;
+            }
+        }
+    }
+    (void)rule();
+    hud->camNear = labeledNumber("Near View Plane", 0.1f, 0.01f, 10.0f, 0.01f);
+    hud->camFar = labeledNumber("Far View Plane", 8000.0f, 100.0f, 100000.0f, 10.0f);
+    (void)rule();
+    hud->camSpeed = labeledNumber("Camera Speed", 4.0f, 0.05f, 200.0f, 0.1f);
     UiFlex viewFlex{};
     viewFlex.grow = 1.0f;
     viewFlex.shrink = 1.0f;
-    (void)uiPanel(*canvas.state, row, viewFlex, hiddenPaint());
+    viewFlex.minH = 0.0f;
+    const uint16_t viewPort = uiPanel(*canvas.state, viewCol, viewFlex, hiddenPaint());
+    UiFlex over{};
+    over.position = UiPosition::Absolute;
+    over.direction = UiFlexDir::Column;
+    over.widthMode = UiSize::Px;
+    over.width = 240.0f;
+    over.heightMode = UiSize::Auto;
+    over.pad = 8.0f;
+    over.gap = 2.0f;
+    over.shrink = 0.0f;
+    over.posX = 8.0f;
+    over.posY = 8.0f;
+    UiPaint veil = paintToken(look, UiToken::Content, look.radiusSm);
+    veil.a = 0.72f;
+    hud->overlay = uiPanel(*canvas.state, viewPort, over, veil);
+    if (hud->overlay < canvas.state->count) {
+        canvas.state->ent[hud->overlay].add<UiPass>();
+    }
+    uiShow(*canvas.state, hud->overlay, false);
+    for (uint8_t i = 0; i < 6; ++i) {
+        const uint16_t line = uiLabel(*canvas.state, hud->overlay, "");
+        hud->statLine[i] = line;
+        if (line < canvas.state->count) {
+            if (auto* paint = canvas.state->ent[line].try_get_mut<UiPaint>()) {
+                paint->token = UiToken::Custom;
+                paint->r = look.accent[0][0];
+                paint->g = look.accent[0][1];
+                paint->b = look.accent[0][2];
+                paint->a = 0.0f;
+            }
+        }
+        uiShow(*canvas.state, line, false);
+    }
     (void)splitBar(row, true);
     UiFlex dockFlex{};
     dockFlex.direction = UiFlexDir::Row;
@@ -1083,7 +2018,6 @@ void sceneHud(Canvas& canvas, void* user) {
     hud->stats.page = statsPane;
     hud->stats.dock = dock;
     hud->stats.open = 0;
-    uiBind(*canvas.state, statsBtn, onStats, &hud->stats);
     UiFlex sideFlex{};
     sideFlex.direction = UiFlexDir::Column;
     sideFlex.grow = 1.0f;
@@ -1200,11 +2134,14 @@ void sceneHud(Canvas& canvas, void* user) {
         }
         return id;
     };
-    auto vec = [&](uint16_t host, const char* label, const char* nx, const char* ny, const char* nz, float x, float y, float z, float minV, float maxV, float step) {
+    auto vec = [&](uint16_t host, const char* label, const char* nx, const char* ny, const char* nz, float x, float y, float z, float minV, float maxV, float step, int slot) {
         const UiPropVec3 row = uiPropVec3(*canvas.state, host, label, x, y, z, minV, maxV, step);
         uiName(*canvas.state, row.x, nx);
         uiName(*canvas.state, row.y, ny);
         uiName(*canvas.state, row.z, nz);
+        if (slot >= 0 && slot < 4) {
+            hud->xformLock[slot] = row.lock;
+        }
     };
     const uint8_t catGeneral = static_cast<uint8_t>(UiPropCat::General);
     const uint8_t catActor = static_cast<uint8_t>(UiPropCat::Actor);
@@ -1213,9 +2150,11 @@ void sceneHud(Canvas& canvas, void* user) {
     const uint8_t catRender = static_cast<uint8_t>(UiPropCat::Rendering);
     const uint8_t catStream = static_cast<uint8_t>(UiPropCat::Streaming);
     panel = uiPropSection(*canvas.state, details, "Transform", catGeneral, kSecTransform);
-    vec(panel, "Location", "pbrPx", "pbrPy", "pbrPz", 0.0f, 0.0f, 0.0f, -4000.0f, 4000.0f, 0.05f);
-    vec(panel, "Rotation", "pbrEx", "pbrEy", "pbrEz", 0.0f, 0.0f, 0.0f, -180.0f, 180.0f, 0.5f);
-    vec(panel, "Scale", "pbrSx", "pbrSy", "pbrSz", 1.0f, 1.0f, 1.0f, 0.05f, 20.0f, 0.05f);
+    constexpr float kOpen = 3.4028234e+38f;
+    vec(panel, "Location", "pbrPx", "pbrPy", "pbrPz", 0.0f, 0.0f, 0.0f, -kOpen, kOpen, 0.05f, 0);
+    vec(panel, "Rotation", "pbrEx", "pbrEy", "pbrEz", 0.0f, 0.0f, 0.0f, -kOpen, kOpen, 0.5f, 1);
+    vec(panel, "Scale", "pbrSx", "pbrSy", "pbrSz", 1.0f, 1.0f, 1.0f, -kOpen, kOpen, 0.05f, 2);
+    vec(panel, "Pivot", "pbrOx", "pbrOy", "pbrOz", 0.0f, 0.0f, 0.0f, -kOpen, kOpen, 0.05f, 3);
     tick("Static", "xfStatic", false);
     panel = uiPropSection(*canvas.state, details, "Material", catActor, kSecMaterial);
     rowSlide(*canvas.state, panel, "Color R", "pbrR", 1.0f, 0.0f, 1.0f);
@@ -1224,15 +2163,6 @@ void sceneHud(Canvas& canvas, void* user) {
     rowSlide(*canvas.state, panel, "Roughness", "pbrRough", 0.5f, 0.0f, 1.0f);
     rowSlide(*canvas.state, panel, "Metallic", "pbrMetal", 0.0f, 0.0f, 1.0f);
     rowSlide(*canvas.state, panel, "Emissive", "pbrEm", 0.0f, 0.0f, 8.0f);
-    panel = uiPropSection(*canvas.state, details, "Sun", catRender, kSecSun);
-    tick("Enabled", "sun", true);
-    tick("Shadows", "shadow", true);
-    rowSlide(*canvas.state, panel, "Intensity", "sunI", 1.0f, 0.0f, 4.0f);
-    rowSlide(*canvas.state, panel, "Color R", "sunR", 1.0f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "Color G", "sunG", 0.92f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "Color B", "sunB", 0.76f, 0.0f, 1.0f);
-    rowSlide(*canvas.state, panel, "Zenith", "zenith", 35.0f, -70.0f, 80.0f);
-    rowSlide(*canvas.state, panel, "Azimuth", "azimuth", 30.0f, 0.0f, 360.0f);
     const uint16_t postBody = uiPropSection(*canvas.state, details, "PostProcessing", catRender, kSecPost);
     const uint16_t giBody = uiFoldBody(*canvas.state, postBody, "GI");
     const uint16_t directBody = uiFoldBody(*canvas.state, giBody, "Direct Illumination");
@@ -1453,6 +2383,38 @@ void sceneHud(Canvas& canvas, void* user) {
     rowSlide(*canvas.state, panel, "Sun Shafts", "fogS", 40.0f, 0.0f, 128.0f);
     rowSlide(*canvas.state, panel, "Shaft Start", "fogIn", 0.0f, 0.0f, 80.0f);
     const uint16_t weather = uiPropSection(*canvas.state, details, "Weather", catRender, kSecWeather);
+    const uint16_t sunFold = uiFoldBody(*canvas.state, weather, "Sun");
+    panel = sunFold;
+    tick("Enabled", "sun", true);
+    tick("Cast Shadows", "sunCast", true);
+    {
+        const uint16_t menu = uiMakeMenu(*canvas.state);
+        uiCommandAddTo(*canvas.state, menu, "ReSTIR DI Shadows", sunShRestir, canvas.state.get());
+        uiCommandAddTo(*canvas.state, menu, "Cascaded Shadow Maps", sunShCsm, canvas.state.get());
+        uiName(*canvas.state, uiPropMenu(*canvas.state, sunFold, "Shadows", "ReSTIR DI Shadows", menu), "sunShBtn");
+    }
+    hideCheck("ReSTIR DI Shadows", "sunSh0", 1, 11, true);
+    hideCheck("Cascaded Shadow Maps", "sunSh1", 1, 11, false);
+    hideCheck("shadow", "shadow", 0, 0, true);
+    {
+        const uint16_t swatch = uiPropSwatch(*canvas.state, sunFold, "Color", 1.0f, 0.92f, 0.76f);
+        uiName(*canvas.state, swatch, "sunSwatch");
+        uiBind(*canvas.state, swatch, onSunSwatch, hud);
+    }
+    hideSlide("sunR", 1.0f, 0.0f, 1.0f);
+    hideSlide("sunG", 0.92f, 0.0f, 1.0f);
+    hideSlide("sunB", 0.76f, 0.0f, 1.0f);
+    rowSlide(*canvas.state, sunFold, "Intensity", "sunI", 1.0f, 0.0f, 4.0f);
+    rowSlide(*canvas.state, sunFold, "Temperature", "sunK", 5600.0f, 1500.0f, 12000.0f);
+    rowSlide(*canvas.state, sunFold, "Sun Angle", "sunAngle", 0.53f, 0.05f, 8.0f);
+    rowSlide(*canvas.state, sunFold, "Soft Angle", "sunSoft", 0.5f, 0.0f, 8.0f);
+    rowSlide(*canvas.state, sunFold, "Indirect Light", "sunIndirect", 1.0f, 0.0f, 4.0f);
+    {
+        const UiPropVec2 row = uiPropVec2(*canvas.state, sunFold, "Rotation", 35.0f, 30.0f, -kOpen, kOpen, 0.5f);
+        uiName(*canvas.state, row.x, "zenith");
+        uiName(*canvas.state, row.y, "azimuth");
+    }
+    tick("Sun Follows Clock", "wxClock", false);
     panel = weather;
     {
         const uint16_t menu = uiMakeMenu(*canvas.state);
@@ -1464,7 +2426,6 @@ void sceneHud(Canvas& canvas, void* user) {
     }
     rowSlide(*canvas.state, panel, "Time of day", "wxTime", 11.4f, 0.0f, 24.0f);
     rowSlide(*canvas.state, panel, "Day length", "wxDay", 1200.0f, 60.0f, 7200.0f);
-    tick("Sun follows clock", "wxClock", false);
     rowSlide(*canvas.state, panel, "Wind", "wind", 6.0f, 0.0f, 40.0f);
     rowSlide(*canvas.state, panel, "Wind yaw", "windYaw", 23.0f, 0.0f, 360.0f);
     rowSlide(*canvas.state, panel, "Temperature", "wxTemp", 12.0f, -20.0f, 45.0f);
@@ -1566,6 +2527,7 @@ void sceneHud(Canvas& canvas, void* user) {
             }
         }
         uiPropShowMask(*canvas.state, mask);
+        uiEnsureColorPopup(*canvas.state);
     }
 }
 
@@ -1626,6 +2588,14 @@ void pullProp(HudContext& hud, Canvas& canvas, uint8_t index) {
     hud.propLast[12] = pose.scale[0];
     hud.propLast[13] = pose.scale[1];
     hud.propLast[14] = pose.scale[2];
+    float pivot[3]{};
+    (void)sceneFrameActorPivot(hud.tool.scene, index, pivot);
+    setSlide(canvas, id.pbrOx, pivot[0]);
+    setSlide(canvas, id.pbrOy, pivot[1]);
+    setSlide(canvas, id.pbrOz, pivot[2]);
+    hud.propPivot[0] = pivot[0];
+    hud.propPivot[1] = pivot[1];
+    hud.propPivot[2] = pivot[2];
     hud.propSel = index;
 }
 
@@ -1661,6 +2631,103 @@ void syncProp(Engine& e, Canvas& canvas) {
         slideAt(canvas, id.pbrSy, e.hud.propLast[13]),
         slideAt(canvas, id.pbrSz, e.hud.propLast[14]),
     };
+    if (canvas.state != nullptr) {
+        const uint16_t locks[3] = {e.hud.xformLock[0], e.hud.xformLock[1], e.hud.xformLock[2]};
+        const uint16_t fields[3][3] = {
+            {id.pbrPx, id.pbrPy, id.pbrPz},
+            {id.pbrEx, id.pbrEy, id.pbrEz},
+            {id.pbrSx, id.pbrSy, id.pbrSz},
+        };
+        for (int row = 0; row < 3; ++row) {
+            if (!uiPropLinked(*canvas.state, locks[row])) {
+                continue;
+            }
+            int changed = -1;
+            int count = 0;
+            for (int axis = 0; axis < 3; ++axis) {
+                if (std::fabs(cur[6 + row * 3 + axis] - e.hud.propLast[6 + row * 3 + axis]) > 0.0005f) {
+                    changed = axis;
+                    ++count;
+                }
+            }
+            if (count != 1 || changed < 0) {
+                continue;
+            }
+            const float oldV = e.hud.propLast[6 + row * 3 + changed];
+            const float newV = cur[6 + row * 3 + changed];
+            for (int axis = 0; axis < 3; ++axis) {
+                if (axis == changed) {
+                    continue;
+                }
+                float next = e.hud.propLast[6 + row * 3 + axis];
+                if (row == 2) {
+                    next = std::fabs(oldV) < 1.0e-6f ? newV : next * (newV / oldV);
+                } else {
+                    next += newV - oldV;
+                }
+                cur[6 + row * 3 + axis] = next;
+                setSlide(canvas, fields[row][axis], next);
+            }
+        }
+    }
+    {
+        float piv[3] = {
+            slideAt(canvas, id.pbrOx, e.hud.propPivot[0]),
+            slideAt(canvas, id.pbrOy, e.hud.propPivot[1]),
+            slideAt(canvas, id.pbrOz, e.hud.propPivot[2]),
+        };
+        if (canvas.state != nullptr && uiPropLinked(*canvas.state, e.hud.xformLock[3])) {
+            int changed = -1;
+            int count = 0;
+            for (int axis = 0; axis < 3; ++axis) {
+                if (std::fabs(piv[axis] - e.hud.propPivot[axis]) > 0.0005f) {
+                    changed = axis;
+                    ++count;
+                }
+            }
+            if (count == 1 && changed >= 0) {
+                const float delta = piv[changed] - e.hud.propPivot[changed];
+                const uint16_t fields[3] = {id.pbrOx, id.pbrOy, id.pbrOz};
+                for (int axis = 0; axis < 3; ++axis) {
+                    if (axis == changed) {
+                        continue;
+                    }
+                    piv[axis] = e.hud.propPivot[axis] + delta;
+                    setSlide(canvas, fields[axis], piv[axis]);
+                }
+            }
+        }
+        bool pivotMoved = false;
+        for (int axis = 0; axis < 3; ++axis) {
+            if (std::fabs(piv[axis] - e.hud.propPivot[axis]) > 0.0005f) {
+                pivotMoved = true;
+            }
+        }
+        if (pivotMoved) {
+            sceneFrameActorSetPivot(e.scene, selected, piv);
+            for (int axis = 0; axis < 3; ++axis) {
+                e.hud.propPivot[axis] = piv[axis];
+            }
+        } else {
+            float got[3]{};
+            if (sceneFrameActorPivot(e.scene, selected, got)) {
+                bool driftPivot = false;
+                for (int axis = 0; axis < 3; ++axis) {
+                    if (std::fabs(got[axis] - e.hud.propPivot[axis]) > 0.0005f) {
+                        driftPivot = true;
+                    }
+                }
+                if (driftPivot) {
+                    setSlide(canvas, id.pbrOx, got[0]);
+                    setSlide(canvas, id.pbrOy, got[1]);
+                    setSlide(canvas, id.pbrOz, got[2]);
+                    for (int axis = 0; axis < 3; ++axis) {
+                        e.hud.propPivot[axis] = got[axis];
+                    }
+                }
+            }
+        }
+    }
     bool moved = checkOn(canvas, id.xfStatic, false) != (e.hud.propStatic != 0);
     for (int i = prop ? 0 : 6; i < 15; ++i) {
         if (std::fabs(cur[i] - e.hud.propLast[i]) > 0.0005f) {
@@ -1727,6 +2794,222 @@ void syncProp(Engine& e, Canvas& canvas) {
     }
 }
 
+void syncViewport(Engine& e, Canvas& canvas) {
+    SceneFrame* scene = e.scene;
+    UiState* state = canvas.state.get();
+    if (scene == nullptr || state == nullptr || e.hud.camFov == kUiNone) {
+        return;
+    }
+    HudContext& hud = e.hud;
+    if (hud.camInit == 0) {
+        const float fov = sceneFrameCameraFov(scene);
+        const float nearZ = sceneFrameCameraNear(scene);
+        const float farZ = sceneFrameCameraFar(scene);
+        const float speed = sceneFrameCameraSpeed(scene);
+        uiSliderSet(*state, hud.camFov, fov);
+        setSlide(canvas, hud.camFovNum, fov);
+        setSlide(canvas, hud.camNear, nearZ);
+        setSlide(canvas, hud.camFar, farZ);
+        setSlide(canvas, hud.camSpeed, speed);
+        hud.fovSent = fov;
+        hud.nearSent = nearZ;
+        hud.farSent = farZ;
+        hud.speedSent = speed;
+        hud.camInit = 1;
+    }
+    const float fovSlide = slideAt(canvas, hud.camFov, hud.fovSent);
+    const float fovNum = slideAt(canvas, hud.camFovNum, hud.fovSent);
+    float fov = hud.fovSent;
+    if (std::fabs(fovSlide - hud.fovSent) > 0.05f) {
+        fov = fovSlide;
+    } else if (std::fabs(fovNum - hud.fovSent) > 0.05f) {
+        fov = fovNum;
+    }
+    const float nearZ = slideAt(canvas, hud.camNear, hud.nearSent);
+    const float farZ = slideAt(canvas, hud.camFar, hud.farSent);
+    if (std::fabs(fov - hud.fovSent) > 0.05f || std::fabs(nearZ - hud.nearSent) > 0.0005f || std::fabs(farZ - hud.farSent) > 0.5f) {
+        sceneFrameCamera(scene, fov, nearZ, farZ);
+        hud.fovSent = sceneFrameCameraFov(scene);
+        hud.nearSent = sceneFrameCameraNear(scene);
+        hud.farSent = sceneFrameCameraFar(scene);
+        uiSliderSet(*state, hud.camFov, hud.fovSent);
+        setSlide(canvas, hud.camFovNum, hud.fovSent);
+        setSlide(canvas, hud.camNear, hud.nearSent);
+        setSlide(canvas, hud.camFar, hud.farSent);
+    }
+    const float liveSpeed = sceneFrameCameraSpeed(scene);
+    const float shownSpeed = slideAt(canvas, hud.camSpeed, liveSpeed);
+    if (std::fabs(liveSpeed - hud.speedSent) > 0.02f && std::fabs(shownSpeed - hud.speedSent) < 0.02f) {
+        setSlide(canvas, hud.camSpeed, liveSpeed);
+        hud.speedSent = liveSpeed;
+    } else if (std::fabs(shownSpeed - hud.speedSent) > 0.001f) {
+        sceneFrameCameraSpeed(scene, shownSpeed);
+        hud.speedSent = sceneFrameCameraSpeed(scene);
+        setSlide(canvas, hud.camSpeed, hud.speedSent);
+    }
+    for (uint8_t channel = 0; channel < 3; ++channel) {
+        const float shown = slideAt(canvas, hud.snapNum[channel], hud.snapSent[channel]);
+        if (std::fabs(shown - hud.snapSent[channel]) > 0.0001f) {
+            hud.snapSent[channel] = shown;
+            sceneFrameSnap(scene, channel, hud.snapOn[channel], shown);
+        }
+    }
+    const uint8_t proj = checkOn(canvas, hud.camProj[1], false) ? 1 : 0;
+    if (proj != sceneFrameCameraProject(scene)) {
+        sceneFrameCameraProject(scene, proj);
+    }
+    if (hud.camBreak != 0) {
+        hud.camBreak = 0;
+        if (sceneFrameCameraMode(scene) != 0 && state != nullptr) {
+            sceneFrameCameraRelease(scene);
+            for (uint8_t i = 0; i < 6; ++i) {
+                if (hud.camAxis[i] < state->count) {
+                    if (auto* check = state->ent[hud.camAxis[i]].try_get_mut<UiCheck>()) {
+                        check->on = 0;
+                    }
+                }
+            }
+            hud.viewSent = 0;
+            state->visualDirty = true;
+        }
+    }
+    uint8_t view = 0;
+    for (uint8_t i = 0; i < 6; ++i) {
+        if (checkOn(canvas, hud.camAxis[i], false)) {
+            view = static_cast<uint8_t>(i + 1);
+        }
+    }
+    if (view != hud.viewSent) {
+        sceneFrameCameraView(scene, view);
+        hud.viewSent = view;
+    }
+    if (hud.camPanel == kUiNone) {
+        return;
+    }
+    auto placeUnder = [&](uint16_t panel, uint16_t button, float width, bool right) {
+        if (panel >= state->count || button >= state->count) {
+            return;
+        }
+        if (auto* flex = state->ent[panel].try_get_mut<UiFlex>()) {
+            const UiBox& box = state->box[button];
+            flex->position = UiPosition::Absolute;
+            float x = right ? box.x + box.w - width : box.x;
+            if (x + width > state->laidW - 4.0f) {
+                x = state->laidW - width - 4.0f;
+            }
+            if (x < 4.0f) {
+                x = 4.0f;
+            }
+            flex->posX = x;
+            float y = box.y + box.h + 4.0f;
+            uint16_t bar = state->parentOf[button];
+            if (bar < state->count) {
+                bar = state->parentOf[bar];
+            }
+            if (bar < state->count && state->box[bar].h > 1.0f) {
+                const float under = state->box[bar].y + state->box[bar].h + 4.0f;
+                if (under > y) {
+                    y = under;
+                }
+            }
+            flex->posY = y;
+        }
+    };
+    if (hud.camWant == 2 && (!state->menuOpen || uiMenuMetrics(*state).opened != hud.camPanel)) {
+        hud.camWant = 0;
+    }
+    if ((hud.camWant == 1 || hud.camWant == 2) && hud.camBtn != kUiNone) {
+        placeUnder(hud.camPanel, hud.camBtn, 400.0f, true);
+        if (hud.camWant == 1) {
+            uiReveal(*state, hud.camPanel, 500.0f, true);
+            uiMenuMetrics(*state).opened = hud.camPanel;
+            state->menuOpen = true;
+            state->layoutDirty = true;
+            hud.camWant = 2;
+        }
+    } else if (hud.camWant == 0) {
+        uiReveal(*state, hud.camPanel, 500.0f, false);
+        if (uiMenuMetrics(*state).opened == hud.camPanel) {
+            uiMenuMetrics(*state).opened = kUiNone;
+            state->menuOpen = false;
+        }
+    }
+    if (hud.viewWant == 2 && (!state->menuOpen || uiMenuMetrics(*state).opened != hud.viewPanel)) {
+        hud.viewWant = 0;
+    }
+    if ((hud.viewWant == 1 || hud.viewWant == 2) && hud.viewBtn != kUiNone && hud.viewPanel < state->count) {
+        float viewW = 160.0f;
+        if (const UiFlex* flex = state->ent[hud.viewPanel].try_get<UiFlex>()) {
+            viewW = flex->width;
+        }
+        placeUnder(hud.viewPanel, hud.viewBtn, viewW, true);
+        if (hud.viewWant == 1) {
+            uiReveal(*state, hud.viewPanel, hud.viewPopH, true);
+            uiMenuMetrics(*state).opened = hud.viewPanel;
+            state->menuOpen = true;
+            state->layoutDirty = true;
+            hud.viewWant = 2;
+        }
+    } else if (hud.viewWant == 0 && hud.viewPanel < state->count) {
+        uiReveal(*state, hud.viewPanel, hud.viewPopH, false);
+        if (uiMenuMetrics(*state).opened == hud.viewPanel) {
+            uiMenuMetrics(*state).opened = kUiNone;
+            state->menuOpen = false;
+        }
+    }
+    bool anyStat = false;
+    for (uint8_t i = 0; i < 6; ++i) {
+        hud.statOn[i] = checkOn(canvas, hud.statCheck[i], false) ? 1 : 0;
+        uiShow(*state, hud.statLine[i], hud.statOn[i] != 0);
+        anyStat = anyStat || hud.statOn[i] != 0;
+    }
+    uiShow(*state, hud.overlay, anyStat);
+    if (anyStat && hud.overlay < state->count) {
+        HostMeters meters{};
+        platformHostMeters(meters);
+        const double ram = static_cast<double>(meters.rss) / (1024.0 * 1024.0);
+        const double vram = static_cast<double>(deviceMemoryUsed(e.host.device)) / (1024.0 * 1024.0);
+        const float fps = sceneFrameFps(scene);
+        const float frame = fps > 1.0f ? 1000.0f / fps : 0.0f;
+        char line[6][64]{};
+        std::snprintf(line[0], sizeof(line[0]), "FPS %.0f   %.2f ms", static_cast<double>(fps), static_cast<double>(frame));
+        std::snprintf(line[1], sizeof(line[1]), "GPU %.2f ms", static_cast<double>(sceneFrameGpuMs(scene)));
+        std::snprintf(line[2], sizeof(line[2]), "Draws %u   Tris %u", sceneFrameDraws(scene), sceneFrameTriangles(scene));
+        std::snprintf(line[3], sizeof(line[3]), "Physics %.2f ms", static_cast<double>(sceneFramePhysicsMs(scene)));
+        std::snprintf(line[4], sizeof(line[4]), "RAM %.0f MB", ram);
+        std::snprintf(line[5], sizeof(line[5]), "VRAM %.0f MB", vram);
+        for (uint8_t i = 0; i < 6; ++i) {
+            if (hud.statOn[i] != 0) {
+                uiText(*state, hud.statLine[i], line[i]);
+            }
+        }
+        if (auto* flex = state->ent[hud.overlay].try_get_mut<UiFlex>()) {
+            flex->position = UiPosition::Absolute;
+            flex->posX = 8.0f;
+            flex->posY = 8.0f;
+        }
+    }
+    if (hud.statsWant == 2 && hud.statsPanel < state->count && (!state->menuOpen || uiMenuMetrics(*state).opened != hud.statsPanel)) {
+        hud.statsWant = 0;
+    }
+    if ((hud.statsWant == 1 || hud.statsWant == 2) && hud.gearBtn != kUiNone && hud.statsPanel < state->count) {
+        placeUnder(hud.statsPanel, hud.gearBtn, 280.0f, true);
+        if (hud.statsWant == 1) {
+            uiReveal(*state, hud.statsPanel, 252.0f, true);
+            uiMenuMetrics(*state).opened = hud.statsPanel;
+            state->menuOpen = true;
+            state->layoutDirty = true;
+            hud.statsWant = 2;
+        }
+    } else if (hud.statsWant == 0 && hud.statsPanel < state->count) {
+        uiReveal(*state, hud.statsPanel, 252.0f, false);
+        if (uiMenuMetrics(*state).opened == hud.statsPanel) {
+            uiMenuMetrics(*state).opened = kUiNone;
+            state->menuOpen = false;
+        }
+    }
+}
+
 bool engineTick(Engine& e) {
     char picked[512]{};
     if (windowTakeFile(picked, static_cast<int>(sizeof(picked))) && e.demo.fileDialogSlot >= 0) {
@@ -1771,14 +3054,12 @@ bool engineTick(Engine& e) {
             showNamed(*hud.state, "fogBody", checkOn(hud, e.hud.ids.fogen, true));
         }
         syncProp(e, hud);
-        uint8_t sunIndex = kSceneActorNone;
-        if (sceneFrameActorKind(e.scene, selected) == static_cast<uint8_t>(SceneActorKind::Sun)) {
-            sunIndex = selected;
-        } else {
+        uint8_t weatherIndex = kSceneActorNone;
+        {
             const uint8_t count = sceneFrameActorCount(e.scene);
             for (uint8_t i = 0; i < count; ++i) {
-                if (sceneFrameActorKind(e.scene, i) == static_cast<uint8_t>(SceneActorKind::Sun)) {
-                    sunIndex = i;
+                if (sceneFrameActorKind(e.scene, i) == static_cast<uint8_t>(SceneActorKind::Weather)) {
+                    weatherIndex = i;
                     break;
                 }
             }
@@ -1919,6 +3200,13 @@ bool engineTick(Engine& e) {
                 setSlide(hud, id.fogB, picker.book->b);
                 uiPaintRgb(state, swatch, picker.book->r, picker.book->g, picker.book->b);
             }
+            const uint16_t sunSwatch = id.sunSwatch;
+            if (sunSwatch != kUiNone && picker.colorAnchor == sunSwatch && picker.book != nullptr && picker.colorPresent != 0) {
+                setSlide(hud, id.sunR, picker.book->r);
+                setSlide(hud, id.sunG, picker.book->g);
+                setSlide(hud, id.sunB, picker.book->b);
+                uiPaintRgb(state, sunSwatch, picker.book->r, picker.book->g, picker.book->b);
+            }
         }
         tweaks.fogR = slideAt(hud, id.fogR, 0.62f);
         tweaks.fogG = slideAt(hud, id.fogG, 0.72f);
@@ -1938,21 +3226,21 @@ bool engineTick(Engine& e) {
             azimuth = sceneFrameWeatherAzimuth(e.scene);
             setSlide(hud, id.zenith, zenith);
             setSlide(hud, id.azimuth, azimuth);
-            if (sunIndex != kSceneActorNone) {
-                sceneFrameActorSetEuler(e.scene, sunIndex, zenith, azimuth);
+            if (weatherIndex != kSceneActorNone) {
+                sceneFrameActorSetEuler(e.scene, weatherIndex, zenith, azimuth);
             }
-        } else if (sunIndex != kSceneActorNone) {
+        } else if (weatherIndex != kSceneActorNone) {
             float pitch = zenith;
             float yaw = azimuth;
-            sceneFrameActorEuler(e.scene, sunIndex, pitch, yaw);
-            const bool dragging = sceneFrameActorDragging(e.scene) && selected == sunIndex;
+            sceneFrameActorEuler(e.scene, weatherIndex, pitch, yaw);
+            const bool dragging = sceneFrameActorDragging(e.scene) && selected == weatherIndex;
             if (dragging || (std::fabs(zenith - pitch) <= 0.25f && std::fabs(azimuth - yaw) <= 0.25f)) {
                 setSlide(hud, id.zenith, pitch);
                 setSlide(hud, id.azimuth, yaw);
                 zenith = pitch;
                 azimuth = yaw;
             } else {
-                sceneFrameActorSetEuler(e.scene, sunIndex, zenith, azimuth);
+                sceneFrameActorSetEuler(e.scene, weatherIndex, zenith, azimuth);
             }
         }
         tweaks.sunZenith = zenith;
@@ -1965,6 +3253,13 @@ bool engineTick(Engine& e) {
         tweaks.dayLength = slideAt(hud, id.wxDay, 1200.0f);
         tweaks.timeOfDay = slideAt(hud, id.wxTime, 11.4f);
         tweaks.clockSun = checkOn(hud, id.wxClock, false) ? 1 : 0;
+        tweaks.sunEnabled = checkOn(hud, id.sun, true) ? 1 : 0;
+        tweaks.sunCast = checkOn(hud, id.sunCast, true) ? 1 : 0;
+        tweaks.sunCsm = checkOn(hud, id.sunSh1, false) ? 1 : 0;
+        tweaks.sunKelvin = slideAt(hud, id.sunKelvin, 5600.0f);
+        tweaks.sunAngle = slideAt(hud, id.sunAngle, 0.53f);
+        tweaks.sunSoft = slideAt(hud, id.sunSoft, 0.5f);
+        tweaks.sunIndirect = slideAt(hud, id.sunIndirect, 1.0f);
         tweaks.freeze = checkOn(hud, id.freeze, false);
         tweaks.passMask = 0;
         if (checkOn(hud, id.cluster, true)) {
@@ -2047,7 +3342,7 @@ bool engineTick(Engine& e) {
         }
         if (checkOn(hud, id.restiren, true)) {
             tweaks.passMask |= 1048576u;
-            if (tweaks.restirSunOn && (tweaks.passMask & 256u) != 0u) {
+            if (tweaks.restirSunOn && tweaks.sunCsm == 0 && (tweaks.passMask & 256u) != 0u) {
                 tweaks.passMask |= 2097152u;
             }
         }
@@ -2058,15 +3353,16 @@ bool engineTick(Engine& e) {
             }
         }
         sceneFrameTweaks(e.scene, tweaks);
+        syncViewport(e, hud);
         const float shownTime = sceneFrameWeatherTime(e.scene);
         if (shownTime >= 0.0f) {
             setSlide(hud, id.wxTime, shownTime);
-            if (tweaks.clockSun != 0 && sunIndex != kSceneActorNone) {
+            if (tweaks.clockSun != 0 && weatherIndex != kSceneActorNone) {
                 const float zen = sceneFrameWeatherZenith(e.scene);
                 const float az = sceneFrameWeatherAzimuth(e.scene);
                 setSlide(hud, id.zenith, zen);
                 setSlide(hud, id.azimuth, az);
-                sceneFrameActorSetEuler(e.scene, sunIndex, zen, az);
+                sceneFrameActorSetEuler(e.scene, weatherIndex, zen, az);
             }
         }
         sceneFrameKick(e.scene, e.host.device);

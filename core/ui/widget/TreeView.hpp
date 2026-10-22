@@ -23,6 +23,11 @@ struct UiParts {
 struct UiTree {
     uint16_t body = kUiNone;
     uint8_t open = 0;
+    uint8_t pad = 0;
+    float full = 0.0f;
+    float from = 0.0f;
+    float to = 0.0f;
+    float t0 = -1.0f;
 };
 
 struct UiTreeConfig {

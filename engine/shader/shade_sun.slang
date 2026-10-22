@@ -89,7 +89,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     }
     uint sunCascade = 2u;
     float shadow = 1.0;
-    if (gFrame.disableShadow == 0 && (gPass.passMask & 2097152u) == 0u) {
+    if (gFrame.disableShadow == 0 && gFrame.debugPad0 == 0u && (gPass.passMask & 2097152u) == 0u) {
         const float3 p0 = shadowPoint(0u, hit.P, hit.N, hit.NdotL);
         const float3 p1 = shadowPoint(1u, hit.P, hit.N, hit.NdotL);
         const float3 p2 = shadowPoint(2u, hit.P, hit.N, hit.NdotL);
@@ -126,7 +126,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
         return;
     }
     shadow *= hit.pomShadow;
-    if (gFrame.disableShadow != 0) {
+    if (gFrame.disableShadow != 0 || gFrame.debugPad0 != 0u) {
         shadow = 1.0;
     }
     shadow *= cloudGroundShadow(hit.P, hit.L);
@@ -158,7 +158,7 @@ void shadeSun(uint3 dtid : SV_DispatchThreadID, uint gtid : SV_GroupIndex) {
     }
     const float giGain = giOn ? max(gShade.pad1, 0.0) : 0.0;
     bounce *= giGain;
-    float3 bounceLit = hit.albedo * (1.0 - hit.metallic) * bounce * sunCol * saturate(inten / 8.0);
+    float3 bounceLit = hit.albedo * (1.0 - hit.metallic) * bounce * sunCol * saturate(inten / 8.0) * max(asfloat(gFrame.debugPad1), 0.0);
     float3 skyAmb = 0.0;
     if (!worldRc) {
         const float3 skyDir = normalize(float3(hit.N.x, hit.N.y + 1.15, hit.N.z));

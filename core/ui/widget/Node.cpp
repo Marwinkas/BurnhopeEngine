@@ -478,6 +478,9 @@ void uiReparent(UiState& s, uint16_t id, uint16_t parent) {
 }
 
 void uiPlace(UiState& s, uint16_t id, bool absolute, float x, float y, float w, float h) {
+    if (id >= s.count) {
+        return;
+    }
     auto* flex = s.ent[id].try_get_mut<UiFlex>();
     if (flex == nullptr) {
         return;
