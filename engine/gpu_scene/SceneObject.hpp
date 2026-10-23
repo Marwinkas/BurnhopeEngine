@@ -2,6 +2,8 @@
 
 #include "gpu_scene/Camera.hpp"
 
+#include "gfx/Material.hpp"
+
 #include <flecs.h>
 
 #include <cmath>
@@ -42,7 +44,7 @@ struct alignas(16) PostProcess {
     uint8_t ao = 1;
     uint8_t sscs = 1;
     uint8_t bloom = 1;
-    uint8_t aa = 3;
+    uint8_t aa = 4;
     uint8_t tone = 0;
     uint8_t pad[8]{};
 };
@@ -99,6 +101,25 @@ struct LightLink {
     uint32_t type = 1;
 };
 
+// Какой слот MaterialGpuData правит этот актор. Не пул физики: слотов пропов 16, материалов больше.
+// anchor = позиция актёра минус перенос инстанса. Сдвиг гизмо прибавляется к матрице, меш не прыгает.
+struct MeshBind {
+    uint32_t material = 0;
+    uint32_t instance = 0;
+    float anchor[3]{};
+    float pad = 0.0f;
+};
+
+struct ActorMat {
+    BhmatDoc doc{};
+};
+
+// Инстансы одной модели. Сдвиг актора прибавляется ко всем, а не к одному мешлету.
+struct MeshSpan {
+    uint32_t begin = 0;
+    uint32_t count = 1;
+};
+
 // Полурёбра меша в локальных осях, до scale. Обводка и клик читают только это.
 struct alignas(16) ActorBounds {
     float half[3]{0.5f, 0.5f, 0.5f};
@@ -117,6 +138,11 @@ static_assert(std::is_trivially_copyable_v<Atmosphere>);
 static_assert(std::is_trivially_copyable_v<ActorKind>);
 static_assert(std::is_trivially_copyable_v<ActorName>);
 static_assert(std::is_trivially_copyable_v<ActorBounds>);
+static_assert(std::is_trivially_copyable_v<MeshBind>);
+static_assert(sizeof(MeshBind) == 24);
+static_assert(std::is_trivially_copyable_v<ActorMat>);
+static_assert(std::is_trivially_copyable_v<MeshSpan>);
+static_assert(sizeof(MeshSpan) == 8);
 static_assert(sizeof(ActorBounds) == 16);
 static_assert(std::is_trivially_copyable_v<Pivot>);
 static_assert(sizeof(Pivot) == 16);
@@ -170,6 +196,7 @@ struct SceneActors {
     uint8_t space = 0;
     uint8_t pivotSpace = 0;
     uint8_t hot = kSceneActorNone;
+    uint8_t mark = kSceneActorNone;
     uint8_t snapOn[3]{};
     float snapStep[3]{1.0f, 15.0f, 0.1f};
     Mat4 viewProj{};
@@ -820,16 +847,18 @@ inline void sceneActorFillGpu(const SceneActors& world, GizmoGpu& gpu) {
         markers += 1;
     }
     gpu.misc[3] = static_cast<float>(markers);
+    const uint8_t boxId = world.mark < world.count ? world.mark : world.selected;
     const Xform* selected = actorXformOf(world, world.selected);
-    if (selected == nullptr) {
+    const Xform* boxed = actorXformOf(world, boxId);
+    if (selected == nullptr && boxed == nullptr) {
         gpu.misc[0] = 1.0f;
         gpu.padAlign[0] = 255.0f;
         gpu.padAlign[1] = 255.0f;
         return;
     }
-    const Xform& xform = *selected;
+    const Xform& xform = selected != nullptr ? *selected : *boxed;
     float handle[3]{};
-    actorHandle(world, xform, world.selected, handle);
+    actorHandle(world, xform, selected != nullptr ? world.selected : boxId, handle);
     gpu.origin[0] = handle[0];
     gpu.origin[1] = handle[1];
     gpu.origin[2] = handle[2];
@@ -844,15 +873,19 @@ inline void sceneActorFillGpu(const SceneActors& world, GizmoGpu& gpu) {
     gpu.ax[3] = 0.0f;
     gpu.ay[3] = 0.0f;
     gpu.az[3] = 0.0f;
-    gpu.padAlign[4] = xform.pos[0];
-    gpu.padAlign[5] = xform.pos[1];
-    gpu.padAlign[6] = xform.pos[2];
+    const Xform& boxX = boxed != nullptr ? *boxed : xform;
+    gpu.padAlign[4] = boxX.pos[0];
+    gpu.padAlign[5] = boxX.pos[1];
+    gpu.padAlign[6] = boxX.pos[2];
     gpu.padAlign[7] = 1.0f;
-    if (world.selected < world.count && world.ent[world.selected].is_alive() && world.ent[world.selected].has<ActorBounds>()) {
-        const ActorBounds& box = world.ent[world.selected].get<ActorBounds>();
-        gpu.ax[3] = box.half[0] * xform.scale[0];
-        gpu.ay[3] = box.half[1] * xform.scale[1];
-        gpu.az[3] = box.half[2] * xform.scale[2];
+    if (boxId < world.count && world.ent[boxId].is_alive() && world.ent[boxId].has<ActorBounds>()) {
+        const ActorBounds& box = world.ent[boxId].get<ActorBounds>();
+        gpu.ax[3] = box.half[0] * boxX.scale[0];
+        gpu.ay[3] = box.half[1] * boxX.scale[1];
+        gpu.az[3] = box.half[2] * boxX.scale[2];
+    }
+    if (selected == nullptr) {
+        gpu.misc[1] = 3.0f;
     }
     gpu.misc[0] = actorSpan(world, handle);
 }
@@ -1015,7 +1048,7 @@ inline uint8_t sceneActorHit(const SceneActors& world, float px, float py, uint8
         float radius = actorIconPx(actorLen(delta)) * 0.5f;
         if (world.ent[i].has<ActorBounds>()) {
             const ActorBounds& box = world.ent[i].get<ActorBounds>();
-            const float reach = box.half[0] * actor->scale[0];
+            const float reach = std::max(box.half[0], std::max(box.half[1], box.half[2])) * actor->scale[0];
             const float corner[3] = {
                 actor->pos[0] + world.right[0] * reach,
                 actor->pos[1] + world.right[1] * reach,

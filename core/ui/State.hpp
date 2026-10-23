@@ -194,6 +194,10 @@ void uiDumpLayout(const UiState& s);
 void uiPlace(UiState& s, uint16_t id, bool absolute, float x, float y, float w, float h);
 void uiGrow(UiState& s, uint16_t id, float extraW, float h);
 void uiSetHeight(UiState& s, uint16_t id, float h);
+void uiSetWidth(UiState& s, uint16_t id, float w);
+void uiPlaceAbsolute(UiState& s, uint16_t id, float x, float y);
+uint16_t uiFindChildText(const UiState& s, uint16_t parent);
+void uiCenterChildren(UiState& s, uint16_t parent);
 void uiSetDrop(UiState& s, uint16_t id, uint8_t drop);
 [[nodiscard]] uint16_t uiImportJson(UiState& s, uint16_t parent, const char* text);
 [[nodiscard]] uint16_t uiImportJsonFile(UiState& s, uint16_t parent, const char* path);
@@ -219,6 +223,9 @@ inline void uiSetContextMenu(UiState& s, uint16_t node, uint16_t menu) {
 }
 inline uint16_t uiParent(const UiState& s, uint16_t id) {
     return id < s.count ? s.parentOf[id] : kUiNone;
+}
+inline UiBox uiNodeBox(const UiState& s, uint16_t id) {
+    return id < s.count ? s.box[id] : UiBox{};
 }
 void uiName(UiState& s, uint16_t id, const char* name);
 void uiDrawAdd(UiState& s, UiDrawFn fn);

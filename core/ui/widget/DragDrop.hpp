@@ -4,7 +4,7 @@
 
 namespace burnhope {
 
-inline constexpr uint8_t kUiDragHostCap = 4;
+inline constexpr uint8_t kUiDragHostCap = 16;
 inline constexpr uint32_t kUiDragNone = 0xFFFFFFFFu;
 
 struct UiDragDrop {
@@ -16,6 +16,8 @@ struct UiDragDrop {
     uint32_t srcIndex = kUiDragNone;
     float x = 0.0f;
     float y = 0.0f;
+    float dropX = 0.0f;
+    float dropY = 0.0f;
     uint8_t armed = 0;
     uint8_t live = 0;
     uint8_t (*canDrag)(void* user, uint16_t host, uint32_t index) = nullptr;
@@ -37,6 +39,7 @@ struct UiDragDropConfig {
 };
 
 void uiDragDropBind(UiState& s, const UiDragDropConfig& cfg);
+void uiDragAddHost(UiState& s, uint16_t host);
 bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
 
 } // namespace burnhope

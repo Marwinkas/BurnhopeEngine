@@ -1,4 +1,6 @@
 #include "ui/widget/DragDrop.hpp"
+
+#include "ui/Geometry.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/TreeView.hpp"
@@ -78,6 +80,24 @@ void endDrag(UiState& s, UiDragDrop& drag, bool drop) {
             dstIndex = index;
             break;
         }
+        if (dstHost == kUiNone) {
+            for (uint8_t i = 0; i < drag.hosts; ++i) {
+                const uint16_t host = drag.host[i];
+                if (host >= s.count) {
+                    continue;
+                }
+                const bool virt = s.ent[host].try_get<UiVirtualGrid>() != nullptr || s.ent[host].try_get<UiTreeView>() != nullptr;
+                if (virt || !hitBox(s.box[host], drag.dropX, drag.dropY)) {
+                    continue;
+                }
+                if (drag.canDrop != nullptr && drag.canDrop(drag.user, host, 0) == 0) {
+                    continue;
+                }
+                dstHost = host;
+                dstIndex = 0;
+                break;
+            }
+        }
     }
     clearMark(s, drag);
     if (drag.ghost < s.count) {
@@ -116,6 +136,21 @@ void uiDragDropBind(UiState& s, const UiDragDropConfig& cfg) {
     drag.user = cfg.user;
 }
 
+void uiDragAddHost(UiState& s, uint16_t host) {
+    if (host == kUiNone) {
+        return;
+    }
+    UiDragDrop& drag = s.world.ensure<UiDragDrop>();
+    for (uint8_t i = 0; i < drag.hosts; ++i) {
+        if (drag.host[i] == host) {
+            return;
+        }
+    }
+    if (drag.hosts < kUiDragHostCap) {
+        drag.host[drag.hosts++] = host;
+    }
+}
+
 bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t, uint8_t phase, uint8_t&) {
     if (phase != kUiInSync && phase != kUiInPress) {
         return false;
@@ -127,6 +162,8 @@ bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t, uint8_t phase, 
     const bool press = (in.pointer.pressed & kPointerLeft) != 0;
     const bool down = (in.pointer.down & kPointerLeft) != 0;
     const bool release = (in.pointer.released & kPointerLeft) != 0;
+    drag->dropX = in.pointer.x;
+    drag->dropY = in.pointer.y;
     if (release && drag->live != 0) {
         endDrag(s, *drag, true);
         return false;
@@ -170,15 +207,27 @@ bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t, uint8_t phase, 
     }
     const uint16_t ghost = ensureGhost(s, *drag);
     if (ghost < s.count) {
-        char badge[32]{};
+        char badge[64]{};
         badge[0] = '0';
         badge[1] = '\0';
         if (drag->badge != nullptr) {
-            drag->badge(drag->user, badge, 32);
+            drag->badge(drag->user, badge, 64);
         }
         uiText(s, ghost, badge);
         uiShow(s, ghost, true);
-        uiPlace(s, ghost, true, in.pointer.x + 12.0f, in.pointer.y + 12.0f, s.metrics.ghostW, s.metrics.ghostH);
+        uiRequestTop(s, true);
+        float gw = s.metrics.ghostW;
+        uint8_t letters = 0;
+        while (badge[letters] != '\0' && letters < 64) {
+            ++letters;
+        }
+        if (letters > 3) {
+            gw = static_cast<float>(letters) * 7.0f + 16.0f;
+            if (gw > 240.0f) {
+                gw = 240.0f;
+            }
+        }
+        uiPlace(s, ghost, true, in.pointer.x + 12.0f, in.pointer.y + 12.0f, gw, s.metrics.ghostH);
     }
     uint16_t row = kUiNone;
     for (uint8_t i = 0; i < drag->hosts; ++i) {

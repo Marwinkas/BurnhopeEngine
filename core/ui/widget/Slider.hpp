@@ -28,6 +28,7 @@ uint16_t uiNumber(UiState& s, uint16_t parent, float value, float minV, float ma
 void uiNumberFill(UiState& s, uint16_t id, bool showFillProgress);
 uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV, float step);
 bool uiRange(const UiState& s, uint16_t id, float& value, float& minV, float& maxV);
+void uiRangeSet(UiState& s, uint16_t id, float value);
 bool uiSliderInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
 bool uiSliderDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap);
 

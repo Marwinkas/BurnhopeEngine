@@ -11,6 +11,21 @@
 
 namespace burnhope {
 
+void uiRangeSet(UiState& s, uint16_t id, float value) {
+    if (id >= s.count) {
+        return;
+    }
+    auto* range = s.ent[id].try_get_mut<UiRange>();
+    if (range == nullptr || range->value == value) {
+        return;
+    }
+    range->value = value;
+    char text[32]{};
+    std::snprintf(text, sizeof(text), "%.4g", static_cast<double>(range->value));
+    uiSetFieldText(s, id, text);
+    uiNotifyVisualDirty(s);
+}
+
 bool uiRange(const UiState& s, uint16_t id, float& value, float& minV, float& maxV) {
     if (id >= s.count) {
         return false;

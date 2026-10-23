@@ -22,7 +22,10 @@ struct Browser : FileModel {
     uint16_t crumbs = kUiNone;
     uint16_t wTree = kUiNone;
     uint16_t status = kUiNone;
+    uint16_t sceneView = kUiNone;
     uint16_t zoom = kUiNone;
+    void (*onImport)(void* user, const char* path, float x, float y) = nullptr;
+    void (*onBadge)(void* user, char* dst, uint8_t cap) = nullptr;
     uint8_t ctrl = 0;
     uint8_t shift = 0;
     uint8_t searchOn = 0;
@@ -45,6 +48,7 @@ void fileOpenAt(UiState& s, int index);
 void fileBeginRename(UiState& s, int index);
 void fileMakeFolder(void* user);
 void fileMakeFile(void* user);
+void fileMakeMaterial(void* user);
 int fileFirstSelected(const Browser& b);
 const char* fileLeaf(const char* path);
 

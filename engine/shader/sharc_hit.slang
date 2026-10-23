@@ -156,7 +156,7 @@ float sharcSunVis(float3 position, float3 normal, float3 sunDir, float ndl) {
     if (ndl <= 0.005) {
         return 0.0;
     }
-    if (gFrame.disableShadow != 0u || gFrame.debugPad0 != 0u) {
+    if (gFrame.disableShadow != 0u || (gFrame.debugPad0 & 0x80000000u) != 0u) {
         return 1.0;
     }
     float hitT = 0.0;
@@ -220,7 +220,7 @@ float3 sharcDirectLite(SharcSurf surf, float3 view) {
     float vis = sharcSunVis(surf.position, surf.geoNormal, sunDir, ndl);
     float rough = max(surf.roughness, 0.045);
     float diff = hammonDiffuse(ndl, max(ndv, 0.15), dot(view, sunDir), rough);
-    float3 direct = (diffuse * diff) * vis * sharcSunEnergy(sunCol) * inten * max(asfloat(gFrame.debugPad1), 0.0);
+    float3 direct = (diffuse * diff) * vis * sharcSunEnergy(sunCol) * max(gSun.pad.w, 0.0) * (inten > 0.0 ? 1.0 : 0.0);
 
     float wrap = saturate(surf.geoNormal.y * 0.4 + 0.6);
     direct += diffuse * sharcSkyFill() * wrap;
@@ -231,9 +231,6 @@ float3 sharcDirectLite(SharcSurf surf, float3 view) {
         [loop]
         for (uint i = 0u; i < count; ++i) {
             LightGpu lamp = gLights[i];
-            if ((lamp.meta.y & 2u) != 0u) {
-                continue;
-            }
             uint kind = lamp.meta.x;
             float radius = lamp.posRadius.w;
             if (kind == 0u || radius <= 0.0) {
@@ -262,14 +259,14 @@ float3 sharcDirectLite(SharcSurf surf, float3 view) {
             float3 lampCol = lamp.colorIntensity.rgb * candelaScale(lamp.colorIntensity.w);
             lampSum += diffuse * lampDiff * atten * lampCol;
         }
-        direct += min(lampSum, float3(inten * 0.8, inten * 0.8, inten * 0.8));
+        direct += min(lampSum, float3(4.0, 4.0, 4.0));
     }
     float3 glow = max(surf.emissive, 0.0);
     float glowLuma = dot(glow, float3(0.2126, 0.7152, 0.0722));
     if (glowLuma > 8.0) {
         glow *= 8.0 / glowLuma;
     }
-    return sharcClampFirefly(max(direct, 0.0) / inten) + glow;
+    return sharcClampFirefly(max(direct + glow, 0.0));
 }
 
 float3 sharcDirect(SharcSurf surf, float3 view, inout uint rng) {

@@ -6,6 +6,7 @@
 #include "ui/Panel.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/State.hpp"
+#include "ui/Style.hpp"
 #include "ui/Text.hpp"
 
 namespace burnhope {
@@ -207,6 +208,122 @@ int uiCheckOn(const UiState& s, const char* name) {
         return -1;
     }
     return uiCheckOn(s, uiFindName(s, name));
+}
+
+uint16_t uiIconBtn(UiState& s, uint16_t parent, uint8_t icon, float side, uint16_t* glyph) {
+    const uint16_t id = uiButton(s, parent, {.label = "", .width = side, .height = side});
+    if (id >= s.count) {
+        return id;
+    }
+    if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
+        flex->pad = 0.0f;
+        flex->padL = 0.0f;
+        flex->padR = 0.0f;
+        flex->padT = 0.0f;
+        flex->padB = 0.0f;
+        flex->align = UiAlign::Center;
+        flex->justify = UiJustify::Center;
+    }
+    s.ent[id].add<UiIconChrome>();
+    if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
+        paintGhost(*paint);
+    }
+    UiFlex mark{};
+    mark.widthMode = UiSize::Px;
+    mark.width = side;
+    mark.heightMode = UiSize::Px;
+    mark.height = side;
+    mark.shrink = 0.0f;
+    UiPaint glyphPaint = paintClear();
+    glyphPaint.icon = icon;
+    glyphPaint.r = 1.0f;
+    glyphPaint.g = 1.0f;
+    glyphPaint.b = 1.0f;
+    const uint16_t child = uiPanel(s, id, mark, glyphPaint);
+    if (glyph != nullptr) {
+        *glyph = child;
+    }
+    return id;
+}
+
+uint16_t uiHostIconBtn(UiState& s, uint16_t parent, uint8_t icon, float side) {
+    const uint16_t id = uiButton(s, parent, {.label = "", .width = side, .height = side});
+    if (id >= s.count) {
+        return id;
+    }
+    if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
+        flex->pad = 0.0f;
+        flex->padL = 0.0f;
+        flex->padR = 0.0f;
+        flex->padT = 0.0f;
+        flex->padB = 0.0f;
+        flex->align = UiAlign::Center;
+        flex->justify = UiJustify::Center;
+    }
+    s.ent[id].add<UiIconChrome>();
+    if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
+        paintGhost(*paint);
+        paint->icon = icon;
+        paint->r = 1.0f;
+        paint->g = 1.0f;
+        paint->b = 1.0f;
+    }
+    return id;
+}
+
+uint16_t uiSlotBtn(UiState& s, uint16_t parent, uint8_t slot, float side, uint16_t* icon) {
+    const uint16_t id = uiButton(s, parent, {.label = "", .width = side, .height = side, .iconSlot = slot});
+    if (id >= s.count) {
+        return id;
+    }
+    if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
+        flex->pad = 0.0f;
+        flex->padL = 0.0f;
+        flex->padR = 0.0f;
+        flex->padT = 0.0f;
+        flex->padB = 0.0f;
+        flex->align = UiAlign::Center;
+        flex->justify = UiJustify::Center;
+    }
+    s.ent[id].add<UiIconChrome>();
+    if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
+        paintGhost(*paint);
+    }
+    const uint16_t child = uiButtonIconChild(s, id);
+    if (child < s.count) {
+        if (auto* flex = s.ent[child].try_get_mut<UiFlex>()) {
+            flex->width = side;
+            flex->height = side;
+        }
+    }
+    if (icon != nullptr) {
+        *icon = child;
+    }
+    return id;
+}
+
+void uiButtonTintIcon(UiState& s, uint16_t icon, bool on) {
+    auto* paint = icon < s.count ? s.ent[icon].try_get_mut<UiPaint>() : nullptr;
+    if (paint == nullptr) {
+        return;
+    }
+    paint->token = UiToken::Custom;
+    paint->r = 1.0f;
+    paint->g = on ? 0.533333f : 1.0f;
+    paint->b = on ? 0.0f : 1.0f;
+    paint->a = 0.0f;
+    uiNotifyVisualDirty(s);
+}
+
+uint16_t uiButtonIconChild(const UiState& s, uint16_t id) {
+    const uint32_t n = uiNodeChildCount(s, id);
+    for (uint32_t i = 0; i < n; ++i) {
+        const uint16_t child = uiNodeChild(s, id, i);
+        if (child < s.count && s.ent[child].has<UiImage>()) {
+            return child;
+        }
+    }
+    return kUiNone;
 }
 
 } // namespace burnhope

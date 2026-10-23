@@ -1,5 +1,4 @@
-// Fullscreen resolve. One R32 vis pixel: 20b instance, 12b primitive.
-// MaterialGpuData is 64 bytes and matches core/gfx/Material.hpp.
+// Fullscreen resolve. MaterialGpuData is 192 bytes and matches core/gfx/Material.hpp.
 
 struct MaterialGpuData {
     float4 baseColor;
@@ -12,6 +11,38 @@ struct MaterialGpuData {
     uint ormTex;
     uint emissiveTex;
     uint4 pad;
+    float reflectance;
+    float aoStrength;
+    float normalScale;
+    float clearcoat;
+    float clearcoatRough;
+    float alphaCutoff;
+    float uvScaleX;
+    float uvScaleY;
+    float uvOffX;
+    float uvOffY;
+    float uvRotation;
+    float worldGrid;
+    float triSharp;
+    float worldOffX;
+    float worldOffY;
+    float worldOffZ;
+    float emitR;
+    float emitG;
+    float emitB;
+    float emissiveGain;
+    uint aoTex;
+    uint tail0;
+    uint tail1;
+    uint tail2;
+    uint tail3;
+    uint tail4;
+    uint tail5;
+    uint tail6;
+    uint tail7;
+    uint tail8;
+    uint tail9;
+    uint tail10;
 };
 
 struct ResolveInstance {

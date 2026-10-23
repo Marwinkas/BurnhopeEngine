@@ -13,6 +13,9 @@
 #define STBI_NO_STDIO
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
+#undef STBI_NO_STDIO
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb/stb_image_write.h"
 
 namespace burnhope {
 namespace {
@@ -249,6 +252,49 @@ void writeBlockDds(
     std::fwrite(hdr, 1, 128, file);
     std::fwrite(data, 1, bytes, file);
     std::fclose(file);
+}
+
+bool imagePackOrm(const char* aoPath, const char* roughPath, const char* metalPath, const char* outPath) {
+    if (aoPath == nullptr || roughPath == nullptr || metalPath == nullptr || outPath == nullptr) {
+        return false;
+    }
+    ImageCpu ao{};
+    ImageCpu rough{};
+    ImageCpu metal{};
+    const bool ok = imageLoadFile(ao, aoPath) && imageLoadFile(rough, roughPath) && imageLoadFile(metal, metalPath)
+        && ao.rgba != nullptr && rough.rgba != nullptr && metal.rgba != nullptr && ao.width > 0 && ao.height > 0;
+    if (!ok) {
+        imageCpuFree(ao);
+        imageCpuFree(rough);
+        imageCpuFree(metal);
+        return false;
+    }
+    const uint32_t w = ao.width < rough.width ? ao.width : rough.width;
+    const uint32_t w2 = w < metal.width ? w : metal.width;
+    const uint32_t h = ao.height < rough.height ? ao.height : rough.height;
+    const uint32_t h2 = h < metal.height ? h : metal.height;
+    uint8_t* packed = static_cast<uint8_t*>(std::malloc(static_cast<size_t>(w2) * h2 * 4u));
+    if (packed == nullptr) {
+        imageCpuFree(ao);
+        imageCpuFree(rough);
+        imageCpuFree(metal);
+        return false;
+    }
+    for (uint32_t y = 0; y < h2; ++y) {
+        for (uint32_t x = 0; x < w2; ++x) {
+            const uint32_t i = (y * w2 + x) * 4u;
+            packed[i] = ao.rgba[(y * ao.width + x) * 4u];
+            packed[i + 1u] = rough.rgba[(y * rough.width + x) * 4u + 1u];
+            packed[i + 2u] = metal.rgba[(y * metal.width + x) * 4u + 2u];
+            packed[i + 3u] = 255;
+        }
+    }
+    const int wrote = stbi_write_png(outPath, static_cast<int>(w2), static_cast<int>(h2), 4, packed, static_cast<int>(w2 * 4u));
+    std::free(packed);
+    imageCpuFree(ao);
+    imageCpuFree(rough);
+    imageCpuFree(metal);
+    return wrote != 0;
 }
 
 } // namespace burnhope

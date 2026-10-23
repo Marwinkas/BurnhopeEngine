@@ -73,6 +73,10 @@ struct UiChoiceConfig {
 
 uint16_t uiChoice(UiState& s, uint16_t parent, const UiChoiceConfig& cfg);
 void uiBindChoice(UiState& s, const char* name, uint8_t selected, void (*onPick)(void* user, uint8_t index), void* user);
+void uiMenuCaption(UiState& s, uint16_t button, const char* text);
+float uiChoiceWidth(const UiState& s, const char* const* labels, uint8_t count);
+void uiChoiceFit(UiState& s, uint16_t button, float width);
+void uiSyncPopover(UiState& s, uint16_t panel, uint16_t anchor, float width, float height, uint8_t& want);
 bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
 
 } // namespace burnhope

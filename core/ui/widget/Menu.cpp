@@ -649,4 +649,109 @@ void uiBindChoice(UiState& s, const char* name, uint8_t selected, void (*onPick)
     }
 }
 
+void uiMenuCaption(UiState& s, uint16_t button, const char* text) {
+    if (text == nullptr || button >= s.count) {
+        return;
+    }
+    for (uint16_t child = 0; child < s.count; ++child) {
+        if (s.parentOf[child] == button && s.ent[child].try_get<UiText>() != nullptr) {
+            uiText(s, child, text);
+            return;
+        }
+    }
+}
+
+float uiChoiceWidth(const UiState& s, const char* const* labels, uint8_t count) {
+    float widest = 0.0f;
+    if (labels == nullptr) {
+        return 26.0f;
+    }
+    for (uint8_t i = 0; i < count; ++i) {
+        uint8_t len = 0;
+        const char* label = labels[i];
+        while (label != nullptr && label[len] != '\0' && len < 48) {
+            ++len;
+        }
+        const float measured = uiMeasure(s, label, len, len);
+        if (measured > widest) {
+            widest = measured;
+        }
+    }
+    return widest + 26.0f;
+}
+
+void uiChoiceFit(UiState& s, uint16_t button, float width) {
+    if (button >= s.count) {
+        return;
+    }
+    if (auto* flex = s.ent[button].try_get_mut<UiFlex>()) {
+        flex->widthMode = UiSize::Px;
+        flex->width = width;
+        flex->minW = 0.0f;
+        flex->grow = 0.0f;
+        flex->shrink = 0.0f;
+        flex->heightMode = UiSize::Px;
+        flex->height = 28.0f;
+        flex->self = UiAlignSelf::Center;
+        flex->padL = 6.0f;
+        flex->padR = 4.0f;
+        flex->gap = 2.0f;
+    }
+    const UiChoice* choice = s.ent[button].try_get<UiChoice>();
+    if (choice != nullptr && choice->menu < s.count) {
+        s.ent[choice->menu].add<UiMenuSlide>();
+        if (auto* flex = s.ent[choice->menu].try_get_mut<UiFlex>()) {
+            flex->width = width;
+        }
+    }
+}
+
+void uiSyncPopover(UiState& s, uint16_t panel, uint16_t anchor, float width, float height, uint8_t& want) {
+    if (panel >= s.count) {
+        return;
+    }
+    if (want == 2 && (!s.menuOpen || uiMenuMetrics(s).opened != panel)) {
+        want = 0;
+    }
+    if ((want == 1 || want == 2) && anchor < s.count) {
+        if (auto* flex = s.ent[panel].try_get_mut<UiFlex>()) {
+            const UiBox& box = s.box[anchor];
+            flex->position = UiPosition::Absolute;
+            float x = box.x + box.w - width;
+            if (x + width > s.laidW - 4.0f) {
+                x = s.laidW - width - 4.0f;
+            }
+            if (x < 4.0f) {
+                x = 4.0f;
+            }
+            flex->posX = x;
+            float y = box.y + box.h + 4.0f;
+            uint16_t bar = s.parentOf[anchor];
+            if (bar < s.count) {
+                bar = s.parentOf[bar];
+            }
+            if (bar < s.count && s.box[bar].h > 1.0f) {
+                const float under = s.box[bar].y + s.box[bar].h + 4.0f;
+                if (under > y) {
+                    y = under;
+                }
+            }
+            flex->posY = y;
+        }
+        if (want == 1) {
+            uiReveal(s, panel, height, true);
+            uiMenuMetrics(s).opened = panel;
+            s.menuOpen = true;
+            uiNotifyLayoutDirty(s);
+            want = 2;
+        }
+    } else if (want == 0) {
+        uiReveal(s, panel, height, false);
+        if (uiMenuMetrics(s).opened == panel) {
+            uiMenuMetrics(s).opened = kUiNone;
+            s.menuOpen = false;
+        }
+    }
+}
+
 } // namespace burnhope

@@ -75,6 +75,7 @@ void fileMenuOpen(UiState& s, float x, float y, bool onItem) {
     }
     const UiMenuItem items[] = {
         menuItem("New Folder", fileMakeFolder),
+        menuItem("New Material", fileMakeMaterial),
         menuItem("New File", fileMakeFile),
         menuItem("Paste (Ctrl+V)", menuCall<menuPaste>),
         menuItem("Select All (Ctrl+A)", menuCall<menuSelectAll>),

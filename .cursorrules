@@ -245,7 +245,7 @@ Scene CPU buffers (`meshletGpu`, `visibleCpu`, `ownedVert`, `textures`) are `std
 - Dialogs: `core/platform/Dialog.cpp` (SDL3). Windowing: `core/platform/Window.cpp` (SDL3). The window system is SDL3.
 - No hardcoded absolute paths (`/home/...`, `C:\Users\...`) and no hardcoded screen size. Resolve from `platformExePath`, the project root, and `platformCachePath`.
 - Textures resolve in order: beside the active `.bhop`, then the adjacent `textures/` directory, then `assets/textures/`, then `uploadDummy`. Never hardcode `newscenetest` or `testscene/assets/bistro` inside a pass.
-- A missing `.bhop` keeps the procedural scene from `sceneFrameCreate` / `testSceneBuild`. Never import a hardcoded glTF (`BistroExterior`) as a fallback.
+- App startup loads `cache/BistroExterior.bhop`, and imports the two bistro glTF files only when that cache file is missing. A failed map keeps the procedural scene from `sceneFrameCreate` / `testSceneBuild`. A render pass never names that glTF.
 - Parsers are bounds-checked and must terminate on bad syntax. No fake fallback UI card (`kFallback` is banned).
 
 ---
@@ -490,3 +490,17 @@ NEVER keep the property scroll when the actor changes (the next object opens pas
 NEVER leave the weather gizmo on the next actor (move stays selected and the ring remains); ALWAYS copy tool back into gizmo when the actor is not Weather, 1 byte.
 NEVER leave the property grip box to Yoga after the scroll pass (the line is clipped until a scroll and a click clears it); ALWAYS stamp the screen box from the scroll viewport after layout, 8 bytes.
 NEVER let a hidden look cursor keep moving (it reaches a panel, relative mode turns off, and the warp snaps the view back); ALWAYS pin the pointer at the grab point for the whole relative look, 8 bytes.
+NEVER name a post slider and look it up with uiFindName on the frame (the tick walks the node table for every channel); ALWAYS UiPropBinder records the node id beside the float when the row is created, 4 bytes.
+NEVER mirror HudPost or SceneTweaks in a second HUD struct and copy every field each frame (the tick is a field list and the layer-3 file blows its limit); ALWAYS bind the row to the field the pass reads, 4 bytes.
+NEVER drive a number scrub from the pinned pointer after the deadzone latch (relative mode freezes x and the value stops); ALWAYS add pointer.dx once that latch is set, 4 bytes.
+NEVER write a bound field while that node is the capture or the focus (the drag and the caret snap back); ALWAYS leave the widget value until the gesture ends, 4 bytes.
+NEVER store sun cast-off in debugPad0 and then overwrite it with decalCount (Cast Shadows stays on); ALWAYS bit 31 of that dword, and the cluster reads the low 31 bits as the decal count, 4 bytes.
+NEVER read the inspector pivot through the center-mode handle (Center returns zeros and the offset snaps back); ALWAYS the Pivot component, 12 bytes.
+NEVER sample a fold's open height while the clip is still moving (the next open stops halfway and the rows pop); ALWAYS keep the height measured while the section is idle and open, 4 bytes.
+NEVER scale a SHaRC sun hit by debugPad1 after that dword becomes the probe grid (the float bits are ~0 and the bounce drops the sun); ALWAYS gSun.pad.w as the indirect scale, 4 bytes.
+NEVER size the file footer with sizeof(Browser::status) (that member is the node id, 2 bytes, and the hint truncates to 0); ALWAYS a 96-byte line with the file type and the size.
+NEVER accept a file drop only when the hovered node is the host (the view pane is transparent and the drop never lands); ALWAYS test the pointer against that host box, 8 bytes.
+NEVER step the file history onto a path outside the project root (back leaves the project); ALWAYS underRoot on that path before the cwd changes, 512 bytes.
+NEVER move a lighter-tagged instance to eye minus forward (the mesh sits behind the camera and every meshlet culls as behind); ALWAYS leave the imported transform and place the eye at maxZ plus max(extent * 2.2, 0.35), near plane extent * 0.02, 12 bytes.
+NEVER load a model without a prop at its bounds (the mesh draws and the click hits nothing); ALWAYS one Prop, MeshSpan over every instance, 8 bytes.
+NEVER replace the property mask while a material file is open (the next tick hides that page); ALWAYS keep section bit 64 until an actor click clears it, 1 byte.

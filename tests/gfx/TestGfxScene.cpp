@@ -440,6 +440,53 @@ TEST_CASE("material blob roundtrips through the asset header") {
     blob[sizeof(AssetHeader)] ^= 1;
     CHECK(!materialDeserialize(blob, bytes, &back));
 }
+TEST_CASE("a 64-byte material record keeps the normal flip and the emissive tint") {
+    MaterialGpuData src{};
+    src.flags = 0;
+    src.baseColor[0] = 0.2f;
+    src.baseColor[1] = 0.3f;
+    src.baseColor[2] = 0.4f;
+    src.emissiveIntensity = 3.0f;
+    uint8_t payload[kMaterialGpuV9]{};
+    std::memcpy(payload, &src, kMaterialGpuV9);
+    AssetHeader header{};
+    header.magic = kAssetMagic;
+    header.version = 1;
+    header.typeHash = assetHash("Material");
+    header.dataSize = kMaterialGpuV9;
+    header.checksum = assetHashBytes(payload, kMaterialGpuV9);
+    uint8_t blob[sizeof(AssetHeader) + kMaterialGpuV9]{};
+    std::memcpy(blob, &header, sizeof(header));
+    std::memcpy(blob + sizeof(header), payload, kMaterialGpuV9);
+    MaterialGpuData adopted{};
+    CHECK(materialDeserialize(blob, sizeof(blob), &adopted));
+    CHECK((adopted.flags & kMatFlipNormalY) != 0u);
+    CHECK(adopted.emissiveGain == doctest::Approx(3.0f));
+    CHECK(adopted.emissiveColor[0] == doctest::Approx(0.2f));
+    CHECK(adopted.uvTiling[0] == doctest::Approx(1.0f));
+}
+TEST_CASE("bhmat json keeps scalars and texture paths") {
+    BhmatDoc doc{};
+    doc.base[0] = 0.25f;
+    doc.roughness = 0.4f;
+    doc.worldAligned = 1;
+    doc.worldGridSize = 2.5f;
+    doc.uvRotation = 0.5f;
+    doc.triplanarSharpness = 6.0f;
+    std::snprintf(doc.albedoPath, sizeof(doc.albedoPath), "textures/brick.png");
+    const char* path = "/tmp/burnhope-mat-test.bhmat";
+    CHECK(materialSaveBhmat(path, doc));
+    BhmatDoc back{};
+    CHECK(materialLoadBhmat(path, back));
+    CHECK(back.base[0] == doctest::Approx(0.25f));
+    CHECK(back.roughness == doctest::Approx(0.4f));
+    CHECK(back.worldAligned == 1);
+    CHECK(back.worldGridSize == doctest::Approx(2.5f));
+    CHECK(back.uvRotation == doctest::Approx(0.5f));
+    CHECK(back.triplanarSharpness == doctest::Approx(6.0f));
+    CHECK(std::strcmp(back.albedoPath, "textures/brick.png") == 0);
+    std::remove(path);
+}
 TEST_CASE("light math keeps energy penumbra and contact handoff") {
     const float smooth = hammonDiffuse(1.0f, 1.0f, 1.0f, 0.0f);
     const float rough = hammonDiffuse(1.0f, 1.0f, 1.0f, 1.0f);

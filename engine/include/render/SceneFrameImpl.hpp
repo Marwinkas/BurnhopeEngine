@@ -170,6 +170,16 @@ struct SceneFrameImpl {
     uint32_t camBursts = 1;
     float impactY[kPropCap]{};
     float impactVy[kPropCap]{};
+    char texPath[512]{};
+    uint8_t texActor = 0xff;
+    uint8_t texChannel = 0xff;
+    struct TexJob {
+        char path[512]{};
+        uint8_t actor = 0xff;
+        uint8_t channel = 0xff;
+    };
+    TexJob texJob[8]{};
+    uint8_t texJobN = 0;
     uint8_t propCount = 0;
     uint8_t propPhase = 0;
     uint8_t propDirty = 0;

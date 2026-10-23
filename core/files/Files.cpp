@@ -6,6 +6,7 @@
 #include "files/FileSession.hpp"
 #include "files/FileTheme.hpp"
 #include "ui/Domain.hpp"
+#include "ui/widget/DragDrop.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Splitter.hpp"
 
@@ -112,6 +113,37 @@ void filesOfferPath(UiState& s, const char* path) {
     uiSetFieldText(s, uiFiles(s).fileTarget, path);
 }
 
+void filesDropOnScene(UiState& s, uint16_t view, void (*fn)(void* user, const char* path, float x, float y), void* user) {
+    Browser& b = fileBook(s);
+    b.sceneView = view;
+    b.onImport = fn;
+    b.user = user;
+    UiDragDrop* drag = s.world.try_get_mut<UiDragDrop>();
+    if (drag == nullptr || view == kUiNone) {
+        return;
+    }
+    for (uint8_t i = 0; i < drag->hosts; ++i) {
+        if (drag->host[i] == view) {
+            return;
+        }
+    }
+    if (drag->hosts < kUiDragHostCap) {
+        drag->host[drag->hosts++] = view;
+    }
+    b.root[0] = '\0';
+    b.cwd[0] = '\0';
+    b.items.clear();
+    b.tree.clear();
+    b.hist.clear();
+    b.histAt = 0;
+    b.total = 0;
+    fileRefresh(s);
+}
+
+void filesDropBadge(UiState& s, void (*fn)(void* user, char* dst, uint8_t cap)) {
+    fileBook(s).onBadge = fn;
+}
+
 void filesRoot(UiState& s, const char* path) {
     Browser& b = fileBook(s);
     if (path == nullptr || path[0] == '\0') {
@@ -124,11 +156,10 @@ void filesRoot(UiState& s, const char* path) {
     const fs::path canon = fs::weakly_canonical(fs::path(path), ec);
     if (!ec) {
         copyCap(b.root, static_cast<int>(sizeof(b.root)), canon.string().c_str());
-        if (!b.underRoot(b.cwd)) {
-            b.go(b.root);
-        } else {
-            b.reload();
-        }
+        b.hist.clear();
+        b.histAt = 0;
+        b.cwd[0] = '\0';
+        b.go(b.root);
     }
     fileRefresh(s);
 }

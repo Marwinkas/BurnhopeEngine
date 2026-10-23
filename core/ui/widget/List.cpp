@@ -63,10 +63,19 @@ void tickFolds(UiState& s) {
         }
         const uint16_t inner = tree->body;
         const uint16_t clip = s.parentOf[inner];
-        if (inner < s.count && s.box[inner].h > 8.0f) {
+        const bool anim = tree->t0 >= 0.0f;
+        if (!anim && tree->open != 0 && inner < s.count && s.box[inner].h > 8.0f) {
             tree->full = s.box[inner].h;
+            if (clip < s.count) {
+                if (auto* flex = s.ent[clip].try_get_mut<UiFlex>()) {
+                    if (flex->heightMode == UiSize::Px && std::fabs(flex->height - tree->full) > 1.0f) {
+                        flex->height = tree->full;
+                        s.layoutDirty = true;
+                    }
+                }
+            }
         }
-        if (tree->t0 < 0.0f || clip >= s.count) {
+        if (!anim || clip >= s.count) {
             continue;
         }
         const float u = easeOutCubic((s.time - tree->t0) / kFoldSec);
@@ -87,15 +96,11 @@ void tickFolds(UiState& s) {
         if (u >= 1.0f) {
             tree->t0 = -1.0f;
             if (auto* flex = s.ent[clip].try_get_mut<UiFlex>()) {
-                if (tree->to <= 0.5f) {
-                    flex->heightMode = UiSize::Px;
-                    flex->height = 0.0f;
-                } else {
-                    flex->heightMode = UiSize::Auto;
-                    flex->height = 0.0f;
-                }
+                flex->heightMode = UiSize::Px;
+                flex->height = tree->to > 0.5f ? tree->full : 0.0f;
+                flex->overflow = UiOverflow::Hidden;
             }
-            s.ent[inner].set<UiFade>({tree->open != 0 ? 1.0f : 0.0f});
+            s.ent[inner].set<UiFade>({tree->to > 0.5f ? 1.0f : 0.0f});
             setFoldAngle(s, id, tree->open != 0 ? 90.0f : 0.0f);
         }
     }
@@ -120,7 +125,7 @@ void onTree(void* user, uint16_t id) {
     if (opening && tree->full < 8.0f && tree->body < s->count && s->box[tree->body].h > 8.0f) {
         tree->full = s->box[tree->body].h;
     }
-    tree->from = opening ? 0.0f : from;
+    tree->from = from;
     tree->to = opening ? tree->full : 0.0f;
     tree->t0 = s->time;
     uiShow(*s, tree->body, true);

@@ -163,9 +163,9 @@ if(BH_TSAN)
 endif()
 bh_module(memory   core/memory/FrameArena.cpp)
 bh_module(wasm core/wasm/WasmHost.cpp)
-bh_module(io core/io/File.cpp)
-bh_module(asset core/asset/AssimpImporter.cpp)
-target_link_libraries(bh_asset PUBLIC assimp::assimp meshoptimizer bh_platform)
+bh_module(io core/io/File.cpp core/gfx/Material.cpp)
+bh_module(asset core/asset/AssimpImporter.cpp core/asset/ProjectDoc.cpp)
+target_link_libraries(bh_asset PUBLIC assimp::assimp meshoptimizer bh_platform bh_io)
 set_source_files_properties(core/asset/AssimpImporter.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions;-frtti")
 target_link_libraries(bh_wasm PUBLIC bh_memory)
 bh_module(rhi
@@ -305,10 +305,12 @@ bh_module(ui
     core/ui/widget/Splitter.cpp
     core/ui/widget/Image.cpp
     core/ui/widget/List.cpp
+    core/ui/widget/PropBind.cpp
     core/ui/widget/Virtual.cpp
     core/ui/widget/VirtualGrid.cpp
     core/ui/widget/Thumb.cpp
     core/ui/widget/DragDrop.cpp
+    core/ui/widget/AssetSlot.cpp
     core/ui/widget/Breadcrumbs.cpp
     core/ui/widget/Rubberband.cpp
     core/ui/widget/Menu.cpp
@@ -333,6 +335,18 @@ bh_module(host core/host/Host.cpp)
 target_link_libraries(bh_host PUBLIC bh_ui bh_rhi bh_platform bh_memory)
 bh_module(app
     demo/app/Engine.cpp
+    demo/app/HudAct.cpp
+    demo/app/HudMat.cpp
+    demo/app/HudMaterial.cpp
+    demo/app/HudPick.cpp
+    demo/app/HudToolbar.cpp
+    demo/app/HudStrip.cpp
+    demo/app/HudView.cpp
+    demo/app/HudInspector.cpp
+    demo/app/HudPost.cpp
+    demo/app/HudSync.cpp
+    demo/app/HudPush.cpp
+    demo/app/ProjectGate.cpp
     demo/app/Shell.cpp
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)

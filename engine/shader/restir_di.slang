@@ -385,7 +385,7 @@ void restirSun(uint2 px) {
         restirSigmaStore(px, 0.0, 0.0, 0.0, 1.0);
         return;
     }
-    if (gFrame.debugPad0 != 0u) {
+    if ((gFrame.debugPad0 & 0x80000000u) != 0u) {
         RAB_LightSample open = RAB_EmptyLightSample();
         open.position = surface.worldPos + L * 20000.0;
         open.normal = -L;

@@ -520,6 +520,62 @@ void uiSetHeight(UiState& s, uint16_t id, float h) {
     s.visualDirty = true;
 }
 
+void uiSetWidth(UiState& s, uint16_t id, float w) {
+    if (id >= s.count) {
+        return;
+    }
+    auto* flex = s.ent[id].try_get_mut<UiFlex>();
+    if (flex == nullptr) {
+        return;
+    }
+    flex->widthMode = UiSize::Px;
+    flex->width = w;
+    flex->grow = 0.0f;
+    flex->shrink = 0.0f;
+    s.layoutDirty = true;
+    s.visualDirty = true;
+}
+
+void uiPlaceAbsolute(UiState& s, uint16_t id, float x, float y) {
+    if (id >= s.count) {
+        return;
+    }
+    auto* flex = s.ent[id].try_get_mut<UiFlex>();
+    if (flex == nullptr) {
+        return;
+    }
+    flex->position = UiPosition::Absolute;
+    flex->posX = x;
+    flex->posY = y;
+    s.layoutDirty = true;
+}
+
+uint16_t uiFindChildText(const UiState& s, uint16_t parent) {
+    const uint32_t n = uiNodeChildCount(s, parent);
+    for (uint32_t i = 0; i < n; ++i) {
+        const uint16_t child = uiNodeChild(s, parent, i);
+        if (child < s.count && s.ent[child].has<UiText>()) {
+            return child;
+        }
+    }
+    return kUiNone;
+}
+
+void uiCenterChildren(UiState& s, uint16_t parent) {
+    const uint32_t n = uiNodeChildCount(s, parent);
+    for (uint32_t i = 0; i < n; ++i) {
+        const uint16_t id = uiNodeChild(s, parent, i);
+        auto* flex = id < s.count ? s.ent[id].try_get_mut<UiFlex>() : nullptr;
+        if (flex == nullptr) {
+            continue;
+        }
+        flex->self = UiAlignSelf::Center;
+        flex->marginT = 0.0f;
+        flex->marginB = 0.0f;
+    }
+    s.layoutDirty = true;
+}
+
 void uiSetDrop(UiState& s, uint16_t id, uint8_t drop) {
     if (id >= s.count) {
         return;

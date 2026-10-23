@@ -60,6 +60,8 @@ struct SceneBlobView {
     const uint32_t* indices = nullptr;
     const SceneInstance* instances = nullptr;
     const MaterialGpuData* materials = nullptr;
+    const uint8_t* materialRaw = nullptr;
+    uint32_t materialStride = 0;
     const SceneTexName* textures = nullptr;
     const LightGpuData* lights = nullptr;
 };
@@ -91,7 +93,7 @@ inline bool sceneBlobView(const uint8_t* mapped, size_t size, SceneBlobView* out
     }
     AssetHeader header{};
     std::memcpy(&header, mapped, sizeof(header));
-    if (header.magic != kAssetMagic || header.version != 9 || header.typeHash != kSceneBlobTypeHash) {
+    if (header.magic != kAssetMagic || (header.version != 9 && header.version != 10) || header.typeHash != kSceneBlobTypeHash) {
         return false;
     }
     if (size < sizeof(AssetHeader) + header.dataSize) {
@@ -102,12 +104,13 @@ inline bool sceneBlobView(const uint8_t* mapped, size_t size, SceneBlobView* out
         return false;
     }
     const auto* info = reinterpret_cast<const SceneBlobInfo*>(payload);
+    const uint32_t matStride = header.version >= 10 ? static_cast<uint32_t>(sizeof(MaterialGpuData)) : kMaterialGpuV9;
     const size_t bytes = sizeof(SceneBlobInfo)
         + static_cast<size_t>(info->meshletCount) * sizeof(Meshlet)
         + static_cast<size_t>(info->vertexCount) * sizeof(SceneVertex)
         + info->indexBytes
         + static_cast<size_t>(info->instanceCount) * sizeof(SceneInstance)
-        + static_cast<size_t>(info->materialCount) * sizeof(MaterialGpuData)
+        + static_cast<size_t>(info->materialCount) * matStride
         + static_cast<size_t>(info->textureCount) * sizeof(SceneTexName)
         + static_cast<size_t>(info->lightCount) * sizeof(LightGpuData);
     if (info->indexBytes < info->indexCount * sizeof(uint32_t) || bytes != header.dataSize) {
@@ -123,8 +126,10 @@ inline bool sceneBlobView(const uint8_t* mapped, size_t size, SceneBlobView* out
     cursor += info->indexBytes;
     out->instances = reinterpret_cast<const SceneInstance*>(cursor);
     cursor += static_cast<size_t>(info->instanceCount) * sizeof(SceneInstance);
-    out->materials = reinterpret_cast<const MaterialGpuData*>(cursor);
-    cursor += static_cast<size_t>(info->materialCount) * sizeof(MaterialGpuData);
+    out->materialRaw = cursor;
+    out->materialStride = matStride;
+    out->materials = matStride == sizeof(MaterialGpuData) ? reinterpret_cast<const MaterialGpuData*>(cursor) : nullptr;
+    cursor += static_cast<size_t>(info->materialCount) * matStride;
     out->textures = reinterpret_cast<const SceneTexName*>(cursor);
     cursor += static_cast<size_t>(info->textureCount) * sizeof(SceneTexName);
     out->lights = info->lightCount > 0 ? reinterpret_cast<const LightGpuData*>(cursor) : nullptr;
@@ -176,7 +181,7 @@ inline bool sceneBlobWrite(
     }
     AssetHeader header{};
     header.magic = kAssetMagic;
-    header.version = 9;
+    header.version = 10;
     header.typeHash = kSceneBlobTypeHash;
     header.dataSize = static_cast<uint32_t>(payload);
     const bool wrote = std::fwrite(&header, sizeof(header), 1, file) == 1

@@ -2,6 +2,7 @@
 // Pixel: 20b instance | 12b primitive inside the meshlet. Zero means no surface.
 
 #include "frame.slang"
+#include "material_map.slang"
 #include "camera.slang"
 #include "core/math.slang"
 
@@ -36,6 +37,7 @@ float3 instancePoint(GpuInstance inst, float3 local) {
 struct VertOut {
     float4 pos : SV_Position;
     float2 uv : TEXCOORD0;
+    float3 world : TEXCOORD1;
     nointerpolation uint instanceId : COLOR0;
     nointerpolation float fade : COLOR2;
     nointerpolation uint coarse : COLOR3;
@@ -228,6 +230,7 @@ void emitMeshlet(uint gtid, uint gid, float4x4 viewProj, bool dropSmall,
     if (gtid < vertCount) {
         verts[gtid].pos = gClip[gtid];
         verts[gtid].uv = float2(gVerts[meshlet.vertexOffset + gtid].u, gVerts[meshlet.vertexOffset + gtid].v);
+        verts[gtid].world = instancePoint(inst, gVerts[meshlet.vertexOffset + gtid].pos);
         verts[gtid].instanceId = src;
 #if SHADOW_CASCADE >= 0
         verts[gtid].fade = 1.0;
@@ -344,6 +347,7 @@ void pointMesh(
     if (gtid < vertCount) {
         verts[gtid].pos = gClip[gtid];
         verts[gtid].uv = float2(gVerts[meshlet.vertexOffset + gtid].u, gVerts[meshlet.vertexOffset + gtid].v);
+        verts[gtid].world = instancePoint(inst, gVerts[meshlet.vertexOffset + gtid].pos);
         verts[gtid].instanceId = src;
         verts[gtid].fade = 1.0;
         verts[gtid].coarse = 0;
@@ -355,15 +359,43 @@ void pointMesh(
 }
 #endif
 
+float cutoutAlpha(MaterialGpu mat, float2 uv, float3 world) {
+    if ((mat.flags & 32u) == 0u || mat.albedo == 0u || mat.albedo >= 768u) {
+        return 1.0;
+    }
+    float cut = mat.alphaCutoff;
+    if (cut <= 0.0 || cut > 1.0) {
+        cut = 0.5;
+    }
+    const uint tex = mat.albedo;
+    if ((mat.flags & 256u) == 0u) {
+        float2 rdx;
+        float2 rdy;
+        const float2 turned = matRotate(uv, mat.uvRotation, float2(1.0, 0.0), float2(0.0, 1.0), rdx, rdy);
+        const float2 mapped = turned * matTiling(mat) + float2(mat.uvOffX, mat.uvOffY);
+        return gTex[NonUniformResourceIndex(tex)].Sample(gWrap, mapped).a - cut + 1.0;
+    }
+    const float3 faceN = normalize(cross(ddx(world), ddy(world)));
+    const MatMap map = matMapUv(mat, uv, ddx(uv), ddy(uv), world, ddx(world), ddy(world), faceN);
+    float alpha = 0.0;
+    if (map.w.x >= 0.01) {
+        alpha += map.w.x * gTex[NonUniformResourceIndex(tex)].SampleGrad(gWrap, map.uvX, map.dxX, map.dyX).a;
+    }
+    if (map.w.y >= 0.01) {
+        alpha += map.w.y * gTex[NonUniformResourceIndex(tex)].SampleGrad(gWrap, map.uvY, map.dxY, map.dyY).a;
+    }
+    if (map.w.z >= 0.01) {
+        alpha += map.w.z * gTex[NonUniformResourceIndex(tex)].SampleGrad(gWrap, map.uvZ, map.dxZ, map.dyZ).a;
+    }
+    return alpha - cut + 1.0;
+}
+
 [shader("fragment")]
 void shadowFs(VertOut vin) {
     const GpuInstance inst = gInstanceBuf[vin.instanceId];
     const MaterialGpu mat = gMat[inst.materialId];
-    if ((mat.flags & 32u) != 0u && mat.albedo > 0u && mat.albedo < 768u) {
-        const float alpha = gTex[NonUniformResourceIndex(mat.albedo)].Sample(gWrap, vin.uv).a;
-        if (alpha < 0.5) {
-            discard;
-        }
+    if (cutoutAlpha(mat, vin.uv, vin.world) < 1.0) {
+        discard;
     }
 }
 
@@ -381,11 +413,8 @@ uint visFs(VertOut vin, nointerpolation uint primId : COLOR1) : SV_Target0 {
     }
     const GpuInstance inst = gInstanceBuf[vin.instanceId];
     const MaterialGpu mat = gMat[inst.materialId];
-    if ((mat.flags & 32u) != 0u && mat.albedo > 0u && mat.albedo < 768u) {
-        const float alpha = gTex[NonUniformResourceIndex(mat.albedo)].Sample(gWrap, vin.uv).a;
-        if (alpha < 0.5) {
-            discard;
-        }
+    if (cutoutAlpha(mat, vin.uv, vin.world) < 1.0) {
+        discard;
     }
     return packVis(vin.instanceId, primId);
 }

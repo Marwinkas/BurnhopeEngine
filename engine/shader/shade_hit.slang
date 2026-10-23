@@ -1,6 +1,7 @@
 // Поверхность из visbuffer. Солнце зовёт shadeHit и кладёт её в две картинки. Лампы их читают.
 
 #include "shade_tile.slang"
+#include "material_map.slang"
 
 [[vk::binding(2, 0)]] Texture2D<float> gDepth;
 [[vk::binding(3, 0)]] RWTexture2D<float4> gHdr;
@@ -71,6 +72,57 @@ float4 sampleHeap(uint id, float2 uv, float lod) {
 
 float4 sampleGrad(uint id, float2 uv, float2 ddx, float2 ddy) {
     return gTex[NonUniformResourceIndex(id)].SampleGrad(gWrap, uv, ddx, ddy);
+}
+
+float4 sampleMap(uint id, MatMap map) {
+    if (id >= 768u) {
+        return float4(1.0, 1.0, 1.0, 1.0);
+    }
+    if (map.world == 0u) {
+        return sampleGrad(id, map.uv, map.ddx, map.ddy);
+    }
+    float4 acc = 0.0;
+    if (map.w.x >= 0.01) {
+        acc += map.w.x * sampleGrad(id, map.uvX, map.dxX, map.dyX);
+    }
+    if (map.w.y >= 0.01) {
+        acc += map.w.y * sampleGrad(id, map.uvY, map.dxY, map.dyY);
+    }
+    if (map.w.z >= 0.01) {
+        acc += map.w.z * sampleGrad(id, map.uvZ, map.dxZ, map.dyZ);
+    }
+    return acc;
+}
+
+float3 decodeTs(float4 texel, MatMap map) {
+    float3 tN = texel.xyz * 2.0 - 1.0;
+    tN.xy *= map.normalScale;
+    if (map.flipY != 0u) {
+        tN.y = -tN.y;
+    }
+    if (dot(tN.xy, tN.xy) > 1e-4 && tN.z < 0.05) {
+        tN.z = sqrt(max(1.0 - dot(tN.xy, tN.xy), 0.0));
+    }
+    return tN;
+}
+
+float3 sampleMapNormal(uint id, MatMap map) {
+    if (map.world == 0u) {
+        return decodeTs(sampleGrad(id, map.uv, map.ddx, map.ddy), map);
+    }
+    float3 nX = float3(0.0, 0.0, 1.0);
+    float3 nY = float3(0.0, 0.0, 1.0);
+    float3 nZ = float3(0.0, 0.0, 1.0);
+    if (map.w.x >= 0.01) {
+        nX = decodeTs(sampleGrad(id, map.uvX, map.dxX, map.dyX), map);
+    }
+    if (map.w.y >= 0.01) {
+        nY = decodeTs(sampleGrad(id, map.uvY, map.dxY, map.dyY), map);
+    }
+    if (map.w.z >= 0.01) {
+        nZ = decodeTs(sampleGrad(id, map.uvZ, map.dxZ, map.dyZ), map);
+    }
+    return matTriNormal(nX, nY, nZ, map.w, map.axisSign);
 }
 
 float2 parallaxOcclusionUv(float2 uv, float2 uvDx, float2 uvDy, float3 viewTS, float ndotv, uint htex, float amount) {
@@ -401,21 +453,43 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     float2 uv = float2(
         gVerts[i0].u * buC + gVerts[i1].u * bvC + gVerts[i2].u * bwC,
         gVerts[i0].v * buC + gVerts[i1].v * bvC + gVerts[i2].v * bwC);
+    const float3 geoN = dot(N, V) < 0.0 ? -N : N;
+    float3 dWx = 0.0;
+    float3 dWy = 0.0;
+    if ((mat.flags & 256u) != 0u) {
+        const uint2 ext = max(gFrame.extent, uint2(1u, 1u));
+        const uint2 pxX = uint2(min(px.x + 1u, ext.x - 1u), px.y);
+        const uint2 pxY = uint2(px.x, min(px.y + 1u, ext.y - 1u));
+        dWx = reconstructWorld(pxX, gDepth.Load(int3(pxX, 0))) - P;
+        dWy = reconstructWorld(pxY, gDepth.Load(int3(pxY, 0))) - P;
+        const float lx = length(dWx);
+        const float ly = length(dWy);
+        if (lx > 0.25) {
+            dWx *= 0.25 / max(lx, 1e-4);
+        }
+        if (ly > 0.25) {
+            dWy *= 0.25 / max(ly, 1e-4);
+        }
+    }
+    const MatMap surf = matMapUv(mat, uv, uvDdx, uvDdy, P, dWx, dWy, geoN);
+    uv = surf.uv;
+    uvDdx = surf.ddx;
+    uvDdy = surf.ddy;
     const uint htex = mat.pad0;
-    if (gShade.pom > 0.001 && htex > 0u && htex < 768u && dot(tangent, tangent) > 0.5) {
+    if (surf.world == 0u && gShade.pom > 0.001 && htex > 0u && htex < 768u && dot(tangent, tangent) > 0.5) {
         const float3 viewTS = float3(dot(V, tangent), dot(V, bitangent), dot(V, N));
         uv = parallaxOcclusionUv(uv, uvDdx, uvDdy, viewTS, saturate(dot(V, N)), htex, saturate(gShade.pom));
     }
-    const float3 geoN = dot(N, V) < 0.0 ? -N : N;
     const uint ntex = mat.normalTex;
-    if ((mat.flags & 32u) == 0u && ntex > 0u && ntex < 768u && dot(tangent, tangent) > 0.5) {
-        float3 tN = sampleGrad(ntex, uv, uvDdx, uvDdy).xyz * 2.0 - 1.0;
-        tN.y = -tN.y;
-        if (dot(tN.xy, tN.xy) > 1e-4 && tN.z < 0.05) {
-            tN.z = sqrt(max(1.0 - dot(tN.xy, tN.xy), 0.0));
+    if ((mat.flags & 32u) == 0u && ntex > 0u && ntex < 768u && (surf.world != 0u || dot(tangent, tangent) > 0.5)) {
+        const float3 tN = sampleMapNormal(ntex, surf);
+        if (surf.world != 0u) {
+            N = tN;
+            normalLen = saturate(length(tN));
+        } else {
+            normalLen = saturate(length(tN.xy));
+            N = normalize(tangent * tN.x + bitangent * tN.y + N * tN.z);
         }
-        normalLen = saturate(length(tN.xy));
-        N = normalize(tangent * tN.x + bitangent * tN.y + N * tN.z);
     }
     const float rainAmt = saturate(gFrame.viewPad.w);
     const float rainTime = gFrame.viewPad.z;
@@ -471,7 +545,7 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
                 lod = 4.0;
             }
         }
-        const float4 texel = sampleGrad(tex, uv, uvDdx, uvDdy);
+        const float4 texel = sampleMap(tex, surf);
         albedo *= texel.rgb;
         if ((mat.flags & 32u) != 0u && texel.a < 0.98) {
             hit.foliage = 1.0;
@@ -520,25 +594,36 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     float metallic = saturate(mat.metallic);
     float roughness = clamp(mat.roughness, 0.045, 1.0);
     if (mat.orm > 0 && mat.orm < 768) {
-        const float3 orm = sampleGrad(mat.orm, uv, uvDdx, uvDdy).rgb;
+        const float3 orm = sampleMap(mat.orm, surf).rgb;
         ao = orm.r > 0.02 ? saturate(orm.r) : 1.0;
         roughness = clamp(orm.g, 0.045, 1.0);
         metallic = saturate(orm.b);
     }
     if (mat.pad2 > 0u && mat.pad2 < 768u) {
-        const float3 roughTex = sampleGrad(mat.pad2, uv, uvDdx, uvDdy).rgb;
+        const float3 roughTex = sampleMap(mat.pad2, surf).rgb;
         const float packed = roughTex.g > 0.02 ? roughTex.g : roughTex.r;
         roughness = clamp(packed, 0.045, 1.0);
     }
     if (mat.pad3 > 0u && mat.pad3 < 768u) {
-        const float3 metalTex = sampleGrad(mat.pad3, uv, uvDdx, uvDdy).rgb;
+        const float3 metalTex = sampleMap(mat.pad3, surf).rgb;
         metallic = saturate(max(metalTex.r, metalTex.b));
     }
+    if (mat.aoTex > 0u && mat.aoTex < 768u) {
+        ao *= saturate(sampleMap(mat.aoTex, surf).r);
+    }
+    ao = lerp(1.0, ao, saturate(mat.aoStrength));
     const float normalGap = saturate(1.0 - normalLen);
     const float kernelRough = min(2.0 * normalGap * normalGap * max(gShade.toksvig, 0.0), 0.18);
     roughness = sqrt(saturate(roughness * roughness + kernelRough));
-    const float coat = (mat.flags & 64u) != 0u ? 1.0 : 0.0;
-    const float coatPerceptual = 0.045;
+    float coat = mat.clearcoat;
+    if (coat <= 0.0 && (mat.flags & 64u) != 0u) {
+        coat = 1.0;
+    }
+    coat = saturate(coat);
+    float coatPerceptual = mat.clearcoatRough;
+    if (coatPerceptual < 0.04) {
+        coatPerceptual = 0.045;
+    }
     if (coat > 0.0) {
         roughness = lerp(roughness, max(roughness, coatPerceptual), coat);
     }
@@ -549,9 +634,12 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     roughness = lerp(roughness, roughness * 0.92, saturate(drip) * wall);
     roughness = clamp(roughness, 0.02, 1.0);
     const float a = roughness * roughness;
-    float reflectance = asfloat(mat.pad1);
+    float reflectance = mat.reflectance;
     if (reflectance < 0.01 || reflectance > 1.0) {
-        reflectance = 0.5;
+        reflectance = asfloat(mat.pad1);
+        if (reflectance < 0.01 || reflectance > 1.0) {
+            reflectance = 0.5;
+        }
     }
     float3 f0 = computeF0(albedo, metallic, computeDielectricF0(reflectance));
     if (coat > 0.0) {
@@ -586,9 +674,23 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     hit.coatNoL = saturate(dot(geoN, L));
     hit.diff = computeDiffuseColor(albedo, metallic) * Fd_Lambert() * gtao * (1.0 - fCoat);
     hit.f0 = f0;
-    hit.emissive = mat.baseColor.rgb * mat.emissive * 8.0;
+    float gain = mat.emissive;
+    if (mat.emissiveGain > 0.0) {
+        gain = mat.emissiveGain;
+    }
+    float3 emitCol = float3(mat.emitR, mat.emitG, mat.emitB);
+    if (dot(emitCol, emitCol) < 1e-8) {
+        emitCol = float3(1.0, 1.0, 1.0);
+    }
+    hit.emissive = emitCol * gain * 8.0;
     if (mat.emissiveTex > 0u && mat.emissiveTex < 768u) {
-        hit.emissive *= sampleGrad(mat.emissiveTex, uv, uvDdx, uvDdy).rgb;
+        hit.emissive *= sampleMap(mat.emissiveTex, surf).rgb;
+    }
+    if ((mat.flags & 1024u) != 0u) {
+        hit.emissive = albedo;
+        hit.diff = 0.0;
+        hit.spec = 0.0;
+        hit.coat = 0.0;
     }
     hit.roughness = roughness;
     hit.metallic = metallic;

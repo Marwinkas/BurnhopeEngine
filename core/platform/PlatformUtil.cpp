@@ -5,6 +5,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
+#include <system_error>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -218,6 +220,43 @@ void platformHostMeters(HostMeters& out) {
         }
     }
 #endif
+}
+
+bool platformResolveAsset(const char* relPath, char* out, size_t cap) {
+    if (relPath == nullptr || relPath[0] == '\0' || out == nullptr || cap == 0) {
+        return false;
+    }
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const fs::path direct(relPath);
+    if (fs::is_regular_file(direct, ec)) {
+        strCopyCap(out, cap, relPath);
+        return true;
+    }
+    const fs::path parentRel = fs::path("..") / relPath;
+    if (fs::is_regular_file(parentRel, ec)) {
+        const std::string text = parentRel.string();
+        strCopyCap(out, cap, text.c_str());
+        return true;
+    }
+    char dir[512]{};
+    if (!platformExePath(dir, sizeof(dir))) {
+        return false;
+    }
+    for (int up = 0; up < 6; ++up) {
+        char parent[512]{};
+        if (!pathParent(dir, parent, sizeof(parent))) {
+            break;
+        }
+        strCopyCap(dir, sizeof(dir), parent);
+        const fs::path face = fs::path(dir) / relPath;
+        if (fs::is_regular_file(face, ec)) {
+            const std::string text = face.string();
+            strCopyCap(out, cap, text.c_str());
+            return true;
+        }
+    }
+    return false;
 }
 
 bool platformLocalTime(const std::time_t* time, std::tm* out) {

@@ -1,5 +1,6 @@
 #include "files/FileSession.hpp"
 
+#include "asset/ProjectDoc.hpp"
 #include "files/FileDomain.hpp"
 #include "files/Format.hpp"
 #include "platform/Desktop.hpp"
@@ -58,11 +59,8 @@ void fileShowFoot(UiState& s, const Browser& b) {
     if (b.status == kUiNone) {
         return;
     }
-    char line[sizeof(Browser::status)]{};
+    char line[96]{};
     b.formatFoot(line, static_cast<int>(sizeof(line)));
-    if (line[0] == '\0') {
-        std::snprintf(line, sizeof(line), "%d", b.count());
-    }
     uiText(s, b.status, line);
 }
 
@@ -103,7 +101,8 @@ void fileOpenAt(UiState& s, int index) {
             b.onOpen(b.user, b.cwd, 1);
         }
     } else if (b.onOpen != nullptr) {
-        if (!desktopOpen(path.c_str())) {
+        const bool material = strExtIs(path.c_str(), ".bhmat");
+        if (!material && !desktopOpen(path.c_str())) {
             b.setStatus("cannot open");
         }
         b.onOpen(b.user, path.c_str(), 0);
@@ -150,6 +149,37 @@ void fileMakeFile(void* user) {
     UiState& s = *static_cast<UiState*>(user);
     fileBook(s).touchFile("New Document.txt");
     fileBook(s).reload();
+    fileRefresh(s);
+}
+
+void fileMakeMaterial(void* user) {
+    UiState& s = *static_cast<UiState*>(user);
+    Browser& b = fileBook(s);
+    if (b.cwd[0] == '\0') {
+        b.setStatus("no folder");
+        return;
+    }
+    char dst[640]{};
+    uniquePath(dst, static_cast<int>(sizeof(dst)), b.cwd, "Material", ".bhmat");
+    MaterialInfo info{};
+    info.base[0] = info.base[1] = info.base[2] = 1.0f;
+    info.roughness = 0.5f;
+    info.albedoGain = info.normalGain = info.ormGain = 1.0f;
+    info.emissiveGain = 0.0f;
+    if (!materialDocWrite(dst, info)) {
+        b.setStatus("create failed");
+        return;
+    }
+    b.reload();
+    b.setStatus("new material");
+    const char* name = fileLeaf(dst);
+    for (int i = 0; i < b.count(); ++i) {
+        if (sameText(b.items[static_cast<size_t>(i)].name.c_str(), name)) {
+            b.selectOnly(i);
+            fileBeginRename(s, i);
+            return;
+        }
+    }
     fileRefresh(s);
 }
 

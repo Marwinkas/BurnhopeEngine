@@ -154,8 +154,11 @@ void FileModel::setStatus(const char* text) {
 }
 
 bool FileModel::underRoot(const char* path) const {
-    if (root[0] == '\0' || path == nullptr) {
+    if (path == nullptr) {
         return false;
+    }
+    if (root[0] == '\0') {
+        return true;
     }
     const size_t n = std::strlen(root);
     if (std::strncmp(path, root, n) != 0) {
@@ -463,6 +466,9 @@ void FileModel::goBack() {
     if (!canBack()) {
         return;
     }
+    if (!underRoot(hist[static_cast<size_t>(histAt - 1)].c_str())) {
+        return;
+    }
     --histAt;
     copyCap(cwd, static_cast<int>(sizeof(cwd)), hist[static_cast<size_t>(histAt)].c_str());
     renameAt = -1;
@@ -471,6 +477,9 @@ void FileModel::goBack() {
 
 void FileModel::goForward() {
     if (!canForward()) {
+        return;
+    }
+    if (!underRoot(hist[static_cast<size_t>(histAt + 1)].c_str())) {
         return;
     }
     ++histAt;

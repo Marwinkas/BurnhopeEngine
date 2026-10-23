@@ -1,5 +1,6 @@
 #include "app/Shell.hpp"
 #include "files/Browser.hpp"
+#include "ui/Canvas.hpp"
 #include "ui/Domain.hpp"
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
@@ -44,7 +45,8 @@ void onScale(void* user, uint16_t id, float value) {
     }
     uiSetHeight(*demo->canvas->state, demo->preview, 40.0f + t * 260.0f);
     if (demo->canvas->state != nullptr) {
-        uiSetPaint(*demo->canvas->state, demo->preview, 0.16f + t * 0.55f, 0.28f + (1.0f - t) * 0.25f, 0.62f - t * 0.2f, 1.0f);
+        const UiLook look = canvasLook(*demo->canvas);
+        uiSetPaint(*demo->canvas->state, demo->preview, look.accent[0][0], look.accent[0][1], look.accent[0][2], 0.45f + t * 0.55f);
     }
     char text[16]{};
     std::snprintf(text, sizeof(text), "SCALE %.2f", value);

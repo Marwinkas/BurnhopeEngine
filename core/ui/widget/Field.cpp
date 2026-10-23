@@ -534,11 +534,20 @@ bool fieldHandlePointer(UiState& s, uint16_t id, const InputFrame& in, bool pres
     }
     if (down && s.capture == id) {
         if (auto* range = s.ent[id].try_get_mut<UiRange>(); range != nullptr && range->step > 0.0f) {
-            const float dx = in.pointer.x - s.grabX;
-            if (dx > -3.0f && dx < 3.0f && s.relative == 0) {
+            float dx = 0.0f;
+            if (s.relative != 0) {
+                dx = in.pointer.dx;
+            } else {
+                dx = in.pointer.x - s.grabX;
+                if (dx > -3.0f && dx < 3.0f) {
+                    return true;
+                }
+                s.relative = 1;
+                s.grabX = in.pointer.x;
+            }
+            if (dx == 0.0f) {
                 return true;
             }
-            s.relative = 1;
             field->scrub = 2;
             if (s.focused == id) {
                 uiFocus(s, kUiNone);
@@ -551,7 +560,6 @@ bool fieldHandlePointer(UiState& s, uint16_t id, const InputFrame& in, bool pres
             if (range->value > range->max) {
                 range->value = range->max;
             }
-            s.grabX = in.pointer.x;
             char text[32]{};
             std::snprintf(text, sizeof(text), "%.4g", static_cast<double>(range->value));
             uiSetFieldText(s, id, text);

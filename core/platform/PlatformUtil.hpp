@@ -23,6 +23,8 @@ void platformHostMeters(HostMeters& out);
 size_t strCopyCap(char* dst, size_t cap, const char* src);
 bool pathParent(const char* path, char* dst, size_t cap);
 bool platformCachePath(char* dst, size_t cap, const char* fileName);
+// Walks the working directory, then parent folders of the executable, for relPath.
+bool platformResolveAsset(const char* relPath, char* out, size_t cap);
 bool platformLocalTime(const std::time_t* time, std::tm* out);
 
 } // namespace burnhope

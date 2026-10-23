@@ -22,6 +22,9 @@ void imageCpuFree(ImageCpu& img);
 // Still images and GIF. Frames are stacked top to bottom in rgba.
 [[nodiscard]] bool imageLoadFile(ImageCpu& img, const char* path);
 
+// R = AO, G = roughness, B = metal. One PNG the material file can name.
+[[nodiscard]] bool imagePackOrm(const char* aoPath, const char* roughPath, const char* metalPath, const char* outPath);
+
 enum class ImageBlock : uint8_t {
     Bc1 = 1,
     Bc3 = 3,

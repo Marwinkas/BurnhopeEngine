@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gfx/Decal.hpp"
+#include "gfx/Material.hpp"
 #include "gfx/Portal.hpp"
 #include "platform/Window.hpp"
 #include "rhi/DescriptorHeap.hpp"
@@ -12,7 +13,8 @@ namespace burnhope {
 struct SceneFrame;
 
 [[nodiscard]] SceneFrame* sceneFrameCreate();
-[[nodiscard]] bool sceneFrameLoadBhop(SceneFrame* scene, const char* path);
+[[nodiscard]] bool sceneFrameLoadBhop(SceneFrame* scene, const char* path, bool plant = true);
+void sceneFrameBlank(SceneFrame* scene);
 void sceneFramePlantCubes(SceneFrame* scene);
 void sceneFrameDestroy(SceneFrame* scene, Device& device);
 void sceneFrameReleaseGpu(SceneFrame* scene, Device& device);
@@ -47,6 +49,12 @@ void sceneFramePause(SceneFrame* scene, uint8_t paused);
 [[nodiscard]] bool sceneFrameActorPivot(const SceneFrame* scene, uint8_t index, float out[3]);
 void sceneFrameActorSetPivot(SceneFrame* scene, uint8_t index, const float local[3]);
 [[nodiscard]] uint8_t sceneFrameSpawn(SceneFrame* scene, uint8_t kind);
+[[nodiscard]] bool sceneFrameCloneMaterial(SceneFrame* scene, uint8_t actor);
+void sceneFrameQueueTexture(SceneFrame* scene, uint8_t actor, uint8_t channel, const char* path);
+[[nodiscard]] bool sceneFrameApplyDoc(SceneFrame* scene, uint8_t actor, const BhmatDoc& doc);
+[[nodiscard]] bool sceneFrameReadDoc(const SceneFrame* scene, uint8_t actor, BhmatDoc& doc);
+[[nodiscard]] uint8_t sceneFramePick(const SceneFrame* scene, float x, float y);
+void sceneFrameMark(SceneFrame* scene, uint8_t actor);
 [[nodiscard]] float sceneFrameCameraFov(const SceneFrame* scene);
 [[nodiscard]] float sceneFrameCameraNear(const SceneFrame* scene);
 [[nodiscard]] float sceneFrameCameraFar(const SceneFrame* scene);
@@ -62,6 +70,7 @@ constexpr uint8_t kSecPost = 4u;
 constexpr uint8_t kSecAtmo = 8u;
 constexpr uint8_t kSecSun = 16u;
 constexpr uint8_t kSecWeather = 32u;
+constexpr uint8_t kSecMatFile = 64u;
 
 struct ActorPose {
     float pos[3]{};

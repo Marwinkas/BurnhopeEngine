@@ -36,7 +36,7 @@ void clusterCs(uint3 id : SV_DispatchThreadID) {
     const float z0 = nearZ * pow(far / nearZ, float(z) / 24.0);
     const float z1 = nearZ * pow(far / nearZ, float(z + 1u) / 24.0);
     const uint lightCount = min(uint(gFrame.padInv.y), 10240u);
-    const uint decalCount = gFrame.debugPad0;
+    const uint decalCount = gFrame.debugPad0 & 0x7fffffffu;
     const uint base = cell * 72u;
     const float x0 = float(x) / 16.0;
     const float x1 = float(x + 1u) / 16.0;

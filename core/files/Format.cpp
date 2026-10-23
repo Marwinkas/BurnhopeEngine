@@ -85,6 +85,9 @@ int fileKind(const char* name, int isDir) {
         || strSame(ext, ".flac")) {
         return 4;
     }
+    if (strSame(ext, ".bhmat")) {
+        return 5;
+    }
     return 0;
 }
 
@@ -97,6 +100,9 @@ const char* fileTypeName(int isDir, int kind) {
     }
     if (kind == 4) {
         return "Аудио";
+    }
+    if (kind == 5) {
+        return "Материал";
     }
     if (kind == 3 || kind == 0) {
         return "Текстовый документ";

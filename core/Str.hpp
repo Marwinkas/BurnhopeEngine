@@ -33,6 +33,36 @@ inline bool strEndsWith(std::string_view str, std::string_view suffix) {
     return str.size() >= suffix.size() && str.substr(str.size() - suffix.size()) == suffix;
 }
 
+inline bool strExtIs(const char* path, const char* ext) {
+    if (path == nullptr || ext == nullptr) {
+        return false;
+    }
+    const size_t n = std::strlen(path);
+    const size_t m = std::strlen(ext);
+    if (n < m) {
+        return false;
+    }
+    for (size_t i = 0; i < m; ++i) {
+        char a = path[n - m + i];
+        char b = ext[i];
+        if (a >= 'A' && a <= 'Z') {
+            a = static_cast<char>(a - 'A' + 'a');
+        }
+        if (b >= 'A' && b <= 'Z') {
+            b = static_cast<char>(b - 'A' + 'a');
+        }
+        if (a != b) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool strIsImagePath(const char* path) {
+    return strExtIs(path, ".png") || strExtIs(path, ".jpg") || strExtIs(path, ".jpeg") || strExtIs(path, ".gif")
+        || strExtIs(path, ".bmp") || strExtIs(path, ".tga") || strExtIs(path, ".hdr") || strExtIs(path, ".psd");
+}
+
 inline void copyCap(char* dst, int cap, const char* src) {
     if (cap <= 0) {
         return;

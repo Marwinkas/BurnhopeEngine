@@ -6,12 +6,14 @@
 #include "files/FileSession.hpp"
 #include "files/FileTheme.hpp"
 #include "files/Format.hpp"
+#include "ui/widget/AssetSlot.hpp"
 #include "ui/widget/Breadcrumbs.hpp"
 #include "ui/widget/DragDrop.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Rubberband.hpp"
 #include "ui/widget/Slider.hpp"
+#include "ui/Style.hpp"
 #include "ui/widget/Thumb.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/VirtualGrid.hpp"
@@ -48,6 +50,7 @@ void onPlus(UiState& s, uint16_t id) {
     const UiBox& box = s.box[id];
     const UiMenuItem items[] = {
         {.label = "New Folder", .onClick = fileMakeFolder},
+        {.label = "+ Material", .onClick = fileMakeMaterial},
         {.label = "New Text Document", .onClick = fileMakeFile},
     };
     uiMenuOpen(s, box.x, box.y + box.h, items, &s, box.y);
@@ -135,7 +138,18 @@ void bindCell(UiState& s, uint16_t cell, uint32_t index) {
         uiShow(s, parts->icon, !header);
         if (!header) {
             const bool dir = b.items[index].isDir != 0;
+            const bool material = !dir && b.items[index].kind == 5;
             uiThumb(s, parts->icon, dir ? b.folderSlot : b.fileSlot, dir ? UiIcon::Folder : UiIcon::Document);
+            if (material) {
+                if (auto* paint = s.ent[parts->icon].try_get_mut<UiPaint>()) {
+                    const UiPaint badge = paintToken(s.look, UiToken::Accent, s.look.radiusSm);
+                    paint->token = badge.token;
+                    paint->r = badge.r;
+                    paint->g = badge.g;
+                    paint->b = badge.b;
+                    paint->icon = static_cast<uint8_t>(UiIcon::Document);
+                }
+            }
         }
     }
 }
@@ -172,6 +186,10 @@ void onSelect(UiState& s, uint32_t index) {
         b.selectOnly(at);
     }
     fileRefresh(s);
+    if (index < static_cast<uint32_t>(b.count()) && b.items[index].isDir == 0
+        && strExtIs(b.items[index].name.c_str(), ".bhmat")) {
+        fileOpenAt(s, at);
+    }
 }
 
 void onOpen(UiState& s, uint32_t index) {
@@ -240,18 +258,20 @@ void onHover(UiState& s, uint32_t index) {
         return;
     }
     if (index < static_cast<uint32_t>(b.count()) && b.items[index].isDir != 2) {
+        const FileItem& item = b.items[index];
         char size[32]{};
-        char line[sizeof(Browser::status)]{};
-        formatFileSize(b.items[index].bytes, size, static_cast<int>(sizeof(size)));
-        std::snprintf(line, sizeof(line), "%s  %s", b.items[index].name.c_str(), size);
+        char line[96]{};
+        formatFileSize(item.bytes, size, static_cast<int>(sizeof(size)));
+        if (item.isDir != 0) {
+            std::snprintf(line, sizeof(line), "%s (%s)", item.name.c_str(), fileTypeName(item.isDir, item.kind));
+        } else {
+            std::snprintf(line, sizeof(line), "%s (%s, %s)", item.name.c_str(), fileTypeName(item.isDir, item.kind), size);
+        }
         uiText(s, b.status, line);
         return;
     }
-    char line[sizeof(Browser::status)]{};
+    char line[96]{};
     b.formatFoot(line, static_cast<int>(sizeof(line)));
-    if (line[0] == '\0') {
-        std::snprintf(line, sizeof(line), "%d", b.count());
-    }
     uiText(s, b.status, line);
 }
 
@@ -341,7 +361,7 @@ uint8_t canDrag(UiState& s, uint16_t host, uint32_t index) {
     if (host != uiFiles(s).fileView || index >= static_cast<uint32_t>(b.count())) {
         return 0;
     }
-    return b.items[index].selected != 0 && b.items[index].isDir != 2 ? 1 : 0;
+    return b.items[index].isDir != 2 ? 1 : 0;
 }
 
 uint8_t canDrop(UiState& s, uint16_t host, uint32_t index) {
@@ -352,14 +372,50 @@ uint8_t canDrop(UiState& s, uint16_t host, uint32_t index) {
     if (host == b.wTree) {
         return index < static_cast<uint32_t>(b.treeCount()) ? 1 : 0;
     }
+    if (host == b.sceneView && b.sceneView != kUiNone) {
+        return 1;
+    }
+    if (host < s.count && s.ent[host].has<UiAssetSlot>()) {
+        return 1;
+    }
     if (host == uiFiles(s).fileView && index < static_cast<uint32_t>(b.count())) {
         return b.items[index].isDir == 1 ? 1 : 0;
     }
     return 0;
 }
 
-void onDrop(UiState& s, uint16_t dstHost, uint32_t dstIndex) {
+void onDrop(UiState& s, uint32_t srcIndex, uint16_t dstHost, uint32_t dstIndex) {
     Browser& b = fileBook(s);
+    if (dstHost < s.count && s.ent[dstHost].has<UiAssetSlot>()) {
+        const UiAssetSlot slot = s.ent[dstHost].get<UiAssetSlot>();
+        if (slot.onPath != nullptr && srcIndex < b.items.size() && b.items[srcIndex].isDir == 0) {
+            const std::string path = (fs::path(b.cwd) / b.items[srcIndex].name).string();
+            slot.onPath(slot.user, path.c_str());
+        }
+        return;
+    }
+    if (dstHost == b.sceneView && b.sceneView != kUiNone && b.onImport != nullptr) {
+        float x = 0.0f;
+        float y = 0.0f;
+        if (const UiDragDrop* drag = s.world.try_get<UiDragDrop>()) {
+            x = drag->dropX;
+            y = drag->dropY;
+        }
+        bool any = false;
+        for (const FileItem& item : b.items) {
+            if (item.selected == 0 || item.isDir != 0) {
+                continue;
+            }
+            const std::string path = (fs::path(b.cwd) / item.name).string();
+            b.onImport(b.user, path.c_str(), x, y);
+            any = true;
+        }
+        if (!any && srcIndex < b.items.size() && b.items[srcIndex].isDir == 0) {
+            const std::string path = (fs::path(b.cwd) / b.items[srcIndex].name).string();
+            b.onImport(b.user, path.c_str(), x, y);
+        }
+        return;
+    }
     std::string dest;
     if (dstHost == b.wTree) {
         dest = treePath(b, dstIndex);
@@ -381,7 +437,23 @@ void dragBadge(UiState& s, char* dst, uint8_t cap) {
     if (dst == nullptr || cap == 0) {
         return;
     }
-    std::snprintf(dst, cap, "%d", fileBook(s).selectedCount());
+    Browser& b = fileBook(s);
+    if (b.onBadge != nullptr) {
+        b.onBadge(b.user, dst, cap);
+        if (dst[0] != '\0') {
+            return;
+        }
+    }
+    const UiDragDrop* drag = s.world.try_get<UiDragDrop>();
+    if (drag != nullptr && drag->srcIndex < b.items.size() && strExtIs(b.items[drag->srcIndex].name.c_str(), ".bhmat")) {
+        std::snprintf(dst, cap, "%s", b.items[drag->srcIndex].name.c_str());
+        return;
+    }
+    int n = b.selectedCount();
+    if (n < 1) {
+        n = 1;
+    }
+    std::snprintf(dst, cap, "%d", n);
 }
 
 } // namespace
@@ -435,7 +507,9 @@ void fileWire(UiState& s) {
         .host2 = b.crumbs,
         .canDrag = [](void* user, uint16_t host, uint32_t index) { return canDrag(stateOf(user), host, index); },
         .canDrop = [](void* user, uint16_t host, uint32_t index) { return canDrop(stateOf(user), host, index); },
-        .onDrop = [](void* user, uint16_t, uint32_t, uint16_t dstHost, uint32_t dstIndex) { onDrop(stateOf(user), dstHost, dstIndex); },
+        .onDrop = [](void* user, uint16_t, uint32_t srcIndex, uint16_t dstHost, uint32_t dstIndex) {
+            onDrop(stateOf(user), srcIndex, dstHost, dstIndex);
+        },
         .badge = [](void* user, char* dst, uint8_t cap) { dragBadge(stateOf(user), dst, cap); },
         .user = &s,
     });
