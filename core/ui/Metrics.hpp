@@ -5,18 +5,6 @@
 
 namespace burnhope {
 
-// Procedural icon ids shared by widgets. Callers pass the enum, not a bare integer.
-enum class UiIcon : uint8_t {
-    None = 0,
-    Document = 2,
-    Dismiss = 3,
-    Folder = 4,
-    Search = 7,
-    MenuChevron = 8,
-    ChevronRight = 10,
-    ChevronDown = 11,
-};
-
 // Default sizes and padding for every widget. Change the look here, not on each button.
 struct UiMetrics {
     float buttonH = 28.0f;

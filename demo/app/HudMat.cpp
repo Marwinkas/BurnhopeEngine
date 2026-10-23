@@ -8,7 +8,7 @@
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/DragDrop.hpp"
-#include "ui/widget/List.hpp"
+#include "ui/widget/PropGrid.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "Str.hpp"
 

@@ -2,6 +2,7 @@
 
 #include "ui/Geometry.hpp"
 #include "ui/Primitive.hpp"
+#include "ui/Style.hpp"
 #include "ui/Typography.hpp"
 
 #include <cstdint>
@@ -9,23 +10,6 @@
 namespace burnhope {
 
 struct UiState;
-
-inline uint8_t uiStrCopy(char* dst, const char* src, uint8_t cap = 96) noexcept {
-    uint8_t n = 0;
-    if (dst == nullptr || cap == 0) {
-        return 0;
-    }
-    if (src == nullptr) {
-        dst[0] = '\0';
-        return 0;
-    }
-    while (src[n] != '\0' && static_cast<uint8_t>(n + 1) < cap) {
-        dst[n] = src[n];
-        ++n;
-    }
-    dst[n] = '\0';
-    return n;
-}
 
 struct UiWrapCut {
     int end = 0;
@@ -73,7 +57,7 @@ void uiText(UiState& s, uint16_t id, const char* text);
 float uiAdvance(const UiState& s, uint32_t cp);
 float uiMeasure(const UiState& s, const char* text, uint8_t len, uint8_t until);
 TextRun textRun(const UiState& s, const UiText& text, const UiBox& slot);
-void textInk(float r, float g, float b, bool hot, float& tr, float& tg, float& tb);
+void textInk(const UiLook& look, float r, float g, float b, bool hot, float& tr, float& tg, float& tb);
 
 uint32_t uiEmitText(
     UiState& s,

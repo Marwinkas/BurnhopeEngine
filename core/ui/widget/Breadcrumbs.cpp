@@ -1,37 +1,43 @@
+#include "Str.hpp"
 #include "ui/widget/Breadcrumbs.hpp"
 #include "ui/widget/Button.hpp"
-#include "ui/widget/Detail.hpp"
 
 #include <cstring>
 
 namespace burnhope {
 namespace {
 
+uint16_t crumbAt(const UiState& s, uint16_t bar, uint32_t index) {
+    return uiNodeChild(s, bar, index);
+}
+
 void onSeg(void* user, uint16_t id) {
     auto* s = static_cast<UiState*>(user);
     if (s == nullptr || id >= s->count) {
         return;
     }
-    const UiCrumbs* crumbs = uiAncestor<UiCrumbs>(*s, id);
+    const uint16_t bar = uiAncestorId<UiCrumbs>(*s, id);
+    const UiCrumbs* crumbs = bar < s->count ? s->ent[bar].try_get<UiCrumbs>() : nullptr;
     if (crumbs == nullptr || crumbs->nav == nullptr) {
         return;
     }
     const bool rooted = crumbs->root[0] != '\0';
     char rel[512]{};
-    rel[0] = '\0';
     int relN = 0;
-    for (uint8_t i = 0; i < crumbs->n; ++i) {
-        if (crumbs->seg[i] >= s->count) {
+    const uint32_t kids = uiNodeChildCount(*s, bar);
+    for (uint32_t i = 0; i < kids; i += 2) {
+        const uint16_t seg = crumbAt(*s, bar, i);
+        if (seg >= s->count) {
             break;
         }
         if (rooted && i == 0) {
-            if (crumbs->seg[i] == id) {
+            if (seg == id) {
                 crumbs->nav(crumbs->user, crumbs->root);
                 return;
             }
             continue;
         }
-        const UiText* text = s->ent[crumbs->seg[i]].try_get<UiText>();
+        const UiText* text = s->ent[seg].try_get<UiText>();
         if (text == nullptr || text->len == 0) {
             continue;
         }
@@ -42,7 +48,7 @@ void onSeg(void* user, uint16_t id) {
             rel[relN++] = text->bytes[c];
         }
         rel[relN] = '\0';
-        if (crumbs->seg[i] != id) {
+        if (seg != id) {
             continue;
         }
         char path[512]{};
@@ -89,8 +95,7 @@ uint16_t uiBreadcrumbs(UiState& s, uint16_t parent, void (*nav)(void* user, cons
     row.widthMode = UiSize::Auto;
     row.heightMode = UiSize::Px;
     row.height = 30.0f;
-    UiPaint bar = paintLabel(s.look);
-    const uint16_t id = spawn(s, parent, row, bar);
+    const uint16_t id = spawn(s, parent, row, paintLabel(s.look));
     UiCrumbs crumbs{};
     crumbs.nav = nav;
     crumbs.user = user;
@@ -148,85 +153,95 @@ void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* path, const char* roo
     } else {
         copyCap(local, 512, path);
     }
-    std::memcpy(crumbs->path, local, std::strlen(local) + 1u);
     auto grow = [&]() {
-        if (crumbs->cap >= kUiCrumbCap || s.count + 2 >= kUiCap) {
+        if (s.count + 2 >= kUiCap) {
             return;
         }
-        const uint8_t i = crumbs->cap;
-        crumbs->seg[i] = uiButton(s, id, UiButtonConfig{ .onClick = onSeg, .user = &s });
-        if (crumbs->seg[i] != kUiNone) {
-            if (auto* paint = s.ent[crumbs->seg[i]].try_get_mut<UiPaint>()) {
+        const uint16_t button = uiButton(s, id, UiButtonConfig{.onClick = onSeg, .user = &s});
+        if (button != kUiNone) {
+            if (auto* paint = s.ent[button].try_get_mut<UiPaint>()) {
                 paint->a = 0.0f;
                 paint->borderW = 0.0f;
                 paint->shadow = 0.0f;
             }
-            if (auto* flex = s.ent[crumbs->seg[i]].try_get_mut<UiFlex>()) {
+            if (auto* flex = s.ent[button].try_get_mut<UiFlex>()) {
                 flex->padL = 4.0f;
                 flex->padR = 4.0f;
             }
-            uiShow(s, crumbs->seg[i], false);
+            uiShow(s, button, false);
         }
         UiPaint arrow = paintLabel(s.look);
         arrow.shadow = 0.0f;
-        crumbs->sep[i] = spawn(s, id, px(10.0f, 14.0f), arrow);
-        addText(s, crumbs->sep[i], ">");
-        if (crumbs->sep[i] < s.count) {
-            if (auto* sepFlex = s.ent[crumbs->sep[i]].try_get_mut<UiFlex>()) {
+        const uint16_t sep = spawn(s, id, px(10.0f, 14.0f), arrow);
+        addText(s, sep, ">");
+        if (sep < s.count) {
+            if (auto* sepFlex = s.ent[sep].try_get_mut<UiFlex>()) {
                 sepFlex->align = UiAlign::Center;
             }
         }
-        uiShow(s, crumbs->sep[i], false);
-        crumbs->cap = static_cast<uint8_t>(i + 1);
+        uiShow(s, sep, false);
     };
     uint8_t seg = 0;
-    uint8_t at = 0;
-    const uint8_t n = uiStrCopy(local, local);
-    while (at <= n && seg < kUiCrumbCap) {
-        if (seg >= crumbs->cap) {
+    size_t at = 0;
+    const size_t n = strLen(local);
+    while (at <= n) {
+        const uint32_t slots = uiNodeChildCount(s, id) / 2;
+        if (seg >= slots) {
             grow();
         }
-        if (seg >= crumbs->cap) {
+        if (seg >= uiNodeChildCount(s, id) / 2) {
             break;
         }
-        uint8_t end = at;
+        size_t end = at;
         while (local[end] != '\0' && local[end] != '/') {
             ++end;
         }
         char piece[32]{};
         uint8_t len = 0;
-        for (uint8_t i = at; i < end && len < 31; ++i) {
+        for (size_t i = at; i < end && len < 31; ++i) {
             piece[len++] = local[i];
         }
         piece[len] = '\0';
-        if (len > 0 && crumbs->seg[seg] < s.count) {
-            uiText(s, crumbs->seg[seg], piece);
-            if (auto* flex = s.ent[crumbs->seg[seg]].try_get_mut<UiFlex>()) {
+        const uint16_t button = crumbAt(s, id, static_cast<uint32_t>(seg) * 2u);
+        const uint16_t sep = seg > 0 ? crumbAt(s, id, static_cast<uint32_t>(seg) * 2u - 1u) : kUiNone;
+        if (len > 0 && button < s.count) {
+            uiText(s, button, piece);
+            if (auto* flex = s.ent[button].try_get_mut<UiFlex>()) {
                 flex->width = uiMeasure(s, piece, len, len) + 8.0f;
                 flex->height = 22.0f;
             }
-            uiShow(s, crumbs->seg[seg], true);
-            if (seg > 0 && crumbs->sep[seg - 1] < s.count) {
-                uiShow(s, crumbs->sep[seg - 1], true);
+            uiShow(s, button, true);
+            if (sep < s.count) {
+                uiShow(s, sep, true);
             }
             ++seg;
         }
-        at = local[end] == '/' ? static_cast<uint8_t>(end + 1) : end;
+        at = local[end] == '/' ? end + 1 : end;
         if (local[end] == '\0') {
             break;
         }
     }
     crumbs->n = seg;
-    for (uint8_t i = seg; i < crumbs->cap; ++i) {
-        if (crumbs->seg[i] < s.count) {
-            uiShow(s, crumbs->seg[i], false);
+    const uint32_t slots = uiNodeChildCount(s, id) / 2;
+    for (uint32_t i = seg; i < slots; ++i) {
+        const uint16_t button = crumbAt(s, id, i * 2u);
+        if (button < s.count) {
+            uiShow(s, button, false);
+        }
+        const uint16_t sep = crumbAt(s, id, i * 2u + 1u);
+        if (sep < s.count) {
+            uiShow(s, sep, false);
         }
     }
-    for (uint8_t i = 0; i < crumbs->cap; ++i) {
-        if (crumbs->sep[i] < s.count && (seg == 0 || i >= seg - 1)) {
-            uiShow(s, crumbs->sep[i], false);
-        }
-    }
+}
+
+uint16_t loadCrumbs(UiState& s, uint16_t parent, const BinNode&, const char*, void*) {
+    return uiBreadcrumbs(s, parent, nullptr, nullptr);
+}
+
+void uiCrumbsBin(UiState& s) {
+    uiBinRole(s, kBinSlotCrumbs, "crumbs", 0, 0);
+    uiRegisterCustomBinNode(s, kBinSlotCrumbs, loadCrumbs, nullptr);
 }
 
 } // namespace burnhope

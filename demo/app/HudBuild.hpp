@@ -12,6 +12,17 @@ void pullProp(HudContext& hud, Canvas& canvas, uint8_t index);
 void syncProp(Engine& e, Canvas& canvas);
 void placeStats(UiState& state, const HudContext& hud);
 void syncViewport(Engine& e, Canvas& canvas);
+enum class UiPropCat : uint8_t {
+    General = 0,
+    Actor,
+    Lod,
+    Misc,
+    Physics,
+    Rendering,
+    Streaming,
+    All,
+};
+
 enum HudMenu : uint8_t {
     kMenuTone = 0,
     kMenuAa = 1,
@@ -53,9 +64,9 @@ void paintTools(HudContext& hud);
 void onGizmoMode(void* user, uint16_t);
 void onSpace(void* user, uint8_t index);
 void onSnapToggle(void* user, uint16_t);
-void onSnapPick(void* user);
+void onSnapPick(void* user, uint16_t item);
 void onPivotSpace(void* user, uint8_t index);
-void onSpawnKind(void* user);
+void onSpawnKind(void* user, uint16_t item);
 void onPlay(void* user, uint16_t);
 void onPause(void* user, uint16_t);
 void onGear(void* user, uint16_t);
@@ -64,18 +75,18 @@ void onViewButton(void* user, uint16_t);
 void onViewRadio(void* user, uint16_t id);
 void onSpawnCube(void* user, uint16_t);
 void onDuplicate(void* user, uint16_t);
-void onDuplicateCmd(void* user);
-void onStatsCmd(void* user);
+void onDuplicateCmd(void* user, uint16_t item);
+void onStatsCmd(void* user, uint16_t item);
 bool loadToolIcon(Canvas& canvas, uint8_t slot, const char* file);
 bool fontBesideExe(Canvas& canvas);
 void hudBuildInspector(Canvas& canvas, HudContext* hud, uint16_t details, uint16_t stats, UiPaint hidden);
 void hudBuildPost(Canvas& canvas, HudContext* hud, uint16_t details, UiPaint hidden);
 void hudPushFrame(Engine& e, Canvas& canvas, uint8_t weatherIndex, uint8_t selected);
 void hudSeed(HudContext& hud);
-void wxClear(void* user);
-void wxOvercast(void* user);
-void wxRain(void* user);
-void wxStorm(void* user);
+void wxClear(void* user, uint16_t item);
+void wxOvercast(void* user, uint16_t item);
+void wxRain(void* user, uint16_t item);
+void wxStorm(void* user, uint16_t item);
 
 struct ViewMode {
     int index = 0;

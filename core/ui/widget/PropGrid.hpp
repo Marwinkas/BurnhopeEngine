@@ -4,12 +4,9 @@
 
 namespace burnhope {
 
-struct UiFoldState {
-    float openH = 0.0f;
-};
+struct UiRowHover {};
 
-void uiFold(UiState& s, uint16_t id);
-uint16_t uiTreeRow(UiState& s, uint16_t parent, const char* text);
+struct UiPropLabel {};
 
 struct UiPropGrid {
     float labelW = 140.0f;
@@ -46,17 +43,6 @@ struct UiVecCtl {
 
 [[nodiscard]] bool uiPropLinked(const UiState& s, uint16_t lock);
 
-enum class UiPropCat : uint8_t {
-    General = 0,
-    Actor,
-    Lod,
-    Misc,
-    Physics,
-    Rendering,
-    Streaming,
-    All,
-};
-
 struct UiPropSection {
     uint8_t cat = 0;
     uint8_t owner = 0;
@@ -76,7 +62,6 @@ struct UiPropFilterBar {
 UiPropVec3 uiPropVec3(UiState& s, uint16_t host, const char* label, float x, float y, float z, float minV, float maxV, float step);
 UiPropVec2 uiPropVec2(UiState& s, uint16_t host, const char* label, float x, float y, float minV, float maxV, float step);
 uint16_t uiPropSwatch(UiState& s, uint16_t host, const char* label, float r, float g, float b);
-uint16_t uiFoldBody(UiState& s, uint16_t parent, const char* title);
 uint16_t uiPropSection(UiState& s, uint16_t parent, const char* title, uint8_t cat, uint8_t owner);
 uint16_t uiPropFilterBar(UiState& s, uint16_t parent);
 void uiPropShowMask(UiState& s, uint8_t mask);

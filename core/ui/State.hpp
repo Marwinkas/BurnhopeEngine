@@ -1,10 +1,15 @@
 #pragma once
 
 #include "platform/Input.hpp"
+#include "ui/Flex.hpp"
+#include "ui/Geometry.hpp"
+#include "ui/Interaction.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/Metrics.hpp"
-#include "ui/Model.hpp"
+#include "ui/Primitive.hpp"
+#include "ui/Style.hpp"
 #include "ui/Text.hpp"
+#include "ui/Typography.hpp"
 #include "ui/UiBin.hpp"
 
 #include <flecs.h>
@@ -26,8 +31,6 @@ using UiBootFn = void (*)(UiState& s);
 using UiRoleFinishFn = void (*)(UiState& s, uint16_t id, const BinNode* spec, const char* text, const char* hint);
 struct UiNoHit {}; // Пустой тег: объект нематериален для курсора мыши
 struct UiPaintLast {}; // Среди братьев рисуется последним, поверх непрозрачных строк.
-struct UiIconChrome {}; // Кнопка без плашки: состояние только на цвете иконки.
-struct UiMenuSlide {}; // Меню тулбара: высота и альфа при открытии и закрытии.
 struct UiReveal {
     float full = 0.0f;
     float from = 0.0f;
@@ -156,12 +159,16 @@ struct UiState {
     uint8_t clipOn = 0;
     UiBox clipBox{};
     UiCustomBinLoader binHooks[kUiBinRoleCap]{};
+    UiBinRole binRole[kUiBinRoleCap]{};
     UiClearFn clearFn[4]{};
     uint8_t clearN = 0;
     UiSpawnFn onSpawn[kUiBinRoleCap]{};
     UiRoleFinishFn roleFinish[kUiBinRoleCap]{};
     UiImportBag importBag{};
-    void (*beforeLayout)(UiState& s) = nullptr;
+    UiBootFn bootFn[4]{};
+    uint8_t bootN = 0;
+    void (*beforeFn[4])(UiState& s){};
+    uint8_t beforeN = 0;
 
     UiState();
     ~UiState();
@@ -183,8 +190,6 @@ void uiBind(UiState& s, uint16_t id, UiClickFn fn, void* user);
 void uiBindName(UiState& s, const char* name, UiClickFn fn, void* user);
 void uiDrag(UiState& s, uint16_t id, UiDragFn fn, void* user);
 void uiEdit(UiState& s, uint16_t id, UiEditFn fn, void* user);
-bool uiCommandAdd(UiState& s, const char* name, UiCommandFn fn, void* user);
-bool uiCommandAddTo(UiState& s, uint16_t menu, const char* name, UiCommandFn fn, void* user);
 void uiShow(UiState& s, uint16_t id, bool visible);
 void uiPaintRgb(UiState& s, uint16_t id, float r, float g, float b);
 void uiReparent(UiState& s, uint16_t id, uint16_t parent);
@@ -214,6 +219,7 @@ inline void uiRequestTop(UiState& s, bool on) { s.topOn = on; s.opTop = on ? 1 :
 inline void uiRequestOpacity(UiState& s, float opacity) { s.opOpacity = opacity; s.ghost = opacity < 1.0f; }
 inline void uiRequestMinimize(UiState& s) { s.opMinimize = true; }
 inline void uiRequestMaximize(UiState& s) { s.opMaximize = true; }
+inline void uiRequestClose(UiState& s) { s.opClose = true; }
 inline void uiNotifyLayoutDirty(UiState& s) { s.layoutDirty = true; }
 inline void uiNotifyVisualDirty(UiState& s) { s.visualDirty = true; }
 inline void uiSetContextMenu(UiState& s, uint16_t node, uint16_t menu) {
@@ -232,6 +238,7 @@ void uiDrawAdd(UiState& s, UiDrawFn fn);
 void uiDrawDecorAdd(UiState& s, UiDrawFn fn);
 void uiOverlayAdd(UiState& s, UiOverlayDrawFn fn);
 void uiBootAdd(UiBootFn fn);
+void uiBeforeLayoutAdd(UiState& s, void (*fn)(UiState& s));
 void uiClearAdd(UiState& s, UiClearFn fn);
 void uiRegisterSpawnHook(UiState& s, uint8_t role, UiSpawnFn fn);
 void uiRegisterRoleFinish(UiState& s, uint8_t role, UiRoleFinishFn fn);
@@ -273,6 +280,7 @@ inline void uiApplyLook(UiState& s, bool warm) {
 }
 void uiMotionTo(UiState& s, uint16_t id, float r, float g, float b, float a);
 void uiReveal(UiState& s, uint16_t id, float full, bool open);
+[[nodiscard]] float uiRevealUnit(const UiState& s, uint16_t id);
 void uiRevealTick(UiState& s);
 [[nodiscard]] bool uiTickMotion(UiState& s);
 [[nodiscard]] uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap);

@@ -4,7 +4,6 @@
 #include "ui/Domain.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
-#include "ui/widget/Detail.hpp"
 #include "ui/Canvas.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Scroll.hpp"
@@ -249,8 +248,8 @@ TEST_CASE("breadcrumb segment opens the folder under the root") {
         return;
     }
     CHECK(bar->n == 2);
-    const uint16_t leaf = bar->seg[0];
-    const uint16_t child = bar->seg[1];
+    const uint16_t leaf = uiNodeChild(state, crumbs, 0);
+    const uint16_t child = uiNodeChild(state, crumbs, 2);
     CHECK(state.box[leaf].w > 1.0f);
     CHECK(state.box[child].w > 1.0f);
     InputFrame in{};

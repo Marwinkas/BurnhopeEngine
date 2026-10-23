@@ -1,3 +1,4 @@
+#include "Str.hpp"
 #include "ui/Text.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/PrimitiveBatch.hpp"
@@ -241,17 +242,12 @@ float uiMeasure(const UiState& s, const char* text, uint8_t len, uint8_t until) 
     return w;
 }
 
-void textInk(float r, float g, float b, bool hot, float& tr, float& tg, float& tb) {
+void textInk(const UiLook& look, float r, float g, float b, bool hot, float& tr, float& tg, float& tb) {
     const float lum = 0.30f * r + 0.59f * g + 0.11f * b;
-    if (lum > 0.72f) {
-        tr = 0.10f;
-        tg = 0.11f;
-        tb = 0.14f;
-    } else {
-        tr = 0.93f;
-        tg = 0.94f;
-        tb = 0.96f;
-    }
+    const float* ink = lum > 0.72f ? look.window : look.text;
+    tr = ink[0];
+    tg = ink[1];
+    tb = ink[2];
     if (hot) {
         tr = tr + 0.08f > 1.0f ? 1.0f : tr + 0.08f;
         tg = tg + 0.08f > 1.0f ? 1.0f : tg + 0.08f;
@@ -608,7 +604,7 @@ uint32_t uiEmitTextNode(
         tb = s.look.text[2];
         ta = 1.0f;
     } else {
-        textInk(r, g, b, id == s.hovered, tr, tg, tb);
+        textInk(s.look, r, g, b, id == s.hovered, tr, tg, tb);
     }
     const TextRun run = textRun(s, *text, slot);
     if (run.lines == 0) {

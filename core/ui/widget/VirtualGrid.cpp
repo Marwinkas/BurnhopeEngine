@@ -1,7 +1,5 @@
 #include "ui/Hover.hpp"
-#include "ui/widget/Detail.hpp"
-#include "ui/widget/Field.hpp"
-#include "ui/widget/TreeView.hpp"
+#include "ui/Icon.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/widget/VirtualGrid.hpp"
 
@@ -67,7 +65,7 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
     glyphPaint.a = 0.0f;
     glyphPaint.borderW = 0.0f;
     glyphPaint.shadow = 0.0f;
-    glyphPaint.icon = 4;
+    glyphPaint.icon = static_cast<uint8_t>(UiIcon::Folder);
     glyphPaint.r = s.look.text[0];
     glyphPaint.g = s.look.text[1];
     glyphPaint.b = s.look.text[2];
@@ -130,9 +128,11 @@ uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& c
     grid.zoom = cfg.onZoom;
     grid.commit = cfg.onCommit;
     grid.cancel = cfg.onCancel;
+    grid.openEditor = cfg.onOpenEditor;
+    grid.readEditor = cfg.onReadEditor;
     grid.user = cfg.user;
     s.ent[scroll].set<UiVirtualGrid>(grid);
-    s.ent[scroll].set<UiVirtualPool>({uiVirtualGridRefresh, uiGridContentH, 0});
+    uiVirtualAttach(s, scroll, uiVirtualGridRefresh, uiGridContentH, 0);
     s.ent[scroll].set<UiLayoutRefresh>({gridOnLayout, nullptr});
     uiVirtualGridRefresh(s, scroll);
     return scroll;
@@ -159,6 +159,8 @@ void uiBindGrid(UiState& s, const char* name, const UiVirtualGridConfig& cfg) {
     grid->zoom = cfg.onZoom;
     grid->commit = cfg.onCommit;
     grid->cancel = cfg.onCancel;
+    grid->openEditor = cfg.onOpenEditor;
+    grid->readEditor = cfg.onReadEditor;
     grid->user = cfg.user;
     uiVirtualGridRefresh(s, id);
 }
@@ -221,7 +223,7 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
         if (auto* flex = s.ent[slot].try_get_mut<UiFlex>()) {
             flex->position = UiPosition::Absolute;
             flex->posX = rows ? s.metrics.cellGap : static_cast<float>(col) * grid->itemW + s.metrics.gridInset;
-            flex->posY = static_cast<float>(row) * grid->itemH - scroll->offset + (rows ? 2.0f : s.metrics.gridInset);
+            flex->posY = uiVirtualSlotY(row, grid->itemH, scroll->offset) + (rows ? 2.0f : s.metrics.gridInset);
             flex->widthMode = UiSize::Px;
             flex->heightMode = UiSize::Px;
             flex->direction = rows ? UiFlexDir::Row : UiFlexDir::Column;
@@ -317,10 +319,8 @@ void finishEdit(UiState& s, uint16_t gridId, bool commit) {
     grid->editAt = kUiCellNone;
     char text[96]{};
     if (editor < s.count) {
-        if (const UiField* field = s.ent[editor].try_get<UiField>()) {
-            const uint8_t n = field->len < 95 ? field->len : 95;
-            std::memcpy(text, field->bytes, n);
-            text[n] = '\0';
+        if (grid->readEditor != nullptr) {
+            grid->readEditor(grid->user, editor, text, 96);
         }
         uiShow(s, editor, false);
     }
@@ -367,21 +367,15 @@ void uiVirtualGridBeginEdit(UiState& s, uint16_t gridId, uint32_t index, const c
     if (grid == nullptr || index >= grid->count) {
         return;
     }
-    if (grid->editor >= s.count || !s.ent[grid->editor].is_alive()) {
-        const uint16_t editor = uiField(s, kUiNone, "", 0, false);
-        if (editor == kUiNone) {
-            return;
-        }
-        s.ent[editor].add<UiPopup>();
-        uiShow(s, editor, false);
-        grid->editor = editor;
+    if (grid->openEditor == nullptr) {
+        return;
     }
+    const uint16_t editor = grid->openEditor(grid->user, grid->editor, index, text);
+    if (editor == kUiNone || editor >= s.count) {
+        return;
+    }
+    grid->editor = editor;
     grid->editAt = index;
-    uiSetFieldText(s, grid->editor, text != nullptr ? text : "");
-    if (auto* field = s.ent[grid->editor].try_get_mut<UiField>()) {
-        field->anchor = 0;
-    }
-    uiFocus(s, grid->editor);
     (void)placeEditor(s, gridId);
 }
 
@@ -465,6 +459,17 @@ bool uiVirtualGridInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t p
         }
     }
     return false;
+}
+
+uint16_t loadGrid(UiState& s, uint16_t parent, const BinNode& node, const char*, void*) {
+    const float itemW = node.width > 1.0f ? node.width : 84.0f;
+    const float itemH = node.height > 1.0f ? node.height : itemW;
+    return uiVirtualGrid(s, parent, {.itemW = itemW, .itemH = itemH});
+}
+
+void uiGridBin(UiState& s) {
+    uiBinRole(s, kBinSlotGrid, "grid", 0, 0);
+    uiRegisterCustomBinNode(s, kBinSlotGrid, loadGrid, nullptr);
 }
 
 } // namespace burnhope

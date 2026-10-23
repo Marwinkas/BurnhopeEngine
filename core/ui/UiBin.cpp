@@ -14,6 +14,29 @@ void uiRegisterCustomBinNode(UiState& s, uint8_t role, UiCustomNodeLoader loader
     }
 }
 
+void uiBinRole(UiState& s, uint8_t role, const char* name, uint8_t token, uint8_t flags) {
+    if (role < kUiBinRoleCap) {
+        s.binRole[role] = { .name = name, .token = token, .flags = flags };
+    }
+}
+
+uint8_t uiBinRoleFind(const UiState& s, const char* name) {
+    if (name == nullptr || name[0] == '\0') {
+        return 0;
+    }
+    for (uint8_t role = 1; role < kUiBinRoleCap; ++role) {
+        const char* known = s.binRole[role].name;
+        if (known != nullptr && std::strcmp(known, name) == 0) {
+            return role;
+        }
+    }
+    return 0;
+}
+
+void uiBinBuiltin(UiState& s) {
+    uiBinRole(s, 8, "hidden", 0, static_cast<uint8_t>(kBinRoleClear | kBinRolePass));
+}
+
 namespace {
 
 static_assert(sizeof(BinHead) == 12, "BinHead size must be exactly 12 bytes");
@@ -32,21 +55,6 @@ void copyPool(char* dst, uint8_t& len, int cap, const char* pool, uint32_t poolN
     std::memcpy(dst, pool + off, static_cast<size_t>(take));
     dst[take] = '\0';
     len = static_cast<uint8_t>(take);
-}
-
-UiToken tokenForSlot(uint8_t slot) noexcept {
-    switch (slot) {
-    case kBinSlotButton: return UiToken::Button;
-    case kBinSlotLabel: return UiToken::Text;
-    case kBinSlotSlider: return UiToken::Slider;
-    case kBinSlotCheck: return UiToken::Check;
-    case kBinSlotField: return UiToken::Field;
-    case kBinSlotClose: return UiToken::Close;
-    case kBinSlotScroll: return UiToken::Scroll;
-    case kBinSlotMenu: return UiToken::Menu;
-    case kBinSlotImage: return UiToken::Preview;
-    default: return UiToken::Custom;
-    }
 }
 
 void fillBag(UiState& s, const char* text, const char* hint) noexcept {
@@ -151,8 +159,12 @@ uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const c
     };
     uiFlexApplyAttr(flex, attr);
 
-    UiToken inkToken = tokenForSlot(bin.role);
-    if ((bin.marks & kBinMarkToken) != 0 && bin.token != 0) {
+    const UiBinRole role = bin.role < kUiBinRoleCap ? s.binRole[bin.role] : UiBinRole{};
+    const bool marked = (bin.marks & kBinMarkToken) != 0 && bin.token != 0;
+    UiToken inkToken = role.token != 0 ? static_cast<UiToken>(role.token) : UiToken::Custom;
+    if (marked) {
+        inkToken = static_cast<UiToken>(bin.token);
+    } else if (inkToken == UiToken::Custom && bin.token != 0) {
         inkToken = static_cast<UiToken>(bin.token);
     }
     float r = bin.r;
@@ -163,10 +175,10 @@ uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const c
     float bg = bin.bg;
     float bb = bin.bb;
     float shadow = bin.shadow;
-    if ((bin.marks & kBinMarkToken) != 0 && bin.token != 0) {
+    if (marked) {
         tokenRgb(s.look, inkToken, r, g, b);
     }
-    if ((bin.marks & kBinMarkToken) != 0 && bin.role == kBinSlotButton) {
+    if (marked && (role.flags & kBinRoleRaised) != 0) {
         UiPaint raised = paintToken(s.look, inkToken, bin.radius);
         paintRaised(raised);
         r = raised.r;
@@ -178,8 +190,8 @@ uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const c
         bb = raised.bb;
         shadow = raised.shadow;
     }
-    float alpha = (bin.role == kBinSlotHidden || bin.role == kBinSlotLabel) ? 0.0f : bin.a;
-    if ((bin.marks & kBinMarkToken) != 0 && bin.role == kBinSlotSlider) {
+    float alpha = (role.flags & kBinRoleClear) != 0 ? 0.0f : bin.a;
+    if (marked && (role.flags & kBinRoleGhost) != 0) {
         alpha = 0.0f;
         borderW = 0.0f;
         shadow = 0.0f;
@@ -224,7 +236,7 @@ uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const c
     if (bin.role < kUiBinRoleCap && s.roleFinish[bin.role] != nullptr) {
         s.roleFinish[bin.role](s, id, &bin, text, hint != nullptr && hint[0] != '\0' ? hint : nullptr);
     }
-    if (bin.role == kBinSlotHidden) {
+    if ((role.flags & kBinRolePass) != 0) {
         s.ent[id].add<UiPass>();
     }
     finishDescribed(s, id, bin, name);

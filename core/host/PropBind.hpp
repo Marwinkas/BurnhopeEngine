@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/widget/List.hpp"
+#include "ui/widget/PropGrid.hpp"
 
 namespace burnhope {
 

@@ -4,7 +4,7 @@
 #include "ui/Domain.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
-#include "ui/widget/Detail.hpp"
+#include "ui/widget/Button.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Calendar.hpp"
 #include "ui/widget/ColorPicker.hpp"
@@ -87,8 +87,6 @@ TEST_CASE("broken blobs do not import") {
 }
 TEST_CASE("baked scale slider moves") {
     UiState state;
-    uiInstallCalendarBin(state);
-    uiInstallColorBin(state);
     const uint16_t root = uiImportBinFile(state, kUiNone, "build-core/ui/shell.uib");
     CHECK(root != kUiNone);
     if (root == kUiNone) {

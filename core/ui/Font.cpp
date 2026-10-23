@@ -1,6 +1,8 @@
 #include "ui/Font.hpp"
 #include "ui/Primitive.hpp"
 #include "image/ImageUpload.hpp"
+#include "io/File.hpp"
+#include "platform/PlatformUtil.hpp"
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -10,7 +12,6 @@
 
 #include <cstring>
 #include <span>
-#include <vector>
 
 namespace burnhope {
 
@@ -65,10 +66,16 @@ bool fontLoadSdf(
         spdlog::error("freetype init failed");
         return false;
     }
+    MappedFile mapped{};
+    if (!fileMapReadOnly(path, &mapped) || mapped.data == nullptr || mapped.size == 0) {
+        FT_Done_FreeType(library);
+        return false;
+    }
     FT_UInt spread = 2;
     FT_Property_Set(library, "sdf", "spread", &spread);
     FT_Face face{};
-    if (FT_New_Face(library, path, 0, &face) != 0) {
+    if (FT_New_Memory_Face(library, mapped.data, static_cast<FT_Long>(mapped.size), 0, &face) != 0) {
+        fileUnmap(&mapped);
         FT_Done_FreeType(library);
         return false;
     }
@@ -76,7 +83,8 @@ bool fontLoadSdf(
 
     const int width = kCols * kCell;
     const int height = kRows * kCell;
-    std::vector<uint8_t> pixels(static_cast<size_t>(width * height), 0);
+    constexpr size_t kAtlasBytes = static_cast<size_t>(kCols * kCell * kRows * kCell);
+    alignas(64) uint8_t pixels[kAtlasBytes]{};
 
     for (int i = 0; i < static_cast<int>(kUiFontGlyphs); ++i) {
         // Единый источник правды из Typography.hpp!
@@ -120,9 +128,10 @@ bool fontLoadSdf(
         font.glyphs[i].advance = static_cast<float>(face->glyph->advance.x) / 64.0f;
     }
     FT_Done_Face(face);
+    fileUnmap(&mapped);
     FT_Done_FreeType(library);
 
-    if (!uploadAtlas(device, heaps, atlas, pixels, width, height)) {
+    if (!uploadAtlas(device, heaps, atlas, std::span<const uint8_t>(pixels, kAtlasBytes), width, height)) {
         spdlog::error("sdf atlas upload failed");
         return false;
     }
@@ -143,19 +152,12 @@ bool fontLoadDefaultSdf(
     DescriptorHeaps& heaps,
     GpuImage& atlas,
     float pixelSize) {
-    const char* candidates[] = {
-        "assets/fonts/Inter-Regular.ttf",
-        "../assets/fonts/Inter-Regular.ttf",
-        "../../assets/fonts/Inter-Regular.ttf",
-        "../../../assets/fonts/Inter-Regular.ttf",
-    };
-    for (const char* path : candidates) {
-        if (fontLoadSdf(font, look, device, heaps, atlas, path, pixelSize)) {
-            return true;
-        }
+    char path[512]{};
+    if (!platformResolveAsset("assets/fonts/Inter-Regular.ttf", path, sizeof(path))) {
+        spdlog::error("default sdf font not found from the executable");
+        return false;
     }
-    spdlog::error("default sdf font candidates not found");
-    return false;
+    return fontLoadSdf(font, look, device, heaps, atlas, path, pixelSize);
 }
 
 } // namespace burnhope

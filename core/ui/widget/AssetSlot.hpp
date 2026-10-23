@@ -21,5 +21,6 @@ struct UiAssetSlotConfig {
 
 uint16_t uiAssetSlot(UiState& s, uint16_t parent, const UiAssetSlotConfig& cfg);
 void uiAssetSlotText(UiState& s, uint16_t id, const char* text);
+bool uiAssetOfferPath(UiState& s, const char* path);
 
 } // namespace burnhope

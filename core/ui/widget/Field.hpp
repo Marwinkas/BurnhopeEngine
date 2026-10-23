@@ -4,6 +4,15 @@
 
 namespace burnhope {
 
+enum class UiFieldFilter : uint8_t {
+    Any = 0,
+    Digits = 1,
+    Letters = 2,
+    Email = 3,
+    Tel = 4,
+    Url = 5,
+};
+
 struct UiField {
     char bytes[96]{};
     uint8_t len = 0;
@@ -68,13 +77,25 @@ inline UiFieldUndo& uiUndo(UiState& s) {
 
 using UiTextChangeFn = void (*)(void* user, const char* text);
 
+struct UiAfterText {
+    void (*fn)(UiState& s, uint16_t id) = nullptr;
+};
+
+void uiAfterTextAdd(UiState& s, void (*fn)(UiState& s, uint16_t id));
+void uiAfterText(UiState& s, uint16_t id);
+
 uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, bool clear);
+inline constexpr uint8_t kBinSlotField = 5;
+inline constexpr uint8_t kBinSlotSearch = 20;
+void uiFieldBin(UiState& s);
+
 void uiBindField(UiState& s, uint16_t id, const char* text, uint8_t filter, bool clear);
 void uiBindFieldExtra(UiState& s, uint16_t id, const char* placeholder, uint8_t maxChars, bool required, bool readOnly, bool password);
 void uiFieldNotify(UiState& s, uint16_t id);
 uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChangeFn onChange, void* user, float width = 160.0f);
 void uiBindSearch(UiState& s, const char* name, UiTextChangeFn onChange, void* user);
 void uiSetFieldText(UiState& s, uint16_t id, const char* text);
+bool fieldHandlePointer(UiState& s, uint16_t id, const InputFrame& in, bool press, bool down);
 void uiClearField(UiState& s);
 void fieldSyncText(UiState& s, uint16_t id);
 void uiFieldInit(
@@ -123,11 +144,11 @@ void fieldReveal(const UiState& s, UiField& field, float view);
 uint8_t fieldCaretAt(const UiState& s, const UiField& field, float local);
 void fieldCopy(UiState& s, const UiField& field);
 UiField* editFieldOf(UiState& s);
-void cmdFieldCut(void* user);
-void cmdFieldCopy(void* user);
-void cmdFieldPaste(void* user);
-void cmdFieldAll(void* user);
-void cmdFieldWipe(void* user);
+void cmdFieldCut(void* user, uint16_t item);
+void cmdFieldCopy(void* user, uint16_t item);
+void cmdFieldPaste(void* user, uint16_t item);
+void cmdFieldAll(void* user, uint16_t item);
+void cmdFieldWipe(void* user, uint16_t item);
 bool uiFieldDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap);
 bool uiFieldInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
 

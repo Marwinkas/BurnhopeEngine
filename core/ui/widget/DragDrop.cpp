@@ -3,36 +3,50 @@
 #include "ui/Geometry.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
-#include "ui/widget/TreeView.hpp"
-#include "ui/widget/VirtualGrid.hpp"
+#include "ui/widget/Virtual.hpp"
 
 namespace burnhope {
 namespace {
 
-void clearMark(UiState& s, UiDragDrop& drag) {
+void hideMark(UiState& s, UiDragDrop& drag) {
     if (drag.mark < s.count) {
-        if (auto* paint = s.ent[drag.mark].try_get_mut<UiPaint>()) {
-            paint->borderW = 0.0f;
-        }
+        uiShow(s, drag.mark, false);
     }
-    drag.mark = kUiNone;
+}
+
+uint16_t ensureMark(UiState& s, UiDragDrop& drag) {
+    if (drag.mark < s.count && s.ent[drag.mark].is_alive()) {
+        return drag.mark;
+    }
+    UiFlex box = px(1.0f, 1.0f);
+    box.position = UiPosition::Absolute;
+    UiPaint ink = paintToken(s.look, UiToken::Accent, s.look.radiusSm);
+    ink.a = 0.0f;
+    ink.borderW = 1.0f;
+    const uint16_t id = spawn(s, kUiNone, box, ink);
+    if (id == kUiNone) {
+        return kUiNone;
+    }
+    s.ent[id].add<UiPopup>();
+    s.ent[id].add<UiNoHit>();
+    uiShow(s, id, false);
+    drag.mark = id;
+    return id;
 }
 
 void showMark(UiState& s, UiDragDrop& drag, uint16_t row) {
-    if (row == drag.mark) {
-        return;
-    }
-    clearMark(s, drag);
     if (row >= s.count) {
+        hideMark(s, drag);
         return;
     }
-    if (auto* paint = s.ent[row].try_get_mut<UiPaint>()) {
-        paint->borderW = 1.0f;
-        paint->br = s.look.accent[0][0];
-        paint->bg = s.look.accent[0][1];
-        paint->bb = s.look.accent[0][2];
+    const uint16_t mark = ensureMark(s, drag);
+    if (mark >= s.count) {
+        return;
     }
-    drag.mark = row;
+    const UiBox& box = s.box[row];
+    uiPlace(s, mark, true, box.x, box.y, box.w > 1.0f ? box.w : 1.0f, box.h > 1.0f ? box.h : 1.0f);
+    uiShow(s, mark, true);
+    uiRequestTop(s, true);
 }
 
 uint16_t ensureGhost(UiState& s, UiDragDrop& drag) {
@@ -65,7 +79,7 @@ void endDrag(UiState& s, UiDragDrop& drag, bool drop) {
             if (host >= s.count || (s.hovered != host && !uiWithin(s, s.hovered, host))) {
                 continue;
             }
-            const bool virt = s.ent[host].try_get<UiVirtualGrid>() != nullptr || s.ent[host].try_get<UiTreeView>() != nullptr;
+            const bool virt = s.ent[host].has<UiVirtualPool>();
             uint32_t index = 0;
             if (virt) {
                 (void)uiVirtualHitRow(s, host, index);
@@ -86,7 +100,7 @@ void endDrag(UiState& s, UiDragDrop& drag, bool drop) {
                 if (host >= s.count) {
                     continue;
                 }
-                const bool virt = s.ent[host].try_get<UiVirtualGrid>() != nullptr || s.ent[host].try_get<UiTreeView>() != nullptr;
+                const bool virt = s.ent[host].has<UiVirtualPool>();
                 if (virt || !hitBox(s.box[host], drag.dropX, drag.dropY)) {
                     continue;
                 }
@@ -99,7 +113,7 @@ void endDrag(UiState& s, UiDragDrop& drag, bool drop) {
             }
         }
     }
-    clearMark(s, drag);
+    hideMark(s, drag);
     if (drag.ghost < s.count) {
         uiShow(s, drag.ghost, false);
     }
@@ -235,7 +249,7 @@ bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t, uint8_t phase, 
         if (host >= s.count || (s.hovered != host && !uiWithin(s, s.hovered, host))) {
             continue;
         }
-        const bool virt = s.ent[host].try_get<UiVirtualGrid>() != nullptr || s.ent[host].try_get<UiTreeView>() != nullptr;
+        const bool virt = s.ent[host].has<UiVirtualPool>();
         uint32_t index = 0;
         const uint16_t hit = virt ? uiVirtualHitRow(s, host, index) : host;
         if (virt && (hit == kUiNone || index == kUiDragNone)) {

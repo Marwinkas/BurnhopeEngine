@@ -7,6 +7,13 @@
 
 namespace burnhope {
 
+inline size_t strLen(const char* src) {
+    if (src == nullptr) {
+        return 0;
+    }
+    return std::strlen(src);
+}
+
 inline size_t strCopyCap(char* dst, size_t cap, const char* src) {
     size_t i = 0;
     if (dst == nullptr || cap == 0) {

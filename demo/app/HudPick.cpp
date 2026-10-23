@@ -15,12 +15,12 @@
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/List.hpp"
+#include "ui/widget/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Splitter.hpp"
-#include "ui/widget/Text.hpp"
+#include "ui/widget/Label.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "Str.hpp"
 
@@ -45,12 +45,12 @@ void applyWeatherPreset(HudContext* hud, uint32_t preset, float coverage, float 
     }
 }
 
-void wxClear(void* user) { applyWeatherPreset(static_cast<HudContext*>(user), 0u, 0.12f, 0.04f, 0.0f, 2.0f, "Clear"); }
-void wxOvercast(void* user) { applyWeatherPreset(static_cast<HudContext*>(user), 1u, 0.70f, 0.10f, 0.4f, 5.0f, "Overcast"); }
-void wxRain(void* user) { applyWeatherPreset(static_cast<HudContext*>(user), 2u, 0.82f, 0.12f, 3.0f, 8.0f, "Rain"); }
-void wxStorm(void* user) { applyWeatherPreset(static_cast<HudContext*>(user), 3u, 0.95f, 0.18f, 4.0f, 14.0f, "Storm"); }
+void wxClear(void* user, uint16_t) { applyWeatherPreset(static_cast<HudContext*>(user), 0u, 0.12f, 0.04f, 0.0f, 2.0f, "Clear"); }
+void wxOvercast(void* user, uint16_t) { applyWeatherPreset(static_cast<HudContext*>(user), 1u, 0.70f, 0.10f, 0.4f, 5.0f, "Overcast"); }
+void wxRain(void* user, uint16_t) { applyWeatherPreset(static_cast<HudContext*>(user), 2u, 0.82f, 0.12f, 3.0f, 8.0f, "Rain"); }
+void wxStorm(void* user, uint16_t) { applyWeatherPreset(static_cast<HudContext*>(user), 3u, 0.95f, 0.18f, 4.0f, 14.0f, "Storm"); }
 
-void onDuplicateCmd(void* user) {
+void onDuplicateCmd(void* user, uint16_t) {
     onDuplicate(user, 0);
 }
 
@@ -70,7 +70,7 @@ void onStats(void* user, uint16_t) {
     }
 }
 
-void onStatsCmd(void* user) {
+void onStatsCmd(void* user, uint16_t) {
     onStats(user, 0);
 }
 

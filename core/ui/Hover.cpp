@@ -11,8 +11,9 @@ void uiHover(UiState& s, uint16_t id) {
     s.ent[id].add<UiHoverable>();
 }
 
-bool rowHot(const UiState& s, uint16_t id) {
-    if (id >= s.count || s.hovered == kUiNone || s.hovered >= s.count || !s.ent[id].has<UiRowHover>()) {
+bool kidHot(const UiState& s, uint16_t id) {
+    const UiPaint* paint = id < s.count ? s.ent[id].try_get<UiPaint>() : nullptr;
+    if (paint == nullptr || paint->hoverKids == 0 || s.hovered == kUiNone || s.hovered >= s.count) {
         return false;
     }
     for (uint16_t p = s.hovered; p != kUiNone && p < s.count; p = s.parentOf[p]) {
@@ -27,32 +28,34 @@ void uiHoverTint(const UiState& s, uint16_t id, float& r, float& g, float& b, fl
     if (id >= s.count) {
         return;
     }
-    const bool row = rowHot(s, id);
+    const bool row = kidHot(s, id);
     if (!row && (!s.ent[id].has<UiHoverable>() || id != s.hovered)) {
         return;
     }
-    if (row) {
-        r = 1.0f;
-        g = 1.0f;
-        b = 1.0f;
-        a = 0.14f;
-        return;
-    }
-    if (s.ent[id].has<UiIconChrome>()) {
-        if (a < 0.12f) {
-            a = 0.28f;
+    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+    if (row && paint != nullptr && paint->hasHoverColor()) {
+        r = paint->hr;
+        g = paint->hg;
+        b = paint->hb;
+        if (paint->ha >= 0.0f) {
+            a = paint->ha;
         }
         return;
     }
-    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+    if (paint == nullptr) {
+        return;
+    }
     if (paint != nullptr && paint->disabled) {
         a *= 0.45f;
         return;
     }
-    if (paint != nullptr && paint->hasHoverColor()) {
+    if (paint->hasHoverColor()) {
         r = paint->hr;
         g = paint->hg;
         b = paint->hb;
+        if (paint->ha >= 0.0f) {
+            a = paint->ha;
+        }
         return;
     }
     const float lift = s.look.hover > 0.0f ? s.look.hover : 0.08f;

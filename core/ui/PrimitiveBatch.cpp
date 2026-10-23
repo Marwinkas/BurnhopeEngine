@@ -453,24 +453,25 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             uiHoverTint(s, id, r, g, b, a);
             float glyphA = 1.0f;
             const uint16_t host = s.parentOf[id];
-            if (host < s.count && s.ent[host].has<UiIconChrome>()) {
+            if (paint->plate != 0) {
                 glyphA = paint->bright > 0.02f ? paint->bright : 0.7f;
-                const bool selected = paint->r > 0.95f && paint->g < 0.75f && paint->b < 0.15f;
-                if (!selected && s.hovered == host) {
+                const bool hot = s.hovered == id || (host < s.count && s.hovered == host);
+                if (paint->picked == 0 && hot) {
                     glyphA = 1.0f;
                     const UiBox& mark = s.box[id];
                     const float side = (mark.w < mark.h ? mark.w : mark.h) + 10.0f;
                     n = emitRect(
                         dst, n, cap,
                         mark.x + (mark.w - side) * 0.5f, mark.y + (mark.h - side) * 0.5f, side, side,
-                        1.0f, 1.0f, 1.0f, 0.22f, side * 0.5f, clip);
+                        s.look.text[0], s.look.text[1], s.look.text[2], 0.22f, side * 0.5f, clip);
                 }
             }
             if (const UiImage* image = s.ent[id].try_get<UiImage>()) {
                 n = uiEmitSprite(dst, n, cap, s.box[id], *image, clip, paint->blur, r, g, b, glyphA);
             } else {
                 n = uiEmitPanel(s, id, dst, n, cap, clip, r, g, b, a, glyphA);
-                if (!s.ent[id].has<UiTextInput>()) {
+                const UiText* shown = s.ent[id].try_get<UiText>();
+                if (shown == nullptr || shown->ownRun == 0) {
                     n = uiEmitTextNode(s, id, dst, n, cap, clip, r, g, b, a);
                 }
             }

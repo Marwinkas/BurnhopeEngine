@@ -6,6 +6,7 @@
 #include "files/FileSession.hpp"
 #include "files/FileTheme.hpp"
 #include "ui/Domain.hpp"
+#include "ui/widget/AssetSlot.hpp"
 #include "ui/widget/DragDrop.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Splitter.hpp"
@@ -107,7 +108,13 @@ void filesOnOpen(UiState& s, FileOpenFn fn, void* user) {
 }
 
 void filesOfferPath(UiState& s, const char* path) {
-    if (path == nullptr || path[0] == '\0' || uiFiles(s).fileTarget == kUiNone) {
+    if (path == nullptr || path[0] == '\0') {
+        return;
+    }
+    if (uiAssetOfferPath(s, path)) {
+        return;
+    }
+    if (uiFiles(s).fileTarget == kUiNone) {
         return;
     }
     uiSetFieldText(s, uiFiles(s).fileTarget, path);

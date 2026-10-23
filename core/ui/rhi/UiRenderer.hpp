@@ -5,7 +5,8 @@
 #include "rhi/GpuImage.hpp"
 #include "rhi/ShaderObject.hpp"
 #include "rhi/Swapchain.hpp"
-#include "ui/Model.hpp"
+#include "ui/Primitive.hpp"
+#include "ui/Typography.hpp"
 
 #include <span>
 

@@ -1,4 +1,4 @@
-#include "ui/widget/PropBind.hpp"
+#include "host/PropBind.hpp"
 
 #include "ui/widget/Button.hpp"
 #include "ui/widget/ColorPicker.hpp"
@@ -121,26 +121,32 @@ void UiPropBinder::sync(const UiState& s) const {
     }
 }
 
-void UiPropBinder::syncSwatches(UiState& s) const {
-    UiColorPickerComponent& picker = uiColor(s);
-    if (picker.book == nullptr || picker.colorPresent == 0 || picker.colorAnchor == kUiNone) {
+void binderOnColor(void* user, UiState& s, uint16_t anchor, float r, float g, float b) {
+    auto* binder = static_cast<UiPropBinder*>(user);
+    if (binder == nullptr || anchor == kUiNone) {
         return;
     }
-    for (uint16_t i = 0; i < nSwatches; ++i) {
-        if (swatches[i].id != picker.colorAnchor) {
+    for (uint16_t i = 0; i < binder->nSwatches; ++i) {
+        if (binder->swatches[i].id != anchor) {
             continue;
         }
-        if (swatches[i].r != nullptr) {
-            *swatches[i].r = picker.book->r;
+        if (binder->swatches[i].r != nullptr) {
+            *binder->swatches[i].r = r;
         }
-        if (swatches[i].g != nullptr) {
-            *swatches[i].g = picker.book->g;
+        if (binder->swatches[i].g != nullptr) {
+            *binder->swatches[i].g = g;
         }
-        if (swatches[i].b != nullptr) {
-            *swatches[i].b = picker.book->b;
+        if (binder->swatches[i].b != nullptr) {
+            *binder->swatches[i].b = b;
         }
-        uiPaintRgb(s, swatches[i].id, picker.book->r, picker.book->g, picker.book->b);
+        uiPaintRgb(s, binder->swatches[i].id, r, g, b);
     }
+}
+
+void UiPropBinder::syncSwatches(UiState& s) const {
+    UiColorPickerComponent& picker = uiColor(s);
+    picker.onColor = binderOnColor;
+    picker.colorUser = const_cast<UiPropBinder*>(this);
 }
 
 void UiPropBinder::write(UiState& s, float* dst, float value) const {

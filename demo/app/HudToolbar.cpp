@@ -15,12 +15,12 @@
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/List.hpp"
+#include "ui/widget/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Splitter.hpp"
-#include "ui/widget/Text.hpp"
+#include "ui/widget/Label.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "Str.hpp"
 
@@ -36,7 +36,6 @@ void sceneHud(Canvas& canvas, void* user) {
     if (hud == nullptr || (!haveFont && !fontBesideExe(canvas) && !canvasUseFont(canvas, 20.0f)) || canvas.state == nullptr) {
         return;
     }
-    uiInstallColorBin(*canvas.state);
     if (hud->book != nullptr) {
         uiSetColorBook(*canvas.state, hud->book);
     }
@@ -89,7 +88,7 @@ void sceneHud(Canvas& canvas, void* user) {
         uiSetContextMenu(*canvas.state, fileBtn, fileMenu);
         uiMarkMenuBar(*canvas.state, fileBtn);
     }
-    auto fileAct = [](void* actUser) {
+    auto fileAct = [](void* actUser, uint16_t) {
         projectOnFile(static_cast<FileAct*>(actUser));
     };
     hud->fileNew = {&canvas, hud, 0};

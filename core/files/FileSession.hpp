@@ -46,9 +46,9 @@ Browser& fileBook(UiState& s);
 void fileRefresh(UiState& s);
 void fileOpenAt(UiState& s, int index);
 void fileBeginRename(UiState& s, int index);
-void fileMakeFolder(void* user);
-void fileMakeFile(void* user);
-void fileMakeMaterial(void* user);
+void fileMakeFolder(void* user, uint16_t item);
+void fileMakeFile(void* user, uint16_t item);
+void fileMakeMaterial(void* user, uint16_t item);
 int fileFirstSelected(const Browser& b);
 const char* fileLeaf(const char* path);
 

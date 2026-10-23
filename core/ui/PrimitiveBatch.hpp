@@ -1,6 +1,7 @@
 #pragma once
 
-#include "ui/Model.hpp"
+#include "ui/Geometry.hpp"
+#include "ui/Primitive.hpp"
 
 namespace burnhope {
 

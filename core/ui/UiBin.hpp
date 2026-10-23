@@ -8,28 +8,11 @@ namespace burnhope {
 inline constexpr uint32_t kUiBinMagic = 0x49554842u; // "BHUI"
 inline constexpr uint16_t kUiBinVersion = 2;
 
-inline constexpr uint8_t kBinSlotButton = 1;
-inline constexpr uint8_t kBinSlotLabel = 2;
-inline constexpr uint8_t kBinSlotSlider = 3;
-inline constexpr uint8_t kBinSlotCheck = 4;
-inline constexpr uint8_t kBinSlotField = 5;
-inline constexpr uint8_t kBinSlotClose = 6;
-inline constexpr uint8_t kBinSlotScroll = 7;
-inline constexpr uint8_t kBinSlotHidden = 8;
-inline constexpr uint8_t kBinSlotProgress = 9;
-inline constexpr uint8_t kBinSlotChrome = 10;
-inline constexpr uint8_t kBinSlotCalendar = 11;
-inline constexpr uint8_t kBinSlotColor = 12;
-inline constexpr uint8_t kBinSlotMenu = 13;
-inline constexpr uint8_t kBinSlotImage = 14;
-inline constexpr uint8_t kBinSlotSplit = 15;
-inline constexpr uint8_t kBinSlotTree = 16;
-inline constexpr uint8_t kBinSlotGrid = 17;
-inline constexpr uint8_t kBinSlotCrumbs = 18;
-inline constexpr uint8_t kBinSlotChoice = 19;
-inline constexpr uint8_t kBinSlotSearch = 20;
-
 inline constexpr uint8_t kUiBinRoleCap = 32;
+inline constexpr uint8_t kBinRoleClear = 1 << 0;
+inline constexpr uint8_t kBinRoleRaised = 1 << 1;
+inline constexpr uint8_t kBinRolePass = 1 << 2;
+inline constexpr uint8_t kBinRoleGhost = 1 << 3;
 inline constexpr uint16_t kBinParentRoot = 0xFFFE;
 
 inline constexpr uint8_t kBinMarkPopup = 1 << 0;
@@ -150,6 +133,12 @@ struct UiImportBag {
     uint8_t hintLen = 0;
 };
 
+struct UiBinRole {
+    const char* name = nullptr;
+    uint8_t token = 0;
+    uint8_t flags = 0;
+};
+
 struct UiState;
 
 using UiCustomNodeLoader = uint16_t (*)(UiState& s, uint16_t parent, const BinNode& node, const char* name, void* user);
@@ -160,6 +149,10 @@ struct UiCustomBinLoader {
 };
 
 void uiRegisterCustomBinNode(UiState& s, uint8_t role, UiCustomNodeLoader loader, void* user);
+void uiBinRole(UiState& s, uint8_t role, const char* name, uint8_t token, uint8_t flags);
+uint8_t uiBinRoleFind(const UiState& s, const char* name);
+void uiBinBuiltin(UiState& s);
+uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const char* name, const char* text, const char* hint);
 
 uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t size);
 uint16_t uiImportBinFile(UiState& s, uint16_t parent, const char* path);

@@ -14,22 +14,6 @@ struct UiTreeView : UiVirtualBase {
     void* user = nullptr;
 };
 
-struct UiParts {
-    uint16_t icon = kUiNone;
-    uint16_t chevron = kUiNone;
-    uint16_t label = kUiNone;
-};
-
-struct UiTree {
-    uint16_t body = kUiNone;
-    uint8_t open = 0;
-    uint8_t pad = 0;
-    float full = 0.0f;
-    float from = 0.0f;
-    float to = 0.0f;
-    float t0 = -1.0f;
-};
-
 struct UiTreeConfig {
     uint32_t totalNodes = 0;
     void (*onBindNode)(void* user, uint16_t rowEntity, uint32_t nodeIndex) = nullptr;
@@ -41,12 +25,14 @@ struct UiTreeConfig {
     void* user = nullptr;
 };
 
+inline constexpr uint8_t kBinSlotTree = 16;
+void uiTreeBin(UiState& s);
+
 uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg);
 void uiBindTree(UiState& s, const char* name, const UiTreeConfig& cfg);
 void uiTreeViewRefresh(UiState& s, uint16_t treeId);
 void uiTreeViewSetCount(UiState& s, uint16_t treeId, uint32_t count);
 void uiRowIndent(UiState& s, uint16_t id, float pad);
-uint16_t uiTreeRow(UiState& s, uint16_t parent, const char* text);
 bool uiTreeInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
 
 } // namespace burnhope

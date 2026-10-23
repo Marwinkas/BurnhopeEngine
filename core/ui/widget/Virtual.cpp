@@ -1,5 +1,4 @@
 #include "ui/Hover.hpp"
-#include "ui/widget/Detail.hpp"
 #include "ui/widget/Virtual.hpp"
 
 #include <cstdio>
@@ -80,7 +79,7 @@ uint16_t uiVirtual(UiState& s, uint16_t parent, float itemH) {
     UiVirtual virt{};
     virt.itemH = itemH;
     s.ent[scroll].set<UiVirtual>(virt);
-    s.ent[scroll].set<UiVirtualPool>({uiVirtualRefresh, uiVirtualContentH, 0});
+    uiVirtualAttach(s, scroll, uiVirtualRefresh, uiVirtualContentH, 0);
     s.ent[scroll].set<UiLayoutRefresh>({virtualOnLayout, nullptr});
     return scroll;
 }
@@ -106,7 +105,7 @@ void uiVirtualRefresh(UiState& s, uint16_t id) {
         }
         if (auto* flex = s.ent[slot].try_get_mut<UiFlex>()) {
             flex->position = UiPosition::Absolute;
-            flex->posY = static_cast<float>(i) * virt->itemH;
+            flex->posY = uiVirtualSlotY(index, virt->itemH, scroll->offset);
             flex->height = virt->itemH > 4.0f ? virt->itemH - 4.0f : virt->itemH;
         }
         s.ent[slot].set<UiVirtRow>({index});

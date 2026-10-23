@@ -5,7 +5,6 @@
 #include "ui/Domain.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
-#include "ui/widget/Detail.hpp"
 
 #include <chrono>
 #include <cstring>

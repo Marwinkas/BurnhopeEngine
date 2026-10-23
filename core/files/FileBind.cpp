@@ -1,4 +1,5 @@
 #include "files/FileBind.hpp"
+#include "ui/Icon.hpp"
 
 #include "Units.hpp"
 #include "files/FileDomain.hpp"
@@ -19,6 +20,7 @@
 #include "ui/widget/VirtualGrid.hpp"
 
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <string>
 
@@ -496,6 +498,37 @@ void fileWire(UiState& s) {
         .onZoom = [](void* user, float wheel) { applyIcon(stateOf(user), fileBook(stateOf(user)).look.icon + wheel * fileTheme(stateOf(user)).iconStep); },
         .onCommit = [](void* user, uint32_t, const char* text) { onRenameCommit(stateOf(user), text); },
         .onCancel = [](void* user, uint32_t) { onRenameCancel(stateOf(user)); },
+        .onOpenEditor = [](void* user, uint16_t editor, uint32_t, const char* text) {
+            UiState& s = stateOf(user);
+            if (editor >= s.count || !s.ent[editor].is_alive()) {
+                editor = uiField(s, kUiNone, "", 0, false);
+                if (editor == kUiNone) {
+                    return editor;
+                }
+                s.ent[editor].add<UiPopup>();
+                uiShow(s, editor, false);
+            }
+            uiSetFieldText(s, editor, text != nullptr ? text : "");
+            if (auto* field = s.ent[editor].try_get_mut<UiField>()) {
+                field->anchor = 0;
+            }
+            uiFocus(s, editor);
+            return editor;
+        },
+        .onReadEditor = [](void* user, uint16_t editor, char* dst, uint8_t cap) {
+            if (dst == nullptr || cap == 0) {
+                return;
+            }
+            dst[0] = '\0';
+            const UiState& s = stateOf(user);
+            const UiField* field = editor < s.count ? s.ent[editor].try_get<UiField>() : nullptr;
+            if (field == nullptr) {
+                return;
+            }
+            const uint8_t n = field->len < static_cast<uint8_t>(cap - 1) ? field->len : static_cast<uint8_t>(cap - 1);
+            std::memcpy(dst, field->bytes, n);
+            dst[n] = '\0';
+        },
         .user = &s,
     });
     if (uiFiles(s).fileView != kUiNone) {

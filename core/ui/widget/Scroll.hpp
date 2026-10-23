@@ -7,7 +7,24 @@ namespace burnhope {
 struct UiScroll {
     float offset = 0.0f;
     uint16_t inner = kUiNone;
+    float (*contentHeight)(const UiState& s, uint16_t id) = nullptr;
+    void (*onScroll)(UiState& s, uint16_t id) = nullptr;
+    uint8_t follow = 1;
 };
+
+struct UiScrollMetrics {
+    float contentH = 0;
+    float maxOff = 0;
+    float thumbH = 0;
+    float travel = 0;
+    float t = 0;
+    uint8_t shown = 0;
+};
+
+UiScrollMetrics uiCalcScrollMetrics(float viewH, float contentH, float offset);
+
+inline constexpr uint8_t kBinSlotScroll = 7;
+void uiScrollBin(UiState& s);
 
 void uiBindScroll(UiState& s, uint16_t id, uint16_t inner);
 bool scrollThumb(const UiState& s, uint16_t id, UiBox& thumb);

@@ -1,8 +1,5 @@
-#include "ui/widget/Detail.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/Slider.hpp"
 
-#include <charconv>
 #include <cstring>
 
 namespace burnhope {
@@ -164,28 +161,6 @@ void swapField(UiField& field, UiFieldUndo::Snap& snap) {
     snap.bytes[snap.len] = '\0';
 }
 
-void syncRangeText(UiState& s, uint16_t id) {
-    auto* range = id < s.count ? s.ent[id].try_get_mut<UiRange>() : nullptr;
-    const UiField* field = id < s.count ? s.ent[id].try_get<UiField>() : nullptr;
-    if (range == nullptr || field == nullptr || range->step <= 0.0f) {
-        return;
-    }
-    float value = range->value;
-    const auto parsed = std::from_chars(field->bytes, field->bytes + field->len, value);
-    if (parsed.ec != std::errc{}) {
-        return;
-    }
-    if (range->max - range->min < 1.0e8f) {
-        if (value < range->min) {
-            value = range->min;
-        }
-        if (value > range->max) {
-            value = range->max;
-        }
-    }
-    range->value = value;
-}
-
 bool fieldUndo(UiState& s) {
     UiFieldUndo& undo = uiUndo(s);
     if (undo.at == 0) {
@@ -200,7 +175,7 @@ bool fieldUndo(UiState& s) {
     undo.snap[undo.at].id = id;
     swapField(*field, undo.snap[undo.at]);
     fieldSyncText(s, id);
-    syncRangeText(s, id);
+    uiAfterText(s, id);
     s.visualDirty = true;
     return true;
 }
@@ -219,7 +194,7 @@ bool fieldRedo(UiState& s) {
     undo.snap[undo.at].id = id;
     ++undo.at;
     fieldSyncText(s, id);
-    syncRangeText(s, id);
+    uiAfterText(s, id);
     s.visualDirty = true;
     return true;
 }

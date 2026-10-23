@@ -5,11 +5,14 @@
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
 #include "ui/widget/Button.hpp"
+#include "ui/widget/Chrome.hpp"
 #include "ui/widget/Curve.hpp"
+#include "ui/widget/Gradient.hpp"
 #include "ui/widget/Docking.hpp"
-#include "ui/widget/List.hpp"
+#include "ui/widget/Fold.hpp"
+#include "ui/widget/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
-#include "ui/widget/Text.hpp"
+#include "ui/widget/Label.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Slider.hpp"
 
@@ -148,15 +151,15 @@ void logPick(void* user, uint16_t) {
     spdlog::info("app pick id {} name {}", pick.id, name);
 }
 
-void ping(void*) {
+void ping(void*, uint16_t) {
     spdlog::info("app command: ping");
 }
 
-void growCmd(void* user) {
+void growCmd(void* user, uint16_t) {
     toggleChips(user, kUiNone);
 }
 
-void warmCmd(void* user) {
+void warmCmd(void* user, uint16_t) {
     auto* demo = static_cast<ShellDemo*>(user);
     if (demo != nullptr && demo->canvas != nullptr) {
         canvasSetLook(*demo->canvas, uiLookWarm());

@@ -4,7 +4,6 @@
 #include "ui/Domain.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
-#include "ui/widget/Detail.hpp"
 #include "ui/Canvas.hpp"
 #include "rhi/Device.hpp"
 #include "rhi/Swapchain.hpp"

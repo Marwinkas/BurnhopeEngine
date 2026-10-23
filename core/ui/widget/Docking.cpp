@@ -1,6 +1,5 @@
+#include "ui/widget/Chrome.hpp"
 #include "ui/widget/Docking.hpp"
-#include "ui/widget/Detail.hpp"
-#include "ui/Domain.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/PrimitiveBatch.hpp"
 
@@ -240,9 +239,20 @@ void uiInstallDockOverlay(UiState& s) {
 }
 
 bool uiDockInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
-    if (phase == kUiInChrome) {
+    if (phase == kUiPhase5) {
         const bool plugAte = (cursor & 0x80u) != 0;
         const bool press = (in.pointer.pressed & kPointerLeft) != 0 && !plugAte;
+        if (press && id != s.capture) {
+            s.resizeId = kUiNone;
+            s.resizeEdge = 0;
+            s.floatWin = kUiNone;
+        }
+        if (in.clicks >= 2 && id < s.count) {
+            const bool onTitle = s.ent[id].has<UiTitleBar>() || uiAncestorHas<UiTitleBar>(s, id);
+            if (onTitle && !s.ent[id].has<UiHoverable>()) {
+                uiRequestMaximize(s);
+            }
+        }
         const bool down = (in.pointer.down & kPointerLeft) != 0;
         const bool release = (in.pointer.released & kPointerLeft) != 0;
         const ChromePointer chrome = uiChromePointer(s, in, id, press, down, release);
@@ -253,6 +263,9 @@ bool uiDockInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, u
         return true;
     }
     if (phase == kUiInRelease) {
+        s.floatWin = kUiNone;
+        s.resizeId = kUiNone;
+        s.resizeEdge = 0;
         uiDock(s).edge = 0;
         if (uiDock(s).hintOn != 0) {
             uiDock(s).hintOn = 0;

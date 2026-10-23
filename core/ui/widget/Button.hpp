@@ -1,8 +1,11 @@
 #pragma once
 
-#include "ui/Model.hpp"
+#include "ui/Interaction.hpp"
+#include "ui/Primitive.hpp"
 
 namespace burnhope {
+
+struct UiIconChrome {};
 
 struct UiState;
 struct UiPrimitive;
@@ -28,7 +31,6 @@ struct UiButtonConfig {
 void uiSetDisabled(UiState& s, uint16_t id, bool disabled);
 uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg = {});
 uint16_t uiIconBtn(UiState& s, uint16_t parent, uint8_t icon, float side, uint16_t* glyph = nullptr);
-uint16_t uiHostIconBtn(UiState& s, uint16_t parent, uint8_t icon, float side);
 uint16_t uiSlotBtn(UiState& s, uint16_t parent, uint8_t slot, float side, uint16_t* icon = nullptr);
 void uiButtonTintIcon(UiState& s, uint16_t icon, bool on);
 uint16_t uiButtonIconChild(const UiState& s, uint16_t id);
@@ -38,5 +40,10 @@ bool uiCheckDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
 void uiCheckPress(UiState& s, uint16_t id);
 int uiCheckOn(const UiState& s, const char* name);
 int uiCheckOn(const UiState& s, uint16_t id);
+
+inline constexpr uint8_t kBinSlotButton = 1;
+inline constexpr uint8_t kBinSlotCheck = 4;
+inline constexpr uint8_t kBinSlotClose = 6;
+void uiButtonBin(UiState& s);
 
 } // namespace burnhope

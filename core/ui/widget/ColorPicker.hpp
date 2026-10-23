@@ -45,6 +45,8 @@ struct UiColorPickerComponent {
     uint16_t colorWinBtn = kUiNone;
     uint16_t colorPickBtn = kUiNone;
     ColorBook* book = nullptr;
+    void (*onColor)(void* user, UiState& state, uint16_t anchor, float r, float g, float b) = nullptr;
+    void* colorUser = nullptr;
     uint32_t colorSeen = 0;
     uint8_t colorUseAlpha = 1;
     uint8_t colorMode = 0;
@@ -57,6 +59,7 @@ struct UiColorPickerComponent {
 inline UiColorPickerComponent& uiColor(UiState& s) {
     return s.world.ensure<UiColorPickerComponent>();
 }
+inline constexpr uint8_t kBinSlotColor = 12;
 void uiInstallColorBin(UiState& s);
 
 inline const UiColorPickerComponent& uiColor(const UiState& s) {

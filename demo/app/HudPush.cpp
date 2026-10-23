@@ -7,10 +7,10 @@
 #include "rhi/Device.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/List.hpp"
-#include "ui/widget/Menu.hpp"
+#include "ui/widget/PropGrid.hpp"
+#include "ui/Popover.hpp"
 #include "ui/widget/Slider.hpp"
-#include "ui/widget/Text.hpp"
+#include "ui/widget/Label.hpp"
 
 #include <cmath>
 #include <cstdio>

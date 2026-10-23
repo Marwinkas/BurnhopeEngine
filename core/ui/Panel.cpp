@@ -64,12 +64,15 @@ uint32_t uiEmitPanel(
         filled.corner[2] = paint->effectiveRadiusBr();
         filled.corner[3] = paint->effectiveRadiusBl();
     }
-    const bool transformed = paint->angle != 0.0f || paint->scaleX != 1.0f || paint->scaleY != 1.0f
+    const UiText* spinLabel = s.ent[id].try_get<UiText>();
+    const bool labeledRow = spinLabel != nullptr && spinLabel->len > 0;
+    const float fillAngle = labeledRow ? 0.0f : paint->angle;
+    const bool transformed = fillAngle != 0.0f || paint->scaleX != 1.0f || paint->scaleY != 1.0f
         || paint->bright != 1.0f || paint->contrast != 1.0f;
     if (n > before && transformed && clip == nullptr) {
         UiPrimitive& filled = dst[n - 1];
         filled.flags |= kUiFlagTransform;
-        uiPackTransform(filled.pad0, filled.pad1, paint->angle, paint->scaleX, paint->scaleY, paint->bright, paint->contrast);
+        uiPackTransform(filled.pad0, filled.pad1, fillAngle, paint->scaleX, paint->scaleY, paint->bright, paint->contrast);
     }
     if (paint->borderW > 0.4f) {
         n = emitMark(
@@ -87,9 +90,21 @@ uint32_t uiEmitPanel(
         if (side < 12.0f) {
             side = 12.0f;
         }
+        const UiText* label = s.ent[id].try_get<UiText>();
+        const bool labeled = label != nullptr && label->len > 0;
+        if (labeled) {
+            side = 14.0f;
+        }
+        float iconX = box.x + (box.w - side) * 0.5f;
+        if (labeled) {
+            iconX = box.x + box.w - side - 6.0f;
+            if (iconX < box.x) {
+                iconX = box.x;
+            }
+        }
         UiPrimitive& icon = dst[n++];
         icon = {};
-        icon.posX = box.x + (box.w - side) * 0.5f;
+        icon.posX = iconX;
         icon.posY = box.y + (box.h - side) * 0.5f;
         icon.sizeX = side;
         icon.sizeY = side;

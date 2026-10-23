@@ -2,6 +2,23 @@
 #include "ui/State.hpp"
 
 namespace burnhope {
+
+void activate(UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return;
+    }
+    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+    if (paint != nullptr && paint->disabled) {
+        return;
+    }
+    uiTrace(s, "activate", id);
+    if (const UiAction* act = s.ent[id].try_get<UiAction>(); act != nullptr && act->fn != nullptr) {
+        act->fn(act->user, id);
+    } else if (s.onClick != nullptr) {
+        s.onClick(s.clickUser, id);
+    }
+}
+
 namespace {
 
 bool probe(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor, bool stop) {
@@ -114,16 +131,13 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         return UiEvent::None;
     }
 
-    probe(s, in, hit, kUiInMenu, unused, false);
+    probe(s, in, hit, kUiPhase4, unused, false);
 
     if (press && hit != s.capture) {
         s.capture = kUiNone;
-        s.resizeId = kUiNone;
-        s.resizeEdge = 0;
-        s.floatWin = kUiNone;
     }
     uint8_t chromeCursor = plugAte ? 0x80u : 0u;
-    probe(s, in, hit, kUiInChrome, chromeCursor, true);
+    probe(s, in, hit, kUiPhase5, chromeCursor, true);
     const bool chromeTook = (chromeCursor & 0x40u) != 0;
     const uint8_t chromeKind = static_cast<uint8_t>(chromeCursor & 0x0fu);
     if (chromeKind != 0) {
@@ -166,17 +180,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
             uiDragEnd(s, hit);
         }
         s.dragId = kUiNone;
-        s.floatWin = kUiNone;
-        s.resizeId = kUiNone;
-        s.resizeEdge = 0;
         probe(s, in, hit, kUiInRelease, unused, false);
-    }
-
-    if (in.clicks >= 2 && hit < s.count) {
-        const bool onTitle = s.ent[hit].has<UiTitleBar>() || uiAncestorHas<UiTitleBar>(s, hit);
-        if (onTitle && !s.ent[hit].has<UiHoverable>()) {
-            s.opMaximize = true;
-        }
     }
 
     if (in.wheel != 0.0f && s.hovered != kUiNone) {

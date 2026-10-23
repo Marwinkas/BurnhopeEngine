@@ -3,16 +3,15 @@
 #include <yoga/Yoga.h>
 
 namespace burnhope {
-namespace {
 
 constexpr float kRevealSec = 0.18f;
 
-float easeOutCubic(float u) {
+static float easeOutCubic(float u) {
     const float t = 1.0f - u;
     return 1.0f - t * t * t;
 }
 
-float revealEase(uint8_t phase, float u) {
+static float revealEase(uint8_t phase, float u) {
     if (u < 0.0f) {
         u = 0.0f;
     }
@@ -22,12 +21,12 @@ float revealEase(uint8_t phase, float u) {
     return phase == 2 ? u * u : easeOutCubic(u);
 }
 
-float revealNow(const UiState& s, const UiReveal& rev) {
+static float revealNow(const UiState& s, const UiReveal& rev) {
     const float u = (s.time - rev.t0) / kRevealSec;
     return rev.from + (rev.to - rev.from) * revealEase(rev.phase, u);
 }
 
-void revealBox(UiState& s, uint16_t id, float height, float full) {
+static void revealBox(UiState& s, uint16_t id, float height, float full) {
     if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
         flex->heightMode = UiSize::Px;
         flex->height = height > 0.0f ? height : 0.0f;
@@ -38,7 +37,23 @@ void revealBox(UiState& s, uint16_t id, float height, float full) {
     s.ent[id].set<UiFade>({height > 0.0f ? height / span : 0.0f});
 }
 
-} // namespace
+float uiRevealUnit(const UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return 0.0f;
+    }
+    const UiReveal* rev = s.ent[id].try_get<UiReveal>();
+    if (rev == nullptr || rev->t0 < 0.0f) {
+        return rev != nullptr && rev->to > 0.5f ? 1.0f : 0.0f;
+    }
+    float u = (s.time - rev->t0) / kRevealSec;
+    if (u < 0.0f) {
+        u = 0.0f;
+    }
+    if (u > 1.0f) {
+        u = 1.0f;
+    }
+    return revealEase(rev->phase, u);
+}
 
 void uiMotionTo(UiState& s, uint16_t id, float r, float g, float b, float a) {
     if (id >= kUiCap) {

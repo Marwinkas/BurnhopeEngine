@@ -6,7 +6,7 @@
 #include "rhi/Device.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/List.hpp"
+#include "ui/widget/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Slider.hpp"
 

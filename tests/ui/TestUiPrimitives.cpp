@@ -5,7 +5,6 @@
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/widget/Curve.hpp"
-#include "ui/widget/Detail.hpp"
 #include "ui/widget/Image.hpp"
 
 #include <cstring>

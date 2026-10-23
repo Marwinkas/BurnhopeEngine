@@ -1,9 +1,9 @@
+#include "Str.hpp"
+#include "ui/Icon.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
-#include "ui/widget/Detail.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/Slider.hpp"
 
 #include <charconv>
 #include <cmath>
@@ -21,19 +21,19 @@ bool fieldAllows(uint8_t filter, uint32_t cp) {
     const bool digit = cp >= '0' && cp <= '9';
     const bool latin = (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z');
     const bool cyr = (cp >= 0x0410 && cp <= 0x044F) || cp == 0x0401 || cp == 0x0451;
-    if (filter == 1) {
+    if (filter == static_cast<uint8_t>(UiFieldFilter::Digits)) {
         return digit;
     }
-    if (filter == 2) {
+    if (filter == static_cast<uint8_t>(UiFieldFilter::Letters)) {
         return latin || cyr;
     }
-    if (filter == 3) {
+    if (filter == static_cast<uint8_t>(UiFieldFilter::Email)) {
         return latin || digit || cyr || cp == '@' || cp == '.' || cp == '_' || cp == '+' || cp == '-';
     }
-    if (filter == 4) {
+    if (filter == static_cast<uint8_t>(UiFieldFilter::Tel)) {
         return digit || cp == '+' || cp == '-' || cp == ' ' || cp == '(' || cp == ')';
     }
-    if (filter == 5) {
+    if (filter == static_cast<uint8_t>(UiFieldFilter::Url)) {
         return latin || digit || cp == ':' || cp == '/' || cp == '.' || cp == '?' || cp == '&' || cp == '=' || cp == '%'
             || cp == '-' || cp == '_' || cp == '~';
     }
@@ -101,15 +101,15 @@ bool fieldProblem(const UiField& field, const char*& msg) {
     if (field.len == 0) {
         return false;
     }
-    if (field.filter == 3 && !emailOk(field)) {
+    if (field.filter == static_cast<uint8_t>(UiFieldFilter::Email) && !emailOk(field)) {
         msg = "email name@host";
         return true;
     }
-    if (field.filter == 4 && !telOk(field)) {
+    if (field.filter == static_cast<uint8_t>(UiFieldFilter::Tel) && !telOk(field)) {
         msg = "tel needs 6 digits";
         return true;
     }
-    if (field.filter == 5 && !urlOk(field)) {
+    if (field.filter == static_cast<uint8_t>(UiFieldFilter::Url) && !urlOk(field)) {
         msg = "url needs a dot";
         return true;
     }
@@ -268,6 +268,7 @@ void fieldSyncText(UiState& s, uint16_t id) {
     text->ellipsis = UiTextEllipsis::None;
     text->valign = UiTextValign::Center;
     text->scroll = field->scroll;
+    text->ownRun = 1;
     s.ent[id].set<UiText>(shown);
     s.visualDirty = true;
 }
@@ -279,7 +280,7 @@ UiField* editFieldOf(UiState& s) {
     return s.ent[s.editField].try_get_mut<UiField>();
 }
 
-void cmdFieldCut(void* user) {
+void cmdFieldCut(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     UiField* field = editFieldOf(s);
     if (field == nullptr || field->readOnly != 0) {
@@ -291,7 +292,7 @@ void cmdFieldCut(void* user) {
     s.visualDirty = true;
 }
 
-void cmdFieldCopy(void* user) {
+void cmdFieldCopy(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     const UiField* field = editFieldOf(s);
     if (field != nullptr) {
@@ -299,7 +300,7 @@ void cmdFieldCopy(void* user) {
     }
 }
 
-void cmdFieldPaste(void* user) {
+void cmdFieldPaste(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     UiField* field = editFieldOf(s);
     if (field == nullptr || field->readOnly != 0 || s.pasteBufLen == 0) {
@@ -309,7 +310,7 @@ void cmdFieldPaste(void* user) {
     s.visualDirty = true;
 }
 
-void cmdFieldAll(void* user) {
+void cmdFieldAll(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     UiField* field = editFieldOf(s);
     if (field == nullptr) {
@@ -320,7 +321,7 @@ void cmdFieldAll(void* user) {
     s.visualDirty = true;
 }
 
-void cmdFieldWipe(void* user) {
+void cmdFieldWipe(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     UiField* field = editFieldOf(s);
     if (field == nullptr || field->readOnly != 0) {
@@ -333,6 +334,17 @@ void cmdFieldWipe(void* user) {
     field->bytes[0] = '\0';
     fieldSyncText(s, s.editField);
     s.visualDirty = true;
+}
+
+void uiAfterTextAdd(UiState& s, void (*fn)(UiState& s, uint16_t id)) {
+    s.world.ensure<UiAfterText>().fn = fn;
+}
+
+void uiAfterText(UiState& s, uint16_t id) {
+    const UiAfterText* hook = s.world.try_get<UiAfterText>();
+    if (hook != nullptr && hook->fn != nullptr) {
+        hook->fn(s, id);
+    }
 }
 
 void uiFieldNotify(UiState& s, uint16_t id) {
@@ -533,42 +545,6 @@ bool fieldHandlePointer(UiState& s, uint16_t id, const InputFrame& in, bool pres
         return true;
     }
     if (down && s.capture == id) {
-        if (auto* range = s.ent[id].try_get_mut<UiRange>(); range != nullptr && range->step > 0.0f) {
-            float dx = 0.0f;
-            if (s.relative != 0) {
-                dx = in.pointer.dx;
-            } else {
-                dx = in.pointer.x - s.grabX;
-                if (dx > -3.0f && dx < 3.0f) {
-                    return true;
-                }
-                s.relative = 1;
-                s.grabX = in.pointer.x;
-            }
-            if (dx == 0.0f) {
-                return true;
-            }
-            field->scrub = 2;
-            if (s.focused == id) {
-                uiFocus(s, kUiNone);
-            }
-            const float steps = dx / 6.0f;
-            range->value += steps * range->step;
-            if (range->value < range->min) {
-                range->value = range->min;
-            }
-            if (range->value > range->max) {
-                range->value = range->max;
-            }
-            char text[32]{};
-            std::snprintf(text, sizeof(text), "%.4g", static_cast<double>(range->value));
-            uiSetFieldText(s, id, text);
-            if (const UiValueHook* hook = s.ent[id].try_get<UiValueHook>(); hook != nullptr && hook->fn != nullptr) {
-                hook->fn(hook->user, range->value);
-            }
-            s.visualDirty = true;
-            return true;
-        }
         field->caret = caretFromPointer(s, id, *field, in.pointer.x, in.pointer.y);
         fieldReveal(s, *field, fieldView(s, id, *field));
         s.visualDirty = true;
@@ -587,26 +563,6 @@ bool fieldHandleKey(UiState& s, uint16_t id, const InputFrame& in) {
         return true;
     }
     if (in.enter != 0) {
-        if (auto* range = s.ent[id].try_get_mut<UiRange>(); range != nullptr && range->step > 0.0f && field->readOnly == 0) {
-            float value = range->value;
-            const auto parsed = std::from_chars(field->bytes, field->bytes + field->len, value);
-            if (parsed.ec == std::errc{}) {
-                if (value < range->min) {
-                    value = range->min;
-                }
-                if (value > range->max) {
-                    value = range->max;
-                }
-                range->value = value;
-                char text[32]{};
-                std::snprintf(text, sizeof(text), "%.4g", static_cast<double>(value));
-                uiSetFieldText(s, id, text);
-                if (const UiValueHook* hook = s.ent[id].try_get<UiValueHook>(); hook != nullptr && hook->fn != nullptr) {
-                    hook->fn(hook->user, value);
-                }
-            }
-            return true;
-        }
         if (field->multi != 0 && field->len < 95 && field->readOnly == 0) {
             fieldRemember(s, id, *field);
             fieldInsert(s, id, "\n", 1);
@@ -739,20 +695,6 @@ bool uiFieldDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
             paint->a > 0.2f ? paint->a : 1.0f, paint->radius, 1.5f, kUiFlagStroke, clip);
     }
     const UiBox inset = fieldInset(s, id, *field);
-    const UiRange* range = s.ent[id].try_get<UiRange>();
-    if (range != nullptr && range->fill != 0 && range->max > range->min + 0.0001f && range->max - range->min < 1.0e8f) {
-        float span = (range->value - range->min) / (range->max - range->min);
-        if (span < 0.0f) {
-            span = 0.0f;
-        }
-        if (span > 1.0f) {
-            span = 1.0f;
-        }
-        if (span > 0.001f) {
-            n = emitRect(dst, n, cap, box.x + 1.0f, box.y + 1.0f, (box.w - 2.0f) * span, box.h - 2.0f,
-                0.34f, 0.34f, 0.36f, 0.85f, paint->radius, clip);
-        }
-    }
     const float textW = uiFieldWidth(s, *field, field->len);
     float origin = inset.x - field->scroll;
     if (field->align == 1) {
@@ -819,7 +761,8 @@ bool uiFieldDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
         }
         if (s.imeLen > 0) {
             const float mark = s.look.advance * static_cast<float>(s.imeLen);
-            n = emitRect(dst, n, cap, cx, box.y + box.h - 10.0f, mark, 2.0f, 0.95f, 0.72f, 0.25f, 0.9f, 0.0f, clip);
+            n = emitRect(dst, n, cap, cx, box.y + box.h - 10.0f, mark, 2.0f,
+                s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.9f, 0.0f, clip);
         }
     }
     const float clearW = field->clear != 0 && field->len > 0 ? 22.0f : 0.0f;
@@ -831,11 +774,11 @@ bool uiFieldDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
         icon.posY = box.y + (box.h - kSide) * 0.5f;
         icon.sizeX = kSide;
         icon.sizeY = kSide;
-        icon.color[0] = 0.75f;
-        icon.color[1] = 0.78f;
-        icon.color[2] = 0.84f;
+        icon.color[0] = s.look.muted[0];
+        icon.color[1] = s.look.muted[1];
+        icon.color[2] = s.look.muted[2];
         icon.color[3] = 1.0f;
-        icon.texId = 3;
+        icon.texId = static_cast<uint32_t>(UiIcon::Dismiss);
         icon.flags = kUiFlagIcon;
     }
     const UiText* shown = s.ent[id].try_get<UiText>();
@@ -884,37 +827,6 @@ bool uiFieldInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, 
         cursor = onClear ? 6 : 5;
         return true;
     }
-    if (phase == kUiInPress) {
-        if (id >= s.count) {
-            return false;
-        }
-        auto* field = s.ent[id].try_get_mut<UiField>();
-        const UiRange* range = field != nullptr ? s.ent[id].try_get<UiRange>() : nullptr;
-        if (field == nullptr || range == nullptr || range->step <= 0.0f) {
-            return false;
-        }
-        s.capture = id;
-        s.grabX = in.pointer.x;
-        s.editField = id;
-        field->scrub = 1;
-        return true;
-    }
-    if (phase == kUiInRelease) {
-        const uint16_t edit = s.editField;
-        auto* field = edit < s.count ? s.ent[edit].try_get_mut<UiField>() : nullptr;
-        if (field == nullptr || field->scrub == 0) {
-            return false;
-        }
-        const uint8_t scrub = field->scrub;
-        field->scrub = 0;
-        if (scrub == 1) {
-            uiFocus(s, edit);
-            fieldHandlePointer(s, edit, in, true, false);
-        } else {
-            s.editField = kUiNone;
-        }
-        return true;
-    }
     if (phase == kUiInFocus) {
         if (id >= s.count) {
             return false;
@@ -932,10 +844,76 @@ bool uiFieldInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, 
         fieldHandlePointer(s, id, in, false, true);
         return true;
     }
+    if (phase == kUiPhase4) {
+        if ((in.pointer.pressed & kPointerRight) == 0 || id >= s.count) {
+            return false;
+        }
+        if (s.ent[id].try_get<UiField>() == nullptr) {
+            return false;
+        }
+        uiFocus(s, id);
+        s.editField = id;
+        uiNotifyVisualDirty(s);
+        return true;
+    }
     if (phase == kUiInKey) {
         return fieldHandleKey(s, id, in);
     }
     return false;
+}
+
+namespace {
+
+void hostText(UiState& s, uint16_t id) {
+    if (s.ent[id].try_get<UiText>() != nullptr) {
+        return;
+    }
+    UiText host{};
+    host.align = UiTextAlign::Left;
+    host.ellipsis = UiTextEllipsis::None;
+    host.valign = UiTextValign::Center;
+    s.ent[id].set<UiText>(host);
+}
+
+void adornField(UiState& s, uint16_t id) {
+    hostText(s, id);
+}
+
+void finishField(UiState& s, uint16_t id, const BinNode* spec, const char* text, const char* hint) {
+    hostText(s, id);
+    uint8_t flags = 0;
+    uint8_t filter = 0;
+    uint8_t maxChars = 0;
+    float padL = 12.0f;
+    float padR = 12.0f;
+    if (spec != nullptr) {
+        flags = static_cast<uint8_t>(spec->flags & (kBinClear | kBinRequired | kBinReadOnly | kBinPassword | kBinForm));
+        filter = spec->filter;
+        maxChars = spec->maxChars;
+        if (spec->padL > 0.0f) {
+            padL = spec->padL;
+        }
+        if (spec->padR > 0.0f) {
+            padR = spec->padR;
+        }
+    }
+    uiFieldInit(s, id, text, hint, filter, flags, maxChars, padL, padR);
+}
+
+uint16_t loadSearch(UiState& s, uint16_t parent, const BinNode& node, const char*, void*) {
+    const float width = node.width > 1.0f ? node.width : 180.0f;
+    const char* hint = s.importBag.hintLen > 0 ? s.importBag.hint : nullptr;
+    return uiSearchField(s, parent, hint, nullptr, nullptr, width);
+}
+
+} // namespace
+
+void uiFieldBin(UiState& s) {
+    uiBinRole(s, kBinSlotField, "field", static_cast<uint8_t>(UiToken::Field), 0);
+    uiBinRole(s, kBinSlotSearch, "search", 0, 0);
+    uiRegisterSpawnHook(s, kBinSlotField, adornField);
+    uiRegisterRoleFinish(s, kBinSlotField, finishField);
+    uiRegisterCustomBinNode(s, kBinSlotSearch, loadSearch, nullptr);
 }
 
 } // namespace burnhope

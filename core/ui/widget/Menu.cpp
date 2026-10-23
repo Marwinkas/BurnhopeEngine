@@ -1,40 +1,13 @@
 #include "ui/Hover.hpp"
+#include "ui/Icon.hpp"
 #include "ui/Panel.hpp"
-#include "ui/Text.hpp"
-#include "ui/widget/Detail.hpp"
 #include "ui/widget/Menu.hpp"
-#include "ui/widget/Field.hpp"
 #include "ui/widget/Scroll.hpp"
 
-#include <algorithm>
 #include <span>
-
-#include <spdlog/spdlog.h>
 
 namespace burnhope {
 namespace {
-
-void onItem(void* user, uint16_t id) {
-    auto* s = static_cast<UiState*>(user);
-    if (s == nullptr) {
-        return;
-    }
-    const uint16_t menu = uiFindName(*s, "ui.menu");
-    auto* pop = menu < s->count ? s->ent[menu].try_get_mut<UiMenuPop>() : nullptr;
-    if (pop == nullptr) {
-        return;
-    }
-    for (uint8_t i = 0; i < pop->n; ++i) {
-        if (pop->row[i] != id || pop->fn[i] == nullptr) {
-            continue;
-        }
-        void (*fn)(void*) = pop->fn[i];
-        void* who = pop->user;
-        uiMenuClose(*s);
-        fn(who);
-        return;
-    }
-}
 
 void menuShell(UiState& s, uint16_t id) {
     if (id >= s.count) {
@@ -58,25 +31,51 @@ void menuShell(UiState& s, uint16_t id) {
     paint->shadow = 10.0f;
 }
 
-uint16_t ensureMenuNamed(UiState& s, const char* name) {
-    uint16_t id = uiFindName(s, name);
-    if (id != kUiNone) {
-        return id;
+void menuDismiss(UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return;
     }
-    UiFlex flex{};
-    flex.position = UiPosition::Absolute;
-    flex.widthMode = UiSize::Px;
-    flex.width = 220.0f;
-    flex.pad = 4.0f;
-    flex.gap = 2.0f;
-    flex.shrink = 0.0f;
-    id = spawn(s, 0, flex, paintToken(s.look, UiToken::Window, s.look.radius));
-    menuShell(s, id);
-    uiName(s, id, name);
+    if (s.ent[id].has<UiMenuSlide>()) {
+        uiReveal(s, id, 0.0f, false);
+        return;
+    }
     uiShow(s, id, false);
-    s.ent[id].set<UiMenuPop>({});
-    s.ent[id].set<UiPopup>({});
-    return id;
+}
+
+void armMenu(UiState& s) {
+    uiMenuHooks(s).invoke = [](void* user, uint16_t id) {
+        auto& state = *static_cast<UiState*>(user);
+        const UiMenuCmd* row = id < state.count ? state.ent[id].try_get<UiMenuCmd>() : nullptr;
+        UiCommandFn fn = nullptr;
+        void* who = nullptr;
+        uint16_t item = 0;
+        uint16_t owner = kUiNone;
+        if (row != nullptr) {
+            fn = row->fn;
+            who = row->user;
+            item = row->item;
+            owner = row->owner;
+        }
+        uiMenuClose(state);
+        if (owner != kUiNone && owner < state.count) {
+            auto* choice = state.ent[owner].try_get_mut<UiChoice>();
+            if (choice != nullptr) {
+                choice->index = item > 255 ? uint8_t{255} : static_cast<uint8_t>(item);
+                const uint16_t caption = choice->caption < state.count ? choice->caption : owner;
+                const UiText* text = id < state.count ? state.ent[id].try_get<UiText>() : nullptr;
+                if (text != nullptr && caption < state.count) {
+                    uiText(state, caption, text->bytes);
+                }
+                if (choice->onPick != nullptr) {
+                    choice->onPick(choice->user, choice->index);
+                }
+            }
+        }
+        if (fn != nullptr) {
+            fn(who, item);
+        }
+        uiNotifyVisualDirty(state);
+    };
 }
 
 float menuTop(const UiState& s, float anchorBottom, float above, float menuH) {
@@ -92,6 +91,96 @@ float menuTop(const UiState& s, float anchorBottom, float above, float menuH) {
     return top;
 }
 
+uint16_t nthChild(const UiState& s, uint16_t parent, uint16_t n) {
+    uint16_t seen = 0;
+    for (uint16_t child = 0; child < s.count; ++child) {
+        if (s.parentOf[child] != parent) {
+            continue;
+        }
+        if (seen == n) {
+            return child;
+        }
+        ++seen;
+    }
+    return kUiNone;
+}
+
+void silenceRow(UiState& s, uint16_t row) {
+    if (row >= s.count) {
+        return;
+    }
+    if (s.ent[row].has<UiMenuCmd>()) {
+        s.ent[row].remove<UiMenuCmd>();
+    }
+    if (s.ent[row].has<UiAction>()) {
+        s.ent[row].remove<UiAction>();
+    }
+    if (s.ent[row].has<UiFocusable>()) {
+        s.ent[row].remove<UiFocusable>();
+    }
+    if (s.ent[row].has<UiHoverable>()) {
+        s.ent[row].remove<UiHoverable>();
+    }
+}
+
+uint16_t separatorRow(UiState& s, uint16_t menu, uint16_t row) {
+    if (row == kUiNone) {
+        UiFlex line = px(200.0f, 1.0f);
+        line.widthMode = UiSize::Percent;
+        line.width = 100.0f;
+        line.shrink = 0.0f;
+        row = spawn(s, menu, line, paintToken(s.look, UiToken::Muted, 0.0f));
+    }
+    if (row >= s.count) {
+        return kUiNone;
+    }
+    if (auto* flex = s.ent[row].try_get_mut<UiFlex>()) {
+        flex->heightMode = UiSize::Px;
+        flex->height = 1.0f;
+        flex->widthMode = UiSize::Percent;
+        flex->width = 100.0f;
+        flex->shrink = 0.0f;
+    }
+    if (auto* paint = s.ent[row].try_get_mut<UiPaint>()) {
+        *paint = paintToken(s.look, UiToken::Muted, 0.0f);
+    }
+    uiText(s, row, "");
+    silenceRow(s, row);
+    uiShow(s, row, true);
+    return row;
+}
+
+uint16_t flyoutMenu(UiState& s) {
+    UiMenuMetrics& metrics = uiMenuMetrics(s);
+    if (metrics.flyout < s.count && s.ent[metrics.flyout].is_alive()) {
+        return metrics.flyout;
+    }
+    const uint16_t id = uiMakeMenu(s);
+    if (id < s.count) {
+        s.ent[id].remove<UiMenuSlide>();
+        if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
+            flex->width = 220.0f;
+        }
+    }
+    metrics.flyout = id;
+    return id;
+}
+
+const char* choiceLabel(const UiState& s, uint16_t menu, uint8_t index) {
+    uint8_t seen = 0;
+    for (uint16_t child = 0; child < s.count; ++child) {
+        if (s.parentOf[child] != menu) {
+            continue;
+        }
+        if (seen == index) {
+            const UiText* text = s.ent[child].try_get<UiText>();
+            return text != nullptr ? text->bytes : nullptr;
+        }
+        ++seen;
+    }
+    return nullptr;
+}
+
 } // namespace
 
 void uiMarkMenuBar(UiState& s, uint16_t id) {
@@ -100,110 +189,58 @@ void uiMarkMenuBar(UiState& s, uint16_t id) {
     }
 }
 
-static void menuDismiss(UiState& s, uint16_t id) {
-    if (id >= s.count) {
-        return;
-    }
-    if (s.ent[id].has<UiMenuSlide>()) {
-        uiReveal(s, id, 0.0f, false);
-        return;
-    }
-    uiShow(s, id, false);
-}
-
 void uiMenuClose(UiState& s) {
-    const uint16_t id = uiFindName(s, "ui.menu");
+    const uint16_t id = uiMenuMetrics(s).opened;
     if (id != kUiNone) {
         menuDismiss(s, id);
     }
-    if (uiMenuMetrics(s).opened == id) {
-        uiMenuMetrics(s).opened = kUiNone;
-        s.menuOpen = false;
-    }
+    uiMenuMetrics(s).opened = kUiNone;
+    s.menuOpen = false;
 }
 
 void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenuItem> items, void* user, float above) {
-    const uint16_t id = ensureMenuNamed(s, "ui.menu");
+    armMenu(s);
+    const uint16_t id = flyoutMenu(s);
     if (id == kUiNone || id >= s.count) {
         return;
     }
-    auto* pop = s.ent[id].try_get_mut<UiMenuPop>();
-    if (pop == nullptr) {
-        return;
-    }
-    pop->user = user;
-    pop->n = 0;
-    pop->hover = 255;
-    pop->sub = kUiNone;
-    uiShow(s, uiFindName(s, "ui.menu.sub"), false);
     for (uint16_t child = 0; child < s.count; ++child) {
         if (s.parentOf[child] == id) {
             uiShow(s, child, false);
         }
     }
-    uint8_t slot = 0;
+    uint16_t slot = 0;
+    float body = 0.0f;
+    const UiMenuMetrics& metrics = uiMenuMetrics(s);
     for (const UiMenuItem& item : items) {
-        if (slot >= kUiMenuCap) {
-            break;
-        }
-        uint16_t row = kUiNone;
-        uint8_t seen = 0;
-        for (uint16_t child = 0; child < s.count; ++child) {
-            if (s.parentOf[child] != id) {
-                continue;
-            }
-            if (seen == slot) {
-                row = child;
+        const uint16_t existing = nthChild(s, id, slot);
+        if (item.separator) {
+            if (separatorRow(s, id, existing) == kUiNone) {
                 break;
             }
-            ++seen;
-        }
-        if (row == kUiNone) {
-            if (item.separator) {
-                row = spawn(s, id, px(200.0f, 1.0f), paintToken(s.look, UiToken::Muted, 0.0f));
+            body += 1.0f;
+        } else {
+            uint16_t row = existing;
+            if (row == kUiNone) {
+                row = uiMenuRow(s, id, item.label, item.onClick, user, slot, kUiNone, kUiNone);
             } else {
-                UiFlex line = px(200.0f, 28.0f);
-                line.shrink = 0.0f;
-                line.align = UiAlign::Start;
-                line.justify = UiJustify::Start;
-                line.padL = 8.0f;
-                row = spawn(s, id, line, paintToken(s.look, UiToken::Item, s.look.radiusSm));
-                if (auto* paint = row < s.count ? s.ent[row].try_get_mut<UiPaint>() : nullptr) {
-                    paint->a = 0.0f;
-                    paint->borderW = 0.0f;
+                uiMenuRowBind(s, row, item.label, item.onClick, user, slot, kUiNone, kUiNone);
+            }
+            if (row == kUiNone) {
+                break;
+            }
+            if (item.disabled) {
+                if (auto* paint = s.ent[row].try_get_mut<UiPaint>()) {
+                    paint->disabled = true;
                 }
-                addText(s, row, item.label != nullptr ? item.label : "");
-                uiTextStyle(s, row, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-                s.ent[row].add<UiFocusable>();
-                uiHover(s, row);
-                uiBind(s, row, onItem, &s);
             }
+            uiShow(s, row, true);
+            body += metrics.itemH;
         }
-        uiShow(s, row, true);
-        if (!item.separator) {
-            uiText(s, row, item.label != nullptr ? item.label : "");
-            if (auto* line = s.ent[row].try_get_mut<UiFlex>()) {
-                line->align = UiAlign::Start;
-                line->justify = UiJustify::Start;
-                line->padL = 8.0f;
-            }
-            if (auto* text = s.ent[row].try_get_mut<UiText>()) {
-                text->align = UiTextAlign::Left;
-            }
-            if (auto* paint = s.ent[row].try_get_mut<UiPaint>()) {
-                paint->token = UiToken::Item;
-                paint->a = 0.0f;
-                paint->borderW = 0.0f;
-                paint->disabled = item.disabled ? 1 : 0;
-            }
-        }
-        pop->row[slot] = row;
-        pop->fn[slot] = item.separator ? nullptr : item.onClick;
-        pop->item[slot] = item.separator ? nullptr : &item;
         ++slot;
     }
-    pop->n = slot;
-    float menuH = static_cast<float>(slot) * 30.0f + 8.0f;
+    const float gaps = slot > 0 ? static_cast<float>(slot - 1) * metrics.gap : 0.0f;
+    float menuH = metrics.pad * 2.0f + body + gaps;
     if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
         flex->position = UiPosition::Absolute;
         const float menuW = flex->width > 1.0f ? flex->width : 220.0f;
@@ -225,21 +262,20 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
         flex->height = menuH;
         flex->overflow = full > limit ? UiOverflow::Scroll : UiOverflow::Visible;
         menuShell(s, id);
-    }
-    if (slot > 0 && s.ent[id].try_get<UiFlex>() != nullptr && s.ent[id].try_get<UiFlex>()->overflow != UiOverflow::Visible) {
-        s.ent[id].set<UiScroll>({0.0f, id});
+        if (flex->overflow != UiOverflow::Visible) {
+            s.ent[id].set<UiScroll>({0.0f, id});
+        } else if (s.ent[id].has<UiScroll>()) {
+            s.ent[id].remove<UiScroll>();
+        }
     }
     uiMenuMetrics(s).opened = id;
     s.menuOpen = true;
-    if (s.ent[id].has<UiMenuSlide>()) {
-        uiReveal(s, id, menuH, true);
-    } else {
-        uiShow(s, id, true);
-    }
+    uiShow(s, id, true);
     uiMarkLayout(s, id);
 }
 
 uint16_t uiMakeMenu(UiState& s) {
+    armMenu(s);
     if (s.count == 0) {
         return kUiNone;
     }
@@ -283,7 +319,7 @@ void uiMenuStyle(UiState& s, float width, float itemH, float pad, float gap) {
             item->height = itemH;
         }
     }
-    s.layoutDirty = true;
+    uiNotifyLayoutDirty(s);
 }
 
 void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y, float above) {
@@ -326,67 +362,6 @@ void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y, float above) {
     }
 }
 
-namespace {
-
-void onMenuCommand(void* user, uint16_t id) {
-    auto& s = *static_cast<UiState*>(user);
-    const UiMenuCmd* cmd = id < s.count ? s.ent[id].try_get<UiMenuCmd>() : nullptr;
-    if (cmd != nullptr && cmd->index < s.cmdCount && s.cmds[cmd->index].fn != nullptr) {
-        s.cmds[cmd->index].fn(s.cmds[cmd->index].user);
-    }
-    if (uiMenuMetrics(s).opened != kUiNone) {
-        menuDismiss(s, uiMenuMetrics(s).opened);
-        uiMenuMetrics(s).opened = kUiNone;
-        s.menuOpen = false;
-    }
-    s.visualDirty = true;
-}
-
-} // namespace
-
-bool uiCommandAdd(UiState& s, const char* name, UiCommandFn fn, void* user) {
-    if (s.cmdCount >= kUiCmdCap || s.menu == kUiNone) {
-        if (s.cmdCount >= kUiCmdCap) {
-            spdlog::warn("ui command cap {} full, dropped {}", static_cast<unsigned>(kUiCmdCap), name != nullptr ? name : "");
-        }
-        return false;
-    }
-    const uint8_t index = s.cmdCount;
-    UiCommand& cmd = s.cmds[index];
-    copyText(cmd.name, cmd.len, name);
-    cmd.fn = fn;
-    cmd.user = user;
-    UiFlex itemF{};
-    itemF.heightMode = UiSize::Px;
-    itemF.height = uiMenuMetrics(s).itemH;
-    itemF.widthMode = UiSize::Percent;
-    itemF.width = 100.0f;
-    itemF.shrink = 0.0f;
-    itemF.align = UiAlign::Start;
-    itemF.justify = UiJustify::Start;
-    itemF.padL = 8.0f;
-    const uint16_t item = spawn(s, s.menu, itemF, paintToken(s.look, UiToken::Item, s.look.radiusSm));
-    if (item == kUiNone || item >= s.count) {
-        return false;
-    }
-    if (auto* rowPaint = s.ent[item].try_get_mut<UiPaint>()) {
-        rowPaint->a = 0.0f;
-        rowPaint->borderW = 0.0f;
-    }
-    UiText label{};
-    label.align = UiTextAlign::Left;
-    label.valign = UiTextValign::Center;
-    copyText(label.bytes, label.len, name);
-    s.ent[item].set<UiText>(label);
-    s.ent[item].set<UiMenuCmd>({index});
-    s.ent[item].add<UiFocusable>();
-    uiHover(s, item);
-    uiBind(s, item, onMenuCommand, &s);
-    ++s.cmdCount;
-    s.layoutDirty = true;
-    return item != kUiNone;
-}
-
 bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t hit, uint8_t phase, uint8_t& cursor) {
     (void)cursor;
     if (phase == kUiInEscape) {
@@ -394,11 +369,11 @@ bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t hit, uint8_t phase, 
             menuDismiss(s, uiMenuMetrics(s).opened);
             uiMenuMetrics(s).opened = kUiNone;
             s.menuOpen = false;
-            s.layoutDirty = true;
+            uiNotifyLayoutDirty(s);
         }
         return false;
     }
-    if (phase != kUiInMenu) {
+    if (phase != kUiPhase4) {
         return false;
     }
     const bool press = (in.pointer.pressed & kPointerLeft) != 0;
@@ -436,15 +411,6 @@ bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t hit, uint8_t phase, 
         menuX = s.box[bar].x;
         menuY = s.box[bar].y + s.box[bar].h;
     }
-    bool justOpened = false;
-    if (right && hit != kUiNone && hit < s.count) {
-        if (s.ent[hit].try_get<UiField>() != nullptr && s.fieldMenu != kUiNone) {
-            contextMenu = s.fieldMenu;
-            uiFocus(s, hit);
-            s.editField = hit;
-            s.visualDirty = true;
-        }
-    }
     bool barOnly = false;
     if (right && hit != kUiNone && hit < s.count) {
         for (uint16_t p = hit; p != kUiNone && p < s.count; p = s.parentOf[p]) {
@@ -454,6 +420,7 @@ bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t hit, uint8_t phase, 
             }
         }
     }
+    bool justOpened = false;
     if (((right && !barOnly) || barOpen) && contextMenu != kUiNone) {
         if (barOpen && s.menuOpen && uiMenuMetrics(s).opened == contextMenu) {
             menuDismiss(s, uiMenuMetrics(s).opened);
@@ -478,14 +445,6 @@ bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t hit, uint8_t phase, 
     return false;
 }
 
-bool uiCommandAddTo(UiState& s, uint16_t menu, const char* name, UiCommandFn fn, void* user) {
-    const uint16_t prev = s.menu;
-    s.menu = menu;
-    const bool ok = uiCommandAdd(s, name, fn, user);
-    s.menu = prev;
-    return ok;
-}
-
 uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t menu) {
     UiFlex flex{};
     flex.direction = UiFlexDir::Row;
@@ -496,40 +455,17 @@ uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t m
     flex.grow = 1.0f;
     flex.shrink = 1.0f;
     flex.align = UiAlign::Center;
+    flex.justify = UiJustify::Start;
     flex.padL = s.metrics.menuPadX;
-    flex.padR = 8.0f;
-    flex.gap = 6.0f;
+    flex.padR = 22.0f;
     const uint16_t id = uiPanel(s, parent, flex, paintButton(s.look));
     if (id == kUiNone) {
         return id;
     }
-    UiFlex caption{};
-    caption.grow = 1.0f;
-    caption.shrink = 1.0f;
-    caption.heightMode = UiSize::Px;
-    caption.height = 18.0f;
-    caption.overflow = UiOverflow::Hidden;
-    const uint16_t text = uiPanel(s, id, caption, paintLabel(s.look));
-    uiText(s, text, label != nullptr ? label : "");
-    uiTextStyle(s, text, UiTextAlign::Left, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-    if (text < s.count) {
-        s.ent[text].add<UiNoHit>();
-    }
-    UiFlex mark{};
-    mark.widthMode = UiSize::Px;
-    mark.width = 14.0f;
-    mark.heightMode = UiSize::Px;
-    mark.height = 14.0f;
-    mark.shrink = 0.0f;
-    UiPaint glyph{};
-    glyph.a = 0.0f;
-    glyph.icon = 8;
-    glyph.r = s.look.text[0];
-    glyph.g = s.look.text[1];
-    glyph.b = s.look.text[2];
-    const uint16_t icon = uiPanel(s, id, mark, glyph);
-    if (icon < s.count) {
-        s.ent[icon].add<UiNoHit>();
+    uiText(s, id, label != nullptr ? label : "");
+    uiTextStyle(s, id, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+    if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
+        paint->icon = static_cast<uint8_t>(UiIcon::MenuChevron);
     }
     uiHover(s, id);
     s.ent[id].add<UiFocusable>();
@@ -540,54 +476,8 @@ uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t m
     return id;
 }
 
-namespace {
-
-void choicePick(void* user, uint8_t index) {
-    auto& s = *static_cast<UiState*>(user);
-    const uint16_t menu = uiMenuMetrics(s).opened;
-    if (menu == kUiNone) {
-        return;
-    }
-    for (uint16_t id = 0; id < s.count; ++id) {
-        auto* choice = s.ent[id].try_get_mut<UiChoice>();
-        if (choice == nullptr || choice->menu != menu) {
-            continue;
-        }
-        choice->index = index;
-        uint8_t seen = 0;
-        for (uint16_t child = 0; child < s.count; ++child) {
-            if (s.parentOf[child] != menu) {
-                continue;
-            }
-            if (seen == index) {
-                const UiText* text = s.ent[child].try_get<UiText>();
-                if (text != nullptr && choice->caption < s.count) {
-                    uiText(s, choice->caption, text->bytes);
-                }
-                break;
-            }
-            ++seen;
-        }
-        if (choice->onPick != nullptr) {
-            choice->onPick(choice->user, index);
-        }
-        return;
-    }
-}
-
-void pick0(void* user) { choicePick(user, 0); }
-void pick1(void* user) { choicePick(user, 1); }
-void pick2(void* user) { choicePick(user, 2); }
-void pick3(void* user) { choicePick(user, 3); }
-void pick4(void* user) { choicePick(user, 4); }
-void pick5(void* user) { choicePick(user, 5); }
-void pick6(void* user) { choicePick(user, 6); }
-void pick7(void* user) { choicePick(user, 7); }
-
-} // namespace
-
 uint16_t uiChoice(UiState& s, uint16_t parent, const UiChoiceConfig& cfg) {
-    if (cfg.labels == nullptr || cfg.count == 0 || cfg.count > 8) {
+    if (cfg.labels == nullptr || cfg.count == 0) {
         return kUiNone;
     }
     const uint8_t selected = cfg.selected < cfg.count ? cfg.selected : 0;
@@ -595,12 +485,7 @@ uint16_t uiChoice(UiState& s, uint16_t parent, const UiChoiceConfig& cfg) {
     if (menu == kUiNone) {
         return kUiNone;
     }
-    using Pick = void (*)(void*);
-    const Pick picks[8] = {pick0, pick1, pick2, pick3, pick4, pick5, pick6, pick7};
-    for (uint8_t i = 0; i < cfg.count; ++i) {
-        (void)uiCommandAddTo(s, menu, cfg.labels[i] != nullptr ? cfg.labels[i] : "", picks[i], &s);
-    }
-    const uint16_t id = uiMenuButton(s, parent, cfg.labels[selected], menu);
+    const uint16_t id = uiMenuButton(s, parent, cfg.labels[selected] != nullptr ? cfg.labels[selected] : "", menu);
     if (id == kUiNone) {
         return id;
     }
@@ -610,14 +495,16 @@ uint16_t uiChoice(UiState& s, uint16_t parent, const UiChoiceConfig& cfg) {
         flex->grow = 0.0f;
         flex->shrink = 0.0f;
     }
-    uint16_t caption = kUiNone;
-    for (uint16_t child = 0; child < s.count; ++child) {
-        if (s.parentOf[child] == id && s.ent[child].try_get<UiText>() != nullptr) {
-            caption = child;
-            break;
-        }
+    for (uint8_t i = 0; i < cfg.count; ++i) {
+        (void)uiMenuRow(s, menu, cfg.labels[i] != nullptr ? cfg.labels[i] : "", nullptr, nullptr, i, id, kUiNone);
     }
-    s.ent[id].set<UiChoice>({menu, caption, selected, cfg.onPick, cfg.user});
+    s.ent[id].set<UiChoice>({
+        .menu = menu,
+        .caption = id,
+        .index = selected,
+        .onPick = cfg.onPick,
+        .user = cfg.user,
+    });
     return id;
 }
 
@@ -633,19 +520,9 @@ void uiBindChoice(UiState& s, const char* name, uint8_t selected, void (*onPick)
         return;
     }
     choice->index = selected;
-    uint8_t seen = 0;
-    for (uint16_t child = 0; child < s.count; ++child) {
-        if (s.parentOf[child] != choice->menu) {
-            continue;
-        }
-        if (seen == selected) {
-            const UiText* text = s.ent[child].try_get<UiText>();
-            if (text != nullptr && choice->caption < s.count) {
-                uiText(s, choice->caption, text->bytes);
-            }
-            return;
-        }
-        ++seen;
+    const char* label = choiceLabel(s, choice->menu, selected);
+    if (label != nullptr && choice->caption < s.count) {
+        uiText(s, choice->caption, label);
     }
 }
 
@@ -653,12 +530,8 @@ void uiMenuCaption(UiState& s, uint16_t button, const char* text) {
     if (text == nullptr || button >= s.count) {
         return;
     }
-    for (uint16_t child = 0; child < s.count; ++child) {
-        if (s.parentOf[child] == button && s.ent[child].try_get<UiText>() != nullptr) {
-            uiText(s, child, text);
-            return;
-        }
-    }
+    uiText(s, button, text);
+    uiTextStyle(s, button, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
 }
 
 float uiChoiceWidth(const UiState& s, const char* const* labels, uint8_t count) {
@@ -694,7 +567,7 @@ void uiChoiceFit(UiState& s, uint16_t button, float width) {
         flex->height = 28.0f;
         flex->self = UiAlignSelf::Center;
         flex->padL = 6.0f;
-        flex->padR = 4.0f;
+        flex->padR = 22.0f;
         flex->gap = 2.0f;
     }
     const UiChoice* choice = s.ent[button].try_get<UiChoice>();
@@ -706,52 +579,31 @@ void uiChoiceFit(UiState& s, uint16_t button, float width) {
     }
 }
 
-void uiSyncPopover(UiState& s, uint16_t panel, uint16_t anchor, float width, float height, uint8_t& want) {
-    if (panel >= s.count) {
-        return;
+uint16_t loadChoice(UiState& s, uint16_t parent, const BinNode& node, const char*, void*) {
+    if (s.importBag.count == 0) {
+        return kUiNone;
     }
-    if (want == 2 && (!s.menuOpen || uiMenuMetrics(s).opened != panel)) {
-        want = 0;
+    const char* labels[kUiImportItemCap]{};
+    for (uint8_t i = 0; i < s.importBag.count; ++i) {
+        labels[i] = s.importBag.item[i];
     }
-    if ((want == 1 || want == 2) && anchor < s.count) {
-        if (auto* flex = s.ent[panel].try_get_mut<UiFlex>()) {
-            const UiBox& box = s.box[anchor];
-            flex->position = UiPosition::Absolute;
-            float x = box.x + box.w - width;
-            if (x + width > s.laidW - 4.0f) {
-                x = s.laidW - width - 4.0f;
-            }
-            if (x < 4.0f) {
-                x = 4.0f;
-            }
-            flex->posX = x;
-            float y = box.y + box.h + 4.0f;
-            uint16_t bar = s.parentOf[anchor];
-            if (bar < s.count) {
-                bar = s.parentOf[bar];
-            }
-            if (bar < s.count && s.box[bar].h > 1.0f) {
-                const float under = s.box[bar].y + s.box[bar].h + 4.0f;
-                if (under > y) {
-                    y = under;
-                }
-            }
-            flex->posY = y;
-        }
-        if (want == 1) {
-            uiReveal(s, panel, height, true);
-            uiMenuMetrics(s).opened = panel;
-            s.menuOpen = true;
-            uiNotifyLayoutDirty(s);
-            want = 2;
-        }
-    } else if (want == 0) {
-        uiReveal(s, panel, height, false);
-        if (uiMenuMetrics(s).opened == panel) {
-            uiMenuMetrics(s).opened = kUiNone;
-            s.menuOpen = false;
-        }
+    uint8_t selected = static_cast<uint8_t>(node.value);
+    if (selected >= s.importBag.count) {
+        selected = 0;
     }
+    return uiChoice(s, parent, {
+        .labels = labels,
+        .count = s.importBag.count,
+        .selected = selected,
+        .width = node.width > 48.0f ? node.width : 140.0f,
+    });
+}
+
+void uiMenuBin(UiState& s) {
+    armMenu(s);
+    uiBinRole(s, kBinSlotMenu, "menu", static_cast<uint8_t>(UiToken::Menu), 0);
+    uiBinRole(s, kBinSlotChoice, "choice", 0, 0);
+    uiRegisterCustomBinNode(s, kBinSlotChoice, loadChoice, nullptr);
 }
 
 } // namespace burnhope

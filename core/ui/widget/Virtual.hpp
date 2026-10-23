@@ -7,11 +7,35 @@ namespace burnhope {
 
 inline constexpr uint16_t kUiPoolCap = 32;
 
+struct UiParts {
+    uint16_t icon = kUiNone;
+    uint16_t chevron = kUiNone;
+    uint16_t label = kUiNone;
+};
+
 struct UiVirtualPool {
     void (*refresh)(UiState& s, uint16_t id) = nullptr;
     float (*contentHeight)(const UiState& s, uint16_t id) = nullptr;
     uint8_t follow = 1;
 };
+
+inline void uiVirtualAttach(
+    UiState& s,
+    uint16_t id,
+    void (*refresh)(UiState& s, uint16_t id),
+    float (*contentHeight)(const UiState& s, uint16_t id),
+    uint8_t follow) {
+    if (auto* scroll = id < s.count ? s.ent[id].try_get_mut<UiScroll>() : nullptr) {
+        scroll->contentHeight = contentHeight;
+        scroll->onScroll = refresh;
+        scroll->follow = follow;
+    }
+    s.ent[id].set<UiVirtualPool>({refresh, contentHeight, follow});
+}
+
+inline float uiVirtualSlotY(uint32_t index, float itemH, float offset) {
+    return static_cast<float>(index) * itemH - offset;
+}
 
 struct UiVirtualBase {
     uint32_t count = 0;

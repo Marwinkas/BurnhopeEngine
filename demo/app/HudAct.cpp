@@ -15,12 +15,12 @@
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/List.hpp"
+#include "ui/widget/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Splitter.hpp"
-#include "ui/widget/Text.hpp"
+#include "ui/widget/Label.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "Str.hpp"
 
@@ -138,7 +138,7 @@ void onSnapToggle(void* user, uint16_t) {
     sceneFrameSnap(hud.tool.scene, hit->mode, hud.snapOn[hit->mode], hud.snapSent[hit->mode]);
 }
 
-void onSnapPick(void* user) {
+void onSnapPick(void* user, uint16_t) {
     auto* hit = static_cast<SnapHit*>(user);
     if (hit == nullptr || hit->hud == nullptr || hit->channel > 2) {
         return;
@@ -176,7 +176,7 @@ void spawnAndSelectActor(HudContext& hud, uint8_t index) {
     }
 }
 
-void onSpawnKind(void* user) {
+void onSpawnKind(void* user, uint16_t) {
     auto* hit = static_cast<SpawnHit*>(user);
     if (hit == nullptr || hit->hud == nullptr || hit->hud->tool.scene == nullptr) {
         return;

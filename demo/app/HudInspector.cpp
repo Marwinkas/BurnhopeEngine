@@ -4,9 +4,9 @@
 #include "gpu_scene/SceneObject.hpp"
 #include "ui/Panel.hpp"
 #include "ui/widget/Button.hpp"
-#include "ui/widget/Text.hpp"
+#include "ui/widget/Label.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/List.hpp"
+#include "ui/widget/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/ColorPicker.hpp"
@@ -28,7 +28,7 @@ void hudShowBodies(HudContext& hud, UiState& s) {
     uiShow(s, hud.fogBody, f.fogen != 0);
 }
 
-void onHudPick(void* user) {
+void onHudPick(void* user, uint16_t) {
     auto* hit = static_cast<HudPick*>(user);
     if (hit == nullptr || hit->hud == nullptr) {
         return;

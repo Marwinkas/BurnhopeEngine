@@ -1,3 +1,4 @@
+#include "ui/Icon.hpp"
 #include "ui/widget/Button.hpp"
 
 #include <bit>
@@ -10,22 +11,6 @@
 #include "ui/Text.hpp"
 
 namespace burnhope {
-
-void activate(UiState& s, uint16_t id) {
-    if (id >= s.count) {
-        return;
-    }
-    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-    if (paint != nullptr && paint->disabled) {
-        return;
-    }
-    uiTrace(s, "activate", id);
-    if (const UiAction* act = s.ent[id].try_get<UiAction>(); act != nullptr && act->fn != nullptr) {
-        act->fn(act->user, id);
-    } else if (s.onClick != nullptr) {
-        s.onClick(s.clickUser, id);
-    }
-}
 
 uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
     UiFlex flex{};
@@ -178,7 +163,7 @@ bool uiCheckDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
         mark.color[1] = s.look.accent[0][1];
         mark.color[2] = s.look.accent[0][2];
         mark.color[3] = 1.0f;
-        mark.texId = 9;
+        mark.texId = static_cast<uint32_t>(UiIcon::Check);
         mark.flags = kUiFlagIcon;
         if (clip != nullptr) {
             mark.flags |= kUiFlagClip;
@@ -227,46 +212,14 @@ uint16_t uiIconBtn(UiState& s, uint16_t parent, uint8_t icon, float side, uint16
     s.ent[id].add<UiIconChrome>();
     if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
         paintGhost(*paint);
-    }
-    UiFlex mark{};
-    mark.widthMode = UiSize::Px;
-    mark.width = side;
-    mark.heightMode = UiSize::Px;
-    mark.height = side;
-    mark.shrink = 0.0f;
-    UiPaint glyphPaint = paintClear();
-    glyphPaint.icon = icon;
-    glyphPaint.r = 1.0f;
-    glyphPaint.g = 1.0f;
-    glyphPaint.b = 1.0f;
-    const uint16_t child = uiPanel(s, id, mark, glyphPaint);
-    if (glyph != nullptr) {
-        *glyph = child;
-    }
-    return id;
-}
-
-uint16_t uiHostIconBtn(UiState& s, uint16_t parent, uint8_t icon, float side) {
-    const uint16_t id = uiButton(s, parent, {.label = "", .width = side, .height = side});
-    if (id >= s.count) {
-        return id;
-    }
-    if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
-        flex->pad = 0.0f;
-        flex->padL = 0.0f;
-        flex->padR = 0.0f;
-        flex->padT = 0.0f;
-        flex->padB = 0.0f;
-        flex->align = UiAlign::Center;
-        flex->justify = UiJustify::Center;
-    }
-    s.ent[id].add<UiIconChrome>();
-    if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
-        paintGhost(*paint);
         paint->icon = icon;
-        paint->r = 1.0f;
-        paint->g = 1.0f;
-        paint->b = 1.0f;
+        paint->plate = 1;
+        paint->r = s.look.text[0];
+        paint->g = s.look.text[1];
+        paint->b = s.look.text[2];
+    }
+    if (glyph != nullptr) {
+        *glyph = id;
     }
     return id;
 }
@@ -295,6 +248,9 @@ uint16_t uiSlotBtn(UiState& s, uint16_t parent, uint8_t slot, float side, uint16
             flex->width = side;
             flex->height = side;
         }
+        if (auto* glyph = s.ent[child].try_get_mut<UiPaint>()) {
+            glyph->plate = 1;
+        }
     }
     if (icon != nullptr) {
         *icon = child;
@@ -307,10 +263,13 @@ void uiButtonTintIcon(UiState& s, uint16_t icon, bool on) {
     if (paint == nullptr) {
         return;
     }
-    paint->token = UiToken::Custom;
-    paint->r = 1.0f;
-    paint->g = on ? 0.533333f : 1.0f;
-    paint->b = on ? 0.0f : 1.0f;
+    paint->token = on ? UiToken::Accent : UiToken::Text;
+    paint->picked = on ? 1 : 0;
+    paint->plate = 1;
+    const float* rgb = on ? s.look.accent[0] : s.look.text;
+    paint->r = rgb[0];
+    paint->g = rgb[1];
+    paint->b = rgb[2];
     paint->a = 0.0f;
     uiNotifyVisualDirty(s);
 }
@@ -324,6 +283,66 @@ uint16_t uiButtonIconChild(const UiState& s, uint16_t id) {
         }
     }
     return kUiNone;
+}
+
+namespace {
+
+void hostText(UiState& s, uint16_t id, UiTextAlign align, UiTextEllipsis ellipsis) {
+    if (s.ent[id].try_get<UiText>() != nullptr) {
+        return;
+    }
+    UiText host{};
+    host.align = align;
+    host.ellipsis = ellipsis;
+    host.valign = UiTextValign::Center;
+    s.ent[id].set<UiText>(host);
+}
+
+void adornButton(UiState& s, uint16_t id) {
+    hostText(s, id, UiTextAlign::Center, UiTextEllipsis::End);
+    uiHover(s, id);
+    s.ent[id].add<UiFocusable>();
+}
+
+void adornClose(UiState& s, uint16_t id) {
+    hostText(s, id, UiTextAlign::Center, UiTextEllipsis::End);
+    uiHover(s, id);
+    s.ent[id].add<UiFocusable>();
+}
+
+void adornCheck(UiState& s, uint16_t id) {
+    hostText(s, id, UiTextAlign::Left, UiTextEllipsis::End);
+    if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
+        if (flex->padL < 32.0f) {
+            flex->padL = 32.0f;
+        }
+    }
+}
+
+void finishCheck(UiState& s, uint16_t id, const BinNode* spec, const char*, const char*) {
+    uint8_t on = 0;
+    uint8_t kind = 0;
+    uint8_t group = 0;
+    if (spec != nullptr) {
+        on = (spec->flags & kBinCheckOn) != 0 ? 1 : 0;
+        kind = spec->checkKind;
+        group = spec->checkGroup;
+    }
+    uiHover(s, id);
+    s.ent[id].add<UiFocusable>();
+    uiBindCheck(s, id, kind, group, on != 0);
+}
+
+} // namespace
+
+void uiButtonBin(UiState& s) {
+    uiBinRole(s, kBinSlotButton, "button", static_cast<uint8_t>(UiToken::Button), kBinRoleRaised);
+    uiBinRole(s, kBinSlotCheck, "check", static_cast<uint8_t>(UiToken::Check), 0);
+    uiBinRole(s, kBinSlotClose, "close", static_cast<uint8_t>(UiToken::Close), 0);
+    uiRegisterSpawnHook(s, kBinSlotButton, adornButton);
+    uiRegisterSpawnHook(s, kBinSlotClose, adornClose);
+    uiRegisterSpawnHook(s, kBinSlotCheck, adornCheck);
+    uiRegisterRoleFinish(s, kBinSlotCheck, finishCheck);
 }
 
 } // namespace burnhope

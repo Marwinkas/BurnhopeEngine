@@ -6,10 +6,11 @@
 #include "ui/widget/Button.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/List.hpp"
+#include "ui/widget/Fold.hpp"
+#include "ui/widget/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Scroll.hpp"
-#include "ui/widget/Text.hpp"
+#include "ui/widget/Label.hpp"
 
 namespace burnhope {
 

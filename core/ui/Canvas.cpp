@@ -1,4 +1,5 @@
 #include "ui/Canvas.hpp"
+#include "ui/Command.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/Font.hpp"
@@ -198,8 +199,10 @@ UiEvent canvasConsume(
     local.pointer.dx /= dpi;
     local.pointer.dy /= dpi;
 
-    if (s.beforeLayout != nullptr) {
-        s.beforeLayout(s);
+    for (uint8_t i = 0; i < s.beforeN; ++i) {
+        if (s.beforeFn[i] != nullptr) {
+            s.beforeFn[i](s);
+        }
     }
     // 1. Верстка дерева через Yoga
     uiLayout(s, pointsW, pointsH);
@@ -250,7 +253,8 @@ bool canvasWantsText(const Canvas& c) {
     if (c.state->focused == kUiNone || c.state->focused >= c.state->count) {
         return false;
     }
-    return c.state->ent[c.state->focused].has<UiTextInput>();
+    const UiText* text = c.state->ent[c.state->focused].try_get<UiText>();
+    return text != nullptr && text->ownRun != 0;
 }
 
 bool canvasWantsRelative(const Canvas& c) {

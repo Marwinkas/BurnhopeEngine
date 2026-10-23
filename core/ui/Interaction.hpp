@@ -22,13 +22,14 @@ struct UiHovered {};   // Мышь над сущностью
 struct UiFocused {};   // Фокус ввода (каретка / клавиатура)
 struct UiFocusable {}; // МОЖЕТ принимать фокус по клавише Tab (вместо enum ролей!)
 struct UiCapture {};   // Захват мыши (drag)
+struct UiTextInput {}; // Узел сам принимает текст и жест
 struct UiPass {};      // Пропуск клика сквозь элемент
 
 // ============================================================================
 // Системные события и коллбэки
 // ============================================================================
 
-using UiCommandFn = void (*)(void* user);
+using UiCommandFn = void (*)(void* user, uint16_t item);
 using UiClickFn   = void (*)(void* user, uint16_t id);
 using UiValueFn   = void (*)(void* user, uint16_t id, float value);
 using UiDragFn    = void (*)(void* user, uint16_t id, float x, float y);
@@ -77,10 +78,7 @@ struct UiDrop {
 struct UiDropTarget {
     char kind[16]{};
 };
-struct UiTextInput {};
 struct UiHoverable {};
-struct UiRowHover {};
-struct UiTitleBar {};
 struct UiPopup {};
 struct UiTab { uint16_t index = 0; };
 
@@ -89,8 +87,8 @@ enum class UiEvent : uint8_t { None = 0, Close = 1 };
 inline constexpr uint8_t kUiInCursor = 1;
 inline constexpr uint8_t kUiInEarly = 2;
 inline constexpr uint8_t kUiInEscape = 3;
-inline constexpr uint8_t kUiInMenu = 4;
-inline constexpr uint8_t kUiInChrome = 5;
+inline constexpr uint8_t kUiPhase4 = 4;
+inline constexpr uint8_t kUiPhase5 = 5;
 inline constexpr uint8_t kUiInPress = 6;
 inline constexpr uint8_t kUiInPressLate = 7;
 inline constexpr uint8_t kUiInFocus = 8;

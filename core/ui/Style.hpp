@@ -51,6 +51,9 @@ struct UiPaint {
     float bb = 0.62f;
     UiToken token = UiToken::Custom;
     uint8_t icon = 0;
+    uint8_t plate = 0;
+    uint8_t picked = 0;
+    uint8_t hoverKids = 0;
     UiRamp ramp = UiRamp::None;
     bool disabled = false;
     float shadow = 0.0f;
@@ -60,6 +63,7 @@ struct UiPaint {
     float hr = kUiUnset;       // Цвет при наведении (если < 0, управляется темой)
     float hg = kUiUnset;
     float hb = kUiUnset;
+    float ha = kUiUnset;
     float angle = 0.0f;        // Поворот в градусах
     float scaleX = 1.0f;
     float scaleY = 1.0f;
@@ -156,6 +160,24 @@ inline void tokenRgb(const UiLook& look, UiToken token, float& r, float& g, floa
     r = src[0];
     g = src[1];
     b = src[2];
+}
+
+inline float tokenRadius(const UiLook& look, UiToken token) noexcept {
+    switch (token) {
+    case UiToken::Button:
+    case UiToken::Field:
+    case UiToken::Menu:
+    case UiToken::Check:
+    case UiToken::Item:
+    case UiToken::Close:
+    case UiToken::Chrome:
+        return look.radiusSm;
+    case UiToken::Preview:
+    case UiToken::Scroll:
+        return look.radius;
+    default:
+        return -1.0f;
+    }
 }
 
 inline UiPaint paintRgb(float r, float g, float b, float radius = 0.0f) noexcept {

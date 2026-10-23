@@ -77,6 +77,7 @@ struct UiText {
     float tracking = 0.0f; // Межбуквенный интервал
     float wordGap = 0.0f;  // Межсловный интервал
     float indent = 0.0f;   // Красная строка
+    uint8_t ownRun = 0;
     float size = 0.0f;     // Множитель масштаба (0 = 1.0)
     float thick = 0.0f;    // Толщина линии декора
     float under = 0.0f;    // Смещение подчеркивания

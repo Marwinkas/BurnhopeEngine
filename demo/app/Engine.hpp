@@ -5,7 +5,7 @@
 #include "host/Host.hpp"
 #include "render/SceneFrame.hpp"
 #include "ui/widget/ColorPicker.hpp"
-#include "ui/widget/PropBind.hpp"
+#include "host/PropBind.hpp"
 
 #include <deque>
 

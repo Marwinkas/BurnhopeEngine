@@ -1,7 +1,5 @@
 #include "ui/PrimitiveBatch.hpp"
-#include "ui/widget/Detail.hpp"
 #include "ui/widget/Scroll.hpp"
-#include "ui/widget/Virtual.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -49,20 +47,16 @@ float scrollContentH(const UiState& s, uint16_t inner) {
 }
 
 float scrollSpan(const UiState& s, uint16_t id, uint16_t inner) {
-    float contentH = scrollContentH(s, inner);
-    if (const auto* pool = s.ent[id].try_get<UiVirtualPool>()) {
-        if (pool->contentHeight != nullptr) {
-            contentH = pool->contentHeight(s, id);
-        }
+    const UiScroll* scroll = id < s.count ? s.ent[id].try_get<UiScroll>() : nullptr;
+    if (scroll != nullptr && scroll->contentHeight != nullptr) {
+        return scroll->contentHeight(s, id);
     }
-    return contentH;
+    return scrollContentH(s, inner);
 }
 
-void scrollRefresh(UiState& s, uint16_t id) {
-    if (const auto* pool = s.ent[id].try_get<UiVirtualPool>()) {
-        if (pool->refresh != nullptr) {
-            pool->refresh(s, id);
-        }
+void scrollRefresh(UiState& s, uint16_t id, void (*fn)(UiState&, uint16_t)) {
+    if (fn != nullptr) {
+        fn(s, id);
     }
 }
 
@@ -125,7 +119,7 @@ void scrollClamp(UiState& s, uint16_t id) {
     if (auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>()) {
         flex->marginT = -scroll->offset;
     }
-    scrollRefresh(s, id);
+    scrollRefresh(s, id, scroll->onScroll);
 }
 
 void scrollClampAll(UiState& s) {
@@ -151,11 +145,8 @@ void scrollBy(UiState& s, uint16_t id, float wheel) {
     if (scroll->offset > metrics.maxOff) {
         scroll->offset = metrics.maxOff;
     }
-    uint8_t follow = 1;
-    if (const UiVirtualPool* pool = s.ent[id].try_get<UiVirtualPool>()) {
-        follow = pool->follow;
-    }
-    scrollRefresh(s, id);
+    const uint8_t follow = scroll->follow;
+    scrollRefresh(s, id, scroll->onScroll);
     if (follow == 0) {
         uiTrace(s, "scroll", id);
         return;
@@ -217,11 +208,8 @@ void dragScroll(UiState& s, uint16_t id, float y) {
         t = 1.0f;
     }
     scroll->offset = t * metrics.maxOff;
-    uint8_t follow = 1;
-    if (const UiVirtualPool* pool = s.ent[id].try_get<UiVirtualPool>()) {
-        follow = pool->follow;
-    }
-    scrollRefresh(s, id);
+    const uint8_t follow = scroll->follow;
+    scrollRefresh(s, id, scroll->onScroll);
     if (follow == 0) {
         s.visualDirty = true;
         return;
@@ -331,6 +319,33 @@ bool uiScrollInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase,
         return true;
     }
     return false;
+}
+
+namespace {
+
+void scrollBindInner(UiState& s, uint16_t id, void*) {
+    auto* scroll = id < s.count ? s.ent[id].try_get_mut<UiScroll>() : nullptr;
+    if (scroll == nullptr || scroll->inner != kUiNone) {
+        return;
+    }
+    for (uint16_t child = 0; child < s.count; ++child) {
+        if (s.parentOf[child] == id) {
+            scroll->inner = child;
+            return;
+        }
+    }
+}
+
+void finishScroll(UiState& s, uint16_t id, const BinNode*, const char*, const char*) {
+    s.ent[id].set<UiScroll>({0.0f, kUiNone});
+    s.ent[id].set<UiLayoutRefresh>({scrollBindInner, nullptr});
+}
+
+} // namespace
+
+void uiScrollBin(UiState& s) {
+    uiBinRole(s, kBinSlotScroll, "scroll", static_cast<uint8_t>(UiToken::Scroll), 0);
+    uiRegisterRoleFinish(s, kBinSlotScroll, finishScroll);
 }
 
 } // namespace burnhope

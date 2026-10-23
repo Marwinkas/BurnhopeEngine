@@ -1,49 +1,24 @@
 #pragma once
 
-#include "ui/State.hpp"
+#include "ui/Command.hpp"
 
 #include <span>
 
 namespace burnhope {
 
+inline constexpr uint8_t kBinSlotMenu = 13;
+inline constexpr uint8_t kBinSlotChoice = 19;
+void uiMenuBin(UiState& s);
+
 struct UiMenuBar {};
-
-struct UiMenuCmd {
-    uint8_t index = 0;
-};
-
-inline constexpr uint8_t kUiMenuCap = 32;
-
-struct UiMenuMetrics {
-    uint16_t opened = kUiNone;
-    float w = 180.0f;
-    float itemH = 28.0f;
-    float pad = 6.0f;
-    float gap = 4.0f;
-};
-
-inline UiMenuMetrics& uiMenuMetrics(UiState& s) {
-    return s.world.ensure<UiMenuMetrics>();
-}
+struct UiMenuSlide {};
 
 struct UiMenuItem {
     const char* label = nullptr;
     uint8_t iconSlot = 255;
-    void (*onClick)(void* user) = nullptr;
-    const UiMenuItem* children = nullptr;
-    uint8_t childCount = 0;
+    UiCommandFn onClick = nullptr;
     bool separator = false;
     bool disabled = false;
-};
-
-struct UiMenuPop {
-    uint16_t row[kUiMenuCap]{};
-    void (*fn[kUiMenuCap])(void*){};
-    const UiMenuItem* item[kUiMenuCap]{};
-    void* user = nullptr;
-    uint8_t n = 0;
-    uint8_t hover = 255;
-    uint16_t sub = kUiNone;
 };
 
 void uiMarkMenuBar(UiState& s, uint16_t id);
@@ -76,7 +51,6 @@ void uiBindChoice(UiState& s, const char* name, uint8_t selected, void (*onPick)
 void uiMenuCaption(UiState& s, uint16_t button, const char* text);
 float uiChoiceWidth(const UiState& s, const char* const* labels, uint8_t count);
 void uiChoiceFit(UiState& s, uint16_t button, float width);
-void uiSyncPopover(UiState& s, uint16_t panel, uint16_t anchor, float width, float height, uint8_t& want);
 bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
 
 } // namespace burnhope

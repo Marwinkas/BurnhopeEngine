@@ -120,7 +120,7 @@ void fileBeginRename(UiState& s, int index) {
     fileRefresh(s);
 }
 
-void fileMakeFolder(void* user) {
+void fileMakeFolder(void* user, uint16_t) {
     UiState& s = *static_cast<UiState*>(user);
     Browser& b = fileBook(s);
     char dst[sizeof(Browser::cwd)]{};
@@ -145,14 +145,14 @@ void fileMakeFolder(void* user) {
     fileRefresh(s);
 }
 
-void fileMakeFile(void* user) {
+void fileMakeFile(void* user, uint16_t) {
     UiState& s = *static_cast<UiState*>(user);
     fileBook(s).touchFile("New Document.txt");
     fileBook(s).reload();
     fileRefresh(s);
 }
 
-void fileMakeMaterial(void* user) {
+void fileMakeMaterial(void* user, uint16_t) {
     UiState& s = *static_cast<UiState*>(user);
     Browser& b = fileBook(s);
     if (b.cwd[0] == '\0') {

@@ -4,6 +4,6 @@
 
 namespace burnhope {
 
-uint16_t uiLabel(UiState& s, uint16_t parent, const char* text);
+void uiMarkTab(UiState& s, uint16_t strip, uint16_t tab);
 
 } // namespace burnhope

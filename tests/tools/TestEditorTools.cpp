@@ -4,16 +4,16 @@
 #include "ui/Domain.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
+#include "ui/widget/Chrome.hpp"
 #include "ui/widget/Splitter.hpp"
-#include "ui/PropertyInspector.hpp"
+#include "host/PropBind.hpp"
+#include "ui/widget/Slider.hpp"
 #include "debug/DebugStats.hpp"
 #include "rhi/GpuProfiler.hpp"
 #include "gpu_scene/FrameUniforms.hpp"
 #include "gpu_scene/Camera.hpp"
 #include "scene/TestScene.hpp"
 #include "gpu_scene/SceneObject.hpp"
-#include "ui/widget/Detail.hpp"
-
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -90,20 +90,17 @@ TEST_CASE("splitter resizes the dock on the far side") {
     CHECK(state.ent[left].try_get<UiFlex>()->width == doctest::Approx(220.0f));
 }
 TEST_CASE("inspector drag writes the bound float") {
+    UiState state;
     float roughness = 0.5f;
-    PropertyBinding prop{};
-    prop.nameHash = assetHash("roughness");
-    prop.type = PropType::FloatSlider;
-    prop.minVal = 0.0f;
-    prop.maxVal = 1.0f;
-    prop.dataPtr = &roughness;
-    InputState drag{};
-    drag.mouseActive = 1;
-    drag.deltaX = 40.0f;
-    CHECK(inspectorHandleInput(&prop, 1, drag));
-    CHECK(roughness == doctest::Approx(0.7f));
-    char line[128]{};
-    CHECK(inspectorWriteLines(&prop, 1, line, sizeof(line)) > 0);
+    const uint16_t root = spawn(state, kUiNone, px(200.0f, 40.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t id = uiSlider(state, root, roughness, 0.0f, 1.0f, nullptr, nullptr, 200.0f);
+    UiPropBinder binder;
+    binder.watch(id, &roughness, roughness);
+    uiLayout(state, 240.0f, 80.0f);
+    const UiBox& box = state.box[id];
+    dragSlider(state, id, box.x + box.w * 0.7f);
+    binder.sync(state);
+    CHECK(roughness == doctest::Approx(0.7f).epsilon(0.02));
     GpuDebugStats stats{};
     stats.fps = 60.0f;
     stats.visibleInstances = 4;

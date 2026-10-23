@@ -1,5 +1,4 @@
 #include "ui/Panel.hpp"
-#include "ui/widget/Detail.hpp"
 #include "ui/widget/Image.hpp"
 
 namespace burnhope {
@@ -156,6 +155,10 @@ void uiArmPhoto(UiState& s, uint16_t id) {
     }
     s.ent[id].set<UiDrag>({photoDrag, &s});
     s.ent[id].set<UiWheel>({photoWheel, &s});
+}
+
+void uiImageBin(UiState& s) {
+    uiBinRole(s, kBinSlotImage, "image", static_cast<uint8_t>(UiToken::Preview), 0);
 }
 
 } // namespace burnhope

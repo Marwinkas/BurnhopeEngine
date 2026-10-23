@@ -134,27 +134,65 @@ void readSize(Cur& c, UiSize& mode, float& value) {
     }
 }
 
+void flexToBin(BinNode& bin, const UiFlex& flex) noexcept {
+    bin.direction = static_cast<uint8_t>(flex.direction);
+    bin.wrap = static_cast<uint8_t>(flex.wrap);
+    bin.justify = static_cast<uint8_t>(flex.justify);
+    bin.align = static_cast<uint8_t>(flex.align);
+    bin.widthMode = static_cast<uint8_t>(flex.widthMode);
+    bin.heightMode = static_cast<uint8_t>(flex.heightMode);
+    bin.position = static_cast<uint8_t>(flex.position);
+    bin.width = flex.width;
+    bin.height = flex.height;
+    bin.grow = flex.grow;
+    bin.shrink = flex.shrink;
+    bin.pad = flex.pad;
+    bin.padL = flex.padL;
+    bin.padR = flex.padR;
+    bin.padT = flex.padT;
+    bin.padB = flex.padB;
+    bin.gap = flex.gap;
+    bin.posX = flex.posX;
+    bin.posY = flex.posY;
+    bin.minW = flex.minW;
+    bin.minH = flex.minH;
+    bin.marginL = flex.marginL;
+    bin.marginR = flex.marginR;
+    bin.marginT = flex.marginT;
+    bin.marginB = flex.marginB;
+    bin.drop = static_cast<uint8_t>(flex.drop);
+    bin.content = static_cast<uint8_t>(flex.content);
+    bin.self = static_cast<uint8_t>(flex.self);
+    bin.basisMode = static_cast<uint8_t>(flex.basisMode);
+    bin.maxWMode = static_cast<uint8_t>(flex.maxWMode);
+    bin.maxHMode = static_cast<uint8_t>(flex.maxHMode);
+    bin.overflow = static_cast<uint8_t>(flex.overflow);
+    bin.box = static_cast<uint8_t>(flex.box);
+    bin.inset = static_cast<uint8_t>(flex.inset);
+    bin.basis = flex.basis;
+    bin.maxW = flex.maxW;
+    bin.maxH = flex.maxH;
+    bin.gapRow = flex.gapRow;
+    bin.aspect = flex.aspect;
+    bin.posR = flex.posR;
+    bin.posB = flex.posB;
+}
+
 uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
     if (!eat(c, '{')) {
         return kUiNone;
     }
     UiFlex flex{};
     flex.shrink = 0.0f;
-    UiPaint paint = paintToken(s.look, UiToken::Content, 0.0f);
-    paint.a = 1.0f;
-    const uint16_t id = uiNode(s, parent, flex, paint);
-    if (id == kUiNone) {
-        skipValue(c);
-        return kUiNone;
-    }
+    BinNode bin{};
+    bin.a = 1.0f;
+    bin.shown = 1;
+    char name[32]{};
     char text[96]{};
     uint8_t textLen = 0;
-    UiSize wMode = UiSize::Auto;
-    UiSize hMode = UiSize::Auto;
-    float width = 0.0f;
-    float height = 0.0f;
-    bool sawW = false;
-    bool sawH = false;
+    const char* kids = nullptr;
+    bool filled = false;
+    UiToken ink = UiToken::Content;
     skip(c);
     if (!eat(c, '}')) {
         for (;;) {
@@ -164,29 +202,19 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                 break;
             }
             if (strSame(key, "id")) {
-                char name[32]{};
                 uint8_t n = 0;
-                if (parseUiString(c, name, 32, n)) {
-                    uiName(s, id, name);
-                }
+                parseUiString(c, name, 32, n);
             } else if (strSame(key, "text")) {
                 parseUiString(c, text, 96, textLen);
             } else if (strSame(key, "role")) {
                 char role[16]{};
                 uint8_t n = 0;
                 if (parseUiString(c, role, 16, n)) {
-                    auto* node = s.ent[id].try_get_mut<UiPaint>();
-                    if (node != nullptr) {
-                        if (strSame(role, "button")) {
-                            *node = paintToken(s.look, UiToken::Button, 0.0f);
-                        } else if (strSame(role, "label")) {
-                            *node = paintLabel(s.look);
-                        } else if (strSame(role, "field")) {
-                            *node = paintToken(s.look, UiToken::Field, 0.0f);
-                        } else if (strSame(role, "check")) {
-                            *node = paintToken(s.look, UiToken::Check, 0.0f);
-                        } else {
-                            *node = paintToken(s.look, UiToken::Content, 0.0f);
+                    const uint8_t found = uiBinRoleFind(s, role);
+                    if (found != 0) {
+                        bin.role = found;
+                        if (s.binRole[found].token != 0) {
+                            ink = static_cast<UiToken>(s.binRole[found].token);
                         }
                     }
                 }
@@ -194,9 +222,7 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                 char word[24]{};
                 uint8_t n = 0;
                 if (parseUiString(c, word, 24, n)) {
-                    if (auto* node = s.ent[id].try_get_mut<UiFlex>()) {
-                        uiFlexApplyAttr(*node, key, word);
-                    }
+                    uiFlexApplyAttr(flex, key, word);
                 }
             } else if (strSame(key, "fill") && eat(c, '[')) {
                 float chans[4] = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -213,58 +239,51 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                         break;
                     }
                 }
-                auto* node = s.ent[id].try_get_mut<UiPaint>();
-                if (node != nullptr && n >= 3) {
-                    node->r = chans[0];
-                    node->g = chans[1];
-                    node->b = chans[2];
+                if (n >= 3) {
+                    bin.r = chans[0];
+                    bin.g = chans[1];
+                    bin.b = chans[2];
                     if (n >= 4) {
-                        node->a = chans[3];
+                        bin.a = chans[3];
                     }
+                    filled = true;
                 }
             } else if (strSame(key, "w")) {
-                readSize(c, wMode, width);
-                sawW = true;
+                UiSize mode = UiSize::Auto;
+                float value = 0.0f;
+                readSize(c, mode, value);
+                uiFlexApplyAttr(flex, "w", static_cast<uint8_t>(mode), value);
             } else if (strSame(key, "h")) {
-                readSize(c, hMode, height);
-                sawH = true;
+                UiSize mode = UiSize::Auto;
+                float value = 0.0f;
+                readSize(c, mode, value);
+                uiFlexApplyAttr(flex, "h", static_cast<uint8_t>(mode), value);
             } else if (strSame(key, "basis") || strSame(key, "maxW") || strSame(key, "maxH")) {
                 UiSize mode = UiSize::Auto;
                 float value = 0.0f;
                 readSize(c, mode, value);
-                if (auto* node = s.ent[id].try_get_mut<UiFlex>()) {
-                    uiFlexApplyAttr(*node, key, static_cast<uint8_t>(mode), value);
-                }
+                uiFlexApplyAttr(flex, key, static_cast<uint8_t>(mode), value);
             } else if (strSame(key, "gapRow") || strSame(key, "aspect") || strSame(key, "right") || strSame(key, "bottom") || strSame(key, "grow")) {
                 float v = 0.0f;
                 if (parseUiNumber(c, v)) {
-                    if (auto* node = s.ent[id].try_get_mut<UiFlex>()) {
-                        uiFlexApplyAttr(*node, key, v);
-                    }
+                    uiFlexApplyAttr(flex, key, v);
                 }
             } else if (strSame(key, "pad") || strSame(key, "gap") || strSame(key, "radius") || strSame(key, "icon")) {
                 float v = 0.0f;
                 if (parseUiNumber(c, v)) {
                     if (strSame(key, "pad") || strSame(key, "gap")) {
-                        if (auto* node = s.ent[id].try_get_mut<UiFlex>()) {
-                            uiFlexApplyAttr(*node, key, v);
-                        }
+                        uiFlexApplyAttr(flex, key, v);
                     } else if (strSame(key, "radius")) {
-                        auto* node = s.ent[id].try_get_mut<UiPaint>();
-                        if (node != nullptr) {
-                            node->radius = v;
-                        }
-                    }  else {
-                        auto* node = s.ent[id].try_get_mut<UiPaint>();
-                        if (node != nullptr) {
-                            node->icon = static_cast<uint8_t>(v);
-                        }
+                        bin.radius = v;
+                    } else {
+                        bin.icon = static_cast<uint8_t>(v);
                     }
                 }
             } else if (strSame(key, "children") && eat(c, '[')) {
+                kids = c.p;
                 if (!eat(c, ']')) {
                     for (;;) {
-                        parseNode(s, id, c);
+                        skipValue(c);
                         if (eat(c, ']')) {
                             break;
                         }
@@ -284,16 +303,24 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
             }
         }
     }
-    if (textLen > 0) {
-        uiText(s, id, text);
+    if (!filled) {
+        tokenRgb(s.look, ink, bin.r, bin.g, bin.b);
     }
-    auto* flexNode = s.ent[id].try_get_mut<UiFlex>();
-    if (flexNode != nullptr) {
-        if (sawW) {
-            uiFlexApplyAttr(*flexNode, "w", static_cast<uint8_t>(wMode), width);
-        }
-        if (sawH) {
-            uiFlexApplyAttr(*flexNode, "h", static_cast<uint8_t>(hMode), height);
+    bin.token = static_cast<uint8_t>(ink);
+    flexToBin(bin, flex);
+    const uint16_t id = uiSpawnDescribed(s, parent, bin, name[0] != '\0' ? name : nullptr, textLen > 0 ? text : nullptr, nullptr);
+    if (id != kUiNone && kids != nullptr) {
+        Cur nested{kids, c.end};
+        if (!eat(nested, ']')) {
+            for (;;) {
+                parseNode(s, id, nested);
+                if (eat(nested, ']')) {
+                    break;
+                }
+                if (!eat(nested, ',')) {
+                    break;
+                }
+            }
         }
     }
     return id;

@@ -1,5 +1,6 @@
 #include "Str.hpp"
 #include "ui/State.hpp"
+#include "ui/widget/Widgets.hpp"
 #include "platform/Trace.hpp"
 
 #include <spdlog/spdlog.h>
@@ -80,9 +81,6 @@ void stamp(UiState& s, uint16_t id, UiToken token) {
     auto* paint = s.ent[id].try_get_mut<UiPaint>();
     if (paint != nullptr) {
         paint->token = token;
-    }
-    if (token == UiToken::Title) {
-        s.ent[id].set<UiTitleBar>({});
     }
 }
 
@@ -213,24 +211,9 @@ void uiRestyle(UiState& s) {
             continue;
         }
         tokenRgb(s.look, paint->token, paint->r, paint->g, paint->b);
-        if (paint->token == UiToken::Button
-            || paint->token == UiToken::Field
-            || paint->token == UiToken::Menu
-            || paint->token == UiToken::Check
-            || paint->token == UiToken::Item
-            || paint->token == UiToken::Close
-            || paint->token == UiToken::Chrome) {
-            paint->radius = s.look.radiusSm;
-        } else if (paint->token == UiToken::Preview || paint->token == UiToken::Scroll) {
-            paint->radius = s.look.radius;
-        }
-        auto* flex = s.ent[id].try_get_mut<UiFlex>();
-        if (paint->token == UiToken::Title) {
-            s.ent[id].set<UiTitleBar>({});
-            if (flex != nullptr) {
-                flex->height = s.look.titleBar;
-                flex->heightMode = UiSize::Px;
-            }
+        const float radius = tokenRadius(s.look, paint->token);
+        if (radius >= 0.0f) {
+            paint->radius = radius;
         }
     }
     s.layoutDirty = true;
@@ -712,12 +695,14 @@ uint16_t uiNodeChild(const UiState& s, uint16_t parent, uint32_t index) {
         return kUiNone;
     }
     YGNodeRef node = YGNodeGetChild(s.yoga[parent], index);
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.yoga[id] == node) {
-            return id;
-        }
+    if (node == nullptr) {
+        return kUiNone;
     }
-    return kUiNone;
+    const auto raw = reinterpret_cast<uintptr_t>(YGNodeGetContext(node));
+    if (raw >= s.count) {
+        return kUiNone;
+    }
+    return static_cast<uint16_t>(raw);
 }
 
 void uiNodeMoveChild(UiState& s, uint16_t parent, uint16_t child, uint32_t newIndex) {
@@ -812,10 +797,7 @@ struct BootTable {
     uint8_t n = 0;
 };
 
-BootTable& boots() {
-    static BootTable table;
-    return table;
-}
+BootTable gBoot{};
 
 } // namespace
 
@@ -823,14 +805,27 @@ void uiBootAdd(UiBootFn fn) {
     if (fn == nullptr) {
         return;
     }
-    BootTable& table = boots();
-    for (uint8_t i = 0; i < table.n; ++i) {
-        if (table.fn[i] == fn) {
+    for (uint8_t i = 0; i < gBoot.n; ++i) {
+        if (gBoot.fn[i] == fn) {
             return;
         }
     }
-    if (table.n < 4) {
-        table.fn[table.n++] = fn;
+    if (gBoot.n < 4) {
+        gBoot.fn[gBoot.n++] = fn;
+    }
+}
+
+void uiBeforeLayoutAdd(UiState& s, void (*fn)(UiState& s)) {
+    if (fn == nullptr) {
+        return;
+    }
+    for (uint8_t i = 0; i < s.beforeN; ++i) {
+        if (s.beforeFn[i] == fn) {
+            return;
+        }
+    }
+    if (s.beforeN < 4) {
+        s.beforeFn[s.beforeN++] = fn;
     }
 }
 
@@ -866,10 +861,12 @@ UiState::UiState()
         parentOf[i] = kUiNone;
         contextOf[i] = kUiNone;
     }
-    const BootTable& table = boots();
-    for (uint8_t i = 0; i < table.n; ++i) {
-        if (table.fn[i] != nullptr) {
-            table.fn[i](*this);
+    uiWidgetsInit(*this);
+    bootN = gBoot.n;
+    for (uint8_t i = 0; i < gBoot.n; ++i) {
+        bootFn[i] = gBoot.fn[i];
+        if (bootFn[i] != nullptr) {
+            bootFn[i](*this);
         }
     }
 }

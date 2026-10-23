@@ -1,6 +1,4 @@
 #include "ui/Panel.hpp"
-#include "ui/widget/Detail.hpp"
-#include "ui/widget/List.hpp"
 #include "ui/widget/Splitter.hpp"
 
 #include <algorithm>
@@ -87,11 +85,27 @@ void writeSize(UiFlex& flex, bool vertical, float size) {
 } // namespace
 
 uint16_t splitTarget(const UiState& s, uint16_t split) {
+    const UiSplitter* drag = split < s.count ? s.ent[split].try_get<UiSplitter>() : nullptr;
+    if (drag != nullptr && drag->target != kUiNone) {
+        return drag->target;
+    }
     const int index = childIndex(s, split);
     if (index <= 0) {
-        return uiFindName(s, "side");
+        return kUiNone;
     }
     return childAt(s, s.parentOf[split], static_cast<uint32_t>(index - 1));
+}
+
+void uiSplitterBind(UiState& s, uint16_t split, uint16_t target, uint8_t axis, UiSplitResizeFn fn, void* user) {
+    auto* drag = split < s.count ? s.ent[split].try_get_mut<UiSplitter>() : nullptr;
+    if (drag == nullptr) {
+        return;
+    }
+    drag->target = target;
+    drag->axis = axis;
+    drag->axisLock = 1;
+    drag->onResize = fn;
+    drag->resizeUser = user;
 }
 
 bool splitVertical(const UiState& s, uint16_t split) {
@@ -104,8 +118,9 @@ bool splitVertical(const UiState& s, uint16_t split) {
 }
 
 uint8_t splitCursor(const UiState& s, uint16_t split) {
-    if (split < s.count && s.ent[split].has<UiSplitShare>()) {
-        return 1;
+    const UiSplitter* drag = split < s.count ? s.ent[split].try_get<UiSplitter>() : nullptr;
+    if (drag != nullptr && drag->axisLock != 0) {
+        return drag->axis != 0 ? 2 : 1;
     }
     return splitVertical(s, split) ? 2 : 1;
 }
@@ -116,7 +131,8 @@ UiBox splitGrip(const UiState& s, uint16_t split) {
     }
     UiBox grip = s.box[split];
     constexpr float kHit = 8.0f;
-    const bool alongY = splitVertical(s, split) && !s.ent[split].has<UiSplitShare>();
+    const UiSplitter* drag = s.ent[split].try_get<UiSplitter>();
+    const bool alongY = drag != nullptr && drag->axisLock != 0 ? drag->axis != 0 : splitVertical(s, split);
     if (alongY) {
         if (grip.h < kHit) {
             grip.y -= (kHit - grip.h) * 0.5f;
@@ -130,6 +146,10 @@ UiBox splitGrip(const UiState& s, uint16_t split) {
 }
 
 bool splitAlive(const UiState& s, uint16_t split) {
+    const UiSplitter* drag = split < s.count ? s.ent[split].try_get<UiSplitter>() : nullptr;
+    if (drag != nullptr && drag->onResize != nullptr) {
+        return true;
+    }
     const int index = childIndex(s, split);
     if (index < 0) {
         return false;
@@ -151,113 +171,12 @@ float paneSize(const UiState& s, uint16_t pane, bool vertical) {
     return vertical ? s.box[pane].h : s.box[pane].w;
 }
 
-struct PropGrip {
-    uint16_t host = kUiNone;
-    float label = 140.0f;
-    float indent = 28.0f;
-};
-
-PropGrip propGrip(const UiState& s, uint16_t split) {
-    PropGrip out{};
-    for (uint16_t id = 0; id < s.count; ++id) {
-        const UiPropGrid* grid = s.ent[id].try_get<UiPropGrid>();
-        if (grid == nullptr || grid->grip != split) {
-            continue;
-        }
-        out.host = id;
-        out.label = grid->labelW > 8.0f ? grid->labelW : out.label;
-        break;
-    }
-    if (out.host == kUiNone) {
-        return out;
-    }
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (!s.ent[id].is_alive() || !s.ent[id].has<UiPropLabel>()) {
-            continue;
-        }
-        bool under = false;
-        for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-            if (p == out.host) {
-                under = true;
-                break;
-            }
-        }
-        if (!under) {
-            continue;
-        }
-        const uint16_t row = s.parentOf[id];
-        if (row < s.count) {
-            if (const UiFlex* flex = s.ent[row].try_get<UiFlex>()) {
-                if (flex->padL > 1.0f) {
-                    out.indent = flex->padL;
-                }
-            }
-        }
-        break;
-    }
-    return out;
-}
-
-void shareResize(UiState& s, uint16_t split, float x) {
-    auto* drag = s.ent[split].try_get_mut<UiSplitter>();
-    if (drag == nullptr) {
-        return;
-    }
-    const PropGrip prop = propGrip(s, split);
-    const uint16_t homeId = s.parentOf[split];
-    const float span = homeId < s.count ? s.box[homeId].w : 0.0f;
-    float size = drag->armed != 0 ? drag->startSize + (x - drag->startMouse) : prop.label;
-    const float maxSize = std::max(72.0f, span - prop.indent - 72.0f);
-    size = std::clamp(size, 72.0f, maxSize);
-    const uint16_t host = prop.host;
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (!s.ent[id].is_alive() || !s.ent[id].has<UiPropLabel>()) {
-            continue;
-        }
-        bool under = false;
-        for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-            if (p == host) {
-                under = true;
-                break;
-            }
-        }
-        if (!under) {
-            continue;
-        }
-        auto* flex = s.ent[id].try_get_mut<UiFlex>();
-        if (flex != nullptr) {
-            writeSize(*flex, false, size);
-        }
-    }
-    if (auto* bar = s.ent[split].try_get_mut<UiFlex>()) {
-        bar->position = UiPosition::Absolute;
-        bar->posX = size + prop.indent;
-        bar->widthMode = UiSize::Px;
-        bar->width = 2.0f;
-    }
-    if (host < s.count) {
-        if (auto* grid = s.ent[host].try_get_mut<UiPropGrid>()) {
-            grid->labelW = size;
-        }
-    }
-    s.layoutFrom = 0;
-    s.layoutDirty = true;
-    s.visualDirty = true;
-}
-
 void splitBegin(UiState& s, uint16_t split, float x, float y) {
-    if (split < s.count && s.ent[split].has<UiSplitShare>()) {
-        auto* drag = s.ent[split].try_get_mut<UiSplitter>();
-        if (drag == nullptr) {
-            return;
-        }
-        const PropGrip prop = propGrip(s, split);
-        drag->pane = prop.host != kUiNone ? prop.host : s.parentOf[split];
-        drag->useNext = 0;
-        drag->startSize = prop.label;
-        drag->startMouse = x;
-        drag->axis = 0;
-        drag->armed = 1;
+    auto* bound = split < s.count ? s.ent[split].try_get_mut<UiSplitter>() : nullptr;
+    if (bound != nullptr && bound->onResize != nullptr) {
+        bound->startSize = bound->live > 1.0f ? bound->live : bound->startSize;
+        bound->startMouse = bound->axis != 0 ? y : x;
+        bound->armed = 1;
         return;
     }
     const int index = childIndex(s, split);
@@ -290,8 +209,14 @@ void splitBegin(UiState& s, uint16_t split, float x, float y) {
 }
 
 void splitDrag(UiState& s, uint16_t split, float x, float y) {
-    if (split < s.count && s.ent[split].has<UiSplitShare>()) {
-        shareResize(s, split, x);
+    auto* bound = split < s.count ? s.ent[split].try_get_mut<UiSplitter>() : nullptr;
+    if (bound != nullptr && bound->onResize != nullptr) {
+        const float mouse = bound->axis != 0 ? y : x;
+        const float size = bound->startSize + (mouse - bound->startMouse);
+        bound->onResize(bound->resizeUser, split, size);
+        s.layoutFrom = 0;
+        uiNotifyLayoutDirty(s);
+        uiNotifyVisualDirty(s);
         return;
     }
     const int index = childIndex(s, split);
@@ -340,8 +265,8 @@ void splitDrag(UiState& s, uint16_t split, float x, float y) {
     size = std::clamp(size, minSize, maxSize);
     writeSize(*flex, vertical, size);
     s.layoutFrom = 0;
-    s.layoutDirty = true;
-    s.visualDirty = true;
+    uiNotifyLayoutDirty(s);
+    uiNotifyVisualDirty(s);
 }
 
 namespace {
@@ -358,20 +283,28 @@ void splitPaint(UiState& s, uint16_t id, bool hot) {
     if (paint == nullptr) {
         return;
     }
-    if (s.ent[id].has<UiSplitShare>()) {
+    auto* drag = s.ent[id].try_get_mut<UiSplitter>();
+    if (drag != nullptr && drag->onResize != nullptr) {
         if (hot) {
+            if (drag->idleSaved == 0) {
+                drag->idleR = paint->r;
+                drag->idleG = paint->g;
+                drag->idleB = paint->b;
+                drag->idleA = paint->a;
+                drag->idleSaved = 1;
+            }
             *paint = paintToken(s.look, UiToken::Accent, 0.0f);
             paint->a = 1.0f;
-        } else {
+        } else if (drag->idleSaved != 0) {
             paint->token = UiToken::Custom;
-            paint->r = 1.0f;
-            paint->g = 1.0f;
-            paint->b = 1.0f;
-            paint->a = 0.08f;
+            paint->r = drag->idleR;
+            paint->g = drag->idleG;
+            paint->b = drag->idleB;
+            paint->a = drag->idleA;
             paint->borderW = 0.0f;
             paint->shadow = 0.0f;
         }
-        s.visualDirty = true;
+        uiNotifyVisualDirty(s);
         return;
     }
     const UiToken token = hot ? UiToken::Accent : UiToken::Muted;
@@ -492,8 +425,18 @@ void uiSplitterSetWidth(UiState& s, uint16_t split, float width) {
     }
     writeSize(*flex, splitVertical(s, split), width);
     s.layoutFrom = 0;
-    s.layoutDirty = true;
-    s.visualDirty = true;
+    uiNotifyLayoutDirty(s);
+    uiNotifyVisualDirty(s);
+}
+
+uint16_t loadSplit(UiState& s, uint16_t parent, const BinNode& node, const char*, void*) {
+    const bool vertical = node.direction != static_cast<uint8_t>(UiFlexDir::Row);
+    return uiSplitBar(s, parent, vertical);
+}
+
+void uiSplitBin(UiState& s) {
+    uiBinRole(s, kBinSlotSplit, "split", 0, 0);
+    uiRegisterCustomBinNode(s, kBinSlotSplit, loadSplit, nullptr);
 }
 
 } // namespace burnhope

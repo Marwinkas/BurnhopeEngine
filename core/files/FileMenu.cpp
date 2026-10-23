@@ -6,7 +6,7 @@
 namespace burnhope {
 
 template <void (*Fn)(UiState&)>
-void menuCall(void* user) {
+void menuCall(void* user, uint16_t) {
     Fn(*static_cast<UiState*>(user));
 }
 
@@ -49,7 +49,7 @@ void menuSelectAll(UiState& s) {
     fileRefresh(s);
 }
 
-UiMenuItem menuItem(const char* label, void (*onClick)(void*)) {
+UiMenuItem menuItem(const char* label, UiCommandFn onClick) {
     return {.label = label, .onClick = onClick};
 }
 

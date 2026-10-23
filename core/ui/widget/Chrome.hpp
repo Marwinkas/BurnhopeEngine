@@ -4,8 +4,11 @@
 
 namespace burnhope {
 
+struct UiTitleBar {};
+
+inline constexpr uint8_t kBinSlotChrome = 10;
+
 uint16_t uiWindowChrome(UiState& s, uint16_t parent);
-void uiMarkTab(UiState& s, uint16_t strip, uint16_t tab);
 void uiInstallChromeBin(UiState& s);
 
 } // namespace burnhope

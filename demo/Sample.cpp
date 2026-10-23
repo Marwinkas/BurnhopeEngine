@@ -1,7 +1,10 @@
 #include "Str.hpp"
 #include "files/Browser.hpp"
 #include "files/FileDomain.hpp"
+#include "ui/Command.hpp"
 #include "ui/Domain.hpp"
+#include "ui/widget/Chrome.hpp"
+#include "ui/widget/Docking.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Calendar.hpp"
 #include "ui/widget/ColorPicker.hpp"
@@ -111,7 +114,7 @@ void formSubmit(UiState& s) {
     uiNotifyVisualDirty(s);
 }
 
-void cmdClear(void* user) {
+void cmdClear(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     auto* field = s.ent[uiField(s)].try_get_mut<UiField>();
     if (field == nullptr) {
@@ -162,13 +165,13 @@ void onCompact(void* user, uint16_t) {
     applyCompact(*static_cast<UiState*>(user));
 }
 
-void cmdScene(void* user) { setPage(*static_cast<UiState*>(user), 0); }
+void cmdScene(void* user, uint16_t) { setPage(*static_cast<UiState*>(user), 0); }
 
-void cmdLook(void* user) { setPage(*static_cast<UiState*>(user), 1); }
+void cmdLook(void* user, uint16_t) { setPage(*static_cast<UiState*>(user), 1); }
 
-void cmdInput(void* user) { setPage(*static_cast<UiState*>(user), 2); }
+void cmdInput(void* user, uint16_t) { setPage(*static_cast<UiState*>(user), 2); }
 
-void cmdCompact(void* user) {
+void cmdCompact(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     auto* check = s.ent[shellIds(s).compactRow].try_get_mut<UiCheck>();
     if (check == nullptr) {
@@ -179,29 +182,29 @@ void cmdCompact(void* user) {
     uiNotifyVisualDirty(s);
 }
 
-void cmdMin(void* user) { uiRequestMinimize(*static_cast<UiState*>(user)); }
+void cmdMin(void* user, uint16_t) { uiRequestMinimize(*static_cast<UiState*>(user)); }
 
-void cmdMax(void* user) { uiRequestMaximize(*static_cast<UiState*>(user)); }
+void cmdMax(void* user, uint16_t) { uiRequestMaximize(*static_cast<UiState*>(user)); }
 
-void cmdTop(void* user) {
+void cmdTop(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     ShellIds& ids = shellIds(s);
     ids.topOn = !ids.topOn;
     uiRequestTop(s, ids.topOn);
 }
 
-void cmdGhost(void* user) {
+void cmdGhost(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     ShellIds& ids = shellIds(s);
     ids.ghost = !ids.ghost;
     uiRequestOpacity(s, ids.ghost ? 0.86f : 1.0f);
 }
 
-void cmdFiles(void* user) {
+void cmdFiles(void* user, uint16_t) {
     filesShow(*static_cast<UiState*>(user), true);
 }
 
-void cmdTheme(void* user) {
+void cmdTheme(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
     ShellIds& ids = shellIds(s);
     ids.warm = !ids.warm;
@@ -209,8 +212,6 @@ void cmdTheme(void* user) {
 }
 
 void uiBuildShell(UiState& s) {
-    uiInstallCalendarBin(s);
-    uiInstallColorBin(s);
     const uint16_t root = uiImportBinFile(s, kUiNone, BH_UI_SHELL);
     auto take = [&](const char* name) { return uiFindName(s, name); };
     auto link = [&](const char* from, const char* to) {
@@ -346,6 +347,9 @@ void uiBuildShell(UiState& s) {
     const uint16_t slider = take("scale");
     stamp(s, root, UiToken::Window);
     stamp(s, title, UiToken::Title);
+    if (title < s.count) {
+        s.ent[title].set<UiTitleBar>({});
+    }
     stamp(s, brand, UiToken::Accent);
     stamp(s, side, UiToken::Side);
     stamp(s, content, UiToken::Content);

@@ -2,11 +2,11 @@
 #include <doctest/doctest.h>
 
 #include "ui/Domain.hpp"
+#include "ui/widget/Docking.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "files/Browser.hpp"
 #include "files/FileDomain.hpp"
-#include "ui/widget/Detail.hpp"
 #include "ui/widget/Slider.hpp"
 
 #include <cstdio>

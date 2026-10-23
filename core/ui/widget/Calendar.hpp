@@ -17,6 +17,7 @@ struct UiCalendarComponent {
 inline UiCalendarComponent& uiCal(UiState& s) {
     return s.world.ensure<UiCalendarComponent>();
 }
+inline constexpr uint8_t kBinSlotCalendar = 11;
 void uiInstallCalendarBin(UiState& s);
 void calOnOpen(void* user, uint16_t id);
 

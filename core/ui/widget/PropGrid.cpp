@@ -1,19 +1,16 @@
 #include "ui/Hover.hpp"
+#include "ui/Icon.hpp"
 #include "ui/Interaction.hpp"
-#include "ui/LayoutBridge.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
-#include "ui/widget/Detail.hpp"
-#include "ui/widget/List.hpp"
+#include "ui/widget/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Field.hpp"
+#include "ui/widget/Fold.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Splitter.hpp"
-#include "ui/widget/TreeView.hpp"
-
-#include <yoga/Yoga.h>
 
 #include <cmath>
 #include <cstdio>
@@ -22,212 +19,13 @@
 namespace burnhope {
 namespace {
 
-constexpr float kFoldSec = 0.2f;
-
-float easeOutCubic(float u) {
-    if (u < 0.0f) {
-        u = 0.0f;
-    }
-    if (u > 1.0f) {
-        u = 1.0f;
-    }
-    const float t = 1.0f - u;
-    return 1.0f - t * t * t;
-}
-
-uint16_t foldMark(const UiState& s, uint16_t head) {
-    for (uint16_t child = 0; child < s.count; ++child) {
-        if (s.parentOf[child] == head) {
-            return child;
-        }
-    }
-    return kUiNone;
-}
-
-void setFoldAngle(UiState& s, uint16_t head, float degrees) {
-    const uint16_t mark = foldMark(s, head);
-    if (mark >= s.count) {
-        return;
-    }
-    if (auto* paint = s.ent[mark].try_get_mut<UiPaint>()) {
-        paint->icon = 10;
-        paint->angle = degrees;
-    }
-}
-
-void tickFolds(UiState& s) {
-    for (uint16_t id = 0; id < s.count; ++id) {
-        auto* tree = s.ent[id].try_get_mut<UiTree>();
-        if (tree == nullptr || tree->body >= s.count) {
-            continue;
-        }
-        const uint16_t inner = tree->body;
-        const uint16_t clip = s.parentOf[inner];
-        const bool anim = tree->t0 >= 0.0f;
-        if (!anim && tree->open != 0 && inner < s.count && s.box[inner].h > 8.0f) {
-            tree->full = s.box[inner].h;
-            if (clip < s.count) {
-                if (auto* flex = s.ent[clip].try_get_mut<UiFlex>()) {
-                    if (flex->heightMode == UiSize::Px && std::fabs(flex->height - tree->full) > 1.0f) {
-                        flex->height = tree->full;
-                        s.layoutDirty = true;
-                    }
-                }
-            }
-        }
-        if (!anim || clip >= s.count) {
-            continue;
-        }
-        const float u = easeOutCubic((s.time - tree->t0) / kFoldSec);
-        const float h = tree->from + (tree->to - tree->from) * u;
-        if (auto* flex = s.ent[clip].try_get_mut<UiFlex>()) {
-            flex->heightMode = UiSize::Px;
-            flex->height = h > 0.0f ? h : 0.0f;
-            flex->minH = 0.0f;
-            flex->overflow = UiOverflow::Hidden;
-        }
-        const float span = tree->full > 1.0f ? tree->full : 1.0f;
-        s.ent[inner].set<UiFade>({h / span});
-        const float aim = tree->to > tree->from ? 90.0f : 0.0f;
-        const float start = tree->to > tree->from ? 0.0f : 90.0f;
-        setFoldAngle(s, id, start + (aim - start) * u);
-        s.layoutDirty = true;
-        s.visualDirty = true;
-        if (u >= 1.0f) {
-            tree->t0 = -1.0f;
-            if (auto* flex = s.ent[clip].try_get_mut<UiFlex>()) {
-                flex->heightMode = UiSize::Px;
-                flex->height = tree->to > 0.5f ? tree->full : 0.0f;
-                flex->overflow = UiOverflow::Hidden;
-            }
-            s.ent[inner].set<UiFade>({tree->to > 0.5f ? 1.0f : 0.0f});
-            setFoldAngle(s, id, tree->open != 0 ? 90.0f : 0.0f);
-        }
-    }
-}
-
-void onTree(void* user, uint16_t id) {
-    auto* s = static_cast<UiState*>(user);
-    if (s == nullptr || id >= s->count) {
-        return;
-    }
-    auto* tree = s->ent[id].try_get_mut<UiTree>();
-    if (tree == nullptr || tree->body == kUiNone) {
-        return;
-    }
-    const bool opening = tree->open == 0;
-    tree->open = opening ? 1 : 0;
-    const uint16_t clip = s->parentOf[tree->body];
-    float from = clip < s->count ? s->box[clip].h : 0.0f;
-    if (!opening && from < 1.0f) {
-        from = tree->full;
-    }
-    if (opening && tree->full < 8.0f && tree->body < s->count && s->box[tree->body].h > 8.0f) {
-        tree->full = s->box[tree->body].h;
-    }
-    tree->from = from;
-    tree->to = opening ? tree->full : 0.0f;
-    tree->t0 = s->time;
-    uiShow(*s, tree->body, true);
-    s->layoutDirty = true;
-    s->visualDirty = true;
-}
-
-} // namespace
-
-uint16_t uiTreeRow(UiState& s, uint16_t parent, const char* text) {
-    UiFlex row{};
-    row.direction = UiFlexDir::Row;
-    row.position = UiPosition::Relative;
-    row.heightMode = UiSize::Px;
-    row.height = 28.0f;
-    row.shrink = 0.0f;
-    row.align = UiAlign::Center;
-    row.gap = 8.0f;
-    row.padL = 8.0f;
-    row.padR = 8.0f;
-    row.widthMode = UiSize::Percent;
-    row.width = 100.0f;
-    if (parent < s.count) {
-        if (const UiFlex* home = s.ent[parent].try_get<UiFlex>()) {
-            const float left = home->pad > 0.0f ? home->pad : home->padL;
-            const float right = home->pad > 0.0f ? home->pad : home->padR;
-            if (left > 0.0f) {
-                row.marginL = -left;
-            }
-            if (right > 0.0f) {
-                row.marginR = -right;
-            }
-        }
-    }
-    UiPaint bar = paintToken(s.look, UiToken::Item, 0.0f);
-    const uint16_t head = uiPanel(s, parent, row, bar);
-    UiFlex chev{};
-    chev.widthMode = UiSize::Px;
-    chev.width = 28.0f;
-    chev.heightMode = UiSize::Px;
-    chev.height = 28.0f;
-    chev.shrink = 0.0f;
-    UiPaint markPaint{};
-    markPaint.a = 0.0f;
-    markPaint.borderW = 0.0f;
-    markPaint.shadow = 0.0f;
-    markPaint.icon = 10;
-    markPaint.r = s.look.accent[0][0];
-    markPaint.g = s.look.accent[0][1];
-    markPaint.b = s.look.accent[0][2];
-    const uint16_t mark = uiPanel(s, head, chev, markPaint);
-    if (mark < s.count) {
-        s.ent[mark].add<UiNoHit>();
-    }
-    UiFlex caption{};
-    caption.grow = 1.0f;
-    caption.shrink = 1.0f;
-    caption.heightMode = UiSize::Px;
-    caption.height = 22.0f;
-    caption.overflow = UiOverflow::Hidden;
-    const uint16_t label = uiPanel(s, head, caption, paintLabel(s.look));
-    uiText(s, label, text != nullptr ? text : "");
-    uiTextStyle(s, label, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-    if (label < s.count) {
-        s.ent[label].add<UiNoHit>();
-    }
-    uiHover(s, head);
-    s.ent[head].add<UiFocusable>();
-    UiFlex clipFlex{};
-    clipFlex.direction = UiFlexDir::Column;
-    clipFlex.shrink = 0.0f;
-    clipFlex.widthMode = UiSize::Percent;
-    clipFlex.width = 100.0f;
-    clipFlex.heightMode = UiSize::Px;
-    clipFlex.height = 0.0f;
-    clipFlex.minH = 0.0f;
-    clipFlex.overflow = UiOverflow::Hidden;
-    const uint16_t clip = uiPanel(s, parent, clipFlex, paintClear());
-    UiFlex body{};
-    body.direction = UiFlexDir::Column;
-    body.shrink = 0.0f;
-    body.widthMode = UiSize::Percent;
-    body.width = 100.0f;
-    body.pad = 4.0f;
-    body.gap = 2.0f;
-    const uint16_t child = uiPanel(s, clip, body, paintToken(s.look, UiToken::Item, s.look.radiusSm));
-    s.ent[head].set<UiTree>({child, 0, 0, 0.0f, 0.0f, 0.0f, -1.0f});
-    uiBind(s, head, onTree, &s);
-    s.beforeLayout = tickFolds;
-    return child;
-}
-
-namespace {
-
 constexpr float kPropSlot = 24.0f;
 constexpr float kPropRow = 32.0f;
 constexpr float kPropPad = 4.0f;
 
-UiPaint paintBlack() {
-    UiPaint paint{};
-    paint.token = UiToken::Custom;
-    paint.a = 1.0f;
+UiPaint paintHair(const UiLook& look) {
+    UiPaint paint = paintToken(look, UiToken::Item, 0.0f);
+    paint.a = 0.35f;
     return paint;
 }
 
@@ -264,12 +62,77 @@ void propHair(UiState& s, uint16_t column) {
     line.heightMode = UiSize::Px;
     line.height = 1.0f;
     line.shrink = 0.0f;
-    (void)uiPanel(s, column, line, paintBlack());
+    (void)uiPanel(s, column, line, paintHair(s.look));
 }
 
 } // namespace
 
 constexpr float kPropIndent = 28.0f;
+
+bool propUnder(const UiState& s, uint16_t id, uint16_t host);
+
+void propColumnResize(void* user, uint16_t split, float size) {
+    auto& s = *static_cast<UiState*>(user);
+    uint16_t host = kUiNone;
+    for (uint16_t id = 0; id < s.count; ++id) {
+        const UiPropGrid* grid = s.ent[id].try_get<UiPropGrid>();
+        if (grid == nullptr || grid->grip != split) {
+            continue;
+        }
+        host = id;
+        break;
+    }
+    if (host == kUiNone) {
+        return;
+    }
+    float indent = kPropIndent;
+    for (uint16_t id = 0; id < s.count; ++id) {
+        if (!s.ent[id].is_alive() || !s.ent[id].has<UiPropLabel>() || !propUnder(s, id, host)) {
+            continue;
+        }
+        const uint16_t row = s.parentOf[id];
+        if (row < s.count) {
+            if (const UiFlex* flex = s.ent[row].try_get<UiFlex>()) {
+                if (flex->padL > 1.0f) {
+                    indent = flex->padL;
+                }
+            }
+        }
+        break;
+    }
+    const uint16_t homeId = s.parentOf[split];
+    const float span = homeId < s.count ? s.box[homeId].w : 0.0f;
+    const float maxSize = span - indent - 72.0f;
+    float clamped = size;
+    if (clamped < 72.0f) {
+        clamped = 72.0f;
+    }
+    if (maxSize > 72.0f && clamped > maxSize) {
+        clamped = maxSize;
+    }
+    for (uint16_t id = 0; id < s.count; ++id) {
+        if (!s.ent[id].is_alive() || !s.ent[id].has<UiPropLabel>() || !propUnder(s, id, host)) {
+            continue;
+        }
+        if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
+            flex->widthMode = UiSize::Px;
+            flex->width = clamped;
+            flex->shrink = 0.0f;
+        }
+    }
+    if (auto* bar = s.ent[split].try_get_mut<UiFlex>()) {
+        bar->position = UiPosition::Absolute;
+        bar->posX = clamped + indent;
+        bar->widthMode = UiSize::Px;
+        bar->width = 2.0f;
+    }
+    if (auto* grid = s.ent[host].try_get_mut<UiPropGrid>()) {
+        grid->labelW = clamped;
+    }
+    if (auto* drag = s.ent[split].try_get_mut<UiSplitter>()) {
+        drag->live = clamped;
+    }
+}
 
 void propPlace(UiState& s, uint16_t id, void*) {
     auto* grid = id < s.count ? s.ent[id].try_get_mut<UiPropGrid>() : nullptr;
@@ -358,8 +221,12 @@ void propPlace(UiState& s, uint16_t id, void*) {
         s.box[grid->grip] = line;
         s.ent[grid->grip].set<UiBounds>({line.x, line.y, line.w, line.h});
     }
-    const UiSplitter* drag = s.ent[grid->grip].try_get<UiSplitter>();
+    auto* drag = s.ent[grid->grip].try_get_mut<UiSplitter>();
     const bool live = s.hovered == grid->grip || (drag != nullptr && drag->armed != 0);
+    if (drag != nullptr && drag->armed == 0) {
+        drag->live = grid->labelW;
+        drag->startSize = grid->labelW;
+    }
     if (!live) {
         if (auto* paint = s.ent[grid->grip].try_get_mut<UiPaint>()) {
             paint->token = UiToken::Custom;
@@ -415,7 +282,11 @@ uint16_t uiPropHost(UiState& s, uint16_t parent) {
             paint->borderW = 0.0f;
             paint->shadow = 0.0f;
         }
-        s.ent[grip].add<UiSplitShare>();
+        uiSplitterBind(s, grip, id, 0, propColumnResize, &s);
+        if (auto* drag = s.ent[grip].try_get_mut<UiSplitter>()) {
+            drag->live = 140.0f;
+            drag->startSize = 140.0f;
+        }
         s.ent[grip].add<UiPaintLast>();
         uint16_t scroll = kUiNone;
         for (uint16_t p = parent; p != kUiNone && p < s.count; p = s.parentOf[p]) {
@@ -452,6 +323,13 @@ uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
     const uint16_t row = uiPanel(s, host, line, paintClear());
     if (row < s.count) {
         s.ent[row].add<UiRowHover>();
+        if (auto* paint = s.ent[row].try_get_mut<UiPaint>()) {
+            paint->hoverKids = 1;
+            paint->hr = s.look.text[0];
+            paint->hg = s.look.text[1];
+            paint->hb = s.look.text[2];
+            paint->ha = 0.14f;
+        }
     }
     UiFlex name{};
     name.widthMode = UiSize::Px;
@@ -569,50 +447,6 @@ uint16_t uiPropMenu(UiState& s, uint16_t host, const char* label, const char* va
     }
     return id;
 }
-
-void uiFoldOpen(UiState& s, uint16_t body) {
-    for (uint16_t id = 0; id < s.count; ++id) {
-        auto* tree = s.ent[id].try_get_mut<UiTree>();
-        if (tree == nullptr || tree->body != body) {
-            continue;
-        }
-        tree->open = 1;
-        uiShow(s, body, true);
-        const uint16_t clip = s.parentOf[body];
-        if (clip < s.count) {
-            if (auto* flex = s.ent[clip].try_get_mut<UiFlex>()) {
-                flex->heightMode = UiSize::Auto;
-                flex->height = 0.0f;
-                flex->overflow = UiOverflow::Hidden;
-            }
-        }
-        for (uint16_t child = 0; child < s.count; ++child) {
-            if (s.parentOf[child] != id) {
-                continue;
-            }
-            uiText(s, child, "");
-            if (auto* paint = s.ent[child].try_get_mut<UiPaint>()) {
-                paint->a = 0.0f;
-                paint->borderW = 0.0f;
-                paint->shadow = 0.0f;
-                paint->icon = 10;
-                paint->angle = 90.0f;
-                paint->r = s.look.accent[0][0];
-                paint->g = s.look.accent[0][1];
-                paint->b = s.look.accent[0][2];
-            }
-            break;
-        }
-        break;
-    }
-}
-
-uint16_t uiFoldBody(UiState& s, uint16_t parent, const char* title) {
-    const uint16_t body = uiTreeRow(s, parent, title);
-    uiFoldOpen(s, body);
-    return body;
-}
-
 namespace {
 
 void writeNumber(UiState& s, uint16_t id, float value) {
@@ -638,7 +472,7 @@ void onVecCtl(void* user, uint16_t id) {
     if (ctl->which == 3) {
         ctl->linked = ctl->linked == 0 ? 1 : 0;
         if (auto* paint = s->ent[id].try_get_mut<UiPaint>()) {
-            paint->icon = ctl->linked != 0 ? 13 : 12;
+            paint->icon = static_cast<uint8_t>(ctl->linked != 0 ? UiIcon::Lock : UiIcon::LockOpen);
         }
         s->visualDirty = true;
         return;
@@ -688,9 +522,9 @@ UiPropVec3 uiPropVec3(UiState& s, uint16_t host, const char* label, float x, flo
     const float axes[3] = {x, y, z};
     const char* letters[3] = {"X", "Y", "Z"};
     const float ink[3][3] = {
-        {0.90f, 0.24f, 0.20f},
-        {0.28f, 0.76f, 0.30f},
-        {0.26f, 0.50f, 0.95f},
+        {s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2]},
+        {s.look.accent[1][0], s.look.accent[1][1], s.look.accent[1][2]},
+        {s.look.accent[2][0], s.look.accent[2][1], s.look.accent[2][2]},
     };
     UiPropVec3 out{};
     uint16_t* ids[3] = {&out.x, &out.y, &out.z};
@@ -727,7 +561,7 @@ UiPropVec3 uiPropVec3(UiState& s, uint16_t host, const char* label, float x, flo
         }
         return id;
     };
-    out.lock = square(12);
+    out.lock = square(static_cast<uint8_t>(UiIcon::LockOpen));
     if (out.lock < s.count) {
         s.ent[out.lock].set<UiVecCtl>({});
         if (auto* ctl = s.ent[out.lock].try_get_mut<UiVecCtl>()) {
@@ -771,7 +605,7 @@ UiPropVec3 uiPropVec3(UiState& s, uint16_t host, const char* label, float x, flo
         uiNumberFill(s, *ids[i], false);
         propFitField(s, *ids[i], true);
     }
-    out.reset = square(14);
+    out.reset = square(static_cast<uint8_t>(UiIcon::Reset));
     UiVecCtl shared{};
     shared.field[0] = out.x;
     shared.field[1] = out.y;
@@ -821,8 +655,8 @@ UiPropVec2 uiPropVec2(UiState& s, uint16_t host, const char* label, float x, flo
     const float axes[2] = {x, y};
     const char* letters[2] = {"X", "Y"};
     const float ink[2][3] = {
-        {0.90f, 0.24f, 0.20f},
-        {0.28f, 0.76f, 0.30f},
+        {s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2]},
+        {s.look.accent[1][0], s.look.accent[1][1], s.look.accent[1][2]},
     };
     UiPropVec2 out{};
     uint16_t* ids[2] = {&out.x, &out.y};
@@ -931,14 +765,9 @@ const char* propSectionTitle(const UiState& s, uint16_t wrap) {
         if (s.parentOf[head] != wrap) {
             continue;
         }
-        for (uint16_t cap = 0; cap < s.count; ++cap) {
-            if (s.parentOf[cap] != head) {
-                continue;
-            }
-            const UiText* text = s.ent[cap].try_get<UiText>();
-            if (text != nullptr && text->len > 0) {
-                return text->bytes;
-            }
+        const UiText* text = s.ent[head].try_get<UiText>();
+        if (text != nullptr && text->len > 0) {
+            return text->bytes;
         }
     }
     return "Component";
@@ -1196,41 +1025,6 @@ void uiPropShowMask(UiState& s, uint8_t mask) {
     }
     uiPropRebuildFilters(s);
     uiPropFilterApply(s);
-}
-
-void uiFold(UiState& s, uint16_t id) {
-    const uint16_t header = s.parentOf[id];
-    const uint16_t panel = header == kUiNone ? kUiNone : s.parentOf[header];
-    if (panel == kUiNone) {
-        return;
-    }
-    bool open = false;
-    for (uint16_t child = 0; child < s.count; ++child) {
-        if (s.parentOf[child] != panel || child == header || s.yoga[child] == nullptr) {
-            continue;
-        }
-        if (YGNodeStyleGetDisplay(s.yoga[child]) != YGDisplayNone) {
-            open = true;
-        }
-    }
-    for (uint16_t child = 0; child < s.count; ++child) {
-        if (s.parentOf[child] == panel && child != header) {
-            uiShow(s, child, !open);
-        }
-    }
-    auto* flex = s.ent[panel].try_get_mut<UiFlex>();
-    if (flex != nullptr && flex->position != UiPosition::Static) {
-        UiFoldState& fold = s.ent[panel].ensure<UiFoldState>();
-        if (open) {
-            fold.openH = flex->height > 56.0f ? flex->height : s.box[panel].h;
-            flex->heightMode = UiSize::Px;
-            flex->height = 52.0f;
-        } else if (fold.openH > 56.0f) {
-            flex->heightMode = UiSize::Px;
-            flex->height = fold.openH;
-        }
-        s.layoutDirty = true;
-    }
 }
 
 } // namespace burnhope

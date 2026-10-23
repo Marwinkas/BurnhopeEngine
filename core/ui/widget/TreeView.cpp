@@ -1,5 +1,5 @@
 #include "ui/Hover.hpp"
-#include "ui/widget/Detail.hpp"
+#include "ui/Icon.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/Virtual.hpp"
 
@@ -126,7 +126,7 @@ uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg) {
     tree.user = cfg.user;
     tree.itemH = s.metrics.rowH;
     s.ent[scroll].set<UiTreeView>(tree);
-    s.ent[scroll].set<UiVirtualPool>({uiTreeViewRefresh, uiTreeContentH, 0});
+    uiVirtualAttach(s, scroll, uiTreeViewRefresh, uiTreeContentH, 0);
     s.ent[scroll].set<UiLayoutRefresh>({treeOnLayout, nullptr});
     uiTreeViewRefresh(s, scroll);
     return scroll;
@@ -185,7 +185,7 @@ void uiTreeViewRefresh(UiState& s, uint16_t id) {
         if (auto* flex = s.ent[slot].try_get_mut<UiFlex>()) {
             flex->position = UiPosition::Absolute;
             flex->posX = 0.0f;
-            flex->posY = static_cast<float>(index) * tree->itemH - scroll->offset;
+            flex->posY = uiVirtualSlotY(index, tree->itemH, scroll->offset);
             flex->widthMode = UiSize::Percent;
             flex->width = 100.0f;
             flex->justify = UiJustify::Start;
@@ -233,6 +233,15 @@ bool uiTreeInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, u
     }
     tree->empty(tree->user);
     return false;
+}
+
+uint16_t loadTree(UiState& s, uint16_t parent, const BinNode&, const char*, void*) {
+    return uiTreeView(s, parent, {});
+}
+
+void uiTreeBin(UiState& s) {
+    uiBinRole(s, kBinSlotTree, "tree", 0, 0);
+    uiRegisterCustomBinNode(s, kBinSlotTree, loadTree, nullptr);
 }
 
 } // namespace burnhope

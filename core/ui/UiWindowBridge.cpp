@@ -54,7 +54,8 @@ void uiMaskSceneInput(const UiState& s, InputFrame& input) {
     }
 
     // 2. Если элемент с фокусом принимает ввод текста — глушим клавиатуру для 3D-сцены
-    if (s.focused != kUiNone && s.focused < s.count && s.ent[s.focused].has<UiTextInput>()) {
+    const UiText* focusedText = s.focused < s.count ? s.ent[s.focused].try_get<UiText>() : nullptr;
+    if (s.focused != kUiNone && focusedText != nullptr && focusedText->ownRun != 0) {
         input.textLen = 0;
         input.backspace = 0;
         input.del = 0;

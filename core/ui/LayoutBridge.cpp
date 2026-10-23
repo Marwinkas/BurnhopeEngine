@@ -271,13 +271,28 @@ void uiLayout(UiState& s, float w, float h) {
     if (s.layoutFrom != kUiNone && s.layoutFrom != 0 && s.layoutFrom < s.count && s.yoga[s.layoutFrom] != nullptr
         && s.box[s.layoutFrom].w > kUiLayoutEpsilon) {
         const uint16_t root = s.layoutFrom;
+        const auto yogaId = [&](YGNodeRef node) -> uint16_t {
+            if (node == nullptr) {
+                return kUiNone;
+            }
+            const auto raw = reinterpret_cast<uintptr_t>(YGNodeGetContext(node));
+            if (raw >= s.count) {
+                return kUiNone;
+            }
+            return static_cast<uint16_t>(raw);
+        };
         const auto applySub = [&](auto&& self, uint16_t id) -> void {
             const UiFlex* flex = s.ent[id].try_get<UiFlex>();
             if (flex != nullptr && s.yoga[id] != nullptr) {
                 applyFlex(s.yoga[id], *flex);
             }
-            for (uint16_t child = 0; child < s.count; ++child) {
-                if (s.parentOf[child] == id) {
+            if (s.yoga[id] == nullptr) {
+                return;
+            }
+            const uint32_t kids = YGNodeGetChildCount(s.yoga[id]);
+            for (uint32_t i = 0; i < kids; ++i) {
+                const uint16_t child = yogaId(YGNodeGetChild(s.yoga[id], i));
+                if (child != kUiNone) {
                     self(self, child);
                 }
             }
@@ -286,8 +301,13 @@ void uiLayout(UiState& s, float w, float h) {
             if (s.yoga[id] != nullptr) {
                 cacheBox(s, id);
             }
-            for (uint16_t child = 0; child < s.count; ++child) {
-                if (s.parentOf[child] == id) {
+            if (s.yoga[id] == nullptr) {
+                return;
+            }
+            const uint32_t kids = YGNodeGetChildCount(s.yoga[id]);
+            for (uint32_t i = 0; i < kids; ++i) {
+                const uint16_t child = yogaId(YGNodeGetChild(s.yoga[id], i));
+                if (child != kUiNone) {
                     self(self, child);
                 }
             }
@@ -309,9 +329,13 @@ void uiLayout(UiState& s, float w, float h) {
             scissor->maxX = keepX + s.box[root].w;
             scissor->maxY = keepY + s.box[root].h;
         }
-        for (uint16_t child = 0; child < s.count; ++child) {
-            if (s.parentOf[child] == root) {
-                cacheSub(cacheSub, child);
+        if (s.yoga[root] != nullptr) {
+            const uint32_t kids = YGNodeGetChildCount(s.yoga[root]);
+            for (uint32_t i = 0; i < kids; ++i) {
+                const uint16_t child = yogaId(YGNodeGetChild(s.yoga[root], i));
+                if (child != kUiNone) {
+                    cacheSub(cacheSub, child);
+                }
             }
         }
         for (uint16_t id = 0; id < s.count; ++id) {

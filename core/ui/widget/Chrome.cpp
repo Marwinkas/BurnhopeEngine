@@ -1,18 +1,18 @@
+#include "ui/Icon.hpp"
 #include "ui/UiBin.hpp"
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
 #include "ui/widget/Chrome.hpp"
-#include "ui/widget/Detail.hpp"
 
 namespace burnhope {
 namespace {
 
 void onMin(void* user, uint16_t) {
-    static_cast<UiState*>(user)->opMinimize = true;
+    uiRequestMinimize(*static_cast<UiState*>(user));
 }
 
 void onMax(void* user, uint16_t) {
-    static_cast<UiState*>(user)->opMaximize = true;
+    uiRequestMaximize(*static_cast<UiState*>(user));
 }
 
 } // namespace
@@ -37,13 +37,13 @@ uint16_t uiWindowChrome(UiState& s, uint16_t parent) {
     uiHover(s, maxB);
     uiHover(s, closeB);
     if (auto* icon = s.ent[minB].try_get_mut<UiPaint>()) {
-        icon->icon = 1;
+        icon->icon = static_cast<uint8_t>(UiIcon::Minimize);
     }
     if (auto* icon = s.ent[maxB].try_get_mut<UiPaint>()) {
-        icon->icon = 2;
+        icon->icon = static_cast<uint8_t>(UiIcon::Maximize);
     }
     if (auto* icon = s.ent[closeB].try_get_mut<UiPaint>()) {
-        icon->icon = 3;
+        icon->icon = static_cast<uint8_t>(UiIcon::Dismiss);
     }
     uiBind(s, minB, onMin, &s);
     uiBind(s, maxB, onMax, &s);
@@ -59,22 +59,8 @@ uint16_t loadChromeBin(UiState& s, uint16_t parent, const BinNode&, const char* 
 }
 
 void uiInstallChromeBin(UiState& s) {
+    uiBinRole(s, kBinSlotChrome, "chrome", 0, 0);
     uiRegisterCustomBinNode(s, kBinSlotChrome, loadChromeBin, nullptr);
-}
-
-void uiMarkTab(UiState& s, uint16_t strip, uint16_t tab) {
-    for (uint16_t id = 1; id < s.count; ++id) {
-        if (s.parentOf[id] != strip) {
-            continue;
-        }
-        if (!s.ent[id].has<UiFocusable>()) {
-            continue;
-        }
-        if (auto* live = s.ent[id].try_get_mut<UiPaint>()) {
-            live->token = id == tab ? UiToken::Accent : UiToken::Button;
-            s.visualDirty = true;
-        }
-    }
 }
 
 } // namespace burnhope

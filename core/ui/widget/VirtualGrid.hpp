@@ -23,6 +23,8 @@ struct UiVirtualGrid : UiVirtualBase {
     void (*zoom)(void* user, float wheel) = nullptr;
     void (*commit)(void* user, uint32_t index, const char* text) = nullptr;
     void (*cancel)(void* user, uint32_t index) = nullptr;
+    uint16_t (*openEditor)(void* user, uint16_t editor, uint32_t index, const char* text) = nullptr;
+    void (*readEditor)(void* user, uint16_t editor, char* dst, uint8_t cap) = nullptr;
     void* user = nullptr;
     uint16_t editor = kUiNone;
     uint32_t editAt = kUiCellNone;
@@ -50,8 +52,13 @@ struct UiVirtualGridConfig {
     void (*onZoom)(void* user, float wheel) = nullptr;
     void (*onCommit)(void* user, uint32_t itemIndex, const char* text) = nullptr;
     void (*onCancel)(void* user, uint32_t itemIndex) = nullptr;
+    uint16_t (*onOpenEditor)(void* user, uint16_t editor, uint32_t index, const char* text) = nullptr;
+    void (*onReadEditor)(void* user, uint16_t editor, char* dst, uint8_t cap) = nullptr;
     void* user = nullptr;
 };
+
+inline constexpr uint8_t kBinSlotGrid = 17;
+void uiGridBin(UiState& s);
 
 uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& cfg);
 void uiBindGrid(UiState& s, const char* name, const UiVirtualGridConfig& cfg);

@@ -1,5 +1,3 @@
-#include "ui/widget/Detail.hpp"
-#include "ui/widget/Field.hpp"
 #include "ui/widget/Rubberband.hpp"
 
 namespace burnhope {
@@ -17,7 +15,7 @@ void rubberPick(UiState& s, uint16_t host, UiRubber& band) {
         }
         const bool under = uiWithin(s, s.parentOf[id], host);
         const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-        if (!under || paint == nullptr || !s.ent[id].has<UiFocusable>() || s.ent[id].try_get<UiField>() != nullptr) {
+        if (!under || paint == nullptr || !s.ent[id].has<UiFocusable>() || s.ent[id].has<UiTextInput>() || s.ent[id].has<UiCapture>()) {
             continue;
         }
         if (overlaps(s.box[id], band.x0, band.y0, band.x1, band.y1)) {
@@ -74,7 +72,7 @@ bool uiRubberbandTrack(UiState& s, uint16_t host, const InputFrame& in) {
     if (s.hovered == host || uiWithin(s, s.hovered, host)) {
         empty = true;
         for (uint16_t p = s.hovered; p != kUiNone && p != host && p < s.count; p = s.parentOf[p]) {
-            if (s.ent[p].has<UiFocusable>() && s.ent[p].try_get<UiField>() == nullptr) {
+            if (s.ent[p].has<UiCapture>() || s.ent[p].has<UiTextInput>() || s.ent[p].has<UiFocusable>()) {
                 empty = false;
                 break;
             }

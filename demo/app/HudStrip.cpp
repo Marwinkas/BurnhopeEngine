@@ -47,7 +47,7 @@ void hudBuildStrip(Canvas& canvas, HudContext* hud, uint16_t toolbar, uint16_t r
         return uiPanel(*canvas.state, parent, px(1.0f, 18.0f), ink);
     };
     {
-        uint16_t plus = uiHostIconBtn(*canvas.state, toolLeft, 16, 28.0f);
+        uint16_t plus = uiIconBtn(*canvas.state, toolLeft, 16, 28.0f);
         hud->spawnBtn = plus;
         uint16_t menu = uiMakeMenu(*canvas.state);
         if (menu != kUiNone) {
