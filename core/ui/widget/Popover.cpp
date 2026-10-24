@@ -1,6 +1,6 @@
-#include "ui/Popover.hpp"
+#include "ui/widget/Popover.hpp"
 
-#include "ui/Command.hpp"
+#include "ui/widget/Menu.hpp"
 
 namespace burnhope {
 
@@ -8,7 +8,7 @@ void uiSyncPopover(UiState& s, uint16_t panel, uint16_t anchor, float width, flo
     if (panel >= s.count) {
         return;
     }
-    if (want == 2 && (!s.menuOpen || uiMenuMetrics(s).opened != panel)) {
+    if (want == 2 && (!uiMenuShown(s) || uiMarked<UiMenuOpen>(s) != panel)) {
         want = 0;
     }
     if ((want == 1 || want == 2) && anchor < s.count) {
@@ -38,16 +38,16 @@ void uiSyncPopover(UiState& s, uint16_t panel, uint16_t anchor, float width, flo
         }
         if (want == 1) {
             uiReveal(s, panel, height, true);
-            uiMenuMetrics(s).opened = panel;
-            s.menuOpen = true;
+            uiMarkOnly<UiMenuOpen>(s, panel);
+            uiMenuSetShown(s, true);
             uiNotifyLayoutDirty(s);
             want = 2;
         }
     } else if (want == 0) {
         uiReveal(s, panel, height, false);
-        if (uiMenuMetrics(s).opened == panel) {
-            uiMenuMetrics(s).opened = kUiNone;
-            s.menuOpen = false;
+        if (uiMarked<UiMenuOpen>(s) == panel) {
+            uiMarkOnly<UiMenuOpen>(s, kUiNone);
+            uiMenuSetShown(s, false);
         }
     }
 }

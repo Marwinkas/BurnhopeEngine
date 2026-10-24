@@ -6,7 +6,12 @@
 namespace burnhope {
 
 struct UiState;
-struct TextRun;
+struct UiNodeBars;
+struct UiBar;
+
+void uiNodeBarPush(UiState& s, UiNodeBars& bars, const UiBar& bar);
+void uiBarScratchReset(UiState& s);
+void uiBarScratchShutdown(UiState& s);
 
 struct UiGpuHeader {
     float extentX;

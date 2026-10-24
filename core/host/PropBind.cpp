@@ -1,8 +1,10 @@
 #include "host/PropBind.hpp"
 
 #include "ui/widget/Button.hpp"
+#include "ui/widget/Check.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
+#include "ui/widget/Number.hpp"
 #include "ui/widget/Slider.hpp"
 
 #include <cstdio>
@@ -143,10 +145,13 @@ void binderOnColor(void* user, UiState& s, uint16_t anchor, float r, float g, fl
     }
 }
 
-void UiPropBinder::syncSwatches(UiState& s) const {
-    UiColorPickerComponent& picker = uiColor(s);
-    picker.onColor = binderOnColor;
-    picker.colorUser = const_cast<UiPropBinder*>(this);
+void UiPropBinder::syncSwatches(UiState& s) {
+    UiColorPickerComponent* picker = uiColorFind(s);
+    if (picker == nullptr) {
+        return;
+    }
+    picker->onColor = binderOnColor;
+    picker->colorUser = this;
 }
 
 void UiPropBinder::write(UiState& s, float* dst, float value) const {

@@ -66,7 +66,6 @@ void canvasSetBuilder(Canvas& c, UiBuilder builder, void* user);
 void canvasSetClick(Canvas& c, UiClickFn fn, void* user);
 void canvasOnFocus(Canvas& c, UiFocusFn fn, void* user);
 bool canvasListen(Canvas& c, UiValueFn fn, void* user);
-[[nodiscard]] bool canvasAddCommand(Canvas& c, const char* name, UiCommandFn fn, void* user);
 
 // 7. Делегирование ресурсов и фотографий (реализация в UiPhoto)
 [[nodiscard]] bool canvasLoadPhoto(Canvas& c, uint8_t slot, const char* path);
@@ -74,7 +73,7 @@ bool canvasListen(Canvas& c, UiValueFn fn, void* user);
 [[nodiscard]] bool canvasSetFont(Canvas& c, const char* path, float pixelSize);
 [[nodiscard]] bool canvasUseFont(Canvas& c, float pixelSize);
 
-// 8. Делегаты оконных операций и маскирования ввода сцены (для обратной совместимости с Host.cpp и Engine.cpp)
+// 8. Делегаты оконных операций.
 inline void canvasTakeWindowOps(Canvas& c, WindowOps& out) {
     if (c.state != nullptr) {
         uiWindowTakeOps(*c.state, out);
@@ -91,12 +90,6 @@ inline void canvasChrome(const Canvas& c, float& titleBar, float& resizeBorder) 
     } else {
         titleBar = 40.0f;
         resizeBorder = 6.0f;
-    }
-}
-
-inline void canvasMaskScene(const Canvas& c, InputFrame& input) {
-    if (c.state != nullptr) {
-        uiMaskSceneInput(*c.state, input);
     }
 }
 

@@ -70,16 +70,13 @@ float axisFloor(const UiState& s, uint16_t id, bool vertical, bool ignoreFixed, 
     return acc;
 }
 
-void writeSize(UiFlex& flex, bool vertical, float size) {
+void writeSize(UiState& s, uint16_t pane, bool vertical, float size) {
     if (vertical) {
-        flex.heightMode = UiSize::Px;
-        flex.height = size;
-        flex.shrink = 0.0f;
-        return;
+        uiSetHeight(s, pane, size);
+    } else {
+        uiSetWidth(s, pane, size);
     }
-    flex.widthMode = UiSize::Px;
-    flex.width = size;
-    flex.shrink = 0.0f;
+    uiFlexShrink(s, pane, 0.0f);
 }
 
 } // namespace
@@ -213,7 +210,7 @@ void splitDrag(UiState& s, uint16_t split, float x, float y) {
     if (bound != nullptr && bound->onResize != nullptr) {
         const float mouse = bound->axis != 0 ? y : x;
         const float size = bound->startSize + (mouse - bound->startMouse);
-        bound->onResize(bound->resizeUser, split, size);
+        bound->live = bound->onResize(bound->resizeUser, split, size);
         s.layoutFrom = 0;
         uiNotifyLayoutDirty(s);
         uiNotifyVisualDirty(s);
@@ -240,10 +237,6 @@ void splitDrag(UiState& s, uint16_t split, float x, float y) {
     if (pane == kUiNone || pane >= s.count) {
         return;
     }
-    auto* flex = s.ent[pane].try_get_mut<UiFlex>();
-    if (flex == nullptr) {
-        return;
-    }
     const UiBox& home = s.box[parent];
     const UiBox& bar = s.box[split];
     const float mouse = vertical ? y : x;
@@ -263,7 +256,7 @@ void splitDrag(UiState& s, uint16_t split, float x, float y) {
     constexpr float minSize = 48.0f;
     const float maxSize = std::max(minSize, span - grip - minSize);
     size = std::clamp(size, minSize, maxSize);
-    writeSize(*flex, vertical, size);
+    writeSize(s, pane, vertical, size);
     s.layoutFrom = 0;
     uiNotifyLayoutDirty(s);
     uiNotifyVisualDirty(s);
@@ -271,9 +264,7 @@ void splitDrag(UiState& s, uint16_t split, float x, float y) {
 
 namespace {
 
-struct UiSplitHot {
-    uint16_t id = kUiNone;
-};
+struct UiSplitHot {};
 
 void splitPaint(UiState& s, uint16_t id, bool hot) {
     if (id >= s.count || !s.ent[id].is_alive() || !s.ent[id].has<UiSplitter>()) {
@@ -283,27 +274,13 @@ void splitPaint(UiState& s, uint16_t id, bool hot) {
     if (paint == nullptr) {
         return;
     }
-    auto* drag = s.ent[id].try_get_mut<UiSplitter>();
+    const UiSplitter* drag = s.ent[id].try_get<UiSplitter>();
     if (drag != nullptr && drag->onResize != nullptr) {
-        if (hot) {
-            if (drag->idleSaved == 0) {
-                drag->idleR = paint->r;
-                drag->idleG = paint->g;
-                drag->idleB = paint->b;
-                drag->idleA = paint->a;
-                drag->idleSaved = 1;
-            }
-            *paint = paintToken(s.look, UiToken::Accent, 0.0f);
-            paint->a = 1.0f;
-        } else if (drag->idleSaved != 0) {
-            paint->token = UiToken::Custom;
-            paint->r = drag->idleR;
-            paint->g = drag->idleG;
-            paint->b = drag->idleB;
-            paint->a = drag->idleA;
-            paint->borderW = 0.0f;
-            paint->shadow = 0.0f;
+        if (!hot) {
+            return;
         }
+        *paint = paintToken(s.look, UiToken::Accent, 0.0f);
+        paint->a = 1.0f;
         uiNotifyVisualDirty(s);
         return;
     }
@@ -320,13 +297,13 @@ void splitPaint(UiState& s, uint16_t id, bool hot) {
 } // namespace
 
 void splitSync(UiState& s, uint16_t hot) {
-    UiSplitHot& prev = s.world.ensure<UiSplitHot>();
-    if (prev.id == hot) {
+    const uint16_t prev = uiMarked<UiSplitHot>(s);
+    if (prev == hot) {
         return;
     }
-    splitPaint(s, prev.id, false);
+    splitPaint(s, prev, false);
     splitPaint(s, hot, true);
-    prev.id = hot;
+    uiMarkOnly<UiSplitHot>(s, hot);
 }
 
 namespace {
@@ -346,13 +323,13 @@ uint16_t splitAt(const UiState& s, float x, float y) {
 
 } // namespace
 
-bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
+bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note) {
     const uint16_t under = splitAt(s, in.pointer.x, in.pointer.y);
     if (phase == kUiInCursor) {
         if (under == kUiNone) {
             return false;
         }
-        cursor = splitCursor(s, under);
+        note.cursor = splitCursor(s, under);
         return true;
     }
     if (phase == kUiInPress) {
@@ -419,17 +396,13 @@ void uiSplitterSetWidth(UiState& s, uint16_t split, float width) {
     if (pane == kUiNone || pane >= s.count) {
         return;
     }
-    auto* flex = s.ent[pane].try_get_mut<UiFlex>();
-    if (flex == nullptr) {
-        return;
-    }
-    writeSize(*flex, splitVertical(s, split), width);
+    writeSize(s, pane, splitVertical(s, split), width);
     s.layoutFrom = 0;
     uiNotifyLayoutDirty(s);
     uiNotifyVisualDirty(s);
 }
 
-uint16_t loadSplit(UiState& s, uint16_t parent, const BinNode& node, const char*, void*) {
+uint16_t loadSplit(UiState& s, uint16_t parent, const BinNode& node, const BinTail&, const char*, const char*, const char*, void*) {
     const bool vertical = node.direction != static_cast<uint8_t>(UiFlexDir::Row);
     return uiSplitBar(s, parent, vertical);
 }

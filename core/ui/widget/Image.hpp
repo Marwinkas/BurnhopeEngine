@@ -2,10 +2,10 @@
 
 #include "ui/State.hpp"
 #include "ui/UiPhoto.hpp"
+#include "ui/widget/BinSlots.hpp"
 
 namespace burnhope {
 
-inline constexpr uint8_t kBinSlotImage = 14;
 void uiImageBin(UiState& s);
 
 uint16_t uiIcon(UiState& s, uint16_t parent, uint8_t slot, float w, float h);

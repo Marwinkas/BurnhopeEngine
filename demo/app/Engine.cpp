@@ -7,12 +7,13 @@
 #include "rhi/Device.hpp"
 #include "files/Browser.hpp"
 #include "files/FileDomain.hpp"
-#include "ui/Domain.hpp"
+#include "host/HostNote.hpp"
+#include "host/SceneMask.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/Panel.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/PropGrid.hpp"
+#include "host/PropGrid.hpp"
 #include "ui/widget/Splitter.hpp"
 #include "ui/widget/Label.hpp"
 #include "ui/widget/Chrome.hpp"
@@ -155,8 +156,8 @@ bool sceneTick(void* user, const InputFrame& input, float dt) {
         sceneInput.pointer.y = view->lookY;
     }
     Canvas* canvas = view->host != nullptr ? hostCanvas(*view->host, view->slot) : nullptr;
-    if (canvas != nullptr && canvas->builder != nullptr && !lookHeld && !toolHeld) {
-        canvasMaskScene(*canvas, sceneInput);
+    if (canvas != nullptr && canvas->state != nullptr && canvas->builder != nullptr && !lookHeld && !toolHeld) {
+        sceneMaskInput(*canvas->state, sceneInput);
     }
     const bool flyLook = sceneFrameTick(view->scene, sceneInput, dt);
     if (view->host != nullptr && view->slot >= 0) {

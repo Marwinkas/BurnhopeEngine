@@ -34,7 +34,7 @@ bool fileActionsHandleKey(UiState& s, const InputFrame& in) {
         }
     }
     const bool typing = (b.searchOn != 0 && s.focused == b.searchBox)
-        || uiVirtualGridEditing(s, uiFiles(s).fileView);
+        || (uiFilesFind(s) != nullptr && uiVirtualGridEditing(s, uiFilesFind(s)->fileView));
     if (typing) {
         return false;
     }

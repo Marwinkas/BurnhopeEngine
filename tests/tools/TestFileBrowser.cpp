@@ -1,7 +1,7 @@
 #define DOCTEST_CONFIG_NO_EXCEPTIONS
 #include <doctest/doctest.h>
 
-#include "ui/Domain.hpp"
+#include "ui/widget/Widgets.hpp"
 #include "ui/widget/Docking.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
@@ -24,6 +24,7 @@ TEST_CASE("mounted file cells sit in the view") {
     fs::remove_all(dir, ec);
     fs::create_directories(dir / "Library", ec);
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t host = spawn(state, kUiNone, px(1600, 1050), paintRgb(0.02f, 0.02f, 0.03f));
     UiFlex frame = px(1100, 700);
     frame.position = UiPosition::Absolute;
@@ -31,7 +32,7 @@ TEST_CASE("mounted file cells sit in the view") {
     frame.posY = 64.0f;
     frame.pad = 10.0f;
     frame.gap = 6.0f;
-    uiFiles(state).fileFrame = spawn(state, host, frame, paintRgb(0.11f, 0.12f, 0.15f, 8.0f));
+    uiFilesOwn(state, spawn(state, host, frame, paintRgb(0.11f, 0.12f, 0.15f, 8.0f)));
     state.ent[uiFiles(state).fileFrame].set<UiResizable>({});
     filesAttach(state);
     filesMount(state);
@@ -73,6 +74,7 @@ TEST_CASE("mounted file cells sit in the view") {
 }
 TEST_CASE("file cell sits inside the view") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t host = spawn(state, kUiNone, px(800, 600), paintRgb(0.05f, 0.05f, 0.05f));
     UiFlex frame = px(400, 300);
     frame.position = UiPosition::Absolute;
@@ -99,8 +101,9 @@ TEST_CASE("file new folder and view menu") {
     fs::remove_all(dir, ec);
     fs::create_directory(dir, ec);
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t frame = spawn(state, kUiNone, px(900, 640), paintRgb(0.08f, 0.08f, 0.1f));
-    uiFiles(state).fileFrame = frame;
+    uiFilesOwn(state, frame);
     filesAttach(state);
     filesMount(state);
     filesShow(state, true);
@@ -172,6 +175,7 @@ TEST_CASE("file listing keeps every file and folder") {
         std::ofstream((dir / ("f" + std::to_string(i) + ".txt")).string()).close();
     }
     UiState state;
+    uiWidgetsInit(state);
     filesAttach(state);
     filesRoot(state, dir.c_str());
     const FileModel* model = filesModel(state);

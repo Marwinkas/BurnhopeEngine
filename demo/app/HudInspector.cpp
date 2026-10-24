@@ -6,7 +6,7 @@
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Label.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/PropGrid.hpp"
+#include "host/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/ColorPicker.hpp"
@@ -81,7 +81,8 @@ void onHudSwatch(void* user, uint16_t id) {
         return;
     }
     UiState& s = *sw->hud->tool.canvas->state;
-    ColorBook* book = uiColor(s).book;
+    UiColorPickerComponent* color = uiColor(s);
+    ColorBook* book = color != nullptr ? color->book : nullptr;
     if (book != nullptr && sw->r != nullptr && sw->g != nullptr && sw->b != nullptr) {
         book->r = *sw->r;
         book->g = *sw->g;
@@ -210,6 +211,9 @@ void hudBuildInspector(Canvas& canvas, HudContext* hud, uint16_t details, uint16
         }
         uiPropShowMask(*canvas.state, mask);
         uiEnsureColorPopup(*canvas.state);
+        if (hud->book != nullptr) {
+            uiSetColorBook(*canvas.state, hud->book);
+        }
     }
 
 }

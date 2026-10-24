@@ -1,7 +1,7 @@
 #define DOCTEST_CONFIG_NO_EXCEPTIONS
 #include <doctest/doctest.h>
 
-#include "ui/Domain.hpp"
+#include "ui/widget/Widgets.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/widget/Curve.hpp"
@@ -14,6 +14,7 @@ using namespace burnhope;
 
 TEST_CASE("curve is a gpu ribbon") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t id = spawn(state, kUiNone, px(180, 80), paintRgb(0.1f, 0.1f, 0.1f));
     state.ent[id].set<UiCurve>({});
     uiLayout(state, 200.0f, 100.0f);
@@ -65,6 +66,7 @@ TEST_CASE("transform pack handles range edges") {
 }
 TEST_CASE("photo blur packs one lod into the photo primitive") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t id = uiIcon(state, kUiNone, 0, 64.0f, 64.0f);
     uiLayout(state, 64.0f, 64.0f);
     uiBlur(state, id, 1.5f);
@@ -89,6 +91,7 @@ TEST_CASE("photo blur packs one lod into the photo primitive") {
 }
 TEST_CASE("panel transform/filter sets the flag on the filled primitive") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t root = spawn(state, kUiNone, px(200, 80), paintRgb(0.1f, 0.1f, 0.1f));
     uiLayout(state, 200.0f, 80.0f);
     uiTransform(state, root, 30.0f, 1.2f, 1.0f);

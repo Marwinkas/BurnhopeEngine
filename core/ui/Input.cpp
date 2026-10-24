@@ -21,21 +21,17 @@ void activate(UiState& s, uint16_t id) {
 
 namespace {
 
-bool probe(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor, bool stop) {
-    const UiInputHooks* hooks = s.world.try_get<UiInputHooks>();
-    if (hooks == nullptr) {
-        return false;
-    }
+bool probe(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note, bool stop) {
     bool any = false;
-    for (uint8_t i = 0; i < hooks->n; ++i) {
-        if (hooks->fn[i] == nullptr) {
+    for (UiInputHookFn fn : s.inputHook) {
+        if (fn == nullptr) {
             continue;
         }
-        uint8_t local = cursor;
-        if (!hooks->fn[i](s, in, id, phase, local)) {
+        UiPhaseNote local = note;
+        if (!fn(s, in, id, phase, local)) {
             continue;
         }
-        cursor = local;
+        note = local;
         any = true;
         if (stop) {
             return true;
@@ -59,62 +55,66 @@ void uiInputAdd(UiState& s, UiInputHookFn fn) {
     if (fn == nullptr) {
         return;
     }
-    UiInputHooks& hooks = s.world.ensure<UiInputHooks>();
-    for (uint8_t i = 0; i < hooks.n; ++i) {
-        if (hooks.fn[i] == fn) {
+    for (UiInputHookFn have : s.inputHook) {
+        if (have == fn) {
             return;
         }
     }
-    if (hooks.n < 12) {
-        hooks.fn[hooks.n++] = fn;
-    }
+    s.inputHook.push_back(fn);
 }
 
 bool uiListen(UiState& s, UiValueFn fn, void* user) {
-    if (fn == nullptr || s.valueN >= 4) {
+    if (fn == nullptr) {
         return false;
     }
-    s.valueFn[s.valueN] = fn;
-    s.valueUser[s.valueN] = user;
-    ++s.valueN;
+    for (const UiValueListen& row : s.valueHook) {
+        if (row.fn == fn && row.user == user) {
+            return true;
+        }
+    }
+    s.valueHook.push_back({.fn = fn, .user = user});
     return true;
+}
+
+void plantIme(UiState& s, const InputFrame& in) {
+    if (s.focused >= s.count) {
+        return;
+    }
+    UiIme ime{};
+    ime.len = static_cast<uint8_t>(strCopyCap(ime.bytes, sizeof(ime.bytes), in.editing));
+    s.ent[s.focused].set<UiIme>(ime);
 }
 
 UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
     s.ateWheel = 0;
-    s.pasteBufLen = static_cast<uint8_t>(strCopyCap(s.pasteBuf, sizeof(s.pasteBuf), in.paste));
-    s.imeLen = static_cast<uint8_t>(strCopyCap(s.ime, sizeof(s.ime), in.editing));
     const uint16_t hit = hitTest(s, in.pointer.x, in.pointer.y);
     if (hit != s.hovered) {
         s.hovered = hit;
         s.visualDirty = true;
     }
-    uint8_t unused = 0;
+    UiPhaseNote unused{};
     if (in.escape) {
         probe(s, in, hit, kUiInEscape, unused, false);
-        if (s.dropBus.active != 0 || s.dragId != kUiNone) {
-            uiDragEnd(s, kUiNone);
-            s.dragId = kUiNone;
-        }
         s.capture = kUiNone;
         s.relative = 0;
         uiFocus(s, kUiNone);
     }
 
-    uint8_t cursor = 0;
+    UiPhaseNote pointed{};
     if (hit != kUiNone) {
-        probe(s, in, hit, kUiInCursor, cursor, true);
+        probe(s, in, hit, kUiInCursor, pointed, true);
     }
-    s.cursor = cursor;
-    if (s.cursorN == 0 && cursor != 0) {
-        uiCursorPush(s, cursor);
+    s.cursor = pointed.cursor;
+    if (s.cursorN == 0 && pointed.cursor != 0) {
+        uiCursorPush(s, pointed.cursor);
     } else if (s.cursorN == 1) {
-        s.cursorStack[0] = cursor;
-        if (cursor == 0) {
+        s.cursorStack[0] = pointed.cursor;
+        if (pointed.cursor == 0) {
             s.cursorN = 0;
         }
     }
     if (probe(s, in, hit, kUiInEarly, unused, true)) {
+        plantIme(s, in);
         return UiEvent::None;
     }
     const bool plugAte = s.plug.handle != nullptr && s.plug.handle(s, in);
@@ -128,6 +128,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
     const bool down = (in.pointer.down & kPointerLeft) != 0;
     const bool release = (in.pointer.released & kPointerLeft) != 0;
     if (press && s.grabFn != nullptr && s.grabFn(s.grabUser, hit, in.pointer.x, in.pointer.y)) {
+        plantIme(s, in);
         return UiEvent::None;
     }
 
@@ -136,12 +137,12 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
     if (press && hit != s.capture) {
         s.capture = kUiNone;
     }
-    uint8_t chromeCursor = plugAte ? 0x80u : 0u;
-    probe(s, in, hit, kUiPhase5, chromeCursor, true);
-    const bool chromeTook = (chromeCursor & 0x40u) != 0;
-    const uint8_t chromeKind = static_cast<uint8_t>(chromeCursor & 0x0fu);
-    if (chromeKind != 0) {
-        pushCursor(s, chromeKind);
+    UiPhaseNote chrome{};
+    chrome.plugAte = plugAte ? 1 : 0;
+    probe(s, in, hit, kUiPhase5, chrome, true);
+    const bool chromeTook = chrome.took != 0;
+    if (chrome.cursor != 0) {
+        pushCursor(s, chrome.cursor);
     }
     if (press && hit != kUiNone && !plugAte && !chromeTook) {
         const UiPaint* p = s.ent[hit].try_get<UiPaint>();
@@ -176,10 +177,6 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
     if (release || !down) {
         s.capture = kUiNone;
         s.relative = 0;
-        if (s.dragId != kUiNone) {
-            uiDragEnd(s, hit);
-        }
-        s.dragId = kUiNone;
         probe(s, in, hit, kUiInRelease, unused, false);
     }
 
@@ -222,6 +219,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
     }
     probe(s, in, hit, kUiInSync, unused, false);
     uiSyncInput(s);
+    plantIme(s, in);
     return UiEvent::None;
 }
 

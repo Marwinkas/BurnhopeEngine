@@ -7,7 +7,6 @@
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
 #include "ui/Canvas.hpp"
-#include "ui/Domain.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
 #include "ui/UiPhoto.hpp"
@@ -15,7 +14,7 @@
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/PropGrid.hpp"
+#include "host/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
@@ -35,9 +34,6 @@ void sceneHud(Canvas& canvas, void* user) {
     const bool haveFont = canvas.state != nullptr && canvas.state->font.ready;
     if (hud == nullptr || (!haveFont && !fontBesideExe(canvas) && !canvasUseFont(canvas, 20.0f)) || canvas.state == nullptr) {
         return;
-    }
-    if (hud->book != nullptr) {
-        uiSetColorBook(*canvas.state, hud->book);
     }
     hud->modes.clear();
     hud->gizmos.clear();

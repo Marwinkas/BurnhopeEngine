@@ -4,10 +4,13 @@
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
-#include "ui/widget/PropGrid.hpp"
+#include "ui/widget/Check.hpp"
+#include "ui/widget/Search.hpp"
+#include "host/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Fold.hpp"
+#include "ui/widget/Number.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Splitter.hpp"
@@ -29,31 +32,6 @@ UiPaint paintHair(const UiLook& look) {
     return paint;
 }
 
-constexpr float kPropField = 108.0f;
-
-void propFitField(UiState& s, uint16_t id, bool compress) {
-    if (id >= s.count) {
-        return;
-    }
-    auto* flex = s.ent[id].try_get_mut<UiFlex>();
-    if (flex == nullptr) {
-        return;
-    }
-    flex->heightMode = UiSize::Px;
-    flex->height = kPropSlot;
-    flex->minH = 0.0f;
-    flex->widthMode = UiSize::Px;
-    flex->width = kPropField;
-    flex->maxWMode = UiSize::Px;
-    flex->maxW = kPropField;
-    flex->grow = 0.0f;
-    flex->shrink = compress ? 1.0f : 0.0f;
-    if (auto* field = s.ent[id].try_get_mut<UiField>()) {
-        field->align = 0;
-    }
-    fieldSyncText(s, id);
-}
-
 void propHair(UiState& s, uint16_t column) {
     if (column >= s.count || uiNodeChildCount(s, column) == 0) {
         return;
@@ -68,27 +46,109 @@ void propHair(UiState& s, uint16_t column) {
 } // namespace
 
 constexpr float kPropIndent = 28.0f;
+constexpr float kPropField = 108.0f;
 
 bool propUnder(const UiState& s, uint16_t id, uint16_t host);
 
-void propColumnResize(void* user, uint16_t split, float size) {
-    auto& s = *static_cast<UiState*>(user);
-    uint16_t host = kUiNone;
-    for (uint16_t id = 0; id < s.count; ++id) {
-        const UiPropGrid* grid = s.ent[id].try_get<UiPropGrid>();
-        if (grid == nullptr || grid->grip != split) {
+void propLinkLabel(UiState& s, uint16_t caption) {
+    UiPropRoll& roll = s.world.ensure<UiPropRoll>();
+    uint16_t next = roll.labels;
+    if (next >= s.count || !s.ent[next].is_alive() || !s.ent[next].has<UiPropLabel>()) {
+        next = kUiNone;
+    }
+    s.ent[caption].set<UiPropLabel>({next});
+    roll.labels = caption;
+}
+
+template <typename Fn>
+void propEachLabel(UiState& s, Fn&& fn) {
+    const UiPropRoll* roll = s.world.try_get<UiPropRoll>();
+    uint16_t id = roll != nullptr ? roll->labels : kUiNone;
+    while (id != kUiNone && id < s.count && s.ent[id].is_alive()) {
+        const UiPropLabel* lab = s.ent[id].try_get<UiPropLabel>();
+        if (lab == nullptr) {
+            break;
+        }
+        const uint16_t next = lab->next;
+        if (!fn(id)) {
+            break;
+        }
+        id = next;
+    }
+}
+
+template <typename Fn>
+void propEachChild(const UiState& s, uint16_t parent, Fn&& fn) {
+    const uint32_t n = uiNodeChildCount(s, parent);
+    for (uint32_t i = 0; i < n; ++i) {
+        const uint16_t child = uiNodeChild(s, parent, i);
+        if (child == kUiNone || child >= s.count) {
             continue;
         }
-        host = id;
-        break;
+        if (!fn(child)) {
+            break;
+        }
     }
-    if (host == kUiNone) {
-        return;
+}
+
+void propLinkSection(UiState& s, uint16_t wrap, uint8_t cat, uint8_t owner) {
+    UiPropRoll& roll = s.world.ensure<UiPropRoll>();
+    uint16_t tail = roll.sectionTail;
+    if (tail >= s.count || !s.ent[tail].is_alive() || !s.ent[tail].has<UiPropSection>()) {
+        tail = kUiNone;
+        roll.sections = kUiNone;
+    }
+    s.ent[wrap].set<UiPropSection>({
+        .next = kUiNone,
+        .cat = cat,
+        .owner = owner,
+        .live = 1,
+    });
+    if (tail == kUiNone) {
+        roll.sections = wrap;
+    } else if (auto* prev = s.ent[tail].try_get_mut<UiPropSection>()) {
+        prev->next = wrap;
+    }
+    roll.sectionTail = wrap;
+}
+
+template <typename Fn>
+void propEachSection(UiState& s, Fn&& fn) {
+    const UiPropRoll* roll = s.world.try_get<UiPropRoll>();
+    uint16_t id = roll != nullptr ? roll->sections : kUiNone;
+    while (id != kUiNone && id < s.count && s.ent[id].is_alive()) {
+        const UiPropSection* section = s.ent[id].try_get<UiPropSection>();
+        if (section == nullptr) {
+            break;
+        }
+        const uint16_t next = section->next;
+        if (!fn(id)) {
+            break;
+        }
+        id = next;
+    }
+}
+
+uint16_t propBar(const UiState& s) {
+    const UiPropRoll* roll = s.world.try_get<UiPropRoll>();
+    const uint16_t bar = roll != nullptr ? roll->bar : kUiNone;
+    if (bar >= s.count || !s.ent[bar].is_alive() || !s.ent[bar].has<UiPropFilterBar>()) {
+        return kUiNone;
+    }
+    return bar;
+}
+
+float propColumnResize(void* user, uint16_t split, float size) {
+    auto& s = *static_cast<UiState*>(user);
+    const UiSplitter* bound = split < s.count ? s.ent[split].try_get<UiSplitter>() : nullptr;
+    const uint16_t host = bound != nullptr ? bound->target : kUiNone;
+    if (host >= s.count || s.ent[host].try_get<UiPropGrid>() == nullptr) {
+        return size;
     }
     float indent = kPropIndent;
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (!s.ent[id].is_alive() || !s.ent[id].has<UiPropLabel>() || !propUnder(s, id, host)) {
-            continue;
+    propEachLabel(s, [&](uint16_t id) {
+        if (!propUnder(s, id, host)) {
+            return true;
         }
         const uint16_t row = s.parentOf[id];
         if (row < s.count) {
@@ -98,8 +158,8 @@ void propColumnResize(void* user, uint16_t split, float size) {
                 }
             }
         }
-        break;
-    }
+        return false;
+    });
     const uint16_t homeId = s.parentOf[split];
     const float span = homeId < s.count ? s.box[homeId].w : 0.0f;
     const float maxSize = span - indent - 72.0f;
@@ -110,28 +170,25 @@ void propColumnResize(void* user, uint16_t split, float size) {
     if (maxSize > 72.0f && clamped > maxSize) {
         clamped = maxSize;
     }
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (!s.ent[id].is_alive() || !s.ent[id].has<UiPropLabel>() || !propUnder(s, id, host)) {
-            continue;
+    propEachLabel(s, [&](uint16_t id) {
+        if (propUnder(s, id, host)) {
+            uiSetWidth(s, id, clamped);
         }
-        if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
-            flex->widthMode = UiSize::Px;
-            flex->width = clamped;
-            flex->shrink = 0.0f;
+        return true;
+    });
+    float gripY = 0.0f;
+    float gripH = 360.0f;
+    if (const UiFlex* bar = s.ent[split].try_get<UiFlex>()) {
+        gripY = bar->posY;
+        if (bar->height > 8.0f) {
+            gripH = bar->height;
         }
     }
-    if (auto* bar = s.ent[split].try_get_mut<UiFlex>()) {
-        bar->position = UiPosition::Absolute;
-        bar->posX = clamped + indent;
-        bar->widthMode = UiSize::Px;
-        bar->width = 2.0f;
-    }
+    uiPlace(s, split, true, clamped + indent, gripY, 2.0f, gripH);
     if (auto* grid = s.ent[host].try_get_mut<UiPropGrid>()) {
         grid->labelW = clamped;
     }
-    if (auto* drag = s.ent[split].try_get_mut<UiSplitter>()) {
-        drag->live = clamped;
-    }
+    return clamped;
 }
 
 void propPlace(UiState& s, uint16_t id, void*) {
@@ -139,26 +196,16 @@ void propPlace(UiState& s, uint16_t id, void*) {
     if (grid == nullptr || grid->grip >= s.count) {
         return;
     }
-    for (uint16_t n = 0; n < s.count; ++n) {
-        if (!s.ent[n].is_alive() || !s.ent[n].has<UiPropLabel>()) {
-            continue;
-        }
-        bool under = false;
-        for (uint16_t p = n; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-            if (p == id) {
-                under = true;
-                break;
-            }
-        }
-        if (!under) {
-            continue;
+    propEachLabel(s, [&](uint16_t n) {
+        if (!propUnder(s, n, id)) {
+            return true;
         }
         const UiFlex* lab = s.ent[n].try_get<UiFlex>();
         if (lab != nullptr && lab->widthMode == UiSize::Px && lab->width > 8.0f) {
             grid->labelW = lab->width;
         }
-        break;
-    }
+        return false;
+    });
     auto* flex = s.ent[grid->grip].try_get_mut<UiFlex>();
     if (flex == nullptr) {
         return;
@@ -179,19 +226,13 @@ void propPlace(UiState& s, uint16_t id, void*) {
         float top = s.box[scroll].y;
         const float bot = top + s.box[scroll].h;
         const uint16_t insp = s.parentOf[scroll];
-        if (insp < s.count) {
-            for (uint16_t child = 0; child < s.count; ++child) {
-                if (s.parentOf[child] != insp || !s.ent[child].has<UiPropFilterBar>()) {
-                    continue;
-                }
-                if (s.box[child].h < 8.0f || s.box[child].h > 180.0f) {
-                    continue;
-                }
+        const uint16_t child = propBar(s);
+        if (insp < s.count && child < s.count && s.parentOf[child] == insp) {
+            if (s.box[child].h >= 8.0f && s.box[child].h <= 180.0f) {
                 const float edge = s.box[child].y + s.box[child].h;
                 if (edge > top && edge + 8.0f < bot) {
                     top = edge;
                 }
-                break;
             }
         }
         posY = top - s.box[scroll].y;
@@ -203,15 +244,7 @@ void propPlace(UiState& s, uint16_t id, void*) {
     if (span < 8.0f) {
         span = 360.0f;
     }
-    flex->position = UiPosition::Absolute;
-    flex->self = UiAlignSelf::Auto;
-    flex->posX = grid->labelW + kPropIndent;
-    flex->posY = posY;
-    flex->widthMode = UiSize::Px;
-    flex->width = 2.0f;
-    flex->heightMode = UiSize::Px;
-    flex->height = span;
-    flex->shrink = 0.0f;
+    uiPlace(s, grid->grip, true, grid->labelW + kPropIndent, posY, 2.0f, span);
     if (scroll < s.count && s.box[scroll].h > 8.0f && s.box[scroll].w > 8.0f) {
         UiBox line{};
         line.x = s.box[scroll].x + grid->labelW + kPropIndent;
@@ -221,12 +254,8 @@ void propPlace(UiState& s, uint16_t id, void*) {
         s.box[grid->grip] = line;
         s.ent[grid->grip].set<UiBounds>({line.x, line.y, line.w, line.h});
     }
-    auto* drag = s.ent[grid->grip].try_get_mut<UiSplitter>();
+    const UiSplitter* drag = s.ent[grid->grip].try_get<UiSplitter>();
     const bool live = s.hovered == grid->grip || (drag != nullptr && drag->armed != 0);
-    if (drag != nullptr && drag->armed == 0) {
-        drag->live = grid->labelW;
-        drag->startSize = grid->labelW;
-    }
     if (!live) {
         if (auto* paint = s.ent[grid->grip].try_get_mut<UiPaint>()) {
             paint->token = UiToken::Custom;
@@ -262,17 +291,7 @@ uint16_t uiPropHost(UiState& s, uint16_t parent) {
     }
     const uint16_t grip = uiSplitBar(s, id, true);
     if (grip < s.count) {
-        if (auto* flex = s.ent[grip].try_get_mut<UiFlex>()) {
-            flex->position = UiPosition::Absolute;
-            flex->self = UiAlignSelf::Auto;
-            flex->posX = 140.0f + kPropIndent;
-            flex->posY = 0.0f;
-            flex->widthMode = UiSize::Px;
-            flex->width = 2.0f;
-            flex->heightMode = UiSize::Px;
-            flex->height = 360.0f;
-            flex->shrink = 0.0f;
-        }
+        uiPlace(s, grip, true, 140.0f + kPropIndent, 0.0f, 2.0f, 360.0f);
         if (auto* paint = s.ent[grip].try_get_mut<UiPaint>()) {
             paint->token = UiToken::Custom;
             paint->r = 1.0f;
@@ -343,7 +362,7 @@ uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
     uiText(s, caption, label != nullptr ? label : "");
     uiTextStyle(s, caption, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     if (caption < s.count) {
-        s.ent[caption].add<UiPropLabel>();
+        propLinkLabel(s, caption);
         s.ent[caption].add<UiPass>();
     }
     UiFlex value{};
@@ -386,8 +405,7 @@ uint16_t uiPropCheck(UiState& s, uint16_t host, const char* label, uint8_t kind,
 
 uint16_t uiPropNumber(UiState& s, uint16_t host, const char* label, float value, float minV, float maxV, float step) {
     const uint16_t slot = uiPropRow(s, host, label);
-    const uint16_t id = uiNumber(s, slot, value, minV, maxV, step);
-    propFitField(s, id, false);
+    const uint16_t id = uiNumber(s, slot, value, minV, maxV, step, nullptr, nullptr, kPropField, kPropSlot, 0.0f);
     return id;
 }
 
@@ -410,15 +428,13 @@ float propMenuWidth(const UiState& s, uint16_t menu, const char* value) {
         consider(value, len);
     }
     if (menu < s.count) {
-        for (uint16_t child = 0; child < s.count; ++child) {
-            if (s.parentOf[child] != menu) {
-                continue;
-            }
+        propEachChild(s, menu, [&](uint16_t child) {
             const UiText* text = s.ent[child].try_get<UiText>();
             if (text != nullptr) {
                 consider(text->bytes, text->len);
             }
-        }
+            return true;
+        });
     }
     return widest + 56.0f;
 }
@@ -601,9 +617,8 @@ UiPropVec3 uiPropVec3(UiState& s, uint16_t host, const char* label, float x, flo
         hold.heightMode = UiSize::Px;
         hold.height = kPropSlot;
         const uint16_t box = uiPanel(s, row, hold, paintClear());
-        *ids[i] = uiNumber(s, box, axes[i], minV, maxV, step);
+        *ids[i] = uiNumber(s, box, axes[i], minV, maxV, step, nullptr, nullptr, kPropField, kPropSlot, 1.0f);
         uiNumberFill(s, *ids[i], false);
-        propFitField(s, *ids[i], true);
     }
     out.reset = square(static_cast<uint8_t>(UiIcon::Reset));
     UiVecCtl shared{};
@@ -621,20 +636,18 @@ UiPropVec3 uiPropVec3(UiState& s, uint16_t host, const char* label, float x, flo
         ctl.which = which;
         s.ent[id].set<UiVecCtl>(ctl);
     };
-    for (uint16_t child = 0; child < s.count; ++child) {
-        if (s.parentOf[child] != row) {
-            continue;
-        }
+    propEachChild(s, row, [&](uint16_t child) {
         if (s.ent[child].try_get<UiText>() == nullptr || s.ent[child].try_get<UiField>() != nullptr) {
-            continue;
+            return true;
         }
         const UiText* text = s.ent[child].try_get<UiText>();
         if (text == nullptr || text->len != 1) {
-            continue;
+            return true;
         }
         const uint8_t which = text->bytes[0] == 'Y' ? 1 : (text->bytes[0] == 'Z' ? 2 : 0);
         stamp(child, which);
-    }
+        return true;
+    });
     stamp(out.lock, 3);
     stamp(out.reset, 4);
     return out;
@@ -685,9 +698,8 @@ UiPropVec2 uiPropVec2(UiState& s, uint16_t host, const char* label, float x, flo
         hold.heightMode = UiSize::Px;
         hold.height = kPropSlot;
         const uint16_t box = uiPanel(s, row, hold, paintClear());
-        *ids[i] = uiNumber(s, box, axes[i], minV, maxV, step);
+        *ids[i] = uiNumber(s, box, axes[i], minV, maxV, step, nullptr, nullptr, kPropField, kPropSlot, 1.0f);
         uiNumberFill(s, *ids[i], false);
-        propFitField(s, *ids[i], true);
     }
     return out;
 }
@@ -735,19 +747,19 @@ uint16_t uiPropSection(UiState& s, uint16_t parent, const char* title, uint8_t c
     if (wrap == kUiNone) {
         return wrap;
     }
-    s.ent[wrap].set<UiPropSection>({cat, owner, 1, 0});
+    propLinkSection(s, wrap, cat, owner);
     const uint16_t body = uiFoldBody(s, wrap, title);
-    for (uint16_t id = 0; id < s.count; ++id) {
-        const UiTree* tree = s.ent[id].try_get<UiTree>();
-        if (tree == nullptr || tree->body != body) {
-            continue;
+    propEachChild(s, wrap, [&](uint16_t id) {
+        const UiFold* fold = s.ent[id].try_get<UiFold>();
+        if (fold == nullptr || fold->body != body) {
+            return true;
         }
         if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
             flex->padL = 0.0f;
             flex->marginL = 0.0f;
         }
-        break;
-    }
+        return false;
+    });
     if (body < s.count) {
         if (auto* flex = s.ent[body].try_get_mut<UiFlex>()) {
             flex->pad = 0.0f;
@@ -761,62 +773,127 @@ uint16_t uiPropSection(UiState& s, uint16_t parent, const char* title, uint8_t c
 }
 
 const char* propSectionTitle(const UiState& s, uint16_t wrap) {
-    for (uint16_t head = 0; head < s.count; ++head) {
-        if (s.parentOf[head] != wrap) {
-            continue;
-        }
+    const char* title = "Component";
+    propEachChild(s, wrap, [&](uint16_t head) {
         const UiText* text = s.ent[head].try_get<UiText>();
-        if (text != nullptr && text->len > 0) {
-            return text->bytes;
+        if (text == nullptr || text->len == 0) {
+            return true;
         }
+        title = text->bytes;
+        return false;
+    });
+    return title;
+}
+
+void onPropFilter(void* user, uint16_t id);
+
+uint16_t propSpawnChip(UiState& s, uint16_t chips, uint16_t section, uint8_t all) {
+    const uint16_t button = uiButton(s, chips, {.label = ""});
+    if (button == kUiNone) {
+        return button;
     }
-    return "Component";
+    uiSetHeight(s, button, 22.0f);
+    uiBind(s, button, onPropFilter, &s);
+    s.ent[button].set<UiPropFilterChip>({
+        .section = section,
+        .all = all,
+    });
+    return button;
+}
+
+uint16_t propFindChip(const UiState& s, uint16_t chips, uint16_t section, uint8_t all) {
+    uint16_t found = kUiNone;
+    propEachChild(s, chips, [&](uint16_t child) {
+        const UiPropFilterChip* chip = s.ent[child].try_get<UiPropFilterChip>();
+        if (chip == nullptr) {
+            return true;
+        }
+        if (all != 0) {
+            if (chip->all == 0) {
+                return true;
+            }
+            found = child;
+            return false;
+        }
+        if (chip->all == 0 && chip->section == section) {
+            found = child;
+            return false;
+        }
+        return true;
+    });
+    return found;
+}
+
+uint16_t propReuseChip(UiState& s, uint16_t chips) {
+    uint16_t found = kUiNone;
+    propEachChild(s, chips, [&](uint16_t child) {
+        auto* chip = s.ent[child].try_get_mut<UiPropFilterChip>();
+        if (chip == nullptr || chip->all != 0 || chip->live != 0) {
+            return true;
+        }
+        found = child;
+        return false;
+    });
+    return found;
 }
 
 void uiPropRebuildFilters(UiState& s) {
-    for (uint16_t id = 0; id < s.count; ++id) {
-        auto* bar = s.ent[id].try_get_mut<UiPropFilterBar>();
-        if (bar == nullptr) {
-            continue;
+    const uint16_t id = propBar(s);
+    if (auto* bar = id < s.count ? s.ent[id].try_get_mut<UiPropFilterBar>() : nullptr) {
+        const uint16_t chips = bar->chips;
+        if (chips >= s.count) {
+            return;
         }
-        uint16_t live[11]{};
-        uint8_t n = 0;
-        for (uint16_t section = 0; section < s.count && n < 11; ++section) {
+        propEachChild(s, chips, [&](uint16_t child) {
+            if (auto* chip = s.ent[child].try_get_mut<UiPropFilterChip>()) {
+                chip->live = 0;
+                uiShow(s, child, false);
+            }
+            return true;
+        });
+        bool whichLive = bar->which == kUiNone;
+        propEachSection(s, [&](uint16_t section) {
             const UiPropSection* prop = s.ent[section].try_get<UiPropSection>();
             if (prop == nullptr || prop->live == 0) {
-                continue;
+                return true;
             }
-            live[n++] = section;
-        }
-        const uint8_t shown = static_cast<uint8_t>(n + 1);
-        bool kept = false;
-        if (bar->which != 0xFF && bar->which < n && live[bar->which] == bar->section[bar->which]) {
-            kept = true;
-        }
-        if (!kept) {
-            bar->which = 0xFF;
-        }
-        bar->count = shown;
-        for (uint8_t i = 0; i < 12; ++i) {
-            const uint16_t button = bar->button[i];
-            if (button >= s.count) {
-                continue;
+            if (section == bar->which) {
+                whichLive = true;
             }
-            if (i > n) {
-                uiShow(s, button, false);
-                bar->section[i] = kUiNone;
-                continue;
+            uint16_t button = propFindChip(s, chips, section, 0);
+            if (button == kUiNone) {
+                button = propReuseChip(s, chips);
+            }
+            if (button == kUiNone) {
+                button = propSpawnChip(s, chips, section, 0);
+            }
+            if (button == kUiNone) {
+                return true;
+            }
+            if (auto* chip = s.ent[button].try_get_mut<UiPropFilterChip>()) {
+                chip->section = section;
+                chip->all = 0;
+                chip->live = 1;
             }
             uiShow(s, button, true);
-            if (i == n) {
-                bar->section[i] = kUiNone;
-                uiText(s, button, "All");
-            } else {
-                bar->section[i] = live[i];
-                uiText(s, button, propSectionTitle(s, live[i]));
-            }
+            uiText(s, button, propSectionTitle(s, section));
+            return true;
+        });
+        uint16_t all = propFindChip(s, chips, kUiNone, 1);
+        if (all == kUiNone) {
+            all = propSpawnChip(s, chips, kUiNone, 1);
         }
-        break;
+        if (all != kUiNone) {
+            if (auto* chip = s.ent[all].try_get_mut<UiPropFilterChip>()) {
+                chip->live = 1;
+                chip->all = 1;
+            }
+            uiShow(s, all, true);
+            uiText(s, all, "All");
+        }
+        if (!whichLive) {
+            bar->which = kUiNone;
+        }
     }
 }
 
@@ -874,74 +951,67 @@ bool propUnder(const UiState& s, uint16_t id, uint16_t host) {
 }
 
 void uiPropFilterApply(UiState& s) {
-    uint8_t which = 0xFF;
-    uint8_t count = 0;
-    const uint16_t* sections = nullptr;
+    uint16_t which = kUiNone;
+    uint16_t chips = kUiNone;
     const char* query = nullptr;
     uint8_t qlen = 0;
     bool searching = false;
-    for (uint16_t id = 0; id < s.count; ++id) {
+    if (const uint16_t id = propBar(s); id < s.count) {
         const UiPropFilterBar* bar = s.ent[id].try_get<UiPropFilterBar>();
-        if (bar == nullptr) {
-            continue;
+        if (bar != nullptr) {
+            which = bar->which;
+            chips = bar->chips;
+            propQueryOf(s, *bar, query, qlen);
+            searching = qlen > 0;
+            propEachChild(s, chips, [&](uint16_t child) {
+                const UiPropFilterChip* chip = s.ent[child].try_get<UiPropFilterChip>();
+                if (chip == nullptr || chip->live == 0) {
+                    return true;
+                }
+                const bool on = chip->all != 0 ? which == kUiNone : chip->section == which;
+                auto* paint = s.ent[child].try_get_mut<UiPaint>();
+                if (paint == nullptr) {
+                    return true;
+                }
+                *paint = paintToken(s.look, on ? UiToken::Accent : UiToken::Button, s.look.radiusSm);
+                return true;
+            });
         }
-        which = bar->which;
-        count = bar->count;
-        sections = bar->section;
-        propQueryOf(s, *bar, query, qlen);
-        searching = qlen > 0;
-        for (uint8_t i = 0; i < count && i < 12; ++i) {
-            const uint16_t button = bar->button[i];
-            if (button >= s.count) {
-                continue;
-            }
-            const bool on = which == 0xFF ? i + 1 == count : i == which;
-            auto* paint = s.ent[button].try_get_mut<UiPaint>();
-            if (paint == nullptr) {
-                continue;
-            }
-            *paint = paintToken(s.look, on ? UiToken::Accent : UiToken::Button, s.look.radiusSm);
-        }
-        break;
     }
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (!s.ent[id].is_alive() || !s.ent[id].has<UiPropLabel>()) {
-            continue;
-        }
+    propEachLabel(s, [&](uint16_t id) {
         const uint16_t row = s.parentOf[id];
-        if (row >= s.count) {
-            continue;
+        if (row < s.count) {
+            const UiText* text = s.ent[id].try_get<UiText>();
+            const bool match = !searching || (text != nullptr && propQueryHas(text->bytes, text->len, query, qlen));
+            uiShow(s, row, match);
         }
-        const UiText* text = s.ent[id].try_get<UiText>();
-        const bool match = !searching || (text != nullptr && propQueryHas(text->bytes, text->len, query, qlen));
-        uiShow(s, row, match);
-    }
-    for (uint16_t id = 0; id < s.count; ++id) {
+        return true;
+    });
+    propEachSection(s, [&](uint16_t id) {
         const UiPropSection* section = s.ent[id].try_get<UiPropSection>();
         if (section == nullptr) {
-            continue;
+            return true;
         }
         if (searching) {
             bool any = false;
-            for (uint16_t label = 0; label < s.count; ++label) {
-                if (!s.ent[label].is_alive() || !s.ent[label].has<UiPropLabel>() || !propUnder(s, label, id)) {
-                    continue;
+            propEachLabel(s, [&](uint16_t label) {
+                if (!propUnder(s, label, id)) {
+                    return true;
                 }
                 const UiText* text = s.ent[label].try_get<UiText>();
                 if (text != nullptr && propQueryHas(text->bytes, text->len, query, qlen)) {
                     any = true;
-                    break;
+                    return false;
                 }
-            }
+                return true;
+            });
             uiShow(s, id, section->live != 0 && any);
-            continue;
+            return true;
         }
-        bool match = which == 0xFF;
-        if (!match && sections != nullptr && which < count) {
-            match = sections[which] == id;
-        }
+        const bool match = which == kUiNone || which == id;
         uiShow(s, id, section->live != 0 && match);
-    }
+        return true;
+    });
 }
 
 void onPropSearch(void* user, const char*) {
@@ -964,11 +1034,11 @@ void onPropFilter(void* user, uint16_t id) {
     if (filt == nullptr) {
         return;
     }
-    for (uint8_t i = 0; i < filt->count && i < 12; ++i) {
-        if (filt->button[i] == id) {
-            filt->which = filt->section[i] == kUiNone ? 0xFF : i;
-        }
+    const UiPropFilterChip* chip = s->ent[id].try_get<UiPropFilterChip>();
+    if (chip == nullptr) {
+        return;
     }
+    filt->which = chip->all != 0 ? kUiNone : chip->section;
     uiPropFilterApply(*s);
 }
 
@@ -988,6 +1058,7 @@ uint16_t uiPropFilterBar(UiState& s, uint16_t parent) {
         return bar;
     }
     s.ent[bar].set<UiPropFilterBar>({});
+    s.world.ensure<UiPropRoll>().bar = bar;
     auto* filt = s.ent[bar].try_get_mut<UiPropFilterBar>();
     const uint16_t search = uiSearchField(s, bar, "Search", onPropSearch, &s, -1.0f);
     if (filt != nullptr) {
@@ -1002,27 +1073,21 @@ uint16_t uiPropFilterBar(UiState& s, uint16_t parent) {
     row.widthMode = UiSize::Percent;
     row.width = 100.0f;
     const uint16_t chips = uiPanel(s, bar, row, paintClear());
-    for (uint8_t i = 0; i < 12; ++i) {
-        const uint16_t button = uiButton(s, chips, {.label = ""});
-        uiSetHeight(s, button, 22.0f);
-        uiBind(s, button, onPropFilter, &s);
-        uiShow(s, button, false);
-        if (filt != nullptr) {
-            filt->button[i] = button;
-            filt->section[i] = kUiNone;
-        }
+    if (filt != nullptr) {
+        filt->chips = chips;
+        filt->which = kUiNone;
     }
     return bar;
 }
 
 void uiPropShowMask(UiState& s, uint8_t mask) {
-    for (uint16_t id = 0; id < s.count; ++id) {
+    propEachSection(s, [&](uint16_t id) {
         auto* section = s.ent[id].try_get_mut<UiPropSection>();
-        if (section == nullptr) {
-            continue;
+        if (section != nullptr) {
+            section->live = (section->owner & mask) != 0 ? 1 : 0;
         }
-        section->live = (section->owner & mask) != 0 ? 1 : 0;
-    }
+        return true;
+    });
     uiPropRebuildFilters(s);
     uiPropFilterApply(s);
 }

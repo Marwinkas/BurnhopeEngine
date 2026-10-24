@@ -43,6 +43,8 @@ struct FileSession {
 };
 
 Browser& fileBook(UiState& s);
+void fileCrumbShow(UiState& s, uint16_t id, const char* path, const char* root);
+bool fileCrumbPath(const char* path, const char* root, uint16_t index, char* out, uint32_t cap);
 void fileRefresh(UiState& s);
 void fileOpenAt(UiState& s, int index);
 void fileBeginRename(UiState& s, int index);

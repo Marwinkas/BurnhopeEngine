@@ -40,7 +40,8 @@ void uiBinBuiltin(UiState& s) {
 namespace {
 
 static_assert(sizeof(BinHead) == 12, "BinHead size must be exactly 12 bytes");
-static_assert(sizeof(BinNode) == 204, "BinNode size must be exactly 204 bytes");
+static_assert(sizeof(BinNode) == 178, "BinNode size must be exactly 178 bytes");
+static_assert(sizeof(BinTail) == kBinTailBytes, "bin tail is 26 bytes");
 
 void copyPool(char* dst, uint8_t& len, int cap, const char* pool, uint32_t poolN, uint16_t off, uint16_t n) noexcept {
     len = 0;
@@ -55,37 +56,6 @@ void copyPool(char* dst, uint8_t& len, int cap, const char* pool, uint32_t poolN
     std::memcpy(dst, pool + off, static_cast<size_t>(take));
     dst[take] = '\0';
     len = static_cast<uint8_t>(take);
-}
-
-void fillBag(UiState& s, const char* text, const char* hint) noexcept {
-    s.importBag = {};
-    if (hint != nullptr && hint[0] != '\0') {
-        uint8_t n = 0;
-        while (hint[n] != '\0' && n + 1 < kUiHintCap) {
-            s.importBag.hint[n] = hint[n];
-            ++n;
-        }
-        s.importBag.hint[n] = '\0';
-        s.importBag.hintLen = n;
-    }
-    if (text == nullptr || std::strchr(text, '\n') == nullptr) {
-        return;
-    }
-    const char* cursor = text;
-    while (*cursor != '\0' && s.importBag.count < kUiImportItemCap) {
-        char* dst = s.importBag.item[s.importBag.count];
-        uint8_t n = 0;
-        while (*cursor != '\0' && *cursor != '\n' && n + 1 < kUiImportItemLen) {
-            dst[n++] = *cursor++;
-        }
-        dst[n] = '\0';
-        if (*cursor == '\n') {
-            ++cursor;
-        }
-        if (n > 0) {
-            ++s.importBag.count;
-        }
-    }
 }
 
 void finishDescribed(UiState& s, uint16_t id, const BinNode& bin, const char* name) noexcept {
@@ -105,10 +75,9 @@ void finishDescribed(UiState& s, uint16_t id, const BinNode& bin, const char* na
 
 } // namespace
 
-uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const char* name, const char* text, const char* hint) {
+uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const BinTail& part, const char* name, const char* text, const char* hint) {
     if (bin.role < kUiBinRoleCap && s.binHooks[bin.role].fn != nullptr) {
-        fillBag(s, text, hint);
-        const uint16_t id = s.binHooks[bin.role].fn(s, host, bin, name, s.binHooks[bin.role].user);
+        const uint16_t id = s.binHooks[bin.role].fn(s, host, bin, part, name, text, hint, s.binHooks[bin.role].user);
         finishDescribed(s, id, bin, name);
         return id;
     }
@@ -209,7 +178,7 @@ uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const c
         .bb = bb,
         .token = inkToken,
         .icon = bin.icon,
-        .disabled = (bin.flags & kBinDisabled) != 0,
+        .disabled = (part.raw[1] & kBinDisabled) != 0,
         .shadow = shadow
     };
 
@@ -220,21 +189,12 @@ uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const c
     if (text != nullptr && text[0] != '\0') {
         uiText(s, id, text);
     }
-    if (bin.textWrap != 0 || bin.textDeco != 0 || bin.textLeading != 0.0f || bin.textAlign != 0 || bin.textEllipsis != 0) {
-        const auto valign = static_cast<UiTextValign>(bin.textValign != 0 ? bin.textValign : (bin.textWrap != 0 ? 1 : 0));
-        uiTextStyle(s, id,
-                    static_cast<UiTextAlign>(bin.textAlign),
-                    static_cast<UiTextEllipsis>(bin.textEllipsis),
-                    valign,
-                    bin.textWrap != 0,
-                    static_cast<UiTextDeco>(bin.textDeco),
-                    bin.textLeading);
-    }
+    uiTextReadTail(s, id, part);
     if (bin.role < kUiBinRoleCap && s.onSpawn[bin.role] != nullptr) {
         s.onSpawn[bin.role](s, id);
     }
     if (bin.role < kUiBinRoleCap && s.roleFinish[bin.role] != nullptr) {
-        s.roleFinish[bin.role](s, id, &bin, text, hint != nullptr && hint[0] != '\0' ? hint : nullptr);
+        s.roleFinish[bin.role](s, id, &part, text, hint != nullptr && hint[0] != '\0' ? hint : nullptr);
     }
     if ((role.flags & kBinRolePass) != 0) {
         s.ent[id].add<UiPass>();
@@ -254,12 +214,13 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
         return kUiNone;
     }
 
-    const uint32_t body = static_cast<uint32_t>(sizeof(BinHead) + sizeof(BinNode) * head.count);
+    const uint32_t body = static_cast<uint32_t>(sizeof(BinHead) + (sizeof(BinNode) + sizeof(BinTail)) * head.count);
     if (body + head.pool > size) {
         return kUiNone;
     }
 
     const auto* nodes = reinterpret_cast<const BinNode*>(static_cast<const std::byte*>(bytes) + sizeof(BinHead));
+    const auto* roles = reinterpret_cast<const BinTail*>(nodes + head.count);
     const uint16_t ncheck = (head.count < kUiCap) ? head.count : kUiCap;
 
     for (uint16_t i = 0; i < ncheck; ++i) {
@@ -303,7 +264,7 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
         copyPool(text, textLen, kUiTextCap, pool, head.pool, bin.textOff, bin.textLen);
         copyPool(hint, hintLen, kUiHintCap, pool, head.pool, bin.hintOff, bin.hintLen);
 
-        const uint16_t id = uiSpawnDescribed(s, host, bin, name, text, hint);
+        const uint16_t id = uiSpawnDescribed(s, host, bin, roles[i], name, text, hint);
         if (id == kUiNone) {
             continue;
         }

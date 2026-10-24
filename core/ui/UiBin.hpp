@@ -6,7 +6,7 @@
 namespace burnhope {
 
 inline constexpr uint32_t kUiBinMagic = 0x49554842u; // "BHUI"
-inline constexpr uint16_t kUiBinVersion = 2;
+inline constexpr uint16_t kUiBinVersion = 3;
 
 inline constexpr uint8_t kUiBinRoleCap = 32;
 inline constexpr uint8_t kBinRoleClear = 1 << 0;
@@ -23,14 +23,7 @@ inline constexpr uint8_t kUiNameCap = 32;
 inline constexpr uint8_t kUiTextCap = 96;
 inline constexpr uint8_t kUiHintCap = 40;
 
-inline constexpr uint8_t kBinClear     = 1 << 0;
-inline constexpr uint8_t kBinRequired  = 1 << 1;
-inline constexpr uint8_t kBinReadOnly  = 1 << 2;
-inline constexpr uint8_t kBinPassword  = 1 << 3;
-inline constexpr uint8_t kBinForm      = 1 << 4;
-inline constexpr uint8_t kBinMinimap   = 1 << 5;
-inline constexpr uint8_t kBinCheckOn   = 1 << 6;
-inline constexpr uint8_t kBinDisabled  = 1 << 7;
+inline constexpr uint8_t kBinDisabled = 1 << 7;
 
 #pragma pack(push, 1)
 struct BinHead {
@@ -58,13 +51,7 @@ struct BinNode {
     uint8_t widthMode = 0;
     uint8_t heightMode = 0;
     uint8_t position = 0;
-    uint8_t filter = 0;
-    uint8_t flags = 0;
-    uint8_t checkKind = 0;
-    uint8_t checkGroup = 0;
-    uint8_t maxChars = 0;
     uint8_t shown = 1;
-    uint8_t textWrap = 0;
     float width = 0.0f;
     float height = 0.0f;
     float grow = 0.0f;
@@ -78,9 +65,6 @@ struct BinNode {
     float a = 1.0f;
     float posX = 0.0f;
     float posY = 0.0f;
-    float minV = 0.0f;
-    float maxV = 0.0f;
-    float value = 0.0f;
     float shadow = 0.0f;
     float borderW = 0.0f;
     float br = 0.0f;
@@ -103,7 +87,6 @@ struct BinNode {
     float aspect = 0.0f;
     float posR = 0.0f;
     float posB = 0.0f;
-    float textLeading = 0.0f;
     uint8_t drop = 0;
     uint8_t content = 0;
     uint8_t self = 0;
@@ -113,25 +96,16 @@ struct BinNode {
     uint8_t overflow = 0;
     uint8_t box = 0;
     uint8_t inset = 0;
-    uint8_t textAlign = 0;
-    uint8_t textEllipsis = 0;
-    uint8_t textValign = 0;
-    uint8_t textDeco = 0;
     uint8_t marks = 0;
     uint8_t token = 0;
     uint8_t pad2 = 0;
 };
-#pragma pack(pop)
+inline constexpr uint16_t kBinTailBytes = 26;
 
-inline constexpr uint8_t kUiImportItemCap = 8;
-inline constexpr uint8_t kUiImportItemLen = 48;
-
-struct UiImportBag {
-    char item[kUiImportItemCap][kUiImportItemLen]{};
-    uint8_t count = 0;
-    char hint[kUiHintCap]{};
-    uint8_t hintLen = 0;
+struct BinTail {
+    uint8_t raw[kBinTailBytes]{};
 };
+#pragma pack(pop)
 
 struct UiBinRole {
     const char* name = nullptr;
@@ -141,7 +115,7 @@ struct UiBinRole {
 
 struct UiState;
 
-using UiCustomNodeLoader = uint16_t (*)(UiState& s, uint16_t parent, const BinNode& node, const char* name, void* user);
+using UiCustomNodeLoader = uint16_t (*)(UiState& s, uint16_t parent, const BinNode& node, const BinTail& tail, const char* name, const char* text, const char* hint, void* user);
 
 struct UiCustomBinLoader {
     UiCustomNodeLoader fn = nullptr;
@@ -152,7 +126,7 @@ void uiRegisterCustomBinNode(UiState& s, uint8_t role, UiCustomNodeLoader loader
 void uiBinRole(UiState& s, uint8_t role, const char* name, uint8_t token, uint8_t flags);
 uint8_t uiBinRoleFind(const UiState& s, const char* name);
 void uiBinBuiltin(UiState& s);
-uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const char* name, const char* text, const char* hint);
+uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const BinTail& tail, const char* name, const char* text, const char* hint);
 
 uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t size);
 uint16_t uiImportBinFile(UiState& s, uint16_t parent, const char* path);

@@ -59,10 +59,8 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
         paint.borderW = 0.0f;
         paint.shadow = 0.0f;
         paint.icon = iconId;
-        const float* rgb = accent ? s.look.accent[0] : s.look.text;
-        paint.r = rgb[0];
-        paint.g = rgb[1];
-        paint.b = rgb[2];
+        paint.token = accent ? UiToken::Accent : UiToken::Text;
+        tokenRgb(s.look, paint.token, paint.r, paint.g, paint.b);
         return spawn(s, slot, box, paint);
     };
     const float rowH = itemH > 6.0f ? itemH - 2.0f : itemH;
@@ -98,7 +96,7 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
 
 } // namespace
 
-float uiTreeContentH(const UiState& s, uint16_t id) {
+static float uiTreeContentH(const UiState& s, uint16_t id) {
     return uiVirtualContentHeight<UiTreeView>(s, id);
 }
 
@@ -211,16 +209,7 @@ void uiTreeViewRefresh(UiState& s, uint16_t id) {
     s.visualDirty = true;
 }
 
-void uiRowIndent(UiState& s, uint16_t id, float pad) {
-    auto* flex = id < s.count ? s.ent[id].try_get_mut<UiFlex>() : nullptr;
-    if (flex == nullptr || flex->padL == pad) {
-        return;
-    }
-    flex->padL = pad;
-    uiMarkLayout(s, id);
-}
-
-bool uiTreeInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t&) {
+bool uiTreeInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote&) {
     if (phase != kUiInPress || (in.pointer.pressed & kPointerLeft) == 0) {
         return false;
     }
@@ -235,7 +224,7 @@ bool uiTreeInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, u
     return false;
 }
 
-uint16_t loadTree(UiState& s, uint16_t parent, const BinNode&, const char*, void*) {
+uint16_t loadTree(UiState& s, uint16_t parent, const BinNode&, const BinTail&, const char*, const char*, const char*, void*) {
     return uiTreeView(s, parent, {});
 }
 

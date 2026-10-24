@@ -14,6 +14,8 @@
 
 #include <flecs.h>
 
+#include <vector>
+
 typedef struct YGNode* YGNodeRef;
 
 namespace burnhope {
@@ -28,7 +30,11 @@ using UiDropFn = void (*)(UiState& s);
 using UiClearFn = void (*)(UiState& s);
 using UiSpawnFn = void (*)(UiState& s, uint16_t id);
 using UiBootFn = void (*)(UiState& s);
-using UiRoleFinishFn = void (*)(UiState& s, uint16_t id, const BinNode* spec, const char* text, const char* hint);
+struct UiValueListen {
+    UiValueFn fn = nullptr;
+    void* user = nullptr;
+};
+using UiRoleFinishFn = void (*)(UiState& s, uint16_t id, const BinTail* tail, const char* text, const char* hint);
 struct UiNoHit {}; // Пустой тег: объект нематериален для курсора мыши
 struct UiPaintLast {}; // Среди братьев рисуется последним, поверх непрозрачных строк.
 struct UiReveal {
@@ -45,44 +51,12 @@ struct UiPlug {
     UiOverlayDrawFn over = nullptr;
     UiTextGateFn wantsText = nullptr;
     UiDropFn shutdown = nullptr;
+    bool (*frame)(const UiState& s, uint16_t id) = nullptr;
+    void (*move)(UiState& s, uint16_t panel, float x, float y) = nullptr;
+    void (*drop)(UiState& s, uint16_t panel) = nullptr;
 };
 
-// Widget modules register draw hooks. uiEmit never switches on widget paint tags.
-struct UiDrawHooks {
-    UiDrawFn fn[4]{};
-    uint8_t n = 0;
-    UiDrawFn decor[8]{};
-    uint8_t decorN = 0;
-};
-
-struct UiOverlayHooks {
-    UiOverlayDrawFn fn[4]{};
-    uint8_t n = 0;
-};
-enum class UiInputPhase : uint8_t {
-    Cursor = 1,
-    Early = 2,
-    Escape = 3,
-    Menu = 4,
-    Chrome = 5,
-    Press = 6,
-    PressLate = 7,
-    Focus = 8,
-    Drag = 9,
-    Release = 10,
-    Wheel = 11,
-    Key = 12,
-    Clip = 13,
-    Sync = 14
-};
-
-
-using UiInputHookFn = bool (*)(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
-
-struct UiInputHooks {
-    UiInputHookFn fn[12]{};
-    uint8_t n = 0;
-};
+using UiInputHookFn = bool (*)(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note);
 
 struct UiState {
     flecs::world world;
@@ -99,24 +73,15 @@ struct UiState {
     uint8_t cursorN = 0;
     uint16_t focused = kUiNone;
     uint16_t capture = kUiNone;
-    uint16_t menu = kUiNone;
-    uint16_t field = kUiNone;
-    uint16_t fieldMenu = kUiNone;
-    uint16_t editField = kUiNone;
-    UiValueFn valueFn[4]{};
-    void* valueUser[4]{};
-    uint8_t valueN = 0;
+    std::vector<UiInputHookFn> inputHook;
+    std::vector<UiDrawFn> drawHook;
+    std::vector<UiDrawFn> decorHook;
+    std::vector<UiOverlayDrawFn> overlayHook;
+    std::vector<void (*)(UiState&)> placeHook;
+    std::vector<UiValueListen> valueHook;
     UiPlug plug{};
-    char pasteBuf[96]{};
-    uint8_t pasteBufLen = 0;
-    uint16_t floatWin = kUiNone;
-    uint16_t resizeId = kUiNone;
-    uint8_t resizeEdge = 0;
     uint8_t cursor = 0;
     uint8_t culled[kUiCap]{};
-    char clip[96]{};
-    uint8_t clipLen = 0;
-    uint8_t clipPut = 0;
     float grabX = 0;
     float grabY = 0;
     UiClickFn onClick = nullptr;
@@ -125,15 +90,6 @@ struct UiState {
     void* grabUser = nullptr;
     UiFocusFn focusFn = nullptr;
     void* focusUser = nullptr;
-    uint16_t dragId = kUiNone;
-    bool menuOpen = false;
-    bool opClose = false;
-    bool opMinimize = false;
-    bool opMaximize = false;
-    bool topOn = false;
-    bool ghost = false;
-    int opTop = -1;
-    float opOpacity = -1.0f;
     float time = 0;
     float prevTime = 0;
     bool altLook = false;
@@ -141,8 +97,6 @@ struct UiState {
     UiMetrics metrics{};
     UiFontAtlas font{};
     UiAnim anim[kUiCap]{};
-    UiCommand cmds[kUiCmdCap]{};
-    uint8_t cmdCount = 0;
     float laidW = -1.0f;
     float laidH = -1.0f;
     bool layoutDirty = true;
@@ -150,9 +104,6 @@ struct UiState {
     uint8_t dumpLayout = 0;
     uint16_t layoutFrom = kUiNone;
     UiLayoutFinishHook layoutFinishHook{};
-    UiDrop dropBus{};
-    char ime[64]{};
-    uint8_t imeLen = 0;
     uint8_t relative = 0;
     uint8_t ateWheel = 0;
     float dpi = 1;
@@ -160,15 +111,11 @@ struct UiState {
     UiBox clipBox{};
     UiCustomBinLoader binHooks[kUiBinRoleCap]{};
     UiBinRole binRole[kUiBinRoleCap]{};
-    UiClearFn clearFn[4]{};
-    uint8_t clearN = 0;
+    std::vector<UiClearFn> clearHook;
     UiSpawnFn onSpawn[kUiBinRoleCap]{};
     UiRoleFinishFn roleFinish[kUiBinRoleCap]{};
-    UiImportBag importBag{};
-    UiBootFn bootFn[4]{};
-    uint8_t bootN = 0;
-    void (*beforeFn[4])(UiState& s){};
-    uint8_t beforeN = 0;
+    std::vector<UiBootFn> bootHook;
+    std::vector<void (*)(UiState&)> beforeHook;
 
     UiState();
     ~UiState();
@@ -184,8 +131,6 @@ void uiCursorPop(UiState& s);
 void uiSyncInput(UiState& s);
 void uiMarkLayout(UiState& s, uint16_t id);
 void uiShowOnly(UiState& s, uint16_t id);
-void uiDragBegin(UiState& s, uint16_t source, const char* kind, const char* bytes);
-void uiDragEnd(UiState& s, uint16_t target);
 void uiBind(UiState& s, uint16_t id, UiClickFn fn, void* user);
 void uiBindName(UiState& s, const char* name, UiClickFn fn, void* user);
 void uiDrag(UiState& s, uint16_t id, UiDragFn fn, void* user);
@@ -200,6 +145,9 @@ void uiPlace(UiState& s, uint16_t id, bool absolute, float x, float y, float w, 
 void uiGrow(UiState& s, uint16_t id, float extraW, float h);
 void uiSetHeight(UiState& s, uint16_t id, float h);
 void uiSetWidth(UiState& s, uint16_t id, float w);
+void uiFlexLimit(UiState& s, uint16_t id, float width, float height, float shrink);
+void uiFlexShrink(UiState& s, uint16_t id, float shrink);
+void uiRowIndent(UiState& s, uint16_t id, float pad);
 void uiPlaceAbsolute(UiState& s, uint16_t id, float x, float y);
 uint16_t uiFindChildText(const UiState& s, uint16_t parent);
 void uiCenterChildren(UiState& s, uint16_t parent);
@@ -209,17 +157,11 @@ void uiSetDrop(UiState& s, uint16_t id, uint8_t drop);
 [[nodiscard]] uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t size);
 [[nodiscard]] uint16_t uiImportBinFile(UiState& s, uint16_t parent, const char* path);
 [[nodiscard]] uint16_t uiFindName(const UiState& s, const char* name);
-inline void uiSetField(UiState& s, uint16_t id) { s.field = id; }
-inline void uiSetMenu(UiState& s, uint16_t id) { s.menu = id; }
-inline void uiSetFieldMenu(UiState& s, uint16_t id) { s.fieldMenu = id; }
-inline uint16_t uiField(const UiState& s) { return s.field; }
-inline uint16_t uiMenu(const UiState& s) { return s.menu; }
-inline uint16_t uiFieldMenu(const UiState& s) { return s.fieldMenu; }
-inline void uiRequestTop(UiState& s, bool on) { s.topOn = on; s.opTop = on ? 1 : 0; }
-inline void uiRequestOpacity(UiState& s, float opacity) { s.opOpacity = opacity; s.ghost = opacity < 1.0f; }
-inline void uiRequestMinimize(UiState& s) { s.opMinimize = true; }
-inline void uiRequestMaximize(UiState& s) { s.opMaximize = true; }
-inline void uiRequestClose(UiState& s) { s.opClose = true; }
+void uiRequestTop(UiState& s, bool on);
+void uiRequestOpacity(UiState& s, float opacity);
+void uiRequestMinimize(UiState& s);
+void uiRequestMaximize(UiState& s);
+void uiRequestClose(UiState& s);
 inline void uiNotifyLayoutDirty(UiState& s) { s.layoutDirty = true; }
 inline void uiNotifyVisualDirty(UiState& s) { s.visualDirty = true; }
 inline void uiSetContextMenu(UiState& s, uint16_t node, uint16_t menu) {
@@ -233,10 +175,36 @@ inline uint16_t uiParent(const UiState& s, uint16_t id) {
 inline UiBox uiNodeBox(const UiState& s, uint16_t id) {
     return id < s.count ? s.box[id] : UiBox{};
 }
+template <typename Tag>
+void uiMarkOnly(UiState& s, uint16_t id) {
+    for (uint16_t i = 0; i < s.count; ++i) {
+        if (!s.ent[i].is_alive() || !s.ent[i].has<Tag>()) {
+            continue;
+        }
+        if (i != id) {
+            s.ent[i].remove<Tag>();
+        }
+    }
+    if (id < s.count && s.ent[id].is_alive()) {
+        s.ent[id].add<Tag>();
+    }
+}
+
+template <typename Tag>
+uint16_t uiMarked(const UiState& s) {
+    for (uint16_t i = 0; i < s.count; ++i) {
+        if (s.ent[i].is_alive() && s.ent[i].has<Tag>()) {
+            return i;
+        }
+    }
+    return kUiNone;
+}
+
 void uiName(UiState& s, uint16_t id, const char* name);
 void uiDrawAdd(UiState& s, UiDrawFn fn);
 void uiDrawDecorAdd(UiState& s, UiDrawFn fn);
 void uiOverlayAdd(UiState& s, UiOverlayDrawFn fn);
+void uiPlaceAdd(UiState& s, void (*fn)(UiState& s));
 void uiBootAdd(UiBootFn fn);
 void uiBeforeLayoutAdd(UiState& s, void (*fn)(UiState& s));
 void uiClearAdd(UiState& s, UiClearFn fn);
@@ -287,6 +255,8 @@ void uiRevealTick(UiState& s);
 
 bool uiListen(UiState& s, UiValueFn fn, void* user);
 void uiTextStyle(UiState& s, uint16_t id, UiTextAlign align, UiTextEllipsis ellipsis, UiTextValign valign, bool wrap, UiTextDeco deco, float leading);
+void uiTextReadTail(UiState& s, uint16_t id, const BinTail& tail);
+void uiSetDisabled(UiState& s, uint16_t id, bool disabled);
 [[nodiscard]] uint16_t uiTextId(const UiState& s, uint16_t id);
 
 inline UiBox uiContent(const UiState& s, uint16_t id) {

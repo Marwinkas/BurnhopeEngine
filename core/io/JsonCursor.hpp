@@ -138,4 +138,100 @@ inline bool parseNumber(Cur& c, double& out) {
     return true;
 }
 
+inline bool skipString(Cur& c) {
+    skip(c);
+    if (c.p >= c.end || *c.p != '"') {
+        return false;
+    }
+    ++c.p;
+    while (c.p < c.end) {
+        const char ch = *c.p++;
+        if (ch == '"') {
+            return true;
+        }
+        if (ch != '\\') {
+            continue;
+        }
+        if (c.p >= c.end) {
+            return false;
+        }
+        if (*c.p == 'u') {
+            if (c.p + 5 > c.end) {
+                return false;
+            }
+            c.p += 5;
+        } else {
+            ++c.p;
+        }
+    }
+    return false;
+}
+
+inline bool skipValue(Cur& c) {
+    skip(c);
+    if (c.p >= c.end) {
+        return false;
+    }
+    const char ch = *c.p;
+    if (ch == '"') {
+        return skipString(c);
+    }
+    if (ch == '{') {
+        ++c.p;
+        skip(c);
+        if (c.p < c.end && *c.p == '}') {
+            ++c.p;
+            return true;
+        }
+        for (;;) {
+            if (!skipString(c) || !eat(c, ':') || !skipValue(c)) {
+                return false;
+            }
+            skip(c);
+            if (c.p < c.end && *c.p == '}') {
+                ++c.p;
+                return true;
+            }
+            if (!eat(c, ',')) {
+                return false;
+            }
+        }
+    }
+    if (ch == '[') {
+        ++c.p;
+        skip(c);
+        if (c.p < c.end && *c.p == ']') {
+            ++c.p;
+            return true;
+        }
+        for (;;) {
+            if (!skipValue(c)) {
+                return false;
+            }
+            skip(c);
+            if (c.p < c.end && *c.p == ']') {
+                ++c.p;
+                return true;
+            }
+            if (!eat(c, ',')) {
+                return false;
+            }
+        }
+    }
+    if (static_cast<std::size_t>(c.end - c.p) >= 4 && std::memcmp(c.p, "true", 4) == 0) {
+        c.p += 4;
+        return true;
+    }
+    if (static_cast<std::size_t>(c.end - c.p) >= 5 && std::memcmp(c.p, "false", 5) == 0) {
+        c.p += 5;
+        return true;
+    }
+    if (static_cast<std::size_t>(c.end - c.p) >= 4 && std::memcmp(c.p, "null", 4) == 0) {
+        c.p += 4;
+        return true;
+    }
+    double dummy = 0.0;
+    return parseNumber(c, dummy);
+}
+
 } // namespace burnhope::json

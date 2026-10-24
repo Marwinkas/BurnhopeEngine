@@ -1,6 +1,5 @@
 #pragma once
 
-#include "platform/Input.hpp"
 #include "ui/Interaction.hpp"
 #include "ui/Style.hpp"
 #include <cstdint>
@@ -17,9 +16,5 @@ void uiWindowTakeOps(UiState& s, WindowOps& out);
 
 // Метрики заголовка и границ изменения размера окна из дизайн-токенов
 void uiWindowChromeMetrics(const UiLook& look, float& titleBar, float& resizeBorder);
-
-// Фильтрация ввода 3D-сцены: если фокус на поле ввода или курсор над UI,
-// глушит клики, вращение камеры и ввод текста, чтобы игра не перехватывала управление.
-void uiMaskSceneInput(const UiState& s, InputFrame& input);
 
 } // namespace burnhope

@@ -1,7 +1,7 @@
 #define DOCTEST_CONFIG_NO_EXCEPTIONS
 #include <doctest/doctest.h>
 
-#include "ui/Domain.hpp"
+#include "ui/widget/Widgets.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/widget/Chrome.hpp"
@@ -22,6 +22,7 @@ using namespace burnhope;
 
 TEST_CASE("double click maximizes the title only") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t btn = spawn(state, kUiNone, px(80, 24), paintRgb(0.2f, 0.2f, 0.2f));
     uiLayout(state, 200.0f, 80.0f);
     InputFrame in{};
@@ -29,9 +30,12 @@ TEST_CASE("double click maximizes the title only") {
     in.pointer.x = state.box[btn].x + 2.0f;
     in.pointer.y = state.box[btn].y + 2.0f;
     (void)uiApplyInput(state, in);
-    CHECK(!state.opMaximize);
+    if (const WindowOps* plain = state.world.try_get<WindowOps>()) {
+        CHECK(plain->toggleMaximize == false);
+    }
 
     UiState titled;
+    uiWidgetsInit(titled);
     const uint16_t root = spawn(titled, kUiNone, px(200.0f, 80.0f), paintRgb(0.1f, 0.1f, 0.1f));
     const uint16_t title = spawn(titled, root, px(180.0f, 32.0f), paintRgb(0.2f, 0.2f, 0.2f, 0.0f));
     titled.ent[title].set<UiTitleBar>({});
@@ -43,10 +47,13 @@ TEST_CASE("double click maximizes the title only") {
     click.pointer.x = titled.box[title].x + 4.0f;
     click.pointer.y = titled.box[title].y + 4.0f;
     (void)uiApplyInput(titled, click);
-    CHECK(titled.opMaximize);
+    const WindowOps* ops = titled.world.try_get<WindowOps>();
+    CHECK(ops != nullptr);
+    CHECK(ops->toggleMaximize);
 }
 TEST_CASE("splitter resizes the dock on the far side") {
     UiState state;
+    uiWidgetsInit(state);
     UiFlex col{};
     col.widthMode = UiSize::Px;
     col.width = 200.0f;
@@ -91,6 +98,7 @@ TEST_CASE("splitter resizes the dock on the far side") {
 }
 TEST_CASE("inspector drag writes the bound float") {
     UiState state;
+    uiWidgetsInit(state);
     float roughness = 0.5f;
     const uint16_t root = spawn(state, kUiNone, px(200.0f, 40.0f), paintRgb(0.1f, 0.1f, 0.1f));
     const uint16_t id = uiSlider(state, root, roughness, 0.0f, 1.0f, nullptr, nullptr, 200.0f);

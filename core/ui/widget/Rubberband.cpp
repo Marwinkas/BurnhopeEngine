@@ -133,8 +133,8 @@ bool uiRubberbandTrack(UiState& s, uint16_t host, const InputFrame& in) {
     return false;
 }
 
-bool uiRubberInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
-    (void)cursor;
+bool uiRubberInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note) {
+    (void)note;
     if (phase != kUiInEarly) {
         return false;
     }

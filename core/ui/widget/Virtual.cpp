@@ -46,6 +46,33 @@ uint16_t addVirtSlot(UiState& s, uint16_t scroll, float itemH) {
 
 } // namespace
 
+bool uiPlaceOverSlot(UiState& s, uint16_t node, uint16_t slot, float fallbackH) {
+    if (node >= s.count) {
+        return false;
+    }
+    const UiParts* parts = slot < s.count ? s.ent[slot].try_get<UiParts>() : nullptr;
+    const uint16_t lab = parts != nullptr && parts->label < s.count ? parts->label : slot;
+    if (lab >= s.count) {
+        uiShow(s, node, false);
+        return false;
+    }
+    const UiBox& box = s.box[lab];
+    if (box.w < 8.0f || box.h < 8.0f) {
+        uiShow(s, node, false);
+        return false;
+    }
+    const float w = box.w > 48.0f ? box.w : 160.0f;
+    const float h = box.h > 16.0f ? box.h : fallbackH;
+    const UiFlex* flex = s.ent[node].try_get<UiFlex>();
+    const bool same = flex != nullptr && flex->posX == box.x && flex->posY == box.y && flex->width == w && flex->height == h
+        && nodeShown(s, node);
+    if (!same) {
+        uiPlace(s, node, true, box.x, box.y, w, h);
+        uiShow(s, node, true);
+    }
+    return true;
+}
+
 float uiVirtualTotalHeight(const UiState& s, uint16_t id, float itemH, uint32_t count, uint8_t cols) {
     const uint8_t columns = cols < 1 ? 1 : cols;
     const float h = id < s.count ? s.box[id].h : 0.0f;

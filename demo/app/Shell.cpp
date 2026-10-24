@@ -1,7 +1,7 @@
 #include "app/Shell.hpp"
 #include "files/Browser.hpp"
 #include "ui/Canvas.hpp"
-#include "ui/Domain.hpp"
+#include "host/HostNote.hpp"
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
 #include "ui/widget/Button.hpp"
@@ -10,8 +10,9 @@
 #include "ui/widget/Gradient.hpp"
 #include "ui/widget/Docking.hpp"
 #include "ui/widget/Fold.hpp"
-#include "ui/widget/PropGrid.hpp"
+#include "host/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
+#include "ui/widget/Number.hpp"
 #include "ui/widget/Label.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Slider.hpp"
@@ -109,9 +110,7 @@ void setEdge(void* user, uint8_t bit) {
         next = bit;
     }
     demo->edges = next;
-    uiDock(*demo->canvas->state).panel = demo->dockPanel;
-    uiDock(*demo->canvas->state).home = demo->dockHome;
-    uiDock(*demo->canvas->state).edges = next;
+    uiDockBind(*demo->canvas->state, demo->dockHome, demo->dockPanel, next);
 }
 
 void onEdgeLeft(void* user, uint16_t) { setEdge(user, 1); }
@@ -166,10 +165,6 @@ void warmCmd(void* user, uint16_t) {
     }
 }
 
-void onFold(void* user, uint16_t id) {
-    uiFold(*static_cast<UiState*>(user), id);
-}
-
 uint16_t dragHeader(UiState& s, uint16_t parent, const char* title) {
     UiFlex row{};
     row.direction = UiFlexDir::Row;
@@ -203,8 +198,7 @@ uint16_t dragHeader(UiState& s, uint16_t parent, const char* title) {
     fold.icon = 1;
     const uint16_t foldBtn = uiPanel(s, header, mark, fold);
     uiHover(s, foldBtn);
-    uiBind(s, foldBtn, onFold, &s);
-    return header;
+    return uiFoldAttach(s, parent, foldBtn);
 }
 
 } // namespace
@@ -276,6 +270,14 @@ uint16_t iconButton(UiState& s, uint16_t parent, const char* text, uint8_t icon)
     return id;
 }
 
+void onScaleHook(void* user, float value) {
+    auto* demo = static_cast<ShellDemo*>(user);
+    if (demo == nullptr) {
+        return;
+    }
+    onScale(user, demo->scale, value);
+}
+
 void shellBuild(Canvas& canvas, void* user) {
     auto* demo = static_cast<ShellDemo*>(user);
     if (canvas.state == nullptr || demo == nullptr) {
@@ -290,14 +292,14 @@ void shellBuild(Canvas& canvas, void* user) {
     demo->canvas = &canvas;
     demo->chipsOn = true;
     demo->toolsOn = true;
-    if (colors != nullptr) {
-        uiSetColorBook(*canvas.state, colors);
-    }
     if (!canvasUseFont(canvas, 12.0f)) {
         spdlog::error("app font was not set");
     }
     if (canvas.state != nullptr) {
         uiBuildShell(*canvas.state);
+    }
+    if (colors != nullptr) {
+        uiSetColorBook(*canvas.state, colors);
     }
     filesAttach(*canvas.state);
     filesMount(*canvas.state);
@@ -305,7 +307,9 @@ void shellBuild(Canvas& canvas, void* user) {
     demo->scale = uiFindName(*canvas.state, "scale");
     demo->preview = uiFindName(*canvas.state, "preview");
     demo->scaleText = uiFindName(*canvas.state, "scale_text");
-    canvasListen(canvas, onScale, demo);
+    if (demo->scale < canvas.state->count) {
+        canvas.state->ent[demo->scale].set<UiValueHook>({onScaleHook, demo});
+    }
     filesOnOpen(*canvas.state, onBrowse, demo);
     const uint16_t note = uiFindName(*canvas.state, "json_note");
     if (note != kUiNone) {
@@ -402,16 +406,14 @@ void shellBuild(Canvas& canvas, void* user) {
     dockFlex.shrink = 0.0f;
     const uint16_t dock = uiPanel(s, home, dockFlex, paintToken(theme, UiToken::Side, theme.radius));
     demo->dockPanel = dock;
-    uiDock(s).panel = dock;
-    uiDock(s).home = home;
-    uiDock(s).edges = 15;
-    dragHeader(s, dock, "INSPECTOR");
-    (void)uiLabel(s, dock, "drag the header out, drop it here or press DOCK");
-    bindClick(s, iconButton(s, dock, "DOCK", 0), onDock, demo);
-    bindClick(s, textButton(s, dock, "LEFT"), onEdgeLeft, demo);
-    bindClick(s, textButton(s, dock, "RIGHT"), onEdgeRight, demo);
-    bindClick(s, textButton(s, dock, "TOP"), onEdgeTop, demo);
-    bindClick(s, textButton(s, dock, "BOTTOM"), onEdgeBottom, demo);
+    uiDockBind(s, home, dock, 15);
+    const uint16_t inspector = dragHeader(s, dock, "INSPECTOR");
+    (void)uiLabel(s, inspector, "drag the header out, drop it here or press DOCK");
+    bindClick(s, iconButton(s, inspector, "DOCK", 0), onDock, demo);
+    bindClick(s, textButton(s, inspector, "LEFT"), onEdgeLeft, demo);
+    bindClick(s, textButton(s, inspector, "RIGHT"), onEdgeRight, demo);
+    bindClick(s, textButton(s, inspector, "TOP"), onEdgeTop, demo);
+    bindClick(s, textButton(s, inspector, "BOTTOM"), onEdgeBottom, demo);
 
     UiFlex win{};
     win.position = UiPosition::Absolute;
@@ -429,9 +431,9 @@ void shellBuild(Canvas& canvas, void* user) {
         s.ent[settings].set<UiResizable>({});
     }
     demo->settings = settings;
-    dragHeader(s, settings, "SETTINGS");
-    (void)uiLabel(s, settings, "separate window, drag the header");
-    bindClick(s, iconButton(s, settings, "CLOSE", 3), toggleSettings, demo);
+    const uint16_t settingsPage = dragHeader(s, settings, "SETTINGS");
+    (void)uiLabel(s, settingsPage, "separate window, drag the header");
+    bindClick(s, iconButton(s, settingsPage, "CLOSE", 3), toggleSettings, demo);
     uiShow(s, settings, false);
 
     const uint16_t sectionMenu = uiMakeMenu(s);
@@ -443,7 +445,7 @@ void shellBuild(Canvas& canvas, void* user) {
         || !uiCommandAddTo(s, chipMenu, "WARM", warmCmd, demo)) {
         spdlog::error("context menu was not filled");
     }
-    if (!canvasAddCommand(canvas, "PING", ping, nullptr)) {
+    if (canvas.state == nullptr || !uiCommandAdd(*canvas.state, "PING", ping, nullptr)) {
         spdlog::error("PING command was not added");
     }
 }
@@ -500,10 +502,10 @@ void colorBuild(Canvas& canvas, void* user) {
         spdlog::error("color font was not set");
     }
     if (canvas.state != nullptr) {
+        uiBuildColor(*canvas.state);
         if (user != nullptr) {
             uiSetColorBook(*canvas.state, static_cast<ColorBook*>(user));
         }
-        uiBuildColor(*canvas.state);
     }
 }
 

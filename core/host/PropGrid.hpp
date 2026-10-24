@@ -6,7 +6,16 @@ namespace burnhope {
 
 struct UiRowHover {};
 
-struct UiPropLabel {};
+struct UiPropLabel {
+    uint16_t next = kUiNone;
+};
+
+struct UiPropRoll {
+    uint16_t labels = kUiNone;
+    uint16_t sections = kUiNone;
+    uint16_t sectionTail = kUiNone;
+    uint16_t bar = kUiNone;
+};
 
 struct UiPropGrid {
     float labelW = 140.0f;
@@ -44,6 +53,7 @@ struct UiVecCtl {
 [[nodiscard]] bool uiPropLinked(const UiState& s, uint16_t lock);
 
 struct UiPropSection {
+    uint16_t next = kUiNone;
     uint8_t cat = 0;
     uint8_t owner = 0;
     uint8_t live = 1;
@@ -51,12 +61,15 @@ struct UiPropSection {
 };
 
 struct UiPropFilterBar {
-    uint8_t which = 0xFF;
-    uint8_t count = 0;
-    uint8_t pad[2]{};
-    uint16_t button[12]{};
-    uint16_t section[12]{};
+    uint16_t which = kUiNone;
+    uint16_t chips = kUiNone;
     uint16_t search = kUiNone;
+};
+
+struct UiPropFilterChip {
+    uint16_t section = kUiNone;
+    uint8_t all = 0;
+    uint8_t live = 0;
 };
 
 UiPropVec3 uiPropVec3(UiState& s, uint16_t host, const char* label, float x, float y, float z, float minV, float maxV, float step);

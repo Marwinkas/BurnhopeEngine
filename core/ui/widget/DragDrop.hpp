@@ -2,14 +2,15 @@
 
 #include "ui/State.hpp"
 
+#include <span>
+
 namespace burnhope {
 
-inline constexpr uint8_t kUiDragHostCap = 16;
 inline constexpr uint32_t kUiDragNone = 0xFFFFFFFFu;
 
+struct UiDragHost {};
+
 struct UiDragDrop {
-    uint16_t host[kUiDragHostCap]{};
-    uint8_t hosts = 0;
     uint16_t ghost = kUiNone;
     uint16_t mark = kUiNone;
     uint16_t srcHost = kUiNone;
@@ -28,9 +29,7 @@ struct UiDragDrop {
 };
 
 struct UiDragDropConfig {
-    uint16_t host0 = kUiNone;
-    uint16_t host1 = kUiNone;
-    uint16_t host2 = kUiNone;
+    std::span<const uint16_t> hosts{};
     uint8_t (*canDrag)(void* user, uint16_t host, uint32_t index) = nullptr;
     uint8_t (*canDrop)(void* user, uint16_t host, uint32_t index) = nullptr;
     void (*onDrop)(void* user, uint16_t srcHost, uint32_t srcIndex, uint16_t dstHost, uint32_t dstIndex) = nullptr;
@@ -40,6 +39,6 @@ struct UiDragDropConfig {
 
 void uiDragDropBind(UiState& s, const UiDragDropConfig& cfg);
 void uiDragAddHost(UiState& s, uint16_t host);
-bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
+bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note);
 
 } // namespace burnhope

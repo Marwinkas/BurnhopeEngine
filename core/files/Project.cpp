@@ -1,6 +1,5 @@
 #include "files/Browser.hpp"
 #include "files/FileDomain.hpp"
-#include "ui/Domain.hpp"
 #include "files/Model.hpp"
 #include "ui/State.hpp"
 

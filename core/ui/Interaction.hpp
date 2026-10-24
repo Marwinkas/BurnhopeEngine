@@ -43,13 +43,6 @@ struct UiDrag    { UiDragFn  fn = nullptr; void* user = nullptr; };
 struct UiWheel   { UiWheelFn fn = nullptr; void* user = nullptr; };
 struct UiEdit    { UiEditFn  fn = nullptr; void* user = nullptr; };
 
-struct UiCommand {
-    char name[24]{};
-    uint8_t len = 0;
-    UiCommandFn fn = nullptr;
-    void* user = nullptr;
-};
-
 struct UiPressed {
     uint8_t button = 0;
     float x = 0.0f;
@@ -66,18 +59,6 @@ struct UiDragState {
     bool active = false;
 };
 
-struct UiDrop {
-    uint16_t source = kUiNone;
-    uint16_t target = kUiNone;
-    char kind[16]{};
-    char bytes[64]{};
-    bool active = false;
-    bool hover = false;
-};
-
-struct UiDropTarget {
-    char kind[16]{};
-};
 struct UiHoverable {};
 struct UiPopup {};
 struct UiTab { uint16_t index = 0; };
@@ -89,6 +70,12 @@ inline constexpr uint8_t kUiInEarly = 2;
 inline constexpr uint8_t kUiInEscape = 3;
 inline constexpr uint8_t kUiPhase4 = 4;
 inline constexpr uint8_t kUiPhase5 = 5;
+
+struct UiPhaseNote {
+    uint8_t cursor = 0;
+    uint8_t plugAte = 0;
+    uint8_t took = 0;
+};
 inline constexpr uint8_t kUiInPress = 6;
 inline constexpr uint8_t kUiInPressLate = 7;
 inline constexpr uint8_t kUiInFocus = 8;
@@ -107,6 +94,17 @@ struct WindowOps {
     float opacity = -1.0f;
 };
 
+struct UiClipOut {
+    char bytes[96]{};
+    uint8_t len = 0;
+    uint8_t put = 0;
+};
+
+struct UiIme {
+    char bytes[64]{};
+    uint8_t len = 0;
+};
+
 struct UiName {
     char bytes[32]{};
     uint8_t len = 0;
@@ -115,6 +113,5 @@ struct UiName {
 static_assert(std::is_trivially_copyable_v<UiSlot>);
 static_assert(std::is_trivially_copyable_v<UiPressed>);
 static_assert(std::is_trivially_copyable_v<UiDragState>);
-static_assert(std::is_trivially_copyable_v<UiCommand>);
 
 } // namespace burnhope

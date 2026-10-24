@@ -71,7 +71,8 @@ PARENT_ROOT = 0xFFFE
 
 DIRS = {"column": 0, "row": 1, "column-reverse": 2, "row-reverse": 3, "col": 0}
 
-NODE = struct.Struct("<HBBh6H8B6B7f6f10f16f16B")
+NODE = struct.Struct("<HBBh6H8B7f6f5f6f4f7f9B3B")
+ROLE = struct.Struct("<10B4f")
 HEAD = struct.Struct("<IHH I")
 
 JUST = {
@@ -286,13 +287,7 @@ def pack_node(n):
         n["widthMode"],
         n["heightMode"],
         n["position"],
-        n["filter"],
-        n["flags"],
-        n["checkKind"],
-        n["checkGroup"],
-        n["maxChars"],
         n["shown"],
-        n["textWrap"],
         n["width"],
         n["height"],
         n["grow"],
@@ -306,9 +301,6 @@ def pack_node(n):
         n["a"],
         n["posX"],
         n["posY"],
-        n["minV"],
-        n["maxV"],
-        n["value"],
         n["shadow"],
         n["borderW"],
         n["br"],
@@ -331,7 +323,6 @@ def pack_node(n):
         n["aspect"],
         n["posR"],
         n["posB"],
-        n["textLeading"],
         n["drop"],
         n["content"],
         n["self"],
@@ -341,13 +332,28 @@ def pack_node(n):
         n["overflow"],
         n["box"],
         n["inset"],
+        n["pad0"],
+        n["pad1"],
+        n["pad2"],
+    )
+
+
+def pack_role(n):
+    return ROLE.pack(
+        n["filter"],
+        n["flags"],
+        n["checkKind"],
+        n["checkGroup"],
+        n["maxChars"],
+        n["textWrap"],
         n["textAlign"],
         n["textEllipsis"],
         n["textValign"],
         n["textDeco"],
-        n["pad0"],
-        n["pad1"],
-        n["pad2"],
+        n["minV"],
+        n["maxV"],
+        n["value"],
+        n["textLeading"],
     )
 
 
@@ -366,9 +372,11 @@ def main():
         sys.stderr.write("too many nodes\n")
         return 1
     blob = bytearray()
-    blob += HEAD.pack(0x49554842, 2, len(nodes), len(pool))
+    blob += HEAD.pack(0x49554842, 3, len(nodes), len(pool))
     for node in nodes:
         blob += pack_node(node)
+    for node in nodes:
+        blob += pack_role(node)
     blob += pool
     with open(sys.argv[2], "wb") as handle:
         handle.write(blob)

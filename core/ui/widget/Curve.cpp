@@ -1,7 +1,9 @@
+#include "ui/widget/Curve.hpp"
+
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
+#include "ui/Primitive.hpp"
 #include "ui/PrimitiveBatch.hpp"
-#include "ui/widget/Curve.hpp"
 
 namespace burnhope {
 namespace {
@@ -44,27 +46,7 @@ void onCurve(void* user, uint16_t id, float x, float y) {
     uiNotifyVisualDirty(*s);
 }
 
-} // namespace
-
-uint16_t uiCurve(UiState& s, uint16_t parent) {
-    UiFlex flex{};
-    flex.heightMode = UiSize::Px;
-    flex.height = 120.0f;
-    flex.shrink = 0.0f;
-    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Content, 6.0f));
-    if (id == kUiNone) {
-        return id;
-    }
-    uiHover(s, id);
-    s.ent[id].set<UiCurve>({});
-    uiDrag(s, id, onCurve, &s);
-    return id;
-}
-
-bool uiCurveDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
-    if (id >= s.count) {
-        return false;
-    }
+bool drawCurve(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
     const UiCurve* curve = s.ent[id].try_get<UiCurve>();
     if (curve == nullptr) {
         return false;
@@ -101,7 +83,29 @@ bool uiCurveDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
     for (int p = 0; p < 4; ++p) {
         n = emitRect(dst, n, cap, box.x + curve->x[p] * box.w - 4.0f, box.y + curve->y[p] * box.h - 4.0f, 8.0f, 8.0f, tr, tg, tb, 1.0f, 4.0f, clip);
     }
-    return false;
+    return true;
+}
+
+} // namespace
+
+uint16_t uiCurve(UiState& s, uint16_t parent) {
+    UiFlex flex{};
+    flex.heightMode = UiSize::Px;
+    flex.height = 120.0f;
+    flex.shrink = 0.0f;
+    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Content, 6.0f));
+    if (id == kUiNone) {
+        return id;
+    }
+    uiHover(s, id);
+    s.ent[id].set<UiCurve>({});
+    uiDrag(s, id, onCurve, &s);
+    uiCurveBind(s);
+    return id;
+}
+
+void uiCurveBind(UiState& s) {
+    uiDrawDecorAdd(s, drawCurve);
 }
 
 } // namespace burnhope

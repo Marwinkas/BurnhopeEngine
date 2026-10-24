@@ -1,6 +1,6 @@
 #include "Str.hpp"
+#include "ui/PrimitiveBatch.hpp"
 #include "ui/State.hpp"
-#include "ui/widget/Widgets.hpp"
 #include "platform/Trace.hpp"
 
 #include <spdlog/spdlog.h>
@@ -108,42 +108,6 @@ void uiShowOnly(UiState& s, uint16_t id) {
     }
 }
 
-void uiDragBegin(UiState& s, uint16_t source, const char* kind, const char* bytes) {
-    s.dropBus = {};
-    s.dropBus.source = source;
-    s.dropBus.active = 1;
-    if (kind != nullptr) {
-        for (int i = 0; i < 15 && kind[i] != '\0'; ++i) {
-            s.dropBus.kind[i] = kind[i];
-        }
-    }
-    if (bytes != nullptr) {
-        for (int i = 0; i < 63 && bytes[i] != '\0'; ++i) {
-            s.dropBus.bytes[i] = bytes[i];
-        }
-    }
-}
-
-void uiDragEnd(UiState& s, uint16_t target) {
-    if (s.dropBus.active == 0) {
-        return;
-    }
-    s.dropBus.hover = 0;
-    uint16_t accept = target;
-    if (s.dropBus.kind[0] != '\0') {
-        accept = kUiNone;
-        for (uint16_t id = target; id != kUiNone; id = s.parentOf[id]) {
-            const UiDropTarget* sink = s.ent[id].try_get<UiDropTarget>();
-            if (sink != nullptr && std::strcmp(sink->kind, s.dropBus.kind) == 0) {
-                accept = id;
-                break;
-            }
-        }
-    }
-    s.dropBus.target = accept;
-    s.dropBus.active = 0;
-}
-
 void uiTab(UiState& s, uint16_t id, uint16_t index) {
     if (id < s.count) {
         s.ent[id].set<UiTab>({index});
@@ -189,15 +153,7 @@ void uiSyncInput(UiState& s) {
         } else {
             ent.remove<UiPressed>();
         }
-        if (id == s.dragId && s.dropBus.active != 0) {
-            ent.set<UiDragState>({s.grabX, s.grabY, s.box[id].x, s.box[id].y, 0, 0, 1});
-        } else {
-            ent.remove<UiDragState>();
-        }
-        if (s.dropBus.active != 0 && id == s.hovered) {
-            const UiDropTarget* sink = ent.try_get<UiDropTarget>();
-            s.dropBus.hover = sink != nullptr && std::strcmp(sink->kind, s.dropBus.kind) == 0 ? 1 : 0;
-        }
+        ent.remove<UiDragState>();
     }
 }
 
@@ -242,18 +198,16 @@ void uiClear(UiState& s) {
     s.hovered = kUiNone;
     s.focused = kUiNone;
     s.capture = kUiNone;
-    s.dragId = kUiNone;
-    for (uint8_t hook = 0; hook < s.clearN; ++hook) {
-        if (s.clearFn[hook] != nullptr) {
-            s.clearFn[hook](s);
+    for (UiClearFn hook : s.clearHook) {
+        if (hook != nullptr) {
+            hook(s);
         }
     }
     s.cursor = 0;
     for (uint16_t i = 0; i < kUiCap; ++i) {
         s.culled[i] = 0;
     }
-    s.cmdCount = 0;
-    s.valueN = 0;
+    s.valueHook.clear();
     s.laidW = -1.0f;
     s.laidH = -1.0f;
 }
@@ -374,6 +328,33 @@ uint16_t uiTextId(const UiState& s, uint16_t id) {
     return id;
 }
 
+void uiTextReadTail(UiState& s, uint16_t id, const BinTail& tail) {
+    const uint8_t wrap = tail.raw[5];
+    const uint8_t align = tail.raw[6];
+    const uint8_t ellipsis = tail.raw[7];
+    const uint8_t valignRaw = tail.raw[8];
+    const uint8_t deco = tail.raw[9];
+    float leading = 0.0f;
+    std::memcpy(&leading, tail.raw + 22, sizeof(leading));
+    if (wrap == 0 && deco == 0 && leading == 0.0f && align == 0 && ellipsis == 0) {
+        return;
+    }
+    const auto valign = static_cast<UiTextValign>(valignRaw != 0 ? valignRaw : (wrap != 0 ? 1 : 0));
+    uiTextStyle(s, id, static_cast<UiTextAlign>(align), static_cast<UiTextEllipsis>(ellipsis), valign, wrap != 0, static_cast<UiTextDeco>(deco), leading);
+}
+
+void uiSetDisabled(UiState& s, uint16_t id, bool disabled) {
+    if (id >= s.count || !s.ent[id].is_alive()) {
+        return;
+    }
+    auto* paint = s.ent[id].try_get_mut<UiPaint>();
+    if (paint == nullptr || paint->disabled == disabled) {
+        return;
+    }
+    paint->disabled = disabled;
+    uiNotifyVisualDirty(s);
+}
+
 void uiTextStyle(UiState& s, uint16_t id, UiTextAlign align, UiTextEllipsis ellipsis, UiTextValign valign, bool wrap, UiTextDeco deco, float leading) {
     const uint16_t part = uiTextId(s, id);
     if (part == kUiNone) {
@@ -469,6 +450,9 @@ void uiPlace(UiState& s, uint16_t id, bool absolute, float x, float y, float w, 
         return;
     }
     flex->position = absolute ? UiPosition::Absolute : UiPosition::Static;
+    if (absolute) {
+        flex->self = UiAlignSelf::Auto;
+    }
     flex->posX = x;
     flex->posY = y;
     if (w > 0.0f) {
@@ -503,6 +487,15 @@ void uiSetHeight(UiState& s, uint16_t id, float h) {
     s.visualDirty = true;
 }
 
+void uiRowIndent(UiState& s, uint16_t id, float pad) {
+    auto* flex = id < s.count ? s.ent[id].try_get_mut<UiFlex>() : nullptr;
+    if (flex == nullptr || flex->padL == pad) {
+        return;
+    }
+    flex->padL = pad;
+    uiMarkLayout(s, id);
+}
+
 void uiSetWidth(UiState& s, uint16_t id, float w) {
     if (id >= s.count) {
         return;
@@ -517,6 +510,40 @@ void uiSetWidth(UiState& s, uint16_t id, float w) {
     flex->shrink = 0.0f;
     s.layoutDirty = true;
     s.visualDirty = true;
+}
+
+void uiFlexLimit(UiState& s, uint16_t id, float width, float height, float shrink) {
+    if (id >= s.count) {
+        return;
+    }
+    auto* flex = s.ent[id].try_get_mut<UiFlex>();
+    if (flex == nullptr) {
+        return;
+    }
+    if (width > 0.0f) {
+        flex->widthMode = UiSize::Px;
+        flex->width = width;
+        flex->maxWMode = UiSize::Px;
+        flex->maxW = width;
+        flex->grow = 0.0f;
+    }
+    if (height > 0.0f) {
+        flex->heightMode = UiSize::Px;
+        flex->height = height;
+        flex->minH = 0.0f;
+    }
+    flex->shrink = shrink;
+    s.layoutDirty = true;
+    s.visualDirty = true;
+}
+
+void uiFlexShrink(UiState& s, uint16_t id, float shrink) {
+    auto* flex = id < s.count ? s.ent[id].try_get_mut<UiFlex>() : nullptr;
+    if (flex == nullptr || flex->shrink == shrink) {
+        return;
+    }
+    flex->shrink = shrink;
+    uiMarkLayout(s, id);
 }
 
 void uiPlaceAbsolute(UiState& s, uint16_t id, float x, float y) {
@@ -787,17 +814,13 @@ void uiShow(UiState& s, uint16_t id, bool visible) {
 }
 
 UiState::~UiState() {
+    uiBarScratchShutdown(*this);
     uiClear(*this);
 }
 
 namespace {
 
-struct BootTable {
-    UiBootFn fn[4]{};
-    uint8_t n = 0;
-};
-
-BootTable gBoot{};
+std::vector<UiBootFn> gBoot;
 
 } // namespace
 
@@ -805,42 +828,36 @@ void uiBootAdd(UiBootFn fn) {
     if (fn == nullptr) {
         return;
     }
-    for (uint8_t i = 0; i < gBoot.n; ++i) {
-        if (gBoot.fn[i] == fn) {
+    for (UiBootFn have : gBoot) {
+        if (have == fn) {
             return;
         }
     }
-    if (gBoot.n < 4) {
-        gBoot.fn[gBoot.n++] = fn;
-    }
+    gBoot.push_back(fn);
 }
 
 void uiBeforeLayoutAdd(UiState& s, void (*fn)(UiState& s)) {
     if (fn == nullptr) {
         return;
     }
-    for (uint8_t i = 0; i < s.beforeN; ++i) {
-        if (s.beforeFn[i] == fn) {
+    for (void (*have)(UiState&) : s.beforeHook) {
+        if (have == fn) {
             return;
         }
     }
-    if (s.beforeN < 4) {
-        s.beforeFn[s.beforeN++] = fn;
-    }
+    s.beforeHook.push_back(fn);
 }
 
 void uiClearAdd(UiState& s, UiClearFn fn) {
     if (fn == nullptr) {
         return;
     }
-    for (uint8_t i = 0; i < s.clearN; ++i) {
-        if (s.clearFn[i] == fn) {
+    for (UiClearFn have : s.clearHook) {
+        if (have == fn) {
             return;
         }
     }
-    if (s.clearN < 4) {
-        s.clearFn[s.clearN++] = fn;
-    }
+    s.clearHook.push_back(fn);
 }
 
 void uiRegisterSpawnHook(UiState& s, uint8_t role, UiSpawnFn fn) {
@@ -861,12 +878,10 @@ UiState::UiState()
         parentOf[i] = kUiNone;
         contextOf[i] = kUiNone;
     }
-    uiWidgetsInit(*this);
-    bootN = gBoot.n;
-    for (uint8_t i = 0; i < gBoot.n; ++i) {
-        bootFn[i] = gBoot.fn[i];
-        if (bootFn[i] != nullptr) {
-            bootFn[i](*this);
+    bootHook = gBoot;
+    for (UiBootFn fn : bootHook) {
+        if (fn != nullptr) {
+            fn(*this);
         }
     }
 }

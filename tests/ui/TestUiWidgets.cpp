@@ -1,10 +1,10 @@
 #define DOCTEST_CONFIG_NO_EXCEPTIONS
 #include <doctest/doctest.h>
 
-#include "ui/Domain.hpp"
+#include "host/SceneMask.hpp"
+#include "ui/widget/Widgets.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
-#include "ui/Canvas.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
@@ -19,6 +19,7 @@ using namespace burnhope;
 
 TEST_CASE("wheel on a scroll does not reach the scene") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t host = spawn(state, kUiNone, px(200, 200), paintRgb(0.05f, 0.05f, 0.05f));
     const uint16_t scroll = spawn(state, host, px(100, 40), paintRgb(0.1f, 0.1f, 0.1f));
     const uint16_t inner = spawn(state, scroll, px(80, 200), paintRgb(0.2f, 0.2f, 0.2f));
@@ -30,15 +31,13 @@ TEST_CASE("wheel on a scroll does not reach the scene") {
     in.pointer.y = state.box[scroll].y + 4.0f;
     (void)uiApplyInput(state, in);
     CHECK(state.ateWheel == 1);
-    Canvas canvas{};
-    canvas.state.reset(&state);
-    canvasMaskScene(canvas, in);
-    canvas.state.release();
+    sceneMaskInput(state, in);
     CHECK(in.wheel == 0.0f);
     CHECK(in.pointer.down == 0);
 }
 TEST_CASE("text button takes the label width") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t bar = spawn(state, kUiNone, px(200, 30), paintRgb(0.1f, 0.1f, 0.1f));
     UiFlex flex{};
     flex.heightMode = UiSize::Px;
@@ -52,6 +51,7 @@ TEST_CASE("text button takes the label width") {
 }
 TEST_CASE("scroll window stays put") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t host = spawn(state, kUiNone, px(200, 200), paintRgb(0.05f, 0.05f, 0.05f));
     UiFlex scrollFlex = px(100, 40);
     scrollFlex.overflow = UiOverflow::Scroll;
@@ -74,6 +74,7 @@ TEST_CASE("scroll window stays put") {
 }
 TEST_CASE("multiline rows and caret") {
     UiState state;
+    uiWidgetsInit(state);
     state.look.advance = 10.0f;
     state.look.glyphH = 18.0f;
     UiField field{};
@@ -90,6 +91,7 @@ TEST_CASE("multiline rows and caret") {
 }
 TEST_CASE("soft wrap breaks on width") {
     UiState state;
+    uiWidgetsInit(state);
     state.look.advance = 10.0f;
     state.look.glyphH = 18.0f;
     UiField field{};
@@ -104,6 +106,7 @@ TEST_CASE("soft wrap breaks on width") {
 }
 TEST_CASE("field undo restores bytes") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t id = spawn(state, kUiNone, px(200, 36), paintRgb(0.1f, 0.1f, 0.1f));
     UiField field{};
     std::memcpy(field.bytes, "hi", 2);
@@ -121,6 +124,7 @@ TEST_CASE("field undo restores bytes") {
 }
 TEST_CASE("disabled node absorbs the hit") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t id = spawn(state, kUiNone, px(80, 30), paintRgb(0.2f, 0.2f, 0.2f));
     state.ent[id].try_get_mut<UiPaint>()->disabled = 1;
     uiLayout(state, 200.0f, 80.0f);
@@ -128,6 +132,7 @@ TEST_CASE("disabled node absorbs the hit") {
 }
 TEST_CASE("virtual rows show the first page") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t list = uiVirtual(state, kUiNone, 20.0f);
     uiVirtualSource(state, list, 40, nullptr, nullptr, nullptr);
     const UiVirtual* virt = state.ent[list].try_get<UiVirtual>();
@@ -207,6 +212,7 @@ TEST_CASE("msdf line places glyphs for mesh draw") {
 }
 TEST_CASE("slider tracks the pointer") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t id = spawn(state, kUiNone, px(200, 22), paintRgb(0.2f, 0.2f, 0.2f));
     state.ent[id].set<UiRange>({0.0f, 0.0f, 100.0f});
     uiLayout(state, 200.0f, 40.0f);
@@ -225,22 +231,17 @@ TEST_CASE("slider tracks the pointer") {
 }
 TEST_CASE("breadcrumb segment opens the folder under the root") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t host = spawn(state, kUiNone, px(400, 40), paintRgb(0.1f, 0.1f, 0.1f));
     struct Sink {
-        char path[512]{};
+        uint16_t index = 0xFFFF;
     } sink{};
-    auto nav = [](void* user, const char* path) {
-        auto* out = static_cast<Sink*>(user);
-        uint32_t i = 0;
-        if (path != nullptr) {
-            for (; path[i] != '\0' && i < 511; ++i) {
-                out->path[i] = path[i];
-            }
-        }
-        out->path[i] = '\0';
+    auto nav = [](void* user, uint16_t index) {
+        static_cast<Sink*>(user)->index = index;
     };
     const uint16_t crumbs = uiBreadcrumbs(state, host, nav, &sink);
-    uiBreadcrumbsSet(state, crumbs, "/proj/src", "/proj");
+    const char* labels[] = {"proj", "src"};
+    uiBreadcrumbsSet(state, crumbs, labels, 2);
     uiLayout(state, 400.0f, 40.0f);
     const UiCrumbs* bar = state.ent[crumbs].try_get<UiCrumbs>();
     CHECK(bar != nullptr);
@@ -258,10 +259,10 @@ TEST_CASE("breadcrumb segment opens the folder under the root") {
     in.pointer.x = state.box[child].x + state.box[child].w * 0.5f;
     in.pointer.y = state.box[child].y + state.box[child].h * 0.5f;
     (void)uiApplyInput(state, in);
-    CHECK(std::strcmp(sink.path, "/proj/src") == 0);
-    sink.path[0] = '\0';
+    CHECK(sink.index == 1);
+    sink.index = 0xFFFF;
     in.pointer.x = state.box[leaf].x + state.box[leaf].w * 0.5f;
     in.pointer.y = state.box[leaf].y + state.box[leaf].h * 0.5f;
     (void)uiApplyInput(state, in);
-    CHECK(std::strcmp(sink.path, "/proj") == 0);
+    CHECK(sink.index == 0);
 }

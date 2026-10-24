@@ -15,6 +15,7 @@ struct UiMetrics {
     float sliderH = 18.0f;
     float menuItemH = 30.0f;
     float menuPadX = 10.0f;
+    float menuShadow = 10.0f;
     float rowH = 28.0f;
     float rowGap = 4.0f;
     float treeIndent = 16.0f;

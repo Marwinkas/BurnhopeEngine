@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/State.hpp"
+#include "ui/widget/BinSlots.hpp"
 
 namespace burnhope {
 
@@ -12,6 +13,25 @@ enum class UiFieldFilter : uint8_t {
     Tel = 4,
     Url = 5,
 };
+
+struct UiNamedField {};
+struct UiFieldMenuMark {};
+struct UiFieldCaret {};
+struct UiFieldPaste {
+    char bytes[96]{};
+    uint8_t len = 0;
+};
+
+static_assert(std::is_trivially_copyable_v<UiFieldPaste>);
+static_assert(sizeof(UiFieldPaste::bytes) == 96);
+
+void uiSetField(UiState& s, uint16_t id);
+uint16_t uiField(const UiState& s);
+void uiSetFieldMenu(UiState& s, uint16_t id);
+uint16_t uiFieldMenu(const UiState& s);
+
+void uiFieldSetEdit(UiState& s, uint16_t id);
+uint16_t uiFieldEdit(const UiState& s);
 
 struct UiField {
     char bytes[96]{};
@@ -59,21 +79,20 @@ struct UiTextHook {
     void* user = nullptr;
 };
 
-struct UiFieldUndo {
-    struct Snap {
-        uint16_t id = kUiNone;
-        char bytes[96]{};
-        uint8_t len = 0;
-        uint8_t caret = 0;
-        uint8_t anchor = 0;
-    } snap[8]{};
-    uint8_t n = 0;
-    uint8_t at = 0;
+struct UiFieldSnap {
+    flecs::entity prev{};
+    flecs::entity next{};
+    char bytes[96]{};
+    uint8_t len = 0;
+    uint8_t caret = 0;
+    uint8_t anchor = 0;
 };
 
-inline UiFieldUndo& uiUndo(UiState& s) {
-    return s.world.ensure<UiFieldUndo>();
-}
+struct UiFieldUndo {
+    flecs::entity head{};
+    uint16_t n = 0;
+    uint16_t at = 0;
+};
 
 using UiTextChangeFn = void (*)(void* user, const char* text);
 
@@ -81,20 +100,17 @@ struct UiAfterText {
     void (*fn)(UiState& s, uint16_t id) = nullptr;
 };
 
-void uiAfterTextAdd(UiState& s, void (*fn)(UiState& s, uint16_t id));
+void uiAfterTextAdd(UiState& s, uint16_t id, void (*fn)(UiState& s, uint16_t id));
 void uiAfterText(UiState& s, uint16_t id);
 
 uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, bool clear);
-inline constexpr uint8_t kBinSlotField = 5;
-inline constexpr uint8_t kBinSlotSearch = 20;
 void uiFieldBin(UiState& s);
 
 void uiBindField(UiState& s, uint16_t id, const char* text, uint8_t filter, bool clear);
 void uiBindFieldExtra(UiState& s, uint16_t id, const char* placeholder, uint8_t maxChars, bool required, bool readOnly, bool password);
 void uiFieldNotify(UiState& s, uint16_t id);
-uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChangeFn onChange, void* user, float width = 160.0f);
-void uiBindSearch(UiState& s, const char* name, UiTextChangeFn onChange, void* user);
 void uiSetFieldText(UiState& s, uint16_t id, const char* text);
+void uiFieldAlign(UiState& s, uint16_t id, uint8_t align);
 bool fieldHandlePointer(UiState& s, uint16_t id, const InputFrame& in, bool press, bool down);
 void uiClearField(UiState& s);
 void fieldSyncText(UiState& s, uint16_t id);
@@ -123,9 +139,7 @@ uint8_t fieldCaretAt2(const UiState& s, const UiField& field, float localX, floa
 bool fieldHandlePointer(UiState& s, uint16_t id, const InputFrame& in, bool press, bool down);
 bool fieldHandleKey(UiState& s, uint16_t id, const InputFrame& in);
 bool fieldAllows(uint8_t filter, uint32_t cp);
-bool emailOk(const UiField& field);
-bool urlOk(const UiField& field);
-bool telOk(const UiField& field);
+bool fieldCheck(uint8_t filter, const char* bytes, uint8_t len, const char*& msg);
 bool fieldProblem(const UiField& field, const char*& msg);
 void fieldMark(UiState& s, uint16_t id);
 uint8_t fieldChars(const UiField& field);
@@ -149,7 +163,6 @@ void cmdFieldCopy(void* user, uint16_t item);
 void cmdFieldPaste(void* user, uint16_t item);
 void cmdFieldAll(void* user, uint16_t item);
 void cmdFieldWipe(void* user, uint16_t item);
-bool uiFieldDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap);
-bool uiFieldInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
+bool uiFieldInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note);
 
 } // namespace burnhope

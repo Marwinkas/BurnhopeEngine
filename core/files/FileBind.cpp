@@ -11,7 +11,10 @@
 #include "ui/widget/Breadcrumbs.hpp"
 #include "ui/widget/DragDrop.hpp"
 #include "ui/widget/Field.hpp"
+#include "ui/widget/Choice.hpp"
 #include "ui/widget/Menu.hpp"
+#include "ui/widget/Search.hpp"
+#include "ui/widget/Number.hpp"
 #include "ui/widget/Rubberband.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/Style.hpp"
@@ -70,8 +73,13 @@ void onFwd(UiState& s) {
     fileRefresh(s);
 }
 
-void onNav(UiState& s, const char* path) {
-    fileBook(s).go(path);
+void onNav(UiState& s, uint16_t index) {
+    Browser& b = fileBook(s);
+    char path[512]{};
+    if (!fileCrumbPath(b.cwd, b.root[0] != '\0' ? b.root : nullptr, index, path, sizeof(path))) {
+        return;
+    }
+    b.go(path);
     clearGridClick(s);
     fileRefresh(s);
 }
@@ -482,7 +490,7 @@ void fileWire(UiState& s) {
         .onEmptyClick = [](void* user) { onEmpty(stateOf(user)); },
         .user = &s,
     });
-    uiBindCrumbs(s, "file.crumbs", [](void* user, const char* path) { onNav(stateOf(user), path); }, &s);
+    uiBindCrumbs(s, "file.crumbs", [](void* user, uint16_t index) { onNav(stateOf(user), index); }, &s);
     uiBindSearch(s, "file.search", [](void* user, const char* text) { onSearch(stateOf(user), text); }, &s);
     uiBindGrid(s, "file.grid", {
         .itemW = b.look.icon,
@@ -534,10 +542,9 @@ void fileWire(UiState& s) {
     if (uiFiles(s).fileView != kUiNone) {
         (void)uiRubberband(s, uiFiles(s).fileView, [](void* user, uint16_t child) { onBand(stateOf(user), child); }, &s, [](void* user) { onBandBegin(stateOf(user)); });
     }
+    const uint16_t dragHosts[] = {uiFiles(s).fileView, b.wTree, b.crumbs};
     uiDragDropBind(s, {
-        .host0 = uiFiles(s).fileView,
-        .host1 = b.wTree,
-        .host2 = b.crumbs,
+        .hosts = dragHosts,
         .canDrag = [](void* user, uint16_t host, uint32_t index) { return canDrag(stateOf(user), host, index); },
         .canDrop = [](void* user, uint16_t host, uint32_t index) { return canDrop(stateOf(user), host, index); },
         .onDrop = [](void* user, uint16_t, uint32_t srcIndex, uint16_t dstHost, uint32_t dstIndex) {

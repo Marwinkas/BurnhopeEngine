@@ -1,3 +1,4 @@
+#include "ui/Bar.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Interaction.hpp"
 #include "ui/PrimitiveBatch.hpp"
@@ -50,9 +51,13 @@ uint32_t uiEmitPanel(
     }
     const uint32_t before = n;
     if (paint->ramp != UiRamp::None) {
-        n = emitRamp(
-            dst, n, cap, box.x, box.y, box.w, box.h, r, g, b,
-            static_cast<uint32_t>(paint->ramp), kUiFlagRamp);
+        uint32_t mode = static_cast<uint32_t>(paint->ramp);
+        uint32_t kind = kUiFlagRamp;
+        if (const UiRampDraw* drawn = s.ent[id].try_get<UiRampDraw>()) {
+            mode = drawn->mode;
+            kind = drawn->flags != 0 ? drawn->flags : kUiFlagRamp;
+        }
+        n = emitRamp(dst, n, cap, box.x, box.y, box.w, box.h, r, g, b, mode, kind);
     } else if (a > 0.0f) {
         n = emitRect(dst, n, cap, box.x, box.y, box.w, box.h, r, g, b, a, paint->radius, clip);
     }

@@ -5,7 +5,10 @@
 #include "ui/Style.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
+#include "ui/widget/Check.hpp"
+#include "ui/widget/Choice.hpp"
 #include "ui/widget/Menu.hpp"
+#include "ui/widget/Number.hpp"
 #include "ui/widget/Slider.hpp"
 
 namespace burnhope {

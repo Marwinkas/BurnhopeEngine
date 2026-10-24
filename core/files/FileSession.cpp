@@ -64,20 +64,130 @@ void fileShowFoot(UiState& s, const Browser& b) {
     uiText(s, b.status, line);
 }
 
+namespace {
+
+struct CrumbSplit {
+    char local[512]{};
+    char root[512]{};
+    uint8_t rooted = 0;
+    uint8_t n = 0;
+    char piece[128][32]{};
+};
+
+void crumbSplit(const char* path, const char* root, CrumbSplit& out) {
+    out = {};
+    if (root != nullptr && root[0] != '\0' && path != nullptr) {
+        const size_t rootLen = std::strlen(root);
+        if (std::strncmp(path, root, rootLen) == 0) {
+            out.rooted = 1;
+            std::snprintf(out.root, sizeof(out.root), "%s", root);
+            const char* tail = path + rootLen;
+            if (tail[0] == '/') {
+                ++tail;
+            }
+            const char* leaf = std::strrchr(root, '/');
+            leaf = leaf != nullptr && leaf[1] != '\0' ? leaf + 1 : root;
+            if (tail[0] == '\0') {
+                std::snprintf(out.local, sizeof(out.local), "%s", leaf);
+            } else {
+                std::snprintf(out.local, sizeof(out.local), "%s/%s", leaf, tail);
+            }
+        } else {
+            std::snprintf(out.local, sizeof(out.local), "%s", path);
+        }
+    } else if (path != nullptr) {
+        std::snprintf(out.local, sizeof(out.local), "%s", path);
+    }
+    size_t at = 0;
+    const size_t n = std::strlen(out.local);
+    while (at <= n && out.n < 128) {
+        size_t end = at;
+        while (out.local[end] != '\0' && out.local[end] != '/') {
+            ++end;
+        }
+        uint8_t len = 0;
+        for (size_t i = at; i < end && len < 31; ++i) {
+            out.piece[out.n][len++] = out.local[i];
+        }
+        out.piece[out.n][len] = '\0';
+        if (len > 0) {
+            ++out.n;
+        }
+        if (out.local[end] == '\0') {
+            break;
+        }
+        at = end + 1;
+    }
+}
+
+} // namespace
+
+void fileCrumbShow(UiState& s, uint16_t id, const char* path, const char* root) {
+    CrumbSplit cut{};
+    crumbSplit(path, root, cut);
+    const char* labels[128]{};
+    for (uint8_t i = 0; i < cut.n; ++i) {
+        labels[i] = cut.piece[i];
+    }
+    uiBreadcrumbsSet(s, id, labels, cut.n);
+}
+
+bool fileCrumbPath(const char* path, const char* root, uint16_t index, char* out, uint32_t cap) {
+    if (out == nullptr || cap == 0) {
+        return false;
+    }
+    out[0] = '\0';
+    CrumbSplit cut{};
+    crumbSplit(path, root, cut);
+    if (index >= cut.n) {
+        return false;
+    }
+    if (cut.rooted != 0 && index == 0) {
+        std::snprintf(out, cap, "%s", cut.root);
+        return out[0] != '\0';
+    }
+    if (cut.rooted != 0) {
+        int n = std::snprintf(out, cap, "%s", cut.root);
+        if (n < 0 || static_cast<uint32_t>(n) >= cap) {
+            return false;
+        }
+        for (uint16_t i = 1; i <= index; ++i) {
+            const int wrote = std::snprintf(out + n, cap - static_cast<uint32_t>(n), "/%s", cut.piece[i]);
+            if (wrote < 0 || static_cast<uint32_t>(n + wrote) >= cap) {
+                return false;
+            }
+            n += wrote;
+        }
+        return true;
+    }
+    int n = std::snprintf(out, cap, "/%s", cut.piece[0]);
+    if (n < 0 || static_cast<uint32_t>(n) >= cap) {
+        return false;
+    }
+    for (uint16_t i = 1; i <= index; ++i) {
+        const int wrote = std::snprintf(out + n, cap - static_cast<uint32_t>(n), "/%s", cut.piece[i]);
+        if (wrote < 0 || static_cast<uint32_t>(n + wrote) >= cap) {
+            return false;
+        }
+        n += wrote;
+    }
+    return true;
+}
+
 void fileRefresh(UiState& s) {
     Browser& b = fileBook(s);
     b.rebuildTree();
     if (b.crumbs != kUiNone) {
-        uiBreadcrumbsSet(s, b.crumbs, b.cwd, b.root[0] != '\0' ? b.root : nullptr);
+        fileCrumbShow(s, b.crumbs, b.cwd, b.root[0] != '\0' ? b.root : nullptr);
     }
     if (b.wTree != kUiNone) {
         uiTreeViewSetCount(s, b.wTree, static_cast<uint32_t>(b.treeCount()));
     }
-    if (uiFiles(s).fileView != kUiNone) {
+    if (const UiFileBrowser* files = uiFilesFind(s); files != nullptr && files->fileView != kUiNone) {
         const bool rows = b.listView != 0 || b.groupOn != 0;
         const FileTheme& theme = fileTheme(s);
         uiVirtualGridSetView(
-            s, uiFiles(s).fileView, static_cast<uint32_t>(b.count()), rows ? 1 : 0,
+            s, files->fileView, static_cast<uint32_t>(b.count()), rows ? 1 : 0,
             rows ? theme.listItemW : b.look.icon, rows ? theme.listRowH : b.look.icon);
     }
     uiSetDisabled(s, b.back, !b.canBack());
@@ -93,8 +203,8 @@ void fileOpenAt(UiState& s, int index) {
     }
     const std::string path = (fs::path(b.cwd) / b.items[static_cast<size_t>(index)].name).string();
     if (b.items[static_cast<size_t>(index)].isDir != 0) {
-        if (uiFiles(s).fileView != kUiNone) {
-            uiVirtualGridClearClick(s, uiFiles(s).fileView);
+        if (const UiFileBrowser* files = uiFilesFind(s); files != nullptr && files->fileView != kUiNone) {
+            uiVirtualGridClearClick(s, files->fileView);
         }
         b.go(path.c_str());
         if (b.onOpen != nullptr) {
@@ -112,11 +222,12 @@ void fileOpenAt(UiState& s, int index) {
 
 void fileBeginRename(UiState& s, int index) {
     Browser& b = fileBook(s);
-    if (index < 0 || index >= b.count() || uiFiles(s).fileView == kUiNone) {
+    const UiFileBrowser* files = uiFilesFind(s);
+    if (index < 0 || index >= b.count() || files == nullptr || files->fileView == kUiNone) {
         return;
     }
     b.startRename(index);
-    uiVirtualGridBeginEdit(s, uiFiles(s).fileView, static_cast<uint32_t>(index), b.items[static_cast<size_t>(index)].name.c_str());
+    uiVirtualGridBeginEdit(s, files->fileView, static_cast<uint32_t>(index), b.items[static_cast<size_t>(index)].name.c_str());
     fileRefresh(s);
 }
 

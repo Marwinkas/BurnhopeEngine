@@ -5,9 +5,11 @@
 #include "render/SceneFrame.hpp"
 #include "rhi/Device.hpp"
 #include "ui/widget/Button.hpp"
+#include "ui/widget/Check.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/PropGrid.hpp"
+#include "host/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
+#include "ui/widget/Number.hpp"
 #include "ui/widget/Slider.hpp"
 
 #include <cmath>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/widget/PropGrid.hpp"
+#include "host/PropGrid.hpp"
 
 namespace burnhope {
 
@@ -62,7 +62,7 @@ struct UiPropBinder {
     uint16_t check(UiState& s, uint16_t panel, const char* label, bool* dst, bool def);
     uint16_t swatch(UiState& s, uint16_t panel, const char* label, float* r, float* g, float* b, float r0, float g0, float b0);
     void sync(const UiState& s) const;
-    void syncSwatches(UiState& s) const;
+    void syncSwatches(UiState& s);
     void write(UiState& s, float* dst, float value) const;
     [[nodiscard]] uint16_t idOf(const float* dst) const;
     [[nodiscard]] uint16_t idOf(const uint8_t* dst) const;

@@ -8,9 +8,9 @@
 #include <spdlog/spdlog.h>
 
 #include <charconv>
+#include <cstring>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <system_error>
 
 namespace burnhope {
@@ -21,6 +21,7 @@ using json::eat;
 using json::parseNumber;
 using json::parseStringCap;
 using json::skip;
+using json::skipValue;
 
 bool parseUiNumber(Cur& c, float& out) {
     double v = 0.0;
@@ -40,69 +41,39 @@ bool parseUiString(Cur& c, char* dst, uint8_t cap, uint8_t& len) {
     return true;
 }
 
-void skipValue(Cur& c) {
-    skip(c);
-    const char* before = c.p;
-    if (c.p >= c.end) {
-        return;
-    }
-    if (*c.p == '"') {
-        char tmp[4]{};
-        uint8_t n = 0;
-        parseUiString(c, tmp, 4, n);
-        return;
-    }
-    if (*c.p == '{') {
-        eat(c, '{');
-        if (eat(c, '}')) {
-            return;
-        }
-        for (;;) {
-            char key[32]{};
-            uint8_t kl = 0;
-            if (!parseUiString(c, key, 32, kl) || !eat(c, ':')) {
-                return;
-            }
-            skipValue(c);
-            if (eat(c, '}')) {
-                return;
-            }
-            if (!eat(c, ',')) {
-                return;
-            }
-        }
-    }
-    if (*c.p == '[') {
-        eat(c, '[');
-        if (eat(c, ']')) {
-            return;
-        }
-        for (;;) {
-            skipValue(c);
-            if (eat(c, ']')) {
-                return;
-            }
-            if (!eat(c, ',')) {
-                return;
-            }
+bool tokenNamed(const char* word, UiToken& out) {
+    struct Pair {
+        const char* name;
+        UiToken token;
+    };
+    const Pair table[] = {
+        {"Custom", UiToken::Custom},
+        {"Window", UiToken::Window},
+        {"Title", UiToken::Title},
+        {"Side", UiToken::Side},
+        {"Content", UiToken::Content},
+        {"Button", UiToken::Button},
+        {"Field", UiToken::Field},
+        {"Menu", UiToken::Menu},
+        {"Close", UiToken::Close},
+        {"Text", UiToken::Text},
+        {"Muted", UiToken::Muted},
+        {"Item", UiToken::Item},
+        {"Preview", UiToken::Preview},
+        {"Status", UiToken::Status},
+        {"Slider", UiToken::Slider},
+        {"Check", UiToken::Check},
+        {"Scroll", UiToken::Scroll},
+        {"Chrome", UiToken::Chrome},
+        {"Accent", UiToken::Accent},
+    };
+    for (const Pair& row : table) {
+        if (strSame(word, row.name)) {
+            out = row.token;
+            return true;
         }
     }
-    if (c.p + 4 <= c.end && std::memcmp(c.p, "true", 4) == 0) {
-        c.p += 4;
-        return;
-    }
-    if (c.p + 5 <= c.end && std::memcmp(c.p, "false", 5) == 0) {
-        c.p += 5;
-        return;
-    }
-    if (c.p + 4 <= c.end && std::memcmp(c.p, "null", 4) == 0) {
-        c.p += 4;
-        return;
-    }
-    float dummy = 0.0f;
-    if (!parseUiNumber(c, dummy) && c.p == before && c.p < c.end) {
-        ++c.p;
-    }
+    return false;
 }
 
 bool parseSizeFloat(const char* begin, const char* end, float& out) {
@@ -189,7 +160,10 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
     bin.shown = 1;
     char name[32]{};
     char text[96]{};
+    char hint[40]{};
     uint8_t textLen = 0;
+    uint8_t hintLen = 0;
+    BinTail role{};
     const char* kids = nullptr;
     bool filled = false;
     UiToken ink = UiToken::Content;
@@ -224,7 +198,15 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                 if (parseUiString(c, word, 24, n)) {
                     uiFlexApplyAttr(flex, key, word);
                 }
-            } else if (strSame(key, "fill") && eat(c, '[')) {
+            } else if (strSame(key, "fill") && !eat(c, '[')) {
+                char word[24]{};
+                uint8_t n = 0;
+                UiToken named = UiToken::Content;
+                if (parseUiString(c, word, 24, n) && tokenNamed(word, named)) {
+                    ink = named;
+                    filled = false;
+                }
+            } else if (strSame(key, "fill")) {
                 float chans[4] = {0.0f, 0.0f, 0.0f, 1.0f};
                 int n = 0;
                 for (;;) {
@@ -246,6 +228,7 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                     if (n >= 4) {
                         bin.a = chans[3];
                     }
+                    ink = UiToken::Custom;
                     filled = true;
                 }
             } else if (strSame(key, "w")) {
@@ -263,7 +246,7 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                 float value = 0.0f;
                 readSize(c, mode, value);
                 uiFlexApplyAttr(flex, key, static_cast<uint8_t>(mode), value);
-            } else if (strSame(key, "gapRow") || strSame(key, "aspect") || strSame(key, "right") || strSame(key, "bottom") || strSame(key, "grow")) {
+            } else if (strSame(key, "gapRow") || strSame(key, "aspect") || strSame(key, "right") || strSame(key, "bottom") || strSame(key, "grow") || strSame(key, "shrink") || strSame(key, "padL") || strSame(key, "padR")) {
                 float v = 0.0f;
                 if (parseUiNumber(c, v)) {
                     uiFlexApplyAttr(flex, key, v);
@@ -278,6 +261,57 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                     } else {
                         bin.icon = static_cast<uint8_t>(v);
                     }
+                }
+            } else if (strSame(key, "hint")) {
+                parseUiString(c, hint, 40, hintLen);
+            } else if (strSame(key, "filter") || strSame(key, "kind") || strSame(key, "group") || strSame(key, "max") || strSame(key, "textWrap") || strSame(key, "ellipsis") || strSame(key, "deco") || strSame(key, "clear") || strSame(key, "required") || strSame(key, "readonly") || strSame(key, "password") || strSame(key, "form") || strSame(key, "on")) {
+                float v = 0.0f;
+                if (parseUiNumber(c, v)) {
+                    const auto n = static_cast<uint8_t>(v);
+                    if (strSame(key, "filter")) {
+                        role.raw[0] = n;
+                    } else if (strSame(key, "kind")) {
+                        role.raw[2] = n;
+                    } else if (strSame(key, "group")) {
+                        role.raw[3] = n;
+                    } else if (strSame(key, "max")) {
+                        role.raw[4] = n;
+                    } else if (strSame(key, "textWrap")) {
+                        role.raw[5] = n;
+                    } else if (strSame(key, "ellipsis")) {
+                        role.raw[7] = n;
+                    } else if (strSame(key, "deco")) {
+                        role.raw[9] = n;
+                    } else if (n != 0) {
+                        uint8_t bit = 0;
+                        if (strSame(key, "clear")) {
+                            bit = 1u << 0;
+                        } else if (strSame(key, "required")) {
+                            bit = 1u << 1;
+                        } else if (strSame(key, "readonly")) {
+                            bit = 1u << 2;
+                        } else if (strSame(key, "password")) {
+                            bit = 1u << 3;
+                        } else if (strSame(key, "form")) {
+                            bit = 1u << 4;
+                        } else if (strSame(key, "on")) {
+                            bit = 1u << 6;
+                        }
+                        role.raw[1] = static_cast<uint8_t>(role.raw[1] | bit);
+                    }
+                }
+            } else if (strSame(key, "min") || strSame(key, "maxv") || strSame(key, "value") || strSame(key, "leading")) {
+                float v = 0.0f;
+                if (parseUiNumber(c, v)) {
+                    uint8_t at = 10;
+                    if (strSame(key, "maxv")) {
+                        at = 14;
+                    } else if (strSame(key, "value")) {
+                        at = 18;
+                    } else if (strSame(key, "leading")) {
+                        at = 22;
+                    }
+                    std::memcpy(role.raw + at, &v, sizeof(v));
                 }
             } else if (strSame(key, "children") && eat(c, '[')) {
                 kids = c.p;
@@ -308,7 +342,7 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
     }
     bin.token = static_cast<uint8_t>(ink);
     flexToBin(bin, flex);
-    const uint16_t id = uiSpawnDescribed(s, parent, bin, name[0] != '\0' ? name : nullptr, textLen > 0 ? text : nullptr, nullptr);
+    const uint16_t id = uiSpawnDescribed(s, parent, bin, role, name[0] != '\0' ? name : nullptr, textLen > 0 ? text : nullptr, hintLen > 0 ? hint : nullptr);
     if (id != kUiNone && kids != nullptr) {
         Cur nested{kids, c.end};
         if (!eat(nested, ']')) {

@@ -1,10 +1,10 @@
 #define DOCTEST_CONFIG_NO_EXCEPTIONS
 #include <doctest/doctest.h>
 
-#include "ui/Domain.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/Canvas.hpp"
+#include "ui/widget/Widgets.hpp"
 #include "rhi/Device.hpp"
 #include "rhi/Swapchain.hpp"
 #include "rhi/DescriptorHeap.hpp"
@@ -176,6 +176,7 @@ TEST_CASE("golden image: panel fill is exact and mesh/vertex paths match") {
         windowDestroy(window);
         return;
     }
+    uiWidgetsInit(*canvas.state);
     canvasSetBuilder(canvas, goldenBuilder, nullptr);
     canvasReload(canvas);
     InputFrame input{};

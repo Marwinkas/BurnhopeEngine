@@ -46,6 +46,7 @@ struct UiVirtualBase {
 };
 
 float uiVirtualTotalHeight(const UiState& s, uint16_t id, float itemH, uint32_t count, uint8_t cols = 1);
+bool uiPlaceOverSlot(UiState& s, uint16_t node, uint16_t slot, float fallbackH);
 
 struct UiVirtual : UiVirtualBase {
     void (*fill)(void* user, uint32_t index, char* dst, uint8_t cap) = nullptr;
@@ -109,8 +110,6 @@ void uiVirtualSource(UiState& s, uint16_t id, uint32_t count, void (*fill)(void*
 void uiVirtualRefresh(UiState& s, uint16_t id);
 
 float uiVirtualContentH(const UiState& s, uint16_t id);
-float uiTreeContentH(const UiState& s, uint16_t id);
-float uiGridContentH(const UiState& s, uint16_t id);
 
 struct UiVirtualWindow {
     uint32_t first = 0;

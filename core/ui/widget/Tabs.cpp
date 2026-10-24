@@ -1,18 +1,23 @@
+#include "ui/widget/Button.hpp"
 #include "ui/widget/Tabs.hpp"
 
 namespace burnhope {
 
 void uiMarkTab(UiState& s, uint16_t strip, uint16_t tab) {
-    for (uint16_t id = 1; id < s.count; ++id) {
-        if (s.parentOf[id] != strip || !s.ent[id].has<UiFocusable>()) {
+    uint16_t index = 0;
+    const uint32_t n = uiNodeChildCount(s, strip);
+    for (uint32_t i = 0; i < n; ++i) {
+        const uint16_t id = uiNodeChild(s, strip, i);
+        if (id >= s.count || !s.ent[id].has<UiFocusable>()) {
             continue;
         }
-        auto* live = s.ent[id].try_get_mut<UiPaint>();
-        if (live == nullptr) {
-            continue;
+        if (id == tab) {
+            s.ent[id].set<UiTab>({.index = index});
+        } else {
+            s.ent[id].remove<UiTab>();
         }
-        live->token = id == tab ? UiToken::Accent : UiToken::Button;
-        uiNotifyVisualDirty(s);
+        ++index;
+        uiButtonMark(s, id, id == tab);
     }
 }
 

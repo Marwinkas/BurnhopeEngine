@@ -1,5 +1,4 @@
 #include "ui/Canvas.hpp"
-#include "ui/Command.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/Font.hpp"
@@ -199,9 +198,9 @@ UiEvent canvasConsume(
     local.pointer.dx /= dpi;
     local.pointer.dy /= dpi;
 
-    for (uint8_t i = 0; i < s.beforeN; ++i) {
-        if (s.beforeFn[i] != nullptr) {
-            s.beforeFn[i](s);
+    for (void (*fn)(UiState&) : s.beforeHook) {
+        if (fn != nullptr) {
+            fn(s);
         }
     }
     // 1. Верстка дерева через Yoga
@@ -236,13 +235,6 @@ UiEvent canvasConsume(
     return ev;
 }
 
-bool canvasAddCommand(Canvas& c, const char* name, UiCommandFn fn, void* user) {
-    if (c.state == nullptr) {
-        return false;
-    }
-    return uiCommandAdd(*c.state, name, fn, user);
-}
-
 bool canvasWantsText(const Canvas& c) {
     if (c.state == nullptr) {
         return false;
@@ -250,11 +242,8 @@ bool canvasWantsText(const Canvas& c) {
     if (c.state->plug.wantsText != nullptr && c.state->plug.wantsText(*c.state)) {
         return true;
     }
-    if (c.state->focused == kUiNone || c.state->focused >= c.state->count) {
-        return false;
-    }
-    const UiText* text = c.state->ent[c.state->focused].try_get<UiText>();
-    return text != nullptr && text->ownRun != 0;
+    const uint16_t id = c.state->focused;
+    return id < c.state->count && c.state->ent[id].is_alive() && c.state->ent[id].has<UiTextInput>();
 }
 
 bool canvasWantsRelative(const Canvas& c) {

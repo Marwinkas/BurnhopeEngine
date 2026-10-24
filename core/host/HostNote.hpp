@@ -18,8 +18,6 @@ struct UiPick {
     uint8_t len = 0;
 };
 
-void uiClearDomain(UiState& s);
-
 inline UiHostNote& uiHostNote(UiState& s) {
     return s.world.ensure<UiHostNote>();
 }

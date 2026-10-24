@@ -9,6 +9,8 @@
 #include "ui/Text.hpp"
 #include "ui/widget/AssetSlot.hpp"
 #include "ui/widget/Button.hpp"
+#include "ui/widget/Check.hpp"
+#include "ui/widget/Choice.hpp"
 #include "ui/widget/Menu.hpp"
 
 #include <cstdio>
@@ -67,9 +69,7 @@ void hudPushLive(HudContext& hud, UiState& state) {
     for (const uint8_t* flag : bit) {
         const uint16_t id = hud.bind.idOf(flag);
         if (id < state.count) {
-            if (auto* check = state.ent[id].try_get_mut<UiCheck>()) {
-                check->on = *flag;
-            }
+            uiCheckAssign(state, id, *flag);
         }
     }
     for (uint16_t i = 0; i < hud.bind.nSwatches; ++i) {

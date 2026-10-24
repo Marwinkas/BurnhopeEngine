@@ -10,6 +10,8 @@
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Label.hpp"
 #include "ui/LayoutBridge.hpp"
+#include "ui/Bar.hpp"
+#include "ui/Primitive.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Slider.hpp"
 #include "color/Color.hpp"
@@ -41,13 +43,122 @@ UiPaint colorRampPart(const UiLook& look, UiToken token, UiRamp ramp, float radi
 }
 } // namespace
 
-void publishColor(UiState& s);
-void refreshColorChrome(UiState& s);
+void publishColor(UiState& s, UiColorPickerComponent& picker);
+void refreshColorChrome(UiState& s, UiColorPickerComponent& picker);
 void fillColorBody(UiState& s, uint16_t parent);
 void colorOnClose(void* user, uint16_t);
+void takeBook(UiState& s, UiColorPickerComponent& picker);
+void applyColor(UiState& s, UiColorPickerComponent& picker, bool fromHsv, bool publish);
+
+bool pickerOwns(const UiColorPickerComponent& picker, uint16_t id) {
+    if (id == kUiNone) {
+        return false;
+    }
+    if (id == picker.colorPanel || id == picker.colorSwatch || id == picker.colorTarget || id == picker.colorWheel
+        || id == picker.colorVal || id == picker.colorAlpha || id == picker.colorHex || id == picker.colorAnchor
+        || id == picker.colorAlphaBtn || id == picker.colorMenuBtn || id == picker.colorWinBtn || id == picker.colorPickBtn) {
+        return true;
+    }
+    for (uint16_t slot : picker.colorRgb) {
+        if (slot == id) {
+            return true;
+        }
+    }
+    for (uint16_t slot : picker.colorHsv) {
+        if (slot == id) {
+            return true;
+        }
+    }
+    for (uint16_t slot : picker.colorNum) {
+        if (slot == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+UiColorPickerComponent* pickerFor(UiState& s, uint16_t id) {
+    if (id < s.count) {
+        for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+            if (s.ent[p].is_alive() && s.ent[p].has<UiColorPickerComponent>()) {
+                return s.ent[p].try_get_mut<UiColorPickerComponent>();
+            }
+        }
+        for (uint16_t i = 0; i < s.count; ++i) {
+            if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
+                continue;
+            }
+            UiColorPickerComponent* picker = s.ent[i].try_get_mut<UiColorPickerComponent>();
+            if (picker != nullptr && pickerOwns(*picker, id)) {
+                return picker;
+            }
+        }
+    }
+    return uiColorFind(s);
+}
+
+const UiColorPickerComponent* pickerFor(const UiState& s, uint16_t id) {
+    if (id < s.count) {
+        for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+            if (s.ent[p].is_alive() && s.ent[p].has<UiColorPickerComponent>()) {
+                return s.ent[p].try_get<UiColorPickerComponent>();
+            }
+        }
+        for (uint16_t i = 0; i < s.count; ++i) {
+            if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
+                continue;
+            }
+            const UiColorPickerComponent* picker = s.ent[i].try_get<UiColorPickerComponent>();
+            if (picker != nullptr && pickerOwns(*picker, id)) {
+                return picker;
+            }
+        }
+    }
+    return uiColorFind(s);
+}
+
+UiColorPickerComponent* hostPicker(UiState& s) {
+    for (uint16_t i = 0; i < s.count; ++i) {
+        if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
+            continue;
+        }
+        UiColorPickerComponent* picker = s.ent[i].try_get_mut<UiColorPickerComponent>();
+        if (picker != nullptr && picker->colorHost == 0) {
+            return picker;
+        }
+    }
+    return uiColorFind(s);
+}
+
+UiColorPickerComponent& colorBind(UiState& s, uint16_t panel) {
+    if (panel < s.count && s.ent[panel].has<UiColorPickerComponent>()) {
+        return *s.ent[panel].try_get_mut<UiColorPickerComponent>();
+    }
+    UiColorPickerComponent born{};
+    if (const UiColorPickerComponent* prior = uiColorFind(s)) {
+        born.book = prior->book;
+        born.onColor = prior->onColor;
+        born.colorUser = prior->colorUser;
+    }
+    s.ent[panel].set<UiColorPickerComponent>(born);
+    return *s.ent[panel].try_get_mut<UiColorPickerComponent>();
+}
 
 void uiSetColorBook(UiState& s, ColorBook* book) {
-    uiColor(s).book = book;
+    for (uint16_t i = 0; i < s.count; ++i) {
+        if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
+            continue;
+        }
+        UiColorPickerComponent* picker = s.ent[i].try_get_mut<UiColorPickerComponent>();
+        if (picker == nullptr) {
+            continue;
+        }
+        picker->book = book;
+        if (book != nullptr && book->gen != 0 && picker->colorSeen != book->gen) {
+            takeBook(s, *picker);
+            applyColor(s, *picker, false, true);
+        }
+    }
 }
 
 void hsvToRgb(float h, float s, float v, float& r, float& g, float& b) {
@@ -99,36 +210,27 @@ void writeHex(char* dst, uint8_t& len, float r, float g, float b, float a, bool 
     }
 }
 
-void applyColor(UiState& s, bool fromHsv, bool publish = true) {
+void applyColor(UiState& s, UiColorPickerComponent& picker, bool fromHsv, bool publish = true) {
     if (fromHsv) {
-        hsvToRgb(uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV, uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB);
+        hsvToRgb(colorInk(picker).h, colorInk(picker).s, colorInk(picker).v, colorInk(picker).r, colorInk(picker).g, colorInk(picker).b);
     } else {
-        rgbToHsv(uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV);
+        rgbToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
     }
-    setRange(s, uiColor(s).colorRgb[0], uiColor(s).colorR);
-    setRange(s, uiColor(s).colorRgb[1], uiColor(s).colorG);
-    setRange(s, uiColor(s).colorRgb[2], uiColor(s).colorB);
-    setRange(s, uiColor(s).colorHsv[0], uiColor(s).colorH);
-    setRange(s, uiColor(s).colorHsv[1], uiColor(s).colorS);
-    setRange(s, uiColor(s).colorHsv[2], uiColor(s).colorV);
-    if (uiColor(s).colorSwatch != kUiNone) {
-        auto* paint = s.ent[uiColor(s).colorSwatch].try_get_mut<UiPaint>();
-        if (paint != nullptr) {
-            paint->r = uiColor(s).colorR;
-            paint->g = uiColor(s).colorG;
-            paint->b = uiColor(s).colorB;
-            paint->a = uiColor(s).colorA;
-        }
-    }
-    for (uint16_t slot : {uiColor(s).colorRgb[0], uiColor(s).colorRgb[1], uiColor(s).colorRgb[2], uiColor(s).colorAlpha, uiColor(s).colorHsv[0], uiColor(s).colorHsv[1], uiColor(s).colorHsv[2]}) {
+    setRange(s, picker.colorRgb[0], colorInk(picker).r);
+    setRange(s, picker.colorRgb[1], colorInk(picker).g);
+    setRange(s, picker.colorRgb[2], colorInk(picker).b);
+    setRange(s, picker.colorHsv[0], colorInk(picker).h);
+    setRange(s, picker.colorHsv[1], colorInk(picker).s);
+    setRange(s, picker.colorHsv[2], colorInk(picker).v);
+    for (uint16_t slot : {picker.colorRgb[0], picker.colorRgb[1], picker.colorRgb[2], picker.colorAlpha, picker.colorHsv[0], picker.colorHsv[1], picker.colorHsv[2]}) {
         if (slot == kUiNone || slot >= s.count) {
             continue;
         }
         auto* ramp = s.ent[slot].try_get_mut<UiPaint>();
         if (ramp != nullptr) {
-            ramp->r = uiColor(s).colorR;
-            ramp->g = uiColor(s).colorG;
-            ramp->b = uiColor(s).colorB;
+            ramp->r = colorInk(picker).r;
+            ramp->g = colorInk(picker).g;
+            ramp->b = colorInk(picker).b;
         }
     }
     auto write = [&](uint16_t id, bool keepCaret) {
@@ -142,24 +244,24 @@ void applyColor(UiState& s, bool fromHsv, bool publish = true) {
         if (keepCaret && s.focused == id) {
             return;
         }
-        writeHex(field->bytes, field->len, uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorA, true);
+        writeHex(field->bytes, field->len, colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).a, true);
         field->caret = field->len;
         field->anchor = field->len;
         fieldSyncText(s, id);
     };
-    write(uiColor(s).colorTarget, false);
-    write(uiColor(s).colorHex, true);
+    write(picker.colorTarget, false);
+    write(picker.colorHex, true);
     const int shown[7] = {
-        static_cast<int>(uiColor(s).colorR * 255.0f + 0.5f),
-        static_cast<int>(uiColor(s).colorG * 255.0f + 0.5f),
-        static_cast<int>(uiColor(s).colorB * 255.0f + 0.5f),
-        static_cast<int>(uiColor(s).colorA * 255.0f + 0.5f),
-        static_cast<int>(uiColor(s).colorH * 360.0f + 0.5f),
-        static_cast<int>(uiColor(s).colorS * 100.0f + 0.5f),
-        static_cast<int>(uiColor(s).colorV * 100.0f + 0.5f),
+        static_cast<int>(colorInk(picker).r * 255.0f + 0.5f),
+        static_cast<int>(colorInk(picker).g * 255.0f + 0.5f),
+        static_cast<int>(colorInk(picker).b * 255.0f + 0.5f),
+        static_cast<int>(colorInk(picker).a * 255.0f + 0.5f),
+        static_cast<int>(colorInk(picker).h * 360.0f + 0.5f),
+        static_cast<int>(colorInk(picker).s * 100.0f + 0.5f),
+        static_cast<int>(colorInk(picker).v * 100.0f + 0.5f),
     };
     for (int i = 0; i < 7; ++i) {
-        const uint16_t id = uiColor(s).colorNum[i];
+        const uint16_t id = picker.colorNum[i];
         if (id == kUiNone) {
             continue;
         }
@@ -172,40 +274,31 @@ void applyColor(UiState& s, bool fromHsv, bool publish = true) {
         field->anchor = field->len;
         fieldSyncText(s, id);
     }
-    setRange(s, uiColor(s).colorAlpha, uiColor(s).colorA);
+    setRange(s, picker.colorAlpha, colorInk(picker).a);
     if (publish) {
-        publishColor(s);
+        publishColor(s, picker);
     }
-    refreshColorChrome(s);
+    refreshColorChrome(s, picker);
     s.visualDirty = true;
 }
 
-void takeBook(UiState& s) {
-    if (uiColor(s).book == nullptr || uiColor(s).book->gen == 0) {
+void takeBook(UiState& s, UiColorPickerComponent& picker) {
+    if (picker.book == nullptr || picker.book->gen == 0) {
         return;
     }
-    uiColor(s).colorR = uiColor(s).book->r;
-    uiColor(s).colorG = uiColor(s).book->g;
-    uiColor(s).colorB = uiColor(s).book->b;
-    uiColor(s).colorA = uiColor(s).book->a;
-    uiColor(s).colorH = uiColor(s).book->h;
-    uiColor(s).colorS = uiColor(s).book->s;
-    uiColor(s).colorV = uiColor(s).book->v;
-    uiColor(s).colorUseAlpha = uiColor(s).book->useAlpha;
-    uiColor(s).colorMode = uiColor(s).book->mode;
-    uiColor(s).colorPresent = uiColor(s).book->present;
-    uiColor(s).colorDrop = uiColor(s).book->drop;
-    uiColor(s).colorSeen = uiColor(s).book->gen;
-    uiColor(s).colorApplied = uiColor(s).book->present;
+    picker.colorSeen = picker.book->gen;
+    picker.colorApplied = picker.book->present;
 }
 
 void paintColor(UiState& s) {
-    applyColor(s, false);
+    if (UiColorPickerComponent* picker = uiColorFind(s)) {
+        applyColor(s, *picker, false);
+    }
 }
 
-void dragWheel(UiState& s, uint16_t id, float x, float y) {
+void dragWheel(UiState& s, UiColorPickerComponent& picker, uint16_t id, float x, float y) {
     const UiBox& b = s.box[id];
-    if (id == uiColor(s).colorWheel) {
+    if (id == picker.colorWheel) {
         const float cx = b.x + b.w * 0.5f;
         const float cy = b.y + b.h * 0.5f;
         const float dx = x - cx;
@@ -222,10 +315,10 @@ void dragWheel(UiState& s, uint16_t id, float x, float y) {
         if (hue >= 1.0f) {
             hue -= 1.0f;
         }
-        uiColor(s).colorH = hue;
-        uiColor(s).colorS = sat;
-        applyColor(s, true);
-    } else if (id == uiColor(s).colorVal) {
+        colorInk(picker).h = hue;
+        colorInk(picker).s = sat;
+        applyColor(s, picker, true);
+    } else if (id == picker.colorVal) {
         float t = b.h > 1.0f ? 1.0f - (y - b.y) / b.h : 0.0f;
         if (t < 0.0f) {
             t = 0.0f;
@@ -233,9 +326,9 @@ void dragWheel(UiState& s, uint16_t id, float x, float y) {
         if (t > 1.0f) {
             t = 1.0f;
         }
-        uiColor(s).colorV = t;
-        applyColor(s, true);
-    } else if (id == uiColor(s).colorAlpha) {
+        colorInk(picker).v = t;
+        applyColor(s, picker, true);
+    } else if (id == picker.colorAlpha) {
         float t = b.w > 1.0f ? (x - b.x) / b.w : 0.0f;
         if (t < 0.0f) {
             t = 0.0f;
@@ -243,8 +336,8 @@ void dragWheel(UiState& s, uint16_t id, float x, float y) {
         if (t > 1.0f) {
             t = 1.0f;
         }
-        uiColor(s).colorA = t;
-        applyColor(s, true);
+        colorInk(picker).a = t;
+        applyColor(s, picker, true);
     }
 }
 
@@ -328,13 +421,21 @@ void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& 
                 return true;
             }
             if (paint->ramp == kRampColorSwatch) {
-                r = uiColor(s).colorR;
-                g = uiColor(s).colorG;
-                b = uiColor(s).colorB;
-                a = uiColor(s).colorA;
+                const UiColorPickerComponent* owned = pickerFor(s, id);
+                if (owned == nullptr) {
+                    continue;
+                }
+                r = colorInk(*owned).r;
+                g = colorInk(*owned).g;
+                b = colorInk(*owned).b;
+                a = colorInk(*owned).a;
                 return true;
             }
             if (paint->ramp == kRampColorValue) {
+                const UiColorPickerComponent* owned = pickerFor(s, id);
+                if (owned == nullptr) {
+                    continue;
+                }
                 float v = box.h > 1.0f ? 1.0f - (y - box.y) / box.h : 1.0f;
                 if (v < 0.0f) {
                     v = 0.0f;
@@ -342,7 +443,7 @@ void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& 
                 if (v > 1.0f) {
                     v = 1.0f;
                 }
-                hsvToRgb(uiColor(s).colorH, uiColor(s).colorS, v, r, g, b);
+                hsvToRgb(colorInk(*owned).h, colorInk(*owned).s, v, r, g, b);
                 a = 1.0f;
                 return true;
             }
@@ -364,51 +465,74 @@ void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& 
 
 void colorOnValue(void* user, uint16_t id, float val) {
     auto& s = *static_cast<UiState*>(user);
-    UiColorPickerComponent& c = uiColor(s);
+
+    UiColorPickerComponent* picker = pickerFor(s, id);
+    if (picker == nullptr) {
+        return;
+    }
+    UiColorPickerComponent& c = (*picker);
     bool fromHsv = false;
     if (id == c.colorRgb[0]) {
-        c.colorR = val;
+        colorInk(c).r = val;
     } else if (id == c.colorRgb[1]) {
-        c.colorG = val;
+        colorInk(c).g = val;
     } else if (id == c.colorRgb[2]) {
-        c.colorB = val;
+        colorInk(c).b = val;
     } else if (id == c.colorAlpha) {
-        c.colorA = val;
+        colorInk(c).a = val;
     } else if (id == c.colorHsv[0]) {
-        c.colorH = val;
+        colorInk(c).h = val;
         fromHsv = true;
     } else if (id == c.colorHsv[1]) {
-        c.colorS = val;
+        colorInk(c).s = val;
         fromHsv = true;
     } else if (id == c.colorHsv[2]) {
-        c.colorV = val;
+        colorInk(c).v = val;
         fromHsv = true;
     } else {
         return;
     }
-    applyColor(s, fromHsv);
+    applyColor(s, *picker, fromHsv);
 }
 
-void publishColor(UiState& s) {
-    if (uiColor(s).book == nullptr) {
+void slideChannel(void* user, int channel, float value) {
+    auto* state = static_cast<UiState*>(user);
+    if (state == nullptr) {
         return;
     }
-    ColorBook& b = *uiColor(s).book;
-    b.r = uiColor(s).colorR;
-    b.g = uiColor(s).colorG;
-    b.b = uiColor(s).colorB;
-    b.a = uiColor(s).colorA;
-    b.h = uiColor(s).colorH;
-    b.s = uiColor(s).colorS;
-    b.v = uiColor(s).colorV;
-    b.useAlpha = uiColor(s).colorUseAlpha;
-    b.mode = uiColor(s).colorMode;
-    b.present = uiColor(s).colorPresent;
-    b.drop = uiColor(s).colorDrop;
+    const uint16_t live = state->capture != kUiNone ? state->capture : state->focused;
+    const UiColorPickerComponent* color = pickerFor(*state, live);
+    if (color == nullptr) {
+        return;
+    }
+    uint16_t id = kUiNone;
+    if (channel < 3) {
+        id = color->colorRgb[channel];
+    } else if (channel == 3) {
+        id = color->colorAlpha;
+    } else if (channel < 7) {
+        id = color->colorHsv[channel - 4];
+    }
+    colorOnValue(user, id, value);
+}
+
+void slideR(void* user, float value) { slideChannel(user, 0, value); }
+void slideG(void* user, float value) { slideChannel(user, 1, value); }
+void slideB(void* user, float value) { slideChannel(user, 2, value); }
+void slideA(void* user, float value) { slideChannel(user, 3, value); }
+void slideH(void* user, float value) { slideChannel(user, 4, value); }
+void slideS(void* user, float value) { slideChannel(user, 5, value); }
+void slideV(void* user, float value) { slideChannel(user, 6, value); }
+
+void publishColor(UiState& s, UiColorPickerComponent& picker) {
+    if (picker.book == nullptr) {
+        return;
+    }
+    ColorBook& b = colorInk(picker);
     ++b.gen;
-    uiColor(s).colorSeen = b.gen;
-    if (uiColor(s).onColor != nullptr && uiColor(s).colorPresent != 0 && uiColor(s).colorAnchor != kUiNone) {
-        uiColor(s).onColor(uiColor(s).colorUser, s, uiColor(s).colorAnchor, b.r, b.g, b.b);
+    picker.colorSeen = b.gen;
+    if (picker.onColor != nullptr && b.present != 0 && picker.colorAnchor != kUiNone) {
+        picker.onColor(picker.colorUser, s, picker.colorAnchor, b.r, b.g, b.b);
     }
 }
 
@@ -425,9 +549,9 @@ void setBtnLabel(UiState& s, uint16_t id, const char* text) {
     }
 }
 
-void refreshColorChrome(UiState& s) {
-    setBtnLabel(s, uiColor(s).colorMenuBtn, uiColor(s).colorMode == 0 ? "MENU *" : "MENU");
-    setBtnLabel(s, uiColor(s).colorWinBtn, uiColor(s).colorMode == 1 ? "WINDOW *" : "WINDOW");
+void refreshColorChrome(UiState& s, UiColorPickerComponent& picker) {
+    setBtnLabel(s, picker.colorMenuBtn, colorInk(picker).mode == 0 ? "MENU *" : "MENU");
+    setBtnLabel(s, picker.colorWinBtn, colorInk(picker).mode == 1 ? "WINDOW *" : "WINDOW");
 }
 
 void colorHead(UiState& s, uint16_t parent) {
@@ -461,13 +585,13 @@ void colorHead(UiState& s, uint16_t parent) {
     }
 }
 
-void placeColorMenu(UiState& s) {
+void placeColorMenu(UiState& s, UiColorPickerComponent& picker) {
     float x = 24.0f;
     float y = 48.0f;
     const float w = kColorW;
     const float h = kColorH;
-    if (uiColor(s).colorAnchor != kUiNone && uiColor(s).colorAnchor < s.count) {
-        const UiBox& b = s.box[uiColor(s).colorAnchor];
+    if (picker.colorAnchor != kUiNone && picker.colorAnchor < s.count) {
+        const UiBox& b = s.box[picker.colorAnchor];
         x = b.x;
         y = b.y + b.h + 6.0f;
         if (s.laidH > 0.0f && y + h > s.laidH - 8.0f) {
@@ -483,59 +607,52 @@ void placeColorMenu(UiState& s) {
     if (y < 8.0f) {
         y = 8.0f;
     }
-    uiPlace(s, uiColor(s).colorPanel, true, x, y, w, h);
+    uiPlace(s, picker.colorPanel, true, x, y, w, h);
 }
 
-void syncColor(UiState& s) {
-    if (uiColor(s).book == nullptr) {
+void syncColor(UiState& s, UiColorPickerComponent& picker) {
+    if (picker.book == nullptr) {
         return;
     }
-    const ColorBook& b = *uiColor(s).book;
-    if (b.gen != uiColor(s).colorSeen) {
-        uiColor(s).colorR = b.r;
-        uiColor(s).colorG = b.g;
-        uiColor(s).colorB = b.b;
-        uiColor(s).colorA = b.a;
-        uiColor(s).colorH = b.h;
-        uiColor(s).colorS = b.s;
-        uiColor(s).colorV = b.v;
-        uiColor(s).colorUseAlpha = b.useAlpha;
-        uiColor(s).colorMode = b.mode;
-        uiColor(s).colorPresent = b.present;
-        uiColor(s).colorDrop = b.drop;
-        uiColor(s).colorSeen = b.gen;
-        applyColor(s, false, false);
+    const ColorBook& b = *picker.book;
+    if (b.gen != picker.colorSeen) {
+        picker.colorSeen = b.gen;
+        applyColor(s, picker, false, false);
     }
-    if (uiColor(s).colorPresent == uiColor(s).colorApplied) {
+    if (colorInk(picker).present == picker.colorApplied) {
         return;
     }
-    uiColor(s).colorApplied = uiColor(s).colorPresent;
-    if (uiColor(s).colorHost == 0) {
-        if (uiColor(s).colorPresent == 1) {
-            placeColorMenu(s);
-            uiShow(s, uiColor(s).colorPanel, true);
+    picker.colorApplied = colorInk(picker).present;
+    if (picker.colorHost == 0) {
+        if (colorInk(picker).present == 1) {
+            placeColorMenu(s, picker);
+            uiShow(s, picker.colorPanel, true);
         } else {
-            uiShow(s, uiColor(s).colorPanel, false);
-            if (uiColor(s).colorPresent == 2 && uiColor(s).book != nullptr) {
-                uiColor(s).book->present = 2;
+            uiShow(s, picker.colorPanel, false);
+            if (colorInk(picker).present == 2 && picker.book != nullptr) {
+                picker.book->present = 2;
             }
         }
-    } else if (uiColor(s).colorPresent != 2) {
+    } else if (colorInk(picker).present != 2) {
         uiRequestClose(s);
     }
 }
 
 void uiEnsureColorPopup(UiState& s) {
-    UiColorPickerComponent& picker = uiColor(s);
-    if (picker.colorPanel < s.count && s.ent[picker.colorPanel].is_alive()) {
-        return;
+    for (uint16_t i = 0; i < s.count; ++i) {
+        if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
+            continue;
+        }
+        const UiColorPickerComponent* existing = s.ent[i].try_get<UiColorPickerComponent>();
+        if (existing == nullptr || existing->colorHost != 0) {
+            continue;
+        }
+        if (existing->colorPanel < s.count && s.ent[existing->colorPanel].is_alive()) {
+            return;
+        }
     }
     if (s.count == 0 || s.yoga[0] == nullptr) {
         return;
-    }
-    picker.colorHost = 0;
-    if (picker.colorSeen == 0) {
-        rgbToHsv(picker.colorR, picker.colorG, picker.colorB, picker.colorH, picker.colorS, picker.colorV);
     }
     UiFlex root{};
     root.position = UiPosition::Absolute;
@@ -551,8 +668,13 @@ void uiEnsureColorPopup(UiState& s) {
     if (id == kUiNone) {
         return;
     }
+    UiColorPickerComponent& picker = colorBind(s, id);
+    picker.colorHost = 0;
+    if (picker.colorSeen == 0) {
+        rgbToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
+    }
     picker.colorPanel = id;
-    picker.colorPresent = 0;
+    colorInk(picker).present = 0;
     picker.colorApplied = 0;
     colorHead(s, id);
     UiFlex body{};
@@ -569,105 +691,139 @@ void uiEnsureColorPopup(UiState& s) {
 void colorOnOpen(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
     uiEnsureColorPopup(s);
-    if (uiColor(s).book != nullptr && uiColor(s).book->gen != uiColor(s).colorSeen) {
-        takeBook(s);
+    UiColorPickerComponent* picker = hostPicker(s);
+    if (picker == nullptr) {
+        return;
     }
-    uiColor(s).colorAnchor = id;
-    applyColor(s, false, false);
-    if (uiColor(s).colorMode == 1) {
-        uiColor(s).colorPresent = 2;
-        uiColor(s).colorApplied = 2;
-        uiShow(s, uiColor(s).colorPanel, false);
-        if (uiColor(s).book != nullptr) {
-            uiColor(s).book->present = 2;
+    if (picker->book != nullptr && picker->book->gen != picker->colorSeen) {
+        takeBook(s, *picker);
+    }
+    picker->colorAnchor = id;
+    applyColor(s, *picker, false, false);
+    if (colorInk(*picker).mode == 1) {
+        colorInk(*picker).present = 2;
+        picker->colorApplied = 2;
+        uiShow(s, picker->colorPanel, false);
+        if (picker->book != nullptr) {
+            picker->book->present = 2;
         }
     } else {
-        uiColor(s).colorPresent = 1;
-        uiColor(s).colorApplied = 1;
-        placeColorMenu(s);
-        uiShow(s, uiColor(s).colorPanel, true);
+        colorInk(*picker).present = 1;
+        picker->colorApplied = 1;
+        placeColorMenu(s, *picker);
+        uiShow(s, picker->colorPanel, true);
     }
-    publishColor(s);
+    publishColor(s, *picker);
 }
 
-void colorOnClose(void* user, uint16_t) {
+void colorOnClose(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
-    uiColor(s).colorPresent = 0;
-    uiColor(s).colorApplied = 0;
-    uiShow(s, uiColor(s).colorPanel, false);
-    publishColor(s);
-    if (uiColor(s).colorHost != 0) {
+
+    UiColorPickerComponent* picker = pickerFor(s, id);
+    if (picker == nullptr) {
+        return;
+    }
+    colorInk((*picker)).present = 0;
+    (*picker).colorApplied = 0;
+    uiShow(s, (*picker).colorPanel, false);
+    publishColor(s, *picker);
+    if ((*picker).colorHost != 0) {
         uiRequestClose(s);
     }
 }
 
-void colorOnDrop(void* user, uint16_t) {
+void colorOnDrop(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
-    uiColor(s).colorDrop = uiColor(s).colorDrop == 0 ? 1 : 0;
-    publishColor(s);
-    if (uiColor(s).colorHost == 0 && uiColor(s).colorPresent == 1) {
-        if (uiColor(s).colorDrop == 0) {
-            placeColorMenu(s);
+
+    UiColorPickerComponent* picker = pickerFor(s, id);
+    if (picker == nullptr) {
+        return;
+    }
+    colorInk((*picker)).drop = colorInk((*picker)).drop == 0 ? 1 : 0;
+    publishColor(s, *picker);
+    if ((*picker).colorHost == 0 && colorInk((*picker)).present == 1) {
+        if (colorInk((*picker)).drop == 0) {
+            placeColorMenu(s, *picker);
         }
-        uiShow(s, uiColor(s).colorPanel, uiColor(s).colorDrop == 0);
+        uiShow(s, (*picker).colorPanel, colorInk((*picker)).drop == 0);
     }
 }
 
-void colorOnMenu(void* user, uint16_t) {
+void colorOnMenu(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
-    uiColor(s).colorMode = 0;
-    uiColor(s).colorPresent = 1;
-    uiColor(s).colorApplied = 1;
-    publishColor(s);
-    refreshColorChrome(s);
-    if (uiColor(s).colorHost != 0) {
+
+    UiColorPickerComponent* picker = pickerFor(s, id);
+    if (picker == nullptr) {
+        return;
+    }
+    colorInk((*picker)).mode = 0;
+    colorInk((*picker)).present = 1;
+    (*picker).colorApplied = 1;
+    publishColor(s, *picker);
+    refreshColorChrome(s, *picker);
+    if ((*picker).colorHost != 0) {
         uiRequestClose(s);
     } else {
-        placeColorMenu(s);
-        uiShow(s, uiColor(s).colorPanel, true);
+        placeColorMenu(s, *picker);
+        uiShow(s, (*picker).colorPanel, true);
     }
 }
 
-void colorOnWindow(void* user, uint16_t) {
+void colorOnWindow(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
-    uiColor(s).colorMode = 1;
-    uiColor(s).colorPresent = 2;
-    uiColor(s).colorApplied = 2;
-    uiShow(s, uiColor(s).colorPanel, false);
-    publishColor(s);
-    refreshColorChrome(s);
-    if (uiColor(s).colorHost == 0 && uiColor(s).book != nullptr) {
-        uiColor(s).book->present = 2;
+
+    UiColorPickerComponent* picker = pickerFor(s, id);
+    if (picker == nullptr) {
+        return;
+    }
+    colorInk((*picker)).mode = 1;
+    colorInk((*picker)).present = 2;
+    (*picker).colorApplied = 2;
+    uiShow(s, (*picker).colorPanel, false);
+    publishColor(s, *picker);
+    refreshColorChrome(s, *picker);
+    if ((*picker).colorHost == 0 && (*picker).book != nullptr) {
+        (*picker).book->present = 2;
     }
 }
 
 void colorOnDrag(void* user, uint16_t id, float x, float y) {
-    dragWheel(*static_cast<UiState*>(user), id, x, y);
+    auto& s = *static_cast<UiState*>(user);
+    UiColorPickerComponent* picker = pickerFor(s, id);
+    if (picker == nullptr) {
+        return;
+    }
+    dragWheel(s, *picker, id, x, y);
 }
 
 void colorOnEdit(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
+
+    UiColorPickerComponent* picker = pickerFor(s, id);
+    if (picker == nullptr) {
+        return;
+    }
     const UiField* field = s.ent[id].try_get<UiField>();
     if (field == nullptr) {
         return;
     }
-    if (id == uiColor(s).colorHex) {
+    if (id == (*picker).colorHex) {
         float r = 0.0f;
         float g = 0.0f;
         float b = 0.0f;
-        float a = uiColor(s).colorA;
+        float a = colorInk((*picker)).a;
         if (readHex(*field, r, g, b, a)) {
-            uiColor(s).colorR = r;
-            uiColor(s).colorG = g;
-            uiColor(s).colorB = b;
-            uiColor(s).colorA = a;
-            applyColor(s, false);
+            colorInk((*picker)).r = r;
+            colorInk((*picker)).g = g;
+            colorInk((*picker)).b = b;
+            colorInk((*picker)).a = a;
+            applyColor(s, *picker, false);
         }
         return;
     }
     int which = -1;
     for (int i = 0; i < 7; ++i) {
-        if (uiColor(s).colorNum[i] == id) {
+        if ((*picker).colorNum[i] == id) {
             which = i;
         }
     }
@@ -684,42 +840,47 @@ void colorOnEdit(void* user, uint16_t id) {
         }
         const float u = static_cast<float>(n) / 255.0f;
         if (which == 0) {
-            uiColor(s).colorR = u;
+            colorInk((*picker)).r = u;
         } else if (which == 1) {
-            uiColor(s).colorG = u;
+            colorInk((*picker)).g = u;
         } else if (which == 2) {
-            uiColor(s).colorB = u;
+            colorInk((*picker)).b = u;
         } else {
-            uiColor(s).colorA = u;
+            colorInk((*picker)).a = u;
         }
-        applyColor(s, false);
+        applyColor(s, *picker, false);
     } else if (which == 4) {
         if (n > 360) {
             n = 360;
         }
-        uiColor(s).colorH = static_cast<float>(n) / 360.0f;
-        applyColor(s, true);
+        colorInk((*picker)).h = static_cast<float>(n) / 360.0f;
+        applyColor(s, *picker, true);
     } else {
         if (n > 100) {
             n = 100;
         }
         const float u = static_cast<float>(n) / 100.0f;
         if (which == 5) {
-            uiColor(s).colorS = u;
+            colorInk((*picker)).s = u;
         } else {
-            uiColor(s).colorV = u;
+            colorInk((*picker)).v = u;
         }
-        applyColor(s, true);
+        applyColor(s, *picker, true);
     }
 }
 
 bool colorGrab(void* user, uint16_t hit, float x, float y) {
     auto& s = *static_cast<UiState*>(user);
-    const bool dropping = uiColor(s).colorDrop != 0 || (uiColor(s).book != nullptr && uiColor(s).book->drop != 0);
+
+    UiColorPickerComponent* picker = pickerFor(s, hit);
+    if (picker == nullptr) {
+        return false;
+    }
+    const bool dropping = colorInk((*picker)).drop != 0 || ((*picker).book != nullptr && (*picker).book->drop != 0);
     if (!dropping) {
         return false;
     }
-    if (hit == uiColor(s).colorPickBtn) {
+    if (hit == (*picker).colorPickBtn) {
         return false;
     }
     float sr = 0.0f;
@@ -727,20 +888,25 @@ bool colorGrab(void* user, uint16_t hit, float x, float y) {
     float sb = 0.0f;
     float sa = 1.0f;
     samplePixel(s, x, y, sr, sg, sb, sa);
-    uiColor(s).colorR = sr;
-    uiColor(s).colorG = sg;
-    uiColor(s).colorB = sb;
-    uiColor(s).colorA = sa;
-    uiColor(s).colorDrop = 0;
-    applyColor(s, false);
-    if (uiColor(s).colorHost == 0 && uiColor(s).colorPresent == 1) {
-        placeColorMenu(s);
-        uiShow(s, uiColor(s).colorPanel, true);
+    colorInk((*picker)).r = sr;
+    colorInk((*picker)).g = sg;
+    colorInk((*picker)).b = sb;
+    colorInk((*picker)).a = sa;
+    colorInk((*picker)).drop = 0;
+    applyColor(s, *picker, false);
+    if ((*picker).colorHost == 0 && colorInk((*picker)).present == 1) {
+        placeColorMenu(s, *picker);
+        uiShow(s, (*picker).colorPanel, true);
     }
     return true;
 }
 
 void fillColorBody(UiState& s, uint16_t parent) {
+    UiColorPickerComponent* picker = pickerFor(s, parent);
+    if (picker == nullptr) {
+        return;
+    }
+
     UiFlex row{};
     row.direction = UiFlexDir::Row;
     UiFlex wheelRow = row;
@@ -756,16 +922,16 @@ void fillColorBody(UiState& s, uint16_t parent) {
     wheel.width = kColorWheel;
     wheel.height = kColorWheel;
     wheel.shrink = 0.0f;
-    uiColor(s).colorWheel = spawn(s, wheelRowId, wheel, colorRampPart(s.look, UiToken::Content, kRampColorWheel));
-    uiDrag(s, uiColor(s).colorWheel, colorOnDrag, &s);
+    (*picker).colorWheel = spawn(s, wheelRowId, wheel, colorRampPart(s.look, UiToken::Content, kRampColorWheel));
+    uiDrag(s, (*picker).colorWheel, colorOnDrag, &s);
     UiFlex valBar{};
     valBar.widthMode = UiSize::Px;
     valBar.heightMode = UiSize::Px;
     valBar.width = kColorVal;
     valBar.height = kColorWheel;
     valBar.shrink = 0.0f;
-    uiColor(s).colorVal = spawn(s, wheelRowId, valBar, colorRampPart(s.look, UiToken::Content, kRampColorValue));
-    uiDrag(s, uiColor(s).colorVal, colorOnDrag, &s);
+    (*picker).colorVal = spawn(s, wheelRowId, valBar, colorRampPart(s.look, UiToken::Content, kRampColorValue));
+    uiDrag(s, (*picker).colorVal, colorOnDrag, &s);
     UiFlex side{};
     side.direction = UiFlexDir::Column;
     side.widthMode = UiSize::Px;
@@ -783,20 +949,17 @@ void fillColorBody(UiState& s, uint16_t parent) {
     swatch.shrink = 0.0f;
     {
         UiPaint swatchPaint = colorRampPart(s.look, UiToken::Preview, kRampColorSwatch, 6.0f);
-        swatchPaint.r = uiColor(s).colorR;
-        swatchPaint.g = uiColor(s).colorG;
-        swatchPaint.b = uiColor(s).colorB;
-        uiColor(s).colorSwatch = uiPanel(s, sideId, swatch, swatchPaint);
+        (*picker).colorSwatch = uiPanel(s, sideId, swatch, swatchPaint);
     }
     const uint16_t pickId = uiButton(s, sideId, {.label = "PICK", .height = 32.0f, .fillWidth = true, .onClick = colorOnDrop, .user = &s});
-    uiColor(s).colorPickBtn = pickId;
+    (*picker).colorPickBtn = pickId;
     if (pickId < s.count) {
         if (auto* paint = s.ent[pickId].try_get_mut<UiPaint>()) {
             paint->icon = static_cast<uint8_t>(UiIcon::Search);
         }
     }
     const char* names[7] = {"R", "G", "B", "A", "H", "S", "V"};
-    const float starts[7] = {uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorA, uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV};
+    const float starts[7] = {colorInk((*picker)).r, colorInk((*picker)).g, colorInk((*picker)).b, colorInk((*picker)).a, colorInk((*picker)).h, colorInk((*picker)).s, colorInk((*picker)).v};
     for (int i = 0; i < 7; ++i) {
         UiFlex line = row;
         line.heightMode = UiSize::Px;
@@ -807,13 +970,14 @@ void fillColorBody(UiState& s, uint16_t parent) {
         const uint16_t lineId = uiPanel(s, parent, line, paintClear());
         const uint16_t lab = uiLabel(s, lineId, names[i]);
         (void)lab;
-        const uint16_t sliderId = uiSlider(s, lineId, starts[i], 0.0f, 1.0f);
+        const UiValueChangeFn slide[7] = {slideR, slideG, slideB, slideA, slideH, slideS, slideV};
+        const uint16_t sliderId = uiSlider(s, lineId, starts[i], 0.0f, 1.0f, slide[i], &s);
         if (i < 3) {
-            uiColor(s).colorRgb[i] = sliderId;
+            (*picker).colorRgb[i] = sliderId;
         } else if (i == 3) {
-            uiColor(s).colorAlpha = sliderId;
+            (*picker).colorAlpha = sliderId;
         } else {
-            uiColor(s).colorHsv[i - 4] = sliderId;
+            (*picker).colorHsv[i - 4] = sliderId;
         }
         const uint16_t numId = uiField(s, lineId, "", static_cast<uint8_t>(UiFieldFilter::Digits), false);
         if (numId < s.count) {
@@ -831,34 +995,28 @@ void fillColorBody(UiState& s, uint16_t parent) {
             }
             uiEdit(s, numId, colorOnEdit, &s);
         }
-        uiColor(s).colorNum[i] = numId;
+        (*picker).colorNum[i] = numId;
     }
-    uiColor(s).colorHex = uiField(s, parent, "", static_cast<uint8_t>(UiFieldFilter::Any), false);
-    if (uiColor(s).colorHex < s.count) {
-        if (auto* flex = s.ent[uiColor(s).colorHex].try_get_mut<UiFlex>()) {
+    (*picker).colorHex = uiField(s, parent, "", static_cast<uint8_t>(UiFieldFilter::Any), false);
+    if ((*picker).colorHex < s.count) {
+        if (auto* flex = s.ent[(*picker).colorHex].try_get_mut<UiFlex>()) {
             flex->heightMode = UiSize::Px;
             flex->height = 32.0f;
             flex->shrink = 0.0f;
         }
-        if (auto* hex = s.ent[uiColor(s).colorHex].try_get_mut<UiField>()) {
+        if (auto* hex = s.ent[(*picker).colorHex].try_get_mut<UiField>()) {
             hex->padL = 10.0f;
             hex->padR = 10.0f;
             hex->maxChars = 9;
         }
-        uiEdit(s, uiColor(s).colorHex, colorOnEdit, &s);
+        uiEdit(s, (*picker).colorHex, colorOnEdit, &s);
     }
     s.grabFn = colorGrab;
     s.grabUser = &s;
-    applyColor(s, true, uiColor(s).colorSeen == 0);
+    applyColor(s, *picker, true, (*picker).colorSeen == 0);
 }
 
 void uiBuildColor(UiState& s) {
-    uiColor(s).colorHost = 1;
-    if (uiColor(s).book != nullptr && uiColor(s).book->gen != 0) {
-        takeBook(s);
-    } else {
-        rgbToHsv(uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV);
-    }
     UiFlex col{};
     col.direction = UiFlexDir::Column;
     col.shrink = 1.0f;
@@ -868,6 +1026,16 @@ void uiBuildColor(UiState& s) {
     rootF.pad = 12.0f;
     rootF.gap = 8.0f;
     const uint16_t root = uiPanel(s, kUiNone, rootF, paintToken(s.look, UiToken::Menu, 0.0f));
+    if (root == kUiNone) {
+        return;
+    }
+    UiColorPickerComponent& picker = colorBind(s, root);
+    picker.colorHost = 1;
+    if (picker.book != nullptr && picker.book->gen != 0) {
+        takeBook(s, picker);
+    } else {
+        rgbToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
+    }
     UiFlex titleF = row;
     titleF.heightMode = UiSize::Px;
     titleF.height = 36.0f;
@@ -892,71 +1060,113 @@ void uiBuildColor(UiState& s) {
             paint->token = UiToken::Close;
         }
     }
-    uiColor(s).colorPanel = root;
-    uiColor(s).colorPresent = 2;
-    uiColor(s).colorApplied = 2;
-    uiColor(s).colorMode = 1;
+    picker.colorPanel = root;
+    colorInk(picker).present = 2;
+    picker.colorApplied = 2;
+    colorInk(picker).mode = 1;
     fillColorBody(s, root);
 }
 
-bool colorCustomDraw(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
-    const UiPaint* paintPtr = id < s.count ? s.ent[id].try_get<UiPaint>() : nullptr;
-    if (paintPtr == nullptr) {
-        return false;
+void pushColorBar(UiState& s, UiNodeBars& bars, float x, float y, float w, float h, float r, float g, float b, float a, float radius) {
+    if (w < 0.5f || h < 0.5f) {
+        return;
     }
-    const UiPaint& paint = *paintPtr;
-    const UiRamp ramp = paint.ramp;
-    if (ramp != kRampColorWheel && ramp != kRampColorValue && ramp != kRampColorSwatch && ramp != kRampColorAlpha) {
-        return false;
-    }
-    const UiBox& box = s.box[id];
-        if (ramp == kRampColorWheel) {
-            n = emitRamp(dst, n, cap, box.x, box.y, box.w, box.h, 1.0f, 1.0f, 1.0f, 0, kUiFlagWheel);
-            const float radius = std::min(box.w, box.h) * 0.5f;
-            const float ang = (uiColor(s).colorH - 0.5f) * 6.2831853f;
-            const float mx = box.x + box.w * 0.5f + std::cos(ang) * uiColor(s).colorS * radius;
-            const float my = box.y + box.h * 0.5f + std::sin(ang) * uiColor(s).colorS * radius;
-            n = emitRect(dst, n, cap, mx - 7.0f, my - 7.0f, 14.0f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, 7.0f, nullptr);
-            n = emitRect(dst, n, cap, mx - 4.0f, my - 4.0f, 8.0f, 8.0f, uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, 1.0f, 4.0f, nullptr);
-            return true;
+    UiBar bar{};
+    bar.x = x;
+    bar.y = y;
+    bar.w = w;
+    bar.h = h;
+    bar.r = r;
+    bar.g = g;
+    bar.b = b;
+    bar.a = a;
+    bar.radius = radius;
+    bar.on = 1;
+    uiNodeBarPush(s, bars, bar);
+}
+
+void colorPlace(UiState& s) {
+    for (uint16_t id = 0; id < s.count; ++id) {
+        auto* paint = s.ent[id].try_get_mut<UiPaint>();
+        if (paint == nullptr) {
+            continue;
         }
-        if (ramp == kRampColorValue) {
-            float pr = 0.0f;
-            float pg = 0.0f;
-            float pb = 0.0f;
-            const float hh = uiColor(s).colorH * 6.0f;
+        const UiRamp ramp = paint->ramp;
+        if (ramp != kRampColorWheel && ramp != kRampColorValue && ramp != kRampColorSwatch && ramp != kRampColorAlpha) {
+            continue;
+        }
+        const UiColorPickerComponent* color = pickerFor(s, id);
+        if (color == nullptr) {
+            continue;
+        }
+        const UiBox& box = s.box[id];
+        UiRampDraw drawn{};
+        UiNodeBars bars{};
+        if (ramp == kRampColorWheel) {
+            paint->r = 1.0f;
+            paint->g = 1.0f;
+            paint->b = 1.0f;
+            drawn.mode = 0;
+            drawn.flags = kUiFlagWheel;
+            const float radius = std::min(box.w, box.h) * 0.5f;
+            const float ang = (colorInk(*color).h - 0.5f) * 6.2831853f;
+            const float mx = box.x + box.w * 0.5f + std::cos(ang) * colorInk(*color).s * radius;
+            const float my = box.y + box.h * 0.5f + std::sin(ang) * colorInk(*color).s * radius;
+            pushColorBar(s, bars, mx - 7.0f, my - 7.0f, 14.0f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, 7.0f);
+            pushColorBar(s, bars, mx - 4.0f, my - 4.0f, 8.0f, 8.0f, colorInk(*color).r, colorInk(*color).g, colorInk(*color).b, 1.0f, 4.0f);
+        } else if (ramp == kRampColorValue) {
+            const float hh = colorInk(*color).h * 6.0f;
             const int hi = static_cast<int>(hh) % 6;
             const float f = hh - static_cast<float>(static_cast<int>(hh));
             const float pv = 1.0f;
-            const float q = pv * (1.0f - f * uiColor(s).colorS);
-            const float t = pv * (1.0f - (1.0f - f) * uiColor(s).colorS);
-            const float pp = pv * (1.0f - uiColor(s).colorS);
+            const float q = pv * (1.0f - f * colorInk(*color).s);
+            const float t = pv * (1.0f - (1.0f - f) * colorInk(*color).s);
+            const float pp = pv * (1.0f - colorInk(*color).s);
+            float pr = pv;
+            float pg = pp;
+            float pb = q;
             if (hi == 0) { pr = pv; pg = t; pb = pp; }
             else if (hi == 1) { pr = q; pg = pv; pb = pp; }
             else if (hi == 2) { pr = pp; pg = pv; pb = t; }
             else if (hi == 3) { pr = pp; pg = q; pb = pv; }
             else if (hi == 4) { pr = t; pg = pp; pb = pv; }
-            else { pr = pv; pg = pp; pb = q; }
-            n = emitRamp(dst, n, cap, box.x, box.y, box.w, box.h, pr, pg, pb, 1, kUiFlagRamp);
-            const float ty = box.y + (1.0f - uiColor(s).colorV) * box.h;
-            n = emitRect(dst, n, cap, box.x - 2.0f, ty - 3.0f, box.w + 4.0f, 6.0f, 1.0f, 1.0f, 1.0f, 1.0f, 2.0f, nullptr);
-            return true;
+            paint->r = pr;
+            paint->g = pg;
+            paint->b = pb;
+            drawn.mode = 1;
+            drawn.flags = kUiFlagRamp;
+            const float ty = box.y + (1.0f - colorInk(*color).v) * box.h;
+            pushColorBar(s, bars, box.x - 2.0f, ty - 3.0f, box.w + 4.0f, 6.0f, 1.0f, 1.0f, 1.0f, 1.0f, 2.0f);
+        } else if (ramp == kRampColorSwatch) {
+            drawn.mode = 6;
+            drawn.flags = kUiFlagRamp;
+            paint->r = 0.0f;
+            paint->g = 0.0f;
+            paint->b = 0.0f;
+            pushColorBar(s, bars, box.x, box.y, box.w, box.h, colorInk(*color).r, colorInk(*color).g, colorInk(*color).b, colorInk(*color).a, paint->radius);
+        } else {
+            paint->r = colorInk(*color).r;
+            paint->g = colorInk(*color).g;
+            paint->b = colorInk(*color).b;
+            drawn.mode = 2;
+            drawn.flags = kUiFlagRamp;
+            const float tx = box.x + colorInk(*color).a * box.w;
+            pushColorBar(s, bars, tx - 3.0f, box.y - 2.0f, 6.0f, box.h + 4.0f, 1.0f, 1.0f, 1.0f, 1.0f, 2.0f);
         }
-        if (ramp == kRampColorSwatch) {
-            n = emitRamp(dst, n, cap, box.x, box.y, box.w, box.h, 0.0f, 0.0f, 0.0f, 6, kUiFlagRamp);
-            n = emitRect(dst, n, cap, box.x, box.y, box.w, box.h, uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorA, paint.radius, nullptr);
-            return true;
+        if (auto* live = s.ent[id].try_get_mut<UiRampDraw>()) {
+            *live = drawn;
+        } else {
+            s.ent[id].set<UiRampDraw>(drawn);
         }
-        if (ramp == kRampColorAlpha) {
-            n = emitRamp(dst, n, cap, box.x, box.y, box.w, box.h, uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, 2, kUiFlagRamp);
-            const float tx = box.x + uiColor(s).colorA * box.w;
-            n = emitRect(dst, n, cap, tx - 3.0f, box.y - 2.0f, 6.0f, box.h + 4.0f, 1.0f, 1.0f, 1.0f, 1.0f, 2.0f, nullptr);
-            return true;
+        if (auto* live = s.ent[id].try_get_mut<UiNodeBars>()) {
+            *live = bars;
+        } else if (bars.n != 0) {
+            s.ent[id].set<UiNodeBars>(bars);
         }
-    return false;
+    }
 }
 
-uint16_t loadColorBin(UiState& s, uint16_t parent, const BinNode& node, const char* name, void*) {
+uint16_t loadColorBin(UiState& s, uint16_t parent, const BinNode& node, const BinTail&, const char* name, const char*, const char*, void*) {
     UiFlex flex{};
     flex.position = UiPosition::Absolute;
     flex.posX = node.posX;
@@ -969,14 +1179,18 @@ uint16_t loadColorBin(UiState& s, uint16_t parent, const BinNode& node, const ch
     flex.gap = 6.0f;
     flex.shrink = 0.0f;
     const uint16_t id = uiPanel(s, parent, flex, paintRgb(node.r, node.g, node.b, node.radius));
-    if (uiColor(s).book == nullptr || uiColor(s).book->gen == 0) {
-        rgbToHsv(uiColor(s).colorR, uiColor(s).colorG, uiColor(s).colorB, uiColor(s).colorH, uiColor(s).colorS, uiColor(s).colorV);
-        uiColor(s).colorA = 1.0f;
-        uiColor(s).colorUseAlpha = 1;
-    } else {
-        takeBook(s);
+    if (id == kUiNone) {
+        return kUiNone;
     }
-    uiColor(s).colorPanel = id;
+    UiColorPickerComponent& picker = colorBind(s, id);
+    if (picker.book == nullptr || picker.book->gen == 0) {
+        rgbToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
+        colorInk(picker).a = 1.0f;
+        colorInk(picker).useAlpha = 1;
+    } else {
+        takeBook(s, picker);
+    }
+    picker.colorPanel = id;
     fillColorBody(s, id);
     uiShow(s, id, false);
     if (name != nullptr && name[0] != '\0') {
@@ -988,13 +1202,7 @@ uint16_t loadColorBin(UiState& s, uint16_t parent, const BinNode& node, const ch
 void uiInstallColorBin(UiState& s) {
     uiBinRole(s, kBinSlotColor, "color", 0, 0);
     uiRegisterCustomBinNode(s, kBinSlotColor, loadColorBin, nullptr);
-    uiDrawAdd(s, colorCustomDraw);
-    for (uint8_t i = 0; i < s.valueN; ++i) {
-        if (s.valueFn[i] == colorOnValue) {
-            return;
-        }
-    }
-    uiListen(s, colorOnValue, &s);
+    uiPlaceAdd(s, colorPlace);
 }
 
 } // namespace burnhope

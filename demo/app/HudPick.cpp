@@ -7,15 +7,15 @@
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
 #include "ui/Canvas.hpp"
-#include "ui/Domain.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
 #include "ui/UiPhoto.hpp"
 #include "ui/widget/Button.hpp"
+#include "ui/widget/Check.hpp"
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/PropGrid.hpp"
+#include "host/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
@@ -91,9 +91,7 @@ void onMode(void* user) {
     if (hit->hud != nullptr && hit->canvas->state != nullptr) {
         for (const ModeHit& mode : hit->hud->modes) {
             if (mode.radio < hit->canvas->state->count) {
-                if (auto* check = hit->canvas->state->ent[mode.radio].try_get_mut<UiCheck>()) {
-                    check->on = mode.index == hit->index ? 1 : 0;
-                }
+                uiCheckAssign(*hit->canvas->state, mode.radio, mode.index == hit->index ? 1 : 0);
             }
         }
     }

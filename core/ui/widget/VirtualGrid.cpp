@@ -95,7 +95,7 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
 
 } // namespace
 
-float uiGridContentH(const UiState& s, uint16_t id) {
+static float uiGridContentH(const UiState& s, uint16_t id) {
     return uiVirtualContentHeight<UiVirtualGrid>(s, id);
 }
 
@@ -337,27 +337,7 @@ bool placeEditor(UiState& s, uint16_t gridId) {
         return false;
     }
     const uint16_t slot = slotFor(s, *grid, grid->editAt);
-    const UiParts* parts = slot < s.count ? s.ent[slot].try_get<UiParts>() : nullptr;
-    const uint16_t lab = parts != nullptr && parts->label < s.count ? parts->label : slot;
-    if (lab >= s.count) {
-        uiShow(s, grid->editor, false);
-        return false;
-    }
-    const UiBox& box = s.box[lab];
-    if (box.w < 8.0f || box.h < 8.0f) {
-        uiShow(s, grid->editor, false);
-        return false;
-    }
-    const float w = box.w > 48.0f ? box.w : 160.0f;
-    const float h = box.h > 16.0f ? box.h : s.metrics.searchH;
-    const UiFlex* flex = s.ent[grid->editor].try_get<UiFlex>();
-    const bool same = flex != nullptr && flex->posX == box.x && flex->posY == box.y && flex->width == w && flex->height == h
-        && nodeShown(s, grid->editor);
-    if (!same) {
-        uiPlace(s, grid->editor, true, box.x, box.y, w, h);
-        uiShow(s, grid->editor, true);
-    }
-    return true;
+    return uiPlaceOverSlot(s, grid->editor, slot, s.metrics.searchH);
 }
 
 } // namespace
@@ -384,7 +364,7 @@ bool uiVirtualGridEditing(const UiState& s, uint16_t gridId) {
     return grid != nullptr && grid->editAt != kUiCellNone && s.focused == grid->editor;
 }
 
-bool uiVirtualGridInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t&) {
+bool uiVirtualGridInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote&) {
     if (phase == kUiInEscape) {
         for (uint16_t n = 0; n < s.count; ++n) {
             if (s.ent[n].try_get<UiVirtualGrid>() != nullptr && s.ent[n].try_get<UiVirtualGrid>()->editAt != kUiCellNone) {
@@ -461,7 +441,7 @@ bool uiVirtualGridInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t p
     return false;
 }
 
-uint16_t loadGrid(UiState& s, uint16_t parent, const BinNode& node, const char*, void*) {
+uint16_t loadGrid(UiState& s, uint16_t parent, const BinNode& node, const BinTail&, const char*, const char*, const char*, void*) {
     const float itemW = node.width > 1.0f ? node.width : 84.0f;
     const float itemH = node.height > 1.0f ? node.height : itemW;
     return uiVirtualGrid(s, parent, {.itemW = itemW, .itemH = itemH});

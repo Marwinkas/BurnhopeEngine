@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ui/widget/BinSlots.hpp"
 #include "ui/widget/Virtual.hpp"
 
 namespace burnhope {
@@ -25,14 +26,12 @@ struct UiTreeConfig {
     void* user = nullptr;
 };
 
-inline constexpr uint8_t kBinSlotTree = 16;
 void uiTreeBin(UiState& s);
 
 uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg);
 void uiBindTree(UiState& s, const char* name, const UiTreeConfig& cfg);
 void uiTreeViewRefresh(UiState& s, uint16_t treeId);
 void uiTreeViewSetCount(UiState& s, uint16_t treeId, uint32_t count);
-void uiRowIndent(UiState& s, uint16_t id, float pad);
-bool uiTreeInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
+bool uiTreeInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note);
 
 } // namespace burnhope

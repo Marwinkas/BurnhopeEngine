@@ -275,7 +275,7 @@ target_link_libraries(bh_render PUBLIC flecs_static Jolt bh_audio)
 bh_module(ui
     core/ui/Canvas.cpp
     core/ui/Command.cpp
-    core/ui/Popover.cpp
+    core/ui/widget/Popover.cpp
     core/ui/Motion.cpp
     core/ui/rhi/UiRenderer.cpp
     core/ui/LayoutBridge.cpp
@@ -299,10 +299,15 @@ bh_module(ui
     core/ui/Focus.cpp
     core/ui/widget/TreeView.cpp
     core/ui/widget/Button.cpp
+    core/ui/widget/Check.cpp
+    core/ui/widget/Choice.cpp
     core/ui/widget/Field.cpp
+    core/ui/widget/FieldFilter.cpp
+    core/ui/widget/Search.cpp
     core/ui/widget/TextEdit.cpp
     core/ui/widget/Label.cpp
     core/ui/widget/Number.cpp
+    core/ui/widget/NumberEdit.cpp
     core/ui/widget/Slider.cpp
     core/ui/widget/Curve.cpp
     core/ui/widget/Gradient.cpp
@@ -310,7 +315,6 @@ bh_module(ui
     core/ui/widget/Splitter.cpp
     core/ui/widget/Image.cpp
     core/ui/widget/Fold.cpp
-    core/ui/widget/PropGrid.cpp
     core/ui/widget/Virtual.cpp
     core/ui/widget/VirtualGrid.cpp
     core/ui/widget/Thumb.cpp
@@ -339,6 +343,8 @@ target_link_libraries(bh_files PUBLIC bh_ui)
 bh_module(host
     core/host/Host.cpp
     core/host/PropBind.cpp
+    core/host/PropGrid.cpp
+    core/host/SceneMask.cpp
 )
 target_link_libraries(bh_host PUBLIC bh_ui bh_rhi bh_platform bh_memory)
 bh_module(app

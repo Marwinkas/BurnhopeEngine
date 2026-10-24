@@ -1,7 +1,9 @@
+#include "ui/widget/Gradient.hpp"
+
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
+#include "ui/Primitive.hpp"
 #include "ui/PrimitiveBatch.hpp"
-#include "ui/widget/Gradient.hpp"
 
 namespace burnhope {
 namespace {
@@ -49,27 +51,7 @@ void onGradient(void* user, uint16_t id, float x, float y) {
     uiNotifyVisualDirty(*s);
 }
 
-} // namespace
-
-uint16_t uiGradient(UiState& s, uint16_t parent) {
-    UiFlex flex{};
-    flex.heightMode = UiSize::Px;
-    flex.height = 36.0f;
-    flex.shrink = 0.0f;
-    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Content, 6.0f));
-    if (id == kUiNone) {
-        return id;
-    }
-    uiHover(s, id);
-    s.ent[id].set<UiGradient>({});
-    uiDrag(s, id, onGradient, &s);
-    return id;
-}
-
-bool uiGradientDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
-    if (id >= s.count) {
-        return false;
-    }
+bool drawGradient(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
     const UiGradient* grad = s.ent[id].try_get<UiGradient>();
     if (grad == nullptr) {
         return false;
@@ -101,7 +83,29 @@ bool uiGradientDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uin
         n = emitRect(
             dst, n, cap, box.x + grad->t[p] * box.w - 5.0f, box.y + box.h * 0.35f - 4.0f, 10.0f, box.h * 0.3f + 8.0f, tr, tg, tb, 0.9f, 2.0f, clip);
     }
-    return false;
+    return true;
+}
+
+} // namespace
+
+uint16_t uiGradient(UiState& s, uint16_t parent) {
+    UiFlex flex{};
+    flex.heightMode = UiSize::Px;
+    flex.height = 36.0f;
+    flex.shrink = 0.0f;
+    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Content, 6.0f));
+    if (id == kUiNone) {
+        return id;
+    }
+    uiHover(s, id);
+    s.ent[id].set<UiGradient>({});
+    uiDrag(s, id, onGradient, &s);
+    uiGradientBind(s);
+    return id;
+}
+
+void uiGradientBind(UiState& s) {
+    uiDrawDecorAdd(s, drawGradient);
 }
 
 } // namespace burnhope

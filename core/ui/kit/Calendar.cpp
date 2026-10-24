@@ -6,6 +6,7 @@
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Label.hpp"
 #include "ui/Panel.hpp"
+#include "ui/Style.hpp"
 #include "ui/LayoutBridge.hpp"
 
 #include <cmath>
@@ -14,7 +15,51 @@
 
 namespace burnhope {
 
-void calPick(UiState& s, uint16_t id);
+void calPick(UiState& s, UiCalendarComponent& cal, uint16_t id);
+
+bool calOwns(const UiCalendarComponent& cal, uint16_t id) {
+    if (id == kUiNone) {
+        return false;
+    }
+    return id == cal.calPanel || id == cal.calHead || id == cal.calTarget;
+}
+
+bool calDayOf(const UiState& s, uint16_t id, uint16_t panel) {
+    for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+        if (p == panel) {
+            return true;
+        }
+    }
+    return false;
+}
+
+UiCalendarComponent* calFor(UiState& s, uint16_t id) {
+    if (id < s.count) {
+        for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
+            if (s.ent[p].is_alive() && s.ent[p].has<UiCalendarComponent>()) {
+                return s.ent[p].try_get_mut<UiCalendarComponent>();
+            }
+        }
+        for (uint16_t i = 0; i < s.count; ++i) {
+            if (!s.ent[i].is_alive() || !s.ent[i].has<UiCalendarComponent>()) {
+                continue;
+            }
+            UiCalendarComponent* cal = s.ent[i].try_get_mut<UiCalendarComponent>();
+            if (cal != nullptr && calOwns(*cal, id)) {
+                return cal;
+            }
+        }
+    }
+    return uiCalFind(s);
+}
+
+UiCalendarComponent& calBind(UiState& s, uint16_t panel) {
+    if (panel < s.count && s.ent[panel].has<UiCalendarComponent>()) {
+        return *s.ent[panel].try_get_mut<UiCalendarComponent>();
+    }
+    s.ent[panel].set<UiCalendarComponent>({});
+    return *s.ent[panel].try_get_mut<UiCalendarComponent>();
+}
 
 int daysInMonth(int year, int month) {
     static const int days[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -31,21 +76,21 @@ int weekDay(int year, int month, int day) {
     return (y + y / 4 - y / 100 + y / 400 + t[month - 1] + day) % 7;
 }
 
-void calFill(UiState& s) {
+void calFill(UiState& s, UiCalendarComponent& cal) {
     static const char* names[] = {"", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
-    if (uiCal(s).calM < 1) {
-        uiCal(s).calM = 12;
-        --uiCal(s).calY;
+    if (cal.calM < 1) {
+        cal.calM = 12;
+        --cal.calY;
     }
-    if (uiCal(s).calM > 12) {
-        uiCal(s).calM = 1;
-        ++uiCal(s).calY;
+    if (cal.calM > 12) {
+        cal.calM = 1;
+        ++cal.calY;
     }
-    if (uiCal(s).calHead != kUiNone) {
-        auto* text = s.ent[uiCal(s).calHead].try_get_mut<UiText>();
+    if (cal.calHead != kUiNone) {
+        auto* text = s.ent[cal.calHead].try_get_mut<UiText>();
         if (text != nullptr) {
             char buf[16]{};
-            const char* name = names[uiCal(s).calM];
+            const char* name = names[cal.calM];
             uint8_t n = 0;
             while (name[n] != '\0') {
                 buf[n] = name[n];
@@ -54,7 +99,7 @@ void calFill(UiState& s) {
             buf[n++] = ' ';
             char yearBuf[8]{};
             uint8_t yearLen = 0;
-            uiWriteInt(yearBuf, yearLen, uiCal(s).calY);
+            uiWriteInt(yearBuf, yearLen, cal.calY);
             for (uint8_t i = 0; i < yearLen; ++i) {
                 buf[n++] = yearBuf[i];
             }
@@ -62,8 +107,8 @@ void calFill(UiState& s) {
             copyText(text->bytes, text->len, buf);
         }
     }
-    const int dim = daysInMonth(uiCal(s).calY, uiCal(s).calM);
-    const int lead = weekDay(uiCal(s).calY, uiCal(s).calM, 1);
+    const int dim = daysInMonth(cal.calY, cal.calM);
+    const int lead = weekDay(cal.calY, cal.calM, 1);
     std::time_t now = std::time(nullptr);
     std::tm today{};
     if (!platformLocalTime(&now, &today)) {
@@ -72,12 +117,14 @@ void calFill(UiState& s) {
     const int todayY = today.tm_year + 1900;
     const int todayM = today.tm_mon + 1;
     const int todayD = today.tm_mday;
-    for (int i = 0; i < 42; ++i) {
-        if (uiCal(s).calDay[i] == kUiNone) {
+    for (uint16_t node = 0; node < s.count; ++node) {
+        const UiCalDay* cell = s.ent[node].try_get<UiCalDay>();
+        if (cell == nullptr || !calDayOf(s, node, cal.calPanel)) {
             continue;
         }
-        auto* text = s.ent[uiCal(s).calDay[i]].try_get_mut<UiText>();
-        auto* paint = s.ent[uiCal(s).calDay[i]].try_get_mut<UiPaint>();
+        const int i = cell->cell;
+        auto* text = s.ent[node].try_get_mut<UiText>();
+        auto* paint = s.ent[node].try_get_mut<UiPaint>();
         const int day = i - lead + 1;
         if (text == nullptr) {
             continue;
@@ -98,130 +145,167 @@ void calFill(UiState& s) {
         }
         if (paint != nullptr) {
             paint->disabled = empty ? 1 : 0;
-            const float* rgb = s.look.item;
+            const bool today = cal.calY == todayY && cal.calM == todayM && day == todayD;
             if (empty) {
-                rgb = s.look.content;
-            } else if (day == uiCal(s).calSel) {
-                rgb = s.look.accent[0];
-            } else if (uiCal(s).calY == todayY && uiCal(s).calM == todayM && day == todayD) {
-                rgb = s.look.accent[1];
+                paint->token = UiToken::Content;
+            } else if (day == cal.calSel) {
+                paint->token = UiToken::Accent;
+            } else if (today) {
+                paint->token = UiToken::Custom;
+            } else {
+                paint->token = UiToken::Item;
             }
-            paint->r = rgb[0];
-            paint->g = rgb[1];
-            paint->b = rgb[2];
+            if (today && !empty && day != cal.calSel) {
+                paint->r = s.look.accent[1][0];
+                paint->g = s.look.accent[1][1];
+                paint->b = s.look.accent[1][2];
+            } else {
+                tokenRgb(s.look, paint->token, paint->r, paint->g, paint->b);
+            }
         }
     }
     s.visualDirty = true;
 }
 
-void writeDate(UiState& s, int day) {
-    if (uiCal(s).calTarget == kUiNone || day < 1) {
-        return;
+bool readIsoDate(const char* bytes, uint8_t len, int& year, int& month, int& day) {
+    if (bytes == nullptr || len < 10 || bytes[4] != '-' || bytes[7] != '-') {
+        return false;
     }
-    auto* field = s.ent[uiCal(s).calTarget].try_get_mut<UiField>();
-    if (field == nullptr) {
+    year = 0;
+    for (int i = 0; i < 4; ++i) {
+        if (bytes[i] < '0' || bytes[i] > '9') {
+            return false;
+        }
+        year = year * 10 + (bytes[i] - '0');
+    }
+    if (bytes[5] < '0' || bytes[5] > '9' || bytes[6] < '0' || bytes[6] > '9') {
+        return false;
+    }
+    if (bytes[8] < '0' || bytes[8] > '9' || bytes[9] < '0' || bytes[9] > '9') {
+        return false;
+    }
+    month = (bytes[5] - '0') * 10 + (bytes[6] - '0');
+    day = (bytes[8] - '0') * 10 + (bytes[9] - '0');
+    return year > 1 && month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month);
+}
+
+void writeDate(UiState& s, UiCalendarComponent& cal, int day) {
+    if (cal.calTarget == kUiNone || day < 1) {
         return;
     }
     char buf[16]{};
-    buf[0] = static_cast<char>('0' + (uiCal(s).calY / 1000) % 10);
-    buf[1] = static_cast<char>('0' + (uiCal(s).calY / 100) % 10);
-    buf[2] = static_cast<char>('0' + (uiCal(s).calY / 10) % 10);
-    buf[3] = static_cast<char>('0' + uiCal(s).calY % 10);
+    buf[0] = static_cast<char>('0' + (cal.calY / 1000) % 10);
+    buf[1] = static_cast<char>('0' + (cal.calY / 100) % 10);
+    buf[2] = static_cast<char>('0' + (cal.calY / 10) % 10);
+    buf[3] = static_cast<char>('0' + cal.calY % 10);
     buf[4] = '-';
-    buf[5] = static_cast<char>('0' + uiCal(s).calM / 10);
-    buf[6] = static_cast<char>('0' + uiCal(s).calM % 10);
+    buf[5] = static_cast<char>('0' + cal.calM / 10);
+    buf[6] = static_cast<char>('0' + cal.calM % 10);
     buf[7] = '-';
     buf[8] = static_cast<char>('0' + day / 10);
     buf[9] = static_cast<char>('0' + day % 10);
     buf[10] = '\0';
-    for (uint8_t n = 0; n < 10; ++n) {
-        field->bytes[n] = buf[n];
-    }
-    field->bytes[10] = '\0';
-    field->len = 10;
-    field->caret = 10;
-    field->anchor = 10;
-    fieldSyncText(s, uiCal(s).calTarget);
-    fieldMark(s, uiCal(s).calTarget);
-    uiCal(s).calSel = day;
-    uiShow(s, uiCal(s).calPanel, false);
+    uiSetFieldText(s, cal.calTarget, buf);
+    cal.calSel = day;
+    uiShow(s, cal.calPanel, false);
 }
 
-void calOnOpen(void* user, uint16_t) {
+void calOnOpen(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
-    if (uiCal(s).calTarget != kUiNone) {
-        const UiField* field = s.ent[uiCal(s).calTarget].try_get<UiField>();
-        if (field != nullptr && field->len >= 10 && field->bytes[4] == '-' && field->bytes[7] == '-') {
-            int year = 0;
-            int month = 0;
-            int day = 0;
-            for (int i = 0; i < 4; ++i) {
-                year = year * 10 + (field->bytes[i] - '0');
-            }
-            month = (field->bytes[5] - '0') * 10 + (field->bytes[6] - '0');
-            day = (field->bytes[8] - '0') * 10 + (field->bytes[9] - '0');
-            if (year > 1 && month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month)) {
-                uiCal(s).calY = year;
-                uiCal(s).calM = month;
-                uiCal(s).calSel = day;
-            }
+
+    UiCalendarComponent* cal = calFor(s, id);
+    if (cal == nullptr) {
+        return;
+    }
+    if ((*cal).calTarget != kUiNone && (*cal).calTarget < s.count) {
+        const UiText* text = s.ent[(*cal).calTarget].try_get<UiText>();
+        int year = 0;
+        int month = 0;
+        int day = 0;
+        if (text != nullptr && readIsoDate(text->bytes, text->len, year, month, day)) {
+            (*cal).calY = year;
+            (*cal).calM = month;
+            (*cal).calSel = day;
         }
     }
-    calFill(s);
-    uiShow(s, uiCal(s).calPanel, true);
+    calFill(s, *cal);
+    uiShow(s, (*cal).calPanel, true);
 }
 
-void calOnToday(void* user, uint16_t) {
+void calOnToday(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
+
+    UiCalendarComponent* cal = calFor(s, id);
+    if (cal == nullptr) {
+        return;
+    }
     std::time_t now = std::time(nullptr);
     std::tm tm{};
     if (!platformLocalTime(&now, &tm)) {
         tm = {};
     }
-    uiCal(s).calY = tm.tm_year + 1900;
-    uiCal(s).calM = tm.tm_mon + 1;
-    calFill(s);
-    writeDate(s, tm.tm_mday);
+    (*cal).calY = tm.tm_year + 1900;
+    (*cal).calM = tm.tm_mon + 1;
+    calFill(s, *cal);
+    writeDate(s, *cal, tm.tm_mday);
 }
 
-void calOnPrev(void* user, uint16_t) {
+void calOnPrev(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
-    --uiCal(s).calM;
-    calFill(s);
+
+    UiCalendarComponent* cal = calFor(s, id);
+    if (cal == nullptr) {
+        return;
+    }
+    --(*cal).calM;
+    calFill(s, *cal);
 }
 
-void calOnNext(void* user, uint16_t) {
+void calOnNext(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
-    ++uiCal(s).calM;
-    calFill(s);
+
+    UiCalendarComponent* cal = calFor(s, id);
+    if (cal == nullptr) {
+        return;
+    }
+    ++(*cal).calM;
+    calFill(s, *cal);
 }
 
-void calOnClose(void* user, uint16_t) {
+void calOnClose(void* user, uint16_t id) {
     auto& s = *static_cast<UiState*>(user);
-    uiShow(s, uiCal(s).calPanel, false);
+
+    UiCalendarComponent* cal = calFor(s, id);
+    if (cal == nullptr) {
+        return;
+    }
+    uiShow(s, (*cal).calPanel, false);
 }
 
 void calOnDay(void* user, uint16_t id) {
-    calPick(*static_cast<UiState*>(user), id);
+    auto& s = *static_cast<UiState*>(user);
+    UiCalendarComponent* cal = calFor(s, id);
+    if (cal == nullptr) {
+        return;
+    }
+    calPick(s, *cal, id);
 }
 
-void calPick(UiState& s, uint16_t id) {
-    const int lead = weekDay(uiCal(s).calY, uiCal(s).calM, 1);
-    const int dim = daysInMonth(uiCal(s).calY, uiCal(s).calM);
-    for (int i = 0; i < 42; ++i) {
-        if (uiCal(s).calDay[i] != id) {
-            continue;
-        }
-        const int day = i - lead + 1;
+void calPick(UiState& s, UiCalendarComponent& cal, uint16_t id) {
+    const int lead = weekDay(cal.calY, cal.calM, 1);
+    const int dim = daysInMonth(cal.calY, cal.calM);
+    const UiCalDay* cell = id < s.count ? s.ent[id].try_get<UiCalDay>() : nullptr;
+    if (cell != nullptr) {
+        const int day = static_cast<int>(cell->cell) - lead + 1;
         if (day < 1 || day > dim) {
             return;
         }
-        writeDate(s, day);
+        writeDate(s, cal, day);
         return;
     }
 }
 
-void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, float h) {
+uint16_t uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, float h) {
     UiFlex flex{};
     flex.position = UiPosition::Absolute;
     flex.posX = x;
@@ -233,7 +317,12 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
     flex.pad = 10.0f;
     flex.gap = 6.0f;
     flex.shrink = 0.0f;
-    uiCal(s).calPanel = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Menu, 8.0f));
+    const uint16_t panel = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Menu, 8.0f));
+    if (panel == kUiNone) {
+        return kUiNone;
+    }
+    UiCalendarComponent& cal = calBind(s, panel);
+    cal.calPanel = panel;
     UiFlex bar{};
     bar.direction = UiFlexDir::Row;
     bar.align = UiAlign::Center;
@@ -241,14 +330,14 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
     bar.heightMode = UiSize::Px;
     bar.height = 32.0f;
     bar.gap = 8.0f;
-    const uint16_t tools = uiPanel(s, uiCal(s).calPanel, bar, paintClear());
+    const uint16_t tools = uiPanel(s, cal.calPanel, bar, paintClear());
     auto mini = [&](uint16_t host, const char* name, UiClickFn fn) {
         const uint8_t n = name != nullptr ? static_cast<uint8_t>(strLen(name)) : 1;
         const float width = static_cast<float>(n) * s.look.advance + 24.0f;
         (void)uiButton(s, host, {.label = name, .width = width, .height = 28.0f, .onClick = fn, .user = &s});
     };
     mini(tools, "<", calOnPrev);
-    uiCal(s).calHead = uiLabel(s, tools, "OCT 2026");
+    cal.calHead = uiLabel(s, tools, "");
     mini(tools, ">", calOnNext);
     mini(tools, "X", calOnClose);
     UiFlex todayRow{};
@@ -256,14 +345,14 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
     todayRow.shrink = 0.0f;
     todayRow.heightMode = UiSize::Px;
     todayRow.height = 32.0f;
-    mini(uiPanel(s, uiCal(s).calPanel, todayRow, paintClear()), "TODAY", calOnToday);
+    mini(uiPanel(s, cal.calPanel, todayRow, paintClear()), "TODAY", calOnToday);
     UiFlex weekHead{};
     weekHead.direction = UiFlexDir::Row;
     weekHead.gap = 4.0f;
     weekHead.shrink = 0.0f;
     weekHead.heightMode = UiSize::Px;
     weekHead.height = 20.0f;
-    const uint16_t weekHeadId = uiPanel(s, uiCal(s).calPanel, weekHead, paintClear());
+    const uint16_t weekHeadId = uiPanel(s, cal.calPanel, weekHead, paintClear());
     const char* weekNames[] = {"SU", "MO", "TU", "WE", "TH", "FR", "SA"};
     for (int day = 0; day < 7; ++day) {
         const uint16_t id = uiLabel(s, weekHeadId, weekNames[day]);
@@ -283,19 +372,21 @@ void uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, flo
         weekRow.shrink = 0.0f;
         weekRow.heightMode = UiSize::Px;
         weekRow.height = 32.0f;
-        const uint16_t weekId = uiPanel(s, uiCal(s).calPanel, weekRow, paintClear());
+        const uint16_t weekId = uiPanel(s, cal.calPanel, weekRow, paintClear());
         for (int day = 0; day < 7; ++day) {
             const uint16_t id = uiButton(s, weekId, {.label = "1", .width = 32.0f, .height = 28.0f, .onClick = calOnDay, .user = &s});
-            uiCal(s).calDay[week * 7 + day] = id;
+            if (id < s.count) {
+                s.ent[id].set<UiCalDay>({.cell = static_cast<uint8_t>(week * 7 + day)});
+            }
         }
     }
-    calFill(s);
-    uiShow(s, uiCal(s).calPanel, false);
+    calFill(s, cal);
+    uiShow(s, cal.calPanel, false);
+    return panel;
 }
 
-uint16_t loadCalendarBin(UiState& s, uint16_t parent, const BinNode& node, const char* name, void*) {
-    uiBuildCalendar(s, parent, node.posX, node.posY, node.width, node.height);
-    const uint16_t id = uiCal(s).calPanel;
+uint16_t loadCalendarBin(UiState& s, uint16_t parent, const BinNode& node, const BinTail&, const char* name, const char*, const char*, void*) {
+    const uint16_t id = uiBuildCalendar(s, parent, node.posX, node.posY, node.width, node.height);
     if (name != nullptr && name[0] != '\0') {
         uiName(s, id, name);
     }

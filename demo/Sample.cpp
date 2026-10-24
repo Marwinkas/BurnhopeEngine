@@ -2,13 +2,15 @@
 #include "files/Browser.hpp"
 #include "files/FileDomain.hpp"
 #include "ui/Command.hpp"
-#include "ui/Domain.hpp"
+#include "host/HostNote.hpp"
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Docking.hpp"
 #include "ui/widget/Button.hpp"
+#include "ui/widget/Check.hpp"
 #include "ui/widget/Calendar.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
+#include "ui/widget/Menu.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -173,11 +175,11 @@ void cmdInput(void* user, uint16_t) { setPage(*static_cast<UiState*>(user), 2); 
 
 void cmdCompact(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
-    auto* check = s.ent[shellIds(s).compactRow].try_get_mut<UiCheck>();
-    if (check == nullptr) {
+    const int on = uiCheckOn(s, shellIds(s).compactRow);
+    if (on < 0) {
         return;
     }
-    check->on = check->on == 0 ? 1 : 0;
+    uiCheckAssign(s, shellIds(s).compactRow, on == 0 ? 1 : 0);
     applyCompact(s);
     uiNotifyVisualDirty(s);
 }
@@ -231,8 +233,12 @@ void uiBuildShell(UiState& s) {
     ids.preview = take("preview");
     uiSetField(s, take("field_name"));
     uiFiles(s).fileTarget = take("field_file");
-    uiCal(s).calTarget = take("field_date");
-    uiColor(s).colorTarget = take("field_color");
+    if (UiCalendarComponent* cal = uiCal(s)) {
+        cal->calTarget = take("field_date");
+    }
+    if (UiColorPickerComponent* color = uiColor(s)) {
+        color->colorTarget = take("field_color");
+    }
     ids.formNote = take("form_note");
     uiFiles(s).photoView = take("photo");
     ids.statusLabel = take("scale_text");
@@ -314,7 +320,7 @@ void uiBuildShell(UiState& s) {
         uiBind(s, id, fn, &s);
         return id;
     };
-    uiFiles(s).fileFrame = floatPanel(70.0f, 64.0f, 1100.0f, 700.0f);
+    uiFilesOwn(s, floatPanel(70.0f, 64.0f, 1100.0f, 700.0f));
     if (uiFiles(s).fileFrame != kUiNone) {
         s.ent[uiFiles(s).fileFrame].set<UiResizable>({});
     }

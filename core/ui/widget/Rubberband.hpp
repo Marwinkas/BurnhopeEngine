@@ -18,6 +18,6 @@ struct UiRubber {
 
 uint16_t uiRubberband(UiState& s, uint16_t host, void (*pick)(void* user, uint16_t child), void* user, void (*begin)(void* user) = nullptr);
 bool uiRubberbandTrack(UiState& s, uint16_t host, const InputFrame& in);
-bool uiRubberInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
+bool uiRubberInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note);
 
 } // namespace burnhope

@@ -7,8 +7,9 @@
 #include "render/SceneFrame.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
+#include "ui/widget/Check.hpp"
 #include "ui/widget/DragDrop.hpp"
-#include "ui/widget/PropGrid.hpp"
+#include "host/PropGrid.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "Str.hpp"
 
@@ -80,9 +81,7 @@ void openMaterialFile(HudContext& hud, const char* path) {
     for (const uint8_t* flag : bit) {
         const uint16_t id = hud.bind.idOf(flag);
         if (id < s.count) {
-            if (auto* check = s.ent[id].try_get_mut<UiCheck>()) {
-                check->on = *flag;
-            }
+            uiCheckAssign(s, id, *flag);
         }
     }
     paintMatTex(hud);

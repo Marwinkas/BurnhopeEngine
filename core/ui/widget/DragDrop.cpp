@@ -8,6 +8,20 @@
 namespace burnhope {
 namespace {
 
+uint16_t nextHost(const UiState& s, uint16_t start) {
+    for (uint16_t id = start; id < s.count; ++id) {
+        if (s.ent[id].is_alive() && s.ent[id].has<UiDragHost>()) {
+            return id;
+        }
+    }
+    return kUiNone;
+}
+
+UiDragDrop* dragSession(UiState& s) {
+    const uint16_t id = uiMarked<UiDragDrop>(s);
+    return id < s.count ? s.ent[id].try_get_mut<UiDragDrop>() : nullptr;
+}
+
 void hideMark(UiState& s, UiDragDrop& drag) {
     if (drag.mark < s.count) {
         uiShow(s, drag.mark, false);
@@ -74,8 +88,7 @@ void endDrag(UiState& s, UiDragDrop& drag, bool drop) {
     uint16_t dstHost = kUiNone;
     uint32_t dstIndex = kUiDragNone;
     if (drop) {
-        for (uint8_t i = 0; i < drag.hosts; ++i) {
-            const uint16_t host = drag.host[i];
+        for (uint16_t host = nextHost(s, 0); host != kUiNone; host = nextHost(s, static_cast<uint16_t>(host + 1))) {
             if (host >= s.count || (s.hovered != host && !uiWithin(s, s.hovered, host))) {
                 continue;
             }
@@ -95,8 +108,7 @@ void endDrag(UiState& s, UiDragDrop& drag, bool drop) {
             break;
         }
         if (dstHost == kUiNone) {
-            for (uint8_t i = 0; i < drag.hosts; ++i) {
-                const uint16_t host = drag.host[i];
+            for (uint16_t host = nextHost(s, 0); host != kUiNone; host = nextHost(s, static_cast<uint16_t>(host + 1))) {
                 if (host >= s.count) {
                     continue;
                 }
@@ -131,46 +143,53 @@ void endDrag(UiState& s, UiDragDrop& drag, bool drop) {
 } // namespace
 
 void uiDragDropBind(UiState& s, const UiDragDropConfig& cfg) {
-    UiDragDrop& drag = s.world.ensure<UiDragDrop>();
-    const uint16_t ghost = drag.ghost;
-    const uint16_t mark = drag.mark;
-    drag = {};
-    drag.ghost = ghost;
-    drag.mark = mark;
-    const uint16_t hosts[3] = {cfg.host0, cfg.host1, cfg.host2};
-    for (uint8_t i = 0; i < 3 && drag.hosts < kUiDragHostCap; ++i) {
-        if (hosts[i] != kUiNone) {
-            drag.host[drag.hosts++] = hosts[i];
+    UiDragDrop born{};
+    if (UiDragDrop* live = dragSession(s)) {
+        born.ghost = live->ghost;
+        born.mark = live->mark;
+    }
+    const uint16_t prev = uiMarked<UiDragDrop>(s);
+    if (prev < s.count) {
+        s.ent[prev].remove<UiDragDrop>();
+    }
+    for (uint16_t id = 0; id < s.count; ++id) {
+        if (s.ent[id].is_alive() && s.ent[id].has<UiDragHost>()) {
+            s.ent[id].remove<UiDragHost>();
         }
     }
-    drag.canDrag = cfg.canDrag;
-    drag.canDrop = cfg.canDrop;
-    drag.onDrop = cfg.onDrop;
-    drag.badge = cfg.badge;
-    drag.user = cfg.user;
+    born.canDrag = cfg.canDrag;
+    born.canDrop = cfg.canDrop;
+    born.onDrop = cfg.onDrop;
+    born.badge = cfg.badge;
+    born.user = cfg.user;
+    uint16_t home = kUiNone;
+    for (uint16_t host : cfg.hosts) {
+        if (host == kUiNone || host >= s.count) {
+            continue;
+        }
+        s.ent[host].add<UiDragHost>();
+        if (home == kUiNone) {
+            home = host;
+        }
+    }
+    if (home != kUiNone) {
+        s.ent[home].set<UiDragDrop>(born);
+    }
 }
 
 void uiDragAddHost(UiState& s, uint16_t host) {
-    if (host == kUiNone) {
+    if (host >= s.count) {
         return;
     }
-    UiDragDrop& drag = s.world.ensure<UiDragDrop>();
-    for (uint8_t i = 0; i < drag.hosts; ++i) {
-        if (drag.host[i] == host) {
-            return;
-        }
-    }
-    if (drag.hosts < kUiDragHostCap) {
-        drag.host[drag.hosts++] = host;
-    }
+    s.ent[host].add<UiDragHost>();
 }
 
-bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t, uint8_t phase, uint8_t&) {
+bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t, uint8_t phase, UiPhaseNote&) {
     if (phase != kUiInSync && phase != kUiInPress) {
         return false;
     }
-    UiDragDrop* drag = s.world.try_get_mut<UiDragDrop>();
-    if (drag == nullptr || drag->hosts == 0) {
+    UiDragDrop* drag = dragSession(s);
+    if (drag == nullptr) {
         return false;
     }
     const bool press = (in.pointer.pressed & kPointerLeft) != 0;
@@ -193,8 +212,7 @@ bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t, uint8_t phase, 
         drag->armed = 0;
         drag->x = in.pointer.x;
         drag->y = in.pointer.y;
-        for (uint8_t i = 0; i < drag->hosts; ++i) {
-            const uint16_t host = drag->host[i];
+        for (uint16_t host = nextHost(s, 0); host != kUiNone; host = nextHost(s, static_cast<uint16_t>(host + 1))) {
             uint32_t index = kUiDragNone;
             if (uiVirtualHitRow(s, host, index) == kUiNone || index == kUiDragNone) {
                 continue;
@@ -244,8 +262,7 @@ bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t, uint8_t phase, 
         uiPlace(s, ghost, true, in.pointer.x + 12.0f, in.pointer.y + 12.0f, gw, s.metrics.ghostH);
     }
     uint16_t row = kUiNone;
-    for (uint8_t i = 0; i < drag->hosts; ++i) {
-        const uint16_t host = drag->host[i];
+    for (uint16_t host = nextHost(s, 0); host != kUiNone; host = nextHost(s, static_cast<uint16_t>(host + 1))) {
         if (host >= s.count || (s.hovered != host && !uiWithin(s, s.hovered, host))) {
             continue;
         }

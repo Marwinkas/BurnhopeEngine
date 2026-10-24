@@ -1,7 +1,7 @@
 #define DOCTEST_CONFIG_NO_EXCEPTIONS
 #include <doctest/doctest.h>
 
-#include "ui/Domain.hpp"
+#include "ui/widget/Widgets.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/widget/Button.hpp"
@@ -29,12 +29,15 @@ TEST_CASE("blob import keeps the name") {
     node.nameLen = 4;
     node.textOff = 0;
     node.textLen = 4;
-    unsigned char blob[sizeof(BinHead) + sizeof(BinNode) + 8]{};
+    BinTail role{};
+    unsigned char blob[sizeof(BinHead) + sizeof(BinNode) + sizeof(BinTail) + 8]{};
     std::memcpy(blob, &head, sizeof(head));
     std::memcpy(blob + sizeof(head), &node, sizeof(node));
-    std::memcpy(blob + sizeof(head) + sizeof(node), "save", 4);
+    std::memcpy(blob + sizeof(head) + sizeof(node), &role, sizeof(role));
+    std::memcpy(blob + sizeof(head) + sizeof(node) + sizeof(role), "save", 4);
     UiState state;
-    const uint16_t root = uiImportBin(state, kUiNone, blob, sizeof(head) + sizeof(node) + 5);
+    uiWidgetsInit(state);
+    const uint16_t root = uiImportBin(state, kUiNone, blob, sizeof(head) + sizeof(node) + sizeof(role) + 5);
     CHECK(root != kUiNone);
     CHECK(uiFindName(state, "save") == root);
     const UiPaint* paint = state.ent[root].try_get<UiPaint>();
@@ -50,6 +53,7 @@ TEST_CASE("broken blobs do not import") {
         junk[i] = static_cast<unsigned char>(i * 17 + 3);
     }
     UiState state;
+    uiWidgetsInit(state);
     CHECK(uiImportBin(state, kUiNone, junk, 64) == kUiNone);
     CHECK(uiImportBin(state, kUiNone, nullptr, 0) == kUiNone);
     BinHead head{};
@@ -87,6 +91,7 @@ TEST_CASE("broken blobs do not import") {
 }
 TEST_CASE("baked scale slider moves") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t root = uiImportBinFile(state, kUiNone, "build-core/ui/shell.uib");
     CHECK(root != kUiNone);
     if (root == kUiNone) {

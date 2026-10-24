@@ -1,4 +1,6 @@
 #include "ui/PrimitiveBatch.hpp"
+#include "ui/Bar.hpp"
+#include "memory/FrameArena.hpp"
 #include "ui/State.hpp"
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
@@ -11,6 +13,46 @@
 #include <cstring>
 
 namespace burnhope {
+namespace {
+
+struct UiBarScratch {
+    FrameArena arena{};
+};
+
+FrameArena& barArena(UiState& s) {
+    UiBarScratch& scratch = s.world.ensure<UiBarScratch>();
+    if (scratch.arena.mem == nullptr) {
+        frameArenaCreate(scratch.arena, 64 * 1024);
+    }
+    return scratch.arena;
+}
+
+} // namespace
+
+void uiNodeBarPush(UiState& s, UiNodeBars& bars, const UiBar& bar) {
+    UiBar* slot = static_cast<UiBar*>(frameArenaAlloc(barArena(s), sizeof(UiBar), alignof(UiBar)));
+    if (slot == nullptr) {
+        return;
+    }
+    *slot = bar;
+    if (bars.bar == nullptr) {
+        bars.bar = slot;
+    }
+    ++bars.n;
+}
+
+void uiBarScratchReset(UiState& s) {
+    if (UiBarScratch* scratch = s.world.try_get_mut<UiBarScratch>()) {
+        frameArenaReset(scratch->arena);
+    }
+}
+
+void uiBarScratchShutdown(UiState& s) {
+    if (UiBarScratch* scratch = s.world.try_get_mut<UiBarScratch>()) {
+        frameArenaDestroy(scratch->arena);
+    }
+}
+
 namespace {
 void putFloat(uint32_t& dst, float v) {
     dst = std::bit_cast<uint32_t>(v);
@@ -275,48 +317,80 @@ void uiDrawAdd(UiState& s, UiDrawFn fn) {
     if (fn == nullptr) {
         return;
     }
-    UiDrawHooks& hooks = s.world.ensure<UiDrawHooks>();
-    for (uint8_t i = 0; i < hooks.n; ++i) {
-        if (hooks.fn[i] == fn) {
+    for (UiDrawFn have : s.drawHook) {
+        if (have == fn) {
             return;
         }
     }
-    if (hooks.n < 4) {
-        hooks.fn[hooks.n++] = fn;
-    }
+    s.drawHook.push_back(fn);
 }
 
 void uiDrawDecorAdd(UiState& s, UiDrawFn fn) {
     if (fn == nullptr) {
         return;
     }
-    UiDrawHooks& hooks = s.world.ensure<UiDrawHooks>();
-    for (uint8_t i = 0; i < hooks.decorN; ++i) {
-        if (hooks.decor[i] == fn) {
+    for (UiDrawFn have : s.decorHook) {
+        if (have == fn) {
             return;
         }
     }
-    if (hooks.decorN < 8) {
-        hooks.decor[hooks.decorN++] = fn;
+    s.decorHook.push_back(fn);
+}
+
+void uiPlaceAdd(UiState& s, void (*fn)(UiState& s)) {
+    if (fn == nullptr) {
+        return;
     }
+    for (void (*have)(UiState&) : s.placeHook) {
+        if (have == fn) {
+            return;
+        }
+    }
+    s.placeHook.push_back(fn);
 }
 
 void uiOverlayAdd(UiState& s, UiOverlayDrawFn fn) {
     if (fn == nullptr) {
         return;
     }
-    UiOverlayHooks& hooks = s.world.ensure<UiOverlayHooks>();
-    for (uint8_t i = 0; i < hooks.n; ++i) {
-        if (hooks.fn[i] == fn) {
+    for (UiOverlayDrawFn have : s.overlayHook) {
+        if (have == fn) {
             return;
         }
     }
-    if (hooks.n < 4) {
-        hooks.fn[hooks.n++] = fn;
+    s.overlayHook.push_back(fn);
+}
+
+static uint32_t emitBars(const UiState& s, UiPrimitive* dst, uint32_t n, uint32_t cap) {
+    for (uint16_t id = 0; id < s.count; ++id) {
+        const UiBar* bar = s.ent[id].try_get<UiBar>();
+        if (bar == nullptr || bar->on == 0 || bar->w < 0.5f || bar->h < 0.5f) {
+            continue;
+        }
+        UiBox clip = s.box[id];
+        UiBox ancestor{};
+        if (uiClipBox(s, id, ancestor) && ancestor.w > 0.5f && ancestor.h > 0.5f) {
+            const float x0 = clip.x > ancestor.x ? clip.x : ancestor.x;
+            const float y0 = clip.y > ancestor.y ? clip.y : ancestor.y;
+            const float x1 = clip.x + clip.w < ancestor.x + ancestor.w ? clip.x + clip.w : ancestor.x + ancestor.w;
+            const float y1 = clip.y + clip.h < ancestor.y + ancestor.h ? clip.y + clip.h : ancestor.y + ancestor.h;
+            clip.x = x0;
+            clip.y = y0;
+            clip.w = x1 > x0 ? x1 - x0 : 0.0f;
+            clip.h = y1 > y0 ? y1 - y0 : 0.0f;
+        }
+        n = emitRect(dst, n, cap, bar->x, bar->y, bar->w, bar->h, bar->r, bar->g, bar->b, bar->a, bar->radius, &clip);
     }
+    return n;
 }
 
 uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
+    uiBarScratchReset(s);
+    for (void (*fn)(UiState&) : s.placeHook) {
+        if (fn != nullptr) {
+            fn(s);
+        }
+    }
     uint16_t order[kUiCap];
     uint16_t nOrder = 0;
     uint16_t childHead[kUiCap];
@@ -378,7 +452,6 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
         }
     }
 
-    const UiDrawHooks* hooks = s.world.try_get<UiDrawHooks>();
     uint32_t n = 0;
     for (int pass = 0; pass < 3; ++pass) {
         for (uint16_t k = 0; k < nOrder; ++k) {
@@ -415,17 +488,15 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             if (s.plug.draw != nullptr && s.plug.draw(s, id, dst, n, cap)) {
                 continue;
             }
-            if (hooks != nullptr) {
-                bool took = false;
-                for (uint8_t hi = 0; hi < hooks->n; ++hi) {
-                    if (hooks->fn[hi] != nullptr && hooks->fn[hi](s, id, dst, n, cap)) {
-                        took = true;
-                        break;
-                    }
+            bool took = false;
+            for (std::size_t hi = 0; hi < s.drawHook.size(); ++hi) {
+                if (s.drawHook[hi] != nullptr && s.drawHook[hi](s, id, dst, n, cap)) {
+                    took = true;
+                    break;
                 }
-                if (took) {
-                    continue;
-                }
+            }
+            if (took) {
+                continue;
             }
             float r = paint->r;
             float g = paint->g;
@@ -475,20 +546,69 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                     n = uiEmitTextNode(s, id, dst, n, cap, clip, r, g, b, a);
                 }
             }
-            if (hooks != nullptr) {
-                for (uint8_t di = 0; di < hooks->decorN; ++di) {
-                    if (hooks->decor[di] != nullptr) {
-                        hooks->decor[di](s, id, dst, n, cap);
+            if (const UiNodeBars* bars = s.ent[id].try_get<UiNodeBars>(); bars != nullptr && bars->bar != nullptr) {
+                for (uint16_t bi = 0; bi < bars->n; ++bi) {
+                    const UiBar& bar = bars->bar[bi];
+                    if (bar.on == 0 || bar.w < 0.5f || bar.h < 0.5f) {
+                        continue;
                     }
+                    if ((bar.flags & kUiFlagStroke) != 0) {
+                        n = emitMark(dst, n, cap, bar.x, bar.y, bar.w, bar.h, bar.r, bar.g, bar.b, bar.a, bar.radius, bar.spread, kUiFlagStroke, clip);
+                    } else {
+                        n = emitRect(dst, n, cap, bar.x, bar.y, bar.w, bar.h, bar.r, bar.g, bar.b, bar.a, bar.radius, clip);
+                    }
+                }
+                if (bars->icon != 0 && n < cap) {
+                    constexpr float kSide = 12.0f;
+                    const float side = bars->iconS > 1.0f ? bars->iconS : kSide;
+                    UiPrimitive& icon = dst[n++];
+                    icon = {};
+                    icon.posX = bars->iconX;
+                    icon.posY = bars->iconY;
+                    icon.sizeX = side;
+                    icon.sizeY = side;
+                    icon.color[0] = bars->iconR;
+                    icon.color[1] = bars->iconG;
+                    icon.color[2] = bars->iconB;
+                    icon.color[3] = bars->iconA;
+                    icon.texId = bars->icon;
+                    icon.flags = kUiFlagIcon;
+                }
+            }
+            if (const UiTextInk* ink = s.ent[id].try_get<UiTextInk>(); ink != nullptr && ink->on != 0) {
+                const UiText* inkText = s.ent[id].try_get<UiText>();
+                if (inkText != nullptr && inkText->len > 0) {
+                    const UiBox slot{ink->x, ink->y, ink->w, ink->h};
+                    UiBox limit{ink->cx, ink->cy, ink->cw, ink->ch};
+                    const TextRun run = textRun(s, *inkText, slot);
+                    if (run.lines > 0) {
+                        n = uiEmitRun(s, dst, n, cap, run, ink->r, ink->g, ink->b, ink->a, ink->clip != 0 ? &limit : nullptr);
+                    }
+                }
+            }
+            for (std::size_t di = 0; di < s.decorHook.size(); ++di) {
+                if (s.decorHook[di] != nullptr) {
+                    s.decorHook[di](s, id, dst, n, cap);
                 }
             }
         }
     }
-    if (const UiOverlayHooks* overlays = s.world.try_get<UiOverlayHooks>()) {
-        for (uint8_t i = 0; i < overlays->n; ++i) {
-            if (overlays->fn[i] != nullptr) {
-                overlays->fn[i](s, dst, n, cap);
+    n = emitBars(s, dst, n, cap);
+    if (const UiStamps* stamps = s.world.try_get<UiStamps>()) {
+        for (uint16_t i = 0; i < stamps->n; ++i) {
+            if (stamps->bar == nullptr) {
+                break;
             }
+            const UiBar& bar = stamps->bar[i];
+            if (bar.on == 0 || bar.w < 0.5f || bar.h < 0.5f) {
+                continue;
+            }
+            n = emitRect(dst, n, cap, bar.x, bar.y, bar.w, bar.h, bar.r, bar.g, bar.b, bar.a, bar.radius, nullptr);
+        }
+    }
+    for (std::size_t i = 0; i < s.overlayHook.size(); ++i) {
+        if (s.overlayHook[i] != nullptr) {
+            s.overlayHook[i](s, dst, n, cap);
         }
     }
     if (s.plug.over != nullptr) {

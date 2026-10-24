@@ -7,16 +7,17 @@
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
 #include "ui/Canvas.hpp"
-#include "ui/Domain.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
 #include "ui/UiPhoto.hpp"
 #include "ui/widget/Button.hpp"
+#include "ui/widget/Check.hpp"
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/PropGrid.hpp"
+#include "host/PropGrid.hpp"
 #include "ui/widget/Menu.hpp"
+#include "ui/widget/Number.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Splitter.hpp"
@@ -337,7 +338,7 @@ void hudBuildView(Canvas& canvas, HudContext* hud, uint16_t root, uint16_t row, 
     fileFlex.shrink = 1.0f;
     const uint16_t files = uiPanel(*canvas.state, root, fileFlex, dockPaint());
     filesShutdown(*canvas.state);
-    uiFiles(*canvas.state).fileFrame = files;
+    uiFilesOwn(*canvas.state, files);
     filesAttach(*canvas.state);
     filesMount(*canvas.state);
     filesDropOnScene(*canvas.state, hud->viewPane, hudDropImport, hud);

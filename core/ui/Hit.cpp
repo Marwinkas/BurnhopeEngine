@@ -1,49 +1,16 @@
 #include "ui/Interaction.hpp"
+#include "ui/PrimitiveBatch.hpp"
 #include "ui/State.hpp"
 #include "platform/Trace.hpp"
 
 namespace burnhope {
 
 bool insideParents(const UiState& s, uint16_t id, float x, float y) {
-    bool any = false;
-    float x0 = 0;
-    float y0 = 0;
-    float x1 = 0;
-    float y1 = 0;
-    for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-        const UiScissor* scissor = s.ent[p].try_get<UiScissor>();
-        const UiFlex* flex = s.ent[p].try_get<UiFlex>();
-        const bool clip = (scissor != nullptr && scissor->enabled)
-            || (flex != nullptr && (flex->overflow == UiOverflow::Hidden || flex->overflow == UiOverflow::Scroll));
-        if (!clip) {
-            continue;
-        }
-        const UiBox& box = s.box[p];
-        if (!any) {
-            x0 = box.x;
-            y0 = box.y;
-            x1 = box.x + box.w;
-            y1 = box.y + box.h;
-            any = true;
-            continue;
-        }
-        if (box.x > x0) {
-            x0 = box.x;
-        }
-        if (box.y > y0) {
-            y0 = box.y;
-        }
-        if (box.x + box.w < x1) {
-            x1 = box.x + box.w;
-        }
-        if (box.y + box.h < y1) {
-            y1 = box.y + box.h;
-        }
-    }
-    if (!any) {
+    UiBox clip{};
+    if (!uiClipBox(s, id, clip)) {
         return true;
     }
-    return x >= x0 && y >= y0 && x < x1 && y < y1;
+    return x >= clip.x && y >= clip.y && x < clip.x + clip.w && y < clip.y + clip.h;
 }
 
 uint16_t hitTest(const UiState& s, float x, float y) {

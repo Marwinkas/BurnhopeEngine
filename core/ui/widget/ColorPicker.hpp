@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/State.hpp"
+#include "ui/widget/BinSlots.hpp"
 
 namespace burnhope {
 
@@ -22,13 +23,7 @@ struct ColorBook {
 };
 
 struct UiColorPickerComponent {
-    float colorR = 0.36f;
-    float colorG = 0.55f;
-    float colorB = 0.92f;
-    float colorH = 0.62f;
-    float colorS = 0.61f;
-    float colorV = 0.92f;
-    float colorA = 1.0f;
+    ColorBook local{};
     uint16_t colorPanel = kUiNone;
     uint16_t colorSwatch = kUiNone;
     uint16_t colorTarget = kUiNone;
@@ -48,29 +43,52 @@ struct UiColorPickerComponent {
     void (*onColor)(void* user, UiState& state, uint16_t anchor, float r, float g, float b) = nullptr;
     void* colorUser = nullptr;
     uint32_t colorSeen = 0;
-    uint8_t colorUseAlpha = 1;
-    uint8_t colorMode = 0;
-    uint8_t colorPresent = 0;
     uint8_t colorApplied = 0;
     uint8_t colorHost = 0;
-    uint8_t colorDrop = 0;
 };
 
-inline UiColorPickerComponent& uiColor(UiState& s) {
-    return s.world.ensure<UiColorPickerComponent>();
+inline ColorBook& colorInk(UiColorPickerComponent& picker) {
+    return picker.book != nullptr ? *picker.book : picker.local;
 }
-inline constexpr uint8_t kBinSlotColor = 12;
-void uiInstallColorBin(UiState& s);
 
-inline const UiColorPickerComponent& uiColor(const UiState& s) {
-    return *s.world.try_get<UiColorPickerComponent>();
+inline const ColorBook& colorInk(const UiColorPickerComponent& picker) {
+    return picker.book != nullptr ? *picker.book : picker.local;
 }
+
+inline UiColorPickerComponent* uiColorFind(UiState& s) {
+    for (uint16_t i = 0; i < s.count; ++i) {
+        if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
+            continue;
+        }
+        return s.ent[i].try_get_mut<UiColorPickerComponent>();
+    }
+    return nullptr;
+}
+
+inline const UiColorPickerComponent* uiColorFind(const UiState& s) {
+    for (uint16_t i = 0; i < s.count; ++i) {
+        if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
+            continue;
+        }
+        return s.ent[i].try_get<UiColorPickerComponent>();
+    }
+    return nullptr;
+}
+
+inline UiColorPickerComponent* uiColor(UiState& s) {
+    return uiColorFind(s);
+}
+
+inline const UiColorPickerComponent* uiColor(const UiState& s) {
+    return uiColorFind(s);
+}
+
+void uiInstallColorBin(UiState& s);
 
 void uiSetColorBook(UiState& s, ColorBook* book);
 void uiEnsureColorPopup(UiState& s);
 void uiBuildColor(UiState& s);
 void colorOnOpen(void* user, uint16_t id);
 void colorOnValue(void* user, uint16_t id, float value);
-bool colorCustomDraw(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap);
 
 } // namespace burnhope

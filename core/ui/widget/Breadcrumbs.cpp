@@ -1,8 +1,5 @@
-#include "Str.hpp"
 #include "ui/widget/Breadcrumbs.hpp"
 #include "ui/widget/Button.hpp"
-
-#include <cstring>
 
 namespace burnhope {
 namespace {
@@ -21,67 +18,24 @@ void onSeg(void* user, uint16_t id) {
     if (crumbs == nullptr || crumbs->nav == nullptr) {
         return;
     }
-    const bool rooted = crumbs->root[0] != '\0';
-    char rel[512]{};
-    int relN = 0;
+    uint16_t index = 0;
     const uint32_t kids = uiNodeChildCount(*s, bar);
     for (uint32_t i = 0; i < kids; i += 2) {
         const uint16_t seg = crumbAt(*s, bar, i);
         if (seg >= s->count) {
             break;
         }
-        if (rooted && i == 0) {
-            if (seg == id) {
-                crumbs->nav(crumbs->user, crumbs->root);
-                return;
-            }
-            continue;
+        if (seg == id) {
+            crumbs->nav(crumbs->user, index);
+            return;
         }
-        const UiText* text = s->ent[seg].try_get<UiText>();
-        if (text == nullptr || text->len == 0) {
-            continue;
-        }
-        if (relN > 0 && relN < 511) {
-            rel[relN++] = '/';
-        }
-        for (uint8_t c = 0; c < text->len && relN < 511; ++c) {
-            rel[relN++] = text->bytes[c];
-        }
-        rel[relN] = '\0';
-        if (seg != id) {
-            continue;
-        }
-        char path[512]{};
-        if (rooted) {
-            int n = 0;
-            for (const char* p = crumbs->root; *p != '\0' && n < 511; ++p) {
-                path[n++] = *p;
-            }
-            if (relN > 0) {
-                if (n > 0 && path[n - 1] != '/' && n < 511) {
-                    path[n++] = '/';
-                }
-                for (int r = 0; rel[r] != '\0' && n < 511; ++r) {
-                    path[n++] = rel[r];
-                }
-            }
-            path[n] = '\0';
-        } else {
-            path[0] = '/';
-            int n = 1;
-            for (int r = 0; rel[r] != '\0' && n < 511; ++r) {
-                path[n++] = rel[r];
-            }
-            path[n] = '\0';
-        }
-        crumbs->nav(crumbs->user, path);
-        return;
+        ++index;
     }
 }
 
 } // namespace
 
-uint16_t uiBreadcrumbs(UiState& s, uint16_t parent, void (*nav)(void* user, const char* path), void* user) {
+uint16_t uiBreadcrumbs(UiState& s, uint16_t parent, void (*nav)(void* user, uint16_t index), void* user) {
     UiFlex row{};
     row.direction = UiFlexDir::Row;
     row.grow = 1.0f;
@@ -103,7 +57,7 @@ uint16_t uiBreadcrumbs(UiState& s, uint16_t parent, void (*nav)(void* user, cons
     return id;
 }
 
-void uiBindCrumbs(UiState& s, const char* name, void (*nav)(void* user, const char* path), void* user) {
+void uiBindCrumbs(UiState& s, const char* name, void (*nav)(void* user, uint16_t index), void* user) {
     const uint16_t id = uiFindName(s, name);
     auto* crumbs = id < s.count ? s.ent[id].try_get_mut<UiCrumbs>() : nullptr;
     if (crumbs == nullptr) {
@@ -113,78 +67,35 @@ void uiBindCrumbs(UiState& s, const char* name, void (*nav)(void* user, const ch
     crumbs->user = user;
 }
 
-void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* path, const char* root) {
+void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* const* labels, uint8_t count) {
     auto* crumbs = id < s.count ? s.ent[id].try_get_mut<UiCrumbs>() : nullptr;
     if (crumbs == nullptr) {
         return;
-    }
-    crumbs->root[0] = '\0';
-    if (root != nullptr && root[0] != '\0') {
-        copyCap(crumbs->root, 512, root);
-    }
-    char local[512]{};
-    if (root != nullptr && root[0] != '\0' && path != nullptr) {
-        const size_t rootLen = std::strlen(root);
-        if (std::strncmp(path, root, rootLen) == 0) {
-            const char* tail = path + rootLen;
-            if (tail[0] == '/') {
-                ++tail;
-            }
-            const char* leaf = std::strrchr(root, '/');
-            leaf = leaf != nullptr && leaf[1] != '\0' ? leaf + 1 : root;
-            if (tail[0] == '\0') {
-                copyCap(local, 512, leaf);
-            } else {
-                char joined[512]{};
-                int n = 0;
-                for (const char* p = leaf; *p != '\0' && n < 510; ++p) {
-                    joined[n++] = *p;
-                }
-                joined[n++] = '/';
-                for (const char* p = tail; *p != '\0' && n < 511; ++p) {
-                    joined[n++] = *p;
-                }
-                joined[n] = '\0';
-                copyCap(local, 512, joined);
-            }
-        } else {
-            copyCap(local, 512, path);
-        }
-    } else {
-        copyCap(local, 512, path);
     }
     auto grow = [&]() {
         if (s.count + 2 >= kUiCap) {
             return;
         }
-        const uint16_t button = uiButton(s, id, UiButtonConfig{.onClick = onSeg, .user = &s});
+        const uint16_t button = uiButton(s, id, UiButtonConfig{.padX = 4.0f, .onClick = onSeg, .user = &s});
         if (button != kUiNone) {
             if (auto* paint = s.ent[button].try_get_mut<UiPaint>()) {
-                paint->a = 0.0f;
-                paint->borderW = 0.0f;
-                paint->shadow = 0.0f;
-            }
-            if (auto* flex = s.ent[button].try_get_mut<UiFlex>()) {
-                flex->padL = 4.0f;
-                flex->padR = 4.0f;
+                *paint = paintLabel(s.look);
             }
             uiShow(s, button, false);
         }
-        UiPaint arrow = paintLabel(s.look);
-        arrow.shadow = 0.0f;
-        const uint16_t sep = spawn(s, id, px(10.0f, 14.0f), arrow);
+        const UiPaint arrow = paintLabel(s.look);
+        UiFlex sepFlex = px(10.0f, 14.0f);
+        sepFlex.align = UiAlign::Center;
+        const uint16_t sep = spawn(s, id, sepFlex, arrow);
         addText(s, sep, ">");
-        if (sep < s.count) {
-            if (auto* sepFlex = s.ent[sep].try_get_mut<UiFlex>()) {
-                sepFlex->align = UiAlign::Center;
-            }
-        }
         uiShow(s, sep, false);
     };
     uint8_t seg = 0;
-    size_t at = 0;
-    const size_t n = strLen(local);
-    while (at <= n) {
+    for (uint8_t i = 0; i < count; ++i) {
+        const char* label = labels != nullptr ? labels[i] : nullptr;
+        if (label == nullptr || label[0] == '\0') {
+            continue;
+        }
         const uint32_t slots = uiNodeChildCount(s, id) / 2;
         if (seg >= slots) {
             grow();
@@ -192,34 +103,27 @@ void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* path, const char* roo
         if (seg >= uiNodeChildCount(s, id) / 2) {
             break;
         }
-        size_t end = at;
-        while (local[end] != '\0' && local[end] != '/') {
-            ++end;
-        }
         char piece[32]{};
         uint8_t len = 0;
-        for (size_t i = at; i < end && len < 31; ++i) {
-            piece[len++] = local[i];
+        for (const char* p = label; *p != '\0' && len < 31; ++p) {
+            piece[len++] = *p;
         }
         piece[len] = '\0';
         const uint16_t button = crumbAt(s, id, static_cast<uint32_t>(seg) * 2u);
         const uint16_t sep = seg > 0 ? crumbAt(s, id, static_cast<uint32_t>(seg) * 2u - 1u) : kUiNone;
-        if (len > 0 && button < s.count) {
-            uiText(s, button, piece);
-            if (auto* flex = s.ent[button].try_get_mut<UiFlex>()) {
-                flex->width = uiMeasure(s, piece, len, len) + 8.0f;
-                flex->height = 22.0f;
-            }
-            uiShow(s, button, true);
-            if (sep < s.count) {
-                uiShow(s, sep, true);
-            }
-            ++seg;
-        }
-        at = local[end] == '/' ? end + 1 : end;
-        if (local[end] == '\0') {
+        if (button >= s.count) {
             break;
         }
+        uiText(s, button, piece);
+        if (auto* flex = s.ent[button].try_get_mut<UiFlex>()) {
+            flex->width = uiMeasure(s, piece, len, len) + 8.0f;
+            flex->height = 22.0f;
+        }
+        uiShow(s, button, true);
+        if (sep < s.count) {
+            uiShow(s, sep, true);
+        }
+        ++seg;
     }
     crumbs->n = seg;
     const uint32_t slots = uiNodeChildCount(s, id) / 2;
@@ -235,7 +139,7 @@ void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* path, const char* roo
     }
 }
 
-uint16_t loadCrumbs(UiState& s, uint16_t parent, const BinNode&, const char*, void*) {
+uint16_t loadCrumbs(UiState& s, uint16_t parent, const BinNode&, const BinTail&, const char*, const char*, const char*, void*) {
     return uiBreadcrumbs(s, parent, nullptr, nullptr);
 }
 

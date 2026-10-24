@@ -34,55 +34,6 @@ bool keyIs(const char* key, const char* want) {
     return std::strcmp(key, want) == 0;
 }
 
-void skipString(json::Cur& c) {
-    char dump[512]{};
-    uint32_t n = 0;
-    if (!json::parseStringCap(c, dump, sizeof(dump), n) && c.p < c.end) {
-        while (c.p < c.end && *c.p != '"') {
-            ++c.p;
-        }
-        if (c.p < c.end && *c.p == '"') {
-            ++c.p;
-        }
-    }
-}
-
-void skipValue(json::Cur& c) {
-    json::skip(c);
-    if (c.p >= c.end) {
-        return;
-    }
-    if (*c.p == '"') {
-        skipString(c);
-        return;
-    }
-    if (*c.p == '{' || *c.p == '[') {
-        const char open = *c.p;
-        const char close = open == '{' ? '}' : ']';
-        int depth = 0;
-        do {
-            const char ch = *c.p++;
-            if (ch == '"') {
-                --c.p;
-                skipString(c);
-                continue;
-            }
-            if (ch == open) {
-                ++depth;
-            } else if (ch == close) {
-                --depth;
-            }
-        } while (c.p < c.end && depth > 0);
-        return;
-    }
-    double unused = 0.0;
-    if (!json::parseNumber(c, unused)) {
-        while (c.p < c.end && *c.p != ',' && *c.p != '}' && *c.p != ']') {
-            ++c.p;
-        }
-    }
-}
-
 void takeNum(BhmatDoc& doc, const char* key, double value) {
     const float n = static_cast<float>(value);
     if (keyIs(key, "version")) doc.version = static_cast<uint32_t>(value);
@@ -197,7 +148,7 @@ bool materialLoadBhmat(const char* path, BhmatDoc& doc) {
             if (json::parseNumber(c, number)) {
                 takeNum(doc, key, number);
             } else {
-                skipValue(c);
+                json::skipValue(c);
             }
         }
         json::eat(c, ',');

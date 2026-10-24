@@ -1,4 +1,4 @@
-#include "ui/PrimitiveBatch.hpp"
+#include "ui/Bar.hpp"
 #include "ui/widget/Scroll.hpp"
 
 #include <algorithm>
@@ -122,14 +122,6 @@ void scrollClamp(UiState& s, uint16_t id) {
     scrollRefresh(s, id, scroll->onScroll);
 }
 
-void scrollClampAll(UiState& s) {
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.ent[id].is_alive() && s.ent[id].try_get<UiScroll>() != nullptr) {
-            scrollClamp(s, id);
-        }
-    }
-}
-
 void scrollBy(UiState& s, uint16_t id, float wheel) {
     auto* scroll = s.ent[id].try_get_mut<UiScroll>();
     if (scroll == nullptr || scroll->inner == kUiNone) {
@@ -239,42 +231,41 @@ uint16_t scrollOwner(const UiState& s, uint16_t id) {
     return uiAncestorId<UiScroll>(s, id);
 }
 
-void uiScrollOverlay(UiState& s, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
+void uiScrollPlace(UiState& s) {
     for (uint16_t id = 0; id < s.count; ++id) {
         if (s.ent[id].try_get<UiScroll>() == nullptr) {
             continue;
         }
+        UiBar next{};
         bool shown = s.box[id].w >= 1.0f && s.box[id].h >= 1.0f;
         for (uint16_t p = id; shown && p != kUiNone && p < s.count; p = s.parentOf[p]) {
             if (s.tight[p] != 0 || s.culled[p] != 0 || !nodeShown(s, p)) {
                 shown = false;
             }
         }
-        if (!shown) {
-            continue;
-        }
         UiBox thumb{};
-        if (!scrollThumb(s, id, thumb)) {
-            continue;
+        if (shown && scrollThumb(s, id, thumb)) {
+            next.x = thumb.x;
+            next.y = thumb.y;
+            next.w = thumb.w;
+            next.h = thumb.h;
+            next.radius = 2.0f;
+            next.r = s.look.accent[0][0];
+            next.g = s.look.accent[0][1];
+            next.b = s.look.accent[0][2];
+            next.a = 0.95f;
+            next.on = 1;
         }
-        UiBox clip = s.box[id];
-        UiBox ancestor{};
-        if (uiClipBox(s, id, ancestor) && ancestor.w > 0.5f && ancestor.h > 0.5f) {
-            const float x0 = clip.x > ancestor.x ? clip.x : ancestor.x;
-            const float y0 = clip.y > ancestor.y ? clip.y : ancestor.y;
-            const float x1 = clip.x + clip.w < ancestor.x + ancestor.w ? clip.x + clip.w : ancestor.x + ancestor.w;
-            const float y1 = clip.y + clip.h < ancestor.y + ancestor.h ? clip.y + clip.h : ancestor.y + ancestor.h;
-            clip.x = x0;
-            clip.y = y0;
-            clip.w = x1 > x0 ? x1 - x0 : 0.0f;
-            clip.h = y1 > y0 ? y1 - y0 : 0.0f;
+        if (auto* bar = s.ent[id].try_get_mut<UiBar>()) {
+            *bar = next;
+        } else if (next.on != 0) {
+            s.ent[id].set<UiBar>(next);
         }
-        n = emitRect(dst, n, cap, thumb.x, thumb.y, thumb.w, thumb.h, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.95f, 2.0f, &clip);
     }
 }
 
-bool uiScrollInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
-    (void)cursor;
+bool uiScrollInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note) {
+    (void)note;
     if (phase == kUiInPressLate) {
         if (id >= s.count) {
             return false;
@@ -336,7 +327,7 @@ void scrollBindInner(UiState& s, uint16_t id, void*) {
     }
 }
 
-void finishScroll(UiState& s, uint16_t id, const BinNode*, const char*, const char*) {
+void finishScroll(UiState& s, uint16_t id, const BinTail*, const char*, const char*) {
     s.ent[id].set<UiScroll>({0.0f, kUiNone});
     s.ent[id].set<UiLayoutRefresh>({scrollBindInner, nullptr});
 }

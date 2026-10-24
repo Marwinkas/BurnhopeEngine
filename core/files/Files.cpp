@@ -5,7 +5,6 @@
 #include "files/FileDomain.hpp"
 #include "files/FileSession.hpp"
 #include "files/FileTheme.hpp"
-#include "ui/Domain.hpp"
 #include "ui/widget/AssetSlot.hpp"
 #include "ui/widget/DragDrop.hpp"
 #include "ui/widget/Field.hpp"
@@ -18,12 +17,13 @@ namespace burnhope {
 namespace fs = std::filesystem;
 
 void mountFiles(UiState& s) {
-    if (uiFiles(s).fileFrame == kUiNone || fileBook(s).mounted != 0) {
+    UiFileBrowser* files = uiFilesFind(s);
+    if (files == nullptr || files->fileFrame == kUiNone || fileBook(s).mounted != 0) {
         return;
     }
     Browser& b = fileBook(s);
     const char* layout = fileTheme(s).layout;
-    if (uiImportBinFile(s, uiFiles(s).fileFrame, layout) == kUiNone) {
+    if (uiImportBinFile(s, files->fileFrame, layout) == kUiNone) {
         spdlog::error("files: missing layout {}", layout);
         return;
     }
@@ -41,7 +41,7 @@ void mountFiles(UiState& s) {
     b.crumbs = take("file.crumbs");
     b.wTree = take("file.tree");
     b.status = take("file.status");
-    uiFiles(s).fileView = take("file.grid");
+    files->fileView = take("file.grid");
     fileWire(s);
     if (const uint16_t split = take("file.split"); split != kUiNone) {
         uiSplitterSetWidth(s, split, b.look.tree);
@@ -82,8 +82,8 @@ void filesShutdown(UiState& s) {
 
 void filesShow(UiState& s, bool on) {
     fileBook(s);
-    if (uiFiles(s).fileFrame != kUiNone) {
-        uiShow(s, uiFiles(s).fileFrame, on);
+    if (const UiFileBrowser* files = uiFilesFind(s); files != nullptr && files->fileFrame != kUiNone) {
+        uiShow(s, files->fileFrame, on);
     }
     uiNotifyVisualDirty(s);
 }
@@ -114,10 +114,11 @@ void filesOfferPath(UiState& s, const char* path) {
     if (uiAssetOfferPath(s, path)) {
         return;
     }
-    if (uiFiles(s).fileTarget == kUiNone) {
+    const UiFileBrowser* files = uiFilesFind(s);
+    if (files == nullptr || files->fileTarget == kUiNone) {
         return;
     }
-    uiSetFieldText(s, uiFiles(s).fileTarget, path);
+    uiSetFieldText(s, files->fileTarget, path);
 }
 
 void filesDropOnScene(UiState& s, uint16_t view, void (*fn)(void* user, const char* path, float x, float y), void* user) {
@@ -125,18 +126,10 @@ void filesDropOnScene(UiState& s, uint16_t view, void (*fn)(void* user, const ch
     b.sceneView = view;
     b.onImport = fn;
     b.user = user;
-    UiDragDrop* drag = s.world.try_get_mut<UiDragDrop>();
-    if (drag == nullptr || view == kUiNone) {
+    if (view == kUiNone) {
         return;
     }
-    for (uint8_t i = 0; i < drag->hosts; ++i) {
-        if (drag->host[i] == view) {
-            return;
-        }
-    }
-    if (drag->hosts < kUiDragHostCap) {
-        drag->host[drag->hosts++] = view;
-    }
+    uiDragAddHost(s, view);
     b.root[0] = '\0';
     b.cwd[0] = '\0';
     b.items.clear();
@@ -172,7 +165,7 @@ void filesRoot(UiState& s, const char* path) {
 }
 
 void uiClearDomain(UiState& s) {
-    if (auto* files = s.world.try_get_mut<UiFileBrowser>()) {
+    if (UiFileBrowser* files = uiFilesFind(s)) {
         files->photoView = kUiNone;
         files->fileView = kUiNone;
         files->fileFrame = kUiNone;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ui/widget/BinSlots.hpp"
 #include "ui/widget/Virtual.hpp"
 
 namespace burnhope {
@@ -57,7 +58,6 @@ struct UiVirtualGridConfig {
     void* user = nullptr;
 };
 
-inline constexpr uint8_t kBinSlotGrid = 17;
 void uiGridBin(UiState& s);
 
 uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& cfg);
@@ -67,6 +67,6 @@ void uiVirtualGridSetView(UiState& s, uint16_t gridId, uint32_t count, uint8_t l
 void uiVirtualGridClearClick(UiState& s, uint16_t gridId);
 void uiVirtualGridBeginEdit(UiState& s, uint16_t gridId, uint32_t index, const char* text);
 bool uiVirtualGridEditing(const UiState& s, uint16_t gridId);
-bool uiVirtualGridInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor);
+bool uiVirtualGridInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note);
 
 } // namespace burnhope

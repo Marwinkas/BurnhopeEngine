@@ -6,9 +6,10 @@
 #include "render/Sharc.hpp"
 #include "rhi/Device.hpp"
 #include "ui/widget/Button.hpp"
+#include "ui/widget/Check.hpp"
 #include "ui/widget/Field.hpp"
-#include "ui/widget/PropGrid.hpp"
-#include "ui/Popover.hpp"
+#include "host/PropGrid.hpp"
+#include "ui/widget/Popover.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Label.hpp"
 
@@ -107,9 +108,7 @@ void syncViewport(Engine& e, Canvas& canvas) {
             sceneFrameCameraRelease(scene);
             for (uint8_t i = 0; i < 6; ++i) {
                 if (hud.camAxis[i] < state->count) {
-                    if (auto* check = state->ent[hud.camAxis[i]].try_get_mut<UiCheck>()) {
-                        check->on = 0;
-                    }
+                    uiCheckAssign(*state, hud.camAxis[i], 0);
                 }
             }
             hud.viewSent = 0;

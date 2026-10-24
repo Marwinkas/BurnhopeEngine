@@ -2,7 +2,7 @@
 #include <doctest/doctest.h>
 #include <yoga/Yoga.h>
 
-#include "ui/Domain.hpp"
+#include "ui/widget/Widgets.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
 
@@ -14,6 +14,7 @@ using namespace burnhope;
 
 TEST_CASE("layout dump names the node") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t id = spawn(state, kUiNone, px(80, 24), paintRgb(0.2f, 0.2f, 0.2f));
     uiName(state, id, "save");
     uiLayout(state, 200.0f, 80.0f);
@@ -24,6 +25,7 @@ TEST_CASE("layout dump names the node") {
 }
 TEST_CASE("column label skips yoga when the line changes") {
     UiState state;
+    uiWidgetsInit(state);
     UiFlex col{};
     const uint16_t column = spawn(state, kUiNone, col, paintRgb(0.1f, 0.1f, 0.1f));
     const uint16_t id = spawn(state, column, UiFlex{}, paintRgb(1.0f, 1.0f, 1.0f));
@@ -45,6 +47,7 @@ TEST_CASE("column label skips yoga when the line changes") {
 }
 TEST_CASE("row label still marks layout") {
     UiState state;
+    uiWidgetsInit(state);
     UiFlex row{};
     row.direction = UiFlexDir::Row;
     const uint16_t line = spawn(state, kUiNone, row, paintRgb(0.1f, 0.1f, 0.1f));
@@ -56,6 +59,7 @@ TEST_CASE("row label still marks layout") {
 }
 TEST_CASE("yoga box") {
     UiState state;
+    uiWidgetsInit(state);
     UiFlex flex{};
     flex.widthMode = UiSize::Px;
     flex.heightMode = UiSize::Px;
@@ -76,6 +80,7 @@ TEST_CASE("yoga box") {
 }
 TEST_CASE("tab index wraps") {
     UiState state;
+    uiWidgetsInit(state);
     UiFlex flex{};
     flex.widthMode = UiSize::Px;
     flex.heightMode = UiSize::Px;
@@ -94,6 +99,7 @@ TEST_CASE("tab index wraps") {
 }
 TEST_CASE("scroll scissor blocks the child") {
     UiState state;
+    uiWidgetsInit(state);
     UiFlex host{};
     host.widthMode = UiSize::Px;
     host.heightMode = UiSize::Px;
@@ -121,6 +127,7 @@ TEST_CASE("scroll scissor blocks the child") {
 }
 TEST_CASE("drop frees the subtree") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t root = spawn(state, kUiNone, px(200, 80), paintRgb(0.1f, 0.1f, 0.1f));
     const uint16_t child = spawn(state, root, px(40, 20), paintRgb(0.2f, 0.2f, 0.2f));
     uiText(state, child, "x");
@@ -137,6 +144,7 @@ TEST_CASE("drop frees the subtree") {
 }
 TEST_CASE("reparent moves the yoga parent") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t host = spawn(state, kUiNone, px(220, 40), paintRgb(0.05f, 0.05f, 0.05f));
     const uint16_t a = spawn(state, host, px(100, 40), paintRgb(0.1f, 0.1f, 0.1f));
     const uint16_t b = spawn(state, host, px(100, 40), paintRgb(0.2f, 0.2f, 0.2f));
@@ -149,6 +157,7 @@ TEST_CASE("reparent moves the yoga parent") {
 }
 TEST_CASE("hidden node is not a hit") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t id = spawn(state, kUiNone, px(80, 30), paintRgb(0.2f, 0.2f, 0.2f));
     uiShow(state, id, false);
     uiLayout(state, 200.0f, 80.0f);
@@ -157,6 +166,7 @@ TEST_CASE("hidden node is not a hit") {
 }
 TEST_CASE("scissor edge and a nested child") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t root = spawn(state, kUiNone, px(200, 80), paintRgb(0.05f, 0.05f, 0.05f));
     UiFlex scrollFlex = px(100, 40);
     scrollFlex.overflow = UiOverflow::Scroll;
@@ -187,6 +197,7 @@ TEST_CASE("scissor edge and a nested child") {
 }
 TEST_CASE("uiLayout timing on a near-cap tree") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t root = spawn(state, kUiNone, px(1600, 1000), paintRgb(0.1f, 0.1f, 0.1f));
     UiFlex grid{};
     grid.direction = UiFlexDir::Row; // row
@@ -214,6 +225,7 @@ TEST_CASE("uiLayout timing on a near-cap tree") {
 }
 TEST_CASE("uiEmit timing on a near-cap tree") {
     UiState state;
+    uiWidgetsInit(state);
     const uint16_t root = spawn(state, kUiNone, px(1600, 1000), paintRgb(0.1f, 0.1f, 0.1f));
     UiFlex grid{};
     grid.direction = UiFlexDir::Row;

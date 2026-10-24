@@ -118,36 +118,88 @@ void fieldInsert(UiField& field, const char* src, uint8_t n) {
     field.bytes[field.len] = '\0';
 }
 
-void fieldRemember(UiState& s, uint16_t id, const UiField& field) {
-    UiFieldUndo& undo = uiUndo(s);
-    if (undo.at < undo.n) {
-        undo.n = undo.at;
+UiFieldUndo* undoOf(UiState& s, uint16_t id) {
+    if (id >= s.count) {
+        return nullptr;
     }
-    if (undo.at > 0) {
-        const auto& prev = undo.snap[undo.at - 1];
-        if (prev.id == id && prev.len == field.len && std::memcmp(prev.bytes, field.bytes, field.len) == 0) {
-            return;
+    if (!s.ent[id].has<UiFieldUndo>()) {
+        s.ent[id].set<UiFieldUndo>({});
+    }
+    return s.ent[id].try_get_mut<UiFieldUndo>();
+}
+
+flecs::entity snapAt(const UiFieldUndo& undo, uint16_t index) {
+    flecs::entity e = undo.head;
+    for (uint16_t i = 0; i < index && e.is_alive(); ++i) {
+        const UiFieldSnap* snap = e.try_get<UiFieldSnap>();
+        if (snap == nullptr) {
+            return {};
+        }
+        e = snap->next;
+    }
+    return e;
+}
+
+void dropRedo(UiFieldUndo& undo) {
+    if (undo.at >= undo.n) {
+        return;
+    }
+    flecs::entity e = snapAt(undo, undo.at);
+    if (undo.at == 0) {
+        undo.head = {};
+    } else {
+        flecs::entity prev = snapAt(undo, static_cast<uint16_t>(undo.at - 1));
+        if (auto* snap = prev.is_alive() ? prev.try_get_mut<UiFieldSnap>() : nullptr) {
+            snap->next = {};
         }
     }
-    if (undo.at >= 8) {
-        for (uint8_t i = 1; i < 8; ++i) {
-            undo.snap[i - 1] = undo.snap[i];
+    while (e.is_alive()) {
+        flecs::entity next{};
+        if (const UiFieldSnap* snap = e.try_get<UiFieldSnap>()) {
+            next = snap->next;
         }
-        undo.at = 7;
-        undo.n = 7;
+        e.destruct();
+        e = next;
     }
-    auto& snap = undo.snap[undo.at];
-    snap = {};
-    snap.id = id;
-    snap.len = field.len;
-    snap.caret = field.caret;
-    snap.anchor = field.anchor;
-    std::memcpy(snap.bytes, field.bytes, field.len);
-    ++undo.at;
     undo.n = undo.at;
 }
 
-void swapField(UiField& field, UiFieldUndo::Snap& snap) {
+void fieldRemember(UiState& s, uint16_t id, const UiField& field) {
+    UiFieldUndo* undo = undoOf(s, id);
+    if (undo == nullptr) {
+        return;
+    }
+    dropRedo(*undo);
+    if (undo->at > 0) {
+        flecs::entity prev = snapAt(*undo, static_cast<uint16_t>(undo->at - 1));
+        const UiFieldSnap* snap = prev.is_alive() ? prev.try_get<UiFieldSnap>() : nullptr;
+        if (snap != nullptr && snap->len == field.len && std::memcmp(snap->bytes, field.bytes, field.len) == 0) {
+            return;
+        }
+    }
+    UiFieldSnap snap{};
+    snap.len = field.len;
+    snap.caret = field.caret;
+    snap.anchor = field.anchor;
+    if (field.len > 0) {
+        std::memcpy(snap.bytes, field.bytes, field.len);
+    }
+    flecs::entity e = s.world.entity();
+    if (undo->at == 0) {
+        undo->head = e;
+    } else {
+        flecs::entity prev = snapAt(*undo, static_cast<uint16_t>(undo->at - 1));
+        snap.prev = prev;
+        if (auto* older = prev.is_alive() ? prev.try_get_mut<UiFieldSnap>() : nullptr) {
+            older->next = e;
+        }
+    }
+    e.set<UiFieldSnap>(snap);
+    ++undo->at;
+    undo->n = undo->at;
+}
+
+void swapField(UiField& field, UiFieldSnap& snap) {
     UiField copy = field;
     field.len = snap.len;
     field.caret = snap.caret;
@@ -162,18 +214,19 @@ void swapField(UiField& field, UiFieldUndo::Snap& snap) {
 }
 
 bool fieldUndo(UiState& s) {
-    UiFieldUndo& undo = uiUndo(s);
-    if (undo.at == 0) {
+    const uint16_t id = s.focused;
+    UiFieldUndo* undo = undoOf(s, id);
+    auto* field = undo != nullptr ? s.ent[id].try_get_mut<UiField>() : nullptr;
+    if (undo == nullptr || field == nullptr || undo->at == 0) {
         return false;
     }
-    const uint16_t id = undo.snap[undo.at - 1].id < s.count ? undo.snap[undo.at - 1].id : s.focused;
-    auto* field = id < s.count ? s.ent[id].try_get_mut<UiField>() : nullptr;
-    if (field == nullptr) {
+    --undo->at;
+    flecs::entity e = snapAt(*undo, undo->at);
+    auto* snap = e.is_alive() ? e.try_get_mut<UiFieldSnap>() : nullptr;
+    if (snap == nullptr) {
         return false;
     }
-    --undo.at;
-    undo.snap[undo.at].id = id;
-    swapField(*field, undo.snap[undo.at]);
+    swapField(*field, *snap);
     fieldSyncText(s, id);
     uiAfterText(s, id);
     s.visualDirty = true;
@@ -181,18 +234,19 @@ bool fieldUndo(UiState& s) {
 }
 
 bool fieldRedo(UiState& s) {
-    UiFieldUndo& undo = uiUndo(s);
-    if (undo.at >= undo.n) {
+    const uint16_t id = s.focused;
+    UiFieldUndo* undo = undoOf(s, id);
+    auto* field = undo != nullptr ? s.ent[id].try_get_mut<UiField>() : nullptr;
+    if (undo == nullptr || field == nullptr || undo->at >= undo->n) {
         return false;
     }
-    const uint16_t id = undo.snap[undo.at].id < s.count ? undo.snap[undo.at].id : s.focused;
-    auto* field = id < s.count ? s.ent[id].try_get_mut<UiField>() : nullptr;
-    if (field == nullptr) {
+    flecs::entity e = snapAt(*undo, undo->at);
+    auto* snap = e.is_alive() ? e.try_get_mut<UiFieldSnap>() : nullptr;
+    if (snap == nullptr) {
         return false;
     }
-    swapField(*field, undo.snap[undo.at]);
-    undo.snap[undo.at].id = id;
-    ++undo.at;
+    swapField(*field, *snap);
+    ++undo->at;
     fieldSyncText(s, id);
     uiAfterText(s, id);
     s.visualDirty = true;
@@ -465,14 +519,15 @@ void fieldCopy(UiState& s, const UiField& field) {
     if (a == b) {
         return;
     }
+    UiClipOut& clip = s.world.ensure<UiClipOut>();
     uint8_t n = 0;
     while (a + n < b && n < 95) {
-        s.clip[n] = field.bytes[a + n];
+        clip.bytes[n] = field.bytes[a + n];
         ++n;
     }
-    s.clip[n] = '\0';
-    s.clipLen = n;
-    s.clipPut = 1;
+    clip.bytes[n] = '\0';
+    clip.len = n;
+    clip.put = 1;
 }
 
 } // namespace burnhope

@@ -1,4 +1,5 @@
 #include "host/Host.hpp"
+#include "ui/widget/Widgets.hpp"
 #include "platform/Action.hpp"
 #include "platform/Jobs.hpp"
 #include "platform/PlatformUtil.hpp"
@@ -439,6 +440,7 @@ int hostOpen(Host& host, const ViewDesc& desc) {
         destroyView(host, slot, false);
         return -1;
     }
+    uiWidgetsInit(*view.canvas.state);
     canvasSetBuilder(view.canvas, desc.builder, desc.user);
     canvasReload(view.canvas);
     copyName(view, desc.name);
@@ -526,6 +528,7 @@ bool restoreViewGpu(Host& host, int slot, bool ownsDeviceSurface) {
         spdlog::error("HOST recover canvas failed {}", view.name);
         return false;
     }
+    uiWidgetsInit(*view.canvas.state);
     canvasSetBuilder(view.canvas, view.canvas.builder, view.canvas.builderUser);
     canvasReload(view.canvas);
     return true;

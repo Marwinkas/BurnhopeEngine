@@ -3,7 +3,6 @@
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Slider.hpp"
 
-#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -30,11 +29,6 @@ void dragSlider(UiState& s, uint16_t id, float x) {
     std::snprintf(note, sizeof(note), "slider %.3f", range->value);
     uiTrace(s, note, id);
     s.visualDirty = true;
-    for (uint8_t i = 0; i < s.valueN; ++i) {
-        if (s.valueFn[i] != nullptr) {
-            s.valueFn[i](s.valueUser[i], id, range->value);
-        }
-    }
 }
 
 uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float maxV, UiValueChangeFn onChange, void* user, float width) {
@@ -105,8 +99,8 @@ void uiSliderSet(UiState& s, uint16_t id, float value) {
     range->value = value;
 }
 
-bool uiSliderInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, uint8_t& cursor) {
-    (void)cursor;
+bool uiSliderInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note) {
+    (void)note;
     if (id >= s.count) {
         return false;
     }
@@ -129,23 +123,18 @@ bool uiSliderInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase,
     return false;
 }
 
-bool uiSliderDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
-    if (id >= s.count) {
-        return false;
-    }
-    const UiRange* range = s.ent[id].try_get<UiRange>();
-    if (range == nullptr || range->step > 0.0f) {
-        return false;
-    }
+namespace {
+
+uint32_t paintTrack(const UiState& s, uint16_t id, const UiRange& range, UiPrimitive* dst, uint32_t n, uint32_t cap) {
     const UiBox& box = s.box[id];
     if (box.w < 8.0f || box.h < 8.0f) {
-        return false;
+        return n;
     }
     UiBox ancestor{};
     const bool hasClip = uiClipBox(s, id, ancestor);
     const UiBox* clip = hasClip ? &ancestor : nullptr;
-    const float span = range->max - range->min;
-    float t = span > 0.0001f ? (range->value - range->min) / span : 0.0f;
+    const float span = range.max - range.min;
+    float t = span > 0.0001f ? (range.value - range.min) / span : 0.0f;
     if (t < 0.0f) {
         t = 0.0f;
     }
@@ -164,24 +153,54 @@ bool uiSliderDecor(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint3
     const float travel = trackW > thumb ? trackW - thumb : 0.0f;
     const float tx = box.x + inset + travel * t;
     const float ty = box.y + (box.h - thumb) * 0.5f;
-    n = emitRect(dst, n, cap, tx, ty, thumb, thumb,
+    return emitRect(dst, n, cap, tx, ty, thumb, thumb,
         s.look.text[0], s.look.text[1], s.look.text[2], 1.0f, thumb * 0.5f, clip);
-    return false;
 }
 
-namespace {
+bool drawSlider(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
+    if (s.ent[id].has<UiProgress>()) {
+        return false;
+    }
+    const UiRange* range = s.ent[id].try_get<UiRange>();
+    if (range == nullptr || range->step > 0.0f) {
+        return false;
+    }
+    n = paintTrack(s, id, *range, dst, n, cap);
+    return true;
+}
+
+bool drawProgress(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {
+    if (!s.ent[id].has<UiProgress>()) {
+        return false;
+    }
+    const UiRange* range = s.ent[id].try_get<UiRange>();
+    if (range == nullptr) {
+        return false;
+    }
+    n = paintTrack(s, id, *range, dst, n, cap);
+    return true;
+}
 
 void adornSlider(UiState& s, uint16_t id) {
     uiHover(s, id);
     s.ent[id].add<UiFocusable>();
 }
 
-void finishRange(UiState& s, uint16_t id, const BinNode* spec, const char*, const char*) {
-    if (spec == nullptr) {
-        s.ent[id].set<UiRange>({});
-        return;
+void finishSlider(UiState& s, uint16_t id, const BinTail* spec, const char*, const char*) {
+    float value = 0.0f;
+    float minV = 0.0f;
+    float maxV = 0.0f;
+    if (spec != nullptr) {
+        std::memcpy(&minV, spec->raw + 10, sizeof(minV));
+        std::memcpy(&maxV, spec->raw + 14, sizeof(maxV));
+        std::memcpy(&value, spec->raw + 18, sizeof(value));
     }
-    s.ent[id].set<UiRange>({spec->value, spec->minV, spec->maxV});
+    s.ent[id].set<UiRange>({value, minV, maxV});
+}
+
+void finishProgress(UiState& s, uint16_t id, const BinTail* spec, const char*, const char*) {
+    finishSlider(s, id, spec, nullptr, nullptr);
+    s.ent[id].add<UiProgress>();
 }
 
 } // namespace
@@ -190,8 +209,10 @@ void uiSliderBin(UiState& s) {
     uiBinRole(s, kBinSlotSlider, "slider", static_cast<uint8_t>(UiToken::Slider), kBinRoleGhost);
     uiBinRole(s, kBinSlotProgress, "progress", 0, 0);
     uiRegisterSpawnHook(s, kBinSlotSlider, adornSlider);
-    uiRegisterRoleFinish(s, kBinSlotSlider, finishRange);
-    uiRegisterRoleFinish(s, kBinSlotProgress, finishRange);
+    uiRegisterRoleFinish(s, kBinSlotSlider, finishSlider);
+    uiRegisterRoleFinish(s, kBinSlotProgress, finishProgress);
+    uiDrawDecorAdd(s, drawSlider);
+    uiDrawDecorAdd(s, drawProgress);
 }
 
 } // namespace burnhope
