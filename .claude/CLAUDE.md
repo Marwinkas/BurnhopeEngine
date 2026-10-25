@@ -46,6 +46,44 @@ LAYER 0   Hardware, OS, Memory, I/O (core/rhi/, core/platform/, core/io/, core/i
 GRAPHICS  3D Engine & Passes (engine/gpu_scene/, engine/include/render/, engine/src/, engine/shader/)
           Built on Layer 0. Scene Flecs lives in engine/gpu_scene/. Zero UI or widget includes.
 
+### 2.1 CMake Targets per Tier
+
+Each `bh_*` target is an OBJECT-library module (`bh_module(name ...)`). Links point strictly downward.
+
+| Target | Tier | Owns | Links |
+| :--- | :--- | :--- | :--- |
+| `bh_foundation` | 0 | Check, PlatformUtil, Jobs, Desktop, FrameArena, File, Json, WasmHost, pure POD `Input.hpp` | cpptrace (Tracy). No SDL3, no volk. |
+| `bh_platform` | 1 | Window, WindowEvents, Dialog, Action | `bh_foundation`, SDL3 |
+| `bh_rhi` | 0 | Device, Swapchain, GpuImage, GpuBuffer, DescriptorHeap, ShaderObject, MeshDraw, GpuProfiler | volk, Vulkan. No SDL3: the host passes surface extensions to `deviceCreateInstance`. |
+| `bh_image` | 0 | ImageDecode, ImageCompress, ImageUpload | `bh_rhi`, `bh_foundation` |
+| `bh_asset` | 2 | AssimpImporter, ProjectDoc, Material | `bh_foundation` |
+| `bh_audio` | 2 | Audio | `bh_foundation` |
+| `bh_gpu_scene` | Graphics | SceneObject, SceneGizmo, Physics (Jolt) | flecs, Jolt |
+| `bh_render` | Graphics | passes plus Scene{Frame,Actors,Geometry,CullUpload,Procedural,Targets,Textures,Uniforms,Lights} | `bh_gpu_scene`, `bh_audio`, volk |
+| `bh_ui_core` | 1A/1B | Command, Node, NodeDump, Hit, Focus, Layout, Text, ... | `bh_foundation`, yoga, flecs |
+| `bh_ui_bricks` | 2A | Button, Check, Field, FieldDraw, Slider, ... | `bh_ui_core`, `bh_foundation` |
+| `bh_ui_kits` | 2B | Color, ColorPopup, ColorDraw, Calendar, Docking, Virtual, ... | `bh_ui_bricks` |
+| `bh_ui_rhi` | 1B | Canvas, Font, UiPhoto, UiRenderer | `bh_ui_core`, `bh_rhi`, `bh_image` |
+| `bh_files` | 3 | Files, FileSession, FileBind, ... | `bh_foundation`, UI targets, `bh_asset` |
+| `bh_host` | 3 | Host, PropBind, PropImport, PropImportParse, PropGrid, PropFilter, SceneMask | UI targets, `bh_rhi`, `bh_platform` |
+| `bh_app` | 3 | `demo/app/*` coordinators | UI targets, `bh_files`, `bh_gpu_scene` |
+
+Only `bh_host` and the executables link `bh_platform`; every other target stays SDL3-free.
+
+### 2.2 `bh_firewall` Rules (CMake configure-time, FATAL_ERROR)
+
+- `core/rhi`: no `platform/Window.hpp`, `ui/`, `files/`, `host/`, `SDL3/`.
+- `core/ui`: no `rhi/`, `image/`, `ui/rhi/`, `ui/widget/`, `ui/kit/`, `files/`, `host/`.
+- `core/ui/widget`, `core/ui/kit`: no `rhi/`, `image/`, `ui/rhi/`, `files/`, `host/`, `yoga/`.
+- Widget headers and `Command.hpp` (except `Widgets.hpp`): no `ui/State.hpp`, no `flecs.h`. Include them from the `.cpp`.
+- Atomic bricks: no composite kit headers.
+- Tier 0 (foundation files): no `rhi/`, `image/`, `Window.hpp`, `ui/`, `files/`, `host/`, `gfx/`, `asset/`, `audio/`, volk, `SDL3/`.
+- Tier 1 (platform without `Window*.cpp`): no `rhi/`, `image/`, `ui/`, `files/`, `host/`, `gfx/`, `asset/`, `audio/`, volk.
+- Tier 2 (`gfx`, `asset`, `audio`, `scene`, `stream`) and Graphics (`engine/`): no `ui/`, `files/`, `host/`, `Window.hpp`.
+- `core/image`, `core/files`, `core/audio`: no `platform/Window.hpp`, `Action.hpp`, `Dialog.hpp`, `SDL3/`.
+- `engine/include/render/*.hpp`: no `flecs.h` (forward-declare `flecs::world`/`flecs::entity`).
+- Rule of thumb: no source file exceeds 1,000 lines. Split along responsibility, with shared declarations in an internal header (`ColorInternal.hpp`, `PropImportInternal.hpp`).
+
 ---
 
 ## 3. Single Source of Truth (SSOT)
@@ -166,3 +204,24 @@ Never duplicate parsers, string helpers, math, or virtualization across modules.
 Every code edit must compile cleanly with zero warnings and pass all tests before completion:
 
 cmake --build build-core --target BurnhopeTest BurnhopeEngine -j && ./build-core/BurnhopeTest
+
+---
+
+## 8. Canonical Modules (Split Files)
+
+| File | Responsibility |
+| :--- | :--- |
+| `core/platform/Window.cpp` / `WindowEvents.cpp` | Window lifecycle, surface, `windowVulkanExtensions()` / event pump, clipboard, hold timing. |
+| `core/ui/Node.cpp` / `NodeDump.cpp` | Node tree and names / node dump. |
+| `core/ui/widget/Field.cpp` / `FieldDraw.cpp` | Field behavior and undo (id-based snapshots) / field painting. |
+| `core/ui/kit/Color.cpp` / `ColorPopup.cpp` / `ColorDraw.cpp` | Picker body and binding / popup, color book, eyedropper / swatch and ramp painting. Shared: `ColorInternal.hpp`. |
+| `core/host/PropImport.cpp` / `PropImportParse.cpp` | Role spawn table and node building / JSON item and show parsing. Shared: `PropImportInternal.hpp`. |
+| `core/host/PropFilter.cpp` | Property row filtering. |
+| `engine/gpu_scene/SceneObject.cpp` / `SceneGizmo.cpp` | Actor storage and transforms / projection, picking, gizmo drag math. |
+| `engine/src/SceneFrame.cpp` | Frame orchestration. |
+| `engine/src/SceneActors.cpp` | Play-mode actor capture/restore and the actor API (select, name, count). |
+| `engine/src/SceneGeometry.cpp` / `SceneCullUpload.cpp` | `.bhop` load, append, meshlet setup / prop links, audio baking, static upload, culling. |
+| `engine/src/SceneProcedural.cpp` | Procedural primitive meshes (cube, plane, sphere, cylinder) and cube planting. |
+| `engine/src/SceneTargets.cpp` | Transient screen targets and resize. |
+| `engine/src/SceneTextures.cpp` | Material and texture upload. |
+| `engine/src/SceneUniforms.cpp` / `SceneLights.cpp` | Camera, weather, block and grade uniforms / light upload (`uploadLights`). |

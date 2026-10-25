@@ -57,7 +57,7 @@ FetchContent_Declare(miniaudio
 )
 FetchContent_MakeAvailable(miniaudio)
 if (TARGET Jolt)
-    set_target_properties(Jolt PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+    set_target_properties(Jolt PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON SYSTEM TRUE)
     if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         target_compile_options(Jolt PRIVATE -w)
     endif()
@@ -153,6 +153,11 @@ bh_firewall("tier 2 world and asset data must not import ui, files, host or Wind
     "ui/|files/|host/|platform/Window\\.hpp" ${BH_T2_SOURCES})
 bh_firewall("tier 5 engine must not import ui, files, host or Window"
     "ui/|files/|host/|platform/Window\\.hpp" ${BH_T5_SOURCES})
+file(GLOB_RECURSE BH_NOWINDOW_SOURCES CONFIGURE_DEPENDS
+    ${BH_CORE}/image/*.cpp ${BH_CORE}/image/*.hpp ${BH_CORE}/files/*.cpp ${BH_CORE}/files/*.hpp
+    ${BH_CORE}/audio/*.cpp ${BH_CORE}/audio/*.hpp)
+bh_firewall("image, files and audio must not import Window, Action, Dialog or SDL3"
+    "platform/(Window|Action|Dialog)\\.hpp|SDL3/" ${BH_NOWINDOW_SOURCES})
 file(GLOB BH_RENDER_HEADERS CONFIGURE_DEPENDS ${BH_ENGINE}/include/render/*.hpp)
 bh_firewall("engine/include/render headers must not import flecs" "flecs\\.h" ${BH_RENDER_HEADERS})
 file(GLOB_RECURSE BH_LIVE_SOURCES CONFIGURE_DEPENDS
@@ -271,10 +276,9 @@ target_include_directories(bh_image PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Libraries/include
     ${CMAKE_CURRENT_SOURCE_DIR}/Libraries/ispc_texcomp
 )
-target_link_libraries(bh_image PUBLIC bh_rhi bh_texcomp bh_platform volk)
+target_link_libraries(bh_image PUBLIC bh_rhi bh_texcomp bh_foundation volk)
 set_source_files_properties(core/image/ImageDecode.cpp PROPERTIES COMPILE_OPTIONS "-w")
 bh_module(gpu_scene engine/gpu_scene/SceneObject.cpp engine/gpu_scene/SceneGizmo.cpp engine/gpu_scene/Physics.cpp)
-set_source_files_properties(engine/gpu_scene/Physics.cpp PROPERTIES COMPILE_OPTIONS "-w")
 target_include_directories(bh_gpu_scene PUBLIC ${BH_ENGINE} ${BH_ENGINE}/include)
 target_link_libraries(bh_gpu_scene PUBLIC flecs_static Jolt)
 bh_module(audio core/audio/Audio.cpp)
@@ -283,7 +287,7 @@ target_include_directories(bh_audio PRIVATE
     ${CMAKE_SOURCE_DIR}/steamaudio/include
 )
 target_link_libraries(bh_audio PUBLIC
-    bh_platform
+    bh_foundation
     "${CMAKE_SOURCE_DIR}/steamaudio/lib/linux-x64/libphonon.so"
     Threads::Threads
     ${CMAKE_DL_LIBS}
@@ -325,10 +329,12 @@ bh_module(render
     engine/src/SceneFrame.cpp
     engine/src/SceneActors.cpp
     engine/src/SceneGeometry.cpp
+    engine/src/SceneCullUpload.cpp
     engine/src/SceneProcedural.cpp
     engine/src/SceneTargets.cpp
     engine/src/SceneTextures.cpp
     engine/src/SceneUniforms.cpp
+    engine/src/SceneLights.cpp
 )
 target_include_directories(bh_render PUBLIC ${BH_ENGINE} ${BH_ENGINE}/include ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include)
 set_source_files_properties(
@@ -413,11 +419,12 @@ bh_module(files
     core/files/Format.cpp
     core/files/Model.cpp
 )
-target_link_libraries(bh_files PUBLIC bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_asset)
+target_link_libraries(bh_files PUBLIC bh_foundation bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_asset)
 bh_module(host
     core/host/Host.cpp
     core/host/PropBind.cpp
     core/host/PropImport.cpp
+    core/host/PropImportParse.cpp
     core/host/PropGrid.cpp
     core/host/PropFilter.cpp
     core/host/SceneMask.cpp
@@ -445,7 +452,7 @@ bh_module(app
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
 target_link_libraries(bh_app PUBLIC bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_files bh_gpu_scene)
 target_link_libraries(bh_ui_core PUBLIC bh_foundation yogacore flecs_static)
-target_link_libraries(bh_ui_bricks PUBLIC bh_ui_core bh_platform)
+target_link_libraries(bh_ui_bricks PUBLIC bh_ui_core bh_foundation)
 target_link_libraries(bh_ui_kits PUBLIC bh_ui_bricks)
 target_link_libraries(bh_ui_rhi PUBLIC bh_ui_core bh_rhi bh_image volk Freetype::Freetype)
 target_compile_definitions(bh_ui_rhi PRIVATE

@@ -1,4 +1,5 @@
 #include "host/PropImport.hpp"
+#include "host/PropImportInternal.hpp"
 #include "Str.hpp"
 
 #include "io/JsonCursor.hpp"
@@ -21,96 +22,7 @@
 namespace burnhope {
 namespace {
 
-using json::Cur;
-
-struct Item {
-    char label[48]{};
-    char command[48]{};
-    uint8_t value = 0;
-    bool hasValue = false;
-};
-
-struct Node {
-    char role[16]{};
-    char label[64]{};
-    char name[32]{};
-    char caption[48]{};
-    uint16_t bind = 0;
-    uint8_t cat = 0;
-    uint8_t owner = 0;
-    float value = 0.0f;
-    float value2 = 0.0f;
-    float minV = 0.0f;
-    float maxV = 1.0f;
-    float step = 0.01f;
-    float g = 0.0f;
-    float b = 0.0f;
-    bool hasBind = false;
-    bool hasStep = false;
-    bool on = false;
-    bool hasShow = false;
-    uint16_t showFlag = 0;
-    uint8_t showValue = 0;
-    uint8_t showOp = 0;
-    char command[48]{};
-    char glyph[32]{};
-    char paintName[16]{};
-    uint8_t icon = 255;
-    uint8_t photo = 255;
-    uint8_t kind = 0;
-    uint8_t groupN = 0;
-    float w = 0.0f;
-    float h = 0.0f;
-    float wp = 0.0f;
-    float hp = 0.0f;
-    float grow = 0.0f;
-    float shrink = 1.0f;
-    float gap = 0.0f;
-    float pad = 0.0f;
-    float padL = 0.0f;
-    float padR = 0.0f;
-    float padT = 0.0f;
-    float padB = 0.0f;
-    float minW = 0.0f;
-    float minH = 0.0f;
-    float posX = 0.0f;
-    float posY = 0.0f;
-    bool hasShrink = false;
-    bool row = false;
-    bool bar = false;
-    bool slide = false;
-    bool hide = false;
-    bool center = false;
-    bool ghost = false;
-    bool pass = false;
-    bool fill = false;
-    bool absolute = false;
-    bool vertical = false;
-    bool alignCenter = false;
-    bool selfCenter = false;
-    bool hasIcon = false;
-    bool hasPhoto = false;
-    bool iconBtn = false;
-    uint8_t itemN = 0;
-    Item items[8]{};
-};
-
-struct Import {
-    UiState* state = nullptr;
-    UiPropBinder* bind = nullptr;
-    const PropSlot* slots = nullptr;
-    uint16_t slotCount = 0;
-    const PropCommand* commands = nullptr;
-    uint16_t commandCount = 0;
-    UiPaint hidden{};
-    PropFlagFn onFlag = nullptr;
-    PropSwatchFn onSwatch = nullptr;
-    void* user = nullptr;
-};
-
-bool keyIs(const char* key, const char* name) {
-    return std::strcmp(key, name) == 0;
-}
+using namespace propimport;
 
 void remember(Import& in, const char* name, uint16_t id) {
     if (name == nullptr || name[0] == '\0') {
@@ -126,125 +38,11 @@ void remember(Import& in, const char* name, uint16_t id) {
     }
 }
 
-bool parseItem(Cur& c, Item& item) {
-    if (!json::eat(c, '{')) {
-        return false;
-    }
-    json::skip(c);
-    if (c.p < c.end && *c.p == '}') {
-        ++c.p;
-        return true;
-    }
-    for (;;) {
-        char key[16]{};
-        uint32_t n = 0;
-        if (!json::parseStringCap(c, key, sizeof(key), n) || !json::eat(c, ':')) {
-            return false;
-        }
-        if (keyIs(key, "label")) {
-            if (!json::parseStringCap(c, item.label, sizeof(item.label), n)) {
-                return false;
-            }
-        } else if (keyIs(key, "command")) {
-            if (!json::parseStringCap(c, item.command, sizeof(item.command), n)) {
-                return false;
-            }
-        } else if (keyIs(key, "value")) {
-            double number = 0.0;
-            if (!json::parseNumber(c, number)) {
-                return false;
-            }
-            item.value = static_cast<uint8_t>(number);
-            item.hasValue = true;
-        } else if (!json::skipValue(c)) {
-            return false;
-        }
-        json::skip(c);
-        if (c.p < c.end && *c.p == '}') {
-            ++c.p;
-            return true;
-        }
-        if (!json::eat(c, ',')) {
-            return false;
-        }
-    }
-}
-
-bool parseShow(Cur& c, Node& node) {
-    if (!json::eat(c, '{')) {
-        return false;
-    }
-    json::skip(c);
-    if (c.p < c.end && *c.p == '}') {
-        ++c.p;
-        return true;
-    }
-    for (;;) {
-        char key[16]{};
-        uint32_t n = 0;
-        if (!json::parseStringCap(c, key, sizeof(key), n) || !json::eat(c, ':')) {
-            return false;
-        }
-        double number = 0.0;
-        if (!json::parseNumber(c, number)) {
-            return false;
-        }
-        if (keyIs(key, "flag")) {
-            node.showFlag = static_cast<uint16_t>(number);
-            node.hasShow = true;
-        } else if (keyIs(key, "eq")) {
-            node.showValue = static_cast<uint8_t>(number);
-            node.showOp = 0;
-            node.hasShow = true;
-        } else if (keyIs(key, "ne")) {
-            node.showValue = static_cast<uint8_t>(number);
-            node.showOp = 1;
-            node.hasShow = true;
-        }
-        json::skip(c);
-        if (c.p < c.end && *c.p == '}') {
-            ++c.p;
-            return true;
-        }
-        if (!json::eat(c, ',')) {
-            return false;
-        }
-    }
-}
-
 void rememberShow(Import& in, uint16_t node, const Node& spec) {
     if (!spec.hasShow || in.bind == nullptr) {
         return;
     }
     in.bind->show(node, spec.showFlag, spec.showValue, spec.showOp);
-}
-
-bool parseItems(Cur& c, Node& node) {
-    if (!json::eat(c, '[')) {
-        return false;
-    }
-    json::skip(c);
-    if (c.p < c.end && *c.p == ']') {
-        ++c.p;
-        return true;
-    }
-    for (;;) {
-        if (node.itemN >= 8) {
-            return false;
-        }
-        if (!parseItem(c, node.items[node.itemN])) {
-            return false;
-        }
-        ++node.itemN;
-        json::skip(c);
-        if (c.p < c.end && *c.p == ']') {
-            ++c.p;
-            return true;
-        }
-        if (!json::eat(c, ',')) {
-            return false;
-        }
-    }
 }
 
 bool parseNode(Cur& c, Import& in, uint16_t parent);
