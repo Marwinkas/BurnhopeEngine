@@ -43,8 +43,6 @@
 #include "scene/TestScene.hpp"
 #include "rhi/GpuProfiler.hpp"
 
-#include <vector>
-
 namespace burnhope {
 
 struct PhysicsWorld;

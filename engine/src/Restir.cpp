@@ -1,5 +1,7 @@
 #include "render/Restir.hpp"
 
+#include <Rtxdi/DI/ReSTIRDI.h>
+
 #include "render/HeapBind.hpp"
 #include "rhi/Barrier.hpp"
 #include "rhi/DescriptorHeap.hpp"
@@ -104,7 +106,8 @@ bool makeContext(RestirPass& p, VkExtent2D extent) {
     params.RenderHeight = extent.height;
     params.CheckerboardSamplingMode = rtxdi::CheckerboardMode::Off;
     for (uint32_t flight = 0; flight < 2u; ++flight) {
-        p.ctx[flight].emplace(params);
+        delete p.ctx[flight];
+        p.ctx[flight] = new rtxdi::ReSTIRDIContext(params);
         tuneContext(*p.ctx[flight]);
         p.parity[flight] = 0;
         p.historyValid[flight] = 0;
@@ -135,8 +138,10 @@ void destroyScreen(RestirPass& p, Device& d) {
     p.cleared = false;
     p.statReady[0] = 0;
     p.statReady[1] = 0;
-    p.ctx[0].reset();
-    p.ctx[1].reset();
+    for (rtxdi::ReSTIRDIContext*& ctx : p.ctx) {
+        delete ctx;
+        ctx = nullptr;
+    }
 }
 
 bool createScreen(RestirPass& p, Device& d, VkExtent2D extent) {
@@ -668,7 +673,7 @@ void restirRecord(
     VkExtent2D extent,
     VkDeviceAddress tlas,
     GpuProfiler& profiler) {
-    if (p.di.handle == VK_NULL_HANDLE || p.presample.handle == VK_NULL_HANDLE || flight > 1u || !p.ctx[0].has_value()) {
+    if (p.di.handle == VK_NULL_HANDLE || p.presample.handle == VK_NULL_HANDLE || flight > 1u || p.ctx[0] == nullptr) {
         publishLog(p, 0u, 0u, 0u, 0u, 0u, 1u, "ReSTIR пропуск: нет шейдера или контекста");
         return;
     }

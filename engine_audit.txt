@@ -1,0 +1,2443 @@
+=== 1. FILE LINE COUNTS (MONOLITH CHECK) ===
+  60650 итого
+    983 engine/src/SceneUniforms.cpp
+    963 engine/src/SceneGeometry.cpp
+    947 engine/src/Radiance.cpp
+    932 engine/gpu_scene/SceneGizmo.cpp
+    907 core/host/PropImport.cpp
+    892 engine/src/Restir.cpp
+    824 engine/src/Fsr.cpp
+    814 core/ui/kit/Color.cpp
+    805 core/platform/Window.cpp
+    800 engine/src/SceneTextures.cpp
+    797 core/rhi/Device.cpp
+    791 core/ui/Node.cpp
+    755 core/files/Model.cpp
+    736 core/ui/widget/Field.cpp
+    703 core/asset/AssimpImporter.cpp
+    690 core/host/Host.cpp
+    673 core/image/ImageUpload.cpp
+    655 core/audio/Audio.cpp
+    649 core/host/PropGrid.cpp
+    641 engine/src/SceneFrame.cpp
+    639 core/ui/PrimitiveBatch.cpp
+    625 engine/src/SceneProcedural.cpp
+    616 core/ui/Text.cpp
+    607 demo/app/Shell.cpp
+    584 core/ui/widget/Menu.cpp
+    558 core/files/FileBind.cpp
+    541 core/rhi/Swapchain.cpp
+    540 core/ui/LayoutBridge.cpp
+    538 core/ui/widget/TextEdit.cpp
+    526 engine/gpu_scene/Physics.cpp
+    457 demo/app/SceneBlockFill.cpp
+    456 core/ui/widget/VirtualGrid.cpp
+    452 engine/src/SceneTargets.cpp
+    449 core/wasm/WasmHost.cpp
+    422 core/ui/kit/Calendar.cpp
+    416 core/ui/widget/Splitter.cpp
+    406 core/image/ImageCompress.cpp
+    400 core/io/Json.cpp
+    400 core/host/PropFilter.cpp
+
+=== 2. HPP INCLUDES ===
+core/platform/Window.hpp:3:#include "platform/Input.hpp"
+core/platform/Window.hpp:5:#include <cstdint>
+core/platform/Window.hpp:6:#include <span>
+core/platform/Trace.hpp:4:#include <tracy/Tracy.hpp>
+core/platform/PlatformUtil.hpp:3:#include <cstddef>
+core/platform/PlatformUtil.hpp:4:#include <cstdint>
+core/platform/PlatformUtil.hpp:5:#include <ctime>
+core/platform/Action.hpp:3:#include "platform/Input.hpp"
+core/platform/Action.hpp:5:#include <cstdint>
+core/platform/Input.hpp:3:#include <cstdint>
+core/memory/FrameArena.hpp:3:#include <cstddef>
+core/memory/FrameArena.hpp:4:#include <cstdint>
+core/memory/FrameArena.hpp:5:#include <new>
+core/memory/FrameArena.hpp:6:#include <utility>
+core/rhi/Device.hpp:3:#include "rhi/DeviceCaps.hpp"
+core/rhi/Device.hpp:5:#include <volk.h>
+core/rhi/Device.hpp:6:#include <vk_mem_alloc.h>
+core/rhi/Device.hpp:8:#include <atomic>
+core/rhi/Device.hpp:9:#include <cstdint>
+core/rhi/Device.hpp:10:#include <mutex>
+core/rhi/Device.hpp:11:#include <span>
+core/rhi/Barrier.hpp:3:#include "rhi/GpuImage.hpp"
+core/rhi/Barrier.hpp:5:#include <volk.h>
+core/rhi/GpuImage.hpp:3:#include "rhi/Device.hpp"
+core/rhi/GpuImage.hpp:5:#include <cstdint>
+core/rhi/GpuBuffer.hpp:3:#include "rhi/Device.hpp"
+core/rhi/MeshDraw.hpp:3:#include "rhi/ShaderObject.hpp"
+core/rhi/GpuProfiler.hpp:3:#include "rhi/Device.hpp"
+core/rhi/GpuProfiler.hpp:5:#include <cstdint>
+core/rhi/DeviceCaps.hpp:3:#include <cstdint>
+core/rhi/ShaderObject.hpp:3:#include "rhi/Device.hpp"
+core/rhi/DescriptorHeap.hpp:3:#include "rhi/Device.hpp"
+core/rhi/DescriptorHeap.hpp:4:#include "rhi/GpuBuffer.hpp"
+core/rhi/DescriptorHeap.hpp:5:#include "rhi/GpuImage.hpp"
+core/rhi/DescriptorHeap.hpp:6:#include "rhi/DescriptorSlots.hpp"
+core/rhi/Swapchain.hpp:3:#include "rhi/DescriptorSlots.hpp"
+core/rhi/Swapchain.hpp:4:#include "rhi/Device.hpp"
+core/rhi/Swapchain.hpp:6:#include <cstdint>
+core/rhi/DescriptorSlots.hpp:3:#include <cstdint>
+core/ui/Panel.hpp:3:#include "ui/Flex.hpp"
+core/ui/Panel.hpp:4:#include "ui/Geometry.hpp"
+core/ui/Panel.hpp:5:#include "ui/Style.hpp"
+core/ui/Panel.hpp:7:#include <cstdint>
+core/ui/widget/Widgets.hpp:3:#include "ui/State.hpp"
+core/ui/widget/BinSlots.hpp:3:#include <cstdint>
+core/ui/widget/Check.hpp:3:#include "ui/Interaction.hpp"
+core/ui/widget/Check.hpp:4:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/Menu.hpp:3:#include "platform/Input.hpp"
+core/ui/widget/Menu.hpp:4:#include "ui/Command.hpp"
+core/ui/widget/Menu.hpp:5:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/Menu.hpp:7:#include <span>
+core/ui/widget/Search.hpp:3:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/Search.hpp:4:#include "ui/widget/Field.hpp"
+core/ui/widget/TreeView.hpp:3:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/TreeView.hpp:4:#include "ui/widget/Virtual.hpp"
+core/ui/widget/VirtualGrid.hpp:3:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/VirtualGrid.hpp:4:#include "ui/widget/Virtual.hpp"
+core/ui/widget/Label.hpp:3:#include "ui/Types.hpp"
+core/ui/widget/Label.hpp:4:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/Tip.hpp:3:#include "ui/Types.hpp"
+core/ui/widget/Scroll.hpp:3:#include "platform/Input.hpp"
+core/ui/widget/Scroll.hpp:4:#include "ui/Geometry.hpp"
+core/ui/widget/Scroll.hpp:5:#include "ui/Interaction.hpp"
+core/ui/widget/Scroll.hpp:6:#include "ui/Types.hpp"
+core/ui/widget/Scroll.hpp:7:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/Splitter.hpp:3:#include "platform/Input.hpp"
+core/ui/widget/Splitter.hpp:4:#include "ui/Interaction.hpp"
+core/ui/widget/Splitter.hpp:5:#include "ui/Types.hpp"
+core/ui/widget/Splitter.hpp:6:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/Tabs.hpp:3:#include "ui/Types.hpp"
+core/ui/widget/Thumb.hpp:3:#include "ui/Icon.hpp"
+core/ui/widget/Thumb.hpp:4:#include "ui/Types.hpp"
+core/ui/widget/CurveData.hpp:3:#include <type_traits>
+core/ui/widget/GradientData.hpp:3:#include <cstdint>
+core/ui/widget/GradientData.hpp:4:#include <type_traits>
+core/ui/widget/Mark.hpp:3:#include <cstdint>
+core/ui/widget/Mark.hpp:4:#include <type_traits>
+core/ui/widget/Range.hpp:3:#include <cstdint>
+core/ui/widget/Range.hpp:4:#include <type_traits>
+core/ui/widget/Slider.hpp:3:#include "ui/widget/Range.hpp"
+core/ui/widget/Slider.hpp:4:#include "platform/Input.hpp"
+core/ui/widget/Slider.hpp:5:#include "ui/Interaction.hpp"
+core/ui/widget/Slider.hpp:6:#include "ui/Types.hpp"
+core/ui/widget/Slider.hpp:7:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/Button.hpp:3:#include "ui/Interaction.hpp"
+core/ui/widget/Button.hpp:4:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/Calendar.hpp:3:#include "ui/Types.hpp"
+core/ui/widget/Calendar.hpp:4:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/Image.hpp:3:#include "ui/Types.hpp"
+core/ui/widget/Image.hpp:4:#include "ui/Primitive.hpp"
+core/ui/widget/Image.hpp:5:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/Breadcrumbs.hpp:3:#include "ui/Types.hpp"
+core/ui/widget/Breadcrumbs.hpp:4:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/ColorPicker.hpp:3:#include "ui/Primitive.hpp"
+core/ui/widget/ColorPicker.hpp:4:#include "ui/Interaction.hpp"
+core/ui/widget/ColorPicker.hpp:5:#include "ui/Types.hpp"
+core/ui/widget/ColorPicker.hpp:6:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/AssetSlot.hpp:3:#include "ui/Types.hpp"
+core/ui/widget/Gradient.hpp:3:#include "ui/widget/GradientData.hpp"
+core/ui/widget/Gradient.hpp:4:#include "ui/Types.hpp"
+core/ui/widget/Fold.hpp:3:#include "ui/Types.hpp"
+core/ui/widget/DragDrop.hpp:3:#include "ui/Interaction.hpp"
+core/ui/widget/DragDrop.hpp:4:#include "platform/Input.hpp"
+core/ui/widget/DragDrop.hpp:5:#include "ui/Types.hpp"
+core/ui/widget/DragDrop.hpp:7:#include <span>
+core/ui/widget/Rubberband.hpp:3:#include "ui/Interaction.hpp"
+core/ui/widget/Rubberband.hpp:4:#include "platform/Input.hpp"
+core/ui/widget/Rubberband.hpp:5:#include "ui/Types.hpp"
+core/ui/widget/Curve.hpp:3:#include "ui/widget/CurveData.hpp"
+core/ui/widget/Curve.hpp:4:#include "ui/Types.hpp"
+core/ui/widget/Chrome.hpp:3:#include "platform/Input.hpp"
+core/ui/widget/Chrome.hpp:4:#include "ui/Types.hpp"
+core/ui/widget/Chrome.hpp:5:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/Chrome.hpp:7:#include <type_traits>
+core/ui/widget/Virtual.hpp:3:#include "ui/Style.hpp"
+core/ui/widget/Virtual.hpp:4:#include "ui/Flex.hpp"
+core/ui/widget/Virtual.hpp:5:#include "ui/Types.hpp"
+core/ui/widget/Virtual.hpp:6:#include "ui/widget/Scroll.hpp"
+core/ui/widget/Choice.hpp:3:#include "ui/Types.hpp"
+core/ui/widget/Choice.hpp:4:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/Popover.hpp:3:#include "ui/Types.hpp"
+core/ui/widget/Docking.hpp:3:#include "ui/Interaction.hpp"
+core/ui/widget/Docking.hpp:4:#include "platform/Input.hpp"
+core/ui/widget/Docking.hpp:5:#include "ui/Types.hpp"
+core/ui/widget/Docking.hpp:6:#include "ui/widget/Chrome.hpp"
+core/ui/widget/Field.hpp:3:#include "ui/Types.hpp"
+core/ui/widget/Field.hpp:4:#include "ui/widget/BinSlots.hpp"
+core/ui/widget/Field.hpp:5:#include "platform/Input.hpp"
+core/ui/widget/Field.hpp:6:#include "ui/Geometry.hpp"
+core/ui/widget/Field.hpp:7:#include "ui/Interaction.hpp"
+core/ui/widget/Field.hpp:9:#include <cstdint>
+core/ui/widget/Field.hpp:10:#include <type_traits>
+core/ui/widget/Number.hpp:3:#include "ui/widget/Range.hpp"
+core/ui/widget/Number.hpp:4:#include "platform/Input.hpp"
+core/ui/widget/Number.hpp:5:#include "ui/Interaction.hpp"
+core/ui/widget/Number.hpp:6:#include "ui/Types.hpp"
+core/ui/widget/Number.hpp:8:#include <cstddef>
+core/ui/kit/ColorInternal.hpp:3:#include "ui/Primitive.hpp"
+core/ui/kit/ColorInternal.hpp:4:#include "ui/Style.hpp"
+core/ui/kit/ColorInternal.hpp:5:#include "ui/widget/ColorPicker.hpp"
+core/ui/rhi/UiRenderer.hpp:3:#include "rhi/DescriptorHeap.hpp"
+core/ui/rhi/UiRenderer.hpp:4:#include "rhi/GpuBuffer.hpp"
+core/ui/rhi/UiRenderer.hpp:5:#include "rhi/GpuImage.hpp"
+core/ui/rhi/UiRenderer.hpp:6:#include "rhi/ShaderObject.hpp"
+core/ui/rhi/UiRenderer.hpp:7:#include "rhi/Swapchain.hpp"
+core/ui/rhi/UiRenderer.hpp:8:#include "ui/Primitive.hpp"
+core/ui/rhi/UiRenderer.hpp:9:#include "ui/Typography.hpp"
+core/ui/rhi/UiRenderer.hpp:11:#include <span>
+core/ui/rhi/UiPhoto.hpp:3:#include "rhi/Device.hpp"
+core/ui/rhi/UiPhoto.hpp:4:#include "rhi/DescriptorHeap.hpp"
+core/ui/rhi/UiPhoto.hpp:5:#include "ui/Primitive.hpp"
+core/ui/rhi/UiPhoto.hpp:6:#include "ui/Geometry.hpp"
+core/ui/rhi/UiPhoto.hpp:7:#include "ui/rhi/UiRenderer.hpp"
+core/ui/rhi/UiPhoto.hpp:8:#include <cstdint>
+core/ui/rhi/Canvas.hpp:3:#include "platform/Input.hpp"
+core/ui/rhi/Canvas.hpp:4:#include "rhi/Swapchain.hpp"
+core/ui/rhi/Canvas.hpp:5:#include "rhi/DescriptorHeap.hpp"
+core/ui/rhi/Canvas.hpp:6:#include "ui/Style.hpp"
+core/ui/rhi/Canvas.hpp:7:#include "ui/Interaction.hpp"
+core/ui/rhi/Canvas.hpp:8:#include "ui/rhi/UiPhoto.hpp"
+core/ui/rhi/Canvas.hpp:9:#include "ui/UiWindowBridge.hpp"
+core/ui/rhi/Canvas.hpp:10:#include "ui/State.hpp"
+core/ui/rhi/Canvas.hpp:11:#include "ui/rhi/UiRenderer.hpp"
+core/ui/rhi/Canvas.hpp:13:#include <cstdint>
+core/ui/rhi/Canvas.hpp:14:#include <memory>
+core/ui/rhi/Font.hpp:3:#include "ui/Typography.hpp"
+core/ui/rhi/Font.hpp:4:#include "ui/Style.hpp"
+core/ui/rhi/Font.hpp:5:#include "rhi/DescriptorHeap.hpp"
+core/ui/rhi/Font.hpp:6:#include "rhi/GpuImage.hpp"
+core/ui/rhi/Font.hpp:7:#include "rhi/Device.hpp"
+core/ui/rhi/Font.hpp:9:#include <cstdint>
+core/ui/FlexAttr.hpp:3:#include "ui/Flex.hpp"
+core/ui/FlexAttr.hpp:4:#include <cstdint>
+core/ui/Flex.hpp:3:#include <cstdint>
+core/ui/Flex.hpp:4:#include <type_traits>
+core/ui/Geometry.hpp:3:#include "ui/Types.hpp"
+core/ui/Geometry.hpp:5:#include <cstdint>
+core/ui/Geometry.hpp:6:#include <type_traits>
+core/ui/LayoutBridge.hpp:3:#include "ui/Flex.hpp"
+core/ui/LayoutBridge.hpp:4:#include "ui/Geometry.hpp"
+core/ui/LayoutBridge.hpp:5:#include <cstdint>
+core/ui/Hover.hpp:3:#include <cstdint>
+core/ui/Bar.hpp:3:#include <cstdint>
+core/ui/Bar.hpp:4:#include <type_traits>
+core/ui/Icon.hpp:3:#include <cstdint>
+core/ui/Interaction.hpp:3:#include "ui/Geometry.hpp"
+core/ui/Interaction.hpp:4:#include <cstdint>
+core/ui/Interaction.hpp:5:#include <type_traits>
+core/ui/Metrics.hpp:3:#include <cstdint>
+core/ui/Metrics.hpp:4:#include <type_traits>
+core/ui/Primitive.hpp:3:#include <algorithm>
+core/ui/Primitive.hpp:4:#include <cstddef>
+core/ui/Primitive.hpp:5:#include <cstdint>
+core/ui/Primitive.hpp:6:#include <type_traits>
+core/ui/PrimitiveBatch.hpp:3:#include "ui/Geometry.hpp"
+core/ui/PrimitiveBatch.hpp:4:#include "ui/Primitive.hpp"
+core/ui/Style.hpp:3:#include "ui/Geometry.hpp"
+core/ui/Style.hpp:4:#include <cstdint>
+core/ui/Style.hpp:5:#include <type_traits>
+core/ui/Text.hpp:3:#include "ui/Geometry.hpp"
+core/ui/Text.hpp:4:#include "ui/Primitive.hpp"
+core/ui/Text.hpp:5:#include "ui/Style.hpp"
+core/ui/Text.hpp:6:#include "ui/Typography.hpp"
+core/ui/Text.hpp:8:#include <cstdint>
+core/ui/Typography.hpp:3:#include "ui/Geometry.hpp"
+core/ui/Typography.hpp:4:#include <cstdint>
+core/ui/Typography.hpp:5:#include <type_traits>
+core/ui/UiBin.hpp:3:#include "ui/Interaction.hpp"
+core/ui/UiBin.hpp:4:#include <cstdint>
+core/ui/UiWindowBridge.hpp:3:#include "ui/Interaction.hpp"
+core/ui/UiWindowBridge.hpp:4:#include "ui/Style.hpp"
+core/ui/UiWindowBridge.hpp:5:#include <cstdint>
+core/ui/Types.hpp:3:#include <cstdint>
+core/ui/State.hpp:3:#include "platform/Input.hpp"
+core/ui/State.hpp:4:#include "ui/Flex.hpp"
+core/ui/State.hpp:5:#include "ui/Geometry.hpp"
+core/ui/State.hpp:6:#include "ui/Interaction.hpp"
+core/ui/State.hpp:7:#include "ui/LayoutBridge.hpp"
+core/ui/State.hpp:8:#include "ui/Metrics.hpp"
+core/ui/State.hpp:9:#include "ui/Primitive.hpp"
+core/ui/State.hpp:10:#include "ui/Style.hpp"
+core/ui/State.hpp:11:#include "ui/Text.hpp"
+core/ui/State.hpp:12:#include "ui/Typography.hpp"
+core/ui/State.hpp:13:#include "ui/UiBin.hpp"
+core/ui/State.hpp:15:#include <flecs.h>
+core/ui/State.hpp:17:#include <vector>
+core/ui/Command.hpp:3:#include "ui/Interaction.hpp"
+core/ui/Command.hpp:4:#include "ui/Types.hpp"
+core/ui/Command.hpp:6:#include <cstdint>
+core/ui/Command.hpp:7:#include <type_traits>
+core/files/Format.hpp:3:#include "Str.hpp"
+core/files/Format.hpp:4:#include "Units.hpp"
+core/files/Format.hpp:6:#include <cstdint>
+core/files/Model.hpp:3:#include <cstdint>
+core/files/Model.hpp:4:#include <string>
+core/files/Model.hpp:5:#include <vector>
+core/files/FileMenu.hpp:3:#include "ui/State.hpp"
+core/files/FileActions.hpp:3:#include "platform/Input.hpp"
+core/files/FileActions.hpp:4:#include "ui/State.hpp"
+core/files/FileBind.hpp:3:#include "ui/State.hpp"
+core/files/FileDomain.hpp:3:#include "ui/State.hpp"
+core/files/FileSession.hpp:3:#include "files/FileTheme.hpp"
+core/files/FileSession.hpp:4:#include "files/Model.hpp"
+core/files/FileSession.hpp:6:#include <cstdint>
+core/files/FileTheme.hpp:3:#include "ui/Primitive.hpp"
+core/files/FileTheme.hpp:4:#include "ui/State.hpp"
+core/files/FileTheme.hpp:6:#include <cstdint>
+core/files/FileTheme.hpp:7:#include <type_traits>
+core/files/Browser.hpp:3:#include "files/Model.hpp"
+core/files/Browser.hpp:4:#include "ui/rhi/Canvas.hpp"
+core/image/ImageFile.hpp:3:#include "image/ImageCompress.hpp"
+core/image/ImageFile.hpp:4:#include "image/ImageDecode.hpp"
+core/image/ImageFile.hpp:5:#include "image/ImageUpload.hpp"
+core/image/ImageCompress.hpp:3:#include "image/ImageDecode.hpp"
+core/image/ImageCompress.hpp:4:#include "rhi/Device.hpp"
+core/image/ImageCompress.hpp:6:#include <cstdint>
+core/image/ImageDecode.hpp:3:#include <cstddef>
+core/image/ImageDecode.hpp:4:#include <cstdint>
+core/image/ImageUpload.hpp:3:#include "image/ImageDecode.hpp"
+core/image/ImageUpload.hpp:4:#include "rhi/GpuImage.hpp"
+core/image/ImageUpload.hpp:6:#include <cstdint>
+core/host/HostNote.hpp:3:#include "ui/State.hpp"
+core/host/HostNote.hpp:5:#include <flecs.h>
+core/host/PropBind.hpp:3:#include "host/PropGrid.hpp"
+core/host/PropBind.hpp:5:#include <cstdint>
+core/host/PropBind.hpp:6:#include <deque>
+core/host/PropBind.hpp:7:#include <vector>
+core/host/PropGrid.hpp:3:#include "ui/State.hpp"
+core/host/PropImport.hpp:3:#include "host/PropBind.hpp"
+core/host/PropImport.hpp:4:#include "ui/Style.hpp"
+core/host/PropImport.hpp:6:#include <cstdint>
+core/host/PropImport.hpp:7:#include <string_view>
+core/host/SceneMask.hpp:3:#include "platform/Input.hpp"
+core/host/Host.hpp:3:#include "memory/FrameArena.hpp"
+core/host/Host.hpp:4:#include "platform/Window.hpp"
+core/host/Host.hpp:5:#include "rhi/DescriptorHeap.hpp"
+core/host/Host.hpp:6:#include "rhi/Device.hpp"
+core/host/Host.hpp:7:#include "rhi/Swapchain.hpp"
+core/host/Host.hpp:8:#include "ui/rhi/Canvas.hpp"
+core/host/PropRoll.hpp:3:#include "host/PropGrid.hpp"
+core/host/PropRoll.hpp:4:#include "ui/State.hpp"
+core/host/PropImportInternal.hpp:3:#include "host/PropImport.hpp"
+core/host/PropImportInternal.hpp:4:#include "io/JsonCursor.hpp"
+core/host/PropImportInternal.hpp:5:#include "ui/Style.hpp"
+core/host/PropImportInternal.hpp:6:#include "ui/widget/Number.hpp"
+core/host/PropImportInternal.hpp:8:#include <cstdint>
+core/wasm/WasmHost.hpp:3:#include "memory/FrameArena.hpp"
+core/wasm/WasmHost.hpp:5:#include <cstdint>
+core/anim/Animation.hpp:3:#include <algorithm>
+core/anim/Animation.hpp:4:#include <cmath>
+core/anim/Animation.hpp:5:#include <cstdint>
+core/anim/Animation.hpp:6:#include <type_traits>
+core/time/Time.hpp:3:#include <cstdint>
+core/time/Time.hpp:4:#include <type_traits>
+core/color/Color.hpp:3:#include <cmath>
+core/color/Color.hpp:4:#include <cstdint>
+core/color/Color.hpp:5:#include <type_traits>
+core/doc/UndoStack.hpp:3:#include <cstdint>
+core/doc/UndoStack.hpp:4:#include <type_traits>
+core/doc/Document.hpp:3:#include "doc/UndoStack.hpp"
+core/doc/Document.hpp:5:#include <cstdint>
+core/doc/Document.hpp:6:#include <cstring>
+core/doc/Document.hpp:7:#include <type_traits>
+core/text/TextLayout.hpp:3:#include <algorithm>
+core/text/TextLayout.hpp:4:#include <cstdint>
+core/text/TextLayout.hpp:5:#include <type_traits>
+core/io/File.hpp:3:#include <cstddef>
+core/io/File.hpp:4:#include <cstdint>
+core/io/Json.hpp:3:#include <cstdint>
+core/io/Json.hpp:4:#include <vector>
+core/io/JsonCursor.hpp:3:#include <charconv>
+core/io/JsonCursor.hpp:4:#include <cstdint>
+core/io/JsonCursor.hpp:5:#include <cstring>
+core/io/JsonCursor.hpp:6:#include <system_error>
+core/io/Blob.hpp:3:#include <cstdint>
+core/io/Blob.hpp:4:#include <type_traits>
+core/gfx/Meshlet.hpp:3:#include "io/Blob.hpp"
+core/gfx/Meshlet.hpp:5:#include <algorithm>
+core/gfx/Meshlet.hpp:6:#include <cmath>
+core/gfx/Meshlet.hpp:7:#include <cstdint>
+core/gfx/Meshlet.hpp:8:#include <cstring>
+core/gfx/Meshlet.hpp:9:#include <type_traits>
+core/gfx/ClusterGrid.hpp:3:#include "gfx/Light.hpp"
+core/gfx/ClusterGrid.hpp:5:#include <cmath>
+core/gfx/ClusterGrid.hpp:6:#include <cstdint>
+core/gfx/ClusterGrid.hpp:7:#include <cstring>
+core/gfx/HiZ.hpp:3:#include <algorithm>
+core/gfx/HiZ.hpp:4:#include <cstdint>
+core/gfx/HiZ.hpp:5:#include <cmath>
+core/gfx/PrimitiveGen.hpp:3:#include "gfx/Meshlet.hpp"
+core/gfx/PrimitiveGen.hpp:5:#include <cstdint>
+core/gfx/PrimitiveGen.hpp:6:#include <cstring>
+core/gfx/Portal.hpp:3:#include <cstdint>
+core/gfx/Decal.hpp:3:#include <cstdint>
+core/gfx/Decal.hpp:4:#include <type_traits>
+core/gfx/Probe.hpp:3:#include <cstdint>
+core/gfx/Probe.hpp:4:#include <cstring>
+core/gfx/Probe.hpp:5:#include <type_traits>
+core/gfx/Material.hpp:3:#include "io/Blob.hpp"
+core/gfx/Material.hpp:5:#include <cstddef>
+core/gfx/Material.hpp:6:#include <cstdint>
+core/gfx/Material.hpp:7:#include <cstring>
+core/gfx/Material.hpp:8:#include <type_traits>
+core/gfx/MeshletBuilder.hpp:3:#include "gfx/Meshlet.hpp"
+core/gfx/MeshletBuilder.hpp:4:#include "gfx/PrimitiveGen.hpp"
+core/gfx/MeshletBuilder.hpp:6:#include <cmath>
+core/gfx/MeshletBuilder.hpp:7:#include <cstdint>
+core/gfx/MeshletBuilder.hpp:8:#include <vector>
+core/gfx/Light.hpp:3:#include <cstdint>
+core/gfx/Light.hpp:4:#include <type_traits>
+core/debug/DebugStats.hpp:3:#include <cstdint>
+core/debug/DebugStats.hpp:4:#include <cstdio>
+core/debug/DebugStats.hpp:5:#include <type_traits>
+core/debug/CpuScope.hpp:3:#include <chrono>
+core/debug/CpuScope.hpp:4:#include <cstdint>
+core/debug/CpuScope.hpp:6:#include <spdlog/spdlog.h>
+core/scene/TestScene.hpp:3:#include "gfx/ClusterGrid.hpp"
+core/scene/TestScene.hpp:4:#include "gfx/Light.hpp"
+core/scene/TestScene.hpp:5:#include "gfx/Material.hpp"
+core/scene/TestScene.hpp:6:#include "gfx/PrimitiveGen.hpp"
+core/scene/TestScene.hpp:8:#include <cstdint>
+core/scene/FlyCam.hpp:3:#include "platform/Input.hpp"
+core/scene/FlyCam.hpp:5:#include <cmath>
+core/scene/FlyCam.hpp:6:#include <cstdint>
+core/stream/StreamRing.hpp:3:#include <cstdint>
+core/stream/StreamRing.hpp:4:#include <type_traits>
+core/stream/StreamQueue.hpp:3:#include <cstdint>
+core/stream/StreamQueue.hpp:4:#include <type_traits>
+core/stream/ResidencyTable.hpp:3:#include "stream/StreamQueue.hpp"
+core/stream/ResidencyTable.hpp:5:#include <cstdint>
+core/stream/ResidencyTable.hpp:6:#include <type_traits>
+core/asset/AssimpImporter.hpp:3:#include <cstdint>
+core/asset/ProjectDoc.hpp:3:#include "gfx/Material.hpp"
+core/asset/ProjectDoc.hpp:5:#include <cstdint>
+core/asset/SceneBlob.hpp:3:#include "gfx/Light.hpp"
+core/asset/SceneBlob.hpp:4:#include "gfx/Material.hpp"
+core/asset/SceneBlob.hpp:5:#include "gfx/Meshlet.hpp"
+core/asset/SceneBlob.hpp:6:#include "io/Blob.hpp"
+core/asset/SceneBlob.hpp:7:#include "io/File.hpp"
+core/asset/SceneBlob.hpp:9:#include <cstdio>
+core/asset/SceneBlob.hpp:10:#include <cstdint>
+core/asset/SceneBlob.hpp:11:#include <cstring>
+core/Units.hpp:3:#include <cstdint>
+core/Units.hpp:4:#include <cstdio>
+core/audio/Audio.hpp:3:#include <cstdint>
+core/Str.hpp:3:#include <cstddef>
+core/Str.hpp:4:#include <cstdint>
+core/Str.hpp:5:#include <cstring>
+core/Str.hpp:6:#include <string_view>
+engine/gpu_scene/Mat4.hpp:3:#include <cmath>
+engine/gpu_scene/Mat4.hpp:4:#include <cstdint>
+engine/gpu_scene/Mat4.hpp:5:#include <cstring>
+engine/gpu_scene/MeshletGpu.hpp:3:#include <cstddef>
+engine/gpu_scene/MeshletGpu.hpp:4:#include <cstdint>
+engine/gpu_scene/Camera.hpp:3:#include "gpu_scene/Mat4.hpp"
+engine/gpu_scene/Camera.hpp:5:#include <algorithm>
+engine/gpu_scene/Camera.hpp:6:#include <cmath>
+engine/gpu_scene/Camera.hpp:7:#include <cstdint>
+engine/gpu_scene/Camera.hpp:8:#include <type_traits>
+engine/gpu_scene/InstanceData.hpp:3:#include <cstdint>
+engine/gpu_scene/InstanceData.hpp:4:#include <type_traits>
+engine/gpu_scene/InstanceCull.hpp:3:#include "gpu_scene/Camera.hpp"
+engine/gpu_scene/InstanceCull.hpp:4:#include "gpu_scene/InstanceData.hpp"
+engine/gpu_scene/InstanceCull.hpp:6:#include <cstdint>
+engine/gpu_scene/InstanceCull.hpp:9:#include <xmmintrin.h>
+engine/gpu_scene/SunShadow.hpp:3:#include "gpu_scene/Mat4.hpp"
+engine/gpu_scene/SunShadow.hpp:4:#include "gpu_scene/Camera.hpp"
+engine/gpu_scene/SunShadow.hpp:6:#include <algorithm>
+engine/gpu_scene/SunShadow.hpp:7:#include <cmath>
+engine/gpu_scene/SunShadow.hpp:8:#include <cstdint>
+engine/gpu_scene/MeshletCull.hpp:3:#include "gfx/HiZ.hpp"
+engine/gpu_scene/MeshletCull.hpp:4:#include "gfx/Meshlet.hpp"
+engine/gpu_scene/MeshletCull.hpp:5:#include "gpu_scene/Camera.hpp"
+engine/gpu_scene/MeshletCull.hpp:7:#include <cmath>
+engine/gpu_scene/MeshletCull.hpp:8:#include <cstdint>
+engine/gpu_scene/PointShadow.hpp:3:#include "gfx/Light.hpp"
+engine/gpu_scene/PointShadow.hpp:4:#include "gpu_scene/Camera.hpp"
+engine/gpu_scene/PointShadow.hpp:6:#include <cmath>
+engine/gpu_scene/PointShadow.hpp:7:#include <cstdint>
+engine/gpu_scene/LightMath.hpp:3:#include <cmath>
+engine/gpu_scene/LightMath.hpp:4:#include <cstdint>
+engine/gpu_scene/FrameUniforms.hpp:3:#include "gpu_scene/Mat4.hpp"
+engine/gpu_scene/FrameUniforms.hpp:5:#include <cstddef>
+engine/gpu_scene/FrameUniforms.hpp:6:#include <cstdint>
+engine/gpu_scene/SceneObject.hpp:3:#include "gpu_scene/Camera.hpp"
+engine/gpu_scene/SceneObject.hpp:5:#include "gfx/Material.hpp"
+engine/gpu_scene/SceneObject.hpp:7:#include <flecs.h>
+engine/gpu_scene/SceneObject.hpp:9:#include <cmath>
+engine/gpu_scene/SceneObject.hpp:10:#include <cstdint>
+engine/gpu_scene/SceneObject.hpp:11:#include <cstring>
+engine/gpu_scene/SceneObject.hpp:12:#include <type_traits>
+engine/gpu_scene/SceneObject.hpp:13:#include <vector>
+engine/gpu_scene/Physics.hpp:3:#include "gpu_scene/InstanceData.hpp"
+engine/gpu_scene/Physics.hpp:4:#include "gpu_scene/MeshletGpu.hpp"
+engine/gpu_scene/Physics.hpp:6:#include <cstdint>
+engine/include/render/Cube.hpp:3:#include "rhi/Device.hpp"
+engine/include/render/Cube.hpp:4:#include "rhi/GpuImage.hpp"
+engine/include/render/Cube.hpp:5:#include "rhi/ShaderObject.hpp"
+engine/include/render/Cull.hpp:3:#include "render/Visbuffer.hpp"
+engine/include/render/Cull.hpp:4:#include "rhi/Device.hpp"
+engine/include/render/Cull.hpp:5:#include "rhi/GpuBuffer.hpp"
+engine/include/render/Cull.hpp:6:#include "rhi/ShaderObject.hpp"
+engine/include/render/PassAllocators.hpp:3:#include "rhi/GpuBuffer.hpp"
+engine/include/render/PassAllocators.hpp:4:#include "rhi/GpuImage.hpp"
+engine/include/render/PassAllocators.hpp:6:#include <initializer_list>
+engine/include/render/PassBufferSync.hpp:3:#include "rhi/Barrier.hpp"
+engine/include/render/PassCommon.hpp:3:#include "gpu_scene/FrameUniforms.hpp"
+engine/include/render/PassCommon.hpp:4:#include "rhi/Barrier.hpp"
+engine/include/render/PassCommon.hpp:5:#include "rhi/DescriptorHeap.hpp"
+engine/include/render/PassCommon.hpp:6:#include "rhi/Device.hpp"
+engine/include/render/PassCommon.hpp:7:#include "rhi/GpuProfiler.hpp"
+engine/include/render/PassCommon.hpp:8:#include "rhi/ShaderObject.hpp"
+engine/include/render/PassCommon.hpp:10:#include <cstdint>
+engine/include/render/PassDebug.hpp:3:#include <cmath>
+engine/include/render/PassDebug.hpp:4:#include <cstdint>
+engine/include/render/PassRendering.hpp:3:#include <volk.h>
+engine/include/render/PassShaderGroup.hpp:3:#include "rhi/ShaderObject.hpp"
+engine/include/render/PassShaderGroup.hpp:5:#include <spdlog/spdlog.h>
+engine/include/render/PassTargets.hpp:3:#include "rhi/GpuImage.hpp"
+engine/include/render/PassTargets.hpp:5:#include <algorithm>
+engine/include/render/PassTargets.hpp:6:#include <cstdint>
+engine/include/render/PassTargets.hpp:7:#include <initializer_list>
+engine/include/render/Radiance.hpp:3:#include "gpu_scene/InstanceData.hpp"
+engine/include/render/Radiance.hpp:4:#include "gpu_scene/MeshletGpu.hpp"
+engine/include/render/Radiance.hpp:5:#include "render/PassCommon.hpp"
+engine/include/render/Radiance.hpp:6:#include "rhi/Device.hpp"
+engine/include/render/Radiance.hpp:7:#include "rhi/GpuBuffer.hpp"
+engine/include/render/Radiance.hpp:8:#include "rhi/ShaderObject.hpp"
+engine/include/render/Shade.hpp:3:#include "rhi/Device.hpp"
+engine/include/render/Shade.hpp:4:#include "rhi/GpuImage.hpp"
+engine/include/render/Shade.hpp:5:#include "render/PassTargets.hpp"
+engine/include/render/Shade.hpp:6:#include "rhi/ShaderObject.hpp"
+engine/include/render/Sky.hpp:3:#include "gpu_scene/FrameUniforms.hpp"
+engine/include/render/Sky.hpp:4:#include "rhi/Device.hpp"
+engine/include/render/Sky.hpp:5:#include "rhi/GpuBuffer.hpp"
+engine/include/render/Sky.hpp:6:#include "rhi/GpuImage.hpp"
+engine/include/render/Sky.hpp:7:#include "render/PassTargets.hpp"
+engine/include/render/Sky.hpp:8:#include "rhi/ShaderObject.hpp"
+engine/include/render/Visbuffer.hpp:3:#include "render/PassTargets.hpp"
+engine/include/render/Visbuffer.hpp:4:#include "rhi/Device.hpp"
+engine/include/render/Visbuffer.hpp:5:#include "rhi/GpuImage.hpp"
+engine/include/render/Visbuffer.hpp:6:#include "rhi/ShaderObject.hpp"
+engine/include/render/VisResolve.hpp:3:#include "gfx/Material.hpp"
+engine/include/render/VisResolve.hpp:4:#include "gpu_scene/InstanceData.hpp"
+engine/include/render/VisResolve.hpp:6:#include <cstdint>
+engine/include/render/Gizmo.hpp:3:#include "gpu_scene/SceneObject.hpp"
+engine/include/render/Gizmo.hpp:4:#include "rhi/GpuBuffer.hpp"
+engine/include/render/Gizmo.hpp:5:#include "rhi/GpuImage.hpp"
+engine/include/render/Gizmo.hpp:6:#include "rhi/ShaderObject.hpp"
+engine/include/render/Gizmo.hpp:7:#include "rhi/Swapchain.hpp"
+engine/include/render/Voxel.hpp:3:#include "render/PassCommon.hpp"
+engine/include/render/Voxel.hpp:4:#include "rhi/GpuBuffer.hpp"
+engine/include/render/Voxel.hpp:5:#include "rhi/GpuImage.hpp"
+engine/include/render/Voxel.hpp:6:#include "rhi/ShaderObject.hpp"
+engine/include/render/Fsr.hpp:3:#include "rhi/GpuBuffer.hpp"
+engine/include/render/Fsr.hpp:4:#include "rhi/GpuImage.hpp"
+engine/include/render/Fsr.hpp:5:#include "rhi/ShaderObject.hpp"
+engine/include/render/Fsr.hpp:7:#include <cstdint>
+engine/include/render/Gtao.hpp:3:#include "gpu_scene/FrameUniforms.hpp"
+engine/include/render/Gtao.hpp:4:#include "rhi/Device.hpp"
+engine/include/render/Gtao.hpp:5:#include "rhi/GpuBuffer.hpp"
+engine/include/render/Gtao.hpp:6:#include "rhi/GpuImage.hpp"
+engine/include/render/Gtao.hpp:7:#include "rhi/ShaderObject.hpp"
+engine/include/render/HeapBind.hpp:3:#include "rhi/DescriptorHeap.hpp"
+engine/include/render/HeapBind.hpp:4:#include "rhi/DescriptorSlots.hpp"
+engine/include/render/HeapBind.hpp:5:#include "rhi/GpuBuffer.hpp"
+engine/include/render/Restir.hpp:3:#include "gfx/Light.hpp"
+engine/include/render/Restir.hpp:4:#include "gpu_scene/FrameUniforms.hpp"
+engine/include/render/Restir.hpp:5:#include "render/PassCommon.hpp"
+engine/include/render/Restir.hpp:6:#include "rhi/GpuBuffer.hpp"
+engine/include/render/Restir.hpp:7:#include "rhi/GpuImage.hpp"
+engine/include/render/Restir.hpp:8:#include "rhi/ShaderObject.hpp"
+engine/include/render/Restir.hpp:10:#include <Rtxdi/DI/ReSTIRDI.h>
+engine/include/render/Restir.hpp:12:#include <cstdint>
+engine/include/render/Restir.hpp:13:#include <optional>
+engine/include/render/Restir.hpp:14:#include <vector>
+engine/include/render/Tonemap.hpp:3:#include "rhi/Device.hpp"
+engine/include/render/Tonemap.hpp:4:#include "rhi/GpuImage.hpp"
+engine/include/render/Tonemap.hpp:5:#include "render/PassTargets.hpp"
+engine/include/render/Tonemap.hpp:6:#include "rhi/ShaderObject.hpp"
+engine/include/render/Tonemap.hpp:7:#include "rhi/Swapchain.hpp"
+engine/include/render/Sharc.hpp:3:#include "rhi/Device.hpp"
+engine/include/render/Sharc.hpp:4:#include "rhi/GpuBuffer.hpp"
+engine/include/render/Sharc.hpp:5:#include "rhi/GpuImage.hpp"
+engine/include/render/Sharc.hpp:6:#include "rhi/ShaderObject.hpp"
+engine/include/render/Sharc.hpp:8:#include <cstddef>
+engine/include/render/Sharc.hpp:9:#include <cstdint>
+engine/include/render/Particles.hpp:3:#include "rhi/DescriptorHeap.hpp"
+engine/include/render/Particles.hpp:4:#include "rhi/GpuBuffer.hpp"
+engine/include/render/Particles.hpp:5:#include "rhi/GpuImage.hpp"
+engine/include/render/Particles.hpp:6:#include "rhi/ShaderObject.hpp"
+engine/include/render/Particles.hpp:8:#include <cstdint>
+engine/include/render/Fog.hpp:3:#include "rhi/GpuImage.hpp"
+engine/include/render/Fog.hpp:4:#include "rhi/ShaderObject.hpp"
+engine/include/render/Fog.hpp:6:#include <cstdint>
+engine/include/render/Rain.hpp:3:#include "rhi/DescriptorHeap.hpp"
+engine/include/render/Rain.hpp:4:#include "rhi/GpuBuffer.hpp"
+engine/include/render/Rain.hpp:5:#include "rhi/GpuImage.hpp"
+engine/include/render/Rain.hpp:6:#include "rhi/ShaderObject.hpp"
+engine/include/render/Rain.hpp:8:#include <cstdint>
+engine/include/render/Weather.hpp:3:#include "gpu_scene/FrameUniforms.hpp"
+engine/include/render/Weather.hpp:5:#include <cstdint>
+engine/include/render/Weather.hpp:6:#include <type_traits>
+engine/include/render/SceneBlock.hpp:3:#include <cstddef>
+engine/include/render/SceneBlock.hpp:4:#include <cstdint>
+engine/include/render/SceneBlock.hpp:5:#include <span>
+engine/include/render/SceneFrameImpl.hpp:3:#include "debug/DebugStats.hpp"
+engine/include/render/SceneFrameImpl.hpp:5:#include <cstdint>
+engine/include/render/SceneFrameImpl.hpp:6:#include <vector>
+engine/include/render/SceneFrameImpl.hpp:7:#include "gpu_scene/Camera.hpp"
+engine/include/render/SceneFrameImpl.hpp:8:#include "gpu_scene/InstanceData.hpp"
+engine/include/render/SceneFrameImpl.hpp:9:#include "gpu_scene/FrameUniforms.hpp"
+engine/include/render/SceneFrameImpl.hpp:10:#include "gpu_scene/MeshletGpu.hpp"
+engine/include/render/SceneFrameImpl.hpp:11:#include "gfx/Decal.hpp"
+engine/include/render/SceneFrameImpl.hpp:12:#include "gfx/Portal.hpp"
+engine/include/render/SceneFrameImpl.hpp:13:#include "gfx/Probe.hpp"
+engine/include/render/SceneFrameImpl.hpp:14:#include "image/ImageFile.hpp"
+engine/include/render/SceneFrameImpl.hpp:15:#include "gfx/Material.hpp"
+engine/include/render/SceneFrameImpl.hpp:16:#include "render/Cull.hpp"
+engine/include/render/SceneFrameImpl.hpp:17:#include "render/PassCommon.hpp"
+engine/include/render/SceneFrameImpl.hpp:18:#include "render/PassTargets.hpp"
+engine/include/render/SceneFrameImpl.hpp:19:#include "render/Cube.hpp"
+engine/include/render/SceneFrameImpl.hpp:20:#include "render/Shade.hpp"
+engine/include/render/SceneFrameImpl.hpp:21:#include "render/Sky.hpp"
+engine/include/render/SceneFrameImpl.hpp:22:#include "render/Hiz.hpp"
+engine/include/render/SceneFrameImpl.hpp:23:#include "render/Radiance.hpp"
+engine/include/render/SceneFrameImpl.hpp:24:#include "render/Sharc.hpp"
+engine/include/render/SceneFrameImpl.hpp:25:#include "render/Fsr.hpp"
+engine/include/render/SceneFrameImpl.hpp:26:#include "render/Gtao.hpp"
+engine/include/render/SceneFrameImpl.hpp:27:#include "render/Restir.hpp"
+engine/include/render/SceneFrameImpl.hpp:28:#include "render/Voxel.hpp"
+engine/include/render/SceneFrameImpl.hpp:29:#include "render/SceneFrame.hpp"
+engine/include/render/SceneFrameImpl.hpp:30:#include "render/Gizmo.hpp"
+engine/include/render/SceneFrameImpl.hpp:31:#include "render/Particles.hpp"
+engine/include/render/SceneFrameImpl.hpp:32:#include "render/Fog.hpp"
+engine/include/render/SceneFrameImpl.hpp:33:#include "render/Rain.hpp"
+engine/include/render/SceneFrameImpl.hpp:34:#include "render/Tonemap.hpp"
+engine/include/render/SceneFrameImpl.hpp:35:#include "render/Visbuffer.hpp"
+engine/include/render/SceneFrameImpl.hpp:36:#include "rhi/Swapchain.hpp"
+engine/include/render/SceneFrameImpl.hpp:37:#include "rhi/GpuBuffer.hpp"
+engine/include/render/SceneFrameImpl.hpp:38:#include "rhi/DescriptorHeap.hpp"
+engine/include/render/SceneFrameImpl.hpp:39:#include "debug/CpuScope.hpp"
+engine/include/render/SceneFrameImpl.hpp:40:#include "asset/SceneBlob.hpp"
+engine/include/render/SceneFrameImpl.hpp:41:#include "io/File.hpp"
+engine/include/render/SceneFrameImpl.hpp:42:#include "scene/FlyCam.hpp"
+engine/include/render/SceneFrameImpl.hpp:43:#include "scene/TestScene.hpp"
+engine/include/render/SceneFrameImpl.hpp:44:#include "rhi/GpuProfiler.hpp"
+engine/include/render/SceneFrameImpl.hpp:46:#include <vector>
+engine/include/render/Hiz.hpp:3:#include "rhi/Device.hpp"
+engine/include/render/Hiz.hpp:4:#include "rhi/ShaderObject.hpp"
+engine/include/render/Hiz.hpp:6:#include <volk.h>
+engine/include/render/SceneFrame.hpp:3:#include "gfx/Decal.hpp"
+engine/include/render/SceneFrame.hpp:4:#include "gfx/Material.hpp"
+engine/include/render/SceneFrame.hpp:5:#include "gfx/Portal.hpp"
+engine/include/render/SceneFrame.hpp:6:#include "platform/Input.hpp"
+engine/include/render/SceneFrame.hpp:7:#include "render/SceneBlock.hpp"
+engine/include/render/SceneFrame.hpp:8:#include "rhi/DescriptorHeap.hpp"
+engine/include/render/SceneFrame.hpp:9:#include "rhi/Swapchain.hpp"
+engine/include/render/SceneFrame.hpp:10:#include "scene/FlyCam.hpp"
+demo/app/Engine.hpp:3:#include "asset/ProjectDoc.hpp"
+demo/app/Engine.hpp:4:#include "host/Host.hpp"
+demo/app/Engine.hpp:5:#include "render/SceneFrame.hpp"
+demo/app/Engine.hpp:6:#include "ui/widget/ColorPicker.hpp"
+demo/app/Engine.hpp:7:#include "host/PropBind.hpp"
+demo/app/Engine.hpp:9:#include <vector>
+demo/app/HudBuild.hpp:3:#include "app/Engine.hpp"
+demo/app/HudBuild.hpp:4:#include "host/PropImport.hpp"
+demo/app/HudBuild.hpp:5:#include "ui/Style.hpp"
+demo/app/SceneBlockFill.hpp:3:#include "app/Engine.hpp"
+demo/app/Shell.hpp:3:#include "host/Host.hpp"
+demo/app/MatPriv.hpp:3:#include "app/Engine.hpp"
+demo/app/MatPriv.hpp:4:#include "ui/State.hpp"
+demo/app/MatPriv.hpp:6:#include <cstddef>
+
+=== 3. CPP INCLUDES ===
+core/platform/Dialog.cpp:1:#include "platform/Window.hpp"
+core/platform/Dialog.cpp:2:#include "platform/PlatformUtil.hpp"
+core/platform/Dialog.cpp:4:#include <SDL3/SDL.h>
+core/platform/Dialog.cpp:5:#include <SDL3/SDL_dialog.h>
+core/platform/Dialog.cpp:7:#include <atomic>
+core/platform/Dialog.cpp:8:#include <cstdlib>
+core/platform/Dialog.cpp:9:#include <cstring>
+core/platform/Dialog.cpp:10:#include <cstdio>
+core/platform/Check.cpp:1:#include "platform/Check.hpp"
+core/platform/Check.cpp:3:#include <cpptrace/cpptrace.hpp>
+core/platform/Check.cpp:5:#include <cstdio>
+core/platform/Jobs.cpp:1:#include "platform/Jobs.hpp"
+core/platform/Jobs.cpp:3:#include <algorithm>
+core/platform/Jobs.cpp:4:#include <atomic>
+core/platform/Jobs.cpp:5:#include <condition_variable>
+core/platform/Jobs.cpp:6:#include <mutex>
+core/platform/Jobs.cpp:7:#include <thread>
+core/platform/Jobs.cpp:8:#include <vector>
+core/platform/Desktop.cpp:1:#include "platform/Desktop.hpp"
+core/platform/Desktop.cpp:2:#include "platform/PlatformUtil.hpp"
+core/platform/Desktop.cpp:4:#include <cstdio>
+core/platform/Desktop.cpp:5:#include <cstring>
+core/platform/Desktop.cpp:9:#include <shellapi.h>
+core/platform/Desktop.cpp:10:#include <windows.h>
+core/platform/Desktop.cpp:12:#include <spawn.h>
+core/platform/Desktop.cpp:13:#include <sys/wait.h>
+core/platform/Action.cpp:1:#include "platform/Action.hpp"
+core/platform/Action.cpp:3:#include <SDL3/SDL.h>
+core/platform/Action.cpp:5:#include <cstdio>
+core/platform/Action.cpp:6:#include <cstring>
+core/platform/PlatformUtil.cpp:1:#include "platform/PlatformUtil.hpp"
+core/platform/PlatformUtil.cpp:3:#include <chrono>
+core/platform/PlatformUtil.cpp:4:#include <cstdio>
+core/platform/PlatformUtil.cpp:5:#include <cstdlib>
+core/platform/PlatformUtil.cpp:6:#include <cstring>
+core/platform/PlatformUtil.cpp:7:#include <ctime>
+core/platform/PlatformUtil.cpp:8:#include <filesystem>
+core/platform/PlatformUtil.cpp:9:#include <system_error>
+core/platform/PlatformUtil.cpp:15:#include <windows.h>
+core/platform/PlatformUtil.cpp:17:#include <fcntl.h>
+core/platform/PlatformUtil.cpp:18:#include <unistd.h>
+core/platform/WindowEvents.cpp:1:#include "platform/Window.hpp"
+core/platform/WindowEvents.cpp:2:#include "platform/Action.hpp"
+core/platform/WindowEvents.cpp:3:#include "platform/PlatformUtil.hpp"
+core/platform/WindowEvents.cpp:5:#include <SDL3/SDL.h>
+core/platform/WindowEvents.cpp:7:#include <cstring>
+core/platform/WindowEvents.cpp:8:#include <cstdio>
+core/platform/Window.cpp:1:#include "platform/Window.hpp"
+core/platform/Window.cpp:2:#include "platform/PlatformUtil.hpp"
+core/platform/Window.cpp:4:#include <SDL3/SDL.h>
+core/platform/Window.cpp:5:#include <SDL3/SDL_vulkan.h>
+core/platform/Window.cpp:6:#include <spdlog/spdlog.h>
+core/platform/Window.cpp:8:#include <cstring>
+core/platform/Window.cpp:9:#include <cstdio>
+core/memory/FrameArena.cpp:1:#include "memory/FrameArena.hpp"
+core/memory/FrameArena.cpp:3:#include "platform/Check.hpp"
+core/memory/FrameArena.cpp:5:#include <cstdlib>
+core/rhi/Swapchain.cpp:1:#include "rhi/Swapchain.hpp"
+core/rhi/Swapchain.cpp:2:#include "rhi/Barrier.hpp"
+core/rhi/Swapchain.cpp:3:#include "platform/PlatformUtil.hpp"
+core/rhi/Swapchain.cpp:4:#include "platform/Trace.hpp"
+core/rhi/Swapchain.cpp:6:#include <spdlog/spdlog.h>
+core/rhi/Swapchain.cpp:8:#include <algorithm>
+core/rhi/Swapchain.cpp:9:#include <vector>
+core/rhi/VolkVma.cpp:1:#include <volk.h>
+core/rhi/VolkVma.cpp:6:#include <vk_mem_alloc.h>
+core/rhi/GpuImage.cpp:1:#include "rhi/GpuImage.hpp"
+core/rhi/GpuImage.cpp:3:#include <spdlog/spdlog.h>
+core/rhi/GpuBuffer.cpp:1:#include "rhi/GpuBuffer.hpp"
+core/rhi/GpuBuffer.cpp:3:#include <spdlog/spdlog.h>
+core/rhi/DescriptorHeap.cpp:1:#include "rhi/DescriptorHeap.hpp"
+core/rhi/DescriptorHeap.cpp:3:#include <cassert>
+core/rhi/DescriptorHeap.cpp:4:#include <cstddef>
+core/rhi/DescriptorHeap.cpp:5:#include <spdlog/spdlog.h>
+core/rhi/MeshDraw.cpp:1:#include "rhi/MeshDraw.hpp"
+core/rhi/GpuProfiler.cpp:1:#include "rhi/GpuProfiler.hpp"
+core/rhi/GpuProfiler.cpp:3:#include <cstdio>
+core/rhi/GpuProfiler.cpp:4:#include <cstring>
+core/rhi/Device.cpp:1:#include "rhi/Device.hpp"
+core/rhi/Device.cpp:2:#include "Str.hpp"
+core/rhi/Device.cpp:4:#include <spdlog/spdlog.h>
+core/rhi/Device.cpp:6:#include <renderdoc_app.h>
+core/rhi/Device.cpp:10:#include <windows.h>
+core/rhi/Device.cpp:12:#include <dlfcn.h>
+core/rhi/Device.cpp:14:#include <cstring>
+core/rhi/Device.cpp:15:#include <vector>
+core/rhi/ShaderObject.cpp:1:#include "rhi/ShaderObject.hpp"
+core/rhi/ShaderObject.cpp:3:#include "io/File.hpp"
+core/rhi/ShaderObject.cpp:4:#include "platform/Check.hpp"
+core/rhi/ShaderObject.cpp:6:#include <spdlog/spdlog.h>
+core/ui/widget/AssetSlot.cpp:1:#include "ui/widget/AssetSlot.hpp"
+core/ui/widget/AssetSlot.cpp:3:#include "ui/Hover.hpp"
+core/ui/widget/AssetSlot.cpp:4:#include "ui/Panel.hpp"
+core/ui/widget/AssetSlot.cpp:5:#include "ui/Style.hpp"
+core/ui/widget/AssetSlot.cpp:6:#include "ui/Text.hpp"
+core/ui/widget/AssetSlot.cpp:7:#include "ui/widget/Button.hpp"
+core/ui/widget/AssetSlot.cpp:8:#include "ui/widget/DragDrop.hpp"
+core/ui/widget/AssetSlot.cpp:9:#include "ui/State.hpp"
+core/ui/widget/Breadcrumbs.cpp:1:#include "ui/widget/Breadcrumbs.hpp"
+core/ui/widget/Breadcrumbs.cpp:2:#include "ui/widget/Button.hpp"
+core/ui/widget/Breadcrumbs.cpp:3:#include "ui/State.hpp"
+core/ui/widget/Button.cpp:1:#include "ui/widget/Button.hpp"
+core/ui/widget/Button.cpp:3:#include "ui/widget/Image.hpp"
+core/ui/widget/Button.cpp:4:#include "ui/Hover.hpp"
+core/ui/widget/Button.cpp:5:#include "ui/Panel.hpp"
+core/ui/widget/Button.cpp:6:#include "ui/State.hpp"
+core/ui/widget/Button.cpp:7:#include "ui/Style.hpp"
+core/ui/widget/Button.cpp:8:#include "ui/Text.hpp"
+core/ui/widget/Choice.cpp:1:#include "ui/widget/Choice.hpp"
+core/ui/widget/Choice.cpp:3:#include "ui/widget/Menu.hpp"
+core/ui/widget/Choice.cpp:4:#include "ui/State.hpp"
+core/ui/widget/Choice.cpp:6:#include <cstring>
+core/ui/widget/Choice.cpp:7:#include <vector>
+core/ui/widget/Chrome.cpp:1:#include "ui/Geometry.hpp"
+core/ui/widget/Chrome.cpp:2:#include "ui/Icon.hpp"
+core/ui/widget/Chrome.cpp:3:#include "ui/UiBin.hpp"
+core/ui/widget/Chrome.cpp:4:#include "ui/Hover.hpp"
+core/ui/widget/Chrome.cpp:5:#include "ui/Panel.hpp"
+core/ui/widget/Chrome.cpp:6:#include "ui/widget/Chrome.hpp"
+core/ui/widget/Chrome.cpp:7:#include "ui/State.hpp"
+core/ui/widget/Curve.cpp:1:#include "ui/widget/Curve.hpp"
+core/ui/widget/Curve.cpp:3:#include "ui/Hover.hpp"
+core/ui/widget/Curve.cpp:4:#include "ui/Panel.hpp"
+core/ui/widget/Curve.cpp:5:#include "ui/Primitive.hpp"
+core/ui/widget/Curve.cpp:6:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/Curve.cpp:7:#include "ui/State.hpp"
+core/ui/widget/Docking.cpp:1:#include "ui/Bar.hpp"
+core/ui/widget/Docking.cpp:2:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/Docking.cpp:3:#include "ui/Geometry.hpp"
+core/ui/widget/Docking.cpp:4:#include "ui/widget/Chrome.hpp"
+core/ui/widget/Docking.cpp:5:#include "ui/widget/Docking.hpp"
+core/ui/widget/Docking.cpp:6:#include "ui/LayoutBridge.hpp"
+core/ui/widget/Docking.cpp:7:#include "ui/State.hpp"
+core/ui/widget/DragDrop.cpp:1:#include "ui/widget/DragDrop.hpp"
+core/ui/widget/DragDrop.cpp:3:#include "ui/Geometry.hpp"
+core/ui/widget/DragDrop.cpp:4:#include "ui/Panel.hpp"
+core/ui/widget/DragDrop.cpp:5:#include "ui/Text.hpp"
+core/ui/widget/DragDrop.cpp:6:#include "ui/widget/Virtual.hpp"
+core/ui/widget/DragDrop.cpp:7:#include "ui/State.hpp"
+core/ui/widget/Field.cpp:1:#include "Str.hpp"
+core/ui/widget/Field.cpp:2:#include "ui/Bar.hpp"
+core/ui/widget/Field.cpp:3:#include "ui/Icon.hpp"
+core/ui/widget/Field.cpp:4:#include "ui/Primitive.hpp"
+core/ui/widget/Field.cpp:5:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/Field.cpp:6:#include "ui/Hover.hpp"
+core/ui/widget/Field.cpp:7:#include "ui/Panel.hpp"
+core/ui/widget/Field.cpp:8:#include "ui/widget/Field.hpp"
+core/ui/widget/Field.cpp:9:#include "ui/State.hpp"
+core/ui/widget/Field.cpp:11:#include <charconv>
+core/ui/widget/Field.cpp:12:#include <cmath>
+core/ui/widget/Field.cpp:13:#include <cstdio>
+core/ui/widget/Field.cpp:14:#include <cstring>
+core/ui/widget/FieldFilter.cpp:1:#include "ui/widget/Field.hpp"
+core/ui/widget/Fold.cpp:1:#include "ui/Hover.hpp"
+core/ui/widget/Fold.cpp:2:#include "ui/Icon.hpp"
+core/ui/widget/Fold.cpp:3:#include "ui/Panel.hpp"
+core/ui/widget/Fold.cpp:4:#include "ui/Text.hpp"
+core/ui/widget/Fold.cpp:5:#include "ui/widget/Fold.hpp"
+core/ui/widget/Fold.cpp:6:#include "ui/State.hpp"
+core/ui/widget/Gradient.cpp:1:#include "ui/widget/Gradient.hpp"
+core/ui/widget/Gradient.cpp:3:#include "ui/Hover.hpp"
+core/ui/widget/Gradient.cpp:4:#include "ui/Panel.hpp"
+core/ui/widget/Gradient.cpp:5:#include "ui/Primitive.hpp"
+core/ui/widget/Gradient.cpp:6:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/Gradient.cpp:7:#include "ui/State.hpp"
+core/ui/widget/Image.cpp:1:#include "ui/Panel.hpp"
+core/ui/widget/Image.cpp:2:#include "ui/widget/Image.hpp"
+core/ui/widget/Image.cpp:3:#include "ui/State.hpp"
+core/ui/widget/Label.cpp:1:#include "ui/Panel.hpp"
+core/ui/widget/Label.cpp:2:#include "ui/State.hpp"
+core/ui/widget/Label.cpp:3:#include "ui/Text.hpp"
+core/ui/widget/Label.cpp:4:#include "ui/widget/Label.hpp"
+core/ui/widget/Menu.cpp:1:#include "ui/Hover.hpp"
+core/ui/widget/Menu.cpp:2:#include "ui/Icon.hpp"
+core/ui/widget/Menu.cpp:3:#include "ui/Panel.hpp"
+core/ui/widget/Menu.cpp:4:#include "ui/widget/Choice.hpp"
+core/ui/widget/Menu.cpp:5:#include "ui/widget/Menu.hpp"
+core/ui/widget/Menu.cpp:6:#include "ui/widget/Scroll.hpp"
+core/ui/widget/Menu.cpp:7:#include "ui/State.hpp"
+core/ui/widget/Menu.cpp:9:#include <span>
+core/ui/widget/Menu.cpp:11:#include <spdlog/spdlog.h>
+core/ui/widget/Number.cpp:1:#include "ui/Hover.hpp"
+core/ui/widget/Number.cpp:2:#include "ui/Panel.hpp"
+core/ui/widget/Number.cpp:3:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/Number.cpp:4:#include "ui/Text.hpp"
+core/ui/widget/Number.cpp:5:#include "ui/widget/Number.hpp"
+core/ui/widget/Number.cpp:6:#include "ui/State.hpp"
+core/ui/widget/Number.cpp:8:#include <cstdio>
+core/ui/widget/NumberEdit.cpp:1:#include "ui/widget/Field.hpp"
+core/ui/widget/NumberEdit.cpp:2:#include "ui/widget/Number.hpp"
+core/ui/widget/NumberEdit.cpp:3:#include "ui/State.hpp"
+core/ui/widget/NumberEdit.cpp:5:#include <charconv>
+core/ui/widget/Popover.cpp:1:#include "ui/widget/Popover.hpp"
+core/ui/widget/Popover.cpp:3:#include "ui/widget/Menu.hpp"
+core/ui/widget/Popover.cpp:4:#include "ui/State.hpp"
+core/ui/widget/Rubberband.cpp:1:#include "ui/widget/Rubberband.hpp"
+core/ui/widget/Rubberband.cpp:2:#include "ui/State.hpp"
+core/ui/widget/Search.cpp:1:#include "ui/widget/Search.hpp"
+core/ui/widget/Search.cpp:3:#include "Str.hpp"
+core/ui/widget/Search.cpp:4:#include "ui/Hover.hpp"
+core/ui/widget/Search.cpp:5:#include "ui/Panel.hpp"
+core/ui/widget/Search.cpp:6:#include "ui/State.hpp"
+core/ui/widget/TextEdit.cpp:1:#include "ui/widget/Field.hpp"
+core/ui/widget/TextEdit.cpp:2:#include "ui/State.hpp"
+core/ui/widget/TextEdit.cpp:4:#include <cstring>
+core/ui/widget/TreeView.cpp:1:#include "ui/Hover.hpp"
+core/ui/widget/TreeView.cpp:2:#include "ui/Icon.hpp"
+core/ui/widget/TreeView.cpp:3:#include "ui/widget/TreeView.hpp"
+core/ui/widget/TreeView.cpp:4:#include "ui/widget/Virtual.hpp"
+core/ui/widget/TreeView.cpp:5:#include "ui/State.hpp"
+core/ui/widget/Virtual.cpp:1:#include "ui/Hover.hpp"
+core/ui/widget/Virtual.cpp:2:#include "ui/widget/Virtual.hpp"
+core/ui/widget/Virtual.cpp:3:#include "ui/State.hpp"
+core/ui/widget/Virtual.cpp:5:#include <cstdio>
+core/ui/widget/Virtual.cpp:6:#include <cstring>
+core/ui/widget/VirtualGrid.cpp:1:#include "ui/Hover.hpp"
+core/ui/widget/VirtualGrid.cpp:2:#include "ui/Icon.hpp"
+core/ui/widget/VirtualGrid.cpp:3:#include "ui/widget/Virtual.hpp"
+core/ui/widget/VirtualGrid.cpp:4:#include "ui/widget/VirtualGrid.hpp"
+core/ui/widget/VirtualGrid.cpp:5:#include "ui/State.hpp"
+core/ui/widget/VirtualGrid.cpp:7:#include <cstring>
+core/ui/widget/VirtualGrid.cpp:9:#include <cmath>
+core/ui/widget/Widgets.cpp:1:#include "ui/Command.hpp"
+core/ui/widget/Widgets.cpp:2:#include "ui/widget/Button.hpp"
+core/ui/widget/Widgets.cpp:3:#include "ui/widget/Check.hpp"
+core/ui/widget/Widgets.cpp:4:#include "ui/widget/Choice.hpp"
+core/ui/widget/Widgets.cpp:5:#include "ui/widget/Calendar.hpp"
+core/ui/widget/Widgets.cpp:6:#include "ui/widget/ColorPicker.hpp"
+core/ui/widget/Widgets.cpp:7:#include "ui/widget/Curve.hpp"
+core/ui/widget/Widgets.cpp:8:#include "ui/widget/Gradient.hpp"
+core/ui/widget/Widgets.cpp:9:#include "ui/widget/Widgets.hpp"
+core/ui/widget/Widgets.cpp:10:#include "ui/UiBin.hpp"
+core/ui/widget/Widgets.cpp:11:#include "ui/widget/Chrome.hpp"
+core/ui/widget/Widgets.cpp:12:#include "ui/widget/DragDrop.hpp"
+core/ui/widget/Widgets.cpp:13:#include "ui/widget/Docking.hpp"
+core/ui/widget/Widgets.cpp:14:#include "ui/widget/Field.hpp"
+core/ui/widget/Widgets.cpp:15:#include "ui/widget/Search.hpp"
+core/ui/widget/Widgets.cpp:16:#include "ui/widget/Breadcrumbs.hpp"
+core/ui/widget/Widgets.cpp:17:#include "ui/widget/Image.hpp"
+core/ui/widget/Widgets.cpp:18:#include "ui/widget/Label.hpp"
+core/ui/widget/Widgets.cpp:19:#include "ui/widget/Menu.hpp"
+core/ui/widget/Widgets.cpp:20:#include "ui/widget/Rubberband.hpp"
+core/ui/widget/Widgets.cpp:21:#include "ui/widget/Scroll.hpp"
+core/ui/widget/Widgets.cpp:22:#include "ui/widget/Number.hpp"
+core/ui/widget/Widgets.cpp:23:#include "ui/widget/Slider.hpp"
+core/ui/widget/Widgets.cpp:24:#include "ui/widget/Splitter.hpp"
+core/ui/widget/Widgets.cpp:25:#include "ui/widget/TreeView.hpp"
+core/ui/widget/Widgets.cpp:26:#include "ui/widget/VirtualGrid.hpp"
+core/ui/widget/Widgets.cpp:27:#include "ui/LayoutBridge.hpp"
+core/ui/widget/Tip.cpp:1:#include "ui/Panel.hpp"
+core/ui/widget/Tip.cpp:2:#include "ui/Text.hpp"
+core/ui/widget/Tip.cpp:3:#include "ui/widget/Tip.hpp"
+core/ui/widget/Tip.cpp:4:#include "ui/State.hpp"
+core/ui/widget/Slider.cpp:1:#include "ui/Hover.hpp"
+core/ui/widget/Slider.cpp:2:#include "ui/Panel.hpp"
+core/ui/widget/Slider.cpp:3:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/Slider.cpp:4:#include "ui/widget/Slider.hpp"
+core/ui/widget/Slider.cpp:5:#include "ui/State.hpp"
+core/ui/widget/Slider.cpp:7:#include <cstdio>
+core/ui/widget/Slider.cpp:8:#include <cstring>
+core/ui/widget/Scroll.cpp:1:#include "ui/Bar.hpp"
+core/ui/widget/Scroll.cpp:2:#include "ui/widget/Scroll.hpp"
+core/ui/widget/Scroll.cpp:3:#include "ui/State.hpp"
+core/ui/widget/Scroll.cpp:5:#include <algorithm>
+core/ui/widget/Scroll.cpp:6:#include <cmath>
+core/ui/widget/Scroll.cpp:7:#include <cstring>
+core/ui/widget/Splitter.cpp:1:#include "ui/Panel.hpp"
+core/ui/widget/Splitter.cpp:2:#include "ui/widget/Splitter.hpp"
+core/ui/widget/Splitter.cpp:3:#include "ui/State.hpp"
+core/ui/widget/Splitter.cpp:5:#include <algorithm>
+core/ui/widget/Tabs.cpp:1:#include "ui/widget/Button.hpp"
+core/ui/widget/Tabs.cpp:2:#include "ui/widget/Tabs.hpp"
+core/ui/widget/Tabs.cpp:3:#include "ui/State.hpp"
+core/ui/widget/Thumb.cpp:1:#include "ui/widget/Thumb.hpp"
+core/ui/widget/Thumb.cpp:2:#include "ui/State.hpp"
+core/ui/widget/Thumb.cpp:3:#include "ui/widget/Image.hpp"
+core/ui/widget/Check.cpp:1:#include "ui/widget/Check.hpp"
+core/ui/widget/Check.cpp:3:#include "ui/Hover.hpp"
+core/ui/widget/Check.cpp:4:#include "ui/Icon.hpp"
+core/ui/widget/Check.cpp:5:#include "ui/widget/Mark.hpp"
+core/ui/widget/Check.cpp:6:#include "ui/Panel.hpp"
+core/ui/widget/Check.cpp:7:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/Check.cpp:8:#include "ui/State.hpp"
+core/ui/widget/Check.cpp:9:#include "ui/Text.hpp"
+core/ui/widget/Check.cpp:11:#include <bit>
+core/ui/widget/Check.cpp:12:#include <cstdint>
+core/ui/widget/FieldDraw.cpp:1:#include "ui/Bar.hpp"
+core/ui/widget/FieldDraw.cpp:2:#include "ui/Icon.hpp"
+core/ui/widget/FieldDraw.cpp:3:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/FieldDraw.cpp:4:#include "ui/widget/Field.hpp"
+core/ui/widget/FieldDraw.cpp:5:#include "ui/State.hpp"
+core/ui/widget/FieldDraw.cpp:7:#include <cstdint>
+core/ui/kit/Calendar.cpp:1:#include "Str.hpp"
+core/ui/kit/Calendar.cpp:2:#include "platform/PlatformUtil.hpp"
+core/ui/kit/Calendar.cpp:3:#include "ui/UiBin.hpp"
+core/ui/kit/Calendar.cpp:4:#include "ui/widget/Button.hpp"
+core/ui/kit/Calendar.cpp:5:#include "ui/widget/Calendar.hpp"
+core/ui/kit/Calendar.cpp:6:#include "ui/widget/Field.hpp"
+core/ui/kit/Calendar.cpp:7:#include "ui/widget/Label.hpp"
+core/ui/kit/Calendar.cpp:8:#include "ui/Panel.hpp"
+core/ui/kit/Calendar.cpp:9:#include "ui/Style.hpp"
+core/ui/kit/Calendar.cpp:10:#include "ui/LayoutBridge.hpp"
+core/ui/kit/Calendar.cpp:11:#include "ui/State.hpp"
+core/ui/kit/Calendar.cpp:13:#include <cmath>
+core/ui/kit/Calendar.cpp:14:#include <cstring>
+core/ui/kit/Calendar.cpp:15:#include <ctime>
+core/ui/kit/Color.cpp:1:#include "Str.hpp"
+core/ui/kit/Color.cpp:2:#include "ui/Icon.hpp"
+core/ui/kit/Color.cpp:3:#include "ui/Panel.hpp"
+core/ui/kit/Color.cpp:4:#include "ui/widget/Button.hpp"
+core/ui/kit/Color.cpp:5:#include "ui/widget/Chrome.hpp"
+core/ui/kit/Color.cpp:6:#include "ui/widget/Field.hpp"
+core/ui/kit/Color.cpp:7:#include "ui/widget/Label.hpp"
+core/ui/kit/Color.cpp:8:#include "ui/widget/Slider.hpp"
+core/ui/kit/Color.cpp:9:#include "color/Color.hpp"
+core/ui/kit/Color.cpp:10:#include "ui/State.hpp"
+core/ui/kit/Color.cpp:11:#include "ui/kit/ColorInternal.hpp"
+core/ui/kit/Color.cpp:13:#include <algorithm>
+core/ui/kit/Color.cpp:14:#include <charconv>
+core/ui/kit/Color.cpp:15:#include <format>
+core/ui/kit/Color.cpp:16:#include <string_view>
+core/ui/kit/Color.cpp:17:#include <cmath>
+core/ui/kit/Color.cpp:18:#include <cstring>
+core/ui/kit/Color.cpp:19:#include <ctime>
+core/ui/kit/ColorDraw.cpp:1:#include "ui/Bar.hpp"
+core/ui/kit/ColorDraw.cpp:2:#include "ui/PrimitiveBatch.hpp"
+core/ui/kit/ColorDraw.cpp:3:#include "ui/widget/ColorPicker.hpp"
+core/ui/kit/ColorDraw.cpp:4:#include "color/Color.hpp"
+core/ui/kit/ColorDraw.cpp:5:#include "ui/State.hpp"
+core/ui/kit/ColorDraw.cpp:7:#include <algorithm>
+core/ui/kit/ColorDraw.cpp:8:#include <cmath>
+core/ui/kit/ColorPopup.cpp:1:#include "ui/Panel.hpp"
+core/ui/kit/ColorPopup.cpp:2:#include "color/Color.hpp"
+core/ui/kit/ColorPopup.cpp:3:#include "ui/State.hpp"
+core/ui/kit/ColorPopup.cpp:4:#include "ui/kit/ColorInternal.hpp"
+core/ui/kit/ColorPopup.cpp:6:#include <algorithm>
+core/ui/kit/ColorPopup.cpp:7:#include <charconv>
+core/ui/kit/ColorPopup.cpp:8:#include <format>
+core/ui/kit/ColorPopup.cpp:9:#include <string_view>
+core/ui/kit/ColorPopup.cpp:10:#include <cmath>
+core/ui/kit/ColorPopup.cpp:11:#include <cstring>
+core/ui/kit/ColorPopup.cpp:12:#include <ctime>
+core/ui/rhi/UiRenderer.cpp:1:#include "ui/rhi/UiRenderer.hpp"
+core/ui/rhi/UiRenderer.cpp:3:#include "ui/PrimitiveBatch.hpp"
+core/ui/rhi/UiRenderer.cpp:4:#include "image/ImageFile.hpp"
+core/ui/rhi/UiRenderer.cpp:5:#include "rhi/Barrier.hpp"
+core/ui/rhi/UiRenderer.cpp:6:#include "rhi/MeshDraw.hpp"
+core/ui/rhi/UiRenderer.cpp:8:#include <spdlog/spdlog.h>
+core/ui/rhi/UiRenderer.cpp:10:#include <cstring>
+core/ui/rhi/UiPhoto.cpp:1:#include "ui/rhi/UiPhoto.hpp"
+core/ui/rhi/UiPhoto.cpp:2:#include "ui/State.hpp"
+core/ui/rhi/UiPhoto.cpp:3:#include "image/ImageFile.hpp"
+core/ui/rhi/UiPhoto.cpp:4:#include "image/ImageUpload.hpp"
+core/ui/rhi/UiPhoto.cpp:5:#include <spdlog/spdlog.h>
+core/ui/rhi/Canvas.cpp:1:#include "ui/rhi/Canvas.hpp"
+core/ui/rhi/Canvas.cpp:2:#include "ui/LayoutBridge.hpp"
+core/ui/rhi/Canvas.cpp:3:#include "ui/PrimitiveBatch.hpp"
+core/ui/rhi/Canvas.cpp:4:#include "ui/rhi/Font.hpp"
+core/ui/rhi/Canvas.cpp:5:#include "ui/State.hpp"
+core/ui/rhi/Canvas.cpp:6:#include "platform/Trace.hpp"
+core/ui/rhi/Canvas.cpp:8:#include <spdlog/spdlog.h>
+core/ui/rhi/Canvas.cpp:10:#include <algorithm>
+core/ui/rhi/Canvas.cpp:11:#include <cmath>
+core/ui/rhi/Canvas.cpp:12:#include <cstring>
+core/ui/rhi/Canvas.cpp:13:#include <memory>
+core/ui/rhi/Canvas.cpp:14:#include <span>
+core/ui/rhi/Font.cpp:1:#include "ui/rhi/Font.hpp"
+core/ui/rhi/Font.cpp:2:#include "ui/Primitive.hpp"
+core/ui/rhi/Font.cpp:3:#include "image/ImageUpload.hpp"
+core/ui/rhi/Font.cpp:4:#include "io/File.hpp"
+core/ui/rhi/Font.cpp:5:#include "platform/PlatformUtil.hpp"
+core/ui/rhi/Font.cpp:7:#include <ft2build.h>
+core/ui/rhi/Font.cpp:8:#include FT_FREETYPE_H
+core/ui/rhi/Font.cpp:9:#include FT_MODULE_H
+core/ui/rhi/Font.cpp:11:#include <spdlog/spdlog.h>
+core/ui/rhi/Font.cpp:13:#include <cstring>
+core/ui/rhi/Font.cpp:14:#include <span>
+core/ui/FlexAttr.cpp:1:#include "ui/FlexAttr.hpp"
+core/ui/FlexAttr.cpp:2:#include <cstring>
+core/ui/Command.cpp:1:#include "ui/Command.hpp"
+core/ui/Command.cpp:2:#include "ui/State.hpp"
+core/ui/Focus.cpp:1:#include "ui/State.hpp"
+core/ui/Hit.cpp:1:#include "ui/Interaction.hpp"
+core/ui/Hit.cpp:2:#include "ui/PrimitiveBatch.hpp"
+core/ui/Hit.cpp:3:#include "ui/State.hpp"
+core/ui/Hit.cpp:4:#include "platform/Trace.hpp"
+core/ui/Hover.cpp:1:#include "ui/Hover.hpp"
+core/ui/Hover.cpp:2:#include "ui/Interaction.hpp"
+core/ui/Hover.cpp:3:#include "ui/State.hpp"
+core/ui/Input.cpp:1:#include "Str.hpp"
+core/ui/Input.cpp:2:#include "ui/State.hpp"
+core/ui/Json.cpp:1:#include "Str.hpp"
+core/ui/Json.cpp:2:#include "io/File.hpp"
+core/ui/Json.cpp:3:#include "io/JsonCursor.hpp"
+core/ui/Json.cpp:4:#include "ui/LayoutBridge.hpp"
+core/ui/Json.cpp:5:#include "ui/FlexAttr.hpp"
+core/ui/Json.cpp:6:#include "ui/State.hpp"
+core/ui/Json.cpp:8:#include <spdlog/spdlog.h>
+core/ui/Json.cpp:10:#include <charconv>
+core/ui/Json.cpp:11:#include <cstring>
+core/ui/Json.cpp:12:#include <cstdio>
+core/ui/Json.cpp:13:#include <cstdlib>
+core/ui/Json.cpp:14:#include <system_error>
+core/ui/LayoutBridge.cpp:1:#include "ui/LayoutBridge.hpp"
+core/ui/LayoutBridge.cpp:2:#include "ui/State.hpp"
+core/ui/LayoutBridge.cpp:3:#include "platform/Trace.hpp"
+core/ui/LayoutBridge.cpp:5:#include <cstdint>
+core/ui/LayoutBridge.cpp:6:#include <yoga/YGValue.h>
+core/ui/LayoutBridge.cpp:7:#include <yoga/Yoga.h>
+core/ui/Motion.cpp:1:#include "ui/State.hpp"
+core/ui/Motion.cpp:3:#include <yoga/Yoga.h>
+core/ui/Node.cpp:1:#include "Str.hpp"
+core/ui/Node.cpp:2:#include "ui/PrimitiveBatch.hpp"
+core/ui/Node.cpp:3:#include "ui/State.hpp"
+core/ui/Node.cpp:4:#include "platform/Trace.hpp"
+core/ui/Node.cpp:6:#include <yoga/Yoga.h>
+core/ui/Node.cpp:8:#include <cstdint>
+core/ui/Node.cpp:9:#include <cmath>
+core/ui/Node.cpp:10:#include <cstdio>
+core/ui/Node.cpp:11:#include <cstring>
+core/ui/Panel.cpp:1:#include "ui/Bar.hpp"
+core/ui/Panel.cpp:2:#include "ui/Panel.hpp"
+core/ui/Panel.cpp:3:#include "ui/Interaction.hpp"
+core/ui/Panel.cpp:4:#include "ui/PrimitiveBatch.hpp"
+core/ui/Panel.cpp:5:#include "ui/State.hpp"
+core/ui/Panel.cpp:7:#include <bit>
+core/ui/Text.cpp:1:#include "Str.hpp"
+core/ui/Text.cpp:2:#include "ui/Text.hpp"
+core/ui/Text.cpp:3:#include "ui/LayoutBridge.hpp"
+core/ui/Text.cpp:4:#include "ui/PrimitiveBatch.hpp"
+core/ui/Text.cpp:5:#include "ui/State.hpp"
+core/ui/Text.cpp:7:#include <bit>
+core/ui/Text.cpp:8:#include <cstring>
+core/ui/UiBin.cpp:1:#include "ui/UiBin.hpp"
+core/ui/UiBin.cpp:2:#include "ui/FlexAttr.hpp"
+core/ui/UiBin.cpp:3:#include "ui/State.hpp"
+core/ui/UiBin.cpp:4:#include "io/File.hpp"
+core/ui/UiBin.cpp:6:#include <cstddef>
+core/ui/UiBin.cpp:7:#include <cstring>
+core/ui/UiWindowBridge.cpp:1:#include "ui/UiWindowBridge.hpp"
+core/ui/UiWindowBridge.cpp:2:#include "ui/State.hpp"
+core/ui/PrimitiveBatch.cpp:1:#include "ui/PrimitiveBatch.hpp"
+core/ui/PrimitiveBatch.cpp:2:#include "ui/Bar.hpp"
+core/ui/PrimitiveBatch.cpp:3:#include "memory/FrameArena.hpp"
+core/ui/PrimitiveBatch.cpp:4:#include "platform/Check.hpp"
+core/ui/PrimitiveBatch.cpp:5:#include "ui/State.hpp"
+core/ui/PrimitiveBatch.cpp:6:#include "ui/Hover.hpp"
+core/ui/PrimitiveBatch.cpp:7:#include "ui/Panel.hpp"
+core/ui/PrimitiveBatch.cpp:8:#include "ui/Text.hpp"
+core/ui/PrimitiveBatch.cpp:10:#include <algorithm>
+core/ui/PrimitiveBatch.cpp:11:#include <bit>
+core/ui/PrimitiveBatch.cpp:12:#include <cmath>
+core/ui/PrimitiveBatch.cpp:13:#include <cstring>
+core/ui/NodeDump.cpp:1:#include "ui/State.hpp"
+core/ui/NodeDump.cpp:3:#include <spdlog/spdlog.h>
+core/ui/NodeDump.cpp:5:#include <yoga/Yoga.h>
+core/ui/NodeDump.cpp:7:#include <cstdint>
+core/ui/NodeDump.cpp:8:#include <cstring>
+core/files/FileTheme.cpp:1:#include "files/Browser.hpp"
+core/files/FileTheme.cpp:2:#include "files/FileSession.hpp"
+core/files/FileTheme.cpp:3:#include "files/FileTheme.hpp"
+core/files/Format.cpp:1:#include "files/Format.hpp"
+core/files/Format.cpp:3:#include "platform/PlatformUtil.hpp"
+core/files/Format.cpp:5:#include <cstdint>
+core/files/Format.cpp:6:#include <cstdio>
+core/files/Format.cpp:7:#include <cstring>
+core/files/Format.cpp:8:#include <filesystem>
+core/files/Model.cpp:1:#include "files/Model.hpp"
+core/files/Model.cpp:2:#include "files/Format.hpp"
+core/files/Model.cpp:3:#include "platform/Desktop.hpp"
+core/files/Model.cpp:4:#include "platform/PlatformUtil.hpp"
+core/files/Model.cpp:6:#include <algorithm>
+core/files/Model.cpp:7:#include <cstdint>
+core/files/Model.cpp:8:#include <cstdio>
+core/files/Model.cpp:9:#include <cstring>
+core/files/Model.cpp:10:#include <filesystem>
+core/files/Model.cpp:11:#include <string>
+core/files/Model.cpp:12:#include <unordered_set>
+core/files/Model.cpp:13:#include <utility>
+core/files/Model.cpp:14:#include <vector>
+core/files/FileActions.cpp:1:#include "files/FileActions.hpp"
+core/files/FileActions.cpp:3:#include "files/FileDomain.hpp"
+core/files/FileActions.cpp:4:#include "files/FileSession.hpp"
+core/files/FileActions.cpp:5:#include "ui/widget/Menu.hpp"
+core/files/FileActions.cpp:6:#include "ui/widget/VirtualGrid.hpp"
+core/files/FileBind.cpp:1:#include "files/FileBind.hpp"
+core/files/FileBind.cpp:2:#include "ui/Icon.hpp"
+core/files/FileBind.cpp:4:#include "Units.hpp"
+core/files/FileBind.cpp:5:#include "files/FileDomain.hpp"
+core/files/FileBind.cpp:6:#include "files/FileMenu.hpp"
+core/files/FileBind.cpp:7:#include "files/FileSession.hpp"
+core/files/FileBind.cpp:8:#include "files/FileTheme.hpp"
+core/files/FileBind.cpp:9:#include "files/Format.hpp"
+core/files/FileBind.cpp:10:#include "ui/widget/AssetSlot.hpp"
+core/files/FileBind.cpp:11:#include "ui/widget/Breadcrumbs.hpp"
+core/files/FileBind.cpp:12:#include "ui/widget/DragDrop.hpp"
+core/files/FileBind.cpp:13:#include "ui/widget/Field.hpp"
+core/files/FileBind.cpp:14:#include "ui/widget/Choice.hpp"
+core/files/FileBind.cpp:15:#include "ui/widget/Menu.hpp"
+core/files/FileBind.cpp:16:#include "ui/widget/Search.hpp"
+core/files/FileBind.cpp:17:#include "ui/widget/Number.hpp"
+core/files/FileBind.cpp:18:#include "ui/widget/Rubberband.hpp"
+core/files/FileBind.cpp:19:#include "ui/widget/Slider.hpp"
+core/files/FileBind.cpp:20:#include "ui/Style.hpp"
+core/files/FileBind.cpp:21:#include "ui/widget/Thumb.hpp"
+core/files/FileBind.cpp:22:#include "ui/widget/TreeView.hpp"
+core/files/FileBind.cpp:23:#include "ui/widget/VirtualGrid.hpp"
+core/files/FileBind.cpp:25:#include <cstdio>
+core/files/FileBind.cpp:26:#include <cstring>
+core/files/FileBind.cpp:27:#include <filesystem>
+core/files/FileBind.cpp:28:#include <string>
+core/files/FileMenu.cpp:1:#include "files/FileMenu.hpp"
+core/files/FileMenu.cpp:3:#include "files/FileSession.hpp"
+core/files/FileMenu.cpp:4:#include "ui/widget/Menu.hpp"
+core/files/FileSession.cpp:1:#include "files/FileSession.hpp"
+core/files/FileSession.cpp:3:#include "asset/ProjectDoc.hpp"
+core/files/FileSession.cpp:4:#include "files/FileDomain.hpp"
+core/files/FileSession.cpp:5:#include "files/Format.hpp"
+core/files/FileSession.cpp:6:#include "platform/Desktop.hpp"
+core/files/FileSession.cpp:7:#include "ui/widget/Breadcrumbs.hpp"
+core/files/FileSession.cpp:8:#include "ui/widget/Button.hpp"
+core/files/FileSession.cpp:9:#include "ui/widget/TreeView.hpp"
+core/files/FileSession.cpp:10:#include "ui/widget/VirtualGrid.hpp"
+core/files/FileSession.cpp:12:#include <cstdio>
+core/files/FileSession.cpp:13:#include <cstring>
+core/files/FileSession.cpp:14:#include <filesystem>
+core/files/FileSession.cpp:15:#include <string>
+core/files/Files.cpp:1:#include "Str.hpp"
+core/files/Files.cpp:2:#include "files/Browser.hpp"
+core/files/Files.cpp:3:#include "files/FileActions.hpp"
+core/files/Files.cpp:4:#include "files/FileBind.hpp"
+core/files/Files.cpp:5:#include "files/FileDomain.hpp"
+core/files/Files.cpp:6:#include "files/FileSession.hpp"
+core/files/Files.cpp:7:#include "files/FileTheme.hpp"
+core/files/Files.cpp:8:#include "ui/widget/AssetSlot.hpp"
+core/files/Files.cpp:9:#include "ui/widget/DragDrop.hpp"
+core/files/Files.cpp:10:#include "ui/widget/Field.hpp"
+core/files/Files.cpp:11:#include "ui/widget/Splitter.hpp"
+core/files/Files.cpp:13:#include <filesystem>
+core/files/Files.cpp:14:#include <spdlog/spdlog.h>
+core/files/Project.cpp:1:#include "files/Browser.hpp"
+core/files/Project.cpp:2:#include "files/FileDomain.hpp"
+core/files/Project.cpp:3:#include "files/Model.hpp"
+core/files/Project.cpp:4:#include "ui/State.hpp"
+core/files/Project.cpp:6:#include <cstdio>
+core/files/Project.cpp:7:#include <filesystem>
+core/image/ImageCompress.cpp:1:#include "image/ImageCompress.hpp"
+core/image/ImageCompress.cpp:3:#include "Str.hpp"
+core/image/ImageCompress.cpp:4:#include "rhi/Barrier.hpp"
+core/image/ImageCompress.cpp:5:#include "rhi/DescriptorHeap.hpp"
+core/image/ImageCompress.cpp:6:#include "rhi/GpuBuffer.hpp"
+core/image/ImageCompress.cpp:7:#include "rhi/ShaderObject.hpp"
+core/image/ImageCompress.cpp:9:#include "ispc_texcomp.h"
+core/image/ImageCompress.cpp:11:#include <cstdint>
+core/image/ImageCompress.cpp:12:#include <cstring>
+core/image/ImageCompress.cpp:13:#include <mutex>
+core/image/ImageCompress.cpp:14:#include <vector>
+core/image/ImageDecode.cpp:1:#include "image/ImageDecode.hpp"
+core/image/ImageDecode.cpp:3:#include "io/File.hpp"
+core/image/ImageDecode.cpp:5:#include <spdlog/spdlog.h>
+core/image/ImageDecode.cpp:7:#include <cstdint>
+core/image/ImageDecode.cpp:8:#include <cstdio>
+core/image/ImageDecode.cpp:9:#include <cstdlib>
+core/image/ImageDecode.cpp:10:#include <cstring>
+core/image/ImageDecode.cpp:11:#include <filesystem>
+core/image/ImageDecode.cpp:15:#include "stb/stb_image.h"
+core/image/ImageDecode.cpp:18:#include "stb/stb_image_write.h"
+core/image/ImageUpload.cpp:1:#include "image/ImageUpload.hpp"
+core/image/ImageUpload.cpp:3:#include "image/ImageCompress.hpp"
+core/image/ImageUpload.cpp:4:#include "io/File.hpp"
+core/image/ImageUpload.cpp:5:#include "platform/Check.hpp"
+core/image/ImageUpload.cpp:6:#include "platform/Jobs.hpp"
+core/image/ImageUpload.cpp:7:#include "rhi/GpuBuffer.hpp"
+core/image/ImageUpload.cpp:9:#include <spdlog/spdlog.h>
+core/image/ImageUpload.cpp:11:#include <chrono>
+core/image/ImageUpload.cpp:12:#include <cstdint>
+core/image/ImageUpload.cpp:13:#include <cstring>
+core/image/ImageUpload.cpp:14:#include <mutex>
+core/image/ImageUpload.cpp:15:#include <vector>
+core/host/Host.cpp:1:#include "host/Host.hpp"
+core/host/Host.cpp:2:#include "ui/widget/Widgets.hpp"
+core/host/Host.cpp:3:#include "platform/Action.hpp"
+core/host/Host.cpp:4:#include "platform/Jobs.hpp"
+core/host/Host.cpp:5:#include "platform/PlatformUtil.hpp"
+core/host/Host.cpp:7:#include <spdlog/spdlog.h>
+core/host/Host.cpp:8:#include <spdlog/sinks/ringbuffer_sink.h>
+core/host/Host.cpp:9:#include <spdlog/sinks/stdout_color_sinks.h>
+core/host/Host.cpp:10:#include <cstdio>
+core/host/Host.cpp:11:#include <memory>
+core/host/Host.cpp:12:#include <cstdlib>
+core/host/Host.cpp:13:#include <cstring>
+core/host/PropBind.cpp:1:#include "host/PropBind.hpp"
+core/host/PropBind.cpp:3:#include "ui/widget/Button.hpp"
+core/host/PropBind.cpp:4:#include "ui/widget/Check.hpp"
+core/host/PropBind.cpp:5:#include "ui/widget/ColorPicker.hpp"
+core/host/PropBind.cpp:6:#include "ui/widget/Field.hpp"
+core/host/PropBind.cpp:7:#include "ui/widget/Number.hpp"
+core/host/PropBind.cpp:8:#include "ui/widget/Slider.hpp"
+core/host/PropBind.cpp:10:#include <cstdio>
+core/host/PropGrid.cpp:1:#include "ui/Hover.hpp"
+core/host/PropGrid.cpp:2:#include "ui/Icon.hpp"
+core/host/PropGrid.cpp:3:#include "ui/Interaction.hpp"
+core/host/PropGrid.cpp:4:#include "ui/Panel.hpp"
+core/host/PropGrid.cpp:5:#include "ui/Text.hpp"
+core/host/PropGrid.cpp:6:#include "ui/widget/Button.hpp"
+core/host/PropGrid.cpp:7:#include "ui/widget/Check.hpp"
+core/host/PropGrid.cpp:8:#include "ui/widget/Search.hpp"
+core/host/PropGrid.cpp:9:#include "host/PropGrid.hpp"
+core/host/PropGrid.cpp:10:#include "host/PropRoll.hpp"
+core/host/PropGrid.cpp:11:#include "ui/widget/Menu.hpp"
+core/host/PropGrid.cpp:12:#include "ui/widget/Field.hpp"
+core/host/PropGrid.cpp:13:#include "ui/widget/Fold.hpp"
+core/host/PropGrid.cpp:14:#include "ui/widget/Number.hpp"
+core/host/PropGrid.cpp:15:#include "ui/widget/Scroll.hpp"
+core/host/PropGrid.cpp:16:#include "ui/widget/Slider.hpp"
+core/host/PropGrid.cpp:17:#include "ui/widget/Splitter.hpp"
+core/host/PropGrid.cpp:19:#include <cmath>
+core/host/PropGrid.cpp:20:#include <format>
+core/host/PropGrid.cpp:21:#include <cstring>
+core/host/SceneMask.cpp:1:#include "host/SceneMask.hpp"
+core/host/SceneMask.cpp:3:#include "ui/State.hpp"
+core/host/SceneMask.cpp:5:#include <cstring>
+core/host/PropFilter.cpp:1:#include "host/PropGrid.hpp"
+core/host/PropFilter.cpp:2:#include "host/PropRoll.hpp"
+core/host/PropFilter.cpp:3:#include "ui/Panel.hpp"
+core/host/PropFilter.cpp:4:#include "ui/Text.hpp"
+core/host/PropFilter.cpp:5:#include "ui/widget/Button.hpp"
+core/host/PropFilter.cpp:6:#include "ui/widget/Field.hpp"
+core/host/PropFilter.cpp:7:#include "ui/widget/Fold.hpp"
+core/host/PropFilter.cpp:8:#include "ui/widget/Search.hpp"
+core/host/PropImport.cpp:1:#include "host/PropImport.hpp"
+core/host/PropImport.cpp:2:#include "host/PropImportInternal.hpp"
+core/host/PropImport.cpp:3:#include "Str.hpp"
+core/host/PropImport.cpp:5:#include "io/JsonCursor.hpp"
+core/host/PropImport.cpp:6:#include "ui/Panel.hpp"
+core/host/PropImport.cpp:7:#include "ui/Text.hpp"
+core/host/PropImport.cpp:8:#include "ui/widget/Button.hpp"
+core/host/PropImport.cpp:9:#include "ui/widget/Check.hpp"
+core/host/PropImport.cpp:10:#include "ui/widget/Choice.hpp"
+core/host/PropImport.cpp:11:#include "ui/widget/Fold.hpp"
+core/host/PropImport.cpp:12:#include "ui/widget/Label.hpp"
+core/host/PropImport.cpp:13:#include "ui/widget/Menu.hpp"
+core/host/PropImport.cpp:14:#include "ui/widget/Number.hpp"
+core/host/PropImport.cpp:15:#include "ui/widget/Scroll.hpp"
+core/host/PropImport.cpp:16:#include "ui/widget/Slider.hpp"
+core/host/PropImport.cpp:17:#include "ui/widget/Splitter.hpp"
+core/host/PropImport.cpp:18:#include "ui/widget/Virtual.hpp"
+core/host/PropImport.cpp:20:#include <cstring>
+core/host/PropImportParse.cpp:1:#include "host/PropImportInternal.hpp"
+core/host/PropImportParse.cpp:3:#include <cstring>
+core/wasm/WasmHost.cpp:1:#include "wasm/WasmHost.hpp"
+core/wasm/WasmHost.cpp:2:#include "Str.hpp"
+core/wasm/WasmHost.cpp:4:#include <cstring>
+core/io/File.cpp:1:#include "io/File.hpp"
+core/io/File.cpp:5:#include <windows.h>
+core/io/File.cpp:7:#include <fcntl.h>
+core/io/File.cpp:8:#include <sys/mman.h>
+core/io/File.cpp:9:#include <sys/stat.h>
+core/io/File.cpp:10:#include <unistd.h>
+core/io/Json.cpp:1:#include "io/Json.hpp"
+core/io/Json.cpp:2:#include "io/File.hpp"
+core/io/Json.cpp:3:#include "io/JsonCursor.hpp"
+core/io/Json.cpp:4:#include "Str.hpp"
+core/io/Json.cpp:6:#include <spdlog/spdlog.h>
+core/io/Json.cpp:8:#include <cstdio>
+core/io/Json.cpp:9:#include <cstdlib>
+core/io/Json.cpp:10:#include <cstring>
+core/gfx/Material.cpp:1:#include "gfx/Material.hpp"
+core/gfx/Material.cpp:3:#include "io/File.hpp"
+core/gfx/Material.cpp:4:#include "io/JsonCursor.hpp"
+core/gfx/Material.cpp:6:#include <cstdio>
+core/gfx/Material.cpp:7:#include <cstring>
+core/asset/ProjectDoc.cpp:1:#include "asset/ProjectDoc.hpp"
+core/asset/ProjectDoc.cpp:3:#include "io/Json.hpp"
+core/asset/ProjectDoc.cpp:5:#include <cstdio>
+core/asset/ProjectDoc.cpp:6:#include <cstring>
+core/asset/ProjectDoc.cpp:7:#include <filesystem>
+core/asset/AssimpImporter.cpp:1:#include "asset/AssimpImporter.hpp"
+core/asset/AssimpImporter.cpp:3:#include "asset/SceneBlob.hpp"
+core/asset/AssimpImporter.cpp:4:#include "gfx/Light.hpp"
+core/asset/AssimpImporter.cpp:5:#include "gfx/MeshletBuilder.hpp"
+core/asset/AssimpImporter.cpp:6:#include "platform/PlatformUtil.hpp"
+core/asset/AssimpImporter.cpp:8:#include <assimp/GltfMaterial.h>
+core/asset/AssimpImporter.cpp:9:#include <assimp/Importer.hpp>
+core/asset/AssimpImporter.cpp:10:#include <assimp/light.h>
+core/asset/AssimpImporter.cpp:11:#include <assimp/material.h>
+core/asset/AssimpImporter.cpp:12:#include <assimp/postprocess.h>
+core/asset/AssimpImporter.cpp:13:#include <assimp/scene.h>
+core/asset/AssimpImporter.cpp:14:#include <algorithm>
+core/asset/AssimpImporter.cpp:15:#include <cctype>
+core/asset/AssimpImporter.cpp:16:#include <cmath>
+core/asset/AssimpImporter.cpp:17:#include <cstdio>
+core/asset/AssimpImporter.cpp:18:#include <cstring>
+core/asset/AssimpImporter.cpp:19:#include <exception>
+core/asset/AssimpImporter.cpp:20:#include <format>
+core/asset/AssimpImporter.cpp:21:#include <string>
+core/asset/AssimpImporter.cpp:22:#include <string_view>
+core/asset/AssimpImporter.cpp:23:#include <vector>
+core/audio/Audio.cpp:1:#include "audio/Audio.hpp"
+core/audio/Audio.cpp:3:#include "io/File.hpp"
+core/audio/Audio.cpp:4:#include "platform/PlatformUtil.hpp"
+core/audio/Audio.cpp:6:#include <phonon.h>
+core/audio/Audio.cpp:9:#include <miniaudio.h>
+core/audio/Audio.cpp:11:#include <spdlog/spdlog.h>
+core/audio/Audio.cpp:13:#include <atomic>
+core/audio/Audio.cpp:14:#include <cmath>
+core/audio/Audio.cpp:15:#include <cstdint>
+core/audio/Audio.cpp:16:#include <cstring>
+core/audio/Audio.cpp:17:#include <vector>
+engine/gpu_scene/SceneObject.cpp:1:#include "gpu_scene/SceneObject.hpp"
+engine/gpu_scene/SceneObject.cpp:3:#include <algorithm>
+engine/gpu_scene/SceneObject.cpp:4:#include <cmath>
+engine/gpu_scene/SceneObject.cpp:5:#include <cstring>
+engine/gpu_scene/Physics.cpp:1:#include "gpu_scene/Physics.hpp"
+engine/gpu_scene/Physics.cpp:3:#include "gpu_scene/SceneObject.hpp"
+engine/gpu_scene/Physics.cpp:5:#include <Jolt/Jolt.h>
+engine/gpu_scene/Physics.cpp:6:#include <Jolt/Core/Factory.h>
+engine/gpu_scene/Physics.cpp:7:#include <Jolt/Core/JobSystemThreadPool.h>
+engine/gpu_scene/Physics.cpp:8:#include <Jolt/Core/TempAllocator.h>
+engine/gpu_scene/Physics.cpp:9:#include <Jolt/Physics/Body/BodyCreationSettings.h>
+engine/gpu_scene/Physics.cpp:10:#include <Jolt/Physics/Collision/Shape/BoxShape.h>
+engine/gpu_scene/Physics.cpp:11:#include <Jolt/Physics/Collision/Shape/MeshShape.h>
+engine/gpu_scene/Physics.cpp:12:#include <Jolt/Physics/Collision/CastResult.h>
+engine/gpu_scene/Physics.cpp:13:#include <Jolt/Physics/Collision/RayCast.h>
+engine/gpu_scene/Physics.cpp:14:#include <Jolt/Physics/PhysicsSystem.h>
+engine/gpu_scene/Physics.cpp:15:#include <Jolt/RegisterTypes.h>
+engine/gpu_scene/Physics.cpp:17:#include <spdlog/spdlog.h>
+engine/gpu_scene/Physics.cpp:19:#include <algorithm>
+engine/gpu_scene/Physics.cpp:20:#include <cstdarg>
+engine/gpu_scene/Physics.cpp:21:#include <cmath>
+engine/gpu_scene/Physics.cpp:22:#include <cstdio>
+engine/gpu_scene/SceneGizmo.cpp:1:#include "gpu_scene/SceneObject.hpp"
+engine/gpu_scene/SceneGizmo.cpp:3:#include <algorithm>
+engine/gpu_scene/SceneGizmo.cpp:4:#include <cmath>
+engine/gpu_scene/SceneGizmo.cpp:5:#include <cstring>
+engine/src/Cube.cpp:1:#include "render/Cube.hpp"
+engine/src/Cube.cpp:3:#include "render/RenderDefs.hpp"
+engine/src/Cube.cpp:4:#include "render/HeapBind.hpp"
+engine/src/Cube.cpp:5:#include "render/PassCommon.hpp"
+engine/src/Cube.cpp:6:#include "render/PassRendering.hpp"
+engine/src/Cube.cpp:7:#include "render/PassShaderGroup.hpp"
+engine/src/Cube.cpp:8:#include "rhi/Barrier.hpp"
+engine/src/Cube.cpp:9:#include "rhi/MeshDraw.hpp"
+engine/src/Cube.cpp:10:#include "rhi/ShaderObject.hpp"
+engine/src/Cube.cpp:12:#include <spdlog/spdlog.h>
+engine/src/Cull.cpp:1:#include "render/Cull.hpp"
+engine/src/Cull.cpp:2:#include "render/HeapBind.hpp"
+engine/src/Cull.cpp:3:#include "render/PassBufferSync.hpp"
+engine/src/Cull.cpp:4:#include "render/PassCommon.hpp"
+engine/src/Cull.cpp:5:#include "render/PassShaderGroup.hpp"
+engine/src/Cull.cpp:7:#include "render/RenderDefs.hpp"
+engine/src/Cull.cpp:9:#include <spdlog/spdlog.h>
+engine/src/Hiz.cpp:1:#include "render/Hiz.hpp"
+engine/src/Hiz.cpp:2:#include "render/HeapBind.hpp"
+engine/src/Hiz.cpp:3:#include "render/PassCommon.hpp"
+engine/src/Hiz.cpp:4:#include "render/PassShaderGroup.hpp"
+engine/src/Hiz.cpp:6:#include "render/RenderDefs.hpp"
+engine/src/Hiz.cpp:8:#include <spdlog/spdlog.h>
+engine/src/PassClusters.cpp:1:#include "render/SceneFrameImpl.hpp"
+engine/src/PassClusters.cpp:3:#include "render/PassBufferSync.hpp"
+engine/src/PassClusters.cpp:4:#include "rhi/GpuProfiler.hpp"
+engine/src/PassCull.cpp:1:#include "render/SceneFrameImpl.hpp"
+engine/src/PassCull.cpp:3:#include "rhi/GpuProfiler.hpp"
+engine/src/PassCull.cpp:5:#include <spdlog/spdlog.h>
+engine/src/PassPoints.cpp:1:#include "render/SceneFrameImpl.hpp"
+engine/src/PassRadiance.cpp:1:#include "render/SceneFrameImpl.hpp"
+engine/src/PassRadiance.cpp:3:#include "rhi/Barrier.hpp"
+engine/src/PassRadiance.cpp:4:#include "rhi/GpuProfiler.hpp"
+engine/src/PassSun.cpp:1:#include "render/SceneFrameImpl.hpp"
+engine/src/PassSun.cpp:3:#include "rhi/GpuProfiler.hpp"
+engine/src/PassSun.cpp:5:#include <spdlog/spdlog.h>
+engine/src/PassSun.cpp:7:#include <cstring>
+engine/src/PassVis.cpp:1:#include "render/SceneFrameImpl.hpp"
+engine/src/PassVis.cpp:3:#include "rhi/GpuProfiler.hpp"
+engine/src/Radiance.cpp:1:#include "render/Radiance.hpp"
+engine/src/Radiance.cpp:3:#include "render/HeapBind.hpp"
+engine/src/Radiance.cpp:4:#include "render/PassBufferSync.hpp"
+engine/src/Radiance.cpp:5:#include "render/RenderDefs.hpp"
+engine/src/Radiance.cpp:6:#include "rhi/Barrier.hpp"
+engine/src/Radiance.cpp:7:#include "rhi/DescriptorHeap.hpp"
+engine/src/Radiance.cpp:9:#include <spdlog/spdlog.h>
+engine/src/Radiance.cpp:11:#include <algorithm>
+engine/src/Radiance.cpp:12:#include <cmath>
+engine/src/Radiance.cpp:13:#include <cstddef>
+engine/src/Radiance.cpp:14:#include <cstdint>
+engine/src/Radiance.cpp:15:#include <cstring>
+engine/src/Radiance.cpp:16:#include <vector>
+engine/src/Sky.cpp:1:#include "render/Sky.hpp"
+engine/src/Sky.cpp:3:#include "gfx/Light.hpp"
+engine/src/Sky.cpp:5:#include "render/RenderDefs.hpp"
+engine/src/Sky.cpp:6:#include "render/HeapBind.hpp"
+engine/src/Sky.cpp:7:#include "render/PassAllocators.hpp"
+engine/src/Sky.cpp:8:#include "render/PassBufferSync.hpp"
+engine/src/Sky.cpp:9:#include "render/PassCommon.hpp"
+engine/src/Sky.cpp:10:#include "rhi/ShaderObject.hpp"
+engine/src/Sky.cpp:12:#include <cmath>
+engine/src/Sky.cpp:13:#include <spdlog/spdlog.h>
+engine/src/Visbuffer.cpp:1:#include "render/Visbuffer.hpp"
+engine/src/Visbuffer.cpp:3:#include "render/RenderDefs.hpp"
+engine/src/Visbuffer.cpp:4:#include "render/HeapBind.hpp"
+engine/src/Visbuffer.cpp:5:#include "gpu_scene/InstanceData.hpp"
+engine/src/Visbuffer.cpp:6:#include "render/PassCommon.hpp"
+engine/src/Visbuffer.cpp:7:#include "render/PassTargets.hpp"
+engine/src/Visbuffer.cpp:8:#include "render/PassRendering.hpp"
+engine/src/Visbuffer.cpp:9:#include "rhi/Barrier.hpp"
+engine/src/Visbuffer.cpp:10:#include "rhi/MeshDraw.hpp"
+engine/src/Visbuffer.cpp:12:#include <spdlog/spdlog.h>
+engine/src/PassGizmo.cpp:1:#include "render/Gizmo.hpp"
+engine/src/PassGizmo.cpp:3:#include "render/RenderDefs.hpp"
+engine/src/PassGizmo.cpp:4:#include "render/HeapBind.hpp"
+engine/src/PassGizmo.cpp:5:#include "render/PassAllocators.hpp"
+engine/src/PassGizmo.cpp:6:#include "render/PassRendering.hpp"
+engine/src/PassGizmo.cpp:7:#include "rhi/Barrier.hpp"
+engine/src/PassGizmo.cpp:8:#include "rhi/GpuImage.hpp"
+engine/src/PassGizmo.cpp:9:#include "rhi/MeshDraw.hpp"
+engine/src/PassGizmo.cpp:11:#include <cstring>
+engine/src/Voxel.cpp:1:#include "render/Voxel.hpp"
+engine/src/Voxel.cpp:3:#include "render/HeapBind.hpp"
+engine/src/Voxel.cpp:4:#include "render/PassAllocators.hpp"
+engine/src/Voxel.cpp:5:#include "render/PassBufferSync.hpp"
+engine/src/Voxel.cpp:6:#include "render/RenderDefs.hpp"
+engine/src/Voxel.cpp:8:#include <cmath>
+engine/src/Voxel.cpp:9:#include <cstdlib>
+engine/src/Voxel.cpp:10:#include <cstring>
+engine/src/Voxel.cpp:11:#include <spdlog/spdlog.h>
+engine/src/PassVoxel.cpp:1:#include "render/SceneFrameImpl.hpp"
+engine/src/PassVoxel.cpp:3:#include "rhi/Barrier.hpp"
+engine/src/PassVoxel.cpp:4:#include "rhi/GpuProfiler.hpp"
+engine/src/Fsr.cpp:1:#include "render/Fsr.hpp"
+engine/src/Fsr.cpp:3:#include "render/HeapBind.hpp"
+engine/src/Fsr.cpp:4:#include "render/PassCommon.hpp"
+engine/src/Fsr.cpp:5:#include "render/RenderDefs.hpp"
+engine/src/Fsr.cpp:6:#include "rhi/Barrier.hpp"
+engine/src/Fsr.cpp:7:#include "rhi/DescriptorHeap.hpp"
+engine/src/Fsr.cpp:9:#include <algorithm>
+engine/src/Fsr.cpp:10:#include <cmath>
+engine/src/Fsr.cpp:11:#include <cstddef>
+engine/src/Fsr.cpp:12:#include <cstdint>
+engine/src/Fsr.cpp:13:#include <cstdio>
+engine/src/Fsr.cpp:14:#include <cstring>
+engine/src/Fsr.cpp:16:#include <spdlog/spdlog.h>
+engine/src/Gtao.cpp:1:#include "render/Gtao.hpp"
+engine/src/Gtao.cpp:3:#include "render/HeapBind.hpp"
+engine/src/Gtao.cpp:4:#include "render/PassBufferSync.hpp"
+engine/src/Gtao.cpp:5:#include "render/PassCommon.hpp"
+engine/src/Gtao.cpp:6:#include "render/RenderDefs.hpp"
+engine/src/Gtao.cpp:7:#include "rhi/Barrier.hpp"
+engine/src/Gtao.cpp:8:#include "rhi/DescriptorHeap.hpp"
+engine/src/Gtao.cpp:10:#include <algorithm>
+engine/src/Gtao.cpp:11:#include <cmath>
+engine/src/Gtao.cpp:12:#include <cstddef>
+engine/src/Gtao.cpp:13:#include <cstdio>
+engine/src/Gtao.cpp:14:#include <cstring>
+engine/src/Gtao.cpp:16:#include <spdlog/spdlog.h>
+engine/src/PassRestir.cpp:1:#include "render/SceneFrameImpl.hpp"
+engine/src/PassRestir.cpp:3:#include "rhi/GpuProfiler.hpp"
+engine/src/PassShade.cpp:1:#include "render/SceneFrameImpl.hpp"
+engine/src/PassShade.cpp:3:#include "render/Fog.hpp"
+engine/src/PassShade.cpp:4:#include "render/Gtao.hpp"
+engine/src/PassShade.cpp:5:#include "render/Sky.hpp"
+engine/src/PassShade.cpp:6:#include "rhi/GpuProfiler.hpp"
+engine/src/PassTonemap.cpp:1:#include "render/SceneFrameImpl.hpp"
+engine/src/PassTonemap.cpp:3:#include "rhi/GpuProfiler.hpp"
+engine/src/Restir.cpp:1:#include "render/Restir.hpp"
+engine/src/Restir.cpp:3:#include "render/HeapBind.hpp"
+engine/src/Restir.cpp:4:#include "rhi/Barrier.hpp"
+engine/src/Restir.cpp:5:#include "rhi/DescriptorHeap.hpp"
+engine/src/Restir.cpp:6:#include "rhi/GpuProfiler.hpp"
+engine/src/Restir.cpp:8:#include <spdlog/spdlog.h>
+engine/src/Restir.cpp:10:#include <algorithm>
+engine/src/Restir.cpp:11:#include <chrono>
+engine/src/Restir.cpp:12:#include <cstddef>
+engine/src/Restir.cpp:13:#include <cstdio>
+engine/src/Restir.cpp:14:#include <cstring>
+engine/src/Shade.cpp:1:#include "render/Shade.hpp"
+engine/src/Shade.cpp:3:#include "render/RenderDefs.hpp"
+engine/src/Shade.cpp:4:#include "render/HeapBind.hpp"
+engine/src/Shade.cpp:5:#include "render/PassTargets.hpp"
+engine/src/Shade.cpp:6:#include "render/PassCommon.hpp"
+engine/src/Shade.cpp:7:#include "render/Sharc.hpp"
+engine/src/Shade.cpp:8:#include "rhi/ShaderObject.hpp"
+engine/src/Shade.cpp:10:#include <algorithm>
+engine/src/Shade.cpp:11:#include <spdlog/spdlog.h>
+engine/src/Tonemap.cpp:1:#include "render/Tonemap.hpp"
+engine/src/Tonemap.cpp:3:#include "render/RenderDefs.hpp"
+engine/src/Tonemap.cpp:4:#include "render/HeapBind.hpp"
+engine/src/Tonemap.cpp:5:#include "render/PassCommon.hpp"
+engine/src/Tonemap.cpp:6:#include "render/PassRendering.hpp"
+engine/src/Tonemap.cpp:7:#include "render/PassShaderGroup.hpp"
+engine/src/Tonemap.cpp:8:#include "rhi/Barrier.hpp"
+engine/src/Tonemap.cpp:9:#include "rhi/MeshDraw.hpp"
+engine/src/Tonemap.cpp:11:#include <algorithm>
+engine/src/Tonemap.cpp:12:#include <spdlog/spdlog.h>
+engine/src/Sharc.cpp:1:#include "render/Sharc.hpp"
+engine/src/Sharc.cpp:3:#include "gfx/Light.hpp"
+engine/src/Sharc.cpp:4:#include "render/HeapBind.hpp"
+engine/src/Sharc.cpp:5:#include "render/PassAllocators.hpp"
+engine/src/Sharc.cpp:6:#include "render/PassBufferSync.hpp"
+engine/src/Sharc.cpp:7:#include "render/PassCommon.hpp"
+engine/src/Sharc.cpp:8:#include "render/PassTargets.hpp"
+engine/src/Sharc.cpp:9:#include "rhi/Barrier.hpp"
+engine/src/Sharc.cpp:10:#include "rhi/DescriptorHeap.hpp"
+engine/src/Sharc.cpp:11:#include "rhi/GpuProfiler.hpp"
+engine/src/Sharc.cpp:13:#include <spdlog/spdlog.h>
+engine/src/Sharc.cpp:15:#include <cstdio>
+engine/src/Sharc.cpp:16:#include <cstring>
+engine/src/PassSharc.cpp:1:#include "render/SceneFrameImpl.hpp"
+engine/src/PassSharc.cpp:3:#include "render/Sharc.hpp"
+engine/src/PassSharc.cpp:4:#include "rhi/Barrier.hpp"
+engine/src/Particles.cpp:1:#include "render/Particles.hpp"
+engine/src/Particles.cpp:3:#include "gfx/Light.hpp"
+engine/src/Particles.cpp:4:#include "render/HeapBind.hpp"
+engine/src/Particles.cpp:5:#include "render/PassAllocators.hpp"
+engine/src/Particles.cpp:6:#include "render/PassBufferSync.hpp"
+engine/src/Particles.cpp:7:#include "render/PassCommon.hpp"
+engine/src/Particles.cpp:8:#include "render/PassRendering.hpp"
+engine/src/Particles.cpp:9:#include "render/RenderDefs.hpp"
+engine/src/Particles.cpp:10:#include "rhi/MeshDraw.hpp"
+engine/src/Particles.cpp:12:#include <cstring>
+engine/src/Rain.cpp:1:#include "render/Rain.hpp"
+engine/src/Rain.cpp:3:#include "render/HeapBind.hpp"
+engine/src/Rain.cpp:4:#include "render/PassAllocators.hpp"
+engine/src/Rain.cpp:5:#include "render/PassBufferSync.hpp"
+engine/src/Rain.cpp:6:#include "render/PassCommon.hpp"
+engine/src/Rain.cpp:7:#include "render/PassRendering.hpp"
+engine/src/Rain.cpp:8:#include "render/RenderDefs.hpp"
+engine/src/Rain.cpp:9:#include "rhi/MeshDraw.hpp"
+engine/src/Rain.cpp:11:#include <cstring>
+engine/src/Fog.cpp:1:#include "render/Fog.hpp"
+engine/src/Fog.cpp:3:#include "render/HeapBind.hpp"
+engine/src/Fog.cpp:4:#include "render/PassCommon.hpp"
+engine/src/Fog.cpp:5:#include "render/RenderDefs.hpp"
+engine/src/Fog.cpp:6:#include "rhi/Barrier.hpp"
+engine/src/SceneTextures.cpp:1:#include "platform/PlatformUtil.hpp"
+engine/src/SceneTextures.cpp:2:#include "render/HeapBind.hpp"
+engine/src/SceneTextures.cpp:3:#include "render/SceneFrameImpl.hpp"
+engine/src/SceneTextures.cpp:5:#include <spdlog/spdlog.h>
+engine/src/SceneTextures.cpp:7:#include <cctype>
+engine/src/SceneTextures.cpp:8:#include <cstdint>
+engine/src/SceneTextures.cpp:9:#include <cstdio>
+engine/src/SceneTextures.cpp:10:#include <cstring>
+engine/src/SceneTextures.cpp:11:#include <filesystem>
+engine/src/SceneTextures.cpp:12:#include <string>
+engine/src/SceneTextures.cpp:13:#include <system_error>
+engine/src/SceneTextures.cpp:14:#include <unordered_map>
+engine/src/SceneTextures.cpp:15:#include <vector>
+engine/src/SceneUniforms.cpp:1:#include "render/Weather.hpp"
+engine/src/SceneUniforms.cpp:2:#include "render/SceneFrameImpl.hpp"
+engine/src/SceneUniforms.cpp:3:#include "gpu_scene/LightMath.hpp"
+engine/src/SceneUniforms.cpp:4:#include "gpu_scene/PointShadow.hpp"
+engine/src/SceneUniforms.cpp:5:#include "gpu_scene/SunShadow.hpp"
+engine/src/SceneUniforms.cpp:7:#include <algorithm>
+engine/src/SceneUniforms.cpp:8:#include <cmath>
+engine/src/SceneUniforms.cpp:9:#include <cstdint>
+engine/src/SceneUniforms.cpp:10:#include <cstring>
+engine/src/SceneUniforms.cpp:11:#include <span>
+engine/src/SceneTargets.cpp:1:#include "render/HeapBind.hpp"
+engine/src/SceneTargets.cpp:2:#include "render/PassAllocators.hpp"
+engine/src/SceneTargets.cpp:3:#include "render/SceneFrameImpl.hpp"
+engine/src/SceneTargets.cpp:5:#include <spdlog/spdlog.h>
+engine/src/SceneTargets.cpp:7:#include <algorithm>
+engine/src/SceneTargets.cpp:8:#include <cstdint>
+engine/src/SceneTargets.cpp:9:#include <cstring>
+engine/src/SceneGeometry.cpp:1:#include "audio/Audio.hpp"
+engine/src/SceneGeometry.cpp:2:#include "platform/PlatformUtil.hpp"
+engine/src/SceneGeometry.cpp:3:#include "gpu_scene/Physics.hpp"
+engine/src/SceneGeometry.cpp:4:#include "render/Weather.hpp"
+engine/src/SceneGeometry.cpp:5:#include "render/SceneFrameImpl.hpp"
+engine/src/SceneGeometry.cpp:6:#include "gpu_scene/InstanceCull.hpp"
+engine/src/SceneGeometry.cpp:7:#include "gpu_scene/PointShadow.hpp"
+engine/src/SceneGeometry.cpp:9:#include <spdlog/spdlog.h>
+engine/src/SceneGeometry.cpp:11:#include <algorithm>
+engine/src/SceneGeometry.cpp:12:#include <cmath>
+engine/src/SceneGeometry.cpp:13:#include <cstdint>
+engine/src/SceneGeometry.cpp:14:#include <cstdio>
+engine/src/SceneGeometry.cpp:15:#include <cstring>
+engine/src/SceneGeometry.cpp:16:#include <vector>
+engine/src/SceneFrame.cpp:1:#include "audio/Audio.hpp"
+engine/src/SceneFrame.cpp:2:#include "render/PassBufferSync.hpp"
+engine/src/SceneFrame.cpp:3:#include "gpu_scene/Physics.hpp"
+engine/src/SceneFrame.cpp:4:#include "render/Weather.hpp"
+engine/src/SceneFrame.cpp:5:#include "render/SceneFrameImpl.hpp"
+engine/src/SceneFrame.cpp:7:#include <spdlog/spdlog.h>
+engine/src/SceneFrame.cpp:9:#include <chrono>
+engine/src/SceneFrame.cpp:10:#include <cmath>
+engine/src/SceneFrame.cpp:11:#include <cstdint>
+engine/src/SceneFrame.cpp:12:#include <cstdio>
+engine/src/SceneFrame.cpp:13:#include <cstring>
+engine/src/SceneActors.cpp:1:#include "gpu_scene/Physics.hpp"
+engine/src/SceneActors.cpp:2:#include "render/SceneFrameImpl.hpp"
+engine/src/SceneActors.cpp:4:#include <cstdint>
+engine/src/SceneActors.cpp:5:#include <cstring>
+engine/src/SceneProcedural.cpp:1:#include "gpu_scene/Physics.hpp"
+engine/src/SceneProcedural.cpp:2:#include "render/SceneFrameImpl.hpp"
+engine/src/SceneProcedural.cpp:4:#include <algorithm>
+engine/src/SceneProcedural.cpp:5:#include <cmath>
+engine/src/SceneProcedural.cpp:6:#include <cstdint>
+engine/src/SceneProcedural.cpp:7:#include <cstdio>
+engine/src/SceneProcedural.cpp:8:#include <cstring>
+engine/src/SceneProcedural.cpp:9:#include <vector>
+engine/src/Weather.cpp:1:#include "render/Weather.hpp"
+engine/src/Weather.cpp:3:#include <flecs.h>
+engine/src/Weather.cpp:5:#include <cmath>
+engine/src/SceneCullUpload.cpp:1:#include "audio/Audio.hpp"
+engine/src/SceneCullUpload.cpp:2:#include "platform/PlatformUtil.hpp"
+engine/src/SceneCullUpload.cpp:3:#include "gpu_scene/Physics.hpp"
+engine/src/SceneCullUpload.cpp:4:#include "render/Weather.hpp"
+engine/src/SceneCullUpload.cpp:5:#include "render/SceneFrameImpl.hpp"
+engine/src/SceneCullUpload.cpp:6:#include "gpu_scene/InstanceCull.hpp"
+engine/src/SceneCullUpload.cpp:7:#include "gpu_scene/PointShadow.hpp"
+engine/src/SceneCullUpload.cpp:9:#include <spdlog/spdlog.h>
+engine/src/SceneCullUpload.cpp:11:#include <algorithm>
+engine/src/SceneCullUpload.cpp:12:#include <cmath>
+engine/src/SceneCullUpload.cpp:13:#include <cstdint>
+engine/src/SceneCullUpload.cpp:14:#include <cstdio>
+engine/src/SceneCullUpload.cpp:15:#include <cstring>
+engine/src/SceneCullUpload.cpp:16:#include <vector>
+engine/src/SceneLights.cpp:1:#include "render/Weather.hpp"
+engine/src/SceneLights.cpp:2:#include "render/SceneFrameImpl.hpp"
+engine/src/SceneLights.cpp:3:#include "gpu_scene/LightMath.hpp"
+engine/src/SceneLights.cpp:4:#include "gpu_scene/PointShadow.hpp"
+engine/src/SceneLights.cpp:5:#include "gpu_scene/SunShadow.hpp"
+engine/src/SceneLights.cpp:7:#include <algorithm>
+engine/src/SceneLights.cpp:8:#include <cmath>
+engine/src/SceneLights.cpp:9:#include <cstdint>
+engine/src/SceneLights.cpp:10:#include <cstring>
+engine/src/SceneLights.cpp:11:#include <span>
+demo/app/Main.cpp:1:#include "app/Engine.hpp"
+demo/app/Main.cpp:3:#include <spdlog/spdlog.h>
+demo/app/Main.cpp:5:#include <cstdlib>
+demo/app/Main.cpp:6:#include <cstring>
+demo/app/HudInspector.cpp:1:#include "app/HudBuild.hpp"
+demo/app/HudInspector.cpp:2:#include "app/SceneBlockFill.hpp"
+demo/app/HudInspector.cpp:4:#include "render/SceneFrame.hpp"
+demo/app/HudInspector.cpp:5:#include "gpu_scene/SceneObject.hpp"
+demo/app/HudInspector.cpp:6:#include "ui/Panel.hpp"
+demo/app/HudInspector.cpp:7:#include "ui/widget/Button.hpp"
+demo/app/HudInspector.cpp:8:#include "ui/widget/Label.hpp"
+demo/app/HudInspector.cpp:9:#include "ui/widget/Field.hpp"
+demo/app/HudInspector.cpp:10:#include "host/PropGrid.hpp"
+demo/app/HudInspector.cpp:11:#include "ui/widget/Menu.hpp"
+demo/app/HudInspector.cpp:12:#include "ui/widget/Scroll.hpp"
+demo/app/HudInspector.cpp:13:#include "ui/widget/Virtual.hpp"
+demo/app/HudInspector.cpp:14:#include "ui/widget/ColorPicker.hpp"
+demo/app/HudInspector.cpp:16:#include <cstdio>
+demo/app/HudMat.cpp:1:#include "app/HudBuild.hpp"
+demo/app/HudMat.cpp:3:#include "asset/ProjectDoc.hpp"
+demo/app/HudMat.cpp:4:#include "files/FileSession.hpp"
+demo/app/HudMat.cpp:5:#include "gpu_scene/SceneObject.hpp"
+demo/app/HudMat.cpp:6:#include "platform/Window.hpp"
+demo/app/HudMat.cpp:7:#include "render/SceneFrame.hpp"
+demo/app/HudMat.cpp:8:#include "ui/Text.hpp"
+demo/app/HudMat.cpp:9:#include "ui/widget/Button.hpp"
+demo/app/HudMat.cpp:10:#include "ui/widget/Check.hpp"
+demo/app/HudMat.cpp:11:#include "ui/widget/DragDrop.hpp"
+demo/app/HudMat.cpp:12:#include "host/PropGrid.hpp"
+demo/app/HudMat.cpp:13:#include "ui/widget/Scroll.hpp"
+demo/app/HudMat.cpp:14:#include "Str.hpp"
+demo/app/HudMat.cpp:16:#include <cstdio>
+demo/app/HudMat.cpp:17:#include <cstring>
+demo/app/HudMat.cpp:18:#include <filesystem>
+demo/app/HudMaterial.cpp:1:#include "app/HudBuild.hpp"
+demo/app/HudMaterial.cpp:3:#include "Str.hpp"
+demo/app/HudMaterial.cpp:4:#include "gfx/Material.hpp"
+demo/app/HudMaterial.cpp:5:#include "ui/Panel.hpp"
+demo/app/HudMaterial.cpp:6:#include "ui/widget/AssetSlot.hpp"
+demo/app/HudMaterial.cpp:7:#include "ui/widget/Choice.hpp"
+demo/app/HudMaterial.cpp:8:#include "ui/widget/Menu.hpp"
+demo/app/HudMaterial.cpp:10:#include <cstdio>
+demo/app/HudPost.cpp:1:#include "app/HudBuild.hpp"
+demo/app/HudPost.cpp:2:#include "app/SceneBlockFill.hpp"
+demo/app/HudPost.cpp:4:#include "io/File.hpp"
+demo/app/HudPost.cpp:5:#include "platform/PlatformUtil.hpp"
+demo/app/HudPost.cpp:6:#include "ui/widget/Button.hpp"
+demo/app/HudPost.cpp:7:#include "ui/widget/ColorPicker.hpp"
+demo/app/HudPost.cpp:8:#include "ui/widget/Menu.hpp"
+demo/app/HudPost.cpp:10:#include <spdlog/spdlog.h>
+demo/app/HudPush.cpp:1:#include "app/HudBuild.hpp"
+demo/app/HudPush.cpp:2:#include "app/SceneBlockFill.hpp"
+demo/app/HudPush.cpp:4:#include "gpu_scene/SceneObject.hpp"
+demo/app/HudPush.cpp:5:#include "platform/PlatformUtil.hpp"
+demo/app/HudPush.cpp:6:#include "render/SceneFrame.hpp"
+demo/app/HudPush.cpp:7:#include "rhi/Device.hpp"
+demo/app/HudPush.cpp:8:#include "ui/widget/Button.hpp"
+demo/app/HudPush.cpp:9:#include "ui/widget/Check.hpp"
+demo/app/HudPush.cpp:10:#include "ui/widget/Field.hpp"
+demo/app/HudPush.cpp:11:#include "host/PropGrid.hpp"
+demo/app/HudPush.cpp:12:#include "ui/widget/Popover.hpp"
+demo/app/HudPush.cpp:13:#include "ui/widget/Slider.hpp"
+demo/app/HudPush.cpp:14:#include "ui/widget/Label.hpp"
+demo/app/HudPush.cpp:15:#include "ui/widget/Scroll.hpp"
+demo/app/HudPush.cpp:16:#include "ui/widget/Virtual.hpp"
+demo/app/HudPush.cpp:17:#include "ui/Text.hpp"
+demo/app/HudPush.cpp:19:#include <cmath>
+demo/app/HudPush.cpp:20:#include <cstdio>
+demo/app/HudPush.cpp:21:#include <cstring>
+demo/app/HudSync.cpp:1:#include "app/HudBuild.hpp"
+demo/app/HudSync.cpp:3:#include "platform/PlatformUtil.hpp"
+demo/app/HudSync.cpp:4:#include "gpu_scene/SceneObject.hpp"
+demo/app/HudSync.cpp:5:#include "render/SceneFrame.hpp"
+demo/app/HudSync.cpp:6:#include "rhi/Device.hpp"
+demo/app/HudSync.cpp:7:#include "ui/widget/Button.hpp"
+demo/app/HudSync.cpp:8:#include "ui/widget/Check.hpp"
+demo/app/HudSync.cpp:9:#include "ui/widget/Field.hpp"
+demo/app/HudSync.cpp:10:#include "host/PropGrid.hpp"
+demo/app/HudSync.cpp:11:#include "ui/widget/Menu.hpp"
+demo/app/HudSync.cpp:12:#include "ui/widget/Number.hpp"
+demo/app/HudSync.cpp:13:#include "ui/widget/Slider.hpp"
+demo/app/HudSync.cpp:15:#include <cmath>
+demo/app/HudSync.cpp:16:#include <cstdio>
+demo/app/HudSync.cpp:17:#include <cstring>
+demo/app/MatPage.cpp:1:#include "app/HudBuild.hpp"
+demo/app/MatPage.cpp:2:#include "app/MatPriv.hpp"
+demo/app/MatPage.cpp:4:#include "ui/Panel.hpp"
+demo/app/MatPage.cpp:5:#include "ui/Style.hpp"
+demo/app/MatPage.cpp:6:#include "ui/widget/Choice.hpp"
+demo/app/MatPage.cpp:7:#include "ui/widget/Image.hpp"
+demo/app/MatPage.cpp:8:#include "ui/widget/Label.hpp"
+demo/app/ProjectGate.cpp:1:#include "app/Engine.hpp"
+demo/app/ProjectGate.cpp:2:#include "app/HudBuild.hpp"
+demo/app/ProjectGate.cpp:4:#include "asset/AssimpImporter.hpp"
+demo/app/ProjectGate.cpp:5:#include "asset/ProjectDoc.hpp"
+demo/app/ProjectGate.cpp:6:#include "platform/Window.hpp"
+demo/app/ProjectGate.cpp:7:#include "render/SceneFrame.hpp"
+demo/app/ProjectGate.cpp:8:#include "Str.hpp"
+demo/app/ProjectGate.cpp:10:#include <spdlog/spdlog.h>
+demo/app/ProjectGate.cpp:12:#include <cstdio>
+demo/app/ProjectGate.cpp:13:#include <cstring>
+demo/app/ProjectGate.cpp:14:#include <filesystem>
+demo/app/MatEdit.cpp:1:#include "app/HudBuild.hpp"
+demo/app/MatEdit.cpp:2:#include "app/MatPriv.hpp"
+demo/app/MatEdit.cpp:3:#include "app/SceneBlockFill.hpp"
+demo/app/MatEdit.cpp:5:#include "ui/Icon.hpp"
+demo/app/MatEdit.cpp:6:#include "ui/widget/Button.hpp"
+demo/app/MatEdit.cpp:7:#include "ui/widget/Check.hpp"
+demo/app/MatEdit.cpp:8:#include "ui/widget/Choice.hpp"
+demo/app/MatEdit.cpp:9:#include "ui/widget/Field.hpp"
+demo/app/MatEdit.cpp:10:#include "ui/widget/Menu.hpp"
+demo/app/MatEdit.cpp:11:#include "ui/widget/Number.hpp"
+demo/app/MatEdit.cpp:13:#include <cstdio>
+demo/app/MatEdit.cpp:14:#include <cstring>
+demo/app/MatSlot.cpp:1:#include "app/HudBuild.hpp"
+demo/app/MatSlot.cpp:2:#include "app/MatPriv.hpp"
+demo/app/MatSlot.cpp:4:#include "ui/Hover.hpp"
+demo/app/MatSlot.cpp:5:#include "ui/Panel.hpp"
+demo/app/MatSlot.cpp:6:#include "ui/Style.hpp"
+demo/app/MatSlot.cpp:7:#include "ui/Text.hpp"
+demo/app/MatSlot.cpp:8:#include "ui/widget/AssetSlot.hpp"
+demo/app/MatSlot.cpp:9:#include "ui/widget/Button.hpp"
+demo/app/MatSlot.cpp:10:#include "ui/widget/DragDrop.hpp"
+demo/app/MatSlot.cpp:11:#include "ui/widget/Field.hpp"
+demo/app/MatSlot.cpp:12:#include "ui/widget/Image.hpp"
+demo/app/MatSlot.cpp:13:#include "ui/widget/Label.hpp"
+demo/app/MatSlot.cpp:14:#include "ui/widget/Number.hpp"
+demo/app/MatSlot.cpp:15:#include "ui/widget/Slider.hpp"
+demo/app/MatSlot.cpp:17:#include <cstring>
+demo/app/HudToolbar.cpp:1:#include "app/Engine.hpp"
+demo/app/HudToolbar.cpp:3:#include "app/HudBuild.hpp"
+demo/app/HudToolbar.cpp:4:#include "files/Browser.hpp"
+demo/app/HudToolbar.cpp:5:#include "platform/PlatformUtil.hpp"
+demo/app/HudToolbar.cpp:6:#include "render/SceneFrame.hpp"
+demo/app/HudToolbar.cpp:7:#include "ui/rhi/Canvas.hpp"
+demo/app/HudToolbar.cpp:8:#include "ui/Style.hpp"
+demo/app/HudToolbar.cpp:9:#include "ui/widget/Choice.hpp"
+demo/app/HudView.cpp:1:#include "app/Engine.hpp"
+demo/app/HudView.cpp:3:#include "app/HudBuild.hpp"
+demo/app/HudView.cpp:4:#include "files/Browser.hpp"
+demo/app/HudView.cpp:5:#include "files/FileDomain.hpp"
+demo/app/HudView.cpp:6:#include "gpu_scene/SceneObject.hpp"
+demo/app/HudView.cpp:7:#include "render/SceneFrame.hpp"
+demo/app/HudView.cpp:8:#include "ui/rhi/Canvas.hpp"
+demo/app/HudView.cpp:9:#include "ui/Panel.hpp"
+demo/app/HudView.cpp:10:#include "ui/Text.hpp"
+demo/app/HudView.cpp:11:#include "ui/widget/Button.hpp"
+demo/app/HudView.cpp:12:#include "ui/widget/Check.hpp"
+demo/app/MatPreview.cpp:1:#include "app/HudBuild.hpp"
+demo/app/MatPreview.cpp:3:#include "image/ImageDecode.hpp"
+demo/app/MatPreview.cpp:4:#include "ui/rhi/Canvas.hpp"
+demo/app/MatPreview.cpp:6:#include <cmath>
+demo/app/MatPreview.cpp:7:#include <cstdint>
+demo/app/MatPreview.cpp:8:#include <cstdio>
+demo/app/MatPreview.cpp:9:#include <cstring>
+demo/app/MatPreview.cpp:10:#include <filesystem>
+demo/app/Shell.cpp:1:#include "app/Shell.hpp"
+demo/app/Shell.cpp:2:#include "files/Browser.hpp"
+demo/app/Shell.cpp:3:#include "files/FileDomain.hpp"
+demo/app/Shell.cpp:4:#include "ui/rhi/Canvas.hpp"
+demo/app/Shell.cpp:5:#include "host/HostNote.hpp"
+demo/app/Shell.cpp:6:#include "platform/Window.hpp"
+demo/app/Shell.cpp:7:#include "ui/rhi/UiPhoto.hpp"
+demo/app/Shell.cpp:8:#include "Str.hpp"
+demo/app/Shell.cpp:9:#include "ui/Hover.hpp"
+demo/app/Shell.cpp:10:#include "ui/Panel.hpp"
+demo/app/Shell.cpp:11:#include "ui/widget/Button.hpp"
+demo/app/Shell.cpp:12:#include "ui/widget/Chrome.hpp"
+demo/app/Shell.cpp:13:#include "ui/widget/Curve.hpp"
+demo/app/Shell.cpp:14:#include "ui/widget/Gradient.hpp"
+demo/app/Shell.cpp:15:#include "ui/widget/Docking.hpp"
+demo/app/Shell.cpp:16:#include "ui/widget/Fold.hpp"
+demo/app/Shell.cpp:17:#include "host/PropGrid.hpp"
+demo/app/Shell.cpp:18:#include "ui/widget/Menu.hpp"
+demo/app/Shell.cpp:19:#include "ui/widget/Number.hpp"
+demo/app/Shell.cpp:20:#include "ui/widget/Label.hpp"
+demo/app/Shell.cpp:21:#include "ui/widget/ColorPicker.hpp"
+demo/app/Shell.cpp:22:#include "ui/widget/Slider.hpp"
+demo/app/Shell.cpp:24:#include <cstdio>
+demo/app/Shell.cpp:25:#include <cstring>
+demo/app/Shell.cpp:27:#include <spdlog/spdlog.h>
+demo/app/HudPick.cpp:1:#include "app/Engine.hpp"
+demo/app/HudPick.cpp:3:#include "app/HudBuild.hpp"
+demo/app/HudPick.cpp:4:#include "files/Browser.hpp"
+demo/app/HudPick.cpp:5:#include "files/FileDomain.hpp"
+demo/app/HudPick.cpp:6:#include "gpu_scene/SceneObject.hpp"
+demo/app/HudPick.cpp:7:#include "platform/PlatformUtil.hpp"
+demo/app/HudPick.cpp:8:#include "render/SceneFrame.hpp"
+demo/app/HudPick.cpp:9:#include "ui/rhi/Canvas.hpp"
+demo/app/HudPick.cpp:10:#include "ui/Panel.hpp"
+demo/app/HudPick.cpp:11:#include "ui/Text.hpp"
+demo/app/HudPick.cpp:12:#include "ui/rhi/UiPhoto.hpp"
+demo/app/HudPick.cpp:13:#include "ui/widget/Button.hpp"
+demo/app/HudPick.cpp:14:#include "ui/widget/Check.hpp"
+demo/app/HudPick.cpp:15:#include "ui/widget/Chrome.hpp"
+demo/app/HudPick.cpp:16:#include "ui/widget/ColorPicker.hpp"
+demo/app/HudPick.cpp:17:#include "ui/widget/Field.hpp"
+demo/app/HudPick.cpp:18:#include "host/PropGrid.hpp"
+demo/app/HudPick.cpp:19:#include "ui/widget/Menu.hpp"
+demo/app/HudPick.cpp:20:#include "ui/widget/Scroll.hpp"
+demo/app/HudPick.cpp:21:#include "ui/widget/Slider.hpp"
+demo/app/HudPick.cpp:22:#include "ui/widget/Splitter.hpp"
+demo/app/HudPick.cpp:23:#include "ui/widget/Label.hpp"
+demo/app/HudPick.cpp:24:#include "ui/widget/TreeView.hpp"
+demo/app/HudPick.cpp:25:#include "Str.hpp"
+demo/app/HudPick.cpp:27:#include <cmath>
+demo/app/HudPick.cpp:28:#include <cstdio>
+demo/app/HudPick.cpp:29:#include <cstring>
+demo/app/HudAct.cpp:1:#include "app/Engine.hpp"
+demo/app/HudAct.cpp:3:#include "app/HudBuild.hpp"
+demo/app/HudAct.cpp:4:#include "files/Browser.hpp"
+demo/app/HudAct.cpp:5:#include "files/FileDomain.hpp"
+demo/app/HudAct.cpp:6:#include "gpu_scene/SceneObject.hpp"
+demo/app/HudAct.cpp:7:#include "platform/PlatformUtil.hpp"
+demo/app/HudAct.cpp:8:#include "render/SceneFrame.hpp"
+demo/app/HudAct.cpp:9:#include "ui/rhi/Canvas.hpp"
+demo/app/HudAct.cpp:10:#include "ui/Panel.hpp"
+demo/app/HudAct.cpp:11:#include "ui/Text.hpp"
+demo/app/HudAct.cpp:12:#include "ui/rhi/UiPhoto.hpp"
+demo/app/HudAct.cpp:13:#include "ui/widget/Button.hpp"
+demo/app/HudAct.cpp:14:#include "ui/widget/Virtual.hpp"
+demo/app/HudAct.cpp:15:#include "ui/widget/Check.hpp"
+demo/app/HudAct.cpp:16:#include "ui/widget/Chrome.hpp"
+demo/app/HudAct.cpp:17:#include "ui/widget/ColorPicker.hpp"
+demo/app/HudAct.cpp:18:#include "ui/widget/Field.hpp"
+demo/app/HudAct.cpp:19:#include "host/PropGrid.hpp"
+demo/app/HudAct.cpp:20:#include "ui/widget/Menu.hpp"
+demo/app/HudAct.cpp:21:#include "ui/widget/Scroll.hpp"
+demo/app/HudAct.cpp:22:#include "ui/widget/Slider.hpp"
+demo/app/HudAct.cpp:23:#include "ui/widget/Splitter.hpp"
+demo/app/HudAct.cpp:24:#include "ui/widget/Label.hpp"
+demo/app/HudAct.cpp:25:#include "ui/widget/TreeView.hpp"
+demo/app/HudAct.cpp:26:#include "Str.hpp"
+demo/app/HudAct.cpp:28:#include <cmath>
+demo/app/HudAct.cpp:29:#include <cstdio>
+demo/app/HudAct.cpp:30:#include <cstring>
+demo/app/Engine.cpp:1:#include "app/Engine.hpp"
+demo/app/Engine.cpp:2:#include "app/SceneBlockFill.hpp"
+demo/app/Engine.cpp:4:#include "app/HudBuild.hpp"
+demo/app/Engine.cpp:5:#include "platform/PlatformUtil.hpp"
+demo/app/Engine.cpp:6:#include "render/SceneFrame.hpp"
+demo/app/Engine.cpp:7:#include "rhi/Device.hpp"
+demo/app/Engine.cpp:8:#include "files/Browser.hpp"
+demo/app/Engine.cpp:9:#include "files/FileDomain.hpp"
+demo/app/Engine.cpp:10:#include "host/HostNote.hpp"
+demo/app/Engine.cpp:11:#include "host/SceneMask.hpp"
+demo/app/Engine.cpp:12:#include "ui/widget/ColorPicker.hpp"
+demo/app/Engine.cpp:13:#include "ui/Panel.hpp"
+demo/app/Engine.cpp:14:#include "ui/widget/Button.hpp"
+demo/app/Engine.cpp:15:#include "ui/widget/Field.hpp"
+demo/app/Engine.cpp:16:#include "host/PropGrid.hpp"
+demo/app/Engine.cpp:17:#include "ui/widget/Splitter.hpp"
+demo/app/Engine.cpp:18:#include "ui/widget/Label.hpp"
+demo/app/Engine.cpp:19:#include "ui/widget/Chrome.hpp"
+demo/app/Engine.cpp:20:#include "ui/widget/Menu.hpp"
+demo/app/Engine.cpp:21:#include "ui/widget/Scroll.hpp"
+demo/app/Engine.cpp:22:#include "ui/widget/Slider.hpp"
+demo/app/Engine.cpp:23:#include "ui/widget/TreeView.hpp"
+demo/app/Engine.cpp:24:#include "ui/Interaction.hpp"
+demo/app/Engine.cpp:25:#include "ui/State.hpp"
+demo/app/Engine.cpp:26:#include "ui/rhi/Canvas.hpp"
+demo/app/Engine.cpp:27:#include "ui/Text.hpp"
+demo/app/Engine.cpp:28:#include "ui/rhi/UiPhoto.hpp"
+demo/app/Engine.cpp:29:#include "Str.hpp"
+demo/app/Engine.cpp:30:#include "app/HudBuild.hpp"
+demo/app/Engine.cpp:31:#include "asset/AssimpImporter.hpp"
+demo/app/Engine.cpp:33:#include <filesystem>
+demo/app/Engine.cpp:35:#include <spdlog/spdlog.h>
+demo/app/Engine.cpp:37:#include "gpu_scene/SceneObject.hpp"
+demo/app/Engine.cpp:39:#include <cmath>
+demo/app/Engine.cpp:40:#include <cstdio>
+demo/app/Engine.cpp:41:#include <cstdlib>
+demo/app/Engine.cpp:42:#include <cstring>
+demo/app/SceneBlockFill.cpp:1:#include "app/SceneBlockFill.hpp"
+demo/app/SceneBlockFill.cpp:3:#include <cstring>
+demo/app/SceneBlockFill.cpp:4:#include <type_traits>
+demo/Sample.cpp:1:#include "Str.hpp"
+demo/Sample.cpp:2:#include "files/Browser.hpp"
+demo/Sample.cpp:3:#include "files/FileDomain.hpp"
+demo/Sample.cpp:4:#include "ui/Command.hpp"
+demo/Sample.cpp:5:#include "host/HostNote.hpp"
+demo/Sample.cpp:6:#include "ui/widget/Chrome.hpp"
+demo/Sample.cpp:7:#include "ui/widget/Docking.hpp"
+demo/Sample.cpp:8:#include "ui/widget/Button.hpp"
+demo/Sample.cpp:9:#include "ui/widget/Check.hpp"
+demo/Sample.cpp:10:#include "ui/widget/Calendar.hpp"
+demo/Sample.cpp:11:#include "ui/widget/ColorPicker.hpp"
+demo/Sample.cpp:12:#include "ui/widget/Field.hpp"
+demo/Sample.cpp:13:#include "ui/widget/Menu.hpp"
+demo/Sample.cpp:15:#include <cmath>
+demo/Sample.cpp:16:#include <cstring>
+demo/Sample.cpp:17:#include <ctime>
+demo/sample/Main.cpp:1:#include "app/Shell.hpp"
+demo/sample/Main.cpp:2:#include "platform/Window.hpp"
+demo/sample/Main.cpp:3:#include "ui/widget/ColorPicker.hpp"
+demo/sample/Main.cpp:5:#include <spdlog/spdlog.h>
+demo/sample/Main.cpp:7:#include <cstdlib>
+
+=== 4. LEAKED TYPES IN HEADERS (Vulkan / Volk / SDL / Yoga) ===
+core/platform/Window.hpp:8:struct SDL_Window;
+core/platform/Window.hpp:9:struct SDL_Cursor;
+core/platform/Window.hpp:10:struct VkInstance_T;
+core/platform/Window.hpp:11:struct VkSurfaceKHR_T;
+core/platform/Window.hpp:97:    SDL_Window* handle = nullptr;
+core/platform/Window.hpp:126:    SDL_Cursor* colorCursor = nullptr;
+core/platform/Window.hpp:128:    SDL_Cursor* cursors[12]{};
+core/platform/Window.hpp:188:[[nodiscard]] bool windowCreateSurface(Window& w, VkInstance_T* instance, VkSurfaceKHR_T*& out);
+core/rhi/Device.hpp:5:#include <volk.h>
+core/rhi/Device.hpp:16:    VkInstance instance = VK_NULL_HANDLE;
+core/rhi/Device.hpp:17:    VkDebugUtilsMessengerEXT debug = VK_NULL_HANDLE;
+core/rhi/Device.hpp:18:    VkPhysicalDevice physical = VK_NULL_HANDLE;
+core/rhi/Device.hpp:19:    VkDevice device = VK_NULL_HANDLE;
+core/rhi/Device.hpp:20:    VkSurfaceKHR surface = VK_NULL_HANDLE;
+core/rhi/Device.hpp:21:    VkQueue graphicsQueue = VK_NULL_HANDLE;
+core/rhi/Device.hpp:22:    VkQueue presentQueue = VK_NULL_HANDLE;
+core/rhi/Device.hpp:23:    VkQueue transferQueue = VK_NULL_HANDLE;
+core/rhi/Device.hpp:24:    VkCommandPool commandPool = VK_NULL_HANDLE;
+core/rhi/Device.hpp:25:    VkCommandPool transferPool = VK_NULL_HANDLE;
+core/rhi/Device.hpp:28:    VkPhysicalDeviceDescriptorHeapPropertiesEXT heapProps{
+core/rhi/Device.hpp:33:    // Одна и та же блокировка на: (1) vkQueueSubmit2/vkQueuePresentKHR на общей VkQueue
+core/rhi/Device.hpp:56:[[nodiscard]] bool deviceCreate(Device& d, VkSurfaceKHR surface);
+core/rhi/Device.hpp:57:[[nodiscard]] bool deviceCreateSurface(Device& d, VkSurfaceKHR surface, VkSurfaceKHR& out);
+core/rhi/Device.hpp:60:void deviceName(Device& d, uint64_t handle, VkObjectType type, const char* name);
+core/rhi/Barrier.hpp:5:#include <volk.h>
+core/rhi/Barrier.hpp:10:    VkCommandBuffer cmd,
+core/rhi/Barrier.hpp:11:    VkImage image,
+core/rhi/Barrier.hpp:12:    VkImageLayout oldL,
+core/rhi/Barrier.hpp:13:    VkImageLayout newL,
+core/rhi/Barrier.hpp:14:    VkPipelineStageFlags2 srcStage,
+core/rhi/Barrier.hpp:15:    VkAccessFlags2 srcAccess,
+core/rhi/Barrier.hpp:16:    VkPipelineStageFlags2 dstStage,
+core/rhi/Barrier.hpp:17:    VkAccessFlags2 dstAccess,
+core/rhi/Barrier.hpp:18:    VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT) {
+core/rhi/Barrier.hpp:22:    VkImageMemoryBarrier2 b{
+core/rhi/Barrier.hpp:35:    VkDependencyInfo dep{
+core/rhi/Barrier.hpp:45:    VkCommandBuffer cmd,
+core/rhi/Barrier.hpp:46:    VkImage image,
+core/rhi/Barrier.hpp:47:    VkImageLayout oldL,
+core/rhi/Barrier.hpp:48:    VkImageLayout newL,
+core/rhi/Barrier.hpp:49:    VkPipelineStageFlags2 srcStage,
+core/rhi/Barrier.hpp:50:    VkAccessFlags2 srcAccess,
+core/rhi/Barrier.hpp:51:    VkPipelineStageFlags2 dstStage,
+core/rhi/Barrier.hpp:52:    VkAccessFlags2 dstAccess,
+core/rhi/Barrier.hpp:55:    VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT) {
+core/rhi/Barrier.hpp:59:    VkImageMemoryBarrier2 b{
+core/rhi/Barrier.hpp:72:    VkDependencyInfo dep{
+core/rhi/Barrier.hpp:81:    VkCommandBuffer cmd,
+core/rhi/Barrier.hpp:82:    VkBuffer buffer,
+core/rhi/Barrier.hpp:83:    VkDeviceSize offset,
+core/rhi/Barrier.hpp:84:    VkDeviceSize size,
+core/rhi/Barrier.hpp:85:    VkPipelineStageFlags2 srcStage,
+core/rhi/Barrier.hpp:86:    VkAccessFlags2 srcAccess,
+core/rhi/Barrier.hpp:87:    VkPipelineStageFlags2 dstStage,
+core/rhi/Barrier.hpp:88:    VkAccessFlags2 dstAccess) {
+core/rhi/Barrier.hpp:89:    VkBufferMemoryBarrier2 b{
+core/rhi/Barrier.hpp:101:    VkDependencyInfo dep{
+core/rhi/Barrier.hpp:110:    VkCommandBuffer cmd,
+core/rhi/Barrier.hpp:111:    VkPipelineStageFlags2 srcStage,
+core/rhi/Barrier.hpp:112:    VkAccessFlags2 srcAccess,
+core/rhi/Barrier.hpp:113:    VkPipelineStageFlags2 dstStage,
+core/rhi/Barrier.hpp:114:    VkAccessFlags2 dstAccess) {
+core/rhi/Barrier.hpp:115:    VkMemoryBarrier2 b{
+core/rhi/Barrier.hpp:122:    VkDependencyInfo dep{
+core/rhi/Barrier.hpp:133:    VkCommandBuffer cmd,
+core/rhi/Barrier.hpp:135:    VkImageLayout newLayout,
+core/rhi/Barrier.hpp:136:    VkPipelineStageFlags2 newStage,
+core/rhi/Barrier.hpp:137:    VkAccessFlags2 newAccess,
+core/rhi/Barrier.hpp:138:    VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+core/rhi/Barrier.hpp:146:    VkPipelineStageFlags2 srcStage = VK_PIPELINE_STAGE_2_NONE;
+core/rhi/Barrier.hpp:147:    VkAccessFlags2 srcAccess = VK_ACCESS_2_NONE;
+core/rhi/GpuImage.hpp:10:    VkImage image = VK_NULL_HANDLE;
+core/rhi/GpuImage.hpp:11:    VkImageView view = VK_NULL_HANDLE;
+core/rhi/GpuImage.hpp:13:    VkFormat format = VK_FORMAT_UNDEFINED;
+core/rhi/GpuImage.hpp:14:    VkExtent2D extent{};
+core/rhi/GpuImage.hpp:22:    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+core/rhi/GpuImage.hpp:23:    VkPipelineStageFlags2 stage = VK_PIPELINE_STAGE_2_NONE;
+core/rhi/GpuImage.hpp:24:    VkAccessFlags2 access = VK_ACCESS_2_NONE;
+core/rhi/GpuImage.hpp:30:    VkExtent2D extent,
+core/rhi/GpuImage.hpp:31:    VkFormat format,
+core/rhi/GpuImage.hpp:32:    VkImageUsageFlags usage,
+core/rhi/GpuImage.hpp:33:    VkImageAspectFlags aspect,
+core/rhi/GpuImage.hpp:43:    VkFormat format,
+core/rhi/GpuImage.hpp:44:    VkImageUsageFlags usage,
+core/rhi/GpuImage.hpp:45:    VkImageAspectFlags aspect);
+core/rhi/GpuImage.hpp:51:    VkFormat format,
+core/rhi/GpuImage.hpp:52:    VkImageUsageFlags usage,
+core/rhi/GpuImage.hpp:53:    VkImageAspectFlags aspect);
+core/rhi/GpuBuffer.hpp:8:    VkBuffer buffer = VK_NULL_HANDLE;
+core/rhi/GpuBuffer.hpp:10:    VkDeviceAddress address = 0;
+core/rhi/GpuBuffer.hpp:12:    VkDeviceSize size = 0;
+core/rhi/GpuBuffer.hpp:18:    VkDeviceSize size,
+core/rhi/GpuBuffer.hpp:19:    VkBufferUsageFlags usage,
+core/rhi/GpuBuffer.hpp:23:void gpuBufferFlush(const GpuBuffer& b, Device& d, VkDeviceSize offset, VkDeviceSize size);
+core/rhi/GpuBuffer.hpp:26:void gpuBufferInvalidate(const GpuBuffer& b, Device& d, VkDeviceSize offset, VkDeviceSize size);
+core/rhi/MeshDraw.hpp:15:    VkShaderEXT mesh = VK_NULL_HANDLE;
+core/rhi/MeshDraw.hpp:18:    VkShaderEXT vert = VK_NULL_HANDLE;
+core/rhi/MeshDraw.hpp:19:    VkShaderEXT frag = VK_NULL_HANDLE;
+core/rhi/MeshDraw.hpp:25:    VkBuffer indirect = VK_NULL_HANDLE;
+core/rhi/MeshDraw.hpp:26:    VkDeviceSize indirectOffset = 0;
+core/rhi/MeshDraw.hpp:33:    VkPipelineLayout pushLayout = VK_NULL_HANDLE;
+core/rhi/MeshDraw.hpp:34:    VkShaderStageFlags pushStages = 0;
+core/rhi/MeshDraw.hpp:41:void meshDrawRecord(VkCommandBuffer cmd, const MeshDrawDesc& desc);
+core/rhi/GpuProfiler.hpp:12:    VkQueryPool pool = VK_NULL_HANDLE;
+core/rhi/GpuProfiler.hpp:27:void gpuProfilerBegin(GpuProfiler& p, Device& d, VkCommandBuffer cmd, uint32_t flight);
+core/rhi/GpuProfiler.hpp:28:void gpuProfilerOpen(GpuProfiler& p, VkCommandBuffer cmd, const char* name);
+core/rhi/GpuProfiler.hpp:29:void gpuProfilerClose(GpuProfiler& p, VkCommandBuffer cmd);
+core/rhi/GpuProfiler.hpp:34:    VkCommandBuffer cmd = VK_NULL_HANDLE;
+core/rhi/GpuProfiler.hpp:36:    GpuZone(GpuProfiler& p, VkCommandBuffer c, const char* name)
+core/rhi/ShaderObject.hpp:12:    VkShaderEXT handle = VK_NULL_HANDLE;
+core/rhi/ShaderObject.hpp:13:    VkShaderStageFlagBits stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+core/rhi/ShaderObject.hpp:18:    VkShaderStageFlagBits stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+core/rhi/ShaderObject.hpp:19:    VkShaderStageFlags nextStage = 0;
+core/rhi/ShaderObject.hpp:20:    VkShaderCreateFlagsEXT extraFlags = 0;
+core/rhi/ShaderObject.hpp:22:    const VkDescriptorSetAndBindingMappingEXT* mappings = nullptr;
+core/rhi/ShaderObject.hpp:25:    VkShaderStageFlags pushStages = 0;
+core/rhi/ShaderObject.hpp:34:    VkShaderStageFlagBits stage,
+core/rhi/ShaderObject.hpp:35:    VkShaderStageFlags nextStage,
+core/rhi/ShaderObject.hpp:40:void cmdBindMeshFrag(VkCommandBuffer cmd, VkShaderEXT mesh, VkShaderEXT frag);
+core/rhi/ShaderObject.hpp:41:void cmdBindVertFrag(VkCommandBuffer cmd, VkShaderEXT vert, VkShaderEXT frag, bool nullMesh);
+core/rhi/ShaderObject.hpp:42:void cmdBindCompute(VkCommandBuffer cmd, VkShaderEXT cs);
+core/rhi/ShaderObject.hpp:44:    VkCommandBuffer cmd,
+core/rhi/ShaderObject.hpp:45:    VkExtent2D extent,
+core/rhi/DescriptorHeap.hpp:21:    VkDeviceSize bufferDescSize = 0;
+core/rhi/DescriptorHeap.hpp:22:    VkDeviceSize imageDescSize = 0;
+core/rhi/DescriptorHeap.hpp:23:    VkDeviceSize samplerDescSize = 0;
+core/rhi/DescriptorHeap.hpp:24:    VkDeviceSize imageHeapOffset = 0;
+core/rhi/DescriptorHeap.hpp:25:    VkPhysicalDeviceDescriptorHeapPropertiesEXT props{};
+core/rhi/DescriptorHeap.hpp:33:[[nodiscard]] VkDeviceSize heapAlign(VkDeviceSize value, VkDeviceSize alignment);
+core/rhi/DescriptorHeap.hpp:42:    VkDescriptorType type,
+core/rhi/DescriptorHeap.hpp:43:    VkDeviceAddress address,
+core/rhi/DescriptorHeap.hpp:44:    VkDeviceSize size);
+core/rhi/DescriptorHeap.hpp:52:    VkDescriptorType type,
+core/rhi/DescriptorHeap.hpp:53:    VkDeviceAddress address,
+core/rhi/DescriptorHeap.hpp:54:    VkDeviceSize size);
+core/rhi/DescriptorHeap.hpp:60:    VkDescriptorType type,
+core/rhi/DescriptorHeap.hpp:62:    VkImageLayout layout,
+core/rhi/DescriptorHeap.hpp:63:    VkImageAspectFlags aspect,
+core/rhi/DescriptorHeap.hpp:73:    VkDescriptorType type,
+core/rhi/DescriptorHeap.hpp:75:    VkImageLayout layout,
+core/rhi/DescriptorHeap.hpp:76:    VkImageAspectFlags aspect,
+core/rhi/DescriptorHeap.hpp:84:    const VkSamplerCreateInfo& ci);
+core/rhi/DescriptorHeap.hpp:86:void heapBind(VkCommandBuffer cmd, const DescriptorHeaps& h, uint32_t flight = 0);
+core/rhi/DescriptorHeap.hpp:92:[[nodiscard]] VkDescriptorSetAndBindingMappingEXT heapMap(
+core/rhi/DescriptorHeap.hpp:95:    VkSpirvResourceTypeFlagsEXT resourceMask,
+core/rhi/DescriptorHeap.hpp:102:    VkDescriptorSetAndBindingMappingEXT mappings[32]{};
+core/rhi/DescriptorHeap.hpp:105:    void push(uint32_t set, uint32_t binding, VkSpirvResourceTypeFlagsEXT kind, uint32_t heapOffset, uint32_t heapStride) {
+core/rhi/Swapchain.hpp:23:    VkSurfaceKHR surface = VK_NULL_HANDLE;
+core/rhi/Swapchain.hpp:24:    VkSwapchainKHR handle = VK_NULL_HANDLE;
+core/rhi/Swapchain.hpp:32:    VkCommandPool pool[kFramesInFlight]{};
+core/rhi/Swapchain.hpp:33:    VkFormat format = VK_FORMAT_B8G8R8A8_UNORM;
+core/rhi/Swapchain.hpp:34:    VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+core/rhi/Swapchain.hpp:35:    VkExtent2D extent{};
+core/rhi/Swapchain.hpp:37:    VkImage images[kMaxSwapchainImages]{};
+core/rhi/Swapchain.hpp:38:    VkImageView views[kMaxSwapchainImages]{};
+core/rhi/Swapchain.hpp:44:    VkCommandBuffer cmd[kFramesInFlight]{};
+core/rhi/Swapchain.hpp:46:    VkCommandBuffer uiCmd[kFramesInFlight]{};
+core/rhi/Swapchain.hpp:47:    VkSemaphore acquireSem[kFramesInFlight]{};
+core/rhi/Swapchain.hpp:49:    VkSemaphore uiSem[kFramesInFlight]{};
+core/rhi/Swapchain.hpp:50:    VkSemaphore renderSem[kMaxSwapchainImages]{};
+core/rhi/Swapchain.hpp:51:    VkFence flightFence[kFramesInFlight]{};
+core/rhi/Swapchain.hpp:52:    VkSemaphore orderSem = VK_NULL_HANDLE;
+core/rhi/Swapchain.hpp:68:    VkCommandBuffer cmd = VK_NULL_HANDLE;
+core/rhi/Swapchain.hpp:69:    VkCommandBuffer uiCmd = VK_NULL_HANDLE;
+core/rhi/Swapchain.hpp:75:[[nodiscard]] bool swapchainCreate(Swapchain& sc, Device& d, VkSurfaceKHR surface, uint32_t w, uint32_t h, const FrameDesc& frame = {}, VkSwapchainKHR retired = VK_NULL_HANDLE);
+core/ui/rhi/UiRenderer.hpp:34:void uiRendererRecord(VkCommandBuffer cmd, const UiRenderer& r, const Swapchain& sc, const FrameContext& fc, uint32_t primCount, bool keepColor);
+core/ui/rhi/Canvas.hpp:48:void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, const FrameContext& fc, bool keepColor = false);
+core/ui/State.hpp:19:typedef struct YGNode* YGNodeRef;
+core/ui/State.hpp:64:    YGNodeRef yoga[kUiCap]{};
+core/image/ImageCompress.hpp:34:void compressRgbaLevel(const uint8_t* src, uint32_t width, uint32_t height, VkFormat format, uint8_t* dst);
+core/image/ImageUpload.hpp:58:    VkFormat format,
+core/host/Host.hpp:22:using HostSceneRecordFn = void (*)(void* user, VkCommandBuffer cmd, Device& device, DescriptorHeaps& heaps, const Swapchain& swap, const FrameContext& frame);
+core/host/Host.hpp:48:    VkSurfaceKHR surface = VK_NULL_HANDLE;
+engine/include/render/Cube.hpp:21:void cubePassRecord(VkCommandBuffer cmd, const CubePass& p, TrackedImage& color, TrackedImage& depth, const uint32_t counts[6], uint32_t face, bool clearColor);
+engine/include/render/Cube.hpp:22:void probeBakeRecord(VkCommandBuffer cmd, const CubePass& p, VkBuffer probes, VkDeviceSize probeBytes);
+engine/include/render/Cull.hpp:20:void occlPassRecord(VkCommandBuffer cmd, const OcclPass& p, const GpuBuffer& indirect, const GpuBuffer& flags, const GpuBuffer& visible, uint32_t count, bool late, uint32_t flight);
+engine/include/render/Cull.hpp:33:void clusterPassRecord(VkCommandBuffer cmd, const ClusterPass& p);
+engine/include/render/Cull.hpp:37:void shadowCullRecord(VkCommandBuffer cmd, const ShadowCullPass& p, const GpuBuffer& indirect, const GpuBuffer& lists, uint32_t count);
+engine/include/render/PassAllocators.hpp:14:    VkDeviceSize size,
+engine/include/render/PassAllocators.hpp:16:    VkBufferUsageFlags extraUsage = 0) {
+engine/include/render/PassAllocators.hpp:17:    const VkBufferUsageFlags usage = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+engine/include/render/PassBufferSync.hpp:7:inline void bufferBarrierComputeWriteToRead(VkCommandBuffer cmd, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size) {
+engine/include/render/PassBufferSync.hpp:13:inline void bufferBarrierComputeToIndirect(VkCommandBuffer cmd, VkBuffer buffer, VkDeviceSize size) {
+engine/include/render/PassBufferSync.hpp:19:inline void bufferBarrierComputeToMeshShader(VkCommandBuffer cmd, VkBuffer buffer, VkDeviceSize size) {
+engine/include/render/PassBufferSync.hpp:26:inline void bufferBarrierComputeWriteToReadWrite(VkCommandBuffer cmd, VkBuffer buffer, VkDeviceSize size) {
+engine/include/render/PassBufferSync.hpp:33:inline void bufferBarrierHostToAccel(VkCommandBuffer cmd, VkBuffer buffer, VkDeviceSize size = VK_WHOLE_SIZE) {
+engine/include/render/PassBufferSync.hpp:40:    VkCommandBuffer cmd,
+engine/include/render/PassBufferSync.hpp:41:    VkBuffer buffer,
+engine/include/render/PassBufferSync.hpp:42:    VkDeviceSize offset,
+engine/include/render/PassBufferSync.hpp:43:    VkDeviceSize size,
+engine/include/render/PassBufferSync.hpp:44:    VkPipelineStageFlags2 srcStage = VK_PIPELINE_STAGE_2_HOST_BIT,
+engine/include/render/PassBufferSync.hpp:45:    VkAccessFlags2 srcAccess = VK_ACCESS_2_HOST_WRITE_BIT) {
+engine/include/render/PassBufferSync.hpp:50:    VkCommandBuffer cmd,
+engine/include/render/PassBufferSync.hpp:51:    VkBuffer buffer,
+engine/include/render/PassBufferSync.hpp:52:    VkDeviceSize offset,
+engine/include/render/PassBufferSync.hpp:53:    VkDeviceSize size,
+engine/include/render/PassBufferSync.hpp:54:    VkAccessFlags2 dstAccess = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT) {
+engine/include/render/PassBufferSync.hpp:62:    VkCommandBuffer cmd,
+engine/include/render/PassBufferSync.hpp:63:    VkBuffer buffer,
+engine/include/render/PassBufferSync.hpp:64:    VkDeviceSize size,
+engine/include/render/PassBufferSync.hpp:65:    VkPipelineStageFlags2 dstStage = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT,
+engine/include/render/PassBufferSync.hpp:66:    VkAccessFlags2 dstAccess = VK_ACCESS_2_UNIFORM_READ_BIT) {
+engine/include/render/PassBufferSync.hpp:72:    VkCommandBuffer cmd,
+engine/include/render/PassBufferSync.hpp:73:    VkBuffer buffer,
+engine/include/render/PassBufferSync.hpp:74:    VkDeviceSize offset,
+engine/include/render/PassBufferSync.hpp:75:    VkDeviceSize size,
+engine/include/render/PassBufferSync.hpp:76:    VkPipelineStageFlags2 srcStage,
+engine/include/render/PassBufferSync.hpp:77:    VkAccessFlags2 srcAccess,
+engine/include/render/PassBufferSync.hpp:78:    VkAccessFlags2 dstAccess = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT) {
+engine/include/render/PassCommon.hpp:41:inline void cmdPushFlight(VkCommandBuffer cmd, VkShaderStageFlags stage, uint32_t flight) {
+engine/include/render/PassCommon.hpp:46:inline void cmdPushFlightMode(VkCommandBuffer cmd, VkShaderStageFlags stage, uint32_t flight, uint32_t mode) {
+engine/include/render/PassCommon.hpp:54:    VkCommandPool pool = VK_NULL_HANDLE;
+engine/include/render/PassCommon.hpp:55:    VkCommandBuffer cmd = VK_NULL_HANDLE;
+engine/include/render/PassCommon.hpp:56:    VkFence fence = VK_NULL_HANDLE;
+engine/include/render/PassCommon.hpp:67:        VkCommandPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+engine/include/render/PassCommon.hpp:72:        VkCommandBufferAllocateInfo alloc{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+engine/include/render/PassCommon.hpp:79:        VkFenceCreateInfo fenceInfo{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+engine/include/render/PassCommon.hpp:86:    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+engine/include/render/PassCommon.hpp:111:    VkCommandBufferSubmitInfo cb{
+engine/include/render/PassCommon.hpp:115:    VkSubmitInfo2 submit{
+engine/include/render/PassCommon.hpp:121:    const VkResult result = vkQueueSubmit2(device.graphicsQueue, 1, &submit, task.fence);
+engine/include/render/PassCommon.hpp:165:[[nodiscard]] inline VkDeviceSize alignUp(VkDeviceSize size, VkDeviceSize alignment = 256) {
+engine/include/render/PassCommon.hpp:172:inline void dispatch1D(VkCommandBuffer cmd, uint32_t count, uint32_t group = 64u) {
+engine/include/render/PassCommon.hpp:176:inline void dispatch2D(VkCommandBuffer cmd, VkExtent2D extent, uint32_t group = 8u) {
+engine/include/render/PassCommon.hpp:180:inline void dispatchCompute2D(VkCommandBuffer cmd, const ShaderExt& shader, VkExtent2D extent, uint32_t group = 8u) {
+engine/include/render/PassCommon.hpp:185:[[nodiscard]] inline VkExtent2D mipExtent(VkExtent2D extent, uint32_t mip) {
+engine/include/render/PassCommon.hpp:193:    VkCommandBuffer cmd;
+engine/include/render/PassCommon.hpp:197:    VkExtent2D extent;
+engine/include/render/PassCommon.hpp:205:inline constexpr VkAccessFlags2 kPingAccess = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+engine/include/render/PassCommon.hpp:212:    VkCommandBuffer cmd,
+engine/include/render/PassCommon.hpp:215:    VkExtent2D baseExtent,
+engine/include/render/PassCommon.hpp:226:    VkCommandBuffer cmd,
+engine/include/render/PassCommon.hpp:229:    VkExtent2D baseExtent,
+engine/include/render/PassRendering.hpp:3:#include <volk.h>
+engine/include/render/PassRendering.hpp:9:    VkCommandBuffer cmd = VK_NULL_HANDLE;
+engine/include/render/PassRendering.hpp:10:    VkRenderingAttachmentInfo color{};
+engine/include/render/PassRendering.hpp:11:    VkRenderingAttachmentInfo depth{};
+engine/include/render/PassRendering.hpp:12:    VkRenderingInfo info{};
+engine/include/render/PassRendering.hpp:60:    VkRenderingAttachmentInfo& out,
+engine/include/render/PassRendering.hpp:61:    VkImageView view,
+engine/include/render/PassRendering.hpp:62:    VkImageLayout layout,
+engine/include/render/PassRendering.hpp:63:    VkAttachmentLoadOp load,
+engine/include/render/PassRendering.hpp:64:    VkClearValue clear) {
+engine/include/render/PassRendering.hpp:75:    VkCommandBuffer cmd,
+engine/include/render/PassRendering.hpp:76:    VkExtent2D extent,
+engine/include/render/PassRendering.hpp:77:    VkImageView colorView,
+engine/include/render/PassRendering.hpp:78:    VkImageView depthView,
+engine/include/render/PassRendering.hpp:79:    VkClearValue clearColor,
+engine/include/render/PassRendering.hpp:80:    VkClearValue clearDepth,
+engine/include/render/PassRendering.hpp:84:    const VkAttachmentLoadOp load = clearOnLoad ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+engine/include/render/PassRendering.hpp:104:    VkCommandBuffer cmd,
+engine/include/render/PassRendering.hpp:105:    VkExtent2D extent,
+engine/include/render/PassRendering.hpp:106:    VkImageView depthView,
+engine/include/render/PassRendering.hpp:107:    VkClearValue clearDepth,
+engine/include/render/PassRendering.hpp:109:    VkRect2D renderArea = {}) {
+engine/include/render/PassRendering.hpp:112:    const VkAttachmentLoadOp load = clearOnLoad ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+engine/include/render/PassShaderGroup.hpp:21:    VkShaderStageFlagBits stage,
+engine/include/render/PassShaderGroup.hpp:22:    const VkDescriptorSetAndBindingMappingEXT* mappings,
+engine/include/render/PassShaderGroup.hpp:24:    VkShaderStageFlags nextStage = 0) {
+engine/include/render/PassShaderGroup.hpp:49:    VkShaderStageFlagBits stage,
+engine/include/render/PassShaderGroup.hpp:50:    const VkDescriptorSetAndBindingMappingEXT* mappings,
+engine/include/render/PassShaderGroup.hpp:52:    VkShaderStageFlags nextStage = 0) {
+engine/include/render/PassShaderGroup.hpp:77:    VkShaderStageFlagBits stage,
+engine/include/render/PassShaderGroup.hpp:78:    const VkDescriptorSetAndBindingMappingEXT* const (&mappings)[N],
+engine/include/render/PassShaderGroup.hpp:80:    VkShaderStageFlags nextStage = 0) {
+engine/include/render/PassShaderGroup.hpp:106:    VkShaderStageFlagBits stage,
+engine/include/render/PassShaderGroup.hpp:108:    VkShaderStageFlags nextStage = 0) {
+engine/include/render/PassTargets.hpp:23:[[nodiscard]] inline VkExtent2D halfExtent(VkExtent2D extent) {
+engine/include/render/PassTargets.hpp:31:    VkExtent2D extent,
+engine/include/render/PassTargets.hpp:32:    VkFormat format,
+engine/include/render/PassTargets.hpp:33:    VkImageUsageFlags usage,
+engine/include/render/PassTargets.hpp:34:    VkImageAspectFlags aspect) {
+engine/include/render/PassTargets.hpp:48:    VkExtent2D extent,
+engine/include/render/PassTargets.hpp:49:    VkFormat format,
+engine/include/render/PassTargets.hpp:50:    VkImageUsageFlags usage,
+engine/include/render/PassTargets.hpp:51:    VkImageAspectFlags aspect) {
+engine/include/render/PassTargets.hpp:59:[[nodiscard]] inline bool recreateHdr(GpuImage& img, Device& device, VkExtent2D extent) {
+engine/include/render/Radiance.hpp:78:    VkAccelerationStructureKHR blas = VK_NULL_HANDLE;
+engine/include/render/Radiance.hpp:79:    VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
+engine/include/render/Radiance.hpp:80:    VkDeviceAddress tlasAddress = 0;
+engine/include/render/Radiance.hpp:141:    VkExtent2D extent,
+engine/include/render/Radiance.hpp:152:    VkCommandBuffer cmd);
+engine/include/render/Radiance.hpp:154:void radianceRecord(VkCommandBuffer cmd, VkExtent2D extent, RadiancePass& p, bool freeze);
+engine/include/render/Shade.hpp:33:[[nodiscard]] bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkExtent2D extent);
+engine/include/render/Shade.hpp:35:[[nodiscard]] bool shadePassResize(ShadePass& p, Device& d, VkExtent2D extent);
+engine/include/render/Shade.hpp:36:void shadeAoRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p);
+engine/include/render/Shade.hpp:37:void shadeSkyRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p);
+engine/include/render/Shade.hpp:38:void shadeSunRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p);
+engine/include/render/Shade.hpp:39:void shadePunctualRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p);
+engine/include/render/Shade.hpp:40:void shadeFogRecord(VkCommandBuffer cmd, VkExtent2D extent, const ShadePass& p);
+engine/include/render/Shade.hpp:41:void contactRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p);
+engine/include/render/Shade.hpp:42:void reflectRecord(VkCommandBuffer cmd, VkExtent2D extent, ShadePass& p, uint32_t flight);
+engine/include/render/Sky.hpp:33:[[nodiscard]] bool skyPassResize(SkyPass& p, Device& d, VkExtent2D extent);
+engine/include/render/Sky.hpp:37:[[nodiscard]] bool skyPassCreate(SkyPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent2D extent);
+engine/include/render/Sky.hpp:39:void skyLutRecord(VkCommandBuffer cmd, SkyPass& p);
+engine/include/render/Sky.hpp:40:void skyProbeRecord(VkCommandBuffer cmd, SkyPass& p, VkBuffer probes, VkDeviceSize size);
+engine/include/render/Sky.hpp:41:void cloudNoiseEnsure(VkCommandBuffer cmd, SkyPass& p);
+engine/include/render/Sky.hpp:42:void cloudShadowRecord(VkCommandBuffer cmd, SkyPass& p);
+engine/include/render/Sky.hpp:43:void cloudRecord(VkCommandBuffer cmd, SkyPass& p, VkExtent2D extent);
+engine/include/render/Visbuffer.hpp:32:    VkBuffer indirect = VK_NULL_HANDLE;
+engine/include/render/Visbuffer.hpp:33:    VkDeviceSize indirectOffset = 0;
+engine/include/render/Visbuffer.hpp:36:[[nodiscard]] bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent2D extent);
+engine/include/render/Visbuffer.hpp:38:[[nodiscard]] bool visPassResize(VisPass& p, Device& d, VkExtent2D extent);
+engine/include/render/Visbuffer.hpp:40:void visPassRecord(VkCommandBuffer cmd, VkExtent2D extent, VisPass& p, const VisInstanceDraw& draw, bool load, uint32_t flight);
+engine/include/render/Visbuffer.hpp:41:void visShadowRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth, const VisInstanceDraw& draw, uint32_t cascade);
+engine/include/render/Visbuffer.hpp:42:void visPointRecord(VkCommandBuffer cmd, const VisPass& p, TrackedImage& depth, const uint32_t counts[3]);
+engine/include/render/Gizmo.hpp:22:void gizmoPassRecord(VkCommandBuffer cmd, Device& device, const Swapchain& swap, const FrameContext& frame, GizmoPass& pass, const SceneActors& actors);
+engine/include/render/Voxel.hpp:64:    VkCommandBuffer cmd,
+engine/include/render/Voxel.hpp:67:    VkExtent2D extent,
+engine/include/render/Fsr.hpp:78:[[nodiscard]] VkExtent2D fsrRenderExtent(uint32_t quality, VkExtent2D display);
+engine/include/render/Fsr.hpp:79:[[nodiscard]] bool fsrCreate(FsrPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent);
+engine/include/render/Fsr.hpp:81:[[nodiscard]] bool fsrResize(FsrPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D render, VkExtent2D display);
+engine/include/render/Fsr.hpp:82:void fsrJitter(FsrPass& p, float& ndcX, float& ndcY, VkExtent2D render, VkExtent2D display);
+engine/include/render/Fsr.hpp:84:    VkCommandBuffer cmd,
+engine/include/render/Gtao.hpp:61:[[nodiscard]] bool gtaoCreate(GtaoPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent);
+engine/include/render/Gtao.hpp:63:[[nodiscard]] bool gtaoResize(GtaoPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent);
+engine/include/render/Gtao.hpp:65:    VkCommandBuffer cmd,
+engine/include/render/HeapBind.hpp:235:[[nodiscard]] inline bool heapWriteStorage(DescriptorHeaps& h, Device& d, uint32_t slot, VkDeviceAddress address, VkDeviceSize size) {
+engine/include/render/HeapBind.hpp:264:        const VkSpirvResourceTypeFlagsEXT kind = readOnly
+engine/include/render/Restir.hpp:100:    VkImageLayout sigmaPenumbraLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+engine/include/render/Restir.hpp:101:    VkImageLayout sigmaSunLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+engine/include/render/Restir.hpp:102:    VkImageLayout sigmaHistLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+engine/include/render/Restir.hpp:120:    VkImageLayout pdfLayout[2]{VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_UNDEFINED};
+engine/include/render/Restir.hpp:121:    VkImageLayout histPosLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+engine/include/render/Restir.hpp:122:    VkImageLayout histMatLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+engine/include/render/Restir.hpp:179:[[nodiscard]] bool restirCreate(RestirPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent2D extent);
+engine/include/render/Restir.hpp:181:[[nodiscard]] bool restirResize(RestirPass& p, Device& d, VkExtent2D extent);
+engine/include/render/Restir.hpp:184:void restirStatReset(VkCommandBuffer cmd, RestirPass& p, Device& d, uint32_t flight);
+engine/include/render/Restir.hpp:185:void restirStatFlush(VkCommandBuffer cmd, RestirPass& p, uint32_t flight);
+engine/include/render/Restir.hpp:187:    VkCommandBuffer cmd,
+engine/include/render/Restir.hpp:195:    VkExtent2D extent,
+engine/include/render/Restir.hpp:196:    VkDeviceAddress tlas,
+engine/include/render/Tonemap.hpp:29:void cmaaPassRecord(VkCommandBuffer cmd, VkExtent2D extent, const TonemapPass& p);
+engine/include/render/Tonemap.hpp:30:void smaaPassRecord(VkCommandBuffer cmd, VkExtent2D extent, const TonemapPass& p);
+engine/include/render/Tonemap.hpp:31:void bloomPassRecord(VkCommandBuffer cmd, const Swapchain& sc, TonemapPass& p, bool run);
+engine/include/render/Tonemap.hpp:32:void tonemapDrawRecord(VkCommandBuffer cmd, const Swapchain& sc, const FrameContext& fc, const TonemapPass& p);
+engine/include/render/Sharc.hpp:93:[[nodiscard]] bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent);
+engine/include/render/Sharc.hpp:94:[[nodiscard]] bool sharcResize(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D extent);
+engine/include/render/Sharc.hpp:97:    VkCommandBuffer cmd,
+engine/include/render/Sharc.hpp:102:    VkExtent2D extent,
+engine/include/render/Sharc.hpp:109:    VkDeviceAddress tlas,
+engine/include/render/Particles.hpp:75:    VkCommandBuffer cmd,
+engine/include/render/Particles.hpp:79:    VkExtent2D extent,
+engine/include/render/Fog.hpp:30:void fogRecord(VkCommandBuffer cmd, FogVolume& fog, TrackedImage& hdr, VkExtent2D extent);
+engine/include/render/Rain.hpp:37:    VkCommandBuffer cmd,
+engine/include/render/Rain.hpp:40:    VkExtent2D extent,
+engine/include/render/SceneFrameImpl.hpp:292:    VkExtent2D extent{};
+engine/include/render/SceneFrameImpl.hpp:341:void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, GtaoPass& gtao, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes, bool restirDi, float fovY);
+engine/include/render/SceneFrameImpl.hpp:342:void framePassRestir(const RenderContext& ctx, RestirPass& restir, const FrameView& view, const void* lights, uint32_t lightCount, uint32_t passMask, VkDeviceAddress tlas);
+engine/include/render/SceneFrameImpl.hpp:345:void framePassSharc(const RenderContext& ctx, SharcPass& sharc, TrackedImage& hdrA, float giGain, uint32_t lightCount, VkDeviceAddress tlas, const RestirPass& restir, uint32_t restirOn, uint32_t denoise);
+engine/include/render/SceneFrameImpl.hpp:371:void sceneResizeTargets(SceneFrame* scene, Device& device, const Swapchain& swap, const FrameContext& frame, VkExtent2D renderExtent);
+engine/include/render/SceneFrameImpl.hpp:395:bool heapImage(DescriptorHeaps& heaps, Device& device, SceneFrameImpl& s, uint32_t slot, VkDescriptorType type, const GpuImage& img, VkImageLayout layout, VkImageAspectFlags aspect);
+engine/include/render/Hiz.hpp:6:#include <volk.h>
+engine/include/render/Hiz.hpp:19:void hizMaxBuildRecord(VkCommandBuffer cmd, VkExtent2D extent, const HizPass& p, TrackedImage& hiz, uint32_t flight);
+engine/include/render/SceneFrame.hpp:322:    VkCommandBuffer cmd,
+
+=== 5. FORWARD DECLARATIONS IN HEADERS ===
+core/platform/Window.hpp:8:struct SDL_Window;
+core/platform/Window.hpp:9:struct SDL_Cursor;
+core/platform/Window.hpp:10:struct VkInstance_T;
+core/platform/Window.hpp:11:struct VkSurfaceKHR_T;
+core/ui/Panel.hpp:11:struct UiState;
+core/ui/Panel.hpp:12:struct UiPrimitive;
+core/ui/widget/Check.hpp:8:struct UiState;
+core/ui/widget/Menu.hpp:13:struct UiMenuBar {};
+core/ui/widget/Menu.hpp:14:struct UiMenuSlide {};
+core/ui/widget/Menu.hpp:16:struct UiCommandTarget {};
+core/ui/widget/Menu.hpp:17:struct UiMenuOpen {};
+core/ui/widget/Slider.hpp:11:struct UiProgress {};
+core/ui/widget/Button.hpp:8:struct UiIconChrome {};
+core/ui/widget/Button.hpp:10:struct UiState;
+core/ui/widget/ColorPicker.hpp:10:struct UiPrimitive;
+core/ui/widget/DragDrop.hpp:13:struct UiDragHost {};
+core/ui/widget/Chrome.hpp:11:struct UiTitleBar {};
+core/ui/widget/Chrome.hpp:12:struct UiResizable {};
+core/ui/widget/Field.hpp:23:struct UiNamedField {};
+core/ui/widget/Field.hpp:24:struct UiFieldMenuMark {};
+core/ui/widget/Field.hpp:25:struct UiFieldCaret {};
+core/ui/rhi/UiPhoto.hpp:12:struct UiState;
+core/ui/LayoutBridge.hpp:9:struct UiState;
+core/ui/Hover.hpp:7:struct UiState;
+core/ui/Interaction.hpp:21:struct UiHovered {};   // Мышь над сущностью
+core/ui/Interaction.hpp:22:struct UiFocused {};   // Фокус ввода (каретка / клавиатура)
+core/ui/Interaction.hpp:23:struct UiFocusable {}; // МОЖЕТ принимать фокус по клавише Tab (вместо enum ролей!)
+core/ui/Interaction.hpp:24:struct UiCapture {};   // Захват мыши (drag)
+core/ui/Interaction.hpp:25:struct UiTextInput {}; // Узел сам принимает текст и жест
+core/ui/Interaction.hpp:26:struct UiPass {};      // Пропуск клика сквозь элемент
+core/ui/Interaction.hpp:41:struct UiAction  { UiClickFn fn = nullptr; void* user = nullptr; };
+core/ui/Interaction.hpp:42:struct UiDrag    { UiDragFn  fn = nullptr; void* user = nullptr; };
+core/ui/Interaction.hpp:43:struct UiWheel   { UiWheelFn fn = nullptr; void* user = nullptr; };
+core/ui/Interaction.hpp:44:struct UiEdit    { UiEditFn  fn = nullptr; void* user = nullptr; };
+core/ui/Interaction.hpp:62:struct UiHoverable {};
+core/ui/Interaction.hpp:63:struct UiPopup {};
+core/ui/Interaction.hpp:64:struct UiTab { uint16_t index = 0; };
+core/ui/PrimitiveBatch.hpp:8:struct UiState;
+core/ui/PrimitiveBatch.hpp:9:struct UiNodeBars;
+core/ui/PrimitiveBatch.hpp:10:struct UiBar;
+core/ui/Text.hpp:12:struct UiState;
+core/ui/UiBin.hpp:116:struct UiState;
+core/ui/UiWindowBridge.hpp:9:struct UiState;
+core/ui/Types.hpp:7:struct UiState;
+core/ui/State.hpp:23:struct UiState;
+core/ui/State.hpp:38:struct UiNoHit {}; // Пустой тег: объект нематериален для курсора мыши
+core/ui/State.hpp:39:struct UiPaintLast {}; // Среди братьев рисуется последним, поверх непрозрачных строк.
+core/host/PropBind.hpp:27:struct UiPropBinder;
+core/host/PropGrid.hpp:7:struct UiRowHover {};
+core/host/SceneMask.hpp:7:struct UiState;
+core/host/Host.hpp:16:struct Host;
+core/audio/Audio.hpp:7:struct AudioWorld;
+engine/gpu_scene/SceneObject.hpp:85:struct SunObj {};
+engine/gpu_scene/SceneObject.hpp:86:struct PostObj {};
+engine/gpu_scene/SceneObject.hpp:87:struct PropObj {};
+engine/gpu_scene/SceneObject.hpp:88:struct WeatherObj {};
+engine/gpu_scene/SceneObject.hpp:89:struct EmptyObj {};
+engine/gpu_scene/SceneObject.hpp:90:struct LightObj {};
+engine/gpu_scene/Physics.hpp:10:struct PhysicsWorld;
+engine/include/render/Cube.hpp:9:struct DescriptorHeaps;
+engine/include/render/Cull.hpp:10:struct DescriptorHeaps;
+engine/include/render/Radiance.hpp:12:struct DescriptorHeaps;
+engine/include/render/Shade.hpp:10:struct DescriptorHeaps;
+engine/include/render/Sky.hpp:12:struct DescriptorHeaps;
+engine/include/render/Sky.hpp:13:struct FrameSun;
+engine/include/render/Visbuffer.hpp:10:struct DescriptorHeaps;
+engine/include/render/Gizmo.hpp:11:struct DescriptorHeaps;
+engine/include/render/Voxel.hpp:10:struct DescriptorHeaps;
+engine/include/render/Fsr.hpp:11:struct Device;
+engine/include/render/Fsr.hpp:12:struct DescriptorHeaps;
+engine/include/render/Gtao.hpp:11:struct DescriptorHeaps;
+engine/include/render/Restir.hpp:90:struct DescriptorHeaps;
+engine/include/render/Restir.hpp:177:struct GpuProfiler;
+engine/include/render/Tonemap.hpp:11:struct DescriptorHeaps;
+engine/include/render/Sharc.hpp:13:struct DescriptorHeaps;
+engine/include/render/Sharc.hpp:91:struct GpuProfiler;
+engine/include/render/Fog.hpp:10:struct DescriptorHeaps;
+engine/include/render/Weather.hpp:9:struct world;
+engine/include/render/Weather.hpp:10:struct entity;
+engine/include/render/SceneFrameImpl.hpp:50:struct PhysicsWorld;
+engine/include/render/SceneFrameImpl.hpp:51:struct AudioWorld;
+engine/include/render/SceneFrameImpl.hpp:349:struct SceneFrame : SceneFrameImpl {};
+engine/include/render/Hiz.hpp:10:struct DescriptorHeaps;
+engine/include/render/Hiz.hpp:11:struct TrackedImage;
+engine/include/render/SceneFrame.hpp:14:struct SceneFrame;
+
+=== 6. STATIC GLOBALS IN HEADERS ===
+
+=== 7. HEAVY STD HEADERS IN HPP ===
+core/ui/rhi/Canvas.hpp:14:#include <memory>
+core/ui/State.hpp:17:#include <vector>
+core/files/Model.hpp:4:#include <string>
+core/files/Model.hpp:5:#include <vector>
+core/host/PropBind.hpp:7:#include <vector>
+core/io/Json.hpp:4:#include <vector>
+core/gfx/MeshletBuilder.hpp:8:#include <vector>
+engine/gpu_scene/SceneObject.hpp:13:#include <vector>
+engine/include/render/Restir.hpp:14:#include <vector>
+engine/include/render/SceneFrameImpl.hpp:6:#include <vector>
+engine/include/render/SceneFrameImpl.hpp:46:#include <vector>
+
+=== 8. USING NAMESPACE IN HEADERS ===

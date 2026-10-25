@@ -64,8 +64,9 @@ Each `bh_*` target is an OBJECT-library module (`bh_module(name ...)`). Links po
 | `bh_ui_bricks` | 2A | Button, Check, Field, FieldDraw, Slider, ... | `bh_ui_core`, `bh_foundation` |
 | `bh_ui_kits` | 2B | Color, ColorPopup, ColorDraw, Calendar, Docking, Virtual, ... | `bh_ui_bricks` |
 | `bh_ui_rhi` | 1B | Canvas, Font, UiPhoto, UiRenderer | `bh_ui_core`, `bh_rhi`, `bh_image` |
+| `bh_ui_inspector` | 2B/3 | PropBind, PropImport, PropImportParse, PropGrid, PropFilter (declarative property inspector) | `bh_ui_kits`, `bh_ui_bricks`, `bh_ui_core`, `bh_foundation`. No RHI, SDL3, Window or Host. |
 | `bh_files` | 3 | Files, FileSession, FileBind, ... | `bh_foundation`, UI targets, `bh_asset` |
-| `bh_host` | 3 | Host, PropBind, PropImport, PropImportParse, PropGrid, PropFilter, SceneMask | UI targets, `bh_rhi`, `bh_platform` |
+| `bh_host` | 3 | Host, SceneMask (window, swapchain and canvas runtime) | `bh_ui_inspector`, UI targets, `bh_rhi`, `bh_platform` |
 | `bh_app` | 3 | `demo/app/*` coordinators | UI targets, `bh_files`, `bh_gpu_scene` |
 
 Only `bh_host` and the executables link `bh_platform`; every other target stays SDL3-free.
@@ -81,7 +82,8 @@ Only `bh_host` and the executables link `bh_platform`; every other target stays 
 - Tier 1 (platform without `Window*.cpp`): no `rhi/`, `image/`, `ui/`, `files/`, `host/`, `gfx/`, `asset/`, `audio/`, volk.
 - Tier 2 (`gfx`, `asset`, `audio`, `scene`, `stream`) and Graphics (`engine/`): no `ui/`, `files/`, `host/`, `Window.hpp`.
 - `core/image`, `core/files`, `core/audio`: no `platform/Window.hpp`, `Action.hpp`, `Dialog.hpp`, `SDL3/`.
-- `engine/include/render/*.hpp`: no `flecs.h` (forward-declare `flecs::world`/`flecs::entity`).
+- `PropGrid*`, `PropFilter*`, `PropBind*`, `PropImport*` (`bh_ui_inspector`): no `rhi/`, `platform/Window.hpp`, `ui/rhi/`, `host/Host.hpp`.
+- `engine/include/render/*.hpp`: no `flecs.h`, no `Rtxdi/DI/ReSTIRDI.h` (only `Restir.cpp` includes it; the header holds a forward-declared `rtxdi::ReSTIRDIContext*`). Forward-declare `flecs::world`/`flecs::entity`.
 - Rule of thumb: no source file exceeds 1,000 lines. Split along responsibility, with shared declarations in an internal header (`ColorInternal.hpp`, `PropImportInternal.hpp`).
 
 ---
@@ -216,7 +218,7 @@ cmake --build build-core --target BurnhopeTest BurnhopeEngine -j && ./build-core
 | `core/ui/widget/Field.cpp` / `FieldDraw.cpp` | Field behavior and undo (id-based snapshots) / field painting. |
 | `core/ui/kit/Color.cpp` / `ColorPopup.cpp` / `ColorDraw.cpp` | Picker body and binding / popup, color book, eyedropper / swatch and ramp painting. Shared: `ColorInternal.hpp`. |
 | `core/host/PropImport.cpp` / `PropImportParse.cpp` | Role spawn table and node building / JSON item and show parsing. Shared: `PropImportInternal.hpp`. |
-| `core/host/PropFilter.cpp` | Property row filtering. |
+| `core/host/PropFilter.cpp` | Property row filtering (`bh_ui_inspector`). |
 | `engine/gpu_scene/SceneObject.cpp` / `SceneGizmo.cpp` | Actor storage and transforms / projection, picking, gizmo drag math. |
 | `engine/src/SceneFrame.cpp` | Frame orchestration. |
 | `engine/src/SceneActors.cpp` | Play-mode actor capture/restore and the actor API (select, name, count). |

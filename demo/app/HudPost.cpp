@@ -1,3 +1,4 @@
+#include "app/Engine.hpp"
 #include "app/HudBuild.hpp"
 #include "app/SceneBlockFill.hpp"
 

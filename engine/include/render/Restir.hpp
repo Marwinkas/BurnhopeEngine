@@ -7,11 +7,14 @@
 #include "rhi/GpuImage.hpp"
 #include "rhi/ShaderObject.hpp"
 
-#include <Rtxdi/DI/ReSTIRDI.h>
+#include <Rtxdi/DI/ReSTIRDIParameters.h>
 
 #include <cstdint>
-#include <optional>
 #include <vector>
+
+namespace rtxdi {
+class ReSTIRDIContext;
+}
 
 namespace burnhope {
 
@@ -110,7 +113,7 @@ struct RestirPass {
     GpuImage histPos{};
     GpuImage histMat{};
     std::vector<float> pdfCpu{};
-    std::optional<rtxdi::ReSTIRDIContext> ctx[2]{};
+    rtxdi::ReSTIRDIContext* ctx[2]{};
     uint32_t pdfW = 0;
     uint32_t pdfH = 0;
     uint32_t pdfMips = 0;

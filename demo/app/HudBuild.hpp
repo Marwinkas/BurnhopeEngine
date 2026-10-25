@@ -1,10 +1,14 @@
 #pragma once
 
-#include "app/Engine.hpp"
 #include "host/PropImport.hpp"
 #include "ui/Style.hpp"
 
 namespace burnhope {
+
+struct BhmatDoc;
+struct Engine;
+struct Canvas;
+struct HudContext;
 
 void setSlide(Canvas& canvas, uint16_t id, float value);
 float slideAt(const Canvas& canvas, uint16_t id, float fallback);

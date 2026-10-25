@@ -1,7 +1,6 @@
 #include "app/Engine.hpp"
 #include "app/SceneBlockFill.hpp"
 
-#include "app/HudBuild.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
 #include "rhi/Device.hpp"

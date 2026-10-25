@@ -158,8 +158,12 @@ file(GLOB_RECURSE BH_NOWINDOW_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/audio/*.cpp ${BH_CORE}/audio/*.hpp)
 bh_firewall("image, files and audio must not import Window, Action, Dialog or SDL3"
     "platform/(Window|Action|Dialog)\\.hpp|SDL3/" ${BH_NOWINDOW_SOURCES})
+file(GLOB BH_INSPECTOR_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/host/PropGrid.* ${BH_CORE}/host/PropFilter.*
+    ${BH_CORE}/host/PropBind.* ${BH_CORE}/host/PropImport*)
+bh_firewall("ui inspector must not import rhi, Window, ui/rhi or Host"
+    "rhi/|platform/Window\\.hpp|ui/rhi/|host/Host\\.hpp" ${BH_INSPECTOR_SOURCES})
 file(GLOB BH_RENDER_HEADERS CONFIGURE_DEPENDS ${BH_ENGINE}/include/render/*.hpp)
-bh_firewall("engine/include/render headers must not import flecs" "flecs\\.h" ${BH_RENDER_HEADERS})
+bh_firewall("engine/include/render headers must not import flecs or the RTXDI context" "flecs\\.h|Rtxdi/DI/ReSTIRDI\\.h" ${BH_RENDER_HEADERS})
 file(GLOB_RECURSE BH_LIVE_SOURCES CONFIGURE_DEPENDS
     ${BH_DEMO}/*.cpp ${BH_DEMO}/*.hpp ${BH_ENGINE}/*.cpp ${BH_ENGINE}/*.hpp)
 foreach(bh_live_file ${BH_LIVE_SOURCES})
@@ -420,16 +424,19 @@ bh_module(files
     core/files/Model.cpp
 )
 target_link_libraries(bh_files PUBLIC bh_foundation bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_asset)
-bh_module(host
-    core/host/Host.cpp
+bh_module(ui_inspector
     core/host/PropBind.cpp
     core/host/PropImport.cpp
     core/host/PropImportParse.cpp
     core/host/PropGrid.cpp
     core/host/PropFilter.cpp
+)
+target_link_libraries(bh_ui_inspector PUBLIC bh_ui_kits bh_ui_bricks bh_ui_core bh_foundation)
+bh_module(host
+    core/host/Host.cpp
     core/host/SceneMask.cpp
 )
-target_link_libraries(bh_host PUBLIC volk bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_rhi bh_platform bh_foundation)
+target_link_libraries(bh_host PUBLIC volk bh_ui_inspector bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_rhi bh_platform bh_foundation)
 bh_module(app
     demo/app/Engine.cpp
     demo/app/HudAct.cpp
@@ -450,7 +457,7 @@ bh_module(app
     demo/app/SceneBlockFill.cpp
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
-target_link_libraries(bh_app PUBLIC bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_files bh_gpu_scene)
+target_link_libraries(bh_app PUBLIC bh_ui_inspector bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_files bh_gpu_scene)
 target_link_libraries(bh_ui_core PUBLIC bh_foundation yogacore flecs_static)
 target_link_libraries(bh_ui_bricks PUBLIC bh_ui_core bh_foundation)
 target_link_libraries(bh_ui_kits PUBLIC bh_ui_bricks)
@@ -928,7 +935,7 @@ target_compile_definitions(bh_files PRIVATE "BH_UI_FILES=\"${UI_BIN_DIR}/files.u
 
 add_executable(BurnhopeEngine demo/app/Main.cpp)
 target_link_libraries(BurnhopeEngine PRIVATE
-    bh_app bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_render bh_audio bh_gpu_scene bh_asset
+    bh_app bh_host bh_ui_inspector bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_render bh_audio bh_gpu_scene bh_asset
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
@@ -942,7 +949,7 @@ add_dependencies(BurnhopeEngine BurnhopeSpv UiSpv UiBin)
 
 add_executable(BurnhopeSample demo/sample/Main.cpp demo/Sample.cpp demo/app/Shell.cpp)
 target_link_libraries(BurnhopeSample PRIVATE
-    bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_gpu_scene bh_asset
+    bh_host bh_ui_inspector bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_gpu_scene bh_asset
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
@@ -972,7 +979,7 @@ set(BH_TEST_SOURCES
 )
 add_executable(BurnhopeTest ${BH_TEST_SOURCES})
 target_link_libraries(BurnhopeTest PRIVATE
-    bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_gpu_scene bh_asset
+    bh_host bh_ui_inspector bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_gpu_scene bh_asset
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads Freetype::Freetype
 )

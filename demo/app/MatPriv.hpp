@@ -1,11 +1,12 @@
 #pragma once
 
-#include "app/Engine.hpp"
 #include "ui/State.hpp"
 
 #include <cstddef>
 
 namespace burnhope {
+
+struct HudContext;
 
 struct MatHex {
     HudContext* hud = nullptr;
