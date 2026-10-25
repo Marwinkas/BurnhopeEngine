@@ -42,7 +42,10 @@ emeraldcity/
 testscene/
 newscenetest/
 BurnHopeEngine/
-
+scene/
+Libraries/
+.cursorignore
+.cursorrules
 # --- Скомпилированные шейдеры ---
 *.spv
 
