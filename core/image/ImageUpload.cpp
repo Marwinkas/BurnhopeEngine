@@ -29,12 +29,20 @@ const char* formatName(VkFormat format) {
     switch (format) {
     case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:
         return "BC1";
+    case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:
+        return "BC1s";
     case VK_FORMAT_BC3_UNORM_BLOCK:
         return "BC3";
+    case VK_FORMAT_BC5_UNORM_BLOCK:
+        return "BC5";
     case VK_FORMAT_BC7_UNORM_BLOCK:
         return "BC7";
+    case VK_FORMAT_BC7_SRGB_BLOCK:
+        return "BC7s";
     case VK_FORMAT_BC6H_UFLOAT_BLOCK:
         return "BC6H";
+    case VK_FORMAT_R8G8B8A8_SRGB:
+        return "RGBA8s";
     case VK_FORMAT_R16G16B16A16_SFLOAT:
         return "RGBA16F";
     default:
@@ -368,71 +376,17 @@ void mipCpuJob(void* user) {
     compressRgbaLevel(job->src, job->width, job->height, job->format, job->dst);
 }
 
-} // namespace
-
-bool imageUploadCompressed(GpuImage& img, Device& d, VkFormat format, const uint8_t* blocks, uint32_t width, uint32_t height) {
-    if (blocks == nullptr || width == 0 || height == 0) {
-        return false;
-    }
-    ImageMip level{};
-    level.width = width;
-    level.height = height;
-    const uint32_t bx = (width + 3u) / 4u;
-    const uint32_t by = (height + 3u) / 4u;
-    const uint32_t blockBytes = format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK ? 8u : 16u;
-    level.bytes = static_cast<uint64_t>(bx) * by * blockBytes;
-    return submitImageHostCopy(img, d, format, blocks, &level, 1);
-}
-
-bool imageLoadDds(GpuImage& img, Device& d, const char* path, bool srgb) {
-    MappedFile mapped{};
-    if (!fileMapReadOnly(path, &mapped) || mapped.size < 128) {
-        return false;
-    }
-    DdsView view{};
-    if (!imageParseDds(mapped.data, mapped.size, view)) {
-        fileUnmap(&mapped);
-        return false;
-    }
-    const VkFormat format = vkBlock(view.block, srgb);
-    const bool ok = format != VK_FORMAT_UNDEFINED && submitImageHostCopy(img, d, format, view.base, view.levels, view.levelCount);
-    fileUnmap(&mapped);
-    return ok;
-}
-
-bool gpuImageUploadRgba(
+bool uploadBlockChain(
     GpuImage& img,
     Device& d,
     const uint8_t* rgba,
     uint32_t width,
     uint32_t height,
     uint32_t frames,
+    VkFormat format,
+    ImageBlock block,
     const char* cacheDds) {
-    if (rgba == nullptr || width == 0 || height == 0 || d.device == VK_NULL_HANDLE) {
-        return false;
-    }
-    if (frames == 0) {
-        frames = 1;
-    }
     const uint32_t frameH = height / frames;
-    const bool alpha = hasAlpha(rgba, width * height);
-    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
-    ImageBlock block = ImageBlock::Bc1;
-    if (!alpha && formatOk(d, VK_FORMAT_BC1_RGBA_UNORM_BLOCK)) {
-        format = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
-        block = ImageBlock::Bc1;
-    } else if (alpha && formatOk(d, VK_FORMAT_BC7_UNORM_BLOCK)) {
-        format = VK_FORMAT_BC7_UNORM_BLOCK;
-        block = ImageBlock::Bc7;
-    } else if (alpha && formatOk(d, VK_FORMAT_BC3_UNORM_BLOCK)) {
-        format = VK_FORMAT_BC3_UNORM_BLOCK;
-        block = ImageBlock::Bc3;
-    }
-    if (format == VK_FORMAT_R8G8B8A8_UNORM) {
-        ImageMip level{width, height, 0, static_cast<uint64_t>(width) * height * 4u};
-        return submitImage(img, d, format, rgba, level.bytes, &level, 1);
-    }
-
     const uint32_t pw = align4(width);
     const uint32_t ph = align4(frameH);
     const uint32_t stacked = ph * frames;
@@ -450,7 +404,7 @@ bool gpuImageUploadRgba(
     }
     const bool chain = frames == 1;
     const uint32_t mips = mipCountFor(pw, stacked, chain);
-    const uint32_t blockBytes = format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK ? 8u : 16u;
+    const uint32_t blockBytes = imageBlockBytes(block);
     std::vector<std::vector<uint8_t>> chainPx;
     chainPx.push_back(std::move(padded));
     uint32_t lw = pw;
@@ -506,14 +460,138 @@ bool gpuImageUploadRgba(
     return submitImage(img, d, format, packed.data(), packed.size(), levels, mips);
 }
 
+} // namespace
+
+bool imageUploadCompressed(GpuImage& img, Device& d, VkFormat format, const uint8_t* blocks, uint32_t width, uint32_t height) {
+    if (blocks == nullptr || width == 0 || height == 0) {
+        return false;
+    }
+    ImageMip level{};
+    level.width = width;
+    level.height = height;
+    const uint32_t bx = (width + 3u) / 4u;
+    const uint32_t by = (height + 3u) / 4u;
+    const uint32_t blockBytes = format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK ? 8u : 16u;
+    level.bytes = static_cast<uint64_t>(bx) * by * blockBytes;
+    return submitImageHostCopy(img, d, format, blocks, &level, 1);
+}
+
+bool imageLoadDds(GpuImage& img, Device& d, const char* path, bool srgb) {
+    MappedFile mapped{};
+    if (!fileMapReadOnly(path, &mapped) || mapped.size < 128) {
+        return false;
+    }
+    DdsView view{};
+    if (!imageParseDds(mapped.data, mapped.size, view)) {
+        fileUnmap(&mapped);
+        return false;
+    }
+    const VkFormat format = vkBlock(view.block, srgb);
+    const bool ok = format != VK_FORMAT_UNDEFINED && submitImageHostCopy(img, d, format, view.base, view.levels, view.levelCount);
+    fileUnmap(&mapped);
+    return ok;
+}
+
+bool gpuImageUploadRgba(
+    GpuImage& img,
+    Device& d,
+    const uint8_t* rgba,
+    uint32_t width,
+    uint32_t height,
+    uint32_t frames,
+    const char* cacheDds) {
+    if (rgba == nullptr || width == 0 || height == 0 || d.device == VK_NULL_HANDLE) {
+        return false;
+    }
+    if (frames == 0) {
+        frames = 1;
+    }
+    const bool alpha = hasAlpha(rgba, width * height);
+    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+    ImageBlock block = ImageBlock::Bc1;
+    if (!alpha && formatOk(d, VK_FORMAT_BC1_RGBA_UNORM_BLOCK)) {
+        format = VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+        block = ImageBlock::Bc1;
+    } else if (alpha && formatOk(d, VK_FORMAT_BC7_UNORM_BLOCK)) {
+        format = VK_FORMAT_BC7_UNORM_BLOCK;
+        block = ImageBlock::Bc7;
+    } else if (alpha && formatOk(d, VK_FORMAT_BC3_UNORM_BLOCK)) {
+        format = VK_FORMAT_BC3_UNORM_BLOCK;
+        block = ImageBlock::Bc3;
+    }
+    if (format == VK_FORMAT_R8G8B8A8_UNORM) {
+        ImageMip level{width, height, 0, static_cast<uint64_t>(width) * height * 4u};
+        return submitImage(img, d, format, rgba, level.bytes, &level, 1);
+    }
+    return uploadBlockChain(img, d, rgba, width, height, frames, format, block, cacheDds);
+}
+
+bool gpuImageUploadPbr(
+    GpuImage& img,
+    Device& d,
+    const uint8_t* rgba,
+    uint32_t width,
+    uint32_t height,
+    PbrTex kind,
+    const char* cacheDds) {
+    if (rgba == nullptr || width == 0 || height == 0 || d.device == VK_NULL_HANDLE) {
+        return false;
+    }
+    ImageBlock block = ImageBlock::Bc7;
+    VkFormat format = VK_FORMAT_UNDEFINED;
+    if (kind == PbrTex::Normal) {
+        if (formatOk(d, VK_FORMAT_BC5_UNORM_BLOCK)) {
+            block = ImageBlock::Bc5;
+            format = VK_FORMAT_BC5_UNORM_BLOCK;
+        } else if (formatOk(d, VK_FORMAT_BC7_UNORM_BLOCK)) {
+            format = VK_FORMAT_BC7_UNORM_BLOCK;
+        }
+    } else if (kind == PbrTex::Color) {
+        if (formatOk(d, VK_FORMAT_BC7_SRGB_BLOCK)) {
+            format = VK_FORMAT_BC7_SRGB_BLOCK;
+        } else if (formatOk(d, VK_FORMAT_BC1_RGBA_SRGB_BLOCK)) {
+            block = ImageBlock::Bc1;
+            format = VK_FORMAT_BC1_RGBA_SRGB_BLOCK;
+        }
+    } else if (formatOk(d, VK_FORMAT_BC7_UNORM_BLOCK)) {
+        format = VK_FORMAT_BC7_UNORM_BLOCK;
+    } else if (formatOk(d, VK_FORMAT_BC3_UNORM_BLOCK)) {
+        block = ImageBlock::Bc3;
+        format = VK_FORMAT_BC3_UNORM_BLOCK;
+    }
+    if (format == VK_FORMAT_UNDEFINED) {
+        return gpuImageUploadRgba8(img, d, rgba, width, height, kind == PbrTex::Color);
+    }
+    return uploadBlockChain(img, d, rgba, width, height, 1, format, block, cacheDds);
+}
+
 bool gpuImageUploadRgba8(GpuImage& img, Device& d, const uint8_t* rgba, uint32_t width, uint32_t height, bool srgb) {
     if (rgba == nullptr || width == 0 || height == 0 || d.device == VK_NULL_HANDLE) {
         return false;
     }
     gpuImageDestroy(img, d);
     const VkFormat format = srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
-    const ImageMip level{width, height, 0, static_cast<uint64_t>(width) * height * 4u};
-    return submitImage(img, d, format, rgba, level.bytes, &level, 1);
+    std::vector<uint8_t> packed;
+    std::vector<uint8_t> level(rgba, rgba + static_cast<size_t>(width) * height * 4u);
+    ImageMip mips[16]{};
+    uint32_t count = 0;
+    uint32_t w = width;
+    uint32_t h = height;
+    while (count < 16u && w > 0 && h > 0) {
+        mips[count].width = w;
+        mips[count].height = h;
+        mips[count].offset = packed.size();
+        mips[count].bytes = level.size();
+        packed.insert(packed.end(), level.begin(), level.end());
+        count += 1u;
+        if (w == 1u && h == 1u) {
+            break;
+        }
+        std::vector<uint8_t> next;
+        downsampleRgba(level, w, h, next, w, h);
+        level.swap(next);
+    }
+    return submitImage(img, d, format, packed.data(), packed.size(), mips, count);
 }
 
 bool imageUploadUncompressed(GpuImage& img, Device& d, const uint8_t* rgba, uint32_t width, uint32_t height) {

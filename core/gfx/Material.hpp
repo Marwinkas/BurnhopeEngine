@@ -21,6 +21,7 @@ constexpr uint32_t kMatWorldAligned = 256u;
 constexpr uint32_t kMatFlipNormalY = 512u;
 constexpr uint32_t kMatUnlit = 1024u;
 constexpr uint32_t kMatClampUv = 2048u;
+constexpr uint32_t kMatUseAlpha = 4096u;
 
 struct alignas(16) MaterialGpuData {
     float baseColor[4]{1.0f, 1.0f, 1.0f, 1.0f};
@@ -208,6 +209,7 @@ inline void materialGpuFromDoc(MaterialGpuData& gpu, const BhmatDoc& doc) {
     if (doc.repeat == 0) {
         flags |= kMatClampUv;
     }
+    flags |= kMatUseAlpha;
     gpu.flags = flags;
     std::memcpy(&gpu.tail[0], &doc.heightScale, sizeof(float));
 }

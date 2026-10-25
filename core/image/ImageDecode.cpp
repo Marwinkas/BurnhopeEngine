@@ -218,6 +218,8 @@ void writeBlockDds(
         four = "DXT1";
     } else if (format == ImageBlock::Bc3) {
         four = "DXT5";
+    } else if (format == ImageBlock::Bc5) {
+        four = "ATI2";
     } else if (format == ImageBlock::Bc7) {
         four = "BC7 ";
     }

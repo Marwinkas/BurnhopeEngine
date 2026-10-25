@@ -180,6 +180,8 @@ struct SceneFrameImpl {
     };
     TexJob texJob[8]{};
     uint8_t texJobN = 0;
+    uint8_t texPublish = 0;
+    uint32_t texPublishBase = 0;
     uint8_t propCount = 0;
     uint8_t propPhase = 0;
     uint8_t propDirty = 0;

@@ -7,7 +7,7 @@
 
 namespace burnhope {
 
-// One mip. Color maps pass srgb so the shader decodes them; data maps stay UNORM.
+// Unpacked RGBA8 mip chain. Scene maps use gpuImageUploadPbr. UI photos stay imageUploadUncompressed.
 [[nodiscard]] bool gpuImageUploadRgba8(
     GpuImage& img,
     Device& d,
@@ -31,6 +31,23 @@ namespace burnhope {
     uint32_t width,
     uint32_t height,
     uint32_t frames = 1,
+    const char* cacheDds = nullptr);
+
+// Color is BC7 sRGB, a normal is BC5, ORM / rough / metal / AO / height are BC7 UNORM.
+// The chain is written to cacheDds for imageLoadDds. Pass srgb on reload only for Color.
+enum class PbrTex : uint8_t {
+    Color = 0,
+    Normal = 1,
+    Data = 2,
+};
+
+[[nodiscard]] bool gpuImageUploadPbr(
+    GpuImage& img,
+    Device& d,
+    const uint8_t* rgba,
+    uint32_t width,
+    uint32_t height,
+    PbrTex kind,
     const char* cacheDds = nullptr);
 
 [[nodiscard]] bool imageLoadDds(GpuImage& img, Device& d, const char* path, bool srgb = false);

@@ -617,7 +617,8 @@ bool loadTextures(SceneFrameImpl& s, Device& device) {
                 if (cpu.hdr != 0 && cpu.rgb != nullptr && srgb) {
                     loaded = gpuImageUploadHdr(s.textures[i], device, cpu.rgb, cpu.width, cpu.height);
                 } else if (cpu.rgba != nullptr) {
-                    loaded = gpuImageUploadRgba8(s.textures[i], device, cpu.rgba, cpu.width, cpu.height, srgb);
+                    loaded = gpuImageUploadPbr(
+                        s.textures[i], device, cpu.rgba, cpu.width, cpu.height, srgb ? PbrTex::Color : PbrTex::Data, cache);
                 }
             }
             imageCpuFree(cpu);
@@ -822,7 +823,7 @@ bool bindHeap(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
     wrap.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     wrap.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     wrap.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    wrap.maxLod = VK_LOD_CLAMP_NONE;
+    wrap.maxLod = 12.0f;
     if (device.caps.samplerAnisotropy) {
         wrap.anisotropyEnable = VK_TRUE;
         wrap.maxAnisotropy = 16.0f;
@@ -3933,31 +3934,42 @@ void queueDocMap(SceneFrame& scene, uint8_t actor, uint8_t channel, const char* 
         sceneFrameQueueTexture(&scene, actor, channel, path);
         return;
     }
-    if (previous == nullptr || previous[0] == '\0') {
-        return;
-    }
     const uint32_t id = actorMaterialSlot(scene, actor);
     if (id >= scene.materialCount || id >= scene.ownedMat.size()) {
         return;
     }
     MaterialGpuData& mat = scene.ownedMat[id];
     uint32_t* slot = &mat.albedoTexIndex;
+    uint32_t none = 0xffffffffu;
     if (channel == 1u) {
         slot = &mat.normalTexIndex;
+        none = 0;
     } else if (channel == 2u) {
         slot = &mat.ormTexIndex;
+        none = 0;
     } else if (channel == 3u) {
         slot = &mat.emissiveTexIndex;
+        none = 0;
     } else if (channel == 4u) {
         slot = &mat.pad[2];
+        none = 0;
     } else if (channel == 5u) {
         slot = &mat.pad[3];
+        none = 0;
     } else if (channel == 6u) {
         slot = &mat.aoTex;
+        none = 0;
     } else if (channel == 7u) {
         slot = &mat.pad[0];
+        none = 0;
     }
-    *slot = 0;
+    if (*slot == none && (channel != 2u || (mat.flags & kMatOrm) == 0u)) {
+        return;
+    }
+    *slot = none;
+    if (channel == 2u) {
+        mat.flags &= ~kMatOrm;
+    }
     if (scene.materialsBuf.mapped != nullptr) {
         static_cast<MaterialGpuData*>(scene.materialsBuf.mapped)[id] = mat;
     }
@@ -4048,7 +4060,7 @@ void sceneFrameMark(SceneFrame* scene, uint8_t actor) {
     scene->actors.mark = actor;
 }
 
-void takeQueuedTexture(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
+void takeQueuedTexture(SceneFrameImpl& s, Device& device) {
     if (s.texJobN == 0u) {
         if (s.texChannel > 7u || s.texPath[0] == '\0') {
             return;
@@ -4096,19 +4108,35 @@ void takeQueuedTexture(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps
             continue;
         }
         const bool color = job.channel == 0u || job.channel == 3u;
+        const PbrTex kind = color ? PbrTex::Color : (job.channel == 1u ? PbrTex::Normal : PbrTex::Data);
         const bool dds = endsWith(job.path, ".dds") || endsWith(job.path, ".DDS");
         GpuImage img{};
         bool loaded = dds && imageLoadDds(img, device, job.path, color);
         if (!loaded) {
-            ImageCpu cpu{};
-            if (imageLoadFile(cpu, job.path)) {
-                if (cpu.hdr != 0 && cpu.rgb != nullptr && color) {
-                    loaded = gpuImageUploadHdr(img, device, cpu.rgb, cpu.width, cpu.height);
-                } else if (cpu.rgba != nullptr) {
-                    loaded = gpuImageUploadRgba8(img, device, cpu.rgba, cpu.width, cpu.height, color);
+            char cache[512]{};
+            ddsCachePath(cache, sizeof(cache), job.path);
+            if (kind == PbrTex::Normal) {
+                const size_t n = std::strlen(cache);
+                if (n >= 4 && n + 5 < sizeof(cache) && std::strcmp(cache + n - 4, ".dds") == 0) {
+                    std::memcpy(cache + n - 4, ".bc5.dds", 9);
                 }
             }
-            imageCpuFree(cpu);
+            loaded = !dds && imageLoadDds(img, device, cache, color);
+            if (loaded && kind != PbrTex::Color && img.format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK) {
+                gpuImageDestroy(img, device);
+                loaded = false;
+            }
+            if (!loaded) {
+                ImageCpu cpu{};
+                if (imageLoadFile(cpu, job.path)) {
+                    if (cpu.hdr != 0 && cpu.rgb != nullptr && color) {
+                        loaded = gpuImageUploadHdr(img, device, cpu.rgb, cpu.width, cpu.height);
+                    } else if (cpu.rgba != nullptr) {
+                        loaded = gpuImageUploadPbr(img, device, cpu.rgba, cpu.width, cpu.height, kind, cache);
+                    }
+                }
+                imageCpuFree(cpu);
+            }
         }
         if (!loaded || img.image == VK_NULL_HANDLE) {
             spdlog::error("texture load failed {}", job.path);
@@ -4117,11 +4145,18 @@ void takeQueuedTexture(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps
         const uint32_t slot = s.textureSlots;
         s.textures.push_back(img);
         s.textureSlots = slot + 1u;
-        if (!heapImage(heaps, device, s, static_cast<uint32_t>(HeapImg::Textures) + slot, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        if (!heapImage(s.gpuHeap, device, s, static_cast<uint32_t>(HeapImg::Textures) + slot, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
                 s.textures[slot], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT)) {
             spdlog::error("texture bind failed slot {}", slot);
             continue;
         }
+        for (uint32_t flight = 0; flight < kFramesInFlight; ++flight) {
+            gpuBufferFlush(s.gpuHeap.resources[flight], device, 0, s.gpuHeap.resources[flight].size);
+        }
+        if (s.texPublish == 0 || slot < s.texPublishBase) {
+            s.texPublishBase = slot;
+        }
+        s.texPublish = 2;
         if (matId >= s.materialCount) {
             continue;
         }
@@ -4146,9 +4181,11 @@ void takeQueuedTexture(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps
         }
         if (s.materialsBuf.mapped != nullptr) {
             static_cast<MaterialGpuData*>(s.materialsBuf.mapped)[matId] = mat;
+            gpuBufferFlush(s.materialsBuf, device, 0, sizeof(MaterialGpuData) * s.materialCount);
         }
         s.editorDirty = static_cast<uint8_t>(s.editorDirty | 1u);
-        spdlog::info("texture {} ch {} mat {} slot {}", job.path, job.channel, matId, slot);
+        spdlog::info("texture {} ch {} mat {} slot {} {}x{} mips {} fmt {}",
+            job.path, job.channel, matId, slot, img.extent.width, img.extent.height, img.mips, static_cast<int>(img.format));
     }
 }
 
@@ -4370,7 +4407,7 @@ void sceneFrameRecord(
         scene->ready = true;
     }
     if (scene->ready) {
-        takeQueuedTexture(*scene, device, heaps);
+        takeQueuedTexture(*scene, device);
     }
 
     CameraPose pose{};
@@ -4889,6 +4926,26 @@ void sceneFrameRecord(
             && heapWriteImageFlight(heaps, device, flight, 868u, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, scene->tone.history[curr].image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
     }
     heapBind(cmd, scene->gpuHeap, flight);
+    if (scene->texPublish > 0) {
+        const GpuBuffer& heapBuf = scene->gpuHeap.resources[flight];
+        rhiBufferBarrier(cmd, heapBuf.buffer, 0, heapBuf.size,
+            VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_WRITE_BIT,
+            VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_DESCRIPTOR_BUFFER_READ_BIT_EXT);
+        const uint32_t from = scene->texPublishBase;
+        const uint32_t to = scene->textureSlots < scene->textures.size()
+            ? scene->textureSlots
+            : static_cast<uint32_t>(scene->textures.size());
+        for (uint32_t i = from; i < to; ++i) {
+            const GpuImage& pic = scene->textures[i];
+            const uint32_t mips = pic.mips == 0u ? 1u : pic.mips;
+            rhiImageBarrierMips(cmd, pic.image,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                0, mips);
+        }
+        scene->texPublish = static_cast<uint8_t>(scene->texPublish - 1u);
+    }
     gpuProfilerBegin(scene->gpuTime, device, cmd, flight);
     char zoneText[3584];
     (void)gpuProfilerFormat(scene->gpuTime, zoneText, sizeof(zoneText));

@@ -71,6 +71,16 @@ float4 sampleHeap(uint id, float2 uv, float lod) {
 }
 
 float4 sampleGrad(uint id, float2 uv, float2 ddx, float2 ddy) {
+    const float span = max(dot(ddx, ddx), dot(ddy, ddy));
+    // A derivative longer than ~0.05 UV (world triplanar is often 0.25) asks anisotropy
+    // for a mip past the chain. With maxLod unclamped that sample comes back 0.
+    if (!(span > 1e-12) || span > 0.0025) {
+        float lod = 0.0;
+        if (span > 0.0025) {
+            lod = clamp(0.5 * log2(span * 1024.0 * 1024.0), 0.0, 7.0);
+        }
+        return gTex[NonUniformResourceIndex(id)].SampleLevel(gWrap, uv, lod);
+    }
     return gTex[NonUniformResourceIndex(id)].SampleGrad(gWrap, uv, ddx, ddy);
 }
 
@@ -96,13 +106,13 @@ float4 sampleMap(uint id, MatMap map) {
 
 float3 decodeTs(float4 texel, MatMap map) {
     float3 tN = texel.xyz * 2.0 - 1.0;
-    tN.xy *= map.normalScale;
     if (map.flipY != 0u) {
         tN.y = -tN.y;
     }
     if (dot(tN.xy, tN.xy) > 1e-4 && tN.z < 0.05) {
         tN.z = sqrt(max(1.0 - dot(tN.xy, tN.xy), 0.0));
     }
+    tN.xy *= map.normalScale;
     return tN;
 }
 
@@ -450,7 +460,10 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
             }
         }
     }
-    float3 albedo = mat.baseColor.rgb * saturate(mat.baseColor.a);
+    float3 albedo = mat.baseColor.rgb;
+    if ((mat.flags & 4096u) != 0u) {
+        albedo *= saturate(mat.baseColor.a);
+    }
     float2 uv = float2(
         gVerts[i0].u * buC + gVerts[i1].u * bvC + gVerts[i2].u * bwC,
         gVerts[i0].v * buC + gVerts[i1].v * bvC + gVerts[i2].v * bwC);
@@ -516,7 +529,7 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     float dripSide = 0.0;
     float3 dripAcross = float3(1.0, 0.0, 0.0);
     const float drip = wall > 0.02 ? rainDrip(P, geoN, rainTime, dripSide, dripAcross) : 0.0;
-    if (dot(tangent, tangent) > 0.5) {
+    if (wet > 0.02 && dot(tangent, tangent) > 0.5) {
         const float2 duv = uv * 24.0;
         const float hC = frac(sin(dot(duv, float2(127.1, 311.7))) * 43758.5453);
         const float hR = frac(sin(dot(duv + float2(0.5, 0.0), float2(127.1, 311.7))) * 43758.5453);
@@ -603,23 +616,24 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
         }
     }
     float ao = 1.0;
-    float metallic = saturate(mat.metallic);
-    float roughness = clamp(mat.roughness, 0.045, 1.0);
+    float roughMap = 1.0;
+    float metalMap = 1.0;
     if (mat.orm > 0 && mat.orm < 768) {
         const float3 orm = sampleMap(mat.orm, surf).rgb;
         ao = orm.r > 0.02 ? saturate(orm.r) : 1.0;
-        roughness = clamp(orm.g, 0.045, 1.0);
-        metallic = saturate(orm.b);
+        roughMap = saturate(orm.g);
+        metalMap = saturate(orm.b);
     }
     if (mat.pad2 > 0u && mat.pad2 < 768u) {
         const float3 roughTex = sampleMap(mat.pad2, surf).rgb;
-        const float packed = roughTex.g > 0.02 ? roughTex.g : roughTex.r;
-        roughness = clamp(packed, 0.045, 1.0);
+        roughMap = saturate(roughTex.g > 0.02 ? roughTex.g : roughTex.r);
     }
     if (mat.pad3 > 0u && mat.pad3 < 768u) {
         const float3 metalTex = sampleMap(mat.pad3, surf).rgb;
-        metallic = saturate(max(metalTex.r, metalTex.b));
+        metalMap = saturate(max(metalTex.r, metalTex.b));
     }
+    float metallic = saturate(mat.metallic * metalMap);
+    float roughness = clamp(mat.roughness * roughMap, 0.045, 1.0);
     if (mat.aoTex > 0u && mat.aoTex < 768u) {
         ao *= saturate(sampleMap(mat.aoTex, surf).r);
     }

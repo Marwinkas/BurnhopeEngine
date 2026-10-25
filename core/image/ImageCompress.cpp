@@ -268,11 +268,20 @@ bool runGpu(Device& d, ImageBlock format, const void* pixels, uint32_t width, ui
 }
 
 void compressChannelLevel(const uint8_t* src, uint32_t width, uint32_t height, bool two, uint8_t* dst) {
+    const uint32_t pixels = width * height;
+    const uint32_t channels = two ? 2u : 1u;
+    std::vector<uint8_t> packed(static_cast<size_t>(pixels) * channels);
+    for (uint32_t i = 0; i < pixels; ++i) {
+        packed[static_cast<size_t>(i) * channels] = src[i * 4u];
+        if (two) {
+            packed[static_cast<size_t>(i) * channels + 1u] = src[i * 4u + 1u];
+        }
+    }
     rgba_surface surf{
-        const_cast<uint8_t*>(src),
+        packed.data(),
         static_cast<int32_t>(width),
         static_cast<int32_t>(height),
-        static_cast<int32_t>(width * 4u),
+        static_cast<int32_t>(width * channels),
     };
     if (two) {
         CompressBlocksBC5(&surf, dst);
@@ -360,12 +369,16 @@ void compressRgbaLevel(const uint8_t* src, uint32_t width, uint32_t height, VkFo
         static_cast<int32_t>(height),
         static_cast<int32_t>(width * 4u),
     };
-    if (format == VK_FORMAT_BC7_UNORM_BLOCK) {
+    if (format == VK_FORMAT_BC7_UNORM_BLOCK || format == VK_FORMAT_BC7_SRGB_BLOCK) {
         bc7_enc_settings settings{};
         GetProfile_alpha_fast(&settings);
         CompressBlocksBC7(&surf, dst, &settings);
-    } else if (format == VK_FORMAT_BC3_UNORM_BLOCK) {
+    } else if (format == VK_FORMAT_BC3_UNORM_BLOCK || format == VK_FORMAT_BC3_SRGB_BLOCK) {
         CompressBlocksBC3(&surf, dst);
+    } else if (format == VK_FORMAT_BC5_UNORM_BLOCK) {
+        compressChannelLevel(src, width, height, true, dst);
+    } else if (format == VK_FORMAT_BC4_UNORM_BLOCK) {
+        compressChannelLevel(src, width, height, false, dst);
     } else {
         CompressBlocksBC1(&surf, dst);
     }

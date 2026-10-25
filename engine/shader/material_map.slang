@@ -132,6 +132,6 @@ float3 matTriNormal(float3 nX, float3 nY, float3 nZ, float3 w, float3 axisSign) 
     if (w.z < 0.01) {
         nZ = float3(0.0, 0.0, 1.0);
     }
-    const float3 blended = float3(nX.xy * w.x + nY.xy * w.y + nZ.xy * w.z, nX.z * nY.z * nZ.z);
-    return normalize(blended);
+    const float3 blended = nX * w.x + nY * w.y + nZ * w.z;
+    return dot(blended, blended) > 1e-8 ? normalize(blended) : float3(0.0, 1.0, 0.0);
 }

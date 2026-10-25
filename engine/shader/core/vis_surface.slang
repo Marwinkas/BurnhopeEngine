@@ -71,9 +71,18 @@ VisTri loadVisTri(uint instanceId, uint tri, uint2 px) {
         t.denomOk = abs(bSum) > 1e-12;
         if (t.denomOk) {
             const float invSum = 1.0 / bSum;
-            t.bu = bw0 * invSum;
-            t.bv = bw1 * invSum;
-            t.bw = bw2 * invSum;
+            float bu = max(bw0 * invSum, 0.0);
+            float bv = max(bw1 * invSum, 0.0);
+            float bw = max(bw2 * invSum, 0.0);
+            const float clamped = bu + bv + bw;
+            if (clamped > 1e-5) {
+                bu /= clamped;
+                bv /= clamped;
+                bw /= clamped;
+            }
+            t.bu = bu;
+            t.bv = bv;
+            t.bw = bw;
         } else {
             t.bu = 1.0;
             t.bv = 0.0;
