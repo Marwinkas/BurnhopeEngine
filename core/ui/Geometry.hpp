@@ -1,11 +1,12 @@
 #pragma once
 
+#include "ui/Types.hpp"
+
 #include <cstdint>
 #include <type_traits>
 
 namespace burnhope {
 
-constexpr uint16_t kUiNone = 0xFFFF;
 constexpr float kUiUnset = -1.0f;
 
 struct UiBox {

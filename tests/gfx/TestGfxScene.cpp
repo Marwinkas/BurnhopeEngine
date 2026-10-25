@@ -11,6 +11,7 @@
 #include "render/VisResolve.hpp"
 #include "render/PassDebug.hpp"
 #include "gfx/PrimitiveGen.hpp"
+#include "asset/SceneBlob.hpp"
 #include "gfx/MeshletBuilder.hpp"
 #include "gfx/Portal.hpp"
 #include "scene/FlyCam.hpp"
@@ -297,14 +298,15 @@ TEST_CASE("a sector stays visible until a portal is marked and leaves the frustu
 TEST_CASE("fly camera moves forward and yaws with the mouse") {
     FlyCam cam{};
     const float z0 = cam.eye[2];
-    InputState input{};
-    inputSetBit(input.keyActive, kFlyKeyW);
+    InputFrame input{};
+    input.pointer.down = kPointerRight;
+    input.keyDown[kFlyKeyW >> 6] |= 1ull << (kFlyKeyW & 63);
     flyCamUpdate(cam, input, 1.0f);
     CHECK(cam.eye[2] < z0);
     input = {};
-    input.mouseActive = 2;
-    input.deltaX = 100.0f;
-    input.deltaY = -50.0f;
+    input.pointer.down = kPointerRight;
+    input.pointer.dx = 100.0f;
+    input.pointer.dy = -50.0f;
     const float yaw0 = cam.yaw;
     const float pitch0 = cam.pitch;
     flyCamUpdate(cam, input, 0.016f);
@@ -314,7 +316,8 @@ TEST_CASE("fly camera moves forward and yaws with the mouse") {
     const float y0 = cam.eye[1];
     const float z1 = cam.eye[2];
     input = {};
-    inputSetBit(input.keyActive, kFlyKeySpace);
+    input.pointer.down = kPointerRight;
+    input.keyDown[kFlyKeySpace >> 6] |= 1ull << (kFlyKeySpace & 63);
     flyCamUpdate(cam, input, 1.0f);
     CHECK(cam.eye[1] > y0);
     CHECK(cam.eye[2] == doctest::Approx(z1));
@@ -325,8 +328,8 @@ TEST_CASE("fly camera moves forward and yaws with the mouse") {
     CHECK(ty > 0.0f);
     const float yawBefore = cam.yaw;
     input = {};
-    input.mouseActive = 2;
-    input.deltaX = 4000.0f;
+    input.pointer.down = kPointerRight;
+    input.pointer.dx = 4000.0f;
     flyCamUpdate(cam, input, 0.016f);
     CHECK(cam.yaw - yawBefore == doctest::Approx(240.0f * 0.004f));
 }

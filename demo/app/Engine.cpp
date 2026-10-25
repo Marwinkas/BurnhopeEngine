@@ -25,7 +25,7 @@
 #include "ui/State.hpp"
 #include "ui/Canvas.hpp"
 #include "ui/Text.hpp"
-#include "ui/UiPhoto.hpp"
+#include "ui/rhi/UiPhoto.hpp"
 #include "Str.hpp"
 #include "app/HudBuild.hpp"
 #include "asset/AssimpImporter.hpp"

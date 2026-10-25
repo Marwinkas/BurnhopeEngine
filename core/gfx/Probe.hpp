@@ -19,7 +19,7 @@ static_assert(std::is_trivially_copyable_v<ProbeGpu>);
 static_assert(sizeof(ProbeGpu) == 128);
 
 inline void probeSetGray(ProbeGpu& probe, float gray) {
-    std::memset(&probe, 0, sizeof(probe));
+    probe = {};
     const float dc = gray / 0.2820948f;
     probe.sh[0] = dc;
     probe.sh[1] = dc;

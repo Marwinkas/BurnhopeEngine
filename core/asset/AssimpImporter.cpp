@@ -1,5 +1,6 @@
 #include "asset/AssimpImporter.hpp"
 
+#include "asset/SceneBlob.hpp"
 #include "gfx/Light.hpp"
 #include "gfx/MeshletBuilder.hpp"
 #include "platform/PlatformUtil.hpp"

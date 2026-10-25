@@ -5,7 +5,7 @@
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
-#include "ui/UiPhoto.hpp"
+#include "ui/rhi/UiPhoto.hpp"
 
 #include <algorithm>
 #include <bit>

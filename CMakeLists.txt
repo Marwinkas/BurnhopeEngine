@@ -287,7 +287,7 @@ bh_module(ui
     core/ui/Json.cpp
     core/io/Json.cpp
     core/ui/UiBin.cpp
-    core/ui/UiPhoto.cpp
+    core/ui/rhi/UiPhoto.cpp
     core/ui/UiWindowBridge.cpp
     core/ui/FlexAttr.cpp
     core/ui/widget/Chrome.cpp

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ui/State.hpp"
-#include "ui/UiPhoto.hpp"
+#include "ui/Primitive.hpp"
 #include "ui/widget/BinSlots.hpp"
 
 namespace burnhope {

@@ -3,7 +3,7 @@
 #include "rhi/Device.hpp"
 #include "rhi/ShaderObject.hpp"
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 
 namespace burnhope {
 

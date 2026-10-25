@@ -1,6 +1,6 @@
 #pragma once
 
-#include "platform/Window.hpp"
+#include "platform/Input.hpp"
 
 #include <cstdint>
 

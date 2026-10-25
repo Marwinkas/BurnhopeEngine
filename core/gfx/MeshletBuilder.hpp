@@ -1,6 +1,6 @@
 #pragma once
 
-#include "asset/SceneBlob.hpp"
+#include "gfx/Meshlet.hpp"
 #include "gfx/PrimitiveGen.hpp"
 
 #include <cmath>

@@ -1,5 +1,6 @@
 #include "ui/Bar.hpp"
 #include "ui/widget/Scroll.hpp"
+#include "ui/State.hpp"
 
 #include <algorithm>
 #include <cmath>

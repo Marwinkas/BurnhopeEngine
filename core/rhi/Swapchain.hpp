@@ -1,12 +1,12 @@
 #pragma once
 
+#include "rhi/DescriptorSlots.hpp"
 #include "rhi/Device.hpp"
 
 #include <cstdint>
 
 namespace burnhope {
 
-constexpr uint32_t kFramesInFlight = 2;
 constexpr uint32_t kMaxSwapchainImages = 8;
 
 // 0 ждёт кадр (FIFO), 1 mailbox, 2 без ожидания, 3 FIFO relaxed. Нет режима — остаётся FIFO.

@@ -2,6 +2,7 @@
 #include "ui/Panel.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Slider.hpp"
+#include "ui/State.hpp"
 
 #include <cstdio>
 #include <cstring>

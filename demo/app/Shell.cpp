@@ -4,7 +4,7 @@
 #include "ui/Canvas.hpp"
 #include "host/HostNote.hpp"
 #include "platform/Window.hpp"
-#include "ui/UiPhoto.hpp"
+#include "ui/rhi/UiPhoto.hpp"
 #include "Str.hpp"
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"

@@ -1,4 +1,5 @@
 #include "ui/widget/Thumb.hpp"
+#include "ui/State.hpp"
 #include "ui/widget/Image.hpp"
 
 namespace burnhope {

@@ -101,7 +101,9 @@ inline bool clusterAssignLights(ClusterCell* cells, uint32_t* indices, uint32_t 
     if (cells == nullptr || indices == nullptr) {
         return false;
     }
-    std::memset(cells, 0, sizeof(ClusterCell) * kClusterCount);
+    for (uint32_t i = 0; i < kClusterCount; ++i) {
+        cells[i] = {};
+    }
     if (lights == nullptr || lightCount == 0) {
         return true;
     }

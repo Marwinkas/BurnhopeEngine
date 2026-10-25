@@ -1,6 +1,9 @@
 #pragma once
 
-#include "ui/State.hpp"
+#include "platform/Input.hpp"
+#include "ui/Geometry.hpp"
+#include "ui/Interaction.hpp"
+#include "ui/Types.hpp"
 #include "ui/widget/BinSlots.hpp"
 
 namespace burnhope {

@@ -9,27 +9,7 @@
 
 namespace burnhope {
 
-inline constexpr uint8_t kPhotoFrameCap = 16;
-
 struct UiState;
-
-struct UiImage {
-    uint8_t slot = 0;
-    uint8_t frames = 1;
-    uint8_t frame = 0;
-    uint8_t minimap = 0;
-    float acc = 0.0f;
-    uint16_t delayMs[kPhotoFrameCap]{};
-    float viewX = 0.0f;
-    float viewY = 0.0f;
-    float viewW = 1.0f;
-    float viewH = 1.0f;
-};
-
-struct PhotoMeta {
-    uint8_t frames = 1;
-    uint16_t delayMs[kPhotoFrameCap]{};
-};
 
 // Загружает изображение с диска, выделяет VMA-текстуру слота kUiDescPhoto + slot,
 // записывает дескриптор в кучу и сохраняет метаданные кадров анимации.

@@ -1,4 +1,4 @@
-#include "ui/UiPhoto.hpp"
+#include "ui/rhi/UiPhoto.hpp"
 #include "ui/State.hpp"
 #include "image/ImageFile.hpp"
 #include "image/ImageUpload.hpp"

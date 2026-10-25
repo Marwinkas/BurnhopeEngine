@@ -5,7 +5,7 @@
 #include "rhi/DescriptorHeap.hpp"
 #include "ui/Style.hpp"
 #include "ui/Interaction.hpp"
-#include "ui/UiPhoto.hpp"
+#include "ui/rhi/UiPhoto.hpp"
 #include "ui/UiWindowBridge.hpp"
 #include "ui/State.hpp"
 #include "ui/rhi/UiRenderer.hpp"

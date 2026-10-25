@@ -1,5 +1,6 @@
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Tabs.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 

@@ -3,7 +3,7 @@
 #include "rhi/Device.hpp"
 #include "rhi/GpuBuffer.hpp"
 #include "rhi/GpuImage.hpp"
-#include "rhi/Swapchain.hpp"
+#include "rhi/DescriptorSlots.hpp"
 
 namespace burnhope {
 

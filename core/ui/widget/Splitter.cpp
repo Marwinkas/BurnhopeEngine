@@ -1,5 +1,6 @@
 #include "ui/Panel.hpp"
 #include "ui/widget/Splitter.hpp"
+#include "ui/State.hpp"
 
 #include <algorithm>
 

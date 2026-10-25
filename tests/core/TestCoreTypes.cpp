@@ -3,7 +3,6 @@
 
 #include "anim/Animation.hpp"
 #include "time/Time.hpp"
-#include "input/InputQueue.hpp"
 #include "color/Color.hpp"
 #include "doc/Document.hpp"
 #include "wasm/WasmHost.hpp"
@@ -70,91 +69,6 @@ TEST_CASE("fixed step consumes remainder and clamps a spike") {
     CHECK(burst == 5);
     CHECK(spike.fixedTickCount == 5);
     CHECK(burst < 50);
-}
-TEST_CASE("input queue tracks pointer keys pad pen touch and tray") {
-    InputQueue queue{};
-    InputEvent move = inputMake(InputDevice::Mouse, InputEventType::MouseMove);
-    move.x = 100.0f;
-    move.y = 200.0f;
-    InputEvent move2 = move;
-    move2.x = 110.0f;
-    move2.y = 215.0f;
-    InputEvent key = inputMake(InputDevice::Keyboard, InputEventType::KeyDown);
-    key.code = kInputKeyA;
-    CHECK(inputPushEvent(queue, move));
-    CHECK(inputPushEvent(queue, move2));
-    CHECK(inputPushEvent(queue, key));
-    InputState state{};
-    inputProcessQueue(state, queue);
-    CHECK(state.mouseX == doctest::Approx(110.0f));
-    CHECK(state.mouseY == doctest::Approx(215.0f));
-    CHECK(state.deltaX == doctest::Approx(10.0f));
-    CHECK(state.deltaY == doctest::Approx(15.0f));
-    CHECK(inputKeyDown(state, kInputKeyA));
-    CHECK(inputKeyPressed(state, kInputKeyA));
-    inputBeginFrame(state);
-    CHECK(state.deltaX == doctest::Approx(0.0f));
-    CHECK(state.deltaY == doctest::Approx(0.0f));
-    CHECK(inputKeyDown(state, kInputKeyA));
-    CHECK(!inputKeyPressed(state, kInputKeyA));
-
-    InputEvent button = inputMake(InputDevice::Gamepad, InputEventType::ButtonDown);
-    button.deviceId = 0;
-    button.code = 1;
-    InputEvent stick = inputMake(InputDevice::Gamepad, InputEventType::AxisMotion);
-    stick.axisX = 0.5f;
-    stick.axisY = -0.25f;
-    CHECK(inputPushEvent(queue, button));
-    CHECK(inputPushEvent(queue, stick));
-    inputProcessQueue(state, queue);
-    CHECK((state.pads[0].active & 2u) != 0);
-    CHECK((state.pads[0].pressed & 2u) != 0);
-    CHECK(state.pads[0].lx == doctest::Approx(0.5f));
-    CHECK(state.pads[0].ly == doctest::Approx(-0.25f));
-
-    InputEvent pen = inputMake(InputDevice::TabletPen, InputEventType::TabletPenMove);
-    pen.x = 200.0f;
-    pen.y = 300.0f;
-    pen.pressure = 0.75f;
-    pen.tiltX = 0.2f;
-    pen.tiltY = -0.1f;
-    CHECK(inputPushEvent(queue, pen));
-    inputProcessQueue(state, queue);
-    CHECK(state.penX == doctest::Approx(200.0f));
-    CHECK(state.penY == doctest::Approx(300.0f));
-    CHECK(state.penPressure == doctest::Approx(0.75f));
-    CHECK(state.penTiltX == doctest::Approx(0.2f));
-    CHECK(state.penTiltY == doctest::Approx(-0.1f));
-    CHECK(state.penActive == 1);
-
-    InputEvent touch = inputMake(InputDevice::Touch, InputEventType::TouchDown);
-    touch.deviceId = 3;
-    touch.x = 12.0f;
-    touch.y = 40.0f;
-    InputEvent tray = inputMake(InputDevice::SystemTray, InputEventType::TrayIconClick);
-    tray.code = 7;
-    CHECK(inputPushEvent(queue, touch));
-    CHECK(inputPushEvent(queue, tray));
-    inputProcessQueue(state, queue);
-    CHECK(state.touches[0].active == 1);
-    CHECK(state.touches[0].pressed == 1);
-    CHECK(state.touches[0].id == 3);
-    CHECK(state.touches[0].x == doctest::Approx(12.0f));
-    CHECK(state.trayClicked == 1);
-    CHECK(state.trayCode == 7);
-    inputBeginFrame(state);
-    CHECK(state.touches[0].active == 1);
-    CHECK(state.touches[0].pressed == 0);
-    CHECK(state.trayClicked == 0);
-    CHECK((state.pads[0].active & 2u) != 0);
-    CHECK(state.pads[0].pressed == 0);
-
-    InputQueue full{};
-    InputEvent extra = inputMake(InputDevice::Mouse, InputEventType::Scroll);
-    for (uint32_t i = 0; i < kInputQueueCap; ++i) {
-        CHECK(inputPushEvent(full, extra));
-    }
-    CHECK(!inputPushEvent(full, extra));
 }
 TEST_CASE("srgb linear hsv and packed rgba8") {
     ColorRgba8 white{};

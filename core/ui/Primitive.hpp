@@ -14,6 +14,26 @@ constexpr uint32_t kUiDescPhoto = 662;
 constexpr uint32_t kUiDescPrimsSlot = kUiDescPrims;   // 48
 constexpr uint8_t kPhotoSlots = 10;
 
+inline constexpr uint8_t kPhotoFrameCap = 16;
+
+struct UiImage {
+    uint8_t slot = 0;
+    uint8_t frames = 1;
+    uint8_t frame = 0;
+    uint8_t minimap = 0;
+    float acc = 0.0f;
+    uint16_t delayMs[kPhotoFrameCap]{};
+    float viewX = 0.0f;
+    float viewY = 0.0f;
+    float viewW = 1.0f;
+    float viewH = 1.0f;
+};
+
+struct PhotoMeta {
+    uint8_t frames = 1;
+    uint16_t delayMs[kPhotoFrameCap]{};
+};
+
 constexpr uint32_t kUiPrimCap = 2048;
 constexpr uint32_t kUiHeaderBytes = 64;
 constexpr uint32_t kUiPrimBytes = 80;

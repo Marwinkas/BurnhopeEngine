@@ -10,6 +10,29 @@
 
 namespace burnhope {
 
+struct SceneVertex {
+    float px = 0.0f;
+    float py = 0.0f;
+    float pz = 0.0f;
+    float u = 0.0f;
+    float nx = 0.0f;
+    float ny = 1.0f;
+    float nz = 0.0f;
+    float v = 0.0f;
+};
+
+struct SceneInstance {
+    float world[12]{
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+    };
+    float sphere[4]{};
+    uint32_t materialId = 0;
+    uint32_t meshId = 0;
+    uint32_t pad[2]{};
+};
+
 struct MeshletVertex {
     float pos[3]{};
     uint32_t packedNormal = 0;

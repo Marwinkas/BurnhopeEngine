@@ -1,6 +1,7 @@
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Tip.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 

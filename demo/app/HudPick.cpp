@@ -9,7 +9,7 @@
 #include "ui/Canvas.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
-#include "ui/UiPhoto.hpp"
+#include "ui/rhi/UiPhoto.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Check.hpp"
 #include "ui/widget/Chrome.hpp"
