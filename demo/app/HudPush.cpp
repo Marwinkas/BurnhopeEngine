@@ -326,6 +326,7 @@ void hudFrame(Engine& e) {
         e.hud.bind.sync(*hud.state);
         e.hud.bind.syncSwatches(*hud.state);
         sceneBlockApply(e.hud);
+        hudPaintMaterial(e.hud);
         hudMaterialSync(e, hud);
         hudMaterialDrag(e.hud, *hud.state);
         saveOpenMaterial(e.hud);

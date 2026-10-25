@@ -1,37 +1,65 @@
+# --- Git и конфигурации IDE ---
 .git/
-old/
+.vs/
+.vscode/
+x64/
+
+# --- Папки сборки и кэши ---
 build/
 build-core/
 build-asan/
 build-tsan/
 .cache/
 cache/
-x64/
-.vs/
-BurnHopeEngine/
-testscene/
-newscenetest/
+
+# --- Временные файлы, логи и дампы ---
 imgui.ini
-emeraldcity/
-*.spv
-*.obj
-*.fbx
-*.png
-*.jpg
+t.txt
 *.log
-.vscode/
-docs/
+
+# --- Локальные настройки Claude Code ---
+.claude/settings.local.json
+
+# --- Сторонние SDK и внешние библиотеки ---
 Falcor/
 XeGTAO/
 RTXGI/
 RTXDI/
 FidelityFX-SDK/
-chandra/
-old/
-t.txt
-FX-SSSR /
+NRD/
 Sharc/
 filament/
+FX-SSSR/
+'FX-SSSR '/
+steam-audio/
+steamaudio/
+
+# --- Тестовые сцены и архивы ---
+old/
+docs/
 chandra/
-XeGTAO/
-NRD/
+emeraldcity/
+testscene/
+newscenetest/
+BurnHopeEngine/
+
+# --- Скомпилированные шейдеры ---
+*.spv
+
+# --- 3D-модели и меши ---
+*.obj
+*.fbx
+
+# --- Бинарные текстуры, изображения и шрифты ---
+*.png
+*.jpg
+*.dds
+*.ktx
+*.ktx2
+*.ttf
+*.otf
+
+# --- Аудиофайлы ---
+*.wav
+*.mp3
+*.ogg

@@ -18,7 +18,7 @@ namespace fs = std::filesystem;
 constexpr uint32_t kPreview = 168;
 constexpr uint32_t kCell = 64;
 constexpr uint32_t kAtlasW = 256;
-constexpr uint32_t kAtlasH = 128;
+constexpr uint32_t kAtlasH = 192;
 
 void park(const char* matPath, char* slot) {
     if (slot == nullptr || slot[0] == '\0' || matPath == nullptr || matPath[0] == '\0') {
@@ -136,6 +136,7 @@ void buildAtlas(HudContext& hud) {
     paintCell(atlas, 5, doc.aoPath, mat, 255, 255, 255);
     paintCell(atlas, 6, doc.ormPath, mat, 40, 40, 44);
     paintCell(atlas, 7, doc.emissivePath, mat, byteOf(doc.emissiveColor[0]), byteOf(doc.emissiveColor[1]), byteOf(doc.emissiveColor[2]));
+    paintCell(atlas, 8, doc.alphaPath, mat, byteOf(doc.baseA), byteOf(doc.baseA), byteOf(doc.baseA));
 }
 
 void buildSphere(HudContext& hud) {
@@ -216,11 +217,11 @@ Canvas* previewCanvas(HudContext& hud) {
 void hudCommitMaps(HudContext& hud, uint8_t channel) {
     char* slot[] = {
         hud.matDoc.albedoPath, hud.matDoc.normalPath, hud.matDoc.ormPath, hud.matDoc.emissivePath,
-        hud.matDoc.roughPath, hud.matDoc.metalPath, hud.matDoc.aoPath, hud.matDoc.heightPath};
+        hud.matDoc.roughPath, hud.matDoc.metalPath, hud.matDoc.aoPath, hud.matDoc.heightPath, hud.matDoc.alphaPath};
     for (char* one : slot) {
         park(hud.matPath, one);
     }
-    if (channel == 2u || !ormOwned(hud)) {
+    if (hud.matDoc.mapPack == 0u || channel == 2u || !ormOwned(hud)) {
         return;
     }
     const bool maps = hud.matDoc.roughPath[0] != '\0' || hud.matDoc.metalPath[0] != '\0' || hud.matDoc.aoPath[0] != '\0'

@@ -62,10 +62,11 @@ void openMaterialFile(HudContext& hud, const char* path) {
     put(kScMatUvOffX, hud.matDoc.uvOffset[0]);
     put(kScMatUvOffY, hud.matDoc.uvOffset[1]);
     put(kScMatCutoff, hud.matDoc.alphaCutoff);
-    const uint16_t bit[] = {kFlMatWorld, kFlMatDouble, kFlMatAlpha, kFlMatFlip, kFlMatUnlit, kFlMatRepeat};
+    const uint16_t bit[] = {kFlMatWorld, kFlMatDouble, kFlMatAlpha, kFlMatFlip, kFlMatUnlit, kFlMatRepeat, kFlMatPack};
     const uint8_t on[] = {
-        hud.matDoc.worldAligned, hud.matDoc.doubleSided, hud.matDoc.alphaCut, hud.matDoc.flipNormalY, hud.matDoc.unlit, hud.matDoc.repeat};
-    for (uint16_t i = 0; i < 6u; ++i) {
+        hud.matDoc.worldAligned, hud.matDoc.doubleSided, hud.matDoc.alphaCut, hud.matDoc.flipNormalY, hud.matDoc.unlit,
+        hud.matDoc.repeat, hud.matDoc.mapPack};
+    for (uint16_t i = 0; i < 7u; ++i) {
         if (bit[i] < 64u) {
             hud.block.flags[bit[i]] = on[i];
         }
@@ -108,7 +109,7 @@ void onMaterialAct(void* user, uint16_t) {
     if (hit == nullptr || hit->hud == nullptr || hit->hud->matOpen == 0) {
         return;
     }
-    if (hit->hud->host == nullptr || hit->hud->slot < 0 || hit->kind < 1 || hit->kind > 8) {
+    if (hit->hud->host == nullptr || hit->hud->slot < 0 || hit->kind < 1 || hit->kind > 9) {
         return;
     }
     hit->hud->texAsk = hit->kind;
@@ -172,7 +173,7 @@ void fillMatList(HudContext& hud) {
 } // namespace
 
 void hudTakeTexture(HudContext& hud, uint8_t channel, const char* path) {
-    if (path == nullptr || path[0] == '\0' || channel > 7u) {
+    if (path == nullptr || path[0] == '\0' || channel > 8u) {
         return;
     }
     std::snprintf(hudDocPath(hud.matDoc, channel), 260, "%s", path);

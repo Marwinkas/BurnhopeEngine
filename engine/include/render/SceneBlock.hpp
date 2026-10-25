@@ -80,6 +80,7 @@ enum SceneFlag : uint16_t {
     kFlMatFlip,
     kFlMatUnlit,
     kFlMatRepeat,
+    kFlMatPack,
     kFlCount,
 };
 

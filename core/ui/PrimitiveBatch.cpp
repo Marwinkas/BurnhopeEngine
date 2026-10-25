@@ -325,6 +325,18 @@ void uiDrawAdd(UiState& s, UiDrawFn fn) {
     s.drawHook.push_back(fn);
 }
 
+void uiDrawUnderAdd(UiState& s, UiDrawFn fn) {
+    if (fn == nullptr) {
+        return;
+    }
+    for (UiDrawFn have : s.underHook) {
+        if (have == fn) {
+            return;
+        }
+    }
+    s.underHook.push_back(fn);
+}
+
 void uiDrawDecorAdd(UiState& s, UiDrawFn fn) {
     if (fn == nullptr) {
         return;
@@ -541,6 +553,11 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                 n = uiEmitSprite(dst, n, cap, s.box[id], *image, clip, paint->blur, r, g, b, glyphA);
             } else {
                 n = uiEmitPanel(s, id, dst, n, cap, clip, r, g, b, a, glyphA);
+                for (std::size_t ui = 0; ui < s.underHook.size(); ++ui) {
+                    if (s.underHook[ui] != nullptr) {
+                        s.underHook[ui](s, id, dst, n, cap);
+                    }
+                }
                 const UiText* shown = s.ent[id].try_get<UiText>();
                 if (shown == nullptr || shown->ownRun == 0) {
                     n = uiEmitTextNode(s, id, dst, n, cap, clip, r, g, b, a);

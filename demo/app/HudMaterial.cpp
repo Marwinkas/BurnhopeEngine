@@ -13,8 +13,9 @@ namespace burnhope {
 
 char* hudDocPath(BhmatDoc& doc, uint8_t channel) {
     char* path[] = {
-        doc.albedoPath, doc.normalPath, doc.ormPath, doc.emissivePath, doc.roughPath, doc.metalPath, doc.aoPath, doc.heightPath};
-    return channel < 8 ? path[channel] : doc.albedoPath;
+        doc.albedoPath, doc.normalPath, doc.ormPath, doc.emissivePath, doc.roughPath, doc.metalPath, doc.aoPath,
+        doc.heightPath, doc.alphaPath};
+    return channel < 9 ? path[channel] : doc.alphaPath;
 }
 
 const char* leaf(const char* path) {

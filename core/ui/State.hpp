@@ -75,6 +75,7 @@ struct UiState {
     uint16_t capture = kUiNone;
     std::vector<UiInputHookFn> inputHook;
     std::vector<UiDrawFn> drawHook;
+    std::vector<UiDrawFn> underHook;
     std::vector<UiDrawFn> decorHook;
     std::vector<UiOverlayDrawFn> overlayHook;
     std::vector<void (*)(UiState&)> placeHook;
@@ -202,6 +203,7 @@ uint16_t uiMarked(const UiState& s) {
 
 void uiName(UiState& s, uint16_t id, const char* name);
 void uiDrawAdd(UiState& s, UiDrawFn fn);
+void uiDrawUnderAdd(UiState& s, UiDrawFn fn);
 void uiDrawDecorAdd(UiState& s, UiDrawFn fn);
 void uiOverlayAdd(UiState& s, UiOverlayDrawFn fn);
 void uiPlaceAdd(UiState& s, void (*fn)(UiState& s));

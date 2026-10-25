@@ -437,6 +437,7 @@ inline void sceneBlockApply(HudContext& hud) {
             case kFlMatFlip: hud.matDoc.flipNormalY = value; break;
             case kFlMatUnlit: hud.matDoc.unlit = value; break;
             case kFlMatRepeat: hud.matDoc.repeat = value; break;
+            case kFlMatPack: hud.matDoc.mapPack = value; break;
             case kFlLiveWorld: hud.live.worldAligned = value; break;
             case kFlLiveDouble: hud.live.doubleSided = value; break;
             case kFlLiveAlpha: hud.live.alphaCut = value; break;

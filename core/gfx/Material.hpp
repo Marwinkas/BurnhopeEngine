@@ -105,7 +105,9 @@ struct BhmatDoc {
     uint8_t flipNormalY = 1;
     uint8_t unlit = 0;
     uint8_t repeat = 1;
-    uint8_t padDoc[2]{};
+    uint8_t mapPack = 0;
+    uint8_t padDoc = 0;
+    char alphaPath[260]{};
 };
 
 static_assert(std::is_trivially_copyable_v<BhmatDoc>);
@@ -209,7 +211,9 @@ inline void materialGpuFromDoc(MaterialGpuData& gpu, const BhmatDoc& doc) {
     if (doc.repeat == 0) {
         flags |= kMatClampUv;
     }
-    flags |= kMatUseAlpha;
+    if (doc.alphaPath[0] != '\0' && doc.baseA < 0.999f) {
+        flags |= kMatUseAlpha;
+    }
     gpu.flags = flags;
     std::memcpy(&gpu.tail[0], &doc.heightScale, sizeof(float));
 }

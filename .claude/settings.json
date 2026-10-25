@@ -1,0 +1,24 @@
+{
+    "permissions": {
+      "defaultMode": "default",
+      "deny": [
+        "Read(build-core/**)",
+        "Edit(build-core/**)",
+        "Read(cache/**)",
+        "Read(.cache/**)",
+        "Read(Libraries/**)",
+        "Read(Falcor/**)",
+        "Read(FidelityFX-SDK/**)",
+        "Read(filament/**)",
+        "Read(FX-SSSR/**)",
+        "Read(NRD/**)",
+        "Read(RTXDI/**)",
+        "Read(Sharc/**)",
+        "Read(XeGTAO/**)",
+        "Read(steam-audio/**)",
+        "Read(steamaudio/**)",
+        "Read(old/**)",
+        "Read(t.txt)"
+      ]
+    }
+  }

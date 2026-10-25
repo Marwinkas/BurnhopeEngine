@@ -74,6 +74,7 @@ void takeNum(BhmatDoc& doc, const char* key, double value) {
     else if (keyIs(key, "flipY")) doc.flipNormalY = n > 0.5 ? 1u : 0u;
     else if (keyIs(key, "unlit")) doc.unlit = n > 0.5 ? 1u : 0u;
     else if (keyIs(key, "repeat")) doc.repeat = n > 0.5 ? 1u : 0u;
+    else if (keyIs(key, "pack")) doc.mapPack = n > 0.5 ? 1u : 0u;
     else if (keyIs(key, "hScale")) doc.heightScale = n;
 }
 
@@ -87,6 +88,7 @@ void takeStr(BhmatDoc& doc, const char* key, const char* text) {
     else if (keyIs(key, "metalPath")) dst = doc.metalPath;
     else if (keyIs(key, "aoPath")) dst = doc.aoPath;
     else if (keyIs(key, "height")) dst = doc.heightPath;
+    else if (keyIs(key, "alpha")) dst = doc.alphaPath;
     if (dst == nullptr) {
         return;
     }
@@ -110,6 +112,7 @@ bool materialLoadBhmat(const char* path, BhmatDoc& doc) {
     doc.emissiveColor[0] = doc.emissiveColor[1] = doc.emissiveColor[2] = 1.0f;
     doc.flipNormalY = 1;
     doc.repeat = 1;
+    doc.mapPack = 255;
     if (path == nullptr || path[0] == '\0') {
         return false;
     }
@@ -156,6 +159,13 @@ bool materialLoadBhmat(const char* path, BhmatDoc& doc) {
             }
         }
         json::eat(c, ',');
+    }
+    if (doc.mapPack > 1u) {
+        const bool split = doc.metalPath[0] != '\0' || doc.roughPath[0] != '\0' || doc.aoPath[0] != '\0' || doc.heightPath[0] != '\0';
+        doc.mapPack = (!split && doc.ormPath[0] != '\0') ? 1u : 0u;
+    }
+    if (doc.mapPack == 0u) {
+        doc.ormPath[0] = '\0';
     }
     fileUnmap(&mapped);
     return true;
@@ -207,6 +217,7 @@ bool materialSaveBhmat(const char* path, const BhmatDoc& doc) {
     putNum(out, "flipY", doc.flipNormalY);
     putNum(out, "unlit", doc.unlit);
     putNum(out, "repeat", doc.repeat);
+    putNum(out, "pack", doc.mapPack);
     putNum(out, "hScale", doc.heightScale);
     std::fputs(",\"albedo\":", out);
     quote(out, doc.albedoPath);
@@ -224,6 +235,8 @@ bool materialSaveBhmat(const char* path, const BhmatDoc& doc) {
     quote(out, doc.aoPath);
     std::fputs(",\"height\":", out);
     quote(out, doc.heightPath);
+    std::fputs(",\"alpha\":", out);
+    quote(out, doc.alphaPath);
     std::fputs("}\n", out);
     std::fclose(out);
     return true;

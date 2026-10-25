@@ -587,6 +587,10 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
             }
         }
     }
+    if ((mat.flags & 4096u) != 0u && mat.tail1 > 0u && mat.tail1 < 768u) {
+        const float4 mask = sampleMap(mat.tail1, surf);
+        albedo *= mask.a < 0.999 ? mask.a : mask.r;
+    }
     const float4 clipD = worldToClip(P);
     const float2 ndcD = clipD.xy / max(clipD.w, 1e-4) * 0.5 + 0.5;
     const float nearD = max(gFrame.cameraPos.w, 0.05);

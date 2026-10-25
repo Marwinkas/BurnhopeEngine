@@ -354,6 +354,8 @@ bh_module(app
     demo/app/HudMat.cpp
     demo/app/HudMaterial.cpp
     demo/app/MatPage.cpp
+    demo/app/MatEdit.cpp
+    demo/app/MatSlot.cpp
     demo/app/MatPreview.cpp
     demo/app/HudPick.cpp
     demo/app/HudToolbar.cpp

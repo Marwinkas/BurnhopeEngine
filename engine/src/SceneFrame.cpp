@@ -3962,6 +3962,9 @@ void queueDocMap(SceneFrame& scene, uint8_t actor, uint8_t channel, const char* 
     } else if (channel == 7u) {
         slot = &mat.pad[0];
         none = 0;
+    } else if (channel == 8u) {
+        slot = &mat.tail[1];
+        none = 0;
     }
     if (*slot == none && (channel != 2u || (mat.flags & kMatOrm) == 0u)) {
         return;
@@ -4023,6 +4026,7 @@ bool sceneFrameApplyDoc(SceneFrame* scene, uint8_t actor, const BhmatDoc& doc) {
         queueDocMap(*scene, actor, 6, "", previous.aoPath[0] != '\0' ? previous.aoPath : "x");
         queueDocMap(*scene, actor, 7, "", previous.heightPath[0] != '\0' ? previous.heightPath : "x");
     }
+    queueDocMap(*scene, actor, 8, doc.alphaPath, previous.alphaPath);
     scene->editorDirty = static_cast<uint8_t>(scene->editorDirty | 1u);
     return true;
 }
@@ -4176,8 +4180,10 @@ void takeQueuedTexture(SceneFrameImpl& s, Device& device) {
             mat.pad[3] = slot;
         } else if (job.channel == 6u) {
             mat.aoTex = slot;
-        } else {
+        } else if (job.channel == 7u) {
             mat.pad[0] = slot;
+        } else if (job.channel == 8u) {
+            mat.tail[1] = slot;
         }
         if (s.materialsBuf.mapped != nullptr) {
             static_cast<MaterialGpuData*>(s.materialsBuf.mapped)[matId] = mat;

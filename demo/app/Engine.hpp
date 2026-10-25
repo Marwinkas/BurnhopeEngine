@@ -95,6 +95,15 @@ struct MatHit {
     uint8_t kind = 0;
 };
 
+struct MatLink {
+    HudContext* hud = nullptr;
+    uint16_t slider = kUiNone;
+    uint16_t number = kUiNone;
+    uint16_t index = 0;
+};
+
+inline constexpr uint8_t kMatSlotN = 9;
+
 struct HudContext {
     SceneFrame* scene = nullptr;
     Host* host = nullptr;
@@ -183,11 +192,16 @@ struct HudContext {
     uint8_t rootReady = 0;
     uint8_t matOpen = 0;
     uint8_t texLive = 0;
-    MatHit matHit[8]{};
-    uint16_t matTex[8]{};
-    uint16_t matThumb[8]{};
-    uint16_t matClear[8]{};
-    uint16_t matDriven[8]{};
+    MatHit matHit[kMatSlotN]{};
+    uint16_t matTex[kMatSlotN]{};
+    uint16_t matThumb[kMatSlotN]{};
+    uint16_t matClear[kMatSlotN]{};
+    uint16_t matEmpty[kMatSlotN]{};
+    uint16_t matRow[kMatSlotN]{};
+    MatLink matLink[kMatSlotN]{};
+    uint16_t matType = kUiNone;
+    uint16_t matPack = kUiNone;
+    uint16_t matHex[2]{};
     uint16_t matPreview = kUiNone;
     float previewYaw = 0.55f;
     float previewPitch = 0.35f;

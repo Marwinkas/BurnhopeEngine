@@ -130,7 +130,7 @@ bool drawNumberFill(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint
 } // namespace
 
 void uiNumberBind(UiState& s) {
-    uiDrawDecorAdd(s, drawNumberFill);
+    uiDrawUnderAdd(s, drawNumberFill);
 }
 
 } // namespace burnhope
