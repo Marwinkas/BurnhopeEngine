@@ -310,6 +310,12 @@ bh_module(render
     engine/src/Rain.cpp
     engine/src/Weather.cpp
     engine/src/SceneFrame.cpp
+    engine/src/SceneActors.cpp
+    engine/src/SceneGeometry.cpp
+    engine/src/SceneProcedural.cpp
+    engine/src/SceneTargets.cpp
+    engine/src/SceneTextures.cpp
+    engine/src/SceneUniforms.cpp
 )
 target_include_directories(bh_render PUBLIC ${BH_ENGINE} ${BH_ENGINE}/include ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include)
 set_source_files_properties(

@@ -346,4 +346,53 @@ void framePassSharc(const RenderContext& ctx, SharcPass& sharc, TrackedImage& hd
 void framePassVoxel(const RenderContext& ctx, VoxelPass& voxel, TrackedImage& hdrA, bool worldVx, uint32_t instances, bool moved);
 void framePassTonemap(const RenderContext& ctx, TonemapPass& tone, TrackedImage& hdrA, TrackedImage& hdrB, const Swapchain& swap, const FrameContext& frame, bool bloomOn, bool skipAa, bool taaOn);
 
+struct SceneFrame : SceneFrameImpl {};
+
+// Per-frame uniform inputs produced by sceneFillUniforms and consumed by the pass recording in sceneFrameRecord.
+struct SceneUniformSet {
+    CameraPose pose{};
+    FrameView gpu{};
+    FrameSun lit{};
+    FramePost knob{};
+    const LightGpuData* lightSrc = nullptr;
+    float unjitVp[16]{};
+    float jitInv[16]{};
+    float splits[3]{};
+    float sunCentre[3]{};
+    uint32_t sunKeep[3]{};
+    uint32_t flight = 0;
+    uint32_t strideU = 0;
+    uint32_t lightCount = 0;
+    bool taaLive = false;
+};
+
+// Scene frame internals shared by SceneFrame.cpp, SceneTextures.cpp, SceneGeometry.cpp, SceneProcedural.cpp,
+// SceneUniforms.cpp and SceneTargets.cpp.
+void sceneResizeTargets(SceneFrame* scene, Device& device, const Swapchain& swap, const FrameContext& frame, VkExtent2D renderExtent);
+bool sceneCreateGpu(SceneFrame* scene, Device& device, const Swapchain& swap);
+void sceneFillUniforms(SceneFrame* scene, Device& device, const Swapchain& swap, const FrameContext& frame, bool fsrLive, SceneUniformSet& out);
+MaterialGpuData* materialAt(SceneFrameImpl& s, uint32_t id);
+void materialOwnFromView(SceneFrameImpl& s, const SceneBlobView& view);
+bool nameHas(const char* text, const char* needle);
+bool loadTextures(SceneFrameImpl& s, Device& device);
+void modelLabel(const SceneFrameImpl& scene, uint32_t mat, char* dst, uint32_t cap);
+void syncPropMaterial(SceneFrame& scene);
+bool ensureOwnedMaterials(SceneFrameImpl& s);
+void takeQueuedTexture(SceneFrameImpl& s, Device& device);
+void placeActors(SceneFrameImpl& scene);
+void armEditorRoom(SceneFrameImpl& s);
+uint8_t linkProp(SceneFrameImpl& s, uint32_t instance, const char* name);
+void bakeAudio(SceneFrameImpl& scene);
+void uploadStatic(SceneFrameImpl& s);
+uint32_t cullLod(SceneFrameImpl& s, const CameraCull& cam);
+uint32_t cullPoint(const SceneFrameImpl& s, float lx, float ly, float lz, float radius, uint32_t* out);
+uint32_t cullFace(const SceneFrameImpl& s, const Mat4& view, uint32_t* out);
+void freeOwned(SceneFrame& s);
+bool syncPropInstance(SceneFrame* scene);
+bool ensureOwnedInstances(SceneFrameImpl& s);
+uint32_t uploadLights(SceneFrameImpl& s, uint32_t flight);
+void followHandLamp(SceneFrameImpl& s);
+bool heapImage(DescriptorHeaps& heaps, Device& device, SceneFrameImpl& s, uint32_t slot, VkDescriptorType type, const GpuImage& img, VkImageLayout layout, VkImageAspectFlags aspect);
+bool bindHeap(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps);
+
 } // namespace burnhope
