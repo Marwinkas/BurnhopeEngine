@@ -1,11 +1,11 @@
 === 1. FILE LINE COUNTS (MONOLITH CHECK) ===
-  60650 итого
+  60670 итого
     983 engine/src/SceneUniforms.cpp
     963 engine/src/SceneGeometry.cpp
     947 engine/src/Radiance.cpp
     932 engine/gpu_scene/SceneGizmo.cpp
     907 core/host/PropImport.cpp
-    892 engine/src/Restir.cpp
+    897 engine/src/Restir.cpp
     824 engine/src/Fsr.cpp
     814 core/ui/kit/Color.cpp
     805 core/platform/Window.cpp
@@ -226,9 +226,6 @@ core/ui/Hover.hpp:3:#include <cstdint>
 core/ui/Bar.hpp:3:#include <cstdint>
 core/ui/Bar.hpp:4:#include <type_traits>
 core/ui/Icon.hpp:3:#include <cstdint>
-core/ui/Interaction.hpp:3:#include "ui/Geometry.hpp"
-core/ui/Interaction.hpp:4:#include <cstdint>
-core/ui/Interaction.hpp:5:#include <type_traits>
 core/ui/Metrics.hpp:3:#include <cstdint>
 core/ui/Metrics.hpp:4:#include <type_traits>
 core/ui/Primitive.hpp:3:#include <algorithm>
@@ -271,6 +268,9 @@ core/ui/Command.hpp:3:#include "ui/Interaction.hpp"
 core/ui/Command.hpp:4:#include "ui/Types.hpp"
 core/ui/Command.hpp:6:#include <cstdint>
 core/ui/Command.hpp:7:#include <type_traits>
+core/ui/Interaction.hpp:3:#include "ui/Geometry.hpp"
+core/ui/Interaction.hpp:4:#include <cstdint>
+core/ui/Interaction.hpp:5:#include <type_traits>
 core/files/Format.hpp:3:#include "Str.hpp"
 core/files/Format.hpp:4:#include "Units.hpp"
 core/files/Format.hpp:6:#include <cstdint>
@@ -553,10 +553,9 @@ engine/include/render/Restir.hpp:5:#include "render/PassCommon.hpp"
 engine/include/render/Restir.hpp:6:#include "rhi/GpuBuffer.hpp"
 engine/include/render/Restir.hpp:7:#include "rhi/GpuImage.hpp"
 engine/include/render/Restir.hpp:8:#include "rhi/ShaderObject.hpp"
-engine/include/render/Restir.hpp:10:#include <Rtxdi/DI/ReSTIRDI.h>
+engine/include/render/Restir.hpp:10:#include <Rtxdi/DI/ReSTIRDIParameters.h>
 engine/include/render/Restir.hpp:12:#include <cstdint>
-engine/include/render/Restir.hpp:13:#include <optional>
-engine/include/render/Restir.hpp:14:#include <vector>
+engine/include/render/Restir.hpp:13:#include <vector>
 engine/include/render/Tonemap.hpp:3:#include "rhi/Device.hpp"
 engine/include/render/Tonemap.hpp:4:#include "rhi/GpuImage.hpp"
 engine/include/render/Tonemap.hpp:5:#include "render/PassTargets.hpp"
@@ -628,7 +627,6 @@ engine/include/render/SceneFrameImpl.hpp:41:#include "io/File.hpp"
 engine/include/render/SceneFrameImpl.hpp:42:#include "scene/FlyCam.hpp"
 engine/include/render/SceneFrameImpl.hpp:43:#include "scene/TestScene.hpp"
 engine/include/render/SceneFrameImpl.hpp:44:#include "rhi/GpuProfiler.hpp"
-engine/include/render/SceneFrameImpl.hpp:46:#include <vector>
 engine/include/render/Hiz.hpp:3:#include "rhi/Device.hpp"
 engine/include/render/Hiz.hpp:4:#include "rhi/ShaderObject.hpp"
 engine/include/render/Hiz.hpp:6:#include <volk.h>
@@ -646,14 +644,12 @@ demo/app/Engine.hpp:5:#include "render/SceneFrame.hpp"
 demo/app/Engine.hpp:6:#include "ui/widget/ColorPicker.hpp"
 demo/app/Engine.hpp:7:#include "host/PropBind.hpp"
 demo/app/Engine.hpp:9:#include <vector>
-demo/app/HudBuild.hpp:3:#include "app/Engine.hpp"
-demo/app/HudBuild.hpp:4:#include "host/PropImport.hpp"
-demo/app/HudBuild.hpp:5:#include "ui/Style.hpp"
-demo/app/SceneBlockFill.hpp:3:#include "app/Engine.hpp"
 demo/app/Shell.hpp:3:#include "host/Host.hpp"
-demo/app/MatPriv.hpp:3:#include "app/Engine.hpp"
-demo/app/MatPriv.hpp:4:#include "ui/State.hpp"
-demo/app/MatPriv.hpp:6:#include <cstddef>
+demo/app/MatPriv.hpp:3:#include "ui/State.hpp"
+demo/app/MatPriv.hpp:5:#include <cstddef>
+demo/app/SceneBlockFill.hpp:3:#include "app/Engine.hpp"
+demo/app/HudBuild.hpp:3:#include "host/PropImport.hpp"
+demo/app/HudBuild.hpp:4:#include "ui/Style.hpp"
 
 === 3. CPP INCLUDES ===
 core/platform/Dialog.cpp:1:#include "platform/Window.hpp"
@@ -1520,16 +1516,17 @@ engine/src/PassShade.cpp:6:#include "rhi/GpuProfiler.hpp"
 engine/src/PassTonemap.cpp:1:#include "render/SceneFrameImpl.hpp"
 engine/src/PassTonemap.cpp:3:#include "rhi/GpuProfiler.hpp"
 engine/src/Restir.cpp:1:#include "render/Restir.hpp"
-engine/src/Restir.cpp:3:#include "render/HeapBind.hpp"
-engine/src/Restir.cpp:4:#include "rhi/Barrier.hpp"
-engine/src/Restir.cpp:5:#include "rhi/DescriptorHeap.hpp"
-engine/src/Restir.cpp:6:#include "rhi/GpuProfiler.hpp"
-engine/src/Restir.cpp:8:#include <spdlog/spdlog.h>
-engine/src/Restir.cpp:10:#include <algorithm>
-engine/src/Restir.cpp:11:#include <chrono>
-engine/src/Restir.cpp:12:#include <cstddef>
-engine/src/Restir.cpp:13:#include <cstdio>
-engine/src/Restir.cpp:14:#include <cstring>
+engine/src/Restir.cpp:3:#include <Rtxdi/DI/ReSTIRDI.h>
+engine/src/Restir.cpp:5:#include "render/HeapBind.hpp"
+engine/src/Restir.cpp:6:#include "rhi/Barrier.hpp"
+engine/src/Restir.cpp:7:#include "rhi/DescriptorHeap.hpp"
+engine/src/Restir.cpp:8:#include "rhi/GpuProfiler.hpp"
+engine/src/Restir.cpp:10:#include <spdlog/spdlog.h>
+engine/src/Restir.cpp:12:#include <algorithm>
+engine/src/Restir.cpp:13:#include <chrono>
+engine/src/Restir.cpp:14:#include <cstddef>
+engine/src/Restir.cpp:15:#include <cstdio>
+engine/src/Restir.cpp:16:#include <cstring>
 engine/src/Shade.cpp:1:#include "render/Shade.hpp"
 engine/src/Shade.cpp:3:#include "render/RenderDefs.hpp"
 engine/src/Shade.cpp:4:#include "render/HeapBind.hpp"
@@ -1687,93 +1684,100 @@ demo/app/Main.cpp:1:#include "app/Engine.hpp"
 demo/app/Main.cpp:3:#include <spdlog/spdlog.h>
 demo/app/Main.cpp:5:#include <cstdlib>
 demo/app/Main.cpp:6:#include <cstring>
-demo/app/HudInspector.cpp:1:#include "app/HudBuild.hpp"
-demo/app/HudInspector.cpp:2:#include "app/SceneBlockFill.hpp"
-demo/app/HudInspector.cpp:4:#include "render/SceneFrame.hpp"
-demo/app/HudInspector.cpp:5:#include "gpu_scene/SceneObject.hpp"
-demo/app/HudInspector.cpp:6:#include "ui/Panel.hpp"
-demo/app/HudInspector.cpp:7:#include "ui/widget/Button.hpp"
-demo/app/HudInspector.cpp:8:#include "ui/widget/Label.hpp"
-demo/app/HudInspector.cpp:9:#include "ui/widget/Field.hpp"
-demo/app/HudInspector.cpp:10:#include "host/PropGrid.hpp"
-demo/app/HudInspector.cpp:11:#include "ui/widget/Menu.hpp"
-demo/app/HudInspector.cpp:12:#include "ui/widget/Scroll.hpp"
-demo/app/HudInspector.cpp:13:#include "ui/widget/Virtual.hpp"
-demo/app/HudInspector.cpp:14:#include "ui/widget/ColorPicker.hpp"
-demo/app/HudInspector.cpp:16:#include <cstdio>
-demo/app/HudMat.cpp:1:#include "app/HudBuild.hpp"
-demo/app/HudMat.cpp:3:#include "asset/ProjectDoc.hpp"
-demo/app/HudMat.cpp:4:#include "files/FileSession.hpp"
-demo/app/HudMat.cpp:5:#include "gpu_scene/SceneObject.hpp"
-demo/app/HudMat.cpp:6:#include "platform/Window.hpp"
-demo/app/HudMat.cpp:7:#include "render/SceneFrame.hpp"
-demo/app/HudMat.cpp:8:#include "ui/Text.hpp"
-demo/app/HudMat.cpp:9:#include "ui/widget/Button.hpp"
-demo/app/HudMat.cpp:10:#include "ui/widget/Check.hpp"
-demo/app/HudMat.cpp:11:#include "ui/widget/DragDrop.hpp"
-demo/app/HudMat.cpp:12:#include "host/PropGrid.hpp"
-demo/app/HudMat.cpp:13:#include "ui/widget/Scroll.hpp"
-demo/app/HudMat.cpp:14:#include "Str.hpp"
-demo/app/HudMat.cpp:16:#include <cstdio>
-demo/app/HudMat.cpp:17:#include <cstring>
-demo/app/HudMat.cpp:18:#include <filesystem>
-demo/app/HudMaterial.cpp:1:#include "app/HudBuild.hpp"
-demo/app/HudMaterial.cpp:3:#include "Str.hpp"
-demo/app/HudMaterial.cpp:4:#include "gfx/Material.hpp"
-demo/app/HudMaterial.cpp:5:#include "ui/Panel.hpp"
-demo/app/HudMaterial.cpp:6:#include "ui/widget/AssetSlot.hpp"
-demo/app/HudMaterial.cpp:7:#include "ui/widget/Choice.hpp"
-demo/app/HudMaterial.cpp:8:#include "ui/widget/Menu.hpp"
-demo/app/HudMaterial.cpp:10:#include <cstdio>
-demo/app/HudPost.cpp:1:#include "app/HudBuild.hpp"
-demo/app/HudPost.cpp:2:#include "app/SceneBlockFill.hpp"
-demo/app/HudPost.cpp:4:#include "io/File.hpp"
-demo/app/HudPost.cpp:5:#include "platform/PlatformUtil.hpp"
-demo/app/HudPost.cpp:6:#include "ui/widget/Button.hpp"
-demo/app/HudPost.cpp:7:#include "ui/widget/ColorPicker.hpp"
-demo/app/HudPost.cpp:8:#include "ui/widget/Menu.hpp"
-demo/app/HudPost.cpp:10:#include <spdlog/spdlog.h>
-demo/app/HudPush.cpp:1:#include "app/HudBuild.hpp"
-demo/app/HudPush.cpp:2:#include "app/SceneBlockFill.hpp"
-demo/app/HudPush.cpp:4:#include "gpu_scene/SceneObject.hpp"
-demo/app/HudPush.cpp:5:#include "platform/PlatformUtil.hpp"
-demo/app/HudPush.cpp:6:#include "render/SceneFrame.hpp"
-demo/app/HudPush.cpp:7:#include "rhi/Device.hpp"
-demo/app/HudPush.cpp:8:#include "ui/widget/Button.hpp"
-demo/app/HudPush.cpp:9:#include "ui/widget/Check.hpp"
-demo/app/HudPush.cpp:10:#include "ui/widget/Field.hpp"
-demo/app/HudPush.cpp:11:#include "host/PropGrid.hpp"
-demo/app/HudPush.cpp:12:#include "ui/widget/Popover.hpp"
-demo/app/HudPush.cpp:13:#include "ui/widget/Slider.hpp"
-demo/app/HudPush.cpp:14:#include "ui/widget/Label.hpp"
-demo/app/HudPush.cpp:15:#include "ui/widget/Scroll.hpp"
-demo/app/HudPush.cpp:16:#include "ui/widget/Virtual.hpp"
-demo/app/HudPush.cpp:17:#include "ui/Text.hpp"
-demo/app/HudPush.cpp:19:#include <cmath>
-demo/app/HudPush.cpp:20:#include <cstdio>
-demo/app/HudPush.cpp:21:#include <cstring>
-demo/app/HudSync.cpp:1:#include "app/HudBuild.hpp"
-demo/app/HudSync.cpp:3:#include "platform/PlatformUtil.hpp"
-demo/app/HudSync.cpp:4:#include "gpu_scene/SceneObject.hpp"
-demo/app/HudSync.cpp:5:#include "render/SceneFrame.hpp"
-demo/app/HudSync.cpp:6:#include "rhi/Device.hpp"
-demo/app/HudSync.cpp:7:#include "ui/widget/Button.hpp"
-demo/app/HudSync.cpp:8:#include "ui/widget/Check.hpp"
-demo/app/HudSync.cpp:9:#include "ui/widget/Field.hpp"
-demo/app/HudSync.cpp:10:#include "host/PropGrid.hpp"
-demo/app/HudSync.cpp:11:#include "ui/widget/Menu.hpp"
-demo/app/HudSync.cpp:12:#include "ui/widget/Number.hpp"
-demo/app/HudSync.cpp:13:#include "ui/widget/Slider.hpp"
-demo/app/HudSync.cpp:15:#include <cmath>
-demo/app/HudSync.cpp:16:#include <cstdio>
-demo/app/HudSync.cpp:17:#include <cstring>
-demo/app/MatPage.cpp:1:#include "app/HudBuild.hpp"
-demo/app/MatPage.cpp:2:#include "app/MatPriv.hpp"
-demo/app/MatPage.cpp:4:#include "ui/Panel.hpp"
-demo/app/MatPage.cpp:5:#include "ui/Style.hpp"
-demo/app/MatPage.cpp:6:#include "ui/widget/Choice.hpp"
-demo/app/MatPage.cpp:7:#include "ui/widget/Image.hpp"
-demo/app/MatPage.cpp:8:#include "ui/widget/Label.hpp"
+demo/app/HudInspector.cpp:1:#include "app/Engine.hpp"
+demo/app/HudInspector.cpp:2:#include "app/HudBuild.hpp"
+demo/app/HudInspector.cpp:3:#include "app/SceneBlockFill.hpp"
+demo/app/HudInspector.cpp:5:#include "render/SceneFrame.hpp"
+demo/app/HudInspector.cpp:6:#include "gpu_scene/SceneObject.hpp"
+demo/app/HudInspector.cpp:7:#include "ui/Panel.hpp"
+demo/app/HudInspector.cpp:8:#include "ui/widget/Button.hpp"
+demo/app/HudInspector.cpp:9:#include "ui/widget/Label.hpp"
+demo/app/HudInspector.cpp:10:#include "ui/widget/Field.hpp"
+demo/app/HudInspector.cpp:11:#include "host/PropGrid.hpp"
+demo/app/HudInspector.cpp:12:#include "ui/widget/Menu.hpp"
+demo/app/HudInspector.cpp:13:#include "ui/widget/Scroll.hpp"
+demo/app/HudInspector.cpp:14:#include "ui/widget/Virtual.hpp"
+demo/app/HudInspector.cpp:15:#include "ui/widget/ColorPicker.hpp"
+demo/app/HudInspector.cpp:17:#include <cstdio>
+demo/app/HudMat.cpp:1:#include "app/Engine.hpp"
+demo/app/HudMat.cpp:2:#include "app/HudBuild.hpp"
+demo/app/HudMat.cpp:4:#include "asset/ProjectDoc.hpp"
+demo/app/HudMat.cpp:5:#include "files/FileSession.hpp"
+demo/app/HudMat.cpp:6:#include "gpu_scene/SceneObject.hpp"
+demo/app/HudMat.cpp:7:#include "platform/Window.hpp"
+demo/app/HudMat.cpp:8:#include "render/SceneFrame.hpp"
+demo/app/HudMat.cpp:9:#include "ui/Text.hpp"
+demo/app/HudMat.cpp:10:#include "ui/widget/Button.hpp"
+demo/app/HudMat.cpp:11:#include "ui/widget/Check.hpp"
+demo/app/HudMat.cpp:12:#include "ui/widget/DragDrop.hpp"
+demo/app/HudMat.cpp:13:#include "host/PropGrid.hpp"
+demo/app/HudMat.cpp:14:#include "ui/widget/Scroll.hpp"
+demo/app/HudMat.cpp:15:#include "Str.hpp"
+demo/app/HudMat.cpp:17:#include <cstdio>
+demo/app/HudMat.cpp:18:#include <cstring>
+demo/app/HudMat.cpp:19:#include <filesystem>
+demo/app/HudMaterial.cpp:1:#include "app/Engine.hpp"
+demo/app/HudMaterial.cpp:2:#include "app/HudBuild.hpp"
+demo/app/HudMaterial.cpp:4:#include "Str.hpp"
+demo/app/HudMaterial.cpp:5:#include "gfx/Material.hpp"
+demo/app/HudMaterial.cpp:6:#include "ui/Panel.hpp"
+demo/app/HudMaterial.cpp:7:#include "ui/widget/AssetSlot.hpp"
+demo/app/HudMaterial.cpp:8:#include "ui/widget/Choice.hpp"
+demo/app/HudMaterial.cpp:9:#include "ui/widget/Menu.hpp"
+demo/app/HudMaterial.cpp:11:#include <cstdio>
+demo/app/HudPost.cpp:1:#include "app/Engine.hpp"
+demo/app/HudPost.cpp:2:#include "app/HudBuild.hpp"
+demo/app/HudPost.cpp:3:#include "app/SceneBlockFill.hpp"
+demo/app/HudPost.cpp:5:#include "io/File.hpp"
+demo/app/HudPost.cpp:6:#include "platform/PlatformUtil.hpp"
+demo/app/HudPost.cpp:7:#include "ui/widget/Button.hpp"
+demo/app/HudPost.cpp:8:#include "ui/widget/ColorPicker.hpp"
+demo/app/HudPost.cpp:9:#include "ui/widget/Menu.hpp"
+demo/app/HudPost.cpp:11:#include <spdlog/spdlog.h>
+demo/app/HudPush.cpp:1:#include "app/Engine.hpp"
+demo/app/HudPush.cpp:2:#include "app/HudBuild.hpp"
+demo/app/HudPush.cpp:3:#include "app/SceneBlockFill.hpp"
+demo/app/HudPush.cpp:5:#include "gpu_scene/SceneObject.hpp"
+demo/app/HudPush.cpp:6:#include "platform/PlatformUtil.hpp"
+demo/app/HudPush.cpp:7:#include "render/SceneFrame.hpp"
+demo/app/HudPush.cpp:8:#include "rhi/Device.hpp"
+demo/app/HudPush.cpp:9:#include "ui/widget/Button.hpp"
+demo/app/HudPush.cpp:10:#include "ui/widget/Check.hpp"
+demo/app/HudPush.cpp:11:#include "ui/widget/Field.hpp"
+demo/app/HudPush.cpp:12:#include "host/PropGrid.hpp"
+demo/app/HudPush.cpp:13:#include "ui/widget/Popover.hpp"
+demo/app/HudPush.cpp:14:#include "ui/widget/Slider.hpp"
+demo/app/HudPush.cpp:15:#include "ui/widget/Label.hpp"
+demo/app/HudPush.cpp:16:#include "ui/widget/Scroll.hpp"
+demo/app/HudPush.cpp:17:#include "ui/widget/Virtual.hpp"
+demo/app/HudPush.cpp:18:#include "ui/Text.hpp"
+demo/app/HudPush.cpp:20:#include <cmath>
+demo/app/HudPush.cpp:21:#include <cstdio>
+demo/app/HudPush.cpp:22:#include <cstring>
+demo/app/HudSync.cpp:1:#include "app/Engine.hpp"
+demo/app/HudSync.cpp:2:#include "app/HudBuild.hpp"
+demo/app/HudSync.cpp:4:#include "platform/PlatformUtil.hpp"
+demo/app/HudSync.cpp:5:#include "gpu_scene/SceneObject.hpp"
+demo/app/HudSync.cpp:6:#include "render/SceneFrame.hpp"
+demo/app/HudSync.cpp:7:#include "rhi/Device.hpp"
+demo/app/HudSync.cpp:8:#include "ui/widget/Button.hpp"
+demo/app/HudSync.cpp:9:#include "ui/widget/Check.hpp"
+demo/app/HudSync.cpp:10:#include "ui/widget/Field.hpp"
+demo/app/HudSync.cpp:11:#include "host/PropGrid.hpp"
+demo/app/HudSync.cpp:12:#include "ui/widget/Menu.hpp"
+demo/app/HudSync.cpp:13:#include "ui/widget/Number.hpp"
+demo/app/HudSync.cpp:14:#include "ui/widget/Slider.hpp"
+demo/app/HudSync.cpp:16:#include <cmath>
+demo/app/HudSync.cpp:17:#include <cstdio>
+demo/app/HudSync.cpp:18:#include <cstring>
+demo/app/MatPage.cpp:1:#include "app/Engine.hpp"
+demo/app/MatPage.cpp:2:#include "app/HudBuild.hpp"
+demo/app/MatPage.cpp:3:#include "app/MatPriv.hpp"
+demo/app/MatPage.cpp:5:#include "ui/Panel.hpp"
+demo/app/MatPage.cpp:6:#include "ui/Style.hpp"
+demo/app/MatPage.cpp:7:#include "ui/widget/Choice.hpp"
+demo/app/MatPage.cpp:8:#include "ui/widget/Image.hpp"
+demo/app/MatPage.cpp:9:#include "ui/widget/Label.hpp"
 demo/app/ProjectGate.cpp:1:#include "app/Engine.hpp"
 demo/app/ProjectGate.cpp:2:#include "app/HudBuild.hpp"
 demo/app/ProjectGate.cpp:4:#include "asset/AssimpImporter.hpp"
@@ -1785,33 +1789,35 @@ demo/app/ProjectGate.cpp:10:#include <spdlog/spdlog.h>
 demo/app/ProjectGate.cpp:12:#include <cstdio>
 demo/app/ProjectGate.cpp:13:#include <cstring>
 demo/app/ProjectGate.cpp:14:#include <filesystem>
-demo/app/MatEdit.cpp:1:#include "app/HudBuild.hpp"
-demo/app/MatEdit.cpp:2:#include "app/MatPriv.hpp"
-demo/app/MatEdit.cpp:3:#include "app/SceneBlockFill.hpp"
-demo/app/MatEdit.cpp:5:#include "ui/Icon.hpp"
-demo/app/MatEdit.cpp:6:#include "ui/widget/Button.hpp"
-demo/app/MatEdit.cpp:7:#include "ui/widget/Check.hpp"
-demo/app/MatEdit.cpp:8:#include "ui/widget/Choice.hpp"
-demo/app/MatEdit.cpp:9:#include "ui/widget/Field.hpp"
-demo/app/MatEdit.cpp:10:#include "ui/widget/Menu.hpp"
-demo/app/MatEdit.cpp:11:#include "ui/widget/Number.hpp"
-demo/app/MatEdit.cpp:13:#include <cstdio>
-demo/app/MatEdit.cpp:14:#include <cstring>
-demo/app/MatSlot.cpp:1:#include "app/HudBuild.hpp"
-demo/app/MatSlot.cpp:2:#include "app/MatPriv.hpp"
-demo/app/MatSlot.cpp:4:#include "ui/Hover.hpp"
-demo/app/MatSlot.cpp:5:#include "ui/Panel.hpp"
-demo/app/MatSlot.cpp:6:#include "ui/Style.hpp"
-demo/app/MatSlot.cpp:7:#include "ui/Text.hpp"
-demo/app/MatSlot.cpp:8:#include "ui/widget/AssetSlot.hpp"
-demo/app/MatSlot.cpp:9:#include "ui/widget/Button.hpp"
-demo/app/MatSlot.cpp:10:#include "ui/widget/DragDrop.hpp"
-demo/app/MatSlot.cpp:11:#include "ui/widget/Field.hpp"
-demo/app/MatSlot.cpp:12:#include "ui/widget/Image.hpp"
-demo/app/MatSlot.cpp:13:#include "ui/widget/Label.hpp"
-demo/app/MatSlot.cpp:14:#include "ui/widget/Number.hpp"
-demo/app/MatSlot.cpp:15:#include "ui/widget/Slider.hpp"
-demo/app/MatSlot.cpp:17:#include <cstring>
+demo/app/MatEdit.cpp:1:#include "app/Engine.hpp"
+demo/app/MatEdit.cpp:2:#include "app/HudBuild.hpp"
+demo/app/MatEdit.cpp:3:#include "app/MatPriv.hpp"
+demo/app/MatEdit.cpp:4:#include "app/SceneBlockFill.hpp"
+demo/app/MatEdit.cpp:6:#include "ui/Icon.hpp"
+demo/app/MatEdit.cpp:7:#include "ui/widget/Button.hpp"
+demo/app/MatEdit.cpp:8:#include "ui/widget/Check.hpp"
+demo/app/MatEdit.cpp:9:#include "ui/widget/Choice.hpp"
+demo/app/MatEdit.cpp:10:#include "ui/widget/Field.hpp"
+demo/app/MatEdit.cpp:11:#include "ui/widget/Menu.hpp"
+demo/app/MatEdit.cpp:12:#include "ui/widget/Number.hpp"
+demo/app/MatEdit.cpp:14:#include <cstdio>
+demo/app/MatEdit.cpp:15:#include <cstring>
+demo/app/MatSlot.cpp:1:#include "app/Engine.hpp"
+demo/app/MatSlot.cpp:2:#include "app/HudBuild.hpp"
+demo/app/MatSlot.cpp:3:#include "app/MatPriv.hpp"
+demo/app/MatSlot.cpp:5:#include "ui/Hover.hpp"
+demo/app/MatSlot.cpp:6:#include "ui/Panel.hpp"
+demo/app/MatSlot.cpp:7:#include "ui/Style.hpp"
+demo/app/MatSlot.cpp:8:#include "ui/Text.hpp"
+demo/app/MatSlot.cpp:9:#include "ui/widget/AssetSlot.hpp"
+demo/app/MatSlot.cpp:10:#include "ui/widget/Button.hpp"
+demo/app/MatSlot.cpp:11:#include "ui/widget/DragDrop.hpp"
+demo/app/MatSlot.cpp:12:#include "ui/widget/Field.hpp"
+demo/app/MatSlot.cpp:13:#include "ui/widget/Image.hpp"
+demo/app/MatSlot.cpp:14:#include "ui/widget/Label.hpp"
+demo/app/MatSlot.cpp:15:#include "ui/widget/Number.hpp"
+demo/app/MatSlot.cpp:16:#include "ui/widget/Slider.hpp"
+demo/app/MatSlot.cpp:18:#include <cstring>
 demo/app/HudToolbar.cpp:1:#include "app/Engine.hpp"
 demo/app/HudToolbar.cpp:3:#include "app/HudBuild.hpp"
 demo/app/HudToolbar.cpp:4:#include "files/Browser.hpp"
@@ -1831,14 +1837,15 @@ demo/app/HudView.cpp:9:#include "ui/Panel.hpp"
 demo/app/HudView.cpp:10:#include "ui/Text.hpp"
 demo/app/HudView.cpp:11:#include "ui/widget/Button.hpp"
 demo/app/HudView.cpp:12:#include "ui/widget/Check.hpp"
-demo/app/MatPreview.cpp:1:#include "app/HudBuild.hpp"
-demo/app/MatPreview.cpp:3:#include "image/ImageDecode.hpp"
-demo/app/MatPreview.cpp:4:#include "ui/rhi/Canvas.hpp"
-demo/app/MatPreview.cpp:6:#include <cmath>
-demo/app/MatPreview.cpp:7:#include <cstdint>
-demo/app/MatPreview.cpp:8:#include <cstdio>
-demo/app/MatPreview.cpp:9:#include <cstring>
-demo/app/MatPreview.cpp:10:#include <filesystem>
+demo/app/MatPreview.cpp:1:#include "app/Engine.hpp"
+demo/app/MatPreview.cpp:2:#include "app/HudBuild.hpp"
+demo/app/MatPreview.cpp:4:#include "image/ImageDecode.hpp"
+demo/app/MatPreview.cpp:5:#include "ui/rhi/Canvas.hpp"
+demo/app/MatPreview.cpp:7:#include <cmath>
+demo/app/MatPreview.cpp:8:#include <cstdint>
+demo/app/MatPreview.cpp:9:#include <cstdio>
+demo/app/MatPreview.cpp:10:#include <cstring>
+demo/app/MatPreview.cpp:11:#include <filesystem>
 demo/app/Shell.cpp:1:#include "app/Shell.hpp"
 demo/app/Shell.cpp:2:#include "files/Browser.hpp"
 demo/app/Shell.cpp:3:#include "files/FileDomain.hpp"
@@ -1921,41 +1928,40 @@ demo/app/HudAct.cpp:29:#include <cstdio>
 demo/app/HudAct.cpp:30:#include <cstring>
 demo/app/Engine.cpp:1:#include "app/Engine.hpp"
 demo/app/Engine.cpp:2:#include "app/SceneBlockFill.hpp"
-demo/app/Engine.cpp:4:#include "app/HudBuild.hpp"
-demo/app/Engine.cpp:5:#include "platform/PlatformUtil.hpp"
-demo/app/Engine.cpp:6:#include "render/SceneFrame.hpp"
-demo/app/Engine.cpp:7:#include "rhi/Device.hpp"
-demo/app/Engine.cpp:8:#include "files/Browser.hpp"
-demo/app/Engine.cpp:9:#include "files/FileDomain.hpp"
-demo/app/Engine.cpp:10:#include "host/HostNote.hpp"
-demo/app/Engine.cpp:11:#include "host/SceneMask.hpp"
-demo/app/Engine.cpp:12:#include "ui/widget/ColorPicker.hpp"
-demo/app/Engine.cpp:13:#include "ui/Panel.hpp"
-demo/app/Engine.cpp:14:#include "ui/widget/Button.hpp"
-demo/app/Engine.cpp:15:#include "ui/widget/Field.hpp"
-demo/app/Engine.cpp:16:#include "host/PropGrid.hpp"
-demo/app/Engine.cpp:17:#include "ui/widget/Splitter.hpp"
-demo/app/Engine.cpp:18:#include "ui/widget/Label.hpp"
-demo/app/Engine.cpp:19:#include "ui/widget/Chrome.hpp"
-demo/app/Engine.cpp:20:#include "ui/widget/Menu.hpp"
-demo/app/Engine.cpp:21:#include "ui/widget/Scroll.hpp"
-demo/app/Engine.cpp:22:#include "ui/widget/Slider.hpp"
-demo/app/Engine.cpp:23:#include "ui/widget/TreeView.hpp"
-demo/app/Engine.cpp:24:#include "ui/Interaction.hpp"
-demo/app/Engine.cpp:25:#include "ui/State.hpp"
-demo/app/Engine.cpp:26:#include "ui/rhi/Canvas.hpp"
-demo/app/Engine.cpp:27:#include "ui/Text.hpp"
-demo/app/Engine.cpp:28:#include "ui/rhi/UiPhoto.hpp"
-demo/app/Engine.cpp:29:#include "Str.hpp"
-demo/app/Engine.cpp:30:#include "app/HudBuild.hpp"
-demo/app/Engine.cpp:31:#include "asset/AssimpImporter.hpp"
-demo/app/Engine.cpp:33:#include <filesystem>
-demo/app/Engine.cpp:35:#include <spdlog/spdlog.h>
-demo/app/Engine.cpp:37:#include "gpu_scene/SceneObject.hpp"
-demo/app/Engine.cpp:39:#include <cmath>
-demo/app/Engine.cpp:40:#include <cstdio>
-demo/app/Engine.cpp:41:#include <cstdlib>
-demo/app/Engine.cpp:42:#include <cstring>
+demo/app/Engine.cpp:4:#include "platform/PlatformUtil.hpp"
+demo/app/Engine.cpp:5:#include "render/SceneFrame.hpp"
+demo/app/Engine.cpp:6:#include "rhi/Device.hpp"
+demo/app/Engine.cpp:7:#include "files/Browser.hpp"
+demo/app/Engine.cpp:8:#include "files/FileDomain.hpp"
+demo/app/Engine.cpp:9:#include "host/HostNote.hpp"
+demo/app/Engine.cpp:10:#include "host/SceneMask.hpp"
+demo/app/Engine.cpp:11:#include "ui/widget/ColorPicker.hpp"
+demo/app/Engine.cpp:12:#include "ui/Panel.hpp"
+demo/app/Engine.cpp:13:#include "ui/widget/Button.hpp"
+demo/app/Engine.cpp:14:#include "ui/widget/Field.hpp"
+demo/app/Engine.cpp:15:#include "host/PropGrid.hpp"
+demo/app/Engine.cpp:16:#include "ui/widget/Splitter.hpp"
+demo/app/Engine.cpp:17:#include "ui/widget/Label.hpp"
+demo/app/Engine.cpp:18:#include "ui/widget/Chrome.hpp"
+demo/app/Engine.cpp:19:#include "ui/widget/Menu.hpp"
+demo/app/Engine.cpp:20:#include "ui/widget/Scroll.hpp"
+demo/app/Engine.cpp:21:#include "ui/widget/Slider.hpp"
+demo/app/Engine.cpp:22:#include "ui/widget/TreeView.hpp"
+demo/app/Engine.cpp:23:#include "ui/Interaction.hpp"
+demo/app/Engine.cpp:24:#include "ui/State.hpp"
+demo/app/Engine.cpp:25:#include "ui/rhi/Canvas.hpp"
+demo/app/Engine.cpp:26:#include "ui/Text.hpp"
+demo/app/Engine.cpp:27:#include "ui/rhi/UiPhoto.hpp"
+demo/app/Engine.cpp:28:#include "Str.hpp"
+demo/app/Engine.cpp:29:#include "app/HudBuild.hpp"
+demo/app/Engine.cpp:30:#include "asset/AssimpImporter.hpp"
+demo/app/Engine.cpp:32:#include <filesystem>
+demo/app/Engine.cpp:34:#include <spdlog/spdlog.h>
+demo/app/Engine.cpp:36:#include "gpu_scene/SceneObject.hpp"
+demo/app/Engine.cpp:38:#include <cmath>
+demo/app/Engine.cpp:39:#include <cstdio>
+demo/app/Engine.cpp:40:#include <cstdlib>
+demo/app/Engine.cpp:41:#include <cstring>
 demo/app/SceneBlockFill.cpp:1:#include "app/SceneBlockFill.hpp"
 demo/app/SceneBlockFill.cpp:3:#include <cstring>
 demo/app/SceneBlockFill.cpp:4:#include <type_traits>
@@ -2301,19 +2307,19 @@ engine/include/render/Gtao.hpp:63:[[nodiscard]] bool gtaoResize(GtaoPass& p, Dev
 engine/include/render/Gtao.hpp:65:    VkCommandBuffer cmd,
 engine/include/render/HeapBind.hpp:235:[[nodiscard]] inline bool heapWriteStorage(DescriptorHeaps& h, Device& d, uint32_t slot, VkDeviceAddress address, VkDeviceSize size) {
 engine/include/render/HeapBind.hpp:264:        const VkSpirvResourceTypeFlagsEXT kind = readOnly
-engine/include/render/Restir.hpp:100:    VkImageLayout sigmaPenumbraLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-engine/include/render/Restir.hpp:101:    VkImageLayout sigmaSunLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-engine/include/render/Restir.hpp:102:    VkImageLayout sigmaHistLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-engine/include/render/Restir.hpp:120:    VkImageLayout pdfLayout[2]{VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_UNDEFINED};
-engine/include/render/Restir.hpp:121:    VkImageLayout histPosLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-engine/include/render/Restir.hpp:122:    VkImageLayout histMatLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-engine/include/render/Restir.hpp:179:[[nodiscard]] bool restirCreate(RestirPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent2D extent);
-engine/include/render/Restir.hpp:181:[[nodiscard]] bool restirResize(RestirPass& p, Device& d, VkExtent2D extent);
-engine/include/render/Restir.hpp:184:void restirStatReset(VkCommandBuffer cmd, RestirPass& p, Device& d, uint32_t flight);
-engine/include/render/Restir.hpp:185:void restirStatFlush(VkCommandBuffer cmd, RestirPass& p, uint32_t flight);
-engine/include/render/Restir.hpp:187:    VkCommandBuffer cmd,
-engine/include/render/Restir.hpp:195:    VkExtent2D extent,
-engine/include/render/Restir.hpp:196:    VkDeviceAddress tlas,
+engine/include/render/Restir.hpp:103:    VkImageLayout sigmaPenumbraLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+engine/include/render/Restir.hpp:104:    VkImageLayout sigmaSunLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+engine/include/render/Restir.hpp:105:    VkImageLayout sigmaHistLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+engine/include/render/Restir.hpp:123:    VkImageLayout pdfLayout[2]{VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_UNDEFINED};
+engine/include/render/Restir.hpp:124:    VkImageLayout histPosLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+engine/include/render/Restir.hpp:125:    VkImageLayout histMatLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+engine/include/render/Restir.hpp:182:[[nodiscard]] bool restirCreate(RestirPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent2D extent);
+engine/include/render/Restir.hpp:184:[[nodiscard]] bool restirResize(RestirPass& p, Device& d, VkExtent2D extent);
+engine/include/render/Restir.hpp:187:void restirStatReset(VkCommandBuffer cmd, RestirPass& p, Device& d, uint32_t flight);
+engine/include/render/Restir.hpp:188:void restirStatFlush(VkCommandBuffer cmd, RestirPass& p, uint32_t flight);
+engine/include/render/Restir.hpp:190:    VkCommandBuffer cmd,
+engine/include/render/Restir.hpp:198:    VkExtent2D extent,
+engine/include/render/Restir.hpp:199:    VkDeviceAddress tlas,
 engine/include/render/Tonemap.hpp:29:void cmaaPassRecord(VkCommandBuffer cmd, VkExtent2D extent, const TonemapPass& p);
 engine/include/render/Tonemap.hpp:30:void smaaPassRecord(VkCommandBuffer cmd, VkExtent2D extent, const TonemapPass& p);
 engine/include/render/Tonemap.hpp:31:void bloomPassRecord(VkCommandBuffer cmd, const Swapchain& sc, TonemapPass& p, bool run);
@@ -2328,12 +2334,12 @@ engine/include/render/Particles.hpp:79:    VkExtent2D extent,
 engine/include/render/Fog.hpp:30:void fogRecord(VkCommandBuffer cmd, FogVolume& fog, TrackedImage& hdr, VkExtent2D extent);
 engine/include/render/Rain.hpp:37:    VkCommandBuffer cmd,
 engine/include/render/Rain.hpp:40:    VkExtent2D extent,
-engine/include/render/SceneFrameImpl.hpp:292:    VkExtent2D extent{};
-engine/include/render/SceneFrameImpl.hpp:341:void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, GtaoPass& gtao, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes, bool restirDi, float fovY);
-engine/include/render/SceneFrameImpl.hpp:342:void framePassRestir(const RenderContext& ctx, RestirPass& restir, const FrameView& view, const void* lights, uint32_t lightCount, uint32_t passMask, VkDeviceAddress tlas);
-engine/include/render/SceneFrameImpl.hpp:345:void framePassSharc(const RenderContext& ctx, SharcPass& sharc, TrackedImage& hdrA, float giGain, uint32_t lightCount, VkDeviceAddress tlas, const RestirPass& restir, uint32_t restirOn, uint32_t denoise);
-engine/include/render/SceneFrameImpl.hpp:371:void sceneResizeTargets(SceneFrame* scene, Device& device, const Swapchain& swap, const FrameContext& frame, VkExtent2D renderExtent);
-engine/include/render/SceneFrameImpl.hpp:395:bool heapImage(DescriptorHeaps& heaps, Device& device, SceneFrameImpl& s, uint32_t slot, VkDescriptorType type, const GpuImage& img, VkImageLayout layout, VkImageAspectFlags aspect);
+engine/include/render/SceneFrameImpl.hpp:290:    VkExtent2D extent{};
+engine/include/render/SceneFrameImpl.hpp:339:void framePassShade(const RenderContext& ctx, ShadePass& shade, SkyPass& sky, GtaoPass& gtao, TrackedImage& vis, TrackedImage& depth, bool gtaoOn, VkBuffer probes, VkDeviceSize probeBytes, bool restirDi, float fovY);
+engine/include/render/SceneFrameImpl.hpp:340:void framePassRestir(const RenderContext& ctx, RestirPass& restir, const FrameView& view, const void* lights, uint32_t lightCount, uint32_t passMask, VkDeviceAddress tlas);
+engine/include/render/SceneFrameImpl.hpp:343:void framePassSharc(const RenderContext& ctx, SharcPass& sharc, TrackedImage& hdrA, float giGain, uint32_t lightCount, VkDeviceAddress tlas, const RestirPass& restir, uint32_t restirOn, uint32_t denoise);
+engine/include/render/SceneFrameImpl.hpp:369:void sceneResizeTargets(SceneFrame* scene, Device& device, const Swapchain& swap, const FrameContext& frame, VkExtent2D renderExtent);
+engine/include/render/SceneFrameImpl.hpp:393:bool heapImage(DescriptorHeaps& heaps, Device& device, SceneFrameImpl& s, uint32_t slot, VkDescriptorType type, const GpuImage& img, VkImageLayout layout, VkImageAspectFlags aspect);
 engine/include/render/Hiz.hpp:6:#include <volk.h>
 engine/include/render/Hiz.hpp:19:void hizMaxBuildRecord(VkCommandBuffer cmd, VkExtent2D extent, const HizPass& p, TrackedImage& hiz, uint32_t flight);
 engine/include/render/SceneFrame.hpp:322:    VkCommandBuffer cmd,
@@ -2363,6 +2369,16 @@ core/ui/widget/Field.hpp:25:struct UiFieldCaret {};
 core/ui/rhi/UiPhoto.hpp:12:struct UiState;
 core/ui/LayoutBridge.hpp:9:struct UiState;
 core/ui/Hover.hpp:7:struct UiState;
+core/ui/PrimitiveBatch.hpp:8:struct UiState;
+core/ui/PrimitiveBatch.hpp:9:struct UiNodeBars;
+core/ui/PrimitiveBatch.hpp:10:struct UiBar;
+core/ui/Text.hpp:12:struct UiState;
+core/ui/UiBin.hpp:116:struct UiState;
+core/ui/UiWindowBridge.hpp:9:struct UiState;
+core/ui/Types.hpp:7:struct UiState;
+core/ui/State.hpp:23:struct UiState;
+core/ui/State.hpp:38:struct UiNoHit {}; // Пустой тег: объект нематериален для курсора мыши
+core/ui/State.hpp:39:struct UiPaintLast {}; // Среди братьев рисуется последним, поверх непрозрачных строк.
 core/ui/Interaction.hpp:21:struct UiHovered {};   // Мышь над сущностью
 core/ui/Interaction.hpp:22:struct UiFocused {};   // Фокус ввода (каретка / клавиатура)
 core/ui/Interaction.hpp:23:struct UiFocusable {}; // МОЖЕТ принимать фокус по клавише Tab (вместо enum ролей!)
@@ -2376,16 +2392,6 @@ core/ui/Interaction.hpp:44:struct UiEdit    { UiEditFn  fn = nullptr; void* user
 core/ui/Interaction.hpp:62:struct UiHoverable {};
 core/ui/Interaction.hpp:63:struct UiPopup {};
 core/ui/Interaction.hpp:64:struct UiTab { uint16_t index = 0; };
-core/ui/PrimitiveBatch.hpp:8:struct UiState;
-core/ui/PrimitiveBatch.hpp:9:struct UiNodeBars;
-core/ui/PrimitiveBatch.hpp:10:struct UiBar;
-core/ui/Text.hpp:12:struct UiState;
-core/ui/UiBin.hpp:116:struct UiState;
-core/ui/UiWindowBridge.hpp:9:struct UiState;
-core/ui/Types.hpp:7:struct UiState;
-core/ui/State.hpp:23:struct UiState;
-core/ui/State.hpp:38:struct UiNoHit {}; // Пустой тег: объект нематериален для курсора мыши
-core/ui/State.hpp:39:struct UiPaintLast {}; // Среди братьев рисуется последним, поверх непрозрачных строк.
 core/host/PropBind.hpp:27:struct UiPropBinder;
 core/host/PropGrid.hpp:7:struct UiRowHover {};
 core/host/SceneMask.hpp:7:struct UiState;
@@ -2410,17 +2416,18 @@ engine/include/render/Voxel.hpp:10:struct DescriptorHeaps;
 engine/include/render/Fsr.hpp:11:struct Device;
 engine/include/render/Fsr.hpp:12:struct DescriptorHeaps;
 engine/include/render/Gtao.hpp:11:struct DescriptorHeaps;
-engine/include/render/Restir.hpp:90:struct DescriptorHeaps;
-engine/include/render/Restir.hpp:177:struct GpuProfiler;
+engine/include/render/Restir.hpp:16:class ReSTIRDIContext;
+engine/include/render/Restir.hpp:93:struct DescriptorHeaps;
+engine/include/render/Restir.hpp:180:struct GpuProfiler;
 engine/include/render/Tonemap.hpp:11:struct DescriptorHeaps;
 engine/include/render/Sharc.hpp:13:struct DescriptorHeaps;
 engine/include/render/Sharc.hpp:91:struct GpuProfiler;
 engine/include/render/Fog.hpp:10:struct DescriptorHeaps;
 engine/include/render/Weather.hpp:9:struct world;
 engine/include/render/Weather.hpp:10:struct entity;
-engine/include/render/SceneFrameImpl.hpp:50:struct PhysicsWorld;
-engine/include/render/SceneFrameImpl.hpp:51:struct AudioWorld;
-engine/include/render/SceneFrameImpl.hpp:349:struct SceneFrame : SceneFrameImpl {};
+engine/include/render/SceneFrameImpl.hpp:48:struct PhysicsWorld;
+engine/include/render/SceneFrameImpl.hpp:49:struct AudioWorld;
+engine/include/render/SceneFrameImpl.hpp:347:struct SceneFrame : SceneFrameImpl {};
 engine/include/render/Hiz.hpp:10:struct DescriptorHeaps;
 engine/include/render/Hiz.hpp:11:struct TrackedImage;
 engine/include/render/SceneFrame.hpp:14:struct SceneFrame;
@@ -2436,8 +2443,7 @@ core/host/PropBind.hpp:7:#include <vector>
 core/io/Json.hpp:4:#include <vector>
 core/gfx/MeshletBuilder.hpp:8:#include <vector>
 engine/gpu_scene/SceneObject.hpp:13:#include <vector>
-engine/include/render/Restir.hpp:14:#include <vector>
+engine/include/render/Restir.hpp:13:#include <vector>
 engine/include/render/SceneFrameImpl.hpp:6:#include <vector>
-engine/include/render/SceneFrameImpl.hpp:46:#include <vector>
 
 === 8. USING NAMESPACE IN HEADERS ===

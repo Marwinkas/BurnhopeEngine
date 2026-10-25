@@ -1,4 +1,5 @@
 #include "files/Format.hpp"
+#include "Str.hpp"
 
 #include "platform/PlatformUtil.hpp"
 

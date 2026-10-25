@@ -1,6 +1,6 @@
 #include "files/FileSession.hpp"
 
-#include "asset/ProjectDoc.hpp"
+#include "gfx/Material.hpp"
 #include "files/FileDomain.hpp"
 #include "files/Format.hpp"
 #include "platform/Desktop.hpp"
@@ -272,12 +272,12 @@ void fileMakeMaterial(void* user, uint16_t) {
     }
     char dst[640]{};
     uniquePath(dst, static_cast<int>(sizeof(dst)), b.cwd, "Material", ".bhmat");
-    MaterialInfo info{};
+    BhmatDoc info{};
     info.base[0] = info.base[1] = info.base[2] = 1.0f;
     info.roughness = 0.5f;
     info.albedoGain = info.normalGain = info.ormGain = 1.0f;
     info.emissiveGain = 0.0f;
-    if (!materialDocWrite(dst, info)) {
+    if (!materialSaveBhmat(dst, info)) {
         b.setStatus("create failed");
         return;
     }

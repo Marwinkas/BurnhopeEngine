@@ -34,8 +34,7 @@ void framePassSun(const RenderContext& ctx, SceneFrameImpl& scene, VisPass& vis,
         sun.stampValid = 1;
         sun.stampCount = scene.instanceCount;
     }
-    static uint32_t shadowLog = 0;
-    if (++shadowLog % 60u == 0u) {
+    if (++scene.shadowLogTick % 60u == 0u) {
         const float* sunC = sun.sunC != nullptr ? sun.sunC : scene.fly.eye;
         const float splits[3] = {
             sun.splits != nullptr ? sun.splits[0] : 0.0f,

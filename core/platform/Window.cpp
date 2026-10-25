@@ -1,5 +1,6 @@
 #include "platform/Window.hpp"
 #include "platform/PlatformUtil.hpp"
+#include "Str.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -785,14 +786,19 @@ void windowRecall(WindowConfig& config, const char* name) {
     char line[64]{};
     SDL_ReadIO(file, line, sizeof(line) - 1);
     SDL_CloseIO(file);
-    int x = 0;
-    int y = 0;
-    int ww = 0;
-    int wh = 0;
-    int maxed = 0;
-    if (std::sscanf(line, "%d %d %d %d %d", &x, &y, &ww, &wh, &maxed) != 5) {
-        return;
+    int v[5]{};
+    const char* cur = line;
+    const char* const end = line + std::strlen(line);
+    for (int& value : v) {
+        if (!strScanInt(cur, end, value)) {
+            return;
+        }
     }
+    const int x = v[0];
+    const int y = v[1];
+    const int ww = v[2];
+    const int wh = v[3];
+    const int maxed = v[4];
     if (ww > 0 && wh > 0) {
         config.x = x;
         config.y = y;

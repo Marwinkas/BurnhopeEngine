@@ -521,11 +521,10 @@ void sceneFrameRecord(
     gpuProfilerBegin(scene->gpuTime, device, cmd, flight);
     char zoneText[3584];
     (void)gpuProfilerFormat(scene->gpuTime, zoneText, sizeof(zoneText));
-    static std::chrono::steady_clock::time_point gpuLog{};
     const auto gpuNow = std::chrono::steady_clock::now();
-    const bool logFrame = scene->gpuTime.count > 0 && gpuNow - gpuLog >= std::chrono::seconds(2);
+    const bool logFrame = scene->gpuTime.count > 0 && gpuNow - scene->gpuLogAt >= std::chrono::seconds(2);
     if (logFrame) {
-        gpuLog = gpuNow;
+        scene->gpuLogAt = gpuNow;
     }
     bufferBarrierHostToShader(cmd, scene->postBuf.buffer, scene->postBuf.size);
     bufferBarrierHostToShader(cmd, scene->frameBuf.buffer, scene->frameBuf.size);

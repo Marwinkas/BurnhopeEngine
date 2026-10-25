@@ -177,7 +177,7 @@ void syncViewport(Engine& e, Canvas& canvas) {
     uiShow(*state, hud.overlay, anyStat);
     if (anyStat && hud.overlay < state->count) {
         HostMeters meters{};
-        platformHostMeters(meters);
+        platformHostMeters(hud.sampler, meters);
         const double ram = static_cast<double>(meters.rss) / (1024.0 * 1024.0);
         const double vram = static_cast<double>(deviceMemoryUsed(e.host.device)) / (1024.0 * 1024.0);
         const float fps = sceneFrameFps(scene);
@@ -297,7 +297,7 @@ void hudFrame(Engine& e) {
     char fps[96];
     sceneFrameStats(e.scene, fps, sizeof(fps));
     HostMeters meters{};
-    platformHostMeters(meters);
+    platformHostMeters(e.hud.sampler, meters);
     const uint64_t vram = deviceMemoryUsed(e.host.device);
     char memLine[96];
     char loadLine[96];

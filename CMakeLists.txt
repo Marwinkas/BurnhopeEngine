@@ -158,6 +158,8 @@ file(GLOB_RECURSE BH_NOWINDOW_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/audio/*.cpp ${BH_CORE}/audio/*.hpp)
 bh_firewall("image, files and audio must not import Window, Action, Dialog or SDL3"
     "platform/(Window|Action|Dialog)\\.hpp|SDL3/" ${BH_NOWINDOW_SOURCES})
+file(GLOB_RECURSE BH_FILES_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/files/*.cpp ${BH_CORE}/files/*.hpp)
+bh_firewall("core/files must not import asset" "asset/" ${BH_FILES_SOURCES})
 file(GLOB BH_INSPECTOR_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/host/PropGrid.* ${BH_CORE}/host/PropFilter.*
     ${BH_CORE}/host/PropBind.* ${BH_CORE}/host/PropImport*)
 bh_firewall("ui inspector must not import rhi, Window, ui/rhi or Host"
@@ -234,8 +236,10 @@ if(BH_TSAN)
     add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
     add_link_options(-fsanitize=thread)
 endif()
-bh_module(asset core/asset/AssimpImporter.cpp core/asset/ProjectDoc.cpp core/gfx/Material.cpp)
-target_link_libraries(bh_asset PUBLIC assimp::assimp meshoptimizer bh_foundation)
+bh_module(material core/gfx/Material.cpp)
+target_link_libraries(bh_material PUBLIC bh_foundation)
+bh_module(asset core/asset/AssimpImporter.cpp core/asset/ProjectDoc.cpp)
+target_link_libraries(bh_asset PUBLIC assimp::assimp meshoptimizer bh_foundation bh_material)
 set_source_files_properties(core/asset/AssimpImporter.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions;-frtti")
 bh_module(rhi
     core/rhi/Device.cpp
@@ -423,7 +427,7 @@ bh_module(files
     core/files/Format.cpp
     core/files/Model.cpp
 )
-target_link_libraries(bh_files PUBLIC bh_foundation bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_asset)
+target_link_libraries(bh_files PUBLIC bh_foundation bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_material)
 bh_module(ui_inspector
     core/host/PropBind.cpp
     core/host/PropImport.cpp
@@ -935,7 +939,7 @@ target_compile_definitions(bh_files PRIVATE "BH_UI_FILES=\"${UI_BIN_DIR}/files.u
 
 add_executable(BurnhopeEngine demo/app/Main.cpp)
 target_link_libraries(BurnhopeEngine PRIVATE
-    bh_app bh_host bh_ui_inspector bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_render bh_audio bh_gpu_scene bh_asset
+    bh_app bh_host bh_ui_inspector bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_render bh_audio bh_gpu_scene bh_asset bh_material
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
@@ -949,7 +953,7 @@ add_dependencies(BurnhopeEngine BurnhopeSpv UiSpv UiBin)
 
 add_executable(BurnhopeSample demo/sample/Main.cpp demo/Sample.cpp demo/app/Shell.cpp)
 target_link_libraries(BurnhopeSample PRIVATE
-    bh_host bh_ui_inspector bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_gpu_scene bh_asset
+    bh_host bh_ui_inspector bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_gpu_scene bh_asset bh_material
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
@@ -979,7 +983,7 @@ set(BH_TEST_SOURCES
 )
 add_executable(BurnhopeTest ${BH_TEST_SOURCES})
 target_link_libraries(BurnhopeTest PRIVATE
-    bh_host bh_ui_inspector bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_gpu_scene bh_asset
+    bh_host bh_ui_inspector bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_gpu_scene bh_asset bh_material
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads Freetype::Freetype
 )

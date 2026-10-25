@@ -18,9 +18,14 @@ struct HostMeters {
 
 [[nodiscard]] bool platformExePath(char* dst, size_t cap);
 [[nodiscard]] bool platformUserDir(char* dst, size_t cap);
-void platformHostMeters(HostMeters& out);
+// Previous CPU counters; the caller owns this so sampling has no hidden global state.
+struct HostSampler {
+    uint64_t prevIdle = 0;
+    uint64_t prevTotal = 0;
+};
 
-size_t strCopyCap(char* dst, size_t cap, const char* src);
+void platformHostMeters(HostSampler& sampler, HostMeters& out);
+
 bool pathParent(const char* path, char* dst, size_t cap);
 bool platformCachePath(char* dst, size_t cap, const char* fileName);
 // Walks the working directory, then parent folders of the executable, for relPath.

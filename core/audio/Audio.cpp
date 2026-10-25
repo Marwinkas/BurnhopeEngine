@@ -1,4 +1,5 @@
 #include "audio/Audio.hpp"
+#include "Str.hpp"
 
 #include "io/File.hpp"
 #include "platform/PlatformUtil.hpp"

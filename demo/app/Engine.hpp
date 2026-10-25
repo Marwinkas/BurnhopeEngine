@@ -2,6 +2,7 @@
 
 #include "asset/ProjectDoc.hpp"
 #include "host/Host.hpp"
+#include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "host/PropBind.hpp"
@@ -105,6 +106,7 @@ struct MatLink {
 inline constexpr uint8_t kMatSlotN = 9;
 
 struct HudContext {
+    HostSampler sampler{};
     SceneFrame* scene = nullptr;
     Host* host = nullptr;
     ColorBook* book = nullptr;

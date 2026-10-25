@@ -1,5 +1,7 @@
 #include "platform/PlatformUtil.hpp"
 
+#include "Str.hpp"
+
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -19,21 +21,6 @@
 #endif
 
 namespace burnhope {
-
-size_t strCopyCap(char* dst, size_t cap, const char* src) {
-    if (dst == nullptr || cap == 0) {
-        return 0;
-    }
-    size_t i = 0;
-    if (src != nullptr) {
-        while (src[i] != '\0' && i + 1 < cap) {
-            dst[i] = src[i];
-            ++i;
-        }
-    }
-    dst[i] = '\0';
-    return i;
-}
 
 bool pathParent(const char* path, char* dst, size_t cap) {
     if (path == nullptr || dst == nullptr || cap == 0) {
@@ -161,15 +148,13 @@ int readText(const char* path, char* dst, int cap) {
 
 } // namespace
 
-void platformHostMeters(HostMeters& out) {
+void platformHostMeters(HostSampler& sampler, HostMeters& out) {
     out = {};
     out.gpu = -1.0f;
 #if defined(_WIN32)
     FILETIME idleFt{};
     FILETIME kernelFt{};
     FILETIME userFt{};
-    static uint64_t prevIdle = 0;
-    static uint64_t prevTotal = 0;
     if (GetSystemTimes(&idleFt, &kernelFt, &userFt) != 0) {
         auto ticks = [](const FILETIME& ft) {
             ULARGE_INTEGER value{};
@@ -179,43 +164,49 @@ void platformHostMeters(HostMeters& out) {
         };
         const uint64_t idle = ticks(idleFt);
         const uint64_t total = ticks(kernelFt) + ticks(userFt);
-        if (prevTotal != 0 && total > prevTotal && idle >= prevIdle) {
-            const uint64_t busy = (total - prevTotal) > (idle - prevIdle) ? (total - prevTotal) - (idle - prevIdle) : 0;
-            out.cpu = 100.0f * static_cast<float>(busy) / static_cast<float>(total - prevTotal);
+        if (sampler.prevTotal != 0 && total > sampler.prevTotal && idle >= sampler.prevIdle) {
+            const uint64_t busy = (total - sampler.prevTotal) > (idle - sampler.prevIdle) ? (total - sampler.prevTotal) - (idle - sampler.prevIdle) : 0;
+            out.cpu = 100.0f * static_cast<float>(busy) / static_cast<float>(total - sampler.prevTotal);
         }
-        prevIdle = idle;
-        prevTotal = total;
+        sampler.prevIdle = idle;
+        sampler.prevTotal = total;
     }
 #else
     char buf[256]{};
-    static uint64_t prevIdle = 0;
-    static uint64_t prevTotal = 0;
     if (readText("/proc/stat", buf, static_cast<int>(sizeof(buf))) > 0) {
-        uint64_t user = 0;
-        uint64_t nice = 0;
-        uint64_t system = 0;
-        uint64_t idle = 0;
-        uint64_t iowait = 0;
-        uint64_t irq = 0;
-        uint64_t soft = 0;
-        if (std::sscanf(buf, "cpu %lu %lu %lu %lu %lu %lu %lu", &user, &nice, &system, &idle, &iowait, &irq, &soft) == 7) {
-            const uint64_t total = user + nice + system + idle + iowait + irq + soft;
+        uint64_t f[7]{};
+        const char* cur = buf;
+        const char* const end = buf + std::strlen(buf);
+        bool ok = strEat(cur, end, "cpu");
+        for (uint64_t& v : f) {
+            ok = ok && strScanInt(cur, end, v);
+        }
+        if (ok) {
+            const uint64_t idle = f[3];
+            const uint64_t iowait = f[4];
+            const uint64_t total = f[0] + f[1] + f[2] + f[3] + f[4] + f[5] + f[6];
             const uint64_t idleNow = idle + iowait;
-            if (prevTotal != 0 && total > prevTotal) {
-                out.cpu = 100.0f * static_cast<float>((total - prevTotal) - (idleNow - prevIdle)) / static_cast<float>(total - prevTotal);
+            if (sampler.prevTotal != 0 && total > sampler.prevTotal) {
+                out.cpu = 100.0f * static_cast<float>((total - sampler.prevTotal) - (idleNow - sampler.prevIdle)) / static_cast<float>(total - sampler.prevTotal);
             }
-            prevIdle = idleNow;
-            prevTotal = total;
+            sampler.prevIdle = idleNow;
+            sampler.prevTotal = total;
         }
     }
     if (readText("/sys/class/drm/card1/device/gpu_busy_percent", buf, static_cast<int>(sizeof(buf))) > 0
         || readText("/sys/class/drm/card0/device/gpu_busy_percent", buf, static_cast<int>(sizeof(buf))) > 0) {
-        out.gpu = static_cast<float>(std::atoi(buf));
+        const char* cur = buf;
+        int busy = 0;
+        if (strScanInt(cur, buf + std::strlen(buf), busy)) {
+            out.gpu = static_cast<float>(busy);
+        }
     }
     if (readText("/proc/self/statm", buf, static_cast<int>(sizeof(buf))) > 0) {
-        unsigned long pages = 0;
-        unsigned long resident = 0;
-        if (std::sscanf(buf, "%lu %lu", &pages, &resident) == 2) {
+        const char* cur = buf;
+        const char* const end = buf + std::strlen(buf);
+        uint64_t pages = 0;
+        uint64_t resident = 0;
+        if (strScanInt(cur, end, pages) && strScanInt(cur, end, resident)) {
             out.rss = static_cast<uint64_t>(resident) * 4096ull;
         }
     }

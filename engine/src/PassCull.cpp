@@ -32,8 +32,7 @@ void framePassCull(const RenderContext& ctx, SceneFrameImpl& scene, const CullBu
     args[6] = bufs.strideU * ctx.flight * 2u;
     args[7] = flagRead;
     args[12] = flagWrite;
-    static uint32_t cullTick = 0;
-    if (++cullTick % 60u == 0u) {
+    if (++scene.cullLogTick % 60u == 0u) {
         const auto* dbg = static_cast<const uint32_t*>(bufs.indirect.mapped) + 64u + ctx.flight * 16u;
         const uint32_t keep0 = bufs.sunKeep != nullptr ? bufs.sunKeep[0] : 0u;
         const uint32_t keep1 = bufs.sunKeep != nullptr ? bufs.sunKeep[1] : 0u;

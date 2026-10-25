@@ -43,6 +43,8 @@
 #include "scene/TestScene.hpp"
 #include "rhi/GpuProfiler.hpp"
 
+#include <chrono>
+
 namespace burnhope {
 
 struct PhysicsWorld;
@@ -56,6 +58,9 @@ constexpr uint32_t kEditorSpare = 8;
 
 struct SceneFrameImpl {
     bool ready = false;
+    uint32_t cullLogTick = 0;
+    uint32_t shadowLogTick = 0;
+    std::chrono::steady_clock::time_point gpuLogAt{};
     FlyCam fly{};
     SceneActors actors{};
     flecs::entity weatherEnt{};

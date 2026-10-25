@@ -4,7 +4,7 @@
 #include "ui/State.hpp"
 
 #include <cstring>
-#include <vector>
+#include <cstdint>
 
 namespace burnhope {
 namespace {
@@ -23,10 +23,11 @@ uint16_t loadChoice(UiState& s, uint16_t parent, const BinNode& node, const BinT
         return kUiNone;
     }
     char store[2048]{};
-    std::vector<const char*> labels;
+    const char* labels[255];
+    uint8_t count = 0;
     uint16_t used = 0;
     const char* cursor = text;
-    while (*cursor != '\0' && labels.size() < 255 && used + 1u < sizeof(store)) {
+    while (*cursor != '\0' && count < 255 && used + 1u < sizeof(store)) {
         const uint16_t at = used;
         uint8_t len = 0;
         while (*cursor != '\0' && *cursor != '\n' && used + 1u < sizeof(store)) {
@@ -38,13 +39,12 @@ uint16_t loadChoice(UiState& s, uint16_t parent, const BinNode& node, const BinT
             ++cursor;
         }
         if (len > 0) {
-            labels.push_back(store + at);
+            labels[count++] = store + at;
         }
     }
-    if (labels.empty()) {
+    if (count == 0) {
         return kUiNone;
     }
-    const auto count = static_cast<uint8_t>(labels.size());
     float picked = 0.0f;
     std::memcpy(&picked, role.raw + 18, sizeof(picked));
     uint8_t selected = static_cast<uint8_t>(picked);
@@ -52,7 +52,7 @@ uint16_t loadChoice(UiState& s, uint16_t parent, const BinNode& node, const BinT
         selected = 0;
     }
     return uiChoice(s, parent, {
-        .labels = labels.data(),
+        .labels = labels,
         .count = count,
         .selected = selected,
         .width = node.width > 48.0f ? node.width : 140.0f,

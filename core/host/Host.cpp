@@ -1,9 +1,11 @@
 #include "host/Host.hpp"
+#include "Str.hpp"
 #include "ui/widget/Widgets.hpp"
 #include "platform/Action.hpp"
 #include "platform/Jobs.hpp"
 #include "platform/PlatformUtil.hpp"
 
+#include <cstddef>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/ringbuffer_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -321,12 +323,8 @@ void finishView(Host& host, int slot, const DrawJobResult& r) {
     }
 }
 
-const char* actionPath() {
-    static char path[512];
-    if (!platformCachePath(path, sizeof(path), "burnhope-actions.txt")) {
-        return nullptr;
-    }
-    return path;
+bool actionPath(char* path, std::size_t cap) {
+    return platformCachePath(path, cap, "burnhope-actions.txt");
 }
 
 } // namespace
@@ -352,8 +350,9 @@ bool hostInit(Host& host) {
         spdlog::error("FrameArena 1MB failed");
         return false;
     }
-    if (const char* path = actionPath()) {
-        (void)actionLoad(path);
+    char actionFile[512];
+    if (actionPath(actionFile, sizeof(actionFile))) {
+        (void)actionLoad(actionFile);
     }
     host.ready = true;
     return true;
@@ -363,8 +362,9 @@ void hostShutdown(Host& host) {
     if (host.device.device != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(host.device.device);
     }
-    if (const char* path = actionPath()) {
-        (void)actionSave(path);
+    char actionFile[512];
+    if (actionPath(actionFile, sizeof(actionFile))) {
+        (void)actionSave(actionFile);
     }
     for (int i = 0; i < kHostSlots; ++i) {
         if (host.view[i].on || host.view[i].window.handle != nullptr) {

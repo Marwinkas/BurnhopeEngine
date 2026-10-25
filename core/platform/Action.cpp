@@ -1,9 +1,12 @@
 #include "platform/Action.hpp"
 
+#include "Str.hpp"
+
 #include <SDL3/SDL.h>
 
 #include <cstdio>
 #include <cstring>
+#include <string_view>
 
 namespace burnhope {
 namespace {
@@ -240,14 +243,21 @@ bool actionLoad(const char* path) {
         if (ch == '\n') {
             line[n] = '\0';
             char name[32]{};
-            unsigned kind = 0;
-            unsigned ctx = 0;
-            unsigned scan = 0;
-            unsigned mods = 0;
-            unsigned trig = 0;
-            unsigned mouse = 0;
-            if (std::sscanf(line, "{\"name\":\"%31[^\"]\",\"kind\":%u,\"ctx\":%u,\"scan\":%u,\"mods\":%u,\"trig\":%u,\"mouse\":%u}", name, &kind, &ctx, &scan, &mods, &trig, &mouse) == 7) {
-                actionBindChord(name, static_cast<int>(scan), static_cast<uint8_t>(mods), static_cast<uint8_t>(trig), static_cast<uint8_t>(mouse), static_cast<uint8_t>(kind), static_cast<uint8_t>(ctx));
+            unsigned f[6]{};
+            const char* cur = line;
+            const char* const end = line + n;
+            bool ok = strEat(cur, end, "{\"name\":\"");
+            size_t len = 0;
+            while (ok && cur < end && *cur != '"' && len + 1 < sizeof(name)) {
+                name[len++] = *cur++;
+            }
+            ok = ok && strEat(cur, end, "\"");
+            constexpr std::string_view keys[6] = {",\"kind\":", ",\"ctx\":", ",\"scan\":", ",\"mods\":", ",\"trig\":", ",\"mouse\":"};
+            for (uint8_t i = 0; i < 6 && ok; ++i) {
+                ok = strEat(cur, end, keys[i]) && strScanInt(cur, end, f[i]);
+            }
+            if (ok && strEat(cur, end, "}")) {
+                actionBindChord(name, static_cast<int>(f[2]), static_cast<uint8_t>(f[3]), static_cast<uint8_t>(f[4]), static_cast<uint8_t>(f[5]), static_cast<uint8_t>(f[0]), static_cast<uint8_t>(f[1]));
             }
             n = 0;
             continue;

@@ -1,4 +1,5 @@
 #include "platform/Window.hpp"
+#include "Str.hpp"
 #include "platform/Action.hpp"
 #include "platform/PlatformUtil.hpp"
 

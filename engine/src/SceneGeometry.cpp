@@ -1,4 +1,5 @@
 #include "audio/Audio.hpp"
+#include "Str.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "gpu_scene/Physics.hpp"
 #include "render/Weather.hpp"

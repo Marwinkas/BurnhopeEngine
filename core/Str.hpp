@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <charconv>
 #include <cstring>
 #include <string_view>
 
@@ -132,6 +133,29 @@ inline int uiHexNib(char ch) {
         return ch - 'A' + 10;
     }
     return -1;
+}
+
+// Reads one integer after optional blanks and advances `p` past it.
+template <class T>
+[[nodiscard]] inline bool strScanInt(const char*& p, const char* end, T& out) {
+    while (p < end && (*p == ' ' || *p == '\t')) {
+        ++p;
+    }
+    const auto r = std::from_chars(p, end, out);
+    if (r.ec != std::errc{}) {
+        return false;
+    }
+    p = r.ptr;
+    return true;
+}
+
+// Matches a literal prefix at `p` and advances past it.
+[[nodiscard]] inline bool strEat(const char*& p, const char* end, std::string_view lit) {
+    if (static_cast<size_t>(end - p) < lit.size() || std::memcmp(p, lit.data(), lit.size()) != 0) {
+        return false;
+    }
+    p += lit.size();
+    return true;
 }
 
 } // namespace burnhope

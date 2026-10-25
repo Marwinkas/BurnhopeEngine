@@ -1,4 +1,5 @@
 #include "platform/Desktop.hpp"
+#include "Str.hpp"
 #include "platform/PlatformUtil.hpp"
 
 #include <cstdio>
