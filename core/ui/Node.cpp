@@ -101,8 +101,10 @@ void uiShowOnly(UiState& s, uint16_t id) {
     if (parent == kUiNone) {
         return;
     }
-    for (uint16_t child = 0; child < s.count; ++child) {
-        if (s.parentOf[child] == parent) {
+    const uint32_t n = uiNodeChildCount(s, parent);
+    for (uint32_t i = 0; i < n; ++i) {
+        const uint16_t child = uiNodeChild(s, parent, i);
+        if (child != kUiNone) {
             uiShow(s, child, child == id);
         }
     }
@@ -386,8 +388,10 @@ void uiDrop(UiState& s, uint16_t id) {
     int n = 0;
     stack[n++] = id;
     for (int i = 0; i < n; ++i) {
-        for (uint16_t child = 0; child < s.count; ++child) {
-            if (s.parentOf[child] == stack[i] && n < kUiCap) {
+        const uint32_t kids = uiNodeChildCount(s, stack[i]);
+        for (uint32_t k = 0; k < kids && n < kUiCap; ++k) {
+            const uint16_t child = uiNodeChild(s, stack[i], k);
+            if (child != kUiNone) {
                 stack[n++] = child;
             }
         }

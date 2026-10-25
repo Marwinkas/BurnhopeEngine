@@ -53,11 +53,9 @@ FetchContent_Declare(miniaudio
     GIT_REPOSITORY https://github.com/mackron/miniaudio.git
     GIT_TAG 0.11.22
     GIT_SHALLOW TRUE
+    SOURCE_SUBDIR bh-header-only
 )
-FetchContent_GetProperties(miniaudio)
-if(NOT miniaudio_POPULATED)
-    FetchContent_Populate(miniaudio)
-endif()
+FetchContent_MakeAvailable(miniaudio)
 if (TARGET Jolt)
     set_target_properties(Jolt PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
     if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
@@ -78,12 +76,10 @@ set(YG_ENABLE_EVENTS OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(yoga
     GIT_REPOSITORY https://github.com/facebook/yoga.git
     GIT_TAG v3.2.1
+    SOURCE_SUBDIR yoga
+    EXCLUDE_FROM_ALL
 )
-FetchContent_GetProperties(yoga)
-if(NOT yoga_POPULATED)
-    FetchContent_Populate(yoga)
-    add_subdirectory(${yoga_SOURCE_DIR}/yoga ${yoga_BINARY_DIR}/yoga EXCLUDE_FROM_ALL)
-endif()
+FetchContent_MakeAvailable(yoga)
 
 set(BH_CORE ${CMAKE_CURRENT_SOURCE_DIR}/core)
 set(BH_DEMO ${CMAKE_CURRENT_SOURCE_DIR}/demo)
@@ -264,9 +260,9 @@ target_include_directories(bh_image PRIVATE
 )
 target_link_libraries(bh_image PUBLIC bh_rhi bh_texcomp bh_platform volk)
 set_source_files_properties(core/image/ImageDecode.cpp PROPERTIES COMPILE_OPTIONS "-w")
-add_library(bh_gpu_scene INTERFACE)
-target_include_directories(bh_gpu_scene INTERFACE ${BH_INCLUDES} ${BH_ENGINE} ${BH_ENGINE}/include)
-target_compile_definitions(bh_gpu_scene INTERFACE ${BH_DEFS})
+bh_module(gpu_scene engine/gpu_scene/SceneObject.cpp)
+target_include_directories(bh_gpu_scene PUBLIC ${BH_ENGINE} ${BH_ENGINE}/include)
+target_link_libraries(bh_gpu_scene PUBLIC flecs_static)
 bh_module(audio core/audio/Audio.cpp)
 target_include_directories(bh_audio PRIVATE
     ${miniaudio_SOURCE_DIR}
@@ -322,7 +318,7 @@ set_source_files_properties(
     engine/src/Physics.cpp
     PROPERTIES COMPILE_OPTIONS "-w")
 target_compile_definitions(bh_render PUBLIC "BH_SHADER_DIR=\"${CMAKE_CURRENT_BINARY_DIR}/shaders\"")
-target_link_libraries(bh_render PUBLIC volk flecs_static Jolt bh_audio)
+target_link_libraries(bh_render PUBLIC volk flecs_static Jolt bh_audio bh_gpu_scene)
 bh_module(ui_core
     core/ui/Command.cpp
     core/ui/FlexAttr.cpp
@@ -421,9 +417,10 @@ bh_module(app
     demo/app/HudSync.cpp
     demo/app/HudPush.cpp
     demo/app/ProjectGate.cpp
+    demo/app/SceneBlockFill.cpp
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
-target_link_libraries(bh_app PUBLIC bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_files)
+target_link_libraries(bh_app PUBLIC bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_files bh_gpu_scene)
 target_link_libraries(bh_ui_core PUBLIC bh_io yogacore flecs_static)
 target_link_libraries(bh_ui_bricks PUBLIC bh_ui_core bh_platform)
 target_link_libraries(bh_ui_kits PUBLIC bh_ui_bricks)
@@ -915,7 +912,7 @@ add_dependencies(BurnhopeEngine BurnhopeSpv UiSpv UiBin)
 
 add_executable(BurnhopeSample demo/sample/Main.cpp demo/Sample.cpp demo/app/Shell.cpp)
 target_link_libraries(BurnhopeSample PRIVATE
-    bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_memory bh_platform bh_asset bh_io
+    bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_memory bh_platform bh_gpu_scene bh_asset bh_io
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
@@ -945,7 +942,7 @@ set(BH_TEST_SOURCES
 )
 add_executable(BurnhopeTest ${BH_TEST_SOURCES})
 target_link_libraries(BurnhopeTest PRIVATE
-    bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_memory bh_platform bh_wasm bh_asset bh_io
+    bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_memory bh_platform bh_wasm bh_gpu_scene bh_asset bh_io
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads Freetype::Freetype
 )

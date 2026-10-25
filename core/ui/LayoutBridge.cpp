@@ -338,26 +338,26 @@ void uiLayout(UiState& s, float w, float h) {
                 }
             }
         }
-        for (uint16_t id = 0; id < s.count; ++id) {
-            if (!s.ent[id].is_alive()) {
-                continue;
+        const auto refreshSub = [&](auto&& self, uint16_t id) -> void {
+            if (!s.ent[id].is_alive() || s.yoga[id] == nullptr) {
+                return;
             }
-            bool under = false;
-            for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-                if (p == root) {
-                    under = true;
-                    break;
+            if (id != root) {
+                if (const auto* r = s.ent[id].try_get<UiLayoutRefresh>()) {
+                    if (r->fn != nullptr) {
+                        r->fn(s, id, r->user);
+                    }
                 }
             }
-            if (!under) {
-                continue;
-            }
-            if (const auto* r = s.ent[id].try_get<UiLayoutRefresh>()) {
-                if (r->fn != nullptr) {
-                    r->fn(s, id, r->user);
+            const uint32_t kids = YGNodeGetChildCount(s.yoga[id]);
+            for (uint32_t i = 0; i < kids; ++i) {
+                const uint16_t child = yogaId(YGNodeGetChild(s.yoga[id], i));
+                if (child != kUiNone) {
+                    self(self, child);
                 }
             }
-        }
+        };
+        refreshSub(refreshSub, root);
 
         s.layoutFrom = kUiNone;
         s.layoutDirty = false;
