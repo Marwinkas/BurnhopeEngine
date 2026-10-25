@@ -125,6 +125,7 @@ void uiFieldInit(
     float padL = 0.0f,
     float padR = 0.0f);
 UiBox fieldInset(const UiState& s, uint16_t id, const UiField& field);
+void fieldPlace(UiState& s);
 void uiFieldMulti(UiState& s, uint16_t id);
 
 struct FieldRow {

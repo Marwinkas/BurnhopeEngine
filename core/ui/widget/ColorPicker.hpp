@@ -55,24 +55,53 @@ inline const ColorBook& colorInk(const UiColorPickerComponent& picker) {
     return picker.book != nullptr ? *picker.book : picker.local;
 }
 
-inline UiColorPickerComponent* uiColorFind(UiState& s) {
-    for (uint16_t i = 0; i < s.count; ++i) {
-        if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
-            continue;
+// Pickers are found through the Flecs index of UiColorPickerComponent, so the cost follows the number of
+// pickers, never s.count. fn runs after the walk, so it may change components freely.
+template <typename Fn>
+void uiColorEach(const UiState& s, Fn&& fn) {
+    constexpr uint16_t kPickerCap = 16;
+    uint16_t ids[kPickerCap];
+    uint16_t n = 0;
+    s.world.each(s.world.id<UiColorPickerComponent>(), [&](flecs::entity e) {
+        const UiSlot* slot = e.try_get<UiSlot>();
+        if (slot != nullptr && slot->index < s.count && s.ent[slot->index] == e && n < kPickerCap) {
+            ids[n++] = slot->index;
         }
-        return s.ent[i].try_get_mut<UiColorPickerComponent>();
+    });
+    for (uint16_t i = 1; i < n; ++i) {
+        const uint16_t id = ids[i];
+        uint16_t at = i;
+        for (; at > 0 && ids[at - 1] > id; --at) {
+            ids[at] = ids[at - 1];
+        }
+        ids[at] = id;
     }
-    return nullptr;
+    for (uint16_t i = 0; i < n; ++i) {
+        fn(ids[i]);
+    }
+}
+
+// Lowest node id whose picker satisfies pred, or kUiNone.
+template <typename Pred>
+uint16_t uiColorFirst(const UiState& s, Pred&& pred) {
+    uint16_t found = kUiNone;
+    uiColorEach(s, [&](uint16_t id) {
+        const UiColorPickerComponent* picker = s.ent[id].try_get<UiColorPickerComponent>();
+        if (found == kUiNone && picker != nullptr && pred(*picker)) {
+            found = id;
+        }
+    });
+    return found;
+}
+
+inline UiColorPickerComponent* uiColorFind(UiState& s) {
+    const uint16_t id = uiColorFirst(s, [](const UiColorPickerComponent&) { return true; });
+    return id == kUiNone ? nullptr : s.ent[id].try_get_mut<UiColorPickerComponent>();
 }
 
 inline const UiColorPickerComponent* uiColorFind(const UiState& s) {
-    for (uint16_t i = 0; i < s.count; ++i) {
-        if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
-            continue;
-        }
-        return s.ent[i].try_get<UiColorPickerComponent>();
-    }
-    return nullptr;
+    const uint16_t id = uiColorFirst(s, [](const UiColorPickerComponent&) { return true; });
+    return id == kUiNone ? nullptr : s.ent[id].try_get<UiColorPickerComponent>();
 }
 
 inline UiColorPickerComponent* uiColor(UiState& s) {
@@ -87,6 +116,7 @@ void uiInstallColorBin(UiState& s);
 
 void uiSetColorBook(UiState& s, ColorBook* book);
 void uiEnsureColorPopup(UiState& s);
+void colorPlace(UiState& s);
 void uiBuildColor(UiState& s);
 void colorOnOpen(void* user, uint16_t id);
 void colorOnValue(void* user, uint16_t id, float value);

@@ -17,6 +17,9 @@
 #include "color/Color.hpp"
 
 #include <algorithm>
+#include <charconv>
+#include <format>
+#include <string_view>
 #include <cmath>
 #include <cstring>
 #include <ctime>
@@ -26,7 +29,6 @@ namespace {
 constexpr UiRamp kRampColorWheel = UiRamp::HueWheel;
 constexpr UiRamp kRampColorValue = UiRamp::ValueRamp;
 constexpr UiRamp kRampColorSwatch = UiRamp::Gradient;
-constexpr UiRamp kRampColorAlpha = UiRamp::Alpha;
 constexpr float kColorSide = 96.0f;
 constexpr float kColorWheel = 220.0f;
 constexpr float kColorVal = 22.0f;
@@ -84,14 +86,9 @@ UiColorPickerComponent* pickerFor(UiState& s, uint16_t id) {
                 return s.ent[p].try_get_mut<UiColorPickerComponent>();
             }
         }
-        for (uint16_t i = 0; i < s.count; ++i) {
-            if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
-                continue;
-            }
-            UiColorPickerComponent* picker = s.ent[i].try_get_mut<UiColorPickerComponent>();
-            if (picker != nullptr && pickerOwns(*picker, id)) {
-                return picker;
-            }
+        const uint16_t owner = uiColorFirst(s, [id](const UiColorPickerComponent& picker) { return pickerOwns(picker, id); });
+        if (owner != kUiNone) {
+            return s.ent[owner].try_get_mut<UiColorPickerComponent>();
         }
     }
     return uiColorFind(s);
@@ -104,28 +101,18 @@ const UiColorPickerComponent* pickerFor(const UiState& s, uint16_t id) {
                 return s.ent[p].try_get<UiColorPickerComponent>();
             }
         }
-        for (uint16_t i = 0; i < s.count; ++i) {
-            if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
-                continue;
-            }
-            const UiColorPickerComponent* picker = s.ent[i].try_get<UiColorPickerComponent>();
-            if (picker != nullptr && pickerOwns(*picker, id)) {
-                return picker;
-            }
+        const uint16_t owner = uiColorFirst(s, [id](const UiColorPickerComponent& picker) { return pickerOwns(picker, id); });
+        if (owner != kUiNone) {
+            return s.ent[owner].try_get<UiColorPickerComponent>();
         }
     }
     return uiColorFind(s);
 }
 
 UiColorPickerComponent* hostPicker(UiState& s) {
-    for (uint16_t i = 0; i < s.count; ++i) {
-        if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
-            continue;
-        }
-        UiColorPickerComponent* picker = s.ent[i].try_get_mut<UiColorPickerComponent>();
-        if (picker != nullptr && picker->colorHost == 0) {
-            return picker;
-        }
+    const uint16_t host = uiColorFirst(s, [](const UiColorPickerComponent& picker) { return picker.colorHost == 0; });
+    if (host != kUiNone) {
+        return s.ent[host].try_get_mut<UiColorPickerComponent>();
     }
     return uiColorFind(s);
 }
@@ -145,32 +132,17 @@ UiColorPickerComponent& colorBind(UiState& s, uint16_t panel) {
 }
 
 void uiSetColorBook(UiState& s, ColorBook* book) {
-    for (uint16_t i = 0; i < s.count; ++i) {
-        if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
-            continue;
-        }
-        UiColorPickerComponent* picker = s.ent[i].try_get_mut<UiColorPickerComponent>();
+    uiColorEach(s, [&](uint16_t id) {
+        UiColorPickerComponent* picker = s.ent[id].try_get_mut<UiColorPickerComponent>();
         if (picker == nullptr) {
-            continue;
+            return;
         }
         picker->book = book;
         if (book != nullptr && book->gen != 0 && picker->colorSeen != book->gen) {
             takeBook(*picker);
             applyColor(s, *picker, false, true);
         }
-    }
-}
-
-void hsvToRgb(float h, float s, float v, float& r, float& g, float& b) {
-    ColorLinear color{};
-    colorHsvToLinear(h, s, v, color);
-    r = color.r;
-    g = color.g;
-    b = color.b;
-}
-
-void rgbToHsv(float r, float g, float b, float& h, float& s, float& v) {
-    colorLinearToHsv(r, g, b, h, s, v);
+    });
 }
 
 void setRange(UiState& s, uint16_t id, float value) {
@@ -183,38 +155,22 @@ void setRange(UiState& s, uint16_t id, float value) {
     }
 }
 
-void writeHex(char* dst, uint8_t& len, float r, float g, float b, float a, bool withAlpha) {
-    auto nib = [](int v) { return static_cast<char>(v < 10 ? '0' + v : 'A' + (v - 10)); };
-    auto byte = [&](float c, int at) {
-        int v = static_cast<int>(c * 255.0f + 0.5f);
-        if (v < 0) {
-            v = 0;
-        }
-        if (v > 255) {
-            v = 255;
-        }
-        dst[at] = nib(v >> 4);
-        dst[at + 1] = nib(v & 15);
-    };
-    dst[0] = '#';
-    byte(r, 1);
-    byte(g, 3);
-    byte(b, 5);
-    if (withAlpha) {
-        byte(a, 7);
-        dst[9] = '\0';
-        len = 9;
-    } else {
-        dst[7] = '\0';
-        len = 7;
-    }
+void writeHex(char* dst, uint8_t& len, float r, float g, float b, float a) {
+    const auto byte = [](float c) { return static_cast<unsigned>(std::clamp(c * 255.0f + 0.5f, 0.0f, 255.0f)); };
+    std::format_to_n(dst, 9, "#{:02X}{:02X}{:02X}{:02X}", byte(r), byte(g), byte(b), byte(a));
+    dst[9] = '\0';
+    len = 9;
 }
 
 void applyColor(UiState& s, UiColorPickerComponent& picker, bool fromHsv, bool publish = true) {
     if (fromHsv) {
-        hsvToRgb(colorInk(picker).h, colorInk(picker).s, colorInk(picker).v, colorInk(picker).r, colorInk(picker).g, colorInk(picker).b);
+        ColorLinear linear{};
+        colorHsvToLinear(colorInk(picker).h, colorInk(picker).s, colorInk(picker).v, linear);
+        colorInk(picker).r = linear.r;
+        colorInk(picker).g = linear.g;
+        colorInk(picker).b = linear.b;
     } else {
-        rgbToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
+        colorLinearToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
     }
     setRange(s, picker.colorRgb[0], colorInk(picker).r);
     setRange(s, picker.colorRgb[1], colorInk(picker).g);
@@ -244,7 +200,7 @@ void applyColor(UiState& s, UiColorPickerComponent& picker, bool fromHsv, bool p
         if (keepCaret && s.focused == id) {
             return;
         }
-        writeHex(field->bytes, field->len, colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).a, true);
+        writeHex(field->bytes, field->len, colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).a);
         field->caret = field->len;
         field->anchor = field->len;
         fieldSyncText(s, id);
@@ -342,46 +298,37 @@ void dragWheel(UiState& s, UiColorPickerComponent& picker, uint16_t id, float x,
 }
 
 bool readHex(const UiField& field, float& r, float& g, float& b, float& a) {
-    uint8_t i = 0;
-    if (field.len > 0 && field.bytes[0] == '#') {
-        i = 1;
+    std::string_view digits(field.bytes, field.len);
+    if (digits.starts_with('#')) {
+        digits.remove_prefix(1);
     }
-    char digits[8]{};
-    int n = 0;
-    for (; i < field.len && n < 8; ++i) {
-        if (uiHexNib(field.bytes[i]) < 0) {
-            return false;
-        }
-        digits[n++] = field.bytes[i];
-    }
-    if (n != 6 && n != 8) {
+    if (digits.size() != 6 && digits.size() != 8) {
         return false;
     }
-    auto chan = [&](int at) {
-        return (uiHexNib(digits[at]) * 16 + uiHexNib(digits[at + 1])) / 255.0f;
-    };
-    r = chan(0);
-    g = chan(2);
-    b = chan(4);
-    if (n == 8) {
-        a = chan(6);
+    uint32_t packed = 0;
+    const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), packed, 16);
+    if (parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size()) {
+        return false;
+    }
+    const bool withAlpha = digits.size() == 8;
+    const uint32_t rgb = withAlpha ? packed >> 8 : packed;
+    r = static_cast<float>((rgb >> 16) & 255u) / 255.0f;
+    g = static_cast<float>((rgb >> 8) & 255u) / 255.0f;
+    b = static_cast<float>(rgb & 255u) / 255.0f;
+    if (withAlpha) {
+        a = static_cast<float>(packed & 255u) / 255.0f;
     }
     return true;
 }
 
 bool readInt(const UiField& field, int& out) {
-    if (field.len == 0) {
+    unsigned value = 0;
+    const char* end = field.bytes + field.len;
+    const auto parsed = std::from_chars(field.bytes, end, value);
+    if (field.len == 0 || parsed.ec != std::errc{} || parsed.ptr != end || value > 0x7fffffffu) {
         return false;
     }
-    int v = 0;
-    for (uint8_t i = 0; i < field.len; ++i) {
-        const char ch = field.bytes[i];
-        if (ch < '0' || ch > '9') {
-            return false;
-        }
-        v = v * 10 + (ch - '0');
-    }
-    out = v;
+    out = static_cast<int>(value);
     return true;
 }
 
@@ -416,7 +363,11 @@ void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& 
                     hue += 1.0f;
                 }
                 const float sat = rad > 1.0f ? 1.0f : rad;
-                hsvToRgb(hue, sat, 1.0f, r, g, b);
+                ColorLinear linear{};
+                colorHsvToLinear(hue, sat, 1.0f, linear);
+                r = linear.r;
+                g = linear.g;
+                b = linear.b;
                 a = 1.0f;
                 return true;
             }
@@ -443,7 +394,11 @@ void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& 
                 if (v > 1.0f) {
                     v = 1.0f;
                 }
-                hsvToRgb(colorInk(*owned).h, colorInk(*owned).s, v, r, g, b);
+                ColorLinear linear{};
+                colorHsvToLinear(colorInk(*owned).h, colorInk(*owned).s, v, linear);
+                r = linear.r;
+                g = linear.g;
+                b = linear.b;
                 a = 1.0f;
                 return true;
             }
@@ -639,17 +594,11 @@ void syncColor(UiState& s, UiColorPickerComponent& picker) {
 }
 
 void uiEnsureColorPopup(UiState& s) {
-    for (uint16_t i = 0; i < s.count; ++i) {
-        if (!s.ent[i].is_alive() || !s.ent[i].has<UiColorPickerComponent>()) {
-            continue;
-        }
-        const UiColorPickerComponent* existing = s.ent[i].try_get<UiColorPickerComponent>();
-        if (existing == nullptr || existing->colorHost != 0) {
-            continue;
-        }
-        if (existing->colorPanel < s.count && s.ent[existing->colorPanel].is_alive()) {
-            return;
-        }
+    const uint16_t live = uiColorFirst(s, [&s](const UiColorPickerComponent& picker) {
+        return picker.colorHost == 0 && picker.colorPanel < s.count && s.ent[picker.colorPanel].is_alive();
+    });
+    if (live != kUiNone) {
+        return;
     }
     if (s.count == 0 || s.yoga[0] == nullptr) {
         return;
@@ -671,7 +620,7 @@ void uiEnsureColorPopup(UiState& s) {
     UiColorPickerComponent& picker = colorBind(s, id);
     picker.colorHost = 0;
     if (picker.colorSeen == 0) {
-        rgbToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
+        colorLinearToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
     }
     picker.colorPanel = id;
     colorInk(picker).present = 0;
@@ -922,7 +871,7 @@ void fillColorBody(UiState& s, uint16_t parent) {
     wheel.width = kColorWheel;
     wheel.height = kColorWheel;
     wheel.shrink = 0.0f;
-    (*picker).colorWheel = spawn(s, wheelRowId, wheel, colorRampPart(s.look, UiToken::Content, kRampColorWheel));
+    (*picker).colorWheel = uiPanel(s, wheelRowId, wheel, colorRampPart(s.look, UiToken::Content, kRampColorWheel));
     uiDrag(s, (*picker).colorWheel, colorOnDrag, &s);
     UiFlex valBar{};
     valBar.widthMode = UiSize::Px;
@@ -930,7 +879,7 @@ void fillColorBody(UiState& s, uint16_t parent) {
     valBar.width = kColorVal;
     valBar.height = kColorWheel;
     valBar.shrink = 0.0f;
-    (*picker).colorVal = spawn(s, wheelRowId, valBar, colorRampPart(s.look, UiToken::Content, kRampColorValue));
+    (*picker).colorVal = uiPanel(s, wheelRowId, valBar, colorRampPart(s.look, UiToken::Content, kRampColorValue));
     uiDrag(s, (*picker).colorVal, colorOnDrag, &s);
     UiFlex side{};
     side.direction = UiFlexDir::Column;
@@ -1034,7 +983,7 @@ void uiBuildColor(UiState& s) {
     if (picker.book != nullptr && picker.book->gen != 0) {
         takeBook(picker);
     } else {
-        rgbToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
+        colorLinearToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
     }
     UiFlex titleF = row;
     titleF.heightMode = UiSize::Px;
@@ -1067,105 +1016,6 @@ void uiBuildColor(UiState& s) {
     fillColorBody(s, root);
 }
 
-void pushColorBar(UiState& s, UiNodeBars& bars, float x, float y, float w, float h, float r, float g, float b, float a, float radius) {
-    if (w < 0.5f || h < 0.5f) {
-        return;
-    }
-    UiBar bar{};
-    bar.x = x;
-    bar.y = y;
-    bar.w = w;
-    bar.h = h;
-    bar.r = r;
-    bar.g = g;
-    bar.b = b;
-    bar.a = a;
-    bar.radius = radius;
-    bar.on = 1;
-    uiNodeBarPush(s, bars, bar);
-}
-
-void colorPlace(UiState& s) {
-    for (uint16_t id = 0; id < s.count; ++id) {
-        auto* paint = s.ent[id].try_get_mut<UiPaint>();
-        if (paint == nullptr) {
-            continue;
-        }
-        const UiRamp ramp = paint->ramp;
-        if (ramp != kRampColorWheel && ramp != kRampColorValue && ramp != kRampColorSwatch && ramp != kRampColorAlpha) {
-            continue;
-        }
-        const UiColorPickerComponent* color = pickerFor(s, id);
-        if (color == nullptr) {
-            continue;
-        }
-        const UiBox& box = s.box[id];
-        UiRampDraw drawn{};
-        UiNodeBars bars{};
-        if (ramp == kRampColorWheel) {
-            paint->r = 1.0f;
-            paint->g = 1.0f;
-            paint->b = 1.0f;
-            drawn.mode = 0;
-            drawn.flags = kUiFlagWheel;
-            const float radius = std::min(box.w, box.h) * 0.5f;
-            const float ang = (colorInk(*color).h - 0.5f) * 6.2831853f;
-            const float mx = box.x + box.w * 0.5f + std::cos(ang) * colorInk(*color).s * radius;
-            const float my = box.y + box.h * 0.5f + std::sin(ang) * colorInk(*color).s * radius;
-            pushColorBar(s, bars, mx - 7.0f, my - 7.0f, 14.0f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, 7.0f);
-            pushColorBar(s, bars, mx - 4.0f, my - 4.0f, 8.0f, 8.0f, colorInk(*color).r, colorInk(*color).g, colorInk(*color).b, 1.0f, 4.0f);
-        } else if (ramp == kRampColorValue) {
-            const float hh = colorInk(*color).h * 6.0f;
-            const int hi = static_cast<int>(hh) % 6;
-            const float f = hh - static_cast<float>(static_cast<int>(hh));
-            const float pv = 1.0f;
-            const float q = pv * (1.0f - f * colorInk(*color).s);
-            const float t = pv * (1.0f - (1.0f - f) * colorInk(*color).s);
-            const float pp = pv * (1.0f - colorInk(*color).s);
-            float pr = pv;
-            float pg = pp;
-            float pb = q;
-            if (hi == 0) { pr = pv; pg = t; pb = pp; }
-            else if (hi == 1) { pr = q; pg = pv; pb = pp; }
-            else if (hi == 2) { pr = pp; pg = pv; pb = t; }
-            else if (hi == 3) { pr = pp; pg = q; pb = pv; }
-            else if (hi == 4) { pr = t; pg = pp; pb = pv; }
-            paint->r = pr;
-            paint->g = pg;
-            paint->b = pb;
-            drawn.mode = 1;
-            drawn.flags = kUiFlagRamp;
-            const float ty = box.y + (1.0f - colorInk(*color).v) * box.h;
-            pushColorBar(s, bars, box.x - 2.0f, ty - 3.0f, box.w + 4.0f, 6.0f, 1.0f, 1.0f, 1.0f, 1.0f, 2.0f);
-        } else if (ramp == kRampColorSwatch) {
-            drawn.mode = 6;
-            drawn.flags = kUiFlagRamp;
-            paint->r = 0.0f;
-            paint->g = 0.0f;
-            paint->b = 0.0f;
-            pushColorBar(s, bars, box.x, box.y, box.w, box.h, colorInk(*color).r, colorInk(*color).g, colorInk(*color).b, colorInk(*color).a, paint->radius);
-        } else {
-            paint->r = colorInk(*color).r;
-            paint->g = colorInk(*color).g;
-            paint->b = colorInk(*color).b;
-            drawn.mode = 2;
-            drawn.flags = kUiFlagRamp;
-            const float tx = box.x + colorInk(*color).a * box.w;
-            pushColorBar(s, bars, tx - 3.0f, box.y - 2.0f, 6.0f, box.h + 4.0f, 1.0f, 1.0f, 1.0f, 1.0f, 2.0f);
-        }
-        if (auto* live = s.ent[id].try_get_mut<UiRampDraw>()) {
-            *live = drawn;
-        } else {
-            s.ent[id].set<UiRampDraw>(drawn);
-        }
-        if (auto* live = s.ent[id].try_get_mut<UiNodeBars>()) {
-            *live = bars;
-        } else if (bars.n != 0) {
-            s.ent[id].set<UiNodeBars>(bars);
-        }
-    }
-}
-
 uint16_t loadColorBin(UiState& s, uint16_t parent, const BinNode& node, const BinTail&, const char* name, const char*, const char*, void*) {
     UiFlex flex{};
     flex.position = UiPosition::Absolute;
@@ -1184,7 +1034,7 @@ uint16_t loadColorBin(UiState& s, uint16_t parent, const BinNode& node, const Bi
     }
     UiColorPickerComponent& picker = colorBind(s, id);
     if (picker.book == nullptr || picker.book->gen == 0) {
-        rgbToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
+        colorLinearToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
         colorInk(picker).a = 1.0f;
         colorInk(picker).useAlpha = 1;
     } else {

@@ -1,4 +1,5 @@
 #include "host/PropImport.hpp"
+#include "Str.hpp"
 
 #include "io/JsonCursor.hpp"
 #include "ui/Panel.hpp"
@@ -15,7 +16,6 @@
 #include "ui/widget/Splitter.hpp"
 #include "ui/widget/Virtual.hpp"
 
-#include <cstdio>
 #include <cstring>
 
 namespace burnhope {
@@ -315,7 +315,7 @@ void addMenu(Import& in, uint16_t parent, const Node& node) {
         pick.value = item.value;
         pick.onFlag = in.onFlag;
         pick.user = in.user;
-        std::snprintf(pick.label, sizeof(pick.label), "%s", item.label);
+        strCopyCap(pick.label, sizeof(pick.label), item.label);
         (void)uiCommandAddTo(*in.state, menu, item.label, onBinderMenu, &pick);
     }
     const uint16_t button = uiPropMenu(*in.state, parent, node.label, caption, menu);
@@ -546,208 +546,259 @@ uint16_t addBar(Import& in, uint16_t parent, const Node& node) {
     return button;
 }
 
-uint16_t spawn(Import& in, uint16_t parent, const Node& node) {
-    if (std::strcmp(node.role, "section") == 0) {
-        const uint16_t id = uiPropSection(*in.state, parent, node.label, node.cat, node.owner);
-        remember(in, node.name, id);
-        return id;
+uint16_t makeSection(Import& in, uint16_t parent, const Node& node) {
+    const uint16_t id = uiPropSection(*in.state, parent, node.label, node.cat, node.owner);
+    remember(in, node.name, id);
+    return id;
+}
+
+uint16_t makeFold(Import& in, uint16_t parent, const Node& node) {
+    const uint16_t id = uiFoldBody(*in.state, parent, node.label);
+    remember(in, node.name, id);
+    return id;
+}
+
+uint16_t makeGroup(Import& in, uint16_t parent, const Node& node) {
+    const uint16_t id = spawnGroup(in, parent);
+    remember(in, node.name, id);
+    return id;
+}
+
+uint16_t makeSlider(Import& in, uint16_t parent, const Node& node) {
+    uint16_t id = kUiNone;
+    if (node.hasStep) {
+        id = in.bind->slideStep(*in.state, parent, node.label, node.bind, node.value, node.minV, node.maxV, node.step);
+    } else {
+        id = in.bind->slide(*in.state, parent, node.label, node.bind, node.value, node.minV, node.maxV);
     }
-    if (std::strcmp(node.role, "fold") == 0) {
-        const uint16_t id = uiFoldBody(*in.state, parent, node.label);
-        remember(in, node.name, id);
-        return id;
+    remember(in, node.name, id);
+    return id;
+}
+
+uint16_t makeSwatch(Import& in, uint16_t parent, const Node& node) {
+    const uint16_t id = in.bind->swatch(*in.state, parent, node.label, node.bind, node.value, node.g, node.b);
+    if (in.onSwatch != nullptr) {
+        in.onSwatch(in.user, *in.state, id);
     }
-    if (std::strcmp(node.role, "group") == 0) {
-        const uint16_t id = spawnGroup(in, parent);
-        remember(in, node.name, id);
-        return id;
+    remember(in, node.name, id);
+    return id;
+}
+
+uint16_t makeVec2(Import& in, uint16_t parent, const Node& node) {
+    const UiPropVec2 row = uiPropVec2(*in.state, parent, node.label, node.value, node.value2, node.minV, node.maxV, node.hasStep ? node.step : 0.5f);
+    in.bind->watch(row.x, node.bind, node.value);
+    in.bind->watch(row.y, static_cast<uint16_t>(node.bind + 1u), node.value2);
+    remember(in, node.name, row.x);
+    return row.x;
+}
+
+uint16_t makeMenu(Import& in, uint16_t parent, const Node& node) {
+    if (node.bar) {
+        return addBar(in, parent, node);
     }
-    if (std::strcmp(node.role, "slider") == 0) {
-        uint16_t id = kUiNone;
-        if (node.hasStep) {
-            id = in.bind->slideStep(*in.state, parent, node.label, node.bind, node.value, node.minV, node.maxV, node.step);
-        } else {
-            id = in.bind->slide(*in.state, parent, node.label, node.bind, node.value, node.minV, node.maxV);
+    addMenu(in, parent, node);
+    return kUiNone;
+}
+
+uint16_t makeSplit(Import& in, uint16_t parent, const Node& node) {
+    return uiSplitBar(*in.state, parent, node.vertical);
+}
+
+uint16_t makeFilter(Import& in, uint16_t parent, const Node& node) {
+    const uint16_t id = uiPropFilterBar(*in.state, parent);
+    remember(in, node.name, id);
+    return id;
+}
+
+uint16_t makeHost(Import& in, uint16_t parent, const Node& node) {
+    const uint16_t id = uiPropHost(*in.state, parent);
+    remember(in, node.name, id);
+    return id;
+}
+
+uint16_t makeLabel(Import& in, uint16_t parent, const Node& node) {
+    const uint16_t id = uiLabel(*in.state, parent, node.label);
+    if (node.paintName[0] != '\0' && id < in.state->count) {
+        if (auto* paint = in.state->ent[id].try_get_mut<UiPaint>()) {
+            *paint = paintOf(in, node);
         }
-        remember(in, node.name, id);
-        return id;
     }
-    if (std::strcmp(node.role, "check") == 0 && node.hasBind) {
+    remember(in, node.name, id);
+    return id;
+}
+
+uint16_t makeButton(Import& in, uint16_t parent, const Node& node) {
+    uint16_t id = kUiNone;
+    if (std::strcmp(node.role, "menubutton") == 0) {
+        id = uiMenuButton(*in.state, parent, node.label, kUiNone);
+    } else {
+        id = uiButton(*in.state, parent, {
+            .label = node.label,
+            .width = node.w,
+            .height = node.h,
+            .fillWidth = node.fill,
+            .iconSlot = node.hasPhoto ? node.photo : uint8_t{255},
+        });
+    }
+    if (node.h > 0.0f) {
+        uiSetHeight(*in.state, id, node.h);
+    }
+    if (node.w > 0.0f) {
+        uiSetWidth(*in.state, id, node.w);
+    }
+    markNode(in, id, node);
+    if (node.row && id < in.state->count) {
+        if (auto* flex = in.state->ent[id].try_get_mut<UiFlex>()) {
+            flex->direction = UiFlexDir::Row;
+            flex->align = UiAlign::Center;
+            flex->justify = UiJustify::Center;
+            flex->gap = 2.0f;
+        }
+    }
+    remember(in, node.name, id);
+    bindNodeCommand(in, id, node);
+    return id;
+}
+
+uint16_t makeIcon(Import& in, uint16_t parent, const Node& node) {
+    uint16_t glyph = kUiNone;
+    const uint16_t id = uiIconBtn(*in.state, parent, node.icon, node.h > 0.0f ? node.h : 28.0f, &glyph);
+    remember(in, node.name, id);
+    remember(in, node.glyph, glyph);
+    bindNodeCommand(in, id, node);
+    return id;
+}
+
+uint16_t makeSlot(Import& in, uint16_t parent, const Node& node) {
+    uint16_t glyph = kUiNone;
+    const uint16_t id = uiSlotBtn(*in.state, parent, node.photo, node.h > 0.0f ? node.h : 28.0f, &glyph);
+    remember(in, node.name, id);
+    remember(in, node.glyph, glyph);
+    bindNodeCommand(in, id, node);
+    return id;
+}
+
+uint16_t makeChoice(Import& in, uint16_t parent, const Node& node) {
+    const char* labels[8]{};
+    for (uint8_t i = 0; i < node.itemN && i < 8; ++i) {
+        labels[i] = node.items[i].label;
+    }
+    const float width = uiChoiceWidth(*in.state, labels, node.itemN);
+    UiCommandPick* pick = takeCommand(in, node.command, 0);
+    const uint16_t id = uiChoice(*in.state, parent, {
+        .labels = labels,
+        .count = node.itemN,
+        .selected = static_cast<uint8_t>(node.value),
+        .width = width,
+        .onPick = pick != nullptr ? onChoiceCommand : nullptr,
+        .user = pick,
+    });
+    uiChoiceFit(*in.state, id, width);
+    remember(in, node.name, id);
+    return id;
+}
+
+uint16_t makeNumber(Import& in, uint16_t parent, const Node& node) {
+    const uint16_t id = uiNumber(*in.state, parent, node.value, node.minV, node.maxV, node.hasStep ? node.step : 0.01f);
+    uiSetHeight(*in.state, id, node.h > 0.0f ? node.h : 28.0f);
+    if (node.w > 0.0f) {
+        uiSetWidth(*in.state, id, node.w);
+    }
+    uiNumberFill(*in.state, id, false);
+    if (id < in.state->count) {
+        if (auto* flex = in.state->ent[id].try_get_mut<UiFlex>()) {
+            flex->widthMode = UiSize::Px;
+            flex->width = node.w > 0.0f ? node.w : 72.0f;
+            flex->grow = 0.0f;
+            flex->shrink = 0.0f;
+        }
+    }
+    remember(in, node.name, id);
+    return id;
+}
+
+uint16_t makeRange(Import& in, uint16_t parent, const Node& node) {
+    const uint16_t id = uiSlider(*in.state, parent, node.value, node.minV, node.maxV, nullptr, nullptr, node.w > 0.0f ? node.w : 32.0f);
+    if (id < in.state->count) {
+        if (auto* flex = in.state->ent[id].try_get_mut<UiFlex>()) {
+            flex->widthMode = UiSize::Px;
+            flex->width = node.w > 0.0f ? node.w : 32.0f;
+            flex->grow = node.grow > 0.0f ? node.grow : 1.0f;
+            flex->shrink = 1.0f;
+            flex->minW = node.minW > 0.0f ? node.minW : 24.0f;
+        }
+    }
+    remember(in, node.name, id);
+    return id;
+}
+
+uint16_t makeList(Import& in, uint16_t parent, const Node& node) {
+    const uint16_t id = uiVirtual(*in.state, parent, node.h > 8.0f ? node.h : 28.0f);
+    remember(in, node.name, id);
+    return id;
+}
+
+uint16_t makeSpacer(Import& in, uint16_t parent, const Node&) {
+    UiFlex gap{};
+    gap.grow = 1.0f;
+    gap.shrink = 1.0f;
+    gap.widthMode = UiSize::Px;
+    gap.width = 8.0f;
+    gap.heightMode = UiSize::Px;
+    gap.height = 1.0f;
+    return uiSpacer(*in.state, parent, gap);
+}
+
+uint16_t makeCheck(Import& in, uint16_t parent, const Node& node) {
+    if (node.hasBind) {
         const uint16_t id = in.bind->check(*in.state, parent, node.label, node.bind, node.on);
         remember(in, node.name, id);
         return id;
     }
-    if (std::strcmp(node.role, "swatch") == 0) {
-        const uint16_t id = in.bind->swatch(*in.state, parent, node.label, node.bind, node.value, node.g, node.b);
-        if (in.onSwatch != nullptr) {
-            in.onSwatch(in.user, *in.state, id);
+    const uint16_t id = uiCheck(*in.state, parent, node.label, node.kind, node.groupN, node.on);
+    markNode(in, id, node);
+    remember(in, node.name, id);
+    bindNodeCommand(in, id, node);
+    return id;
+}
+
+struct RoleSpawn {
+    const char* role;
+    uint16_t (*make)(Import& in, uint16_t parent, const Node& node);
+};
+
+constexpr RoleSpawn kRoleSpawns[] = {
+    {"section", makeSection},
+    {"fold", makeFold},
+    {"group", makeGroup},
+    {"slider", makeSlider},
+    {"swatch", makeSwatch},
+    {"vec2", makeVec2},
+    {"menu", makeMenu},
+    {"panel", spawnPanel},
+    {"sep", spawnPanel},
+    {"scroll", spawnScroll},
+    {"split", makeSplit},
+    {"filter", makeFilter},
+    {"host", makeHost},
+    {"label", makeLabel},
+    {"button", makeButton},
+    {"menubutton", makeButton},
+    {"icon", makeIcon},
+    {"slot", makeSlot},
+    {"choice", makeChoice},
+    {"number", makeNumber},
+    {"range", makeRange},
+    {"list", makeList},
+    {"spacer", makeSpacer},
+    {"check", makeCheck},
+};
+
+uint16_t spawn(Import& in, uint16_t parent, const Node& node) {
+    for (const RoleSpawn& entry : kRoleSpawns) {
+        if (std::strcmp(node.role, entry.role) == 0) {
+            return entry.make(in, parent, node);
         }
-        remember(in, node.name, id);
-        return id;
-    }
-    if (std::strcmp(node.role, "vec2") == 0) {
-        const UiPropVec2 row = uiPropVec2(*in.state, parent, node.label, node.value, node.value2, node.minV, node.maxV, node.hasStep ? node.step : 0.5f);
-        in.bind->watch(row.x, node.bind, node.value);
-        in.bind->watch(row.y, static_cast<uint16_t>(node.bind + 1u), node.value2);
-        remember(in, node.name, row.x);
-        return row.x;
-    }
-    if (std::strcmp(node.role, "menu") == 0) {
-        if (node.bar) {
-            return addBar(in, parent, node);
-        }
-        addMenu(in, parent, node);
-        return kUiNone;
-    }
-    if (std::strcmp(node.role, "panel") == 0 || std::strcmp(node.role, "sep") == 0) {
-        return spawnPanel(in, parent, node);
-    }
-    if (std::strcmp(node.role, "scroll") == 0) {
-        return spawnScroll(in, parent, node);
-    }
-    if (std::strcmp(node.role, "split") == 0) {
-        return uiSplitBar(*in.state, parent, node.vertical);
-    }
-    if (std::strcmp(node.role, "filter") == 0) {
-        const uint16_t id = uiPropFilterBar(*in.state, parent);
-        remember(in, node.name, id);
-        return id;
-    }
-    if (std::strcmp(node.role, "host") == 0) {
-        const uint16_t id = uiPropHost(*in.state, parent);
-        remember(in, node.name, id);
-        return id;
-    }
-    if (std::strcmp(node.role, "label") == 0) {
-        const uint16_t id = uiLabel(*in.state, parent, node.label);
-        if (node.paintName[0] != '\0' && id < in.state->count) {
-            if (auto* paint = in.state->ent[id].try_get_mut<UiPaint>()) {
-                *paint = paintOf(in, node);
-            }
-        }
-        remember(in, node.name, id);
-        return id;
-    }
-    if (std::strcmp(node.role, "button") == 0 || std::strcmp(node.role, "menubutton") == 0) {
-        uint16_t id = kUiNone;
-        if (std::strcmp(node.role, "menubutton") == 0) {
-            id = uiMenuButton(*in.state, parent, node.label, kUiNone);
-        } else {
-            id = uiButton(*in.state, parent, {
-                .label = node.label,
-                .width = node.w,
-                .height = node.h,
-                .fillWidth = node.fill,
-                .iconSlot = node.hasPhoto ? node.photo : uint8_t{255},
-            });
-        }
-        if (node.h > 0.0f) {
-            uiSetHeight(*in.state, id, node.h);
-        }
-        if (node.w > 0.0f) {
-            uiSetWidth(*in.state, id, node.w);
-        }
-        markNode(in, id, node);
-        if (node.row && id < in.state->count) {
-            if (auto* flex = in.state->ent[id].try_get_mut<UiFlex>()) {
-                flex->direction = UiFlexDir::Row;
-                flex->align = UiAlign::Center;
-                flex->justify = UiJustify::Center;
-                flex->gap = 2.0f;
-            }
-        }
-        remember(in, node.name, id);
-        bindNodeCommand(in, id, node);
-        return id;
-    }
-    if (std::strcmp(node.role, "icon") == 0) {
-        uint16_t glyph = kUiNone;
-        const uint16_t id = uiIconBtn(*in.state, parent, node.icon, node.h > 0.0f ? node.h : 28.0f, &glyph);
-        remember(in, node.name, id);
-        remember(in, node.glyph, glyph);
-        bindNodeCommand(in, id, node);
-        return id;
-    }
-    if (std::strcmp(node.role, "slot") == 0) {
-        uint16_t glyph = kUiNone;
-        const uint16_t id = uiSlotBtn(*in.state, parent, node.photo, node.h > 0.0f ? node.h : 28.0f, &glyph);
-        remember(in, node.name, id);
-        remember(in, node.glyph, glyph);
-        bindNodeCommand(in, id, node);
-        return id;
-    }
-    if (std::strcmp(node.role, "choice") == 0) {
-        const char* labels[8]{};
-        for (uint8_t i = 0; i < node.itemN && i < 8; ++i) {
-            labels[i] = node.items[i].label;
-        }
-        const float width = uiChoiceWidth(*in.state, labels, node.itemN);
-        UiCommandPick* pick = takeCommand(in, node.command, 0);
-        const uint16_t id = uiChoice(*in.state, parent, {
-            .labels = labels,
-            .count = node.itemN,
-            .selected = static_cast<uint8_t>(node.value),
-            .width = width,
-            .onPick = pick != nullptr ? onChoiceCommand : nullptr,
-            .user = pick,
-        });
-        uiChoiceFit(*in.state, id, width);
-        remember(in, node.name, id);
-        return id;
-    }
-    if (std::strcmp(node.role, "number") == 0) {
-        const uint16_t id = uiNumber(*in.state, parent, node.value, node.minV, node.maxV, node.hasStep ? node.step : 0.01f);
-        uiSetHeight(*in.state, id, node.h > 0.0f ? node.h : 28.0f);
-        if (node.w > 0.0f) {
-            uiSetWidth(*in.state, id, node.w);
-        }
-        uiNumberFill(*in.state, id, false);
-        if (id < in.state->count) {
-            if (auto* flex = in.state->ent[id].try_get_mut<UiFlex>()) {
-                flex->widthMode = UiSize::Px;
-                flex->width = node.w > 0.0f ? node.w : 72.0f;
-                flex->grow = 0.0f;
-                flex->shrink = 0.0f;
-            }
-        }
-        remember(in, node.name, id);
-        return id;
-    }
-    if (std::strcmp(node.role, "range") == 0) {
-        const uint16_t id = uiSlider(*in.state, parent, node.value, node.minV, node.maxV, nullptr, nullptr, node.w > 0.0f ? node.w : 32.0f);
-        if (id < in.state->count) {
-            if (auto* flex = in.state->ent[id].try_get_mut<UiFlex>()) {
-                flex->widthMode = UiSize::Px;
-                flex->width = node.w > 0.0f ? node.w : 32.0f;
-                flex->grow = node.grow > 0.0f ? node.grow : 1.0f;
-                flex->shrink = 1.0f;
-                flex->minW = node.minW > 0.0f ? node.minW : 24.0f;
-            }
-        }
-        remember(in, node.name, id);
-        return id;
-    }
-    if (std::strcmp(node.role, "check") == 0 && !node.hasBind) {
-        const uint16_t id = uiCheck(*in.state, parent, node.label, node.kind, node.groupN, node.on);
-        markNode(in, id, node);
-        remember(in, node.name, id);
-        bindNodeCommand(in, id, node);
-        return id;
-    }
-    if (std::strcmp(node.role, "list") == 0) {
-        const uint16_t id = uiVirtual(*in.state, parent, node.h > 8.0f ? node.h : 28.0f);
-        remember(in, node.name, id);
-        return id;
-    }
-    if (std::strcmp(node.role, "spacer") == 0) {
-        UiFlex gap{};
-        gap.grow = 1.0f;
-        gap.shrink = 1.0f;
-        gap.widthMode = UiSize::Px;
-        gap.width = 8.0f;
-        gap.heightMode = UiSize::Px;
-        gap.height = 1.0f;
-        return uiSpacer(*in.state, parent, gap);
     }
     return parent;
 }
@@ -839,7 +890,7 @@ bool parseNode(Cur& c, Import& in, uint16_t parent) {
                 return false;
             }
             if (keyIs(key, "paint")) {
-                std::snprintf(node.paintName, sizeof(node.paintName), "%s", text);
+                strCopyCap(node.paintName, sizeof(node.paintName), text);
             } else if (keyIs(key, "dir")) {
                 node.row = std::strcmp(text, "row") == 0;
             } else if (keyIs(key, "align")) {

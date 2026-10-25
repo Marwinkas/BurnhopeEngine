@@ -38,7 +38,7 @@ void actorEulerFromBasis(const float x[3], const float y[3], const float z[3], f
     }
 }
 
-void actorSpinAround(const float grabEuler[3], const float axis[3], float deltaDeg, float outEuler[3]) {
+static void actorSpinAround(const float grabEuler[3], const float axis[3], float deltaDeg, float outEuler[3]) {
     float b[3][3];
     actorBasis(grabEuler, b[0], b[1], b[2]);
     float ax[3] = {axis[0], axis[1], axis[2]};
@@ -76,7 +76,7 @@ void actorSpin(const float grabEuler[3], int axis, float deltaDeg, float outEule
     actorSpinAround(grabEuler, b[axis], deltaDeg, outEuler);
 }
 
-void actorCopyName(char* dst, const char* src) {
+static void actorCopyName(char* dst, const char* src) {
     uint8_t n = 0;
     if (src != nullptr) {
         while (src[n] != '\0' && n < 23) {
@@ -94,7 +94,7 @@ const Xform* actorXformOf(const SceneActors& world, uint8_t index) {
     return &world.ent[index].get<Xform>();
 }
 
-Xform* actorXformMut(SceneActors& world, uint8_t index) {
+static Xform* actorXformMut(SceneActors& world, uint8_t index) {
     if (index >= world.count || !world.ent[index].is_alive() || !world.ent[index].has<Xform>()) {
         return nullptr;
     }
@@ -115,7 +115,7 @@ const char* actorNameOf(const SceneActors& world, uint8_t index) {
     return world.ent[index].get<ActorName>().text;
 }
 
-void actorStoreXform(SceneActors& world, uint8_t slot, const Xform& src) {
+static void actorStoreXform(SceneActors& world, uint8_t slot, const Xform& src) {
     if (Xform* x = actorXformMut(world, slot)) {
         *x = src;
     }
@@ -247,7 +247,7 @@ uint8_t sceneActorDuplicate(SceneActors& world) {
     return index;
 }
 
-void actorSub(const float a[3], const float b[3], float o[3]) {
+static void actorSub(const float a[3], const float b[3], float o[3]) {
     o[0] = a[0] - b[0];
     o[1] = a[1] - b[1];
     o[2] = a[2] - b[2];
@@ -261,7 +261,7 @@ float actorLen(const float a[3]) {
     return std::sqrt(actorDot(a, a));
 }
 
-void actorCross(const float a[3], const float b[3], float o[3]) {
+static void actorCross(const float a[3], const float b[3], float o[3]) {
     o[0] = a[1] * b[2] - a[2] * b[1];
     o[1] = a[2] * b[0] - a[0] * b[2];
     o[2] = a[0] * b[1] - a[1] * b[0];
@@ -293,7 +293,7 @@ void sceneActorSetCamera(SceneActors& world, const CameraCull& cam, float width,
     world.camReady = 1;
 }
 
-void actorRay(const SceneActors& world, float px, float py, float ro[3], float rd[3]) {
+static void actorRay(const SceneActors& world, float px, float py, float ro[3], float rd[3]) {
     const float ndcX = (px / world.extentW) * 2.0f - 1.0f;
     const float ndcY = (py / world.extentH) * 2.0f - 1.0f;
     if (world.ortho != 0) {
@@ -334,7 +334,7 @@ bool actorProject(const SceneActors& world, const float p[3], float& sx, float& 
     return true;
 }
 
-float actorScreenDist(float px, float py, float ax, float ay, float bx, float by) {
+static float actorScreenDist(float px, float py, float ax, float ay, float bx, float by) {
     const float abx = bx - ax;
     const float aby = by - ay;
     const float ab2 = abx * abx + aby * aby;
@@ -350,7 +350,7 @@ float actorScreenDist(float px, float py, float ax, float ay, float bx, float by
     return std::sqrt(dx * dx + dy * dy);
 }
 
-float actorScreenAlong(float px, float py, float ax, float ay, float bx, float by, bool& ok) {
+static float actorScreenAlong(float px, float py, float ax, float ay, float bx, float by, bool& ok) {
     const float abx = bx - ax;
     const float aby = by - ay;
     const float ab2 = abx * abx + aby * aby;
@@ -361,7 +361,7 @@ float actorScreenAlong(float px, float py, float ax, float ay, float bx, float b
     return ((px - ax) * abx + (py - ay) * aby) / ab2;
 }
 
-bool actorRayPlane(const float ro[3], const float rd[3], const float p0[3], const float n[3], float& t) {
+static bool actorRayPlane(const float ro[3], const float rd[3], const float p0[3], const float n[3], float& t) {
     const float denom = actorDot(rd, n);
     if (std::fabs(denom) < 1.0e-6f) {
         return false;
@@ -372,7 +372,7 @@ bool actorRayPlane(const float ro[3], const float rd[3], const float p0[3], cons
     return t > 0.0f;
 }
 
-float actorRayAxis(const float ro[3], const float rd[3], const float p0[3], const float dir[3], float& along) {
+static float actorRayAxis(const float ro[3], const float rd[3], const float p0[3], const float dir[3], float& along) {
     float w0[3];
     actorSub(ro, p0, w0);
     const float b = actorDot(rd, dir);
@@ -413,7 +413,7 @@ float actorMetersPerPx(const SceneActors& world, const float pos[3]) {
     return dist * (2.0f * tanY) / height;
 }
 
-float actorIconPx(float dist) {
+static float actorIconPx(float dist) {
     float t = (dist - 8.0f) / 40.0f;
     if (t < 0.0f) {
         t = 0.0f;
@@ -439,14 +439,14 @@ float actorSpan(const SceneActors& world, const float pos[3]) {
     return len;
 }
 
-float actorSnap(float value, float step) {
+static float actorSnap(float value, float step) {
     if (step <= 1.0e-5f) {
         return value;
     }
     return std::round(value / step) * step;
 }
 
-void gizmoBasis(const SceneActors& world, const float euler[3], float x[3], float y[3], float z[3]) {
+static void gizmoBasis(const SceneActors& world, const float euler[3], float x[3], float y[3], float z[3]) {
     if (world.space != 0) {
         x[0] = 1.0f;
         x[1] = 0.0f;
@@ -462,7 +462,7 @@ void gizmoBasis(const SceneActors& world, const float euler[3], float x[3], floa
     actorBasis(euler, x, y, z);
 }
 
-void actorPivotLocal(const SceneActors& world, uint8_t actor, float out[3]) {
+static void actorPivotLocal(const SceneActors& world, uint8_t actor, float out[3]) {
     out[0] = 0.0f;
     out[1] = 0.0f;
     out[2] = 0.0f;
@@ -486,7 +486,7 @@ void actorWritePivot(SceneActors& world, uint8_t actor, const float local[3]) {
     world.ent[actor].set<Pivot>(pivot);
 }
 
-void actorHandle(const SceneActors& world, const Xform& xform, uint8_t actor, float out[3]) {
+static void actorHandle(const SceneActors& world, const Xform& xform, uint8_t actor, float out[3]) {
     float local[3]{};
     actorPivotLocal(world, actor, local);
     float bx[3]{};
@@ -498,7 +498,7 @@ void actorHandle(const SceneActors& world, const Xform& xform, uint8_t actor, fl
     out[2] = xform.pos[2] + bx[2] * local[0] * xform.scale[0] + by[2] * local[1] * xform.scale[1] + bz[2] * local[2] * xform.scale[2];
 }
 
-float actorPickPx(const SceneActors& world, const float origin[3], float span) {
+static float actorPickPx(const SceneActors& world, const float origin[3], float span) {
     float ax = 0.0f;
     float ay = 0.0f;
     float bx = 0.0f;
@@ -521,7 +521,7 @@ float actorPickPx(const SceneActors& world, const float origin[3], float span) {
     return px;
 }
 
-bool actorAlong(const SceneActors& world, float px, float py, const float origin[3], const float dir[3], float& along, uint8_t& screen, int stick) {
+static bool actorAlong(const SceneActors& world, float px, float py, const float origin[3], const float dir[3], float& along, uint8_t& screen, int stick = -1) {
     float ro[3];
     float rd[3];
     actorRay(world, px, py, ro, rd);
@@ -547,7 +547,7 @@ bool actorAlong(const SceneActors& world, float px, float py, const float origin
     return true;
 }
 
-float actorRingAngle(const SceneActors& world, float px, float py, const float origin[3], const float axis[3], uint8_t& screen) {
+static float actorRingAngle(const SceneActors& world, float px, float py, const float origin[3], const float axis[3], uint8_t& screen) {
     float ox = 0.0f;
     float oy = 0.0f;
     float ro[3];
@@ -588,7 +588,7 @@ float actorRingAngle(const SceneActors& world, float px, float py, const float o
     return std::atan2(py - oy, px - ox) * 57.2957795f;
 }
 
-bool sceneActorSunRig(const SceneActors& world) {
+static bool sceneActorSunRig(const SceneActors& world) {
     return world.selected < world.count
         && actorKindOf(world, world.selected) == static_cast<uint8_t>(SceneActorKind::Weather);
 }
@@ -863,7 +863,7 @@ uint8_t sceneActorHit(const SceneActors& world, float px, float py, uint8_t& axi
     return found;
 }
 
-void sceneActorGrab(SceneActors& world, const Xform& xform) {
+static void sceneActorGrab(SceneActors& world, const Xform& xform) {
     world.grabPos[0] = xform.pos[0];
     world.grabPos[1] = xform.pos[1];
     world.grabPos[2] = xform.pos[2];
@@ -875,7 +875,7 @@ void sceneActorGrab(SceneActors& world, const Xform& xform) {
     world.grabScale[2] = xform.scale[2];
 }
 
-void sceneActorScreenDelta(const SceneActors& world, float x, float y, float& alongRight, float& alongUp) {
+static void sceneActorScreenDelta(const SceneActors& world, float x, float y, float& alongRight, float& alongUp) {
     alongRight = 0.0f;
     alongUp = 0.0f;
     const float mpp = actorMetersPerPx(world, world.grabPos);

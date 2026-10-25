@@ -176,15 +176,24 @@ inline uint16_t uiParent(const UiState& s, uint16_t id) {
 inline UiBox uiNodeBox(const UiState& s, uint16_t id) {
     return id < s.count ? s.box[id] : UiBox{};
 }
+// First node other than `except` holding Tag. Flecs walks only the tables that carry Tag, so the cost follows
+// the number of holders, not s.count.
+template <typename Tag>
+uint16_t uiMarkedOther(const UiState& s, uint16_t except) {
+    uint16_t found = kUiNone;
+    s.world.each(s.world.id<Tag>(), [&](flecs::entity e) {
+        const UiSlot* slot = found == kUiNone ? e.try_get<UiSlot>() : nullptr;
+        if (slot != nullptr && slot->index != except && slot->index < s.count && s.ent[slot->index] == e) {
+            found = slot->index;
+        }
+    });
+    return found;
+}
+
 template <typename Tag>
 void uiMarkOnly(UiState& s, uint16_t id) {
-    for (uint16_t i = 0; i < s.count; ++i) {
-        if (!s.ent[i].is_alive() || !s.ent[i].has<Tag>()) {
-            continue;
-        }
-        if (i != id) {
-            s.ent[i].remove<Tag>();
-        }
+    for (uint16_t other = uiMarkedOther<Tag>(s, id); other != kUiNone; other = uiMarkedOther<Tag>(s, id)) {
+        s.ent[other].remove<Tag>();
     }
     if (id < s.count && s.ent[id].is_alive()) {
         s.ent[id].add<Tag>();
@@ -193,12 +202,7 @@ void uiMarkOnly(UiState& s, uint16_t id) {
 
 template <typename Tag>
 uint16_t uiMarked(const UiState& s) {
-    for (uint16_t i = 0; i < s.count; ++i) {
-        if (s.ent[i].is_alive() && s.ent[i].has<Tag>()) {
-            return i;
-        }
-    }
-    return kUiNone;
+    return uiMarkedOther<Tag>(s, kUiNone);
 }
 
 void uiName(UiState& s, uint16_t id, const char* name);

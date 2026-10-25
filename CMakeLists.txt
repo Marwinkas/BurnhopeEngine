@@ -330,6 +330,7 @@ bh_module(ui_core
     core/ui/LayoutBridge.cpp
     core/ui/Motion.cpp
     core/ui/Node.cpp
+    core/ui/NodeDump.cpp
     core/ui/Panel.cpp
     core/ui/PrimitiveBatch.cpp
     core/ui/Text.cpp
@@ -341,6 +342,7 @@ bh_module(ui_bricks
     core/ui/widget/Check.cpp
     core/ui/widget/Curve.cpp
     core/ui/widget/Field.cpp
+    core/ui/widget/FieldDraw.cpp
     core/ui/widget/FieldFilter.cpp
     core/ui/widget/Fold.cpp
     core/ui/widget/Gradient.cpp
@@ -359,6 +361,7 @@ bh_module(ui_bricks
 bh_module(ui_kits
     core/ui/kit/Calendar.cpp
     core/ui/kit/Color.cpp
+    core/ui/kit/ColorDraw.cpp
     core/ui/widget/AssetSlot.cpp
     core/ui/widget/Breadcrumbs.cpp
     core/ui/widget/Choice.cpp
@@ -397,6 +400,7 @@ bh_module(host
     core/host/PropBind.cpp
     core/host/PropImport.cpp
     core/host/PropGrid.cpp
+    core/host/PropFilter.cpp
     core/host/SceneMask.cpp
 )
 target_link_libraries(bh_host PUBLIC volk bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_rhi bh_platform bh_memory)

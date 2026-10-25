@@ -218,21 +218,13 @@ void actorBasis(const float euler[3], float x[3], float y[3], float z[3]);
 
 void actorEulerFromBasis(const float x[3], const float y[3], const float z[3], float euler[3]);
 
-void actorSpinAround(const float grabEuler[3], const float axis[3], float deltaDeg, float outEuler[3]);
-
 void actorSpin(const float grabEuler[3], int axis, float deltaDeg, float outEuler[3]);
 
-void actorCopyName(char* dst, const char* src);
-
 const Xform* actorXformOf(const SceneActors& world, uint8_t index);
-
-Xform* actorXformMut(SceneActors& world, uint8_t index);
 
 uint8_t actorKindOf(const SceneActors& world, uint8_t index);
 
 const char* actorNameOf(const SceneActors& world, uint8_t index);
-
-void actorStoreXform(SceneActors& world, uint8_t slot, const Xform& src);
 
 Xform sceneActorXform(const SceneActors& world, uint8_t index);
 
@@ -244,63 +236,26 @@ uint8_t sceneActorAdd(SceneActors& world, SceneActorKind kind, const float pos[3
 
 uint8_t sceneActorDuplicate(SceneActors& world);
 
-void actorSub(const float a[3], const float b[3], float o[3]);
-
 float actorDot(const float a[3], const float b[3]);
 
 float actorLen(const float a[3]);
 
-void actorCross(const float a[3], const float b[3], float o[3]);
-
 void sceneActorSetCamera(SceneActors& world, const CameraCull& cam, float width, float height);
-
-void actorRay(const SceneActors& world, float px, float py, float ro[3], float rd[3]);
 
 bool actorProject(const SceneActors& world, const float p[3], float& sx, float& sy);
 
-float actorScreenDist(float px, float py, float ax, float ay, float bx, float by);
-
-float actorScreenAlong(float px, float py, float ax, float ay, float bx, float by, bool& ok);
-
-bool actorRayPlane(const float ro[3], const float rd[3], const float p0[3], const float n[3], float& t);
-
-float actorRayAxis(const float ro[3], const float rd[3], const float p0[3], const float dir[3], float& along);
-
 float actorMetersPerPx(const SceneActors& world, const float pos[3]);
-
-// 72 px было базой значка. Вблизи ×4, вдали ×2, затем кламп в пикселях.
-float actorIconPx(float dist);
 
 // Экранные 108 px = прежние 72 × 1.5. Длина = distance * tan(fov/2) * (2*108/height).
 float actorSpan(const SceneActors& world, const float pos[3]);
 
-float actorSnap(float value, float step);
-
-void gizmoBasis(const SceneActors& world, const float euler[3], float x[3], float y[3], float z[3]);
-
-void actorPivotLocal(const SceneActors& world, uint8_t actor, float out[3]);
-
 void actorWritePivot(SceneActors& world, uint8_t actor, const float local[3]);
-
-void actorHandle(const SceneActors& world, const Xform& xform, uint8_t actor, float out[3]);
-
-float actorPickPx(const SceneActors& world, const float origin[3], float span);
-
-bool actorAlong(const SceneActors& world, float px, float py, const float origin[3], const float dir[3], float& along, uint8_t& screen, int stick = -1);
-
-float actorRingAngle(const SceneActors& world, float px, float py, const float origin[3], const float axis[3], uint8_t& screen);
-
-bool sceneActorSunRig(const SceneActors& world);
 
 void sceneActorFitTool(SceneActors& world);
 
 void sceneActorFillGpu(const SceneActors& world, GizmoGpu& gpu);
 
 uint8_t sceneActorHit(const SceneActors& world, float px, float py, uint8_t& axis);
-
-void sceneActorGrab(SceneActors& world, const Xform& xform);
-
-void sceneActorScreenDelta(const SceneActors& world, float x, float y, float& alongRight, float& alongUp);
 
 void sceneActorPointer(SceneActors& world, float x, float y, uint8_t down, uint8_t pressed, uint8_t released);
 
