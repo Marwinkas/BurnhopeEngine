@@ -52,23 +52,26 @@ void pullProp(HudContext& hud, Canvas& canvas, uint8_t index) {
         return;
     }
     UiState& state = *canvas.state;
-    auto put = [&](float* dst, float value) { hud.bind.write(state, dst, value); };
-    put(&hud.actor.color[0], pbr.base[0]);
-    put(&hud.actor.color[1], pbr.base[1]);
-    put(&hud.actor.color[2], pbr.base[2]);
-    put(&hud.actor.rough, pbr.roughness);
-    put(&hud.actor.metal, pbr.metallic);
-    put(&hud.actor.emissive, pbr.emissive);
-    put(hud.actor.pos + 0, pose.pos[0]);
-    put(hud.actor.pos + 1, pose.pos[1]);
-    put(hud.actor.pos + 2, pose.pos[2]);
-    put(hud.actor.euler + 0, pose.euler[0]);
-    put(hud.actor.euler + 1, pose.euler[1]);
-    put(hud.actor.euler + 2, pose.euler[2]);
-    put(hud.actor.scale + 0, pose.scale[0]);
-    put(hud.actor.scale + 1, pose.scale[1]);
-    put(hud.actor.scale + 2, pose.scale[2]);
-    uiBindCheck(state, hud.bind.idOf(&hud.actor.isStatic), 0, 0, pose.isStatic != 0);
+    auto put = [&](uint16_t index, float value) { hud.bind.write(state, index, value); };
+    put(kScColor0, pbr.base[0]);
+    put(kScColor1, pbr.base[1]);
+    put(kScColor2, pbr.base[2]);
+    put(kScRough, pbr.roughness);
+    put(kScMetal, pbr.metallic);
+    put(kScEmissive, pbr.emissive);
+    put(kScPos0, pose.pos[0]);
+    put(kScPos1, pose.pos[1]);
+    put(kScPos2, pose.pos[2]);
+    put(kScEuler0, pose.euler[0]);
+    put(kScEuler1, pose.euler[1]);
+    put(kScEuler2, pose.euler[2]);
+    put(kScScale0, pose.scale[0]);
+    put(kScScale1, pose.scale[1]);
+    put(kScScale2, pose.scale[2]);
+    if (kFlActorStatic < 64u) {
+        hud.block.flags[kFlActorStatic] = pose.isStatic;
+    }
+    uiBindCheck(state, hud.bind.idOf(kFlActorStatic, kBindFlag), 0, 0, pose.isStatic != 0);
     hud.actor.isStatic = pose.isStatic;
     hud.propStatic = pose.isStatic;
     hud.propLast[0] = pbr.base[0];
@@ -88,9 +91,9 @@ void pullProp(HudContext& hud, Canvas& canvas, uint8_t index) {
     hud.propLast[14] = pose.scale[2];
     float pivot[3]{};
     (void)sceneFrameActorPivot(hud.tool.scene, index, pivot);
-    put(hud.actor.pivot + 0, pivot[0]);
-    put(hud.actor.pivot + 1, pivot[1]);
-    put(hud.actor.pivot + 2, pivot[2]);
+    put(kScPivot0, pivot[0]);
+    put(kScPivot1, pivot[1]);
+    put(kScPivot2, pivot[2]);
     hud.propPivot[0] = pivot[0];
     hud.propPivot[1] = pivot[1];
     hud.propPivot[2] = pivot[2];
@@ -128,11 +131,6 @@ void syncProp(Engine& e, Canvas& canvas) {
     last[15] = e.hud.propPivot[0];
     last[16] = e.hud.propPivot[1];
     last[17] = e.hud.propPivot[2];
-    float* dst[18] = {
-        &actor.color[0], &actor.color[1], &actor.color[2], &actor.rough, &actor.metal, &actor.emissive,
-        &actor.pos[0], &actor.pos[1], &actor.pos[2], &actor.euler[0], &actor.euler[1], &actor.euler[2],
-        &actor.scale[0], &actor.scale[1], &actor.scale[2], &actor.pivot[0], &actor.pivot[1], &actor.pivot[2],
-    };
     const int base[4] = {6, 9, 12, 15};
     for (int row = 0; row < 4; ++row) {
         if (!uiPropLinked(state, e.hud.xformLock[row])) {
@@ -162,7 +160,7 @@ void syncProp(Engine& e, Canvas& canvas) {
                 next += newV - oldV;
             }
             cur[base[row] + axis] = next;
-            e.hud.bind.write(state, dst[base[row] + axis], next);
+            e.hud.bind.write(state, static_cast<uint16_t>(kScColor0 + base[row] + axis), next);
         }
     }
     bool pivotMoved = false;
@@ -187,9 +185,9 @@ void syncProp(Engine& e, Canvas& canvas) {
                 }
             }
             if (driftPivot) {
-                e.hud.bind.write(state, &actor.pivot[0], got[0]);
-                e.hud.bind.write(state, &actor.pivot[1], got[1]);
-                e.hud.bind.write(state, &actor.pivot[2], got[2]);
+                e.hud.bind.write(state, kScPivot0, got[0]);
+                e.hud.bind.write(state, kScPivot1, got[1]);
+                e.hud.bind.write(state, kScPivot2, got[2]);
                 for (int axis = 0; axis < 3; ++axis) {
                     e.hud.propPivot[axis] = got[axis];
                     cur[15 + axis] = got[axis];
@@ -249,15 +247,15 @@ void syncProp(Engine& e, Canvas& canvas) {
     if (!drift) {
         return;
     }
-    e.hud.bind.write(state, &actor.pos[0], pose.pos[0]);
-    e.hud.bind.write(state, &actor.pos[1], pose.pos[1]);
-    e.hud.bind.write(state, &actor.pos[2], pose.pos[2]);
-    e.hud.bind.write(state, &actor.euler[0], pose.euler[0]);
-    e.hud.bind.write(state, &actor.euler[1], pose.euler[1]);
-    e.hud.bind.write(state, &actor.euler[2], pose.euler[2]);
-    e.hud.bind.write(state, &actor.scale[0], pose.scale[0]);
-    e.hud.bind.write(state, &actor.scale[1], pose.scale[1]);
-    e.hud.bind.write(state, &actor.scale[2], pose.scale[2]);
+    e.hud.bind.write(state, kScPos0, pose.pos[0]);
+    e.hud.bind.write(state, kScPos1, pose.pos[1]);
+    e.hud.bind.write(state, kScPos2, pose.pos[2]);
+    e.hud.bind.write(state, kScEuler0, pose.euler[0]);
+    e.hud.bind.write(state, kScEuler1, pose.euler[1]);
+    e.hud.bind.write(state, kScEuler2, pose.euler[2]);
+    e.hud.bind.write(state, kScScale0, pose.scale[0]);
+    e.hud.bind.write(state, kScScale1, pose.scale[1]);
+    e.hud.bind.write(state, kScScale2, pose.scale[2]);
     for (int i = 0; i < 9; ++i) {
         e.hud.propLast[6 + i] = got[i];
     }

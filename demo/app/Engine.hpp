@@ -1,13 +1,12 @@
 #pragma once
 
-#include "app/Shell.hpp"
 #include "asset/ProjectDoc.hpp"
 #include "host/Host.hpp"
 #include "render/SceneFrame.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "host/PropBind.hpp"
 
-#include <deque>
+#include <vector>
 
 namespace burnhope {
 
@@ -20,14 +19,6 @@ struct StatsHit {
     uint8_t open = 0;
 };
 
-struct ModeHit {
-    Canvas* canvas = nullptr;
-    HudContext* hud = nullptr;
-    int index = 0;
-    uint16_t label = kUiNone;
-    uint16_t radio = kUiNone;
-};
-
 struct ToolHit {
     Canvas* canvas = nullptr;
     SceneFrame* scene = nullptr;
@@ -35,43 +26,13 @@ struct ToolHit {
     uint16_t propPage = kUiNone;
 };
 
-struct HudContext;
-
-struct GizmoHit {
-    ToolHit* tool = nullptr;
-    HudContext* hud = nullptr;
-    uint8_t mode = 0;
+struct MatLeaf {
+    char name[96]{};
+    char path[512]{};
 };
 
-struct SnapHit {
-    HudContext* hud = nullptr;
-    uint8_t channel = 0;
-    uint8_t index = 0;
-    float step = 1.0f;
-};
-
-struct SpawnHit {
-    HudContext* hud = nullptr;
-    uint8_t kind = 0;
-};
-
-struct ObjectHit {
-    Canvas* canvas = nullptr;
-    SceneFrame* scene = nullptr;
-    HudContext* hud = nullptr;
-    uint8_t index = 0;
-};
-
-struct FileAct {
-    Canvas* canvas = nullptr;
-    HudContext* hud = nullptr;
-    int kind = 0;
-};
-
-// Состояние HUD одного окна сцены. Кнопки держат указатели на элементы deque:
-// push_back их не сдвигает.
 struct HudIds {
-    uint16_t stat[40]{};
+    uint16_t statList = kUiNone;
     uint16_t statsLbl = kUiNone;
     uint16_t memLbl = kUiNone;
     uint16_t loadLbl = kUiNone;
@@ -129,20 +90,6 @@ struct HudFlags {
     float forceLod = -1.0f;
 };
 
-struct HudPick {
-    HudContext* hud = nullptr;
-    uint8_t kind = 0;
-    uint8_t value = 0;
-    const char* label = nullptr;
-};
-
-struct HudSwatch {
-    HudContext* hud = nullptr;
-    float* r = nullptr;
-    float* g = nullptr;
-    float* b = nullptr;
-};
-
 struct MatHit {
     HudContext* hud = nullptr;
     uint8_t kind = 0;
@@ -165,13 +112,7 @@ struct HudContext {
     float propPivot[3]{};
     ToolHit tool{};
     StatsHit stats{};
-    std::deque<ModeHit> modes;
-    std::deque<GizmoHit> gizmos;
-    std::deque<SnapHit> snaps;
-    std::deque<SpawnHit> spawns;
-    std::deque<ObjectHit> objects;
-    uint16_t toolBtn[5]{};
-    uint16_t toolIcon[5]{};
+    uint16_t viewRadio[20]{};
     uint16_t snapBtn[3]{};
     uint16_t snapIcon[3]{};
     uint16_t snapNum[3]{};
@@ -217,19 +158,13 @@ struct HudContext {
     float nearSent = 0.1f;
     float farSent = 8000.0f;
     float speedSent = 4.0f;
-    FileAct fileNew{};
-    FileAct fileOpen{};
-    FileAct fileSave{};
-    FileAct fileLoad{};
-    FileAct fileExit{};
     HudIds ids{};
     UiPropBinder bind{};
+    SceneBlock block{};
     HudPost post{};
     SceneTweaks tweaks{};
     HudFlags flags{};
     HudActor actor{};
-    std::deque<HudPick> picks;
-    std::deque<HudSwatch> swatches;
     uint16_t menuBtn[8]{};
     uint16_t diBody = kUiNone;
     uint16_t indBody = kUiNone;
@@ -245,10 +180,24 @@ struct HudContext {
     uint16_t wxBtn = kUiNone;
     uint8_t projectAsk = 0;
     uint8_t texAsk = 0;
+    uint8_t rootReady = 0;
     uint8_t matOpen = 0;
     uint8_t texLive = 0;
-    MatHit matHit[4]{};
-    uint16_t matTex[4]{};
+    MatHit matHit[8]{};
+    uint16_t matTex[8]{};
+    uint16_t matThumb[8]{};
+    uint16_t matClear[8]{};
+    uint16_t matDriven[8]{};
+    uint16_t matPreview = kUiNone;
+    float previewYaw = 0.55f;
+    float previewPitch = 0.35f;
+    float previewTint[3]{1.0f, 1.0f, 1.0f};
+    float previewPx = 0.0f;
+    float previewPy = 0.0f;
+    uint8_t previewDown = 0;
+    uint8_t previewDirty = 1;
+    uint8_t atlasDirty = 1;
+    uint8_t matListed = 0;
     MaterialInfo matDoc{};
     MaterialInfo matSent{};
     char matPath[512]{};
@@ -256,24 +205,19 @@ struct HudContext {
     BhmatDoc live{};
     BhmatDoc liveSent{};
     char livePath[512]{};
-    uint8_t liveDirty = 0;
     uint8_t liveActor = 0xff;
     float uvDeg = 0.0f;
-    uint16_t liveSlot[7]{};
     uint16_t livePick = kUiNone;
     uint16_t liveDrop = kUiNone;
-    uint16_t liveSave = kUiNone;
-    MatHit liveHit[7]{};
-    char matName[8][48]{};
-    char matFile[8][260]{};
-    uint8_t matListN = 0;
+    std::vector<MatLeaf> mats;
+    std::vector<uint8_t> previewBuf;
+    std::vector<uint8_t> atlasBuf;
 };
 
 struct Engine {
     Host host;
     ColorBook colors{};
     SceneFrame* scene = nullptr;
-    ShellDemo demo{};
     HudContext hud{};
 };
 

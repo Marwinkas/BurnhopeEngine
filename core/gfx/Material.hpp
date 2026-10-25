@@ -20,6 +20,7 @@ constexpr uint32_t kMatClearcoat = 64u;
 constexpr uint32_t kMatWorldAligned = 256u;
 constexpr uint32_t kMatFlipNormalY = 512u;
 constexpr uint32_t kMatUnlit = 1024u;
+constexpr uint32_t kMatClampUv = 2048u;
 
 struct alignas(16) MaterialGpuData {
     float baseColor[4]{1.0f, 1.0f, 1.0f, 1.0f};
@@ -94,12 +95,16 @@ struct BhmatDoc {
     char roughPath[260]{};
     char metalPath[260]{};
     char aoPath[260]{};
+    char heightPath[260]{};
+    char file[260]{};
+    float heightScale = 0.0f;
     uint8_t worldAligned = 0;
     uint8_t doubleSided = 0;
     uint8_t alphaCut = 0;
     uint8_t flipNormalY = 1;
     uint8_t unlit = 0;
-    uint8_t padDoc[3]{};
+    uint8_t repeat = 1;
+    uint8_t padDoc[2]{};
 };
 
 static_assert(std::is_trivially_copyable_v<BhmatDoc>);
@@ -200,7 +205,11 @@ inline void materialGpuFromDoc(MaterialGpuData& gpu, const BhmatDoc& doc) {
     if (doc.unlit != 0) {
         flags |= kMatUnlit;
     }
+    if (doc.repeat == 0) {
+        flags |= kMatClampUv;
+    }
     gpu.flags = flags;
+    std::memcpy(&gpu.tail[0], &doc.heightScale, sizeof(float));
 }
 
 inline void materialDocFromGpu(BhmatDoc& doc, const MaterialGpuData& gpu) {
@@ -236,6 +245,8 @@ inline void materialDocFromGpu(BhmatDoc& doc, const MaterialGpuData& gpu) {
     doc.worldAligned = (gpu.flags & kMatWorldAligned) != 0u ? 1u : 0u;
     doc.flipNormalY = (gpu.flags & kMatFlipNormalY) != 0u ? 1u : 0u;
     doc.unlit = (gpu.flags & kMatUnlit) != 0u ? 1u : 0u;
+    doc.repeat = (gpu.flags & kMatClampUv) != 0u ? 0u : 1u;
+    std::memcpy(&doc.heightScale, &gpu.tail[0], sizeof(float));
     if (doc.clearcoat <= 0.0f && (gpu.flags & kMatClearcoat) != 0u) {
         doc.clearcoat = 1.0f;
     }

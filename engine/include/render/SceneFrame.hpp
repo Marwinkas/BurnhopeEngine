@@ -4,6 +4,7 @@
 #include "gfx/Material.hpp"
 #include "gfx/Portal.hpp"
 #include "platform/Window.hpp"
+#include "render/SceneBlock.hpp"
 #include "rhi/DescriptorHeap.hpp"
 #include "rhi/Swapchain.hpp"
 #include "scene/FlyCam.hpp"
@@ -199,7 +200,68 @@ struct SceneTweaks {
     bool freeze = false;
 };
 
-void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks);
+[[nodiscard]] SceneTweaks sceneBlockTweaks(const SceneBlock& block);
+
+// One row turns one pass bit on when every gate matches. op 0 is equal, op 1 is not equal.
+// A flag of 0xFFFF skips that gate. Bits 20, 22 and 23 are kPassRestir, kPassFsr and kPassSharc.
+struct PassGate {
+    uint16_t flag = 0xFFFF;
+    uint8_t eq = 0;
+    uint8_t op = 0;
+};
+
+struct PassBit {
+    PassGate gate[4]{};
+    uint32_t bit = 0;
+};
+
+[[nodiscard]] inline uint32_t sceneBlockPassMask(const SceneBlock& block) {
+    constexpr PassGate none{0xFFFF, 0, 0};
+    constexpr PassBit table[] = {
+        {{{kFlCluster, 0, 1}, none, none, none}, 1u},
+        {{{kFlProbes, 0, 1}, none, none, none}, 2u},
+        {{{kFlGi, 3, 0}, none, none, none}, 262144u},
+        {{{kFlGi, 3, 0}, none, none, none}, 1u << 23},
+        {{{kFlAa, 3, 0}, none, none, none}, 1u << 22},
+        {{{kFlAa, 2, 0}, none, none, none}, 8u},
+        {{{kFlAo, 1, 0}, none, none, none}, 16u},
+        {{{kFlBloom, 0, 1}, none, none, none}, 32u},
+        {{{kFlAa, 1, 0}, none, none, none}, 4u},
+        {{{kFlSun, 0, 1}, none, none, none}, 256u},
+        {{{kFlPoints, 0, 1}, none, none, none}, 512u},
+        {{{kFlSpots, 0, 1}, none, none, none}, 65536u},
+        {{{kFlArea, 0, 1}, none, none, none}, 131072u},
+        {{{kFlSky, 0, 1}, none, none, none}, 1024u},
+        {{{kFlCloud, 0, 1}, none, none, none}, 2048u},
+        {{{kFlFog, 0, 1}, none, none, none}, 4096u},
+        {{{kFlReflect, 0, 1}, none, none, none}, 8192u},
+        {{{kFlContact, 0, 1}, none, none, none}, 16384u},
+        {{{kFlVt, 0, 1}, none, none, none}, 32768u},
+        {{{kFlDirect, 1, 0}, none, none, none}, 1u << 20},
+        {{{kFlDirect, 1, 0}, {kFlRestirSun, 0, 1}, {kFlSunCsm, 0, 0}, {kFlSun, 0, 1}}, 1u << 21},
+    };
+    uint32_t mask = 0;
+    for (const PassBit& row : table) {
+        bool on = true;
+        for (const PassGate& gate : row.gate) {
+            if (gate.flag == 0xFFFF) {
+                continue;
+            }
+            const uint8_t value = sceneBlockFlag(block, gate.flag);
+            const bool match = gate.op == 0 ? value == gate.eq : value != gate.eq;
+            if (!match) {
+                on = false;
+                break;
+            }
+        }
+        if (on) {
+            mask |= row.bit;
+        }
+    }
+    return mask;
+}
+
+void sceneFrameSetBlock(SceneFrame* scene, const SceneBlock& block);
 void sceneFrameWeatherPreset(SceneFrame* scene, uint32_t preset);
 [[nodiscard]] float sceneFrameWeatherTime(const SceneFrame* scene);
 [[nodiscard]] float sceneFrameWeatherZenith(const SceneFrame* scene);
@@ -250,7 +312,7 @@ struct HudPost {
     float vibrance = 1.0f;
 };
 
-void sceneFrameTune(SceneFrame* scene, const HudPost& post);
+[[nodiscard]] HudPost sceneBlockPost(const SceneBlock& block);
 void sceneFrameSetDecals(SceneFrame* scene, const DecalGpu* decals, uint32_t count);
 void sceneFrameSetSectors(SceneFrame* scene, const Sector* sectors, uint32_t sectorCount, const Portal* portals, uint32_t portalCount);
 // Сабмит сборки BLAS, если она уже записана. Звать после present, не из записи кадра.

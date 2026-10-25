@@ -297,4 +297,101 @@ bool imagePackOrm(const char* aoPath, const char* roughPath, const char* metalPa
     return wrote != 0;
 }
 
+namespace {
+
+uint8_t mapPeak(const ImageCpu* img, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint8_t fallback) {
+    if (img == nullptr || img->rgba == nullptr || img->width == 0 || img->height == 0 || w == 0 || h == 0) {
+        return fallback;
+    }
+    const uint32_t sx = x * img->width / w;
+    const uint32_t sy = y * img->height / h;
+    const uint32_t cx = sx < img->width ? sx : img->width - 1u;
+    const uint32_t cy = sy < img->height ? sy : img->height - 1u;
+    const uint8_t* p = img->rgba + (static_cast<size_t>(cy) * img->width + cx) * 4u;
+    uint8_t peak = p[0];
+    if (p[1] > peak) {
+        peak = p[1];
+    }
+    if (p[2] > peak) {
+        peak = p[2];
+    }
+    return peak;
+}
+
+void mapSize(const ImageCpu& img, uint32_t& w, uint32_t& h) {
+    if (img.rgba == nullptr || img.width == 0 || img.height == 0) {
+        return;
+    }
+    if (w == 0 || img.width < w) {
+        w = img.width;
+    }
+    if (h == 0 || img.height < h) {
+        h = img.height;
+    }
+}
+
+} // namespace
+
+bool imagePackOrmh(
+    const char* aoPath,
+    const char* roughPath,
+    const char* metalPath,
+    const char* heightPath,
+    const char* outPath) {
+    if (outPath == nullptr || outPath[0] == '\0') {
+        return false;
+    }
+    const char* paths[4] = {aoPath, roughPath, metalPath, heightPath};
+    ImageCpu img[4]{};
+    uint32_t live = 0;
+    for (uint32_t i = 0; i < 4u; ++i) {
+        if (paths[i] != nullptr && paths[i][0] != '\0' && imageLoadFile(img[i], paths[i]) && img[i].rgba != nullptr) {
+            live += 1u;
+        }
+    }
+    if (live == 0u) {
+        for (ImageCpu& one : img) {
+            imageCpuFree(one);
+        }
+        return false;
+    }
+    uint32_t w = 0;
+    uint32_t h = 0;
+    for (const ImageCpu& one : img) {
+        if (w == 0 && one.rgba != nullptr) {
+            w = one.width;
+            h = one.height;
+        }
+        mapSize(one, w, h);
+    }
+    if (w == 0 || h == 0 || w > 4096u || h > 4096u) {
+        for (ImageCpu& one : img) {
+            imageCpuFree(one);
+        }
+        return false;
+    }
+    uint8_t* packed = static_cast<uint8_t*>(std::malloc(static_cast<size_t>(w) * h * 4u));
+    if (packed == nullptr) {
+        for (ImageCpu& one : img) {
+            imageCpuFree(one);
+        }
+        return false;
+    }
+    const uint8_t fallback[4] = {255, 128, 0, 255};
+    for (uint32_t y = 0; y < h; ++y) {
+        for (uint32_t x = 0; x < w; ++x) {
+            uint8_t* dst = packed + (static_cast<size_t>(y) * w + x) * 4u;
+            for (uint32_t c = 0; c < 4u; ++c) {
+                dst[c] = mapPeak(img[c].rgba != nullptr ? &img[c] : nullptr, x, y, w, h, fallback[c]);
+            }
+        }
+    }
+    const int wrote = stbi_write_png(outPath, static_cast<int>(w), static_cast<int>(h), 4, packed, static_cast<int>(w * 4u));
+    std::free(packed);
+    for (ImageCpu& one : img) {
+        imageCpuFree(one);
+    }
+    return wrote != 0;
+}
+
 } // namespace burnhope

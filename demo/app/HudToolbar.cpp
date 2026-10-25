@@ -2,30 +2,11 @@
 
 #include "app/HudBuild.hpp"
 #include "files/Browser.hpp"
-#include "files/FileDomain.hpp"
-#include "gpu_scene/SceneObject.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
 #include "ui/Canvas.hpp"
-#include "ui/Panel.hpp"
-#include "ui/Text.hpp"
-#include "ui/UiPhoto.hpp"
-#include "ui/widget/Button.hpp"
-#include "ui/widget/Chrome.hpp"
-#include "ui/widget/ColorPicker.hpp"
-#include "ui/widget/Field.hpp"
-#include "host/PropGrid.hpp"
-#include "ui/widget/Menu.hpp"
-#include "ui/widget/Scroll.hpp"
-#include "ui/widget/Slider.hpp"
-#include "ui/widget/Splitter.hpp"
-#include "ui/widget/Label.hpp"
-#include "ui/widget/TreeView.hpp"
-#include "Str.hpp"
-
-#include <cmath>
-#include <cstdio>
-#include <cstring>
+#include "ui/Style.hpp"
+#include "ui/widget/Choice.hpp"
 
 namespace burnhope {
 
@@ -35,119 +16,104 @@ void sceneHud(Canvas& canvas, void* user) {
     if (hud == nullptr || (!haveFont && !fontBesideExe(canvas) && !canvasUseFont(canvas, 20.0f)) || canvas.state == nullptr) {
         return;
     }
-    hud->modes.clear();
-    hud->gizmos.clear();
-    hud->snaps.clear();
-    hud->objects.clear();
     hud->shown = 0xff;
     hud->tool = {};
     hud->tool.canvas = &canvas;
     hud->tool.scene = hud->scene;
     hud->stats = {};
+    for (uint16_t& radio : hud->viewRadio) {
+        radio = kUiNone;
+    }
     filesLoadIcons(canvas);
     canvasSetLook(canvas, uiLookInk());
-    const UiLook look = canvasLook(canvas);
-    auto hiddenPaint = []() {
-        UiPaint paint{};
-        paint.a = 0.0f;
-        return paint;
-    };
-    auto dockPaint = [&]() {
-        UiPaint paint = paintToken(look, UiToken::Content, 0.0f);
-        paint.a = 0.94f;
-        paint.borderW = 0.0f;
-        return paint;
-    };
-    UiFlex rootFlex{};
-    rootFlex.grow = 1.0f;
-    rootFlex.direction = UiFlexDir::Column;
-    rootFlex.widthMode = UiSize::Percent;
-    rootFlex.width = 100.0f;
-    rootFlex.heightMode = UiSize::Percent;
-    rootFlex.height = 100.0f;
-    const uint16_t root = uiPanel(*canvas.state, kUiNone, rootFlex, hiddenPaint());
-    UiFlex menuFlex{};
-    menuFlex.direction = UiFlexDir::Row;
-    menuFlex.heightMode = UiSize::Px;
-    menuFlex.height = 32.0f;
-    menuFlex.minH = 32.0f;
-    menuFlex.shrink = 0.0f;
-    menuFlex.align = UiAlign::Center;
-    menuFlex.padL = 8.0f;
-    menuFlex.padR = 8.0f;
-    menuFlex.gap = 4.0f;
-    const uint16_t menuBar = uiPanel(*canvas.state, root, menuFlex, dockPaint());
-    uint16_t fileBtn = uiButton(*canvas.state, menuBar, { .label = "File" });
-    uiSetHeight(*canvas.state, fileBtn, 26.0f);
-    uint16_t fileMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
-    if (canvas.state) {
-        uiSetContextMenu(*canvas.state, fileBtn, fileMenu);
-        uiMarkMenuBar(*canvas.state, fileBtn);
-    }
-    auto fileAct = [](void* actUser, uint16_t) {
-        projectOnFile(static_cast<FileAct*>(actUser));
-    };
-    hud->fileNew = {&canvas, hud, 0};
-    hud->fileOpen = {&canvas, hud, 1};
-    hud->fileSave = {&canvas, hud, 2};
-    hud->fileExit = {&canvas, hud, 3};
-    hud->fileLoad = {&canvas, hud, 4};
-    if (canvas.state != nullptr) {
-        (void)uiCommandAddTo(*canvas.state, fileMenu, "New Project...", fileAct, &hud->fileNew);
-        (void)uiCommandAddTo(*canvas.state, fileMenu, "Open Project...", fileAct, &hud->fileOpen);
-        (void)uiCommandAddTo(*canvas.state, fileMenu, "Save Scene", fileAct, &hud->fileSave);
-        (void)uiCommandAddTo(*canvas.state, fileMenu, "Load Scene", fileAct, &hud->fileLoad);
-        (void)uiCommandAddTo(*canvas.state, fileMenu, "Exit", fileAct, &hud->fileExit);
-    }
-    uint16_t editBtn = uiButton(*canvas.state, menuBar, { .label = "Edit" });
-    uiSetHeight(*canvas.state, editBtn, 26.0f);
-    uint16_t editMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
-    if (canvas.state != nullptr) {
-        uiSetContextMenu(*canvas.state, editBtn, editMenu);
-        uiMarkMenuBar(*canvas.state, editBtn);
-        (void)uiCommandAddTo(*canvas.state, editMenu, "Duplicate", onDuplicateCmd, hud);
-    }
-    uint16_t viewMenuBtn = uiButton(*canvas.state, menuBar, { .label = "View" });
-    uiSetHeight(*canvas.state, viewMenuBtn, 26.0f);
-    uint16_t appViewMenu = canvas.state != nullptr ? uiMakeMenu(*canvas.state) : kUiNone;
-    if (canvas.state != nullptr) {
-        uiSetContextMenu(*canvas.state, viewMenuBtn, appViewMenu);
-        uiMarkMenuBar(*canvas.state, viewMenuBtn);
-        (void)uiCommandAddTo(*canvas.state, appViewMenu, "Stats", onStatsCmd, &hud->stats);
-    }
-    UiFlex rowFlex{};
-    rowFlex.direction = UiFlexDir::Row;
-    rowFlex.grow = 1.0f;
-    rowFlex.shrink = 1.0f;
-    rowFlex.minH = 72.0f;
-    const uint16_t row = uiPanel(*canvas.state, root, rowFlex, hiddenPaint());
-    UiFlex viewColFlex{};
-    viewColFlex.direction = UiFlexDir::Column;
-    viewColFlex.grow = 1.0f;
-    viewColFlex.shrink = 1.0f;
-    viewColFlex.minW = 0.0f;
-    const uint16_t viewCol = uiPanel(*canvas.state, row, viewColFlex, hiddenPaint());
     (void)loadToolIcon(canvas, 2, "SelectMode.png");
     (void)loadToolIcon(canvas, 3, "MoveMode.png");
     (void)loadToolIcon(canvas, 4, "RotateMode.png");
     (void)loadToolIcon(canvas, 5, "ScallingMode.png");
     (void)loadToolIcon(canvas, 6, "Camera.png");
     (void)loadToolIcon(canvas, 7, "Snap.png");
-    UiFlex toolFlex{};
-    toolFlex.direction = UiFlexDir::Row;
-    toolFlex.heightMode = UiSize::Px;
-    toolFlex.height = 36.0f;
-    toolFlex.minH = 36.0f;
-    toolFlex.shrink = 0.0f;
-    toolFlex.align = UiAlign::Center;
-    toolFlex.padL = 6.0f;
-    toolFlex.padR = 6.0f;
-    toolFlex.padT = 4.0f;
-    toolFlex.padB = 4.0f;
-    toolFlex.gap = 6.0f;
-    const uint16_t toolbar = uiPanel(*canvas.state, viewCol, toolFlex, dockPaint());
-    hudBuildStrip(canvas, hud, toolbar, root, look);
-    hudBuildView(canvas, hud, root, row, viewCol, look);
+    UiPaint hidden{};
+    hidden.a = 0.0f;
+    hud->bind.attach(hud->block.scalars, 256, hud->block.flags, 64);
+    hud->bind.clear();
+    uint16_t details = kUiNone;
+    uint16_t statsBody = kUiNone;
+    uint16_t files = kUiNone;
+    uint16_t detailsInner = kUiNone;
+    const PropSlot slots[] = {
+        {"toolBar", &hud->toolBar},
+        {"spawnBtn", &hud->spawnBtn},
+        {"snapBtn0", &hud->snapBtn[0]}, {"snapIcon0", &hud->snapIcon[0]}, {"snapNum0", &hud->snapNum[0]},
+        {"snapBtn1", &hud->snapBtn[1]}, {"snapIcon1", &hud->snapIcon[1]}, {"snapNum1", &hud->snapNum[1]},
+        {"snapBtn2", &hud->snapBtn[2]}, {"snapIcon2", &hud->snapIcon[2]}, {"snapNum2", &hud->snapNum[2]},
+        {"playBtn", &hud->playBtn}, {"playGlyph", &hud->playGlyph}, {"pauseBtn", &hud->pauseBtn},
+        {"camBtn", &hud->camBtn}, {"viewBtn", &hud->viewBtn}, {"gearBtn", &hud->gearBtn},
+        {"viewPanel", &hud->viewPanel}, {"camPanel", &hud->camPanel}, {"statsPanel", &hud->statsPanel},
+        {"view0", &hud->viewRadio[0]}, {"view1", &hud->viewRadio[1]}, {"view2", &hud->viewRadio[2]},
+        {"view4", &hud->viewRadio[4]}, {"view5", &hud->viewRadio[5]}, {"view6", &hud->viewRadio[6]},
+        {"view7", &hud->viewRadio[7]}, {"view8", &hud->viewRadio[8]}, {"view9", &hud->viewRadio[9]},
+        {"view10", &hud->viewRadio[10]}, {"view11", &hud->viewRadio[11]}, {"view12", &hud->viewRadio[12]},
+        {"view13", &hud->viewRadio[13]}, {"view14", &hud->viewRadio[14]}, {"view15", &hud->viewRadio[15]},
+        {"view16", &hud->viewRadio[16]}, {"view17", &hud->viewRadio[17]}, {"view18", &hud->viewRadio[18]},
+        {"view19", &hud->viewRadio[19]},
+        {"stat0", &hud->statCheck[0]}, {"stat1", &hud->statCheck[1]}, {"stat2", &hud->statCheck[2]},
+        {"stat3", &hud->statCheck[3]}, {"stat4", &hud->statCheck[4]}, {"stat5", &hud->statCheck[5]},
+        {"statLine0", &hud->statLine[0]}, {"statLine1", &hud->statLine[1]}, {"statLine2", &hud->statLine[2]},
+        {"statLine3", &hud->statLine[3]}, {"statLine4", &hud->statLine[4]}, {"statLine5", &hud->statLine[5]},
+        {"overlay", &hud->overlay}, {"viewPane", &hud->viewPane},
+        {"camFov", &hud->camFov}, {"camFovNum", &hud->camFovNum},
+        {"camNear", &hud->camNear}, {"camFar", &hud->camFar}, {"camSpeed", &hud->camSpeed},
+        {"camProj0", &hud->camProj[0]}, {"camProj1", &hud->camProj[1]},
+        {"camAxis0", &hud->camAxis[0]}, {"camAxis1", &hud->camAxis[1]}, {"camAxis2", &hud->camAxis[2]},
+        {"camAxis3", &hud->camAxis[3]}, {"camAxis4", &hud->camAxis[4]}, {"camAxis5", &hud->camAxis[5]},
+        {"actors", &hud->tool.objects}, {"propPage", &hud->tool.propPage},
+        {"statsPage", &hud->stats.page}, {"dock", &hud->stats.dock},
+        {"details", &details}, {"statsBody", &statsBody}, {"files", &files}, {"detailsInner", &detailsInner},
+    };
+    const PropCommand commands[] = {
+        {"file.new", cmdFileNew, hud},
+        {"file.open", cmdFileOpen, hud},
+        {"file.save", cmdFileSave, hud},
+        {"file.load", cmdFileLoad, hud},
+        {"file.exit", cmdFileExit, hud},
+        {"scene.duplicate", onDuplicateCmd, hud},
+        {"view.stats", onStatsCmd, &hud->stats},
+        {"scene.spawn", cmdSpawn, hud},
+        {"gizmo.mode", cmdGizmo, hud},
+        {"gizmo.space", cmdSpace, hud},
+        {"gizmo.pivot", cmdPivot, hud},
+        {"snap.toggle", cmdSnapToggle, hud},
+        {"snap.move", cmdSnapMove, hud},
+        {"snap.turn", cmdSnapTurn, hud},
+        {"snap.scale", cmdSnapScale, hud},
+        {"scene.play", onPlay, hud},
+        {"scene.pause", onPause, hud},
+        {"camera.open", onCameraButton, hud},
+        {"view.open", onViewButton, hud},
+        {"view.set", cmdView, hud},
+        {"view.gear", onGear, hud},
+    };
+    for (const PropSlot& slot : slots) {
+        if (slot.id != nullptr) {
+            *slot.id = kUiNone;
+        }
+    }
+    (void)hudImportLayout(*canvas.state, kUiNone, "assets/ui/editor.json", "frame", *hud, slots,
+        static_cast<uint16_t>(sizeof slots / sizeof slots[0]), commands,
+        static_cast<uint16_t>(sizeof commands / sizeof commands[0]), hidden);
+    const uint16_t spaceId = uiFindName(*canvas.state, "spaceChoice");
+    if (spaceId < canvas.state->count) {
+        if (auto* space = canvas.state->ent[spaceId].try_get<UiChoice>()) {
+            uiBindChoice(*canvas.state, "spaceChoice", hud->space, space->onPick, space->user);
+        }
+    }
+    const uint16_t pivotId = uiFindName(*canvas.state, "pivotChoice");
+    if (pivotId < canvas.state->count) {
+        if (auto* pivot = canvas.state->ent[pivotId].try_get<UiChoice>()) {
+            uiBindChoice(*canvas.state, "pivotChoice", hud->pivotSpace, pivot->onPick, pivot->user);
+        }
+    }
+    hudWire(canvas, hud, details, statsBody, files, detailsInner);
 }
 
 } // namespace burnhope

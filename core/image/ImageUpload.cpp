@@ -506,6 +506,16 @@ bool gpuImageUploadRgba(
     return submitImage(img, d, format, packed.data(), packed.size(), levels, mips);
 }
 
+bool gpuImageUploadRgba8(GpuImage& img, Device& d, const uint8_t* rgba, uint32_t width, uint32_t height, bool srgb) {
+    if (rgba == nullptr || width == 0 || height == 0 || d.device == VK_NULL_HANDLE) {
+        return false;
+    }
+    gpuImageDestroy(img, d);
+    const VkFormat format = srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+    const ImageMip level{width, height, 0, static_cast<uint64_t>(width) * height * 4u};
+    return submitImage(img, d, format, rgba, level.bytes, &level, 1);
+}
+
 bool imageUploadUncompressed(GpuImage& img, Device& d, const uint8_t* rgba, uint32_t width, uint32_t height) {
     if (rgba == nullptr || width == 0 || height == 0 || d.device == VK_NULL_HANDLE) {
         return false;

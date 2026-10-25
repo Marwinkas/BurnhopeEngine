@@ -34,7 +34,7 @@ struct alignas(16) FileTheme {
 static_assert(std::is_trivially_copyable_v<FileTheme>);
 static_assert(sizeof(FileTheme) % 16 == 0);
 static_assert(kUiDescPhoto == 662);
-static_assert(kUiDescPhoto + 1 <= 669);
+static_assert(kUiDescPhoto + kPhotoSlots <= 810u);
 
 inline uint8_t filePhotoIndex(uint32_t heapSlot) {
     if (heapSlot < kUiDescPhoto || heapSlot >= kUiDescPhoto + kPhotoSlots) {

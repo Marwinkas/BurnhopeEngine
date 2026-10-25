@@ -11,35 +11,72 @@
 
 namespace burnhope {
 
-void UiPropBinder::clear() {
-    nFloats = 0;
-    nBools = 0;
-    nBits = 0;
-    nSwatches = 0;
+void UiPropBinder::attach(float* scalarBase, uint16_t scalarCount, uint8_t* flagBase, uint16_t flagCount) {
+    scalars = scalarBase;
+    flags = flagBase;
+    scalarN = scalarCount;
+    flagN = flagCount;
 }
 
-void UiPropBinder::watch(uint16_t id, float* dst, float fallback) {
-    if (dst == nullptr) {
+void UiPropBinder::clear() {
+    rows.clear();
+    shown.clear();
+    menus.clear();
+    commands.clear();
+}
+
+void UiPropBinder::show(uint16_t node, uint16_t flag, uint8_t value, uint8_t op) {
+    if (node == kUiNone) {
         return;
     }
-    *dst = fallback;
-    if (nFloats < kFloats) {
-        floats[nFloats++] = {id, dst, fallback};
+    shown.push_back(UiShowRule{.node = node, .flag = flag, .value = value, .op = op});
+}
+
+void propApplyShow(UiState& state, const UiPropBinder& bind) {
+    for (const UiShowRule& rule : bind.shown) {
+        const uint8_t flag = bind.flags != nullptr && rule.flag < bind.flagN ? bind.flags[rule.flag] : 0;
+        const bool on = rule.op == 0 ? flag == rule.value : flag != rule.value;
+        uiShow(state, rule.node, on);
     }
 }
 
-uint16_t UiPropBinder::slideStep(UiState& s, uint16_t panel, const char* label, float* dst, float def, float minV, float maxV, float step) {
-    if (dst != nullptr) {
-        *dst = def;
+void onBinderMenu(void* user, uint16_t) {
+    auto* pick = static_cast<UiMenuPick*>(user);
+    if (pick == nullptr || pick->bind == nullptr) {
+        return;
+    }
+    if (pick->bind->flags != nullptr && pick->index < pick->bind->flagN) {
+        pick->bind->flags[pick->index] = pick->value;
+    }
+    if (pick->onFlag != nullptr) {
+        pick->onFlag(pick->user, pick->index, pick->value, pick->button, pick->label);
+    }
+}
+
+void onBinderCommand(void* user, uint16_t) {
+    auto* pick = static_cast<UiCommandPick*>(user);
+    if (pick != nullptr && pick->fn != nullptr) {
+        pick->fn(pick->user, pick->arg);
+    }
+}
+
+void UiPropBinder::watch(uint16_t id, uint16_t index, float fallback) {
+    if (scalars != nullptr && index < scalarN) {
+        scalars[index] = fallback;
+    }
+    rows.push_back(UiBind{.id = id, .index = index, .kind = kBindFloat, .fallback = fallback});
+}
+
+uint16_t UiPropBinder::slideStep(UiState& s, uint16_t panel, const char* label, uint16_t index, float def, float minV, float maxV, float step) {
+    if (scalars != nullptr && index < scalarN) {
+        scalars[index] = def;
     }
     const uint16_t id = uiPropNumber(s, panel, label, def, minV, maxV, step);
-    if (dst != nullptr && nFloats < kFloats) {
-        floats[nFloats++] = {id, dst, def};
-    }
+    rows.push_back(UiBind{.id = id, .index = index, .kind = kBindFloat, .fallback = def});
     return id;
 }
 
-uint16_t UiPropBinder::slide(UiState& s, uint16_t panel, const char* label, float* dst, float def, float minV, float maxV) {
+uint16_t UiPropBinder::slide(UiState& s, uint16_t panel, const char* label, uint16_t index, float def, float minV, float maxV) {
     const float span = maxV - minV;
     float step = 0.01f;
     if (span > 40.0f) {
@@ -47,7 +84,7 @@ uint16_t UiPropBinder::slide(UiState& s, uint16_t panel, const char* label, floa
     } else if (span > 4.0f) {
         step = 0.1f;
     }
-    return slideStep(s, panel, label, dst, def, minV, maxV, step);
+    return slideStep(s, panel, label, index, def, minV, maxV, step);
 }
 
 void UiPropBinder::slides(UiState& s, uint16_t panel, const UiSlideSpec* spec, uint16_t count) {
@@ -55,93 +92,68 @@ void UiPropBinder::slides(UiState& s, uint16_t panel, const UiSlideSpec* spec, u
         return;
     }
     for (uint16_t i = 0; i < count; ++i) {
-        slide(s, panel, spec[i].label, spec[i].dst, spec[i].def, spec[i].minV, spec[i].maxV);
+        slide(s, panel, spec[i].label, spec[i].index, spec[i].def, spec[i].minV, spec[i].maxV);
     }
 }
 
-uint16_t UiPropBinder::check(UiState& s, uint16_t panel, const char* label, uint8_t* dst, bool def) {
-    if (dst != nullptr) {
-        *dst = def ? 1 : 0;
+uint16_t UiPropBinder::check(UiState& s, uint16_t panel, const char* label, uint16_t index, bool def) {
+    if (flags != nullptr && index < flagN) {
+        flags[index] = def ? 1u : 0u;
     }
     const uint16_t id = uiPropCheck(s, panel, label, 0, 0, def);
-    if (dst != nullptr && nBools < kBools) {
-        bools[nBools++] = {id, dst, static_cast<uint8_t>(def ? 1 : 0)};
-    }
+    rows.push_back(UiBind{.id = id, .index = index, .kind = kBindFlag, .fallback = def ? 1.0f : 0.0f});
     return id;
 }
 
-uint16_t UiPropBinder::check(UiState& s, uint16_t panel, const char* label, bool* dst, bool def) {
-    if (dst != nullptr) {
-        *dst = def;
-    }
-    const uint16_t id = uiPropCheck(s, panel, label, 0, 0, def);
-    if (dst != nullptr && nBits < kBools) {
-        bits[nBits++] = {id, dst, static_cast<uint8_t>(def ? 1 : 0)};
-    }
-    return id;
-}
-
-uint16_t UiPropBinder::swatch(UiState& s, uint16_t panel, const char* label, float* r, float* g, float* b, float r0, float g0, float b0) {
-    if (r != nullptr) {
-        *r = r0;
-    }
-    if (g != nullptr) {
-        *g = g0;
-    }
-    if (b != nullptr) {
-        *b = b0;
+uint16_t UiPropBinder::swatch(UiState& s, uint16_t panel, const char* label, uint16_t index, float r0, float g0, float b0) {
+    if (scalars != nullptr && static_cast<uint32_t>(index) + 2u < scalarN) {
+        scalars[index] = r0;
+        scalars[static_cast<uint16_t>(index + 1u)] = g0;
+        scalars[static_cast<uint16_t>(index + 2u)] = b0;
     }
     const uint16_t id = uiPropSwatch(s, panel, label, r0, g0, b0);
-    if (nSwatches < kSwatches) {
-        swatches[nSwatches++] = {id, r, g, b};
-    }
+    rows.push_back(UiBind{.id = id, .index = index, .kind = kBindSwatch, .fallback = r0});
     return id;
 }
 
 void UiPropBinder::sync(const UiState& s) const {
-    for (uint16_t i = 0; i < nFloats; ++i) {
-        float value = floats[i].fallback;
-        float minV = 0.0f;
-        float maxV = 1.0f;
-        if (floats[i].dst != nullptr && uiRange(s, floats[i].id, value, minV, maxV)) {
-            *floats[i].dst = value;
-        }
-    }
-    for (uint16_t i = 0; i < nBools; ++i) {
-        if (bools[i].dst == nullptr) {
+    for (const UiBind& row : rows) {
+        if (row.kind == kBindFloat) {
+            if (scalars == nullptr || row.index >= scalarN) {
+                continue;
+            }
+            float value = row.fallback;
+            float minV = 0.0f;
+            float maxV = 1.0f;
+            if (uiRange(s, row.id, value, minV, maxV)) {
+                scalars[row.index] = value;
+            }
             continue;
         }
-        const int on = uiCheckOn(s, bools[i].id);
-        *bools[i].dst = on < 0 ? bools[i].fallback : static_cast<uint8_t>(on != 0);
-    }
-    for (uint16_t i = 0; i < nBits; ++i) {
-        if (bits[i].dst == nullptr) {
+        if (row.kind != kBindFlag || flags == nullptr || row.index >= flagN) {
             continue;
         }
-        const int on = uiCheckOn(s, bits[i].id);
-        *bits[i].dst = on < 0 ? bits[i].fallback != 0 : on != 0;
+        const int on = uiCheckOn(s, row.id);
+        flags[row.index] = on < 0 ? static_cast<uint8_t>(row.fallback != 0.0f) : static_cast<uint8_t>(on != 0);
     }
 }
 
-void binderOnColor(void* user, UiState& s, uint16_t anchor, float r, float g, float b) {
+static void binderOnColor(void* user, UiState& s, uint16_t anchor, float r, float g, float b) {
     auto* binder = static_cast<UiPropBinder*>(user);
-    if (binder == nullptr || anchor == kUiNone) {
+    if (binder == nullptr || anchor == kUiNone || binder->scalars == nullptr) {
         return;
     }
-    for (uint16_t i = 0; i < binder->nSwatches; ++i) {
-        if (binder->swatches[i].id != anchor) {
+    for (const UiBind& row : binder->rows) {
+        if (row.kind != kBindSwatch || row.id != anchor) {
             continue;
         }
-        if (binder->swatches[i].r != nullptr) {
-            *binder->swatches[i].r = r;
+        if (static_cast<uint32_t>(row.index) + 2u >= binder->scalarN) {
+            continue;
         }
-        if (binder->swatches[i].g != nullptr) {
-            *binder->swatches[i].g = g;
-        }
-        if (binder->swatches[i].b != nullptr) {
-            *binder->swatches[i].b = b;
-        }
-        uiPaintRgb(s, binder->swatches[i].id, r, g, b);
+        binder->scalars[row.index] = r;
+        binder->scalars[static_cast<uint16_t>(row.index + 1u)] = g;
+        binder->scalars[static_cast<uint16_t>(row.index + 2u)] = b;
+        uiPaintRgb(s, row.id, r, g, b);
     }
 }
 
@@ -154,15 +166,14 @@ void UiPropBinder::syncSwatches(UiState& s) {
     picker->colorUser = this;
 }
 
-void UiPropBinder::write(UiState& s, float* dst, float value) const {
-    if (dst == nullptr) {
-        return;
-    }
-    const uint16_t id = idOf(dst);
+void UiPropBinder::write(UiState& s, uint16_t index, float value) const {
+    const uint16_t id = idOf(index, kBindFloat);
     if (id != kUiNone && id < s.count && (s.capture == id || s.focused == id)) {
         return;
     }
-    *dst = value;
+    if (scalars != nullptr && index < scalarN) {
+        scalars[index] = value;
+    }
     if (id == kUiNone || id >= s.count) {
         return;
     }
@@ -177,19 +188,10 @@ void UiPropBinder::write(UiState& s, float* dst, float value) const {
     uiNotifyVisualDirty(s);
 }
 
-uint16_t UiPropBinder::idOf(const float* dst) const {
-    for (uint16_t i = 0; i < nFloats; ++i) {
-        if (floats[i].dst == dst) {
-            return floats[i].id;
-        }
-    }
-    return kUiNone;
-}
-
-uint16_t UiPropBinder::idOf(const uint8_t* dst) const {
-    for (uint16_t i = 0; i < nBools; ++i) {
-        if (bools[i].dst == dst) {
-            return bools[i].id;
+uint16_t UiPropBinder::idOf(uint16_t index, uint8_t kind) const {
+    for (const UiBind& row : rows) {
+        if (row.kind == kind && row.index == index) {
+            return row.id;
         }
     }
     return kUiNone;

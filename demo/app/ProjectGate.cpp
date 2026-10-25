@@ -3,10 +3,8 @@
 
 #include "asset/AssimpImporter.hpp"
 #include "asset/ProjectDoc.hpp"
-#include "files/Browser.hpp"
 #include "platform/Window.hpp"
 #include "render/SceneFrame.hpp"
-#include "ui/Canvas.hpp"
 #include "Str.hpp"
 
 #include <spdlog/spdlog.h>
@@ -178,6 +176,7 @@ void takeProject(Engine& e, const char* folder, uint8_t ask) {
         return;
     }
     copyRoot(e.hud.projectRoot, sizeof(e.hud.projectRoot), folder);
+    e.hud.matListed = 0;
     char proj[512]{};
     std::snprintf(proj, sizeof(proj), "%s/project.proj", folder);
     ProjectInfo info{};
@@ -207,40 +206,42 @@ void takeProject(Engine& e, const char* folder, uint8_t ask) {
         writeEmptyScene(e.hud);
         sceneFrameBlank(e.hud.scene);
     }
-    if (e.hud.slot >= 0 && e.hud.projectRoot[0] != '\0') {
-        Canvas* canvas = hostCanvas(e.host, e.hud.slot);
-        if (canvas != nullptr && canvas->state != nullptr) {
-            filesRoot(*canvas->state, e.hud.projectRoot);
-        }
-    }
+    e.hud.rootReady = 1;
 }
 
 } // namespace
 
-void projectOnFile(FileAct* hit) {
-    if (hit == nullptr || hit->hud == nullptr) {
+void cmdFile(void* user, uint16_t kind) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr) {
         return;
     }
-    if (hit->kind == 3) {
+    if (kind == 3) {
         std::exit(0);
     }
-    if (hit->kind == 2) {
-        if (hit->hud->projectRoot[0] == '\0') {
-            hit->hud->projectAsk = 3;
-            (void)askFolder(*hit->hud);
+    if (kind == 2) {
+        if (hud->projectRoot[0] == '\0') {
+            hud->projectAsk = 3;
+            (void)askFolder(*hud);
             return;
         }
-        saveScene(*hit->hud);
+        saveScene(*hud);
         return;
     }
-    if (hit->kind == 4) {
-        hit->hud->projectAsk = 4;
-        (void)askSceneFile(*hit->hud);
+    if (kind == 4) {
+        hud->projectAsk = 4;
+        (void)askSceneFile(*hud);
         return;
     }
-    hit->hud->projectAsk = hit->kind == 0 ? 1 : 2;
-    (void)askFolder(*hit->hud);
+    hud->projectAsk = kind == 0 ? 1 : 2;
+    (void)askFolder(*hud);
 }
+
+void cmdFileNew(void* user, uint16_t) { cmdFile(user, 0); }
+void cmdFileOpen(void* user, uint16_t) { cmdFile(user, 1); }
+void cmdFileSave(void* user, uint16_t) { cmdFile(user, 2); }
+void cmdFileLoad(void* user, uint16_t) { cmdFile(user, 4); }
+void cmdFileExit(void* user, uint16_t) { cmdFile(user, 3); }
 
 bool projectGatePoll(Engine& e) {
     if (e.hud.texAsk != 0) {

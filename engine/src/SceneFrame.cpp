@@ -613,11 +613,12 @@ bool loadTextures(SceneFrameImpl& s, Device& device) {
         }
         if (!loaded) {
             ImageCpu cpu{};
-            if (imageLoadFile(cpu, path) && cpu.rgba != nullptr) {
-                if (precise && cpu.width * cpu.height > 0) {
-                    cpu.rgba[3] = 0;
+            if (imageLoadFile(cpu, path)) {
+                if (cpu.hdr != 0 && cpu.rgb != nullptr && srgb) {
+                    loaded = gpuImageUploadHdr(s.textures[i], device, cpu.rgb, cpu.width, cpu.height);
+                } else if (cpu.rgba != nullptr) {
+                    loaded = gpuImageUploadRgba8(s.textures[i], device, cpu.rgba, cpu.width, cpu.height, srgb);
                 }
-                loaded = gpuImageUploadRgba(s.textures[i], device, cpu.rgba, cpu.width, cpu.height, cpu.frames, cache);
             }
             imageCpuFree(cpu);
         }
@@ -1156,6 +1157,32 @@ struct SceneFrame : SceneFrameImpl {};
 
 SceneFrame* sceneFrameCreate() {
     SceneFrame* scene = new SceneFrame{};
+    scene->block.scalars[kScGtaoRadius] = 0.5f;
+    scene->block.scalars[kScGtaoSteps] = 3.0f;
+    scene->block.scalars[kScGtaoSlices] = 3.0f;
+    scene->block.scalars[kScGtaoPower] = 2.2f;
+    scene->block.scalars[kScGtaoFalloff] = 0.615f;
+    scene->block.scalars[kScGtaoDenoise] = 1.0f;
+    scene->block.scalars[kScSsrCutoff] = 0.82f;
+    scene->block.scalars[kScSsrSteps] = 64.0f;
+    scene->block.scalars[kScSsrStride] = 1.0f;
+    scene->block.scalars[kScSsrThick] = 0.02f;
+    scene->block.scalars[kScSsrMetal] = 0.35f;
+    scene->block.scalars[kScSsrRt] = 0.45f;
+    scene->block.scalars[kScSsrEdge] = 24.0f;
+    scene->block.scalars[kScSsrMax] = 80.0f;
+    scene->block.scalars[kScSsrBias] = 0.15f;
+    scene->block.scalars[kScFogDensity] = 0.06f;
+    scene->block.scalars[kScFogHeight] = 0.0f;
+    scene->block.scalars[kScFogScatter] = 40.0f;
+    scene->block.scalars[kScFogFalloff] = 0.08f;
+    scene->block.scalars[kScFogR] = 0.62f;
+    scene->block.scalars[kScFogG] = 0.72f;
+    scene->block.scalars[kScFogB] = 0.86f;
+    scene->block.scalars[kScFogLum] = 1.4f;
+    scene->block.scalars[kScFogStart] = 0.0f;
+    scene->block.scalars[kScFogOpacity] = 0.92f;
+    scene->block.scalars[kScFogInStart] = 0.0f;
     scene->audio = audioCreate();
     testSceneBuild(scene->world);
     pointShadowAssign(scene->world.lights, scene->world.lightCount);
@@ -2072,28 +2099,180 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
     return true;
 }
 
-void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
+HudPost sceneBlockPost(const SceneBlock& block) {
+    HudPost post{};
+    const std::span<const float> s = sceneBlockSpan(block, kScPost, kScPostN);
+    if (s.size() != kScPostN) {
+        return post;
+    }
+    post.grain = s[0];
+    post.brightness = s[1];
+    post.bloom = s[2];
+    post.vignette = s[3];
+    post.ca = s[4];
+    post.contact = s[5];
+    post.specOcc = s[6];
+    post.toksvig = s[7];
+    post.pom = s[8];
+    post.ggx = s[9];
+    post.ssrc = s[10];
+    post.gtao = s[11];
+    post.lamp = s[12];
+    post.sunGain = s[13];
+    post.sunR = s[14];
+    post.sunG = s[15];
+    post.sunB = s[16];
+    post.exposure = s[17];
+    post.temperature = s[18];
+    post.tint = s[19];
+    post.contrast = s[20];
+    post.saturation = s[21];
+    post.night = s[22];
+    post.shadows = s[23];
+    post.midtones = s[24];
+    post.highlights = s[25];
+    post.slope = s[26];
+    post.cdlOffset = s[27];
+    post.power = s[28];
+    post.dofFocus = s[29];
+    post.dofAmount = s[30];
+    post.flare = s[31];
+    post.gradeFlags = s[32];
+    post.mix = s[33];
+    post.genContrast = s[34];
+    post.midIn = s[35];
+    post.midOut = s[36];
+    post.hdrMax = s[37];
+    post.vibrance = s[38];
+    return post;
+}
+
+SceneTweaks sceneBlockTweaks(const SceneBlock& block) {
+    SceneTweaks tweaks{};
+    const std::span<const float> gtao = sceneBlockSpan(block, kScGtao, kScGtaoN);
+    const std::span<const float> ssr = sceneBlockSpan(block, kScSsr, kScSsrN);
+    const std::span<const float> sscs = sceneBlockSpan(block, kScSscs, kScSscsN);
+    const std::span<const float> ssrc = sceneBlockSpan(block, kScSsrc, kScSsrcN);
+    const std::span<const float> rc = sceneBlockSpan(block, kScRc, kScRcN);
+    const std::span<const float> restir = sceneBlockSpan(block, kScRestir, kScRestirN);
+    const std::span<const float> fog = sceneBlockSpan(block, kScFog, kScFogN);
+    tweaks.forceLod = static_cast<int32_t>(sceneBlockAt(block, kScForceLod));
+    tweaks.passMask = block.passMask;
+    tweaks.gtaoRadius = gtao[0];
+    tweaks.gtaoSteps = gtao[1];
+    tweaks.gtaoSlices = gtao[2];
+    tweaks.gtaoPower = gtao[3];
+    tweaks.gtaoFalloff = gtao[4];
+    tweaks.gtaoDenoise = gtao[5];
+    tweaks.ssrCutoff = ssr[0];
+    tweaks.ssrSteps = ssr[1];
+    tweaks.ssrStride = ssr[2];
+    tweaks.ssrThick = ssr[3];
+    tweaks.ssrMetal = ssr[4];
+    tweaks.ssrRt = ssr[5];
+    tweaks.ssrEdge = ssr[6];
+    tweaks.ssrMax = ssr[7];
+    tweaks.ssrBias = ssr[8];
+    tweaks.sscsReach = sscs[0];
+    tweaks.sscsThick = sscs[1];
+    tweaks.sscsSteps = sscs[2];
+    tweaks.sscsPx = sscs[3];
+    tweaks.ssrcBase = ssrc[0];
+    tweaks.ssrcThick = ssrc[1];
+    tweaks.ssrcCap = ssrc[2];
+    tweaks.ssrcSteps = ssrc[3];
+    tweaks.rcRays = rc[0];
+    tweaks.rcSpacing = rc[1];
+    tweaks.rcIntensity = rc[2];
+    tweaks.rcMax = rc[3];
+    tweaks.rcSun = rc[4];
+    tweaks.rcBounce = rc[5];
+    tweaks.giGain = rc[6];
+    tweaks.sharcDenoise = sceneBlockFlag(block, kFlSharcDenoise) != 0;
+    tweaks.restirLocal = restir[0];
+    tweaks.restirSpatial = restir[1];
+    tweaks.restirRadius = restir[2];
+    tweaks.restirHistory = restir[3];
+    tweaks.restirBoil = restir[4];
+    tweaks.restirTemporalDepth = restir[5];
+    tweaks.restirTemporalNormal = restir[6];
+    tweaks.restirTemporalBias = restir[7];
+    tweaks.restirSpatialDepth = restir[8];
+    tweaks.restirSpatialNormal = restir[9];
+    tweaks.restirSpatialBias = restir[10];
+    tweaks.restirSpatialBoost = restir[11];
+    tweaks.restirSunDisk = restir[12];
+    tweaks.restirSunRays = restir[13];
+    tweaks.restirShadowRays = restir[14];
+    tweaks.restirShadowRange = restir[15];
+    tweaks.restirShadowBias = restir[16];
+    tweaks.restirPermTh = restir[17];
+    tweaks.restirTarget = restir[18];
+    tweaks.restirTemporal = sceneBlockFlag(block, kFlRestirTemporal) != 0;
+    tweaks.restirSpatialOn = sceneBlockFlag(block, kFlRestirSpatial) != 0;
+    tweaks.restirBoilOn = sceneBlockFlag(block, kFlRestirBoil) != 0;
+    tweaks.restirInitVis = sceneBlockFlag(block, kFlRestirInitVis) != 0;
+    tweaks.restirPerm = sceneBlockFlag(block, kFlRestirPerm) != 0;
+    tweaks.restirShortcut = sceneBlockFlag(block, kFlRestirShortcut) != 0;
+    tweaks.restirMaterial = sceneBlockFlag(block, kFlRestirMaterial) != 0;
+    tweaks.restirNaive = sceneBlockFlag(block, kFlRestirNaive) != 0;
+    tweaks.restirSunOn = sceneBlockFlag(block, kFlRestirSun) != 0;
+    tweaks.fsrQuality = sceneBlockFlag(block, kFlFsrQ);
+    tweaks.fsrSharpness = sceneBlockAt(block, kScFsrSharpness);
+    tweaks.lightProfile = sceneBlockFlag(block, kFlGi);
+    tweaks.bloomThreshold = sceneBlockAt(block, kScBloomThreshold);
+    tweaks.fogDensity = fog[0];
+    tweaks.fogHeight = fog[1];
+    tweaks.fogScatter = fog[2];
+    tweaks.fogFalloff = fog[3];
+    tweaks.fogR = fog[4];
+    tweaks.fogG = fog[5];
+    tweaks.fogB = fog[6];
+    tweaks.fogLum = fog[7];
+    tweaks.fogStart = fog[8];
+    tweaks.fogOpacity = fog[9];
+    tweaks.fogInStart = fog[10];
+    tweaks.rainAmount = sceneBlockAt(block, kScRainAmount);
+    tweaks.rainWet = sceneBlockAt(block, kScRainWet);
+    tweaks.rainRipple = sceneBlockAt(block, kScRainRipple);
+    tweaks.sunZenith = sceneBlockAt(block, kScSunZenith);
+    tweaks.sunAzimuth = sceneBlockAt(block, kScSunAzimuth);
+    tweaks.cloudCoverage = sceneBlockAt(block, kScCloudCoverage);
+    tweaks.cloudDensity = sceneBlockAt(block, kScCloudDensity);
+    tweaks.windSpeed = sceneBlockAt(block, kScWindSpeed);
+    tweaks.windYaw = sceneBlockAt(block, kScWindYaw);
+    tweaks.temperatureC = sceneBlockAt(block, kScTemperatureC);
+    tweaks.dayLength = sceneBlockAt(block, kScDayLength);
+    tweaks.timeOfDay = sceneBlockAt(block, kScTimeOfDay);
+    tweaks.clockSun = sceneBlockFlag(block, kFlWxClock);
+    tweaks.sunKelvin = sceneBlockAt(block, kScSunKelvin);
+    tweaks.sunAngle = sceneBlockAt(block, kScSunAngle);
+    tweaks.sunSoft = sceneBlockAt(block, kScSunSoft);
+    tweaks.sunIndirect = sceneBlockAt(block, kScSunIndirect);
+    tweaks.sunEnabled = sceneBlockFlag(block, kFlSun);
+    tweaks.sunCast = sceneBlockFlag(block, kFlSunCast);
+    tweaks.sunCsm = sceneBlockFlag(block, kFlSunCsm);
+    tweaks.tonemapper = sceneBlockFlag(block, kFlTone);
+    tweaks.freeze = sceneBlockFlag(block, kFlFreeze) != 0;
+    return tweaks;
+}
+
+static_assert(kPassRestir == (1u << 20));
+static_assert(kPassFsr == (1u << 22));
+static_assert(kPassSharc == (1u << 23));
+
+void sceneFrameSetBlock(SceneFrame* scene, const SceneBlock& block) {
     if (scene == nullptr) {
         return;
     }
+    SceneBlock stored = block;
+    stored.passMask = sceneBlockPassMask(stored);
+    scene->block = stored;
+    const SceneTweaks tweaks = sceneBlockTweaks(stored);
+    scene->hud = sceneBlockPost(block);
     scene->forceLod = tweaks.forceLod;
     scene->passMask = tweaks.passMask;
     scene->lightProfile = tweaks.lightProfile;
-    scene->gtaoRadius = tweaks.gtaoRadius;
-    scene->gtaoSteps = tweaks.gtaoSteps;
-    scene->gtaoSlices = tweaks.gtaoSlices;
-    scene->gtaoPower = tweaks.gtaoPower;
-    scene->gtaoFalloff = tweaks.gtaoFalloff;
-    scene->gtaoDenoise = tweaks.gtaoDenoise;
-    scene->ssrCutoff = tweaks.ssrCutoff;
-    scene->ssrSteps = tweaks.ssrSteps;
-    scene->ssrStride = tweaks.ssrStride;
-    scene->ssrThick = tweaks.ssrThick;
-    scene->ssrMetal = tweaks.ssrMetal;
-    scene->ssrRt = tweaks.ssrRt;
-    scene->ssrEdge = tweaks.ssrEdge;
-    scene->ssrMax = tweaks.ssrMax;
-    scene->ssrBias = tweaks.ssrBias;
     scene->sscsReach = tweaks.sscsReach;
     scene->sscsThick = tweaks.sscsThick;
     scene->sscsSteps = tweaks.sscsSteps;
@@ -2110,49 +2289,39 @@ void sceneFrameTweaks(SceneFrame* scene, const SceneTweaks& tweaks) {
     scene->rcBounce = tweaks.rcBounce;
     scene->giGain = tweaks.giGain;
     scene->sharcDenoise = tweaks.sharcDenoise;
-    scene->restir.knobLocal = static_cast<uint32_t>(std::clamp(tweaks.restirLocal, 0.0f, 16.0f));
-    scene->restir.knobSpatial = static_cast<uint32_t>(std::clamp(tweaks.restirSpatial, 0.0f, 32.0f));
-    scene->restir.knobRadius = std::clamp(tweaks.restirRadius, 1.0f, 64.0f);
-    scene->restir.knobHistory = static_cast<uint32_t>(std::clamp(tweaks.restirHistory, 1.0f, 64.0f));
-    scene->restir.knobBoil = std::clamp(tweaks.restirBoil, 0.0f, 1.0f);
-    scene->restir.knobTemporalDepth = std::clamp(tweaks.restirTemporalDepth, 0.001f, 1.0f);
-    scene->restir.knobTemporalNormal = std::clamp(tweaks.restirTemporalNormal, 0.0f, 1.0f);
-    scene->restir.knobTemporalBias = static_cast<uint32_t>(std::clamp(tweaks.restirTemporalBias, 0.0f, 2.0f));
-    scene->restir.knobSpatialDepth = std::clamp(tweaks.restirSpatialDepth, 0.001f, 1.0f);
-    scene->restir.knobSpatialNormal = std::clamp(tweaks.restirSpatialNormal, 0.0f, 1.0f);
-    scene->restir.knobSpatialBias = static_cast<uint32_t>(std::clamp(tweaks.restirSpatialBias, 0.0f, 3.0f));
-    scene->restir.knobSpatialBoost = static_cast<uint32_t>(std::clamp(tweaks.restirSpatialBoost, 0.0f, 32.0f));
-    scene->restir.knobSunDisk = std::clamp(tweaks.restirSunDisk, 0.0f, 4.0f);
-    scene->restir.knobSunRays = static_cast<uint32_t>(std::clamp(tweaks.restirSunRays, 1.0f, 8.0f));
-    scene->restir.knobShadowRays = static_cast<uint32_t>(std::clamp(tweaks.restirShadowRays, 1.0f, 8.0f));
-    scene->restir.knobShadowRange = std::clamp(tweaks.restirShadowRange, 0.0f, 200.0f);
-    scene->restir.knobShadowBias = std::clamp(tweaks.restirShadowBias, 0.02f, 2.0f);
-    scene->restir.knobPermTh = std::clamp(tweaks.restirPermTh, 0.0f, 1.0f);
-    scene->restir.knobTarget = static_cast<uint32_t>(std::clamp(tweaks.restirTarget, 1.0f, 64.0f));
-    scene->restir.knobTemporalOn = tweaks.restirTemporal ? 1u : 0u;
-    scene->restir.knobSpatialOn = tweaks.restirSpatialOn ? 1u : 0u;
-    scene->restir.knobBoilOn = tweaks.restirBoilOn ? 1u : 0u;
-    scene->restir.knobInitVis = tweaks.restirInitVis ? 1u : 0u;
-    scene->restir.knobPerm = tweaks.restirPerm ? 1u : 0u;
-    scene->restir.knobShortcut = tweaks.restirShortcut ? 1u : 0u;
-    scene->restir.knobMaterial = tweaks.restirMaterial ? 1u : 0u;
-    scene->restir.knobNaive = tweaks.restirNaive ? 1u : 0u;
-    scene->restir.knobSunOn = (tweaks.restirSunOn && tweaks.sunEnabled != 0 && tweaks.sunCsm == 0) ? 1u : 0u;
+    const std::span<const float> restir = sceneBlockSpan(block, kScRestir, kScRestirN);
+    scene->restir.knobLocal = static_cast<uint32_t>(std::clamp(restir[0], 0.0f, 16.0f));
+    scene->restir.knobSpatial = static_cast<uint32_t>(std::clamp(restir[1], 0.0f, 32.0f));
+    scene->restir.knobRadius = std::clamp(restir[2], 1.0f, 64.0f);
+    scene->restir.knobHistory = static_cast<uint32_t>(std::clamp(restir[3], 1.0f, 64.0f));
+    scene->restir.knobBoil = std::clamp(restir[4], 0.0f, 1.0f);
+    scene->restir.knobTemporalDepth = std::clamp(restir[5], 0.001f, 1.0f);
+    scene->restir.knobTemporalNormal = std::clamp(restir[6], 0.0f, 1.0f);
+    scene->restir.knobTemporalBias = static_cast<uint32_t>(std::clamp(restir[7], 0.0f, 2.0f));
+    scene->restir.knobSpatialDepth = std::clamp(restir[8], 0.001f, 1.0f);
+    scene->restir.knobSpatialNormal = std::clamp(restir[9], 0.0f, 1.0f);
+    scene->restir.knobSpatialBias = static_cast<uint32_t>(std::clamp(restir[10], 0.0f, 3.0f));
+    scene->restir.knobSpatialBoost = static_cast<uint32_t>(std::clamp(restir[11], 0.0f, 32.0f));
+    scene->restir.knobSunDisk = std::clamp(restir[12], 0.0f, 4.0f);
+    scene->restir.knobSunRays = static_cast<uint32_t>(std::clamp(restir[13], 1.0f, 8.0f));
+    scene->restir.knobShadowRays = static_cast<uint32_t>(std::clamp(restir[14], 1.0f, 8.0f));
+    scene->restir.knobShadowRange = std::clamp(restir[15], 0.0f, 200.0f);
+    scene->restir.knobShadowBias = std::clamp(restir[16], 0.02f, 2.0f);
+    scene->restir.knobPermTh = std::clamp(restir[17], 0.0f, 1.0f);
+    scene->restir.knobTarget = static_cast<uint32_t>(std::clamp(restir[18], 1.0f, 64.0f));
+    scene->restir.knobTemporalOn = sceneBlockFlag(block, kFlRestirTemporal);
+    scene->restir.knobSpatialOn = sceneBlockFlag(block, kFlRestirSpatial);
+    scene->restir.knobBoilOn = sceneBlockFlag(block, kFlRestirBoil);
+    scene->restir.knobInitVis = sceneBlockFlag(block, kFlRestirInitVis);
+    scene->restir.knobPerm = sceneBlockFlag(block, kFlRestirPerm);
+    scene->restir.knobShortcut = sceneBlockFlag(block, kFlRestirShortcut);
+    scene->restir.knobMaterial = sceneBlockFlag(block, kFlRestirMaterial);
+    scene->restir.knobNaive = sceneBlockFlag(block, kFlRestirNaive);
+    scene->restir.knobSunOn = (sceneBlockFlag(block, kFlRestirSun) != 0 && tweaks.sunEnabled != 0 && tweaks.sunCsm == 0) ? 1u : 0u;
     scene->restir.knobSunDisk = std::clamp(tweaks.sunAngle + tweaks.sunSoft, 0.0f, 8.0f);
     scene->fsr.quality = tweaks.fsrQuality > 4u ? 0u : tweaks.fsrQuality;
     scene->fsr.sharpness = std::clamp(tweaks.fsrSharpness, 0.0f, 1.0f);
     scene->bloomThreshold = tweaks.bloomThreshold;
-    scene->fogDensity = tweaks.fogDensity;
-    scene->fogHeight = tweaks.fogHeight;
-    scene->fogScatter = tweaks.fogScatter;
-    scene->fogFalloff = tweaks.fogFalloff;
-    scene->fogR = tweaks.fogR;
-    scene->fogG = tweaks.fogG;
-    scene->fogB = tweaks.fogB;
-    scene->fogLum = tweaks.fogLum;
-    scene->fogStart = tweaks.fogStart;
-    scene->fogOpacity = tweaks.fogOpacity;
-    scene->fogInStart = tweaks.fogInStart;
     scene->rainRipple = std::clamp(tweaks.rainRipple, 0.0f, 1.0f);
     if (Weather* climate = scene->weatherEnt.try_get_mut<Weather>()) {
         weatherGoals(*climate, tweaks.cloudCoverage, tweaks.cloudDensity, tweaks.rainAmount, tweaks.rainWet, tweaks.fogDensity, tweaks.sunZenith, tweaks.sunAzimuth, tweaks.windSpeed, tweaks.windYaw, tweaks.temperatureC, tweaks.dayLength, tweaks.timeOfDay, tweaks.clockSun);
@@ -2197,13 +2366,6 @@ const char* sceneFrameGpuText(const SceneFrame* scene) {
         return "";
     }
     return scene->gpuText;
-}
-
-void sceneFrameTune(SceneFrame* scene, const HudPost& post) {
-    if (scene == nullptr) {
-        return;
-    }
-    scene->hud = post;
 }
 
 void sceneFrameReleaseGpu(SceneFrame* scene, Device& device) {
@@ -3598,7 +3760,6 @@ void syncPropMaterial(SceneFrame& scene) {
         dst.baseColor[0] = src.base[0];
         dst.baseColor[1] = src.base[1];
         dst.baseColor[2] = src.base[2];
-        dst.baseColor[3] = 1.0f;
         dst.roughness = src.roughness;
         dst.metallic = src.metallic;
         dst.emissiveIntensity = src.emissive;
@@ -3735,7 +3896,7 @@ bool sceneFrameCloneMaterial(SceneFrame* scene, uint8_t actor) {
 }
 
 void sceneFrameQueueTexture(SceneFrame* scene, uint8_t actor, uint8_t channel, const char* path) {
-    if (scene == nullptr || path == nullptr || path[0] == '\0' || channel > 6u || scene->texJobN >= 8u) {
+    if (scene == nullptr || path == nullptr || path[0] == '\0' || channel > 7u || scene->texJobN >= 8u) {
         return;
     }
     SceneFrameImpl::TexJob& job = scene->texJob[scene->texJobN];
@@ -3793,6 +3954,8 @@ void queueDocMap(SceneFrame& scene, uint8_t actor, uint8_t channel, const char* 
         slot = &mat.pad[3];
     } else if (channel == 6u) {
         slot = &mat.aoTex;
+    } else if (channel == 7u) {
+        slot = &mat.pad[0];
     }
     *slot = 0;
     if (scene.materialsBuf.mapped != nullptr) {
@@ -3837,9 +4000,17 @@ bool sceneFrameApplyDoc(SceneFrame* scene, uint8_t actor, const BhmatDoc& doc) {
     queueDocMap(*scene, actor, 1, doc.normalPath, previous.normalPath);
     queueDocMap(*scene, actor, 2, doc.ormPath, previous.ormPath);
     queueDocMap(*scene, actor, 3, doc.emissivePath, previous.emissivePath);
-    queueDocMap(*scene, actor, 4, doc.roughPath, previous.roughPath);
-    queueDocMap(*scene, actor, 5, doc.metalPath, previous.metalPath);
-    queueDocMap(*scene, actor, 6, doc.aoPath, previous.aoPath);
+    if (doc.ormPath[0] == '\0') {
+        queueDocMap(*scene, actor, 4, doc.roughPath, previous.roughPath);
+        queueDocMap(*scene, actor, 5, doc.metalPath, previous.metalPath);
+        queueDocMap(*scene, actor, 6, doc.aoPath, previous.aoPath);
+        queueDocMap(*scene, actor, 7, doc.heightPath, previous.heightPath);
+    } else {
+        queueDocMap(*scene, actor, 4, "", previous.roughPath[0] != '\0' ? previous.roughPath : "x");
+        queueDocMap(*scene, actor, 5, "", previous.metalPath[0] != '\0' ? previous.metalPath : "x");
+        queueDocMap(*scene, actor, 6, "", previous.aoPath[0] != '\0' ? previous.aoPath : "x");
+        queueDocMap(*scene, actor, 7, "", previous.heightPath[0] != '\0' ? previous.heightPath : "x");
+    }
     scene->editorDirty = static_cast<uint8_t>(scene->editorDirty | 1u);
     return true;
 }
@@ -3879,7 +4050,7 @@ void sceneFrameMark(SceneFrame* scene, uint8_t actor) {
 
 void takeQueuedTexture(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps) {
     if (s.texJobN == 0u) {
-        if (s.texChannel > 6u || s.texPath[0] == '\0') {
+        if (s.texChannel > 7u || s.texPath[0] == '\0') {
             return;
         }
         if (s.texJobN < 8u) {
@@ -3900,7 +4071,7 @@ void takeQueuedTexture(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps
         s.texJobN = static_cast<uint8_t>(s.texJobN - 1u);
         s.texPath[0] = '\0';
         s.texChannel = 0xff;
-        if (job.channel > 6u || job.path[0] == '\0') {
+        if (job.channel > 7u || job.path[0] == '\0') {
             continue;
         }
         if (job.actor >= s.actors.count || s.textureSlots >= 768u) {
@@ -3924,16 +4095,18 @@ void takeQueuedTexture(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps
             spdlog::error("texture rejected, actor {} has no material", job.actor);
             continue;
         }
-        const bool precise = job.channel != 0u && job.channel != 3u;
+        const bool color = job.channel == 0u || job.channel == 3u;
+        const bool dds = endsWith(job.path, ".dds") || endsWith(job.path, ".DDS");
         GpuImage img{};
-        bool loaded = imageLoadDds(img, device, job.path, !precise);
+        bool loaded = dds && imageLoadDds(img, device, job.path, color);
         if (!loaded) {
             ImageCpu cpu{};
-            if (imageLoadFile(cpu, job.path) && cpu.rgba != nullptr) {
-                if (precise && cpu.width * cpu.height > 0) {
-                    cpu.rgba[3] = 0;
+            if (imageLoadFile(cpu, job.path)) {
+                if (cpu.hdr != 0 && cpu.rgb != nullptr && color) {
+                    loaded = gpuImageUploadHdr(img, device, cpu.rgb, cpu.width, cpu.height);
+                } else if (cpu.rgba != nullptr) {
+                    loaded = gpuImageUploadRgba8(img, device, cpu.rgba, cpu.width, cpu.height, color);
                 }
-                loaded = gpuImageUploadRgba(img, device, cpu.rgba, cpu.width, cpu.height, cpu.frames, nullptr);
             }
             imageCpuFree(cpu);
         }
@@ -3966,8 +4139,10 @@ void takeQueuedTexture(SceneFrameImpl& s, Device& device, DescriptorHeaps& heaps
             mat.pad[2] = slot;
         } else if (job.channel == 5u) {
             mat.pad[3] = slot;
-        } else {
+        } else if (job.channel == 6u) {
             mat.aoTex = slot;
+        } else {
+            mat.pad[0] = slot;
         }
         if (s.materialsBuf.mapped != nullptr) {
             static_cast<MaterialGpuData*>(s.materialsBuf.mapped)[matId] = mat;
@@ -4269,10 +4444,12 @@ void sceneFrameRecord(
     FrameView gpu{};
     FrameSun lit{};
     FramePost knob{};
+    const std::span<const float> fog = sceneBlockSpan(scene->block, kScFog, kScFogN);
+    float publishedFog = fog[0];
     std::memcpy(gpu.viewProj, cam.viewProj.m, sizeof(cam.viewProj.m));
     std::memcpy(gpu.invViewProj, cam.invViewProj.m, sizeof(cam.invViewProj.m));
     if (const Weather* climate = scene->weatherEnt.try_get<Weather>()) {
-        weatherPublish(*climate, scene->atmosphere, scene->rainAmount, scene->rainWet, scene->fogDensity);
+        weatherPublish(*climate, scene->atmosphere, scene->rainAmount, scene->rainWet, publishedFog);
     }
     scene->atmosphere.time = scene->skyTime;
     scene->atmosphere.parity = (scene->frameCursor & 1u) != 0u ? 1.0f : 0.0f;
@@ -4359,29 +4536,31 @@ void sceneFrameRecord(
     } else {
         knob.flags.passMask &= ~64u;
     }
-    knob.gtao.radius = scene->gtaoRadius;
-    knob.gtao.steps = scene->gtaoSteps;
-    knob.gtao.slices = scene->gtaoSlices;
-    knob.gtao.power = scene->gtaoPower;
-    knob.gtao.falloff = scene->gtaoFalloff;
+    const std::span<const float> gtao = sceneBlockSpan(scene->block, kScGtao, kScGtaoN);
+    knob.gtao.radius = gtao[0];
+    knob.gtao.steps = gtao[1];
+    knob.gtao.slices = gtao[2];
+    knob.gtao.power = gtao[3];
+    knob.gtao.falloff = gtao[4];
     knob.gtao.intensity = scene->hud.gtao;
-    knob.gtao.pad[0] = scene->gtaoDenoise;
-    knob.ssr.cutoff = scene->ssrCutoff;
-    knob.ssr.steps = scene->ssrSteps;
-    knob.ssr.stride = scene->ssrStride;
-    knob.ssr.thick = scene->ssrThick;
-    knob.ssr.pad[0] = scene->ssrRt;
-    knob.ssr.pad[1] = scene->ssrMetal;
-    knob.ssr.pad[2] = scene->ssrEdge;
-    knob.ssr.maxDist = scene->ssrMax;
-    knob.ssr.bias = scene->ssrBias;
+    knob.gtao.pad[0] = gtao[5];
+    const std::span<const float> ssr = sceneBlockSpan(scene->block, kScSsr, kScSsrN);
+    knob.ssr.cutoff = ssr[0];
+    knob.ssr.steps = ssr[1];
+    knob.ssr.stride = ssr[2];
+    knob.ssr.thick = ssr[3];
+    knob.ssr.pad[0] = ssr[5];
+    knob.ssr.pad[1] = ssr[4];
+    knob.ssr.pad[2] = ssr[6];
+    knob.ssr.maxDist = ssr[7];
+    knob.ssr.bias = ssr[8];
     knob.shade.sscsReach = scene->sscsReach;
     knob.shade.sscsThick = scene->sscsThick;
     knob.shade.sscsSteps = scene->sscsSteps;
     knob.shade.sscsPx = scene->sscsPx;
-    knob.shade.fogDensity = scene->fogDensity;
-    knob.shade.fogHeight = scene->fogHeight;
-    knob.shade.fogScatter = scene->fogScatter;
+    knob.shade.fogDensity = publishedFog;
+    knob.shade.fogHeight = fog[1];
+    knob.shade.fogScatter = fog[2];
     knob.shade.sscsAmt = scene->hud.contact;
     knob.shade.specOcc = scene->hud.specOcc;
     knob.shade.toksvig = scene->hud.toksvig;
@@ -4403,15 +4582,15 @@ void sceneFrameRecord(
     knob.rc.cap = 8.0f;
     knob.rc.sunScale = scene->rcSun;
     knob.rc.bounce = scene->rcBounce;
-    knob.rc.fogFalloff = scene->fogFalloff;
-    knob.rc.fogR = scene->fogR;
-    knob.rc.fogG = scene->fogG;
-    knob.rc.fogB = scene->fogB;
-    knob.rc.fogLum = scene->fogLum;
-    knob.rc.fogStart = scene->fogStart;
-    knob.rc.fogOpacity = scene->fogOpacity;
-    knob.rc.fogInStart = scene->fogInStart;
-    knob.rc.fogInSize = scene->fogScatter;
+    knob.rc.fogFalloff = fog[3];
+    knob.rc.fogR = fog[4];
+    knob.rc.fogG = fog[5];
+    knob.rc.fogB = fog[6];
+    knob.rc.fogLum = fog[7];
+    knob.rc.fogStart = fog[8];
+    knob.rc.fogOpacity = fog[9];
+    knob.rc.fogInStart = fog[10];
+    knob.rc.fogInSize = fog[2];
     knob.bloom.threshold = scene->bloomThreshold;
     knob.bloom.tonemapper = scene->tonemapper;
     knob.bloom.grain = scene->hud.grain;

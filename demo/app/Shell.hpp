@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/Canvas.hpp"
+#include "host/Host.hpp"
 
 namespace burnhope {
 
@@ -25,9 +25,10 @@ struct ShellDemo {
     int fileDialogSlot = -1;
 };
 
-// Пример приложения. Другое приложение передаёт свой UiBuilder в hostOpen и не трогает окно, rhi и present.
 void shellBuild(Canvas& canvas, void* user);
 void toolBuild(Canvas& canvas, void* user);
 void colorBuild(Canvas& canvas, void* user);
+void sampleDrop(Host& host, int slot, const char* path, void* user);
+void sampleOps(Host& host, int slot, const WindowOps& ops, void* user);
 
 } // namespace burnhope

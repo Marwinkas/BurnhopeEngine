@@ -19,72 +19,62 @@
 
 namespace burnhope {
 
-const char* texLeaf(const char* path, const char* fallback) {
-    if (path == nullptr || path[0] == '\0') {
-        return fallback;
-    }
-    const char* leaf = path;
-    for (const char* p = path; *p != '\0'; ++p) {
-        if (*p == '/' || *p == '\\') {
-            leaf = p + 1;
-        }
-    }
-    return leaf[0] != '\0' ? leaf : fallback;
-}
-
-void paintMatTex(HudContext& hud) {
-    if (hud.tool.canvas == nullptr || hud.tool.canvas->state == nullptr) {
-        return;
-    }
-    const char* fallback[] = {"Albedo", "Normal", "ORM", "Emissive"};
-    const char* path[] = {
-        hud.matDoc.albedoPath, hud.matDoc.normalPath, hud.matDoc.ormPath, hud.matDoc.emissivePath};
-    UiState& s = *hud.tool.canvas->state;
-    for (uint8_t i = 0; i < 4; ++i) {
-        uiText(s, hud.matTex[i], texLeaf(path[i], fallback[i]));
-    }
-}
-
 void openMaterialFile(HudContext& hud, const char* path) {
     if (path == nullptr || path[0] == '\0' || !materialDocRead(path, hud.matDoc)) {
         return;
     }
     std::snprintf(hud.matPath, sizeof(hud.matPath), "%s", path);
+    std::snprintf(hud.matDoc.file, sizeof(hud.matDoc.file), "%s", path);
     hud.matSent = hud.matDoc;
+    hud.atlasDirty = 1;
+    hud.previewDirty = 1;
     hud.matOpen = 1;
     if (hud.tool.canvas == nullptr || hud.tool.canvas->state == nullptr) {
         return;
     }
     UiState& s = *hud.tool.canvas->state;
-    auto put = [&](float* dst, float value) { hud.bind.write(s, dst, value); };
-    put(&hud.matDoc.base[0], hud.matDoc.base[0]);
-    put(&hud.matDoc.base[1], hud.matDoc.base[1]);
-    put(&hud.matDoc.base[2], hud.matDoc.base[2]);
-    put(&hud.matDoc.roughness, hud.matDoc.roughness);
-    put(&hud.matDoc.metallic, hud.matDoc.metallic);
-    put(&hud.matDoc.emissive, hud.matDoc.emissive);
-    put(&hud.matDoc.albedoGain, hud.matDoc.albedoGain);
-    put(&hud.matDoc.normalGain, hud.matDoc.normalGain);
-    put(&hud.matDoc.ormGain, hud.matDoc.ormGain);
-    put(&hud.matDoc.emissiveGain, hud.matDoc.emissiveGain);
-    put(&hud.matDoc.reflectance, hud.matDoc.reflectance);
-    put(&hud.matDoc.aoStrength, hud.matDoc.aoStrength);
-    put(&hud.matDoc.normalScale, hud.matDoc.normalScale);
-    put(&hud.matDoc.clearcoat, hud.matDoc.clearcoat);
-    put(&hud.matDoc.clearcoatRoughness, hud.matDoc.clearcoatRoughness);
-    put(&hud.matDoc.worldGridSize, hud.matDoc.worldGridSize);
-    put(&hud.matDoc.triplanarSharpness, hud.matDoc.triplanarSharpness);
-    put(&hud.matDoc.uvTiling[0], hud.matDoc.uvTiling[0]);
-    put(&hud.matDoc.uvTiling[1], hud.matDoc.uvTiling[1]);
-    put(&hud.matDoc.uvRotation, hud.matDoc.uvRotation);
-    const uint8_t* bit[] = {&hud.matDoc.worldAligned, &hud.matDoc.doubleSided, &hud.matDoc.alphaCut};
-    for (const uint8_t* flag : bit) {
-        const uint16_t id = hud.bind.idOf(flag);
+    auto put = [&](uint16_t index, float value) { hud.bind.write(s, index, value); };
+    put(kScMatBase0, hud.matDoc.base[0]);
+    put(kScMatBase1, hud.matDoc.base[1]);
+    put(kScMatBase2, hud.matDoc.base[2]);
+    put(kScMatRough, hud.matDoc.roughness);
+    put(kScMatMetal, hud.matDoc.metallic);
+    put(kScMatEmissive, hud.matDoc.emissive);
+    put(kScMatAlbedoGain, hud.matDoc.albedoGain);
+    put(kScMatNormalGain, hud.matDoc.normalGain);
+    put(kScMatOrmGain, hud.matDoc.ormGain);
+    put(kScMatEmissiveGain, hud.matDoc.emissiveGain > 0.0f ? hud.matDoc.emissiveGain : hud.matDoc.emissive);
+    put(kScMatReflect, hud.matDoc.reflectance);
+    put(kScMatAo, hud.matDoc.aoStrength);
+    put(kScMatNormal, hud.matDoc.normalScale);
+    put(kScMatCoat, hud.matDoc.clearcoat);
+    put(kScMatCoatRough, hud.matDoc.clearcoatRoughness);
+    put(kScMatGrid, hud.matDoc.worldGridSize);
+    put(kScMatSharp, hud.matDoc.triplanarSharpness);
+    put(kScMatUvX, hud.matDoc.uvTiling[0]);
+    put(kScMatUvY, hud.matDoc.uvTiling[1]);
+    put(kScMatUvRot, hud.matDoc.uvRotation * 57.2957795f);
+    put(kScMatEm0, hud.matDoc.emissiveColor[0]);
+    put(kScMatEm1, hud.matDoc.emissiveColor[1]);
+    put(kScMatEm2, hud.matDoc.emissiveColor[2]);
+    put(kScMatHeight, hud.matDoc.heightScale);
+    put(kScMatOpacity, hud.matDoc.baseA);
+    put(kScMatUvOffX, hud.matDoc.uvOffset[0]);
+    put(kScMatUvOffY, hud.matDoc.uvOffset[1]);
+    put(kScMatCutoff, hud.matDoc.alphaCutoff);
+    const uint16_t bit[] = {kFlMatWorld, kFlMatDouble, kFlMatAlpha, kFlMatFlip, kFlMatUnlit, kFlMatRepeat};
+    const uint8_t on[] = {
+        hud.matDoc.worldAligned, hud.matDoc.doubleSided, hud.matDoc.alphaCut, hud.matDoc.flipNormalY, hud.matDoc.unlit, hud.matDoc.repeat};
+    for (uint16_t i = 0; i < 6u; ++i) {
+        if (bit[i] < 64u) {
+            hud.block.flags[bit[i]] = on[i];
+        }
+        const uint16_t id = hud.bind.idOf(bit[i], kBindFlag);
         if (id < s.count) {
-            uiCheckAssign(s, id, *flag);
+            uiCheckAssign(s, id, on[i]);
         }
     }
-    paintMatTex(hud);
+    hudPaintMaterial(hud);
     uiPropShowMask(s, kSecMatFile);
     scrollReset(s, hud.tool.propPage);
 }
@@ -101,6 +91,7 @@ void saveOpenMaterial(HudContext& hud) {
         return;
     }
     hud.matSent = hud.matDoc;
+    hud.matListed = 0;
     if (hud.scene == nullptr) {
         return;
     }
@@ -117,7 +108,7 @@ void onMaterialAct(void* user, uint16_t) {
     if (hit == nullptr || hit->hud == nullptr || hit->hud->matOpen == 0) {
         return;
     }
-    if (hit->hud->host == nullptr || hit->hud->slot < 0 || hit->kind < 1 || hit->kind > 4) {
+    if (hit->hud->host == nullptr || hit->hud->slot < 0 || hit->kind < 1 || hit->kind > 8) {
         return;
     }
     hit->hud->texAsk = hit->kind;
@@ -136,62 +127,61 @@ namespace {
 
 namespace fs = std::filesystem;
 
-void fillMatList(HudContext& hud) {
-    hud.matListN = 1;
-    std::snprintf(hud.matName[0], sizeof(hud.matName[0]), "None");
-    hud.matFile[0][0] = '\0';
-    if (hud.projectRoot[0] == '\0') {
+bool skipDir(const fs::path& dir) {
+    const std::string name = dir.filename().string();
+    return name == "cache" || name == "build" || name == "build-core" || name == ".git";
+}
+
+void walkMats(HudContext& hud, const fs::path& dir, int depth) {
+    if (depth > 4 || hud.mats.size() >= 128 || skipDir(dir)) {
         return;
     }
-    const fs::path dirs[2] = {fs::path(hud.projectRoot), fs::path(hud.projectRoot) / "materials"};
-    for (const fs::path& dir : dirs) {
-        std::error_code ec;
-        if (!fs::is_directory(dir, ec)) {
+    std::error_code ec;
+    for (const fs::directory_entry& ent : fs::directory_iterator(dir, ec)) {
+        if (ec || hud.mats.size() >= 128) {
+            return;
+        }
+        if (ent.is_directory(ec)) {
+            walkMats(hud, ent.path(), depth + 1);
             continue;
         }
-        for (const fs::directory_entry& ent : fs::directory_iterator(dir, ec)) {
-            if (hud.matListN >= 8 || ec || !ent.is_regular_file(ec)) {
-                continue;
-            }
-            const std::string name = ent.path().filename().string();
-            if (!strExtIs(name.c_str(), ".bhmat")) {
-                continue;
-            }
-            std::snprintf(hud.matName[hud.matListN], 48, "%s", name.c_str());
-            std::snprintf(hud.matFile[hud.matListN], 260, "%s", ent.path().string().c_str());
-            hud.matListN = static_cast<uint8_t>(hud.matListN + 1u);
+        if (!ent.is_regular_file(ec)) {
+            continue;
         }
+        const std::string name = ent.path().filename().string();
+        if (!strExtIs(name.c_str(), ".bhmat")) {
+            continue;
+        }
+        MatLeaf leaf{};
+        std::snprintf(leaf.name, sizeof(leaf.name), "%s", name.c_str());
+        std::snprintf(leaf.path, sizeof(leaf.path), "%s", ent.path().string().c_str());
+        hud.mats.push_back(leaf);
     }
 }
 
-bool saveLive(HudContext& hud) {
-    if (hud.livePath[0] == '\0' || !materialSaveBhmat(hud.livePath, hud.live)) {
-        return false;
+void fillMatList(HudContext& hud) {
+    hud.mats.clear();
+    hud.mats.push_back({});
+    std::snprintf(hud.mats.front().name, sizeof(hud.mats.front().name), "None");
+    if (hud.projectRoot[0] == '\0') {
+        return;
     }
-    hud.liveDirty = 0;
-    return true;
+    walkMats(hud, fs::path(hud.projectRoot), 0);
 }
 
 } // namespace
 
 void hudTakeTexture(HudContext& hud, uint8_t channel, const char* path) {
-    if (path == nullptr || path[0] == '\0' || channel > 6u) {
+    if (path == nullptr || path[0] == '\0' || channel > 7u) {
         return;
     }
-    std::snprintf(hudDocPath(hud.texLive != 0 ? hud.live : hud.matDoc, channel), 260, "%s", path);
-    if (hud.texLive == 0) {
-        paintMatTex(hud);
-        saveOpenMaterial(hud);
-        if (hud.scene != nullptr) {
-            sceneFrameQueueTexture(hud.scene, sceneFrameActorSelected(hud.scene), channel, path);
-        }
-        return;
-    }
-    hudPaintSlots(hud);
-    hud.liveDirty = 1;
-    if (hud.scene != nullptr && sceneFrameApplyDoc(hud.scene, sceneFrameActorSelected(hud.scene), hud.live)) {
-        hud.liveSent = hud.live;
-    }
+    std::snprintf(hudDocPath(hud.matDoc, channel), 260, "%s", path);
+    hud.texLive = 0;
+    hudCommitMaps(hud, channel);
+    hud.atlasDirty = 1;
+    hud.previewDirty = 1;
+    hudPaintMaterial(hud);
+    saveOpenMaterial(hud);
 }
 
 void hudMaterialSync(Engine& e, Canvas& canvas) {
@@ -200,33 +190,23 @@ void hudMaterialSync(Engine& e, Canvas& canvas) {
     }
     HudContext& hud = e.hud;
     UiState& state = *canvas.state;
+    if (hud.matListed == 0 && hud.projectRoot[0] != '\0') {
+        fillMatList(hud);
+        hud.matListed = 1;
+        hudPaintPick(hud, state);
+    }
     const uint8_t sel = sceneFrameActorSelected(e.scene);
-    if (sel != hud.liveActor) {
-        hud.liveActor = sel;
-        hud.livePath[0] = '\0';
-        if (sel != kSceneActorNone && sceneFrameReadDoc(e.scene, sel, hud.live)) {
-            hud.liveSent = hud.live;
-            fillMatList(hud);
-            hudPushLive(hud, state);
-            hudPaintPick(hud, state);
-        }
+    if (sel == hud.liveActor) {
         return;
     }
-    if (sel == kSceneActorNone) {
-        return;
-    }
-    if (state.capture == hud.bind.idOf(&hud.uvDeg)) {
-        hud.live.uvRotation = hud.uvDeg * 0.017453292f;
-    }
-    if (state.capture == hud.bind.idOf(&hud.live.emissiveGain)) {
-        hud.live.emissive = hud.live.emissiveGain;
-    }
-    if (std::memcmp(&hud.live, &hud.liveSent, sizeof(BhmatDoc)) != 0 && sceneFrameApplyDoc(e.scene, sel, hud.live)) {
+    hud.liveActor = sel;
+    hud.livePath[0] = '\0';
+    if (sel != kSceneActorNone && sceneFrameReadDoc(e.scene, sel, hud.live)) {
         hud.liveSent = hud.live;
-        hud.liveDirty = 1;
-    }
-    if (hud.liveDirty != 0 && state.capture == kUiNone) {
-        saveLive(hud);
+        if (hud.live.file[0] != '\0') {
+            std::snprintf(hud.livePath, sizeof(hud.livePath), "%s", hud.live.file);
+        }
+        hudPaintPick(hud, state);
     }
 }
 
@@ -253,6 +233,7 @@ void hudDropImport(void* user, const char* path, float x, float y) {
     if (strExtIs(path, ".bhmat")) {
         BhmatDoc doc{};
         if (hud->scene != nullptr && materialLoadBhmat(path, doc)) {
+            std::snprintf(doc.file, sizeof(doc.file), "%s", path);
             const uint8_t hit = sceneFramePick(hud->scene, x, y);
             if (hit != kSceneActorNone && sceneFrameApplyDoc(hud->scene, hit, doc)) {
                 sceneFrameActorSelect(hud->scene, hit);

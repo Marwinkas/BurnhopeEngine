@@ -504,3 +504,5 @@ NEVER step the file history onto a path outside the project root (back leaves th
 NEVER move a lighter-tagged instance to eye minus forward (the mesh sits behind the camera and every meshlet culls as behind); ALWAYS leave the imported transform and place the eye at maxZ plus max(extent * 2.2, 0.35), near plane extent * 0.02, 12 bytes.
 NEVER load a model without a prop at its bounds (the mesh draws and the click hits nothing); ALWAYS one Prop, MeshSpan over every instance, 8 bytes.
 NEVER replace the property mask while a material file is open (the next tick hides that page); ALWAYS keep section bit 64 until an actor click clears it, 1 byte.
+NEVER upload an editor color map as a UNORM block chain (the albedo samples black and the base color is gone); ALWAYS one mip of R8G8B8A8_SRGB, 4 bytes.
+NEVER key a material photo by luminance or read a jpg as DDS (the albedo turns into a white crop and the file is skipped); ALWAYS the texel on slots 8 and 9, and imageLoadFile for jpg png tga bmp hdr, 4 bytes.

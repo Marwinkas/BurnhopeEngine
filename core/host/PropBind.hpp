@@ -2,70 +2,89 @@
 
 #include "host/PropGrid.hpp"
 
+#include <cstdint>
+#include <deque>
+#include <vector>
+
 namespace burnhope {
 
-struct UiFloatBind {
+enum BindKind : uint8_t {
+    kBindFloat = 0,
+    kBindFlag = 1,
+    kBindSwatch = 2,
+};
+
+// One row per control. index is a scalar or a flag in the window block.
+// A swatch owns three scalars starting at index. The table grows while the
+// layout is built and is only walked during the frame.
+struct UiBind {
     uint16_t id = kUiNone;
-    float* dst = nullptr;
+    uint16_t index = 0;
+    uint8_t kind = kBindFloat;
     float fallback = 0.0f;
 };
 
-struct UiBoolBind {
-    uint16_t id = kUiNone;
-    uint8_t* dst = nullptr;
-    uint8_t fallback = 0;
+struct UiPropBinder;
+
+struct UiMenuPick {
+    UiPropBinder* bind = nullptr;
+    uint16_t button = kUiNone;
+    uint16_t index = 0;
+    uint8_t value = 0;
+    char label[48]{};
+    void (*onFlag)(void* user, uint16_t index, uint8_t value, uint16_t button, const char* label) = nullptr;
+    void* user = nullptr;
 };
 
-struct UiBitBind {
-    uint16_t id = kUiNone;
-    bool* dst = nullptr;
-    uint8_t fallback = 0;
+struct UiCommandPick {
+    void (*fn)(void* user, uint16_t item) = nullptr;
+    void* user = nullptr;
+    uint16_t arg = 0;
 };
 
-struct UiSwatchBind {
-    uint16_t id = kUiNone;
-    float* r = nullptr;
-    float* g = nullptr;
-    float* b = nullptr;
+// op 0: flag == value. op 1: flag != value.
+struct UiShowRule {
+    uint16_t node = kUiNone;
+    uint16_t flag = 0;
+    uint8_t value = 0;
+    uint8_t op = 0;
 };
 
 struct UiSlideSpec {
     const char* label = nullptr;
-    float* dst = nullptr;
+    uint16_t index = 0;
     float def = 0.0f;
     float minV = 0.0f;
     float maxV = 1.0f;
 };
 
-// One record per control, filled when the row is created. The frame copies the
-// live widget into *dst. No name and no second lookup.
 struct UiPropBinder {
-    static constexpr uint16_t kFloats = 384;
-    static constexpr uint16_t kBools = 96;
-    static constexpr uint16_t kSwatches = 8;
+    float* scalars = nullptr;
+    uint8_t* flags = nullptr;
+    uint16_t scalarN = 0;
+    uint16_t flagN = 0;
+    std::vector<UiBind> rows;
+    std::vector<UiShowRule> shown;
+    std::deque<UiMenuPick> menus;
+    std::deque<UiCommandPick> commands;
 
-    UiFloatBind floats[kFloats]{};
-    UiBoolBind bools[kBools]{};
-    UiBitBind bits[kBools]{};
-    UiSwatchBind swatches[kSwatches]{};
-    uint16_t nFloats = 0;
-    uint16_t nBools = 0;
-    uint16_t nBits = 0;
-    uint16_t nSwatches = 0;
-
+    void attach(float* scalars, uint16_t scalarCount, uint8_t* flags, uint16_t flagCount);
     void clear();
-    uint16_t slide(UiState& s, uint16_t panel, const char* label, float* dst, float def, float minV, float maxV);
-    void watch(uint16_t id, float* dst, float fallback);
-    uint16_t slideStep(UiState& s, uint16_t panel, const char* label, float* dst, float def, float minV, float maxV, float step);
+    void show(uint16_t node, uint16_t flag, uint8_t value, uint8_t op);
+    uint16_t slide(UiState& s, uint16_t panel, const char* label, uint16_t index, float def, float minV, float maxV);
+    void watch(uint16_t id, uint16_t index, float fallback);
+    uint16_t slideStep(UiState& s, uint16_t panel, const char* label, uint16_t index, float def, float minV, float maxV, float step);
     void slides(UiState& s, uint16_t panel, const UiSlideSpec* spec, uint16_t count);
-    uint16_t check(UiState& s, uint16_t panel, const char* label, uint8_t* dst, bool def);
-    uint16_t check(UiState& s, uint16_t panel, const char* label, bool* dst, bool def);
-    uint16_t swatch(UiState& s, uint16_t panel, const char* label, float* r, float* g, float* b, float r0, float g0, float b0);
+    uint16_t check(UiState& s, uint16_t panel, const char* label, uint16_t index, bool def);
+    uint16_t swatch(UiState& s, uint16_t panel, const char* label, uint16_t index, float r0, float g0, float b0);
     void sync(const UiState& s) const;
     void syncSwatches(UiState& s);
-    void write(UiState& s, float* dst, float value) const;
-    [[nodiscard]] uint16_t idOf(const float* dst) const;
-    [[nodiscard]] uint16_t idOf(const uint8_t* dst) const;
+    void write(UiState& s, uint16_t index, float value) const;
+    [[nodiscard]] uint16_t idOf(uint16_t index, uint8_t kind) const;
 };
+
+void onBinderMenu(void* user, uint16_t item);
+void onBinderCommand(void* user, uint16_t item);
+void propApplyShow(UiState& state, const UiPropBinder& bind);
 
 } // namespace burnhope

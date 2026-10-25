@@ -35,10 +35,10 @@ void applyWeatherPreset(HudContext* hud, uint32_t preset, float coverage, float 
         return;
     }
     UiState& state = *hud->tool.canvas->state;
-    hud->bind.write(state, &hud->tweaks.cloudCoverage, coverage);
-    hud->bind.write(state, &hud->tweaks.cloudDensity, density);
-    hud->bind.write(state, &hud->tweaks.rainAmount, rain);
-    hud->bind.write(state, &hud->tweaks.windSpeed, wind);
+    hud->bind.write(state, kScCloudCoverage, coverage);
+    hud->bind.write(state, kScCloudDensity, density);
+    hud->bind.write(state, kScRainAmount, rain);
+    hud->bind.write(state, kScWindSpeed, wind);
     uiMenuCaption(state, hud->wxBtn, caption);
     if (hud->tool.scene != nullptr) {
         sceneFrameWeatherPreset(hud->tool.scene, preset);
@@ -74,47 +74,45 @@ void onStatsCmd(void* user, uint16_t) {
     onStats(user, 0);
 }
 
-void onMode(void* user) {
-    auto* hit = static_cast<ModeHit*>(user);
-    if (hit == nullptr || hit->canvas == nullptr) {
+void cmdView(void* user, uint16_t mode) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr || hud->tool.canvas == nullptr || hud->tool.canvas->state == nullptr) {
         return;
     }
-    if (hit->hud != nullptr) {
-        hit->hud->flags.viewMode = static_cast<uint8_t>(hit->index);
+    UiState& state = *hud->tool.canvas->state;
+    hud->flags.viewMode = static_cast<uint8_t>(mode);
+    if (mode < 20 && hud->viewRadio[mode] != kUiNone) {
+        uiCheckPress(state, hud->viewRadio[mode]);
     }
     const char* title = "Lit";
-    for (const ViewMode& mode : kViews) {
-        if (mode.index == hit->index) {
-            title = mode.name;
+    for (const ViewMode& row : kViews) {
+        if (row.index == static_cast<int>(mode)) {
+            title = row.name;
+        }
+        if (row.index >= 0 && row.index < 20 && hud->viewRadio[row.index] < state.count) {
+            uiCheckAssign(state, hud->viewRadio[row.index], row.index == static_cast<int>(mode) ? 1 : 0);
         }
     }
-    if (hit->hud != nullptr && hit->canvas->state != nullptr) {
-        for (const ModeHit& mode : hit->hud->modes) {
-            if (mode.radio < hit->canvas->state->count) {
-                uiCheckAssign(*hit->canvas->state, mode.radio, mode.index == hit->index ? 1 : 0);
-            }
-        }
-    }
-    if (hit->label != kUiNone && hit->canvas->state != nullptr) {
-        UiState& s = *hit->canvas->state;
-        uiText(s, hit->label, title);
-        uiTextStyle(s, hit->label, UiTextAlign::Left, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-        const uint16_t button = uiParent(s, hit->label);
+    if (hud->viewCap != kUiNone) {
+        uiText(state, hud->viewCap, title);
+        uiTextStyle(state, hud->viewCap, UiTextAlign::Left, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+        const uint16_t button = uiParent(state, hud->viewCap);
         uint8_t len = 0;
         while (title[len] != '\0' && len < 48) {
             ++len;
         }
-        const float width = uiMeasure(s, title, len, len) + 38.0f;
-        if (button < s.count) {
-            if (auto* flex = s.ent[button].try_get_mut<UiFlex>()) {
+        const float width = uiMeasure(state, title, len, len) + 38.0f;
+        if (button < state.count) {
+            if (auto* flex = state.ent[button].try_get_mut<UiFlex>()) {
                 flex->widthMode = UiSize::Px;
                 flex->width = width;
                 flex->grow = 0.0f;
                 flex->shrink = 0.0f;
             }
         }
-        uiNotifyLayoutDirty(s);
+        uiNotifyLayoutDirty(state);
     }
+    hud->viewWant = 0;
 }
 
 bool loadToolIcon(Canvas& canvas, uint8_t slot, const char* file) {

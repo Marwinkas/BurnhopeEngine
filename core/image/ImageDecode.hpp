@@ -25,6 +25,14 @@ void imageCpuFree(ImageCpu& img);
 // R = AO, G = roughness, B = metal. One PNG the material file can name.
 [[nodiscard]] bool imagePackOrm(const char* aoPath, const char* roughPath, const char* metalPath, const char* outPath);
 
+// R = AO, G = roughness, B = metal, A = height. A missing map keeps the constant for that channel.
+[[nodiscard]] bool imagePackOrmh(
+    const char* aoPath,
+    const char* roughPath,
+    const char* metalPath,
+    const char* heightPath,
+    const char* outPath);
+
 enum class ImageBlock : uint8_t {
     Bc1 = 1,
     Bc3 = 3,

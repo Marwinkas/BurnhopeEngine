@@ -69,6 +69,7 @@ bool canvasListen(Canvas& c, UiValueFn fn, void* user);
 
 // 7. Делегирование ресурсов и фотографий (реализация в UiPhoto)
 [[nodiscard]] bool canvasLoadPhoto(Canvas& c, uint8_t slot, const char* path);
+[[nodiscard]] bool canvasUploadPhoto(Canvas& c, uint8_t slot, const uint8_t* rgba, uint32_t width, uint32_t height);
 [[nodiscard]] const PhotoMeta* canvasPhotoMeta(const Canvas& c, uint8_t slot);
 [[nodiscard]] bool canvasSetFont(Canvas& c, const char* path, float pixelSize);
 [[nodiscard]] bool canvasUseFont(Canvas& c, float pixelSize);

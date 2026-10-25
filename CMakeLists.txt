@@ -343,6 +343,7 @@ target_link_libraries(bh_files PUBLIC bh_ui)
 bh_module(host
     core/host/Host.cpp
     core/host/PropBind.cpp
+    core/host/PropImport.cpp
     core/host/PropGrid.cpp
     core/host/SceneMask.cpp
 )
@@ -352,16 +353,16 @@ bh_module(app
     demo/app/HudAct.cpp
     demo/app/HudMat.cpp
     demo/app/HudMaterial.cpp
+    demo/app/MatPage.cpp
+    demo/app/MatPreview.cpp
     demo/app/HudPick.cpp
     demo/app/HudToolbar.cpp
-    demo/app/HudStrip.cpp
     demo/app/HudView.cpp
     demo/app/HudInspector.cpp
     demo/app/HudPost.cpp
     demo/app/HudSync.cpp
     demo/app/HudPush.cpp
     demo/app/ProjectGate.cpp
-    demo/app/Shell.cpp
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
 target_link_libraries(bh_app PUBLIC bh_ui bh_files)
@@ -838,22 +839,33 @@ add_custom_command(
 add_custom_target(UiBin DEPENDS ${UI_BIN_DIR}/shell.uib ${UI_BIN_DIR}/sample.uib ${UI_BIN_DIR}/files.uib)
 target_compile_definitions(bh_files PRIVATE "BH_UI_FILES=\"${UI_BIN_DIR}/files.uib\"")
 
-add_executable(BurnhopeEngine demo/app/Main.cpp demo/Sample.cpp)
+add_executable(BurnhopeEngine demo/app/Main.cpp)
 target_link_libraries(BurnhopeEngine PRIVATE
     bh_app bh_host bh_files bh_ui bh_image bh_rhi bh_memory bh_platform bh_render bh_audio bh_gpu_scene bh_asset bh_io
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
 target_include_directories(BurnhopeEngine PRIVATE ${BH_CORE} ${BH_ENGINE} ${BH_ENGINE}/include ${BH_DEMO} ${vma_SOURCE_DIR}/include)
-target_compile_definitions(BurnhopeEngine PRIVATE ${BH_DEFS}
-    "BH_UI_SHELL=\"${UI_BIN_DIR}/shell.uib\""
-    "BH_UI_SAMPLE=\"${UI_BIN_DIR}/sample.uib\""
-)
+target_compile_definitions(BurnhopeEngine PRIVATE ${BH_DEFS})
 target_compile_options(BurnhopeEngine PRIVATE ${BH_OPTS})
 set_target_properties(BurnhopeEngine PROPERTIES
     BUILD_RPATH "${CMAKE_SOURCE_DIR}/steamaudio/lib/linux-x64"
 )
 add_dependencies(BurnhopeEngine BurnhopeSpv UiSpv UiBin)
+
+add_executable(BurnhopeSample demo/sample/Main.cpp demo/Sample.cpp demo/app/Shell.cpp)
+target_link_libraries(BurnhopeSample PRIVATE
+    bh_host bh_files bh_ui bh_image bh_rhi bh_memory bh_platform bh_io
+    yogacore flecs_static
+    SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
+)
+target_include_directories(BurnhopeSample PRIVATE ${BH_CORE} ${BH_ENGINE} ${BH_ENGINE}/include ${BH_DEMO} ${vma_SOURCE_DIR}/include)
+target_compile_definitions(BurnhopeSample PRIVATE ${BH_DEFS}
+    "BH_UI_SHELL=\"${UI_BIN_DIR}/shell.uib\""
+    "BH_UI_SAMPLE=\"${UI_BIN_DIR}/sample.uib\""
+)
+target_compile_options(BurnhopeSample PRIVATE ${BH_OPTS})
+add_dependencies(BurnhopeSample UiSpv UiBin)
 
 set(BH_TEST_SOURCES
     tests/Main.cpp

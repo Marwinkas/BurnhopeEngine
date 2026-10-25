@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/Engine.hpp"
+#include "host/PropImport.hpp"
 #include "ui/Style.hpp"
 
 namespace burnhope {
@@ -40,19 +41,20 @@ struct HudMenuItem {
 };
 
 void hudShowBodies(HudContext& hud, UiState& s);
-uint16_t hudDrop(HudContext& hud, UiState& s, uint16_t panel, const char* label, uint8_t kind, const HudMenuItem* items, uint8_t count, uint8_t selected);
-uint16_t bindSwatch(HudContext& hud, UiState& s, uint16_t panel, const char* label, float* r, float* g, float* b, float r0, float g0, float b0);
-bool addActorButton(HudContext& hud, uint16_t objects, uint8_t index, const char* name, uint8_t kind);
+void onHudSwatch(void* user, uint16_t id);
+uint16_t bindSwatch(HudContext& hud, UiState& s, uint16_t panel, const char* label, uint16_t index, float r0, float g0, float b0);
+void hudRefreshActors(HudContext& hud);
 void spawnAndSelectActor(HudContext& hud, uint8_t index);
 void onMaterialAct(void* user, uint16_t id);
 void openMaterialFile(HudContext& hud, const char* path);
 void saveOpenMaterial(HudContext& hud);
-void paintMatTex(HudContext& hud);
+void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel);
+void hudPaintMaterial(HudContext& hud);
+void hudBakeMaterialView(HudContext& hud);
+void hudCommitMaps(HudContext& hud, uint8_t channel);
 void hudBuildActorMaterial(Canvas& canvas, HudContext* hud, uint16_t panel);
 char* hudDocPath(BhmatDoc& doc, uint8_t channel);
 UiState* hudUi(HudContext& hud);
-void hudPaintSlots(HudContext& hud);
-void hudPushLive(HudContext& hud, UiState& state);
 void hudPaintPick(HudContext& hud, UiState& state);
 void hudMaterialSync(Engine& e, Canvas& canvas);
 void hudMaterialDrag(HudContext& hud, UiState& s);
@@ -61,27 +63,31 @@ void hudDropImport(void* user, const char* path, float x, float y);
 void hudTakeTexture(HudContext& hud, uint8_t channel, const char* path);
 void onFileOpen(void* user, const char* path, int isDir);
 void paintTools(HudContext& hud);
-void onGizmoMode(void* user, uint16_t);
-void onSpace(void* user, uint8_t index);
-void onSnapToggle(void* user, uint16_t);
-void onSnapPick(void* user, uint16_t item);
-void onPivotSpace(void* user, uint8_t index);
-void onSpawnKind(void* user, uint16_t item);
+void cmdGizmo(void* user, uint16_t mode);
+void cmdSpace(void* user, uint16_t index);
+void cmdPivot(void* user, uint16_t index);
+void cmdSnapToggle(void* user, uint16_t channel);
+void cmdSnapMove(void* user, uint16_t index);
+void cmdSnapTurn(void* user, uint16_t index);
+void cmdSnapScale(void* user, uint16_t index);
+void cmdSpawn(void* user, uint16_t kind);
+void cmdView(void* user, uint16_t mode);
 void onPlay(void* user, uint16_t);
 void onPause(void* user, uint16_t);
 void onGear(void* user, uint16_t);
 void onCameraButton(void* user, uint16_t);
 void onViewButton(void* user, uint16_t);
-void onViewRadio(void* user, uint16_t id);
 void onSpawnCube(void* user, uint16_t);
 void onDuplicate(void* user, uint16_t);
 void onDuplicateCmd(void* user, uint16_t item);
 void onStatsCmd(void* user, uint16_t item);
 bool loadToolIcon(Canvas& canvas, uint8_t slot, const char* file);
 bool fontBesideExe(Canvas& canvas);
-void hudBuildInspector(Canvas& canvas, HudContext* hud, uint16_t details, uint16_t stats, UiPaint hidden);
+void hudBuildInspector(Canvas& canvas, HudContext* hud, uint16_t details, uint16_t stats);
 void hudBuildPost(Canvas& canvas, HudContext* hud, uint16_t details, UiPaint hidden);
+bool hudImportLayout(UiState& state, uint16_t parent, const char* asset, const char* key, HudContext& hud, const PropSlot* slots, uint16_t slotCount, const PropCommand* commands, uint16_t commandCount, const UiPaint& hidden);
 void hudPushFrame(Engine& e, Canvas& canvas, uint8_t weatherIndex, uint8_t selected);
+void hudFrame(Engine& e);
 void hudSeed(HudContext& hud);
 void wxClear(void* user, uint16_t item);
 void wxOvercast(void* user, uint16_t item);
@@ -100,9 +106,12 @@ inline const ViewMode kViews[] = {
     {15, "ReSTIR свет"}, {16, "ReSTIR вес"}, {17, "ReSTIR M"}, {18, "ReSTIR тень"}, {19, "ReSTIR индекс"},
 };
 
-void hudBuildView(Canvas& canvas, HudContext* hud, uint16_t root, uint16_t row, uint16_t viewCol, const UiLook& look);
-void hudBuildStrip(Canvas& canvas, HudContext* hud, uint16_t toolbar, uint16_t root, const UiLook& look);
-void projectOnFile(FileAct* hit);
+void hudWire(Canvas& canvas, HudContext* hud, uint16_t details, uint16_t statsBody, uint16_t files, uint16_t detailsInner);
+void cmdFileNew(void* user, uint16_t item);
+void cmdFileOpen(void* user, uint16_t item);
+void cmdFileSave(void* user, uint16_t item);
+void cmdFileLoad(void* user, uint16_t item);
+void cmdFileExit(void* user, uint16_t item);
 [[nodiscard]] bool projectGatePoll(Engine& e);
 void projectImportModel(HudContext& hud, const char* path);
 

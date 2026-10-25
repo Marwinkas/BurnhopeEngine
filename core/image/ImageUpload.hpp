@@ -7,6 +7,15 @@
 
 namespace burnhope {
 
+// One mip. Color maps pass srgb so the shader decodes them; data maps stay UNORM.
+[[nodiscard]] bool gpuImageUploadRgba8(
+    GpuImage& img,
+    Device& d,
+    const uint8_t* rgba,
+    uint32_t width,
+    uint32_t height,
+    bool srgb);
+
 [[nodiscard]] bool imageUploadUncompressed(
     GpuImage& img,
     Device& d,

@@ -136,9 +136,9 @@ void uiVirtualRefresh(UiState& s, uint16_t id) {
             flex->height = virt->itemH > 4.0f ? virt->itemH - 4.0f : virt->itemH;
         }
         s.ent[slot].set<UiVirtRow>({index});
-        char text[32]{};
+        char text[96]{};
         if (virt->fill != nullptr) {
-            virt->fill(virt->user, index, text, 31);
+            virt->fill(virt->user, index, text, static_cast<uint8_t>(sizeof(text) - 1u));
         } else {
             std::snprintf(text, sizeof(text), "%u", index);
         }

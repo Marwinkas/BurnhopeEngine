@@ -1,9 +1,9 @@
 #include "app/HudBuild.hpp"
+#include "app/SceneBlockFill.hpp"
 
 #include "gpu_scene/SceneObject.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
-#include "render/Sharc.hpp"
 #include "rhi/Device.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Check.hpp"
@@ -12,12 +12,43 @@
 #include "ui/widget/Popover.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Label.hpp"
+#include "ui/widget/Scroll.hpp"
+#include "ui/widget/Virtual.hpp"
+#include "ui/Text.hpp"
 
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 
 namespace burnhope {
+
+void fillGpuStat(void* user, uint32_t index, char* dst, uint8_t cap) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (dst == nullptr || cap == 0) {
+        return;
+    }
+    dst[0] = '\0';
+    const char* cursor = hud != nullptr && hud->scene != nullptr ? sceneFrameGpuText(hud->scene) : nullptr;
+    if (cursor == nullptr) {
+        return;
+    }
+    uint32_t line = 0;
+    while (cursor[0] != '\0' && line < index) {
+        const char* nl = std::strchr(cursor, '\n');
+        if (nl == nullptr) {
+            return;
+        }
+        cursor = nl + 1;
+        line += 1;
+    }
+    const char* nl = std::strchr(cursor, '\n');
+    size_t n = nl != nullptr ? static_cast<size_t>(nl - cursor) : std::strlen(cursor);
+    if (n >= cap) {
+        n = static_cast<size_t>(cap - 1u);
+    }
+    std::memcpy(dst, cursor, n);
+    dst[n] = '\0';
+}
 
 void placeStats(UiState& state, const HudContext& hud) {
     if (hud.overlay >= state.count) {
@@ -196,12 +227,11 @@ void hudPushFrame(Engine& e, Canvas& hud, uint8_t weatherIndex, uint8_t selected
         grade += 8.0f;
     }
     post.gradeFlags = grade;
-    sceneFrameTune(e.scene, post);
     if (hud.state != nullptr && f.wxClock != 0) {
         const float zenith = sceneFrameWeatherZenith(e.scene);
         const float azimuth = sceneFrameWeatherAzimuth(e.scene);
-        h.bind.write(*hud.state, &h.tweaks.sunZenith, zenith);
-        h.bind.write(*hud.state, &h.tweaks.sunAzimuth, azimuth);
+        h.bind.write(*hud.state, kScSunZenith, zenith);
+        h.bind.write(*hud.state, kScSunAzimuth, azimuth);
         if (weatherIndex != kSceneActorNone) {
             sceneFrameActorSetEuler(e.scene, weatherIndex, zenith, azimuth);
         }
@@ -211,12 +241,13 @@ void hudPushFrame(Engine& e, Canvas& hud, uint8_t weatherIndex, uint8_t selected
         sceneFrameActorEuler(e.scene, weatherIndex, pitch, yaw);
         const bool dragging = sceneFrameActorDragging(e.scene) && selected == weatherIndex;
         if (dragging || (std::fabs(h.tweaks.sunZenith - pitch) <= 0.25f && std::fabs(h.tweaks.sunAzimuth - yaw) <= 0.25f)) {
-            h.bind.write(*hud.state, &h.tweaks.sunZenith, pitch);
-            h.bind.write(*hud.state, &h.tweaks.sunAzimuth, yaw);
+            h.bind.write(*hud.state, kScSunZenith, pitch);
+            h.bind.write(*hud.state, kScSunAzimuth, yaw);
         } else {
             sceneFrameActorSetEuler(e.scene, weatherIndex, h.tweaks.sunZenith, h.tweaks.sunAzimuth);
         }
     }
+    sceneBlockApply(h);
     SceneTweaks tweaks = h.tweaks;
     tweaks.forceLod = static_cast<int32_t>(f.forceLod);
     if (f.reflectMode != 2) {
@@ -229,109 +260,88 @@ void hudPushFrame(Engine& e, Canvas& hud, uint8_t weatherIndex, uint8_t selected
     tweaks.fsrQuality = f.fsrQ;
     tweaks.lightProfile = f.giMode;
     tweaks.tonemapper = f.tone;
-    tweaks.passMask = 0;
-    if (f.cluster != 0) {
-        tweaks.passMask |= 1u;
-    }
-    if (f.probes != 0) {
-        tweaks.passMask |= 2u;
-    }
-    if (f.giMode == 3) {
-        tweaks.passMask |= 262144u;
-    }
-    if (f.aa == 3) {
-        tweaks.passMask |= 4194304u;
-    } else if (f.aa == 2) {
-        tweaks.passMask |= 8u;
-    }
-    if (f.aoMode == 1) {
-        tweaks.passMask |= 16u;
-    }
-    if (f.bloomen != 0) {
-        tweaks.passMask |= 32u;
-    }
-    if (f.aa == 1) {
-        tweaks.passMask |= 4u;
-    }
-    if (f.sun != 0) {
-        tweaks.passMask |= 256u;
-    }
-    if (f.points != 0) {
-        tweaks.passMask |= 512u;
-    }
-    if (f.spots != 0) {
-        tweaks.passMask |= 65536u;
-    }
-    if (f.area != 0) {
-        tweaks.passMask |= 131072u;
-    }
-    if (f.sky != 0) {
-        tweaks.passMask |= 1024u;
-    }
-    if (f.clouden != 0) {
-        tweaks.passMask |= 2048u;
-    }
-    if (f.fogen != 0) {
-        tweaks.passMask |= 4096u;
-    }
-    if (f.reflectMode != 0) {
-        tweaks.passMask |= 8192u;
-    }
-    if (f.contacten != 0) {
-        tweaks.passMask |= 16384u;
-    }
-    if (f.vt != 0) {
-        tweaks.passMask |= 32768u;
-    }
-    if ((tweaks.passMask & 262144u) != 0u && tweaks.lightProfile == 1u) {
-        tweaks.passMask |= 524288u;
-    }
-    if ((tweaks.passMask & 262144u) != 0u && tweaks.lightProfile == 2u) {
-        tweaks.passMask |= 128u;
-    }
-    if ((tweaks.passMask & 262144u) != 0u && tweaks.lightProfile == 3u) {
-        tweaks.passMask |= kPassSharc;
-    }
-    if (f.directMode == 1) {
-        tweaks.passMask |= 1048576u;
-        if (tweaks.restirSunOn && tweaks.sunCsm == 0 && (tweaks.passMask & 256u) != 0u) {
-            tweaks.passMask |= 2097152u;
-        }
-    }
-    sceneFrameTweaks(e.scene, tweaks);
+    sceneBlockFill(h.block, post, tweaks, f, h.actor);
+    sceneFrameSetBlock(e.scene, h.block);
     syncViewport(e, hud);
     const float shownTime = sceneFrameWeatherTime(e.scene);
     if (shownTime >= 0.0f && hud.state != nullptr) {
-        h.bind.write(*hud.state, &h.tweaks.timeOfDay, shownTime);
+        h.bind.write(*hud.state, kScTimeOfDay, shownTime);
         if (tweaks.clockSun != 0 && weatherIndex != kSceneActorNone) {
             const float zen = sceneFrameWeatherZenith(e.scene);
             const float az = sceneFrameWeatherAzimuth(e.scene);
-            h.bind.write(*hud.state, &h.tweaks.sunZenith, zen);
-            h.bind.write(*hud.state, &h.tweaks.sunAzimuth, az);
+            h.bind.write(*hud.state, kScSunZenith, zen);
+            h.bind.write(*hud.state, kScSunAzimuth, az);
             sceneFrameActorSetEuler(e.scene, weatherIndex, zen, az);
         }
     }
-    const char* gpuText = sceneFrameGpuText(e.scene);
-    char lines[40][96]{};
-    uint32_t line = 0;
-    const char* cursor = gpuText != nullptr ? gpuText : "";
-    while (line < 40 && cursor[0] != '\0') {
-        const char* nl = std::strchr(cursor, '\n');
-        const size_t n = nl != nullptr ? static_cast<size_t>(nl - cursor) : std::strlen(cursor);
-        const size_t copy = n < 95 ? n : 95;
-        std::memcpy(lines[line], cursor, copy);
-        lines[line][copy] = '\0';
-        line += 1;
-        if (nl == nullptr) {
-            break;
+    if (hud.state != nullptr && e.hud.ids.statList != kUiNone) {
+        const char* gpuText = sceneFrameGpuText(e.scene);
+        uint32_t lines = 0;
+        if (gpuText != nullptr && gpuText[0] != '\0') {
+            lines = 1;
+            for (const char* p = gpuText; *p != '\0'; ++p) {
+                if (*p == '\n' && p[1] != '\0') {
+                    lines += 1;
+                }
+            }
         }
-        cursor = nl + 1;
+        uiVirtualSource(*hud.state, e.hud.ids.statList, lines, fillGpuStat, nullptr, &e.hud);
+    }
+}
+
+void hudFrame(Engine& e) {
+    if (e.scene == nullptr || e.host.primary < 0) {
+        return;
+    }
+    char fps[96];
+    sceneFrameStats(e.scene, fps, sizeof(fps));
+    HostMeters meters{};
+    platformHostMeters(meters);
+    const uint64_t vram = deviceMemoryUsed(e.host.device);
+    char memLine[96];
+    char loadLine[96];
+    std::snprintf(memLine, sizeof(memLine), "vram %.0f МБ   ram %.0f МБ", static_cast<double>(vram) / (1024.0 * 1024.0), static_cast<double>(meters.rss) / (1024.0 * 1024.0));
+    if (meters.gpu >= 0.0f) {
+        std::snprintf(loadLine, sizeof(loadLine), "cpu %.0f%%   gpu %.0f%%", meters.cpu, meters.gpu);
+    } else {
+        std::snprintf(loadLine, sizeof(loadLine), "cpu %.0f%%   gpu n/a", meters.cpu);
+    }
+    Canvas& hud = e.host.view[e.host.primary].canvas;
+    if (hud.state != nullptr) {
+        uiText(*hud.state, e.hud.ids.statsLbl, fps);
+        uiText(*hud.state, e.hud.ids.memLbl, memLine);
+        uiText(*hud.state, e.hud.ids.loadLbl, loadLine);
+    }
+    const uint8_t selected = sceneFrameActorSelected(e.scene);
+    if (selected != e.hud.shown && selected != kSceneActorNone) {
+        e.hud.matOpen = 0;
+        e.hud.shown = selected;
+        if (hud.state != nullptr) {
+            uiPropShowMask(*hud.state, sceneFrameActorSections(e.scene, selected));
+            scrollReset(*hud.state, e.hud.tool.propPage);
+        }
+        sceneFrameActorGizmo(e.scene, e.hud.toolMode);
     }
     if (hud.state != nullptr) {
-        for (uint32_t i = 0; i < 40; ++i) {
-            uiText(*hud.state, e.hud.ids.stat[i], lines[i]);
+        e.hud.bind.sync(*hud.state);
+        e.hud.bind.syncSwatches(*hud.state);
+        sceneBlockApply(e.hud);
+        hudMaterialSync(e, hud);
+        hudMaterialDrag(e.hud, *hud.state);
+        saveOpenMaterial(e.hud);
+        hudBakeMaterialView(e.hud);
+        hudShowBodies(e.hud, *hud.state);
+    }
+    syncProp(e, hud);
+    uint8_t weatherIndex = kSceneActorNone;
+    const uint8_t count = sceneFrameActorCount(e.scene);
+    for (uint8_t i = 0; i < count; ++i) {
+        if (sceneFrameActorKind(e.scene, i) == static_cast<uint8_t>(SceneActorKind::Weather)) {
+            weatherIndex = i;
+            break;
         }
     }
+    hudPushFrame(e, hud, weatherIndex, selected);
 }
 
 } // namespace burnhope

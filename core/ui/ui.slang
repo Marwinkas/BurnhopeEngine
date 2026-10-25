@@ -5,7 +5,7 @@ ByteAddressBuffer gUi;
 [[vk::binding(1, 0)]]
 Texture2D<float> gSdf;
 [[vk::binding(2, 0)]]
-Texture2D<float4> gPhoto[8];
+Texture2D<float4> gPhoto[10];
 [[vk::binding(0, 1)]]
 SamplerState gSdfSamp;
 
@@ -214,6 +214,8 @@ float4 samplePhoto(uint slot, float2 uv, float blur) {
     if (slot == 5u) return sampleLevel(gPhoto[5], uv, blur);
     if (slot == 6u) return sampleLevel(gPhoto[6], uv, blur);
     if (slot == 7u) return sampleLevel(gPhoto[7], uv, blur);
+    if (slot == 8u) return sampleLevel(gPhoto[8], uv, blur);
+    if (slot == 9u) return sampleLevel(gPhoto[9], uv, blur);
     return sampleLevel(gPhoto[0], uv, blur);
 }
 
@@ -244,13 +246,15 @@ float4 uiFs(VsOut i) : SV_Target0 {
     float3 rgb = i.color.rgb;
     float alpha = i.color.a;
     if ((i.flags & 32u) != 0) {
-        const float4 tex = samplePhoto(min(i.slot, 7u), saturate(i.uv), i.blur);
+        const float4 tex = samplePhoto(min(i.slot, 9u), saturate(i.uv), i.blur);
         rgb = tex.rgb;
-        const float photoLum = dot(rgb, float3(0.30, 0.59, 0.11));
-        if (photoLum <= 0.55) {
-            rgb = float3(0.94, 0.94, 0.92) * i.color.rgb;
-        } else if ((i.flags & 2u) == 0) {
-            rgb *= i.color.rgb;
+        if (i.slot < 8u) {
+            const float photoLum = dot(rgb, float3(0.30, 0.59, 0.11));
+            if (photoLum <= 0.55) {
+                rgb = float3(0.94, 0.94, 0.92) * i.color.rgb;
+            } else if ((i.flags & 2u) == 0) {
+                rgb *= i.color.rgb;
+            }
         }
         alpha = tex.a * i.color.a;
         const float d = sdRound(i.local, i.size, i.radii);

@@ -7,7 +7,13 @@
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Splitter.hpp"
 #include "host/PropBind.hpp"
+#include "host/PropImport.hpp"
+#include "io/File.hpp"
+#include "platform/PlatformUtil.hpp"
+#include "render/SceneBlock.hpp"
+#include "render/SceneFrame.hpp"
 #include "ui/widget/Slider.hpp"
+#include "ui/widget/Virtual.hpp"
 #include "debug/DebugStats.hpp"
 #include "rhi/GpuProfiler.hpp"
 #include "gpu_scene/FrameUniforms.hpp"
@@ -17,6 +23,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <string_view>
 
 using namespace burnhope;
 
@@ -99,22 +106,124 @@ TEST_CASE("splitter resizes the dock on the far side") {
 TEST_CASE("inspector drag writes the bound float") {
     UiState state;
     uiWidgetsInit(state);
-    float roughness = 0.5f;
+    SceneBlock block{};
+    block.scalars[0] = 0.5f;
     const uint16_t root = spawn(state, kUiNone, px(200.0f, 40.0f), paintRgb(0.1f, 0.1f, 0.1f));
-    const uint16_t id = uiSlider(state, root, roughness, 0.0f, 1.0f, nullptr, nullptr, 200.0f);
+    const uint16_t id = uiSlider(state, root, block.scalars[0], 0.0f, 1.0f, nullptr, nullptr, 200.0f);
     UiPropBinder binder;
-    binder.watch(id, &roughness, roughness);
+    binder.attach(block.scalars, 256, block.flags, 64);
+    binder.watch(id, 0, block.scalars[0]);
     uiLayout(state, 240.0f, 80.0f);
     const UiBox& box = state.box[id];
     dragSlider(state, id, box.x + box.w * 0.7f);
     binder.sync(state);
-    CHECK(roughness == doctest::Approx(0.7f).epsilon(0.02));
+    CHECK(block.scalars[0] == doctest::Approx(0.7f).epsilon(0.02));
     GpuDebugStats stats{};
     stats.fps = 60.0f;
     stats.visibleInstances = 4;
     char hud[160]{};
     CHECK(debugFormatStats(stats, hud, sizeof(hud)) > 0);
     CHECK(std::strstr(hud, "60.0") != nullptr);
+}
+TEST_CASE("inspector json writes the slider index") {
+    UiState state;
+    uiWidgetsInit(state);
+    SceneBlock block{};
+    UiPropBinder binder;
+    binder.attach(block.scalars, 256, block.flags, 64);
+    const char* text =
+        R"({"page":[{"role":"check","label":"Sun","bind":22,"on":true},{"role":"slider","label":"Gain","bind":13,"value":1.5,"min":0,"max":4}]})";
+    const uint16_t root = spawn(state, kUiNone, px(220.0f, 80.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    CHECK(propImport(state, root, text, "page", binder, nullptr, 0, nullptr, 0, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr, nullptr));
+    CHECK(block.flags[22] == 1);
+    CHECK(block.scalars[13] == doctest::Approx(1.5f));
+    CHECK(binder.idOf(13, kBindFloat) != kUiNone);
+    CHECK(binder.idOf(22, kBindFlag) != kUiNone);
+    char path[512]{};
+    MappedFile file{};
+    CHECK(platformResolveAsset("assets/ui/inspector.json", path, sizeof(path)));
+    CHECK(fileMapReadOnly(path, &file));
+    const std::string_view doc{reinterpret_cast<const char*>(file.data), file.size};
+    UiPropBinder page;
+    page.attach(block.scalars, 256, block.flags, 64);
+    CHECK(propImport(state, root, doc, "post", page, nullptr, 0, nullptr, 0, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr, nullptr));
+    CHECK(propImport(state, root, doc, "material", page, nullptr, 0, nullptr, 0, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr, nullptr));
+    CHECK(page.idOf(kScGiGain, kBindFloat) != kUiNone);
+    CHECK(page.idOf(kFlRestirTemporal, kBindFlag) != kUiNone);
+    CHECK(page.idOf(kScMatRough, kBindFloat) == kUiNone);
+    CHECK(page.idOf(kScFogR, kBindSwatch) != kUiNone);
+    CHECK(page.shown.size() == 9);
+    fileUnmap(&file);
+}
+TEST_CASE("shell json names the spawn button") {
+    UiState state;
+    uiWidgetsInit(state);
+    SceneBlock block{};
+    UiPropBinder binder;
+    binder.attach(block.scalars, 256, block.flags, 64);
+    uint16_t spawnBtn = kUiNone;
+    uint16_t actors = kUiNone;
+    const PropSlot slots[] = {{"spawnBtn", &spawnBtn}, {"actors", &actors}};
+    char path[512]{};
+    MappedFile file{};
+    CHECK(platformResolveAsset("assets/ui/editor.json", path, sizeof(path)));
+    CHECK(fileMapReadOnly(path, &file));
+    const std::string_view doc{reinterpret_cast<const char*>(file.data), file.size};
+    const uint16_t root = spawn(state, kUiNone, px(800.0f, 600.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    CHECK(propImport(state, root, doc, "frame", binder, slots, 2, nullptr, 0, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr, nullptr));
+    CHECK(spawnBtn != kUiNone);
+    CHECK(actors != kUiNone);
+    CHECK(state.ent[actors].try_get<UiVirtual>() != nullptr);
+    fileUnmap(&file);
+}
+
+TEST_CASE("virtual row keeps a long line") {
+    UiState state;
+    uiWidgetsInit(state);
+    const uint16_t root = spawn(state, kUiNone, px(800.0f, 600.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t list = uiVirtual(state, root, 28.0f);
+    char line[96];
+    std::memset(line, 'A', 80);
+    line[80] = '\0';
+    auto fill = [](void* user, uint32_t, char* dst, uint8_t cap) {
+        std::snprintf(dst, static_cast<size_t>(cap) + 1u, "%s", static_cast<const char*>(user));
+    };
+    uiVirtualSource(state, list, 1, fill, nullptr, line);
+    bool kept = false;
+    for (uint16_t id = 0; id < state.count; ++id) {
+        const UiText* text = state.ent[id].try_get<UiText>();
+        if (text != nullptr && text->len == 80) {
+            kept = true;
+        }
+    }
+    CHECK(kept);
+}
+TEST_CASE("pass mask follows the flag table") {
+    SceneBlock block{};
+    block.flags[kFlCluster] = 1;
+    block.flags[kFlProbes] = 1;
+    block.flags[kFlGi] = 3;
+    block.flags[kFlAo] = 1;
+    block.flags[kFlBloom] = 1;
+    block.flags[kFlSun] = 1;
+    block.flags[kFlPoints] = 1;
+    block.flags[kFlSpots] = 1;
+    block.flags[kFlArea] = 1;
+    block.flags[kFlSky] = 1;
+    block.flags[kFlCloud] = 1;
+    block.flags[kFlReflect] = 2;
+    block.flags[kFlDirect] = 1;
+    block.flags[kFlRestirSun] = 1;
+    block.flags[kFlAa] = 4;
+    const uint32_t expect = 1u | 2u | 262144u | (1u << 23) | 16u | 32u | 256u | 512u | 65536u | 131072u | 1024u | 2048u | 8192u | (1u << 20) | 2097152u;
+    CHECK(sceneBlockPassMask(block) == expect);
+    block.flags[kFlAa] = 3;
+    CHECK((sceneBlockPassMask(block) & (1u << 22)) != 0u);
+    block.flags[kFlSunCsm] = 1;
+    CHECK((sceneBlockPassMask(block) & 2097152u) == 0u);
+    block.flags[kFlGi] = 1;
+    CHECK((sceneBlockPassMask(block) & 262144u) == 0u);
+    CHECK((sceneBlockPassMask(block) & 524288u) == 0u);
 }
 TEST_CASE("gpu profiler table names the slow pass") {
     CHECK(sizeof(FrameView) == 384);

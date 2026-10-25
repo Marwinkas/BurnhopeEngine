@@ -2,6 +2,7 @@
 
 static const uint kMatWorldBit = 256u;
 static const uint kMatFlipBit = 512u;
+static const uint kMatClampBit = 2048u;
 
 float matSafe(float v, float fallback) {
     return v > 1e-4 ? v : fallback;
@@ -74,6 +75,11 @@ MatMap matMapUv(MaterialGpu mat, float2 meshUv, float2 meshDx, float2 meshDy, fl
         m.uv = turned * tile + off;
         m.ddx = rdx * tile;
         m.ddy = rdy * tile;
+        if ((mat.flags & kMatClampBit) != 0u) {
+            m.uv = clamp(m.uv, 0.0, 1.0);
+            m.ddx = 0.0;
+            m.ddy = 0.0;
+        }
         return m;
     }
     const float grid = max(mat.worldGrid, 0.001);

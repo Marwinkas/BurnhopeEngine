@@ -6,6 +6,35 @@
 
 namespace burnhope {
 
+bool uiPhotoUpload(
+    UiRenderer& rhi,
+    Device& device,
+    DescriptorHeaps& heaps,
+    uint8_t slot,
+    const uint8_t* rgba,
+    uint32_t width,
+    uint32_t height) {
+    if (slot >= kPhotoSlots || rgba == nullptr || width == 0 || height == 0) {
+        return false;
+    }
+    gpuImageDestroy(rhi.photos[slot], device);
+    if (!imageUploadUncompressed(rhi.photos[slot], device, rgba, width, height)) {
+        return false;
+    }
+    const bool ok = heapWriteImage(
+        heaps,
+        device,
+        kUiDescPhoto + slot,
+        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        rhi.photos[slot],
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_IMAGE_ASPECT_COLOR_BIT);
+    if (!ok) {
+        spdlog::error("uiPhotoUpload: heap write failed for slot {}", slot);
+    }
+    return ok;
+}
+
 bool uiPhotoLoad(
     UiRenderer& rhi,
     Device& device,

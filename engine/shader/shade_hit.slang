@@ -125,7 +125,7 @@ float3 sampleMapNormal(uint id, MatMap map) {
     return matTriNormal(nX, nY, nZ, map.w, map.axisSign);
 }
 
-float2 parallaxOcclusionUv(float2 uv, float2 uvDx, float2 uvDy, float3 viewTS, float ndotv, uint htex, float amount) {
+float2 parallaxOcclusionUv(float2 uv, float2 uvDx, float2 uvDy, float3 viewTS, float ndotv, uint htex, float amount, uint useAlpha) {
     const int nNumSteps = clamp(int(lerp(48.0, 8.0, saturate(ndotv))), 8, 48);
     const float fStepSize = 1.0 / float(nNumSteps);
     const float heightScale = 0.05 * amount / 0.35;
@@ -140,7 +140,8 @@ float2 parallaxOcclusionUv(float2 uv, float2 uvDx, float2 uvDy, float3 viewTS, f
     [loop]
     for (int nStepIndex = 0; nStepIndex < nNumSteps; ++nStepIndex) {
         vTexCurrentOffset -= vTexOffsetPerStep;
-        const float fCurrHeight = sampleGrad(htex, vTexCurrentOffset, uvDx, uvDy).r;
+        const float4 hTexel = sampleGrad(htex, vTexCurrentOffset, uvDx, uvDy);
+        const float fCurrHeight = useAlpha != 0u ? hTexel.a : hTexel.r;
         fCurrentBound -= fStepSize;
         if (fCurrHeight > fCurrentBound) {
             pt1 = float2(fCurrentBound, fCurrHeight);
@@ -449,7 +450,7 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
             }
         }
     }
-    float3 albedo = mat.baseColor.rgb;
+    float3 albedo = mat.baseColor.rgb * saturate(mat.baseColor.a);
     float2 uv = float2(
         gVerts[i0].u * buC + gVerts[i1].u * bvC + gVerts[i2].u * bwC,
         gVerts[i0].v * buC + gVerts[i1].v * bvC + gVerts[i2].v * bwC);
@@ -475,10 +476,21 @@ ShadeHit shadeHit(uint2 px, uint vis, uint gtid, bool feedback) {
     uv = surf.uv;
     uvDdx = surf.ddx;
     uvDdy = surf.ddy;
-    const uint htex = mat.pad0;
-    if (surf.world == 0u && gShade.pom > 0.001 && htex > 0u && htex < 768u && dot(tangent, tangent) > 0.5) {
+    uint htex = mat.pad0;
+    uint hAlpha = 0u;
+    float pom = asfloat(mat.tail0);
+    if (pom < 0.001) {
+        pom = gShade.pom;
+    }
+    if (htex == 0u || htex >= 768u) {
+        if (mat.orm > 0u && mat.orm < 768u && asfloat(mat.tail0) > 0.001) {
+            htex = mat.orm;
+            hAlpha = 1u;
+        }
+    }
+    if (surf.world == 0u && pom > 0.001 && htex > 0u && htex < 768u && dot(tangent, tangent) > 0.5) {
         const float3 viewTS = float3(dot(V, tangent), dot(V, bitangent), dot(V, N));
-        uv = parallaxOcclusionUv(uv, uvDdx, uvDdy, viewTS, saturate(dot(V, N)), htex, saturate(gShade.pom));
+        uv = parallaxOcclusionUv(uv, uvDdx, uvDdy, viewTS, saturate(dot(V, N)), htex, saturate(pom), hAlpha);
     }
     const uint ntex = mat.normalTex;
     if ((mat.flags & 32u) == 0u && ntex > 0u && ntex < 768u && (surf.world != 0u || dot(tangent, tangent) > 0.5)) {

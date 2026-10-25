@@ -73,6 +73,8 @@ void takeNum(BhmatDoc& doc, const char* key, double value) {
     else if (keyIs(key, "cutout")) doc.alphaCut = n > 0.5 ? 1u : 0u;
     else if (keyIs(key, "flipY")) doc.flipNormalY = n > 0.5 ? 1u : 0u;
     else if (keyIs(key, "unlit")) doc.unlit = n > 0.5 ? 1u : 0u;
+    else if (keyIs(key, "repeat")) doc.repeat = n > 0.5 ? 1u : 0u;
+    else if (keyIs(key, "hScale")) doc.heightScale = n;
 }
 
 void takeStr(BhmatDoc& doc, const char* key, const char* text) {
@@ -84,6 +86,7 @@ void takeStr(BhmatDoc& doc, const char* key, const char* text) {
     else if (keyIs(key, "roughPath")) dst = doc.roughPath;
     else if (keyIs(key, "metalPath")) dst = doc.metalPath;
     else if (keyIs(key, "aoPath")) dst = doc.aoPath;
+    else if (keyIs(key, "height")) dst = doc.heightPath;
     if (dst == nullptr) {
         return;
     }
@@ -106,6 +109,7 @@ bool materialLoadBhmat(const char* path, BhmatDoc& doc) {
     doc.alphaCutoff = 0.5f;
     doc.emissiveColor[0] = doc.emissiveColor[1] = doc.emissiveColor[2] = 1.0f;
     doc.flipNormalY = 1;
+    doc.repeat = 1;
     if (path == nullptr || path[0] == '\0') {
         return false;
     }
@@ -202,6 +206,8 @@ bool materialSaveBhmat(const char* path, const BhmatDoc& doc) {
     putNum(out, "cutout", doc.alphaCut);
     putNum(out, "flipY", doc.flipNormalY);
     putNum(out, "unlit", doc.unlit);
+    putNum(out, "repeat", doc.repeat);
+    putNum(out, "hScale", doc.heightScale);
     std::fputs(",\"albedo\":", out);
     quote(out, doc.albedoPath);
     std::fputs(",\"normal\":", out);
@@ -216,6 +222,8 @@ bool materialSaveBhmat(const char* path, const BhmatDoc& doc) {
     quote(out, doc.metalPath);
     std::fputs(",\"aoPath\":", out);
     quote(out, doc.aoPath);
+    std::fputs(",\"height\":", out);
+    quote(out, doc.heightPath);
     std::fputs("}\n", out);
     std::fclose(out);
     return true;

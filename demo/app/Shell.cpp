@@ -1,7 +1,11 @@
 #include "app/Shell.hpp"
 #include "files/Browser.hpp"
+#include "files/FileDomain.hpp"
 #include "ui/Canvas.hpp"
 #include "host/HostNote.hpp"
+#include "platform/Window.hpp"
+#include "ui/UiPhoto.hpp"
+#include "Str.hpp"
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
 #include "ui/widget/Button.hpp"
@@ -497,14 +501,105 @@ void toolBuild(Canvas& canvas, void*) {
     (void)uiGradient(s, page);
 }
 
+void sampleDrop(Host& host, int slot, const char* path, void*) {
+    if (path == nullptr || path[0] == '\0') {
+        return;
+    }
+    Canvas* canvas = hostCanvas(host, slot);
+    if (canvas == nullptr || canvas->state == nullptr) {
+        return;
+    }
+    filesOfferPath(*canvas->state, path);
+    if (strIsImagePath(path)) {
+        (void)canvasLoadPhoto(*canvas, 0, path);
+    } else if (strExtIs(path, ".json")) {
+        (void)uiImportJsonFile(*canvas->state, 0, path);
+    }
+}
+
+void sampleOps(Host& host, int slot, const WindowOps& ops, void* user) {
+    (void)ops;
+    auto* demo = static_cast<ShellDemo*>(user);
+    ColorBook* colors = demo != nullptr ? demo->colors : nullptr;
+    Canvas* canvas = hostCanvas(host, slot);
+    bool wantTool = false;
+    bool wantColor = false;
+    bool wantFile = false;
+    if (canvas != nullptr && canvas->state != nullptr) {
+        UiHostNote& note = uiHostNote(*canvas->state);
+        wantTool = note.tool;
+        wantFile = note.file;
+        note = {};
+    }
+    bool colorOpen = false;
+    for (int i = 0; i < kHostSlots; ++i) {
+        if (host.view[i].on && std::strcmp(host.view[i].name, "color") == 0) {
+            colorOpen = true;
+            break;
+        }
+    }
+    if (colors != nullptr && colors->present == 2 && !colorOpen) {
+        wantColor = true;
+    }
+    if (wantFile && demo != nullptr && slot >= 0 && slot < kHostSlots) {
+        static const FileFilter filters[] = {
+            {"All files", "*"},
+            {"JSON", "json"},
+            {"Images", "png;jpg;jpeg;gif;bmp;tga;hdr;psd"},
+        };
+        if (windowAskFile(host.view[slot].window, filters, 3, FileAsk::Open)) {
+            demo->fileDialogSlot = slot;
+        }
+    }
+    if (wantTool) {
+        ViewDesc desc{};
+        desc.name = "tool";
+        desc.window.title = "Burnhope";
+        desc.window.width = 560;
+        desc.window.height = 420;
+        desc.window.minWidth = 360;
+        desc.window.minHeight = 240;
+        desc.window.bordered = false;
+        desc.window.resizable = true;
+        desc.builder = toolBuild;
+        desc.onOps = sampleOps;
+        desc.user = demo;
+        (void)hostOpen(host, desc);
+    }
+    if (wantColor) {
+        ViewDesc desc{};
+        desc.name = "color";
+        desc.window.title = "Color";
+        desc.window.width = 440;
+        desc.window.height = 720;
+        desc.window.minWidth = 360;
+        desc.window.minHeight = 480;
+        desc.window.bordered = false;
+        desc.window.resizable = true;
+        desc.builder = colorBuild;
+        desc.onOps = sampleOps;
+        desc.onClose = [](Host&, int, void* user) {
+            auto* demo = static_cast<ShellDemo*>(user);
+            if (demo == nullptr || demo->colors == nullptr) {
+                return;
+            }
+            demo->colors->present = 0;
+            ++demo->colors->gen;
+        };
+        desc.user = demo;
+        (void)hostOpen(host, desc);
+    }
+}
+
 void colorBuild(Canvas& canvas, void* user) {
     if (!canvasUseFont(canvas, 12.0f)) {
         spdlog::error("color font was not set");
     }
     if (canvas.state != nullptr) {
         uiBuildColor(*canvas.state);
-        if (user != nullptr) {
-            uiSetColorBook(*canvas.state, static_cast<ColorBook*>(user));
+        auto* demo = static_cast<ShellDemo*>(user);
+        if (demo != nullptr && demo->colors != nullptr) {
+            uiSetColorBook(*canvas.state, demo->colors);
         }
     }
 }

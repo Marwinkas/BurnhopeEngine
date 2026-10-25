@@ -127,6 +127,17 @@ bool canvasLoadPhoto(Canvas& c, uint8_t slot, const char* path) {
     return ok;
 }
 
+bool canvasUploadPhoto(Canvas& c, uint8_t slot, const uint8_t* rgba, uint32_t width, uint32_t height) {
+    if (slot >= kPhotoSlots || c.device == nullptr || c.heaps == nullptr) {
+        return false;
+    }
+    const bool ok = uiPhotoUpload(c.rhi, *c.device, *c.heaps, slot, rgba, width, height);
+    if (ok && c.state != nullptr) {
+        c.state->visualDirty = true;
+    }
+    return ok;
+}
+
 const PhotoMeta* canvasPhotoMeta(const Canvas& c, uint8_t slot) {
     if (slot >= kPhotoSlots) {
         return nullptr;
