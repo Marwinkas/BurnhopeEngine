@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/CurveData.hpp"
+#include "ui/widget/CurveData.hpp"
 #include "ui/State.hpp"
 
 namespace burnhope {

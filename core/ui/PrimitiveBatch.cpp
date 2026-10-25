@@ -1,11 +1,11 @@
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/Bar.hpp"
 #include "memory/FrameArena.hpp"
+#include "platform/Check.hpp"
 #include "ui/State.hpp"
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
-#include "ui/rhi/UiPhoto.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -22,7 +22,10 @@ struct UiBarScratch {
 FrameArena& barArena(UiState& s) {
     UiBarScratch& scratch = s.world.ensure<UiBarScratch>();
     if (scratch.arena.mem == nullptr) {
-        frameArenaCreate(scratch.arena, 64 * 1024);
+        // Провал оставляет арену пустой: frameArenaAlloc вернёт nullptr, и бар не добавится.
+        const bool created = frameArenaCreate(scratch.arena, 64 * 1024);
+        BH_ASSERT(created, "ui bar arena");
+        static_cast<void>(created);
     }
     return scratch.arena;
 }

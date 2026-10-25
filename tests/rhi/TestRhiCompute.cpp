@@ -351,7 +351,7 @@ TEST_CASE("gpuImageUploadRgba: GPU BC1 decodes close to the source") {
     deviceDestroy(device);
     windowDestroy(window);
 }
-TEST_CASE("gpuImageUploadRgba: GPU BC7 mode 6 decodes close to the source") {
+TEST_CASE("gpuCompressLevel: GPU BC7 mode 6 decodes close to the source") {
     Window window{};
     WindowConfig cfg{};
     cfg.hidden = true;
@@ -380,84 +380,35 @@ TEST_CASE("gpuImageUploadRgba: GPU BC7 mode 6 decodes close to the source") {
             p[3] = static_cast<uint8_t>(32 + (x + y) % 200);
         }
     }
-    GpuImage img{};
-    const bool uploaded = gpuImageUploadRgba(img, device, rgba.data(), kW, kH, 1);
-    CHECK(uploaded);
-    if (uploaded) {
-        CHECK(img.format == VK_FORMAT_BC7_UNORM_BLOCK);
-        const uint32_t blocksX = kW / 4u;
-        const uint32_t blocksY = kH / 4u;
-        const VkDeviceSize bcBytes = static_cast<VkDeviceSize>(blocksX) * blocksY * 16u;
-        GpuBuffer staging{};
-        if (gpuBufferCreate(staging, device, bcBytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true)) {
-            VkCommandBuffer cmd = VK_NULL_HANDLE;
-            const VkCommandBufferAllocateInfo alloc{
-                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-                .commandPool = device.commandPool,
-                .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                .commandBufferCount = 1,
-            };
-            if (vkAllocateCommandBuffers(device.device, &alloc, &cmd) == VK_SUCCESS) {
-                const VkCommandBufferBeginInfo begin{
-                    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-                };
-                vkBeginCommandBuffer(cmd, &begin);
-                rhiImageBarrier(
-                    cmd,
-                    img.image,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                    VK_PIPELINE_STAGE_2_COPY_BIT,
-                    VK_ACCESS_2_TRANSFER_READ_BIT);
-                const VkBufferImageCopy region{
-                    .bufferOffset = 0,
-                    .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-                    .imageExtent = {kW, kH, 1},
-                };
-                vkCmdCopyImageToBuffer(cmd, img.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging.buffer, 1, &region);
-                vkEndCommandBuffer(cmd);
-                const VkCommandBufferSubmitInfo cbsi{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO, .commandBuffer = cmd};
-                const VkSubmitInfo2 submit{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2, .commandBufferInfoCount = 1, .pCommandBufferInfos = &cbsi};
-                if (vkQueueSubmit2(device.graphicsQueue, 1, &submit, VK_NULL_HANDLE) == VK_SUCCESS) {
-                    vkQueueWaitIdle(device.graphicsQueue);
-                    const auto* blocks = static_cast<const uint8_t*>(staging.mapped);
-                    double sumErr = 0.0;
-                    uint32_t mode6 = 0;
-                    for (uint32_t by = 0; by < blocksY; ++by) {
-                        for (uint32_t bx = 0; bx < blocksX; ++bx) {
-                            uint8_t decoded[16 * 4];
-                            const uint8_t* blk = blocks + (static_cast<size_t>(by) * blocksX + bx) * 16u;
-                            if (!decodeBc7Mode6(blk, decoded)) {
-                                continue;
-                            }
-                            ++mode6;
-                            for (uint32_t ty = 0; ty < 4; ++ty) {
-                                for (uint32_t tx = 0; tx < 4; ++tx) {
-                                    const uint8_t* src = rgba.data() + (static_cast<size_t>(by * 4 + ty) * kW + (bx * 4 + tx)) * 4u;
-                                    const uint8_t* dec = decoded + (ty * 4 + tx) * 4u;
-                                    for (int c = 0; c < 4; ++c) {
-                                        sumErr += std::abs(static_cast<int>(src[c]) - static_cast<int>(dec[c]));
-                                    }
-                                }
-                            }
-                        }
+    const uint32_t blocksX = kW / 4u;
+    const uint32_t blocksY = kH / 4u;
+    std::vector<uint8_t> blocks(static_cast<size_t>(blocksX) * blocksY * imageBlockBytes(ImageBlock::Bc7));
+    CHECK(gpuCompressLevel(device, ImageBlock::Bc7, rgba.data(), kW, kH, blocks.data()));
+    double sumErr = 0.0;
+    uint32_t mode6 = 0;
+    for (uint32_t by = 0; by < blocksY; ++by) {
+        for (uint32_t bx = 0; bx < blocksX; ++bx) {
+            uint8_t decoded[16 * 4];
+            const uint8_t* blk = blocks.data() + (static_cast<size_t>(by) * blocksX + bx) * 16u;
+            if (!decodeBc7Mode6(blk, decoded)) {
+                continue;
+            }
+            ++mode6;
+            for (uint32_t ty = 0; ty < 4; ++ty) {
+                for (uint32_t tx = 0; tx < 4; ++tx) {
+                    const uint8_t* src = rgba.data() + (static_cast<size_t>(by * 4 + ty) * kW + (bx * 4 + tx)) * 4u;
+                    const uint8_t* dec = decoded + (ty * 4 + tx) * 4u;
+                    for (int c = 0; c < 4; ++c) {
+                        sumErr += std::abs(static_cast<int>(src[c]) - static_cast<int>(dec[c]));
                     }
-                    const double meanErr = sumErr / (static_cast<double>(kW) * kH * 4.0);
-                    spdlog::info("gpu bc7 mode6 blocks {}/{} mean abs error per channel = {:.3f}", mode6, blocksX * blocksY, meanErr);
-                    CHECK(mode6 == blocksX * blocksY);
-                    CHECK(meanErr < 12.0);
                 }
             }
-            if (cmd != VK_NULL_HANDLE) {
-                vkFreeCommandBuffers(device.device, device.commandPool, 1, &cmd);
-            }
-            gpuBufferDestroy(staging, device);
         }
-        gpuImageDestroy(img, device);
     }
+    const double meanErr = sumErr / (static_cast<double>(kW) * kH * 4.0);
+    spdlog::info("gpu bc7 mode6 blocks {}/{} mean abs error per channel = {:.3f}", mode6, blocksX * blocksY, meanErr);
+    CHECK(mode6 == blocksX * blocksY);
+    CHECK(meanErr < 12.0);
     deviceDestroy(device);
     windowDestroy(window);
 }

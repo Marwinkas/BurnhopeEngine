@@ -3,7 +3,7 @@
 #include "gfx/Decal.hpp"
 #include "gfx/Material.hpp"
 #include "gfx/Portal.hpp"
-#include "platform/Window.hpp"
+#include "platform/Input.hpp"
 #include "render/SceneBlock.hpp"
 #include "rhi/DescriptorHeap.hpp"
 #include "rhi/Swapchain.hpp"

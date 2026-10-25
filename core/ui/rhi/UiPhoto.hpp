@@ -32,16 +32,4 @@ struct UiState;
 
 void uiPhotoTick(UiState& s);
 
-uint32_t uiEmitSprite(
-    UiPrimitive* dst,
-    uint32_t n,
-    uint32_t cap,
-    const UiBox& box,
-    const UiImage& image,
-    const UiBox* clip,
-    float blur,
-    float tintR,
-    float tintG,
-    float tintB);
-
 } // namespace burnhope

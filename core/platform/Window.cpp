@@ -1115,8 +1115,8 @@ void placePath(char* out, int cap, const char* name) {
     }
 }
 
-bool windowCreateSurface(Window& w, VkInstance instance, VkSurfaceKHR& out) {
-    if (!live(w) || instance == VK_NULL_HANDLE) {
+bool windowCreateSurface(Window& w, VkInstance_T* instance, VkSurfaceKHR_T*& out) {
+    if (!live(w) || instance == nullptr) {
         return false;
     }
     if (!SDL_Vulkan_CreateSurface(w.handle, instance, nullptr, &out)) {

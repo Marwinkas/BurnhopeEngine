@@ -3,7 +3,7 @@
 
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
-#include "ui/Canvas.hpp"
+#include "ui/rhi/Canvas.hpp"
 #include "ui/widget/Widgets.hpp"
 #include "rhi/Device.hpp"
 #include "rhi/Swapchain.hpp"

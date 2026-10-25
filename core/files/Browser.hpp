@@ -1,7 +1,7 @@
 #pragma once
 
 #include "files/Model.hpp"
-#include "ui/Canvas.hpp"
+#include "ui/rhi/Canvas.hpp"
 
 namespace burnhope {
 

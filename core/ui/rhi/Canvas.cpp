@@ -1,7 +1,7 @@
-#include "ui/Canvas.hpp"
+#include "ui/rhi/Canvas.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/PrimitiveBatch.hpp"
-#include "ui/Font.hpp"
+#include "ui/rhi/Font.hpp"
 #include "ui/State.hpp"
 #include "platform/Trace.hpp"
 

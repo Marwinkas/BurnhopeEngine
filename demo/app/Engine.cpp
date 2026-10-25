@@ -23,7 +23,7 @@
 #include "ui/widget/TreeView.hpp"
 #include "ui/Interaction.hpp"
 #include "ui/State.hpp"
-#include "ui/Canvas.hpp"
+#include "ui/rhi/Canvas.hpp"
 #include "ui/Text.hpp"
 #include "ui/rhi/UiPhoto.hpp"
 #include "Str.hpp"

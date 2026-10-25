@@ -100,6 +100,57 @@ foreach(bh_core_file ${BH_CORE_SOURCES})
         message(FATAL_ERROR "core must not import demo, engine, or old: ${bh_core_file}")
     endif()
 endforeach()
+# Слоевые брандмауэры include. Нижний слой не видит верхний, UI-ядро не видит RHI и виджеты.
+function(bh_firewall rule pattern)
+    foreach(bh_fw_file ${ARGN})
+        file(READ ${bh_fw_file} bh_fw_text)
+        if(bh_fw_text MATCHES "#[ \t]*include[ \t]*[\"<](${pattern})")
+            message(FATAL_ERROR "${rule}: ${bh_fw_file}")
+        endif()
+    endforeach()
+endfunction()
+file(GLOB_RECURSE BH_RHI_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/rhi/*.cpp ${BH_CORE}/rhi/*.hpp)
+file(GLOB BH_UI_CORE_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/ui/*.cpp ${BH_CORE}/ui/*.hpp)
+file(GLOB_RECURSE BH_UI_WIDGET_SOURCES CONFIGURE_DEPENDS
+    ${BH_CORE}/ui/widget/*.cpp ${BH_CORE}/ui/widget/*.hpp
+    ${BH_CORE}/ui/kit/*.cpp ${BH_CORE}/ui/kit/*.hpp)
+bh_firewall("core/rhi must not import Window, ui, files or host"
+    "platform/Window\\.hpp|ui/|files/|host/" ${BH_RHI_SOURCES})
+bh_firewall("core/ui must not import rhi, image, ui/rhi, widgets, kits, files or host"
+    "rhi/|image/|ui/rhi/|ui/widget/|ui/kit/|files/|host/" ${BH_UI_CORE_SOURCES})
+bh_firewall("core/ui/widget and core/ui/kit must not import rhi, image, ui/rhi, files, host or yoga"
+    "rhi/|image/|ui/rhi/|files/|host/|yoga/" ${BH_UI_WIDGET_SOURCES})
+file(GLOB BH_UI_BRICK_SOURCES CONFIGURE_DEPENDS
+    ${BH_CORE}/ui/widget/Label.* ${BH_CORE}/ui/widget/Button.* ${BH_CORE}/ui/widget/Check.*
+    ${BH_CORE}/ui/widget/Field.* ${BH_CORE}/ui/widget/FieldFilter.* ${BH_CORE}/ui/widget/TextEdit.*
+    ${BH_CORE}/ui/widget/Search.* ${BH_CORE}/ui/widget/Number.* ${BH_CORE}/ui/widget/NumberEdit.*
+    ${BH_CORE}/ui/widget/Slider.* ${BH_CORE}/ui/widget/Scroll.* ${BH_CORE}/ui/widget/Splitter.*
+    ${BH_CORE}/ui/widget/Fold.* ${BH_CORE}/ui/widget/Tip.* ${BH_CORE}/ui/widget/Curve.*
+    ${BH_CORE}/ui/widget/Gradient.* ${BH_CORE}/ui/widget/Image.* ${BH_CORE}/ui/widget/Tabs.*)
+bh_firewall("atomic bricks must not import composite kits"
+    "([a-z]+/)*(Virtual|VirtualGrid|TreeView|Thumb|Menu|Choice|Popover|Breadcrumbs|AssetSlot|DragDrop|Rubberband|Chrome|Docking|Calendar|ColorPicker|Widgets)\\.hpp" ${BH_UI_BRICK_SOURCES})
+file(GLOB_RECURSE BH_T0_SOURCES CONFIGURE_DEPENDS
+    ${BH_CORE}/memory/*.cpp ${BH_CORE}/memory/*.hpp ${BH_CORE}/io/*.cpp ${BH_CORE}/io/*.hpp
+    ${BH_CORE}/wasm/*.cpp ${BH_CORE}/wasm/*.hpp ${BH_CORE}/color/*.hpp ${BH_CORE}/time/*.hpp
+    ${BH_CORE}/doc/*.hpp ${BH_CORE}/text/*.hpp)
+file(GLOB BH_T1_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/platform/*.cpp ${BH_CORE}/platform/*.hpp)
+list(REMOVE_ITEM BH_T1_SOURCES ${BH_CORE}/platform/Window.cpp)
+file(GLOB_RECURSE BH_T2_SOURCES CONFIGURE_DEPENDS
+    ${BH_CORE}/gfx/*.cpp ${BH_CORE}/gfx/*.hpp ${BH_CORE}/asset/*.cpp ${BH_CORE}/asset/*.hpp
+    ${BH_CORE}/audio/*.cpp ${BH_CORE}/audio/*.hpp ${BH_CORE}/scene/*.cpp ${BH_CORE}/scene/*.hpp
+    ${BH_CORE}/stream/*.cpp ${BH_CORE}/stream/*.hpp)
+file(GLOB_RECURSE BH_T5_SOURCES CONFIGURE_DEPENDS
+    ${BH_ENGINE}/gpu_scene/*.cpp ${BH_ENGINE}/gpu_scene/*.hpp
+    ${BH_ENGINE}/include/render/*.cpp ${BH_ENGINE}/include/render/*.hpp
+    ${BH_ENGINE}/src/*.cpp ${BH_ENGINE}/src/*.hpp)
+bh_firewall("tier 0 foundation must not import rhi, image, Window, ui, files, host, gfx, asset, audio, volk or SDL3"
+    "rhi/|image/|platform/Window\\.hpp|ui/|files/|host/|gfx/|asset/|audio/|volk\\.h|SDL3/" ${BH_T0_SOURCES})
+bh_firewall("tier 1 platform must not import rhi, image, ui, files, host, gfx, asset, audio or volk"
+    "rhi/|image/|ui/|files/|host/|gfx/|asset/|audio/|volk\\.h" ${BH_T1_SOURCES})
+bh_firewall("tier 2 world and asset data must not import ui, files, host or Window"
+    "ui/|files/|host/|platform/Window\\.hpp" ${BH_T2_SOURCES})
+bh_firewall("tier 5 engine must not import ui, files, host or Window"
+    "ui/|files/|host/|platform/Window\\.hpp" ${BH_T5_SOURCES})
 file(GLOB_RECURSE BH_LIVE_SOURCES CONFIGURE_DEPENDS
     ${BH_DEMO}/*.cpp ${BH_DEMO}/*.hpp ${BH_ENGINE}/*.cpp ${BH_ENGINE}/*.hpp)
 foreach(bh_live_file ${BH_LIVE_SOURCES})
@@ -115,14 +166,14 @@ set(BH_DEFS
     SPDLOG_NO_EXCEPTIONS
     FMT_EXCEPTIONS=0
 )
-set(BH_OPTS -Wall -Wextra -Wpedantic -std=c++26 -fno-rtti -fno-exceptions -Wno-missing-field-initializers)
+set(BH_OPTS -Wall -Wextra -Wpedantic -std=c++26 -fno-rtti -fno-exceptions -Wno-missing-field-initializers -Wno-deprecated-declarations)
 
 function(bh_module name)
     add_library(bh_${name} OBJECT ${ARGN})
     target_include_directories(bh_${name} PUBLIC ${BH_INCLUDES})
     target_compile_definitions(bh_${name} PUBLIC ${BH_DEFS})
     target_compile_options(bh_${name} PRIVATE ${BH_OPTS})
-    target_link_libraries(bh_${name} PUBLIC volk spdlog::spdlog)
+    target_link_libraries(bh_${name} PUBLIC spdlog::spdlog)
 endfunction()
 
 option(BH_TRACY "Pull Tracy from https://github.com/wolfpld/tracy and mark frame zones" OFF)
@@ -163,8 +214,8 @@ if(BH_TSAN)
 endif()
 bh_module(memory   core/memory/FrameArena.cpp)
 bh_module(wasm core/wasm/WasmHost.cpp)
-bh_module(io core/io/File.cpp core/gfx/Material.cpp)
-bh_module(asset core/asset/AssimpImporter.cpp core/asset/ProjectDoc.cpp)
+bh_module(io core/io/File.cpp core/io/Json.cpp)
+bh_module(asset core/asset/AssimpImporter.cpp core/asset/ProjectDoc.cpp core/gfx/Material.cpp)
 target_link_libraries(bh_asset PUBLIC assimp::assimp meshoptimizer bh_platform bh_io)
 set_source_files_properties(core/asset/AssimpImporter.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions;-frtti")
 target_link_libraries(bh_wasm PUBLIC bh_memory)
@@ -211,7 +262,7 @@ target_include_directories(bh_image PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Libraries/include
     ${CMAKE_CURRENT_SOURCE_DIR}/Libraries/ispc_texcomp
 )
-target_link_libraries(bh_image PUBLIC bh_rhi bh_texcomp bh_platform)
+target_link_libraries(bh_image PUBLIC bh_rhi bh_texcomp bh_platform volk)
 set_source_files_properties(core/image/ImageDecode.cpp PROPERTIES COMPILE_OPTIONS "-w")
 add_library(bh_gpu_scene INTERFACE)
 target_include_directories(bh_gpu_scene INTERFACE ${BH_INCLUDES} ${BH_ENGINE} ${BH_ENGINE}/include)
@@ -271,62 +322,67 @@ set_source_files_properties(
     engine/src/Physics.cpp
     PROPERTIES COMPILE_OPTIONS "-w")
 target_compile_definitions(bh_render PUBLIC "BH_SHADER_DIR=\"${CMAKE_CURRENT_BINARY_DIR}/shaders\"")
-target_link_libraries(bh_render PUBLIC flecs_static Jolt bh_audio)
-bh_module(ui
-    core/ui/Canvas.cpp
+target_link_libraries(bh_render PUBLIC volk flecs_static Jolt bh_audio)
+bh_module(ui_core
     core/ui/Command.cpp
-    core/ui/widget/Popover.cpp
-    core/ui/Motion.cpp
-    core/ui/rhi/UiRenderer.cpp
-    core/ui/LayoutBridge.cpp
-    core/ui/PrimitiveBatch.cpp
-    core/ui/Font.cpp
-    core/ui/Text.cpp
-    core/ui/Hover.cpp
-    core/ui/Panel.cpp
-    core/ui/Json.cpp
-    core/io/Json.cpp
-    core/ui/UiBin.cpp
-    core/ui/rhi/UiPhoto.cpp
-    core/ui/UiWindowBridge.cpp
     core/ui/FlexAttr.cpp
-    core/ui/widget/Chrome.cpp
-    core/ui/widget/Tabs.cpp
-    core/ui/widget/Docking.cpp
-    core/ui/Node.cpp
-    core/ui/widget/Widgets.cpp
-    core/ui/Hit.cpp
     core/ui/Focus.cpp
-    core/ui/widget/TreeView.cpp
+    core/ui/Hit.cpp
+    core/ui/Hover.cpp
+    core/ui/Input.cpp
+    core/ui/Json.cpp
+    core/ui/LayoutBridge.cpp
+    core/ui/Motion.cpp
+    core/ui/Node.cpp
+    core/ui/Panel.cpp
+    core/ui/PrimitiveBatch.cpp
+    core/ui/Text.cpp
+    core/ui/UiBin.cpp
+    core/ui/UiWindowBridge.cpp
+)
+bh_module(ui_bricks
     core/ui/widget/Button.cpp
     core/ui/widget/Check.cpp
-    core/ui/widget/Choice.cpp
+    core/ui/widget/Curve.cpp
     core/ui/widget/Field.cpp
     core/ui/widget/FieldFilter.cpp
-    core/ui/widget/Search.cpp
-    core/ui/widget/TextEdit.cpp
+    core/ui/widget/Fold.cpp
+    core/ui/widget/Gradient.cpp
+    core/ui/widget/Image.cpp
     core/ui/widget/Label.cpp
     core/ui/widget/Number.cpp
     core/ui/widget/NumberEdit.cpp
-    core/ui/widget/Slider.cpp
-    core/ui/widget/Curve.cpp
-    core/ui/widget/Gradient.cpp
     core/ui/widget/Scroll.cpp
+    core/ui/widget/Search.cpp
+    core/ui/widget/Slider.cpp
     core/ui/widget/Splitter.cpp
-    core/ui/widget/Image.cpp
-    core/ui/widget/Fold.cpp
-    core/ui/widget/Virtual.cpp
-    core/ui/widget/VirtualGrid.cpp
-    core/ui/widget/Thumb.cpp
-    core/ui/widget/DragDrop.cpp
-    core/ui/widget/AssetSlot.cpp
-    core/ui/widget/Breadcrumbs.cpp
-    core/ui/widget/Rubberband.cpp
-    core/ui/widget/Menu.cpp
-    core/ui/Input.cpp
+    core/ui/widget/Tabs.cpp
+    core/ui/widget/TextEdit.cpp
     core/ui/widget/Tip.cpp
+)
+bh_module(ui_kits
     core/ui/kit/Calendar.cpp
     core/ui/kit/Color.cpp
+    core/ui/widget/AssetSlot.cpp
+    core/ui/widget/Breadcrumbs.cpp
+    core/ui/widget/Choice.cpp
+    core/ui/widget/Chrome.cpp
+    core/ui/widget/Docking.cpp
+    core/ui/widget/DragDrop.cpp
+    core/ui/widget/Menu.cpp
+    core/ui/widget/Popover.cpp
+    core/ui/widget/Rubberband.cpp
+    core/ui/widget/Thumb.cpp
+    core/ui/widget/TreeView.cpp
+    core/ui/widget/Virtual.cpp
+    core/ui/widget/VirtualGrid.cpp
+    core/ui/widget/Widgets.cpp
+)
+bh_module(ui_rhi
+    core/ui/rhi/Canvas.cpp
+    core/ui/rhi/Font.cpp
+    core/ui/rhi/UiPhoto.cpp
+    core/ui/rhi/UiRenderer.cpp
 )
 bh_module(files
     core/files/Files.cpp
@@ -339,7 +395,7 @@ bh_module(files
     core/files/Format.cpp
     core/files/Model.cpp
 )
-target_link_libraries(bh_files PUBLIC bh_ui)
+target_link_libraries(bh_files PUBLIC bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_asset)
 bh_module(host
     core/host/Host.cpp
     core/host/PropBind.cpp
@@ -347,7 +403,7 @@ bh_module(host
     core/host/PropGrid.cpp
     core/host/SceneMask.cpp
 )
-target_link_libraries(bh_host PUBLIC bh_ui bh_rhi bh_platform bh_memory)
+target_link_libraries(bh_host PUBLIC volk bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_rhi bh_platform bh_memory)
 bh_module(app
     demo/app/Engine.cpp
     demo/app/HudAct.cpp
@@ -367,17 +423,19 @@ bh_module(app
     demo/app/ProjectGate.cpp
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
-target_link_libraries(bh_app PUBLIC bh_ui bh_files)
-target_link_libraries(bh_ui PUBLIC bh_io bh_image yogacore flecs_static Freetype::Freetype)
-target_compile_options(bh_ui PRIVATE -Wno-deprecated-declarations)
-target_compile_definitions(bh_ui PRIVATE
+target_link_libraries(bh_app PUBLIC bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_files)
+target_link_libraries(bh_ui_core PUBLIC bh_io yogacore flecs_static)
+target_link_libraries(bh_ui_bricks PUBLIC bh_ui_core bh_platform)
+target_link_libraries(bh_ui_kits PUBLIC bh_ui_bricks)
+target_link_libraries(bh_ui_rhi PUBLIC bh_ui_core bh_rhi bh_image volk Freetype::Freetype)
+target_compile_definitions(bh_ui_rhi PRIVATE
     "BH_UI_VERT=\"${CMAKE_CURRENT_BINARY_DIR}/shaders/ui.vert.spv\""
     "BH_UI_FRAG=\"${CMAKE_CURRENT_BINARY_DIR}/shaders/ui.frag.spv\""
     "BH_UI_MESH=\"${CMAKE_CURRENT_BINARY_DIR}/shaders/ui.mesh.spv\""
 )
 
 set_source_files_properties(core/rhi/VolkVma.cpp PROPERTIES COMPILE_OPTIONS "-w")
-target_link_libraries(bh_rhi PUBLIC Vulkan::Vulkan)
+target_link_libraries(bh_rhi PUBLIC volk Vulkan::Vulkan)
 target_link_libraries(bh_platform PUBLIC SDL3::SDL3)
 
 find_program(SLANGC_EXECUTABLE slangc REQUIRED)
@@ -843,7 +901,7 @@ target_compile_definitions(bh_files PRIVATE "BH_UI_FILES=\"${UI_BIN_DIR}/files.u
 
 add_executable(BurnhopeEngine demo/app/Main.cpp)
 target_link_libraries(BurnhopeEngine PRIVATE
-    bh_app bh_host bh_files bh_ui bh_image bh_rhi bh_memory bh_platform bh_render bh_audio bh_gpu_scene bh_asset bh_io
+    bh_app bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_memory bh_platform bh_render bh_audio bh_gpu_scene bh_asset bh_io
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
@@ -857,7 +915,7 @@ add_dependencies(BurnhopeEngine BurnhopeSpv UiSpv UiBin)
 
 add_executable(BurnhopeSample demo/sample/Main.cpp demo/Sample.cpp demo/app/Shell.cpp)
 target_link_libraries(BurnhopeSample PRIVATE
-    bh_host bh_files bh_ui bh_image bh_rhi bh_memory bh_platform bh_io
+    bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_memory bh_platform bh_asset bh_io
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
@@ -887,7 +945,7 @@ set(BH_TEST_SOURCES
 )
 add_executable(BurnhopeTest ${BH_TEST_SOURCES})
 target_link_libraries(BurnhopeTest PRIVATE
-    bh_host bh_files bh_ui bh_image bh_rhi bh_memory bh_platform bh_wasm bh_io
+    bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_memory bh_platform bh_wasm bh_asset bh_io
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads Freetype::Freetype
 )

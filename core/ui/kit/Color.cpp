@@ -47,7 +47,7 @@ void publishColor(UiState& s, UiColorPickerComponent& picker);
 void refreshColorChrome(UiState& s, UiColorPickerComponent& picker);
 void fillColorBody(UiState& s, uint16_t parent);
 void colorOnClose(void* user, uint16_t);
-void takeBook(UiState& s, UiColorPickerComponent& picker);
+void takeBook(UiColorPickerComponent& picker);
 void applyColor(UiState& s, UiColorPickerComponent& picker, bool fromHsv, bool publish);
 
 bool pickerOwns(const UiColorPickerComponent& picker, uint16_t id) {
@@ -155,7 +155,7 @@ void uiSetColorBook(UiState& s, ColorBook* book) {
         }
         picker->book = book;
         if (book != nullptr && book->gen != 0 && picker->colorSeen != book->gen) {
-            takeBook(s, *picker);
+            takeBook(*picker);
             applyColor(s, *picker, false, true);
         }
     }
@@ -282,7 +282,7 @@ void applyColor(UiState& s, UiColorPickerComponent& picker, bool fromHsv, bool p
     s.visualDirty = true;
 }
 
-void takeBook(UiState& s, UiColorPickerComponent& picker) {
+void takeBook(UiColorPickerComponent& picker) {
     if (picker.book == nullptr || picker.book->gen == 0) {
         return;
     }
@@ -696,7 +696,7 @@ void colorOnOpen(void* user, uint16_t id) {
         return;
     }
     if (picker->book != nullptr && picker->book->gen != picker->colorSeen) {
-        takeBook(s, *picker);
+        takeBook(*picker);
     }
     picker->colorAnchor = id;
     applyColor(s, *picker, false, false);
@@ -1032,7 +1032,7 @@ void uiBuildColor(UiState& s) {
     UiColorPickerComponent& picker = colorBind(s, root);
     picker.colorHost = 1;
     if (picker.book != nullptr && picker.book->gen != 0) {
-        takeBook(s, picker);
+        takeBook(picker);
     } else {
         rgbToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
     }
@@ -1188,7 +1188,7 @@ uint16_t loadColorBin(UiState& s, uint16_t parent, const BinNode& node, const Bi
         colorInk(picker).a = 1.0f;
         colorInk(picker).useAlpha = 1;
     } else {
-        takeBook(s, picker);
+        takeBook(picker);
     }
     picker.colorPanel = id;
     fillColorBody(s, id);

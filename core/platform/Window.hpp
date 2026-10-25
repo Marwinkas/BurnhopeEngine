@@ -2,12 +2,12 @@
 
 #include "platform/Input.hpp"
 
-#include <volk.h>
-
 #include <cstdint>
 
 struct SDL_Window;
 struct SDL_Cursor;
+struct VkInstance_T;
+struct VkSurfaceKHR_T;
 
 namespace burnhope {
 
@@ -182,7 +182,7 @@ void windowApply(Window& w, const WindowCommand& command);
 
 void windowText(Window& w, bool on);
 void windowTextArea(Window& w, int x, int y, int width, int height);
-[[nodiscard]] bool windowCreateSurface(Window& w, VkInstance instance, VkSurfaceKHR& out);
+[[nodiscard]] bool windowCreateSurface(Window& w, VkInstance_T* instance, VkSurfaceKHR_T*& out);
 void platformSleep(int ms);
 void platformPace(int hz, uint64_t& nextTick);
 [[nodiscard]] uint16_t windowHoldMs(const Window& w, int scancode);

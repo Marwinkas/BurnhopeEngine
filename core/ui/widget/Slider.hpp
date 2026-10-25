@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/Range.hpp"
+#include "ui/widget/Range.hpp"
 #include "platform/Input.hpp"
 #include "ui/Interaction.hpp"
 #include "ui/Types.hpp"

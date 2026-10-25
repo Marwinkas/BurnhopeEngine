@@ -1,7 +1,7 @@
 #include "app/Shell.hpp"
 #include "files/Browser.hpp"
 #include "files/FileDomain.hpp"
-#include "ui/Canvas.hpp"
+#include "ui/rhi/Canvas.hpp"
 #include "host/HostNote.hpp"
 #include "platform/Window.hpp"
 #include "ui/rhi/UiPhoto.hpp"

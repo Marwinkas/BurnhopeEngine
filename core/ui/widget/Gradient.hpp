@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/GradientData.hpp"
+#include "ui/widget/GradientData.hpp"
 #include "ui/State.hpp"
 
 namespace burnhope {

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "rhi/DescriptorSlots.hpp"
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -11,7 +10,6 @@ namespace burnhope {
 // Слоты дескрипторной кучи Vulkan 1.4
 constexpr uint32_t kUiDescFont = 661;
 constexpr uint32_t kUiDescPhoto = 662;
-constexpr uint32_t kUiDescPrimsSlot = kUiDescPrims;   // 48
 constexpr uint8_t kPhotoSlots = 10;
 
 inline constexpr uint8_t kPhotoFrameCap = 16;

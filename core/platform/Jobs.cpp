@@ -85,7 +85,7 @@ Pool& pool() {
         // Вызывающий поток тоже берёт работу. Остальные ядра ждут в пуле.
         const unsigned extra = hw > 1 ? hw - 1u : 0u;
         for (unsigned i = 0; i < extra; ++i) {
-            p.workers.emplace_back([&p] { p.workerLoop(); });
+            p.workers.emplace_back([] { p.workerLoop(); });
         }
     });
     return p;

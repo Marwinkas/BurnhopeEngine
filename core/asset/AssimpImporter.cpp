@@ -17,7 +17,9 @@
 #include <cstdio>
 #include <cstring>
 #include <exception>
+#include <format>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace burnhope {
@@ -57,6 +59,17 @@ void texSearchFromFbx(const char* fbxPath, TexSearch& out) {
     out.hasModelDir = pathParent(fbxPath, out.modelDir, sizeof(out.modelDir));
 }
 
+// Склейка dir/mid/file. Усечённый путь не проверяют: он указал бы на другой файл.
+bool texReadableAt(const char* dir, std::string_view mid, const char* file) {
+    char path[320];
+    const auto res = std::format_to_n(path, sizeof(path) - 1, "{}/{}{}", dir, mid, file);
+    if (static_cast<size_t>(res.size) >= sizeof(path)) {
+        return false;
+    }
+    *res.out = '\0';
+    return fileReadable(path);
+}
+
 bool texOnDisk(const TexSearch& search, const char* file) {
     if (file == nullptr || file[0] == '\0') {
         return false;
@@ -67,22 +80,11 @@ bool texOnDisk(const TexSearch& search, const char* file) {
     if (!search.hasModelDir) {
         return false;
     }
-    char path[320];
-    std::snprintf(path, sizeof(path), "%s/%s", search.modelDir, file);
-    if (fileReadable(path)) {
-        return true;
-    }
     const char* base = fileNameOf(file);
-    std::snprintf(path, sizeof(path), "%s/%s", search.modelDir, base);
-    if (fileReadable(path)) {
-        return true;
-    }
-    std::snprintf(path, sizeof(path), "%s/Textures/%s", search.modelDir, base);
-    if (fileReadable(path)) {
-        return true;
-    }
-    std::snprintf(path, sizeof(path), "%s/Textures/%s", search.modelDir, file);
-    return fileReadable(path);
+    return texReadableAt(search.modelDir, "", file)
+        || texReadableAt(search.modelDir, "", base)
+        || texReadableAt(search.modelDir, "Textures/", base)
+        || texReadableAt(search.modelDir, "Textures/", file);
 }
 
 void siblingFile(const char* albedo, const char* kind, char* out, size_t cap) {

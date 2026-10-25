@@ -206,10 +206,8 @@ bool actionSave(const char* path) {
     for (int i = 0; i < gActionN; ++i) {
         for (uint8_t c = 0; c < gActions[i].chordN; ++c) {
             const Chord& chord = gActions[i].chord[c];
-            char line[160]{};
-            std::snprintf(
-                line,
-                sizeof(line),
+            SDL_IOprintf(
+                file,
                 "{\"name\":\"%s\",\"kind\":%u,\"ctx\":%u,\"scan\":%u,\"mods\":%u,\"trig\":%u,\"mouse\":%u}\n",
                 gActions[i].name,
                 gActions[i].kind,
@@ -218,7 +216,6 @@ bool actionSave(const char* path) {
                 chord.mods,
                 chord.trigger,
                 chord.mouse);
-            SDL_WriteIO(file, line, std::strlen(line));
         }
     }
     SDL_CloseIO(file);

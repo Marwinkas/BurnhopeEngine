@@ -4,7 +4,7 @@
 #include "files/Browser.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
-#include "ui/Canvas.hpp"
+#include "ui/rhi/Canvas.hpp"
 #include "ui/Style.hpp"
 #include "ui/widget/Choice.hpp"
 

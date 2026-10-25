@@ -63,6 +63,18 @@ uint32_t emitMark(
     float spread,
     uint32_t flag,
     const UiBox* clip);
+uint32_t uiEmitSprite(
+    UiPrimitive* dst,
+    uint32_t n,
+    uint32_t cap,
+    const UiBox& box,
+    const UiImage& image,
+    const UiBox* clip,
+    float blur,
+    float tintR,
+    float tintG,
+    float tintB,
+    float tintA);
 [[nodiscard]] bool uiClipBox(const UiState& s, uint16_t id, UiBox& out);
 [[nodiscard]] uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap);
 

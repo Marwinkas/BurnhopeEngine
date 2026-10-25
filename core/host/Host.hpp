@@ -5,7 +5,7 @@
 #include "rhi/DescriptorHeap.hpp"
 #include "rhi/Device.hpp"
 #include "rhi/Swapchain.hpp"
-#include "ui/Canvas.hpp"
+#include "ui/rhi/Canvas.hpp"
 
 namespace burnhope {
 

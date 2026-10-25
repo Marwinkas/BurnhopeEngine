@@ -369,7 +369,8 @@ TEST_CASE("gizmo axis follows the cursor") {
     CHECK(moved.pos[0] == doctest::Approx(span).epsilon(0.05));
     CHECK(moved.pos[1] == doctest::Approx(2.0f).epsilon(0.02));
     CHECK(moved.pos[2] == doctest::Approx(0.0f).epsilon(0.02));
-    world.gizmo = 2;
+    world.tool = 2;
+    sceneActorFitTool(world);
     world.drag = kSceneActorNone;
     Xform back = sceneActorXform(world, 0);
     back.pos[0] = 0.0f;
@@ -381,7 +382,8 @@ TEST_CASE("gizmo axis follows the cursor") {
     CHECK(world.drag == 0);
     sceneActorPointer(world, fx, fy, 1, 0, 0);
     CHECK(sceneActorXform(world, 0).scale[0] == doctest::Approx(2.0f).epsilon(0.08));
-    world.gizmo = 1;
+    world.tool = 1;
+    sceneActorFitTool(world);
     world.drag = kSceneActorNone;
     const float yRing[3] = {span * 0.7071f, 2.0f, -span * 0.7071f};
     const float xRing[3] = {0.0f, 2.0f - span * 0.7071f, span * 0.7071f};

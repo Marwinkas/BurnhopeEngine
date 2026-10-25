@@ -78,7 +78,7 @@ void onMatPick(void* user, uint8_t index) {
     if (!materialLoadBhmat(path, doc)) {
         return;
     }
-    std::snprintf(doc.file, sizeof(doc.file), "%s", path);
+    strCopyCap(doc.file, sizeof(doc.file), path);
     if (sceneFrameApplyDoc(hud->scene, sceneFrameActorSelected(hud->scene), doc)) {
         hud->live = doc;
         hud->liveSent = doc;
@@ -95,7 +95,7 @@ void bindDoc(HudContext& hud, const char* path) {
     if (path == nullptr || !materialLoadBhmat(path, doc) || hud.scene == nullptr) {
         return;
     }
-    std::snprintf(doc.file, sizeof(doc.file), "%s", path);
+    strCopyCap(doc.file, sizeof(doc.file), path);
     if (!sceneFrameApplyDoc(hud.scene, sceneFrameActorSelected(hud.scene), doc)) {
         return;
     }

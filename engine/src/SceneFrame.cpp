@@ -1902,7 +1902,12 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
     float maxZ = -1.0e9f;
     for (uint32_t i = 0; i < view.info->instanceCount; ++i) {
         GpuInstance& dst = instances[instBase + i];
-        std::memcpy(&dst, &view.instances[i], sizeof(GpuInstance));
+        const SceneInstance& src = view.instances[i];
+        std::copy_n(src.world, std::size(src.world), dst.world);
+        std::copy_n(src.sphere, std::size(src.sphere), dst.sphere);
+        dst.materialId = src.materialId;
+        dst.meshId = src.meshId;
+        std::copy_n(src.pad, std::size(src.pad), dst.pad);
         dst.materialId += matBase;
         dst.meshId += instBase;
         const float x = dst.sphere[0];

@@ -1,7 +1,7 @@
 #include "app/HudBuild.hpp"
 
 #include "image/ImageDecode.hpp"
-#include "ui/Canvas.hpp"
+#include "ui/rhi/Canvas.hpp"
 
 #include <cmath>
 #include <cstdint>

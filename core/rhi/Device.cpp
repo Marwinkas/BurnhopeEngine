@@ -1,4 +1,5 @@
 #include "rhi/Device.hpp"
+#include "Str.hpp"
 
 #include <SDL3/SDL_vulkan.h>
 #include <spdlog/spdlog.h>
@@ -48,19 +49,6 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
         spdlog::debug("vk: {}", data->pMessage);
     }
     return VK_FALSE;
-}
-
-bool hasLayer(const char* name) {
-    uint32_t n = 0;
-    vkEnumerateInstanceLayerProperties(&n, nullptr);
-    std::vector<VkLayerProperties> layers(n);
-    vkEnumerateInstanceLayerProperties(&n, layers.data());
-    for (const auto& l : layers) {
-        if (std::strcmp(l.layerName, name) == 0) {
-            return true;
-        }
-    }
-    return false;
 }
 
 bool hasDeviceExt(VkPhysicalDevice pd, const char* name) {
@@ -115,7 +103,7 @@ bool pickQueues(VkPhysicalDevice pd, VkSurfaceKHR surface, DeviceCaps& caps) {
 void fillCaps(VkPhysicalDevice pd, DeviceCaps& caps) {
     VkPhysicalDeviceProperties2 props2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
     vkGetPhysicalDeviceProperties2(pd, &props2);
-    std::strncpy(caps.deviceName, props2.properties.deviceName, sizeof(caps.deviceName) - 1);
+    strCopyCap(caps.deviceName, sizeof(caps.deviceName), props2.properties.deviceName);
     caps.apiMajor = VK_API_VERSION_MAJOR(props2.properties.apiVersion);
     caps.apiMinor = VK_API_VERSION_MINOR(props2.properties.apiVersion);
     caps.apiPatch = VK_API_VERSION_PATCH(props2.properties.apiVersion);

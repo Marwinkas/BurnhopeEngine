@@ -25,10 +25,10 @@ uint16_t loadChoice(UiState& s, uint16_t parent, const BinNode& node, const BinT
     std::vector<const char*> labels;
     uint16_t used = 0;
     const char* cursor = text;
-    while (*cursor != '\0' && labels.size() < 255 && used + 1 < sizeof(store)) {
+    while (*cursor != '\0' && labels.size() < 255 && used + 1u < sizeof(store)) {
         const uint16_t at = used;
         uint8_t len = 0;
-        while (*cursor != '\0' && *cursor != '\n' && used + 1 < sizeof(store)) {
+        while (*cursor != '\0' && *cursor != '\n' && used + 1u < sizeof(store)) {
             store[used++] = *cursor++;
             ++len;
         }

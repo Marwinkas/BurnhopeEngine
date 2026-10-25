@@ -6,7 +6,7 @@
 #include "gpu_scene/SceneObject.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
-#include "ui/Canvas.hpp"
+#include "ui/rhi/Canvas.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
 #include "ui/rhi/UiPhoto.hpp"
