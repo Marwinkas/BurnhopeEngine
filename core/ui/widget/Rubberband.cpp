@@ -1,4 +1,5 @@
 #include "ui/widget/Rubberband.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 namespace {

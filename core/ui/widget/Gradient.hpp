@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ui/widget/GradientData.hpp"
-#include "ui/State.hpp"
+#include "ui/Types.hpp"
 
 namespace burnhope {
 

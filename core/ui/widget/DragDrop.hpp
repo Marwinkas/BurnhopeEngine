@@ -1,6 +1,8 @@
 #pragma once
 
-#include "ui/State.hpp"
+#include "ui/Interaction.hpp"
+#include "platform/Input.hpp"
+#include "ui/Types.hpp"
 
 #include <span>
 

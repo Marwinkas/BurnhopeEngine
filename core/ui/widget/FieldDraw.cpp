@@ -2,6 +2,7 @@
 #include "ui/Icon.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Field.hpp"
+#include "ui/State.hpp"
 
 #include <cstdint>
 

@@ -1,5 +1,6 @@
 #include "ui/widget/Breadcrumbs.hpp"
 #include "ui/widget/Button.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 namespace {

@@ -161,7 +161,7 @@ TEST_CASE("golden image: panel fill is exact and mesh/vertex paths match") {
     }
     Device device{};
     VkSurfaceKHR surface = VK_NULL_HANDLE;
-    if (!deviceCreateInstance(device) || !windowCreateSurface(window, device.instance, surface) || !deviceCreate(device, surface)) {
+    if (!deviceCreateInstance(device, windowVulkanExtensions()) || !windowCreateSurface(window, device.instance, surface) || !deviceCreate(device, surface)) {
         spdlog::warn("no Vulkan device for golden-image test, skip");
         windowDestroy(window);
         return;

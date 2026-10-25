@@ -2,6 +2,7 @@
 #include "ui/Icon.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/Virtual.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 namespace {
@@ -97,7 +98,7 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
 } // namespace
 
 static float uiTreeContentH(const UiState& s, uint16_t id) {
-    return uiVirtualContentHeight<UiTreeView>(s, id);
+    return uiVirtualContentHeight(s, id, id < s.count ? s.ent[id].try_get<UiTreeView>() : nullptr);
 }
 
 void treeOnLayout(UiState& s, uint16_t id, void*) {

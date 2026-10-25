@@ -1,4 +1,4 @@
-#include "render/Physics.hpp"
+#include "gpu_scene/Physics.hpp"
 #include "render/SceneFrameImpl.hpp"
 
 #include <algorithm>

@@ -110,12 +110,16 @@ file(GLOB BH_UI_CORE_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/ui/*.cpp ${BH_CORE}/ui
 file(GLOB_RECURSE BH_UI_WIDGET_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/ui/widget/*.cpp ${BH_CORE}/ui/widget/*.hpp
     ${BH_CORE}/ui/kit/*.cpp ${BH_CORE}/ui/kit/*.hpp)
-bh_firewall("core/rhi must not import Window, ui, files or host"
-    "platform/Window\\.hpp|ui/|files/|host/" ${BH_RHI_SOURCES})
+bh_firewall("core/rhi must not import Window, ui, files, host or SDL3"
+    "platform/Window\\.hpp|ui/|files/|host/|SDL3/" ${BH_RHI_SOURCES})
 bh_firewall("core/ui must not import rhi, image, ui/rhi, widgets, kits, files or host"
     "rhi/|image/|ui/rhi/|ui/widget/|ui/kit/|files/|host/" ${BH_UI_CORE_SOURCES})
 bh_firewall("core/ui/widget and core/ui/kit must not import rhi, image, ui/rhi, files, host or yoga"
     "rhi/|image/|ui/rhi/|files/|host/|yoga/" ${BH_UI_WIDGET_SOURCES})
+file(GLOB BH_UI_WIDGET_HEADERS CONFIGURE_DEPENDS ${BH_CORE}/ui/widget/*.hpp ${BH_CORE}/ui/Command.hpp)
+list(REMOVE_ITEM BH_UI_WIDGET_HEADERS ${BH_CORE}/ui/widget/Widgets.hpp)
+bh_firewall("widget headers must not import ui/State.hpp or flecs; include it from the .cpp"
+    "ui/State\\.hpp|flecs\\.h" ${BH_UI_WIDGET_HEADERS})
 file(GLOB BH_UI_BRICK_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/ui/widget/Label.* ${BH_CORE}/ui/widget/Button.* ${BH_CORE}/ui/widget/Check.*
     ${BH_CORE}/ui/widget/Field.* ${BH_CORE}/ui/widget/FieldFilter.* ${BH_CORE}/ui/widget/TextEdit.*
@@ -128,9 +132,11 @@ bh_firewall("atomic bricks must not import composite kits"
 file(GLOB_RECURSE BH_T0_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/memory/*.cpp ${BH_CORE}/memory/*.hpp ${BH_CORE}/io/*.cpp ${BH_CORE}/io/*.hpp
     ${BH_CORE}/wasm/*.cpp ${BH_CORE}/wasm/*.hpp ${BH_CORE}/color/*.hpp ${BH_CORE}/time/*.hpp
-    ${BH_CORE}/doc/*.hpp ${BH_CORE}/text/*.hpp)
+    ${BH_CORE}/doc/*.hpp ${BH_CORE}/text/*.hpp
+    ${BH_CORE}/platform/Check.* ${BH_CORE}/platform/PlatformUtil.* ${BH_CORE}/platform/Jobs.*
+    ${BH_CORE}/platform/Desktop.* ${BH_CORE}/platform/Trace.hpp)
 file(GLOB BH_T1_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/platform/*.cpp ${BH_CORE}/platform/*.hpp)
-list(REMOVE_ITEM BH_T1_SOURCES ${BH_CORE}/platform/Window.cpp)
+list(REMOVE_ITEM BH_T1_SOURCES ${BH_CORE}/platform/Window.cpp ${BH_CORE}/platform/WindowEvents.cpp)
 file(GLOB_RECURSE BH_T2_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/gfx/*.cpp ${BH_CORE}/gfx/*.hpp ${BH_CORE}/asset/*.cpp ${BH_CORE}/asset/*.hpp
     ${BH_CORE}/audio/*.cpp ${BH_CORE}/audio/*.hpp ${BH_CORE}/scene/*.cpp ${BH_CORE}/scene/*.hpp
@@ -147,6 +153,8 @@ bh_firewall("tier 2 world and asset data must not import ui, files, host or Wind
     "ui/|files/|host/|platform/Window\\.hpp" ${BH_T2_SOURCES})
 bh_firewall("tier 5 engine must not import ui, files, host or Window"
     "ui/|files/|host/|platform/Window\\.hpp" ${BH_T5_SOURCES})
+file(GLOB BH_RENDER_HEADERS CONFIGURE_DEPENDS ${BH_ENGINE}/include/render/*.hpp)
+bh_firewall("engine/include/render headers must not import flecs" "flecs\\.h" ${BH_RENDER_HEADERS})
 file(GLOB_RECURSE BH_LIVE_SOURCES CONFIGURE_DEPENDS
     ${BH_DEMO}/*.cpp ${BH_DEMO}/*.hpp ${BH_ENGINE}/*.cpp ${BH_ENGINE}/*.hpp)
 foreach(bh_live_file ${BH_LIVE_SOURCES})
@@ -176,18 +184,27 @@ option(BH_TRACY "Pull Tracy from https://github.com/wolfpld/tracy and mark frame
 option(BH_ASAN "Debug address and undefined sanitizers" OFF)
 option(BH_TSAN "Debug thread sanitizer" OFF)
 
-bh_module(platform
-    core/platform/Window.cpp
-    core/platform/Dialog.cpp
+bh_module(foundation
     core/platform/Check.cpp
     core/platform/Jobs.cpp
     core/platform/Desktop.cpp
     core/platform/PlatformUtil.cpp
-    core/platform/Action.cpp
+    core/memory/FrameArena.cpp
+    core/io/File.cpp
+    core/io/Json.cpp
+    core/wasm/WasmHost.cpp
 )
 set_source_files_properties(core/platform/Check.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions;-frtti")
 find_package(cpptrace CONFIG REQUIRED)
-target_link_libraries(bh_platform PUBLIC cpptrace::cpptrace)
+target_link_libraries(bh_foundation PUBLIC cpptrace::cpptrace)
+
+bh_module(platform
+    core/platform/Window.cpp
+    core/platform/WindowEvents.cpp
+    core/platform/Dialog.cpp
+    core/platform/Action.cpp
+)
+target_link_libraries(bh_platform PUBLIC bh_foundation)
 
 if(BH_TRACY)
     FetchContent_Declare(tracy
@@ -196,8 +213,8 @@ if(BH_TRACY)
     )
     set(TRACY_ENABLE ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(tracy)
-    target_compile_definitions(bh_platform PUBLIC BH_TRACY)
-    target_link_libraries(bh_platform PUBLIC TracyClient)
+    target_compile_definitions(bh_foundation PUBLIC BH_TRACY)
+    target_link_libraries(bh_foundation PUBLIC TracyClient)
 endif()
 
 if(BH_ASAN)
@@ -208,13 +225,9 @@ if(BH_TSAN)
     add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
     add_link_options(-fsanitize=thread)
 endif()
-bh_module(memory   core/memory/FrameArena.cpp)
-bh_module(wasm core/wasm/WasmHost.cpp)
-bh_module(io core/io/File.cpp core/io/Json.cpp)
 bh_module(asset core/asset/AssimpImporter.cpp core/asset/ProjectDoc.cpp core/gfx/Material.cpp)
-target_link_libraries(bh_asset PUBLIC assimp::assimp meshoptimizer bh_platform bh_io)
+target_link_libraries(bh_asset PUBLIC assimp::assimp meshoptimizer bh_foundation)
 set_source_files_properties(core/asset/AssimpImporter.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions;-frtti")
-target_link_libraries(bh_wasm PUBLIC bh_memory)
 bh_module(rhi
     core/rhi/Device.cpp
     core/rhi/Swapchain.cpp
@@ -260,9 +273,10 @@ target_include_directories(bh_image PRIVATE
 )
 target_link_libraries(bh_image PUBLIC bh_rhi bh_texcomp bh_platform volk)
 set_source_files_properties(core/image/ImageDecode.cpp PROPERTIES COMPILE_OPTIONS "-w")
-bh_module(gpu_scene engine/gpu_scene/SceneObject.cpp)
+bh_module(gpu_scene engine/gpu_scene/SceneObject.cpp engine/gpu_scene/SceneGizmo.cpp engine/gpu_scene/Physics.cpp)
+set_source_files_properties(engine/gpu_scene/Physics.cpp PROPERTIES COMPILE_OPTIONS "-w")
 target_include_directories(bh_gpu_scene PUBLIC ${BH_ENGINE} ${BH_ENGINE}/include)
-target_link_libraries(bh_gpu_scene PUBLIC flecs_static)
+target_link_libraries(bh_gpu_scene PUBLIC flecs_static Jolt)
 bh_module(audio core/audio/Audio.cpp)
 target_include_directories(bh_audio PRIVATE
     ${miniaudio_SOURCE_DIR}
@@ -304,7 +318,6 @@ bh_module(render
     engine/src/PassVoxel.cpp
     engine/src/PassTonemap.cpp
     engine/src/PassGizmo.cpp
-    engine/src/Physics.cpp
     engine/src/Particles.cpp
     engine/src/Fog.cpp
     engine/src/Rain.cpp
@@ -321,7 +334,6 @@ target_include_directories(bh_render PUBLIC ${BH_ENGINE} ${BH_ENGINE}/include ${
 set_source_files_properties(
     RTXDI/Libraries/Rtxdi/Source/ReSTIRDI.cpp
     RTXDI/Libraries/Rtxdi/Source/RtxdiUtils.cpp
-    engine/src/Physics.cpp
     PROPERTIES COMPILE_OPTIONS "-w")
 target_compile_definitions(bh_render PUBLIC "BH_SHADER_DIR=\"${CMAKE_CURRENT_BINARY_DIR}/shaders\"")
 target_link_libraries(bh_render PUBLIC volk flecs_static Jolt bh_audio bh_gpu_scene)
@@ -367,6 +379,7 @@ bh_module(ui_bricks
 bh_module(ui_kits
     core/ui/kit/Calendar.cpp
     core/ui/kit/Color.cpp
+    core/ui/kit/ColorPopup.cpp
     core/ui/kit/ColorDraw.cpp
     core/ui/widget/AssetSlot.cpp
     core/ui/widget/Breadcrumbs.cpp
@@ -409,7 +422,7 @@ bh_module(host
     core/host/PropFilter.cpp
     core/host/SceneMask.cpp
 )
-target_link_libraries(bh_host PUBLIC volk bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_rhi bh_platform bh_memory)
+target_link_libraries(bh_host PUBLIC volk bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_rhi bh_platform bh_foundation)
 bh_module(app
     demo/app/Engine.cpp
     demo/app/HudAct.cpp
@@ -431,7 +444,7 @@ bh_module(app
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
 target_link_libraries(bh_app PUBLIC bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_files bh_gpu_scene)
-target_link_libraries(bh_ui_core PUBLIC bh_io yogacore flecs_static)
+target_link_libraries(bh_ui_core PUBLIC bh_foundation yogacore flecs_static)
 target_link_libraries(bh_ui_bricks PUBLIC bh_ui_core bh_platform)
 target_link_libraries(bh_ui_kits PUBLIC bh_ui_bricks)
 target_link_libraries(bh_ui_rhi PUBLIC bh_ui_core bh_rhi bh_image volk Freetype::Freetype)
@@ -908,7 +921,7 @@ target_compile_definitions(bh_files PRIVATE "BH_UI_FILES=\"${UI_BIN_DIR}/files.u
 
 add_executable(BurnhopeEngine demo/app/Main.cpp)
 target_link_libraries(BurnhopeEngine PRIVATE
-    bh_app bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_memory bh_platform bh_render bh_audio bh_gpu_scene bh_asset bh_io
+    bh_app bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_render bh_audio bh_gpu_scene bh_asset
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
@@ -922,7 +935,7 @@ add_dependencies(BurnhopeEngine BurnhopeSpv UiSpv UiBin)
 
 add_executable(BurnhopeSample demo/sample/Main.cpp demo/Sample.cpp demo/app/Shell.cpp)
 target_link_libraries(BurnhopeSample PRIVATE
-    bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_memory bh_platform bh_gpu_scene bh_asset bh_io
+    bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_gpu_scene bh_asset
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
@@ -952,7 +965,7 @@ set(BH_TEST_SOURCES
 )
 add_executable(BurnhopeTest ${BH_TEST_SOURCES})
 target_link_libraries(BurnhopeTest PRIVATE
-    bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_memory bh_platform bh_wasm bh_gpu_scene bh_asset bh_io
+    bh_host bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_gpu_scene bh_asset
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads Freetype::Freetype
 )

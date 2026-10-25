@@ -1,6 +1,8 @@
 #pragma once
 
-#include "ui/State.hpp"
+#include "ui/Interaction.hpp"
+#include "platform/Input.hpp"
+#include "ui/Types.hpp"
 #include "ui/widget/Chrome.hpp"
 
 namespace burnhope {
@@ -16,34 +18,11 @@ struct UiDock {
     UiBox edgeLine{};
 };
 
-inline UiDock* uiDockFind(UiState& s) {
-    const uint16_t id = uiMarked<UiDock>(s);
-    return id < s.count ? s.ent[id].try_get_mut<UiDock>() : nullptr;
-}
+UiDock* uiDockFind(UiState& s);
 
-inline const UiDock* uiDockFind(const UiState& s) {
-    const uint16_t id = uiMarked<UiDock>(s);
-    return id < s.count ? s.ent[id].try_get<UiDock>() : nullptr;
-}
+const UiDock* uiDockFind(const UiState& s);
 
-inline void uiDockBind(UiState& s, uint16_t home, uint16_t panel, uint8_t edges) {
-    if (home >= s.count) {
-        return;
-    }
-    const uint16_t prev = uiMarked<UiDock>(s);
-    UiDock dock{};
-    if (prev == home) {
-        if (const UiDock* live = s.ent[home].try_get<UiDock>()) {
-            dock = *live;
-        }
-    } else if (prev < s.count) {
-        s.ent[prev].remove<UiDock>();
-    }
-    dock.home = home;
-    dock.panel = panel;
-    dock.edges = edges;
-    s.ent[home].set<UiDock>(dock);
-}
+void uiDockBind(UiState& s, uint16_t home, uint16_t panel, uint8_t edges);
 
 void uiDockTo(UiState& s, uint8_t edge);
 void uiInstallDockOverlay(UiState& s);

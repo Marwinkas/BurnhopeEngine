@@ -410,7 +410,7 @@ int hostOpen(Host& host, const ViewDesc& desc) {
     const bool first = host.device.instance == VK_NULL_HANDLE;
     if (first) {
         VkSurfaceKHR surface = VK_NULL_HANDLE;
-        if (!deviceCreateInstance(host.device)
+        if (!deviceCreateInstance(host.device, windowVulkanExtensions())
             || !windowCreateSurface(view.window, host.device.instance, surface)
             || !deviceCreate(host.device, surface)) {
             windowDestroy(view.window);
@@ -557,7 +557,7 @@ bool hostRecover(Host& host) {
     spdlog::error("HOST recover 3: recreate logical device");
     deviceDestroy(host.device);
     VkSurfaceKHR surface = VK_NULL_HANDLE;
-    if (!deviceCreateInstance(host.device)
+    if (!deviceCreateInstance(host.device, windowVulkanExtensions())
         || !windowCreateSurface(host.view[host.primary].window, host.device.instance, surface)
         || !deviceCreate(host.device, surface)) {
         spdlog::error("HOST recover: deviceCreate failed");

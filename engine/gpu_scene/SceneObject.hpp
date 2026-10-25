@@ -221,6 +221,8 @@ void actorEulerFromBasis(const float x[3], const float y[3], const float z[3], f
 void actorSpin(const float grabEuler[3], int axis, float deltaDeg, float outEuler[3]);
 
 const Xform* actorXformOf(const SceneActors& world, uint8_t index);
+Xform* actorXformMut(SceneActors& world, uint8_t index);
+void actorSpinAround(const float grabEuler[3], const float axis[3], float deltaDeg, float outEuler[3]);
 
 uint8_t actorKindOf(const SceneActors& world, uint8_t index);
 

@@ -2,6 +2,7 @@
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "color/Color.hpp"
+#include "ui/State.hpp"
 
 #include <algorithm>
 #include <cmath>

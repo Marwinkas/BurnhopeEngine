@@ -1,5 +1,6 @@
 #pragma once
 
+#include "platform/Input.hpp"
 #include "ui/Command.hpp"
 #include "ui/widget/BinSlots.hpp"
 

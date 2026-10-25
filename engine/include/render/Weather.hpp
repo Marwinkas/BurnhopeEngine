@@ -2,10 +2,13 @@
 
 #include "gpu_scene/FrameUniforms.hpp"
 
-#include <flecs.h>
-
 #include <cstdint>
 #include <type_traits>
+
+namespace flecs {
+struct world;
+struct entity;
+} // namespace flecs
 
 namespace burnhope {
 

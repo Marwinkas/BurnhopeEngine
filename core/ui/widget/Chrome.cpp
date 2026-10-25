@@ -4,6 +4,7 @@
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
 #include "ui/widget/Chrome.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 namespace {
@@ -216,6 +217,30 @@ ChromePointer uiChromePointer(UiState& s, const InputFrame& in, uint16_t hit, bo
         uiChromePark(s, home, gesture);
     }
     return out;
+}
+
+UiChromeGesture* uiChromeFind(UiState& s) {
+    const uint16_t id = uiMarked<UiChromeGesture>(s);
+    return id < s.count ? s.ent[id].try_get_mut<UiChromeGesture>() : nullptr;
+}
+
+void uiChromeClear(UiState& s) {
+    const uint16_t id = uiMarked<UiChromeGesture>(s);
+    if (id < s.count && s.ent[id].is_alive()) {
+        s.ent[id].remove<UiChromeGesture>();
+    }
+}
+
+void uiChromePark(UiState& s, uint16_t home, const UiChromeGesture& gesture) {
+    if (home >= s.count) {
+        uiChromeClear(s);
+        return;
+    }
+    const uint16_t prev = uiMarked<UiChromeGesture>(s);
+    if (prev < s.count && prev != home && s.ent[prev].is_alive()) {
+        s.ent[prev].remove<UiChromeGesture>();
+    }
+    s.ent[home].set<UiChromeGesture>(gesture);
 }
 
 } // namespace burnhope

@@ -6,6 +6,7 @@
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
 #include "ui/widget/Field.hpp"
+#include "ui/State.hpp"
 
 #include <charconv>
 #include <cmath>
@@ -13,6 +14,26 @@
 #include <cstring>
 
 namespace burnhope {
+
+float uiFieldWidth(const UiState& s, const UiField& field, uint8_t until) {
+    if (field.password == 0) {
+        return uiMeasure(s, field.bytes, field.len, until);
+    }
+    uint8_t count = 0;
+    uint8_t i = 0;
+    const uint8_t end = until < field.len ? until : field.len;
+    while (i < end) {
+        uint8_t step = 1;
+        uiReadUtf8(field.bytes, field.len, i, step);
+        if (step == 0) {
+            break;
+        }
+        ++count;
+        i = static_cast<uint8_t>(i + step);
+    }
+    return static_cast<float>(count) * uiAdvance(s, static_cast<uint32_t>('*'));
+}
+
 
 void uiSetFieldText(UiState& s, uint16_t id, const char* text);
 void uiFieldAlign(UiState& s, uint16_t id, uint8_t align);

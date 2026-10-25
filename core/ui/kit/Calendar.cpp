@@ -8,6 +8,7 @@
 #include "ui/Panel.hpp"
 #include "ui/Style.hpp"
 #include "ui/LayoutBridge.hpp"
+#include "ui/State.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -396,6 +397,26 @@ uint16_t loadCalendarBin(UiState& s, uint16_t parent, const BinNode& node, const
 void uiInstallCalendarBin(UiState& s) {
     uiBinRole(s, kBinSlotCalendar, "calendar", 0, 0);
     uiRegisterCustomBinNode(s, kBinSlotCalendar, loadCalendarBin, nullptr);
+}
+
+UiCalendarComponent* uiCalFind(UiState& s) {
+    for (uint16_t i = 0; i < s.count; ++i) {
+        if (!s.ent[i].is_alive() || !s.ent[i].has<UiCalendarComponent>()) {
+            continue;
+        }
+        return s.ent[i].try_get_mut<UiCalendarComponent>();
+    }
+    return nullptr;
+}
+
+const UiCalendarComponent* uiCalFind(const UiState& s) {
+    for (uint16_t i = 0; i < s.count; ++i) {
+        if (!s.ent[i].is_alive() || !s.ent[i].has<UiCalendarComponent>()) {
+            continue;
+        }
+        return s.ent[i].try_get<UiCalendarComponent>();
+    }
+    return nullptr;
 }
 
 } // namespace burnhope

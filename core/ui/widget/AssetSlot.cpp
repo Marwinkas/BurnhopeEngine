@@ -6,6 +6,7 @@
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/DragDrop.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 

@@ -1,6 +1,6 @@
 #include "audio/Audio.hpp"
 #include "platform/PlatformUtil.hpp"
-#include "render/Physics.hpp"
+#include "gpu_scene/Physics.hpp"
 #include "render/Weather.hpp"
 #include "render/SceneFrameImpl.hpp"
 #include "gpu_scene/InstanceCull.hpp"

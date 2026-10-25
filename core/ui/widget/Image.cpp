@@ -1,5 +1,6 @@
 #include "ui/Panel.hpp"
 #include "ui/widget/Image.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 

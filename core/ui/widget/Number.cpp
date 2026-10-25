@@ -3,6 +3,7 @@
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Number.hpp"
+#include "ui/State.hpp"
 
 #include <cstdio>
 

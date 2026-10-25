@@ -1,6 +1,7 @@
 #include "ui/widget/Popover.hpp"
 
 #include "ui/widget/Menu.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 

@@ -2,6 +2,7 @@
 #include "ui/Icon.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/widget/VirtualGrid.hpp"
+#include "ui/State.hpp"
 
 #include <cstring>
 
@@ -96,7 +97,7 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
 } // namespace
 
 static float uiGridContentH(const UiState& s, uint16_t id) {
-    return uiVirtualContentHeight<UiVirtualGrid>(s, id);
+    return uiVirtualContentHeight(s, id, id < s.count ? s.ent[id].try_get<UiVirtualGrid>() : nullptr);
 }
 
 void gridOnLayout(UiState& s, uint16_t id, void*) {

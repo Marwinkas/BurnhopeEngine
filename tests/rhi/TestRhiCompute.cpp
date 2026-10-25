@@ -179,7 +179,7 @@ TEST_CASE("gpuCompressLevel: BC3 BC4 BC5 decode close to the source") {
     }
     Device device{};
     VkSurfaceKHR surface = VK_NULL_HANDLE;
-    if (!deviceCreateInstance(device) || !windowCreateSurface(window, device.instance, surface) || !deviceCreate(device, surface)) {
+    if (!deviceCreateInstance(device, windowVulkanExtensions()) || !windowCreateSurface(window, device.instance, surface) || !deviceCreate(device, surface)) {
         spdlog::warn("no Vulkan device for BC3/4/5 test, skip");
         windowDestroy(window);
         return;
@@ -259,7 +259,7 @@ TEST_CASE("gpuImageUploadRgba: GPU BC1 decodes close to the source") {
     }
     Device device{};
     VkSurfaceKHR surface = VK_NULL_HANDLE;
-    if (!deviceCreateInstance(device) || !windowCreateSurface(window, device.instance, surface) || !deviceCreate(device, surface)) {
+    if (!deviceCreateInstance(device, windowVulkanExtensions()) || !windowCreateSurface(window, device.instance, surface) || !deviceCreate(device, surface)) {
         spdlog::warn("no Vulkan device for GPU BC1 test, skip");
         windowDestroy(window);
         return;
@@ -363,7 +363,7 @@ TEST_CASE("gpuCompressLevel: GPU BC7 mode 6 decodes close to the source") {
     }
     Device device{};
     VkSurfaceKHR surface = VK_NULL_HANDLE;
-    if (!deviceCreateInstance(device) || !windowCreateSurface(window, device.instance, surface) || !deviceCreate(device, surface)) {
+    if (!deviceCreateInstance(device, windowVulkanExtensions()) || !windowCreateSurface(window, device.instance, surface) || !deviceCreate(device, surface)) {
         spdlog::warn("no Vulkan device for GPU BC7 test, skip");
         windowDestroy(window);
         return;
@@ -424,7 +424,7 @@ TEST_CASE("gpuImageUploadHdr: GPU BC6H mode 11 decodes close to the source") {
     }
     Device device{};
     VkSurfaceKHR surface = VK_NULL_HANDLE;
-    if (!deviceCreateInstance(device) || !windowCreateSurface(window, device.instance, surface) || !deviceCreate(device, surface)) {
+    if (!deviceCreateInstance(device, windowVulkanExtensions()) || !windowCreateSurface(window, device.instance, surface) || !deviceCreate(device, surface)) {
         spdlog::warn("no Vulkan device for GPU BC6H test, skip");
         windowDestroy(window);
         return;
@@ -533,7 +533,7 @@ TEST_CASE("gpuImageUploadRgba round-trips through host_image_copy") {
     }
     Device device{};
     VkSurfaceKHR surface = VK_NULL_HANDLE;
-    if (!deviceCreateInstance(device) || !windowCreateSurface(window, device.instance, surface) || !deviceCreate(device, surface)) {
+    if (!deviceCreateInstance(device, windowVulkanExtensions()) || !windowCreateSurface(window, device.instance, surface) || !deviceCreate(device, surface)) {
         spdlog::warn("no Vulkan device for host_image_copy test, skip");
         windowDestroy(window);
         return;

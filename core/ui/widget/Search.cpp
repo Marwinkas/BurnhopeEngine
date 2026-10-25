@@ -3,6 +3,7 @@
 #include "Str.hpp"
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 namespace {

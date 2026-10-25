@@ -1,6 +1,7 @@
 #pragma once
 
-#include "ui/State.hpp"
+#include "platform/Input.hpp"
+#include "ui/Types.hpp"
 #include "ui/widget/BinSlots.hpp"
 
 #include <type_traits>
@@ -24,29 +25,11 @@ struct ChromePointer {
 static_assert(std::is_trivially_copyable_v<UiChromeGesture>);
 static_assert(std::is_trivially_copyable_v<ChromePointer>);
 
-inline UiChromeGesture* uiChromeFind(UiState& s) {
-    const uint16_t id = uiMarked<UiChromeGesture>(s);
-    return id < s.count ? s.ent[id].try_get_mut<UiChromeGesture>() : nullptr;
-}
+UiChromeGesture* uiChromeFind(UiState& s);
 
-inline void uiChromeClear(UiState& s) {
-    const uint16_t id = uiMarked<UiChromeGesture>(s);
-    if (id < s.count && s.ent[id].is_alive()) {
-        s.ent[id].remove<UiChromeGesture>();
-    }
-}
+void uiChromeClear(UiState& s);
 
-inline void uiChromePark(UiState& s, uint16_t home, const UiChromeGesture& gesture) {
-    if (home >= s.count) {
-        uiChromeClear(s);
-        return;
-    }
-    const uint16_t prev = uiMarked<UiChromeGesture>(s);
-    if (prev < s.count && prev != home && s.ent[prev].is_alive()) {
-        s.ent[prev].remove<UiChromeGesture>();
-    }
-    s.ent[home].set<UiChromeGesture>(gesture);
-}
+void uiChromePark(UiState& s, uint16_t home, const UiChromeGesture& gesture);
 
 uint16_t uiWindowChrome(UiState& s, uint16_t parent);
 void uiInstallChromeBin(UiState& s);

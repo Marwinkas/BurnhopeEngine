@@ -1,5 +1,7 @@
 #include "render/Weather.hpp"
 
+#include <flecs.h>
+
 #include <cmath>
 
 namespace burnhope {

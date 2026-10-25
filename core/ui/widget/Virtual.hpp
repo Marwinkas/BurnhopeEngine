@@ -1,6 +1,8 @@
 #pragma once
 
-#include "ui/State.hpp"
+#include "ui/Style.hpp"
+#include "ui/Flex.hpp"
+#include "ui/Types.hpp"
 #include "ui/widget/Scroll.hpp"
 
 namespace burnhope {
@@ -19,19 +21,12 @@ struct UiVirtualPool {
     uint8_t follow = 1;
 };
 
-inline void uiVirtualAttach(
+void uiVirtualAttach(
     UiState& s,
     uint16_t id,
     void (*refresh)(UiState& s, uint16_t id),
     float (*contentHeight)(const UiState& s, uint16_t id),
-    uint8_t follow) {
-    if (auto* scroll = id < s.count ? s.ent[id].try_get_mut<UiScroll>() : nullptr) {
-        scroll->contentHeight = contentHeight;
-        scroll->onScroll = refresh;
-        scroll->follow = follow;
-    }
-    s.ent[id].set<UiVirtualPool>({refresh, contentHeight, follow});
-}
+    uint8_t follow);
 
 inline float uiVirtualSlotY(uint32_t index, float itemH, float offset) {
     return static_cast<float>(index) * itemH - offset;
@@ -62,8 +57,7 @@ template <typename T>
 concept UiVirtualHasCols = requires(const T& pool) { pool.cols; };
 
 template <typename T>
-float uiVirtualContentHeight(const UiState& s, uint16_t id) {
-    const T* pool = id < s.count ? s.ent[id].try_get<T>() : nullptr;
+float uiVirtualContentHeight(const UiState& s, uint16_t id, const T* pool) {
     if (pool == nullptr) {
         return 0.0f;
     }
@@ -74,36 +68,9 @@ float uiVirtualContentHeight(const UiState& s, uint16_t id) {
     return uiVirtualTotalHeight(s, id, pool->itemH, pool->count, cols);
 }
 
-inline uint16_t uiVirtualHitRow(const UiState& s, uint16_t host, uint32_t& index) {
-    index = 0xFFFFFFFFu;
-    if (host >= s.count || (s.hovered != host && !uiWithin(s, s.hovered, host))) {
-        return kUiNone;
-    }
-    for (uint16_t p = s.hovered; p != kUiNone && p < s.count && p != host; p = s.parentOf[p]) {
-        const UiVirtRow* row = s.ent[p].try_get<UiVirtRow>();
-        if (row != nullptr) {
-            index = row->index;
-            return p;
-        }
-    }
-    return kUiNone;
-}
+uint16_t uiVirtualHitRow(const UiState& s, uint16_t host, uint32_t& index);
 
-inline uint32_t uiVirtRowIndex(const UiState& s, uint16_t id) {
-    if (id >= s.count) {
-        return 0xFFFFFFFFu;
-    }
-    const UiVirtRow* row = s.ent[id].try_get<UiVirtRow>();
-    if (row == nullptr) {
-        for (uint16_t p = s.parentOf[id]; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-            row = s.ent[p].try_get<UiVirtRow>();
-            if (row != nullptr) {
-                break;
-            }
-        }
-    }
-    return row != nullptr ? row->index : 0xFFFFFFFFu;
-}
+uint32_t uiVirtRowIndex(const UiState& s, uint16_t id);
 
 uint16_t uiVirtual(UiState& s, uint16_t parent, float rowH);
 void uiVirtualSource(UiState& s, uint16_t id, uint32_t count, void (*fill)(void*, uint32_t, char*, uint8_t), void (*click)(void*, uint32_t), void* user);
@@ -175,52 +142,18 @@ inline uint16_t uiVirtualSlots(float viewH, float itemH, uint8_t cols = 1) {
     return static_cast<uint16_t>(n);
 }
 
-inline uint16_t uiVirtualHostCreate(UiState& s, uint16_t parent, UiToken token, float radius) {
-    UiFlex host{};
-    host.grow = 1.0f;
-    host.shrink = 1.0f;
-    host.overflow = UiOverflow::Scroll;
-    host.position = UiPosition::Relative;
-    host.justify = UiJustify::Start;
-    host.align = UiAlign::Stretch;
-    host.content = UiAlignContent::Start;
-    const uint16_t scroll = spawn(s, parent, host, paintToken(s.look, token, radius));
-    if (scroll == kUiNone) {
-        return kUiNone;
-    }
-    UiFlex spacer{};
-    spacer.widthMode = UiSize::Percent;
-    spacer.width = 100.0f;
-    spacer.heightMode = UiSize::Px;
-    spacer.height = 1.0f;
-    spacer.shrink = 0.0f;
-    spacer.position = UiPosition::Absolute;
-    spacer.posX = 0.0f;
-    spacer.posY = 0.0f;
-    const uint16_t inner = spawn(s, scroll, spacer, paintClear());
-    s.ent[scroll].set<UiScroll>({0.0f, inner});
-    return scroll;
-}
+uint16_t uiVirtualHostCreate(UiState& s, uint16_t parent, UiToken token, float radius);
 
-inline void uiVirtualSyncSpacer(UiState& s, uint16_t inner, float totalHeight) {
-    if (inner >= s.count) {
-        return;
-    }
-    if (auto* flex = s.ent[inner].try_get_mut<UiFlex>()) {
-        flex->height = totalHeight;
-        flex->position = UiPosition::Absolute;
-        flex->posX = 0.0f;
-        flex->posY = 0.0f;
-        flex->marginT = 0.0f;
-        flex->marginB = 0.0f;
-    }
-}
+void uiVirtualSyncSpacer(UiState& s, uint16_t inner, float totalHeight);
 
 void uiVirtualSetShown(UiState& s, uint16_t slot, bool on);
 
+// True while `budget` more nodes still fit under kUiCap.
+bool uiVirtualRoom(const UiState& s, uint16_t budget);
+
 template <typename Pool, typename Add>
 void uiVirtualEnsure(UiState& s, Pool& pool, uint16_t need, uint16_t budget, Add add) {
-    while (pool.slots < need && pool.slots < kUiPoolCap && s.count + budget < kUiCap) {
+    while (pool.slots < need && pool.slots < kUiPoolCap && uiVirtualRoom(s, budget)) {
         const uint16_t slot = add();
         if (slot == kUiNone) {
             break;

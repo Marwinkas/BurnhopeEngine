@@ -1,6 +1,8 @@
 #pragma once
 
-#include "ui/State.hpp"
+#include "ui/Primitive.hpp"
+#include "ui/Interaction.hpp"
+#include "ui/Types.hpp"
 #include "ui/widget/BinSlots.hpp"
 
 namespace burnhope {
@@ -55,27 +57,18 @@ inline const ColorBook& colorInk(const UiColorPickerComponent& picker) {
     return picker.book != nullptr ? *picker.book : picker.local;
 }
 
+constexpr uint16_t kUiColorPickerCap = 16;
+
 // Pickers are found through the Flecs index of UiColorPickerComponent, so the cost follows the number of
-// pickers, never s.count. fn runs after the walk, so it may change components freely.
+// pickers, never s.count. Fills ids ascending and returns the count.
+uint16_t uiColorCollect(const UiState& s, uint16_t* ids, uint16_t cap);
+const UiColorPickerComponent* uiColorAt(const UiState& s, uint16_t id);
+
+// fn runs after the walk, so it may change components freely.
 template <typename Fn>
 void uiColorEach(const UiState& s, Fn&& fn) {
-    constexpr uint16_t kPickerCap = 16;
-    uint16_t ids[kPickerCap];
-    uint16_t n = 0;
-    s.world.each(s.world.id<UiColorPickerComponent>(), [&](flecs::entity e) {
-        const UiSlot* slot = e.try_get<UiSlot>();
-        if (slot != nullptr && slot->index < s.count && s.ent[slot->index] == e && n < kPickerCap) {
-            ids[n++] = slot->index;
-        }
-    });
-    for (uint16_t i = 1; i < n; ++i) {
-        const uint16_t id = ids[i];
-        uint16_t at = i;
-        for (; at > 0 && ids[at - 1] > id; --at) {
-            ids[at] = ids[at - 1];
-        }
-        ids[at] = id;
-    }
+    uint16_t ids[kUiColorPickerCap];
+    const uint16_t n = uiColorCollect(s, ids, kUiColorPickerCap);
     for (uint16_t i = 0; i < n; ++i) {
         fn(ids[i]);
     }
@@ -86,7 +79,7 @@ template <typename Pred>
 uint16_t uiColorFirst(const UiState& s, Pred&& pred) {
     uint16_t found = kUiNone;
     uiColorEach(s, [&](uint16_t id) {
-        const UiColorPickerComponent* picker = s.ent[id].try_get<UiColorPickerComponent>();
+        const UiColorPickerComponent* picker = uiColorAt(s, id);
         if (found == kUiNone && picker != nullptr && pred(*picker)) {
             found = id;
         }
@@ -94,15 +87,9 @@ uint16_t uiColorFirst(const UiState& s, Pred&& pred) {
     return found;
 }
 
-inline UiColorPickerComponent* uiColorFind(UiState& s) {
-    const uint16_t id = uiColorFirst(s, [](const UiColorPickerComponent&) { return true; });
-    return id == kUiNone ? nullptr : s.ent[id].try_get_mut<UiColorPickerComponent>();
-}
+UiColorPickerComponent* uiColorFind(UiState& s);
 
-inline const UiColorPickerComponent* uiColorFind(const UiState& s) {
-    const uint16_t id = uiColorFirst(s, [](const UiColorPickerComponent&) { return true; });
-    return id == kUiNone ? nullptr : s.ent[id].try_get<UiColorPickerComponent>();
-}
+const UiColorPickerComponent* uiColorFind(const UiState& s);
 
 inline UiColorPickerComponent* uiColor(UiState& s) {
     return uiColorFind(s);

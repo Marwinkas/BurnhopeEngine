@@ -4,6 +4,7 @@
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Docking.hpp"
 #include "ui/LayoutBridge.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 
@@ -180,6 +181,35 @@ bool uiDockInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, U
         }
     }
     return false;
+}
+
+UiDock* uiDockFind(UiState& s) {
+    const uint16_t id = uiMarked<UiDock>(s);
+    return id < s.count ? s.ent[id].try_get_mut<UiDock>() : nullptr;
+}
+
+const UiDock* uiDockFind(const UiState& s) {
+    const uint16_t id = uiMarked<UiDock>(s);
+    return id < s.count ? s.ent[id].try_get<UiDock>() : nullptr;
+}
+
+void uiDockBind(UiState& s, uint16_t home, uint16_t panel, uint8_t edges) {
+    if (home >= s.count) {
+        return;
+    }
+    const uint16_t prev = uiMarked<UiDock>(s);
+    UiDock dock{};
+    if (prev == home) {
+        if (const UiDock* live = s.ent[home].try_get<UiDock>()) {
+            dock = *live;
+        }
+    } else if (prev < s.count) {
+        s.ent[prev].remove<UiDock>();
+    }
+    dock.home = home;
+    dock.panel = panel;
+    dock.edges = edges;
+    s.ent[home].set<UiDock>(dock);
 }
 
 } // namespace burnhope

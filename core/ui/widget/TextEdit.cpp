@@ -1,4 +1,5 @@
 #include "ui/widget/Field.hpp"
+#include "ui/State.hpp"
 
 #include <cstring>
 
@@ -128,35 +129,39 @@ UiFieldUndo* undoOf(UiState& s, uint16_t id) {
     return s.ent[id].try_get_mut<UiFieldUndo>();
 }
 
-flecs::entity snapAt(const UiFieldUndo& undo, uint16_t index) {
-    flecs::entity e = undo.head;
+flecs::entity snapEnt(UiState& s, uint64_t id) {
+    return flecs::entity(s.world, id);
+}
+
+flecs::entity snapAt(UiState& s, const UiFieldUndo& undo, uint16_t index) {
+    flecs::entity e = snapEnt(s, undo.head);
     for (uint16_t i = 0; i < index && e.is_alive(); ++i) {
         const UiFieldSnap* snap = e.try_get<UiFieldSnap>();
         if (snap == nullptr) {
             return {};
         }
-        e = snap->next;
+        e = snapEnt(s, snap->next);
     }
     return e;
 }
 
-void dropRedo(UiFieldUndo& undo) {
+void dropRedo(UiState& s, UiFieldUndo& undo) {
     if (undo.at >= undo.n) {
         return;
     }
-    flecs::entity e = snapAt(undo, undo.at);
+    flecs::entity e = snapAt(s, undo, undo.at);
     if (undo.at == 0) {
-        undo.head = {};
+        undo.head = 0;
     } else {
-        flecs::entity prev = snapAt(undo, static_cast<uint16_t>(undo.at - 1));
+        flecs::entity prev = snapAt(s, undo, static_cast<uint16_t>(undo.at - 1));
         if (auto* snap = prev.is_alive() ? prev.try_get_mut<UiFieldSnap>() : nullptr) {
-            snap->next = {};
+            snap->next = 0;
         }
     }
     while (e.is_alive()) {
         flecs::entity next{};
         if (const UiFieldSnap* snap = e.try_get<UiFieldSnap>()) {
-            next = snap->next;
+            next = snapEnt(s, snap->next);
         }
         e.destruct();
         e = next;
@@ -169,9 +174,9 @@ void fieldRemember(UiState& s, uint16_t id, const UiField& field) {
     if (undo == nullptr) {
         return;
     }
-    dropRedo(*undo);
+    dropRedo(s, *undo);
     if (undo->at > 0) {
-        flecs::entity prev = snapAt(*undo, static_cast<uint16_t>(undo->at - 1));
+        flecs::entity prev = snapAt(s, *undo, static_cast<uint16_t>(undo->at - 1));
         const UiFieldSnap* snap = prev.is_alive() ? prev.try_get<UiFieldSnap>() : nullptr;
         if (snap != nullptr && snap->len == field.len && std::memcmp(snap->bytes, field.bytes, field.len) == 0) {
             return;
@@ -186,12 +191,12 @@ void fieldRemember(UiState& s, uint16_t id, const UiField& field) {
     }
     flecs::entity e = s.world.entity();
     if (undo->at == 0) {
-        undo->head = e;
+        undo->head = e.id();
     } else {
-        flecs::entity prev = snapAt(*undo, static_cast<uint16_t>(undo->at - 1));
-        snap.prev = prev;
+        flecs::entity prev = snapAt(s, *undo, static_cast<uint16_t>(undo->at - 1));
+        snap.prev = prev.id();
         if (auto* older = prev.is_alive() ? prev.try_get_mut<UiFieldSnap>() : nullptr) {
-            older->next = e;
+            older->next = e.id();
         }
     }
     e.set<UiFieldSnap>(snap);
@@ -221,7 +226,7 @@ bool fieldUndo(UiState& s) {
         return false;
     }
     --undo->at;
-    flecs::entity e = snapAt(*undo, undo->at);
+    flecs::entity e = snapAt(s, *undo, undo->at);
     auto* snap = e.is_alive() ? e.try_get_mut<UiFieldSnap>() : nullptr;
     if (snap == nullptr) {
         return false;
@@ -240,7 +245,7 @@ bool fieldRedo(UiState& s) {
     if (undo == nullptr || field == nullptr || undo->at >= undo->n) {
         return false;
     }
-    flecs::entity e = snapAt(*undo, undo->at);
+    flecs::entity e = snapAt(s, *undo, undo->at);
     auto* snap = e.is_alive() ? e.try_get_mut<UiFieldSnap>() : nullptr;
     if (snap == nullptr) {
         return false;

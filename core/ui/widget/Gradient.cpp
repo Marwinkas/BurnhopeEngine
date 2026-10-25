@@ -4,6 +4,7 @@
 #include "ui/Panel.hpp"
 #include "ui/Primitive.hpp"
 #include "ui/PrimitiveBatch.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 namespace {

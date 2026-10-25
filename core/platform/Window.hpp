@@ -3,6 +3,7 @@
 #include "platform/Input.hpp"
 
 #include <cstdint>
+#include <span>
 
 struct SDL_Window;
 struct SDL_Cursor;
@@ -182,6 +183,8 @@ void windowApply(Window& w, const WindowCommand& command);
 
 void windowText(Window& w, bool on);
 void windowTextArea(Window& w, int x, int y, int width, int height);
+// Инстанс-расширения Vulkan для поверхности; пусто, если видео-драйвер не поднят.
+[[nodiscard]] std::span<const char* const> windowVulkanExtensions();
 [[nodiscard]] bool windowCreateSurface(Window& w, VkInstance_T* instance, VkSurfaceKHR_T*& out);
 void platformSleep(int ms);
 void platformPace(int hz, uint64_t& nextTick);

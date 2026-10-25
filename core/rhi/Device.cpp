@@ -1,7 +1,6 @@
 #include "rhi/Device.hpp"
 #include "Str.hpp"
 
-#include <SDL3/SDL_vulkan.h>
 #include <spdlog/spdlog.h>
 
 #include <renderdoc_app.h>
@@ -262,7 +261,7 @@ bool deviceCreateSurface(Device& d, VkSurfaceKHR surface, VkSurfaceKHR& out) {
     return true;
 }
 
-bool deviceCreateInstance(Device& d) {
+bool deviceCreateInstance(Device& d, std::span<const char* const> surfaceExts) {
     if (d.instance != VK_NULL_HANDLE) {
         return true;
     }
@@ -284,10 +283,8 @@ bool deviceCreateInstance(Device& d) {
         .apiVersion = VK_API_VERSION_1_4,
     };
 
-    uint32_t sdlExtCount = 0;
-    const char* const* sdlExts = SDL_Vulkan_GetInstanceExtensions(&sdlExtCount);
-    if (sdlExts == nullptr) {
-        spdlog::error("SDL_Vulkan_GetInstanceExtensions: {}", SDL_GetError());
+    if (surfaceExts.empty()) {
+        spdlog::error("deviceCreateInstance: no surface extensions supplied");
         return false;
     }
 
@@ -311,7 +308,7 @@ bool deviceCreateInstance(Device& d) {
     const bool instSurfaceCaps2 = hasInstExt(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME)
         && instSurfaceMaint1;
 
-    std::vector<const char*> instExts(sdlExts, sdlExts + sdlExtCount);
+    std::vector<const char*> instExts(surfaceExts.begin(), surfaceExts.end());
     if (d.validation) {
         instExts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
@@ -457,7 +454,7 @@ bool deviceCreate(Device& d, VkSurfaceKHR surface) {
     // cooperativeMatrix: обнаружен и в логе, но не запрошен — нет потребителя в текущих фазах
     // (план, Северная звезда — будущий ReSTIR/нейро-апскейл). Инстанс-расширение
     // VK_KHR_SURFACE уже требует VK_KHR_get_surface_capabilities2 для maintenance1,
-    // но у SDL он уже в списке инстанс-расширений по умолчанию на большинстве лоадеров.
+    // но у платформы он уже в списке инстанс-расширений по умолчанию на большинстве лоадеров.
 
     const float prio = 1.0f;
     VkDeviceQueueCreateInfo qcis[3]{};

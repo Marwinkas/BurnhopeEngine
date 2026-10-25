@@ -1,6 +1,10 @@
 #pragma once
 
-#include "ui/State.hpp"
+#include "ui/Interaction.hpp"
+#include "ui/Types.hpp"
+
+#include <cstdint>
+#include <type_traits>
 
 namespace burnhope {
 
@@ -37,9 +41,7 @@ static_assert(std::is_trivially_copyable_v<UiCommandList>);
 void uiCommandBind(UiState& s);
 void uiCommandStore(UiState& s, uint16_t row, UiCommandFn fn, void* user, uint16_t item, uint16_t owner, uint16_t command);
 
-inline UiMenuHooks& uiMenuHooks(UiState& s) {
-    return s.world.ensure<UiMenuHooks>();
-}
+UiMenuHooks& uiMenuHooks(UiState& s);
 
 bool uiCommandAdd(UiState& s, const char* name, UiCommandFn fn, void* user);
 bool uiCommandAddTo(UiState& s, uint16_t menu, const char* name, UiCommandFn fn, void* user);

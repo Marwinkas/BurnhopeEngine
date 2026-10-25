@@ -1,20 +1,14 @@
 #include "Str.hpp"
 #include "ui/Icon.hpp"
-#include "ui/UiBin.hpp"
-#include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
-#include "ui/Interaction.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Chrome.hpp"
-#include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Label.hpp"
-#include "ui/LayoutBridge.hpp"
-#include "ui/Bar.hpp"
-#include "ui/Primitive.hpp"
-#include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Slider.hpp"
 #include "color/Color.hpp"
+#include "ui/State.hpp"
+#include "ui/kit/ColorInternal.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -25,32 +19,12 @@
 #include <ctime>
 
 namespace burnhope {
-namespace {
-constexpr UiRamp kRampColorWheel = UiRamp::HueWheel;
-constexpr UiRamp kRampColorValue = UiRamp::ValueRamp;
-constexpr UiRamp kRampColorSwatch = UiRamp::Gradient;
-constexpr float kColorSide = 96.0f;
-constexpr float kColorWheel = 220.0f;
-constexpr float kColorVal = 22.0f;
-constexpr float kColorGap = 10.0f;
-constexpr float kColorPad = 12.0f;
-constexpr float kColorTitle = 36.0f;
-constexpr float kColorW = kColorPad * 2.0f + kColorWheel + kColorGap + kColorVal + kColorGap + kColorSide;
-constexpr float kColorH = 634.0f;
-
-UiPaint colorRampPart(const UiLook& look, UiToken token, UiRamp ramp, float radius = 0.0f) {
+UiPaint colorRampPart(const UiLook& look, UiToken token, UiRamp ramp, float radius) {
     UiPaint paint = paintToken(look, token, radius);
     paint.ramp = ramp;
     return paint;
 }
-} // namespace
 
-void publishColor(UiState& s, UiColorPickerComponent& picker);
-void refreshColorChrome(UiState& s, UiColorPickerComponent& picker);
-void fillColorBody(UiState& s, uint16_t parent);
-void colorOnClose(void* user, uint16_t);
-void takeBook(UiColorPickerComponent& picker);
-void applyColor(UiState& s, UiColorPickerComponent& picker, bool fromHsv, bool publish);
 
 bool pickerOwns(const UiColorPickerComponent& picker, uint16_t id) {
     if (id == kUiNone) {
@@ -131,20 +105,6 @@ UiColorPickerComponent& colorBind(UiState& s, uint16_t panel) {
     return *s.ent[panel].try_get_mut<UiColorPickerComponent>();
 }
 
-void uiSetColorBook(UiState& s, ColorBook* book) {
-    uiColorEach(s, [&](uint16_t id) {
-        UiColorPickerComponent* picker = s.ent[id].try_get_mut<UiColorPickerComponent>();
-        if (picker == nullptr) {
-            return;
-        }
-        picker->book = book;
-        if (book != nullptr && book->gen != 0 && picker->colorSeen != book->gen) {
-            takeBook(*picker);
-            applyColor(s, *picker, false, true);
-        }
-    });
-}
-
 void setRange(UiState& s, uint16_t id, float value) {
     if (id == kUiNone) {
         return;
@@ -162,7 +122,7 @@ void writeHex(char* dst, uint8_t& len, float r, float g, float b, float a) {
     len = 9;
 }
 
-void applyColor(UiState& s, UiColorPickerComponent& picker, bool fromHsv, bool publish = true) {
+void applyColor(UiState& s, UiColorPickerComponent& picker, bool fromHsv, bool publish) {
     if (fromHsv) {
         ColorLinear linear{};
         colorHsvToLinear(colorInk(picker).h, colorInk(picker).s, colorInk(picker).v, linear);
@@ -236,14 +196,6 @@ void applyColor(UiState& s, UiColorPickerComponent& picker, bool fromHsv, bool p
     }
     refreshColorChrome(s, picker);
     s.visualDirty = true;
-}
-
-void takeBook(UiColorPickerComponent& picker) {
-    if (picker.book == nullptr || picker.book->gen == 0) {
-        return;
-    }
-    picker.colorSeen = picker.book->gen;
-    picker.colorApplied = picker.book->present;
 }
 
 void paintColor(UiState& s) {
@@ -330,92 +282,6 @@ bool readInt(const UiField& field, int& out) {
     }
     out = static_cast<int>(value);
     return true;
-}
-
-void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& b, float& a) {
-    r = 0.102f;
-    g = 0.106f;
-    b = 0.122f;
-    a = 1.0f;
-    auto take = [&](bool overlay) -> bool {
-        for (int n = static_cast<int>(s.count) - 1; n >= 0; --n) {
-            const auto id = static_cast<uint16_t>(n);
-            if (uiIsOverlay(s, id) != overlay || !nodeShown(s, id)) {
-                continue;
-            }
-            const UiPaint* paint = s.ent[id].try_get<UiPaint>();
-            if (paint == nullptr || paint->a <= 0.0f || s.ent[id].has<UiPass>()) {
-                continue;
-            }
-            const UiBox& box = s.box[id];
-            if (!hitBox(box, x, y)) {
-                continue;
-            }
-            if (paint->ramp == kRampColorWheel) {
-                const float px = (x - box.x) / box.w * 2.0f - 1.0f;
-                const float py = (y - box.y) / box.h * 2.0f - 1.0f;
-                const float rad = std::sqrt(px * px + py * py);
-                if (rad > 1.02f) {
-                    continue;
-                }
-                float hue = std::atan2(py, px) * 0.15915494f + 0.5f;
-                if (hue < 0.0f) {
-                    hue += 1.0f;
-                }
-                const float sat = rad > 1.0f ? 1.0f : rad;
-                ColorLinear linear{};
-                colorHsvToLinear(hue, sat, 1.0f, linear);
-                r = linear.r;
-                g = linear.g;
-                b = linear.b;
-                a = 1.0f;
-                return true;
-            }
-            if (paint->ramp == kRampColorSwatch) {
-                const UiColorPickerComponent* owned = pickerFor(s, id);
-                if (owned == nullptr) {
-                    continue;
-                }
-                r = colorInk(*owned).r;
-                g = colorInk(*owned).g;
-                b = colorInk(*owned).b;
-                a = colorInk(*owned).a;
-                return true;
-            }
-            if (paint->ramp == kRampColorValue) {
-                const UiColorPickerComponent* owned = pickerFor(s, id);
-                if (owned == nullptr) {
-                    continue;
-                }
-                float v = box.h > 1.0f ? 1.0f - (y - box.y) / box.h : 1.0f;
-                if (v < 0.0f) {
-                    v = 0.0f;
-                }
-                if (v > 1.0f) {
-                    v = 1.0f;
-                }
-                ColorLinear linear{};
-                colorHsvToLinear(colorInk(*owned).h, colorInk(*owned).s, v, linear);
-                r = linear.r;
-                g = linear.g;
-                b = linear.b;
-                a = 1.0f;
-                return true;
-            }
-            if (paint->a <= 0.02f) {
-                continue;
-            }
-            r = paint->r;
-            g = paint->g;
-            b = paint->b;
-            a = paint->a;
-            return true;
-        }
-        return false;
-    };
-    if (!take(true)) {
-        take(false);
-    }
 }
 
 void colorOnValue(void* user, uint16_t id, float val) {
@@ -590,149 +456,6 @@ void syncColor(UiState& s, UiColorPickerComponent& picker) {
         }
     } else if (colorInk(picker).present != 2) {
         uiRequestClose(s);
-    }
-}
-
-void uiEnsureColorPopup(UiState& s) {
-    const uint16_t live = uiColorFirst(s, [&s](const UiColorPickerComponent& picker) {
-        return picker.colorHost == 0 && picker.colorPanel < s.count && s.ent[picker.colorPanel].is_alive();
-    });
-    if (live != kUiNone) {
-        return;
-    }
-    if (s.count == 0 || s.yoga[0] == nullptr) {
-        return;
-    }
-    UiFlex root{};
-    root.position = UiPosition::Absolute;
-    root.direction = UiFlexDir::Column;
-    root.pad = 0.0f;
-    root.gap = 0.0f;
-    root.widthMode = UiSize::Px;
-    root.width = kColorW;
-    root.heightMode = UiSize::Px;
-    root.height = kColorH;
-    root.shrink = 0.0f;
-    const uint16_t id = uiPanel(s, 0, root, paintToken(s.look, UiToken::Menu, 0.0f));
-    if (id == kUiNone) {
-        return;
-    }
-    UiColorPickerComponent& picker = colorBind(s, id);
-    picker.colorHost = 0;
-    if (picker.colorSeen == 0) {
-        colorLinearToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
-    }
-    picker.colorPanel = id;
-    colorInk(picker).present = 0;
-    picker.colorApplied = 0;
-    colorHead(s, id);
-    UiFlex body{};
-    body.direction = UiFlexDir::Column;
-    body.pad = kColorPad;
-    body.gap = 8.0f;
-    body.grow = 1.0f;
-    body.shrink = 1.0f;
-    const uint16_t bodyId = uiPanel(s, id, body, paintClear());
-    fillColorBody(s, bodyId);
-    uiShow(s, id, false);
-}
-
-void colorOnOpen(void* user, uint16_t id) {
-    auto& s = *static_cast<UiState*>(user);
-    uiEnsureColorPopup(s);
-    UiColorPickerComponent* picker = hostPicker(s);
-    if (picker == nullptr) {
-        return;
-    }
-    if (picker->book != nullptr && picker->book->gen != picker->colorSeen) {
-        takeBook(*picker);
-    }
-    picker->colorAnchor = id;
-    applyColor(s, *picker, false, false);
-    if (colorInk(*picker).mode == 1) {
-        colorInk(*picker).present = 2;
-        picker->colorApplied = 2;
-        uiShow(s, picker->colorPanel, false);
-        if (picker->book != nullptr) {
-            picker->book->present = 2;
-        }
-    } else {
-        colorInk(*picker).present = 1;
-        picker->colorApplied = 1;
-        placeColorMenu(s, *picker);
-        uiShow(s, picker->colorPanel, true);
-    }
-    publishColor(s, *picker);
-}
-
-void colorOnClose(void* user, uint16_t id) {
-    auto& s = *static_cast<UiState*>(user);
-
-    UiColorPickerComponent* picker = pickerFor(s, id);
-    if (picker == nullptr) {
-        return;
-    }
-    colorInk((*picker)).present = 0;
-    (*picker).colorApplied = 0;
-    uiShow(s, (*picker).colorPanel, false);
-    publishColor(s, *picker);
-    if ((*picker).colorHost != 0) {
-        uiRequestClose(s);
-    }
-}
-
-void colorOnDrop(void* user, uint16_t id) {
-    auto& s = *static_cast<UiState*>(user);
-
-    UiColorPickerComponent* picker = pickerFor(s, id);
-    if (picker == nullptr) {
-        return;
-    }
-    colorInk((*picker)).drop = colorInk((*picker)).drop == 0 ? 1 : 0;
-    publishColor(s, *picker);
-    if ((*picker).colorHost == 0 && colorInk((*picker)).present == 1) {
-        if (colorInk((*picker)).drop == 0) {
-            placeColorMenu(s, *picker);
-        }
-        uiShow(s, (*picker).colorPanel, colorInk((*picker)).drop == 0);
-    }
-}
-
-void colorOnMenu(void* user, uint16_t id) {
-    auto& s = *static_cast<UiState*>(user);
-
-    UiColorPickerComponent* picker = pickerFor(s, id);
-    if (picker == nullptr) {
-        return;
-    }
-    colorInk((*picker)).mode = 0;
-    colorInk((*picker)).present = 1;
-    (*picker).colorApplied = 1;
-    publishColor(s, *picker);
-    refreshColorChrome(s, *picker);
-    if ((*picker).colorHost != 0) {
-        uiRequestClose(s);
-    } else {
-        placeColorMenu(s, *picker);
-        uiShow(s, (*picker).colorPanel, true);
-    }
-}
-
-void colorOnWindow(void* user, uint16_t id) {
-    auto& s = *static_cast<UiState*>(user);
-
-    UiColorPickerComponent* picker = pickerFor(s, id);
-    if (picker == nullptr) {
-        return;
-    }
-    colorInk((*picker)).mode = 1;
-    colorInk((*picker)).present = 2;
-    (*picker).colorApplied = 2;
-    uiShow(s, (*picker).colorPanel, false);
-    publishColor(s, *picker);
-    refreshColorChrome(s, *picker);
-    if ((*picker).colorHost == 0 && (*picker).book != nullptr) {
-        (*picker).book->present = 2;
     }
 }
 
@@ -1053,6 +776,39 @@ void uiInstallColorBin(UiState& s) {
     uiBinRole(s, kBinSlotColor, "color", 0, 0);
     uiRegisterCustomBinNode(s, kBinSlotColor, loadColorBin, nullptr);
     uiPlaceAdd(s, colorPlace);
+}
+
+UiColorPickerComponent* uiColorFind(UiState& s) {
+    const uint16_t id = uiColorFirst(s, [](const UiColorPickerComponent&) { return true; });
+    return id == kUiNone ? nullptr : s.ent[id].try_get_mut<UiColorPickerComponent>();
+}
+
+const UiColorPickerComponent* uiColorFind(const UiState& s) {
+    const uint16_t id = uiColorFirst(s, [](const UiColorPickerComponent&) { return true; });
+    return id == kUiNone ? nullptr : s.ent[id].try_get<UiColorPickerComponent>();
+}
+
+uint16_t uiColorCollect(const UiState& s, uint16_t* ids, uint16_t cap) {
+    uint16_t n = 0;
+    s.world.each(s.world.id<UiColorPickerComponent>(), [&](flecs::entity e) {
+        const UiSlot* slot = e.try_get<UiSlot>();
+        if (slot != nullptr && slot->index < s.count && s.ent[slot->index] == e && n < cap) {
+            ids[n++] = slot->index;
+        }
+    });
+    for (uint16_t i = 1; i < n; ++i) {
+        const uint16_t id = ids[i];
+        uint16_t at = i;
+        for (; at > 0 && ids[at - 1] > id; --at) {
+            ids[at] = ids[at - 1];
+        }
+        ids[at] = id;
+    }
+    return n;
+}
+
+const UiColorPickerComponent* uiColorAt(const UiState& s, uint16_t id) {
+    return id < s.count ? s.ent[id].try_get<UiColorPickerComponent>() : nullptr;
 }
 
 } // namespace burnhope

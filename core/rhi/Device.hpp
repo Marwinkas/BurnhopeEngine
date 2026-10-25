@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <mutex>
+#include <span>
 
 namespace burnhope {
 
@@ -50,7 +51,8 @@ struct Device {
 void deviceMarkLost(Device& d, const char* where, int32_t result);
 [[nodiscard]] uint64_t deviceMemoryUsed(const Device& d);
 
-[[nodiscard]] bool deviceCreateInstance(Device& d);
+// surfaceExts — инстанс-расширения поверхности, которые даёт платформа (windowVulkanExtensions).
+[[nodiscard]] bool deviceCreateInstance(Device& d, std::span<const char* const> surfaceExts);
 [[nodiscard]] bool deviceCreate(Device& d, VkSurfaceKHR surface);
 [[nodiscard]] bool deviceCreateSurface(Device& d, VkSurfaceKHR surface, VkSurfaceKHR& out);
 void deviceDestroy(Device& d);

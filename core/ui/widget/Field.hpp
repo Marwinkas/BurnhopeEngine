@@ -1,7 +1,13 @@
 #pragma once
 
-#include "ui/State.hpp"
+#include "ui/Types.hpp"
 #include "ui/widget/BinSlots.hpp"
+#include "platform/Input.hpp"
+#include "ui/Geometry.hpp"
+#include "ui/Interaction.hpp"
+
+#include <cstdint>
+#include <type_traits>
 
 namespace burnhope {
 
@@ -55,24 +61,7 @@ struct UiField {
     char hint[40]{};
 };
 
-inline float uiFieldWidth(const UiState& s, const UiField& field, uint8_t until) {
-    if (field.password == 0) {
-        return uiMeasure(s, field.bytes, field.len, until);
-    }
-    uint8_t count = 0;
-    uint8_t i = 0;
-    const uint8_t end = until < field.len ? until : field.len;
-    while (i < end) {
-        uint8_t step = 1;
-        uiReadUtf8(field.bytes, field.len, i, step);
-        if (step == 0) {
-            break;
-        }
-        ++count;
-        i = static_cast<uint8_t>(i + step);
-    }
-    return static_cast<float>(count) * uiAdvance(s, static_cast<uint32_t>('*'));
-}
+float uiFieldWidth(const UiState& s, const UiField& field, uint8_t until);
 
 struct UiTextHook {
     void (*fn)(void* user, const char* text) = nullptr;
@@ -80,8 +69,8 @@ struct UiTextHook {
 };
 
 struct UiFieldSnap {
-    flecs::entity prev{};
-    flecs::entity next{};
+    uint64_t prev = 0;
+    uint64_t next = 0;
     char bytes[96]{};
     uint8_t len = 0;
     uint8_t caret = 0;
@@ -89,7 +78,7 @@ struct UiFieldSnap {
 };
 
 struct UiFieldUndo {
-    flecs::entity head{};
+    uint64_t head = 0;
     uint16_t n = 0;
     uint16_t at = 0;
 };

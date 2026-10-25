@@ -1,6 +1,6 @@
 #include "audio/Audio.hpp"
 #include "render/PassBufferSync.hpp"
-#include "render/Physics.hpp"
+#include "gpu_scene/Physics.hpp"
 #include "render/Weather.hpp"
 #include "render/SceneFrameImpl.hpp"
 

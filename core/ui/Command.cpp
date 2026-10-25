@@ -1,6 +1,12 @@
 #include "ui/Command.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
+
+UiMenuHooks& uiMenuHooks(UiState& s) {
+    return s.world.ensure<UiMenuHooks>();
+}
+
 namespace {
 
 void commandInvoke(void* user, uint16_t id) {

@@ -1,7 +1,9 @@
 #pragma once
 
 #include "ui/widget/Range.hpp"
-#include "ui/State.hpp"
+#include "platform/Input.hpp"
+#include "ui/Interaction.hpp"
+#include "ui/Types.hpp"
 
 #include <cstddef>
 
