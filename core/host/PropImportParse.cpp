@@ -142,3 +142,40 @@ void applyClass(const UiState& s, Node& node, const char* name) {
 }
 
 } // namespace burnhope::propimport
+
+namespace burnhope::propimport {
+
+bool parseExtra(Cur& c, const char* key, Node& node) {
+    if (keyIs(key, "slot") || keyIs(key, "channel") || keyIs(key, "cell")) {
+        double number = 0.0;
+        if (!json::parseNumber(c, number)) {
+            return false;
+        }
+        const auto value = static_cast<uint8_t>(number);
+        if (keyIs(key, "slot")) {
+            node.slotN = value;
+        } else if (keyIs(key, "channel")) {
+            node.channel = value;
+        } else {
+            node.cell = value;
+        }
+        return true;
+    }
+    if (keyIs(key, "reset")) {
+        json::skip(c);
+        if (c.p + 4 <= c.end && std::memcmp(c.p, "true", 4) == 0) {
+            node.reset = true;
+            c.p += 4;
+            return true;
+        }
+        if (c.p + 5 <= c.end && std::memcmp(c.p, "false", 5) == 0) {
+            node.reset = false;
+            c.p += 5;
+            return true;
+        }
+        return false;
+    }
+    return json::skipValue(c);
+}
+
+} // namespace burnhope::propimport

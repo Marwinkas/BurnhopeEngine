@@ -455,20 +455,10 @@
                           "role": "button",
                           "name": "camBtn",
                           "photo": 6,
-                          "w": 52,
+                          "w": 28,
                           "h": 28,
                           "command": "camera.open",
-                          "dir": "row",
-                          "children": [
-                            {
-                              "role": "panel",
-                              "w": 14,
-                              "h": 14,
-                              "shrink": 0,
-                              "paint": "glyph",
-                              "icon": 11
-                            }
-                          ]
+                          "class": "tool_button"
                         },
                         {
                           "role": "menubutton",

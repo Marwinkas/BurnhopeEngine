@@ -442,6 +442,7 @@ bh_module(ui_inspector
     core/host/PropBind.cpp
     core/host/PropImport.cpp
     core/host/PropImportParse.cpp
+    core/host/PropImportRoles.cpp
     core/host/PropGrid.cpp
     core/host/PropFilter.cpp
 )

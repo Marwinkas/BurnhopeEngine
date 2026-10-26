@@ -30,7 +30,7 @@ struct TokenName {
 };
 
 constexpr TokenName kTokens[] = {
-    {"window", UiToken::Window}, {"title", UiToken::Title}, {"side", UiToken::Side}, {"content", UiToken::Content},
+    {"window", UiToken::Window}, {"dock", UiToken::Content}, {"title", UiToken::Title}, {"side", UiToken::Side}, {"content", UiToken::Content},
     {"button", UiToken::Button}, {"field", UiToken::Field}, {"menu", UiToken::Menu}, {"text", UiToken::Text},
     {"muted", UiToken::Muted}, {"item", UiToken::Item}, {"accent", UiToken::Accent},
 };

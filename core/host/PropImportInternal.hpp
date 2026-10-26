@@ -48,6 +48,10 @@ struct Node {
     uint8_t photo = 255;
     uint8_t kind = 0;
     uint8_t groupN = 0;
+    uint8_t slotN = 0;
+    uint8_t channel = 0;
+    uint8_t cell = 0;
+    bool reset = false;
     float w = 0.0f;
     float h = 0.0f;
     float wp = 0.0f;
@@ -94,7 +98,20 @@ struct Import {
     UiPaint hidden{};
     PropFlagFn onFlag = nullptr;
     void* user = nullptr;
+    const PropRole* roles = nullptr;
+    uint16_t roleCount = 0;
 };
+
+// Records `id` in the slot list under `name` and, when `rename`, names the node.
+void remember(Import& in, const char* name, uint16_t id, bool rename = true);
+// The binder-owned command callback registered under `name`, or nullptr.
+UiCommandPick* takeCommand(Import& in, const char* name, uint16_t arg);
+void onChoiceCommand(void* user, uint8_t index);
+// Builds the roles that live outside the main table (segment, preview, pick and host-registered PropRoles).
+// Returns false when `node.role` is none of them.
+bool spawnExtra(Import& in, uint16_t parent, const Node& node, uint16_t& out);
+// Keys of the node object that parseNode does not own: slot, channel, cell, reset. Unknown keys are skipped.
+bool parseExtra(Cur& c, const char* key, Node& node);
 
 bool keyIs(const char* key, const char* name);
 bool parseItem(Cur& c, Item& item);

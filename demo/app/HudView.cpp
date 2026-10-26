@@ -34,7 +34,6 @@ void hudWire(Canvas& canvas, HudContext* hud, uint16_t details, uint16_t statsBo
     const float viewCount = static_cast<float>(sizeof(kViews) / sizeof(kViews[0]));
     hud->viewPopH = 16.0f + viewCount * 36.0f + (viewCount - 1.0f) * 2.0f;
     uiSetSize(state, hud->viewPanel, viewW, hud->viewPopH);
-    uiButtonTintIcon(state, uiButtonIconChild(state, hud->camBtn), false);
     for (const uint16_t btn : {hud->camBtn, hud->gearBtn, hud->playBtn, hud->pauseBtn}) {
         uiToolFrame(state, btn);
     }

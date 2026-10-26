@@ -198,6 +198,8 @@ struct HudContext {
     std::vector<MatLeaf> texList;
     uint16_t matEmpty[kMatSlotN]{};
     uint16_t matVal[kMatSlotN]{};
+    uint8_t matGroup[kMatSlotN]{};
+    uint8_t matChannel[kMatSlotN]{};
     uint16_t matType = kUiNone;
     uint16_t matPack = kUiNone;
     uint16_t matPreview = kUiNone;

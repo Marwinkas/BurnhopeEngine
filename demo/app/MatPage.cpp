@@ -4,6 +4,7 @@
 #include "app/MatPriv.hpp"
 
 #include "host/PropGrid.hpp"
+#include "host/PropImport.hpp"
 #include "asset/MaterialBake.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Style.hpp"
@@ -17,7 +18,7 @@ namespace burnhope {
 
 namespace {
 
-void onType(void* user, uint8_t index) {
+void onType(void* user, uint16_t index) {
     auto* hud = static_cast<HudContext*>(user);
     if (hud == nullptr) {
         return;
@@ -29,7 +30,7 @@ void onType(void* user, uint8_t index) {
     saveOpenMaterial(*hud);
 }
 
-void onPack(void* user, uint8_t index) {
+void onPack(void* user, uint16_t index) {
     auto* hud = static_cast<HudContext*>(user);
     if (hud == nullptr) {
         return;
@@ -42,10 +43,10 @@ void onPack(void* user, uint8_t index) {
     saveOpenMaterial(*hud);
 }
 
-void onShape(void* user, uint8_t index) {
+void onShape(void* user, uint16_t index) {
     auto* hud = static_cast<HudContext*>(user);
     if (hud != nullptr) {
-        hud->previewShape = index;
+        hud->previewShape = static_cast<uint8_t>(index);
         hud->previewDirty = 1;
     }
 }
@@ -95,37 +96,22 @@ void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel) {
     hud->bind.resetUser = hud;
     hud->previewBuf.resize(kMatSphereSide * kMatSphereSide * 4u);
     hud->atlasBuf.resize(kMatAtlasW * kMatAtlasH * 4u);
-    UiFlex previewCol{};
-    previewCol.direction = UiFlexDir::Column;
-    previewCol.align = UiAlign::Center;
-    previewCol.widthMode = UiSize::Percent;
-    previewCol.width = 100.0f;
-    previewCol.gap = 4.0f;
-    previewCol.shrink = 0.0f;
-    const uint16_t preview = uiPanel(s, panel, previewCol, paintClear());
-    const char* shapeName[] = {"Sphere", "Cube", "Plane"};
-    (void)uiSegment(s, preview, {.labels = shapeName, .count = 3, .selected = hud->previewShape, .onPick = onShape, .user = hud});
-    hud->matPreview = uiIcon(s, preview, 8, static_cast<float>(kMatSphereSide), static_cast<float>(kMatSphereSide));
+    const PropSlot slots[] = {
+        {"matPreview", &hud->matPreview},
+        {"matType", &hud->matType},
+        {"matPack", &hud->matPack},
+    };
+    const PropCommand commands[] = {
+        {"mat.shape", onShape, hud},
+        {"mat.type", onType, hud},
+        {"mat.pack", onPack, hud},
+    };
+    const PropRole roles[] = {{"matslot", matSlotRole, hud}};
+    if (!propImportAsset(s, panel, "assets/ui/material.json", "material", hud->bind, slots, 3, commands, 3, paintClear(), nullptr, hud, roles, 1)) {
+        return;
+    }
     uiDrag(s, hud->matPreview, onPreviewDrag, hud);
     uiDragRight(s, hud->matPreview, onPreviewOrbit, hud);
-    uiLabel(s, preview, "Material Preview");
-    const char* typeName[] = {"Lit", "Unlit"};
-    const char* packName[] = {"Classic", "ORMH"};
-    hud->matType = hud->bind.choiceReset(s, panel, "Type", typeName, 2, onType, hud, kFlMatUnlit);
-    hud->bind.checkReset(s, panel, "Double Sided", kFlMatDouble, false);
-    matAddSlot(s, *hud, panel, 0);
-    matAddSlot(s, *hud, panel, 1);
-    matAddSlot(s, *hud, panel, 2);
-    hud->bind.checkReset(s, panel, "Flip Normal Y", kFlMatFlip, true);
-    hud->matPack = hud->bind.choiceReset(s, panel, "Map Type", packName, 2, onPack, hud, kFlMatPack);
-    for (uint8_t slot = 3; slot < 8; ++slot) {
-        matAddSlot(s, *hud, panel, slot);
-    }
-    matAddSlot(s, *hud, panel, 8);
-    hud->bind.checkReset(s, panel, "Repeat", kFlMatRepeat, true);
-    hud->bind.checkReset(s, panel, "Triplanar", kFlMatWorld, false);
-    hud->bind.vec2Reset(s, panel, "Tiling", kScMatUvX, 1.0f, 1.0f);
-    hud->bind.vec2Reset(s, panel, "Offset", kScMatUvOffX, 0.0f, 0.0f);
 }
 
 } // namespace burnhope

@@ -381,6 +381,41 @@ TEST_CASE("shell json names the spawn button") {
     fileUnmap(&file);
 }
 
+namespace {
+uint8_t gShape = 255;
+uint16_t gHosted = 0;
+void onShapeTest(void*, uint16_t item) { gShape = static_cast<uint8_t>(item); }
+uint16_t hostedRole(void* user, UiState& s, UiPropBinder&, uint16_t parent, const PropSpec& spec) {
+    ++*static_cast<uint16_t*>(user);
+    return uiPropRow(s, parent, spec.label);
+}
+} // namespace
+
+TEST_CASE("material json builds segment, pick, preview and hosted roles") {
+    UiState state;
+    uiWidgetsInit(state);
+    SceneBlock block{};
+    UiPropBinder binder;
+    binder.attach(block.scalars, 256, block.flags, 64);
+    uint16_t preview = kUiNone;
+    uint16_t type = kUiNone;
+    const PropSlot slots[] = {{"matPreview", &preview}, {"matType", &type}};
+    const PropCommand commands[] = {{"mat.shape", onShapeTest, nullptr}, {"mat.type", onShapeTest, nullptr}, {"mat.pack", onShapeTest, nullptr}};
+    const PropRole roles[] = {{"matslot", hostedRole, &gHosted}};
+    char path[512]{};
+    MappedFile file{};
+    CHECK(platformResolveAsset("assets/ui/material.json", path, sizeof(path)));
+    CHECK(fileMapReadOnly(path, &file));
+    const std::string_view doc{reinterpret_cast<const char*>(file.data), file.size};
+    const uint16_t root = spawn(state, kUiNone, px(800.0f, 900.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    gHosted = 0;
+    CHECK(propImport(state, root, doc, "material", binder, slots, 2, commands, 3, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr, roles, 1));
+    CHECK(preview != kUiNone);
+    CHECK(type != kUiNone);
+    CHECK(gHosted == 9);
+    fileUnmap(&file);
+}
+
 TEST_CASE("virtual row keeps a long line") {
     UiState state;
     uiWidgetsInit(state);

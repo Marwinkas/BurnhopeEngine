@@ -69,7 +69,7 @@ void propHair(UiState& s, uint16_t column) {
 constexpr float kPropIndent = 28.0f;
 constexpr float kPropField = 108.0f;
 constexpr float kPropMargin = 8.0f;
-constexpr float kPropLock = 18.0f;
+constexpr float kPropLock = 18.0f; // fallback of the "vector_lock" class
 constexpr float kVecGap = 2.0f;
 constexpr float kPropGap = 10.0f; // clear space between the splitter line and every value control
 
@@ -222,6 +222,8 @@ uint16_t uiPropGrip(UiState& s, uint16_t body) {
         return grip;
     }
     if (auto* flex = s.ent[grip].try_get_mut<UiFlex>()) {
+        flex->widthMode = UiSize::Px;
+        flex->width = uiStyle(s, "splitter_grip", UiStyleKey::Width, flex->width);
         flex->position = UiPosition::Absolute;
         flex->posX = labelW + kPropIndent;
         flex->posY = 0.0f;
@@ -518,7 +520,8 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
     // Fixed axis width: what is left of the control slot after lock, caps and gaps, split equally.
     const float capW = propSlotH(s);
     const int items = (full ? 1 : 0) + 2 * n;
-    const float lockUsed = full ? kPropLock + 4.0f : 0.0f;
+    const float lockSide = uiStyle(s, "vector_lock", UiStyleKey::Width, kPropLock);
+    const float lockUsed = full ? lockSide + 4.0f : 0.0f;
     const float fieldW = (line.width - lockUsed - capW * static_cast<float>(n) - kVecGap * static_cast<float>(items - 1)) / static_cast<float>(n);
     const char* letters[3] = {"X", "Y", "Z"};
     UiPropVec3 out{};
@@ -559,7 +562,7 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         return id;
     };
     if (full) {
-        out.lock = square(static_cast<uint8_t>(UiIcon::LockOpen), row, kPropLock);
+        out.lock = square(static_cast<uint8_t>(UiIcon::LockOpen), row, lockSide);
         if (out.lock < s.count) {
             s.ent[out.lock].set<UiVecCtl>({});
             if (auto* ctl = s.ent[out.lock].try_get_mut<UiVecCtl>()) {
@@ -614,6 +617,11 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         *ids[i] = uiNumber(s, box, axes[i], minV, maxV, step, nullptr, nullptr, kPropField, propSlotH(s), 1.0f);
         propFillWidth(s, *ids[i]);
         uiNumberFill(s, *ids[i], false);
+        // Axis numbers sit in a narrow box: the vector_field class gives them tighter side padding than a lone field.
+        if (auto* field = *ids[i] < s.count ? s.ent[*ids[i]].try_get_mut<UiField>() : nullptr) {
+            field->padL = uiStyle(s, "vector_field", UiStyleKey::PadL, field->padL);
+            field->padR = uiStyle(s, "vector_field", UiStyleKey::PadR, field->padR);
+        }
     }
     if (!full) {
         return out;

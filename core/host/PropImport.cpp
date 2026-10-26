@@ -29,20 +29,6 @@ namespace {
 
 using namespace propimport;
 
-void remember(Import& in, const char* name, uint16_t id, bool rename = true) {
-    if (name == nullptr || name[0] == '\0') {
-        return;
-    }
-    for (uint16_t i = 0; i < in.slotCount; ++i) {
-        if (in.slots[i].name != nullptr && in.slots[i].id != nullptr && std::strcmp(in.slots[i].name, name) == 0) {
-            *in.slots[i].id = id;
-        }
-    }
-    if (rename && in.state != nullptr) {
-        uiName(*in.state, id, name);
-    }
-}
-
 void rememberShow(Import& in, uint16_t node, const Node& spec) {
     if (!spec.hasShow || in.bind == nullptr) {
         return;
@@ -128,27 +114,6 @@ void addMenu(Import& in, uint16_t parent, const Node& node) {
         }
     }
     remember(in, node.name, button);
-}
-
-void onChoiceCommand(void* user, uint8_t index) {
-    auto* pick = static_cast<UiCommandPick*>(user);
-    if (pick != nullptr && pick->fn != nullptr) {
-        pick->fn(pick->user, index);
-    }
-}
-
-UiCommandPick* takeCommand(Import& in, const char* name, uint16_t arg) {
-    if (name == nullptr || name[0] == '\0' || in.bind == nullptr || in.commands == nullptr) {
-        return nullptr;
-    }
-    for (uint16_t i = 0; i < in.commandCount; ++i) {
-        if (in.commands[i].name == nullptr || std::strcmp(in.commands[i].name, name) != 0) {
-            continue;
-        }
-        in.bind->commands.push_back(UiCommandPick{.fn = in.commands[i].fn, .user = in.commands[i].user, .arg = arg});
-        return &in.bind->commands.back();
-    }
-    return nullptr;
 }
 
 void bindNodeCommand(Import& in, uint16_t id, const Node& node) {
@@ -381,6 +346,11 @@ uint16_t makeSwatch(Import& in, uint16_t parent, const Node& node) {
 }
 
 uint16_t makeVec2(Import& in, uint16_t parent, const Node& node) {
+    if (node.reset && node.hasBind) {
+        const UiPropVec2 home = in.bind->vec2Reset(*in.state, parent, node.label, node.bind, node.value, node.value2, node.minV, node.maxV, node.hasStep ? node.step : 0.5f);
+        remember(in, node.name, home.x);
+        return home.x;
+    }
     const UiPropVec2 row = uiPropVec2(*in.state, parent, node.label, node.value, node.value2, node.minV, node.maxV, node.hasStep ? node.step : 0.5f);
     in.bind->watch(row.x, node.bind, node.value);
     in.bind->watch(row.y, static_cast<uint16_t>(node.bind + 1u), node.value2);
@@ -546,6 +516,11 @@ uint16_t makeSpacer(Import& in, uint16_t parent, const Node&) {
 }
 
 uint16_t makeCheck(Import& in, uint16_t parent, const Node& node) {
+    if (node.hasBind && node.reset) {
+        const uint16_t id = in.bind->checkReset(*in.state, parent, node.label, node.bind, node.on);
+        remember(in, node.name, id);
+        return id;
+    }
     if (node.hasBind) {
         const uint16_t id = in.bind->check(*in.state, parent, node.label, node.bind, node.on);
         remember(in, node.name, id);
@@ -595,6 +570,10 @@ uint16_t spawn(Import& in, uint16_t parent, const Node& node) {
         if (std::strcmp(node.role, entry.role) == 0) {
             return entry.make(in, parent, node);
         }
+    }
+    uint16_t extra = kUiNone;
+    if (spawnExtra(in, parent, node, extra)) {
+        return extra;
     }
     return parent;
 }
@@ -820,7 +799,7 @@ bool parseNode(Cur& c, Import& in, uint16_t parent) {
                 return false;
             }
             finishNode(in, host, node);
-        } else if (!json::skipValue(c)) {
+        } else if (!parseExtra(c, key, node)) {
             return false;
         }
         json::skip(c);
@@ -857,7 +836,9 @@ bool propImport(
     uint16_t commandCount,
     const UiPaint& hidden,
     PropFlagFn onFlag,
-    void* user) {
+    void* user,
+    const PropRole* roles,
+    uint16_t roleCount) {
     if (key == nullptr || text.data() == nullptr) {
         return false;
     }
@@ -875,6 +856,8 @@ bool propImport(
         .hidden = hidden,
         .onFlag = onFlag,
         .user = user,
+        .roles = roles,
+        .roleCount = roleCount,
     };
     bool found = false;
     json::skip(c);
@@ -918,7 +901,9 @@ bool propImportAsset(
     uint16_t commandCount,
     const UiPaint& hidden,
     PropFlagFn onFlag,
-    void* user) {
+    void* user,
+    const PropRole* roles,
+    uint16_t roleCount) {
     char path[512]{};
     if (asset == nullptr || !platformResolveAsset(asset, path, sizeof(path))) {
         spdlog::error("layout {} was not found", asset != nullptr ? asset : "");
@@ -930,7 +915,7 @@ bool propImportAsset(
         return false;
     }
     const std::string_view text{reinterpret_cast<const char*>(file.data), file.size};
-    const bool ok = propImport(state, parent, text, key, bind, slots, slotCount, commands, commandCount, hidden, onFlag, user);
+    const bool ok = propImport(state, parent, text, key, bind, slots, slotCount, commands, commandCount, hidden, onFlag, user, roles, roleCount);
     fileUnmap(&file);
     if (!ok) {
         spdlog::error("layout {} did not import", key != nullptr ? key : "");
