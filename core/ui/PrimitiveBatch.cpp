@@ -390,14 +390,7 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
         childTail[parent] = id;
     };
     for (uint16_t id = 0; id < s.count && id < kUiCap; ++id) {
-        if (!s.ent[id].has<UiPaintLast>()) {
-            link(id);
-        }
-    }
-    for (uint16_t id = 0; id < s.count && id < kUiCap; ++id) {
-        if (s.ent[id].has<UiPaintLast>()) {
-            link(id);
-        }
+        link(id);
     }
     uint16_t stack[kUiCap];
     uint16_t sp = 0;

@@ -36,6 +36,20 @@ void hostText(UiState& s, uint16_t id) {
     s.ent[id].set<UiText>(host);
 }
 
+// Check rows are transparent: only the box and the label draw; hover never fills the row.
+void clearRow(UiState& s, uint16_t id) {
+    if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
+        paintGhost(*paint);
+        paint->r = s.look.text[0];
+        paint->g = s.look.text[1];
+        paint->b = s.look.text[2];
+        paint->hr = s.look.text[0];
+        paint->hg = s.look.text[1];
+        paint->hb = s.look.text[2];
+        paint->ha = 0.0f;
+    }
+}
+
 void adornCheck(UiState& s, uint16_t id) {
     hostText(s, id);
     if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
@@ -55,10 +69,12 @@ bool drawCheck(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t 
     const bool hasClip = uiClipBox(s, id, ancestor);
     const UiBox* clip = hasClip ? &ancestor : nullptr;
     const float side = 22.0f;
+    const bool hot = s.hovered == id;
+    const float* edge = hot ? s.look.text : s.look.muted;
     const float x = box.w < 40.0f ? box.x + (box.w - side) * 0.5f : box.x + 8.0f;
     const float y = box.y + (box.h - side) * 0.5f;
     if (mark->shape != 0) {
-        n = emitMark(dst, n, cap, x, y, side, side, s.look.muted[0], s.look.muted[1], s.look.muted[2], 1.0f, side * 0.5f, 1.5f, kUiFlagStroke, clip);
+        n = emitMark(dst, n, cap, x, y, side, side, edge[0], edge[1], edge[2], 1.0f, side * 0.5f, 1.5f, kUiFlagStroke, clip);
         if (mark->on != 0) {
             const float dot = 10.0f;
             n = emitRect(dst, n, cap, x + (side - dot) * 0.5f, y + (side - dot) * 0.5f, dot, dot,
@@ -66,7 +82,7 @@ bool drawCheck(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t 
         }
         return true;
     }
-    n = emitMark(dst, n, cap, x, y, side, side, s.look.muted[0], s.look.muted[1], s.look.muted[2], 1.0f, 2.0f, 1.0f, kUiFlagStroke, clip);
+    n = emitMark(dst, n, cap, x, y, side, side, edge[0], edge[1], edge[2], 1.0f, 3.0f, 1.0f, kUiFlagStroke, clip);
     if (mark->on != 0 && n < cap) {
         UiPrimitive& drawn = dst[n++];
         drawn = {};
@@ -101,6 +117,7 @@ void finishCheck(UiState& s, uint16_t id, const BinTail* spec, const char*, cons
         kind = spec->raw[2];
         group = spec->raw[3];
     }
+    clearRow(s, id);
     uiHover(s, id);
     uiSetFocusable(s, id);
     uiBindCheck(s, id, kind, group, on != 0);
@@ -122,6 +139,7 @@ uint16_t uiCheck(UiState& s, uint16_t parent, const char* text, uint8_t kind, ui
     }
     uiText(s, id, text != nullptr ? text : "");
     uiTextStyle(s, id, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+    clearRow(s, id);
     uiHover(s, id);
     uiSetFocusable(s, id);
     uiBindCheck(s, id, kind, group, on);

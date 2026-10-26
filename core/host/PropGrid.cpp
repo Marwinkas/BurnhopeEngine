@@ -70,7 +70,7 @@ void propHair(UiState& s, uint16_t column) {
 constexpr float kPropIndent = 28.0f;
 constexpr float kPropField = 108.0f;
 constexpr float kPropMargin = 8.0f;
-constexpr float kPropLock = 18.0f; // fallback of the "vector_lock" class
+constexpr float kPropLock = 26.0f; // fallback of the "vector_lock" class
 constexpr float kVecGap = 2.0f;
 constexpr float kVecFieldMin = 85.0f;
 constexpr float kPropGap = 10.0f; // clear space between the splitter line and every value control
@@ -242,7 +242,6 @@ uint16_t uiPropGrip(UiState& s, uint16_t body) {
     }
     s.ent[grip].add<UiPropGrip>();
     s.ent[grip].set<UiSplitGroup>({0.08f});
-    s.ent[grip].add<UiPaintLast>();
     return grip;
 }
 

@@ -74,7 +74,6 @@ struct UiNodeVis {
 };
 using UiRoleFinishFn = void (*)(UiState& s, uint16_t id, const BinTail* tail, const char* text, const char* hint);
 struct UiNoHit {}; // Пустой тег: объект нематериален для курсора мыши
-struct UiPaintLast {}; // Среди братьев рисуется последним, поверх непрозрачных строк.
 struct UiReveal {
     float full = 0.0f;
     float from = 0.0f;

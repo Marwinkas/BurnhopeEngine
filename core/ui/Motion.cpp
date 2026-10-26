@@ -34,7 +34,8 @@ static void revealBox(UiState& s, uint16_t id, float height, float full) {
         flex->overflow = UiOverflow::Hidden;
     }
     const float span = full > 1.0f ? full : 1.0f;
-    s.ent[id].set<UiFade>({height > 0.0f ? height / span : 0.0f});
+    const float progress = height > 0.0f ? (height < span ? height / span : 1.0f) : 0.0f;
+    s.ent[id].set<UiFade>({progress * progress});
 }
 
 float uiRevealUnit(const UiState& s, uint16_t id) {
