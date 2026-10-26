@@ -191,7 +191,7 @@ uint16_t uiFoldBody(UiState& s, uint16_t parent, const char* title) {
     uiText(s, head, title != nullptr ? title : "");
     uiTextStyle(s, head, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     uiHover(s, head);
-    s.ent[head].add<UiFocusable>();
+    uiSetFocusable(s, head);
     const uint16_t body = makeBody(s, parent, head);
     uiFoldOpen(s, body);
     return body;

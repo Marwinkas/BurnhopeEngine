@@ -206,7 +206,7 @@ uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const B
         s.roleFinish[bin.role](s, id, &part, text, hint != nullptr && hint[0] != '\0' ? hint : nullptr);
     }
     if ((role.flags & kBinRolePass) != 0) {
-        s.ent[id].add<UiPass>();
+        uiSetPass(s, id);
     }
     finishDescribed(s, id, bin, name);
     return id;

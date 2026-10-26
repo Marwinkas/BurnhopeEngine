@@ -39,17 +39,17 @@ static std::shared_ptr<spdlog::logger> uiLogger() {
 
 void uiTrace(const UiState& s, const char* fn, uint16_t id) {
     auto log = uiLogger();
-    if (log == nullptr) {
+    if (log == nullptr || !log->should_log(spdlog::level::trace)) {
         return;
     }
     if (id >= s.count || !s.ent[id].is_alive()) {
-        log->info("ui fn={} id={}", fn != nullptr ? fn : "-", static_cast<unsigned>(id));
+        log->trace("ui fn={} id={}", fn != nullptr ? fn : "-", static_cast<unsigned>(id));
         return;
     }
     char name[32];
     nodeLabel(s, id, name, 32);
     const UiBox& box = s.box[id];
-    log->info(
+    log->trace(
         "ui fn={} id={} name={} parent={} box={:.1f},{:.1f} {:.1f}x{:.1f}",
         fn != nullptr ? fn : "-",
         static_cast<unsigned>(id),

@@ -27,7 +27,7 @@ uint16_t uiAssetSlot(UiState& s, uint16_t parent, const UiAssetSlotConfig& cfg) 
     if (id == kUiNone) {
         return id;
     }
-    s.ent[id].add<UiFocusable>();
+    uiSetFocusable(s, id);
     uiHover(s, id);
     const char* shown = cfg.value != nullptr && cfg.value[0] != '\0' ? cfg.value : cfg.label;
     uiText(s, id, shown != nullptr ? shown : "");
@@ -63,7 +63,7 @@ UiTexSlotIds uiTexSlot(UiState& s, uint16_t parent, const UiTexSlotConfig& cfg) 
     if (out.frame == kUiNone) {
         return out;
     }
-    s.ent[out.frame].add<UiFocusable>();
+    uiSetFocusable(s, out.frame);
     if (cfg.onBrowse != nullptr) {
         uiBind(s, out.frame, cfg.onBrowse, cfg.user);
     }
@@ -71,12 +71,12 @@ UiTexSlotIds uiTexSlot(UiState& s, uint16_t parent, const UiTexSlotConfig& cfg) 
     uiDragAddHost(s, out.frame);
     out.empty = uiLabel(s, out.frame, cfg.emptyLabel != nullptr ? cfg.emptyLabel : "");
     if (out.empty < s.count) {
-        s.ent[out.empty].add<UiPass>();
+        uiSetPass(s, out.empty);
         uiTextStyle(s, out.empty, UiTextAlign::Center, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     }
     out.thumb = uiIcon(s, out.frame, cfg.photo, cfg.side - 8.0f, cfg.side - 8.0f);
     if (out.thumb < s.count) {
-        s.ent[out.thumb].add<UiPass>();
+        uiSetPass(s, out.thumb);
         const uint8_t cols = cfg.atlasCols > 0 ? cfg.atlasCols : uint8_t{1};
         const uint8_t rows = cfg.atlasRows > 0 ? cfg.atlasRows : uint8_t{1};
         if (auto* image = s.ent[out.thumb].try_get_mut<UiImage>()) {

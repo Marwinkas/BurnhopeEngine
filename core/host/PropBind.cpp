@@ -328,7 +328,7 @@ uint16_t UiPropBinder::colorHex(UiState& s, uint16_t parent, uint16_t rgbIndex, 
         return chip;
     }
     uiHover(s, chip);
-    s.ent[chip].add<UiFocusable>();
+    uiSetFocusable(s, chip);
     uiBind(s, chip, swatchClick, this);
     rows.push_back(UiBind{.id = chip, .index = rgbIndex, .kind = kBindSwatch, .fallback = 1.0f});
     const uint16_t field = uiField(s, column, "#FFFFFF", 0, false);

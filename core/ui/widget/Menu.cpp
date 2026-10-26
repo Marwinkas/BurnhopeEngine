@@ -108,7 +108,7 @@ void silenceRow(UiState& s, uint16_t row) {
         s.ent[row].remove<UiAction>();
     }
     if (s.ent[row].has<UiFocusable>()) {
-        s.ent[row].remove<UiFocusable>();
+        uiSetFocusable(s, row, false);
     }
     if (s.ent[row].has<UiHoverable>()) {
         s.ent[row].remove<UiHoverable>();
@@ -194,7 +194,7 @@ void uiMenuRowBind(UiState& s, uint16_t row, const char* label, UiCommandFn fn, 
     }
     uiText(s, row, label != nullptr ? label : "");
     uiTextStyle(s, row, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-    s.ent[row].add<UiFocusable>();
+    uiSetFocusable(s, row);
     uiHover(s, row);
     uiCommandStore(s, row, fn, user, item, owner, command);
 }
@@ -548,7 +548,7 @@ uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t m
         paint->icon = static_cast<uint8_t>(UiIcon::MenuChevron);
     }
     uiHover(s, id);
-    s.ent[id].add<UiFocusable>();
+    uiSetFocusable(s, id);
     if (menu != kUiNone) {
         uiSetContextMenu(s, id, menu);
         uiMarkMenuBar(s, id);

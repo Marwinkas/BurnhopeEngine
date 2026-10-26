@@ -50,6 +50,8 @@ void uiPlaceAbsolute(UiState& s, uint16_t id, float x, float y);
 uint16_t uiFindChildText(const UiState& s, uint16_t parent);
 void uiCenterChildren(UiState& s, uint16_t parent);
 void uiSetDrop(UiState& s, uint16_t id, uint8_t drop);
+void uiSetFocusable(UiState& s, uint16_t id, bool on = true);
+void uiSetPass(UiState& s, uint16_t id, bool on = true);
 [[nodiscard]] uint16_t uiImportJson(UiState& s, uint16_t parent, const char* text);
 [[nodiscard]] uint16_t uiImportJsonFile(UiState& s, uint16_t parent, const char* path);
 [[nodiscard]] uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t size);

@@ -10,7 +10,6 @@
 #include <charconv>
 #include <cstring>
 #include <cstdio>
-#include <cstdlib>
 #include <system_error>
 
 namespace burnhope {

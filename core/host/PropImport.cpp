@@ -267,7 +267,7 @@ void markNode(Import& in, uint16_t id, const Node& node) {
         in.state->ent[id].add<UiMenuSlide>();
     }
     if (node.pass) {
-        in.state->ent[id].add<UiPass>();
+        uiSetPass(*in.state, id);
     }
     if (node.ghost) {
         if (auto* paint = in.state->ent[id].try_get_mut<UiPaint>()) {

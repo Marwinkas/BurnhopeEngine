@@ -102,7 +102,7 @@ void finishCheck(UiState& s, uint16_t id, const BinTail* spec, const char*, cons
         group = spec->raw[3];
     }
     uiHover(s, id);
-    s.ent[id].add<UiFocusable>();
+    uiSetFocusable(s, id);
     uiBindCheck(s, id, kind, group, on != 0);
 }
 
@@ -123,7 +123,7 @@ uint16_t uiCheck(UiState& s, uint16_t parent, const char* text, uint8_t kind, ui
     uiText(s, id, text != nullptr ? text : "");
     uiTextStyle(s, id, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     uiHover(s, id);
-    s.ent[id].add<UiFocusable>();
+    uiSetFocusable(s, id);
     uiBindCheck(s, id, kind, group, on);
     return id;
 }

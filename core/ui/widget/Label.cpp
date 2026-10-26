@@ -14,7 +14,7 @@ uint16_t uiLabel(UiState& s, uint16_t parent, const char* text) {
         return id;
     }
     uiText(s, id, text);
-    s.ent[id].add<UiPass>();
+    uiSetPass(s, id);
     return id;
 }
 

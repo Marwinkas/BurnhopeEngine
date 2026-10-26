@@ -54,7 +54,7 @@ uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
     uiText(s, id, cfg.label != nullptr ? cfg.label : "");
     uiTextStyle(s, id, UiTextAlign::Center, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     uiHover(s, id);
-    s.ent[id].add<UiFocusable>();
+    uiSetFocusable(s, id);
     if (cfg.iconSlot < kPhotoSlots) {
         s.ent[id].set<UiImage>({.slot = cfg.iconSlot, .frames = 1, .inset = kButtonIcon});
     }
@@ -200,13 +200,13 @@ void hostText(UiState& s, uint16_t id, UiTextAlign align, UiTextEllipsis ellipsi
 void adornButton(UiState& s, uint16_t id) {
     hostText(s, id, UiTextAlign::Center, UiTextEllipsis::End);
     uiHover(s, id);
-    s.ent[id].add<UiFocusable>();
+    uiSetFocusable(s, id);
 }
 
 void adornClose(UiState& s, uint16_t id) {
     hostText(s, id, UiTextAlign::Center, UiTextEllipsis::End);
     uiHover(s, id);
-    s.ent[id].add<UiFocusable>();
+    uiSetFocusable(s, id);
 }
 
 } // namespace

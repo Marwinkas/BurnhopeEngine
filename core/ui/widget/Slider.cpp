@@ -54,7 +54,7 @@ uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float ma
         return id;
     }
     uiHover(s, id);
-    s.ent[id].add<UiFocusable>();
+    uiSetFocusable(s, id);
     if (value < minV) {
         value = minV;
     }
@@ -184,7 +184,7 @@ bool drawProgress(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
 
 void adornSlider(UiState& s, uint16_t id) {
     uiHover(s, id);
-    s.ent[id].add<UiFocusable>();
+    uiSetFocusable(s, id);
 }
 
 void finishSlider(UiState& s, uint16_t id, const BinTail* spec, const char*, const char*) {

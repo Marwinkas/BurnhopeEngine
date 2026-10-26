@@ -616,6 +616,28 @@ void uiCenterChildren(UiState& s, uint16_t parent) {
     s.layoutDirty = true;
 }
 
+void uiSetFocusable(UiState& s, uint16_t id, bool on) {
+    if (id >= s.count || !s.ent[id].is_alive()) {
+        return;
+    }
+    if (on) {
+        s.ent[id].add<UiFocusable>();
+    } else {
+        s.ent[id].remove<UiFocusable>();
+    }
+}
+
+void uiSetPass(UiState& s, uint16_t id, bool on) {
+    if (id >= s.count || !s.ent[id].is_alive()) {
+        return;
+    }
+    if (on) {
+        s.ent[id].add<UiPass>();
+    } else {
+        s.ent[id].remove<UiPass>();
+    }
+}
+
 void uiSetDrop(UiState& s, uint16_t id, uint8_t drop) {
     if (id >= s.count) {
         return;

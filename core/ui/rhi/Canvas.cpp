@@ -28,10 +28,7 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
         return false;
     }
 
-    c.photoMeta[0].frames = 2;
-    c.photoMeta[0].delayMs[0] = 420;
-    c.photoMeta[0].delayMs[1] = 420;
-    for (uint8_t slot = 1; slot < kPhotoSlots; ++slot) {
+    for (uint8_t slot = 0; slot < kPhotoSlots; ++slot) {
         c.photoMeta[slot].frames = 1;
         c.photoMeta[slot].delayMs[0] = 100;
     }

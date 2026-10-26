@@ -85,7 +85,7 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
     if (label < s.count) {
         s.ent[label].add<UiNoHit>();
     }
-    s.ent[slot].add<UiFocusable>();
+    uiSetFocusable(s, slot);
     uiHover(s, slot);
     s.ent[slot].set<UiParts>({icon, kUiNone, label});
     uiBind(s, slot, onCell, &s);

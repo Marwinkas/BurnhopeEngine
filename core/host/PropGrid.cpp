@@ -300,7 +300,7 @@ uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
     uiTextStyle(s, caption, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     if (caption < s.count) {
         propLinkLabel(s, caption);
-        s.ent[caption].add<UiPass>();
+        uiSetPass(s, caption);
     }
     UiFlex value{};
     value.direction = UiFlexDir::Row;
@@ -509,7 +509,7 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         const uint16_t id = uiPanel(s, row, box, paint);
         if (id < s.count) {
             uiHover(s, id);
-            s.ent[id].add<UiFocusable>();
+            uiSetFocusable(s, id);
             uiBind(s, id, onVecCtl, &s);
         }
         return id;
@@ -551,10 +551,10 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         if (cap < s.count) {
             if (full) {
                 uiHover(s, cap);
-                s.ent[cap].add<UiFocusable>();
+                uiSetFocusable(s, cap);
                 uiBind(s, cap, onVecCtl, &s);
             } else {
-                s.ent[cap].add<UiPass>();
+                uiSetPass(s, cap);
             }
         }
         UiFlex hold{};
@@ -673,7 +673,7 @@ uint16_t uiPropSwatch(UiState& s, uint16_t host, const char* label, float r, flo
     const uint16_t id = uiPanel(s, slot, flex, paint);
     if (id < s.count) {
         uiHover(s, id);
-        s.ent[id].add<UiFocusable>();
+        uiSetFocusable(s, id);
     }
     return id;
 }

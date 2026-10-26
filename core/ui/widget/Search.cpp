@@ -36,7 +36,7 @@ uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChan
         return id;
     }
     uiHover(s, id);
-    s.ent[id].add<UiFocusable>();
+    uiSetFocusable(s, id);
     s.ent[id].add<UiTextInput>();
     UiField field{};
     copyText(field.hint, field.hintLen, hint != nullptr ? hint : "");

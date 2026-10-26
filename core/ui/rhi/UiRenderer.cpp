@@ -39,20 +39,8 @@ bool uiRendererCreate(UiRenderer& r, Device& d, DescriptorHeaps& heaps) {
     }
 
     uint8_t blank[4] = {28, 30, 36, 255};
-    alignas(64) uint8_t demo[128u * 256u * 4u];
-    for (uint32_t y = 0; y < 256; ++y) {
-        for (uint32_t x = 0; x < 128; ++x) {
-            uint8_t* px = demo + (static_cast<size_t>(y) * 128u + x) * 4u;
-            const bool second = y >= 128;
-            const uint32_t ly = second ? y - 128 : y;
-            px[0] = static_cast<uint8_t>(x * 2);
-            px[1] = static_cast<uint8_t>(ly * 2);
-            px[2] = second ? 210 : 48;
-            px[3] = 255;
-        }
-    }
-    bool photosOk = gpuImageUploadRgba(r.photos[0], d, demo, 128, 256, 2);
-    for (uint8_t slot = 1; slot < kPhotoSlots && photosOk; ++slot) {
+    bool photosOk = true;
+    for (uint8_t slot = 0; slot < kPhotoSlots && photosOk; ++slot) {
         photosOk = gpuImageUploadRgba(r.photos[slot], d, blank, 1, 1);
     }
     for (uint8_t slot = 0; slot < kPhotoSlots && photosOk; ++slot) {

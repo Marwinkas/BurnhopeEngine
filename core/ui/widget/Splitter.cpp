@@ -386,7 +386,7 @@ uint16_t uiSplitBar(UiState& s, uint16_t parent, bool verticalBar) {
     const uint16_t bar = uiPanel(s, parent, grip, paint);
     if (bar != kUiNone) {
         s.ent[bar].set<UiSplitter>({});
-        s.ent[bar].add<UiFocusable>();
+        uiSetFocusable(s, bar);
     }
     return bar;
 }

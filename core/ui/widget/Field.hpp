@@ -103,13 +103,32 @@ void uiFieldAlign(UiState& s, uint16_t id, uint8_t align);
 bool fieldHandlePointer(UiState& s, uint16_t id, const InputFrame& in, bool press, bool down);
 void uiClearField(UiState& s);
 void fieldSyncText(UiState& s, uint16_t id);
+// Behaviour bits a field spec carries (bit order is the .bhui wire format).
+enum class UiFieldFlag : uint8_t { None = 0, Clear = 1 << 0, Required = 1 << 1, ReadOnly = 1 << 2, Password = 1 << 3, InForm = 1 << 4 };
+
+constexpr UiFieldFlag operator|(UiFieldFlag a, UiFieldFlag b) {
+    return static_cast<UiFieldFlag>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
+}
+
+constexpr UiFieldFlag operator&(UiFieldFlag a, UiFieldFlag b) {
+    return static_cast<UiFieldFlag>(static_cast<uint8_t>(a) & static_cast<uint8_t>(b));
+}
+
+constexpr UiFieldFlag& operator|=(UiFieldFlag& a, UiFieldFlag b) {
+    return a = a | b;
+}
+
+constexpr bool uiFieldHas(UiFieldFlag flags, UiFieldFlag bit) {
+    return (flags & bit) != UiFieldFlag::None;
+}
+
 void uiFieldInit(
     UiState& s,
     uint16_t id,
     const char* text,
     const char* hint = nullptr,
     uint8_t filter = 0,
-    uint8_t flags = 0,
+    UiFieldFlag flags = UiFieldFlag::None,
     uint8_t maxChars = 0,
     float padL = 0.0f,
     float padR = 0.0f);

@@ -67,7 +67,7 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
     const float rowH = itemH > 6.0f ? itemH - 2.0f : itemH;
     const uint16_t chevron = bareIcon(s.metrics.chevronW, rowH, static_cast<uint8_t>(UiIcon::ChevronRight), true);
     if (chevron < s.count) {
-        s.ent[chevron].add<UiFocusable>();
+        uiSetFocusable(s, chevron);
         uiBind(s, chevron, onRow, &s);
     }
     const uint16_t icon = bareIcon(s.metrics.icon, s.metrics.icon, static_cast<uint8_t>(UiIcon::Folder), false);
@@ -86,7 +86,7 @@ uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
     if (label < s.count) {
         s.ent[label].add<UiNoHit>();
     }
-    s.ent[slot].add<UiFocusable>();
+    uiSetFocusable(s, slot);
     uiHover(s, slot);
     uiBind(s, slot, onRow, &s);
     s.ent[slot].set<UiParts>({icon, chevron, label});

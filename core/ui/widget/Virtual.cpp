@@ -38,7 +38,7 @@ uint16_t addVirtSlot(UiState& s, uint16_t scroll, float itemH) {
     }
     addText(s, slot, " ");
     uiBind(s, slot, onVirtClick, &s);
-    s.ent[slot].add<UiFocusable>();
+    uiSetFocusable(s, slot);
     uiHover(s, slot);
     s.ent[slot].set<UiVirtRow>({});
     uiShow(s, slot, false);

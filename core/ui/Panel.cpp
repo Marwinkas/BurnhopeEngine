@@ -109,7 +109,7 @@ void uiSetAlpha(UiState& s, uint16_t id, float alpha) {
 uint16_t uiSpacer(UiState& s, uint16_t parent, const UiFlex& flex) {
     const uint16_t id = uiPanel(s, parent, flex, paintClear());
     if (id != kUiNone) {
-        s.ent[id].add<UiPass>();
+        uiSetPass(s, id);
     }
     return id;
 }

@@ -35,6 +35,10 @@ void resolveVis(UiState& s, uint16_t id) {
     const bool ownHidden = s.tight[id] != 0 || (s.yoga[id] != nullptr && YGNodeStyleGetDisplay(s.yoga[id]) == YGDisplayNone);
     v.hidden = static_cast<uint8_t>((hasParent && s.vis[parent].hidden != 0) || ownHidden);
     v.overlay = static_cast<uint8_t>((hasParent && s.vis[parent].overlay != 0) || (s.ent[id].is_alive() && uiOverlayHere(s, id)));
+    const bool alive = s.ent[id].is_alive();
+    v.popup = static_cast<uint8_t>((hasParent && s.vis[parent].popup != 0) || (alive && s.ent[id].has<UiPopup>()));
+    const UiFade* fade = alive ? s.ent[id].try_get<UiFade>() : nullptr;
+    v.fadeA = (hasParent ? s.vis[parent].fadeA : 1.0f) * (fade != nullptr ? fade->a : 1.0f);
     v.clipped = 0;
     v.clip = {};
     if (!hasParent) {

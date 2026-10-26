@@ -105,3 +105,35 @@ TEST_CASE("input tags follow hover, focus and capture without touching other nod
     CHECK(state.ent[b].has<UiHovered>());
     CHECK(state.ent[c].has<UiFocused>());
 }
+
+TEST_CASE("popup and fade propagate top-down through the visibility cache") {
+    UiState state;
+    uiWidgetsInit(state);
+    const uint16_t root = spawn(state, kUiNone, px(200, 200), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t mid = spawn(state, root, px(100, 100), paintRgb(0.2f, 0.2f, 0.2f));
+    const uint16_t leaf = spawn(state, mid, px(40, 40), paintRgb(0.3f, 0.3f, 0.3f));
+    state.ent[mid].add<UiPopup>();
+    state.ent[root].set<UiFade>({0.5f});
+    state.ent[mid].set<UiFade>({0.5f});
+    uiLayout(state, 200.0f, 200.0f);
+    uiCacheVisibility(state);
+    CHECK(state.vis[root].popup == 0);
+    CHECK(state.vis[mid].popup == 1);
+    CHECK(state.vis[leaf].popup == 1);
+    CHECK(state.vis[root].fadeA == doctest::Approx(0.5f));
+    CHECK(state.vis[leaf].fadeA == doctest::Approx(0.25f));
+}
+
+TEST_CASE("focus and click-pass facades toggle their tags") {
+    UiState state;
+    uiWidgetsInit(state);
+    const uint16_t id = spawn(state, kUiNone, px(20, 20), paintRgb(0.1f, 0.1f, 0.1f));
+    uiSetFocusable(state, id);
+    uiSetPass(state, id);
+    CHECK(state.ent[id].has<UiFocusable>());
+    CHECK(state.ent[id].has<UiPass>());
+    uiSetFocusable(state, id, false);
+    uiSetPass(state, id, false);
+    CHECK_FALSE(state.ent[id].has<UiFocusable>());
+    CHECK_FALSE(state.ent[id].has<UiPass>());
+}

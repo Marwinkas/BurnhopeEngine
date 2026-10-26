@@ -69,6 +69,8 @@ struct UiNodeVis {
     uint8_t hidden = 0;
     uint8_t overlay = 0;
     uint8_t clipped = 0;
+    uint8_t popup = 0; // node or an ancestor is a UiPopup
+    float fadeA = 1.0f; // product of UiFade::a along the ancestor chain
 };
 using UiRoleFinishFn = void (*)(UiState& s, uint16_t id, const BinTail* tail, const char* text, const char* hint);
 struct UiNoHit {}; // Пустой тег: объект нематериален для курсора мыши

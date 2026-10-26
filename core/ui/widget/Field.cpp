@@ -56,7 +56,7 @@ void uiFieldInit(
     const char* text,
     const char* hint,
     uint8_t filter,
-    uint8_t flags,
+    UiFieldFlag flags,
     uint8_t maxChars,
     float padL,
     float padR) {
@@ -76,11 +76,11 @@ void uiFieldInit(
         field.anchor = len;
     }
     field.filter = filter;
-    field.clear = (flags & 1) != 0 ? 1 : 0;
-    field.required = (flags & 2) != 0 ? 1 : 0;
-    field.readOnly = (flags & 4) != 0 ? 1 : 0;
-    field.password = (flags & 8) != 0 ? 1 : 0;
-    field.inForm = (flags & 16) != 0 ? 1 : 0;
+    field.clear = uiFieldHas(flags, UiFieldFlag::Clear) ? 1 : 0;
+    field.required = uiFieldHas(flags, UiFieldFlag::Required) ? 1 : 0;
+    field.readOnly = uiFieldHas(flags, UiFieldFlag::ReadOnly) ? 1 : 0;
+    field.password = uiFieldHas(flags, UiFieldFlag::Password) ? 1 : 0;
+    field.inForm = uiFieldHas(flags, UiFieldFlag::InForm) ? 1 : 0;
     if (maxChars != 0) {
         field.maxChars = maxChars;
     }
@@ -100,10 +100,10 @@ void uiFieldInit(
         field.hintLen = n;
     }
     s.ent[id].set<UiField>(field);
-    s.ent[id].add<UiFocusable>();
+    uiSetFocusable(s, id);
     s.ent[id].add<UiTextInput>();
     fieldSyncText(s, id);
-    if ((flags & 16) != 0) {
+    if (uiFieldHas(flags, UiFieldFlag::InForm)) {
         fieldMark(s, id);
     }
 }
@@ -379,7 +379,7 @@ uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, 
         return id;
     }
     uiHover(s, id);
-    s.ent[id].add<UiFocusable>();
+    uiSetFocusable(s, id);
     s.ent[id].add<UiTextInput>();
     UiField field{};
     const uint8_t n = uiStrCopy(field.bytes, text);
@@ -729,7 +729,7 @@ void adornField(UiState& s, uint16_t id) {
 
 void finishField(UiState& s, uint16_t id, const BinTail* spec, const char* text, const char* hint) {
     hostText(s, id);
-    uint8_t flags = 0;
+    UiFieldFlag flags = UiFieldFlag::None;
     uint8_t filter = 0;
     uint8_t maxChars = 0;
     float padL = 12.0f;
@@ -743,13 +743,10 @@ void finishField(UiState& s, uint16_t id, const BinTail* spec, const char* text,
         }
     }
     if (spec != nullptr) {
-        constexpr uint8_t kClear = 1 << 0;
-        constexpr uint8_t kRequired = 1 << 1;
-        constexpr uint8_t kReadOnly = 1 << 2;
-        constexpr uint8_t kPassword = 1 << 3;
-        constexpr uint8_t kForm = 1 << 4;
+        constexpr UiFieldFlag kAll = UiFieldFlag::Clear | UiFieldFlag::Required | UiFieldFlag::ReadOnly
+            | UiFieldFlag::Password | UiFieldFlag::InForm;
         filter = spec->raw[0];
-        flags = static_cast<uint8_t>(spec->raw[1] & (kClear | kRequired | kReadOnly | kPassword | kForm));
+        flags = static_cast<UiFieldFlag>(spec->raw[1]) & kAll;
         maxChars = spec->raw[4];
     }
     uiFieldInit(s, id, text, hint, filter, flags, maxChars, padL, padR);

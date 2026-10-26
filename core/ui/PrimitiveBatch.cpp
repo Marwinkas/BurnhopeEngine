@@ -423,13 +423,7 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
     for (int pass = 0; pass < 3; ++pass) {
         for (uint16_t k = 0; k < nOrder; ++k) {
             const uint16_t id = order[k];
-            bool popup = false;
-            for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-                if (s.ent[p].has<UiPopup>()) {
-                    popup = true;
-                    break;
-                }
-            }
+            const bool popup = s.vis[id].popup != 0;
             if (pass == 2) {
                 if (!popup) {
                     continue;
@@ -469,11 +463,7 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             float g = paint->g;
             float b = paint->b;
             float a = paint->a;
-            for (uint16_t fadeAt = id; fadeAt != kUiNone && fadeAt < s.count; fadeAt = s.parentOf[fadeAt]) {
-                if (const UiFade* fade = s.ent[fadeAt].try_get<UiFade>()) {
-                    a *= fade->a;
-                }
-            }
+            a *= s.vis[id].fadeA;
             if (s.anim[id].on && s.anim[id].dur > 0.0f) {
                 float u = (s.time - s.anim[id].t0) / s.anim[id].dur;
                 if (u < 0.0f) {
