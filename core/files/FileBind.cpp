@@ -171,8 +171,9 @@ void bindCell(UiState& s, uint16_t cell, uint32_t index) {
         if (!header) {
             const bool dir = b.items[index].isDir != 0;
             const bool material = !dir && b.items[index].kind == 5;
+            const bool thumbable = material || (!dir && b.items[index].kind == 2);
             uiThumb(s, parts->icon, dir ? b.folderSlot : b.fileSlot, dir ? UiIcon::Folder : UiIcon::Document);
-            if (material && !bindMaterialThumb(s, parts->icon, b, b.items[index])) {
+            if (thumbable && !bindMaterialThumb(s, parts->icon, b, b.items[index]) && material) {
                 if (auto* paint = s.ent[parts->icon].try_get_mut<UiPaint>()) {
                     const UiPaint badge = paintToken(s.look, UiToken::Accent, s.look.radiusSm);
                     paint->token = badge.token;

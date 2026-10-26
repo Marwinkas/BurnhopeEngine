@@ -1,6 +1,8 @@
 #include "app/MatThumb.hpp"
 
+#include "Str.hpp"
 #include "asset/MaterialBake.hpp"
+#include "image/ImageDecode.hpp"
 #include "files/Browser.hpp"
 #include "ui/rhi/Canvas.hpp"
 
@@ -40,8 +42,61 @@ void blit(MatThumbs& t, uint8_t cell) {
     }
 }
 
+// Fits the first frame of the image at `path` into cell `cell` (aspect kept, transparent margin, alpha-weighted box filter).
+bool bakeImage(MatThumbs& t, const char* path, uint8_t cell) {
+    ImageCpu img{};
+    if (!imageLoadFile(img, path) || img.rgba == nullptr || img.width == 0 || img.height == 0 || img.frames == 0) {
+        imageCpuFree(img);
+        return false;
+    }
+    const uint32_t sw = img.width;
+    const uint32_t sh = img.height / img.frames;
+    const bool wide = static_cast<uint64_t>(sw) >= sh;
+    const uint32_t dw = wide ? kThumbPx : std::max<uint32_t>(1, static_cast<uint32_t>(static_cast<uint64_t>(sw) * kThumbPx / sh));
+    const uint32_t dh = wide ? std::max<uint32_t>(1, static_cast<uint32_t>(static_cast<uint64_t>(sh) * kThumbPx / sw)) : kThumbPx;
+    const uint32_t ox = (cell % kThumbCols) * kThumbPx;
+    const uint32_t oy = (cell / kThumbCols) * kThumbPx;
+    for (uint32_t y = 0; y < kThumbPx; ++y) {
+        uint8_t* row = t.atlas.data() + (static_cast<size_t>(oy + y) * kAtlasSide + ox) * 4u;
+        std::fill(row, row + kThumbPx * 4u, uint8_t{0});
+    }
+    const uint32_t padX = (kThumbPx - dw) / 2;
+    const uint32_t padY = (kThumbPx - dh) / 2;
+    for (uint32_t y = 0; y < dh; ++y) {
+        const uint32_t y0 = static_cast<uint32_t>(static_cast<uint64_t>(y) * sh / dh);
+        const uint32_t y1 = std::max(y0 + 1, static_cast<uint32_t>(static_cast<uint64_t>(y + 1) * sh / dh));
+        for (uint32_t x = 0; x < dw; ++x) {
+            const uint32_t x0 = static_cast<uint32_t>(static_cast<uint64_t>(x) * sw / dw);
+            const uint32_t x1 = std::max(x0 + 1, static_cast<uint32_t>(static_cast<uint64_t>(x + 1) * sw / dw));
+            uint64_t rgb[3]{};
+            uint64_t alpha = 0;
+            for (uint32_t sy = y0; sy < y1; ++sy) {
+                for (uint32_t sx = x0; sx < x1; ++sx) {
+                    const uint8_t* src = img.rgba + (static_cast<size_t>(sy) * sw + sx) * 4u;
+                    for (uint32_t c = 0; c < 3; ++c) {
+                        rgb[c] += static_cast<uint64_t>(src[c]) * src[3];
+                    }
+                    alpha += src[3];
+                }
+            }
+            const uint32_t n = (y1 - y0) * (x1 - x0);
+            uint8_t* dst = t.atlas.data() + (static_cast<size_t>(oy + padY + y) * kAtlasSide + ox + padX + x) * 4u;
+            for (uint32_t c = 0; c < 3; ++c) {
+                dst[c] = alpha != 0 ? static_cast<uint8_t>(rgb[c] / alpha) : uint8_t{0};
+            }
+            dst[3] = static_cast<uint8_t>(alpha / n);
+        }
+    }
+    imageCpuFree(img);
+    t.dirty = 1;
+    return true;
+}
+
 bool bake(void* user, const char* path, uint8_t cell) {
     auto* t = static_cast<MatThumbs*>(user);
+    if (t != nullptr && cell < kThumbCells && !strExtIs(path, ".bhmat")) {
+        return bakeImage(*t, path, cell);
+    }
     BhmatDoc doc{};
     if (t == nullptr || cell >= kThumbCells || !materialLoadBhmat(path, doc)) {
         return false;

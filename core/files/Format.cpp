@@ -74,7 +74,7 @@ int fileKind(const char* name, int isDir) {
     }
     if (strSame(ext, ".png") || strSame(ext, ".jpg") || strSame(ext, ".jpeg")
         || strSame(ext, ".gif") || strSame(ext, ".bmp") || strSame(ext, ".tga")
-        || strSame(ext, ".hdr") || strSame(ext, ".psd")) {
+        || strSame(ext, ".hdr") || strSame(ext, ".psd") || strSame(ext, ".svg") || strSame(ext, ".dds")) {
         return 2;
     }
     if (strSame(ext, ".txt") || strSame(ext, ".md") || strSame(ext, ".json")

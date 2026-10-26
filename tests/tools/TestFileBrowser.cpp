@@ -4,6 +4,7 @@
 
 #include "ui/widget/Widgets.hpp"
 #include "ui/widget/Docking.hpp"
+#include "ui/widget/Menu.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "files/Browser.hpp"
@@ -218,4 +219,71 @@ TEST_CASE("material thumbnails bake once per modification time") {
     }
     cache.bake = nullptr;
     CHECK(thumbCell(cache, "/p/a.bhmat", 100) == kThumbNone);
+}
+
+namespace {
+
+void clickAt(UiState& state, float x, float y) {
+    InputFrame in{};
+    in.pointer.x = x;
+    in.pointer.y = y;
+    in.pointer.pressed = kPointerLeft;
+    in.pointer.down = kPointerLeft;
+    (void)uiApplyInput(state, in);
+    uiLayout(state, 900.0f, 640.0f);
+    InputFrame up{};
+    up.pointer.x = x;
+    up.pointer.y = y;
+    up.pointer.released = kPointerLeft;
+    (void)uiApplyInput(state, up);
+    uiLayout(state, 900.0f, 640.0f);
+    InputFrame idle{};
+    idle.pointer.x = x;
+    idle.pointer.y = y;
+    (void)uiApplyInput(state, idle);
+    uiLayout(state, 900.0f, 640.0f);
+}
+
+} // namespace
+
+TEST_CASE("file tune button toggles its panel and outside click dismisses it") {
+    namespace fs = std::filesystem;
+    const fs::path dir = "/tmp/burnhope-tune-test";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directory(dir, ec);
+    UiState state;
+    uiWidgetsInit(state);
+    uiFilesOwn(state, spawn(state, kUiNone, px(900, 640), paintRgb(0.08f, 0.08f, 0.1f)));
+    filesAttach(state);
+    filesMount(state);
+    filesShow(state, true);
+    filesRoot(state, dir.c_str());
+    uiLayout(state, 900.0f, 640.0f);
+    const uint16_t tune = uiFindName(state, "file.tune");
+    const uint16_t panel = uiFindName(state, "file.tunePanel");
+    CHECK(tune != kUiNone);
+    CHECK(panel != kUiNone);
+    if (tune == kUiNone || panel == kUiNone) {
+        filesShutdown(state);
+        fs::remove_all(dir, ec);
+        return;
+    }
+    const float x = state.box[tune].x + state.box[tune].w * 0.5f;
+    const float y = state.box[tune].y + state.box[tune].h * 0.5f;
+    CHECK(state.ent[tune].has<UiFocusable>());
+    CHECK(state.ent[tune].try_get<UiAction>() != nullptr);
+    clickAt(state, x, y);
+    for (int i = 0; i < 30; ++i) {
+        state.time += 0.02f;
+        uiRevealTick(state);
+        uiLayout(state, 900.0f, 640.0f);
+    }
+    CHECK(uiMarked<UiMenuOpen>(state) == panel);
+    CHECK(state.box[panel].w > 1.0f);
+    CHECK(state.box[panel].y >= state.box[tune].y + state.box[tune].h);
+    clickAt(state, 20.0f, 620.0f);
+    CHECK(uiMarked<UiMenuOpen>(state) == kUiNone);
+    filesShutdown(state);
+    fs::remove_all(dir, ec);
 }

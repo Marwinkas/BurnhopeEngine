@@ -12,7 +12,7 @@ namespace burnhope {
 
 bool fileActionsHandleKey(UiState& s, const InputFrame& in) {
     const FileSession* session = s.world.try_get<FileSession>();
-    const UiFileBrowser* browser = s.world.try_get<UiFileBrowser>();
+    const UiFileBrowser* browser = uiFilesFind(static_cast<const UiState&>(s));
     if (session == nullptr || session->ready == 0 || browser == nullptr || browser->fileFrame == kUiNone
         || !nodeShown(s, browser->fileFrame)) {
         return false;
@@ -30,7 +30,7 @@ bool fileActionsHandleKey(UiState& s, const InputFrame& in) {
     const FileTheme& theme = fileTheme(s);
     uiSyncPopover(s, b.pop, b.tune, theme.tuneW, theme.tuneH, b.popWant);
     const bool typing = (b.searchOn != 0 && s.focused == b.searchBox)
-        || (uiFilesFind(s) != nullptr && uiVirtualGridEditing(s, uiFilesFind(s)->fileView));
+        || uiVirtualGridEditing(s, browser->fileView);
     if (typing) {
         return false;
     }

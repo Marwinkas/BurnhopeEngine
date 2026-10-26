@@ -4,13 +4,13 @@
 
 namespace burnhope {
 
-// Material thumbnails share one photo slot laid out as an 8 x 8 atlas of 64 px cells.
+// Material and image thumbnails share one photo slot laid out as an 8 x 8 atlas of 64 px cells.
 constexpr uint8_t kThumbCols = 8;
 constexpr uint8_t kThumbCells = kThumbCols * kThumbCols;
 constexpr uint32_t kThumbPx = 64;
 constexpr uint8_t kThumbNone = 255;
 
-// Renders the preview of the material at `path` into atlas cell `cell`. False when it cannot be read.
+// Renders the preview of the material or image at `path` into atlas cell `cell`. False when it cannot be read.
 using FileThumbFn = bool (*)(void* user, const char* path, uint8_t cell);
 
 // Fixed-size cache keyed by path hash and file modification time. A cell is baked once and again only when
