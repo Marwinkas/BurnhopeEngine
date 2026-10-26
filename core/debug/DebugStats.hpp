@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <type_traits>
@@ -36,6 +37,45 @@ inline uint32_t debugFormatStats(const GpuDebugStats& stats, char* dst, uint32_t
         return cap - 1;
     }
     return static_cast<uint32_t>(wrote);
+}
+
+// Строка кадра: fps, худший кадр (low), среднее по худшему проценту из последних 128 кадров и счётчик видимого.
+// frameMs — последние count (до 128) времён кадров в мс. Копия сортируется на стеке, куча не нужна.
+inline void debugFormatFrameStats(
+    const float* frameMs, uint32_t count, float fps, uint32_t visible, uint32_t total, char* dst, size_t cap) {
+    if (dst == nullptr || cap == 0) {
+        return;
+    }
+    const uint32_t n = frameMs != nullptr && count < 128u ? count : (frameMs != nullptr ? 128u : 0u);
+    float sorted[128];
+    float worst = 0.0f;
+    for (uint32_t i = 0; i < n; ++i) {
+        sorted[i] = frameMs[i];
+        if (sorted[i] > worst) {
+            worst = sorted[i];
+        }
+    }
+    for (uint32_t i = 1; i < n; ++i) {
+        const float key = sorted[i];
+        uint32_t j = i;
+        while (j > 0 && sorted[j - 1] < key) {
+            sorted[j] = sorted[j - 1];
+            j -= 1;
+        }
+        sorted[j] = key;
+    }
+    const float low = worst > 0.0f ? 1000.0f / worst : fps;
+    uint32_t slowN = n / 100u;
+    if (slowN < 1u && n > 0u) {
+        slowN = 1u;
+    }
+    float slowSum = 0.0f;
+    for (uint32_t i = 0; i < slowN; ++i) {
+        slowSum += sorted[i];
+    }
+    const float one = slowSum > 0.0f ? (1000.0f * static_cast<float>(slowN)) / slowSum : fps;
+    std::snprintf(dst, cap, "fps %.0f   low %.0f   1%% %.0f   mesh %u/%u",
+        static_cast<double>(fps), static_cast<double>(low), static_cast<double>(one), visible, total);
 }
 
 } // namespace burnhope

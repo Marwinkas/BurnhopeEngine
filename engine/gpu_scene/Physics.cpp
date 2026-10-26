@@ -103,12 +103,6 @@ public:
     }
 };
 
-void instancePoint(const GpuInstance& inst, float x, float y, float z, float& ox, float& oy, float& oz) {
-    ox = inst.world[0] * x + inst.world[1] * y + inst.world[2] * z + inst.world[3];
-    oy = inst.world[4] * x + inst.world[5] * y + inst.world[6] * z + inst.world[7];
-    oz = inst.world[8] * x + inst.world[9] * y + inst.world[10] * z + inst.world[11];
-}
-
 void instanceAxes(const GpuInstance& inst, float scale[3], float x[3], float y[3], float z[3], float pos[3]) {
     x[0] = inst.world[0];
     x[1] = inst.world[4];
@@ -276,7 +270,7 @@ void addWorldMesh(PhysicsWorld& world, const PhysicsCook& cook) {
             float x = 0.0f;
             float y = 0.0f;
             float z = 0.0f;
-            instancePoint(inst, vert.px, vert.py, vert.pz, x, y, z);
+            instanceTransformPoint(inst, vert.px, vert.py, vert.pz, x, y, z);
             vertices.push_back(JPH::Float3(x, y, z));
         }
         for (uint32_t t = 0; t < mesh.triangleCount; ++t) {

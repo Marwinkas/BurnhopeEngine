@@ -64,6 +64,27 @@ static_assert(offsetof(MaterialGpuData, worldOffset) == 116);
 static_assert(offsetof(MaterialGpuData, emissiveColor) == 128);
 static_assert(offsetof(MaterialGpuData, aoTex) == 144);
 
+// Slot of one texture channel inside the GPU record: 0 albedo, 1 normal, 2 orm, 3 emissive, 4 roughness,
+// 5 metallic, 6 ao, 7 height, 8 specular. Null for an unknown channel. outNone gets the "no texture" value:
+// albedo marks it with 0xffffffff, every other channel with 0.
+[[nodiscard]] inline uint32_t* materialTexSlot(MaterialGpuData& mat, uint8_t channel, uint32_t* outNone = nullptr) {
+    if (outNone != nullptr) {
+        *outNone = channel == 0u ? 0xffffffffu : 0u;
+    }
+    switch (channel) {
+    case 0: return &mat.albedoTexIndex;
+    case 1: return &mat.normalTexIndex;
+    case 2: return &mat.ormTexIndex;
+    case 3: return &mat.emissiveTexIndex;
+    case 4: return &mat.pad[2];
+    case 5: return &mat.pad[3];
+    case 6: return &mat.aoTex;
+    case 7: return &mat.pad[0];
+    case 8: return &mat.tail[1];
+    default: return nullptr;
+    }
+}
+
 // Authoring document for a .bhmat file. The first fields match the historical document.
 struct BhmatDoc {
     uint32_t version = 1;

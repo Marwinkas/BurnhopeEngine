@@ -57,7 +57,7 @@ uint32_t uploadLights(SceneFrameImpl& s, uint32_t flight) {
         std::memcpy(dst + sizeof(LightGpuData) * count, &lamp, sizeof(lamp));
         count += 1u;
     }
-    if (((s.passMask & kPassRestir) != 0u || (s.passMask & kPassSharc) != 0u)
+    if (((s.tweaks.passMask & kPassRestir) != 0u || (s.tweaks.passMask & kPassSharc) != 0u)
         && s.materialSrc != nullptr && s.materialCount > 0u && lamps != nullptr) {
         for (uint32_t i = 0; i < s.instanceCount && count < kLightCap; ++i) {
             const GpuInstance& inst = lamps[i];

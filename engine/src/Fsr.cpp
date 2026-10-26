@@ -3,6 +3,7 @@
 
 #include "render/HeapBind.hpp"
 #include "render/PassCommon.hpp"
+#include "render/PassTargets.hpp"
 #include "render/RenderDefs.hpp"
 #include "rhi/Barrier.hpp"
 #include "rhi/DescriptorHeap.hpp"
@@ -20,6 +21,8 @@ namespace burnhope {
 namespace {
 
 constexpr uint32_t kStride = 256u;
+constexpr VkImageUsageFlags kImageUsage =
+    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
 enum Slot : uint32_t {
     Motion = 0,
@@ -169,21 +172,6 @@ float halton(int32_t index, int32_t base) {
 
 
 
-void uboAt(PassBindings& bind, uint32_t binding, uint32_t slot) {
-    bind.raw.push(0, binding, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
-        heapBufOffset(*bind.raw.heaps, slot), static_cast<uint32_t>(bind.raw.heaps->bufferDescSize));
-}
-
-bool makeImage(TrackedImage& img, Device& d, VkExtent2D extent, VkFormat format, uint32_t mips) {
-    gpuImageDestroy(img.image, d);
-    img.layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    img.stage = VK_PIPELINE_STAGE_2_NONE;
-    img.access = VK_ACCESS_2_NONE;
-    return gpuImageCreate(img.image, d, extent, format,
-        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        VK_IMAGE_ASPECT_COLOR_BIT, mips);
-}
-
 bool viewBoth(DescriptorHeaps& heaps, Device& d, Slot slot, const GpuImage& img, VkDescriptorType type, uint32_t mips, uint32_t baseMip) {
     return heapWriteImage(heaps, d, slotOf(slot), type, img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT, mips, baseMip);
 }
@@ -213,32 +201,32 @@ bool createImages(FsrPass& p, Device& d, VkExtent2D render, VkExtent2D display) 
     const VkExtent2D one{1u, 1u};
     const VkExtent2D half{halfOf(render.width), halfOf(render.height)};
     const VkExtent2D pyramid = spdExtent(render.width, render.height);
-    const bool ok = makeImage(p.motionVec, d, render, VK_FORMAT_R16G16_SFLOAT, 1)
-        && makeImage(p.dilatedMv, d, render, VK_FORMAT_R16G16_SFLOAT, 1)
-        && makeImage(p.dilatedDepth, d, render, VK_FORMAT_R32_SFLOAT, 1)
-        && makeImage(p.reconDepth, d, render, VK_FORMAT_R32_UINT, 1)
-        && makeImage(p.farthest, d, render, VK_FORMAT_R32_SFLOAT, 1)
-        && makeImage(p.farthestMip, d, half, VK_FORMAT_R32_SFLOAT, 1)
-        && makeImage(p.luma[0], d, render, VK_FORMAT_R16_SFLOAT, 1)
-        && makeImage(p.luma[1], d, render, VK_FORMAT_R16_SFLOAT, 1)
-        && makeImage(p.spd, d, pyramid, VK_FORMAT_R16G16_SFLOAT, 6)
-        && makeImage(p.atomic, d, one, VK_FORMAT_R32_UINT, 1)
-        && makeImage(p.frameInfo, d, one, VK_FORMAT_R16G16B16A16_SFLOAT, 1)
-        && makeImage(p.shading, d, half, VK_FORMAT_R16_SFLOAT, 1)
-        && makeImage(p.dilatedReactive, d, render, VK_FORMAT_R8G8B8A8_UNORM, 1)
-        && makeImage(p.locks, d, render, VK_FORMAT_R8_UNORM, 1)
-        && makeImage(p.accumulation[0], d, render, VK_FORMAT_R16_SFLOAT, 1)
-        && makeImage(p.accumulation[1], d, render, VK_FORMAT_R16_SFLOAT, 1)
-        && makeImage(p.lumaHistory[0], d, render, VK_FORMAT_R16G16B16A16_SFLOAT, 1)
-        && makeImage(p.lumaHistory[1], d, render, VK_FORMAT_R16G16B16A16_SFLOAT, 1)
-        && makeImage(p.instabilityImg, d, render, VK_FORMAT_R16_SFLOAT, 1)
-        && makeImage(p.upscaled[0], d, display, VK_FORMAT_R16G16B16A16_SFLOAT, 1)
-        && makeImage(p.upscaled[1], d, display, VK_FORMAT_R16G16B16A16_SFLOAT, 1)
-        && makeImage(p.rcasIn, d, display, VK_FORMAT_R16G16B16A16_SFLOAT, 1)
-        && makeImage(p.output, d, display, VK_FORMAT_R16G16B16A16_SFLOAT, 1)
-        && makeImage(p.exposure, d, one, VK_FORMAT_R16G16_SFLOAT, 1)
-        && makeImage(p.reactive, d, one, VK_FORMAT_R8_UNORM, 1)
-        && makeImage(p.composition, d, one, VK_FORMAT_R8_UNORM, 1);
+    const bool ok = recreateTracked(p.motionVec, d, render, VK_FORMAT_R16G16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.dilatedMv, d, render, VK_FORMAT_R16G16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.dilatedDepth, d, render, VK_FORMAT_R32_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.reconDepth, d, render, VK_FORMAT_R32_UINT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.farthest, d, render, VK_FORMAT_R32_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.farthestMip, d, half, VK_FORMAT_R32_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.luma[0], d, render, VK_FORMAT_R16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.luma[1], d, render, VK_FORMAT_R16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.spd, d, pyramid, VK_FORMAT_R16G16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 6)
+        && recreateTracked(p.atomic, d, one, VK_FORMAT_R32_UINT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.frameInfo, d, one, VK_FORMAT_R16G16B16A16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.shading, d, half, VK_FORMAT_R16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.dilatedReactive, d, render, VK_FORMAT_R8G8B8A8_UNORM, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.locks, d, render, VK_FORMAT_R8_UNORM, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.accumulation[0], d, render, VK_FORMAT_R16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.accumulation[1], d, render, VK_FORMAT_R16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.lumaHistory[0], d, render, VK_FORMAT_R16G16B16A16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.lumaHistory[1], d, render, VK_FORMAT_R16G16B16A16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.instabilityImg, d, render, VK_FORMAT_R16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.upscaled[0], d, display, VK_FORMAT_R16G16B16A16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.upscaled[1], d, display, VK_FORMAT_R16G16B16A16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.rcasIn, d, display, VK_FORMAT_R16G16B16A16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.output, d, display, VK_FORMAT_R16G16B16A16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.exposure, d, one, VK_FORMAT_R16G16_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.reactive, d, one, VK_FORMAT_R8_UNORM, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.composition, d, one, VK_FORMAT_R8_UNORM, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     if (!ok) {
         destroyImages(p, d);
         return false;
@@ -324,12 +312,12 @@ bool bindHistory(const FsrPass& p, DescriptorHeaps& heaps, Device& d, uint32_t f
 
 bool createShaders(FsrPass& p, Device& d, const DescriptorHeaps& heaps) {
     PassBindings motion(heaps);
-    uboAt(motion, 0, kFsrMotionSlot);
+    motion.ubo(0, kFsrMotionSlot);
     motion.sampledImg(1, HeapImg::Depth);
     motion.storageImg(2, slotOf(Motion));
 
     PassBindings prepare(heaps);
-    uboAt(prepare, 0, kFsrConstSlot);
+    prepare.ubo(0, kFsrConstSlot);
     prepare.sampledImg(8, slotOf(Motion));
     prepare.sampledImg(9, HeapImg::Depth);
     prepare.sampledImg(10, HeapImg::HdrASampled);
@@ -340,8 +328,8 @@ bool createShaders(FsrPass& p, Device& d, const DescriptorHeaps& heaps) {
     prepare.storageImg(28, slotOf(LumaU));
 
     PassBindings luma(heaps);
-    uboAt(luma, 0, kFsrConstSlot);
-    uboAt(luma, 1, kFsrSpdSlot);
+    luma.ubo(0, kFsrConstSlot);
+    luma.ubo(1, kFsrSpdSlot);
     luma.sampledImg(8, slotOf(LumaS));
     luma.sampledImg(9, slotOf(FarS));
     luma.storageImg(24, slotOf(AtomicU));
@@ -355,8 +343,8 @@ bool createShaders(FsrPass& p, Device& d, const DescriptorHeaps& heaps) {
     luma.storageImg(32, slotOf(FarMipU));
 
     PassBindings shadePyr(heaps);
-    uboAt(shadePyr, 0, kFsrConstSlot);
-    uboAt(shadePyr, 1, kFsrSpdSlot);
+    shadePyr.ubo(0, kFsrConstSlot);
+    shadePyr.ubo(1, kFsrSpdSlot);
     shadePyr.sampledImg(8, slotOf(LumaS));
     shadePyr.sampledImg(9, slotOf(LumaPrevS));
     shadePyr.sampledImg(10, slotOf(DilMvS));
@@ -370,13 +358,13 @@ bool createShaders(FsrPass& p, Device& d, const DescriptorHeaps& heaps) {
     shadePyr.storageImg(30, slotOf(Spd5));
 
     PassBindings shade(heaps);
-    uboAt(shade, 0, kFsrConstSlot);
+    shade.ubo(0, kFsrConstSlot);
     shade.sampledImg(8, slotOf(SpdS));
     shade.sampler(5, HeapSamp::Linear);
     shade.storageImg(24, slotOf(ShadeU));
 
     PassBindings react(heaps);
-    uboAt(react, 0, kFsrConstSlot);
+    react.ubo(0, kFsrConstSlot);
     react.sampledImg(8, slotOf(ReconS));
     react.sampledImg(9, slotOf(DilMvS));
     react.sampledImg(10, slotOf(DilDS));
@@ -392,7 +380,7 @@ bool createShaders(FsrPass& p, Device& d, const DescriptorHeaps& heaps) {
     react.storageImg(26, slotOf(AccU));
 
     PassBindings unstable(heaps);
-    uboAt(unstable, 0, kFsrConstSlot);
+    unstable.ubo(0, kFsrConstSlot);
     unstable.sampledImg(8, slotOf(ExpS));
     unstable.sampledImg(9, slotOf(ReactS));
     unstable.sampledImg(10, slotOf(DilMvS));
@@ -403,7 +391,7 @@ bool createShaders(FsrPass& p, Device& d, const DescriptorHeaps& heaps) {
     unstable.storageImg(25, slotOf(InstU));
 
     PassBindings accum(heaps);
-    uboAt(accum, 0, kFsrConstSlot);
+    accum.ubo(0, kFsrConstSlot);
     accum.sampledImg(8, slotOf(ExpS));
     accum.sampledImg(9, slotOf(ReactS));
     accum.sampledImg(10, slotOf(DilMvS));
@@ -418,8 +406,8 @@ bool createShaders(FsrPass& p, Device& d, const DescriptorHeaps& heaps) {
     accum.storageImg(26, slotOf(LockU));
 
     PassBindings rcas(heaps);
-    uboAt(rcas, 0, kFsrConstSlot);
-    uboAt(rcas, 1, kFsrRcasSlot);
+    rcas.ubo(0, kFsrConstSlot);
+    rcas.ubo(1, kFsrRcasSlot);
     rcas.sampledImg(8, slotOf(ExpS));
     rcas.sampledImg(9, slotOf(RcasS));
     rcas.storageImg(24, slotOf(OutU));

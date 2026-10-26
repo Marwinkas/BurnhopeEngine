@@ -42,7 +42,7 @@ void framePassCull(const RenderContext& ctx, SceneFrameImpl& scene, const CullBu
             bufs.instanceCount, args[0], args[8], dbg[0], dbg[7],
             dbg[1], dbg[2], dbg[3], dbg[4], dbg[5], dbg[6], dbg[8],
             keep0, keep1, keep2, scene.cpuRecordMs,
-            scene.lightProfile, scene.showHiz ? 1 : 0, scene.showCone ? 1 : 0,
+            scene.tweaks.lightProfile, scene.showHiz ? 1 : 0, scene.showCone ? 1 : 0,
             scene.showLod ? 1 : 0, scene.showFrustum ? 1 : 0, scene.showSubpixel ? 1 : 0, scene.showShadow ? 1 : 0,
             scene.debugMode);
     }

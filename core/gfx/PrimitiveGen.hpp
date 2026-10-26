@@ -2,6 +2,7 @@
 
 #include "gfx/Meshlet.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 
@@ -98,5 +99,153 @@ inline void genCubeMeshlets(float size, uint32_t materialId, MeshletBlob* out) {
     }
     meshletFinish(*out);
 }
+
+// Процедурные примитивы в вершинах GpuVertex. UV лежат в pad0/pad1. Индексы локальные, от нуля.
+// 24 вершин и 36 индексов куба с полуразмерами hx, hy, hz. Индексы локальные, от нуля.
+inline void genBoxMesh(GpuVertex* vert, uint32_t* idx, float hx, float hy, float hz) {
+    struct Face {
+        float cx, cy, cz, ux, uy, uz, vx, vy, vz;
+    };
+    const Face faces[6] = {
+        {0.0f, hy, 0.0f, hx, 0.0f, 0.0f, 0.0f, 0.0f, -hz},
+        {0.0f, -hy, 0.0f, hx, 0.0f, 0.0f, 0.0f, 0.0f, hz},
+        {hx, 0.0f, 0.0f, 0.0f, hy, 0.0f, 0.0f, 0.0f, hz},
+        {-hx, 0.0f, 0.0f, 0.0f, hy, 0.0f, 0.0f, 0.0f, -hz},
+        {0.0f, 0.0f, hz, hx, 0.0f, 0.0f, 0.0f, hy, 0.0f},
+        {0.0f, 0.0f, -hz, hx, 0.0f, 0.0f, 0.0f, -hy, 0.0f},
+    };
+    const float corner[4][2] = {{-1.0f, -1.0f}, {1.0f, -1.0f}, {1.0f, 1.0f}, {-1.0f, 1.0f}};
+    const uint32_t local[6] = {0u, 1u, 2u, 0u, 2u, 3u};
+    uint32_t vcount = 0;
+    uint32_t icount = 0;
+    for (const Face& face : faces) {
+        float nx = face.uy * face.vz - face.uz * face.vy;
+        float ny = face.uz * face.vx - face.ux * face.vz;
+        float nz = face.ux * face.vy - face.uy * face.vx;
+        const float nlen = std::sqrt(nx * nx + ny * ny + nz * nz);
+        if (nlen > 1.0e-6f) {
+            nx /= nlen;
+            ny /= nlen;
+            nz /= nlen;
+        } else {
+            ny = 1.0f;
+        }
+        const uint32_t faceBase = vcount;
+        for (uint32_t c = 0; c < 4u; ++c) {
+            GpuVertex& v = vert[vcount];
+            v = {};
+            v.px = face.cx + corner[c][0] * face.ux + corner[c][1] * face.vx;
+            v.py = face.cy + corner[c][0] * face.uy + corner[c][1] * face.vy;
+            v.pz = face.cz + corner[c][0] * face.uz + corner[c][1] * face.vz;
+            v.pad0 = corner[c][0] * 0.5f + 0.5f;
+            v.nx = nx;
+            v.ny = ny;
+            v.nz = nz;
+            v.pad1 = corner[c][1] * 0.5f + 0.5f;
+            vcount += 1;
+        }
+        for (uint32_t t = 0; t < 6u; ++t) {
+            idx[icount] = faceBase + local[t];
+            icount += 1;
+        }
+    }
+}
+
+inline void genCubeMesh(GpuVertex* vert, uint32_t* idx, float half) {
+    genBoxMesh(vert, idx, half, half, half);
+}
+
+inline void genPlaneMesh(GpuVertex* vert, uint32_t* idx) {
+    genCubeMesh(vert, idx, 0.02f);
+    for (uint32_t i = 0; i < 24u; ++i) {
+        vert[i].py = 0.0f;
+        vert[i].ny = 1.0f;
+        vert[i].nx = 0.0f;
+        vert[i].nz = 0.0f;
+    }
+}
+
+inline void genSphereMesh(GpuVertex* vert, uint32_t* idx) {
+    constexpr int kSlice = 8;
+    constexpr int kStack = 4;
+    uint32_t vcount = 0;
+    for (int y = 0; y <= kStack; ++y) {
+        const float v = static_cast<float>(y) / static_cast<float>(kStack);
+        const float pitch = (v - 0.5f) * 3.14159265f;
+        const float cy = std::cos(pitch);
+        const float sy = std::sin(pitch);
+        for (int x = 0; x <= kSlice; ++x) {
+            const float u = static_cast<float>(x) / static_cast<float>(kSlice);
+            const float yaw = u * 6.2831853f;
+            GpuVertex& dst = vert[vcount++];
+            dst = {};
+            dst.px = std::cos(yaw) * cy * 0.5f;
+            dst.py = sy * 0.5f;
+            dst.pz = std::sin(yaw) * cy * 0.5f;
+            dst.nx = dst.px * 2.0f;
+            dst.ny = dst.py * 2.0f;
+            dst.nz = dst.pz * 2.0f;
+            dst.pad0 = u;
+            dst.pad1 = v;
+        }
+    }
+    uint32_t icount = 0;
+    for (int y = 0; y < kStack; ++y) {
+        for (int x = 0; x < kSlice; ++x) {
+            const uint32_t a = static_cast<uint32_t>(y * (kSlice + 1) + x);
+            const uint32_t b = a + static_cast<uint32_t>(kSlice + 1);
+            idx[icount++] = a;
+            idx[icount++] = b;
+            idx[icount++] = a + 1u;
+            idx[icount++] = a + 1u;
+            idx[icount++] = b;
+            idx[icount++] = b + 1u;
+        }
+    }
+}
+
+inline void genCylinderMesh(GpuVertex* vert, uint32_t* idx) {
+    constexpr int kSide = 8;
+    uint32_t vcount = 0;
+    for (int cap = 0; cap < 2; ++cap) {
+        const float y = cap == 0 ? -0.5f : 0.5f;
+        for (int i = 0; i < kSide; ++i) {
+            const float ang = static_cast<float>(i) * 6.2831853f / static_cast<float>(kSide);
+            GpuVertex& dst = vert[vcount++];
+            dst = {};
+            dst.px = std::cos(ang) * 0.5f;
+            dst.py = y;
+            dst.pz = std::sin(ang) * 0.5f;
+            dst.nx = dst.px * 2.0f;
+            dst.ny = 0.0f;
+            dst.nz = dst.pz * 2.0f;
+        }
+    }
+    GpuVertex& bottom = vert[vcount++];
+    bottom = {};
+    bottom.py = -0.5f;
+    bottom.ny = -1.0f;
+    GpuVertex& top = vert[vcount++];
+    top = {};
+    top.py = 0.5f;
+    top.ny = 1.0f;
+    uint32_t icount = 0;
+    for (int i = 0; i < kSide; ++i) {
+        const uint32_t n = static_cast<uint32_t>((i + 1) % kSide);
+        idx[icount++] = static_cast<uint32_t>(i);
+        idx[icount++] = n;
+        idx[icount++] = static_cast<uint32_t>(kSide) + n;
+        idx[icount++] = static_cast<uint32_t>(i);
+        idx[icount++] = static_cast<uint32_t>(kSide) + n;
+        idx[icount++] = static_cast<uint32_t>(kSide) + static_cast<uint32_t>(i);
+        idx[icount++] = static_cast<uint32_t>(kSide * 2);
+        idx[icount++] = n;
+        idx[icount++] = static_cast<uint32_t>(i);
+        idx[icount++] = static_cast<uint32_t>(kSide * 2 + 1);
+        idx[icount++] = static_cast<uint32_t>(kSide) + static_cast<uint32_t>(i);
+        idx[icount++] = static_cast<uint32_t>(kSide) + n;
+    }
+}
+
 
 } // namespace burnhope

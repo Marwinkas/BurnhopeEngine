@@ -218,12 +218,6 @@ struct alignas(16) RcTriVert {
 static_assert(sizeof(RcTriVert) == 48);
 static_assert(alignof(RcTriVert) == 16);
 
-void transform(const float* m, float x, float y, float z, float& ox, float& oy, float& oz) {
-    ox = m[0] * x + m[1] * y + m[2] * z + m[3];
-    oy = m[4] * x + m[5] * y + m[6] * z + m[7];
-    oz = m[8] * x + m[9] * y + m[10] * z + m[11];
-}
-
 void transformNormal(const float* m, float x, float y, float z, float& ox, float& oy, float& oz) {
     const float c00 = m[5] * m[10] - m[6] * m[9];
     const float c01 = m[6] * m[8] - m[4] * m[10];
@@ -496,7 +490,7 @@ void radianceArm(
             for (uint32_t k = 0; k < 3u; ++k) {
                 const GpuVertex& v = verts[mlet.vertexOffset + indices[at + k]];
                 RcTriVert out{};
-                transform(m, v.px, v.py, v.pz, out.x, out.y, out.z);
+                instanceTransformPoint(instances[i], v.px, v.py, v.pz, out.x, out.y, out.z);
                 loX = std::min(loX, out.x);
                 loY = std::min(loY, out.y);
                 loZ = std::min(loZ, out.z);

@@ -31,7 +31,8 @@ inline void destroyTracked(Device& device, std::initializer_list<TrackedImage*> 
     VkExtent2D extent,
     VkFormat format,
     VkImageUsageFlags usage,
-    VkImageAspectFlags aspect) {
+    VkImageAspectFlags aspect,
+    uint32_t mips = 1u) {
     gpuImageDestroy(img, device);
     if (extent.width == 0u) {
         extent.width = 1u;
@@ -39,7 +40,7 @@ inline void destroyTracked(Device& device, std::initializer_list<TrackedImage*> 
     if (extent.height == 0u) {
         extent.height = 1u;
     }
-    return gpuImageCreate(img, device, extent, format, usage, aspect);
+    return gpuImageCreate(img, device, extent, format, usage, aspect, mips);
 }
 
 [[nodiscard]] inline bool recreateTracked(
@@ -48,8 +49,9 @@ inline void destroyTracked(Device& device, std::initializer_list<TrackedImage*> 
     VkExtent2D extent,
     VkFormat format,
     VkImageUsageFlags usage,
-    VkImageAspectFlags aspect) {
-    const bool ok = recreateImage(img.image, device, extent, format, usage, aspect);
+    VkImageAspectFlags aspect,
+    uint32_t mips = 1u) {
+    const bool ok = recreateImage(img.image, device, extent, format, usage, aspect, mips);
     img.layout = VK_IMAGE_LAYOUT_UNDEFINED;
     img.stage = VK_PIPELINE_STAGE_2_NONE;
     img.access = VK_ACCESS_2_NONE;

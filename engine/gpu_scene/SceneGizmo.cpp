@@ -1,3 +1,4 @@
+#include "gpu_scene/Mat4.hpp"
 #include "gpu_scene/SceneObject.hpp"
 
 #include <algorithm>
@@ -17,12 +18,6 @@ float actorDot(const float a[3], const float b[3]) {
 
 float actorLen(const float a[3]) {
     return std::sqrt(actorDot(a, a));
-}
-
-static void actorCross(const float a[3], const float b[3], float o[3]) {
-    o[0] = a[1] * b[2] - a[2] * b[1];
-    o[1] = a[2] * b[0] - a[0] * b[2];
-    o[2] = a[0] * b[1] - a[1] * b[0];
 }
 
 void sceneActorSetCamera(SceneActors& world, const CameraCull& cam, float width, float height) {
@@ -319,20 +314,9 @@ static float actorRingAngle(const SceneActors& world, float px, float py, const 
         float t = 0.0f;
         if (actorRayPlane(ro, rd, origin, axis, t)) {
             const float hit[3] = {ro[0] + rd[0] * t, ro[1] + rd[1] * t, ro[2] + rd[2] * t};
-            float ref[3] = {0.0f, 1.0f, 0.0f};
-            if (std::fabs(axis[1]) >= 0.9f) {
-                ref[0] = 1.0f;
-                ref[1] = 0.0f;
-            }
             float u[3];
-            actorCross(axis, ref, u);
-            const float un = actorLen(u);
-            if (un > 1.0e-4f) {
-                u[0] /= un;
-                u[1] /= un;
-                u[2] /= un;
-                float v[3];
-                actorCross(axis, u, v);
+            float v[3];
+            if (mat4BasisFromAxis(axis, u, v)) {
                 float rel[3];
                 actorSub(hit, origin, rel);
                 return std::atan2(actorDot(rel, v), actorDot(rel, u)) * 57.2957795f;
@@ -501,21 +485,10 @@ uint8_t sceneActorHit(const SceneActors& world, float px, float py, uint8_t& axi
             }
             if (world.gizmo == 1) {
                 float u[3];
-                float ref[3] = {0.0f, 1.0f, 0.0f};
-                if (std::fabs(basis[a][1]) >= 0.9f) {
-                    ref[0] = 1.0f;
-                    ref[1] = 0.0f;
-                }
-                actorCross(basis[a], ref, u);
-                const float un = actorLen(u);
-                if (un < 1.0e-4f) {
+                float v[3];
+                if (!mat4BasisFromAxis(basis[a], u, v)) {
                     continue;
                 }
-                u[0] /= un;
-                u[1] /= un;
-                u[2] /= un;
-                float v[3];
-                actorCross(basis[a], u, v);
                 float ring = limit;
                 float prevX = 0.0f;
                 float prevY = 0.0f;

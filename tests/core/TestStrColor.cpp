@@ -4,6 +4,11 @@
 #include "Str.hpp"
 #include "asset/ProjectDoc.hpp"
 #include "color/Color.hpp"
+#include "debug/DebugStats.hpp"
+#include "gfx/Material.hpp"
+#include "gfx/PrimitiveGen.hpp"
+#include "gpu_scene/InstanceData.hpp"
+#include "gpu_scene/Mat4.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -146,4 +151,66 @@ TEST_CASE("luma, kelvin tint and half floats match their reference values") {
     CHECK(burnhope::floatToHalf(-2.0f) == 0xc000u);
     CHECK(burnhope::floatToHalf(0.0f) == 0u);
     CHECK(burnhope::floatToHalf(1.0e10f) == 0x7c00u);
+}
+
+TEST_CASE("strAppendLine adds a line, truncates, and skips when full") {
+    char text[16]{};
+    strCopyCap(text, sizeof(text), "one");
+    CHECK(strAppendLine(text, sizeof(text), "two") == 7);
+    CHECK(std::strcmp(text, "one\ntwo") == 0);
+    CHECK(strAppendLine(text, sizeof(text), "0123456789") == 15);
+    CHECK(std::strcmp(text, "one\ntwo\n0123456") == 0);
+    CHECK(strAppendLine(text, sizeof(text), "x") == 15);
+    CHECK(std::strcmp(text, "one\ntwo\n0123456") == 0);
+}
+
+TEST_CASE("frame stats report fps, worst frame and the slowest percent") {
+    float ms[100];
+    for (float& v : ms) {
+        v = 10.0f;
+    }
+    ms[7] = 40.0f;
+    char out[96]{};
+    debugFormatFrameStats(ms, 100, 90.0f, 3, 9, out, sizeof(out));
+    CHECK(std::strcmp(out, "fps 90   low 25   1% 25   mesh 3/9") == 0);
+    debugFormatFrameStats(nullptr, 0, 60.0f, 0, 0, out, sizeof(out));
+    CHECK(std::strcmp(out, "fps 60   low 60   1% 60   mesh 0/0") == 0);
+}
+
+TEST_CASE("material channel slots resolve to the GPU record") {
+    MaterialGpuData mat{};
+    uint32_t none = 7u;
+    CHECK(materialTexSlot(mat, 0, &none) == &mat.albedoTexIndex);
+    CHECK(none == 0xffffffffu);
+    CHECK(materialTexSlot(mat, 2, &none) == &mat.ormTexIndex);
+    CHECK(none == 0u);
+    CHECK(materialTexSlot(mat, 6) == &mat.aoTex);
+    CHECK(materialTexSlot(mat, 8) == &mat.tail[1]);
+    CHECK(materialTexSlot(mat, 9) == nullptr);
+}
+
+TEST_CASE("primitive boxes, instance points and axis bases") {
+    GpuVertex vert[24]{};
+    uint32_t idx[36]{};
+    genBoxMesh(vert, idx, 1.0f, 2.0f, 3.0f);
+    CHECK(idx[35] == 23u);
+    float maxY = 0.0f;
+    for (const GpuVertex& v : vert) {
+        maxY = v.py > maxY ? v.py : maxY;
+    }
+    CHECK(maxY == doctest::Approx(2.0f));
+    GpuInstance inst{};
+    instanceSet(inst, 1.0f, 2.0f, 3.0f, 1.0f, 0, 0);
+    float x = 0.0f, y = 0.0f, z = 0.0f;
+    instanceTransformPoint(inst, 1.0f, 1.0f, 1.0f, x, y, z);
+    CHECK(x == doctest::Approx(2.0f));
+    CHECK(y == doctest::Approx(3.0f));
+    CHECK(z == doctest::Approx(4.0f));
+    const float axis[3] = {0.0f, 0.0f, 1.0f};
+    float u[3]{}, v[3]{};
+    CHECK(mat4BasisFromAxis(axis, u, v));
+    CHECK(u[0] * axis[0] + u[1] * axis[1] + u[2] * axis[2] == doctest::Approx(0.0f));
+    CHECK(u[0] * v[0] + u[1] * v[1] + u[2] * v[2] == doctest::Approx(0.0f));
+    const float zero[3] = {0.0f, 0.0f, 0.0f};
+    CHECK_FALSE(mat4BasisFromAxis(zero, u, v));
 }

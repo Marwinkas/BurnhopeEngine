@@ -187,4 +187,25 @@ inline Mat4 mat4Inverse(const Mat4& in) {
     return out;
 }
 
+// Ортонормированная пара u, v поперёк оси. Опора — мировой верх, у почти вертикальной оси — мировой X.
+// Ложь, если ось вырождена. u = norm(axis × ref), v = axis × u.
+[[nodiscard]] inline bool mat4BasisFromAxis(const float axis[3], float u[3], float v[3]) {
+    const bool steep = std::fabs(axis[1]) >= 0.9f;
+    const float ref[3] = {steep ? 1.0f : 0.0f, steep ? 0.0f : 1.0f, 0.0f};
+    u[0] = axis[1] * ref[2] - axis[2] * ref[1];
+    u[1] = axis[2] * ref[0] - axis[0] * ref[2];
+    u[2] = axis[0] * ref[1] - axis[1] * ref[0];
+    const float len = std::sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+    if (len < 1.0e-4f) {
+        return false;
+    }
+    u[0] /= len;
+    u[1] /= len;
+    u[2] /= len;
+    v[0] = axis[1] * u[2] - axis[2] * u[1];
+    v[1] = axis[2] * u[0] - axis[0] * u[2];
+    v[2] = axis[0] * u[1] - axis[1] * u[0];
+    return true;
+}
+
 } // namespace burnhope

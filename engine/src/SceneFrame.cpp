@@ -1,5 +1,8 @@
+#include "Str.hpp"
 #include "audio/Audio.hpp"
+#include "debug/DebugStats.hpp"
 #include "render/PassBufferSync.hpp"
+#include "gpu_scene/Mat4.hpp"
 #include "gpu_scene/Physics.hpp"
 #include "render/Weather.hpp"
 #include "render/SceneFrameImpl.hpp"
@@ -198,21 +201,14 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
         ear.ahead[0] = fx;
         ear.ahead[1] = fy;
         ear.ahead[2] = fz;
-        const float rx = -fz;
-        const float ry = 0.0f;
-        const float rz = fx;
-        ear.up[0] = ry * fz - rz * fy;
-        ear.up[1] = rz * fx - rx * fz;
-        ear.up[2] = rx * fy - ry * fx;
-        const float ul = std::sqrt(ear.up[0] * ear.up[0] + ear.up[1] * ear.up[1] + ear.up[2] * ear.up[2]);
-        if (ul < 1.0e-4f) {
-            ear.up[0] = 0.0f;
-            ear.up[1] = 1.0f;
-            ear.up[2] = 0.0f;
+        float side[3];
+        float down[3];
+        if (mat4BasisFromAxis(ear.ahead, side, down)) {
+            for (uint32_t i = 0; i < 3u; ++i) {
+                ear.up[i] = -down[i];
+            }
         } else {
-            ear.up[0] /= ul;
-            ear.up[1] /= ul;
-            ear.up[2] /= ul;
+            ear.up[1] = 1.0f;
         }
         audioSetListener(scene->audio, ear);
         audioSetRain(scene->audio, 1.0f - roof, scene->rainAmount);
@@ -335,7 +331,7 @@ void sceneFrameDebug(SceneFrame* scene, bool hiz, bool cone, bool lod, bool frus
     scene->showBehind = behind;
     scene->debugMode = mode;
     spdlog::info("debug profile {} hiz {} cone {} lod {} frust {} small {} shadow {} mode {}",
-        scene->lightProfile, hiz ? 1 : 0, cone ? 1 : 0, lod ? 1 : 0, frustum ? 1 : 0, subpixel ? 1 : 0, shadow ? 1 : 0, mode);
+        scene->tweaks.lightProfile, hiz ? 1 : 0, cone ? 1 : 0, lod ? 1 : 0, frustum ? 1 : 0, subpixel ? 1 : 0, shadow ? 1 : 0, mode);
 }
 
 void sceneFrameStats(const SceneFrame* scene, char* out, size_t cap) {
@@ -346,35 +342,7 @@ void sceneFrameStats(const SceneFrame* scene, char* out, size_t cap) {
     if (scene == nullptr) {
         return;
     }
-    const uint32_t n = scene->frameCursor < 128u ? scene->frameCursor : 128u;
-    float copy[128];
-    float worst = 0.0f;
-    for (uint32_t i = 0; i < n; ++i) {
-        copy[i] = scene->frameMs[i];
-        if (copy[i] > worst) {
-            worst = copy[i];
-        }
-    }
-    for (uint32_t i = 1; i < n; ++i) {
-        const float key = copy[i];
-        uint32_t j = i;
-        while (j > 0 && copy[j - 1] < key) {
-            copy[j] = copy[j - 1];
-            j -= 1;
-        }
-        copy[j] = key;
-    }
-    const float low = worst > 0.0f ? 1000.0f / worst : scene->fps;
-    uint32_t slowN = n / 100u;
-    if (slowN < 1u && n > 0u) {
-        slowN = 1u;
-    }
-    float slowSum = 0.0f;
-    for (uint32_t i = 0; i < slowN; ++i) {
-        slowSum += copy[i];
-    }
-    const float one = slowSum > 0.0f ? (1000.0f * static_cast<float>(slowN)) / slowSum : scene->fps;
-    std::snprintf(out, cap, "fps %.0f   low %.0f   1%% %.0f   mesh %u/%u", scene->fps, low, one, scene->visibleCount, scene->instanceCount);
+    debugFormatFrameStats(scene->frameMs, scene->frameCursor, scene->fps, scene->visibleCount, scene->instanceCount, out, cap);
 }
 
 void sceneFrameKick(SceneFrame* scene, Device& device) {
@@ -412,7 +380,7 @@ void sceneFrameRecord(
     }
     (void)heaps;
     CpuScope recordCpu("sceneFrameRecord", &scene->cpuRecordMs);
-    const bool fsrLive = (scene->passMask & kPassFsr) != 0u && scene->fsr.prepare.handle != VK_NULL_HANDLE;
+    const bool fsrLive = (scene->tweaks.passMask & kPassFsr) != 0u && scene->fsr.prepare.handle != VK_NULL_HANDLE;
     const VkExtent2D renderExtent = fsrLive ? fsrRenderExtent(scene->fsr.quality, swap.extent) : swap.extent;
     sceneResizeTargets(scene, device, swap, frame, renderExtent);
     const bool propMoved = syncPropInstance(scene);
@@ -513,7 +481,7 @@ void sceneFrameRecord(
     bufferBarrierHostToShader(cmd, scene->atmBuf.buffer, scene->atmBuf.size);
     bufferBarrierHostToShader(cmd, scene->lightBuf.buffer, scene->lightBuf.size,
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
-    const RenderContext ctx{cmd, device, scene->gpuHeap, scene->gpuTime, scene->extent, flight, scene->freeze, gpu, lit, knob};
+    const RenderContext ctx{cmd, device, scene->gpuHeap, scene->gpuTime, scene->extent, flight, scene->tweaks.freeze, gpu, lit, knob};
     framePassClusters(ctx, scene->clusters, scene->cellBuf, scene->lightIndex);
     CullBuffers cullBufs{scene->shadowIndirect, scene->shadowVisible, scene->indirect, scene->candidates, scene->visible, scene->instanceCount, strideU, sunKeep};
     CullResults culled{};
@@ -539,15 +507,15 @@ void sceneFrameRecord(
     }
     framePassVis(ctx, scene->vis, scene->occl, scene->hiz, scene->hizMax[flight], scene->indirect, scene->candidates, scene->visible,
         scene->instanceCount, culled.twoPhase, scene->showHiz, culled.draw, culled.lateDraw);
-    const bool restirOn = (scene->passMask & kPassRestir) != 0u && scene->restir.di.handle != VK_NULL_HANDLE;
-    const bool gtaoOn = (scene->passMask & 524288u) == 0u && scene->lightProfile != 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
+    const bool restirOn = (scene->tweaks.passMask & kPassRestir) != 0u && scene->restir.di.handle != VK_NULL_HANDLE;
+    const bool gtaoOn = (scene->tweaks.passMask & 524288u) == 0u && scene->tweaks.lightProfile != 2u && (knob.flags.passMask & 16u) != 0u && scene->hud.gtao > 0.001f;
     framePassShade(ctx, scene->shade, scene->sky, scene->gtao, scene->vis.targets.vis, scene->vis.targets.depth, gtaoOn, scene->probeBuf.buffer, scene->probeBuf.size, restirOn, pose.fovYRad);
     const VkDeviceAddress tlas = scene->radiance.geometry ? scene->radiance.tlasAddress : 0;
-    const bool worldSharc = (scene->passMask & kPassSharc) != 0u;
-    const bool worldRc = !worldSharc && (scene->passMask & 128u) != 0u && (scene->passMask & 262144u) != 0u;
-    const bool worldVx = !worldSharc && (scene->passMask & 524288u) != 0u && (scene->passMask & 262144u) != 0u && !worldRc;
+    const bool worldSharc = (scene->tweaks.passMask & kPassSharc) != 0u;
+    const bool worldRc = !worldSharc && (scene->tweaks.passMask & 128u) != 0u && (scene->tweaks.passMask & 262144u) != 0u;
+    const bool worldVx = !worldSharc && (scene->tweaks.passMask & 524288u) != 0u && (scene->tweaks.passMask & 262144u) != 0u && !worldRc;
     if (!restirOn) {
-        restirNote(scene->restir, scene->lightProfile, (scene->passMask & kPassRestir) != 0u ? "нет шейдера" : "выкл");
+        restirNote(scene->restir, scene->tweaks.lightProfile, (scene->tweaks.passMask & kPassRestir) != 0u ? "нет шейдера" : "выкл");
     }
     restirStatReset(cmd, scene->restir, device, flight);
     if (restirOn) {
@@ -555,14 +523,14 @@ void sceneFrameRecord(
         if (scene->lightBuf.mapped != nullptr) {
             gpuLights = static_cast<const uint8_t*>(scene->lightBuf.mapped) + sizeof(LightGpuData) * kLightCap * flight;
         }
-        framePassRestir(ctx, scene->restir, gpu, gpuLights, lightCount, scene->passMask, tlas);
+        framePassRestir(ctx, scene->restir, gpu, gpuLights, lightCount, scene->tweaks.passMask, tlas);
     }
     if (worldSharc) {
-        framePassSharc(ctx, scene->sharc, scene->shade.hdrA, scene->giGain, lightCount, tlas, scene->restir, restirOn ? 1u : 0u, scene->sharcDenoise ? 1u : 0u);
+        framePassSharc(ctx, scene->sharc, scene->shade.hdrA, scene->tweaks.giGain, lightCount, tlas, scene->restir, restirOn ? 1u : 0u, scene->tweaks.sharcDenoise ? 1u : 0u);
     } else if (worldVx) {
         framePassVoxel(ctx, scene->voxel, scene->shade.hdrA, true, scene->instanceCount, propMoved);
     } else {
-        framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->rcRays, scene->rcSpacing, scene->rcIntensity, scene->rcMax, scene->rcSun, scene->rcBounce);
+        framePassRadiance(ctx, scene->radiance, scene->shade.hdrA, worldRc, scene->tweaks.rcRays, scene->tweaks.rcSpacing, scene->tweaks.rcIntensity, scene->tweaks.rcMax, scene->tweaks.rcSun, scene->tweaks.rcBounce);
     }
     framePassShadeLate(ctx, scene->shade, scene->sky, scene->fog);
     particleRecord(cmd, device, scene->particles, scene->shade.hdrA, scene->extent, flight, scene->simDt);
@@ -574,10 +542,9 @@ void sceneFrameRecord(
         std::snprintf(scene->gpuText, sizeof(scene->gpuText), "%s", zoneText);
     }
     {
-        const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
-        if (used + 32 < sizeof(scene->gpuText)) {
-            std::snprintf(scene->gpuText + used, sizeof(scene->gpuText) - used, "\ncpu record %5.2f", static_cast<double>(scene->cpuRecordMs));
-        }
+        char cpuLine[32];
+        std::snprintf(cpuLine, sizeof(cpuLine), "cpu record %5.2f", static_cast<double>(scene->cpuRecordMs));
+        strAppendLine(scene->gpuText, sizeof(scene->gpuText), cpuLine);
     }
     const bool bloomOn = (knob.flags.passMask & 32u) != 0u && scene->hud.bloom > 0.001f;
     if (fsrLive) {
@@ -589,22 +556,13 @@ void sceneFrameRecord(
     }
     framePassTonemap(ctx, scene->tone, scene->shade.hdrA, scene->shade.hdrB, swap, frame, bloomOn, fsrLive, taaLive && taaBound);
     if (scene->fsr.lastLog[0] != '\0') {
-        const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
-        if (used + 2u < sizeof(scene->gpuText)) {
-            std::snprintf(scene->gpuText + used, sizeof(scene->gpuText) - used, "\n%s", scene->fsr.lastLog);
-        }
+        strAppendLine(scene->gpuText, sizeof(scene->gpuText), scene->fsr.lastLog);
     }
     if (scene->gtao.lastLog[0] != '\0') {
-        const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
-        if (used + 2u < sizeof(scene->gpuText)) {
-            std::snprintf(scene->gpuText + used, sizeof(scene->gpuText) - used, "\n%s", scene->gtao.lastLog);
-        }
+        strAppendLine(scene->gpuText, sizeof(scene->gpuText), scene->gtao.lastLog);
     }
     if (worldSharc && scene->sharc.lastLog[0] != '\0') {
-        const uint32_t used = static_cast<uint32_t>(std::strlen(scene->gpuText));
-        if (used + 2u < sizeof(scene->gpuText)) {
-            std::snprintf(scene->gpuText + used, sizeof(scene->gpuText) - used, "\n%s", scene->sharc.lastLog);
-        }
+        strAppendLine(scene->gpuText, sizeof(scene->gpuText), scene->sharc.lastLog);
     }
     if (logFrame) {
         spdlog::info("frame {:.1f} ms ({:.1f} fps)\n{}", scene->fps > 1.0f ? 1000.0f / scene->fps : 0.0, static_cast<double>(scene->fps), scene->gpuText);

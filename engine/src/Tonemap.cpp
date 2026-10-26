@@ -24,8 +24,7 @@ bool tonemapPassCreate(TonemapPass& p, Device& d, const DescriptorHeaps& heaps) 
     tone.knob(57, HeapBuf::Bloom);
     tone.sampledImg(2, HeapImg::Depth);
     tone.knob(56, HeapBuf::Sliders);
-    tone.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
-        heapBufOffset(heaps, kGradeSlot), static_cast<uint32_t>(heaps.bufferDescSize));
+    tone.grade();
     const ShaderCreateDesc mesh{
         .path = BH_SHADER_DIR "/tonemap.mesh.spv",
         .stage = VK_SHADER_STAGE_MESH_BIT_EXT,
@@ -79,8 +78,7 @@ bool tonemapPassCreate(TonemapPass& p, Device& d, const DescriptorHeaps& heaps) 
     taaBind.sampledImg(34, 866u);
     taaBind.storageImg(35, 868u);
     taaBind.knob(57, HeapBuf::Bloom);
-    taaBind.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
-        heapBufOffset(heaps, kGradeSlot), static_cast<uint32_t>(heaps.bufferDescSize));
+    taaBind.grade();
     PassBindings copyBind{heaps};
     copyBind.ubo(0, HeapBuf::Frame);
     copyBind.storageImg(3, HeapImg::HdrAStorage);

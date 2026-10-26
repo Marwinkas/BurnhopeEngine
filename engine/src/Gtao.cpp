@@ -3,6 +3,7 @@
 #include "render/HeapBind.hpp"
 #include "render/PassBufferSync.hpp"
 #include "render/PassCommon.hpp"
+#include "render/PassTargets.hpp"
 #include "render/RenderDefs.hpp"
 #include "rhi/Barrier.hpp"
 #include "rhi/DescriptorHeap.hpp"
@@ -19,6 +20,7 @@ namespace burnhope {
 namespace {
 
 constexpr uint32_t kStride = 256u;
+constexpr VkImageUsageFlags kImageUsage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 constexpr uint32_t kDepthS = 974u;
 constexpr uint32_t kDepth0 = 975u;
 constexpr uint32_t kNormU = 980u;
@@ -42,17 +44,6 @@ uint32_t legalMips(VkExtent2D extent) {
         mips += 1u;
     }
     return mips;
-}
-
-bool makeImage(TrackedImage& img, Device& d, VkExtent2D extent, VkFormat format, uint32_t mips) {
-    const bool ok = gpuImageCreate(
-        img.image, d, extent, format,
-        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_IMAGE_ASPECT_COLOR_BIT, mips);
-    img.layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    img.stage = VK_PIPELINE_STAGE_2_NONE;
-    img.access = VK_ACCESS_2_NONE;
-    return ok;
 }
 
 void destroyImages(GtaoPass& p, Device& d) {
@@ -102,13 +93,8 @@ bool bindConstants(const GtaoPass& p, DescriptorHeaps& heaps, Device& d) {
     return ok;
 }
 
-void uboAt(PassBindings& b, uint32_t binding) {
-    b.raw.push(0, binding, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
-        heapBufOffset(*b.raw.heaps, kGtaoConstSlot), static_cast<uint32_t>(b.raw.heaps->bufferDescSize));
-}
-
 void commonDepth(PassBindings& map) {
-    uboAt(map, 0);
+    map.ubo(0, kGtaoConstSlot);
     map.sampler(4, HeapSamp::Nearest);
     map.sampledImg(8, static_cast<uint32_t>(HeapImg::Depth));
 }
@@ -127,7 +113,7 @@ bool createShaders(GtaoPass& p, Device& d, const DescriptorHeaps& heaps) {
     norm.storageImg(24, kNormU);
 
     PassBindings main{heaps};
-    uboAt(main, 0);
+    main.ubo(0, kGtaoConstSlot);
     main.sampler(4, HeapSamp::Nearest);
     main.sampledImg(8, kDepthS);
     main.sampledImg(9, kNormS);
@@ -135,14 +121,14 @@ bool createShaders(GtaoPass& p, Device& d, const DescriptorHeaps& heaps) {
     main.storageImg(25, kEdgeU);
 
     PassBindings denoiseA{heaps};
-    uboAt(denoiseA, 0);
+    denoiseA.ubo(0, kGtaoConstSlot);
     denoiseA.sampler(4, HeapSamp::Nearest);
     denoiseA.sampledImg(8, kAo0S);
     denoiseA.sampledImg(9, kEdgeS);
     denoiseA.storageImg(24, kAo1U);
 
     PassBindings denoiseB{heaps};
-    uboAt(denoiseB, 0);
+    denoiseB.ubo(0, kGtaoConstSlot);
     denoiseB.sampler(4, HeapSamp::Nearest);
     denoiseB.sampledImg(8, kAo1S);
     denoiseB.sampledImg(9, kEdgeS);
@@ -259,11 +245,11 @@ bool gtaoResize(GtaoPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D exten
         return true;
     }
     const uint32_t mips = legalMips(extent);
-    const bool images = makeImage(p.depthMips, d, extent, VK_FORMAT_R32_SFLOAT, mips)
-        && makeImage(p.normalsImg, d, extent, VK_FORMAT_R32_UINT, 1)
-        && makeImage(p.aoTerm[0], d, extent, VK_FORMAT_R32_UINT, 1)
-        && makeImage(p.aoTerm[1], d, extent, VK_FORMAT_R32_UINT, 1)
-        && makeImage(p.edges, d, extent, VK_FORMAT_R8_UNORM, 1);
+    const bool images = recreateTracked(p.depthMips, d, extent, VK_FORMAT_R32_SFLOAT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, mips)
+        && recreateTracked(p.normalsImg, d, extent, VK_FORMAT_R32_UINT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.aoTerm[0], d, extent, VK_FORMAT_R32_UINT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.aoTerm[1], d, extent, VK_FORMAT_R32_UINT, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1)
+        && recreateTracked(p.edges, d, extent, VK_FORMAT_R8_UNORM, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     if (!images) {
         destroyImages(p, d);
         return false;

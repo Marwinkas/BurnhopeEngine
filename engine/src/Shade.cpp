@@ -159,8 +159,7 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     reflectUp.storageImg(38, HeapImg::ReflectHist1);
     reflectUp.ubo(52, HeapBuf::Ssr);
     reflectUp.ubo(73, static_cast<HeapBuf>(kSharcParamSlot));
-    reflectUp.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
-        heapBufOffset(*reflectUp.raw.heaps, kGradeSlot), static_cast<uint32_t>(reflectUp.raw.heaps->bufferDescSize));
+    reflectUp.grade();
     PassBindings relaxBind{heaps};
     relaxBind.ubo(0, HeapBuf::Frame);
     relaxBind.sampledImg(2, HeapImg::Depth);
@@ -170,8 +169,7 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     relaxBind.storageImg(36, HeapImg::Reflect);
     relaxBind.storageImg(37, HeapImg::ReflectHist0);
     relaxBind.storageImg(38, HeapImg::ReflectHist1);
-    relaxBind.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
-        heapBufOffset(*relaxBind.raw.heaps, kGradeSlot), static_cast<uint32_t>(relaxBind.raw.heaps->bufferDescSize));
+    relaxBind.grade();
     if (!createComputeShader(d, BH_SHADER_DIR "/shade.sky.comp.spv", sky, p.sky)
         || !createComputeShader(d, BH_SHADER_DIR "/shade.sun.comp.spv", sun, p.sun)
         || !createComputeShader(d, BH_SHADER_DIR "/shade.punctual.comp.spv", punctual, p.punctual)

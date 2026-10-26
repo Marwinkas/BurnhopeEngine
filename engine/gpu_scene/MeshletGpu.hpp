@@ -1,14 +1,11 @@
 #pragma once
 
+#include "gfx/Meshlet.hpp"
+
 #include <cstddef>
 #include <cstdint>
 
 namespace burnhope {
-
-struct GpuVertex {
-    float px, py, pz, pad0;
-    float nx, ny, nz, pad1;
-};
 
 struct GpuMeshlet {
     uint32_t vertexOffset = 0;

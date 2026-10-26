@@ -171,6 +171,51 @@ void adoptLoadedModel(SceneFrame& scene, const char* path, float minX, float min
     spdlog::info("actor {} index {} inst {} bounds {:.3f} {:.3f} {:.3f}", name, actor, scene.instanceCount, box.half[0], box.half[1], box.half[2]);
 }
 
+// Свои лампы модели идут перед накопленными. Первые три точечные или прожектор получают карты теней,
+// направленная задаёт солнце.
+void adoptSceneLights(SceneFrameImpl& scene, const LightGpuData* src, uint32_t count) {
+    if (src == nullptr || count == 0u) {
+        return;
+    }
+    LightGpuData merged[kLightCap]{};
+    const uint32_t add = std::min(count, kLightCap);
+    std::memcpy(merged, src, sizeof(LightGpuData) * add);
+    uint32_t n = add;
+    for (uint32_t i = 0; i < scene.importedCount && n < kLightCap; ++i) {
+        merged[n++] = scene.imported[i];
+    }
+    std::memcpy(scene.imported, merged, sizeof(LightGpuData) * n);
+    scene.importedCount = n;
+    int32_t slot = 0;
+    for (uint32_t i = 0; i < n; ++i) {
+        LightGpuData& light = scene.imported[i];
+        light.shadowMapIndex = -1;
+        const bool local = light.type == kLightPoint || light.type == kLightSpot;
+        if (local) {
+            if (light.radius < 8.0f) {
+                light.radius = 22.0f;
+            }
+            if (light.intensity < 4.0f) {
+                light.intensity = 8.0f;
+            }
+        }
+        if (light.type == kLightDirectional) {
+            scene.world.sunDir[0] = light.direction[0];
+            scene.world.sunDir[1] = light.direction[1];
+            scene.world.sunDir[2] = light.direction[2];
+            continue;
+        }
+        if (slot < 3 && local) {
+            light.shadowMapIndex = slot;
+            scene.world.lights[slot] = light;
+            slot += 1;
+        }
+    }
+    if (slot > 0) {
+        scene.world.lightCount = static_cast<uint32_t>(slot);
+    }
+}
+
 uint32_t remapTex(uint32_t index, uint32_t texBase) {
     return index == 0u ? 0u : texBase + index - 1u;
 }
@@ -451,36 +496,8 @@ bool sceneFrameLoadBhop(SceneFrame* scene, const char* path, bool plant) {
     scene->boxMax[1] = maxY;
     scene->boxMax[2] = maxZ;
     scene->shadowExtent = std::max(20.0f, extent);
-    scene->importedCount = std::min(view.info->lightCount, kLightCap);
-    if (view.lights != nullptr && scene->importedCount > 0) {
-        std::memcpy(scene->imported, view.lights, sizeof(LightGpuData) * scene->importedCount);
-        int32_t slot = 0;
-        for (uint32_t i = 0; i < scene->importedCount; ++i) {
-            scene->imported[i].shadowMapIndex = -1;
-            if (scene->imported[i].type == kLightPoint || scene->imported[i].type == kLightSpot) {
-                if (scene->imported[i].radius < 8.0f) {
-                    scene->imported[i].radius = 22.0f;
-                }
-                if (scene->imported[i].intensity < 4.0f) {
-                    scene->imported[i].intensity = 8.0f;
-                }
-            }
-            if (scene->imported[i].type == kLightDirectional) {
-                scene->world.sunDir[0] = scene->imported[i].direction[0];
-                scene->world.sunDir[1] = scene->imported[i].direction[1];
-                scene->world.sunDir[2] = scene->imported[i].direction[2];
-                continue;
-            }
-            if (slot < 3 && (scene->imported[i].type == kLightPoint || scene->imported[i].type == kLightSpot)) {
-                scene->imported[i].shadowMapIndex = slot;
-                scene->world.lights[slot] = scene->imported[i];
-                slot += 1;
-            }
-        }
-        if (slot > 0) {
-            scene->world.lightCount = static_cast<uint32_t>(slot);
-        }
-    }
+    scene->importedCount = 0;
+    adoptSceneLights(*scene, view.lights, view.info->lightCount);
     const float ground = minY + 2.0f;
     if (scene->importedCount == 0 && scene->world.lightCount >= 3) {
         scene->world.lights[0].pos[0] = cx;
@@ -805,43 +822,7 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
     scene->meshletGpu.clear();
     scene->cones = nullptr;
     scene->coneCount = 0;
-    if (view.lights != nullptr && view.info->lightCount > 0) {
-        LightGpuData merged[kLightCap]{};
-        uint32_t n = 0;
-        const uint32_t add = std::min(view.info->lightCount, kLightCap);
-        std::memcpy(merged, view.lights, sizeof(LightGpuData) * add);
-        n = add;
-        for (uint32_t i = 0; i < scene->importedCount && n < kLightCap; ++i) {
-            merged[n++] = scene->imported[i];
-        }
-        std::memcpy(scene->imported, merged, sizeof(LightGpuData) * n);
-        scene->importedCount = n;
-        int32_t slot = 0;
-        scene->world.lightCount = 0;
-        for (uint32_t i = 0; i < n; ++i) {
-            scene->imported[i].shadowMapIndex = -1;
-            if (scene->imported[i].type == kLightPoint || scene->imported[i].type == kLightSpot) {
-                if (scene->imported[i].radius < 8.0f) {
-                    scene->imported[i].radius = 22.0f;
-                }
-                if (scene->imported[i].intensity < 4.0f) {
-                    scene->imported[i].intensity = 8.0f;
-                }
-            }
-            if (scene->imported[i].type == kLightDirectional) {
-                scene->world.sunDir[0] = scene->imported[i].direction[0];
-                scene->world.sunDir[1] = scene->imported[i].direction[1];
-                scene->world.sunDir[2] = scene->imported[i].direction[2];
-                continue;
-            }
-            if (slot < 3 && (scene->imported[i].type == kLightPoint || scene->imported[i].type == kLightSpot)) {
-                scene->imported[i].shadowMapIndex = slot;
-                scene->world.lights[slot] = scene->imported[i];
-                slot += 1;
-            }
-        }
-        scene->world.lightCount = static_cast<uint32_t>(slot);
-    }
+    adoptSceneLights(*scene, view.lights, view.info->lightCount);
     const float extent = std::max(maxX - minX, std::max(maxY - minY, maxZ - minZ));
     scene->shadowExtent = std::max(20.0f, extent);
     scene->farPlane = std::max(scene->farPlane, std::max(400.0f, extent * 4.0f));

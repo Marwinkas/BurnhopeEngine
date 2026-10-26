@@ -256,9 +256,18 @@ struct PassBindings {
         ubo(49, HeapBuf::Sun);
     }
 
-    void ubo(uint32_t binding, HeapBuf slot, uint32_t set = 0) {
+    void ubo(uint32_t binding, uint32_t slot, uint32_t set = 0) {
         raw.push(set, binding, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
-            heapBufOffset(*raw.heaps, static_cast<uint32_t>(slot)), static_cast<uint32_t>(raw.heaps->bufferDescSize));
+            heapBufOffset(*raw.heaps, slot), static_cast<uint32_t>(raw.heaps->bufferDescSize));
+    }
+
+    void ubo(uint32_t binding, HeapBuf slot, uint32_t set = 0) {
+        ubo(binding, static_cast<uint32_t>(slot), set);
+    }
+
+    // Блок грейда кадра: общий для тонмапа, шейдинга и денойзеров.
+    void grade(uint32_t binding = 60, uint32_t set = 0) {
+        ubo(binding, kGradeSlot, set);
     }
 
     void storageBuf(uint32_t binding, uint32_t slot, bool readOnly = true, uint32_t set = 0) {

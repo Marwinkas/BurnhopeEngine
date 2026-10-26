@@ -172,27 +172,10 @@ void sceneFrameSetBlock(SceneFrame* scene, const SceneBlock& block) {
     SceneBlock stored = block;
     stored.passMask = sceneBlockPassMask(stored);
     scene->block = stored;
-    const SceneTweaks tweaks = sceneBlockTweaks(stored);
+    scene->tweaks = sceneBlockTweaks(stored);
+    SceneTweaks& tweaks = scene->tweaks;
+    tweaks.tonemapper = tweaks.tonemapper > 7u ? 0u : tweaks.tonemapper;
     scene->hud = sceneBlockPost(block);
-    scene->forceLod = tweaks.forceLod;
-    scene->passMask = tweaks.passMask;
-    scene->lightProfile = tweaks.lightProfile;
-    scene->sscsReach = tweaks.sscsReach;
-    scene->sscsThick = tweaks.sscsThick;
-    scene->sscsSteps = tweaks.sscsSteps;
-    scene->sscsPx = tweaks.sscsPx;
-    scene->ssrcBase = tweaks.ssrcBase;
-    scene->ssrcThick = tweaks.ssrcThick;
-    scene->ssrcCap = tweaks.ssrcCap;
-    scene->ssrcSteps = tweaks.ssrcSteps;
-    scene->rcRays = tweaks.rcRays;
-    scene->rcSpacing = tweaks.rcSpacing;
-    scene->rcIntensity = tweaks.rcIntensity;
-    scene->rcMax = tweaks.rcMax;
-    scene->rcSun = tweaks.rcSun;
-    scene->rcBounce = tweaks.rcBounce;
-    scene->giGain = tweaks.giGain;
-    scene->sharcDenoise = tweaks.sharcDenoise;
     const std::span<const float> restir = sceneBlockSpan(block, kScRestir, kScRestirN);
     scene->restir.knobLocal = static_cast<uint32_t>(std::clamp(restir[0], 0.0f, 16.0f));
     scene->restir.knobSpatial = static_cast<uint32_t>(std::clamp(restir[1], 0.0f, 32.0f));
@@ -225,7 +208,6 @@ void sceneFrameSetBlock(SceneFrame* scene, const SceneBlock& block) {
     scene->restir.knobSunDisk = std::clamp(tweaks.sunAngle + tweaks.sunSoft, 0.0f, 8.0f);
     scene->fsr.quality = tweaks.fsrQuality > 4u ? 0u : tweaks.fsrQuality;
     scene->fsr.sharpness = std::clamp(tweaks.fsrSharpness, 0.0f, 1.0f);
-    scene->bloomThreshold = tweaks.bloomThreshold;
     scene->rainRipple = std::clamp(tweaks.rainRipple, 0.0f, 1.0f);
     if (Weather* climate = scene->weatherEnt.try_get_mut<Weather>()) {
         weatherGoals(*climate, tweaks.cloudCoverage, tweaks.cloudDensity, tweaks.rainAmount, tweaks.rainWet, tweaks.fogDensity, tweaks.sunZenith, tweaks.sunAzimuth, tweaks.windSpeed, tweaks.windYaw, tweaks.temperatureC, tweaks.dayLength, tweaks.timeOfDay, tweaks.clockSun);
@@ -256,13 +238,7 @@ void sceneFrameSetBlock(SceneFrame* scene, const SceneBlock& block) {
         scene->atmosphere.cloudCoverage = tweaks.cloudCoverage;
         scene->atmosphere.cloudDensity = tweaks.cloudDensity;
     }
-    scene->sunEnabled = tweaks.sunEnabled != 0;
-    scene->sunCast = tweaks.sunCast != 0;
-    scene->sunCsm = tweaks.sunCsm != 0;
-    scene->sunKelvin = tweaks.sunKelvin;
-    scene->sunIndirect = tweaks.sunIndirect;
-    scene->tonemapper = tweaks.tonemapper > 7u ? 0u : tweaks.tonemapper;
-    scene->freeze = tweaks.freeze;
+    scene->tweaks.freeze = tweaks.freeze;
 }
 
 void sceneFrameCamera(SceneFrame* scene, float fovDeg, float nearZ, float farZ) {
@@ -490,19 +466,19 @@ void sceneFillUniforms(SceneFrame* scene, Device& device, const Swapchain& swap,
     }
     scene->atmosphere.time = scene->skyTime;
     scene->atmosphere.parity = (scene->frameCursor & 1u) != 0u ? 1.0f : 0.0f;
-    if (!scene->sunEnabled) {
+    if (!scene->tweaks.sunEnabled) {
         scene->atmosphere.sunIntensity = 0.0f;
     }
     atmosphereApply(lit, scene->atmosphere);
     lit.sunDirIntensity[3] *= scene->hud.sunGain;
-    if (!scene->sunEnabled) {
+    if (!scene->tweaks.sunEnabled) {
         lit.sunDirIntensity[3] = 0.0f;
     }
-    lit.pad[3] = scene->sunIndirect;
+    lit.pad[3] = scene->tweaks.sunIndirect;
     float kelvinR = 1.0f;
     float kelvinG = 1.0f;
     float kelvinB = 1.0f;
-    colorFromKelvin(scene->sunKelvin, kelvinR, kelvinG, kelvinB);
+    colorFromKelvin(scene->tweaks.sunKelvin, kelvinR, kelvinG, kelvinB);
     lit.sunColor[0] = scene->hud.sunR * kelvinR;
     lit.sunColor[1] = scene->hud.sunG * kelvinG;
     lit.sunColor[2] = scene->hud.sunB * kelvinB;
@@ -551,12 +527,12 @@ void sceneFillUniforms(SceneFrame* scene, Device& device, const Swapchain& swap,
     gpu.disableFrustum = scene->showFrustum ? 0u : 1u;
     gpu.disableSubpixel = scene->showSubpixel ? 0u : 1u;
     gpu.disableShadow = scene->showShadow ? 0u : 1u;
-    const float sunIndirect = scene->sunIndirect;
+    const float sunIndirect = scene->tweaks.sunIndirect;
     std::memcpy(&gpu.debugPad[1], &sunIndirect, sizeof(sunIndirect));
     gpu.disableBackface = scene->showBackface ? 0u : 1u;
     gpu.disableScreen = scene->showScreen ? 0u : 1u;
     gpu.disableBehind = scene->showBehind ? 0u : 1u;
-    if (scene->freeze) {
+    if (scene->tweaks.freeze) {
         if (!scene->freezeHeld) {
             std::memcpy(scene->freezeVp, cam.viewProj.m, sizeof(scene->freezeVp));
             scene->freezeHeld = true;
@@ -565,10 +541,10 @@ void sceneFillUniforms(SceneFrame* scene, Device& device, const Swapchain& swap,
         scene->freezeHeld = false;
     }
     std::memcpy(gpu.freezeVp, scene->freezeVp, sizeof(gpu.freezeVp));
-    knob.flags.forceLod = scene->forceLod;
-    knob.flags.passMask = scene->passMask;
-    knob.flags.lightProfile = scene->lightProfile;
-    if (scene->freeze) {
+    knob.flags.forceLod = scene->tweaks.forceLod;
+    knob.flags.passMask = scene->tweaks.passMask;
+    knob.flags.lightProfile = scene->tweaks.lightProfile;
+    if (scene->tweaks.freeze) {
         knob.flags.passMask |= 64u;
     } else {
         knob.flags.passMask &= ~64u;
@@ -591,10 +567,10 @@ void sceneFillUniforms(SceneFrame* scene, Device& device, const Swapchain& swap,
     knob.ssr.pad[2] = ssr[6];
     knob.ssr.maxDist = ssr[7];
     knob.ssr.bias = ssr[8];
-    knob.shade.sscsReach = scene->sscsReach;
-    knob.shade.sscsThick = scene->sscsThick;
-    knob.shade.sscsSteps = scene->sscsSteps;
-    knob.shade.sscsPx = scene->sscsPx;
+    knob.shade.sscsReach = scene->tweaks.sscsReach;
+    knob.shade.sscsThick = scene->tweaks.sscsThick;
+    knob.shade.sscsSteps = scene->tweaks.sscsSteps;
+    knob.shade.sscsPx = scene->tweaks.sscsPx;
     knob.shade.fogDensity = publishedFog;
     knob.shade.fogHeight = fog[1];
     knob.shade.fogScatter = fog[2];
@@ -605,20 +581,20 @@ void sceneFillUniforms(SceneFrame* scene, Device& device, const Swapchain& swap,
     knob.shade.ggx = scene->hud.ggx;
     knob.shade.gtaoAmt = scene->hud.gtao;
     knob.shade.lamp = scene->hud.lamp;
-    knob.shade.pad0 = scene->rcIntensity;
-    knob.shade.pad1 = scene->giGain;
+    knob.shade.pad0 = scene->tweaks.rcIntensity;
+    knob.shade.pad1 = scene->tweaks.giGain;
     knob.ssrc.strength = scene->hud.ssrc;
-    knob.ssrc.base = scene->ssrcBase;
-    knob.ssrc.thick = scene->ssrcThick;
-    knob.ssrc.cap = scene->ssrcCap;
-    knob.ssrc.steps = scene->ssrcSteps;
-    knob.rc.rays = scene->rcRays;
-    knob.rc.spacing = scene->rcSpacing;
-    knob.rc.intensity = scene->rcIntensity;
-    knob.rc.maxDist = scene->rcMax;
+    knob.ssrc.base = scene->tweaks.ssrcBase;
+    knob.ssrc.thick = scene->tweaks.ssrcThick;
+    knob.ssrc.cap = scene->tweaks.ssrcCap;
+    knob.ssrc.steps = scene->tweaks.ssrcSteps;
+    knob.rc.rays = scene->tweaks.rcRays;
+    knob.rc.spacing = scene->tweaks.rcSpacing;
+    knob.rc.intensity = scene->tweaks.rcIntensity;
+    knob.rc.maxDist = scene->tweaks.rcMax;
     knob.rc.cap = 8.0f;
-    knob.rc.sunScale = scene->rcSun;
-    knob.rc.bounce = scene->rcBounce;
+    knob.rc.sunScale = scene->tweaks.rcSun;
+    knob.rc.bounce = scene->tweaks.rcBounce;
     knob.rc.fogFalloff = fog[3];
     knob.rc.fogR = fog[4];
     knob.rc.fogG = fog[5];
@@ -628,8 +604,8 @@ void sceneFillUniforms(SceneFrame* scene, Device& device, const Swapchain& swap,
     knob.rc.fogOpacity = fog[9];
     knob.rc.fogInStart = fog[10];
     knob.rc.fogInSize = fog[2];
-    knob.bloom.threshold = scene->bloomThreshold;
-    knob.bloom.tonemapper = scene->tonemapper;
+    knob.bloom.threshold = scene->tweaks.bloomThreshold;
+    knob.bloom.tonemapper = scene->tweaks.tonemapper;
     knob.bloom.grain = scene->hud.grain;
     knob.bloom.bloomMix = scene->hud.bloom;
     knob.bloom.vignette = scene->hud.vignette;
@@ -641,7 +617,7 @@ void sceneFillUniforms(SceneFrame* scene, Device& device, const Swapchain& swap,
     knob.bloom.pad[4] = scene->tone.taaReady != 0u ? 0.12f : 1.0f;
     std::memcpy(static_cast<void*>(&knob.sliders), &scene->hud.exposure, sizeof(PostPack));
     gpu.debugPad[0] = scene->decalCount;
-    if (scene->sunEnabled && !scene->sunCast) {
+    if (scene->tweaks.sunEnabled && !scene->tweaks.sunCast) {
         gpu.debugPad[0] |= 0x80000000u;
     }
     gpu.debugPad[1] = kProbeGrid;
@@ -677,7 +653,7 @@ void sceneFillUniforms(SceneFrame* scene, Device& device, const Swapchain& swap,
     if (scene->texPageBuf.mapped != nullptr && scene->texFeedbackBuf.mapped != nullptr) {
         auto* pages = static_cast<uint32_t*>(scene->texPageBuf.mapped);
         auto* feedback = static_cast<uint32_t*>(scene->texFeedbackBuf.mapped);
-        if ((scene->passMask & 32768u) != 0u) {
+        if ((scene->tweaks.passMask & 32768u) != 0u) {
             std::memset(pages, 0, sizeof(uint32_t) * 64u);
             pages[0] = 1u;
             const uint32_t n = feedback[0] < 63u ? feedback[0] : 63u;

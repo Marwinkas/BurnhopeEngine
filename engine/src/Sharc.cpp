@@ -18,6 +18,10 @@
 namespace burnhope {
 namespace {
 
+constexpr VkFormat kImageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+constexpr VkImageUsageFlags kImageUsage =
+    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
 constexpr VkDeviceSize kParamStride = 256;
 
 void bindCache(PassBindings& bind, bool accum) {
@@ -51,12 +55,6 @@ bool sharcScreen(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
     return heapWriteStorage(heaps, d, kSharcColorSlot, p.color.address, p.color.size);
 }
 
-bool sharcImage(TrackedImage& img, Device& d, VkExtent2D extent) {
-    return recreateTracked(img, d, extent, VK_FORMAT_R16G16B16A16_SFLOAT,
-        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        VK_IMAGE_ASPECT_COLOR_BIT);
-}
-
 bool bindSharcImages(SharcPass& p, Device& d, DescriptorHeaps& heaps) {
     return heapWriteImage(heaps, d, static_cast<uint32_t>(HeapImg::SharcRaw), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
             p.raw.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
@@ -68,14 +66,6 @@ bool bindSharcImages(SharcPass& p, Device& d, DescriptorHeaps& heaps) {
             p.history.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT)
         && heapWriteImage(heaps, d, static_cast<uint32_t>(HeapImg::SharcTemporal), VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
             p.temporal.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
-}
-
-void fillZero(VkCommandBuffer cmd, const GpuBuffer& buf) {
-    rhiBufferBarrier(cmd, buf.buffer, 0, buf.size,
-        VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
-        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
-    vkCmdFillBuffer(cmd, buf.buffer, 0, buf.size, 0u);
-    bufferBarrierTransferToCompute(cmd, buf.buffer, 0, buf.size);
 }
 
 } // namespace
@@ -94,9 +84,9 @@ bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
         || !createDefaultGpuBuffer(p.resolved, d, resolvedBytes, false, VK_BUFFER_USAGE_TRANSFER_DST_BIT)
         || !createDefaultGpuBuffer(p.params, d, kParamStride * 2u, true)
         || !sharcScreen(p, d, heaps, extent)
-        || !sharcImage(p.raw, d, extent)
-        || !sharcImage(p.history, d, extent)
-        || !sharcImage(p.temporal, d, extent)) {
+        || !recreateTracked(p.raw, d, extent, kImageFormat, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT)
+        || !recreateTracked(p.history, d, extent, kImageFormat, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT)
+        || !recreateTracked(p.temporal, d, extent, kImageFormat, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT)) {
         spdlog::error("sharc buffers failed");
         sharcDestroy(p, d);
         return false;
@@ -156,8 +146,7 @@ bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
     reblurBind.storageImg(4, HeapImg::Surf0);
     reblurBind.storageImg(5, HeapImg::Surf1);
     reblurBind.knob(55, HeapBuf::Shade);
-    reblurBind.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
-        heapBufOffset(*reblurBind.raw.heaps, kGradeSlot), static_cast<uint32_t>(reblurBind.raw.heaps->bufferDescSize));
+    reblurBind.grade();
     reblurBind.storageBuf(77, kSharcColorSlot, false);
     const bool shaders = createComputeShader(d, BH_SHADER_DIR "/sharc.resolve.comp.spv", resolveBind, p.resolve)
         && createComputeShader(d, BH_SHADER_DIR "/sharc.update.comp.spv", updateBind, p.update)
@@ -180,8 +169,9 @@ bool sharcResize(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
         return true;
     }
     if (!sharcScreen(p, d, heaps, extent)
-        || !sharcImage(p.raw, d, extent) || !sharcImage(p.history, d, extent)
-        || !sharcImage(p.temporal, d, extent)
+        || !recreateTracked(p.raw, d, extent, kImageFormat, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT)
+        || !recreateTracked(p.history, d, extent, kImageFormat, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT)
+        || !recreateTracked(p.temporal, d, extent, kImageFormat, kImageUsage, VK_IMAGE_ASPECT_COLOR_BIT)
         || !bindSharcImages(p, d, heaps)) {
         spdlog::error("sharc resize failed");
         return false;
@@ -291,13 +281,13 @@ void sharcRecord(
     }
     bufferBarrierHostToShader(cmd, p.params.buffer, p.params.size);
     if (!p.cleared) {
-        fillZero(cmd, p.hash);
-        fillZero(cmd, p.accum);
-        fillZero(cmd, p.resolved);
+        bufferFillZeroToCompute(cmd, p.hash);
+        bufferFillZeroToCompute(cmd, p.accum);
+        bufferFillZeroToCompute(cmd, p.resolved);
         p.cleared = true;
     }
     if (!p.screenCleared && p.color.buffer != VK_NULL_HANDLE) {
-        fillZero(cmd, p.color);
+        bufferFillZeroToCompute(cmd, p.color);
         p.screenCleared = true;
     }
     if (p.history.layout == VK_IMAGE_LAYOUT_UNDEFINED || p.raw.layout == VK_IMAGE_LAYOUT_UNDEFINED

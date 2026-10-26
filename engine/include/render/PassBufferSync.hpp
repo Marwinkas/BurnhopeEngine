@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rhi/Barrier.hpp"
+#include "rhi/GpuBuffer.hpp"
 
 namespace burnhope {
 
@@ -77,6 +78,15 @@ inline void bufferBarrierToCompute(
     VkAccessFlags2 srcAccess,
     VkAccessFlags2 dstAccess = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT) {
     rhiBufferBarrier(cmd, buffer, offset, size, srcStage, srcAccess, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, dstAccess);
+}
+
+// Обнуляет буфер через transfer и отдаёт его compute.
+inline void bufferFillZeroToCompute(VkCommandBuffer cmd, const GpuBuffer& buf) {
+    rhiBufferBarrier(cmd, buf.buffer, 0, buf.size,
+        VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
+        VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+    vkCmdFillBuffer(cmd, buf.buffer, 0, buf.size, 0u);
+    bufferBarrierTransferToCompute(cmd, buf.buffer, 0, buf.size);
 }
 
 } // namespace burnhope

@@ -22,6 +22,13 @@ static_assert(std::is_trivially_copyable_v<GpuInstance>);
 static_assert(sizeof(GpuInstance) == 80);
 static_assert(sizeof(GpuInstance) % 16 == 0);
 
+// Точка модели в мире по аффинной world.
+inline void instanceTransformPoint(const GpuInstance& inst, float x, float y, float z, float& ox, float& oy, float& oz) {
+    ox = inst.world[0] * x + inst.world[1] * y + inst.world[2] * z + inst.world[3];
+    oy = inst.world[4] * x + inst.world[5] * y + inst.world[6] * z + inst.world[7];
+    oz = inst.world[8] * x + inst.world[9] * y + inst.world[10] * z + inst.world[11];
+}
+
 inline void instanceSet(GpuInstance& g, float x, float y, float z, float radius, uint32_t material, uint32_t mesh) {
     g = {};
     g.world[0] = g.world[5] = g.world[10] = 1.0f;

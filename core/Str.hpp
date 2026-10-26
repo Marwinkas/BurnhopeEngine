@@ -30,6 +30,22 @@ inline size_t strCopyCap(char* dst, size_t cap, const char* src) {
     return i;
 }
 
+// Дописывает "\n" и строку в конец dst. Не влезло — строка обрезается, а без места под перевод строки пропускается.
+inline size_t strAppendLine(char* dst, size_t cap, const char* line) {
+    if (dst == nullptr || cap == 0) {
+        return 0;
+    }
+    size_t used = 0;
+    while (used < cap && dst[used] != '\0') {
+        ++used;
+    }
+    if (used + 2 >= cap) {
+        return used;
+    }
+    dst[used++] = '\n';
+    return used + strCopyCap(dst + used, cap - used, line);
+}
+
 inline bool strSame(const char* a, const char* b) {
     if (a == nullptr || b == nullptr) {
         return a == b;

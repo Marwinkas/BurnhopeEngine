@@ -39,9 +39,7 @@ void resolveTexturePath(char* path, size_t cap, const char* root, const char* na
         }
         const size_t n = std::strlen(name);
         const size_t c = std::strlen(cut[i]);
-        std::string stem(name, n - c);
-        stem += full[i];
-        std::snprintf(path, cap, "%s/%s", root, stem.c_str());
+        std::snprintf(path, cap, "%s/%.*s%s", root, static_cast<int>(n - c), name, full[i]);
         if (fileReadable(path)) {
             return;
         }
@@ -229,32 +227,10 @@ void queueDocMap(SceneFrame& scene, uint8_t actor, uint8_t channel, const char* 
         return;
     }
     MaterialGpuData& mat = scene.ownedMat[id];
-    uint32_t* slot = &mat.albedoTexIndex;
-    uint32_t none = 0xffffffffu;
-    if (channel == 1u) {
-        slot = &mat.normalTexIndex;
-        none = 0;
-    } else if (channel == 2u) {
-        slot = &mat.ormTexIndex;
-        none = 0;
-    } else if (channel == 3u) {
-        slot = &mat.emissiveTexIndex;
-        none = 0;
-    } else if (channel == 4u) {
-        slot = &mat.pad[2];
-        none = 0;
-    } else if (channel == 5u) {
-        slot = &mat.pad[3];
-        none = 0;
-    } else if (channel == 6u) {
-        slot = &mat.aoTex;
-        none = 0;
-    } else if (channel == 7u) {
-        slot = &mat.pad[0];
-        none = 0;
-    } else if (channel == 8u) {
-        slot = &mat.tail[1];
-        none = 0;
+    uint32_t none = 0u;
+    uint32_t* slot = materialTexSlot(mat, channel, &none);
+    if (slot == nullptr) {
+        return;
     }
     if (*slot == none && (channel != 2u || (mat.flags & kMatOrm) == 0u)) {
         return;
@@ -730,25 +706,11 @@ void takeQueuedTexture(SceneFrameImpl& s, Device& device) {
             continue;
         }
         MaterialGpuData& mat = s.ownedMat[matId];
-        if (job.channel == 0u) {
-            mat.albedoTexIndex = slot;
-        } else if (job.channel == 1u) {
-            mat.normalTexIndex = slot;
-        } else if (job.channel == 2u) {
-            mat.ormTexIndex = slot;
+        if (uint32_t* texSlot = materialTexSlot(mat, job.channel)) {
+            *texSlot = slot;
+        }
+        if (job.channel == 2u) {
             mat.flags |= kMatOrm;
-        } else if (job.channel == 3u) {
-            mat.emissiveTexIndex = slot;
-        } else if (job.channel == 4u) {
-            mat.pad[2] = slot;
-        } else if (job.channel == 5u) {
-            mat.pad[3] = slot;
-        } else if (job.channel == 6u) {
-            mat.aoTex = slot;
-        } else if (job.channel == 7u) {
-            mat.pad[0] = slot;
-        } else if (job.channel == 8u) {
-            mat.tail[1] = slot;
         }
         if (s.materialsBuf.mapped != nullptr) {
             static_cast<MaterialGpuData*>(s.materialsBuf.mapped)[matId] = mat;

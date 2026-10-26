@@ -33,6 +33,11 @@ struct SceneInstance {
     uint32_t pad[2]{};
 };
 
+struct GpuVertex {
+    float px, py, pz, pad0;
+    float nx, ny, nz, pad1;
+};
+
 struct MeshletVertex {
     float pos[3]{};
     uint32_t packedNormal = 0;

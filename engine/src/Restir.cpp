@@ -435,8 +435,7 @@ bool restirCreate(RestirPass& p, Device& d, const DescriptorHeaps& heaps, VkExte
     sigma.storageImg(26, HeapImg::SigmaPenumbra);
     sigma.storageImg(27, HeapImg::SigmaSun);
     sigma.storageImg(28, HeapImg::SigmaHist);
-    sigma.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
-        heapBufOffset(*sigma.raw.heaps, kGradeSlot), static_cast<uint32_t>(sigma.raw.heaps->bufferDescSize));
+    sigma.grade();
     di.storageBuf(19, HeapBuf::Lights, true);
     di.storageBuf(20, HeapBuf::Materials, true);
     di.sampledImg(21, HeapImg::Textures);
@@ -458,8 +457,7 @@ bool restirCreate(RestirPass& p, Device& d, const DescriptorHeaps& heaps, VkExte
     fast.storageBuf(23, HeapBuf::ClusterIndex, true);
     fast.storageImg(26, HeapImg::SigmaPenumbra);
     fast.storageImg(28, HeapImg::SigmaHist);
-    fast.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
-        heapBufOffset(*fast.raw.heaps, kGradeSlot), static_cast<uint32_t>(fast.raw.heaps->bufferDescSize));
+    fast.grade();
     if (!createComputeShader(d, BH_SHADER_DIR "/restir.presample.comp.spv", presample, p.presample, sizeof(RestirPush))
         || !createComputeShader(d, BH_SHADER_DIR "/restir.di.comp.spv", di, p.di, sizeof(RestirPush))
         || !createComputeShader(d, BH_SHADER_DIR "/restir.fast.comp.spv", fast, p.fast, sizeof(RestirPush))
