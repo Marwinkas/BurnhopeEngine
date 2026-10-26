@@ -23,7 +23,7 @@
 #include "ui/widget/Label.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "Str.hpp"
-#include "ui/State.hpp"
+#include "ui/Nodes.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -84,7 +84,7 @@ void cmdView(void* user, uint16_t mode) {
         if (row.index == static_cast<int>(mode)) {
             title = row.name;
         }
-        if (row.index >= 0 && row.index < 20 && hud->viewRadio[row.index] < state.count) {
+        if (row.index >= 0 && row.index < 20) {
             uiCheckAssign(state, hud->viewRadio[row.index], row.index == static_cast<int>(mode) ? 1 : 0);
         }
     }
@@ -94,24 +94,6 @@ void cmdView(void* user, uint16_t mode) {
         uiButtonFitText(state, hud->viewBtn, title, 38.0f);
     }
     hud->viewWant = 0;
-}
-
-bool loadToolIcon(Canvas& canvas, uint8_t slot, const char* file) {
-    char rel[160]{};
-    std::snprintf(rel, sizeof(rel), "assets/icons/%s", file);
-    char face[640]{};
-    if (!platformResolveAsset(rel, face, sizeof(face))) {
-        return false;
-    }
-    return canvasLoadPhoto(canvas, slot, face);
-}
-
-bool fontBesideExe(Canvas& canvas) {
-    char face[640]{};
-    if (!platformResolveAsset("assets/fonts/Inter-Regular.ttf", face, sizeof(face))) {
-        return false;
-    }
-    return canvasSetFont(canvas, face, 20.0f);
 }
 
 } // namespace burnhope

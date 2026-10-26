@@ -32,7 +32,7 @@
 #include <spdlog/spdlog.h>
 
 #include "gpu_scene/SceneObject.hpp"
-#include "ui/State.hpp"
+#include "ui/Nodes.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -50,12 +50,7 @@ void shellDrop(Host& host, int slot, const char* path, void* user) {
     if (canvas == nullptr || canvas->state == nullptr) {
         return;
     }
-    filesOfferPath(*canvas->state, path);
-    if (strIsImagePath(path)) {
-        (void)canvasLoadPhoto(*canvas, 0, path);
-    } else if (strExtIs(path, ".json")) {
-        (void)uiImportJsonFile(*canvas->state, 0, path);
-    }
+    filesOfferDrop(*canvas, path);
     if (slot >= 0 && std::strcmp(host.view[slot].name, "scene") == 0 && user != nullptr) {
         projectImportModel(*static_cast<HudContext*>(user), path);
     }

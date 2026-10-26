@@ -30,6 +30,8 @@ inline const UiCalendarComponent* uiCal(const UiState& s) {
     return uiCalFind(s);
 }
 
+// The field the calendar popup writes its date into. Does nothing without a calendar in the state.
+void uiCalSetTarget(UiState& s, uint16_t field);
 void uiInstallCalendarBin(UiState& s);
 void calOnOpen(void* user, uint16_t id);
 

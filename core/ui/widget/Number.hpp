@@ -12,6 +12,8 @@ namespace burnhope {
 void uiWriteNumber(char* dst, std::size_t cap, float value);
 void uiRangeSet(UiState& s, uint16_t id, float value);
 bool uiRange(const UiState& s, uint16_t id, float& value, float& minV, float& maxV);
+// Current value of a range control, or `fallback` when `id` holds none.
+[[nodiscard]] float uiRangeVal(const UiState& s, uint16_t id, float fallback);
 void dragSpin(UiState& s, uint16_t id, float x);
 uint16_t uiNumber(UiState& s, uint16_t parent, float value, float minV, float maxV, float step, UiValueChangeFn onChange = nullptr, void* user = nullptr, float width = 0.0f, float height = 0.0f, float shrink = 0.0f);
 void uiNumberFill(UiState& s, uint16_t id, bool showFillProgress);

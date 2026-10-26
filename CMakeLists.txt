@@ -124,6 +124,9 @@ file(GLOB_RECURSE BH_ALL_HEADERS CONFIGURE_DEPENDS ${BH_CORE}/*.hpp ${CMAKE_SOUR
 list(REMOVE_ITEM BH_ALL_HEADERS ${BH_CORE}/ui/State.hpp)
 bh_firewall("headers must not import ui/State.hpp; include it from the .cpp"
     "ui/State\\.hpp" ${BH_ALL_HEADERS})
+file(GLOB_RECURSE BH_DEMO_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/demo/*.cpp ${CMAKE_SOURCE_DIR}/demo/*.hpp)
+bh_firewall("demo must not import ui/State.hpp or flecs; it reaches the UI through the id-based facades"
+    "ui/State\\.hpp|flecs\\.h" ${BH_DEMO_SOURCES})
 file(GLOB BH_UI_BRICK_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/ui/widget/Label.* ${BH_CORE}/ui/widget/Button.* ${BH_CORE}/ui/widget/Check.*
     ${BH_CORE}/ui/widget/Field.* ${BH_CORE}/ui/widget/FieldFilter.* ${BH_CORE}/ui/widget/TextEdit.*

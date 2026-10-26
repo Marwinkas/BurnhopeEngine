@@ -406,6 +406,12 @@ UiCalendarComponent* uiCalFind(UiState& s) {
     return uiCollect<UiCalendarComponent>(s, holders, kUiCap) > 0 ? s.ent[holders[0]].try_get_mut<UiCalendarComponent>() : nullptr;
 }
 
+void uiCalSetTarget(UiState& s, uint16_t field) {
+    if (UiCalendarComponent* cal = uiCalFind(s)) {
+        cal->calTarget = field;
+    }
+}
+
 const UiCalendarComponent* uiCalFind(const UiState& s) {
     uint16_t holders[kUiCap];
     return uiCollect<UiCalendarComponent>(s, holders, kUiCap) > 0 ? s.ent[holders[0]].try_get<UiCalendarComponent>() : nullptr;

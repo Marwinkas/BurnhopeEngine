@@ -1,5 +1,6 @@
 #include "app/Engine.hpp"
 #include "app/HudBuild.hpp"
+#include "app/SceneBlockMap.hpp"
 
 #include "asset/ProjectDoc.hpp"
 #include "files/Browser.hpp"
@@ -12,7 +13,7 @@
 #include "host/PropGrid.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "Str.hpp"
-#include "ui/State.hpp"
+#include "ui/Nodes.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -34,34 +35,11 @@ void openMaterialFile(HudContext& hud, const char* path) {
     }
     UiState& s = *hud.tool.canvas->state;
     auto put = [&](uint16_t index, float value) { hud.bind.write(s, index, value); };
-    put(kScMatBase0, hud.matDoc.base[0]);
-    put(kScMatBase1, hud.matDoc.base[1]);
-    put(kScMatBase2, hud.matDoc.base[2]);
-    put(kScMatRough, hud.matDoc.roughness);
-    put(kScMatMetal, hud.matDoc.metallic);
-    put(kScMatEmissive, hud.matDoc.emissive);
-    put(kScMatAlbedoGain, hud.matDoc.albedoGain);
-    put(kScMatNormalGain, hud.matDoc.normalGain);
-    put(kScMatOrmGain, hud.matDoc.ormGain);
+    for (const ScalarField& field : kDocFields) {
+        put(field.scalar, scalarLoad(hud.matDoc, field.offset));
+    }
     put(kScMatEmissiveGain, hud.matDoc.emissiveGain > 0.0f ? hud.matDoc.emissiveGain : hud.matDoc.emissive);
-    put(kScMatReflect, hud.matDoc.reflectance);
-    put(kScMatAo, hud.matDoc.aoStrength);
-    put(kScMatNormal, hud.matDoc.normalScale);
-    put(kScMatCoat, hud.matDoc.clearcoat);
-    put(kScMatCoatRough, hud.matDoc.clearcoatRoughness);
-    put(kScMatGrid, hud.matDoc.worldGridSize);
-    put(kScMatSharp, hud.matDoc.triplanarSharpness);
-    put(kScMatUvX, hud.matDoc.uvTiling[0]);
-    put(kScMatUvY, hud.matDoc.uvTiling[1]);
     put(kScMatUvRot, hud.matDoc.uvRotation * 57.2957795f);
-    put(kScMatEm0, hud.matDoc.emissiveColor[0]);
-    put(kScMatEm1, hud.matDoc.emissiveColor[1]);
-    put(kScMatEm2, hud.matDoc.emissiveColor[2]);
-    put(kScMatHeight, hud.matDoc.heightScale);
-    put(kScMatOpacity, hud.matDoc.baseA);
-    put(kScMatUvOffX, hud.matDoc.uvOffset[0]);
-    put(kScMatUvOffY, hud.matDoc.uvOffset[1]);
-    put(kScMatCutoff, hud.matDoc.alphaCutoff);
     const uint16_t bit[] = {kFlMatWorld, kFlMatDouble, kFlMatAlpha, kFlMatFlip, kFlMatUnlit, kFlMatRepeat, kFlMatPack};
     const uint8_t on[] = {
         hud.matDoc.worldAligned, hud.matDoc.doubleSided, hud.matDoc.alphaCut, hud.matDoc.flipNormalY, hud.matDoc.unlit,
@@ -70,10 +48,7 @@ void openMaterialFile(HudContext& hud, const char* path) {
         if (bit[i] < 64u) {
             hud.block.flags[bit[i]] = on[i];
         }
-        const uint16_t id = hud.bind.idOf(bit[i], kBindFlag);
-        if (id < s.count) {
-            uiCheckAssign(s, id, on[i]);
-        }
+        uiCheckAssign(s, hud.bind.idOf(bit[i], kBindFlag), on[i]);
     }
     hudPaintMaterial(hud);
     uiPropShowMask(s, kSecMatFile);

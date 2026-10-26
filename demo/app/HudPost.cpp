@@ -2,13 +2,9 @@
 #include "app/HudBuild.hpp"
 #include "app/SceneBlockFill.hpp"
 
-#include "io/File.hpp"
-#include "platform/PlatformUtil.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Menu.hpp"
-
-#include <spdlog/spdlog.h>
 
 namespace burnhope {
 
@@ -24,26 +20,6 @@ void onImportFlag(void* user, uint16_t, uint8_t, uint16_t button, const char* la
     UiState& state = *hud->tool.canvas->state;
     uiMenuCaption(state, button, label);
     propApplyShow(state, hud->bind);
-}
-
-bool hudImportLayout(UiState& state, uint16_t parent, const char* asset, const char* key, HudContext& hud, const PropSlot* slots, uint16_t slotCount, const PropCommand* commands, uint16_t commandCount, const UiPaint& hidden) {
-    char path[512]{};
-    if (asset == nullptr || !platformResolveAsset(asset, path, sizeof(path))) {
-        spdlog::error("inspector layout was not found");
-        return false;
-    }
-    MappedFile file{};
-    if (!fileMapReadOnly(path, &file) || file.data == nullptr) {
-        spdlog::error("inspector layout did not map");
-        return false;
-    }
-    const std::string_view text{reinterpret_cast<const char*>(file.data), file.size};
-    const bool ok = propImport(state, parent, text, key, hud.bind, slots, slotCount, commands, commandCount, hidden, onImportFlag, &hud);
-    fileUnmap(&file);
-    if (!ok) {
-        spdlog::error("inspector layout {} did not import", key != nullptr ? key : "");
-    }
-    return ok;
 }
 
 void hudBuildPost(Canvas& canvas, HudContext* hud, uint16_t details, UiPaint hidden) {
@@ -78,7 +54,7 @@ void hudBuildPost(Canvas& canvas, HudContext* hud, uint16_t details, UiPaint hid
         {"weather.rain", wxRain, hud},
         {"weather.storm", wxStorm, hud},
     };
-    (void)hudImportLayout(*canvas.state, details, "assets/ui/inspector.json", "post", *hud, slots, static_cast<uint16_t>(sizeof slots / sizeof slots[0]), commands, 4, hidden);
+    (void)propImportAsset(*canvas.state, details, "assets/ui/inspector.json", "post", hud->bind, slots, static_cast<uint16_t>(sizeof slots / sizeof slots[0]), commands, 4, hidden, onImportFlag, hud);
 }
 
 } // namespace burnhope

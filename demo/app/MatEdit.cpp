@@ -12,25 +12,12 @@
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Number.hpp"
-#include "ui/State.hpp"
+#include "ui/Nodes.hpp"
 
 #include <cstdio>
 #include <cstring>
 
 namespace burnhope {
-
-namespace {
-
-struct MatHome {
-    uint16_t index = 0;
-    float home = 0.0f;
-    float home2 = 0.0f;
-    uint8_t kind = 0;
-};
-
-void onMatReset(void* user, uint16_t id);
-
-} // namespace
 
 UiState* matPageState(HudContext& hud) {
     if (hud.tool.canvas != nullptr && hud.tool.canvas->state != nullptr) {
@@ -89,52 +76,30 @@ void matOnPath(void* user, const char* path) {
     hudTakeTexture(*hit->hud, static_cast<uint8_t>(hit->kind - 1u), path);
 }
 
-uint16_t matResetBtn(UiState& s, HudContext& hud, uint16_t parent, uint16_t index, float home, float home2, uint8_t kind) {
-    const uint16_t id = uiIconBtn(s, parent, static_cast<uint8_t>(UiIcon::Reset), 22.0f, nullptr);
-    if (id >= s.count) {
-        return id;
-    }
-    uiSetGrow(s, id, -1.0f, 0.0f);
-    s.ent[id].set<MatHome>({index, home, home2, kind});
-    uiBind(s, id, onMatReset, &hud);
-    return id;
-}
-
-namespace {
-
-void onMatReset(void* user, uint16_t id) {
+void matOnReset(void* user, UiState& s, const UiResetHome& home) {
     auto* hud = static_cast<HudContext*>(user);
-    UiState* state = hud != nullptr ? matPageState(*hud) : nullptr;
-    if (hud == nullptr || state == nullptr || id >= state->count) {
+    if (hud == nullptr) {
         return;
     }
-    const MatHome* home = state->ent[id].try_get<MatHome>();
-    if (home == nullptr) {
-        return;
-    }
-    if (home->kind == 1) {
-        matApplyFlag(*hud, *state, home->index, home->home >= 0.5f ? 1u : 0u);
-    } else if (home->kind == 6) {
-        hudDocPath(hud->matDoc, static_cast<uint8_t>(home->index))[0] = '\0';
-        hudCommitMaps(*hud, static_cast<uint8_t>(home->index));
+    switch (static_cast<UiReset>(home.kind)) {
+    case UiReset::Flag:
+        matApplyFlag(*hud, s, home.index, home.home >= 0.5f ? 1u : 0u);
+        break;
+    case UiReset::Custom:
+        hudDocPath(hud->matDoc, static_cast<uint8_t>(home.index))[0] = '\0';
+        hudCommitMaps(*hud, static_cast<uint8_t>(home.index));
         hud->atlasDirty = 1;
         hud->previewDirty = 1;
-    } else if (home->kind == 2) {
-        hud->bind.write(*state, home->index, home->home);
-        hud->bind.write(*state, static_cast<uint16_t>(home->index + 1u), home->home2);
-    } else if (home->kind == 3) {
-        hud->bind.write(*state, home->index, 1.0f);
-        hud->bind.write(*state, static_cast<uint16_t>(home->index + 1u), 1.0f);
-        hud->bind.write(*state, static_cast<uint16_t>(home->index + 2u), 1.0f);
+        break;
+    case UiReset::Rgb:
         hud->previewDirty = 1;
         hud->atlasDirty = 1;
-    } else {
-        hud->bind.write(*state, home->index, home->home);
+        break;
+    default:
+        break;
     }
     hudPaintMaterial(*hud);
     saveOpenMaterial(*hud);
 }
-
-} // namespace
 
 } // namespace burnhope

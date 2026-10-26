@@ -47,7 +47,7 @@ void hudBuildInspector(Canvas& canvas, HudContext* hud, uint16_t details, uint16
     hudBuildPost(canvas, hud, details, hidden);
     uint16_t matFile = kUiNone;
     const PropSlot matSlot[] = {{"matFile", &matFile}};
-    (void)hudImportLayout(*canvas.state, details, "assets/ui/inspector.json", "material", *hud, matSlot, 1, nullptr, 0, hidden);
+    (void)propImportAsset(*canvas.state, details, "assets/ui/inspector.json", "material", hud->bind, matSlot, 1, nullptr, 0, hidden, onImportFlag, hud);
     hudBuildMaterialPage(canvas, hud, matFile);
     panel = stats;
     hud->ids.statList = uiVirtual(*canvas.state, panel, 16.0f);

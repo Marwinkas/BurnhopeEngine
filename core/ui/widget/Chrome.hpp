@@ -33,6 +33,8 @@ void uiChromeClear(UiState& s);
 void uiChromePark(UiState& s, uint16_t home, const UiChromeGesture& gesture);
 
 uint16_t uiWindowChrome(UiState& s, uint16_t parent);
+// A free-floating resizable window panel (absolute, Window token) of w x h at x, y under `parent`.
+uint16_t uiFloatWindow(UiState& s, uint16_t parent, float x, float y, float w, float h, bool visible = false);
 // Tags a node as a window that can be resized from its edges / as a drag handle for its window.
 void uiSetResizable(UiState& s, uint16_t id);
 void uiSetTitleBar(UiState& s, uint16_t id);

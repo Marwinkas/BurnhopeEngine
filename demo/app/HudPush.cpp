@@ -18,7 +18,7 @@
 #include "ui/widget/Virtual.hpp"
 #include "ui/Text.hpp"
 #include "ui/Panel.hpp"
-#include "ui/State.hpp"
+#include "ui/Nodes.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -36,9 +36,6 @@ void fillGpuStat(void* user, uint32_t index, char* dst, uint8_t cap) {
 }
 
 void placeStats(UiState& state, const HudContext& hud) {
-    if (hud.overlay >= state.count) {
-        return;
-    }
     const uint16_t origin = uiParent(state, hud.overlay);
     const UiBox root = uiNodeBox(state, origin);
     const UiBox view = uiNodeBox(state, hud.viewPane);
@@ -123,9 +120,7 @@ void syncViewport(Engine& e, Canvas& canvas) {
         if (sceneFrameCameraMode(scene) != 0 && state != nullptr) {
             sceneFrameCameraRelease(scene);
             for (uint8_t i = 0; i < 6; ++i) {
-                if (hud.camAxis[i] < state->count) {
-                    uiCheckAssign(*state, hud.camAxis[i], 0);
-                }
+                uiCheckAssign(*state, hud.camAxis[i], 0);
             }
             hud.viewSent = 0;
             uiNotifyVisualDirty(*state);
@@ -154,7 +149,7 @@ void syncViewport(Engine& e, Canvas& canvas) {
         anyStat = anyStat || hud.statOn[i] != 0;
     }
     uiShow(*state, hud.overlay, anyStat);
-    if (anyStat && hud.overlay < state->count) {
+    if (anyStat) {
         HostMeters meters{};
         platformHostMeters(hud.sampler, meters);
         const double ram = static_cast<double>(meters.rss) / (1024.0 * 1024.0);

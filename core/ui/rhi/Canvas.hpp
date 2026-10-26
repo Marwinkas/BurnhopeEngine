@@ -71,7 +71,11 @@ bool canvasListen(Canvas& c, UiValueFn fn, void* user);
 [[nodiscard]] bool canvasUploadPhoto(Canvas& c, uint8_t slot, const uint8_t* rgba, uint32_t width, uint32_t height);
 [[nodiscard]] const PhotoMeta* canvasPhotoMeta(const Canvas& c, uint8_t slot);
 [[nodiscard]] bool canvasSetFont(Canvas& c, const char* path, float pixelSize);
+// Loads the default SDF face, or assets/fonts/Inter-Regular.ttf beside the executable when the default is missing.
 [[nodiscard]] bool canvasUseFont(Canvas& c, float pixelSize);
+[[nodiscard]] bool canvasHasFont(const Canvas& c);
+// Loads assets/icons/<iconFile> into photo slot `slot`.
+[[nodiscard]] bool canvasLoadIcon(Canvas& c, uint8_t slot, const char* iconFile);
 
 // 8. Делегаты оконных операций.
 void canvasTakeWindowOps(Canvas& c, WindowOps& out);

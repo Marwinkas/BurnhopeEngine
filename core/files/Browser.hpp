@@ -24,6 +24,8 @@ void filesOpenProject(UiState& s, const char* path);
 // Local photo indices (heap slot minus 662). Pass 255 when the icon is missing.
 void filesIconSlots(UiState& s, uint8_t folderSlot, uint8_t fileSlot);
 void filesOfferPath(UiState& s, const char* path);
+// Offers a dropped path to the browser, then shows an image in photo slot 0 or imports a .json layout.
+void filesOfferDrop(Canvas& canvas, const char* path);
 void filesLoadIcons(Canvas& c);
 // Name of the item being dragged out of the file list while the pointer is over `pane`, else nullptr.
 // Writes the pointer position to outX/outY. The name stays valid until the listing reloads.

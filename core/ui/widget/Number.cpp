@@ -30,6 +30,13 @@ bool uiRange(const UiState& s, uint16_t id, float& value, float& minV, float& ma
     return true;
 }
 
+float uiRangeVal(const UiState& s, uint16_t id, float fallback) {
+    float value = fallback;
+    float minV = 0.0f;
+    float maxV = 1.0f;
+    return uiRange(s, id, value, minV, maxV) ? value : fallback;
+}
+
 void dragSpin(UiState& s, uint16_t id, float x) {
     auto* range = s.ent[id].try_get_mut<UiRange>();
     if (range == nullptr) {

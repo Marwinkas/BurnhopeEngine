@@ -99,6 +99,8 @@ inline const UiColorPickerComponent* uiColor(const UiState& s) {
     return uiColorFind(s);
 }
 
+// The field the colour popup writes its hex into. Does nothing without a picker in the state.
+void uiColorSetTarget(UiState& s, uint16_t field);
 void uiInstallColorBin(UiState& s);
 
 void uiSetColorBook(UiState& s, ColorBook* book);

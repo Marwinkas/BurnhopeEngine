@@ -27,13 +27,7 @@ void setSlide(Canvas& canvas, uint16_t id, float value) {
 
 
 float slideAt(const Canvas& canvas, uint16_t id, float fallback) {
-    float value = fallback;
-    float minV = 0.0f;
-    float maxV = 1.0f;
-    if (canvas.state == nullptr || !uiRange(*canvas.state, id, value, minV, maxV)) {
-        return fallback;
-    }
-    return value;
+    return canvas.state != nullptr ? uiRangeVal(*canvas.state, id, fallback) : fallback;
 }
 
 bool checkOn(const Canvas& canvas, uint16_t id, bool fallback) {

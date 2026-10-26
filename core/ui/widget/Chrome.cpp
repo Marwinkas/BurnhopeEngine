@@ -21,6 +21,24 @@ void onMax(void* user, uint16_t) {
 
 } // namespace
 
+uint16_t uiFloatWindow(UiState& s, uint16_t parent, float x, float y, float w, float h, bool visible) {
+    UiFlex flex{};
+    flex.position = UiPosition::Absolute;
+    flex.posX = x;
+    flex.posY = y;
+    flex.widthMode = UiSize::Px;
+    flex.width = w;
+    flex.heightMode = UiSize::Px;
+    flex.height = h;
+    flex.pad = 10.0f;
+    flex.gap = 6.0f;
+    flex.shrink = 0.0f;
+    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Window, s.look.radius));
+    uiSetResizable(s, id);
+    uiShow(s, id, visible);
+    return id;
+}
+
 uint16_t uiWindowChrome(UiState& s, uint16_t parent) {
     UiFlex row{};
     row.direction = UiFlexDir::Row;

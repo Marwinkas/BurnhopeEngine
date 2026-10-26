@@ -3,12 +3,14 @@
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/rhi/Font.hpp"
 #include "ui/State.hpp"
+#include "platform/PlatformUtil.hpp"
 #include "platform/Trace.hpp"
 
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <span>
@@ -192,12 +194,24 @@ bool canvasSetFont(Canvas& c, const char* path, float pixelSize) {
     return true;
 }
 
+bool canvasHasFont(const Canvas& c) {
+    return c.state != nullptr && c.state->font.ready;
+}
+
+bool canvasLoadIcon(Canvas& c, uint8_t slot, const char* iconFile) {
+    char rel[160]{};
+    std::snprintf(rel, sizeof(rel), "assets/icons/%s", iconFile != nullptr ? iconFile : "");
+    char path[640]{};
+    return platformResolveAsset(rel, path, sizeof(path)) && canvasLoadPhoto(c, slot, path);
+}
+
 bool canvasUseFont(Canvas& c, float pixelSize) {
     if (c.state == nullptr || c.device == nullptr || c.heaps == nullptr) {
         return false;
     }
     if (!fontLoadDefaultSdf(c.state->font, c.state->look, *c.device, *c.heaps, c.rhi.font, pixelSize)) {
-        return false;
+        char face[640]{};
+        return platformResolveAsset("assets/fonts/Inter-Regular.ttf", face, sizeof(face)) && canvasSetFont(c, face, pixelSize);
     }
     uiRendererUploadFontTable(c.rhi, *c.device, c.state->font);
     uiRestyle(*c.state);

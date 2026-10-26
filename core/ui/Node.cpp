@@ -780,4 +780,33 @@ UiState::UiState()
     }
 }
 
+void uiNotifyLayoutDirty(UiState& s) { s.layoutDirty = true; }
+void uiNotifyVisualDirty(UiState& s) { s.visualDirty = true; }
+void uiSetContextMenu(UiState& s, uint16_t node, uint16_t menu) {
+    if (node < s.count) {
+        s.contextOf[node] = menu;
+    }
+}
+uint16_t uiParent(const UiState& s, uint16_t id) {
+    return id < s.count ? s.parentOf[id] : kUiNone;
+}
+UiBox uiNodeBox(const UiState& s, uint16_t id) {
+    return id < s.count ? s.box[id] : UiBox{};
+}
+void uiApplyLook(UiState& s, bool warm) {
+    const float glyphH = s.look.glyphH;
+    const float glyphW = s.look.glyphW;
+    const float advance = s.look.advance;
+    const float title = s.look.titleBar;
+    const float border = s.look.resizeBorder;
+    s.altLook = warm;
+    s.look = warm ? uiLookWarm() : UiLook{};
+    s.look.glyphH = glyphH;
+    s.look.glyphW = glyphW;
+    s.look.advance = advance;
+    s.look.titleBar = title;
+    s.look.resizeBorder = border;
+    uiRestyle(s);
+}
+
 } // namespace burnhope

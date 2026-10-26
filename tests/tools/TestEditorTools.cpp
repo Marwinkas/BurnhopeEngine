@@ -195,6 +195,97 @@ TEST_CASE("slider and number share one scalar") {
     CHECK(value == doctest::Approx(0.1f));
 }
 
+namespace {
+
+struct ResetSeen {
+    int calls = 0;
+    uint8_t kind = 255;
+    uint16_t index = 0;
+};
+
+void onResetSeen(void* user, UiState&, const UiResetHome& home) {
+    auto* seen = static_cast<ResetSeen*>(user);
+    seen->calls += 1;
+    seen->kind = home.kind;
+    seen->index = home.index;
+}
+
+} // namespace
+
+TEST_CASE("reset buttons restore the scalar, the axes or the flag, then tell the app") {
+    UiState state;
+    uiWidgetsInit(state);
+    SceneBlock block{};
+    UiPropBinder binder;
+    binder.attach(block.scalars, 256, block.flags, 64);
+    ResetSeen seen;
+    binder.onReset = onResetSeen;
+    binder.resetUser = &seen;
+    const uint16_t root = spawn(state, kUiNone, px(400.0f, 200.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t number = binder.sliderNumber(state, root, 3, 0.25f, 0.0f, 1.0f, 0.01f);
+    const uint16_t floatBtn = binder.resetBtn(state, root, UiReset::Float, 3, 0.25f);
+    const UiPropVec2 axes = binder.vec2Reset(state, root, "Tiling", 10, 1.0f, 2.0f);
+    const uint16_t flagRow = binder.checkReset(state, root, "Double", 5, true);
+    CHECK(floatBtn != kUiNone);
+    CHECK(axes.row != kUiNone);
+    CHECK(flagRow != kUiNone);
+
+    binder.write(state, 3, 0.9f);
+    activate(state, floatBtn);
+    CHECK(block.scalars[3] == doctest::Approx(0.25f));
+    CHECK(uiRangeVal(state, number, -1.0f) == doctest::Approx(0.25f));
+    CHECK(seen.calls == 1);
+    CHECK(seen.kind == static_cast<uint8_t>(UiReset::Float));
+
+    binder.write(state, 10, 7.0f);
+    binder.write(state, 11, 8.0f);
+    uint16_t buttons[kUiCap];
+    const uint16_t found = uiCollect<UiResetHome>(state, buttons, kUiCap);
+    CHECK(found == 3);
+    uint16_t vecBtn = kUiNone;
+    uint16_t flagBtn = kUiNone;
+    for (uint16_t i = 0; i < found; ++i) {
+        const UiResetHome* home = state.ent[buttons[i]].try_get<UiResetHome>();
+        if (home->index == 10) {
+            vecBtn = buttons[i];
+        } else if (home->index == 5) {
+            flagBtn = buttons[i];
+        }
+    }
+    activate(state, vecBtn);
+    CHECK(block.scalars[10] == doctest::Approx(1.0f));
+    CHECK(block.scalars[11] == doctest::Approx(2.0f));
+    CHECK(seen.calls == 2);
+    CHECK(seen.index == 10);
+
+    block.flags[5] = 0;
+    activate(state, flagBtn);
+    CHECK(block.flags[5] == 1);
+    CHECK(seen.kind == static_cast<uint8_t>(UiReset::Flag));
+}
+
+TEST_CASE("float window is a resizable panel, hidden unless asked") {
+    UiState state;
+    uiWidgetsInit(state);
+    const uint16_t root = spawn(state, kUiNone, px(800.0f, 600.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t hidden = uiFloatWindow(state, root, 10.0f, 20.0f, 300.0f, 200.0f);
+    const uint16_t shown = uiFloatWindow(state, root, 40.0f, 50.0f, 100.0f, 100.0f, true);
+    CHECK(hidden != kUiNone);
+    CHECK(state.ent[hidden].has<UiResizable>());
+    CHECK(state.ent[shown].has<UiResizable>());
+    CHECK_FALSE(nodeShown(state, hidden));
+    CHECK(nodeShown(state, shown));
+    CHECK(uiParent(state, hidden) == root);
+}
+
+TEST_CASE("range value falls back for a node that holds none") {
+    UiState state;
+    uiWidgetsInit(state);
+    const uint16_t root = spawn(state, kUiNone, px(100.0f, 40.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    CHECK(uiRangeVal(state, root, 4.5f) == doctest::Approx(4.5f));
+    CHECK(uiRangeVal(state, kUiNone, 2.0f) == doctest::Approx(2.0f));
+}
+
 TEST_CASE("colour hex field shows the scalars it owns") {
     UiState state;
     uiWidgetsInit(state);

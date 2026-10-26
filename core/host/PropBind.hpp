@@ -38,6 +38,21 @@ struct UiVecLink {
     float last[3]{};
 };
 
+// What a reset button restores. Float: one scalar. Flag: one flag. Vec2: two scalars. Rgb: three scalars, all to `home`.
+// Custom restores nothing itself and leaves the work to onReset.
+enum class UiReset : uint8_t { Float, Flag, Vec2, Rgb, Custom };
+
+// Sits on the button built by resetBtn.
+struct UiResetHome {
+    uint16_t index = 0;
+    float home = 0.0f;
+    float home2 = 0.0f;
+    uint8_t kind = 0;
+};
+
+// Runs after the binder has restored the scalars of a reset button, for side effects the binder does not know.
+using UiResetFn = void (*)(void* user, UiState& s, const UiResetHome& home);
+
 struct UiPropBinder;
 
 // Sits on the hex field built by colorHex: where the colour lives and who to tell when the text is edited.
@@ -94,6 +109,8 @@ struct UiPropBinder {
     std::vector<UiShowRule> shown;
     std::deque<UiMenuPick> menus;
     std::deque<UiCommandPick> commands;
+    UiResetFn onReset = nullptr;
+    void* resetUser = nullptr;
 
     void attach(float* scalars, uint16_t scalarCount, uint8_t* flags, uint16_t flagCount);
     void clear();
@@ -111,6 +128,15 @@ struct UiPropBinder {
     // A swatch stacked over a #RRGGBB field on scalars rgbIndex..+2. withAlpha adds the scalar at alphaIndex as #RRGGBBAA
     // while it is below 1. *outDirty is set when the user edits the text. Returns the swatch.
     uint16_t colorHex(UiState& s, uint16_t parent, uint16_t rgbIndex, uint16_t alphaIndex, bool withAlpha, bool* outDirty = nullptr);
+    // A small reset button under `parent`: clicking it restores the scalars or flag at `index` to `home` (and `home2`
+    // for the second axis of a Vec2), then calls onReset. Returns the button.
+    uint16_t resetBtn(UiState& s, uint16_t parent, UiReset kind, uint16_t index, float home, float home2 = 0.0f);
+    // A check row with a reset button in its value slot.
+    uint16_t checkReset(UiState& s, uint16_t panel, const char* label, uint16_t flag, bool def);
+    // A two-entry choice row bound to `flag` with a reset button. Returns the choice.
+    uint16_t choiceReset(UiState& s, uint16_t panel, const char* label, const char* const* names, uint8_t count, void (*onPick)(void* user, uint8_t index), void* user, uint16_t flag);
+    // A two-axis number row on scalars ix and ix + 1 with a reset button on the row.
+    UiPropVec2 vec2Reset(UiState& s, uint16_t panel, const char* label, uint16_t ix, float x, float y, float minV = -64.0f, float maxV = 64.0f, float step = 0.01f);
     void sync(UiState& s);
     void syncSwatches(UiState& s);
     void write(UiState& s, uint16_t index, float value);

@@ -7,14 +7,13 @@
 #include "ui/rhi/Canvas.hpp"
 #include "ui/Style.hpp"
 #include "ui/widget/Choice.hpp"
-#include "ui/State.hpp"
+#include "ui/Nodes.hpp"
 
 namespace burnhope {
 
 void sceneHud(Canvas& canvas, void* user) {
     auto* hud = static_cast<HudContext*>(user);
-    const bool haveFont = canvas.state != nullptr && canvas.state->font.ready;
-    if (hud == nullptr || (!haveFont && !fontBesideExe(canvas) && !canvasUseFont(canvas, 20.0f)) || canvas.state == nullptr) {
+    if (hud == nullptr || (!canvasHasFont(canvas) && !canvasUseFont(canvas, 20.0f)) || canvas.state == nullptr) {
         return;
     }
     hud->shown = 0xff;
@@ -27,12 +26,12 @@ void sceneHud(Canvas& canvas, void* user) {
     }
     filesLoadIcons(canvas);
     canvasSetLook(canvas, uiLookInk());
-    (void)loadToolIcon(canvas, 2, "SelectMode.png");
-    (void)loadToolIcon(canvas, 3, "MoveMode.png");
-    (void)loadToolIcon(canvas, 4, "RotateMode.png");
-    (void)loadToolIcon(canvas, 5, "ScallingMode.png");
-    (void)loadToolIcon(canvas, 6, "Camera.png");
-    (void)loadToolIcon(canvas, 7, "Snap.png");
+    (void)canvasLoadIcon(canvas, 2, "SelectMode.png");
+    (void)canvasLoadIcon(canvas, 3, "MoveMode.png");
+    (void)canvasLoadIcon(canvas, 4, "RotateMode.png");
+    (void)canvasLoadIcon(canvas, 5, "ScallingMode.png");
+    (void)canvasLoadIcon(canvas, 6, "Camera.png");
+    (void)canvasLoadIcon(canvas, 7, "Snap.png");
     UiPaint hidden{};
     hidden.a = 0.0f;
     hud->bind.attach(hud->block.scalars, 256, hud->block.flags, 64);
@@ -99,9 +98,9 @@ void sceneHud(Canvas& canvas, void* user) {
             *slot.id = kUiNone;
         }
     }
-    (void)hudImportLayout(*canvas.state, kUiNone, "assets/ui/editor.json", "frame", *hud, slots,
+    (void)propImportAsset(*canvas.state, kUiNone, "assets/ui/editor.json", "frame", hud->bind, slots,
         static_cast<uint16_t>(sizeof slots / sizeof slots[0]), commands,
-        static_cast<uint16_t>(sizeof commands / sizeof commands[0]), hidden);
+        static_cast<uint16_t>(sizeof commands / sizeof commands[0]), hidden, onImportFlag, hud);
     uiBindChoice(*canvas.state, "spaceChoice", hud->space, nullptr, nullptr);
     uiBindChoice(*canvas.state, "pivotChoice", hud->pivotSpace, nullptr, nullptr);
     hudWire(canvas, hud, details, statsBody, files, detailsInner);

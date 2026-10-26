@@ -122,6 +122,18 @@ void filesOfferPath(UiState& s, const char* path) {
     uiSetFieldText(s, files->fileTarget, path);
 }
 
+void filesOfferDrop(Canvas& canvas, const char* path) {
+    if (canvas.state == nullptr || path == nullptr || path[0] == '\0') {
+        return;
+    }
+    filesOfferPath(*canvas.state, path);
+    if (strIsImagePath(path)) {
+        (void)canvasLoadPhoto(canvas, 0, path);
+    } else if (strExtIs(path, ".json")) {
+        (void)uiImportJsonFile(*canvas.state, 0, path);
+    }
+}
+
 void filesDropOnScene(UiState& s, uint16_t view, void (*fn)(void* user, const char* path, float x, float y), void* user) {
     Browser& b = fileBook(s);
     b.sceneView = view;

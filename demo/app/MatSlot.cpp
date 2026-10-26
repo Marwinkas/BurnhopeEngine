@@ -17,7 +17,7 @@
 #include "ui/widget/Label.hpp"
 #include "ui/widget/Number.hpp"
 #include "ui/widget/Slider.hpp"
-#include "ui/State.hpp"
+#include "ui/Nodes.hpp"
 
 #include <cstring>
 
@@ -80,17 +80,17 @@ void addThumb(UiState& s, HudContext& hud, uint16_t parent, uint8_t slot) {
 void addSlide(UiState& s, HudContext& hud, uint16_t parent, uint8_t slot) {
     const Slot& spec = kSlot[slot];
     hud.bind.sliderNumber(s, parent, spec.bind, spec.def, spec.lo, spec.hi, 0.01f);
-    matResetBtn(s, hud, parent, spec.bind, spec.def, 0.0f, 0);
+    (void)hud.bind.resetBtn(s, parent, UiReset::Float, spec.bind, spec.def);
 }
 
 void addColor(UiState& s, HudContext& hud, uint16_t parent, uint8_t slot) {
     const Slot& spec = kSlot[slot];
     hud.bind.colorHex(s, parent, spec.bind, kScMatOpacity, spec.bind == kScMatBase0, &hud.matEdited);
-    matResetBtn(s, hud, parent, spec.bind, 1.0f, 0.0f, 3);
+    (void)hud.bind.resetBtn(s, parent, UiReset::Rgb, spec.bind, 1.0f);
 }
 
 void showIf(UiState& s, uint16_t id, bool on) {
-    if (id == 0 || id >= s.count) {
+    if (id == 0) {
         return;
     }
     uiShow(s, id, on);
@@ -109,7 +109,7 @@ void matAddSlot(UiState& s, HudContext& hud, uint16_t panel, uint8_t slot) {
     } else if (spec.kind == 1) {
         addSlide(s, hud, value, slot);
     } else {
-        matResetBtn(s, hud, value, spec.channel, 0.0f, 0.0f, 6);
+        (void)hud.bind.resetBtn(s, value, UiReset::Custom, spec.channel, 0.0f);
     }
     if (spec.group == 2) {
         uiPropRowShow(s, value, false);

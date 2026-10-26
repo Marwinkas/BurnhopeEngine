@@ -21,7 +21,7 @@
 #include "ui/widget/Label.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Slider.hpp"
-#include "ui/State.hpp"
+#include "ui/Nodes.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -30,7 +30,6 @@
 
 namespace burnhope {
 
-void uiBuildShell(UiState& s);
 
 namespace {
 
@@ -210,7 +209,7 @@ void shellBuild(Canvas& canvas, void* user) {
         spdlog::error("app font was not set");
     }
     if (canvas.state != nullptr) {
-        uiBuildShell(*canvas.state);
+        uiBuildShell(*canvas.state, demo->sample);
     }
     if (colors != nullptr) {
         uiSetColorBook(*canvas.state, colors);
@@ -327,24 +326,12 @@ void shellBuild(Canvas& canvas, void* user) {
     (void)uiButton(s, inspector, {.label = "TOP", .height = textH, .ghost = true, .onClick = onEdgeTop, .user = demo});
     (void)uiButton(s, inspector, {.label = "BOTTOM", .height = textH, .ghost = true, .onClick = onEdgeBottom, .user = demo});
 
-    UiFlex win{};
-    win.position = UiPosition::Absolute;
-    win.posX = 640.0f;
-    win.posY = 160.0f;
-    win.widthMode = UiSize::Px;
-    win.width = 300.0f;
-    win.heightMode = UiSize::Px;
-    win.height = 168.0f;
-    win.pad = 10.0f;
-    win.gap = 8.0f;
-    win.shrink = 0.0f;
-    const uint16_t settings = uiPanel(s, 0, win, paintToken(theme, UiToken::Window, theme.radius));
-    uiSetResizable(s, settings);
+    const uint16_t settings = uiFloatWindow(s, 0, 640.0f, 160.0f, 300.0f, 168.0f);
+    uiSetGap(s, settings, 8.0f);
     demo->settings = settings;
     const uint16_t settingsPage = uiDragFoldHeader(s, settings, "SETTINGS");
     (void)uiLabel(s, settingsPage, "separate window, drag the header");
     (void)uiButton(s, settingsPage, {.label = "CLOSE", .height = kToolH, .icon = UiIcon::Dismiss, .onClick = toggleSettings, .user = demo});
-    uiShow(s, settings, false);
 
     const uint16_t sectionMenu = uiMakeMenu(s);
     const uint16_t chipMenu = uiMakeMenu(s);
@@ -393,12 +380,7 @@ void sampleDrop(Host& host, int slot, const char* path, void*) {
     if (canvas == nullptr || canvas->state == nullptr) {
         return;
     }
-    filesOfferPath(*canvas->state, path);
-    if (strIsImagePath(path)) {
-        (void)canvasLoadPhoto(*canvas, 0, path);
-    } else if (strExtIs(path, ".json")) {
-        (void)uiImportJsonFile(*canvas->state, 0, path);
-    }
+    filesOfferDrop(*canvas, path);
 }
 
 void sampleOps(Host& host, int slot, const WindowOps& ops, void* user) {

@@ -6,6 +6,7 @@
 #include "ui/Style.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Check.hpp"
+#include "ui/widget/Choice.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Number.hpp"
@@ -34,6 +35,44 @@ UiBind* findRow(std::vector<UiBind>& rows, uint16_t index, uint8_t kind) {
         }
     }
     return nullptr;
+}
+
+void resetClick(void* user, uint16_t id) {
+    auto* bind = static_cast<UiPropBinder*>(user);
+    if (bind == nullptr || bind->ui == nullptr) {
+        return;
+    }
+    UiState& s = *bind->ui;
+    const UiResetHome* found = s.ent[id].try_get<UiResetHome>();
+    if (found == nullptr) {
+        return;
+    }
+    const UiResetHome home = *found;
+    switch (static_cast<UiReset>(home.kind)) {
+    case UiReset::Float:
+        bind->write(s, home.index, home.home);
+        break;
+    case UiReset::Vec2:
+        bind->write(s, home.index, home.home);
+        bind->write(s, static_cast<uint16_t>(home.index + 1u), home.home2);
+        break;
+    case UiReset::Rgb:
+        for (uint16_t axis = 0; axis < 3u; ++axis) {
+            bind->write(s, static_cast<uint16_t>(home.index + axis), home.home);
+        }
+        break;
+    case UiReset::Flag:
+        if (bind->flags != nullptr && home.index < bind->flagN) {
+            bind->flags[home.index] = home.home >= 0.5f ? 1u : 0u;
+        }
+        uiCheckAssign(s, bind->idOf(home.index, kBindFlag), home.home >= 0.5f ? 1u : 0u);
+        break;
+    case UiReset::Custom:
+        break;
+    }
+    if (bind->onReset != nullptr) {
+        bind->onReset(bind->resetUser, s, home);
+    }
 }
 
 void swatchClick(void* user, uint16_t id) {
@@ -93,6 +132,42 @@ void UiPropBinder::attach(float* scalarBase, uint16_t scalarCount, uint8_t* flag
     flags = flagBase;
     scalarN = scalarCount;
     flagN = flagCount;
+}
+
+uint16_t UiPropBinder::resetBtn(UiState& s, uint16_t parent, UiReset kind, uint16_t index, float home, float home2) {
+    if (ui == nullptr) {
+        ui = &s;
+    }
+    const uint16_t id = uiIconBtn(s, parent, static_cast<uint8_t>(UiIcon::Reset), 22.0f, nullptr);
+    if (id == kUiNone) {
+        return id;
+    }
+    uiSetGrow(s, id, -1.0f, 0.0f);
+    s.ent[id].set<UiResetHome>({index, home, home2, static_cast<uint8_t>(kind)});
+    uiBind(s, id, resetClick, this);
+    return id;
+}
+
+uint16_t UiPropBinder::checkReset(UiState& s, uint16_t panel, const char* label, uint16_t flag, bool def) {
+    const uint16_t id = check(s, panel, label, flag, def);
+    (void)resetBtn(s, uiPropSlotOf(s, id), UiReset::Flag, flag, def ? 1.0f : 0.0f);
+    return id;
+}
+
+uint16_t UiPropBinder::choiceReset(UiState& s, uint16_t panel, const char* label, const char* const* names, uint8_t count, void (*onPick)(void* user, uint8_t index), void* user, uint16_t flag) {
+    const uint16_t value = uiPropRow(s, panel, label);
+    const uint16_t pick = uiChoice(s, value, {.labels = names, .count = count, .selected = 0, .width = 160.0f, .onPick = onPick, .user = user});
+    uiSetGrow(s, pick, 1.0f, 1.0f);
+    (void)resetBtn(s, value, UiReset::Flag, flag, 0.0f);
+    return pick;
+}
+
+UiPropVec2 UiPropBinder::vec2Reset(UiState& s, uint16_t panel, const char* label, uint16_t ix, float x, float y, float minV, float maxV, float step) {
+    const UiPropVec2 v = uiPropVec2(s, panel, label, x, y, minV, maxV, step);
+    watch(v.x, ix, x);
+    watch(v.y, static_cast<uint16_t>(ix + 1u), y);
+    (void)resetBtn(s, v.row, UiReset::Vec2, ix, x, y);
+    return v;
 }
 
 void UiPropBinder::clear() {

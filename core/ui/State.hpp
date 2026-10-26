@@ -6,6 +6,7 @@
 #include "ui/Interaction.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/Metrics.hpp"
+#include "ui/Nodes.hpp"
 #include "ui/Primitive.hpp"
 #include "ui/Style.hpp"
 #include "ui/Text.hpp"
@@ -167,62 +168,6 @@ struct UiState {
     UiState& operator=(const UiState&) = delete;
 };
 
-void uiFocus(UiState& s, uint16_t id);
-void uiFocusStep(UiState& s, int dir);
-void uiTab(UiState& s, uint16_t id, uint16_t index);
-void uiCursorPush(UiState& s, uint8_t kind);
-void uiCursorPop(UiState& s);
-void uiSyncInput(UiState& s);
-[[nodiscard]] uint16_t uiYogaId(const UiState& s, const struct YGNode* node);
-void uiCacheVisibility(UiState& s);
-void uiCapture(UiState& s, uint16_t id);
-void uiReleaseCapture(UiState& s);
-void uiMarkLayout(UiState& s, uint16_t id);
-void uiShowOnly(UiState& s, uint16_t id);
-void uiBind(UiState& s, uint16_t id, UiClickFn fn, void* user);
-void uiBindName(UiState& s, const char* name, UiClickFn fn, void* user);
-void uiDrag(UiState& s, uint16_t id, UiDragFn fn, void* user);
-void uiEdit(UiState& s, uint16_t id, UiEditFn fn, void* user);
-void uiShow(UiState& s, uint16_t id, bool visible);
-void uiPaintRgb(UiState& s, uint16_t id, float r, float g, float b);
-void uiReparent(UiState& s, uint16_t id, uint16_t parent);
-void uiDrop(UiState& s, uint16_t id);
-void uiTrace(const UiState& s, const char* fn, uint16_t id);
-void uiDumpLayout(const UiState& s);
-void uiPlace(UiState& s, uint16_t id, bool absolute, float x, float y, float w, float h);
-void uiGrow(UiState& s, uint16_t id, float extraW, float h);
-void uiSetHeight(UiState& s, uint16_t id, float h);
-void uiSetWidth(UiState& s, uint16_t id, float w);
-void uiFlexLimit(UiState& s, uint16_t id, float width, float height, float shrink);
-void uiFlexShrink(UiState& s, uint16_t id, float shrink);
-void uiRowIndent(UiState& s, uint16_t id, float pad);
-void uiPlaceAbsolute(UiState& s, uint16_t id, float x, float y);
-uint16_t uiFindChildText(const UiState& s, uint16_t parent);
-void uiCenterChildren(UiState& s, uint16_t parent);
-void uiSetDrop(UiState& s, uint16_t id, uint8_t drop);
-[[nodiscard]] uint16_t uiImportJson(UiState& s, uint16_t parent, const char* text);
-[[nodiscard]] uint16_t uiImportJsonFile(UiState& s, uint16_t parent, const char* path);
-[[nodiscard]] uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t size);
-[[nodiscard]] uint16_t uiImportBinFile(UiState& s, uint16_t parent, const char* path);
-[[nodiscard]] uint16_t uiFindName(const UiState& s, const char* name);
-void uiRequestTop(UiState& s, bool on);
-void uiRequestOpacity(UiState& s, float opacity);
-void uiRequestMinimize(UiState& s);
-void uiRequestMaximize(UiState& s);
-void uiRequestClose(UiState& s);
-inline void uiNotifyLayoutDirty(UiState& s) { s.layoutDirty = true; }
-inline void uiNotifyVisualDirty(UiState& s) { s.visualDirty = true; }
-inline void uiSetContextMenu(UiState& s, uint16_t node, uint16_t menu) {
-    if (node < s.count) {
-        s.contextOf[node] = menu;
-    }
-}
-inline uint16_t uiParent(const UiState& s, uint16_t id) {
-    return id < s.count ? s.parentOf[id] : kUiNone;
-}
-inline UiBox uiNodeBox(const UiState& s, uint16_t id) {
-    return id < s.count ? s.box[id] : UiBox{};
-}
 // First node other than `except` holding Tag. Flecs walks only the tables that carry Tag, so the cost follows
 // the number of holders, not s.count.
 template <typename Tag>
@@ -274,64 +219,14 @@ uint16_t uiMarked(const UiState& s) {
     return uiMarkedOther<Tag>(s, kUiNone);
 }
 
-void uiName(UiState& s, uint16_t id, const char* name);
 void uiDrawAdd(UiState& s, UiDrawFn fn);
 void uiDrawUnderAdd(UiState& s, UiDrawFn fn);
 void uiDrawDecorAdd(UiState& s, UiDrawFn fn);
 void uiOverlayAdd(UiState& s, UiOverlayDrawFn fn);
-void uiPlaceAdd(UiState& s, void (*fn)(UiState& s));
-void uiBeforeLayoutAdd(UiState& s, void (*fn)(UiState& s));
 void uiClearAdd(UiState& s, UiClearFn fn);
 void uiRegisterSpawnHook(UiState& s, uint8_t role, UiSpawnFn fn);
 void uiRegisterRoleFinish(UiState& s, uint8_t role, UiRoleFinishFn fn);
 void uiInputAdd(UiState& s, UiInputHookFn fn);
-bool nodeShown(const UiState& s, uint16_t id);
-uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
-void addText(UiState& s, uint16_t id, const char* text);
-uint16_t hitTest(const UiState& s, float x, float y);
-void activate(UiState& s, uint16_t id);
-uint32_t uiNodeChildCount(const UiState& s, uint16_t parent);
-uint16_t uiNodeChild(const UiState& s, uint16_t parent, uint32_t index);
-void uiNodeMoveChild(UiState& s, uint16_t parent, uint16_t child, uint32_t newIndex);
-
-void uiClear(UiState& s);
-uint16_t uiNode(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
-void stamp(UiState& s, uint16_t id, UiToken token);
-void uiStamp(UiState& s, uint16_t id, UiToken token);
-void uiBlur(UiState& s, uint16_t id, float blur);
-void uiTransform(UiState& s, uint16_t id, float angle, float scaleX, float scaleY);
-void uiFilter(UiState& s, uint16_t id, float bright, float contrast);
-void uiSetPaint(UiState& s, uint16_t id, float r, float g, float b, float a);
-[[nodiscard]] UiEvent uiApplyInput(UiState& s, const InputFrame& in);
-void uiLayout(UiState& s, float w, float h);
-void uiRestyle(UiState& s);
-inline void uiApplyLook(UiState& s, bool warm) {
-    const float glyphH = s.look.glyphH;
-    const float glyphW = s.look.glyphW;
-    const float advance = s.look.advance;
-    const float title = s.look.titleBar;
-    const float border = s.look.resizeBorder;
-    s.altLook = warm;
-    s.look = warm ? uiLookWarm() : UiLook{};
-    s.look.glyphH = glyphH;
-    s.look.glyphW = glyphW;
-    s.look.advance = advance;
-    s.look.titleBar = title;
-    s.look.resizeBorder = border;
-    uiRestyle(s);
-}
-void uiMotionTo(UiState& s, uint16_t id, float r, float g, float b, float a);
-void uiReveal(UiState& s, uint16_t id, float full, bool open);
-[[nodiscard]] float uiRevealUnit(const UiState& s, uint16_t id);
-void uiRevealTick(UiState& s);
-[[nodiscard]] bool uiTickMotion(UiState& s);
-[[nodiscard]] uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap);
-
-bool uiListen(UiState& s, UiValueFn fn, void* user);
-void uiTextStyle(UiState& s, uint16_t id, UiTextAlign align, UiTextEllipsis ellipsis, UiTextValign valign, bool wrap, UiTextDeco deco, float leading);
-void uiTextReadTail(UiState& s, uint16_t id, const BinTail& tail);
-void uiSetDisabled(UiState& s, uint16_t id, bool disabled);
-[[nodiscard]] uint16_t uiTextId(const UiState& s, uint16_t id);
 
 inline UiBox uiContent(const UiState& s, uint16_t id) {
     UiBox box = id < s.count ? s.box[id] : UiBox{};

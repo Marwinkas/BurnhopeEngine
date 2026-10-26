@@ -763,6 +763,12 @@ UiColorPickerComponent* uiColorFind(UiState& s) {
     return id == kUiNone ? nullptr : s.ent[id].try_get_mut<UiColorPickerComponent>();
 }
 
+void uiColorSetTarget(UiState& s, uint16_t field) {
+    if (UiColorPickerComponent* color = uiColorFind(s)) {
+        color->colorTarget = field;
+    }
+}
+
 const UiColorPickerComponent* uiColorFind(const UiState& s) {
     const uint16_t id = uiColorFirst(s, [](const UiColorPickerComponent&) { return true; });
     return id == kUiNone ? nullptr : s.ent[id].try_get<UiColorPickerComponent>();

@@ -2,7 +2,9 @@
 #include "host/PropImportInternal.hpp"
 #include "Str.hpp"
 
+#include "io/File.hpp"
 #include "io/JsonCursor.hpp"
+#include "platform/PlatformUtil.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
@@ -17,6 +19,8 @@
 #include "ui/widget/Splitter.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/State.hpp"
+
+#include <spdlog/spdlog.h>
 
 #include <cstring>
 
@@ -898,6 +902,38 @@ bool propImport(
             return false;
         }
     }
+}
+
+bool propImportAsset(
+    UiState& state,
+    uint16_t parent,
+    const char* asset,
+    const char* key,
+    UiPropBinder& bind,
+    const PropSlot* slots,
+    uint16_t slotCount,
+    const PropCommand* commands,
+    uint16_t commandCount,
+    const UiPaint& hidden,
+    PropFlagFn onFlag,
+    void* user) {
+    char path[512]{};
+    if (asset == nullptr || !platformResolveAsset(asset, path, sizeof(path))) {
+        spdlog::error("layout {} was not found", asset != nullptr ? asset : "");
+        return false;
+    }
+    MappedFile file{};
+    if (!fileMapReadOnly(path, &file) || file.data == nullptr) {
+        spdlog::error("layout {} did not map", path);
+        return false;
+    }
+    const std::string_view text{reinterpret_cast<const char*>(file.data), file.size};
+    const bool ok = propImport(state, parent, text, key, bind, slots, slotCount, commands, commandCount, hidden, onFlag, user);
+    fileUnmap(&file);
+    if (!ok) {
+        spdlog::error("layout {} did not import", key != nullptr ? key : "");
+    }
+    return ok;
 }
 
 } // namespace burnhope

@@ -9,7 +9,7 @@
 #include "ui/widget/Choice.hpp"
 #include "ui/widget/Image.hpp"
 #include "ui/widget/Label.hpp"
-#include "ui/State.hpp"
+#include "ui/Nodes.hpp"
 
 namespace burnhope {
 
@@ -69,25 +69,6 @@ void onPreviewDrag(void* user, uint16_t, float x, float y) {
     hud->previewDirty = 1;
 }
 
-void checkReset(UiState& s, HudContext& hud, uint16_t panel, const char* label, uint16_t flag, bool def) {
-    const uint16_t id = hud.bind.check(s, panel, label, flag, def);
-    matResetBtn(s, hud, uiPropSlotOf(s, id), flag, def ? 1.0f : 0.0f, 0.0f, 1);
-}
-
-void choiceRow(UiState& s, HudContext& hud, uint16_t panel, const char* label, const char* const* names, void (*fn)(void*, uint8_t), uint16_t& out, uint16_t flag) {
-    const uint16_t value = uiPropRow(s, panel, label);
-    out = uiChoice(s, value, {.labels = names, .count = 2, .selected = 0, .width = 160.0f, .onPick = fn, .user = &hud});
-    uiSetGrow(s, out, 1.0f, 1.0f);
-    matResetBtn(s, hud, value, flag, 0.0f, 0.0f, 1);
-}
-
-void vecReset(UiState& s, HudContext& hud, uint16_t panel, const char* label, uint16_t ix, float x, float y) {
-    const UiPropVec2 v = uiPropVec2(s, panel, label, x, y, -64.0f, 64.0f, 0.01f);
-    hud.bind.watch(v.x, ix, x);
-    hud.bind.watch(v.y, static_cast<uint16_t>(ix + 1u), y);
-    matResetBtn(s, hud, v.row, ix, x, y, 2);
-}
-
 } // namespace
 
 void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel) {
@@ -95,6 +76,8 @@ void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel) {
         return;
     }
     UiState& s = *canvas.state;
+    hud->bind.onReset = matOnReset;
+    hud->bind.resetUser = hud;
     hud->previewBuf.resize(kMatSphereSide * kMatSphereSide * 4u);
     hud->atlasBuf.resize(kMatAtlasW * kMatAtlasH * 4u);
     UiFlex previewCol{};
@@ -110,21 +93,21 @@ void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel) {
     uiLabel(s, preview, "Material Preview");
     const char* typeName[] = {"Lit", "Unlit"};
     const char* packName[] = {"Classic", "ORMH"};
-    choiceRow(s, *hud, panel, "Type", typeName, onType, hud->matType, kFlMatUnlit);
-    checkReset(s, *hud, panel, "Double Sided", kFlMatDouble, false);
+    hud->matType = hud->bind.choiceReset(s, panel, "Type", typeName, 2, onType, hud, kFlMatUnlit);
+    hud->bind.checkReset(s, panel, "Double Sided", kFlMatDouble, false);
     matAddSlot(s, *hud, panel, 0);
     matAddSlot(s, *hud, panel, 1);
     matAddSlot(s, *hud, panel, 2);
-    checkReset(s, *hud, panel, "Flip Normal Y", kFlMatFlip, true);
-    choiceRow(s, *hud, panel, "Map Type", packName, onPack, hud->matPack, kFlMatPack);
+    hud->bind.checkReset(s, panel, "Flip Normal Y", kFlMatFlip, true);
+    hud->matPack = hud->bind.choiceReset(s, panel, "Map Type", packName, 2, onPack, hud, kFlMatPack);
     for (uint8_t slot = 3; slot < 8; ++slot) {
         matAddSlot(s, *hud, panel, slot);
     }
     matAddSlot(s, *hud, panel, 8);
-    checkReset(s, *hud, panel, "Repeat", kFlMatRepeat, true);
-    checkReset(s, *hud, panel, "Triplanar", kFlMatWorld, false);
-    vecReset(s, *hud, panel, "Tiling", kScMatUvX, 1.0f, 1.0f);
-    vecReset(s, *hud, panel, "Offset", kScMatUvOffX, 0.0f, 0.0f);
+    hud->bind.checkReset(s, panel, "Repeat", kFlMatRepeat, true);
+    hud->bind.checkReset(s, panel, "Triplanar", kFlMatWorld, false);
+    hud->bind.vec2Reset(s, panel, "Tiling", kScMatUvX, 1.0f, 1.0f);
+    hud->bind.vec2Reset(s, panel, "Offset", kScMatUvOffX, 0.0f, 0.0f);
 }
 
 } // namespace burnhope
