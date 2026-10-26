@@ -131,18 +131,6 @@ bool vxDirty(const VxCascade& c) {
     return c.full != 0u || c.slabMaxX > c.slabMinX || c.slabMaxY > c.slabMinY || c.slabMaxZ > c.slabMinZ;
 }
 
-bool vxShader(Device& d, const char* path, const PassBindings& bind, ShaderExt& out) {
-    const ShaderCreateDesc desc{
-        .path = path,
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = bind.raw.count,
-        .mappings = bind.raw.mappings,
-        .pushBytes = sizeof(VxPush),
-        .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
-    };
-    return shaderCreate(d, desc, out);
-}
-
 void vxBind(VkCommandBuffer cmd, const ShaderExt& shader, VxPush push) {
     cmdBindCompute(cmd, shader.handle);
     vkCmdPushConstants(cmd, VK_NULL_HANDLE, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
@@ -283,10 +271,10 @@ bool voxelCreate(VoxelPass& p, Device& d, const DescriptorHeaps& heaps) {
     trace.knob(55, HeapBuf::Shade);
     trace.knob(59, HeapBuf::VxClip);
     trace.sampledImg(61, HeapImg::VoxelSample);
-    const bool ok = vxShader(d, BH_SHADER_DIR "/vx.clear.comp.spv", clear, p.clear)
-        && vxShader(d, BH_SHADER_DIR "/vx.voxel.comp.spv", voxel, p.voxel)
-        && vxShader(d, BH_SHADER_DIR "/vx.resolve.comp.spv", resolve, p.resolve)
-        && vxShader(d, BH_SHADER_DIR "/vx.trace.comp.spv", trace, p.trace);
+    const bool ok = createComputeShader(d, BH_SHADER_DIR "/vx.clear.comp.spv", clear, p.clear, sizeof(VxPush))
+        && createComputeShader(d, BH_SHADER_DIR "/vx.voxel.comp.spv", voxel, p.voxel, sizeof(VxPush))
+        && createComputeShader(d, BH_SHADER_DIR "/vx.resolve.comp.spv", resolve, p.resolve, sizeof(VxPush))
+        && createComputeShader(d, BH_SHADER_DIR "/vx.trace.comp.spv", trace, p.trace, sizeof(VxPush));
     if (!ok) {
         spdlog::error("voxel shaders failed");
         voxelDestroy(p, d);

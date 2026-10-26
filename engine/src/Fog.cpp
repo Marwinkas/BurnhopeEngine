@@ -29,27 +29,9 @@ bool fogCreate(FogVolume& fog, Device& device, DescriptorHeaps& heaps) {
     apply.sampledImg(2, HeapImg::Depth);
     apply.storageImg(3, HeapImg::HdrAStorage);
     apply.storageImg(91, kFogIntSlot);
-    const ShaderCreateDesc scatterDesc{
-        .path = BH_SHADER_DIR "/fog.scatter.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = scatter.raw.count,
-        .mappings = scatter.raw.mappings,
-    };
-    const ShaderCreateDesc integrateDesc{
-        .path = BH_SHADER_DIR "/fog.integrate.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = integrate.raw.count,
-        .mappings = integrate.raw.mappings,
-    };
-    const ShaderCreateDesc applyDesc{
-        .path = BH_SHADER_DIR "/fog.apply.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = apply.raw.count,
-        .mappings = apply.raw.mappings,
-    };
-    if (!shaderCreate(device, scatterDesc, fog.scatterCs)
-        || !shaderCreate(device, integrateDesc, fog.integrateCs)
-        || !shaderCreate(device, applyDesc, fog.applyCs)) {
+    if (!createComputeShader(device, BH_SHADER_DIR "/fog.scatter.comp.spv", scatter, fog.scatterCs)
+        || !createComputeShader(device, BH_SHADER_DIR "/fog.integrate.comp.spv", integrate, fog.integrateCs)
+        || !createComputeShader(device, BH_SHADER_DIR "/fog.apply.comp.spv", apply, fog.applyCs)) {
         fogDestroy(fog, device);
         return false;
     }

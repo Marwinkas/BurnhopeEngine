@@ -39,12 +39,6 @@ void bindVisMesh(PassBindings& b) {
     b.storageBuf(11, HeapBuf::Visible);
 }
 
-void copyBindings(const PassBindings& b, VkDescriptorSetAndBindingMappingEXT* dst) {
-    for (uint32_t i = 0; i < b.raw.count; ++i) {
-        dst[i] = b.raw.mappings[i];
-    }
-}
-
 } // namespace
 
 bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent2D extent) {
@@ -54,40 +48,39 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
     }
     PassBindings mesh{heaps};
     bindVisMesh(mesh);
-    VkDescriptorSetAndBindingMappingEXT maps[6];
-    copyBindings(mesh, maps);
     const ShaderCreateDesc meshDesc{
         .path = BH_SHADER_DIR "/visbuffer.mesh.spv",
         .stage = VK_SHADER_STAGE_MESH_BIT_EXT,
         .nextStage = VK_SHADER_STAGE_FRAGMENT_BIT,
-        .mappingCount = 6u,
-        .mappings = maps,
+        .mappingCount = mesh.raw.count,
+        .mappings = mesh.raw.mappings,
         .pushBytes = sizeof(FlightPush),
         .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
     };
     ShaderCreateDesc lateDesc = meshDesc;
     lateDesc.path = BH_SHADER_DIR "/visbuffer.late.mesh.spv";
-    VkDescriptorSetAndBindingMappingEXT shadowMaps[8];
-    VkDescriptorSetAndBindingMappingEXT pointMaps[8];
-    VkDescriptorSetAndBindingMappingEXT fragMaps[9];
     PassBindings fragBind{heaps};
     bindVisMesh(fragBind);
     fragBind.sampledImg(12, HeapImg::Textures);
     fragBind.storageBuf(14, HeapBuf::Materials);
     fragBind.sampler(24, HeapSamp::Wrap);
-    copyBindings(fragBind, fragMaps);
-    VkDescriptorSetAndBindingMappingEXT shadowFragMaps[4];
+    const ShaderCreateDesc frag{
+        .path = BH_SHADER_DIR "/visbuffer.frag.spv",
+        .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .mappingCount = fragBind.raw.count,
+        .mappings = fragBind.raw.mappings,
+    };
     PassBindings shadowFragBind{heaps};
     shadowFragBind.storageBuf(10, HeapBuf::Instances);
     shadowFragBind.sampledImg(12, HeapImg::Textures);
     shadowFragBind.storageBuf(14, HeapBuf::Materials);
     shadowFragBind.sampler(24, HeapSamp::Wrap);
-    copyBindings(shadowFragBind, shadowFragMaps);
-    const ShaderCreateDesc frag{
-        .path = BH_SHADER_DIR "/visbuffer.frag.spv",
+    const ShaderCreateDesc shadowFragDesc{
+        .path = BH_SHADER_DIR "/visbuffer.shadow.frag.spv",
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-        .mappingCount = 9,
-        .mappings = fragMaps,
+        .extraFlags = VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT,
+        .mappingCount = shadowFragBind.raw.count,
+        .mappings = shadowFragBind.raw.mappings,
     };
     PassBindings shadowBind{heaps};
     shadowBind.ubo(0, HeapBuf::Frame);
@@ -97,13 +90,12 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
     shadowBind.storageBuf(10, HeapBuf::Instances);
     shadowBind.sun();
     shadowBind.storageBuf(18, HeapBuf::ShadowAll);
-    copyBindings(shadowBind, shadowMaps);
     const ShaderCreateDesc shadowDesc{
         .path = BH_SHADER_DIR "/visbuffer.shadow.mesh.spv",
         .stage = VK_SHADER_STAGE_MESH_BIT_EXT,
         .nextStage = VK_SHADER_STAGE_FRAGMENT_BIT,
-        .mappingCount = 7u,
-        .mappings = shadowMaps,
+        .mappingCount = shadowBind.raw.count,
+        .mappings = shadowBind.raw.mappings,
         .pushBytes = sizeof(ShadowPush),
         .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
     };
@@ -115,26 +107,19 @@ bool visPassCreate(VisPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
     pointBind.storageBuf(10, HeapBuf::Instances);
     pointBind.sun();
     pointBind.storageBuf(19, HeapBuf::PointVisible);
-    copyBindings(pointBind, pointMaps);
     const ShaderCreateDesc pointDesc{
         .path = BH_SHADER_DIR "/visbuffer.point.mesh.spv",
         .stage = VK_SHADER_STAGE_MESH_BIT_EXT,
         .nextStage = VK_SHADER_STAGE_FRAGMENT_BIT,
-        .mappingCount = 7u,
-        .mappings = pointMaps,
+        .mappingCount = pointBind.raw.count,
+        .mappings = pointBind.raw.mappings,
         .pushBytes = sizeof(PointPush),
         .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
     };
     const bool shaders = shaderCreate(d, meshDesc, p.mesh) && shaderCreate(d, lateDesc, p.meshLate)
         && shaderCreate(d, shadowDesc, p.shadow)
         && shaderCreate(d, pointDesc, p.point)
-        && shaderCreate(d, ShaderCreateDesc{
-            .path = BH_SHADER_DIR "/visbuffer.shadow.frag.spv",
-            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .extraFlags = VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT,
-            .mappingCount = shadowFragBind.raw.count,
-            .mappings = shadowFragMaps,
-        }, p.shadowFrag)
+        && shaderCreate(d, shadowFragDesc, p.shadowFrag)
         && shaderCreate(d, frag, p.frag);
     if (!shaders) {
         spdlog::error("visPass shaders failed");

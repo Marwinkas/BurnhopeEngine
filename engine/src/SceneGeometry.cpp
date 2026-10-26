@@ -127,20 +127,9 @@ void adoptLoadedModel(SceneFrame& scene, const char* path, float minX, float min
     if (scene.instSrc == nullptr || scene.instanceCount == 0) {
         return;
     }
-    const char* leaf = path != nullptr ? path : "Model";
-    for (const char* p = leaf; *p != '\0'; ++p) {
-        if (*p == '/' || *p == '\\') {
-            leaf = p + 1;
-        }
-    }
     char name[24]{};
-    uint32_t n = 0;
-    for (const char* p = leaf; *p != '\0' && *p != '.' && n + 1u < sizeof(name); ++p) {
-        name[n++] = *p;
-    }
-    if (n == 0) {
-        name[0] = 'M';
-        name[1] = '\0';
+    if (strPathStem(path != nullptr ? path : "Model", name, sizeof(name)) == 0) {
+        strCopyCap(name, sizeof(name), "M");
     }
     const float pos[3] = {(minX + maxX) * 0.5f, (minY + maxY) * 0.5f, (minZ + maxZ) * 0.5f};
     const uint8_t actor = sceneActorAdd(scene.actors, SceneActorKind::Prop, pos, name);
@@ -876,12 +865,7 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
         scene->fly.eye[0], scene->fly.eye[1], scene->fly.eye[2]);
     fileUnmap(&mapped);
     armEditorRoom(*scene);
-    const char* leaf = path;
-    for (const char* p = path; *p != '\0'; ++p) {
-        if (*p == '/' || *p == '\\') {
-            leaf = p + 1;
-        }
-    }
+    const char* leaf = strPathLeaf(path);
     const uint32_t added = view.info->instanceCount < 8u ? view.info->instanceCount : 8u;
     for (uint32_t i = 0; i < added && scene->propCount < kPropCap; ++i) {
         char name[24]{};
@@ -889,7 +873,7 @@ bool sceneFrameAppendBhop(SceneFrame* scene, const char* path) {
             modelLabel(*scene, scene->instSrc[instBase + i].materialId, name, sizeof(name));
         }
         if (name[0] == '\0') {
-            std::snprintf(name, sizeof(name), "%s", leaf);
+            strCopyCap(name, sizeof(name), leaf);
         }
         linkProp(*scene, instBase + i, name);
     }

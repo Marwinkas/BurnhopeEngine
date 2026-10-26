@@ -1,3 +1,4 @@
+#include "Str.hpp"
 #include "io/File.hpp"
 #include "asset/AssimpImporter.hpp"
 
@@ -243,24 +244,6 @@ void bakeNormal(const aiMatrix4x4& m, float x, float y, float z, float& ox, floa
     oz /= len;
 }
 
-bool nameHas(const char* text, const char* needle) {
-    if (text == nullptr || needle == nullptr) {
-        return false;
-    }
-    for (const char* p = text; *p != '\0'; ++p) {
-        const char* a = p;
-        const char* b = needle;
-        while (*a != '\0' && *b != '\0' && std::tolower(static_cast<unsigned char>(*a)) == std::tolower(static_cast<unsigned char>(*b))) {
-            ++a;
-            ++b;
-        }
-        if (*b == '\0') {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool foliageMaterial(const aiMaterial* mat) {
     if (mat == nullptr) {
         return false;
@@ -272,13 +255,13 @@ bool foliageMaterial(const aiMaterial* mat) {
     }
     aiString name;
     mat->Get(AI_MATKEY_NAME, name);
-    if (nameHas(name.C_Str(), "leaf") || nameHas(name.C_Str(), "ivy") || nameHas(name.C_Str(), "foliage")
-        || nameHas(name.C_Str(), "frond") || nameHas(name.C_Str(), "needle")) {
+    if (strContainsCi(name.C_Str(), "leaf") || strContainsCi(name.C_Str(), "ivy") || strContainsCi(name.C_Str(), "foliage")
+        || strContainsCi(name.C_Str(), "frond") || strContainsCi(name.C_Str(), "needle")) {
         return true;
     }
     aiString tex;
     if (mat->GetTexture(aiTextureType_DIFFUSE, 0, &tex) == AI_SUCCESS || mat->GetTexture(aiTextureType_BASE_COLOR, 0, &tex) == AI_SUCCESS) {
-        if (nameHas(tex.C_Str(), "leaf") || nameHas(tex.C_Str(), "ivy") || nameHas(tex.C_Str(), "foliage")) {
+        if (strContainsCi(tex.C_Str(), "leaf") || strContainsCi(tex.C_Str(), "ivy") || strContainsCi(tex.C_Str(), "foliage")) {
             return true;
         }
     }
@@ -382,7 +365,7 @@ bool appendSceneMeshes(
     std::vector<SceneTexName>& textures,
     std::vector<LightGpuData>& lights,
     MeshletBuild& build) {
-    const bool hand = nameHas(label, "lighter");
+    const bool hand = strContainsCi(label, "lighter");
     const uint32_t groupBase = hand ? kSceneLighterGroup : 0u;
     const uint32_t materialBase = static_cast<uint32_t>(materials.size());
     const uint32_t localCount = scene->mNumMaterials > 0 ? scene->mNumMaterials : 1u;

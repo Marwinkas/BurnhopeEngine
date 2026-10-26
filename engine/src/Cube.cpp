@@ -4,7 +4,6 @@
 #include "render/HeapBind.hpp"
 #include "render/PassCommon.hpp"
 #include "render/PassRendering.hpp"
-#include "render/PassShaderGroup.hpp"
 #include "rhi/Barrier.hpp"
 #include "rhi/MeshDraw.hpp"
 #include "rhi/ShaderObject.hpp"
@@ -15,8 +14,6 @@ namespace burnhope {
 
 bool cubePassCreate(CubePass& p, Device& d, const DescriptorHeaps& heaps) {
     cubePassDestroy(p, d);
-    VkDescriptorSetAndBindingMappingEXT maps[12];
-    VkDescriptorSetAndBindingMappingEXT fragMaps[8];
     PassBindings meshBind{heaps};
     meshBind.sun();
     meshBind.storageBuf(7, HeapBuf::Verts);
@@ -24,15 +21,12 @@ bool cubePassCreate(CubePass& p, Device& d, const DescriptorHeaps& heaps) {
     meshBind.storageBuf(9, HeapBuf::Meshlets);
     meshBind.storageBuf(10, HeapBuf::Instances);
     meshBind.storageBuf(21, HeapBuf::CubeVisible);
-    for (uint32_t i = 0; i < meshBind.raw.count; ++i) {
-        maps[i] = meshBind.raw.mappings[i];
-    }
     const ShaderCreateDesc meshDesc{
         .path = BH_SHADER_DIR "/cube.mesh.spv",
         .stage = VK_SHADER_STAGE_MESH_BIT_EXT,
         .nextStage = VK_SHADER_STAGE_FRAGMENT_BIT,
         .mappingCount = meshBind.raw.count,
-        .mappings = maps,
+        .mappings = meshBind.raw.mappings,
         .pushBytes = 16,
         .pushStages = VK_SHADER_STAGE_MESH_BIT_EXT,
     };
@@ -47,14 +41,11 @@ bool cubePassCreate(CubePass& p, Device& d, const DescriptorHeaps& heaps) {
     fragBind.sampledImg(12, HeapImg::Textures);
     fragBind.sampler(13, HeapSamp::Linear);
     fragBind.storageBuf(14, HeapBuf::Materials);
-    for (uint32_t i = 0; i < fragBind.raw.count; ++i) {
-        fragMaps[i] = fragBind.raw.mappings[i];
-    }
     const ShaderCreateDesc frag{
         .path = BH_SHADER_DIR "/cube.frag.spv",
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
         .mappingCount = fragBind.raw.count,
-        .mappings = fragMaps,
+        .mappings = fragBind.raw.mappings,
     };
     if (!shaderCreate(d, frag, p.frag)) {
         spdlog::error("cube fragment shader failed");
@@ -67,13 +58,7 @@ bool cubePassCreate(CubePass& p, Device& d, const DescriptorHeaps& heaps) {
     fillBind.sampledImg(42, HeapImg::SkyViewSample);
     fillBind.storageBuf(46, HeapBuf::CloudNoise);
     fillBind.knob(58, HeapBuf::Atm);
-    const ShaderCreateDesc fillDesc{
-        .path = BH_SHADER_DIR "/cube.fill.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = fillBind.raw.count,
-        .mappings = fillBind.raw.mappings,
-    };
-    if (!shaderCreate(d, fillDesc, p.fill)) {
+    if (!createComputeShader(d, BH_SHADER_DIR "/cube.fill.comp.spv", fillBind, p.fill)) {
         spdlog::error("cube fill shader failed");
         cubePassDestroy(p, d);
         return false;
@@ -82,13 +67,7 @@ bool cubePassCreate(CubePass& p, Device& d, const DescriptorHeaps& heaps) {
     bakeBind.sampledImg(16, HeapImg::Cube);
     bakeBind.storageBuf(19, HeapBuf::Probes, false);
     bakeBind.sampler(24, HeapSamp::Wrap);
-    const ShaderCreateDesc bake{
-        .path = BH_SHADER_DIR "/probe.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = bakeBind.raw.count,
-        .mappings = bakeBind.raw.mappings,
-    };
-    if (!shaderCreate(d, bake, p.bake)) {
+    if (!createComputeShader(d, BH_SHADER_DIR "/probe.comp.spv", bakeBind, p.bake)) {
         spdlog::error("probe bake shader failed");
         cubePassDestroy(p, d);
         return false;

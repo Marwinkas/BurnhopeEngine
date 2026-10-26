@@ -15,22 +15,6 @@ namespace burnhope {
 
 namespace {
 
-RenderingPass beginHdrLoad(VkCommandBuffer cmd, VkExtent2D extent, VkImageView color) {
-    RenderingPass pass;
-    pass.cmd = cmd;
-    VkClearValue clear{};
-    fillAttachment(pass.color, color, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ATTACHMENT_LOAD_OP_LOAD, clear);
-    pass.info = {};
-    pass.info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    pass.info.renderArea = {{0, 0}, extent};
-    pass.info.layerCount = 1;
-    pass.info.colorAttachmentCount = 1;
-    pass.retarget();
-    vkCmdBeginRendering(cmd, &pass.info);
-    pass.open = true;
-    return pass;
-}
-
 void pushMode(VkCommandBuffer cmd, uint32_t flight, uint32_t mode, float dt) {
     const ParticlePush push{flight & 1u, mode, dt, 0};
     vkCmdPushConstants(cmd, VK_NULL_HANDLE, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
@@ -217,7 +201,8 @@ void particleRecord(
         cmd, hdr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
         VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
-    RenderingPass rendering = beginHdrLoad(cmd, extent, hdr.image.view);
+    VkClearValue clear{};
+    RenderingPass rendering = beginRenderingColorDepth(cmd, extent, hdr.image.view, VK_NULL_HANDLE, clear, clear, false);
     cmdSetGraphicsDynamic(cmd, extent, 1, false, false, BlendMode::Premultiplied);
     const ParticlePush drawPush{slice, 0u, dt, 0u};
     meshDrawRecord(cmd, MeshDrawDesc{

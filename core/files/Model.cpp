@@ -1,3 +1,4 @@
+#include "Str.hpp"
 #include "files/Model.hpp"
 #include "files/Format.hpp"
 #include "platform/Desktop.hpp"
@@ -19,30 +20,8 @@ namespace fs = std::filesystem;
 
 namespace {
 
-char foldAscii(char c) {
-    return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
-}
-
-// Case-insensitive substring test with no temporary strings.
 bool searchHit(const FileModel& model, std::string_view name) {
-    const char* needle = model.search;
-    const std::size_t m = std::strlen(needle);
-    if (m == 0) {
-        return true;
-    }
-    if (name.size() < m) {
-        return false;
-    }
-    for (std::size_t i = 0; i + m <= name.size(); ++i) {
-        std::size_t k = 0;
-        while (k < m && foldAscii(name[i + k]) == foldAscii(needle[k])) {
-            ++k;
-        }
-        if (k == m) {
-            return true;
-        }
-    }
-    return false;
+    return strContainsCi(name, model.search);
 }
 
 std::vector<std::string> listDirs(const fs::path& abs, const FileModel& model, std::unordered_set<std::string>& seen) {

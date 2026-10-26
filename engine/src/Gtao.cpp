@@ -30,9 +30,7 @@ constexpr uint32_t kAo1S = 985u;
 constexpr uint32_t kEdgeU = 986u;
 constexpr uint32_t kEdgeS = 987u;
 
-uint32_t groupsOf(uint32_t size, uint32_t group) {
-    return std::max((size + group - 1u) / group, 1u);
-}
+
 
 uint32_t legalMips(VkExtent2D extent) {
     uint32_t mips = 1u;
@@ -109,16 +107,6 @@ void uboAt(PassBindings& b, uint32_t binding) {
         heapBufOffset(*b.raw.heaps, kGtaoConstSlot), static_cast<uint32_t>(b.raw.heaps->bufferDescSize));
 }
 
-bool makeShader(Device& d, const PassBindings& map, const char* path, ShaderExt& shader) {
-    const ShaderCreateDesc desc{
-        .path = path,
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = map.raw.count,
-        .mappings = map.raw.mappings,
-    };
-    return shaderCreate(d, desc, shader);
-}
-
 void commonDepth(PassBindings& map) {
     uboAt(map, 0);
     map.sampler(4, HeapSamp::Nearest);
@@ -168,18 +156,18 @@ bool createShaders(GtaoPass& p, Device& d, const DescriptorHeaps& heaps) {
     resolveB.sampledImg(8, kAo0S);
     resolveB.storageImg(24, static_cast<uint32_t>(HeapImg::AoStorage));
 
-    return makeShader(d, pre, BH_SHADER_DIR "/xegtao.prefilter.comp.spv", p.prefilter)
-        && makeShader(d, norm, BH_SHADER_DIR "/xegtao.normals.comp.spv", p.normals)
-        && makeShader(d, main, BH_SHADER_DIR "/xegtao.low.comp.spv", p.main[0])
-        && makeShader(d, main, BH_SHADER_DIR "/xegtao.medium.comp.spv", p.main[1])
-        && makeShader(d, main, BH_SHADER_DIR "/xegtao.high.comp.spv", p.main[2])
-        && makeShader(d, main, BH_SHADER_DIR "/xegtao.ultra.comp.spv", p.main[3])
-        && makeShader(d, denoiseA, BH_SHADER_DIR "/xegtao.denoise.comp.spv", p.denoise[0])
-        && makeShader(d, denoiseB, BH_SHADER_DIR "/xegtao.denoise.comp.spv", p.denoise[1])
-        && makeShader(d, denoiseA, BH_SHADER_DIR "/xegtao.denoise_last.comp.spv", p.denoiseLast[0])
-        && makeShader(d, denoiseB, BH_SHADER_DIR "/xegtao.denoise_last.comp.spv", p.denoiseLast[1])
-        && makeShader(d, resolveA, BH_SHADER_DIR "/xegtao.resolve.comp.spv", p.resolve[0])
-        && makeShader(d, resolveB, BH_SHADER_DIR "/xegtao.resolve.comp.spv", p.resolve[1]);
+    return createComputeShader(d, BH_SHADER_DIR "/xegtao.prefilter.comp.spv", pre, p.prefilter)
+        && createComputeShader(d, BH_SHADER_DIR "/xegtao.normals.comp.spv", norm, p.normals)
+        && createComputeShader(d, BH_SHADER_DIR "/xegtao.low.comp.spv", main, p.main[0])
+        && createComputeShader(d, BH_SHADER_DIR "/xegtao.medium.comp.spv", main, p.main[1])
+        && createComputeShader(d, BH_SHADER_DIR "/xegtao.high.comp.spv", main, p.main[2])
+        && createComputeShader(d, BH_SHADER_DIR "/xegtao.ultra.comp.spv", main, p.main[3])
+        && createComputeShader(d, BH_SHADER_DIR "/xegtao.denoise.comp.spv", denoiseA, p.denoise[0])
+        && createComputeShader(d, BH_SHADER_DIR "/xegtao.denoise.comp.spv", denoiseB, p.denoise[1])
+        && createComputeShader(d, BH_SHADER_DIR "/xegtao.denoise_last.comp.spv", denoiseA, p.denoiseLast[0])
+        && createComputeShader(d, BH_SHADER_DIR "/xegtao.denoise_last.comp.spv", denoiseB, p.denoiseLast[1])
+        && createComputeShader(d, BH_SHADER_DIR "/xegtao.resolve.comp.spv", resolveA, p.resolve[0])
+        && createComputeShader(d, BH_SHADER_DIR "/xegtao.resolve.comp.spv", resolveB, p.resolve[1]);
 }
 
 void destroyShaders(GtaoPass& p, Device& d) {
@@ -343,17 +331,17 @@ void gtaoRecord(
     p.frame += 1u;
 
     barrierMips(cmd, p.depthMips, 5, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-    dispatch(cmd, p.prefilter, groupsOf(extent.width, 16u), groupsOf(extent.height, 16u));
+    dispatch(cmd, p.prefilter, passGroups(extent.width, 16u), passGroups(extent.height, 16u));
     barrierMips(cmd, p.depthMips, 5, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
 
     imageBarrier(cmd, p.normalsImg, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-    dispatch(cmd, p.normals, groupsOf(extent.width, 8u), groupsOf(extent.height, 8u));
+    dispatch(cmd, p.normals, passGroups(extent.width, 8u), passGroups(extent.height, 8u));
     imageBarrier(cmd, p.normalsImg, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
 
     imageBarrier(cmd, p.aoTerm[0], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     imageBarrier(cmd, p.edges, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
     const uint32_t quality = qualityOf(params.slices, params.steps);
-    dispatch(cmd, p.main[quality], groupsOf(extent.width, 8u), groupsOf(extent.height, 8u));
+    dispatch(cmd, p.main[quality], passGroups(extent.width, 8u), passGroups(extent.height, 8u));
     imageBarrier(cmd, p.aoTerm[0], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
     imageBarrier(cmd, p.edges, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
 
@@ -363,12 +351,12 @@ void gtaoRecord(
         const uint32_t dst = side ^ 1u;
         imageBarrier(cmd, p.aoTerm[dst], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT, true);
         const ShaderExt& shader = last ? p.denoiseLast[side] : p.denoise[side];
-        dispatch(cmd, shader, groupsOf(extent.width, 16u), groupsOf(extent.height, 8u));
+        dispatch(cmd, shader, passGroups(extent.width, 16u), passGroups(extent.height, 8u));
         imageBarrier(cmd, p.aoTerm[dst], VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
     }
     const uint32_t finalSide = (static_cast<uint32_t>(passes) & 1u) == 1u ? 0u : 1u;
     imageBarrier(cmd, ao, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
-    dispatch(cmd, p.resolve[finalSide], groupsOf(extent.width, 8u), groupsOf(extent.height, 8u));
+    dispatch(cmd, p.resolve[finalSide], passGroups(extent.width, 8u), passGroups(extent.height, 8u));
     imageBarrier(cmd, ao, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
     std::snprintf(p.lastLog, sizeof(p.lastLog), "XeGTAO %ux%u r %.2f sl %.0f st %.0f den %d q %u",
         extent.width, extent.height, static_cast<double>(constants.radius), static_cast<double>(params.slices),

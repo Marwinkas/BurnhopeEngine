@@ -3,6 +3,7 @@
 #include "rhi/DescriptorHeap.hpp"
 #include "rhi/DescriptorSlots.hpp"
 #include "rhi/GpuBuffer.hpp"
+#include "rhi/ShaderObject.hpp"
 
 namespace burnhope {
 
@@ -298,5 +299,20 @@ struct PassBindings {
         ubo(binding, slot);
     }
 };
+
+// Compute-шейдер по карте слотов прохода. pushBytes > 0 открывает push-блок для compute-стадии.
+[[nodiscard]] inline bool createComputeShader(
+    Device& d, const char* path, const PassBindings& bind, ShaderExt& out, uint32_t pushBytes = 0) {
+    const ShaderCreateDesc desc{
+        .path = path,
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .mappingCount = bind.raw.count,
+        .mappings = bind.raw.mappings,
+        .entry = "main",
+        .pushBytes = pushBytes,
+        .pushStages = pushBytes > 0u ? static_cast<VkShaderStageFlags>(VK_SHADER_STAGE_COMPUTE_BIT) : VkShaderStageFlags{0},
+    };
+    return shaderCreate(d, desc, out);
+}
 
 } // namespace burnhope

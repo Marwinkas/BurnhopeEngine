@@ -20,18 +20,6 @@ namespace {
 
 constexpr VkDeviceSize kParamStride = 256;
 
-bool sharcShader(Device& d, const char* path, const PassBindings& bind, ShaderExt& out, uint32_t pushBytes = 0) {
-    const ShaderCreateDesc desc{
-        .path = path,
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = bind.raw.count,
-        .mappings = bind.raw.mappings,
-        .pushBytes = pushBytes,
-        .pushStages = pushBytes > 0u ? static_cast<VkShaderStageFlags>(VK_SHADER_STAGE_COMPUTE_BIT) : VkShaderStageFlags{0},
-    };
-    return shaderCreate(d, desc, out);
-}
-
 void bindCache(PassBindings& bind, bool accum) {
     bind.storageBuf(70, kSharcHashSlot, false);
     if (accum) {
@@ -171,12 +159,12 @@ bool sharcCreate(SharcPass& p, Device& d, DescriptorHeaps& heaps, VkExtent2D ext
     reblurBind.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
         heapBufOffset(*reblurBind.raw.heaps, kGradeSlot), static_cast<uint32_t>(reblurBind.raw.heaps->bufferDescSize));
     reblurBind.storageBuf(77, kSharcColorSlot, false);
-    const bool shaders = sharcShader(d, BH_SHADER_DIR "/sharc.resolve.comp.spv", resolveBind, p.resolve)
-        && sharcShader(d, BH_SHADER_DIR "/sharc.update.comp.spv", updateBind, p.update)
-        && sharcShader(d, BH_SHADER_DIR "/sharc.query.comp.spv", queryBind, p.query, 16u)
-        && sharcShader(d, BH_SHADER_DIR "/sharc.relax.temporal.comp.spv", temporalBind, p.relaxTemporal)
-        && sharcShader(d, BH_SHADER_DIR "/sharc.relax.spatial.comp.spv", spatialBind, p.relaxSpatial, 16u)
-        && sharcShader(d, BH_SHADER_DIR "/reblur.comp.spv", reblurBind, p.reblur, 16u);
+    const bool shaders = createComputeShader(d, BH_SHADER_DIR "/sharc.resolve.comp.spv", resolveBind, p.resolve)
+        && createComputeShader(d, BH_SHADER_DIR "/sharc.update.comp.spv", updateBind, p.update)
+        && createComputeShader(d, BH_SHADER_DIR "/sharc.query.comp.spv", queryBind, p.query, 16u)
+        && createComputeShader(d, BH_SHADER_DIR "/sharc.relax.temporal.comp.spv", temporalBind, p.relaxTemporal)
+        && createComputeShader(d, BH_SHADER_DIR "/sharc.relax.spatial.comp.spv", spatialBind, p.relaxSpatial, 16u)
+        && createComputeShader(d, BH_SHADER_DIR "/reblur.comp.spv", reblurBind, p.reblur, 16u);
     if (!shaders) {
         spdlog::error("sharc shaders failed");
         sharcDestroy(p, d);

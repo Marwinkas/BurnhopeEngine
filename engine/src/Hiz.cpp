@@ -1,7 +1,6 @@
 #include "render/Hiz.hpp"
 #include "render/HeapBind.hpp"
 #include "render/PassCommon.hpp"
-#include "render/PassShaderGroup.hpp"
 
 #include "render/RenderDefs.hpp"
 
@@ -16,15 +15,7 @@ bool hizPassCreate(HizPass& p, Device& d, const DescriptorHeaps& heaps) {
     maxBind.sampledImg(2, HeapImg::Depth);
     maxBind.storageImg(6, HeapImg::HiZMax);
     maxBind.storageImg(33, HeapImg::HiZMax1);
-    const ShaderCreateDesc desc{
-        .path = BH_SHADER_DIR "/hizmax.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = maxBind.raw.count,
-        .mappings = maxBind.raw.mappings,
-        .pushBytes = 16,
-        .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
-    };
-    if (!shaderCreate(d, desc, p.cs)) {
+    if (!createComputeShader(d, BH_SHADER_DIR "/hizmax.comp.spv", maxBind, p.cs, 16)) {
         spdlog::error("hiz max shader failed");
         hizPassDestroy(p, d);
         return false;

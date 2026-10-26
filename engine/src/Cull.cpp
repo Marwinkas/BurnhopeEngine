@@ -2,7 +2,6 @@
 #include "render/HeapBind.hpp"
 #include "render/PassBufferSync.hpp"
 #include "render/PassCommon.hpp"
-#include "render/PassShaderGroup.hpp"
 
 #include "render/RenderDefs.hpp"
 
@@ -23,24 +22,12 @@ bool occlPassCreate(OcclPass& p, Device& d, const DescriptorHeaps& heaps) {
     b.storageBuf(9, HeapBuf::Meshlets);
     b.storageBuf(8, HeapBuf::Sectors);
     b.knob(50, HeapBuf::Flags);
-    VkDescriptorSetAndBindingMappingEXT maps[10];
-    for (uint32_t i = 0; i < b.raw.count; ++i) {
-        maps[i] = b.raw.mappings[i];
-    }
-    const ShaderCreateDesc clearDesc{
-        .path = BH_SHADER_DIR "/cull.clear.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = 9u,
-        .mappings = maps,
-        .pushBytes = sizeof(FlightPush),
-        .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
-    };
-    ShaderCreateDesc compactDesc = clearDesc;
-    compactDesc.path = BH_SHADER_DIR "/cull.comp.spv";
-    compactDesc.mappingCount = 10u;
-    ShaderCreateDesc lateDesc = compactDesc;
-    lateDesc.path = BH_SHADER_DIR "/cull.late.spv";
-    if (!shaderCreate(d, clearDesc, p.clear) || !shaderCreate(d, compactDesc, p.compact) || !shaderCreate(d, lateDesc, p.late)) {
+    PassBindings clearBind = b;
+    clearBind.raw.count = 9u;
+    const uint32_t push = sizeof(FlightPush);
+    if (!createComputeShader(d, BH_SHADER_DIR "/cull.clear.spv", clearBind, p.clear, push)
+        || !createComputeShader(d, BH_SHADER_DIR "/cull.comp.spv", b, p.compact, push)
+        || !createComputeShader(d, BH_SHADER_DIR "/cull.late.spv", b, p.late, push)) {
         spdlog::error("occlusion cull shader failed");
         occlPassDestroy(p, d);
         return false;
@@ -83,13 +70,7 @@ bool clusterPassCreate(ClusterPass& p, Device& d, const DescriptorHeaps& heaps) 
     b.storageBuf(26, HeapBuf::Clusters, false);
     b.storageBuf(27, HeapBuf::ClusterIndex, false);
     b.storageBuf(18, HeapBuf::Decals);
-    const ShaderCreateDesc desc{
-        .path = BH_SHADER_DIR "/cluster.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = b.raw.count,
-        .mappings = b.raw.mappings,
-    };
-    if (!shaderCreate(d, desc, p.cs)) {
+    if (!createComputeShader(d, BH_SHADER_DIR "/cluster.comp.spv", b, p.cs)) {
         spdlog::error("cluster light shader failed");
         clusterPassDestroy(p, d);
         return false;
@@ -117,19 +98,8 @@ bool shadowCullCreate(ShadowCullPass& p, Device& d, const DescriptorHeaps& heaps
     PassBindings clearBind{heaps};
     clearBind.sun();
     clearBind.storageBuf(32, HeapBuf::ShadowIndirect, false);
-    const ShaderCreateDesc clear{
-        .path = BH_SHADER_DIR "/shadowcull.clear.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = clearBind.raw.count,
-        .mappings = clearBind.raw.mappings,
-    };
-    const ShaderCreateDesc compact{
-        .path = BH_SHADER_DIR "/shadowcull.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = 5,
-        .mappings = b.raw.mappings,
-    };
-    if (!shaderCreate(d, clear, p.clear) || !shaderCreate(d, compact, p.compact)) {
+    if (!createComputeShader(d, BH_SHADER_DIR "/shadowcull.clear.spv", clearBind, p.clear)
+        || !createComputeShader(d, BH_SHADER_DIR "/shadowcull.comp.spv", b, p.compact)) {
         spdlog::error("shadow cull shader failed");
         shadowCullDestroy(p, d);
         return false;

@@ -298,18 +298,6 @@ void rcFreeGeometry(RadiancePass& p, Device& d) {
     p.bakeSunZ = -1.0f;
 }
 
-bool rcShader(Device& d, const char* path, const PassBindings& bind, ShaderExt& out) {
-    const ShaderCreateDesc desc{
-        .path = path,
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = bind.raw.count,
-        .mappings = bind.raw.mappings,
-        .pushBytes = sizeof(RcPushConstants),
-        .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
-    };
-    return shaderCreate(d, desc, out);
-}
-
 void rcBind(VkCommandBuffer cmd, const ShaderExt& shader, const RcPushConstants& push) {
     cmdBindCompute(cmd, shader.handle);
     vkCmdPushConstants(cmd, VK_NULL_HANDLE, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push), &push);
@@ -400,12 +388,12 @@ bool radianceCreate(RadiancePass& p, Device& d, const DescriptorHeaps& heaps) {
     shade.knob(50, HeapBuf::Flags);
     shade.knob(54, HeapBuf::RcParams);
     shade.knob(55, HeapBuf::Shade);
-    const bool ok = rcShader(d, BH_SHADER_DIR "/rc.alloc.comp.spv", alloc, p.alloc)
-        && rcShader(d, BH_SHADER_DIR "/rc.prefix.comp.spv", prefix, p.prefix)
-        && rcShader(d, BH_SHADER_DIR "/rc.trace.comp.spv", trace, p.trace)
-        && rcShader(d, BH_SHADER_DIR "/rc.merge.comp.spv", merge, p.merge)
-        && rcShader(d, BH_SHADER_DIR "/rc.oct.comp.spv", oct, p.octahedral)
-        && rcShader(d, BH_SHADER_DIR "/rc.shade.comp.spv", shade, p.shade);
+    const bool ok = createComputeShader(d, BH_SHADER_DIR "/rc.alloc.comp.spv", alloc, p.alloc, sizeof(RcPushConstants))
+        && createComputeShader(d, BH_SHADER_DIR "/rc.prefix.comp.spv", prefix, p.prefix, sizeof(RcPushConstants))
+        && createComputeShader(d, BH_SHADER_DIR "/rc.trace.comp.spv", trace, p.trace, sizeof(RcPushConstants))
+        && createComputeShader(d, BH_SHADER_DIR "/rc.merge.comp.spv", merge, p.merge, sizeof(RcPushConstants))
+        && createComputeShader(d, BH_SHADER_DIR "/rc.oct.comp.spv", oct, p.octahedral, sizeof(RcPushConstants))
+        && createComputeShader(d, BH_SHADER_DIR "/rc.shade.comp.spv", shade, p.shade, sizeof(RcPushConstants));
     if (!ok) {
         spdlog::error("radiance shaders failed");
         radianceDestroy(p, d);

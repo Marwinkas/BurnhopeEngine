@@ -105,28 +105,12 @@ void gizmoPassRecord(VkCommandBuffer cmd, Device& device, const Swapchain& swap,
             VK_IMAGE_ASPECT_DEPTH_BIT,
             true);
     }
-    RenderingPass rendering;
-    rendering.cmd = cmd;
     VkClearValue colorClear{};
-    fillAttachment(rendering.color, swap.views[frame.imageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ATTACHMENT_LOAD_OP_LOAD, colorClear);
-    if (depth) {
-        VkClearValue depthClear{};
-        depthClear.depthStencil.depth = 0.0f;
-        fillAttachment(
-            rendering.depth,
-            depthImg.image.view,
-            VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-            VK_ATTACHMENT_LOAD_OP_CLEAR,
-            depthClear);
-    }
-    rendering.info = {};
-    rendering.info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    rendering.info.renderArea = {{0, 0}, swap.extent};
-    rendering.info.layerCount = 1;
-    rendering.info.colorAttachmentCount = 1;
-    rendering.retarget();
-    vkCmdBeginRendering(cmd, &rendering.info);
-    rendering.open = true;
+    VkClearValue depthClear{};
+    depthClear.depthStencil.depth = 0.0f;
+    RenderingPass rendering = beginRenderingColorDepth(
+        cmd, swap.extent, swap.views[frame.imageIndex], depth ? depthImg.image.view : VK_NULL_HANDLE, colorClear, depthClear,
+        VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_LOAD_OP_CLEAR);
     struct GizmoPhase {
         uint32_t phase = 0;
         uint32_t pad0 = 0;

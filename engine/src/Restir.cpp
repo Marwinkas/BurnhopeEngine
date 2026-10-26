@@ -1,3 +1,4 @@
+#include "color/Color.hpp"
 #include "render/Restir.hpp"
 
 #include <Rtxdi/DI/ReSTIRDI.h>
@@ -51,7 +52,7 @@ float lightPower(const LightGpuData& light, uint32_t passMask) {
     if (light.type != kLightPoint && light.type != kLightSpot && (light.flags & 1u) == 0u) {
         return 0.0f;
     }
-    const float luma = 0.2126f * light.color[0] + 0.7152f * light.color[1] + 0.0722f * light.color[2];
+    const float luma = colorLuma(light.color[0], light.color[1], light.color[2]);
     return luma * std::max(light.intensity, 0.0f);
 }
 
@@ -170,19 +171,6 @@ bool createScreen(RestirPass& p, Device& d, VkExtent2D extent) {
         return false;
     }
     return true;
-}
-
-bool shaderOf(Device& d, const PassBindings& bind, const char* path, ShaderExt& out) {
-    const ShaderCreateDesc desc{
-        .path = path,
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = bind.raw.count,
-        .mappings = bind.raw.mappings,
-        .entry = "main",
-        .pushBytes = sizeof(RestirPush),
-        .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
-    };
-    return shaderCreate(d, desc, out);
 }
 
 void imageLayout(VkCommandBuffer cmd, VkImage image, VkImageLayout& layout, VkImageLayout next, VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess, VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess, uint32_t mips) {
@@ -402,19 +390,8 @@ ReSTIRDI_SpatialBiasCorrectionMode spatialBias(uint32_t mode) {
 }
 
 void storageBarrier(VkCommandBuffer cmd) {
-    const VkMemoryBarrier2 barrier{
-        .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
-        .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-    };
-    const VkDependencyInfo dep{
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .memoryBarrierCount = 1,
-        .pMemoryBarriers = &barrier,
-    };
-    vkCmdPipelineBarrier2(cmd, &dep);
+    rhiMemoryBarrier(cmd, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
 }
 
 void reservoirBarrier(VkCommandBuffer cmd, const RestirPass& p) {
@@ -483,10 +460,10 @@ bool restirCreate(RestirPass& p, Device& d, const DescriptorHeaps& heaps, VkExte
     fast.storageImg(28, HeapImg::SigmaHist);
     fast.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
         heapBufOffset(*fast.raw.heaps, kGradeSlot), static_cast<uint32_t>(fast.raw.heaps->bufferDescSize));
-    if (!shaderOf(d, presample, BH_SHADER_DIR "/restir.presample.comp.spv", p.presample)
-        || !shaderOf(d, di, BH_SHADER_DIR "/restir.di.comp.spv", p.di)
-        || !shaderOf(d, fast, BH_SHADER_DIR "/restir.fast.comp.spv", p.fast)
-        || !shaderOf(d, sigma, BH_SHADER_DIR "/sigma.comp.spv", p.sigma)) {
+    if (!createComputeShader(d, BH_SHADER_DIR "/restir.presample.comp.spv", presample, p.presample, sizeof(RestirPush))
+        || !createComputeShader(d, BH_SHADER_DIR "/restir.di.comp.spv", di, p.di, sizeof(RestirPush))
+        || !createComputeShader(d, BH_SHADER_DIR "/restir.fast.comp.spv", fast, p.fast, sizeof(RestirPush))
+        || !createComputeShader(d, BH_SHADER_DIR "/sigma.comp.spv", sigma, p.sigma, sizeof(RestirPush))) {
         spdlog::error("restir shaders failed");
         restirDestroy(p, d);
         return false;

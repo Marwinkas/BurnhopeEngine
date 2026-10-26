@@ -12,17 +12,18 @@ namespace burnhope {
 
 namespace {
 
-void writeCube(GpuVertex* vert, uint32_t* idx, float half) {
+// 24 вершин и 36 индексов куба с полуразмерами hx, hy, hz. Индексы локальные, от нуля.
+void writeBox(GpuVertex* vert, uint32_t* idx, float hx, float hy, float hz) {
     struct Face {
         float cx, cy, cz, ux, uy, uz, vx, vy, vz;
     };
     const Face faces[6] = {
-        {0.0f, half, 0.0f, half, 0.0f, 0.0f, 0.0f, 0.0f, -half},
-        {0.0f, -half, 0.0f, half, 0.0f, 0.0f, 0.0f, 0.0f, half},
-        {half, 0.0f, 0.0f, 0.0f, half, 0.0f, 0.0f, 0.0f, half},
-        {-half, 0.0f, 0.0f, 0.0f, half, 0.0f, 0.0f, 0.0f, -half},
-        {0.0f, 0.0f, half, half, 0.0f, 0.0f, 0.0f, half, 0.0f},
-        {0.0f, 0.0f, -half, half, 0.0f, 0.0f, 0.0f, -half, 0.0f},
+        {0.0f, hy, 0.0f, hx, 0.0f, 0.0f, 0.0f, 0.0f, -hz},
+        {0.0f, -hy, 0.0f, hx, 0.0f, 0.0f, 0.0f, 0.0f, hz},
+        {hx, 0.0f, 0.0f, 0.0f, hy, 0.0f, 0.0f, 0.0f, hz},
+        {-hx, 0.0f, 0.0f, 0.0f, hy, 0.0f, 0.0f, 0.0f, -hz},
+        {0.0f, 0.0f, hz, hx, 0.0f, 0.0f, 0.0f, hy, 0.0f},
+        {0.0f, 0.0f, -hz, hx, 0.0f, 0.0f, 0.0f, -hy, 0.0f},
     };
     const float corner[4][2] = {{-1.0f, -1.0f}, {1.0f, -1.0f}, {1.0f, 1.0f}, {-1.0f, 1.0f}};
     const uint32_t local[6] = {0u, 1u, 2u, 0u, 2u, 3u};
@@ -59,6 +60,10 @@ void writeCube(GpuVertex* vert, uint32_t* idx, float half) {
             icount += 1;
         }
     }
+}
+
+void writeCube(GpuVertex* vert, uint32_t* idx, float half) {
+    writeBox(vert, idx, half, half, half);
 }
 
 void writePlane(GpuVertex* vert, uint32_t* idx) {
@@ -214,48 +219,11 @@ void sceneFramePlantCubes(SceneFrame* scene) {
         added += 1;
     };
     auto emitBox = [&](float cx, float cy, float cz, float hx, float hy, float hz, uint32_t matSlot) {
-        struct Face {
-            float cx, cy, cz, ux, uy, uz, vx, vy, vz;
-        };
-        const Face faces[6] = {
-            {0.0f, hy, 0.0f, hx, 0.0f, 0.0f, 0.0f, 0.0f, -hz},
-            {0.0f, -hy, 0.0f, hx, 0.0f, 0.0f, 0.0f, 0.0f, hz},
-            {hx, 0.0f, 0.0f, 0.0f, hy, 0.0f, 0.0f, 0.0f, hz},
-            {-hx, 0.0f, 0.0f, 0.0f, hy, 0.0f, 0.0f, 0.0f, -hz},
-            {0.0f, 0.0f, hz, hx, 0.0f, 0.0f, 0.0f, hy, 0.0f},
-            {0.0f, 0.0f, -hz, hx, 0.0f, 0.0f, 0.0f, -hy, 0.0f},
-        };
-        const float corner[4][2] = {{-1.0f, -1.0f}, {1.0f, -1.0f}, {1.0f, 1.0f}, {-1.0f, 1.0f}};
         const uint32_t base = static_cast<uint32_t>(verts.size());
         const uint32_t ind = static_cast<uint32_t>(indices.size());
-        for (const Face& face : faces) {
-            float nx = face.uy * face.vz - face.uz * face.vy;
-            float ny = face.uz * face.vx - face.ux * face.vz;
-            float nz = face.ux * face.vy - face.uy * face.vx;
-            const float nlen = std::sqrt(nx * nx + ny * ny + nz * nz);
-            if (nlen > 1.0e-6f) {
-                nx /= nlen;
-                ny /= nlen;
-                nz /= nlen;
-            } else {
-                ny = 1.0f;
-            }
-            const uint32_t faceBase = static_cast<uint32_t>(verts.size()) - base;
-            for (uint32_t c = 0; c < 4; ++c) {
-                GpuVertex v{};
-                v.px = face.cx + corner[c][0] * face.ux + corner[c][1] * face.vx;
-                v.py = face.cy + corner[c][0] * face.uy + corner[c][1] * face.vy;
-                v.pz = face.cz + corner[c][0] * face.uz + corner[c][1] * face.vz;
-                v.nx = nx;
-                v.ny = ny;
-                v.nz = nz;
-                verts.push_back(v);
-            }
-            const uint32_t local[6] = {0, 1, 2, 0, 2, 3};
-            for (uint32_t t = 0; t < 6; ++t) {
-                indices.push_back(faceBase + local[t]);
-            }
-        }
+        verts.resize(base + 24u);
+        indices.resize(ind + 36u);
+        writeBox(&verts[base], &indices[ind], hx, hy, hz);
         const float radius = std::sqrt(hx * hx + hy * hy + hz * hz);
         finish(cx, cy, cz, radius, matSlot, base, ind, 24, 12);
     };

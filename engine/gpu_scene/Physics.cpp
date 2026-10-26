@@ -311,17 +311,17 @@ void addWorldMesh(PhysicsWorld& world, const PhysicsCook& cook) {
     spdlog::info("Jolt world {} triangles", static_cast<uint32_t>(triangles.size()));
 }
 
-JPH::Quat bodyRotation(const PhysicsPose& pose) {
+JPH::Quat bodyRotation(const Xform& pose) {
     return quatFromEuler(pose.euler);
 }
 
-JPH::RVec3 bodyPosition(const DynBody& dyn, const PhysicsPose& pose, JPH::Quat rot) {
+JPH::RVec3 bodyPosition(const DynBody& dyn, const Xform& pose, JPH::Quat rot) {
     const JPH::Vec3 local{dyn.center[0] * pose.scale[0], dyn.center[1] * pose.scale[1], dyn.center[2] * pose.scale[2]};
     const JPH::Vec3 world = rot * local;
     return JPH::RVec3{pose.pos[0] + world.GetX(), pose.pos[1] + world.GetY(), pose.pos[2] + world.GetZ()};
 }
 
-void applyScale(JPH::BodyInterface& bodies, DynBody& dyn, const PhysicsPose& pose) {
+void applyScale(JPH::BodyInterface& bodies, DynBody& dyn, const Xform& pose) {
     const float sx = std::max(pose.scale[0], 0.05f);
     const float sy = std::max(pose.scale[1], 0.05f);
     const float sz = std::max(pose.scale[2], 0.05f);
@@ -407,7 +407,7 @@ bool physicsAddBox(PhysicsWorld* world, uint32_t instance, uint8_t actor, const 
     instanceAxes(inst, scale, axisX, axisY, axisZ, pos);
     float euler[3]{};
     actorEulerFromBasis(axisX, axisY, axisZ, euler);
-    PhysicsPose pose{};
+    Xform pose{};
     pose.pos[0] = pos[0];
     pose.pos[1] = pos[1];
     pose.pos[2] = pos[2];
@@ -457,7 +457,7 @@ bool physicsAddBox(PhysicsWorld* world, uint32_t instance, uint8_t actor, const 
     return true;
 }
 
-void physicsStep(PhysicsWorld* world, float dt, uint8_t heldActor, PhysicsPose* poses, uint32_t count) {
+void physicsStep(PhysicsWorld* world, float dt, uint8_t heldActor, Xform* poses, uint32_t count) {
     if (world == nullptr || !world->open || poses == nullptr || count == 0) {
         return;
     }

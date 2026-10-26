@@ -71,6 +71,7 @@ inline void fillAttachment(
     out.clearValue = clear;
 }
 
+// Цвет и глубина с раздельными load-операциями: gizmo грузит цвет кадра и чистит свою глубину.
 [[nodiscard]] inline RenderingPass beginRenderingColorDepth(
     VkCommandBuffer cmd,
     VkExtent2D extent,
@@ -78,15 +79,15 @@ inline void fillAttachment(
     VkImageView depthView,
     VkClearValue clearColor,
     VkClearValue clearDepth,
-    bool clearOnLoad = true) {
+    VkAttachmentLoadOp colorLoad,
+    VkAttachmentLoadOp depthLoad) {
     RenderingPass pass;
     pass.cmd = cmd;
-    const VkAttachmentLoadOp load = clearOnLoad ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
     if (colorView != VK_NULL_HANDLE) {
-        fillAttachment(pass.color, colorView, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, load, clearColor);
+        fillAttachment(pass.color, colorView, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, colorLoad, clearColor);
     }
     if (depthView != VK_NULL_HANDLE) {
-        fillAttachment(pass.depth, depthView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, load, clearDepth);
+        fillAttachment(pass.depth, depthView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, depthLoad, clearDepth);
     }
     pass.info = {};
     pass.info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -97,6 +98,18 @@ inline void fillAttachment(
     vkCmdBeginRendering(cmd, &pass.info);
     pass.open = true;
     return pass;
+}
+
+[[nodiscard]] inline RenderingPass beginRenderingColorDepth(
+    VkCommandBuffer cmd,
+    VkExtent2D extent,
+    VkImageView colorView,
+    VkImageView depthView,
+    VkClearValue clearColor,
+    VkClearValue clearDepth,
+    bool clearOnLoad = true) {
+    const VkAttachmentLoadOp load = clearOnLoad ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+    return beginRenderingColorDepth(cmd, extent, colorView, depthView, clearColor, clearDepth, load, load);
 }
 
 // renderArea с нулевой шириной значит весь extent.

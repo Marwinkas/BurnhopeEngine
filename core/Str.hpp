@@ -66,6 +66,34 @@ inline bool strExtIs(const char* path, const char* ext) {
     return true;
 }
 
+inline char strFoldAscii(char c) {
+    return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+// Case-insensitive (ASCII) substring test; an empty needle matches.
+inline bool strContainsCi(std::string_view text, std::string_view needle) {
+    if (needle.size() > text.size()) {
+        return false;
+    }
+    for (size_t i = 0; i + needle.size() <= text.size(); ++i) {
+        size_t k = 0;
+        while (k < needle.size() && strFoldAscii(text[i + k]) == strFoldAscii(needle[k])) {
+            ++k;
+        }
+        if (k == needle.size()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool strContainsCi(const char* text, const char* needle) {
+    if (text == nullptr || needle == nullptr) {
+        return false;
+    }
+    return strContainsCi(std::string_view(text), std::string_view(needle));
+}
+
 inline bool strIsImagePath(const char* path) {
     return strExtIs(path, ".png") || strExtIs(path, ".jpg") || strExtIs(path, ".jpeg") || strExtIs(path, ".gif")
         || strExtIs(path, ".bmp") || strExtIs(path, ".tga") || strExtIs(path, ".hdr") || strExtIs(path, ".psd");

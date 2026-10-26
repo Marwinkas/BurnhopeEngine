@@ -1,3 +1,4 @@
+#include "Str.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "render/HeapBind.hpp"
 #include "render/SceneFrameImpl.hpp"
@@ -19,22 +20,11 @@ namespace burnhope {
 namespace {
 
 bool fileReadable(const char* path) {
-    std::FILE* file = std::fopen(path, "rb");
-    if (file == nullptr) {
-        return false;
-    }
-    std::fclose(file);
-    return true;
+    std::error_code ec;
+    return std::filesystem::is_regular_file(path, ec);
 }
 
-bool endsWith(const char* text, const char* suffix) {
-    if (text == nullptr || suffix == nullptr) {
-        return false;
-    }
-    const size_t n = std::strlen(text);
-    const size_t m = std::strlen(suffix);
-    return n >= m && std::strcmp(text + (n - m), suffix) == 0;
-}
+
 
 void resolveTexturePath(char* path, size_t cap, const char* root, const char* name) {
     std::snprintf(path, cap, "%s/%s", root, name);
@@ -44,7 +34,7 @@ void resolveTexturePath(char* path, size_t cap, const char* root, const char* na
     const char* cut[] = {".d", ".dd", ".pn", ".jp"};
     const char* full[] = {".dds", ".dds", ".png", ".jpg"};
     for (uint32_t i = 0; i < 4; ++i) {
-        if (!endsWith(name, cut[i])) {
+        if (!strExtIs(name, cut[i])) {
             continue;
         }
         const size_t n = std::strlen(name);
@@ -118,9 +108,8 @@ void ddsCachePath(char* out, size_t cap, const char* resolved) {
 }
 
 bool imageName(const std::filesystem::path& path) {
-    const std::string ext = path.extension().string();
-    return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".dds" || ext == ".tga" || ext == ".bmp"
-        || ext == ".PNG" || ext == ".JPG" || ext == ".JPEG" || ext == ".DDS" || ext == ".TGA";
+    const std::string file = path.string();
+    return strIsImagePath(file.c_str()) || strExtIs(file.c_str(), ".dds");
 }
 
 bool skipTextureDir(const std::filesystem::path& path) {
@@ -309,22 +298,7 @@ void materialOwnFromView(SceneFrameImpl& s, const SceneBlobView& view) {
 }
 
 bool nameHas(const char* text, const char* needle) {
-    if (text == nullptr || needle == nullptr) {
-        return false;
-    }
-    for (const char* p = text; *p != '\0'; ++p) {
-        const char* a = p;
-        const char* b = needle;
-        while (*a != '\0' && *b != '\0'
-            && std::tolower(static_cast<unsigned char>(*a)) == std::tolower(static_cast<unsigned char>(*b))) {
-            ++a;
-            ++b;
-        }
-        if (*b == '\0') {
-            return true;
-        }
-    }
-    return false;
+    return strContainsCi(text, needle);
 }
 
 bool loadTextures(SceneFrameImpl& s, Device& device) {
@@ -433,18 +407,7 @@ void modelLabel(const SceneFrameImpl& scene, uint32_t mat, char* dst, uint32_t c
         const uint32_t tex = scene.materialSrc[mat].albedoTexIndex;
         if (tex > 0u && tex < scene.texNameCount) {
             const char* file = scene.texNames[tex].file;
-            const char* leaf = file;
-            for (const char* p = file; *p != '\0'; ++p) {
-                if (*p == '/' || *p == '\\') {
-                    leaf = p + 1;
-                }
-            }
-            uint32_t n = 0;
-            while (leaf[n] != '\0' && leaf[n] != '.' && n + 1u < cap) {
-                dst[n] = leaf[n];
-                n += 1u;
-            }
-            dst[n] = '\0';
+            strPathStem(file, dst, cap);
         }
     }
     if (dst[0] == '\0') {
@@ -715,7 +678,7 @@ void takeQueuedTexture(SceneFrameImpl& s, Device& device) {
         }
         const bool color = job.channel == 0u || job.channel == 3u;
         const PbrTex kind = color ? PbrTex::Color : (job.channel == 1u ? PbrTex::Normal : PbrTex::Data);
-        const bool dds = endsWith(job.path, ".dds") || endsWith(job.path, ".DDS");
+        const bool dds = strExtIs(job.path, ".dds");
         GpuImage img{};
         bool loaded = dds && imageLoadDds(img, device, job.path, color);
         if (!loaded) {

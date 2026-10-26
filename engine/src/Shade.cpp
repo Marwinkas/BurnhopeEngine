@@ -172,71 +172,15 @@ bool shadePassCreate(ShadePass& p, Device& d, const DescriptorHeaps& heaps, VkEx
     relaxBind.storageImg(38, HeapImg::ReflectHist1);
     relaxBind.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
         heapBufOffset(*relaxBind.raw.heaps, kGradeSlot), static_cast<uint32_t>(relaxBind.raw.heaps->bufferDescSize));
-    const ShaderCreateDesc contactDesc{
-        .path = BH_SHADER_DIR "/contact.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = contact.raw.count,
-        .mappings = contact.raw.mappings,
-    };
-    const ShaderCreateDesc gtaoDesc{
-        .path = BH_SHADER_DIR "/gtao.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = gtao.raw.count,
-        .mappings = gtao.raw.mappings,
-    };
-    const ShaderCreateDesc skyDesc{
-        .path = BH_SHADER_DIR "/shade.sky.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = sky.raw.count,
-        .mappings = sky.raw.mappings,
-    };
-    const ShaderCreateDesc sunDesc{
-        .path = BH_SHADER_DIR "/shade.sun.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = sun.raw.count,
-        .mappings = sun.raw.mappings,
-    };
-    const ShaderCreateDesc punctualDesc{
-        .path = BH_SHADER_DIR "/shade.punctual.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = punctual.raw.count,
-        .mappings = punctual.raw.mappings,
-    };
-    const ShaderCreateDesc reflectTraceDesc{
-        .path = BH_SHADER_DIR "/reflect.trace.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = reflectTrace.raw.count,
-        .mappings = reflectTrace.raw.mappings,
-        .pushBytes = sizeof(FlightPush),
-        .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
-    };
-    const ShaderCreateDesc reflectUpDesc{
-        .path = BH_SHADER_DIR "/reflect.up.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = reflectUp.raw.count,
-        .mappings = reflectUp.raw.mappings,
-        .pushBytes = sizeof(FlightPush),
-        .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
-    };
-    const ShaderCreateDesc relaxDesc{
-        .path = BH_SHADER_DIR "/relax.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = relaxBind.raw.count,
-        .mappings = relaxBind.raw.mappings,
-        .entry = "main",
-        .pushBytes = sizeof(FlightPush),
-        .pushStages = VK_SHADER_STAGE_COMPUTE_BIT,
-    };
-    const ShaderCreateDesc fogDesc{
-        .path = BH_SHADER_DIR "/shade.fog.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = fog.raw.count,
-        .mappings = fog.raw.mappings,
-    };
-    if (!shaderCreate(d, skyDesc, p.sky) || !shaderCreate(d, sunDesc, p.sun) || !shaderCreate(d, punctualDesc, p.punctual)
-        || !shaderCreate(d, fogDesc, p.fog) || !shaderCreate(d, gtaoDesc, p.gtao) || !shaderCreate(d, contactDesc, p.contactCs)
-        || !shaderCreate(d, reflectTraceDesc, p.reflectTrace) || !shaderCreate(d, reflectUpDesc, p.reflectUp)
-        || !shaderCreate(d, relaxDesc, p.relax)) {
+    if (!createComputeShader(d, BH_SHADER_DIR "/shade.sky.comp.spv", sky, p.sky)
+        || !createComputeShader(d, BH_SHADER_DIR "/shade.sun.comp.spv", sun, p.sun)
+        || !createComputeShader(d, BH_SHADER_DIR "/shade.punctual.comp.spv", punctual, p.punctual)
+        || !createComputeShader(d, BH_SHADER_DIR "/shade.fog.comp.spv", fog, p.fog)
+        || !createComputeShader(d, BH_SHADER_DIR "/gtao.comp.spv", gtao, p.gtao)
+        || !createComputeShader(d, BH_SHADER_DIR "/contact.comp.spv", contact, p.contactCs)
+        || !createComputeShader(d, BH_SHADER_DIR "/reflect.trace.comp.spv", reflectTrace, p.reflectTrace, sizeof(FlightPush))
+        || !createComputeShader(d, BH_SHADER_DIR "/reflect.up.comp.spv", reflectUp, p.reflectUp, sizeof(FlightPush))
+        || !createComputeShader(d, BH_SHADER_DIR "/relax.comp.spv", relaxBind, p.relax, sizeof(FlightPush))) {
         spdlog::error("shade compute shader failed");
         shadePassDestroy(p, d);
         return false;

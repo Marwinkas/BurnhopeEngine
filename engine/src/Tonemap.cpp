@@ -26,32 +26,24 @@ bool tonemapPassCreate(TonemapPass& p, Device& d, const DescriptorHeaps& heaps) 
     tone.knob(56, HeapBuf::Sliders);
     tone.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
         heapBufOffset(heaps, kGradeSlot), static_cast<uint32_t>(heaps.bufferDescSize));
-    VkDescriptorSetAndBindingMappingEXT maps[12];
-    for (uint32_t i = 0; i < tone.raw.count && i < 12u; ++i) {
-        maps[i] = tone.raw.mappings[i];
-    }
     const ShaderCreateDesc mesh{
         .path = BH_SHADER_DIR "/tonemap.mesh.spv",
         .stage = VK_SHADER_STAGE_MESH_BIT_EXT,
         .nextStage = VK_SHADER_STAGE_FRAGMENT_BIT,
         .mappingCount = 2,
-        .mappings = maps,
+        .mappings = tone.raw.mappings,
     };
     const ShaderCreateDesc frag{
         .path = BH_SHADER_DIR "/tonemap.frag.spv",
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
         .mappingCount = tone.raw.count,
-        .mappings = maps,
+        .mappings = tone.raw.mappings,
     };
     PassBindings bloom{heaps};
     bloom.ubo(0, HeapBuf::Frame);
     bloom.sampledImg(6, HeapImg::HdrBSampled);
     bloom.storageImg(33, HeapImg::BloomStorage);
     bloom.knob(57, HeapBuf::Bloom);
-    VkDescriptorSetAndBindingMappingEXT bloomMaps[4];
-    for (uint32_t i = 0; i < bloom.raw.count; ++i) {
-        bloomMaps[i] = bloom.raw.mappings[i];
-    }
     const char* downPath[4] = {
         BH_SHADER_DIR "/bloom0.comp.spv",
         BH_SHADER_DIR "/bloom1.comp.spv",
@@ -65,39 +57,19 @@ bool tonemapPassCreate(TonemapPass& p, Device& d, const DescriptorHeaps& heaps) 
     };
     const uint32_t downCount[4] = {4u, 3u, 3u, 3u};
     bool bloomOk = shaderCreate(d, mesh, p.mesh) && shaderCreate(d, frag, p.frag)
-        && createShaderArray(d, p.down, downPath, VK_SHADER_STAGE_COMPUTE_BIT, bloomMaps, downCount)
-        && createShaderArray(d, p.up, upPath, VK_SHADER_STAGE_COMPUTE_BIT, bloomMaps, 3u);
+        && createShaderArray(d, p.down, downPath, VK_SHADER_STAGE_COMPUTE_BIT, bloom.raw.mappings, downCount)
+        && createShaderArray(d, p.up, upPath, VK_SHADER_STAGE_COMPUTE_BIT, bloom.raw.mappings, 3u);
     PassBindings cmaaBind{heaps};
     cmaaBind.ubo(0, HeapBuf::Frame);
     cmaaBind.sampledImg(6, HeapImg::HdrBSampled);
     cmaaBind.storageImg(3, HeapImg::HdrAStorage);
     cmaaBind.knob(50, HeapBuf::Flags);
-    VkDescriptorSetAndBindingMappingEXT cmaaMaps[4];
-    for (uint32_t i = 0; i < cmaaBind.raw.count; ++i) {
-        cmaaMaps[i] = cmaaBind.raw.mappings[i];
-    }
-    const ShaderCreateDesc cmaa{
-        .path = BH_SHADER_DIR "/cmaa2.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = 4,
-        .mappings = cmaaMaps,
-    };
     PassBindings smaaBind{heaps};
     smaaBind.ubo(0, HeapBuf::Frame);
     smaaBind.storageImg(3, HeapImg::HdrAStorage);
     smaaBind.storageImg(4, HeapImg::HdrBStorage);
     smaaBind.sampledImg(6, HeapImg::HdrBSampled);
     smaaBind.knob(50, HeapBuf::Flags);
-    VkDescriptorSetAndBindingMappingEXT smaaMaps[5];
-    for (uint32_t i = 0; i < smaaBind.raw.count; ++i) {
-        smaaMaps[i] = smaaBind.raw.mappings[i];
-    }
-    const ShaderCreateDesc smaa{
-        .path = BH_SHADER_DIR "/smaa.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = 5,
-        .mappings = smaaMaps,
-    };
     PassBindings taaBind{heaps};
     taaBind.ubo(0, HeapBuf::Frame);
     taaBind.sampler(1, HeapSamp::Linear, 1);
@@ -109,32 +81,15 @@ bool tonemapPassCreate(TonemapPass& p, Device& d, const DescriptorHeaps& heaps) 
     taaBind.knob(57, HeapBuf::Bloom);
     taaBind.raw.push(0, 60, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
         heapBufOffset(heaps, kGradeSlot), static_cast<uint32_t>(heaps.bufferDescSize));
-    VkDescriptorSetAndBindingMappingEXT taaMaps[12];
-    for (uint32_t i = 0; i < taaBind.raw.count && i < 12u; ++i) {
-        taaMaps[i] = taaBind.raw.mappings[i];
-    }
-    const ShaderCreateDesc taa{
-        .path = BH_SHADER_DIR "/taa.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = taaBind.raw.count,
-        .mappings = taaMaps,
-    };
     PassBindings copyBind{heaps};
     copyBind.ubo(0, HeapBuf::Frame);
     copyBind.storageImg(3, HeapImg::HdrAStorage);
     copyBind.storageImg(4, HeapImg::HdrBStorage);
-    VkDescriptorSetAndBindingMappingEXT copyMaps[4];
-    for (uint32_t i = 0; i < copyBind.raw.count && i < 4u; ++i) {
-        copyMaps[i] = copyBind.raw.mappings[i];
-    }
-    const ShaderCreateDesc taaCopy{
-        .path = BH_SHADER_DIR "/taacopy.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = copyBind.raw.count,
-        .mappings = copyMaps,
-    };
-    if (!bloomOk || !shaderCreate(d, cmaa, p.cmaa) || !shaderCreate(d, smaa, p.smaa)
-        || !shaderCreate(d, taa, p.taa) || !shaderCreate(d, taaCopy, p.taaCopy)) {
+    if (!bloomOk
+        || !createComputeShader(d, BH_SHADER_DIR "/cmaa2.comp.spv", cmaaBind, p.cmaa)
+        || !createComputeShader(d, BH_SHADER_DIR "/smaa.comp.spv", smaaBind, p.smaa)
+        || !createComputeShader(d, BH_SHADER_DIR "/taa.comp.spv", taaBind, p.taa)
+        || !createComputeShader(d, BH_SHADER_DIR "/taacopy.comp.spv", copyBind, p.taaCopy)) {
         spdlog::error("tonemap shaders failed");
         tonemapPassDestroy(p, d);
         return false;

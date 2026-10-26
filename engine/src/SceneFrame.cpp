@@ -66,20 +66,11 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
         (input.pointer.released & kPointerLeft) != 0 ? 1 : 0);
     if (scene->physics != nullptr && scene->sim != 0) {
         const uint32_t n = physicsBodyCount(scene->physics);
-        PhysicsPose poses[kPropCap]{};
+        Xform poses[kPropCap]{};
         const uint32_t count = n < kPropCap ? n : kPropCap;
         for (uint32_t i = 0; i < count; ++i) {
             const uint8_t actor = physicsBodyActor(scene->physics, i);
-            const Xform pose = sceneActorXform(scene->actors, actor);
-            poses[i].pos[0] = pose.pos[0];
-            poses[i].pos[1] = pose.pos[1];
-            poses[i].pos[2] = pose.pos[2];
-            poses[i].euler[0] = pose.euler[0];
-            poses[i].euler[1] = pose.euler[1];
-            poses[i].euler[2] = pose.euler[2];
-            poses[i].scale[0] = pose.scale[0];
-            poses[i].scale[1] = pose.scale[1];
-            poses[i].scale[2] = pose.scale[2];
+            poses[i] = sceneActorXform(scene->actors, actor);
         }
         const uint8_t held = scene->actors.drag <= 6 ? scene->actors.selected : kSceneActorNone;
         const float stepDt = scene->sim == 2 ? 0.0f : dt;
@@ -91,17 +82,7 @@ bool sceneFrameTick(SceneFrame* scene, const InputFrame& input, float dt) {
             if (actor == held || actor >= scene->actors.count) {
                 continue;
             }
-            Xform pose = sceneActorXform(scene->actors, actor);
-            pose.pos[0] = poses[i].pos[0];
-            pose.pos[1] = poses[i].pos[1];
-            pose.pos[2] = poses[i].pos[2];
-            pose.euler[0] = poses[i].euler[0];
-            pose.euler[1] = poses[i].euler[1];
-            pose.euler[2] = poses[i].euler[2];
-            pose.scale[0] = poses[i].scale[0];
-            pose.scale[1] = poses[i].scale[1];
-            pose.scale[2] = poses[i].scale[2];
-            sceneActorWriteXform(scene->actors, actor, pose);
+            sceneActorWriteXform(scene->actors, actor, poses[i]);
         }
         for (uint32_t i = 0; i < count; ++i) {
             const uint8_t actor = physicsBodyActor(scene->physics, i);

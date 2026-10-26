@@ -1,3 +1,4 @@
+#include "color/Color.hpp"
 #include "render/Weather.hpp"
 #include "render/SceneFrameImpl.hpp"
 #include "gpu_scene/LightMath.hpp"
@@ -82,7 +83,7 @@ uint32_t uploadLights(SceneFrameImpl& s, uint32_t flight) {
             if (near) {
                 continue;
             }
-            const float luma = 0.2126f * mat.baseColor[0] + 0.7152f * mat.baseColor[1] + 0.0722f * mat.baseColor[2];
+            const float luma = colorLuma(mat.baseColor[0], mat.baseColor[1], mat.baseColor[2]);
             LightGpuData lamp{};
             lamp.pos[0] = inst.sphere[0];
             lamp.pos[1] = inst.sphere[1];

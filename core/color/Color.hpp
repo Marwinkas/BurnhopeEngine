@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <type_traits>
 
 namespace burnhope {
@@ -175,5 +176,43 @@ inline size_t colorFormatHex(char* dst, size_t cap, float r, float g, float b, f
     return strCopyCap(dst, cap, full);
 }
 
+// Rec.709 luminance of a linear colour.
+constexpr float colorLuma(float r, float g, float b) {
+    return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+}
+
+// Blackbody tint (Tanner Helland fit) for 1500..12000 K, each channel in 0..1.
+inline void colorFromKelvin(float kelvin, float& r, float& g, float& b) {
+    const float t = std::fmin(std::fmax(kelvin, 1500.0f), 12000.0f) / 100.0f;
+    auto sat = [](float v) { return std::fmin(std::fmax(v, 0.0f), 255.0f); };
+    if (t <= 66.0f) {
+        r = 255.0f;
+        g = sat(99.4708025861f * std::log(t) - 161.1195681661f);
+        b = t <= 19.0f ? 0.0f : sat(138.5177312231f * std::log(t - 10.0f) - 305.0447927307f);
+    } else {
+        r = sat(329.698727446f * std::pow(t - 60.0f, -0.1332047592f));
+        g = sat(288.1221695283f * std::pow(t - 60.0f, -0.0755148492f));
+        b = 255.0f;
+    }
+    r /= 255.0f;
+    g /= 255.0f;
+    b /= 255.0f;
+}
+
+// IEEE binary16 bits, truncating; denormals flush to zero and overflow saturates to infinity.
+inline uint16_t floatToHalf(float value) {
+    uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    const uint32_t sign = (bits >> 16u) & 0x8000u;
+    const int32_t exp = static_cast<int32_t>((bits >> 23u) & 0xffu) - 127 + 15;
+    const uint32_t mant = bits & 0x7fffffu;
+    if (exp <= 0) {
+        return static_cast<uint16_t>(sign);
+    }
+    if (exp >= 31) {
+        return static_cast<uint16_t>(sign | 0x7c00u);
+    }
+    return static_cast<uint16_t>(sign | (static_cast<uint32_t>(exp) << 10u) | (mant >> 13u));
+}
 
 } // namespace burnhope

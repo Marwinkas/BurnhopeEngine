@@ -1,3 +1,4 @@
+#include "color/Color.hpp"
 #include "render/Fsr.hpp"
 
 #include "render/HeapBind.hpp"
@@ -129,9 +130,7 @@ uint32_t slotOf(Slot slot) {
     return kFsrImgBase + static_cast<uint32_t>(slot);
 }
 
-uint32_t groupsOf(uint32_t n, uint32_t group) {
-    return (n + group - 1u) / group;
-}
+
 
 uint32_t halfOf(uint32_t v) {
     return v > 1u ? v / 2u : 1u;
@@ -168,35 +167,11 @@ float halton(int32_t index, int32_t base) {
     return r;
 }
 
-uint16_t floatToHalf(float value) {
-    uint32_t bits = 0;
-    std::memcpy(&bits, &value, sizeof(bits));
-    const uint32_t sign = (bits >> 16u) & 0x8000u;
-    const int32_t exp = static_cast<int32_t>((bits >> 23u) & 0xffu) - 127 + 15;
-    const uint32_t mant = bits & 0x7fffffu;
-    if (exp <= 0) {
-        return static_cast<uint16_t>(sign);
-    }
-    if (exp >= 31) {
-        return static_cast<uint16_t>(sign | 0x7c00u);
-    }
-    return static_cast<uint16_t>(sign | (static_cast<uint32_t>(exp) << 10u) | (mant >> 13u));
-}
+
 
 void uboAt(PassBindings& bind, uint32_t binding, uint32_t slot) {
     bind.raw.push(0, binding, VK_SPIRV_RESOURCE_TYPE_UNIFORM_BUFFER_BIT_EXT,
         heapBufOffset(*bind.raw.heaps, slot), static_cast<uint32_t>(bind.raw.heaps->bufferDescSize));
-}
-
-bool makeShader(Device& d, PassBindings& bind, const char* path, ShaderExt& out) {
-    const ShaderCreateDesc desc{
-        .path = path,
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = bind.raw.count,
-        .mappings = bind.raw.mappings,
-        .entry = "main",
-    };
-    return shaderCreate(d, desc, out);
 }
 
 bool makeImage(TrackedImage& img, Device& d, VkExtent2D extent, VkFormat format, uint32_t mips) {
@@ -449,15 +424,15 @@ bool createShaders(FsrPass& p, Device& d, const DescriptorHeaps& heaps) {
     rcas.sampledImg(9, slotOf(RcasS));
     rcas.storageImg(24, slotOf(OutU));
 
-    return makeShader(d, motion, BH_SHADER_DIR "/fsr.motion.comp.spv", p.motion)
-        && makeShader(d, prepare, BH_SHADER_DIR "/fsr.prepare.comp.spv", p.prepare)
-        && makeShader(d, luma, BH_SHADER_DIR "/fsr.luma.comp.spv", p.lumaPyramid)
-        && makeShader(d, shadePyr, BH_SHADER_DIR "/fsr.shading_pyramid.comp.spv", p.shadingPyramid)
-        && makeShader(d, shade, BH_SHADER_DIR "/fsr.shading.comp.spv", p.shadingChange)
-        && makeShader(d, react, BH_SHADER_DIR "/fsr.reactivity.comp.spv", p.reactivity)
-        && makeShader(d, unstable, BH_SHADER_DIR "/fsr.instability.comp.spv", p.instability)
-        && makeShader(d, accum, BH_SHADER_DIR "/fsr.accumulate.comp.spv", p.accumulate)
-        && makeShader(d, rcas, BH_SHADER_DIR "/fsr.rcas.comp.spv", p.rcas);
+    return createComputeShader(d, BH_SHADER_DIR "/fsr.motion.comp.spv", motion, p.motion)
+        && createComputeShader(d, BH_SHADER_DIR "/fsr.prepare.comp.spv", prepare, p.prepare)
+        && createComputeShader(d, BH_SHADER_DIR "/fsr.luma.comp.spv", luma, p.lumaPyramid)
+        && createComputeShader(d, BH_SHADER_DIR "/fsr.shading_pyramid.comp.spv", shadePyr, p.shadingPyramid)
+        && createComputeShader(d, BH_SHADER_DIR "/fsr.shading.comp.spv", shade, p.shadingChange)
+        && createComputeShader(d, BH_SHADER_DIR "/fsr.reactivity.comp.spv", react, p.reactivity)
+        && createComputeShader(d, BH_SHADER_DIR "/fsr.instability.comp.spv", unstable, p.instability)
+        && createComputeShader(d, BH_SHADER_DIR "/fsr.accumulate.comp.spv", accum, p.accumulate)
+        && createComputeShader(d, BH_SHADER_DIR "/fsr.rcas.comp.spv", rcas, p.rcas);
 }
 
 void destroyShaders(FsrPass& p, Device& d) {
@@ -486,19 +461,9 @@ void dispatch(VkCommandBuffer cmd, const ShaderExt& shader, uint32_t x, uint32_t
 }
 
 void memoryBarrier(VkCommandBuffer cmd) {
-    const VkMemoryBarrier2 barrier{
-        .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
-        .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-        .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-    };
-    const VkDependencyInfo dep{
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .memoryBarrierCount = 1,
-        .pMemoryBarriers = &barrier,
-    };
-    vkCmdPipelineBarrier2(cmd, &dep);
+    rhiMemoryBarrier(cmd, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
 }
 
 void clearFloat(VkCommandBuffer cmd, TrackedImage& img, float r, float g, float b, float a) {
@@ -724,8 +689,8 @@ void fsrRecord(
     if (mips > mipLimit) {
         mips = mipLimit;
     }
-    const uint32_t spdX = groupsOf(p.renderW, 64u);
-    const uint32_t spdY = groupsOf(p.renderH, 64u);
+    const uint32_t spdX = passGroups(p.renderW, 64u);
+    const uint32_t spdY = passGroups(p.renderH, 64u);
     SpdConst spd{};
     spd.mips = mips;
     spd.numWorkGroups = spdX * spdY;
@@ -772,12 +737,12 @@ void fsrRecord(
         useGeneral(cmd, p.composition);
     }
 
-    const uint32_t srcX = groupsOf(p.renderW, 8u);
-    const uint32_t srcY = groupsOf(p.renderH, 8u);
-    const uint32_t dstX = groupsOf(p.displayW, 8u);
-    const uint32_t dstY = groupsOf(p.displayH, 8u);
-    const uint32_t shadeX = groupsOf(halfOf(p.renderW), 8u);
-    const uint32_t shadeY = groupsOf(halfOf(p.renderH), 8u);
+    const uint32_t srcX = passGroups(p.renderW, 8u);
+    const uint32_t srcY = passGroups(p.renderH, 8u);
+    const uint32_t dstX = passGroups(p.displayW, 8u);
+    const uint32_t dstY = passGroups(p.displayH, 8u);
+    const uint32_t shadeX = passGroups(halfOf(p.renderW), 8u);
+    const uint32_t shadeY = passGroups(halfOf(p.renderH), 8u);
 
     dispatch(cmd, p.motion, srcX, srcY);
     memoryBarrier(cmd);
@@ -799,7 +764,7 @@ void fsrRecord(
     memoryBarrier(cmd);
     dispatch(cmd, p.accumulate, dstX, dstY);
     memoryBarrier(cmd);
-    dispatch(cmd, p.rcas, groupsOf(p.displayW, 16u), groupsOf(p.displayH, 16u));
+    dispatch(cmd, p.rcas, passGroups(p.displayW, 16u), passGroups(p.displayH, 16u));
 
     imageBarrier(cmd, p.output, VK_IMAGE_LAYOUT_GENERAL,
         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,

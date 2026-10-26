@@ -1,9 +1,12 @@
+#include "color/Color.hpp"
 #include "render/Weather.hpp"
 #include "render/SceneFrameImpl.hpp"
 #include "gpu_scene/LightMath.hpp"
 #include "gpu_scene/PointShadow.hpp"
 #include "gpu_scene/SunShadow.hpp"
 
+#include <cstddef>
+#include <type_traits>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -14,37 +17,7 @@ namespace burnhope {
 
 namespace {
 
-void kelvinRgb(float kelvin, float& r, float& g, float& b) {
-    float t = kelvin;
-    if (t < 1500.0f) {
-        t = 1500.0f;
-    }
-    if (t > 12000.0f) {
-        t = 12000.0f;
-    }
-    t /= 100.0f;
-    auto sat = [](float v) {
-        if (v < 0.0f) {
-            return 0.0f;
-        }
-        if (v > 255.0f) {
-            return 255.0f;
-        }
-        return v;
-    };
-    if (t <= 66.0f) {
-        r = 255.0f;
-        g = sat(99.4708025861f * std::log(t) - 161.1195681661f);
-        b = t <= 19.0f ? 0.0f : sat(138.5177312231f * std::log(t - 10.0f) - 305.0447927307f);
-    } else {
-        r = sat(329.698727446f * std::pow(t - 60.0f, -0.1332047592f));
-        g = sat(288.1221695283f * std::pow(t - 60.0f, -0.0755148492f));
-        b = 255.0f;
-    }
-    r /= 255.0f;
-    g /= 255.0f;
-    b /= 255.0f;
-}
+
 
 float clampRange(float v, float lo, float hi) {
     if (v < lo) {
@@ -58,51 +31,19 @@ float clampRange(float v, float lo, float hi) {
 
 } // namespace
 
+static_assert(std::is_trivially_copyable_v<HudPost>);
+static_assert(std::is_trivially_copyable_v<PostPack>);
+static_assert(sizeof(PostPack) == 16 * sizeof(float));
+static_assert(offsetof(HudPost, gradeFlags) - offsetof(HudPost, exposure) == sizeof(PostPack) - sizeof(float));
+static_assert(sizeof(HudPost) == kScPostN * sizeof(float));
+
 HudPost sceneBlockPost(const SceneBlock& block) {
     HudPost post{};
     const std::span<const float> s = sceneBlockSpan(block, kScPost, kScPostN);
     if (s.size() != kScPostN) {
         return post;
     }
-    post.grain = s[0];
-    post.brightness = s[1];
-    post.bloom = s[2];
-    post.vignette = s[3];
-    post.ca = s[4];
-    post.contact = s[5];
-    post.specOcc = s[6];
-    post.toksvig = s[7];
-    post.pom = s[8];
-    post.ggx = s[9];
-    post.ssrc = s[10];
-    post.gtao = s[11];
-    post.lamp = s[12];
-    post.sunGain = s[13];
-    post.sunR = s[14];
-    post.sunG = s[15];
-    post.sunB = s[16];
-    post.exposure = s[17];
-    post.temperature = s[18];
-    post.tint = s[19];
-    post.contrast = s[20];
-    post.saturation = s[21];
-    post.night = s[22];
-    post.shadows = s[23];
-    post.midtones = s[24];
-    post.highlights = s[25];
-    post.slope = s[26];
-    post.cdlOffset = s[27];
-    post.power = s[28];
-    post.dofFocus = s[29];
-    post.dofAmount = s[30];
-    post.flare = s[31];
-    post.gradeFlags = s[32];
-    post.mix = s[33];
-    post.genContrast = s[34];
-    post.midIn = s[35];
-    post.midOut = s[36];
-    post.hdrMax = s[37];
-    post.vibrance = s[38];
+    std::memcpy(static_cast<void*>(&post), s.data(), sizeof(HudPost));
     return post;
 }
 
@@ -561,7 +502,7 @@ void sceneFillUniforms(SceneFrame* scene, Device& device, const Swapchain& swap,
     float kelvinR = 1.0f;
     float kelvinG = 1.0f;
     float kelvinB = 1.0f;
-    kelvinRgb(scene->sunKelvin, kelvinR, kelvinG, kelvinB);
+    colorFromKelvin(scene->sunKelvin, kelvinR, kelvinG, kelvinB);
     lit.sunColor[0] = scene->hud.sunR * kelvinR;
     lit.sunColor[1] = scene->hud.sunG * kelvinG;
     lit.sunColor[2] = scene->hud.sunB * kelvinB;
@@ -698,22 +639,7 @@ void sceneFillUniforms(SceneFrame* scene, Device& device, const Swapchain& swap,
     knob.bloom.pad[2] = -scene->fsr.jitterX;
     knob.bloom.pad[3] = scene->fsr.jitterY;
     knob.bloom.pad[4] = scene->tone.taaReady != 0u ? 0.12f : 1.0f;
-    knob.sliders.exposure = scene->hud.exposure;
-    knob.sliders.temperature = scene->hud.temperature;
-    knob.sliders.tint = scene->hud.tint;
-    knob.sliders.contrast = scene->hud.contrast;
-    knob.sliders.saturation = scene->hud.saturation;
-    knob.sliders.night = scene->hud.night;
-    knob.sliders.shadows = scene->hud.shadows;
-    knob.sliders.midtones = scene->hud.midtones;
-    knob.sliders.highlights = scene->hud.highlights;
-    knob.sliders.slope = scene->hud.slope;
-    knob.sliders.cdlOffset = scene->hud.cdlOffset;
-    knob.sliders.power = scene->hud.power;
-    knob.sliders.dofFocus = scene->hud.dofFocus;
-    knob.sliders.dofAmount = scene->hud.dofAmount;
-    knob.sliders.flare = scene->hud.flare;
-    knob.sliders.flags = scene->hud.gradeFlags;
+    std::memcpy(static_cast<void*>(&knob.sliders), &scene->hud.exposure, sizeof(PostPack));
     gpu.debugPad[0] = scene->decalCount;
     if (scene->sunEnabled && !scene->sunCast) {
         gpu.debugPad[0] |= 0x80000000u;

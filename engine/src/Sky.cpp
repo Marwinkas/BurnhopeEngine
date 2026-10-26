@@ -84,63 +84,19 @@ bool skyPassCreate(SkyPass& p, Device& d, const DescriptorHeaps& heaps, VkExtent
     upBind.sampler(23, HeapSamp::Linear);
     upBind.knob(50, HeapBuf::Flags);
     upBind.knob(58, HeapBuf::Atm);
-    const ShaderCreateDesc transDesc{
-        .path = BH_SHADER_DIR "/sky.trans.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = transBind.raw.count,
-        .mappings = transBind.raw.mappings,
-    };
-    const ShaderCreateDesc msDesc{
-        .path = BH_SHADER_DIR "/sky.ms.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = msBind.raw.count,
-        .mappings = msBind.raw.mappings,
-    };
-    const ShaderCreateDesc viewDesc{
-        .path = BH_SHADER_DIR "/sky.view.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = viewBind.raw.count,
-        .mappings = viewBind.raw.mappings,
-    };
-    const ShaderCreateDesc marchDesc{
-        .path = BH_SHADER_DIR "/cloud.march.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = marchBind.raw.count,
-        .mappings = marchBind.raw.mappings,
-    };
     PassBindings probeBind{heaps};
     probeBind.ubo(0, HeapBuf::Frame);
     probeBind.storageBuf(19, HeapBuf::Probes, false);
     probeBind.sampler(23, HeapSamp::Linear);
     probeBind.sampledImg(42, HeapImg::SkyViewSample);
-    const ShaderCreateDesc probeDesc{
-        .path = BH_SHADER_DIR "/sky.probe.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = probeBind.raw.count,
-        .mappings = probeBind.raw.mappings,
-    };
-    const ShaderCreateDesc shadowDesc{
-        .path = BH_SHADER_DIR "/cloud.shadow.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = shadowBind.raw.count,
-        .mappings = shadowBind.raw.mappings,
-    };
-    const ShaderCreateDesc upDesc{
-        .path = BH_SHADER_DIR "/cloud.up.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = upBind.raw.count,
-        .mappings = upBind.raw.mappings,
-    };
-    const ShaderCreateDesc noiseDesc{
-        .path = BH_SHADER_DIR "/cloud.noise.comp.spv",
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .mappingCount = noiseBind.raw.count,
-        .mappings = noiseBind.raw.mappings,
-    };
-    if (!shaderCreate(d, transDesc, p.transmittanceCs) || !shaderCreate(d, msDesc, p.multiCs) || !shaderCreate(d, viewDesc, p.skyViewCs)
-        || !shaderCreate(d, marchDesc, p.cloudMarch) || !shaderCreate(d, shadowDesc, p.cloudShadow) || !shaderCreate(d, upDesc, p.cloudUp)
-        || !shaderCreate(d, noiseDesc, p.noiseCs)
-        || !shaderCreate(d, probeDesc, p.skyProbe)) {
+    if (!createComputeShader(d, BH_SHADER_DIR "/sky.trans.comp.spv", transBind, p.transmittanceCs)
+        || !createComputeShader(d, BH_SHADER_DIR "/sky.ms.comp.spv", msBind, p.multiCs)
+        || !createComputeShader(d, BH_SHADER_DIR "/sky.view.comp.spv", viewBind, p.skyViewCs)
+        || !createComputeShader(d, BH_SHADER_DIR "/cloud.march.comp.spv", marchBind, p.cloudMarch)
+        || !createComputeShader(d, BH_SHADER_DIR "/cloud.shadow.comp.spv", shadowBind, p.cloudShadow)
+        || !createComputeShader(d, BH_SHADER_DIR "/cloud.up.comp.spv", upBind, p.cloudUp)
+        || !createComputeShader(d, BH_SHADER_DIR "/cloud.noise.comp.spv", noiseBind, p.noiseCs)
+        || !createComputeShader(d, BH_SHADER_DIR "/sky.probe.comp.spv", probeBind, p.skyProbe)) {
         spdlog::error("sky shader failed");
         skyPassDestroy(p, d);
         return false;

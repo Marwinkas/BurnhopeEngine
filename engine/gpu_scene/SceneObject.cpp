@@ -1,4 +1,5 @@
 #include "gpu_scene/SceneObject.hpp"
+#include "Str.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -74,17 +75,6 @@ void actorSpin(const float grabEuler[3], int axis, float deltaDeg, float outEule
     float b[3][3];
     actorBasis(grabEuler, b[0], b[1], b[2]);
     actorSpinAround(grabEuler, b[axis], deltaDeg, outEuler);
-}
-
-static void actorCopyName(char* dst, const char* src) {
-    uint8_t n = 0;
-    if (src != nullptr) {
-        while (src[n] != '\0' && n < 23) {
-            dst[n] = src[n];
-            ++n;
-        }
-    }
-    dst[n] = '\0';
 }
 
 const Xform* actorXformOf(const SceneActors& world, uint8_t index) {
@@ -171,7 +161,7 @@ uint8_t sceneActorAdd(SceneActors& world, SceneActorKind kind, const float pos[3
     tag.v = static_cast<uint8_t>(kind);
     tag.slot = index;
     ActorName label{};
-    actorCopyName(label.text, name);
+    strCopyCap(label.text, sizeof(label.text), name);
     flecs::entity ent = world.world.entity();
     ent.set<Xform>(xform);
     Transform pose{};
@@ -228,7 +218,7 @@ uint8_t sceneActorDuplicate(SceneActors& world) {
     const uint8_t kind = actorKindOf(world, world.selected);
     float pos[3] = {src.pos[0] + 2.0f, src.pos[1], src.pos[2]};
     char name[24];
-    actorCopyName(name, actorNameOf(world, world.selected));
+    strCopyCap(name, sizeof(name), actorNameOf(world, world.selected));
     const uint8_t n = static_cast<uint8_t>(std::strlen(name));
     if (n + 2 < 23) {
         name[n] = ' ';

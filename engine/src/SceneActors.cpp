@@ -87,12 +87,7 @@ void sceneFrameActorName(const SceneFrame* scene, uint8_t index, char* name, uin
     if (actorXformOf(scene->actors, index) == nullptr) {
         return;
     }
-    uint8_t n = 0;
-    while (src[n] != '\0' && n + 1 < cap) {
-        name[n] = src[n];
-        ++n;
-    }
-    name[n] = '\0';
+    strCopyCap(name, cap, src);
     if (kind != nullptr) {
         *kind = actorKindOf(scene->actors, index);
     }
@@ -338,20 +333,11 @@ void sceneFrameStop(SceneFrame* scene) {
     scene->sim = 1;
     if (scene->physics != nullptr) {
         const uint32_t n = physicsBodyCount(scene->physics);
-        PhysicsPose poses[kPropCap]{};
+        Xform poses[kPropCap]{};
         const uint32_t count = n < kPropCap ? n : kPropCap;
         for (uint32_t i = 0; i < count; ++i) {
             const uint8_t actor = physicsBodyActor(scene->physics, i);
-            const Xform pose = sceneActorXform(scene->actors, actor);
-            poses[i].pos[0] = pose.pos[0];
-            poses[i].pos[1] = pose.pos[1];
-            poses[i].pos[2] = pose.pos[2];
-            poses[i].euler[0] = pose.euler[0];
-            poses[i].euler[1] = pose.euler[1];
-            poses[i].euler[2] = pose.euler[2];
-            poses[i].scale[0] = pose.scale[0];
-            poses[i].scale[1] = pose.scale[1];
-            poses[i].scale[2] = pose.scale[2];
+            poses[i] = sceneActorXform(scene->actors, actor);
         }
         physicsStep(scene->physics, 0.0f, kSceneActorNone, poses, count);
     }

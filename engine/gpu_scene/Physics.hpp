@@ -2,18 +2,13 @@
 
 #include "gpu_scene/InstanceData.hpp"
 #include "gpu_scene/MeshletGpu.hpp"
+#include "gpu_scene/SceneObject.hpp"
 
 #include <cstdint>
 
 namespace burnhope {
 
 struct PhysicsWorld;
-
-struct PhysicsPose {
-    float pos[3]{};
-    float euler[3]{};
-    float scale[3]{1.0f, 1.0f, 1.0f};
-};
 
 struct PhysicsCook {
     const GpuVertex* verts = nullptr;
@@ -38,7 +33,7 @@ void physicsDestroy(PhysicsWorld* world);
 bool physicsAddBox(PhysicsWorld* world, uint32_t instance, uint8_t actor, const GpuInstance& inst, const GpuMeshlet& mesh, const GpuVertex* verts, const uint32_t* indices);
 
 // heldActor == 0xff: every box is dynamic. Otherwise that actor is glued to its pose.
-void physicsStep(PhysicsWorld* world, float dt, uint8_t heldActor, PhysicsPose* poses, uint32_t count);
+void physicsStep(PhysicsWorld* world, float dt, uint8_t heldActor, Xform* poses, uint32_t count);
 
 [[nodiscard]] bool physicsRoof(const PhysicsWorld* world, float x, float y, float z);
 

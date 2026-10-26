@@ -118,3 +118,32 @@ TEST_CASE("materialCommitMaps parks maps next to the material") {
     CHECK(fs::path(doc.albedoPath).parent_path() == root / "mat");
     fs::remove_all(root, ec);
 }
+
+TEST_CASE("case-insensitive substring match, empty needle matches, null never does") {
+    CHECK(burnhope::strContainsCi("Rock_NORMAL.png", "normal"));
+    CHECK(burnhope::strContainsCi(std::string_view("Bark"), "ARK"));
+    CHECK_FALSE(burnhope::strContainsCi("rough", "metal"));
+    CHECK_FALSE(burnhope::strContainsCi("ab", "abc"));
+    CHECK(burnhope::strContainsCi("abc", ""));
+    CHECK_FALSE(burnhope::strContainsCi(static_cast<const char*>(nullptr), "a"));
+}
+
+TEST_CASE("luma, kelvin tint and half floats match their reference values") {
+    CHECK(burnhope::colorLuma(1.0f, 1.0f, 1.0f) == doctest::Approx(1.0f));
+    CHECK(burnhope::colorLuma(0.0f, 1.0f, 0.0f) == doctest::Approx(0.7152f));
+    float r = 0.0f, g = 0.0f, b = 0.0f;
+    burnhope::colorFromKelvin(6600.0f, r, g, b);
+    CHECK(r == doctest::Approx(1.0f));
+    CHECK(g > 0.95f);
+    CHECK(b > 0.95f);
+    burnhope::colorFromKelvin(1000.0f, r, g, b);
+    float rLow = 0.0f, gLow = 0.0f, bLow = 0.0f;
+    burnhope::colorFromKelvin(1500.0f, rLow, gLow, bLow);
+    CHECK(r == rLow);
+    CHECK(g == gLow);
+    CHECK(b == bLow);
+    CHECK(burnhope::floatToHalf(1.0f) == 0x3c00u);
+    CHECK(burnhope::floatToHalf(-2.0f) == 0xc000u);
+    CHECK(burnhope::floatToHalf(0.0f) == 0u);
+    CHECK(burnhope::floatToHalf(1.0e10f) == 0x7c00u);
+}
