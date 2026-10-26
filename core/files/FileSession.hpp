@@ -1,6 +1,7 @@
 #pragma once
 
 #include "files/FileTheme.hpp"
+#include "files/Format.hpp"
 #include "files/FileThumb.hpp"
 #include "files/Model.hpp"
 
@@ -36,6 +37,7 @@ struct Browser : FileModel {
     uint8_t bandSnap = 0;
     uint8_t folderSlot = 255;
     uint8_t fileSlot = 255;
+    uint8_t classSlot[kFileIconClasses]{255, 255, 255};
     uint8_t mounted = 0;
 };
 

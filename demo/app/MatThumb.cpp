@@ -1,9 +1,11 @@
 #include "app/MatThumb.hpp"
+#include "app/ModelThumb.hpp"
 
 #include "Str.hpp"
 #include "asset/MaterialBake.hpp"
 #include "image/ImageDecode.hpp"
 #include "files/Browser.hpp"
+#include "files/Format.hpp"
 #include "ui/rhi/Canvas.hpp"
 
 #include <algorithm>
@@ -94,6 +96,11 @@ bool bakeImage(MatThumbs& t, const char* path, uint8_t cell) {
 
 bool bake(void* user, const char* path, uint8_t cell) {
     auto* t = static_cast<MatThumbs*>(user);
+    if (t != nullptr && cell < kThumbCells && fileIsModel(path)) {
+        const bool ok = modelThumbBake(t->atlas.data(), cell, path);
+        t->dirty = ok ? 1 : t->dirty;
+        return ok;
+    }
     if (t != nullptr && cell < kThumbCells && !strExtIs(path, ".bhmat")) {
         return bakeImage(*t, path, cell);
     }

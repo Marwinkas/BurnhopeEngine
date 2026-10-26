@@ -148,6 +148,24 @@ bool imageLoadFile(ImageCpu& img, const char* path) {
         img.delayMs[0] = 100;
         return true;
     }
+    DdsView dds{};
+    if (imageParseDds(file.data, file.size, dds)) {
+        const bool fits = dds.width <= kMaxEdge && dds.height <= kMaxEdge;
+        auto* out = fits ? static_cast<uint8_t*>(std::malloc(static_cast<size_t>(dds.width) * dds.height * 4u)) : nullptr;
+        const bool ok = out != nullptr && imageDecodeDdsLevel(dds, 0, out);
+        fileUnmap(&file);
+        if (!ok) {
+            spdlog::error("dds decode failed: {}", path);
+            std::free(out);
+            return false;
+        }
+        img.rgba = out;
+        img.width = dds.width;
+        img.height = dds.height;
+        img.frames = 1;
+        img.delayMs[0] = 100;
+        return true;
+    }
     if (stbi_is_hdr_from_memory(file.data, fileBytes) != 0) {
         float* hdr = stbi_loadf_from_memory(file.data, fileBytes, &w, &h, &comp, 3);
         fileUnmap(&file);

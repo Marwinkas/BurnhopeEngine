@@ -9,6 +9,7 @@
 #include "memory/FrameArena.hpp"
 
 #include <cstring>
+#include <vector>
 
 using namespace burnhope;
 
@@ -196,4 +197,163 @@ TEST_CASE("fileTrimPath strips CRLF, spaces and quotes from the tail") {
     CHECK(std::strcmp(out, "a/b.jpg") == 0);
     CHECK(fileTrimPath("\"x.png\" ", out, sizeof(out)) == 6);
     CHECK(fileTrimPath("long/path", out, 4) == 0);
+}
+
+#include "asset/ModelMesh.hpp"
+
+namespace {
+
+void putBits(uint8_t* block, uint32_t at, uint32_t n, uint32_t value) {
+    for (uint32_t i = 0; i < n; ++i) {
+        if (((value >> i) & 1u) != 0) {
+            block[(at + i) / 8] = static_cast<uint8_t>(block[(at + i) / 8] | (1u << ((at + i) % 8)));
+        }
+    }
+}
+
+bool decodeOne(ImageBlock format, const uint8_t* block, uint32_t blockBytes, uint8_t out[4]) {
+    uint8_t file[128 + 16]{};
+    std::memcpy(file, "DDS ", 4);
+    const uint32_t size = 4;
+    std::memcpy(file + 12, &size, 4);
+    std::memcpy(file + 16, &size, 4);
+    const uint32_t mips = 1;
+    std::memcpy(file + 28, &mips, 4);
+    const char* four = format == ImageBlock::Bc1 ? "DXT1" : format == ImageBlock::Bc3 ? "DXT5" : format == ImageBlock::Bc5 ? "ATI2" : "BC7 ";
+    std::memcpy(file + 84, four, 4);
+    std::memcpy(file + 128, block, blockBytes);
+    DdsView view{};
+    uint8_t rgba[4 * 4 * 4]{};
+    if (!imageParseDds(file, 128 + blockBytes, view) || !imageDecodeDdsLevel(view, 0, rgba)) {
+        return false;
+    }
+    std::memcpy(out, rgba, 4);
+    return true;
+}
+
+} // namespace
+
+TEST_CASE("dds block decoders expand BC1 BC3 BC5 and BC7 modes 5 and 6") {
+    uint8_t px[4]{};
+    const uint8_t bc1[8] = {0x00, 0xF8, 0x1F, 0x00, 0, 0, 0, 0};
+    CHECK(decodeOne(ImageBlock::Bc1, bc1, 8, px));
+    CHECK(px[0] == 255);
+    CHECK(px[1] == 0);
+    CHECK(px[2] == 0);
+    CHECK(px[3] == 255);
+    uint8_t bc3[16]{};
+    bc3[0] = 128;
+    std::memcpy(bc3 + 8, bc1, 8);
+    CHECK(decodeOne(ImageBlock::Bc3, bc3, 16, px));
+    CHECK(px[0] == 255);
+    CHECK(px[3] == 128);
+    uint8_t bc5[16]{};
+    bc5[0] = 255;
+    CHECK(decodeOne(ImageBlock::Bc5, bc5, 16, px));
+    CHECK(px[0] == 255);
+    CHECK(px[1] == 0);
+    uint8_t mode6[16]{};
+    putBits(mode6, 6, 1, 1);
+    putBits(mode6, 7, 7, 127);
+    putBits(mode6, 21, 7, 127);
+    putBits(mode6, 35, 7, 127);
+    putBits(mode6, 49, 7, 127);
+    putBits(mode6, 63, 1, 1);
+    CHECK(decodeOne(ImageBlock::Bc7, mode6, 16, px));
+    CHECK(px[0] == 255);
+    CHECK(px[1] == 255);
+    CHECK(px[2] == 255);
+    CHECK(px[3] == 255);
+    uint8_t mode5[16]{};
+    putBits(mode5, 5, 1, 1);
+    putBits(mode5, 6, 2, 1); // rotation 1 swaps red and alpha
+    putBits(mode5, 8, 7, 127);
+    CHECK(decodeOne(ImageBlock::Bc7, mode5, 16, px));
+    CHECK(px[0] == 0);
+    CHECK(px[1] == 0);
+    CHECK(px[2] == 0);
+    CHECK(px[3] == 255);
+}
+
+TEST_CASE("imageLoadFile decodes a block compressed dds") {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "bh_dds_test";
+    std::filesystem::create_directories(dir);
+    const std::string file = (dir / "red.dds").string();
+    uint8_t bytes[128 + 8]{};
+    std::memcpy(bytes, "DDS ", 4);
+    const uint32_t side = 4;
+    std::memcpy(bytes + 12, &side, 4);
+    std::memcpy(bytes + 16, &side, 4);
+    std::memcpy(bytes + 84, "DXT1", 4);
+    bytes[128] = 0x00;
+    bytes[129] = 0xF8;
+    FILE* f = std::fopen(file.c_str(), "wb");
+    CHECK(f != nullptr);
+    if (f == nullptr) {
+        return;
+    }
+    std::fwrite(bytes, 1, sizeof(bytes), f);
+    std::fclose(f);
+    ImageCpu img{};
+    CHECK(imageLoadFile(img, file.c_str()));
+    CHECK(img.width == 4);
+    CHECK(img.height == 4);
+    if (img.rgba != nullptr) {
+        CHECK(img.rgba[0] == 255);
+        CHECK(img.rgba[1] == 0);
+        CHECK(img.rgba[3] == 255);
+    }
+    imageCpuFree(img);
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("modelLoadMesh reads an obj triangle") {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "bh_model_test";
+    std::filesystem::create_directories(dir);
+    const std::string file = (dir / "tri.obj").string();
+    const char obj[] = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
+    FILE* f = std::fopen(file.c_str(), "wb");
+    CHECK(f != nullptr);
+    if (f == nullptr) {
+        return;
+    }
+    std::fwrite(obj, 1, sizeof(obj) - 1, f);
+    std::fclose(f);
+    ModelMesh mesh;
+    CHECK(modelLoadMesh(file.c_str(), mesh));
+    CHECK(mesh.idx.size() == 3);
+    CHECK(mesh.xyz.size() == 9);
+    CHECK(!modelLoadMesh((dir / "missing.obj").string().c_str(), mesh));
+    std::filesystem::remove_all(dir);
+}
+
+#include "app/ModelThumb.hpp"
+#include "files/FileThumb.hpp"
+
+TEST_CASE("modelThumbBake draws a lit silhouette into its atlas cell only") {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "bh_model_thumb";
+    std::filesystem::create_directories(dir);
+    const std::string file = (dir / "cube.obj").string();
+    const char obj[] = "v -1 -1 -1\nv 1 -1 -1\nv 1 1 -1\nv -1 1 -1\nv -1 -1 1\nv 1 -1 1\nv 1 1 1\nv -1 1 1\n"
+                       "f 1 3 2\nf 1 4 3\nf 5 6 7\nf 5 7 8\nf 1 2 6\nf 1 6 5\nf 4 7 3\nf 4 8 7\nf 1 5 8\nf 1 8 4\nf 2 3 7\nf 2 7 6\n";
+    FILE* f = std::fopen(file.c_str(), "wb");
+    CHECK(f != nullptr);
+    if (f == nullptr) {
+        return;
+    }
+    std::fwrite(obj, 1, sizeof(obj) - 1, f);
+    std::fclose(f);
+    constexpr uint32_t side = kThumbCols * kThumbPx;
+    std::vector<uint8_t> atlas(static_cast<size_t>(side) * side * 4u, 0);
+    CHECK(modelThumbBake(atlas.data(), 9, file.c_str()));
+    const uint32_t ox = (9 % kThumbCols) * kThumbPx;
+    const uint32_t oy = (9 / kThumbCols) * kThumbPx;
+    const uint8_t* mid = atlas.data() + (static_cast<size_t>(oy + 32) * side + ox + 32) * 4u;
+    CHECK(mid[3] == 255);
+    CHECK(mid[2] > 60);
+    const uint8_t* corner = atlas.data() + (static_cast<size_t>(oy) * side + ox) * 4u;
+    CHECK(corner[3] == 0);
+    CHECK(atlas[3] == 0); // cell 0 untouched
+    CHECK(!modelThumbBake(atlas.data(), 9, (dir / "none.obj").string().c_str()));
+    std::filesystem::remove_all(dir);
 }

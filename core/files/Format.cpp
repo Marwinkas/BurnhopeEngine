@@ -92,6 +92,61 @@ int fileKind(const char* name, int isDir) {
     return 0;
 }
 
+namespace {
+
+void lowerExt(const char* name, char (&ext)[12]) {
+    ext[0] = '\0';
+    const char* dot = name != nullptr ? std::strrchr(name, '.') : nullptr;
+    if (dot == nullptr) {
+        return;
+    }
+    strCopyCap(ext, sizeof(ext), dot);
+    for (char* p = ext; *p != '\0'; ++p) {
+        if (*p >= 'A' && *p <= 'Z') {
+            *p = static_cast<char>(*p - 'A' + 'a');
+        }
+    }
+}
+
+} // namespace
+
+FileIconClass fileIconClass(const char* name) {
+    char ext[12];
+    lowerExt(name, ext);
+    if (strSame(ext, ".bhscene") || strSame(ext, ".bscene")) {
+        return FileIconClass::Scene;
+    }
+    if (strSame(ext, ".txt") || strSame(ext, ".json") || strSame(ext, ".md") || strSame(ext, ".log")
+        || strSame(ext, ".ini") || strSame(ext, ".xml")) {
+        return FileIconClass::Doc;
+    }
+    if (strSame(ext, ".proj") || strSame(ext, ".bhproject")) {
+        return FileIconClass::Project;
+    }
+    return FileIconClass::None;
+}
+
+const char* fileIconClassPath(FileIconClass cls) {
+    switch (cls) {
+    case FileIconClass::Scene:
+        return "assets/icons/scene.svg";
+    case FileIconClass::Doc:
+        return "assets/icons/docs.svg";
+    case FileIconClass::Project:
+        return "assets/icons/project.svg";
+    case FileIconClass::None:
+        break;
+    }
+    return "";
+}
+
+bool fileIsModel(const char* name) {
+    char ext[12];
+    lowerExt(name, ext);
+    return strSame(ext, ".gltf") || strSame(ext, ".glb") || strSame(ext, ".fbx") || strSame(ext, ".obj")
+        || strSame(ext, ".bhop");
+}
+
 const char* fileTypeName(int isDir, int kind) {
     if (isDir != 0) {
         return "Папка";

@@ -268,6 +268,13 @@ void FileModel::reload() {
             if (filename.empty() || (showHidden == 0 && filename[0] == '.')) {
                 continue;
             }
+            if (!dir && strExtIs(filename.c_str(), ".bin")) {
+                fs::path sibling = ent.path();
+                sibling.replace_extension(".gltf");
+                if (fs::exists(sibling, ignored)) {
+                    continue;
+                }
+            }
             if (!dir && filt[0] != '\0') {
                 const size_t fl = std::strlen(filt);
                 if (filename.size() < fl || filename.compare(filename.size() - fl, fl, filt) != 0) {

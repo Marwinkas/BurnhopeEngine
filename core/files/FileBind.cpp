@@ -171,8 +171,18 @@ void bindCell(UiState& s, uint16_t cell, uint32_t index) {
         if (!header) {
             const bool dir = b.items[index].isDir != 0;
             const bool material = !dir && b.items[index].kind == 5;
-            const bool thumbable = material || (!dir && b.items[index].kind == 2);
-            uiThumb(s, parts->icon, dir ? b.folderSlot : b.fileSlot, dir ? UiIcon::Folder : UiIcon::Document);
+            const bool thumbable = material || (!dir && (b.items[index].kind == 2 || fileIsModel(b.items[index].name.c_str())));
+            const FileIconClass cls = dir ? FileIconClass::None : fileIconClass(b.items[index].name.c_str());
+            const uint8_t classSlot = cls != FileIconClass::None ? b.classSlot[static_cast<uint8_t>(cls) - 1] : uint8_t{255};
+            const uint8_t plain = dir ? b.folderSlot : (classSlot < kPhotoSlots ? classSlot : b.fileSlot);
+            uiThumb(s, parts->icon, plain, dir ? UiIcon::Folder : UiIcon::Document);
+            if (classSlot < kPhotoSlots) {
+                if (auto* paint = s.ent[parts->icon].try_get_mut<UiPaint>()) {
+                    paint->r = s.look.text[0];
+                    paint->g = s.look.text[1];
+                    paint->b = s.look.text[2];
+                }
+            }
             if (thumbable && !bindMaterialThumb(s, parts->icon, b, b.items[index]) && material) {
                 if (auto* paint = s.ent[parts->icon].try_get_mut<UiPaint>()) {
                     const UiPaint badge = paintToken(s.look, UiToken::Accent, s.look.radiusSm);

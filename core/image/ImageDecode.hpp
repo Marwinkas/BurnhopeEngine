@@ -61,6 +61,10 @@ struct DdsView {
 
 [[nodiscard]] bool imageParseDds(const uint8_t* data, size_t size, DdsView& out);
 
+// Expands mip `level` of a parsed DDS to RGBA8 (width * height * 4 bytes in `rgba`). BC1, BC3 and BC5 decode exactly,
+// as do the single-subset BC7 modes 4-6. Partitioned BC7 blocks (modes 0-3, 7) are approximated by their mean endpoint colour.
+[[nodiscard]] bool imageDecodeDdsLevel(const DdsView& view, uint32_t level, uint8_t* rgba);
+
 void writeBlockDds(
     const char* path,
     uint32_t width,

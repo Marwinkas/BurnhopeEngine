@@ -245,9 +245,9 @@ if(BH_TSAN)
 endif()
 bh_module(material core/gfx/Material.cpp)
 target_link_libraries(bh_material PUBLIC bh_foundation)
-bh_module(asset core/asset/AssimpImporter.cpp core/asset/ProjectDoc.cpp core/asset/MaterialBake.cpp)
+bh_module(asset core/asset/AssimpImporter.cpp core/asset/ProjectDoc.cpp core/asset/MaterialBake.cpp core/asset/ModelMesh.cpp)
 target_link_libraries(bh_asset PUBLIC assimp::assimp meshoptimizer bh_foundation bh_material bh_image)
-set_source_files_properties(core/asset/AssimpImporter.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions;-frtti")
+set_source_files_properties(core/asset/AssimpImporter.cpp core/asset/ModelMesh.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions;-frtti")
 bh_module(rhi
     core/rhi/Device.cpp
     core/rhi/Swapchain.cpp
@@ -284,7 +284,7 @@ target_include_directories(bh_texcomp
 target_compile_options(bh_texcomp PRIVATE -w)
 
 bh_module(image
-    core/image/ImageDecode.cpp
+    core/image/ImageDecode.cpp core/image/ImageBlockDecode.cpp
     core/image/ImageCompress.cpp
     core/image/ImageUpload.cpp)
 target_include_directories(bh_image PRIVATE
@@ -467,6 +467,7 @@ bh_module(app
     demo/app/MatSlot.cpp
     demo/app/MatPreview.cpp
     demo/app/MatThumb.cpp
+    demo/app/ModelThumb.cpp
     demo/app/HudPick.cpp
     demo/app/HudToolbar.cpp
     demo/app/HudView.cpp
@@ -1007,6 +1008,7 @@ target_link_libraries(BurnhopeTest PRIVATE
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads Freetype::Freetype
 )
-target_include_directories(BurnhopeTest PRIVATE ${BH_CORE} ${BH_ENGINE} ${BH_ENGINE}/include ${vma_SOURCE_DIR}/include)
+target_sources(BurnhopeTest PRIVATE demo/app/ModelThumb.cpp)
+target_include_directories(BurnhopeTest PRIVATE ${BH_DEMO} ${BH_CORE} ${BH_ENGINE} ${BH_ENGINE}/include ${vma_SOURCE_DIR}/include)
 target_compile_options(BurnhopeTest PRIVATE ${BH_OPTS})
 add_dependencies(BurnhopeTest UiSpv UiBin)

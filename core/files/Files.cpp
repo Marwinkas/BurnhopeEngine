@@ -13,6 +13,7 @@
 #include "ui/widget/Splitter.hpp"
 #include "ui/State.hpp"
 
+#include <cstring>
 #include <filesystem>
 #include <spdlog/spdlog.h>
 
@@ -84,12 +85,15 @@ void filesShutdown(UiState& s) {
     if (auto* session = s.world.try_get_mut<FileSession>()) {
         const uint8_t folder = session->browser.folderSlot;
         const uint8_t file = session->browser.fileSlot;
+        uint8_t classSlot[kFileIconClasses]{};
+        std::memcpy(classSlot, session->browser.classSlot, sizeof(classSlot));
         FileThumbs thumbs = session->browser.thumbs;
         thumbReset(thumbs);
         session->browser = {};
         session->browser.thumbs = thumbs;
         session->browser.folderSlot = folder;
         session->browser.fileSlot = file;
+        std::memcpy(session->browser.classSlot, classSlot, sizeof(classSlot));
         session->ready = 0;
     }
 }

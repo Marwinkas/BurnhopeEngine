@@ -9,6 +9,7 @@
 #include "ui/LayoutBridge.hpp"
 #include "files/Browser.hpp"
 #include "files/FileDomain.hpp"
+#include "files/Format.hpp"
 #include "ui/widget/Slider.hpp"
 
 #include <cstdio>
@@ -231,6 +232,14 @@ void clickAt(UiState& state, float x, float y) {
     in.pointer.down = kPointerLeft;
     (void)uiApplyInput(state, in);
     uiLayout(state, 900.0f, 640.0f);
+    InputFrame held{};
+    held.pointer.x = x;
+    held.pointer.y = y;
+    held.pointer.down = kPointerLeft;
+    for (int i = 0; i < 3; ++i) {
+        (void)uiApplyInput(state, held);
+        uiLayout(state, 900.0f, 640.0f);
+    }
     InputFrame up{};
     up.pointer.x = x;
     up.pointer.y = y;
@@ -284,6 +293,37 @@ TEST_CASE("file tune button toggles its panel and outside click dismisses it") {
     CHECK(state.box[panel].y >= state.box[tune].y + state.box[tune].h);
     clickAt(state, 20.0f, 620.0f);
     CHECK(uiMarked<UiMenuOpen>(state) == kUiNone);
+    filesShutdown(state);
+    fs::remove_all(dir, ec);
+}
+
+TEST_CASE("file listing hides a gltf companion bin and classifies extensions") {
+    namespace fs = std::filesystem;
+    const fs::path dir = "/tmp/burnhope-gltf-bin";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    for (const char* name : {"car.gltf", "car.bin", "lone.bin", "a.txt"}) {
+        std::ofstream((dir / name).string()).close();
+    }
+    UiState state;
+    uiWidgetsInit(state);
+    filesAttach(state);
+    filesRoot(state, dir.c_str());
+    const FileModel* model = filesModel(state);
+    CHECK(model != nullptr);
+    if (model != nullptr) {
+        CHECK(model->count() == 3);
+        for (const FileItem& item : model->items) {
+            CHECK(item.name != "car.bin");
+        }
+    }
+    CHECK(fileIconClass("level.BHSCENE") == FileIconClass::Scene);
+    CHECK(fileIconClass("notes.md") == FileIconClass::Doc);
+    CHECK(fileIconClass("game.proj") == FileIconClass::Project);
+    CHECK(fileIconClass("pic.png") == FileIconClass::None);
+    CHECK(fileIsModel("a.GLB"));
+    CHECK(!fileIsModel("a.png"));
     filesShutdown(state);
     fs::remove_all(dir, ec);
 }

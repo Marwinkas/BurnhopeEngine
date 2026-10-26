@@ -2,6 +2,7 @@
 #include "files/FileSession.hpp"
 #include "files/FileTheme.hpp"
 #include "ui/State.hpp"
+#include "ui/rhi/Canvas.hpp"
 
 namespace burnhope {
 
@@ -24,6 +25,11 @@ void filesLoadIcons(Canvas& c) {
     const uint8_t file = filePhotoIndex(theme.fileSlot);
     const bool folderOk = folder != 255 && loadIcon(folder, folderPaths, 2);
     const bool fileOk = file != 255 && loadIcon(file, filePaths, 2);
+    FileSession& session = c.state->world.ensure<FileSession>();
+    for (uint8_t i = 0; i < kFileIconClasses; ++i) {
+        const uint8_t slot = canvasIconSlot(c, fileIconClassPath(static_cast<FileIconClass>(i + 1)));
+        session.browser.classSlot[i] = slot < kPhotoSlots ? slot : uint8_t{255};
+    }
     filesIconSlots(*c.state, folderOk ? folder : 255, fileOk ? file : 255);
 }
 
