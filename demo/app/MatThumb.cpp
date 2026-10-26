@@ -109,7 +109,7 @@ bool bake(void* user, const char* path, uint8_t cell) {
         return false;
     }
     materialBakeAtlas(doc, path, t->maps.data());
-    materialBakePreview(doc, t->maps.data(), MatShape::Sphere, 0.0f, 0.0f, t->shaded.data());
+    materialBakePreview(doc, t->maps.data(), MatShape::Sphere, 0.0f, 0.0f, 1.0f, t->shaded.data());
     blit(*t, cell);
     t->dirty = 1;
     return true;

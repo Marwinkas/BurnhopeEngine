@@ -20,7 +20,6 @@
 #include "ui/widget/Number.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/Nodes.hpp"
-#include "ui/State.hpp"
 
 #include <cstring>
 
@@ -34,6 +33,8 @@ constexpr float kLineH = 22.0f;
 constexpr float kEmissionMax = 16.0f;
 constexpr uint8_t kChannelEmission = 3;
 constexpr uint8_t kChannelHeight = 7;
+constexpr uint8_t kChannelNormal = 1;
+constexpr float kFieldH = 26.0f;
 
 UiFlex lineFlex(float height) {
     UiFlex line{};
@@ -69,14 +70,8 @@ uint16_t addThumb(UiState& s, HudContext& hud, uint16_t parent, uint8_t slot, co
     return ids.frame;
 }
 
-void addSlide(UiState& s, HudContext& hud, uint16_t parent, uint16_t bind, float value, float lo, float hi) {
-    hud.bind.sliderNumber(s, parent, bind, value, lo, hi, 0.01f);
-    (void)hud.bind.resetBtn(s, parent, UiReset::Float, bind, value);
-}
-
 void addColor(UiState& s, HudContext& hud, uint16_t parent, const PropSpec& spec) {
     hud.bind.colorHex(s, parent, spec.bind, kScMatOpacity, spec.bind == kScMatBase0, &hud.matEdited);
-    (void)hud.bind.resetBtn(s, parent, UiReset::Rgb, spec.bind, 1.0f);
 }
 
 void showIf(UiState& s, uint16_t id, bool on) {
@@ -87,21 +82,14 @@ void showIf(UiState& s, uint16_t id, bool on) {
 }
 
 uint16_t addCaption(UiState& s, uint16_t parent, const char* text, float grow) {
-    UiFlex flex{};
-    flex.heightMode = UiSize::Px;
-    flex.height = kLineH;
-    flex.grow = grow;
-    flex.shrink = 1.0f;
-    flex.overflow = UiOverflow::Hidden;
-    const uint16_t id = uiPanel(s, parent, flex, paintLabel(s.look));
-    uiText(s, id, text);
-    uiTextStyle(s, id, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+    const uint16_t id = uiLabel(s, parent, text);
+    uiSetGrow(s, id, grow, 1.0f, 0.0f);
     return id;
 }
 
 } // namespace
 
-// One slot card: [thumbnail] [label ........ X] / [bound control], so the red clear button sits on the label row's far edge.
+// One slot card: [thumbnail with its red clear button] [label / bound control stack].
 uint16_t matSlotRole(void* user, UiState& s, UiPropBinder&, uint16_t panel, const PropSpec& spec) {
     auto* hud = static_cast<HudContext*>(user);
     if (hud == nullptr || spec.slot >= kMatSlotN) {
@@ -110,6 +98,8 @@ uint16_t matSlotRole(void* user, UiState& s, UiPropBinder&, uint16_t panel, cons
     const uint8_t slot = spec.slot;
     UiFlex cardFlex = lineFlex(kThumb + 4.0f);
     cardFlex.align = UiAlign::Start;
+    cardFlex.heightMode = UiSize::Auto;
+    cardFlex.minH = kThumb + 4.0f;
     cardFlex.gap = kCardGap;
     cardFlex.padT = 2.0f;
     cardFlex.padB = 2.0f;
@@ -122,42 +112,42 @@ uint16_t matSlotRole(void* user, UiState& s, UiPropBinder&, uint16_t panel, cons
     colFlex.direction = UiFlexDir::Column;
     colFlex.grow = 1.0f;
     colFlex.shrink = 1.0f;
-    colFlex.gap = 4.0f;
+    colFlex.gap = 3.0f;
     colFlex.minW = 40.0f;
     const uint16_t col = uiPanel(s, card, colFlex, paintClear());
     const uint16_t top = uiPanel(s, col, lineFlex(kLineH), paintClear());
     (void)addCaption(s, top, spec.label, 1.0f);
-    const uint16_t clear = hud->matClear[slot];
-    if (clear < s.count) {
-        uiReparent(s, clear, top);
-        if (auto* flex = s.ent[clear].try_get_mut<UiFlex>()) {
-            flex->position = UiPosition::Relative;
-            flex->posX = 0.0f;
-            flex->posY = 0.0f;
-            flex->shrink = 0.0f;
+    hud->matDriven[slot] = 0;
+    hud->matCtl[slot] = kUiNone;
+    if (spec.kind == 2) {
+        if (spec.group == 2) {
+            uiShow(s, card, false);
         }
+        return card;
     }
-    UiFlex ctlFlex = lineFlex(kLineH + 2.0f);
-    const uint16_t line = uiPanel(s, col, ctlFlex, paintClear());
-    UiFlex boxFlex = lineFlex(kLineH + 2.0f);
-    boxFlex.grow = 1.0f;
+    const bool normal = spec.channel == kChannelNormal;
+    const uint16_t line = normal ? top : uiPanel(s, col, lineFlex(spec.kind == 0 ? 64.0f : kFieldH), paintClear());
+    UiFlex boxFlex = lineFlex(spec.kind == 0 ? 64.0f : kFieldH);
     boxFlex.widthMode = UiSize::Auto;
+    boxFlex.grow = normal ? 0.0f : 1.0f;
+    boxFlex.align = UiAlign::Start;
     const uint16_t box = uiPanel(s, line, boxFlex, paintClear());
     hud->matCtl[slot] = box;
-    hud->matDriven[slot] = 0;
     if (spec.kind == 0) {
         addColor(s, *hud, box, spec);
         if (spec.channel == kChannelEmission) {
-            addSlide(s, *hud, box, kScMatEmissiveGain, 0.0f, 0.0f, kEmissionMax);
+            (void)matNumber(s, hud->bind, box, kScMatEmissiveGain, 0.0f, 0.0f, kEmissionMax, 0.01f);
         }
-    } else if (spec.kind == 1) {
-        addSlide(s, *hud, box, spec.bind, spec.value, spec.minV, spec.maxV);
+    } else {
+        (void)matNumber(s, hud->bind, box, spec.bind, spec.value, spec.minV, spec.maxV, 0.01f);
         if (spec.group == 1 && spec.channel != kChannelHeight) {
             hud->matDriven[slot] = addCaption(s, line, "Driven by texture map", 1.0f);
             uiShow(s, hud->matDriven[slot], false);
         }
-    } else {
-        (void)hud->bind.resetBtn(s, box, UiReset::Custom, spec.channel, 0.0f);
+    }
+    if (normal) {
+        const uint16_t flip = uiPanel(s, col, lineFlex(kLineH), paintClear());
+        (void)matFlagCheck(s, hud->bind, flip, "Flip Normal Y", kFlMatFlip, true);
     }
     if (spec.group == 2) {
         uiShow(s, card, false);
@@ -187,7 +177,7 @@ void hudPaintMaterial(HudContext& hud) {
         showIf(*state, hud.matDriven[i], driven);
     }
     uiChoiceSelect(*state, hud.matType, hud.block.flags[kFlMatUnlit] != 0 ? 1u : 0u, hud.block.flags[kFlMatUnlit] != 0 ? "Unlit" : "Lit");
-    uiChoiceSelect(*state, hud.matPack, pack ? 1u : 0u, pack ? "ORMH" : "Classic");
+    uiChoiceSelect(*state, hud.matPack, pack ? 1u : 0u, pack ? "Packed ORM" : "Classic");
 }
 
 } // namespace burnhope

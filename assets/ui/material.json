@@ -12,17 +12,11 @@
           "role": "panel",
           "name": "matLeft",
           "dir": "column",
-          "w": 210,
+          "w": 240,
           "shrink": 0,
           "gap": 6,
           "paint": "hidden",
           "children": [
-            {
-              "role": "label",
-              "name": "matTitle",
-              "label": "Editing:",
-              "paint": "accent"
-            },
             {
               "role": "panel",
               "dir": "column",
@@ -54,102 +48,61 @@
                     {
                       "label": "Plane"
                     }
-                  ]
-                },
-                {
-                  "role": "label",
-                  "label": "Drag: Rotate | Scroll: Zoom",
-                  "name": "matHint"
+                  ],
+                  "w": 168
                 }
               ]
             },
             {
-              "role": "section",
-              "label": "Texturing & UV"
-            },
-            {
-              "role": "check",
+              "role": "matrow",
               "label": "Repeat",
+              "kind": 0,
               "bind": 57,
-              "reset": true,
-              "on": true
+              "value": 1.0
             },
             {
-              "role": "check",
+              "role": "matrow",
               "label": "Triplanar",
+              "kind": 0,
               "bind": 47,
-              "reset": true,
-              "on": false
+              "value": 0.0
             },
             {
-              "role": "vec2",
+              "role": "matrow",
               "label": "Tiling",
+              "kind": 1,
               "bind": 153,
-              "reset": true,
-              "value": 1.0,
-              "value2": 1.0,
-              "min": -64,
-              "max": 64,
-              "step": 0.01
+              "value": 1.0
             },
             {
-              "role": "vec2",
+              "role": "matrow",
               "label": "Offset",
+              "kind": 1,
               "bind": 186,
-              "reset": true,
-              "value": 0.0,
-              "value2": 0.0,
-              "min": -64,
-              "max": 64,
-              "step": 0.01
+              "value": 0.0
             },
             {
-              "role": "section",
-              "label": "Surface"
-            },
-            {
-              "role": "pick",
+              "role": "matrow",
               "label": "Type",
-              "name": "matType",
+              "kind": 2,
               "bind": 56,
-              "command": "mat.type",
-              "items": [
-                {
-                  "label": "Lit"
-                },
-                {
-                  "label": "Unlit"
-                }
-              ]
+              "value": 0.0,
+              "name": "matType"
             },
             {
-              "role": "check",
+              "role": "matrow",
               "label": "Double Sided",
+              "kind": 0,
               "bind": 48,
-              "reset": true,
-              "on": false
+              "value": 0.0
             },
             {
-              "role": "check",
-              "label": "Flip Normal Y",
-              "bind": 55,
-              "reset": true,
-              "on": true
-            },
-            {
-              "role": "pick",
-              "label": "Map Type",
-              "name": "matPack",
+              "role": "matrow",
+              "label": "Maps",
+              "kind": 2,
               "bind": 58,
-              "command": "mat.pack",
-              "items": [
-                {
-                  "label": "Classic"
-                },
-                {
-                  "label": "ORMH"
-                }
-              ]
+              "value": 0.0,
+              "name": "matPack"
             }
           ]
         },
@@ -186,19 +139,6 @@
                 },
                 {
                   "role": "matslot",
-                  "label": "Metallic",
-                  "slot": 4,
-                  "channel": 5,
-                  "cell": 1,
-                  "group": 1,
-                  "kind": 1,
-                  "bind": 140,
-                  "value": 0.0,
-                  "min": 0.0,
-                  "max": 1.0
-                },
-                {
-                  "role": "matslot",
                   "label": "Normal Map",
                   "slot": 2,
                   "channel": 1,
@@ -212,71 +152,14 @@
                 },
                 {
                   "role": "matslot",
-                  "label": "Ambient Occlusion",
-                  "slot": 6,
-                  "channel": 6,
-                  "cell": 5,
+                  "label": "Metallic",
+                  "slot": 4,
+                  "channel": 5,
+                  "cell": 1,
                   "group": 1,
                   "kind": 1,
-                  "bind": 147,
-                  "value": 1.0,
-                  "min": 0.0,
-                  "max": 1.0
-                },
-                {
-                  "role": "matslot",
-                  "label": "Emission",
-                  "slot": 8,
-                  "channel": 3,
-                  "cell": 7,
-                  "group": 0,
-                  "kind": 0,
-                  "bind": 181,
-                  "value": 1.0,
-                  "min": 0.0,
-                  "max": 1.0
-                }
-              ]
-            },
-            {
-              "role": "panel",
-              "name": "matCol2",
-              "dir": "column",
-              "grow": 1,
-              "shrink": 1,
-              "gap": 8,
-              "paint": "hidden",
-              "children": [
-                {
-                  "role": "matslot",
-                  "label": "Alpha / Opacity",
-                  "slot": 1,
-                  "channel": 8,
-                  "cell": 8,
-                  "group": 0,
-                  "kind": 1,
-                  "bind": 185,
-                  "value": 1.0,
-                  "min": 0.0,
-                  "max": 1.0
-                },
-                {
-                  "role": "check",
-                  "label": "Transparent Material",
-                  "bind": 49,
-                  "reset": true,
-                  "on": false
-                },
-                {
-                  "role": "matslot",
-                  "label": "Roughness",
-                  "slot": 5,
-                  "channel": 4,
-                  "cell": 2,
-                  "group": 1,
-                  "kind": 1,
-                  "bind": 139,
-                  "value": 0.5,
+                  "bind": 140,
+                  "value": 0.0,
                   "min": 0.0,
                   "max": 1.0
                 },
@@ -305,6 +188,69 @@
                   "value": 0.0,
                   "min": 0.0,
                   "max": 0.0
+                }
+              ]
+            },
+            {
+              "role": "panel",
+              "name": "matCol2",
+              "dir": "column",
+              "grow": 1,
+              "shrink": 1,
+              "gap": 8,
+              "paint": "hidden",
+              "children": [
+                {
+                  "role": "matslot",
+                  "label": "Alpha / Opacity",
+                  "slot": 1,
+                  "channel": 8,
+                  "cell": 8,
+                  "group": 0,
+                  "kind": 1,
+                  "bind": 185,
+                  "value": 1.0,
+                  "min": 0.0,
+                  "max": 1.0
+                },
+                {
+                  "role": "matslot",
+                  "label": "Roughness",
+                  "slot": 5,
+                  "channel": 4,
+                  "cell": 2,
+                  "group": 1,
+                  "kind": 1,
+                  "bind": 139,
+                  "value": 0.5,
+                  "min": 0.0,
+                  "max": 1.0
+                },
+                {
+                  "role": "matslot",
+                  "label": "Ambient Occlusion",
+                  "slot": 6,
+                  "channel": 6,
+                  "cell": 5,
+                  "group": 1,
+                  "kind": 1,
+                  "bind": 147,
+                  "value": 1.0,
+                  "min": 0.0,
+                  "max": 1.0
+                },
+                {
+                  "role": "matslot",
+                  "label": "Emission",
+                  "slot": 8,
+                  "channel": 3,
+                  "cell": 7,
+                  "group": 0,
+                  "kind": 0,
+                  "bind": 181,
+                  "value": 1.0,
+                  "min": 0.0,
+                  "max": 1.0
                 }
               ]
             }

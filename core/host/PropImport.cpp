@@ -462,7 +462,7 @@ uint16_t makeChoice(Import& in, uint16_t parent, const Node& node) {
     for (uint8_t i = 0; i < node.itemN && i < 8; ++i) {
         labels[i] = node.items[i].label;
     }
-    const float width = uiChoiceWidth(*in.state, labels, node.itemN);
+    const float width = node.w > 0.0f ? node.w : uiChoiceWidth(*in.state, labels, node.itemN);
     UiCommandPick* pick = takeCommand(in, node.command, 0);
     const uint16_t id = uiChoice(*in.state, parent, {
         .labels = labels,

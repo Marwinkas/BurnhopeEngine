@@ -398,10 +398,9 @@ TEST_CASE("material json builds segment, pick, preview and hosted roles") {
     UiPropBinder binder;
     binder.attach(block.scalars, 256, block.flags, 64);
     uint16_t preview = kUiNone;
-    uint16_t type = kUiNone;
-    const PropSlot slots[] = {{"matPreview", &preview}, {"matType", &type}};
-    const PropCommand commands[] = {{"mat.shape", onShapeTest, nullptr}, {"mat.type", onShapeTest, nullptr}, {"mat.pack", onShapeTest, nullptr}};
-    const PropRole roles[] = {{"matslot", hostedRole, &gHosted}};
+    const PropSlot slots[] = {{"matPreview", &preview}};
+    const PropCommand commands[] = {{"mat.shape", onShapeTest, nullptr}};
+    const PropRole roles[] = {{"matslot", hostedRole, &gHosted}, {"matrow", hostedRole, &gHosted}};
     char path[512]{};
     MappedFile file{};
     CHECK(platformResolveAsset("assets/ui/material.json", path, sizeof(path)));
@@ -409,10 +408,9 @@ TEST_CASE("material json builds segment, pick, preview and hosted roles") {
     const std::string_view doc{reinterpret_cast<const char*>(file.data), file.size};
     const uint16_t root = spawn(state, kUiNone, px(800.0f, 900.0f), paintRgb(0.1f, 0.1f, 0.1f));
     gHosted = 0;
-    CHECK(propImport(state, root, doc, "material", binder, slots, 2, commands, 3, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr, roles, 1));
+    CHECK(propImport(state, root, doc, "material", binder, slots, 1, commands, 1, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr, roles, 2));
     CHECK(preview != kUiNone);
-    CHECK(type != kUiNone);
-    CHECK(gHosted == 9);
+    CHECK(gHosted == 16);
     fileUnmap(&file);
 }
 
@@ -724,7 +722,7 @@ TEST_CASE("material preview paints every shape and reacts to the material") {
     static uint8_t pixels[2][kMatSphereSide * kMatSphereSide * 4u];
     materialBakeAtlas(doc, "", atlas);
     for (const MatShape shape : {MatShape::Sphere, MatShape::Cube, MatShape::Plane}) {
-        materialBakePreview(doc, atlas, shape, 0.4f, 0.3f, pixels[0]);
+        materialBakePreview(doc, atlas, shape, 0.4f, 0.3f, 1.0f, pixels[0]);
         uint32_t lit = 0;
         for (uint32_t i = 0; i < kMatSphereSide * kMatSphereSide; ++i) {
             lit += pixels[0][i * 4u] != 46u ? 1u : 0u;
@@ -734,10 +732,10 @@ TEST_CASE("material preview paints every shape and reacts to the material") {
     }
     doc.metallic = 1.0f;
     doc.roughness = 0.1f;
-    materialBakePreview(doc, atlas, MatShape::Sphere, 0.4f, 0.3f, pixels[0]);
+    materialBakePreview(doc, atlas, MatShape::Sphere, 0.4f, 0.3f, 1.0f, pixels[0]);
     doc.metallic = 0.0f;
     doc.roughness = 0.9f;
-    materialBakePreview(doc, atlas, MatShape::Sphere, 0.4f, 0.3f, pixels[1]);
+    materialBakePreview(doc, atlas, MatShape::Sphere, 0.4f, 0.3f, 1.0f, pixels[1]);
     CHECK(std::memcmp(pixels[0], pixels[1], sizeof(pixels[0])) != 0);
 }
 
@@ -746,7 +744,7 @@ TEST_CASE("material sphere preview is transparent outside the ball") {
     static uint8_t atlas[kMatAtlasW * kMatAtlasH * 4u];
     static uint8_t pixels[kMatSphereSide * kMatSphereSide * 4u];
     materialBakeAtlas(doc, "", atlas);
-    materialBakePreview(doc, atlas, MatShape::Sphere, 0.0f, 0.0f, pixels);
+    materialBakePreview(doc, atlas, MatShape::Sphere, 0.0f, 0.0f, 1.0f, pixels);
     CHECK(pixels[3] == 0);
     const size_t mid = (static_cast<size_t>(kMatSphereSide / 2) * kMatSphereSide + kMatSphereSide / 2) * 4u;
     CHECK(pixels[mid + 3] == 255);

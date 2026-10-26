@@ -43,6 +43,15 @@ void hudBakeMaterialView(HudContext& hud) {
     if (state != nullptr && uiCaptured(*state) != hud.matPreview) {
         hud.previewDown = 0;
     }
+    if (hud.matOpen != 0) {
+        // Transparency follows the opacity: a material is cut out as soon as it has an alpha map or an opacity below one.
+        const uint8_t cut = hud.matDoc.baseA < 0.999f || hud.matDoc.alphaPath[0] != '\0' ? 1u : 0u;
+        if (hud.matDoc.alphaCut != cut) {
+            hud.matDoc.alphaCut = cut;
+            hud.block.flags[kFlMatAlpha] = cut;
+            saveOpenMaterial(hud);
+        }
+    }
     bool changed = hud.atlasDirty != 0;
     if (hud.matEdited) {
         hud.matEdited = false;
@@ -82,7 +91,7 @@ void hudBakeMaterialView(HudContext& hud) {
         }
     }
     if (hud.previewDirty != 0) {
-        materialBakePreview(hud.matDoc, hud.atlasBuf.data(), static_cast<MatShape>(hud.previewShape), hud.previewYaw, hud.previewPitch, hud.previewBuf.data());
+        materialBakePreview(hud.matDoc, hud.atlasBuf.data(), static_cast<MatShape>(hud.previewShape), hud.previewYaw, hud.previewPitch, hud.previewZoom, hud.previewBuf.data());
         if (canvasUploadPhoto(*canvas, 8, hud.previewBuf.data(), kMatSphereSide, kMatSphereSide)) {
             hud.previewDirty = 0;
         }

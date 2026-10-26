@@ -21,7 +21,7 @@ enum class MatShape : uint8_t { Sphere, Cube, Plane };
 
 // Path-free PBR preview of `shape` turned by yaw (about Y) then pitch (about X): a sun with GGX / Smith / Schlick
 // specular plus a hemispherical dome, driven by the albedo, metal, roughness, normal, AO / ORM and emissive cells of
-// the atlas and the scalars of `doc`. `dst` holds kMatSphereSide^2 RGBA bytes.
-void materialBakePreview(const BhmatDoc& doc, const uint8_t* atlas, MatShape shape, float yaw, float pitch, uint8_t* dst);
+// the atlas and the scalars of `doc`. `zoom` scales the shape on screen (1 = default). `dst` holds kMatSphereSide^2 RGBA bytes.
+void materialBakePreview(const BhmatDoc& doc, const uint8_t* atlas, MatShape shape, float yaw, float pitch, float zoom, uint8_t* dst);
 
 } // namespace burnhope

@@ -351,10 +351,10 @@ uint8_t display(float linear) {
 
 } // namespace
 
-void materialBakePreview(const BhmatDoc& doc, const uint8_t* atlas, MatShape shape, float yaw, float pitch, uint8_t* dst) {
+void materialBakePreview(const BhmatDoc& doc, const uint8_t* atlas, MatShape shape, float yaw, float pitch, float zoom, uint8_t* dst) {
     const Spin spin{std::cos(yaw), std::sin(yaw), std::cos(pitch), std::sin(pitch)};
     constexpr float half = static_cast<float>(kMatSphereSide) * 0.5f;
-    constexpr float radius = 70.0f;
+    const float radius = 70.0f * zoom;
     for (uint32_t y = 0; y < kMatSphereSide; ++y) {
         for (uint32_t x = 0; x < kMatSphereSide; ++x) {
             uint8_t* px = dst + (static_cast<size_t>(y) * kMatSphereSide + x) * 4u;

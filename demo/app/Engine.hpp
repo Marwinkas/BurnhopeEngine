@@ -206,10 +206,9 @@ struct HudContext {
     uint16_t matType = kUiNone;
     uint16_t matPack = kUiNone;
     uint16_t matPreview = kUiNone;
-    uint16_t matTitle = kUiNone;
-    uint16_t matHint = kUiNone;
     float previewYaw = 0.55f;
     float previewPitch = 0.35f;
+    float previewZoom = 1.0f;
     float previewTint[3]{1.0f, 1.0f, 1.0f};
     float previewPx = 0.0f;
     float previewPy = 0.0f;

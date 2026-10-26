@@ -44,7 +44,7 @@ void matApplyFlag(HudContext& hud, UiState& s, uint16_t index, uint8_t value) {
         uiChoiceSelect(s, hud.matType, value, value != 0 ? "Unlit" : "Lit");
     }
     if (index == kFlMatPack) {
-        uiChoiceSelect(s, hud.matPack, value, value != 0 ? "ORMH" : "Classic");
+        uiChoiceSelect(s, hud.matPack, value, value != 0 ? "Packed ORM" : "Classic");
         if (value == 0) {
             hud.matDoc.ormPath[0] = '\0';
         } else {

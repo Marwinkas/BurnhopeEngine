@@ -13,38 +13,14 @@
 #include "ui/widget/Label.hpp"
 #include "ui/widget/Segment.hpp"
 #include "ui/Nodes.hpp"
-#include "ui/State.hpp"
 
 namespace burnhope {
 
 namespace {
 
-constexpr float kHintScale = 0.8f;
-
-void onType(void* user, uint16_t index) {
-    auto* hud = static_cast<HudContext*>(user);
-    if (hud == nullptr) {
-        return;
-    }
-    UiState* state = matPageState(*hud);
-    if (state != nullptr) {
-        matApplyFlag(*hud, *state, kFlMatUnlit, index == 1 ? 1u : 0u);
-    }
-    saveOpenMaterial(*hud);
-}
-
-void onPack(void* user, uint16_t index) {
-    auto* hud = static_cast<HudContext*>(user);
-    if (hud == nullptr) {
-        return;
-    }
-    UiState* state = matPageState(*hud);
-    if (state != nullptr) {
-        matApplyFlag(*hud, *state, kFlMatPack, index == 0 ? 0u : 1u);
-        hudPaintMaterial(*hud);
-    }
-    saveOpenMaterial(*hud);
-}
+constexpr float kZoomMin = 0.5f;
+constexpr float kZoomMax = 2.5f;
+constexpr float kZoomStep = 0.1f;
 
 void onSave(void* user, uint16_t) {
     if (auto* hud = static_cast<HudContext*>(user)) {
@@ -94,6 +70,14 @@ void onPreviewDrag(void* user, uint16_t, float x, float y) {
     orbitPreview(*hud, dx, dy);
 }
 
+void onPreviewWheel(void* user, uint16_t, float wheel, float, float) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud != nullptr) {
+        hud->previewZoom = std::clamp(hud->previewZoom + wheel * kZoomStep, kZoomMin, kZoomMax);
+        hud->previewDirty = 1;
+    }
+}
+
 } // namespace
 
 void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel) {
@@ -107,35 +91,18 @@ void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel) {
     hud->atlasBuf.resize(kMatAtlasW * kMatAtlasH * 4u);
     const PropSlot slots[] = {
         {"matPreview", &hud->matPreview},
-        {"matType", &hud->matType},
-        {"matPack", &hud->matPack},
-        {"matTitle", &hud->matTitle},
-        {"matHint", &hud->matHint},
     };
     const PropCommand commands[] = {
         {"mat.shape", onShape, hud},
-        {"mat.type", onType, hud},
-        {"mat.pack", onPack, hud},
         {"mat.save", onSave, hud},
     };
-    const PropRole roles[] = {{"matslot", matSlotRole, hud}};
-    if (!propImportAsset(s, panel, "assets/ui/material.json", "material", hud->bind, slots, 5, commands, 4, paintClear(), nullptr, hud, roles, 1)) {
+    const PropRole roles[] = {{"matslot", matSlotRole, hud}, {"matrow", matRowRole, hud}};
+    if (!propImportAsset(s, panel, "assets/ui/material.json", "material", hud->bind, slots, 1, commands, 2, paintClear(), nullptr, hud, roles, 2)) {
         return;
-    }
-    if (hud->matHint < s.count) {
-        if (auto* paint = s.ent[hud->matHint].try_get_mut<UiPaint>()) {
-            *paint = paintToken(s.look, UiToken::Muted, 0.0f);
-            paint->a = 0.0f;
-            paint->borderW = 0.0f;
-        }
-        if (const uint16_t part = uiTextId(s, hud->matHint); part < s.count) {
-            if (auto* text = s.ent[part].try_get_mut<UiText>()) {
-                text->size = kHintScale;
-            }
-        }
     }
     uiDrag(s, hud->matPreview, onPreviewDrag, hud);
     uiDragRight(s, hud->matPreview, onPreviewOrbit, hud);
+    uiWheelBind(s, hud->matPreview, onPreviewWheel, hud);
 }
 
 } // namespace burnhope

@@ -465,6 +465,7 @@ bh_module(app
     demo/app/MatPage.cpp
     demo/app/MatEdit.cpp
     demo/app/MatSlot.cpp
+    demo/app/MatRows.cpp
     demo/app/MatPreview.cpp
     demo/app/MatThumb.cpp
     demo/app/ModelThumb.cpp
