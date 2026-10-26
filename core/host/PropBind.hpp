@@ -125,7 +125,7 @@ struct UiPropBinder {
     UiPropVec3 vec3(UiState& s, uint16_t host, const char* label, uint16_t index, float x, float y, float z, float minV, float maxV, float step, bool proportional = false);
     // A slider and a number sharing one scalar. Returns the number; whichever the user moves drives the other.
     uint16_t sliderNumber(UiState& s, uint16_t parent, uint16_t index, float def, float lo, float hi, float step);
-    // A 64x24 swatch beside a 74x24 #RRGGBB field on scalars rgbIndex..+2. withAlpha adds the scalar at alphaIndex as #RRGGBBAA
+    // A 48x24 swatch beside an 86x24 #RRGGBB field on scalars rgbIndex..+2. withAlpha adds the scalar at alphaIndex as #RRGGBBAA
     // while it is below 1. *outDirty is set when the user edits the text. Returns the swatch.
     uint16_t colorHex(UiState& s, uint16_t parent, uint16_t rgbIndex, uint16_t alphaIndex, bool withAlpha, bool* outDirty = nullptr);
     // A small reset button under `parent`: clicking it restores the scalars or flag at `index` to `home` (and `home2`

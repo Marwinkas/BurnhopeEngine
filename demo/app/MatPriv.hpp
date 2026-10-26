@@ -20,8 +20,8 @@ uint16_t matSlotRole(void* user, UiState& s, UiPropBinder& bind, uint16_t panel,
 // PropRole "matrow": a compact row of the left column (flag check, Tiling / Offset pair, or Type / Maps choice).
 uint16_t matRowRole(void* user, UiState& s, UiPropBinder& bind, uint16_t panel, const PropSpec& spec);
 // A bare check bound to `flag`, and a compact number field bound to `scalar`.
-uint16_t matFlagCheck(UiState& s, UiPropBinder& bind, uint16_t parent, const char* label, uint16_t flag, bool on);
-uint16_t matNumber(UiState& s, UiPropBinder& bind, uint16_t parent, uint16_t scalar, float def, float lo, float hi, float step);
+uint16_t matFlagCheck(UiState& s, UiPropBinder& bind, uint16_t parent, const char* label, float labelW, uint16_t flag, bool on);
+uint16_t matNumber(UiState& s, UiPropBinder& bind, uint16_t parent, uint16_t scalar, float def, float lo, float hi, float step, float width);
 void matOnClear(void* user, uint16_t id);
 void matOnPath(void* user, const char* path);
 

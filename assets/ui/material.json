@@ -12,7 +12,7 @@
           "role": "panel",
           "name": "matLeft",
           "dir": "column",
-          "w": 230,
+          "w": 275,
           "padL": 6,
           "padR": 6,
           "shrink": 0,
@@ -57,6 +57,29 @@
             },
             {
               "role": "matrow",
+              "label": "Type",
+              "kind": 2,
+              "bind": 56,
+              "value": 0.0,
+              "name": "matType"
+            },
+            {
+              "role": "matrow",
+              "label": "Double Sided",
+              "kind": 0,
+              "bind": 48,
+              "value": 0.0
+            },
+            {
+              "role": "matrow",
+              "label": "Maps",
+              "kind": 2,
+              "bind": 58,
+              "value": 0.0,
+              "name": "matPack"
+            },
+            {
+              "role": "matrow",
               "label": "Repeat",
               "kind": 0,
               "bind": 57,
@@ -82,29 +105,6 @@
               "kind": 1,
               "bind": 186,
               "value": 0.0
-            },
-            {
-              "role": "matrow",
-              "label": "Type",
-              "kind": 2,
-              "bind": 56,
-              "value": 0.0,
-              "name": "matType"
-            },
-            {
-              "role": "matrow",
-              "label": "Double Sided",
-              "kind": 0,
-              "bind": 48,
-              "value": 0.0
-            },
-            {
-              "role": "matrow",
-              "label": "Maps",
-              "kind": 2,
-              "bind": 58,
-              "value": 0.0,
-              "name": "matPack"
             }
           ]
         },
@@ -191,7 +191,8 @@
                   "min": 0.0,
                   "max": 0.0
                 }
-              ]
+              ],
+              "minW": 270
             },
             {
               "role": "panel",
@@ -254,9 +255,11 @@
                   "min": 0.0,
                   "max": 1.0
                 }
-              ]
+              ],
+              "minW": 270
             }
-          ]
+          ],
+          "wrap": true
         }
       ]
     },

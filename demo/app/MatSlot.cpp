@@ -27,7 +27,7 @@ namespace burnhope {
 
 namespace {
 
-constexpr float kThumb = 64.0f;
+constexpr float kThumb = 68.0f;
 constexpr float kCardGap = 8.0f;
 constexpr float kLineH = 22.0f;
 constexpr float kEmissionMax = 16.0f;
@@ -35,6 +35,9 @@ constexpr uint8_t kChannelEmission = 3;
 constexpr uint8_t kChannelHeight = 7;
 constexpr uint8_t kChannelNormal = 1;
 constexpr float kFieldH = 24.0f;
+constexpr float kFieldW = 60.0f;
+constexpr float kBesideGap = 8.0f;
+constexpr float kFlipLabelW = 100.0f;
 
 UiFlex lineFlex(float height) {
     UiFlex line{};
@@ -115,8 +118,12 @@ uint16_t matSlotRole(void* user, UiState& s, UiPropBinder&, uint16_t panel, cons
     colFlex.gap = 3.0f;
     colFlex.minW = 40.0f;
     const uint16_t col = uiPanel(s, card, colFlex, paintClear());
-    const uint16_t top = uiPanel(s, col, lineFlex(kLineH), paintClear());
-    (void)addCaption(s, top, spec.label, 1.0f);
+    // Normal and Emission keep their number on the label line, right after the caption.
+    const bool beside = spec.channel == kChannelNormal || spec.channel == kChannelEmission;
+    UiFlex topFlex = lineFlex(kFieldH);
+    topFlex.gap = kBesideGap;
+    const uint16_t top = uiPanel(s, col, topFlex, paintClear());
+    (void)addCaption(s, top, spec.label, beside ? 0.0f : 1.0f);
     hud->matDriven[slot] = 0;
     hud->matCtl[slot] = kUiNone;
     if (spec.kind == 2) {
@@ -125,28 +132,31 @@ uint16_t matSlotRole(void* user, UiState& s, UiPropBinder&, uint16_t panel, cons
         }
         return card;
     }
-    const bool normal = spec.channel == kChannelNormal;
-    const uint16_t line = normal ? top : uiPanel(s, col, lineFlex(kFieldH), paintClear());
-    UiFlex boxFlex = lineFlex(kFieldH);
-    boxFlex.widthMode = UiSize::Auto;
-    boxFlex.grow = normal || spec.kind == 0 ? 0.0f : 1.0f;
-    boxFlex.align = UiAlign::Start;
-    const uint16_t box = uiPanel(s, line, boxFlex, paintClear());
-    hud->matCtl[slot] = box;
     if (spec.kind == 0) {
+        UiFlex boxFlex = lineFlex(kFieldH);
+        boxFlex.widthMode = UiSize::Auto;
+        boxFlex.grow = 0.0f;
+        const uint16_t box = uiPanel(s, col, boxFlex, paintClear());
+        hud->matCtl[slot] = box;
         addColor(s, *hud, box, spec);
         if (spec.channel == kChannelEmission) {
-            (void)matNumber(s, hud->bind, box, kScMatEmissiveGain, 0.0f, 0.0f, kEmissionMax, 0.01f);
+            (void)matNumber(s, hud->bind, top, kScMatEmissiveGain, 0.0f, 0.0f, kEmissionMax, 0.01f, kFieldW);
         }
     } else {
-        (void)matNumber(s, hud->bind, box, spec.bind, spec.value, spec.minV, spec.maxV, 0.01f);
+        const uint16_t line = beside ? top : uiPanel(s, col, lineFlex(kFieldH), paintClear());
+        UiFlex boxFlex = lineFlex(kFieldH);
+        boxFlex.widthMode = UiSize::Auto;
+        boxFlex.grow = beside ? 0.0f : 1.0f;
+        const uint16_t box = uiPanel(s, line, boxFlex, paintClear());
+        hud->matCtl[slot] = box;
+        (void)matNumber(s, hud->bind, box, spec.bind, spec.value, spec.minV, spec.maxV, 0.01f, kFieldW);
         if (spec.group == 1 && spec.channel != kChannelHeight) {
             hud->matDriven[slot] = addCaption(s, line, "Driven by texture map", 1.0f);
             uiShow(s, hud->matDriven[slot], false);
         }
     }
-    if (normal) {
-        (void)matFlagCheck(s, hud->bind, col, "Flip Normal Y", kFlMatFlip, true);
+    if (spec.channel == kChannelNormal) {
+        (void)matFlagCheck(s, hud->bind, col, "Flip Normal Y", kFlipLabelW, kFlMatFlip, true);
     }
     if (spec.group == 2) {
         uiShow(s, card, false);

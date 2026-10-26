@@ -18,8 +18,8 @@ namespace burnhope {
 namespace {
 
 constexpr float kRowH = 26.0f;
-constexpr float kLabelW = 46.0f;
-constexpr float kFieldW = 54.0f;
+constexpr float kLabelW = 95.0f;
+constexpr float kFieldW = 52.0f;
 constexpr float kFieldH = 24.0f;
 constexpr float kBadgeW = 16.0f;
 constexpr float kBadgeH = 20.0f;
@@ -90,14 +90,15 @@ uint16_t badgeOf(UiState& s, uint16_t row, const char* letter, uint8_t axis) {
 
 } // namespace
 
-// A property row: the label on the left, the check box on the right.
-uint16_t matFlagCheck(UiState& s, UiPropBinder& bind, uint16_t parent, const char* label, uint16_t flag, bool on) {
+// A property row: the label in a fixed-width column, then the check box.
+uint16_t matFlagCheck(UiState& s, UiPropBinder& bind, uint16_t parent, const char* label, float labelW, uint16_t flag, bool on) {
     if (bind.flags != nullptr && flag < bind.flagN) {
         bind.flags[flag] = on ? 1u : 0u;
     }
-    const uint16_t row = rowOf(s, parent, 6.0f, UiJustify::Between);
+    const uint16_t row = rowOf(s, parent, 0.0f, UiJustify::Start);
     const uint16_t caption = uiLabel(s, row, label);
-    uiSetGrow(s, caption, 1.0f, 1.0f, 0.0f);
+    uiSetWidth(s, caption, labelW);
+    uiSetGrow(s, caption, 0.0f, 0.0f, labelW);
     const uint16_t id = uiCheck(s, row, "", 0, 0, on);
     uiSetWidth(s, id, kCheckW);
     uiSetGrow(s, id, 0.0f, 0.0f, kCheckW);
@@ -105,8 +106,8 @@ uint16_t matFlagCheck(UiState& s, UiPropBinder& bind, uint16_t parent, const cha
     return id;
 }
 
-uint16_t matNumber(UiState& s, UiPropBinder& bind, uint16_t parent, uint16_t scalar, float def, float lo, float hi, float step) {
-    const uint16_t id = uiNumber(s, parent, def, lo, hi, step, nullptr, nullptr, kFieldW, kFieldH, 0.0f);
+uint16_t matNumber(UiState& s, UiPropBinder& bind, uint16_t parent, uint16_t scalar, float def, float lo, float hi, float step, float width) {
+    const uint16_t id = uiNumber(s, parent, def, lo, hi, step, nullptr, nullptr, width, kFieldH, 0.0f);
     uiNumberFill(s, id, false);
     bind.watch(id, scalar, def);
     return id;
@@ -120,14 +121,14 @@ uint16_t matRowRole(void* user, UiState& s, UiPropBinder& bind, uint16_t panel, 
         return kUiNone;
     }
     if (spec.kind == 0) {
-        return matFlagCheck(s, bind, panel, spec.label, spec.bind, spec.value >= 0.5f);
+        return matFlagCheck(s, bind, panel, spec.label, kLabelW, spec.bind, spec.value >= 0.5f);
     }
     const uint16_t row = rowOf(s, panel, 2.0f, UiJustify::Start);
     (void)captionOf(s, row, spec.label);
     if (spec.kind == 1) {
         for (uint16_t axis = 0; axis < 2u; ++axis) {
             (void)badgeOf(s, row, axis == 0 ? "X" : "Y", static_cast<uint8_t>(axis));
-            (void)matNumber(s, bind, row, static_cast<uint16_t>(spec.bind + axis), spec.value, -kVecRange, kVecRange, 0.01f);
+            (void)matNumber(s, bind, row, static_cast<uint16_t>(spec.bind + axis), spec.value, -kVecRange, kVecRange, 0.01f, kFieldW);
         }
         const uint16_t reset = bind.resetBtn(s, row, UiReset::Vec2, spec.bind, spec.value, spec.value);
         uiSetSize(s, reset, kResetSide, kResetSide);

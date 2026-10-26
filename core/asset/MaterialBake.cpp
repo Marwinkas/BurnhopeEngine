@@ -240,27 +240,66 @@ Hit tracePlane(const Spin& spin, float nx, float ny) {
     return out;
 }
 
-const uint8_t* texel(const uint8_t* atlas, uint8_t cell, float u, float v) {
-    u -= std::floor(u);
-    v -= std::floor(v);
+struct Rgba {
+    float r;
+    float g;
+    float b;
+    float a;
+};
+
+// One atlas cell at (u, v): wrapped when the material repeats, clamped to its edge otherwise.
+Rgba fetch(const uint8_t* atlas, uint8_t cell, float u, float v, bool repeat) {
+    if (repeat) {
+        u -= std::floor(u);
+        v -= std::floor(v);
+    } else {
+        u = clamp01(u);
+        v = clamp01(v);
+    }
     const uint32_t sx = std::min(static_cast<uint32_t>(u * static_cast<float>(kMatCell)), kMatCell - 1u);
     const uint32_t sy = std::min(static_cast<uint32_t>(v * static_cast<float>(kMatCell)), kMatCell - 1u);
     const uint32_t col = cell % 4u;
     const uint32_t row = cell / 4u;
-    return atlas + (static_cast<size_t>(row * kMatCell + sy) * kMatAtlasW + col * kMatCell + sx) * 4u;
+    const uint8_t* px = atlas + (static_cast<size_t>(row * kMatCell + sy) * kMatAtlasW + col * kMatCell + sx) * 4u;
+    return {px[0] / 255.0f, px[1] / 255.0f, px[2] / 255.0f, px[3] / 255.0f};
 }
 
-V3 srgbLinear(const uint8_t* px) {
-    const float r = px[0] / 255.0f;
-    const float g = px[1] / 255.0f;
-    const float b = px[2] / 255.0f;
-    return {r * r, g * g, b * b};
+// Samples the cells of one hit with the material's tiling, offset, repeat and triplanar settings. Triplanar blends the
+// three axis projections of the object-space position by the squared normal components.
+struct Sampler {
+    const uint8_t* atlas;
+    const BhmatDoc& doc;
+    const Hit& hit;
+
+    Rgba at(uint8_t cell, float u, float v) const {
+        return fetch(atlas, cell, u * doc.uvTiling[0] + doc.uvOffset[0], v * doc.uvTiling[1] + doc.uvOffset[1], doc.repeat != 0);
+    }
+
+    Rgba get(uint8_t cell) const {
+        if (doc.worldAligned == 0) {
+            return at(cell, hit.u, hit.v);
+        }
+        const float wx = hit.n.x * hit.n.x;
+        const float wy = hit.n.y * hit.n.y;
+        const float wz = hit.n.z * hit.n.z;
+        const float inv = 1.0f / std::max(wx + wy + wz, 1.0e-6f);
+        const Rgba x = at(cell, hit.pos.z * 0.5f + 0.5f, 0.5f - hit.pos.y * 0.5f);
+        const Rgba y = at(cell, hit.pos.x * 0.5f + 0.5f, 0.5f - hit.pos.z * 0.5f);
+        const Rgba z = at(cell, hit.pos.x * 0.5f + 0.5f, 0.5f - hit.pos.y * 0.5f);
+        const float a = wx * inv;
+        const float b = wy * inv;
+        const float c = wz * inv;
+        return {x.r * a + y.r * b + z.r * c, x.g * a + y.g * b + z.g * c, x.b * a + y.b * b + z.b * c, x.a * a + y.a * b + z.a * c};
+    }
+};
+
+V3 srgbLinear(const Rgba& px) {
+    return {px.r * px.r, px.g * px.g, px.b * px.b};
 }
 
 V3 shade(const BhmatDoc& doc, const uint8_t* atlas, const Spin& spin, const Hit& hit, V3 view) {
-    const float u = hit.u * doc.uvTiling[0] + doc.uvOffset[0];
-    const float v = hit.v * doc.uvTiling[1] + doc.uvOffset[1];
-    V3 albedo = srgbLinear(texel(atlas, 0, u, v)) * V3{doc.base[0], doc.base[1], doc.base[2]} * doc.albedoGain;
+    const Sampler tex{atlas, doc, hit};
+    V3 albedo = srgbLinear(tex.get(0)) * V3{doc.base[0], doc.base[1], doc.base[2]} * doc.albedoGain;
     if (doc.unlit != 0) {
         return albedo;
     }
@@ -268,19 +307,19 @@ V3 shade(const BhmatDoc& doc, const uint8_t* atlas, const Spin& spin, const Hit&
     float metal = doc.metallic;
     float ao = 1.0f;
     if (doc.mapPack != 0 && doc.ormPath[0] != '\0') {
-        const uint8_t* orm = texel(atlas, 6, u, v);
-        ao = orm[0] / 255.0f;
-        rough *= orm[1] / 255.0f;
-        metal *= orm[2] / 255.0f;
+        const Rgba orm = tex.get(6);
+        ao = orm.r;
+        rough *= orm.g;
+        metal *= orm.b;
     } else {
         if (doc.roughPath[0] != '\0') {
-            rough *= texel(atlas, 2, u, v)[0] / 255.0f;
+            rough *= tex.get(2).r;
         }
         if (doc.metalPath[0] != '\0') {
-            metal *= texel(atlas, 1, u, v)[0] / 255.0f;
+            metal *= tex.get(1).r;
         }
         if (doc.aoPath[0] != '\0') {
-            ao = texel(atlas, 5, u, v)[0] / 255.0f;
+            ao = tex.get(5).r;
         }
     }
     ao = 1.0f + (ao - 1.0f) * clamp01(doc.aoStrength);
@@ -289,10 +328,10 @@ V3 shade(const BhmatDoc& doc, const uint8_t* atlas, const Spin& spin, const Hit&
 
     V3 n = hit.n;
     if (doc.normalPath[0] != '\0') {
-        const uint8_t* np = texel(atlas, 3, u, v);
+        const Rgba np = tex.get(3);
         const float scale = doc.normalScale * doc.normalGain;
-        const float tx = (np[0] / 255.0f * 2.0f - 1.0f) * scale;
-        float ty = (np[1] / 255.0f * 2.0f - 1.0f) * scale;
+        const float tx = (np.r * 2.0f - 1.0f) * scale;
+        float ty = (np.g * 2.0f - 1.0f) * scale;
         if (doc.flipNormalY != 0) {
             ty = -ty;
         }
@@ -337,7 +376,7 @@ V3 shade(const BhmatDoc& doc, const uint8_t* atlas, const Spin& spin, const Hit&
     if (doc.emissive > 0.0f) {
         V3 glow{doc.emissiveColor[0], doc.emissiveColor[1], doc.emissiveColor[2]};
         if (doc.emissivePath[0] != '\0') {
-            glow = glow * srgbLinear(texel(atlas, 7, u, v));
+            glow = glow * srgbLinear(tex.get(7));
         }
         color = color + glow * doc.emissive;
     }

@@ -187,6 +187,7 @@ void sizeFlex(UiFlex& flex, const Node& node) {
     flex.grow = node.grow;
     flex.shrink = node.hasShrink ? node.shrink : flex.shrink;
     flex.gap = node.gap;
+    flex.wrap = node.wrap ? UiFlexWrap::Wrap : UiFlexWrap::NoWrap;
     flex.pad = node.pad;
     flex.padL = node.padL;
     flex.padR = node.padR;
@@ -763,7 +764,7 @@ bool parseNode(Cur& c, Import& in, uint16_t parent) {
                 node.posY = v;
             }
         } else if (keyIs(key, "bar") || keyIs(key, "slide") || keyIs(key, "hide") || keyIs(key, "center")
-            || keyIs(key, "ghost") || keyIs(key, "pass") || keyIs(key, "fill") || keyIs(key, "absolute")
+            || keyIs(key, "ghost") || keyIs(key, "pass") || keyIs(key, "fill") || keyIs(key, "wrap") || keyIs(key, "absolute")
             || keyIs(key, "vertical") || keyIs(key, "iconbtn")) {
             json::skip(c);
             bool flag = false;
@@ -789,6 +790,8 @@ bool parseNode(Cur& c, Import& in, uint16_t parent) {
                 node.pass = flag;
             } else if (keyIs(key, "fill")) {
                 node.fill = flag;
+            } else if (keyIs(key, "wrap")) {
+                node.wrap = flag;
             } else if (keyIs(key, "absolute")) {
                 node.absolute = flag;
             } else if (keyIs(key, "vertical")) {

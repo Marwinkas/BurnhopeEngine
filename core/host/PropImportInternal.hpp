@@ -78,6 +78,7 @@ struct Node {
     bool ghost = false;
     bool pass = false;
     bool fill = false;
+    bool wrap = false;
     bool absolute = false;
     bool vertical = false;
     bool alignCenter = false;

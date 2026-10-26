@@ -23,8 +23,8 @@ namespace {
 
 constexpr float kLinkEps = 0.0005f;
 constexpr float kHexRowH = 24.0f;
-constexpr float kHexW = 74.0f;
-constexpr float kChipW = 64.0f;
+constexpr float kHexW = 86.0f;
+constexpr float kChipW = 48.0f;
 constexpr float kHexGap = 6.0f;
 constexpr float kNumberW = 84.0f;
 constexpr float kSliderMinW = 48.0f;
