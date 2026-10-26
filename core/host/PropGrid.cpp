@@ -245,6 +245,15 @@ uint16_t uiPropGrip(UiState& s, uint16_t body) {
     return grip;
 }
 
+void uiPropNoGrip(UiState& s, uint16_t body) {
+    propEachChild(s, body, [&](uint16_t id) {
+        if (s.ent[id].has<UiPropGrip>()) {
+            uiShow(s, id, false);
+        }
+        return true;
+    });
+}
+
 uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
     const UiPropGrid* grid = propGrid(s, host);
     const float labelW = grid != nullptr && grid->labelW > 8.0f ? grid->labelW : 140.0f;

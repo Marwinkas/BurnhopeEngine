@@ -27,14 +27,14 @@ namespace burnhope {
 
 namespace {
 
-constexpr float kThumb = 52.0f;
+constexpr float kThumb = 64.0f;
 constexpr float kCardGap = 8.0f;
 constexpr float kLineH = 22.0f;
 constexpr float kEmissionMax = 16.0f;
 constexpr uint8_t kChannelEmission = 3;
 constexpr uint8_t kChannelHeight = 7;
 constexpr uint8_t kChannelNormal = 1;
-constexpr float kFieldH = 26.0f;
+constexpr float kFieldH = 24.0f;
 
 UiFlex lineFlex(float height) {
     UiFlex line{};
@@ -126,10 +126,10 @@ uint16_t matSlotRole(void* user, UiState& s, UiPropBinder&, uint16_t panel, cons
         return card;
     }
     const bool normal = spec.channel == kChannelNormal;
-    const uint16_t line = normal ? top : uiPanel(s, col, lineFlex(spec.kind == 0 ? 64.0f : kFieldH), paintClear());
-    UiFlex boxFlex = lineFlex(spec.kind == 0 ? 64.0f : kFieldH);
+    const uint16_t line = normal ? top : uiPanel(s, col, lineFlex(kFieldH), paintClear());
+    UiFlex boxFlex = lineFlex(kFieldH);
     boxFlex.widthMode = UiSize::Auto;
-    boxFlex.grow = normal ? 0.0f : 1.0f;
+    boxFlex.grow = normal || spec.kind == 0 ? 0.0f : 1.0f;
     boxFlex.align = UiAlign::Start;
     const uint16_t box = uiPanel(s, line, boxFlex, paintClear());
     hud->matCtl[slot] = box;
@@ -146,8 +146,7 @@ uint16_t matSlotRole(void* user, UiState& s, UiPropBinder&, uint16_t panel, cons
         }
     }
     if (normal) {
-        const uint16_t flip = uiPanel(s, col, lineFlex(kLineH), paintClear());
-        (void)matFlagCheck(s, hud->bind, flip, "Flip Normal Y", kFlMatFlip, true);
+        (void)matFlagCheck(s, hud->bind, col, "Flip Normal Y", kFlMatFlip, true);
     }
     if (spec.group == 2) {
         uiShow(s, card, false);
@@ -162,9 +161,9 @@ void hudPaintMaterial(HudContext& hud) {
     }
     const bool pack = hud.block.flags[kFlMatPack] != 0;
     for (uint8_t i = 0; i < kMatSlotN; ++i) {
-        if (hud.matGroup[i] == 2) {
-            showIf(*state, hud.matVal[i], pack);
-        }
+        // Classic shows the separate maps, Packed ORM shows only the packed one; the two sets never appear together.
+        const uint8_t group = hud.matGroup[i];
+        showIf(*state, hud.matVal[i], group == 0 || (group == 1 && !pack) || (group == 2 && pack));
         const char* path = hudDocPath(hud.matDoc, hud.matChannel[i]);
         const bool face = hud.matGroup[i] != 1 || !pack;
         const bool tex = face && path != nullptr && path[0] != '\0';

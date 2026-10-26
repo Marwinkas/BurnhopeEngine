@@ -22,9 +22,10 @@ namespace burnhope {
 namespace {
 
 constexpr float kLinkEps = 0.0005f;
-constexpr float kHexStackH = 64.0f;
 constexpr float kHexRowH = 24.0f;
-constexpr float kChipH = 22.0f;
+constexpr float kHexW = 74.0f;
+constexpr float kChipW = 64.0f;
+constexpr float kHexGap = 6.0f;
 constexpr float kNumberW = 84.0f;
 constexpr float kSliderMinW = 48.0f;
 
@@ -301,20 +302,20 @@ uint16_t UiPropBinder::colorHex(UiState& s, uint16_t parent, uint16_t rgbIndex, 
         scalars[static_cast<uint16_t>(rgbIndex + 1u)] = 1.0f;
         scalars[static_cast<uint16_t>(rgbIndex + 2u)] = 1.0f;
     }
-    UiFlex col{};
-    col.direction = UiFlexDir::Column;
-    col.justify = UiJustify::Between;
-    col.grow = 1.0f;
-    col.shrink = 1.0f;
-    col.heightMode = UiSize::Px;
-    col.height = kHexStackH;
-    col.minW = 96.0f;
-    const uint16_t column = uiPanel(s, parent, col, paintClear());
+    UiFlex row{};
+    row.direction = UiFlexDir::Row;
+    row.align = UiAlign::Center;
+    row.gap = kHexGap;
+    row.grow = 0.0f;
+    row.shrink = 0.0f;
+    row.heightMode = UiSize::Px;
+    row.height = kHexRowH;
+    const uint16_t column = uiPanel(s, parent, row, paintClear());
     UiFlex flex{};
-    flex.widthMode = UiSize::Percent;
-    flex.width = 100.0f;
+    flex.widthMode = UiSize::Px;
+    flex.width = kChipW;
     flex.heightMode = UiSize::Px;
-    flex.height = kChipH;
+    flex.height = kHexRowH;
     flex.shrink = 0.0f;
     UiPaint paint{};
     paint.token = UiToken::Custom;
@@ -322,7 +323,7 @@ uint16_t UiPropBinder::colorHex(UiState& s, uint16_t parent, uint16_t rgbIndex, 
     paint.g = 1.0f;
     paint.b = 1.0f;
     paint.a = 1.0f;
-    paint.radius = s.look.radiusSm;
+    paint.radius = 4.0f;
     paint.borderW = 1.0f;
     const uint16_t chip = uiPanel(s, column, flex, paint);
     if (chip >= s.count) {
@@ -336,9 +337,8 @@ uint16_t UiPropBinder::colorHex(UiState& s, uint16_t parent, uint16_t rgbIndex, 
     if (field >= s.count) {
         return chip;
     }
-    uiSetWidthPercent(s, field, 100.0f);
-    uiSetSize(s, field, -1.0f, kHexRowH);
-    uiSetGrow(s, field, -1.0f, 0.0f);
+    uiSetSize(s, field, kHexW, kHexRowH);
+    uiSetGrow(s, field, 0.0f, 0.0f);
     s.ent[field].set<UiHexBind>({this, outDirty, chip, rgbIndex, alphaIndex, static_cast<uint8_t>(withAlpha)});
     uiAfterTextAdd(s, field, hexEdited);
     hexFields.push_back(field);
