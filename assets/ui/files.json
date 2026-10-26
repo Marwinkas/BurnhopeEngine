@@ -9,7 +9,7 @@
     "padR": 4,
     "fill": [0, 0, 0, 0],
     "children": [
-      {"name": "file.plus", "role": "button", "icon": "assets/icons/square-plus.svg", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
+      {"name": "file.plus", "role": "button", "icon": "plus", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
       {"name": "file.back", "role": "button", "icon": "chevron_left", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
       {"name": "file.fwd", "role": "button", "icon": "chevron_right", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
       {"name": "file.tune", "role": "button", "icon": "gear", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
