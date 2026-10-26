@@ -383,6 +383,7 @@ bool gpuCompressLevelDeferred(Device& d, ImageBlock format, const void* pixels, 
 
 void compressRgbaLevel(const uint8_t* src, uint32_t width, uint32_t height, VkFormat format, uint8_t* dst) {
     rgba_surface surf{
+        // ISPC C boundary: rgba_surface::ptr is non-const but the encoder only reads it.
         const_cast<uint8_t*>(src),
         static_cast<int32_t>(width),
         static_cast<int32_t>(height),

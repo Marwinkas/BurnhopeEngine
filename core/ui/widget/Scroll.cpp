@@ -233,10 +233,10 @@ uint16_t scrollOwner(const UiState& s, uint16_t id) {
 }
 
 void uiScrollPlace(UiState& s) {
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.ent[id].try_get<UiScroll>() == nullptr) {
-            continue;
-        }
+    uint16_t holders[kUiCap];
+    const uint16_t n = uiCollect<UiScroll>(s, holders, kUiCap);
+    for (uint16_t h = 0; h < n; ++h) {
+        const uint16_t id = holders[h];
         UiBar next{};
         bool shown = s.box[id].w >= 1.0f && s.box[id].h >= 1.0f;
         for (uint16_t p = id; shown && p != kUiNone && p < s.count; p = s.parentOf[p]) {

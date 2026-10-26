@@ -83,7 +83,8 @@ bool desktopOpen(const char* path) {
     }
     char storage[512]{};
     strCopyCap(storage, sizeof(storage), path);
-    char* argv[] = {const_cast<char*>("xdg-open"), storage, nullptr};
+    char cmd[] = "xdg-open";
+    char* argv[] = {cmd, storage, nullptr};
     pid_t pid = 0;
     return posix_spawnp(&pid, "xdg-open", nullptr, nullptr, argv, environ) == 0;
 }
@@ -109,17 +110,14 @@ void desktopReveal(const char* const* paths, int count) {
         }
         at += wrote;
     }
-    char* argv[] = {
-        const_cast<char*>("dbus-send"),
-        const_cast<char*>("--session"),
-        const_cast<char*>("--dest=org.freedesktop.FileManager1"),
-        const_cast<char*>("--type=method_call"),
-        const_cast<char*>("/org/freedesktop/FileManager1"),
-        const_cast<char*>("org.freedesktop.FileManager1.ShowItems"),
-        list,
-        const_cast<char*>("string:"),
-        nullptr,
-    };
+    char cmd[] = "dbus-send";
+    char session[] = "--session";
+    char dest[] = "--dest=org.freedesktop.FileManager1";
+    char type[] = "--type=method_call";
+    char object[] = "/org/freedesktop/FileManager1";
+    char method[] = "org.freedesktop.FileManager1.ShowItems";
+    char none[] = "string:";
+    char* argv[] = {cmd, session, dest, type, object, method, list, none, nullptr};
     if (spawnWait("dbus-send", argv)) {
         return;
     }
@@ -127,7 +125,8 @@ void desktopReveal(const char* const* paths, int count) {
     if (!pathParent(paths[0], parent, sizeof(parent))) {
         strCopyCap(parent, sizeof(parent), paths[0]);
     }
-    char* openArgv[] = {const_cast<char*>("xdg-open"), parent, nullptr};
+    char openCmd[] = "xdg-open";
+    char* openArgv[] = {openCmd, parent, nullptr};
     pid_t pid = 0;
     posix_spawnp(&pid, "xdg-open", nullptr, nullptr, openArgv, environ);
 }
