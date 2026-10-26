@@ -557,6 +557,7 @@ uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t m
     flex.padR = uiStyle(s, "dropdown_trigger", UiStyleKey::PadR, 22.0f);
     UiPaint look = paintButtonFill(s.look);
     look.borderW = uiStyle(s, "dropdown_trigger", UiStyleKey::Border, 1.0f);
+    look.radius = uiStyle(s, "dropdown_trigger", UiStyleKey::Radius, look.radius);
     tokenRgb(s.look, UiToken::Muted, look.br, look.bg, look.bb);
     const uint16_t id = uiPanel(s, parent, flex, look);
     if (id == kUiNone) {

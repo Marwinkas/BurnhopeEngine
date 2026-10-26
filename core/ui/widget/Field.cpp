@@ -7,6 +7,7 @@
 #include "ui/Panel.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <charconv>
 #include <cmath>
@@ -124,7 +125,7 @@ void fieldMark(UiState& s, uint16_t id) {
         paint->br = s.look.muted[0];
         paint->bg = s.look.muted[1];
         paint->bb = s.look.muted[2];
-        paint->borderW = 1.0f;
+        paint->borderW = uiStyle(s, "input_field", UiStyleKey::Border, 1.0f);
     }
     s.visualDirty = true;
 }
@@ -372,9 +373,12 @@ uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, 
     flex.widthMode = UiSize::Percent;
     flex.width = 100.0f;
     flex.heightMode = UiSize::Px;
-    flex.height = s.metrics.fieldH;
+    flex.height = uiStyle(s, "input_field", UiStyleKey::Height, s.metrics.fieldH);
     flex.shrink = 0.0f;
-    const uint16_t id = uiPanel(s, parent, flex, paintField(s.look));
+    UiPaint look = paintField(s.look);
+    look.radius = uiStyle(s, "input_field", UiStyleKey::Radius, look.radius);
+    look.borderW = uiStyle(s, "input_field", UiStyleKey::Border, look.borderW);
+    const uint16_t id = uiPanel(s, parent, flex, look);
     if (id == kUiNone) {
         return id;
     }
@@ -382,6 +386,8 @@ uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, 
     uiSetFocusable(s, id);
     s.ent[id].add<UiTextInput>();
     UiField field{};
+    field.padL = uiStyle(s, "input_field", UiStyleKey::PadL, field.padL);
+    field.padR = uiStyle(s, "input_field", UiStyleKey::PadR, field.padR);
     const uint8_t n = uiStrCopy(field.bytes, text);
     field.len = n;
     field.caret = n;
@@ -401,6 +407,8 @@ void uiBindField(UiState& s, uint16_t id, const char* text, uint8_t filter, bool
         return;
     }
     UiField field{};
+    field.padL = uiStyle(s, "input_field", UiStyleKey::PadL, field.padL);
+    field.padR = uiStyle(s, "input_field", UiStyleKey::PadR, field.padR);
     const uint8_t n = uiStrCopy(field.bytes, text);
     field.len = n;
     field.caret = n;

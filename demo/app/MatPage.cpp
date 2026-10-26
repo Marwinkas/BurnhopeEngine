@@ -50,14 +50,20 @@ void onShape(void* user, uint8_t index) {
     }
 }
 
-void onPreviewOrbit(void* user, uint16_t, float dx, float dy) {
-    auto* hud = static_cast<HudContext*>(user);
-    if (hud == nullptr || (dx == 0.0f && dy == 0.0f)) {
+// Both buttons turn the shape by the pointer travel since the last step.
+void orbitPreview(HudContext& hud, float dx, float dy) {
+    if (dx == 0.0f && dy == 0.0f) {
         return;
     }
-    hud->previewYaw += dx * 0.012f;
-    hud->previewPitch = std::clamp(hud->previewPitch + dy * 0.012f, -1.2f, 1.2f);
-    hud->previewDirty = 1;
+    hud.previewYaw += dx * 0.015f;
+    hud.previewPitch = std::clamp(hud.previewPitch + dy * 0.015f, -1.4f, 1.4f);
+    hud.previewDirty = 1;
+}
+
+void onPreviewOrbit(void* user, uint16_t, float dx, float dy) {
+    if (auto* hud = static_cast<HudContext*>(user)) {
+        orbitPreview(*hud, dx, dy);
+    }
 }
 
 void onPreviewDrag(void* user, uint16_t, float x, float y) {
@@ -75,18 +81,7 @@ void onPreviewDrag(void* user, uint16_t, float x, float y) {
     const float dy = y - hud->previewPy;
     hud->previewPx = x;
     hud->previewPy = y;
-    if (dx == 0.0f && dy == 0.0f) {
-        return;
-    }
-    hud->previewYaw += dx * 0.012f;
-    hud->previewPitch += dy * 0.012f;
-    if (hud->previewPitch > 1.2f) {
-        hud->previewPitch = 1.2f;
-    }
-    if (hud->previewPitch < -1.2f) {
-        hud->previewPitch = -1.2f;
-    }
-    hud->previewDirty = 1;
+    orbitPreview(*hud, dx, dy);
 }
 
 } // namespace

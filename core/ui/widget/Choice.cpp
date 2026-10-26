@@ -2,6 +2,7 @@
 
 #include "ui/widget/Menu.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <cstring>
 #include <cstdint>
@@ -195,10 +196,10 @@ void uiChoiceFit(UiState& s, uint16_t button, float width) {
         flex->grow = 0.0f;
         flex->shrink = 0.0f;
         flex->heightMode = UiSize::Px;
-        flex->height = 28.0f;
+        flex->height = uiStyle(s, "dropdown_trigger", UiStyleKey::Height, 26.0f);
         flex->self = UiAlignSelf::Center;
-        flex->padL = 6.0f;
-        flex->padR = 22.0f;
+        flex->padL = uiStyle(s, "dropdown_trigger", UiStyleKey::PadL, 8.0f);
+        flex->padR = uiStyle(s, "dropdown_trigger", UiStyleKey::PadR, 22.0f);
         flex->gap = 2.0f;
     }
     const UiChoice* choice = s.ent[button].try_get<UiChoice>();

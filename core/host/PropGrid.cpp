@@ -128,6 +128,11 @@ void propSyncGrips(UiState& s, float labelW) {
                 s.layoutDirty = true;
             }
         }
+        // The grip under the pointer keeps the width and mouse x captured at press: re-priming it mid-drag
+        // would add the whole mouse travel again on every step.
+        if (id == s.capture) {
+            continue;
+        }
         if (auto* drag = s.ent[id].try_get_mut<UiSplitter>()) {
             drag->live = labelW;
             drag->startSize = labelW;
@@ -499,7 +504,9 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
     line.direction = UiFlexDir::Row;
     line.align = UiAlign::Center;
     line.justify = UiJustify::Start;
-    line.grow = 1.0f;
+    line.widthMode = UiSize::Percent;
+    line.width = 100.0f;
+    line.grow = 0.0f;
     line.shrink = 1.0f;
     line.gap = 2.0f;
     line.heightMode = UiSize::Px;
@@ -587,6 +594,8 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
             }
         }
         UiFlex hold{};
+        hold.widthMode = UiSize::Px;
+        hold.width = 0.0f;
         hold.grow = 1.0f;
         hold.shrink = 1.0f;
         hold.minW = 0.0f;

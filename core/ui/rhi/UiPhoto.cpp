@@ -4,6 +4,8 @@
 #include "image/ImageUpload.hpp"
 #include <spdlog/spdlog.h>
 
+#include <mutex>
+
 namespace burnhope {
 
 bool uiPhotoUpload(
@@ -16,6 +18,11 @@ bool uiPhotoUpload(
     uint32_t height) {
     if (slot >= kPhotoSlots || rgba == nullptr || width == 0 || height == 0) {
         return false;
+    }
+    {
+        // The old image may still be sampled by an in-flight frame.
+        std::lock_guard<std::mutex> queueLock(device.queueMutex);
+        vkQueueWaitIdle(device.graphicsQueue);
     }
     gpuImageDestroy(rhi.photos[slot], device);
     if (!imageUploadUncompressed(rhi.photos[slot], device, rgba, width, height)) {

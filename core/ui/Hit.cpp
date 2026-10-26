@@ -98,7 +98,7 @@ uint16_t hitTest(const UiState& s, float x, float y) {
             if (s.ent[id].has<UiNoHit>() || s.ent[id].has<UiPass>()) {
                 continue;
             }
-            if (p->a <= 0.02f && !s.ent[id].has<UiFocusable>() && p->hoverKids == 0) {
+            if (p->a <= 0.02f && !s.ent[id].has<UiFocusable>() && !s.ent[id].has<UiDrag>() && !s.ent[id].has<UiDragRight>() && p->hoverKids == 0) {
                 continue;
             }
             return id;
