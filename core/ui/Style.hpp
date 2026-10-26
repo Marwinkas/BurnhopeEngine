@@ -289,6 +289,22 @@ inline void paintGhost(UiPaint& paint) noexcept {
     paint.radius = 0.0f;
 }
 
+// Every toolbar tool button shares one frame: transparent plate, 1px muted border, 4px corners.
+constexpr float kUiToolRadius = 4.0f;
+constexpr float kUiToolBorder = 1.0f;
+
+inline void paintToolFrame(UiPaint& paint, const float (&text)[3]) noexcept {
+    paint.radius = kUiToolRadius;
+    paint.radiusTr = kUiUnset;
+    paint.radiusBr = kUiUnset;
+    paint.radiusBl = kUiUnset;
+    paint.borderW = kUiToolBorder;
+    paint.shadow = 0.0f;
+    paint.br = text[0] * 0.35f;
+    paint.bg = text[1] * 0.35f;
+    paint.bb = text[2] * 0.35f;
+}
+
 inline UiLook uiLookInk() noexcept {
     UiLook look{};
     const float paper[3]{0.11f, 0.11f, 0.12f};

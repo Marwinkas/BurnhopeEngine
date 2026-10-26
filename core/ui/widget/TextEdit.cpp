@@ -96,7 +96,17 @@ void fieldInsert(UiField& field, const char* src, uint8_t n) {
             break;
         }
         const bool room = field.maxChars == 0 || static_cast<uint8_t>(have + added) < field.maxChars;
-        if (room && fieldAllows(field.filter, cp) && static_cast<uint8_t>(field.len + accept + step) < 95) {
+        // Typed text so far = bytes before the caret + accepted run; the tail after the caret is the "rest".
+        char head[192]{};
+        uint8_t headLen = 0;
+        for (uint8_t k = 0; k < field.caret; ++k) {
+            head[headLen++] = field.bytes[k];
+        }
+        for (uint8_t k = 0; k < accept; ++k) {
+            head[headLen++] = tmp[k];
+        }
+        const bool ok = fieldAllowsAt(field.filter, cp, head, headLen, field.bytes + field.caret, static_cast<uint8_t>(field.len - field.caret));
+        if (room && ok && static_cast<uint8_t>(field.len + accept + step) < 95) {
             ++added;
             for (uint8_t k = 0; k < step; ++k) {
                 tmp[accept++] = src[i + k];

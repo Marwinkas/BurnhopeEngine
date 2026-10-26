@@ -64,7 +64,7 @@ uint16_t uiNumber(UiState& s, uint16_t parent, float value, float minV, float ma
     }
     char text[32]{};
     uiWriteNumber(text, sizeof(text), value);
-    const uint16_t id = uiField(s, parent, text, 0, false);
+    const uint16_t id = uiField(s, parent, text, static_cast<uint8_t>(UiFieldFilter::Decimal), false);
     if (id == kUiNone) {
         return id;
     }

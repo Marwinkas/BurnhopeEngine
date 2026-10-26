@@ -18,6 +18,7 @@ enum class UiFieldFilter : uint8_t {
     Email = 3,
     Tel = 4,
     Url = 5,
+    Decimal = 6,
 };
 
 struct UiNamedField {};
@@ -148,6 +149,7 @@ uint8_t fieldCaretAt2(const UiState& s, const UiField& field, float localX, floa
 bool fieldHandlePointer(UiState& s, uint16_t id, const InputFrame& in, bool press, bool down);
 bool fieldHandleKey(UiState& s, uint16_t id, const InputFrame& in);
 bool fieldAllows(uint8_t filter, uint32_t cp);
+bool fieldAllowsAt(uint8_t filter, uint32_t cp, const char* head, uint8_t headLen, const char* rest, uint8_t restLen);
 bool fieldCheck(uint8_t filter, const char* bytes, uint8_t len, const char*& msg);
 bool fieldProblem(const UiField& field, const char*& msg);
 void fieldMark(UiState& s, uint16_t id);

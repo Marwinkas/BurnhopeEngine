@@ -152,8 +152,20 @@ void uiToolButtonState(UiState& s, uint16_t id, bool active, bool ghost) {
         paint->bright = active ? 1.0f : 0.7f;
         if (ghost) {
             paintGhost(*paint);
+            paintToolFrame(*paint, s.look.text);
         }
     }
+}
+
+void uiToolFrame(UiState& s, uint16_t id) {
+    auto* paint = id < s.count ? s.ent[id].try_get_mut<UiPaint>() : nullptr;
+    if (paint == nullptr) {
+        return;
+    }
+    paintGhost(*paint);
+    paintToolFrame(*paint, s.look.text);
+    s.ent[id].add<UiIconChrome>();
+    uiNotifyVisualDirty(s);
 }
 
 float uiButtonTextWidth(const UiState& s, const char* text, float extraPad) {

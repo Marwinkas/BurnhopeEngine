@@ -11,6 +11,10 @@ bool allowDigits(uint32_t cp) {
     return cp >= '0' && cp <= '9';
 }
 
+bool allowDecimal(uint32_t cp) {
+    return allowDigits(cp) || cp == '-' || cp == '.';
+}
+
 bool allowLetters(uint32_t cp) {
     const bool latin = (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z');
     const bool cyr = (cp >= 0x0410 && cp <= 0x044F) || cp == 0x0401 || cp == 0x0451;
@@ -113,6 +117,7 @@ const Gate kGate[] = {
     {allowEmail, checkEmail},
     {allowTel, checkTel},
     {allowUrl, checkUrl},
+    {allowDecimal, nullptr},
 };
 
 const Gate& gateAt(uint8_t filter) {
@@ -129,6 +134,35 @@ bool fieldAllows(uint8_t filter, uint32_t cp) {
         return false;
     }
     return gateAt(filter).allow(cp);
+}
+
+// Position-aware gate: a decimal accepts '-' only as the first character and '.' only once.
+bool fieldAllowsAt(uint8_t filter, uint32_t cp, const char* head, uint8_t headLen, const char* rest, uint8_t restLen) {
+    if (!fieldAllows(filter, cp)) {
+        return false;
+    }
+    if (filter != static_cast<uint8_t>(UiFieldFilter::Decimal)) {
+        return true;
+    }
+    if (cp == '-') {
+        if (headLen != 0) {
+            return false;
+        }
+    }
+    if (cp == '-' || cp == '.') {
+        const char want = static_cast<char>(cp);
+        for (uint8_t i = 0; i < headLen; ++i) {
+            if (head[i] == want) {
+                return false;
+            }
+        }
+        for (uint8_t i = 0; i < restLen; ++i) {
+            if (rest[i] == want) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 bool fieldCheck(uint8_t filter, const char* bytes, uint8_t len, const char*& msg) {

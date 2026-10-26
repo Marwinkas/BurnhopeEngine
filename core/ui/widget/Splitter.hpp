@@ -23,6 +23,11 @@ struct UiSplitter {
     void* resizeUser = nullptr;
 };
 
+// Splitters carrying this behave as one line: hot or captured, every member lights together; idle falls back to the theme text at `idleA`.
+struct UiSplitGroup {
+    float idleA = 0.08f;
+};
+
 uint16_t splitTarget(const UiState& s, uint16_t split);
 void uiSplitterBind(UiState& s, uint16_t split, uint16_t target, uint8_t axis, UiSplitResizeFn fn, void* user);
 void splitDrag(UiState& s, uint16_t split, float x, float y);

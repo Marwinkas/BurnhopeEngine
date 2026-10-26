@@ -306,3 +306,17 @@ TEST_CASE("choice select moves the index once and keeps the pick callback") {
     CHECK(state.ent[id].try_get<UiChoice>()->index == 1);
     uiChoiceSelect(state, kUiNone, 1, "x");
 }
+
+TEST_CASE("decimal filter rejects letters and misplaced signs") {
+    const auto dec = static_cast<uint8_t>(UiFieldFilter::Decimal);
+    CHECK(fieldAllowsAt(dec, '7', "", 0, "", 0));
+    CHECK_FALSE(fieldAllowsAt(dec, 'a', "", 0, "", 0));
+    CHECK_FALSE(fieldAllowsAt(dec, 'Z', "1", 1, "", 0));
+    CHECK_FALSE(fieldAllowsAt(dec, '+', "", 0, "", 0));
+    CHECK(fieldAllowsAt(dec, '-', "", 0, "5", 1));
+    CHECK_FALSE(fieldAllowsAt(dec, '-', "1", 1, "", 0));
+    CHECK_FALSE(fieldAllowsAt(dec, '-', "", 0, "-5", 2));
+    CHECK(fieldAllowsAt(dec, '.', "1", 1, "", 0));
+    CHECK_FALSE(fieldAllowsAt(dec, '.', "1.5", 3, "", 0));
+    CHECK_FALSE(fieldAllowsAt(dec, '.', "1", 1, "5.2", 3));
+}

@@ -277,11 +277,31 @@ void splitPaint(UiState& s, uint16_t id, bool hot) {
     }
     const UiSplitter* drag = s.ent[id].try_get<UiSplitter>();
     if (drag != nullptr && drag->onResize != nullptr) {
-        if (!hot) {
+        uint16_t peers[kUiCap];
+        const uint16_t count = s.ent[id].try_get<UiSplitGroup>() != nullptr ? uiCollect<UiSplitGroup>(s, peers, kUiCap) : uint16_t{0};
+        if (count == 0) {
+            if (hot) {
+                *paint = paintToken(s.look, UiToken::Accent, 0.0f);
+                paint->a = 1.0f;
+                uiNotifyVisualDirty(s);
+            }
             return;
         }
-        *paint = paintToken(s.look, UiToken::Accent, 0.0f);
-        paint->a = 1.0f;
+        for (uint16_t i = 0; i < count; ++i) {
+            auto* peer = s.ent[peers[i]].try_get_mut<UiPaint>();
+            const UiSplitGroup* group = s.ent[peers[i]].try_get<UiSplitGroup>();
+            if (peer == nullptr || group == nullptr) {
+                continue;
+            }
+            if (hot) {
+                *peer = paintToken(s.look, UiToken::Accent, 0.0f);
+                peer->a = 1.0f;
+            } else {
+                *peer = paintToken(s.look, UiToken::Custom, 0.0f);
+                paintTint(*peer, s.look.text);
+                peer->a = group->idleA;
+            }
+        }
         uiNotifyVisualDirty(s);
         return;
     }

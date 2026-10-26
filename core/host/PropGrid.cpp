@@ -70,6 +70,8 @@ constexpr float kPropIndent = 28.0f;
 constexpr float kPropField = 108.0f;
 constexpr float kPropMargin = 8.0f;
 constexpr float kPropLock = 18.0f;
+constexpr float kVecGap = 2.0f;
+constexpr float kPropGap = 10.0f; // clear space between the splitter line and every value control
 
 void propLinkLabel(UiState& s, uint16_t caption) {
     UiPropRoll& roll = s.world.ensure<UiPropRoll>();
@@ -235,6 +237,7 @@ uint16_t uiPropGrip(UiState& s, uint16_t body) {
         drag->startSize = labelW;
     }
     s.ent[grip].add<UiPropGrip>();
+    s.ent[grip].set<UiSplitGroup>({0.08f});
     s.ent[grip].add<UiPaintLast>();
     return grip;
 }
@@ -291,10 +294,10 @@ uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
     value.widthMode = UiSize::Percent;
     value.width = 100.0f;
     value.maxWMode = UiSize::Px;
-    value.maxW = propControlMax(s);
+    value.maxW = propControlMax(s) + kPropGap;
     value.heightMode = UiSize::Px;
     value.height = propSlotH(s);
-    value.padL = 4.0f;
+    value.padL = kPropGap;
     value.overflow = UiOverflow::Hidden;
     const uint16_t slot = uiPanel(s, row, value, paintClear());
     UiFlex trail{};
@@ -504,14 +507,19 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
     line.direction = UiFlexDir::Row;
     line.align = UiAlign::Center;
     line.justify = UiJustify::Start;
-    line.widthMode = UiSize::Percent;
-    line.width = 100.0f;
+    line.widthMode = UiSize::Px;
+    line.width = propControlMax(s);
     line.grow = 0.0f;
     line.shrink = 1.0f;
-    line.gap = 2.0f;
+    line.gap = kVecGap;
     line.heightMode = UiSize::Px;
     line.height = propSlotH(s);
     const uint16_t row = uiPanel(s, slot, line, paintClear());
+    // Fixed axis width: what is left of the control slot after lock, caps and gaps, split equally.
+    const float capW = propSlotH(s);
+    const int items = (full ? 1 : 0) + 2 * n;
+    const float lockUsed = full ? kPropLock + 4.0f : 0.0f;
+    const float fieldW = (line.width - lockUsed - capW * static_cast<float>(n) - kVecGap * static_cast<float>(items - 1)) / static_cast<float>(n);
     const char* letters[3] = {"X", "Y", "Z"};
     UiPropVec3 out{};
     out.row = row;
@@ -566,7 +574,7 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         const float* ink = kUiAxis[i];
         UiFlex tag{};
         tag.widthMode = UiSize::Px;
-        tag.width = propSlotH(s);
+        tag.width = capW;
         tag.heightMode = UiSize::Px;
         tag.height = propSlotH(s);
         tag.shrink = 0.0f;
@@ -595,10 +603,11 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         }
         UiFlex hold{};
         hold.widthMode = UiSize::Px;
-        hold.width = 0.0f;
-        hold.grow = 1.0f;
+        hold.width = fieldW;
+        hold.grow = 0.0f;
         hold.shrink = 1.0f;
         hold.minW = 0.0f;
+        hold.align = UiAlign::Center;
         hold.heightMode = UiSize::Px;
         hold.height = propSlotH(s);
         const uint16_t box = uiPanel(s, row, hold, paintClear());
