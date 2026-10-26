@@ -14,6 +14,8 @@
 namespace burnhope {
 namespace {
 
+constexpr float kUiMenuMinW = 96.0f;
+
 struct UiMenuFlyout {};
 
 UiMenuMetrics metricsOf(const UiState& s, uint16_t menu) {
@@ -41,10 +43,32 @@ void menuShell(UiState& s, uint16_t id) {
     paint->shadow = s.metrics.menuShadow;
 }
 
+// A bordered trigger (Choice, dropdown) wears the orange accent border while its menu is open.
+void litTrigger(UiState& s, uint16_t menu, bool on) {
+    for (uint16_t p = 0; p < s.count; ++p) {
+        if (s.contextOf[p] != menu || !s.ent[p].has<UiMenuBar>()) {
+            continue;
+        }
+        auto* paint = s.ent[p].try_get_mut<UiPaint>();
+        if (paint == nullptr || paint->borderW < 0.4f) {
+            continue;
+        }
+        if (on) {
+            paint->br = kUiToolActive[0];
+            paint->bg = kUiToolActive[1];
+            paint->bb = kUiToolActive[2];
+        } else {
+            tokenRgb(s.look, UiToken::Muted, paint->br, paint->bg, paint->bb);
+        }
+    }
+    uiNotifyVisualDirty(s);
+}
+
 void menuDismiss(UiState& s, uint16_t id) {
     if (id >= s.count) {
         return;
     }
+    litTrigger(s, id, false);
     if (s.ent[id].has<UiMenuSlide>()) {
         uiReveal(s, id, 0.0f, false);
         return;
@@ -429,11 +453,16 @@ void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y, float above) {
     }
     const uint32_t items = uiNodeChildCount(s, menuId);
     const UiMenuMetrics metrics = metricsOf(s, menuId);
+    // A popup never narrows below kUiMenuMinW, whatever trigger width it was sized from.
+    if (flex->width < kUiMenuMinW) {
+        flex->width = kUiMenuMinW;
+    }
     const float menuH = metrics.pad * 2.0f + static_cast<float>(items) * metrics.itemH
         + static_cast<float>(items > 0 ? items - 1 : 0) * metrics.gap;
     const float anchorY = y;
-    if (x + metrics.w > s.laidW) {
-        x = s.laidW - metrics.w;
+    const float shownW = flex->width > metrics.w ? flex->width : metrics.w;
+    if (x + shownW > s.laidW) {
+        x = s.laidW - shownW;
     }
     y = menuTop(s, anchorY, above, menuH);
     if (x < 4.0f) {
@@ -445,6 +474,7 @@ void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y, float above) {
     flex->posX = x;
     flex->posY = y;
     menuShell(s, menuId);
+    litTrigger(s, menuId, true);
     uiMarkOnly<UiMenuOpen>(s, menuId);
     uiMenuSetShown(s, true);
     if (s.ent[menuId].has<UiMenuSlide>()) {

@@ -1,4 +1,5 @@
 #include "host/PropImportInternal.hpp"
+#include "Str.hpp"
 
 #include <cstring>
 
@@ -134,6 +135,10 @@ void applyClass(const UiState& s, Node& node, const char* name) {
             dst = cls->value[static_cast<size_t>(key)];
         }
     };
+    // The "window_panel" class is the popup look (uiStyleLoad feeds it to paintPopup), which the "veil" paint draws.
+    if (std::strcmp(name, "window_panel") == 0 && node.paintName[0] == '\0') {
+        strCopyCap(node.paintName, sizeof(node.paintName), "veil");
+    }
     take(UiStyleKey::Height, node.h, blank.h);
     take(UiStyleKey::Width, node.w, blank.w);
     take(UiStyleKey::MinW, node.minW, blank.minW);

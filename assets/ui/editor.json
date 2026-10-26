@@ -616,7 +616,7 @@
           "pad": 8,
           "gap": 6,
           "shrink": 0,
-          "paint": "veil",
+          "class": "window_panel",
           "slide": true,
           "hide": true,
           "children": [
@@ -847,7 +847,7 @@
           "pad": 8,
           "gap": 2,
           "shrink": 0,
-          "paint": "veil",
+          "class": "window_panel",
           "slide": true,
           "hide": true,
           "children": [
@@ -1072,7 +1072,7 @@
           "pad": 8,
           "gap": 4,
           "shrink": 0,
-          "paint": "veil",
+          "class": "window_panel",
           "slide": true,
           "hide": true,
           "children": [

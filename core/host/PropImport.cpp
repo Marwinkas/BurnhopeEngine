@@ -291,6 +291,11 @@ uint16_t addBar(Import& in, uint16_t parent, const Node& node) {
         if (!node.hasIcon && button < in.state->count) {
             if (auto* paint = in.state->ent[button].try_get_mut<UiPaint>()) {
                 paintGhost(*paint);
+                paintTint(*paint, in.state->look.text);
+                paint->hr = in.state->look.text[0];
+                paint->hg = in.state->look.text[1];
+                paint->hb = in.state->look.text[2];
+                paint->ha = 0.08f;
                 paint->radius = uiStyle(*in.state, "menu_bar", UiStyleKey::Radius, 4.0f);
             }
         }
