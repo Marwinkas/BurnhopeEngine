@@ -6,6 +6,7 @@
 #include "render/SceneFrame.hpp"
 #include "ui/rhi/Canvas.hpp"
 #include "ui/Style.hpp"
+#include "ui/StyleSheet.hpp"
 #include "ui/widget/Choice.hpp"
 #include "ui/Nodes.hpp"
 
@@ -98,6 +99,7 @@ void sceneHud(Canvas& canvas, void* user) {
             *slot.id = kUiNone;
         }
     }
+    (void)uiStyleLoadAsset(*canvas.state, "assets/ui/styles.json");
     (void)propImportAsset(*canvas.state, kUiNone, "assets/ui/editor.json", "frame", hud->bind, slots,
         static_cast<uint16_t>(sizeof slots / sizeof slots[0]), commands,
         static_cast<uint16_t>(sizeof commands / sizeof commands[0]), hidden, onImportFlag, hud);

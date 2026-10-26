@@ -4,6 +4,7 @@
 #include "ui/Text.hpp"
 #include "ui/widget/Fold.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 namespace burnhope {
 namespace {
@@ -163,12 +164,14 @@ uint16_t uiFoldBody(UiState& s, uint16_t parent, const char* title) {
     row.direction = UiFlexDir::Row;
     row.position = UiPosition::Relative;
     row.heightMode = UiSize::Px;
-    row.height = 28.0f;
+    row.height = uiStyle(s, "fold_header", UiStyleKey::Height, 28.0f);
     row.shrink = 0.0f;
     row.align = UiAlign::Center;
     row.widthMode = UiSize::Percent;
     row.width = 100.0f;
-    row.padL = kUiIconLeftPad + 16.0f + 6.0f;
+    const float iconPad = uiStyle(s, "fold_header", UiStyleKey::PadL, 10.0f);
+    const float iconSide = uiStyle(s, "fold_header", UiStyleKey::Icon, 16.0f);
+    row.padL = iconPad + iconSide + uiStyle(s, "fold_header", UiStyleKey::Gap, 8.0f);
     row.padR = 8.0f;
     if (parent < s.count) {
         if (const UiFlex* home = s.ent[parent].try_get<UiFlex>()) {
@@ -184,7 +187,8 @@ uint16_t uiFoldBody(UiState& s, uint16_t parent, const char* title) {
     }
     UiPaint bar = paintToken(s.look, UiToken::Item, 0.0f);
     bar.icon = static_cast<uint8_t>(UiIcon::ChevronRight);
-    bar.iconLeft = 1;
+    bar.iconLeft = static_cast<uint8_t>(iconPad);
+    bar.iconSide = static_cast<uint8_t>(iconSide);
     const uint16_t head = uiPanel(s, parent, row, bar);
     if (head == kUiNone) {
         return kUiNone;

@@ -122,4 +122,23 @@ bool parseItems(Cur& c, Node& node) {
     }
 }
 
+void applyClass(const UiState& s, Node& node, const char* name) {
+    const UiStyleClass* cls = uiStyleFind(s, name);
+    if (cls == nullptr) {
+        return;
+    }
+    auto take = [&](UiStyleKey key, float& dst) {
+        if (uiStyleHas(cls, key)) {
+            dst = cls->value[static_cast<size_t>(key)];
+        }
+    };
+    take(UiStyleKey::Height, node.h);
+    take(UiStyleKey::Width, node.w);
+    take(UiStyleKey::MinW, node.minW);
+    take(UiStyleKey::Pad, node.pad);
+    take(UiStyleKey::PadL, node.padL);
+    take(UiStyleKey::PadR, node.padR);
+    take(UiStyleKey::Gap, node.gap);
+}
+
 } // namespace burnhope::propimport

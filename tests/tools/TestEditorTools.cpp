@@ -11,7 +11,9 @@
 #include "asset/MaterialBake.hpp"
 #include "ui/widget/Segment.hpp"
 #include "ui/widget/Fold.hpp"
+#include "ui/widget/Menu.hpp"
 #include "ui/Nodes.hpp"
+#include "ui/StyleSheet.hpp"
 #include "ui/Style.hpp"
 #include "host/PropGrid.hpp"
 #include "host/PropImport.hpp"
@@ -758,7 +760,7 @@ TEST_CASE("fold headers draw the chevron left and a node can move to the end of 
     const UiPaint* paint = head < state.count ? state.ent[head].try_get<UiPaint>() : nullptr;
     CHECK(paint != nullptr);
     if (paint != nullptr) {
-        CHECK(paint->iconLeft == 1);
+        CHECK(paint->iconLeft > 0);
     }
     const uint16_t a = spawn(state, root, px(10.0f, 10.0f), paintRgb(0.2f, 0.2f, 0.2f));
     const uint16_t b = spawn(state, root, px(10.0f, 10.0f), paintRgb(0.2f, 0.2f, 0.2f));
@@ -766,4 +768,29 @@ TEST_CASE("fold headers draw the chevron left and a node can move to the end of 
     CHECK(last == b);
     uiSendToEnd(state, a);
     CHECK(uiNodeChild(state, root, uiNodeChildCount(state, root) - 1u) == a);
+}
+
+TEST_CASE("style sheet classes feed widgets and every section owns a column grip") {
+    UiState state;
+    uiWidgetsInit(state);
+    CHECK(uiStyle(state, "dropdown_trigger", UiStyleKey::Height, 26.0f) == 26.0f);
+    const char* sheet = R"({"classes":{"dropdown_trigger":{"h":30,"border":2},"window_panel":{"alpha":0.5}}})";
+    CHECK(uiStyleLoad(state, sheet));
+    CHECK(uiStyle(state, "dropdown_trigger", UiStyleKey::Height, 26.0f) == 30.0f);
+    CHECK(uiStyle(state, "dropdown_trigger", UiStyleKey::PadR, 22.0f) == 22.0f);
+    CHECK(state.look.popupAlpha == 0.5f);
+    CHECK(!uiStyleLoad(state, "{\"classes\": 3"));
+    CHECK(uiStyle(state, "dropdown_trigger", UiStyleKey::Height, 26.0f) == 30.0f);
+    const uint16_t root = spawn(state, kUiNone, px(300.0f, 200.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t host = uiPropHost(state, root);
+    const uint16_t body = uiPropSection(state, host, "Sec", 0, 0);
+    uint16_t grips[kUiCap];
+    CHECK(uiCollect<UiPropGrip>(state, grips, kUiCap) == 1);
+    const uint16_t menu = uiMakeMenu(state);
+    const uint16_t trigger = uiMenuButton(state, body, "x", menu);
+    const UiFlex* flex = trigger < state.count ? state.ent[trigger].try_get<UiFlex>() : nullptr;
+    CHECK(flex != nullptr);
+    if (flex != nullptr) {
+        CHECK(flex->height == 30.0f);
+    }
 }

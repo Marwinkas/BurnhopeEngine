@@ -16,6 +16,7 @@
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Splitter.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <cmath>
 #include <format>
@@ -33,12 +34,18 @@ void gripIdle(UiPaint& paint, const UiLook& look) {
     paint.shadow = 0.0f;
 }
 
-constexpr float kPropSlot = 24.0f;
-constexpr float kPropRow = 32.0f;
-constexpr float kPropPad = 4.0f;
-constexpr float kPropControlMax = 240.0f;
+// Row metrics come from the "prop_row" class of assets/ui/styles.json; these are the fallbacks.
+constexpr float kPropSlotDefault = 26.0f;
+constexpr float kPropRowDefault = 34.0f;
+constexpr float kPropPadDefault = 4.0f;
+constexpr float kPropControlMaxDefault = 240.0f;
 constexpr float kPropMinLabel = 70.0f;
 constexpr float kPropMinValue = 110.0f;
+
+float propSlotH(const UiState& s) { return uiStyle(s, "prop_row", UiStyleKey::Inner, kPropSlotDefault); }
+float propRowH(const UiState& s) { return uiStyle(s, "prop_row", UiStyleKey::Height, kPropRowDefault); }
+float propPadV(const UiState& s) { return uiStyle(s, "prop_row", UiStyleKey::Pad, kPropPadDefault); }
+float propControlMax(const UiState& s) { return uiStyle(s, "prop_row", UiStyleKey::MaxW, kPropControlMaxDefault); }
 
 UiPaint paintHair(const UiLook& look) {
     UiPaint paint = paintToken(look, UiToken::Item, 0.0f);
@@ -109,35 +116,28 @@ void propApplyLabelW(UiState& s, float w) {
     });
 }
 
-// Screen y of the first visible property label under `host`, clamped into [top, top + span]; `top` when none shows.
-// The grip starts here so it never covers a tab bar, header or material preview above the rows.
-float propContentTop(const UiState& s, uint16_t host, float top, float span) {
-    float first = top + span;
-    bool seen = false;
-    propEachLabel(s, [&](uint16_t id) {
-        if (!propUnder(s, id, host) || s.vis[id].hidden != 0 || s.box[id].h < 1.0f) {
-            return true;
+// Puts every section grip on the shared label edge and primes its drag so any grip starts from the current width.
+void propSyncGrips(UiState& s, float labelW) {
+    uint16_t grips[kUiCap];
+    const uint16_t count = uiCollect<UiPropGrip>(s, grips, kUiCap);
+    for (uint16_t i = 0; i < count; ++i) {
+        const uint16_t id = grips[i];
+        if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
+            if (flex->posX != labelW + kPropIndent) {
+                flex->posX = labelW + kPropIndent;
+                s.layoutDirty = true;
+            }
         }
-        if (s.box[id].y < first) {
-            first = s.box[id].y;
-            seen = true;
+        if (auto* drag = s.ent[id].try_get_mut<UiSplitter>()) {
+            drag->live = labelW;
+            drag->startSize = labelW;
         }
-        return true;
-    });
-    if (!seen) {
-        return top;
     }
-    return first < top ? top : first;
 }
 
 float propColumnResize(void* user, uint16_t split, float size) {
     auto& s = *static_cast<UiState*>(user);
-    const UiSplitter* bound = split < s.count ? s.ent[split].try_get<UiSplitter>() : nullptr;
-    const uint16_t host = bound != nullptr ? bound->target : kUiNone;
-    if (host >= s.count || s.ent[host].try_get<UiPropGrid>() == nullptr) {
-        return size;
-    }
-    const uint16_t homeId = s.parentOf[split];
+    const uint16_t homeId = split < s.count ? s.parentOf[split] : kUiNone;
     const float span = homeId < s.count ? s.box[homeId].w : 0.0f;
     float clamped = size < kPropMinLabel ? kPropMinLabel : size;
     if (span > 0.0f) {
@@ -146,28 +146,14 @@ float propColumnResize(void* user, uint16_t split, float size) {
     }
     s.world.ensure<UiPropRoll>().labelW = clamped;
     propApplyLabelW(s, clamped);
-    float gripY = 0.0f;
-    float gripH = 360.0f;
-    if (const UiFlex* bar = s.ent[split].try_get<UiFlex>()) {
-        gripY = bar->posY;
-        if (bar->height > 8.0f) {
-            gripH = bar->height;
-        }
-    }
-    uiPlace(s, split, true, clamped + kPropIndent, gripY, 2.0f, gripH);
-    if (auto* grid = s.ent[host].try_get_mut<UiPropGrid>()) {
-        grid->labelW = clamped;
-    }
+    propSyncGrips(s, clamped);
     return clamped;
 }
 
+// Runs after the host lays out: keeps the shared label width inside the panel and the section grips on its edge.
 void propPlace(UiState& s, uint16_t id, void*) {
     auto* grid = id < s.count ? s.ent[id].try_get_mut<UiPropGrid>() : nullptr;
-    if (grid == nullptr || grid->grip >= s.count) {
-        return;
-    }
-    auto* flex = s.ent[grid->grip].try_get_mut<UiFlex>();
-    if (flex == nullptr) {
+    if (grid == nullptr) {
         return;
     }
     uint16_t scroll = kUiNone;
@@ -177,10 +163,7 @@ void propPlace(UiState& s, uint16_t id, void*) {
             break;
         }
     }
-    if (scroll != kUiNone && s.parentOf[grid->grip] != scroll) {
-        uiReparent(s, grid->grip, scroll);
-    }
-    const bool framed = scroll < s.count && s.box[scroll].h > 8.0f && s.box[scroll].w > 8.0f;
+    const bool framed = scroll < s.count && s.box[scroll].w > 8.0f;
     const float want = s.world.ensure<UiPropRoll>().labelW;
     float labelW = want;
     if (framed) {
@@ -191,31 +174,7 @@ void propPlace(UiState& s, uint16_t id, void*) {
         grid->labelW = labelW;
         propApplyLabelW(s, labelW);
     }
-    float span = flex->heightMode == UiSize::Px && flex->height > 8.0f ? flex->height : 0.0f;
-    if (framed) {
-        span = s.box[scroll].h;
-    }
-    if (span < 8.0f) {
-        span = 360.0f;
-    }
-    uiPlace(s, grid->grip, true, grid->labelW + kPropIndent, 0.0f, 2.0f, span);
-    if (framed) {
-        const float top = propContentTop(s, id, s.box[scroll].y, span);
-        UiBox line{};
-        line.x = s.box[scroll].x + grid->labelW + kPropIndent;
-        line.y = top;
-        line.w = 2.0f;
-        line.h = s.box[scroll].y + span - top;
-        s.box[grid->grip] = line;
-        s.ent[grid->grip].set<UiBounds>({line.x, line.y, line.w, line.h});
-    }
-    const UiSplitter* drag = s.ent[grid->grip].try_get<UiSplitter>();
-    const bool live = s.hovered == grid->grip || (drag != nullptr && drag->armed != 0);
-    if (!live) {
-        if (auto* paint = s.ent[grid->grip].try_get_mut<UiPaint>()) {
-            gripIdle(*paint, s.look);
-        }
-    }
+    propSyncGrips(s, labelW);
 }
 
 const UiPropGrid* propGrid(const UiState& s, uint16_t host) {
@@ -238,33 +197,41 @@ uint16_t uiPropHost(UiState& s, uint16_t parent) {
     if (id == kUiNone) {
         return id;
     }
-    const float labelW = s.world.ensure<UiPropRoll>().labelW;
-    const uint16_t grip = uiSplitBar(s, id, true);
-    if (grip < s.count) {
-        uiPlace(s, grip, true, labelW + kPropIndent, 0.0f, 2.0f, 360.0f);
-        if (auto* paint = s.ent[grip].try_get_mut<UiPaint>()) {
-            gripIdle(*paint, s.look);
-        }
-        uiSplitterBind(s, grip, id, 0, propColumnResize, &s);
-        if (auto* drag = s.ent[grip].try_get_mut<UiSplitter>()) {
-            drag->live = labelW;
-            drag->startSize = labelW;
-        }
-        s.ent[grip].add<UiPaintLast>();
-        uint16_t scroll = kUiNone;
-        for (uint16_t p = parent; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-            if (s.ent[p].try_get<UiScroll>() != nullptr) {
-                scroll = p;
-                break;
-            }
-        }
-        if (scroll != kUiNone) {
-            uiReparent(s, grip, scroll);
-        }
+    UiPropRoll& roll = s.world.ensure<UiPropRoll>();
+    if (roll.seeded == 0) {
+        roll.seeded = 1;
+        roll.labelW = uiStyle(s, "prop_row", UiStyleKey::Width, roll.labelW);
     }
-    s.ent[id].set<UiPropGrid>({labelW, grip, kUiNone, kUiNone});
+    const float labelW = roll.labelW;
+    s.ent[id].set<UiPropGrid>({labelW, kUiNone, kUiNone, kUiNone});
     s.ent[id].set<UiLayoutRefresh>({propPlace, nullptr});
     return id;
+}
+
+uint16_t uiPropGrip(UiState& s, uint16_t body) {
+    const float labelW = s.world.ensure<UiPropRoll>().labelW;
+    const uint16_t grip = uiSplitBar(s, body, true);
+    if (grip >= s.count) {
+        return grip;
+    }
+    if (auto* flex = s.ent[grip].try_get_mut<UiFlex>()) {
+        flex->position = UiPosition::Absolute;
+        flex->posX = labelW + kPropIndent;
+        flex->posY = 0.0f;
+        flex->heightMode = UiSize::Percent;
+        flex->height = 100.0f;
+    }
+    if (auto* paint = s.ent[grip].try_get_mut<UiPaint>()) {
+        gripIdle(*paint, s.look);
+    }
+    uiSplitterBind(s, grip, body, 0, propColumnResize, &s);
+    if (auto* drag = s.ent[grip].try_get_mut<UiSplitter>()) {
+        drag->live = labelW;
+        drag->startSize = labelW;
+    }
+    s.ent[grip].add<UiPropGrip>();
+    s.ent[grip].add<UiPaintLast>();
+    return grip;
 }
 
 uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
@@ -277,9 +244,9 @@ uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
     line.widthMode = UiSize::Percent;
     line.width = 100.0f;
     line.heightMode = UiSize::Px;
-    line.height = kPropRow;
-    line.padT = kPropPad;
-    line.padB = kPropPad;
+    line.height = propRowH(s);
+    line.padT = propPadV(s);
+    line.padB = propPadV(s);
     line.padL = kPropIndent;
     line.padR = kPropMargin;
     line.shrink = 0.0f;
@@ -299,7 +266,7 @@ uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
     name.widthMode = UiSize::Px;
     name.width = labelW;
     name.heightMode = UiSize::Px;
-    name.height = kPropSlot;
+    name.height = propSlotH(s);
     name.shrink = 0.0f;
     name.overflow = UiOverflow::Hidden;
     name.padR = 8.0f;
@@ -319,9 +286,9 @@ uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
     value.widthMode = UiSize::Percent;
     value.width = 100.0f;
     value.maxWMode = UiSize::Px;
-    value.maxW = kPropControlMax;
+    value.maxW = propControlMax(s);
     value.heightMode = UiSize::Px;
-    value.height = kPropSlot;
+    value.height = propSlotH(s);
     value.padL = 4.0f;
     value.overflow = UiOverflow::Hidden;
     const uint16_t slot = uiPanel(s, row, value, paintClear());
@@ -330,9 +297,9 @@ uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
     trail.align = UiAlign::Center;
     trail.justify = UiJustify::End;
     trail.widthMode = UiSize::Px;
-    trail.width = kPropSlot;
+    trail.width = uiStyle(s, "prop_row", UiStyleKey::Trail, propSlotH(s));
     trail.heightMode = UiSize::Px;
-    trail.height = kPropSlot;
+    trail.height = propSlotH(s);
     trail.grow = 1.0f;
     trail.shrink = 0.0f;
     trail.overflow = UiOverflow::Hidden;
@@ -403,7 +370,7 @@ void propFillWidth(UiState& s, uint16_t id) {
 
 uint16_t uiPropNumber(UiState& s, uint16_t host, const char* label, float value, float minV, float maxV, float step) {
     const uint16_t slot = uiPropRow(s, host, label);
-    const uint16_t id = uiNumber(s, slot, value, minV, maxV, step, nullptr, nullptr, kPropField, kPropSlot, 0.0f);
+    const uint16_t id = uiNumber(s, slot, value, minV, maxV, step, nullptr, nullptr, kPropField, propSlotH(s), 0.0f);
     propFillWidth(s, id);
     return id;
 }
@@ -536,7 +503,7 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
     line.shrink = 1.0f;
     line.gap = 2.0f;
     line.heightMode = UiSize::Px;
-    line.height = kPropSlot;
+    line.height = propSlotH(s);
     const uint16_t row = uiPanel(s, slot, line, paintClear());
     const char* letters[3] = {"X", "Y", "Z"};
     UiPropVec3 out{};
@@ -592,9 +559,9 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         const float* ink = kUiAxis[i];
         UiFlex tag{};
         tag.widthMode = UiSize::Px;
-        tag.width = kPropSlot;
+        tag.width = propSlotH(s);
         tag.heightMode = UiSize::Px;
-        tag.height = kPropSlot;
+        tag.height = propSlotH(s);
         tag.shrink = 0.0f;
         UiPaint axis{};
         axis.token = UiToken::Custom;
@@ -624,9 +591,9 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         hold.shrink = 1.0f;
         hold.minW = 0.0f;
         hold.heightMode = UiSize::Px;
-        hold.height = kPropSlot;
+        hold.height = propSlotH(s);
         const uint16_t box = uiPanel(s, row, hold, paintClear());
-        *ids[i] = uiNumber(s, box, axes[i], minV, maxV, step, nullptr, nullptr, kPropField, kPropSlot, 1.0f);
+        *ids[i] = uiNumber(s, box, axes[i], minV, maxV, step, nullptr, nullptr, kPropField, propSlotH(s), 1.0f);
         propFillWidth(s, *ids[i]);
         uiNumberFill(s, *ids[i], false);
     }
@@ -634,7 +601,7 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         return out;
     }
     const uint16_t tail = uiPropTrail(s, row);
-    out.reset = square(static_cast<uint8_t>(UiIcon::Reset), tail < s.count ? tail : row, kPropSlot);
+    out.reset = square(static_cast<uint8_t>(UiIcon::Reset), tail < s.count ? tail : row, propSlotH(s));
     UiVecCtl shared{};
     shared.field[0] = out.x;
     shared.field[1] = out.y;
@@ -735,7 +702,7 @@ uint16_t uiPropSwatch(UiState& s, uint16_t host, const char* label, float r, flo
     flex.widthMode = UiSize::Px;
     flex.width = kPropField;
     flex.heightMode = UiSize::Px;
-    flex.height = kPropSlot;
+    flex.height = propSlotH(s);
     UiPaint paint{};
     paint.token = UiToken::Custom;
     paint.r = r;

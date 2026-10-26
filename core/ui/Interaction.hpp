@@ -39,6 +39,9 @@ using UiFocusFn   = void (*)(void* user, uint16_t id);
 using UiWheelFn   = void (*)(void* user, uint16_t id, float wheel, float x, float y);
 
 struct UiAction  { UiClickFn fn = nullptr; void* user = nullptr; };
+// Right-button drag: fn receives the pointer motion of every frame the button stays down after a press on the node.
+using UiDragRelFn = void (*)(void* user, uint16_t id, float dx, float dy);
+struct UiDragRight { UiDragRelFn fn = nullptr; void* user = nullptr; };
 struct UiDrag    { UiDragFn  fn = nullptr; void* user = nullptr; };
 struct UiWheel   { UiWheelFn fn = nullptr; void* user = nullptr; };
 struct UiEdit    { UiEditFn  fn = nullptr; void* user = nullptr; };

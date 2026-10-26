@@ -186,6 +186,7 @@ struct HudContext {
     uint8_t texChannel = 0;
     uint8_t rootReady = 0;
     uint8_t launcherDirty = 1;
+    uint8_t launcherActive = 0;
     uint16_t launcher = kUiNone;
     RecentList recent;
     uint8_t matOpen = 0;
@@ -207,7 +208,6 @@ struct HudContext {
     float previewPy = 0.0f;
     uint8_t previewDown = 0;
     MaterialInfo previewSeen{};
-    uint8_t previewOrbit = 0;
     char cliProject[512]{};
     uint8_t previewShape = 0;
     uint8_t previewDirty = 1;

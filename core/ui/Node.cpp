@@ -287,6 +287,13 @@ void uiDrag(UiState& s, uint16_t id, UiDragFn fn, void* user) {
     s.ent[id].set<UiDrag>({fn, user});
 }
 
+void uiDragRight(UiState& s, uint16_t id, UiDragRelFn fn, void* user) {
+    if (id >= s.count || fn == nullptr) {
+        return;
+    }
+    s.ent[id].set<UiDragRight>({fn, user});
+}
+
 void uiEdit(UiState& s, uint16_t id, UiEditFn fn, void* user) {
     if (id >= s.count || fn == nullptr) {
         return;

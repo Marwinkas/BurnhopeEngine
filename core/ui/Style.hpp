@@ -39,10 +39,7 @@ enum class UiRamp : uint8_t {
 };
 
 // Height of every dropdown trigger (menu button, choice).
-constexpr float kUiTriggerH = 24.0f;
-
-// Distance from a node's left edge to an icon drawn with UiPaint::iconLeft.
-constexpr float kUiIconLeftPad = 10.0f;
+constexpr float kUiTriggerH = 26.0f;
 
 // Визуальный компонент сущности (прямоугольник, скругление, цвет, обводка)
 struct UiPaint {
@@ -62,7 +59,8 @@ struct UiPaint {
     uint8_t hoverKids = 0;
     UiRamp ramp = UiRamp::None;
     bool disabled = false;
-    uint8_t iconLeft = 0;      // 1: a labeled node draws its icon at the left edge instead of the right
+    uint8_t iconLeft = 0;      // > 0: a labeled node draws its icon this many px from the left edge instead of the right
+    uint8_t iconSide = 0;      // side of a left icon in px (0: 16)
     float shadow = 0.0f;
     float radiusTr = kUiUnset; // Если < 0.0f, наследует radius
     float radiusBr = kUiUnset;
@@ -116,6 +114,10 @@ struct UiLook {
     float advance = 9.0f;
     float glyphW = 8.0f;
     float glyphH = 18.0f;
+    // Popup surface (window_panel class of assets/ui/styles.json); a negative radius means `radius`.
+    float popupAlpha = 0.88f;
+    float popupBorder = 1.0f;
+    float popupRadius = -1.0f;
 };
 
 // Множитель альфы узла и его детей. 1 — без изменений.
@@ -255,9 +257,9 @@ inline UiPaint paintField(const UiLook& look) noexcept {
 
 // The one look of every popup surface (menus, choices, popovers): translucent window fill with a crisp 1px border.
 inline UiPaint paintPopup(const UiLook& look) noexcept {
-    UiPaint out = paintToken(look, UiToken::Window, look.radiusSm);
-    out.a = 0.88f;
-    out.borderW = 1.0f;
+    UiPaint out = paintToken(look, UiToken::Window, look.popupRadius >= 0.0f ? look.popupRadius : look.radiusSm);
+    out.a = look.popupAlpha;
+    out.borderW = look.popupBorder;
     tokenRgb(look, UiToken::Muted, out.br, out.bg, out.bb);
     return out;
 }

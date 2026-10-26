@@ -5,6 +5,7 @@
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <span>
 
@@ -547,15 +548,15 @@ uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t m
     flex.widthMode = UiSize::Percent;
     flex.width = 100.0f;
     flex.heightMode = UiSize::Px;
-    flex.height = kUiTriggerH;
+    flex.height = uiStyle(s, "dropdown_trigger", UiStyleKey::Height, kUiTriggerH);
     flex.grow = 1.0f;
     flex.shrink = 1.0f;
     flex.align = UiAlign::Center;
     flex.justify = UiJustify::Start;
-    flex.padL = s.metrics.menuPadX;
-    flex.padR = 22.0f;
+    flex.padL = uiStyle(s, "dropdown_trigger", UiStyleKey::PadL, s.metrics.menuPadX);
+    flex.padR = uiStyle(s, "dropdown_trigger", UiStyleKey::PadR, 22.0f);
     UiPaint look = paintButtonFill(s.look);
-    look.borderW = 1.0f;
+    look.borderW = uiStyle(s, "dropdown_trigger", UiStyleKey::Border, 1.0f);
     tokenRgb(s.look, UiToken::Muted, look.br, look.bg, look.bb);
     const uint16_t id = uiPanel(s, parent, flex, look);
     if (id == kUiNone) {

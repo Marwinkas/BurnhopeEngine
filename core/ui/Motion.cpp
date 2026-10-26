@@ -11,14 +11,14 @@ static float easeOutCubic(float u) {
     return 1.0f - t * t * t;
 }
 
-static float revealEase(uint8_t phase, float u) {
+static float revealEase(uint8_t, float u) {
     if (u < 0.0f) {
         u = 0.0f;
     }
     if (u > 1.0f) {
         u = 1.0f;
     }
-    return phase == 2 ? u * u : easeOutCubic(u);
+    return easeOutCubic(u);
 }
 
 static float revealNow(const UiState& s, const UiReveal& rev) {

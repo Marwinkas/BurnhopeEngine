@@ -6,6 +6,7 @@
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Style.hpp"
+#include "ui/StyleSheet.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/AssetSlot.hpp"
 #include "host/PropGrid.hpp"
@@ -128,7 +129,7 @@ void hudPaintMaterial(HudContext& hud) {
             uiPropRowShow(*state, hud.matVal[i], pack);
         }
         if (kSlot[i].group == 1) {
-            uiPropRowHeight(*state, hud.matVal[i], pack ? 32.0f : 72.0f, pack ? 24.0f : 64.0f);
+            uiPropRowHeight(*state, hud.matVal[i], pack ? uiStyle(*state, "prop_row", UiStyleKey::Height, 34.0f) : 72.0f, pack ? uiStyle(*state, "prop_row", UiStyleKey::Inner, 26.0f) : 64.0f);
         }
         const char* path = hudDocPath(hud.matDoc, kSlot[i].channel);
         const bool face = kSlot[i].group != 1 || !pack;

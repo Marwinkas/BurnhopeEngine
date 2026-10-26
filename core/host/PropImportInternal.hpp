@@ -3,6 +3,7 @@
 #include "host/PropImport.hpp"
 #include "io/JsonCursor.hpp"
 #include "ui/Style.hpp"
+#include "ui/StyleSheet.hpp"
 #include "ui/widget/Number.hpp"
 
 #include <cstdint>
@@ -98,6 +99,9 @@ struct Import {
 bool keyIs(const char* key, const char* name);
 bool parseItem(Cur& c, Item& item);
 bool parseShow(Cur& c, Node& node);
+// Copies the size and spacing of style class `name` onto `node`. A node lists "class" before its own keys,
+// so the keys that follow override what the class set.
+void applyClass(const UiState& s, Node& node, const char* name);
 bool parseItems(Cur& c, Node& node);
 
 } // namespace burnhope::propimport

@@ -368,6 +368,7 @@ bh_module(ui_core
     core/ui/Json.cpp
     core/ui/LayoutBridge.cpp
     core/ui/Motion.cpp
+    core/ui/StyleSheet.cpp
     core/ui/Node.cpp
     core/ui/NodeDump.cpp
     core/ui/Panel.cpp

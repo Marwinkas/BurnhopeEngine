@@ -21,7 +21,7 @@ namespace {
 
 constexpr float kCardW = 560.0f;
 constexpr float kRowH = 44.0f;
-constexpr float kDateW = 112.0f;
+constexpr float kDateW = 160.0f;
 
 UiLauncher* launcherOf(UiState& s, uint16_t id) {
     return id < s.count ? s.ent[id].try_get_mut<UiLauncher>() : nullptr;
@@ -132,6 +132,9 @@ uint16_t spawnRow(UiState& s, uint16_t list, uint16_t launcher) {
     row.date = cell(s, id, kDateW, 22.0f, UiTextAlign::Right, UiTextEllipsis::End);
     row.forget = uiIconBtn(s, id, static_cast<uint8_t>(UiIcon::Dismiss), 22.0f);
     if (row.forget < s.count) {
+        if (auto* box = s.ent[row.forget].try_get_mut<UiFlex>()) {
+            box->shrink = 0.0f;
+        }
         uiBind(s, row.forget, forgetClick, &s);
     }
     s.ent[id].set<UiLauncherRow>(row);
@@ -159,7 +162,8 @@ uint16_t uiLauncher(UiState& s, const LauncherConfig& cfg) {
     UiPaint dim = paintToken(s.look, UiToken::Window, 0.0f);
     dim.a = 1.0f;
     dim.borderW = 0.0f;
-    const uint16_t id = uiNode(s, kUiNone, veil, dim);
+    // Layout only solves the tree under node 0, so the veil must hang from it (a parentless node is never laid out).
+    const uint16_t id = uiNode(s, s.count > 0 ? 0 : kUiNone, veil, dim);
     if (id >= s.count) {
         return id;
     }
@@ -212,9 +216,14 @@ void uiLauncherList(UiState& s, uint16_t launcher, const RecentList& list) {
         }
         row->index = i;
         const RecentProject& entry = list.item[i];
-        const char* leaf = strPathLeaf(entry.path);
-        uiText(s, row->name, leaf[0] != '\0' ? leaf : entry.path);
-        const size_t len = std::strlen(entry.path);
+        char trimmed[sizeof(entry.path)]{};
+        std::snprintf(trimmed, sizeof(trimmed), "%s", entry.path);
+        size_t len = std::strlen(trimmed);
+        while (len > 1 && (trimmed[len - 1] == '/' || trimmed[len - 1] == '\\')) {
+            trimmed[--len] = '\0';
+        }
+        const char* leaf = strPathLeaf(trimmed);
+        uiText(s, row->name, leaf[0] != '\0' ? leaf : trimmed);
         char shown[96]{};
         if (len < sizeof(shown)) {
             std::snprintf(shown, sizeof(shown), "%s", entry.path);

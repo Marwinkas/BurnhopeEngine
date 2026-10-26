@@ -4,6 +4,8 @@
 #include "host/Launcher.hpp"
 #include "ui/rhi/Canvas.hpp"
 
+#include <spdlog/spdlog.h>
+
 #include <filesystem>
 
 namespace burnhope {
@@ -75,7 +77,12 @@ void hudLauncherSync(Engine& e) {
         hud.launcherDirty = 0;
         uiLauncherList(*state, hud.launcher, hud.recent);
     }
-    uiLauncherShow(*state, hud.launcher, hud.projectRoot[0] == '\0');
+    const bool gate = hud.projectRoot[0] == '\0';
+    if (gate && hud.launcherActive == 0) {
+        spdlog::info("[Launcher] Displaying startup launcher");
+    }
+    hud.launcherActive = gate ? 1 : 0;
+    uiLauncherShow(*state, hud.launcher, gate);
 }
 
 } // namespace burnhope

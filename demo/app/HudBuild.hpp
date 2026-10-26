@@ -55,8 +55,6 @@ void saveOpenMaterial(HudContext& hud);
 void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel);
 void hudPaintMaterial(HudContext& hud);
 void hudBakeMaterialView(HudContext& hud);
-// Right-drag over the material preview orbits it.
-void hudPreviewOrbit(HudContext& hud, const InputFrame& input);
 void hudCommitMaps(HudContext& hud, uint8_t channel);
 void hudBuildActorMaterial(Canvas& canvas, HudContext* hud, uint16_t panel);
 char* hudDocPath(BhmatDoc& doc, uint8_t channel);

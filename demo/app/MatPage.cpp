@@ -1,4 +1,5 @@
 #include "app/Engine.hpp"
+#include <algorithm>
 #include "app/HudBuild.hpp"
 #include "app/MatPriv.hpp"
 
@@ -47,6 +48,16 @@ void onShape(void* user, uint8_t index) {
         hud->previewShape = index;
         hud->previewDirty = 1;
     }
+}
+
+void onPreviewOrbit(void* user, uint16_t, float dx, float dy) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr || (dx == 0.0f && dy == 0.0f)) {
+        return;
+    }
+    hud->previewYaw += dx * 0.012f;
+    hud->previewPitch = std::clamp(hud->previewPitch + dy * 0.012f, -1.2f, 1.2f);
+    hud->previewDirty = 1;
 }
 
 void onPreviewDrag(void* user, uint16_t, float x, float y) {
@@ -101,6 +112,7 @@ void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel) {
     (void)uiSegment(s, preview, {.labels = shapeName, .count = 3, .selected = hud->previewShape, .onPick = onShape, .user = hud});
     hud->matPreview = uiIcon(s, preview, 8, static_cast<float>(kMatSphereSide), static_cast<float>(kMatSphereSide));
     uiDrag(s, hud->matPreview, onPreviewDrag, hud);
+    uiDragRight(s, hud->matPreview, onPreviewOrbit, hud);
     uiLabel(s, preview, "Material Preview");
     const char* typeName[] = {"Lit", "Unlit"};
     const char* packName[] = {"Classic", "ORMH"};

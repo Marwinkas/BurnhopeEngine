@@ -24,23 +24,6 @@ Canvas* previewCanvas(HudContext& hud) {
 
 } // namespace
 
-void hudPreviewOrbit(HudContext& hud, const InputFrame& input) {
-    UiState* state = hudUi(hud);
-    if (state == nullptr || hud.matOpen == 0 || hud.matPreview == kUiNone || (input.pointer.down & kPointerRight) == 0) {
-        return;
-    }
-    const bool over = uiHovered(*state) == hud.matPreview;
-    if ((input.pointer.pressed & kPointerRight) != 0) {
-        hud.previewOrbit = over ? 1 : 0;
-    }
-    if (hud.previewOrbit == 0 || (input.pointer.dx == 0.0f && input.pointer.dy == 0.0f)) {
-        return;
-    }
-    hud.previewYaw += input.pointer.dx * 0.012f;
-    hud.previewPitch = std::clamp(hud.previewPitch + input.pointer.dy * 0.012f, -1.2f, 1.2f);
-    hud.previewDirty = 1;
-}
-
 void hudCommitMaps(HudContext& hud, uint8_t channel) {
     if (!materialCommitMaps(hud.matDoc, hud.matPath, channel)) {
         return;

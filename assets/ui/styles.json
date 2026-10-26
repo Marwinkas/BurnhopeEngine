@@ -1,0 +1,8 @@
+{
+  "classes": {
+    "dropdown_trigger": { "h": 26, "border": 1, "padR": 22, "icon": 14 },
+    "prop_row": { "h": 34, "inner": 26, "w": 140, "maxW": 240, "pad": 4, "trail": 26 },
+    "fold_header": { "h": 28, "padL": 10, "icon": 16, "gap": 8 },
+    "window_panel": { "bg": "window", "edge": "muted", "alpha": 0.88, "border": 1, "radius": 6 }
+  }
+}

@@ -32,6 +32,8 @@ void uiShowOnly(UiState& s, uint16_t id);
 void uiBind(UiState& s, uint16_t id, UiClickFn fn, void* user);
 void uiBindName(UiState& s, const char* name, UiClickFn fn, void* user);
 void uiDrag(UiState& s, uint16_t id, UiDragFn fn, void* user);
+// Right-button drag on a node; fn gets the pointer delta each frame (orbiting a preview, for one).
+void uiDragRight(UiState& s, uint16_t id, UiDragRelFn fn, void* user);
 void uiEdit(UiState& s, uint16_t id, UiEditFn fn, void* user);
 void uiShow(UiState& s, uint16_t id, bool visible);
 void uiPaintRgb(UiState& s, uint16_t id, float r, float g, float b);

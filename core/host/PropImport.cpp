@@ -629,6 +629,12 @@ bool parseNode(Cur& c, Import& in, uint16_t parent) {
             if (!json::parseStringCap(c, node.name, sizeof(node.name), n)) {
                 return false;
             }
+        } else if (keyIs(key, "class")) {
+            char name[24]{};
+            if (!json::parseStringCap(c, name, sizeof(name), n)) {
+                return false;
+            }
+            applyClass(*in.state, node, name);
         } else if (keyIs(key, "caption")) {
             if (!json::parseStringCap(c, node.caption, sizeof(node.caption), n)) {
                 return false;

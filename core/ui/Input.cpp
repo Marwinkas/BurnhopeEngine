@@ -156,6 +156,18 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         }
     }
 
+    if ((in.pointer.pressed & kPointerRight) != 0 && hit != kUiNone && s.ent[hit].try_get<UiDragRight>() != nullptr) {
+        s.rightGrab = hit;
+    }
+    if (s.rightGrab != kUiNone) {
+        const UiDragRight* orbit = s.rightGrab < s.count ? s.ent[s.rightGrab].try_get<UiDragRight>() : nullptr;
+        if ((in.pointer.down & kPointerRight) != 0 && orbit != nullptr) {
+            orbit->fn(orbit->user, s.rightGrab, in.pointer.dx, in.pointer.dy);
+        } else {
+            s.rightGrab = kUiNone;
+        }
+    }
+
     if (down && s.capture != kUiNone && !chromeTook) {
         const UiPaint* cap = s.ent[s.capture].try_get<UiPaint>();
         if (cap != nullptr && s.ent[s.capture].try_get<UiDrag>() != nullptr) {

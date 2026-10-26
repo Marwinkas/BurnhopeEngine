@@ -107,6 +107,7 @@ struct UiState {
     uint8_t tight[kUiCap]{};
     uint16_t count = 0;
     uint16_t hovered = kUiNone;
+    uint16_t rightGrab = kUiNone; // node that took a right-button press (UiDragRight)
     uint8_t cursorStack[8]{};
     uint8_t cursorN = 0;
     uint16_t focused = kUiNone;

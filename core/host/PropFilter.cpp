@@ -71,7 +71,6 @@ uint16_t uiPropSection(UiState& s, uint16_t parent, const char* title, uint8_t c
             return true;
         }
         if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
-            flex->padL = 0.0f;
             flex->marginL = 0.0f;
         }
         return false;
@@ -84,6 +83,7 @@ uint16_t uiPropSection(UiState& s, uint16_t parent, const char* title, uint8_t c
             flex->padT = 0.0f;
             flex->padB = 0.0f;
         }
+        (void)uiPropGrip(s, body);
     }
     return body;
 }

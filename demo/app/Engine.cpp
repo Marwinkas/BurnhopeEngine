@@ -72,7 +72,6 @@ bool sceneTick(void* user, const InputFrame& input, float dt) {
     if (canvas != nullptr && canvas->state != nullptr && canvas->builder != nullptr && !lookHeld && !toolHeld) {
         sceneMaskInput(*canvas->state, sceneInput);
     }
-    hudPreviewOrbit(*view, input);
     const bool flyLook = sceneFrameTick(view->scene, sceneInput, dt);
     if (view->host != nullptr && view->slot >= 0) {
         const Swapchain& shown = view->host->view[view->slot].swap;

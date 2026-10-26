@@ -192,11 +192,11 @@ uint32_t uiEmitPanel(
         const UiText* label = s.ent[id].try_get<UiText>();
         const bool labeled = label != nullptr && label->len > 0;
         if (labeled) {
-            side = paint->iconLeft != 0 ? 16.0f : 14.0f;
+            side = paint->iconLeft != 0 ? (paint->iconSide != 0 ? static_cast<float>(paint->iconSide) : 16.0f) : 14.0f;
         }
         float iconX = box.x + (box.w - side) * 0.5f;
         if (labeled && paint->iconLeft != 0) {
-            iconX = box.x + kUiIconLeftPad;
+            iconX = box.x + static_cast<float>(paint->iconLeft);
         } else if (labeled) {
             iconX = box.x + box.w - side - 6.0f;
             if (iconX < box.x) {
