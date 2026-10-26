@@ -1,9 +1,10 @@
 #include "ui/StyleSheet.hpp"
 
 #include "io/File.hpp"
-#include "io/JsonCursor.hpp"
+#include "platform/Check.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleInternal.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -12,163 +13,71 @@
 namespace burnhope {
 namespace {
 
-struct KeyName {
-    const char* name;
-    UiStyleKey key;
-};
-
-constexpr KeyName kKeys[] = {
-    {"h", UiStyleKey::Height}, {"inner", UiStyleKey::Inner}, {"w", UiStyleKey::Width}, {"maxW", UiStyleKey::MaxW},
-    {"minW", UiStyleKey::MinW}, {"pad", UiStyleKey::Pad}, {"padL", UiStyleKey::PadL}, {"padR", UiStyleKey::PadR},
-    {"gap", UiStyleKey::Gap}, {"border", UiStyleKey::Border}, {"radius", UiStyleKey::Radius},
-    {"icon", UiStyleKey::Icon}, {"alpha", UiStyleKey::Alpha}, {"trail", UiStyleKey::Trail},
-};
-
-struct TokenName {
-    const char* name;
-    UiToken token;
-};
-
-constexpr TokenName kTokens[] = {
-    {"window", UiToken::Window}, {"dock", UiToken::Content}, {"title", UiToken::Title}, {"side", UiToken::Side}, {"content", UiToken::Content},
-    {"button", UiToken::Button}, {"field", UiToken::Field}, {"menu", UiToken::Menu}, {"text", UiToken::Text},
-    {"muted", UiToken::Muted}, {"item", UiToken::Item}, {"accent", UiToken::Accent},
-};
-
-uint16_t bit(UiStyleKey key) {
-    return static_cast<uint16_t>(1u << static_cast<uint8_t>(key));
+// Caches the render-path classes ("ui", "minimap") so emission reads plain floats.
+void refreshPaintStyle(UiState& s) {
+    using K = UiStyleKey;
+    if (uiStyleFind(s, "ui") == nullptr || uiStyleFind(s, "minimap") == nullptr) {
+        return; // a partial sheet keeps the paint style it has
+    }
+    UiPaintStyle& p = s.paintStyle;
+    p.disabledAlpha = uiStyle(s, "ui", K::DisabledAlpha);
+    p.hoverLift = uiStyle(s, "ui", K::HoverLift);
+    p.hoverMinAlpha = uiStyle(s, "ui", K::HoverMinAlpha);
+    p.hoverFallback = uiStyle(s, "ui", K::HoverFallback);
+    p.shadowDy = uiStyle(s, "ui", K::ShadowDy);
+    p.shadowAlpha = uiStyle(s, "ui", K::ShadowAlpha);
+    p.shadowGrow = uiStyle(s, "ui", K::ShadowGrow);
+    p.iconSide = uiStyle(s, "ui", K::IconSide);
+    p.iconLeft = uiStyle(s, "ui", K::Icon);
+    p.iconInset = uiStyle(s, "ui", K::IconInset);
+    p.iconFitMin = uiStyle(s, "ui", K::IconFitMin);
+    p.iconFitPad = uiStyle(s, "ui", K::IconFitPad);
+    p.iconMin = uiStyle(s, "ui", K::IconMin);
+    p.iconMax = uiStyle(s, "ui", K::IconMax);
+    p.toolIcon = uiStyle(s, "ui", K::ToolIcon);
+    p.inkThreshold = uiStyle(s, "ui", K::InkThreshold);
+    p.mapW = uiStyle(s, "minimap", K::Width);
+    p.mapH = uiStyle(s, "minimap", K::Height);
+    p.mapMargin = uiStyle(s, "minimap", K::Margin);
+    p.mapPad = uiStyle(s, "minimap", K::Pad);
+    p.mapAlpha = uiStyle(s, "minimap", K::Alpha);
+    p.mapRadius = uiStyle(s, "minimap", K::Radius);
+    p.mapMinW = uiStyle(s, "minimap", K::MinW);
+    p.mapMinH = uiStyle(s, "minimap", K::MinH);
 }
 
-bool parseClass(json::Cur& c, UiStyleClass& out) {
-    if (!json::eat(c, '{')) {
-        return false;
+bool applySheet(UiState& s, const UiStyleSheet& sheet) {
+    s.world.ensure<UiStyleSheet>() = sheet;
+    refreshPaintStyle(s);
+    if (uiStyleFind(s, "window_panel") != nullptr) {
+        s.look.popupAlpha = uiStyle(s, "window_panel", UiStyleKey::Alpha);
+        s.look.popupBorder = uiStyle(s, "window_panel", UiStyleKey::Border);
+        s.look.popupRadius = uiStyle(s, "window_panel", UiStyleKey::Radius);
     }
-    json::skip(c);
-    if (c.p < c.end && *c.p == '}') {
-        ++c.p;
-        return true;
-    }
-    for (;;) {
-        char key[16]{};
-        uint32_t n = 0;
-        if (!json::parseStringCap(c, key, sizeof(key), n) || !json::eat(c, ':')) {
-            return false;
-        }
-        if (std::strcmp(key, "bg") == 0 || std::strcmp(key, "edge") == 0) {
-            char text[16]{};
-            if (!json::parseStringCap(c, text, sizeof(text), n)) {
-                return false;
-            }
-            UiToken token = UiToken::Custom;
-            for (const TokenName& entry : kTokens) {
-                if (std::strcmp(entry.name, text) == 0) {
-                    token = entry.token;
-                }
-            }
-            (key[0] == 'b' ? out.bg : out.edge) = token;
-        } else {
-            bool known = false;
-            for (const KeyName& entry : kKeys) {
-                if (std::strcmp(entry.name, key) != 0) {
-                    continue;
-                }
-                double number = 0.0;
-                if (!json::parseNumber(c, number)) {
-                    return false;
-                }
-                out.value[static_cast<size_t>(entry.key)] = static_cast<float>(number);
-                out.has = static_cast<uint16_t>(out.has | bit(entry.key));
-                known = true;
-                break;
-            }
-            if (!known && !json::skipValue(c)) {
-                return false;
-            }
-        }
-        json::skip(c);
-        if (c.p < c.end && *c.p == '}') {
-            ++c.p;
-            return true;
-        }
-        if (!json::eat(c, ',')) {
-            return false;
-        }
-    }
-}
-
-bool parseClasses(json::Cur& c, UiStyleSheet& sheet) {
-    if (!json::eat(c, '{')) {
-        return false;
-    }
-    json::skip(c);
-    if (c.p < c.end && *c.p == '}') {
-        ++c.p;
-        return true;
-    }
-    for (;;) {
-        UiStyleClass entry{};
-        uint32_t n = 0;
-        if (!json::parseStringCap(c, entry.name, sizeof(entry.name), n) || !json::eat(c, ':') || !parseClass(c, entry)) {
-            return false;
-        }
-        if (sheet.count < kUiStyleCap) {
-            sheet.cls[sheet.count++] = entry;
-        }
-        json::skip(c);
-        if (c.p < c.end && *c.p == '}') {
-            ++c.p;
-            return true;
-        }
-        if (!json::eat(c, ',')) {
-            return false;
-        }
-    }
-}
-
-bool parseSheet(std::string_view text, UiStyleSheet& sheet) {
-    json::Cur c{text.data(), text.data() + text.size()};
-    if (!json::eat(c, '{')) {
-        return false;
-    }
-    for (;;) {
-        char key[16]{};
-        uint32_t n = 0;
-        if (!json::parseStringCap(c, key, sizeof(key), n) || !json::eat(c, ':')) {
-            return false;
-        }
-        if (std::strcmp(key, "classes") == 0) {
-            if (!parseClasses(c, sheet)) {
-                return false;
-            }
-        } else if (!json::skipValue(c)) {
-            return false;
-        }
-        json::skip(c);
-        if (c.p < c.end && *c.p == '}') {
-            return true;
-        }
-        if (!json::eat(c, ',')) {
-            return false;
-        }
-    }
+    return true;
 }
 
 } // namespace
 
 bool uiStyleLoad(UiState& s, std::string_view json) {
     UiStyleSheet sheet{};
-    if (!parseSheet(json, sheet)) {
+    if (!style::parseSheet(json, sheet, false)) {
         return false;
     }
-    s.world.ensure<UiStyleSheet>() = sheet;
-    const UiStyleClass* panel = uiStyleFind(s, "window_panel");
-    if (panel != nullptr) {
-        s.look.popupAlpha = uiStyle(s, "window_panel", UiStyleKey::Alpha, s.look.popupAlpha);
-        s.look.popupBorder = uiStyle(s, "window_panel", UiStyleKey::Border, s.look.popupBorder);
-        s.look.popupRadius = uiStyle(s, "window_panel", UiStyleKey::Radius, s.look.popupRadius);
-    }
-    return true;
+    return applySheet(s, sheet);
 }
+
+bool uiStyleLoadOver(UiState& s, std::string_view json) {
+    UiStyleSheet sheet{};
+    if (const UiStyleSheet* live = s.world.try_get<UiStyleSheet>()) {
+        sheet = *live;
+    }
+    if (!style::parseSheet(json, sheet, true)) {
+        return false;
+    }
+    return applySheet(s, sheet);
+}
+
 
 bool uiStyleLoadAsset(UiState& s, const char* asset) {
     char path[512]{};
@@ -191,24 +100,48 @@ bool uiStyleLoadAsset(UiState& s, const char* asset) {
 
 const UiStyleClass* uiStyleFind(const UiState& s, const char* name) {
     const UiStyleSheet* sheet = s.world.try_get<UiStyleSheet>();
-    if (sheet == nullptr || name == nullptr) {
-        return nullptr;
-    }
-    for (uint8_t i = 0; i < sheet->count; ++i) {
-        if (std::strcmp(sheet->cls[i].name, name) == 0) {
-            return &sheet->cls[i];
-        }
-    }
-    return nullptr;
+    return sheet != nullptr && name != nullptr ? style::findIn(*sheet, name) : nullptr;
 }
 
 bool uiStyleHas(const UiStyleClass* cls, UiStyleKey key) {
-    return cls != nullptr && (cls->has & bit(key)) != 0;
+    return cls != nullptr && cls->has.test(key);
 }
 
-float uiStyle(const UiState& s, const char* cls, UiStyleKey key, float fallback) {
+bool uiStyleResolve(const UiState& s, const char* name, UiStyleClass& out) {
+    const UiStyleClass* found = uiStyleFind(s, name);
+    if (found == nullptr) {
+        return false;
+    }
+    out = *found;
+    return true;
+}
+
+UiToken uiStyleBg(const UiState& s, const char* name) {
+    UiStyleClass cls;
+    return uiStyleResolve(s, name, cls) ? cls.bg : UiToken::Custom;
+}
+
+float uiStyle(const UiState& s, const char* cls, UiStyleKey key) {
     const UiStyleClass* found = uiStyleFind(s, cls);
-    return uiStyleHas(found, key) ? found->value[static_cast<size_t>(key)] : fallback;
+    if (uiStyleHas(found, key)) {
+        return found->value[static_cast<size_t>(key)];
+    }
+    BH_ASSERT(false, "style class or key is not in styles.json");
+    return 0.0f;
+}
+
+const char* uiStyleKeyName(UiStyleKey key) {
+    static constexpr const char* kNames[] = {
+        "h", "inner", "w", "maxW", "minW", "pad", "padL", "padR", "gap", "border", "radius", "icon", "alpha", "trail",
+        "labelW", "fieldW", "badgeW", "lockGap", "hoverAlpha", "hoverGain", "chrome", "rowH",
+        "errorBorder", "clearIcon", "labelPad",
+        "iconSide", "iconInset", "iconFitMin", "shadowDy", "shadowAlpha", "shadowGrow", "disabledAlpha",
+        "hoverLift", "hoverFallback", "hoverMinAlpha", "plate",
+        "margin", "maxH", "minH", "caretW", "selectionAlpha", "trackH", "thumbSide", "handleSide",
+        "iconFitPad", "iconMin", "iconMax", "inkThreshold", "shadow", "toolIcon", "borderDim", "clearW", "iconLeft", "marginR", "offset", "anchorGap", "screenGap", "flyoutW", "popupMinW", "minThumb", "wheelStep", "barInset", "basePane", "hitSlop", "minPane", "hotAlpha", "idleAlpha", "barMaxH", "chevron", "treeIndent", "tileGap", "gridInset", "labelH", "subH", "subScale", "listPad", "listGap", "selectedA", "headerA", "dragSlop", "offsetY", "glyphW", "rowInset", "ramp",
+    };
+    static_assert(sizeof(kNames) / sizeof(kNames[0]) == static_cast<size_t>(UiStyleKey::Count));
+    return kNames[static_cast<size_t>(key)];
 }
 
 } // namespace burnhope

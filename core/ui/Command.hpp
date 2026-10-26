@@ -20,10 +20,10 @@ struct UiMenuCmd {
 static_assert(std::is_trivially_copyable_v<UiMenuCmd>);
 
 struct UiMenuMetrics {
-    float w = 180.0f;
-    float itemH = 26.0f;
-    float pad = 6.0f;
-    float gap = 4.0f;
+    float w = 0.0f; // filled from the "menu" class unless uiMenuStyle changed them
+    float itemH = 0.0f;
+    float pad = 0.0f;
+    float gap = 0.0f;
 };
 
 struct UiMenuHooks {

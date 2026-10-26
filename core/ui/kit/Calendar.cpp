@@ -9,6 +9,7 @@
 #include "ui/Style.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/State.hpp"
+#include "ui/Template.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -309,78 +310,39 @@ void calPick(UiState& s, UiCalendarComponent& cal, uint16_t id) {
 }
 
 uint16_t uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, float h) {
-    UiFlex flex{};
-    flex.position = UiPosition::Absolute;
-    flex.posX = x;
-    flex.posY = y;
-    flex.widthMode = UiSize::Px;
-    flex.width = w;
-    flex.heightMode = UiSize::Px;
-    flex.height = h;
-    flex.pad = 10.0f;
-    flex.gap = 6.0f;
-    flex.shrink = 0.0f;
-    const uint16_t panel = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Menu, 8.0f));
+    const UiTemplateId tpl = uiTemplateFind(s, "core/calendar");
+    const uint16_t panel = uiSpawnTemplate(s, parent, tpl);
     if (panel == kUiNone) {
         return kUiNone;
     }
+    uiPlace(s, panel, true, x, y, w, h);
     UiCalendarComponent& cal = calBind(s, panel);
     cal.calPanel = panel;
-    UiFlex bar{};
-    bar.direction = UiFlexDir::Row;
-    bar.align = UiAlign::Center;
-    bar.shrink = 0.0f;
-    bar.heightMode = UiSize::Px;
-    bar.height = 32.0f;
-    bar.gap = 8.0f;
-    const uint16_t tools = uiPanel(s, cal.calPanel, bar, paintClear());
-    auto mini = [&](uint16_t host, const char* name, UiClickFn fn) {
-        const uint8_t n = name != nullptr ? static_cast<uint8_t>(strLen(name)) : 1;
-        const float width = static_cast<float>(n) * s.look.advance + 24.0f;
-        (void)uiButton(s, host, {.label = name, .width = width, .height = 28.0f, .onClick = fn, .user = &s});
+    auto wire = [&](const char* slot, const char* text, UiClickFn fn) {
+        const uint16_t id = uiTemplateSlot(s, tpl, panel, slot);
+        uiText(s, id, text);
+        uiBind(s, id, fn, &s);
     };
-    mini(tools, "<", calOnPrev);
-    cal.calHead = uiLabel(s, tools, "");
-    mini(tools, ">", calOnNext);
-    mini(tools, "X", calOnClose);
-    UiFlex todayRow{};
-    todayRow.direction = UiFlexDir::Row;
-    todayRow.shrink = 0.0f;
-    todayRow.heightMode = UiSize::Px;
-    todayRow.height = 32.0f;
-    mini(uiPanel(s, cal.calPanel, todayRow, paintClear()), "TODAY", calOnToday);
-    UiFlex weekHead{};
-    weekHead.direction = UiFlexDir::Row;
-    weekHead.gap = 4.0f;
-    weekHead.shrink = 0.0f;
-    weekHead.heightMode = UiSize::Px;
-    weekHead.height = 20.0f;
-    const uint16_t weekHeadId = uiPanel(s, cal.calPanel, weekHead, paintClear());
+    wire("prev", "<", calOnPrev);
+    cal.calHead = uiTemplateSlot(s, tpl, panel, "head");
+    uiText(s, cal.calHead, "");
+    wire("next", ">", calOnNext);
+    wire("close", "X", calOnClose);
+    wire("today", "TODAY", calOnToday);
+    const uint16_t weekHead = uiTemplateSlot(s, tpl, panel, "weekhead");
     const char* weekNames[] = {"SU", "MO", "TU", "WE", "TH", "FR", "SA"};
-    for (int day = 0; day < 7; ++day) {
-        const uint16_t id = uiLabel(s, weekHeadId, weekNames[day]);
-        if (id < s.count) {
-            if (auto* box = s.ent[id].try_get_mut<UiFlex>()) {
-                box->widthMode = UiSize::Px;
-                box->width = 32.0f;
-                box->heightMode = UiSize::Px;
-                box->height = 18.0f;
-            }
-        }
+    for (uint32_t day = 0; day < 7; ++day) {
+        uiText(s, uiNodeChild(s, weekHead, day), weekNames[day]);
     }
-    for (int week = 0; week < 6; ++week) {
-        UiFlex weekRow{};
-        weekRow.direction = UiFlexDir::Row;
-        weekRow.gap = 4.0f;
-        weekRow.shrink = 0.0f;
-        weekRow.heightMode = UiSize::Px;
-        weekRow.height = 32.0f;
-        const uint16_t weekId = uiPanel(s, cal.calPanel, weekRow, paintClear());
-        for (int day = 0; day < 7; ++day) {
-            const uint16_t id = uiButton(s, weekId, {.label = "1", .width = 32.0f, .height = 28.0f, .onClick = calOnDay, .user = &s});
-            if (id < s.count) {
-                s.ent[id].set<UiCalDay>({.cell = static_cast<uint8_t>(week * 7 + day)});
-            }
+    // The six week rows follow the bar, the today row and the weekday header.
+    constexpr uint32_t kFirstWeek = 3;
+    for (uint32_t week = 0; week < 6; ++week) {
+        const uint16_t row = uiNodeChild(s, panel, kFirstWeek + week);
+        for (uint32_t day = 0; day < 7; ++day) {
+            const uint16_t id = uiNodeChild(s, row, day);
+            uiText(s, id, "1");
+            uiBind(s, id, calOnDay, &s);
+            s.ent[id].set<UiCalDay>({.cell = static_cast<uint8_t>(week * 7 + day)});
         }
     }
     calFill(s, cal);

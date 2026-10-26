@@ -1,0 +1,7 @@
+{
+  "role": "button",
+  "class": "btn_default",
+  "flex": { "align": "center", "justify": "center", "shrink": 0 },
+  "text": { "align": "center", "valign": "center", "ellipsis": "end", "leading": 1 },
+  "traits": ["hoverable", "focusable", "pressable"]
+}

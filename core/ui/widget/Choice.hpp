@@ -17,7 +17,6 @@ struct UiChoiceConfig {
     const char* const* labels = nullptr;
     uint8_t count = 0;
     uint8_t selected = 0;
-    float width = 140.0f;
     void (*onPick)(void* user, uint8_t index) = nullptr;
     void* user = nullptr;
 };

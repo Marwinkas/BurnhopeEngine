@@ -1,0 +1,165 @@
+-|| 0.0,0.0 1280.0x2400.0
+  -|| 0.0,0.0 1280.0x2400.0
+    -|| 0.0,0.0 1280.0x32.0
+      -|File| 8.0,4.0 60.0x24.0
+      -|Edit| 72.0,4.0 60.0x24.0
+      -|View| 136.0,4.0 60.0x24.0
+    -|| 0.0,32.0 1280.0x2166.0
+      -|| 0.0,32.0 898.0x2166.0
+        toolBar|| 0.0,32.0 898.0x36.0
+          -|| 6.0,36.0 0.0x28.0
+            spawnBtn|| 6.0,36.0 28.0x28.0
+            -|| 38.0,41.0 1.0x18.0
+            toolBtn0|| 43.0,36.0 28.0x28.0
+            toolBtn1|| 75.0,36.0 28.0x28.0
+            toolBtn2|| 107.0,36.0 28.0x28.0
+            toolBtn3|| 139.0,36.0 28.0x28.0
+            toolBtn4|| 171.0,36.0 28.0x28.0
+            -|| 203.0,41.0 1.0x18.0
+            spaceChoice|Local| 208.0,37.0 71.0x26.0
+            pivotChoice|Pivot| 283.0,37.0 80.0x26.0
+            -|| 367.0,41.0 1.0x18.0
+            snapBtn0|| 372.0,36.0 28.0x28.0
+            snapNum0|1| 404.0,37.0 56.0x26.0
+            -|| 464.0,37.0 22.0x26.0
+            snapBtn1|| 490.0,36.0 28.0x28.0
+            snapNum1|15| 522.0,37.0 56.0x26.0
+            -|| 582.0,37.0 22.0x26.0
+            snapBtn2|| 608.0,36.0 28.0x28.0
+            snapNum2|0.1| 640.0,37.0 56.0x26.0
+            -|| 700.0,37.0 22.0x26.0
+            -|| 726.0,41.0 1.0x18.0
+            playBtn|| 731.0,36.0 28.0x28.0
+            pauseBtn||hidden 6.0,36.0 0.0x0.0
+          -|| 12.0,36.0 950.0x28.0
+            camBtn|| 12.0,36.0 28.0x28.0
+            viewBtn|Lit| 44.0,37.0 886.0x26.0
+            gearBtn|| 934.0,36.0 28.0x28.0
+        viewPane|| 0.0,68.0 898.0x2130.0
+      -|| 898.0,68.0 2.0x2130.0
+      dock|| 900.0,32.0 380.0x2166.0
+        statsPage||hidden 900.0,32.0 0.0x0.0
+          statsBody||hidden 900.0,32.0 0.0x0.0
+        -|| 900.0,32.0 380.0x2166.0
+          -|Hierarchy| 900.0,32.0 380.0x18.0
+          -|Куб| 900.0,50.0 380.0x877.0
+          actors|| 900.0,927.0 380.0x849.0
+            -|| 900.0,927.0 380.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+            -| |hidden 900.0,927.0 0.0x0.0
+          -|| 900.0,1776.0 380.0x2.0
+          insp|| 900.0,1778.0 380.0x420.0
+            -|| 900.0,1778.0 380.0x74.0
+              -|Search| 912.0,1788.0 360.0x26.0
+              -|| 912.0,1822.0 360.0x22.0
+            propPage|| 900.0,1852.0 380.0x346.0
+              detailsInner|| 900.0,1852.0 380.0x0.0
+                details|| 900.0,1852.0 380.0x0.0
+    -|| 0.0,2198.0 1280.0x2.0
+    files|| 0.0,2200.0 1280.0x200.0
+    camPanel||hidden 0.0,0.0 0.0x0.0
+      camProj0|Perspective|hidden 0.0,0.0 0.0x0.0
+      camProj1|Orthographic|hidden 0.0,0.0 0.0x0.0
+      -||hidden 0.0,0.0 0.0x0.0
+      camAxis0|Top|hidden 0.0,0.0 0.0x0.0
+      camAxis1|Bottom|hidden 0.0,0.0 0.0x0.0
+      camAxis2|Left|hidden 0.0,0.0 0.0x0.0
+      camAxis3|Right|hidden 0.0,0.0 0.0x0.0
+      camAxis4|Front|hidden 0.0,0.0 0.0x0.0
+      camAxis5|Back|hidden 0.0,0.0 0.0x0.0
+      -||hidden 0.0,0.0 0.0x0.0
+      -||hidden 0.0,0.0 0.0x0.0
+        -|Field of View|hidden 0.0,0.0 0.0x0.0
+        camFov||hidden 0.0,0.0 0.0x0.0
+        camFovNum|60|hidden 0.0,0.0 0.0x0.0
+      -||hidden 0.0,0.0 0.0x0.0
+      -||hidden 0.0,0.0 0.0x0.0
+        -|Near View Plane|hidden 0.0,0.0 0.0x0.0
+        -||hidden 0.0,0.0 0.0x0.0
+        camNear|0.1|hidden 0.0,0.0 0.0x0.0
+      -||hidden 0.0,0.0 0.0x0.0
+        -|Far View Plane|hidden 0.0,0.0 0.0x0.0
+        -||hidden 0.0,0.0 0.0x0.0
+        camFar|8000|hidden 0.0,0.0 0.0x0.0
+      -||hidden 0.0,0.0 0.0x0.0
+      -||hidden 0.0,0.0 0.0x0.0
+        -|Camera Speed|hidden 0.0,0.0 0.0x0.0
+        -||hidden 0.0,0.0 0.0x0.0
+        camSpeed|4|hidden 0.0,0.0 0.0x0.0
+    viewPanel||hidden 0.0,0.0 0.0x0.0
+      view0|Lit|hidden 0.0,0.0 0.0x0.0
+      view1|Primitive ID|hidden 0.0,0.0 0.0x0.0
+      view2|Normals|hidden 0.0,0.0 0.0x0.0
+      view4|GI|hidden 0.0,0.0 0.0x0.0
+      view5|каскады|hidden 0.0,0.0 0.0x0.0
+      view6|контакт|hidden 0.0,0.0 0.0x0.0
+      view7|луч|hidden 0.0,0.0 0.0x0.0
+      view8|прямой|hidden 0.0,0.0 0.0x0.0
+      view9|альбедо|hidden 0.0,0.0 0.0x0.0
+      view10|солнце|hidden 0.0,0.0 0.0x0.0
+      view11|шероховатость|hidden 0.0,0.0 0.0x0.0
+      view12|металл|hidden 0.0,0.0 0.0x0.0
+      view13|AO|hidden 0.0,0.0 0.0x0.0
+      view14|свечение|hidden 0.0,0.0 0.0x0.0
+      view15|ReSTIR свет|hidden 0.0,0.0 0.0x0.0
+      view16|ReSTIR вес|hidden 0.0,0.0 0.0x0.0
+      view17|ReSTIR M|hidden 0.0,0.0 0.0x0.0
+      view18|ReSTIR тень|hidden 0.0,0.0 0.0x0.0
+      view19|ReSTIR индекс|hidden 0.0,0.0 0.0x0.0
+    statsPanel||hidden 0.0,0.0 0.0x0.0
+      stat0|Show FPS / Frame Time|hidden 0.0,0.0 0.0x0.0
+      stat1|Show GPU Time|hidden 0.0,0.0 0.0x0.0
+      stat2|Show Draw Calls / Triangle Count|hidden 0.0,0.0 0.0x0.0
+      stat3|Show Physics Time (Jolt)|hidden 0.0,0.0 0.0x0.0
+      stat4|Show Memory|hidden 0.0,0.0 0.0x0.0
+      stat5|Show VRAM Memory|hidden 0.0,0.0 0.0x0.0
+    overlay||hidden 0.0,0.0 0.0x0.0
+      statLine0|FPS|hidden 0.0,0.0 0.0x0.0
+      statLine1|Frame|hidden 0.0,0.0 0.0x0.0
+      statLine2|GPU|hidden 0.0,0.0 0.0x0.0
+      statLine3|Draws|hidden 0.0,0.0 0.0x0.0
+      statLine4|Memory|hidden 0.0,0.0 0.0x0.0
+      statLine5|VRAM|hidden 0.0,0.0 0.0x0.0
+  -||hidden 0.0,0.0 0.0x0.0
+  -||hidden 0.0,0.0 0.0x0.0
+  -||hidden 0.0,0.0 0.0x0.0
+  -||hidden 0.0,0.0 0.0x0.0
+  -||hidden 0.0,0.0 0.0x0.0
+    -|Local|hidden 0.0,0.0 0.0x0.0
+    -|World|hidden 0.0,0.0 0.0x0.0
+  -||hidden 0.0,0.0 0.0x0.0
+    -|Pivot|hidden 0.0,0.0 0.0x0.0
+    -|Center|hidden 0.0,0.0 0.0x0.0
+  -||hidden 0.0,0.0 0.0x0.0
+  -||hidden 0.0,0.0 0.0x0.0
+  -||hidden 0.0,0.0 0.0x0.0

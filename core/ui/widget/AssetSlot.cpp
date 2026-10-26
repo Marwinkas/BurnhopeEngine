@@ -9,31 +9,22 @@
 #include "ui/widget/Image.hpp"
 #include "ui/widget/Label.hpp"
 #include "ui/State.hpp"
+#include "ui/Template.hpp"
+#include "ui/StyleSheet.hpp"
 
 namespace burnhope {
 
 uint16_t uiAssetSlot(UiState& s, uint16_t parent, const UiAssetSlotConfig& cfg) {
-    UiFlex row{};
-    row.direction = UiFlexDir::Row;
-    row.heightMode = UiSize::Px;
-    row.height = 28.0f;
-    row.gap = 4.0f;
-    row.grow = 1.0f;
-    row.shrink = 1.0f;
-    row.align = UiAlign::Center;
-    row.padL = 8.0f;
-    row.padR = cfg.onClear != nullptr ? 36.0f : 8.0f;
-    const uint16_t id = uiPanel(s, parent, row, paintToken(s.look, UiToken::Field, s.look.radiusSm));
+    // With a clear button the row reserves room for it on the right.
+    const uint16_t id = uiSpawnTemplate(s, parent, "core/asset_slot", cfg.onClear != nullptr ? "asset_slot_clear" : nullptr);
     if (id == kUiNone) {
         return id;
     }
-    uiSetFocusable(s, id);
-    uiHover(s, id);
+    uiSetGrow(s, id, 1.0f, 1.0f);
     const char* shown = cfg.value != nullptr && cfg.value[0] != '\0' ? cfg.value : cfg.label;
     uiText(s, id, shown != nullptr ? shown : "");
-    uiTextStyle(s, id, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     if (cfg.onClear != nullptr) {
-        const uint16_t clearId = uiButton(s, id, {.label = "x", .width = 28.0f, .height = 24.0f, .onClick = cfg.onClear, .user = cfg.user});
+        const uint16_t clearId = uiButton(s, id, {.cls = "asset_x", .label = "x", .onClick = cfg.onClear, .user = cfg.user});
         (void)clearId;
     }
     if (cfg.onBrowse != nullptr) {
@@ -50,23 +41,11 @@ uint16_t uiAssetSlot(UiState& s, uint16_t parent, const UiAssetSlotConfig& cfg) 
 
 UiTexSlotIds uiTexSlot(UiState& s, uint16_t parent, const UiTexSlotConfig& cfg) {
     UiTexSlotIds out{};
-    UiFlex frameFlex{};
-    frameFlex.widthMode = UiSize::Px;
-    frameFlex.heightMode = UiSize::Px;
-    frameFlex.width = cfg.side;
-    frameFlex.height = cfg.side;
-    frameFlex.shrink = 0.0f;
-    frameFlex.overflow = UiOverflow::Hidden;
-    frameFlex.align = UiAlign::Center;
-    frameFlex.justify = UiJustify::Center;
-    UiPaint framePaint = paintToken(s.look, UiToken::Field, 0.0f);
-    framePaint.borderW = 1.0f;
-    tokenRgb(s.look, UiToken::Muted, framePaint.br, framePaint.bg, framePaint.bb);
-    framePaint.shadow = 0.0f;
-    out.frame = uiPanel(s, parent, frameFlex, framePaint);
+    out.frame = uiSpawnTemplate(s, parent, "core/cluster", "tex_frame");
     if (out.frame == kUiNone) {
         return out;
     }
+    uiSetSize(s, out.frame, cfg.side, cfg.side);
     uiSetFocusable(s, out.frame);
     if (cfg.onBrowse != nullptr) {
         uiBind(s, out.frame, cfg.onBrowse, cfg.user);
@@ -91,13 +70,11 @@ UiTexSlotIds uiTexSlot(UiState& s, uint16_t parent, const UiTexSlotConfig& cfg) 
         }
         uiShow(s, out.thumb, false);
     }
-    out.clear = uiIconBtn(s, out.frame, static_cast<uint8_t>(UiIcon::Dismiss), 18.0f);
+    out.clear = uiButton(s, out.frame, {.cls = "tex_clear", .icon = UiIcon::Dismiss});
     if (out.clear < s.count) {
         uiBind(s, out.clear, cfg.onClear, cfg.user);
-        uiPlaceAbsolute(s, out.clear, cfg.side - 20.0f, 1.0f);
-        if (auto* paint = s.ent[out.clear].try_get_mut<UiPaint>()) {
-            *paint = paintToken(s.look, UiToken::Close, 0.0f);
-        }
+        uiPlaceAbsolute(s, out.clear, cfg.side - uiStyle(s, "tex_clear", UiStyleKey::Width) - uiStyle(s, "tex_clear", UiStyleKey::Offset),
+            uiStyle(s, "tex_clear", UiStyleKey::OffsetY));
         uiShow(s, out.clear, false);
     }
     return out;

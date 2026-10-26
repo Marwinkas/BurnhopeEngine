@@ -1,6 +1,8 @@
 #include "ui/Panel.hpp"
 #include "color/Color.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
+#include "ui/Template.hpp"
 #include "ui/kit/ColorInternal.hpp"
 
 #include <algorithm>
@@ -134,20 +136,11 @@ void uiEnsureColorPopup(UiState& s) {
     if (s.count == 0 || s.yoga[0] == nullptr) {
         return;
     }
-    UiFlex root{};
-    root.position = UiPosition::Absolute;
-    root.direction = UiFlexDir::Column;
-    root.pad = 0.0f;
-    root.gap = 0.0f;
-    root.widthMode = UiSize::Px;
-    root.width = kColorW;
-    root.heightMode = UiSize::Px;
-    root.height = kColorH;
-    root.shrink = 0.0f;
-    const uint16_t id = uiPanel(s, 0, root, paintToken(s.look, UiToken::Menu, 0.0f));
+    const uint16_t id = uiSpawnTemplate(s, 0, "core/panel", "color_popup");
     if (id == kUiNone) {
         return;
     }
+    uiPlace(s, id, true, 0.0f, 0.0f, 0.0f, 0.0f);
     UiColorPickerComponent& picker = colorBind(s, id);
     picker.colorHost = 0;
     if (picker.colorSeen == 0) {
@@ -156,14 +149,9 @@ void uiEnsureColorPopup(UiState& s) {
     picker.colorPanel = id;
     colorInk(picker).present = 0;
     picker.colorApplied = 0;
-    colorHead(s, id);
-    UiFlex body{};
-    body.direction = UiFlexDir::Column;
-    body.pad = kColorPad;
-    body.gap = 8.0f;
-    body.grow = 1.0f;
-    body.shrink = 1.0f;
-    const uint16_t bodyId = uiPanel(s, id, body, paintClear());
+    colorHead(s, id, "Color");
+    const uint16_t bodyId = uiSpawnTemplate(s, id, "core/panel", "color_body");
+    uiSetGrow(s, bodyId, 1.0f, 1.0f); // the body takes what the title leaves
     fillColorBody(s, bodyId);
     uiShow(s, id, false);
 }

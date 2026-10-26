@@ -34,5 +34,7 @@ inline const UiCalendarComponent* uiCal(const UiState& s) {
 void uiCalSetTarget(UiState& s, uint16_t field);
 void uiInstallCalendarBin(UiState& s);
 void calOnOpen(void* user, uint16_t id);
+// Builds a calendar panel of w x h at x, y under `parent`; returns the panel.
+uint16_t uiBuildCalendar(UiState& s, uint16_t parent, float x, float y, float w, float h);
 
 } // namespace burnhope

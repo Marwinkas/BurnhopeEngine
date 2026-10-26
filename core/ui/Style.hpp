@@ -57,6 +57,8 @@ struct UiPaint {
     uint8_t plate = 0;
     uint8_t picked = 0;
     uint8_t hoverKids = 0;
+    UiToken idleToken = UiToken::Custom;   // token while inactive, restored by uiSetActive(false)
+    UiToken activeToken = UiToken::Custom; // token while active; Custom: the node has no active look
     UiRamp ramp = UiRamp::None;
     bool disabled = false;
     uint8_t iconLeft = 0;      // > 0: a labeled node draws its icon this many px from the left edge instead of the right
@@ -105,6 +107,10 @@ struct UiLook {
         {0.45f, 0.72f, 0.48f},
         {0.86f, 0.55f, 0.32f},
     };
+    // Glyph ink of plate-less tool buttons by state (idle gray, hover white, active orange).
+    float tool[3]{0.75f, 0.78f, 0.84f};
+    float toolHover[3]{1.0f, 1.0f, 1.0f};
+    float toolActive[3]{1.0f, 0.55f, 0.10f};
     float radius = 8.0f;
     float radiusSm = 6.0f;
     float motion = 0.14f;
@@ -118,6 +124,40 @@ struct UiLook {
     float popupAlpha = 0.88f;
     float popupBorder = 1.0f;
     float popupRadius = -1.0f;
+};
+
+// A fill at or below this alpha is invisible: it neither blocks the pointer nor casts a shadow. A border thinner than
+// kUiBorderMinW is not drawn.
+constexpr float kUiInvisibleAlpha = 0.02f;
+constexpr float kUiBorderMinW = 0.4f;
+
+// Render-path numbers every node shares: the "ui" and "minimap" classes of assets/ui/styles.json (uiStyleLoad fills
+// this). The member defaults are what the shipped sheet carries, so a state without a sheet draws the same.
+struct UiPaintStyle {
+    float disabledAlpha = 0.45f;  // alpha multiplier of a disabled node
+    float hoverLift = 0.08f;      // channel lift of a hovered node when the look sets none
+    float hoverMinAlpha = 0.12f;  // a hovered node fainter than this ...
+    float hoverFallback = 0.28f;  // ... is drawn at this alpha
+    float shadowDy = 0.15f;       // shadow offset down, in shadow radii
+    float shadowAlpha = 0.42f;
+    float shadowGrow = 1.0f;      // shadow spread, in shadow radii
+    float iconSide = 14.0f;       // icon beside a label on the right, and of a node too small to fit one
+    float iconLeft = 16.0f;       // icon on the left of a label unless the paint sets a side
+    float iconInset = 6.0f;       // gap between a right-hand icon and the node edge
+    float iconFitMin = 18.0f;     // a node smaller than this uses iconSide, a larger one fits (edge - iconFitPad)
+    float iconFitPad = 4.0f;
+    float iconMin = 12.0f;
+    float iconMax = 72.0f;
+    float toolIcon = 20.0f;       // glyph of a plate-less tool button
+    float inkThreshold = 0.72f;   // luminance above which text on a fill switches to the dark ink
+    float mapW = 72.0f;           // image minimap
+    float mapH = 48.0f;
+    float mapMargin = 8.0f;
+    float mapPad = 2.0f;
+    float mapAlpha = 0.9f;
+    float mapRadius = 3.0f;
+    float mapMinW = 120.0f;       // smallest image box that shows a minimap
+    float mapMinH = 90.0f;
 };
 
 // Множитель альфы узла и его детей. 1 — без изменений.
@@ -228,33 +268,6 @@ inline void paintRaised(UiPaint& paint) noexcept {
     paint.bb = paint.b + lift > 1.0f ? 1.0f : paint.b + lift;
 }
 
-inline void paintSunken(UiPaint& paint) noexcept {
-    paint.borderW = 2.0f;
-    paint.shadow = 3.0f;
-    paint.br = paint.r * 0.35f;
-    paint.bg = paint.g * 0.35f;
-    paint.bb = paint.b * 0.35f;
-}
-
-inline UiPaint paintButton(const UiLook& look) noexcept {
-    UiPaint out = paintToken(look, UiToken::Button, look.radiusSm);
-    paintRaised(out);
-    return out;
-}
-
-inline UiPaint paintButtonFill(const UiLook& look) noexcept {
-    UiPaint out = paintToken(look, UiToken::Button, look.radiusSm);
-    out.borderW = 0.0f;
-    out.shadow = 0.0f;
-    return out;
-}
-
-inline UiPaint paintField(const UiLook& look) noexcept {
-    UiPaint out = paintToken(look, UiToken::Field, look.radiusSm);
-    paintSunken(out);
-    return out;
-}
-
 // The one look of every popup surface (menus, choices, popovers): translucent window fill with a crisp 1px border.
 inline UiPaint paintPopup(const UiLook& look) noexcept {
     UiPaint out = paintToken(look, UiToken::Window, look.popupRadius >= 0.0f ? look.popupRadius : look.radiusSm);
@@ -287,110 +300,6 @@ inline void paintGhost(UiPaint& paint) noexcept {
     paint.borderW = 0.0f;
     paint.shadow = 0.0f;
     paint.radius = 0.0f;
-}
-
-// Toolbar tool icons ("tool_icon"): no plate and no border, one glyph size, ink by state (idle gray, hover white, active orange).
-constexpr float kUiToolRadius = 4.0f;
-constexpr float kUiToolIconSide = 20.0f;
-inline constexpr float kUiToolIdle[3]{0.75f, 0.78f, 0.84f};
-inline constexpr float kUiToolHover[3]{1.0f, 1.0f, 1.0f};
-inline constexpr float kUiToolActive[3]{1.0f, 0.55f, 0.10f};
-
-inline void paintToolIcon(UiPaint& paint) noexcept {
-    paintGhost(paint);
-    paint.radius = kUiToolRadius;
-    paint.radiusTr = kUiUnset;
-    paint.radiusBr = kUiUnset;
-    paint.radiusBl = kUiUnset;
-    paint.plate = 1;
-    paint.bright = 1.0f;
-    paintTint(paint, kUiToolIdle);
-}
-
-inline UiLook uiLookInk() noexcept {
-    UiLook look{};
-    const float paper[3]{0.11f, 0.11f, 0.12f};
-    const float raised[3]{0.20f, 0.20f, 0.22f};
-    const float ink[3]{0.94f, 0.94f, 0.92f};
-    const float orange[3]{0.93f, 0.45f, 0.12f};
-    look.window[0] = 0.07f;
-    look.window[1] = 0.07f;
-    look.window[2] = 0.08f;
-    look.title[0] = paper[0];
-    look.title[1] = paper[1];
-    look.title[2] = paper[2];
-    look.side[0] = paper[0];
-    look.side[1] = paper[1];
-    look.side[2] = paper[2];
-    look.content[0] = 0.14f;
-    look.content[1] = 0.14f;
-    look.content[2] = 0.15f;
-    look.button[0] = raised[0];
-    look.button[1] = raised[1];
-    look.button[2] = raised[2];
-    look.field[0] = 0.08f;
-    look.field[1] = 0.08f;
-    look.field[2] = 0.09f;
-    look.menu[0] = 0.16f;
-    look.menu[1] = 0.16f;
-    look.menu[2] = 0.18f;
-    look.close[0] = orange[0];
-    look.close[1] = orange[1];
-    look.close[2] = orange[2];
-    look.text[0] = ink[0];
-    look.text[1] = ink[1];
-    look.text[2] = ink[2];
-    look.muted[0] = 0.45f;
-    look.muted[1] = 0.45f;
-    look.muted[2] = 0.48f;
-    look.item[0] = raised[0];
-    look.item[1] = raised[1];
-    look.item[2] = raised[2];
-    look.preview[0] = orange[0];
-    look.preview[1] = orange[1];
-    look.preview[2] = orange[2];
-    look.status[0] = ink[0];
-    look.status[1] = ink[1];
-    look.status[2] = ink[2];
-    look.slider[0] = 0.05f;
-    look.slider[1] = 0.05f;
-    look.slider[2] = 0.06f;
-    look.check[0] = raised[0];
-    look.check[1] = raised[1];
-    look.check[2] = raised[2];
-    look.chrome[0] = paper[0];
-    look.chrome[1] = paper[1];
-    look.chrome[2] = paper[2];
-    for (int i = 0; i < 3; ++i) {
-        look.accent[0][i] = orange[i];
-        look.accent[1][i] = orange[i];
-    }
-    look.accent[2][0] = 0.55f;
-    look.accent[2][1] = 0.22f;
-    look.accent[2][2] = 0.05f;
-    look.radius = 3.0f;
-    look.radiusSm = 2.0f;
-    return look;
-}
-
-inline UiLook uiLookWarm() noexcept {
-    UiLook look{};
-    look.window[0] = 0.16f;
-    look.window[1] = 0.12f;
-    look.window[2] = 0.09f;
-    look.title[0] = 0.22f;
-    look.title[1] = 0.16f;
-    look.title[2] = 0.11f;
-    look.content[0] = 0.14f;
-    look.content[1] = 0.11f;
-    look.content[2] = 0.08f;
-    look.button[0] = 0.28f;
-    look.button[1] = 0.20f;
-    look.button[2] = 0.14f;
-    look.text[0] = 0.96f;
-    look.text[1] = 0.93f;
-    look.text[2] = 0.86f;
-    return look;
 }
 
 } // namespace burnhope

@@ -31,7 +31,6 @@ struct UiPass {};      // Пропуск клика сквозь элемент
 
 using UiCommandFn = void (*)(void* user, uint16_t item);
 using UiClickFn   = void (*)(void* user, uint16_t id);
-using UiValueFn   = void (*)(void* user, uint16_t id, float value);
 using UiDragFn    = void (*)(void* user, uint16_t id, float x, float y);
 using UiEditFn    = void (*)(void* user, uint16_t id);
 using UiGrabFn    = bool (*)(void* user, uint16_t hit, float x, float y);

@@ -4,6 +4,7 @@
 #include "ui/Command.hpp"
 #include "ui/Icon.hpp"
 #include "ui/Panel.hpp"
+#include "ui/Theme.hpp"
 #include "host/HostNote.hpp"
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Docking.hpp"
@@ -18,6 +19,7 @@
 #include "app/Shell.hpp"
 
 #include <cmath>
+#include <spdlog/spdlog.h>
 #include <cstring>
 #include <ctime>
 
@@ -184,6 +186,9 @@ void cmdTheme(void* user, uint16_t) {
 
 void uiBuildShell(UiState& s, SampleShell& shell) {
     shell.state = &s;
+    if (!uiThemeLoadAsset(s, "assets/ui/theme.json")) {
+        spdlog::warn("sample: assets/ui/theme.json is unavailable, themes fall back to the default palette");
+    }
     const uint16_t root = uiImportBinFile(s, kUiNone, BH_UI_SHELL);
     auto take = [&](const char* name) { return uiFindName(s, name); };
     auto link = [&](const char* from, const char* to) {

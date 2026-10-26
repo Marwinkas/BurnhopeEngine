@@ -5,7 +5,6 @@
 #include "ui/Geometry.hpp"
 #include "ui/Interaction.hpp"
 #include "ui/LayoutBridge.hpp"
-#include "ui/Metrics.hpp"
 #include "ui/Nodes.hpp"
 #include "ui/Primitive.hpp"
 #include "ui/Style.hpp"
@@ -36,11 +35,6 @@ using UiClearFn = void (*)(UiState& s);
 using UiSpawnFn = void (*)(UiState& s, uint16_t id);
 // Maps an asset-path icon to a photo slot, loading it on first use; kPhotoNone when the file cannot be loaded.
 using UiIconResolveFn = uint8_t (*)(UiState& s, const char* path, void* user);
-struct UiValueListen {
-    UiValueFn fn = nullptr;
-    void* user = nullptr;
-    bool operator==(const UiValueListen&) const = default;
-};
 inline constexpr uint8_t kUiHookCap = 32;
 // Fixed-capacity registry of callbacks: no heap, registration order is call order, duplicates are ignored.
 template <class T>
@@ -114,12 +108,9 @@ struct UiState {
     uint16_t focused = kUiNone;
     uint16_t capture = kUiNone;
     UiHookList<UiInputHookFn> inputHook;
-    UiHookList<UiDrawFn> drawHook;
     UiHookList<UiDrawFn> underHook;
     UiHookList<UiDrawFn> decorHook;
-    UiHookList<UiOverlayDrawFn> overlayHook;
     UiHookList<void (*)(UiState&)> placeHook;
-    UiHookList<UiValueListen> valueHook;
     UiPlug plug{};
     uint8_t cursor = 0;
     uint8_t culled[kUiCap]{};
@@ -144,7 +135,7 @@ struct UiState {
     float prevTime = 0;
     bool altLook = false;
     UiLook look{};
-    UiMetrics metrics{};
+    UiPaintStyle paintStyle{};
     UiFontAtlas font{};
     UiAnim anim[kUiCap]{};
     float laidW = -1.0f;
@@ -153,7 +144,6 @@ struct UiState {
     bool visualDirty = true;
     uint8_t dumpLayout = 0;
     uint16_t layoutFrom = kUiNone;
-    UiLayoutFinishHook layoutFinishHook{};
     uint8_t relative = 0;
     uint8_t ateWheel = 0;
     float dpi = 1;
@@ -225,10 +215,8 @@ uint16_t uiMarked(const UiState& s) {
     return uiMarkedOther<Tag>(s, kUiNone);
 }
 
-void uiDrawAdd(UiState& s, UiDrawFn fn);
 void uiDrawUnderAdd(UiState& s, UiDrawFn fn);
 void uiDrawDecorAdd(UiState& s, UiDrawFn fn);
-void uiOverlayAdd(UiState& s, UiOverlayDrawFn fn);
 void uiClearAdd(UiState& s, UiClearFn fn);
 void uiRegisterSpawnHook(UiState& s, uint8_t role, UiSpawnFn fn);
 void uiRegisterRoleFinish(UiState& s, uint8_t role, UiRoleFinishFn fn);

@@ -9,6 +9,7 @@
 #include "ui/Hover.hpp"
 #include "ui/Icon.hpp"
 #include "ui/Panel.hpp"
+#include "ui/Theme.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Curve.hpp"
@@ -33,7 +34,6 @@ namespace burnhope {
 
 namespace {
 
-constexpr float kToolH = 30.0f;
 
 void onScale(void* user, uint16_t id, float value) {
     auto* demo = static_cast<ShellDemo*>(user);
@@ -167,7 +167,11 @@ void growCmd(void* user, uint16_t) {
 void warmCmd(void* user, uint16_t) {
     auto* demo = static_cast<ShellDemo*>(user);
     if (demo != nullptr && demo->canvas != nullptr) {
-        canvasSetLook(*demo->canvas, uiLookWarm());
+        UiLook warm{};
+        if (!uiThemeLook(*demo->canvas->state, "warm", warm)) {
+            spdlog::warn("ui: theme \"warm\" is not loaded");
+        }
+        canvasSetLook(*demo->canvas, warm);
     }
 }
 
@@ -237,8 +241,7 @@ void shellBuild(Canvas& canvas, void* user) {
     const uint16_t section = uiPanel(s, look, block, paintClear());
 
     const UiLook theme = uiLook(s);
-    const float textH = uiLook(s).glyphH + 6.0f;
-    (void)uiButton(s, section, {.label = "YOGA GROW", .height = textH, .ghost = true, .onClick = toggleChips, .user = demo});
+    (void)uiButton(s, section, {.cls = "demo_text", .label = "YOGA GROW", .onClick = toggleChips, .user = demo});
 
     UiFlex strip{};
     strip.direction = UiFlexDir::Row;
@@ -284,9 +287,9 @@ void shellBuild(Canvas& canvas, void* user) {
     const uint16_t inner = uiPanel(s, nest, innerFlex, paintToken(theme, UiToken::Item, theme.radius));
     (void)uiLabel(s, inner, "NESTED LAYER");
 
-    (void)uiButton(s, section, {.label = "DROP LAST", .height = textH, .ghost = true, .onClick = onDropLast, .user = demo});
-    (void)uiButton(s, section, {.label = "DROP FIRST", .height = textH, .ghost = true, .onClick = onDropFirst, .user = demo});
-    (void)uiButton(s, section, {.label = "TOOLS", .height = textH, .ghost = true, .onClick = toggleTools, .user = demo});
+    (void)uiButton(s, section, {.cls = "demo_text", .label = "DROP LAST", .onClick = onDropLast, .user = demo});
+    (void)uiButton(s, section, {.cls = "demo_text", .label = "DROP FIRST", .onClick = onDropFirst, .user = demo});
+    (void)uiButton(s, section, {.cls = "demo_text", .label = "TOOLS", .onClick = toggleTools, .user = demo});
     UiFlex toolsFlex{};
     toolsFlex.direction = UiFlexDir::Row;
     toolsFlex.gap = 8.0f;
@@ -295,10 +298,10 @@ void shellBuild(Canvas& canvas, void* user) {
     toolsFlex.height = 36.0f;
     const uint16_t tools = uiPanel(s, section, toolsFlex, paintClear());
     demo->tools = tools;
-    (void)uiButton(s, tools, {.label = "SAVE", .height = kToolH, .icon = UiIcon::Folder, .onClick = logPick, .user = demo});
-    (void)uiButton(s, tools, {.label = "PICK", .height = kToolH, .icon = UiIcon::Menu, .onClick = logPick, .user = demo});
-    (void)uiButton(s, tools, {.width = kToolH, .height = kToolH, .icon = UiIcon::Gear, .onClick = onToolWindow, .user = demo});
-    (void)uiButton(s, tools, {.label = "WINDOW", .height = kToolH, .icon = UiIcon::Folder, .onClick = toggleSettings, .user = demo});
+    (void)uiButton(s, tools, {.cls = "demo_tool", .label = "SAVE", .icon = UiIcon::Folder, .onClick = logPick, .user = demo});
+    (void)uiButton(s, tools, {.cls = "demo_tool", .label = "PICK", .icon = UiIcon::Menu, .onClick = logPick, .user = demo});
+    (void)uiButton(s, tools, {.cls = "demo_tool_icon", .icon = UiIcon::Gear, .onClick = onToolWindow, .user = demo});
+    (void)uiButton(s, tools, {.cls = "demo_tool", .label = "WINDOW", .icon = UiIcon::Folder, .onClick = toggleSettings, .user = demo});
 
     UiFlex homeFlex{};
     homeFlex.direction = UiFlexDir::Column;
@@ -320,18 +323,18 @@ void shellBuild(Canvas& canvas, void* user) {
     uiDockBind(s, home, dock, 15);
     const uint16_t inspector = uiDragFoldHeader(s, dock, "INSPECTOR");
     (void)uiLabel(s, inspector, "drag the header out, drop it here or press DOCK");
-    (void)uiButton(s, inspector, {.label = "DOCK", .height = kToolH, .onClick = onDock, .user = demo});
-    (void)uiButton(s, inspector, {.label = "LEFT", .height = textH, .ghost = true, .onClick = onEdgeLeft, .user = demo});
-    (void)uiButton(s, inspector, {.label = "RIGHT", .height = textH, .ghost = true, .onClick = onEdgeRight, .user = demo});
-    (void)uiButton(s, inspector, {.label = "TOP", .height = textH, .ghost = true, .onClick = onEdgeTop, .user = demo});
-    (void)uiButton(s, inspector, {.label = "BOTTOM", .height = textH, .ghost = true, .onClick = onEdgeBottom, .user = demo});
+    (void)uiButton(s, inspector, {.cls = "demo_tool", .label = "DOCK", .onClick = onDock, .user = demo});
+    (void)uiButton(s, inspector, {.cls = "demo_text", .label = "LEFT", .onClick = onEdgeLeft, .user = demo});
+    (void)uiButton(s, inspector, {.cls = "demo_text", .label = "RIGHT", .onClick = onEdgeRight, .user = demo});
+    (void)uiButton(s, inspector, {.cls = "demo_text", .label = "TOP", .onClick = onEdgeTop, .user = demo});
+    (void)uiButton(s, inspector, {.cls = "demo_text", .label = "BOTTOM", .onClick = onEdgeBottom, .user = demo});
 
     const uint16_t settings = uiFloatWindow(s, 0, 640.0f, 160.0f, 300.0f, 168.0f);
     uiSetGap(s, settings, 8.0f);
     demo->settings = settings;
     const uint16_t settingsPage = uiDragFoldHeader(s, settings, "SETTINGS");
     (void)uiLabel(s, settingsPage, "separate window, drag the header");
-    (void)uiButton(s, settingsPage, {.label = "CLOSE", .height = kToolH, .icon = UiIcon::Dismiss, .onClick = toggleSettings, .user = demo});
+    (void)uiButton(s, settingsPage, {.cls = "demo_tool", .label = "CLOSE", .icon = UiIcon::Dismiss, .onClick = toggleSettings, .user = demo});
 
     const uint16_t sectionMenu = uiMakeMenu(s);
     const uint16_t chipMenu = uiMakeMenu(s);
@@ -367,7 +370,7 @@ void toolBuild(Canvas& canvas, void*) {
     const uint16_t page = uiPanel(s, root, body, paintClear());
     (void)uiLabel(s, page, "Separate OS window.");
     (void)uiLabel(s, page, "Drag the title. Resize any edge.");
-    (void)uiButton(s, page, {.label = "PING", .height = kToolH, .icon = UiIcon::Menu});
+    (void)uiButton(s, page, {.cls = "demo_tool", .label = "PING", .icon = UiIcon::Menu});
     (void)uiCurve(s, page);
     (void)uiGradient(s, page);
 }

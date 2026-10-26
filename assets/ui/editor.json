@@ -166,8 +166,7 @@
                         },
                         {
                           "role": "sep",
-                          "w": 1,
-                          "h": 18,
+                          "class": "separator",
                           "paint": "sep"
                         },
                         {
@@ -212,8 +211,7 @@
                         },
                         {
                           "role": "sep",
-                          "w": 1,
-                          "h": 18,
+                          "class": "separator",
                           "paint": "sep"
                         },
                         {
@@ -246,8 +244,7 @@
                         },
                         {
                           "role": "sep",
-                          "w": 1,
-                          "h": 18,
+                          "class": "separator",
                           "paint": "sep"
                         },
                         {
@@ -427,8 +424,7 @@
                         },
                         {
                           "role": "sep",
-                          "w": 1,
-                          "h": 18,
+                          "class": "separator",
                           "paint": "sep"
                         },
                         {

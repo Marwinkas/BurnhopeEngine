@@ -1,0 +1,12 @@
+{
+  "role": "row",
+  "class": "cw_title",
+  "flex": { "dir": "row", "align": "center", "shrink": 0 },
+  "traits": ["titlebar"],
+  "parts": [
+    { "use": "core/label", "name": "brand" },
+    { "role": "gap", "name": "gap", "class": "cw_gap", "flex": { "grow": 1, "shrink": 1 } },
+    { "use": "core/button", "name": "close", "class": "title_close" }
+  ],
+  "slots": { "brand": "brand", "close": "close" }
+}

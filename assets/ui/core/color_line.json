@@ -1,0 +1,11 @@
+{
+  "role": "row",
+  "class": "cw_line",
+  "flex": { "dir": "row", "align": "center", "shrink": 0 },
+  "parts": [
+    { "use": "core/label", "name": "label" },
+    { "use": "core/slider", "name": "slider", "flex": { "wp": 100 } },
+    { "use": "core/field", "name": "num", "class": "cw_num" }
+  ],
+  "slots": { "label": "label", "slider": "slider", "num": "num" }
+}

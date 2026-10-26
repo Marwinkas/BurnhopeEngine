@@ -101,21 +101,29 @@ uint16_t makeHosted(Import& in, uint16_t parent, const Node& node, const PropRol
     return id;
 }
 
-struct ExtraSpawn {
+struct RoleSpawn {
     const char* role;
     uint16_t (*make)(Import& in, uint16_t parent, const Node& node);
 };
 
-constexpr ExtraSpawn kExtraSpawns[] = {
-    {"segment", makeSegment},
-    {"preview", makePreview},
-    {"pick", makePick},
+constexpr RoleSpawn kRoleSpawns[] = {
+    {"section", makeSection}, {"fold", makeFold}, {"group", makeGroup}, {"slider", makeSlider},
+    {"swatch", makeSwatch}, {"vec2", makeVec2}, {"vec3", makeVec3}, {"menu", makeMenu},
+    {"panel", spawnPanel}, {"sep", spawnPanel}, {"scroll", spawnScroll}, {"split", makeSplit},
+    {"filter", makeFilter}, {"host", makeHost}, {"label", makeLabel}, {"button", makeButton},
+    {"menubutton", makeButton}, {"icon", makeIcon}, {"slot", makeSlot}, {"choice", makeChoice},
+    {"number", makeNumber}, {"range", makeRange}, {"list", makeList}, {"spacer", makeSpacer},
+    {"check", makeCheck}, {"segment", makeSegment}, {"preview", makePreview}, {"pick", makePick},
 };
 
 } // namespace
 
-bool spawnExtra(Import& in, uint16_t parent, const Node& node, uint16_t& out) {
-    for (const ExtraSpawn& entry : kExtraSpawns) {
+bool spawnRole(Import& in, uint16_t parent, const Node& node, uint16_t& out) {
+    if (node.use[0] != '\0') {
+        out = makeUse(in, parent, node);
+        return out != kUiNone;
+    }
+    for (const RoleSpawn& entry : kRoleSpawns) {
         if (std::strcmp(node.role, entry.role) == 0) {
             out = entry.make(in, parent, node);
             return true;

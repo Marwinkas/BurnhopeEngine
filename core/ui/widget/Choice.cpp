@@ -54,12 +54,15 @@ uint16_t loadChoice(UiState& s, uint16_t parent, const BinNode& node, const BinT
     if (selected >= count) {
         selected = 0;
     }
-    return uiChoice(s, parent, {
+    const uint16_t id = uiChoice(s, parent, {
         .labels = labels,
         .count = count,
         .selected = selected,
-        .width = node.width > 48.0f ? node.width : 140.0f,
     });
+    if (node.width > 48.0f) {
+        uiSetWidth(s, id, node.width);
+    }
+    return id;
 }
 
 } // namespace
@@ -92,15 +95,9 @@ uint16_t uiChoice(UiState& s, uint16_t parent, const UiChoiceConfig& cfg) {
     if (menu == kUiNone) {
         return kUiNone;
     }
-    const uint16_t id = uiMenuButton(s, parent, cfg.labels[selected] != nullptr ? cfg.labels[selected] : "", menu);
+    const uint16_t id = uiMenuButton(s, parent, cfg.labels[selected] != nullptr ? cfg.labels[selected] : "", menu, "core/choice");
     if (id == kUiNone) {
         return id;
-    }
-    if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
-        flex->widthMode = UiSize::Px;
-        flex->width = cfg.width > 1.0f ? cfg.width : 140.0f;
-        flex->grow = 0.0f;
-        flex->shrink = 0.0f;
     }
     for (uint8_t i = 0; i < cfg.count; ++i) {
         (void)uiMenuRow(s, menu, cfg.labels[i] != nullptr ? cfg.labels[i] : "", nullptr, nullptr, i, id, kUiNone);
@@ -169,7 +166,7 @@ void uiChoiceSelect(UiState& s, uint16_t id, uint8_t index, const char* label) {
 float uiChoiceWidth(const UiState& s, const char* const* labels, uint8_t count) {
     float widest = 0.0f;
     if (labels == nullptr) {
-        return 26.0f;
+        return uiStyle(s, "choice", UiStyleKey::Chrome);
     }
     for (uint8_t i = 0; i < count; ++i) {
         uint8_t len = 0;
@@ -182,7 +179,7 @@ float uiChoiceWidth(const UiState& s, const char* const* labels, uint8_t count) 
             widest = measured;
         }
     }
-    return widest + 26.0f;
+    return widest + uiStyle(s, "choice", UiStyleKey::Chrome);
 }
 
 void uiChoiceFit(UiState& s, uint16_t button, float width) {
@@ -195,12 +192,7 @@ void uiChoiceFit(UiState& s, uint16_t button, float width) {
         flex->minW = 0.0f;
         flex->grow = 0.0f;
         flex->shrink = 0.0f;
-        flex->heightMode = UiSize::Px;
-        flex->height = uiStyle(s, "dropdown_trigger", UiStyleKey::Height, 26.0f);
         flex->self = UiAlignSelf::Center;
-        flex->padL = uiStyle(s, "dropdown_trigger", UiStyleKey::PadL, 8.0f);
-        flex->padR = uiStyle(s, "dropdown_trigger", UiStyleKey::PadR, 22.0f);
-        flex->gap = 2.0f;
     }
     const UiChoice* choice = s.ent[button].try_get<UiChoice>();
     if (choice != nullptr && choice->menu < s.count) {

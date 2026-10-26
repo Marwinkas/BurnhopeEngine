@@ -3,8 +3,10 @@
 #include "ui/widget/ColorPicker.hpp"
 #include "color/Color.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <algorithm>
+#include <numbers>
 #include <cmath>
 
 namespace burnhope {
@@ -42,6 +44,11 @@ void colorPlaceNode(UiState& s, uint16_t id, const UiColorPickerComponent* color
         return;
     }
     const UiBox& box = s.box[id];
+    const float ring = uiStyle(s, "color_marks", UiStyleKey::HandleSide); // wheel marker: white ring around a dot of the colour
+    const float dot = uiStyle(s, "color_marks", UiStyleKey::Inner);
+    const float tick = uiStyle(s, "color_marks", UiStyleKey::Width);      // value / alpha marker thickness
+    const float over = uiStyle(s, "color_marks", UiStyleKey::Offset);     // how far a marker overhangs its bar
+    const float corner = uiStyle(s, "color_marks", UiStyleKey::Radius);
     UiRampDraw drawn{};
     UiNodeBars bars{};
     if (ramp == UiRamp::HueWheel) {
@@ -50,11 +57,11 @@ void colorPlaceNode(UiState& s, uint16_t id, const UiColorPickerComponent* color
         drawn.mode = 0;
         drawn.flags = kUiFlagWheel;
         const float radius = std::min(box.w, box.h) * 0.5f;
-        const float ang = (colorInk(*color).h - 0.5f) * 6.2831853f;
+        const float ang = (colorInk(*color).h - 0.5f) * std::numbers::pi_v<float> * 2.0f;
         const float mx = box.x + box.w * 0.5f + std::cos(ang) * colorInk(*color).s * radius;
         const float my = box.y + box.h * 0.5f + std::sin(ang) * colorInk(*color).s * radius;
-        pushColorBar(s, bars, mx - 7.0f, my - 7.0f, 14.0f, 14.0f, kUiWhite[0], kUiWhite[1], kUiWhite[2], 1.0f, 7.0f);
-        pushColorBar(s, bars, mx - 4.0f, my - 4.0f, 8.0f, 8.0f, colorInk(*color).r, colorInk(*color).g, colorInk(*color).b, 1.0f, 4.0f);
+        pushColorBar(s, bars, mx - ring * 0.5f, my - ring * 0.5f, ring, ring, kUiWhite[0], kUiWhite[1], kUiWhite[2], 1.0f, ring * 0.5f);
+        pushColorBar(s, bars, mx - dot * 0.5f, my - dot * 0.5f, dot, dot, colorInk(*color).r, colorInk(*color).g, colorInk(*color).b, 1.0f, dot * 0.5f);
     } else if (ramp == UiRamp::ValueRamp) {
         ColorLinear hue{};
         colorHsvToLinear(colorInk(*color).h, colorInk(*color).s, 1.0f, hue);
@@ -64,7 +71,7 @@ void colorPlaceNode(UiState& s, uint16_t id, const UiColorPickerComponent* color
         drawn.mode = 1;
         drawn.flags = kUiFlagRamp;
         const float ty = box.y + (1.0f - colorInk(*color).v) * box.h;
-        pushColorBar(s, bars, box.x - 2.0f, ty - 3.0f, box.w + 4.0f, 6.0f, kUiWhite[0], kUiWhite[1], kUiWhite[2], 1.0f, 2.0f);
+        pushColorBar(s, bars, box.x - over, ty - tick * 0.5f, box.w + over * 2.0f, tick, kUiWhite[0], kUiWhite[1], kUiWhite[2], 1.0f, corner);
     } else if (ramp == UiRamp::Gradient) {
         drawn.mode = 6;
         drawn.flags = kUiFlagRamp;
@@ -78,7 +85,7 @@ void colorPlaceNode(UiState& s, uint16_t id, const UiColorPickerComponent* color
         drawn.mode = 2;
         drawn.flags = kUiFlagRamp;
         const float tx = box.x + colorInk(*color).a * box.w;
-        pushColorBar(s, bars, tx - 3.0f, box.y - 2.0f, 6.0f, box.h + 4.0f, kUiWhite[0], kUiWhite[1], kUiWhite[2], 1.0f, 2.0f);
+        pushColorBar(s, bars, tx - tick * 0.5f, box.y - over, tick, box.h + over * 2.0f, kUiWhite[0], kUiWhite[1], kUiWhite[2], 1.0f, corner);
     }
     if (auto* live = s.ent[id].try_get_mut<UiRampDraw>()) {
         *live = drawn;

@@ -1,0 +1,8 @@
+{
+  "role": "fold_clip",
+  "flex": { "dir": "column", "shrink": 0 },
+  "parts": [
+    { "name": "body", "role": "fold_body", "class": "fold_body", "flex": { "dir": "column", "shrink": 0 } }
+  ],
+  "slots": { "body": "body" }
+}

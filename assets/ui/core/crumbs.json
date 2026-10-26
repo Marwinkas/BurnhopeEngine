@@ -1,0 +1,6 @@
+{
+  "role": "crumbs",
+  "class": "crumbs",
+  "flex": { "dir": "row", "align": "center", "justify": "start" },
+  "traits": ["visible"]
+}

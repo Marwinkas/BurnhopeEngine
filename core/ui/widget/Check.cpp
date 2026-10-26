@@ -6,6 +6,7 @@
 #include "ui/Panel.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/State.hpp"
+#include "ui/Template.hpp"
 #include "ui/Text.hpp"
 
 #include <bit>
@@ -126,22 +127,11 @@ void finishCheck(UiState& s, uint16_t id, const BinTail* spec, const char*, cons
 } // namespace
 
 uint16_t uiCheck(UiState& s, uint16_t parent, const char* text, uint8_t kind, uint8_t group, bool on) {
-    UiFlex flex{};
-    flex.widthMode = UiSize::Percent;
-    flex.width = 100.0f;
-    flex.heightMode = UiSize::Px;
-    flex.height = s.metrics.checkH;
-    flex.padL = 36.0f;
-    flex.padR = 8.0f;
-    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Check, s.look.radiusSm));
+    const uint16_t id = uiSpawnTemplate(s, parent, "core/checkbox");
     if (id == kUiNone) {
         return id;
     }
     uiText(s, id, text != nullptr ? text : "");
-    uiTextStyle(s, id, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-    clearRow(s, id);
-    uiHover(s, id);
-    uiSetFocusable(s, id);
     uiBindCheck(s, id, kind, group, on);
     return id;
 }

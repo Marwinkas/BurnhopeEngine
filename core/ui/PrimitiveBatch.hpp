@@ -2,6 +2,7 @@
 
 #include "ui/Geometry.hpp"
 #include "ui/Primitive.hpp"
+#include "ui/Style.hpp"
 
 namespace burnhope {
 
@@ -64,6 +65,7 @@ uint32_t emitMark(
     uint32_t flag,
     const UiBox* clip);
 uint32_t uiEmitSprite(
+    const UiPaintStyle& style,
     UiPrimitive* dst,
     uint32_t n,
     uint32_t cap,

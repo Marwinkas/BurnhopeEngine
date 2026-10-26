@@ -242,16 +242,19 @@ float uiMeasure(const UiState& s, const char* text, uint8_t len, uint8_t until) 
     return w;
 }
 
-void textInk(const UiLook& look, float r, float g, float b, bool hot, float& tr, float& tg, float& tb) {
-    const float lum = 0.30f * r + 0.59f * g + 0.11f * b;
-    const float* ink = lum > 0.72f ? look.window : look.text;
+void textInk(const UiLook& look, const UiPaintStyle& style, float r, float g, float b, bool hot, float& tr, float& tg, float& tb) {
+    constexpr float kLumaR = 0.30f; // Rec.601 luma weights
+    constexpr float kLumaG = 0.59f;
+    constexpr float kLumaB = 0.11f;
+    const float lum = kLumaR * r + kLumaG * g + kLumaB * b;
+    const float* ink = lum > style.inkThreshold ? look.window : look.text;
     tr = ink[0];
     tg = ink[1];
     tb = ink[2];
     if (hot) {
-        tr = tr + 0.08f > 1.0f ? 1.0f : tr + 0.08f;
-        tg = tg + 0.08f > 1.0f ? 1.0f : tg + 0.08f;
-        tb = tb + 0.08f > 1.0f ? 1.0f : tb + 0.08f;
+        tr = tr + style.hoverLift > 1.0f ? 1.0f : tr + style.hoverLift;
+        tg = tg + style.hoverLift > 1.0f ? 1.0f : tg + style.hoverLift;
+        tb = tb + style.hoverLift > 1.0f ? 1.0f : tb + style.hoverLift;
     }
 }
 
@@ -604,7 +607,7 @@ uint32_t uiEmitTextNode(
         tb = s.look.text[2];
         ta = 1.0f;
     } else {
-        textInk(s.look, r, g, b, id == s.hovered, tr, tg, tb);
+        textInk(s.look, s.paintStyle, r, g, b, id == s.hovered, tr, tg, tb);
     }
     const TextRun run = textRun(s, *text, slot);
     if (run.lines == 0) {

@@ -7,6 +7,8 @@
 #include "ui/widget/Fold.hpp"
 #include "ui/widget/Label.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
+#include "ui/Template.hpp"
 
 namespace burnhope {
 namespace {
@@ -22,39 +24,24 @@ void onMax(void* user, uint16_t) {
 } // namespace
 
 uint16_t uiFloatWindow(UiState& s, uint16_t parent, float x, float y, float w, float h, bool visible) {
-    UiFlex flex{};
-    flex.position = UiPosition::Absolute;
-    flex.posX = x;
-    flex.posY = y;
-    flex.widthMode = UiSize::Px;
-    flex.width = w;
-    flex.heightMode = UiSize::Px;
-    flex.height = h;
-    flex.pad = 10.0f;
-    flex.gap = 6.0f;
-    flex.shrink = 0.0f;
-    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Window, s.look.radius));
+    const uint16_t id = uiSpawnTemplate(s, parent, "core/panel", "window_float");
+    if (id == kUiNone) {
+        return id;
+    }
+    uiPlace(s, id, true, x, y, w, h);
     uiSetResizable(s, id);
     uiShow(s, id, visible);
     return id;
 }
 
 uint16_t uiWindowChrome(UiState& s, uint16_t parent) {
-    UiFlex row{};
-    row.direction = UiFlexDir::Row;
-    row.widthMode = UiSize::Px;
-    row.width = 100.0f;
-    row.heightMode = UiSize::Px;
-    row.height = 28.0f;
-    row.shrink = 0.0f;
-    row.align = UiAlign::Center;
-    row.justify = UiJustify::Center;
-    row.gap = 4.0f;
-    row.marginR = 8.0f;
-    const uint16_t cluster = uiPanel(s, parent, row, paintClear());
-    const uint16_t minB = uiPanel(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiToken::Chrome, s.look.radiusSm));
-    const uint16_t maxB = uiPanel(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiToken::Chrome, s.look.radiusSm));
-    const uint16_t closeB = uiPanel(s, cluster, px(28.0f, 28.0f), paintToken(s.look, UiToken::Close, s.look.radiusSm));
+    const uint16_t cluster = uiSpawnTemplate(s, parent, "core/cluster", "chrome_cluster");
+    if (cluster == kUiNone) {
+        return cluster;
+    }
+    const uint16_t minB = uiSpawnTemplate(s, cluster, "core/panel", "chrome_button");
+    const uint16_t maxB = uiSpawnTemplate(s, cluster, "core/panel", "chrome_button");
+    const uint16_t closeB = uiSpawnTemplate(s, cluster, "core/panel", "chrome_close");
     uiHover(s, minB);
     uiHover(s, maxB);
     uiHover(s, closeB);
@@ -81,6 +68,9 @@ uint16_t loadChromeBin(UiState& s, uint16_t parent, const BinNode&, const BinTai
 }
 
 void uiInstallChromeBin(UiState& s) {
+    // Blueprint traits for window pieces.
+    (void)uiTemplateTrait(s, "titlebar", [](UiState& st, uint16_t id) { st.ent[id].add<UiTitleBar>(); });
+    (void)uiTemplateTrait(s, "resizable", [](UiState& st, uint16_t id) { st.ent[id].add<UiResizable>(); });
     uiBinRole(s, kBinSlotChrome, "chrome", 0, 0);
     uiRegisterCustomBinNode(s, kBinSlotChrome, loadChromeBin, nullptr);
 }
@@ -264,72 +254,34 @@ void uiChromePark(UiState& s, uint16_t home, const UiChromeGesture& gesture) {
 }
 
 uint16_t uiDragFoldHeader(UiState& s, uint16_t parent, const char* title) {
-    UiFlex row{};
-    row.direction = UiFlexDir::Row;
-    row.heightMode = UiSize::Px;
-    row.height = 28.0f;
-    row.widthMode = UiSize::Percent;
-    row.width = 100.0f;
-    row.shrink = 0.0f;
-    row.align = UiAlign::Center;
-    row.padL = 8.0f;
-    row.padR = 4.0f;
-    const uint16_t header = uiPanel(s, parent, row, paintToken(s.look, UiToken::Title, s.look.radiusSm));
+    const uint16_t header = uiSpawnTemplate(s, parent, "core/row", "fold_title");
     if (header == kUiNone) {
         return kUiNone;
     }
+    uiSetWidthPercent(s, header, 100.0f);
     s.ent[header].set<UiTitleBar>({});
     (void)uiLabel(s, header, title);
-    UiFlex gap{};
-    gap.grow = 1.0f;
-    gap.shrink = 1.0f;
-    gap.heightMode = UiSize::Px;
-    gap.height = 1.0f;
-    (void)uiSpacer(s, header, gap);
-    UiFlex mark{};
-    mark.widthMode = UiSize::Px;
-    mark.heightMode = UiSize::Px;
-    mark.width = 22.0f;
-    mark.height = 22.0f;
-    mark.shrink = 0.0f;
-    mark.marginR = 2.0f;
-    UiPaint fold = paintToken(s.look, UiToken::Chrome, s.look.radiusSm);
-    fold.icon = static_cast<uint8_t>(UiIcon::Minimize);
-    const uint16_t foldBtn = uiPanel(s, header, mark, fold);
+    (void)uiSpacer(s, header);
+    const uint16_t foldBtn = uiSpawnTemplate(s, header, "core/panel", "fold_toggle");
+    uiSetIcon(s, foldBtn, UiIcon::Minimize);
     uiHover(s, foldBtn);
     return uiFoldAttach(s, parent, foldBtn);
 }
 
 uint16_t uiTitleBar(UiState& s, uint16_t parent, const char* title, UiClickFn onClose, void* user, float height) {
-    UiFlex row{};
-    row.direction = UiFlexDir::Row;
-    row.widthMode = UiSize::Percent;
-    row.width = 100.0f;
-    row.heightMode = UiSize::Px;
-    row.height = height;
-    row.align = UiAlign::Center;
-    row.shrink = 0.0f;
-    row.pad = 8.0f;
-    row.gap = 8.0f;
-    const uint16_t bar = uiPanel(s, parent, row, paintToken(s.look, UiToken::Title, 0.0f));
+    const uint16_t bar = uiSpawnTemplate(s, parent, "core/row", "title_bar");
     if (bar == kUiNone) {
         return kUiNone;
     }
+    uiSetWidthPercent(s, bar, 100.0f);
+    if (height > 0.0f) {
+        uiSetSize(s, bar, -1.0f, height);
+    }
     s.ent[bar].set<UiTitleBar>({});
     (void)uiLabel(s, bar, title);
-    UiFlex gap{};
-    gap.grow = 1.0f;
-    gap.shrink = 1.0f;
-    (void)uiSpacer(s, bar, gap);
-    UiFlex mark{};
-    mark.widthMode = UiSize::Px;
-    mark.heightMode = UiSize::Px;
-    mark.width = 22.0f;
-    mark.height = 22.0f;
-    mark.shrink = 0.0f;
-    UiPaint close = paintToken(s.look, UiToken::Close, s.look.radiusSm);
-    close.icon = static_cast<uint8_t>(UiIcon::Dismiss);
-    const uint16_t closeBtn = uiPanel(s, bar, mark, close);
+    (void)uiSpacer(s, bar);
+    const uint16_t closeBtn = uiSpawnTemplate(s, bar, "core/panel", "title_mark");
+    uiSetIcon(s, closeBtn, UiIcon::Dismiss);
     uiHover(s, closeBtn);
     if (onClose != nullptr) {
         uiBind(s, closeBtn, onClose, user);

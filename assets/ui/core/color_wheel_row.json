@@ -1,0 +1,15 @@
+{
+  "role": "row",
+  "class": "cw_row",
+  "flex": { "dir": "row", "align": "center", "shrink": 0 },
+  "parts": [
+    { "name": "wheel", "role": "panel", "class": "cw_wheel", "flex": { "shrink": 0 } },
+    { "name": "val", "role": "panel", "class": "cw_val", "flex": { "shrink": 0 } },
+    { "name": "side", "role": "column", "class": "cw_side", "flex": { "dir": "column", "shrink": 0 },
+      "parts": [
+        { "name": "swatch", "role": "panel", "class": "cw_swatch", "flex": { "wp": 100, "shrink": 0 } },
+        { "use": "core/button", "name": "pick", "class": "pick_button", "flex": { "wp": 100, "grow": 1, "shrink": 0 } }
+      ] }
+  ],
+  "slots": { "wheel": "wheel", "val": "val", "swatch": "swatch", "pick": "pick" }
+}

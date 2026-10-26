@@ -1,4 +1,4 @@
-#include "ui/widget/Button.hpp"
+#include "ui/Panel.hpp"
 #include "ui/widget/Tabs.hpp"
 #include "ui/State.hpp"
 
@@ -18,7 +18,7 @@ void uiMarkTab(UiState& s, uint16_t strip, uint16_t tab) {
             s.ent[id].remove<UiTab>();
         }
         ++index;
-        uiButtonMark(s, id, id == tab);
+        uiSetActive(s, id, id == tab);
     }
 }
 

@@ -1,0 +1,5 @@
+{
+  "role": "row",
+  "class": "segment_strip",
+  "flex": { "dir": "row", "align": "center", "shrink": 0 }
+}

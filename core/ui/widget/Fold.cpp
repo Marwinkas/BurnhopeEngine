@@ -5,6 +5,7 @@
 #include "ui/widget/Fold.hpp"
 #include "ui/State.hpp"
 #include "ui/StyleSheet.hpp"
+#include "ui/Template.hpp"
 
 namespace burnhope {
 namespace {
@@ -52,26 +53,19 @@ uint16_t makeBody(UiState& s, uint16_t parent, uint16_t head) {
     if (parent >= s.count || head >= s.count) {
         return kUiNone;
     }
-    UiFlex clipFlex{};
-    clipFlex.direction = UiFlexDir::Column;
-    clipFlex.shrink = 0.0f;
-    clipFlex.widthMode = UiSize::Percent;
-    clipFlex.width = 100.0f;
-    clipFlex.heightMode = UiSize::Px;
-    clipFlex.height = 0.0f;
-    clipFlex.minH = 0.0f;
-    clipFlex.overflow = UiOverflow::Hidden;
-    const uint16_t clip = uiPanel(s, parent, clipFlex, paintClear());
-    UiFlex body{};
-    body.direction = UiFlexDir::Column;
-    body.shrink = 0.0f;
-    body.widthMode = UiSize::Percent;
-    body.width = 100.0f;
-    body.pad = 4.0f;
-    body.gap = 2.0f;
-    const uint16_t child = uiPanel(s, clip, body, paintToken(s.look, UiToken::Item, s.look.radiusSm));
-    if (child == kUiNone) {
+    const UiTemplateId clipTpl = uiTemplateFind(s, "core/fold_clip");
+    const uint16_t clip = uiSpawnTemplate(s, parent, clipTpl);
+    const uint16_t child = uiTemplateSlot(s, clipTpl, clip, "body");
+    if (clip == kUiNone || child == kUiNone) {
         return kUiNone;
+    }
+    // The body is revealed by animating the clip's height from 0, and both span the fold's parent.
+    uiSetWidthPercent(s, clip, 100.0f);
+    uiSetWidthPercent(s, child, 100.0f);
+    if (auto* flex = s.ent[clip].try_get_mut<UiFlex>()) {
+        flex->heightMode = UiSize::Px;
+        flex->height = 0.0f;
+        flex->minH = 0.0f;
     }
     UiFoldChain& chain = s.world.ensure<UiFoldChain>();
     s.ent[head].set<UiFold>({
@@ -105,7 +99,7 @@ void uiFoldToggle(UiState& s, uint16_t head) {
         fold->full = full;
     }
     if (full < 8.0f) {
-        full = 28.0f;
+        full = uiStyle(s, "fold_header", UiStyleKey::Height);
     }
     uiShow(s, fold->body, true);
     uiReveal(s, fold->clip, full, opening);
@@ -160,43 +154,30 @@ uint16_t uiFoldAttach(UiState& s, uint16_t parent, uint16_t head) {
 }
 
 uint16_t uiFoldBody(UiState& s, uint16_t parent, const char* title) {
-    UiFlex row{};
-    row.direction = UiFlexDir::Row;
-    row.position = UiPosition::Relative;
-    row.heightMode = UiSize::Px;
-    row.height = uiStyle(s, "fold_header", UiStyleKey::Height, 28.0f);
-    row.shrink = 0.0f;
-    row.align = UiAlign::Center;
-    row.widthMode = UiSize::Percent;
-    row.width = 100.0f;
-    const float iconPad = uiStyle(s, "fold_header", UiStyleKey::PadL, 10.0f);
-    const float iconSide = uiStyle(s, "fold_header", UiStyleKey::Icon, 16.0f);
-    row.padL = iconPad + iconSide + uiStyle(s, "fold_header", UiStyleKey::Gap, 8.0f);
-    row.padR = 8.0f;
-    if (parent < s.count) {
-        if (const UiFlex* home = s.ent[parent].try_get<UiFlex>()) {
-            const float left = home->pad > 0.0f ? home->pad : home->padL;
-            const float right = home->pad > 0.0f ? home->pad : home->padR;
-            if (left > 0.0f) {
-                row.marginL = -left;
-            }
-            if (right > 0.0f) {
-                row.marginR = -right;
-            }
-        }
-    }
-    UiPaint bar = paintToken(s.look, UiToken::Item, 0.0f);
-    bar.icon = static_cast<uint8_t>(UiIcon::ChevronRight);
-    bar.iconLeft = static_cast<uint8_t>(iconPad);
-    bar.iconSide = static_cast<uint8_t>(iconSide);
-    const uint16_t head = uiPanel(s, parent, row, bar);
+    const uint16_t head = uiSpawnTemplate(s, parent, "core/fold_header");
     if (head == kUiNone) {
         return kUiNone;
     }
+    // A header runs edge to edge: it counters the padding of the container it sits in.
+    if (auto* row = s.ent[head].try_get_mut<UiFlex>()) {
+        row->position = UiPosition::Relative;
+        row->widthMode = UiSize::Percent;
+        row->width = 100.0f;
+        if (parent < s.count) {
+            if (const UiFlex* home = s.ent[parent].try_get<UiFlex>()) {
+                const float left = home->pad > 0.0f ? home->pad : home->padL;
+                const float right = home->pad > 0.0f ? home->pad : home->padR;
+                if (left > 0.0f) {
+                    row->marginL = -left;
+                }
+                if (right > 0.0f) {
+                    row->marginR = -right;
+                }
+            }
+        }
+    }
+    uiSetIcon(s, head, UiIcon::ChevronRight);
     uiText(s, head, title != nullptr ? title : "");
-    uiTextStyle(s, head, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-    uiHover(s, head);
-    uiSetFocusable(s, head);
     const uint16_t body = makeBody(s, parent, head);
     uiFoldOpen(s, body);
     return body;

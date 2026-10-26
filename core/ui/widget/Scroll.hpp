@@ -25,7 +25,8 @@ struct UiScrollMetrics {
     uint8_t shown = 0;
 };
 
-UiScrollMetrics uiCalcScrollMetrics(float viewH, float contentH, float offset);
+// `minThumb` is the shortest thumb in px (the "scroll_bar" class).
+UiScrollMetrics uiCalcScrollMetrics(float viewH, float contentH, float offset, float minThumb);
 
 void uiScrollBin(UiState& s);
 

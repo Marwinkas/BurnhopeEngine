@@ -120,7 +120,8 @@ TEST_CASE("inspector drag writes the bound float") {
     SceneBlock block{};
     block.scalars[0] = 0.5f;
     const uint16_t root = spawn(state, kUiNone, px(200.0f, 40.0f), paintRgb(0.1f, 0.1f, 0.1f));
-    const uint16_t id = uiSlider(state, root, block.scalars[0], 0.0f, 1.0f, nullptr, nullptr, 200.0f);
+    const uint16_t id = uiSlider(state, root, block.scalars[0], 0.0f, 1.0f);
+    uiSetWidth(state, id, 200.0f);
     UiPropBinder binder;
     binder.attach(block.scalars, 256, block.flags, 64);
     binder.watch(id, 0, block.scalars[0]);
@@ -817,14 +818,14 @@ TEST_CASE("fold headers draw the chevron left and a node can move to the end of 
 TEST_CASE("style sheet classes feed widgets and every section owns a column grip") {
     UiState state;
     uiWidgetsInit(state);
-    CHECK(uiStyle(state, "dropdown_trigger", UiStyleKey::Height, 26.0f) == 26.0f);
+    CHECK(uiStyle(state, "dropdown_trigger", UiStyleKey::Height) == 26.0f);
     const char* sheet = R"({"classes":{"dropdown_trigger":{"h":30,"border":2},"window_panel":{"alpha":0.5}}})";
-    CHECK(uiStyleLoad(state, sheet));
-    CHECK(uiStyle(state, "dropdown_trigger", UiStyleKey::Height, 26.0f) == 30.0f);
-    CHECK(uiStyle(state, "dropdown_trigger", UiStyleKey::PadR, 22.0f) == 22.0f);
+    CHECK(uiStyleLoadOver(state, sheet));
+    CHECK(uiStyle(state, "dropdown_trigger", UiStyleKey::Height) == 30.0f);
+    CHECK(uiStyle(state, "dropdown_trigger", UiStyleKey::PadR) == 22.0f);
     CHECK(state.look.popupAlpha == 0.5f);
     CHECK(!uiStyleLoad(state, "{\"classes\": 3"));
-    CHECK(uiStyle(state, "dropdown_trigger", UiStyleKey::Height, 26.0f) == 30.0f);
+    CHECK(uiStyle(state, "dropdown_trigger", UiStyleKey::Height) == 30.0f);
     const uint16_t root = spawn(state, kUiNone, px(300.0f, 200.0f), paintRgb(0.1f, 0.1f, 0.1f));
     const uint16_t host = uiPropHost(state, root);
     const uint16_t body = uiPropSection(state, host, "Sec", 0, 0);

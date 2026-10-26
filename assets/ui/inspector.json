@@ -1,4 +1,10 @@
 {
+  "stats": [
+    { "role": "label", "name": "statsLbl", "label": "fps" },
+    { "role": "label", "name": "memLbl", "label": "mem" },
+    { "role": "label", "name": "loadLbl", "label": "gpu" },
+    { "role": "list", "name": "statList", "h": 16 }
+  ],
   "actor": [
     {
       "role": "section",

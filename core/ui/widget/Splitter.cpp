@@ -1,6 +1,7 @@
 #include "ui/Panel.hpp"
 #include "ui/widget/Splitter.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <algorithm>
 
@@ -38,7 +39,7 @@ float axisFloor(const UiState& s, uint16_t id, bool vertical, bool ignoreFixed, 
     const float stated = vertical ? flex->minH : flex->minW;
     const UiSize mode = vertical ? flex->heightMode : flex->widthMode;
     const float px = vertical ? flex->height : flex->width;
-    float base = 64.0f;
+    float base = uiStyle(s, "splitter_grip", UiStyleKey::BasePane);
     if (stated > 1.0f) {
         base = stated;
     } else if (!ignoreFixed && mode == UiSize::Px && flex->shrink < 0.5f && px > 1.0f) {
@@ -141,7 +142,7 @@ UiBox splitGrip(const UiState& s, uint16_t split) {
         return {};
     }
     UiBox grip = s.box[split];
-    constexpr float kHit = 8.0f;
+    const float kHit = uiStyle(s, "splitter_grip", UiStyleKey::HitSlop);
     const UiSplitter* drag = s.ent[split].try_get<UiSplitter>();
     const bool alongY = drag != nullptr && drag->axisLock != 0 ? drag->axis != 0 : splitVertical(s, split);
     if (alongY) {
@@ -267,7 +268,7 @@ void splitDrag(UiState& s, uint16_t split, float x, float y) {
         }
         size = drag->startSize + delta;
     }
-    constexpr float minSize = 48.0f;
+    const float minSize = uiStyle(s, "splitter_grip", UiStyleKey::MinPane);
     const float maxSize = std::max(minSize, span - grip - minSize);
     size = std::clamp(size, minSize, maxSize);
     writeSize(s, pane, vertical, size);
@@ -324,7 +325,7 @@ void splitPaint(UiState& s, uint16_t id, bool hot) {
     }
     const float radius = paint->radius;
     *paint = paintToken(s.look, token, radius);
-    paint->a = hot ? 0.9f : 0.62f;
+    paint->a = uiStyle(s, "splitter_grip", hot ? UiStyleKey::HotAlpha : UiStyleKey::IdleAlpha);
     s.visualDirty = true;
 }
 
@@ -402,20 +403,21 @@ bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, 
 }
 
 uint16_t uiSplitBar(UiState& s, uint16_t parent, bool verticalBar, float inset) {
+    const float thickness = uiStyle(s, "splitter_grip", UiStyleKey::Width);
     UiFlex grip{};
     grip.shrink = 0.0f;
     grip.self = UiAlignSelf::Stretch;
     if (verticalBar) {
         grip.widthMode = UiSize::Px;
-        grip.width = 2.0f;
+        grip.width = thickness;
         grip.marginT = inset;
     } else {
         grip.heightMode = UiSize::Px;
-        grip.height = 2.0f;
+        grip.height = thickness;
         grip.marginL = inset;
     }
-    UiPaint paint = paintToken(s.look, UiToken::Muted, 0.0f);
-    paint.a = 0.55f;
+    UiPaint paint = paintToken(s.look, uiStyleBg(s, "splitter_grip"), 0.0f);
+    paint.a = uiStyle(s, "splitter_grip", UiStyleKey::Alpha);
     const uint16_t bar = uiPanel(s, parent, grip, paint);
     if (bar != kUiNone) {
         s.ent[bar].set<UiSplitter>({});

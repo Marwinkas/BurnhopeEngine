@@ -5,6 +5,7 @@
 #include "ui/widget/Docking.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 namespace burnhope {
 
@@ -26,14 +27,14 @@ void uiDockTo(UiState& s, uint8_t edge) {
     panel->grow = 0.0f;
     if (horizontal) {
         panel->widthMode = UiSize::Px;
-        panel->width = 260.0f;
+        panel->width = uiStyle(s, "dock_panel", UiStyleKey::Width);
         panel->heightMode = UiSize::Percent;
         panel->height = 100.0f;
     } else {
         panel->widthMode = UiSize::Percent;
         panel->width = 100.0f;
         panel->heightMode = UiSize::Px;
-        panel->height = 160.0f;
+        panel->height = uiStyle(s, "dock_panel", UiStyleKey::Height);
     }
     if (edge == 1 || edge == 3) {
         uiNodeMoveChild(s, dock->home, dock->panel, 0);

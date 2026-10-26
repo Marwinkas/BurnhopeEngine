@@ -24,6 +24,7 @@ namespace {
 constexpr float kLinkEps = 0.0005f;
 constexpr float kHexRowH = 24.0f;
 constexpr float kHexW = 96.0f;
+constexpr float kChoiceW = 160.0f;
 constexpr float kChipW = 52.0f;
 constexpr float kHexGap = 6.0f;
 constexpr float kNumberW = 84.0f;
@@ -140,7 +141,7 @@ uint16_t UiPropBinder::resetBtn(UiState& s, uint16_t parent, UiReset kind, uint1
         ui = &s;
     }
     const uint16_t tail = uiPropTrail(s, parent);
-    const uint16_t id = uiIconBtn(s, tail < s.count ? tail : parent, static_cast<uint8_t>(UiIcon::Reset), 22.0f, nullptr);
+    const uint16_t id = uiButton(s, tail < s.count ? tail : parent, {.cls = "tool_button_sm", .icon = UiIcon::Reset});
     if (id == kUiNone) {
         return id;
     }
@@ -158,7 +159,8 @@ uint16_t UiPropBinder::checkReset(UiState& s, uint16_t panel, const char* label,
 
 uint16_t UiPropBinder::choiceReset(UiState& s, uint16_t panel, const char* label, const char* const* names, uint8_t count, void (*onPick)(void* user, uint8_t index), void* user, uint16_t flag) {
     const uint16_t value = uiPropRow(s, panel, label);
-    const uint16_t pick = uiChoice(s, value, {.labels = names, .count = count, .selected = 0, .width = 160.0f, .onPick = onPick, .user = user});
+    const uint16_t pick = uiChoice(s, value, {.labels = names, .count = count, .selected = 0, .onPick = onPick, .user = user});
+    uiSetWidth(s, pick, kChoiceW);
     uiSetGrow(s, pick, 1.0f, 1.0f);
     (void)resetBtn(s, value, UiReset::Flag, flag, 0.0f);
     return pick;
@@ -284,10 +286,11 @@ UiPropVec3 UiPropBinder::vec3(UiState& s, uint16_t host, const char* label, uint
 }
 
 uint16_t UiPropBinder::sliderNumber(UiState& s, uint16_t parent, uint16_t index, float def, float lo, float hi, float step) {
-    const uint16_t slider = uiSlider(s, parent, def, lo, hi, nullptr, nullptr, 0.0f);
+    const uint16_t slider = uiSlider(s, parent, def, lo, hi, nullptr, nullptr);
     uiSetSize(s, slider, 0.0f, -1.0f);
     uiSetGrow(s, slider, 1.0f, 1.0f, kSliderMinW);
-    const uint16_t number = uiNumber(s, parent, def, lo, hi, step, nullptr, nullptr, kNumberW, kHexRowH, 0.0f);
+    const uint16_t number = uiNumber(s, parent, def, lo, hi, step);
+    uiFlexLimit(s, number, kNumberW, kHexRowH, 0.0f);
     uiNumberFill(s, number, false);
     watch(number, index, def);
     rows.back().pair = slider;

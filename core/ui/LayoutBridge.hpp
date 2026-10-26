@@ -31,21 +31,10 @@ struct UiLayoutRefresh {
     void* user = nullptr;
 };
 
-// Коллбэк завершения верстки (вызывается ядром после полного пересчета дерева, например для clamp скролла)
-using UiLayoutFinishFn = void (*)(UiState& s, bool resized, void* user);
-
-struct UiLayoutFinishHook {
-    UiLayoutFinishFn fn = nullptr;
-    void* user = nullptr;
-};
-
 // Запись вычисленных координат ноды из Yoga в UiBox и UiBounds
 void cacheBox(UiState& s, uint16_t id);
 
 // Главный расчет верстки дерева под размер экрана (w, h)
 void uiLayout(UiState& s, float w, float h);
-
-// Регистрация коллбэка завершения верстки
-void uiRegisterLayoutFinish(UiState& s, UiLayoutFinishFn fn, void* user);
 
 } // namespace burnhope

@@ -4,6 +4,8 @@
 #include "ui/Panel.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/State.hpp"
+#include "ui/Template.hpp"
+#include "ui/StyleSheet.hpp"
 
 namespace burnhope {
 namespace {
@@ -29,14 +31,7 @@ uint16_t uiSegment(UiState& s, uint16_t parent, const UiSegmentConfig& cfg) {
     if (cfg.labels == nullptr || cfg.count == 0) {
         return kUiNone;
     }
-    UiFlex line{};
-    line.direction = UiFlexDir::Row;
-    line.align = UiAlign::Center;
-    line.gap = 2.0f;
-    line.shrink = 0.0f;
-    line.heightMode = UiSize::Px;
-    line.height = cfg.itemH;
-    const uint16_t strip = uiPanel(s, parent, line, paintClear());
+    const uint16_t strip = uiSpawnTemplate(s, parent, "core/segment_strip");
     if (strip >= s.count) {
         return strip;
     }
@@ -44,15 +39,14 @@ uint16_t uiSegment(UiState& s, uint16_t parent, const UiSegmentConfig& cfg) {
     s.ent[strip].set<UiSegment>({.selected = selected, .onPick = cfg.onPick, .user = cfg.user});
     for (uint8_t i = 0; i < cfg.count; ++i) {
         const uint16_t id = uiButton(s, strip, {
+            .cls = "segment_item",
             .label = cfg.labels[i],
-            .width = cfg.itemW,
-            .height = cfg.itemH,
             .onClick = segmentClick,
             .user = &s,
         });
         if (id < s.count) {
             s.ent[id].set<UiSegmentItem>({.strip = strip, .index = i});
-            uiButtonMark(s, id, i == selected);
+            uiSetActive(s, id, i == selected);
         }
     }
     return strip;
@@ -69,7 +63,7 @@ void uiSegmentSelect(UiState& s, uint16_t strip, uint8_t index) {
         const uint16_t id = uiNodeChild(s, strip, i);
         const UiSegmentItem* item = id < s.count ? s.ent[id].try_get<UiSegmentItem>() : nullptr;
         if (item != nullptr) {
-            uiButtonMark(s, id, item->index == index);
+            uiSetActive(s, id, item->index == index);
         }
     }
 }

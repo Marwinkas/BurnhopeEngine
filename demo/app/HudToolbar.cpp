@@ -6,9 +6,11 @@
 #include "render/SceneFrame.hpp"
 #include "ui/rhi/Canvas.hpp"
 #include "ui/Style.hpp"
-#include "ui/StyleSheet.hpp"
+#include "ui/Theme.hpp"
 #include "ui/widget/Choice.hpp"
 #include "ui/Nodes.hpp"
+
+#include <spdlog/spdlog.h>
 
 namespace burnhope {
 
@@ -26,7 +28,11 @@ void sceneHud(Canvas& canvas, void* user) {
         radio = kUiNone;
     }
     filesLoadIcons(canvas);
-    canvasSetLook(canvas, uiLookInk());
+    UiLook ink{};
+    if (!uiThemeLook(*canvas.state, "ink", ink)) {
+        spdlog::warn("ui: theme \"ink\" is not loaded, the editor uses the default palette");
+    }
+    canvasSetLook(canvas, ink);
     (void)canvasLoadIcon(canvas, 2, "SelectMode.svg");
     (void)canvasLoadIcon(canvas, 3, "MoveMode.svg");
     (void)canvasLoadIcon(canvas, 4, "RotateMode.svg");
@@ -43,6 +49,8 @@ void sceneHud(Canvas& canvas, void* user) {
     uint16_t detailsInner = kUiNone;
     const PropSlot slots[] = {
         {"toolBar", &hud->toolBar},
+        {"toolBtn0", &hud->toolBtn[0]}, {"toolBtn1", &hud->toolBtn[1]}, {"toolBtn2", &hud->toolBtn[2]},
+        {"toolBtn3", &hud->toolBtn[3]}, {"toolBtn4", &hud->toolBtn[4]},
         {"spawnBtn", &hud->spawnBtn},
         {"snapBtn0", &hud->snapBtn[0]}, {"snapIcon0", &hud->snapIcon[0]}, {"snapNum0", &hud->snapNum[0]},
         {"snapBtn1", &hud->snapBtn[1]}, {"snapIcon1", &hud->snapIcon[1]}, {"snapNum1", &hud->snapNum[1]},
@@ -99,7 +107,6 @@ void sceneHud(Canvas& canvas, void* user) {
             *slot.id = kUiNone;
         }
     }
-    (void)uiStyleLoadAsset(*canvas.state, "assets/ui/styles.json");
     (void)propImportAsset(*canvas.state, kUiNone, "assets/ui/editor.json", "frame", hud->bind, slots,
         static_cast<uint16_t>(sizeof slots / sizeof slots[0]), commands,
         static_cast<uint16_t>(sizeof commands / sizeof commands[0]), hidden, onImportFlag, hud);

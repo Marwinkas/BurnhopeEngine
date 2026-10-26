@@ -1,6 +1,9 @@
 #include "ui/Hover.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/State.hpp"
+#include "ui/Panel.hpp"
+#include "ui/Template.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -24,18 +27,14 @@ void onVirtClick(void* user, uint16_t id) {
 }
 
 uint16_t addVirtSlot(UiState& s, uint16_t scroll, float itemH) {
-    UiFlex row{};
-    row.position = UiPosition::Absolute;
-    row.widthMode = UiSize::Percent;
-    row.width = 100.0f;
-    row.heightMode = UiSize::Px;
-    row.height = itemH > 4.0f ? itemH - 4.0f : itemH;
-    row.shrink = 0.0f;
-    row.align = UiAlign::Center;
-    const uint16_t slot = spawn(s, scroll, row, paintToken(s.look, UiToken::Item, s.look.radiusSm));
+    const uint16_t slot = uiSpawnTemplate(s, scroll, "core/row", "list_row");
     if (slot == kUiNone) {
         return slot;
     }
+    // A pooled row hangs in the scroll view: absolute, full width, a little shorter than its pitch.
+    const float inset = uiStyle(s, "list_row", UiStyleKey::RowInset);
+    uiPlace(s, slot, true, 0.0f, 0.0f, 0.0f, itemH > inset ? itemH - inset : itemH);
+    uiSetWidthPercent(s, slot, 100.0f);
     addText(s, slot, " ");
     uiBind(s, slot, onVirtClick, &s);
     uiSetFocusable(s, slot);

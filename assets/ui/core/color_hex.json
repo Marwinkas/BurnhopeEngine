@@ -1,0 +1,5 @@
+{
+  "use": "core/field",
+  "role": "field",
+  "class": "cw_hex"
+}

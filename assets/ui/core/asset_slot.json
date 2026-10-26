@@ -1,0 +1,7 @@
+{
+  "role": "assetslot",
+  "class": "asset_slot",
+  "flex": { "dir": "row", "align": "center" },
+  "text": { "align": "left", "valign": "center", "ellipsis": "end", "leading": 1 },
+  "traits": ["hoverable", "focusable"]
+}

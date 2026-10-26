@@ -120,6 +120,7 @@ struct HudContext {
     StatsHit stats{};
     uint16_t viewRadio[20]{};
     uint16_t snapBtn[3]{};
+    uint16_t toolBtn[5]{};
     uint16_t snapIcon[3]{};
     uint16_t snapNum[3]{};
     uint16_t playBtn = kUiNone;

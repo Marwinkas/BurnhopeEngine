@@ -90,7 +90,7 @@ void hudBuildActorMaterial(Canvas& canvas, HudContext* hud, uint16_t panel) {
     }
     UiState& state = *canvas.state;
     static const char* labels[] = {"None"};
-    hud->livePick = uiChoice(state, panel, {.labels = labels, .count = 1, .width = 220.0f, .onPick = onMatPick, .user = hud});
+    hud->livePick = uiChoice(state, panel, {.labels = labels, .count = 1, .onPick = onMatPick, .user = hud});
     uiSetWidthPercent(state, hud->livePick, 100.0f);
     uiSetGrow(state, hud->livePick, 1.0f, -1.0f);
     hud->liveDrop = uiAssetSlot(state, panel, {.label = "Drop .bhmat", .onPath = onMatDrop, .user = hud});

@@ -14,7 +14,8 @@ struct UiPrimitive;
 
 // Панель — заливка одного прямоугольника. Не знает кнопку, текст и курсор.
 uint16_t uiPanel(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& paint);
-uint16_t uiSpacer(UiState& s, uint16_t parent, const UiFlex& flex);
+// A blank node that takes the free room of its row or column; `cls` ("spacer_flex", "spacer") sets its thickness.
+uint16_t uiSpacer(UiState& s, uint16_t parent, const char* cls = "spacer_flex");
 // Re-skins one node with a theme token; the node keeps the rest of its paint.
 void uiSetToken(UiState& s, uint16_t id, UiToken token);
 // The node that holds the pointer capture (kUiNone when none), and the active theme.
@@ -34,7 +35,9 @@ void uiSetGap(UiState& s, uint16_t id, float gap);
 void uiAddWidth(UiState& s, uint16_t id, float delta, float minW);
 [[nodiscard]] float uiStyleWidth(const UiState& s, uint16_t id, float fallback);
 void uiSetIcon(UiState& s, uint16_t id, UiIcon icon);
-void uiSetAlpha(UiState& s, uint16_t id, float alpha);
+// Switches a node between its class's idle and active look: the bg / activeBg tokens, or for a plate-less tool button
+// the glyph ink. A node whose class has no activeBg only changes its glyph ink.
+void uiSetActive(UiState& s, uint16_t id, bool on);
 
 uint32_t uiEmitPanel(
     const UiState& s,

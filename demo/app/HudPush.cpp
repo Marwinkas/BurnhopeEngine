@@ -19,6 +19,7 @@
 #include "ui/Text.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Nodes.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -40,13 +41,14 @@ void placeStats(UiState& state, const HudContext& hud) {
     const UiBox root = uiNodeBox(state, origin);
     const UiBox view = uiNodeBox(state, hud.viewPane);
     const UiBox bar = uiNodeBox(state, hud.toolBar);
-    float x = 8.0f;
-    float y = 80.0f;
+    const float margin = uiStyle(state, "stats_overlay", UiStyleKey::Pad);
+    float x = margin;
+    float y = uiStyle(state, "stats_overlay", UiStyleKey::Height);
     if (view.w > 1.0f) {
-        x = view.x + 8.0f - root.x;
+        x = view.x + margin - root.x;
     }
     if (bar.h > 1.0f) {
-        y = bar.y + bar.h + 8.0f - root.y;
+        y = bar.y + bar.h + margin - root.y;
     }
     uiPlaceAbsolute(state, hud.overlay, x, y);
 }

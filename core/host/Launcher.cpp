@@ -130,7 +130,7 @@ uint16_t spawnRow(UiState& s, uint16_t list, uint16_t launcher) {
         tokenRgb(s.look, UiToken::Muted, paintPath->r, paintPath->g, paintPath->b);
     }
     row.date = cell(s, id, kDateW, 22.0f, UiTextAlign::Right, UiTextEllipsis::End);
-    row.forget = uiIconBtn(s, id, static_cast<uint8_t>(UiIcon::Dismiss), 22.0f);
+    row.forget = uiButton(s, id, {.cls = "tool_button_sm", .icon = UiIcon::Dismiss});
     if (row.forget < s.count) {
         if (auto* box = s.ent[row.forget].try_get_mut<UiFlex>()) {
             box->shrink = 0.0f;
@@ -182,8 +182,8 @@ uint16_t uiLauncher(UiState& s, const LauncherConfig& cfg) {
     buttons.gap = 10.0f;
     buttons.shrink = 0.0f;
     const uint16_t bar = uiPanel(s, card, buttons, paintClear());
-    (void)uiButton(s, bar, {.label = "Create Project", .width = 160.0f, .height = 32.0f, .onClick = createClick, .user = &s});
-    (void)uiButton(s, bar, {.label = "Open Project", .width = 160.0f, .height = 32.0f, .onClick = openClick, .user = &s});
+    (void)uiButton(s, bar, {.cls = "launcher_button", .label = "Create Project", .onClick = createClick, .user = &s});
+    (void)uiButton(s, bar, {.cls = "launcher_button", .label = "Open Project", .onClick = openClick, .user = &s});
     UiLauncher box{};
     box.cfg = cfg;
     (void)uiLabel(s, card, "Recent Projects");

@@ -3,6 +3,9 @@
 #include "ui/widget/Virtual.hpp"
 #include "ui/widget/VirtualGrid.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
+#include "ui/Template.hpp"
+#include "ui/Panel.hpp"
 
 #include <cstring>
 
@@ -13,12 +16,12 @@ namespace {
 
 // Tile pitch for icon mode: a fixed gap and fixed inner padding around a square icon that grows with `itemW`.
 float tileIconSide(const UiState& s, float itemW) {
-    const float side = itemW - s.metrics.tileGap - s.metrics.tilePad * 2.0f;
+    const float side = itemW - uiStyle(s, "grid", UiStyleKey::TileGap) - uiStyle(s, "grid", UiStyleKey::Pad) * 2.0f;
     return side > 16.0f ? side : 16.0f;
 }
 
 float tilePitchH(const UiState& s, float itemW) {
-    return tileIconSide(s, itemW) + s.metrics.tilePad * 2.0f + s.metrics.labelH + s.metrics.subH + s.metrics.cellGap * 2.0f + s.metrics.tileGap;
+    return tileIconSide(s, itemW) + uiStyle(s, "grid", UiStyleKey::Pad) * 2.0f + uiStyle(s, "cell_label", UiStyleKey::Height) + uiStyle(s, "cell_sub", UiStyleKey::Height) + uiStyle(s, "grid", UiStyleKey::Gap) * 2.0f + uiStyle(s, "grid", UiStyleKey::TileGap);
 }
 
 void onCell(void* user, uint16_t id) {
@@ -50,75 +53,39 @@ void onCell(void* user, uint16_t id) {
 }
 
 uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
-    UiFlex cell = px(itemW - s.metrics.tileGap, itemH - s.metrics.tileGap);
-    cell.shrink = 0.0f;
-    cell.direction = UiFlexDir::Column;
-    cell.align = UiAlign::Center;
-    cell.justify = UiJustify::Center;
-    cell.padL = s.metrics.tilePad;
-    cell.padR = s.metrics.tilePad;
-    cell.padT = s.metrics.tilePad;
-    cell.padB = s.metrics.tilePad;
-    cell.gap = s.metrics.cellGap;
-    UiPaint ink = paintToken(s.look, UiToken::Item, s.look.radiusSm);
-    ink.a = 0.0f;
-    ink.borderW = 0.0f;
-    const uint16_t slot = spawn(s, inner, cell, ink);
+    const UiTemplateId tpl = uiTemplateFind(s, "core/grid_cell");
+    const uint16_t slot = uiSpawnTemplate(s, inner, tpl);
     if (slot == kUiNone) {
         return slot;
     }
+    const uint16_t icon = uiTemplateSlot(s, tpl, slot, "icon");
+    const uint16_t label = uiTemplateSlot(s, tpl, slot, "label");
+    const uint16_t sub = uiTemplateSlot(s, tpl, slot, "sub");
+    const float tileGap = uiStyle(s, "grid", UiStyleKey::TileGap);
+    if (auto* cell = s.ent[slot].try_get_mut<UiFlex>()) {
+        cell->widthMode = UiSize::Px;
+        cell->width = itemW - tileGap;
+        cell->heightMode = UiSize::Px;
+        cell->height = itemH - tileGap;
+    }
     const float iconSide = tileIconSide(s, itemW);
-    UiFlex glyph{};
-    glyph.widthMode = UiSize::Px;
-    glyph.width = iconSide;
-    glyph.heightMode = UiSize::Px;
-    glyph.height = iconSide;
-    glyph.shrink = 0.0f;
-    UiPaint glyphPaint{};
-    glyphPaint.a = 0.0f;
-    glyphPaint.borderW = 0.0f;
-    glyphPaint.shadow = 0.0f;
-    glyphPaint.icon = static_cast<uint8_t>(UiIcon::Folder);
-    glyphPaint.r = s.look.text[0];
-    glyphPaint.g = s.look.text[1];
-    glyphPaint.b = s.look.text[2];
-    const uint16_t icon = spawn(s, slot, glyph, glyphPaint);
-    UiFlex lab{};
-    lab.self = UiAlignSelf::Stretch;
-    lab.heightMode = UiSize::Px;
-    lab.height = s.metrics.labelH;
-    lab.shrink = 1.0f;
-    const uint16_t label = spawn(s, slot, lab, paintLabel(s.look));
-    addText(s, label, " ");
-    uiTextStyle(s, label, UiTextAlign::Center, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-    UiFlex subFlex{};
-    subFlex.self = UiAlignSelf::Stretch;
-    subFlex.heightMode = UiSize::Px;
-    subFlex.height = s.metrics.subH;
-    subFlex.shrink = 1.0f;
-    UiPaint subPaint = paintToken(s.look, UiToken::Muted, 0.0f);
-    subPaint.a = 0.0f;
-    subPaint.borderW = 0.0f;
-    const uint16_t sub = spawn(s, slot, subFlex, subPaint);
-    addText(s, sub, " ");
-    uiTextStyle(s, sub, UiTextAlign::Center, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+    if (auto* glyph = s.ent[icon].try_get_mut<UiFlex>()) {
+        glyph->widthMode = UiSize::Px;
+        glyph->width = iconSide;
+        glyph->heightMode = UiSize::Px;
+        glyph->height = iconSide;
+    }
+    uiSetIcon(s, icon, UiIcon::Folder);
+    uiText(s, label, " ");
+    uiText(s, sub, " ");
     if (const uint16_t part = uiTextId(s, sub); part < s.count) {
         if (auto* text = s.ent[part].try_get_mut<UiText>()) {
-            text->size = s.metrics.subScale;
+            text->size = uiStyle(s, "grid", UiStyleKey::SubScale);
         }
     }
-    if (icon < s.count) {
-        s.ent[icon].add<UiNoHit>();
-    }
-    if (label < s.count) {
-        s.ent[label].add<UiNoHit>();
-    }
     if (sub < s.count) {
-        s.ent[sub].add<UiNoHit>();
         uiShow(s, sub, false);
     }
-    uiSetFocusable(s, slot);
-    uiHover(s, slot);
     s.ent[slot].set<UiParts>({icon, kUiNone, label, sub});
     uiBind(s, slot, onCell, &s);
     s.ent[slot].set<UiVirtRow>({});
@@ -219,7 +186,7 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
     if (grid == nullptr || scroll == nullptr) {
         return;
     }
-    const float viewW = s.box[id].w > 32.0f ? s.box[id].w - s.metrics.gridInset * 2.0f : grid->itemW;
+    const float viewW = s.box[id].w > 32.0f ? s.box[id].w - uiStyle(s, "grid", UiStyleKey::GridInset) * 2.0f : grid->itemW;
     uint32_t rawCols = 1u;
     if (grid->list == 0 && grid->itemW > 1.0f) {
         rawCols = static_cast<uint32_t>(viewW / grid->itemW);
@@ -238,7 +205,7 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
     }
     const UiVirtualWindow win = uiVirtualCalc(scroll->offset, s.box[id].h, grid->itemH, grid->count, cols);
     grid->first = win.first;
-    uiVirtualSyncSpacer(s, scroll->inner, win.totalHeight + s.metrics.gridInset * 2.0f);
+    uiVirtualSyncSpacer(s, scroll->inner, win.totalHeight + uiStyle(s, "grid", UiStyleKey::GridInset) * 2.0f);
     for (uint8_t i = 0; i < grid->slots; ++i) {
         const uint16_t slot = grid->slot[i];
         const uint32_t index = win.first + i;
@@ -250,23 +217,23 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
         const uint32_t col = grid->list != 0 || cols == 0 ? 0u : index % cols;
         const uint32_t row = grid->list != 0 || cols == 0 ? index : index / cols;
         const bool rows = grid->list != 0;
-        const float tileW = rows ? (viewW > 24.0f ? viewW : grid->itemW) : grid->itemW - s.metrics.tileGap;
-        const float tileH = rows ? grid->itemH - 4.0f : grid->itemH - s.metrics.tileGap;
+        const float tileW = rows ? (viewW > 24.0f ? viewW : grid->itemW) : grid->itemW - uiStyle(s, "grid", UiStyleKey::TileGap);
+        const float tileH = rows ? grid->itemH - 4.0f : grid->itemH - uiStyle(s, "grid", UiStyleKey::TileGap);
         if (auto* flex = s.ent[slot].try_get_mut<UiFlex>()) {
             flex->position = UiPosition::Absolute;
-            flex->posX = rows ? s.metrics.cellGap : static_cast<float>(col) * grid->itemW + s.metrics.gridInset;
-            flex->posY = uiVirtualSlotY(row, grid->itemH, scroll->offset) + (rows ? 2.0f : s.metrics.gridInset);
+            flex->posX = rows ? uiStyle(s, "grid", UiStyleKey::Gap) : static_cast<float>(col) * grid->itemW + uiStyle(s, "grid", UiStyleKey::GridInset);
+            flex->posY = uiVirtualSlotY(row, grid->itemH, scroll->offset) + (rows ? 2.0f : uiStyle(s, "grid", UiStyleKey::GridInset));
             flex->widthMode = UiSize::Px;
             flex->heightMode = UiSize::Px;
             flex->direction = rows ? UiFlexDir::Row : UiFlexDir::Column;
             flex->align = UiAlign::Center;
             flex->justify = rows ? UiJustify::Start : UiJustify::Center;
-            flex->gap = rows ? s.metrics.listGap : s.metrics.cellGap;
-            flex->pad = rows ? s.metrics.listPad : 0.0f;
-            flex->padL = rows ? 0.0f : s.metrics.tilePad;
-            flex->padR = rows ? 0.0f : s.metrics.tilePad;
-            flex->padT = rows ? 0.0f : s.metrics.tilePad;
-            flex->padB = rows ? 0.0f : s.metrics.tilePad;
+            flex->gap = rows ? uiStyle(s, "grid", UiStyleKey::ListGap) : uiStyle(s, "grid", UiStyleKey::Gap);
+            flex->pad = rows ? uiStyle(s, "grid", UiStyleKey::ListPad) : 0.0f;
+            flex->padL = rows ? 0.0f : uiStyle(s, "grid", UiStyleKey::Pad);
+            flex->padR = rows ? 0.0f : uiStyle(s, "grid", UiStyleKey::Pad);
+            flex->padT = rows ? 0.0f : uiStyle(s, "grid", UiStyleKey::Pad);
+            flex->padB = rows ? 0.0f : uiStyle(s, "grid", UiStyleKey::Pad);
             flex->width = tileW > 8.0f ? tileW : 8.0f;
             flex->height = tileH > 8.0f ? tileH : 8.0f;
             flex->shrink = 0.0f;
@@ -282,7 +249,7 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
                 if (auto* lab = s.ent[parts->label].try_get_mut<UiFlex>()) {
                     lab->self = UiAlignSelf::Stretch;
                     lab->heightMode = UiSize::Px;
-                    lab->height = s.metrics.labelH;
+                    lab->height = uiStyle(s, "cell_label", UiStyleKey::Height);
                     lab->grow = rows ? 1.0f : 0.0f;
                     lab->shrink = 1.0f;
                 }
@@ -298,11 +265,11 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
                 const uint8_t role = grid->role(grid->user, index);
                 if (role == kUiCellSelected) {
                     *paint = paintToken(s.look, UiToken::Accent, s.look.radiusSm);
-                    paint->a = s.metrics.selectedA;
+                    paint->a = uiStyle(s, "grid", UiStyleKey::SelectedA);
                     paint->borderW = 0.0f;
                 } else if (role == kUiCellHeader) {
                     *paint = paintToken(s.look, UiToken::Side, 0.0f);
-                    paint->a = s.metrics.headerA;
+                    paint->a = uiStyle(s, "grid", UiStyleKey::HeaderA);
                     paint->borderW = 0.0f;
                 } else {
                     *paint = paintToken(s.look, UiToken::Item, s.look.radiusSm);
@@ -373,7 +340,7 @@ bool placeEditor(UiState& s, uint16_t gridId) {
         return false;
     }
     const uint16_t slot = slotFor(s, *grid, grid->editAt);
-    return uiPlaceOverSlot(s, grid->editor, slot, s.metrics.searchH);
+    return uiPlaceOverSlot(s, grid->editor, slot, uiStyle(s, "search_field", UiStyleKey::Height));
 }
 
 } // namespace

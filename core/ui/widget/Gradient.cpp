@@ -5,6 +5,8 @@
 #include "ui/Primitive.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/State.hpp"
+#include "ui/Template.hpp"
+#include "ui/StyleSheet.hpp"
 
 namespace burnhope {
 namespace {
@@ -80,9 +82,10 @@ bool drawGradient(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
     const float tr = s.look.text[0];
     const float tg = s.look.text[1];
     const float tb = s.look.text[2];
+    const float handle = uiStyle(s, "gradient", UiStyleKey::HandleSide);
     for (int p = 0; p < stops; ++p) {
         n = emitRect(
-            dst, n, cap, box.x + grad->t[p] * box.w - 5.0f, box.y + box.h * 0.35f - 4.0f, 10.0f, box.h * 0.3f + 8.0f, tr, tg, tb, 0.9f, 2.0f, clip);
+            dst, n, cap, box.x + grad->t[p] * box.w - handle * 0.5f, box.y + box.h * 0.35f - 4.0f, handle, box.h * 0.3f + 8.0f, tr, tg, tb, 0.9f, 2.0f, clip);
     }
     return true;
 }
@@ -90,11 +93,7 @@ bool drawGradient(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
 } // namespace
 
 uint16_t uiGradient(UiState& s, uint16_t parent) {
-    UiFlex flex{};
-    flex.heightMode = UiSize::Px;
-    flex.height = 36.0f;
-    flex.shrink = 0.0f;
-    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Content, 6.0f));
+    const uint16_t id = uiSpawnTemplate(s, parent, "core/panel", "gradient");
     if (id == kUiNone) {
         return id;
     }

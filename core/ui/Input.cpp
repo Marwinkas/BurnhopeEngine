@@ -60,13 +60,6 @@ void uiInputAdd(UiState& s, UiInputHookFn fn) {
     BH_ASSERT(ok, "ui hook registry full");
 }
 
-bool uiListen(UiState& s, UiValueFn fn, void* user) {
-    if (fn == nullptr) {
-        return false;
-    }
-    return s.valueHook.add({.fn = fn, .user = user});
-}
-
 void plantIme(UiState& s, const InputFrame& in) {
     if (s.focused >= s.count) {
         return;

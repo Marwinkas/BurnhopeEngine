@@ -5,7 +5,7 @@
 
 namespace burnhope {
 
-uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChangeFn onChange, void* user, float width = 160.0f);
+uint16_t uiSearchField(UiState& s, uint16_t parent, const char* hint, UiTextChangeFn onChange, void* user);
 void uiBindSearch(UiState& s, const char* name, UiTextChangeFn onChange, void* user);
 void uiSearchBin(UiState& s);
 

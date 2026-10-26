@@ -1,0 +1,4 @@
+{
+  "role": "cluster",
+  "flex": { "dir": "row", "align": "center", "justify": "center", "shrink": 0 }
+}

@@ -1,20 +1,17 @@
 #include "ui/Panel.hpp"
 #include "ui/State.hpp"
+#include "ui/Template.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Label.hpp"
 
 namespace burnhope {
 
 uint16_t uiLabel(UiState& s, uint16_t parent, const char* text) {
-    UiFlex flex{};
-    flex.shrink = 0.0f;
-    UiPaint ink = paintLabel(s.look);
-    const uint16_t id = uiPanel(s, parent, flex, ink);
+    const uint16_t id = uiSpawnTemplate(s, parent, "core/label");
     if (id == kUiNone) {
         return id;
     }
     uiText(s, id, text);
-    uiSetPass(s, id);
     return id;
 }
 

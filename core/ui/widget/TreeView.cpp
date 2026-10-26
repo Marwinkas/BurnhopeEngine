@@ -3,6 +3,9 @@
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
+#include "ui/Template.hpp"
+#include "ui/Panel.hpp"
 
 namespace burnhope {
 namespace {
@@ -30,64 +33,30 @@ void onRow(void* user, uint16_t id) {
 }
 
 uint16_t addTreeSlot(UiState& s, uint16_t inner, float itemH) {
-    UiFlex row{};
-    row.position = UiPosition::Absolute;
-    row.widthMode = UiSize::Percent;
-    row.width = 100.0f;
-    row.heightMode = UiSize::Px;
-    row.height = itemH > 2.0f ? itemH - 2.0f : itemH;
-    row.shrink = 0.0f;
-    row.direction = UiFlexDir::Row;
-    row.align = UiAlign::Center;
-    row.justify = UiJustify::Start;
-    row.gap = s.metrics.rowGap;
-    UiPaint rowPaint = paintToken(s.look, UiToken::Item, s.look.radiusSm);
-    rowPaint.a = 0.0f;
-    rowPaint.borderW = 0.0f;
-    const uint16_t slot = spawn(s, inner, row, rowPaint);
+    const UiTemplateId tpl = uiTemplateFind(s, "core/tree_row");
+    const uint16_t slot = uiSpawnTemplate(s, inner, tpl);
     if (slot == kUiNone) {
         return slot;
     }
-    auto bareIcon = [&](float side, float tall, uint8_t iconId, bool accent) {
-        UiFlex box{};
-        box.widthMode = UiSize::Px;
-        box.width = side;
-        box.heightMode = UiSize::Px;
-        box.height = tall;
-        box.shrink = 0.0f;
-        UiPaint paint{};
-        paint.a = 0.0f;
-        paint.borderW = 0.0f;
-        paint.shadow = 0.0f;
-        paint.icon = iconId;
-        paint.token = accent ? UiToken::Accent : UiToken::Text;
-        tokenRgb(s.look, paint.token, paint.r, paint.g, paint.b);
-        return spawn(s, slot, box, paint);
-    };
+    const uint16_t chevron = uiTemplateSlot(s, tpl, slot, "chevron");
+    const uint16_t icon = uiTemplateSlot(s, tpl, slot, "icon");
+    const uint16_t label = uiTemplateSlot(s, tpl, slot, "label");
+    // The row hangs in the virtual list: absolute, full width, a little shorter than its pitch.
+    uiPlace(s, slot, true, 0.0f, 0.0f, 0.0f, itemH > 2.0f ? itemH - 2.0f : itemH);
+    uiSetWidthPercent(s, slot, 100.0f);
     const float rowH = itemH > 6.0f ? itemH - 2.0f : itemH;
-    const uint16_t chevron = bareIcon(s.metrics.chevronW, rowH, static_cast<uint8_t>(UiIcon::ChevronRight), true);
-    if (chevron < s.count) {
-        uiSetFocusable(s, chevron);
-        uiBind(s, chevron, onRow, &s);
+    if (auto* box = s.ent[chevron].try_get_mut<UiFlex>()) {
+        box->heightMode = UiSize::Px;
+        box->height = rowH;
     }
-    const uint16_t icon = bareIcon(s.metrics.icon, s.metrics.icon, static_cast<uint8_t>(UiIcon::Folder), false);
-    UiFlex caption{};
-    caption.grow = 1.0f;
-    caption.shrink = 1.0f;
-    caption.self = UiAlignSelf::Stretch;
-    caption.heightMode = UiSize::Px;
-    caption.height = itemH > 6.0f ? itemH - 6.0f : itemH;
-    const uint16_t label = spawn(s, slot, caption, paintLabel(s.look));
-    addText(s, label, " ");
-    uiTextStyle(s, label, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-    if (icon < s.count) {
-        s.ent[icon].add<UiNoHit>();
+    uiSetIcon(s, chevron, UiIcon::ChevronRight);
+    uiBind(s, chevron, onRow, &s);
+    uiSetIcon(s, icon, UiIcon::Folder);
+    if (auto* caption = s.ent[label].try_get_mut<UiFlex>()) {
+        caption->heightMode = UiSize::Px;
+        caption->height = itemH > 6.0f ? itemH - 6.0f : itemH;
     }
-    if (label < s.count) {
-        s.ent[label].add<UiNoHit>();
-    }
-    uiSetFocusable(s, slot);
-    uiHover(s, slot);
+    uiText(s, label, " ");
     uiBind(s, slot, onRow, &s);
     s.ent[slot].set<UiParts>({icon, chevron, label});
     s.ent[slot].set<UiVirtRow>({});
@@ -112,7 +81,7 @@ uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg) {
     }
     const UiScroll* born = s.ent[scroll].try_get<UiScroll>();
     if (born != nullptr) {
-        uiVirtualSyncSpacer(s, born->inner, s.metrics.rowH);
+        uiVirtualSyncSpacer(s, born->inner, uiStyle(s, "tree", UiStyleKey::RowH));
     }
     UiTreeView tree{};
     tree.count = cfg.totalNodes;
@@ -123,7 +92,7 @@ uint16_t uiTreeView(UiState& s, uint16_t parent, const UiTreeConfig& cfg) {
     tree.open = cfg.onOpen;
     tree.empty = cfg.onEmptyClick;
     tree.user = cfg.user;
-    tree.itemH = s.metrics.rowH;
+    tree.itemH = uiStyle(s, "tree", UiStyleKey::RowH);
     s.ent[scroll].set<UiTreeView>(tree);
     uiVirtualAttach(s, scroll, uiTreeViewRefresh, uiTreeContentH, 0);
     s.ent[scroll].set<UiLayoutRefresh>({treeOnLayout, nullptr});
@@ -194,7 +163,7 @@ void uiTreeViewRefresh(UiState& s, uint16_t id) {
         }
         s.ent[slot].set<UiVirtRow>({index});
         if (tree->depth != nullptr) {
-            uiRowIndent(s, slot, static_cast<float>(tree->depth(tree->user, index)) * s.metrics.treeIndent);
+            uiRowIndent(s, slot, static_cast<float>(tree->depth(tree->user, index)) * uiStyle(s, "tree", UiStyleKey::TreeIndent));
         }
         if (const UiParts* parts = s.ent[slot].try_get<UiParts>(); parts != nullptr && parts->chevron < s.count && tree->open != nullptr) {
             uiShow(s, parts->chevron, true);

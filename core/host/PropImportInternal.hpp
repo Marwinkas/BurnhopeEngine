@@ -24,6 +24,10 @@ struct Node {
     char label[64]{};
     char name[32]{};
     char caption[48]{};
+    char cls[24]{};             // "class": applied after every key is read
+    const char* clsAt = nullptr; // where "class" appeared, for the error message
+    char use[24]{};             // "use": a blueprint of assets/ui/core spawned in place of a role
+    const char* useAt = nullptr;
     uint16_t bind = 0;
     uint8_t cat = 0;
     uint8_t owner = 0;
@@ -94,6 +98,9 @@ struct Node {
 
 struct Import {
     UiState* state = nullptr;
+    const char* asset = nullptr; // document name for error messages
+    const char* text = nullptr;  // start of the document, for line and column
+    bool failed = false;         // an error was already logged
     UiPropBinder* bind = nullptr;
     const PropSlot* slots = nullptr;
     uint16_t slotCount = 0;
@@ -106,23 +113,66 @@ struct Import {
     uint16_t roleCount = 0;
 };
 
+// Logs "<asset>:<line>:<col>: <message>" for the document position `at` and marks the import failed.
+// Always returns false so a parser can `return fail(...)`.
+bool fail(Import& in, const char* at, const char* message, const char* detail = "");
+
 // Records `id` in the slot list under `name` and, when `rename`, names the node.
 void remember(Import& in, const char* name, uint16_t id, bool rename = true);
 // The binder-owned command callback registered under `name`, or nullptr.
 UiCommandPick* takeCommand(Import& in, const char* name, uint16_t arg);
 void onChoiceCommand(void* user, uint8_t index);
-// Builds the roles that live outside the main table (segment, preview, pick and host-registered PropRoles).
-// Returns false when `node.role` is none of them.
-bool spawnExtra(Import& in, uint16_t parent, const Node& node, uint16_t& out);
-// Keys of the node object that parseNode does not own: slot, channel, cell, reset. Unknown keys are skipped.
-bool parseExtra(Cur& c, const char* key, Node& node);
 
-bool keyIs(const char* key, const char* name);
-bool parseItem(Cur& c, Item& item);
-bool parseShow(Cur& c, Node& node);
-// Copies the size and spacing of style class `name` onto `node`. A node lists "class" before its own keys,
-// so the keys that follow override what the class set.
-void applyClass(const UiState& s, Node& node, const char* name);
-bool parseItems(Cur& c, Node& node);
+// Reads one node object up to (not into) its "children" array: every key fills `node`, in any order.
+// `children` is left at the array, or null when the node has none. Unknown keys, bad value types and bad
+// enum words fail the import.
+bool parseNodeKeys(Cur& c, Import& in, Node& node, const char*& children);
+bool parseItem(Import& in, Cur& c, Item& item);
+bool parseShow(Import& in, Cur& c, Node& node);
+bool parseItems(Import& in, Cur& c, Node& node);
+// Copies the size and spacing of style class `name` onto `node`; fields the node set itself keep their value.
+// Fails when neither styles.json nor the built-in classes know `name`.
+bool applyClass(Import& in, const char* at, Node& node, const char* name);
+
+// A menu button spans its row and shares the row's free width, unless the layout sizes it.
+void fillRow(UiState& s, uint16_t id);
+
+// Builds `node` under `parent` with the maker of node.role: a built-in role, segment / preview / pick, or a
+// host-registered PropRole. Returns false for an unknown role.
+bool spawnRole(Import& in, uint16_t parent, const Node& node, uint16_t& out);
+
+// Makers shared by the role table (PropImportRoles.cpp) and the files that define them.
+uint16_t spawnPanel(Import& in, uint16_t parent, const Node& node);
+uint16_t spawnScroll(Import& in, uint16_t parent, const Node& node);
+uint16_t makeMenu(Import& in, uint16_t parent, const Node& node);
+void bindNodeCommand(Import& in, uint16_t id, const Node& node);
+void markNode(Import& in, uint16_t id, const Node& node);
+void rememberShow(Import& in, uint16_t node, const Node& spec);
+void finishNode(Import& in, uint16_t host, const Node& node);
+UiPaint paintOf(const Import& in, const Node& node);
+uint16_t spawnGroup(Import& in, uint16_t parent);
+
+uint16_t makeSection(Import& in, uint16_t parent, const Node& node);
+uint16_t makeFold(Import& in, uint16_t parent, const Node& node);
+uint16_t makeGroup(Import& in, uint16_t parent, const Node& node);
+uint16_t makeSlider(Import& in, uint16_t parent, const Node& node);
+uint16_t makeSwatch(Import& in, uint16_t parent, const Node& node);
+uint16_t makeVec2(Import& in, uint16_t parent, const Node& node);
+uint16_t makeVec3(Import& in, uint16_t parent, const Node& node);
+uint16_t makeSplit(Import& in, uint16_t parent, const Node& node);
+uint16_t makeFilter(Import& in, uint16_t parent, const Node& node);
+uint16_t makeHost(Import& in, uint16_t parent, const Node& node);
+uint16_t makeLabel(Import& in, uint16_t parent, const Node& node);
+uint16_t makeButton(Import& in, uint16_t parent, const Node& node);
+uint16_t makeIcon(Import& in, uint16_t parent, const Node& node);
+uint16_t makeSlot(Import& in, uint16_t parent, const Node& node);
+uint16_t makeChoice(Import& in, uint16_t parent, const Node& node);
+uint16_t makeNumber(Import& in, uint16_t parent, const Node& node);
+uint16_t makeRange(Import& in, uint16_t parent, const Node& node);
+uint16_t makeList(Import& in, uint16_t parent, const Node& node);
+uint16_t makeSpacer(Import& in, uint16_t parent, const Node& node);
+uint16_t makeCheck(Import& in, uint16_t parent, const Node& node);
+// Spawns the blueprint node.use names; the node supplies placement, label and icon. kUiNone (import failed) on error.
+uint16_t makeUse(Import& in, uint16_t parent, const Node& node);
 
 } // namespace burnhope::propimport

@@ -1,0 +1,14 @@
+{
+  "role": "cell",
+  "class": "cell_tile",
+  "flex": { "dir": "column", "align": "center", "justify": "center", "shrink": 0 },
+  "traits": ["hoverable", "focusable"],
+  "parts": [
+    { "name": "icon", "role": "icon", "class": "cell_icon", "flex": { "shrink": 0 }, "traits": ["nohit"] },
+    { "name": "label", "role": "label", "class": "cell_label", "flex": { "self": "stretch", "shrink": 1 },
+      "text": { "align": "center", "valign": "center", "ellipsis": "end", "leading": 1 }, "traits": ["nohit"] },
+    { "name": "sub", "role": "label", "class": "cell_sub", "flex": { "self": "stretch", "shrink": 1 },
+      "text": { "align": "center", "valign": "center", "ellipsis": "end", "leading": 1 }, "traits": ["nohit"] }
+  ],
+  "slots": { "icon": "icon", "label": "label", "sub": "sub" }
+}

@@ -19,8 +19,6 @@ struct UiSegmentConfig {
     const char* const* labels = nullptr;
     uint8_t count = 0;
     uint8_t selected = 0;
-    float itemW = 56.0f;
-    float itemH = 24.0f;
     void (*onPick)(void* user, uint8_t index) = nullptr;
     void* user = nullptr;
 };

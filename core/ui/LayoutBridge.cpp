@@ -504,22 +504,12 @@ void uiLayout(UiState& s, float w, float h) {
         }
     }
 
-    const bool resized = (s.laidW != w || s.laidH != h);
     s.laidW = w;
     s.laidH = h;
     s.layoutDirty = false;
 
-    // Вызов зарегистрированного хука финализации
-    if (s.layoutFinishHook.fn != nullptr) {
-        s.layoutFinishHook.fn(s, resized, s.layoutFinishHook.user);
-    }
-
     s.visualDirty = true;
     uiCacheVisibility(s);
-}
-
-void uiRegisterLayoutFinish(UiState& s, UiLayoutFinishFn fn, void* user) {
-    s.layoutFinishHook = { .fn = fn, .user = user };
 }
 
 } // namespace burnhope

@@ -8,6 +8,7 @@
 #include "ui/widget/Field.hpp"
 #include "ui/State.hpp"
 #include "ui/StyleSheet.hpp"
+#include "ui/Template.hpp"
 
 #include <charconv>
 #include <cmath>
@@ -120,12 +121,12 @@ void fieldMark(UiState& s, uint16_t id) {
         paint->br = s.look.accent[2][0];
         paint->bg = s.look.accent[2][1];
         paint->bb = s.look.accent[2][2];
-        paint->borderW = 1.5f;
+        paint->borderW = uiStyle(s, "input_field", UiStyleKey::ErrorBorder);
     } else {
         paint->br = s.look.muted[0];
         paint->bg = s.look.muted[1];
         paint->bb = s.look.muted[2];
-        paint->borderW = uiStyle(s, "input_field", UiStyleKey::Border, 1.0f);
+        paint->borderW = uiStyle(s, "input_field", UiStyleKey::Border);
     }
     s.visualDirty = true;
 }
@@ -163,7 +164,7 @@ void uiFieldBindContextMenuAll(UiState& s, uint16_t menuId) {
 
 UiBox fieldInset(const UiState& s, uint16_t id, const UiField& field) {
     const UiBox& box = s.box[id];
-    const float clearW = field.clear != 0 && field.len > 0 ? 22.0f : 0.0f;
+    const float clearW = field.clear != 0 && field.len > 0 ? uiStyle(s, "input_field", UiStyleKey::ClearW) : 0.0f;
     UiBox inset = box;
     inset.x += field.padL;
     inset.w = box.w - field.padL - field.padR - clearW;
@@ -369,36 +370,8 @@ void uiFieldNotify(UiState& s, uint16_t id) {
 }
 
 uint16_t uiField(UiState& s, uint16_t parent, const char* text, uint8_t filter, bool clear) {
-    UiFlex flex{};
-    flex.widthMode = UiSize::Percent;
-    flex.width = 100.0f;
-    flex.heightMode = UiSize::Px;
-    flex.height = uiStyle(s, "input_field", UiStyleKey::Height, s.metrics.fieldH);
-    flex.shrink = 0.0f;
-    UiPaint look = paintField(s.look);
-    look.radius = uiStyle(s, "input_field", UiStyleKey::Radius, look.radius);
-    look.borderW = uiStyle(s, "input_field", UiStyleKey::Border, look.borderW);
-    const uint16_t id = uiPanel(s, parent, flex, look);
-    if (id == kUiNone) {
-        return id;
-    }
-    uiHover(s, id);
-    uiSetFocusable(s, id);
-    s.ent[id].add<UiTextInput>();
-    UiField field{};
-    field.padL = uiStyle(s, "input_field", UiStyleKey::PadL, field.padL);
-    field.padR = uiStyle(s, "input_field", UiStyleKey::PadR, field.padR);
-    const uint8_t n = uiStrCopy(field.bytes, text);
-    field.len = n;
-    field.caret = n;
-    field.anchor = n;
-    field.filter = filter;
-    field.clear = clear ? 1 : 0;
-    s.ent[id].set<UiField>(field);
-    fieldSyncText(s, id);
-    if (uiFieldMenu(s) != kUiNone) {
-        s.contextOf[id] = uiFieldMenu(s);
-    }
+    const uint16_t id = uiSpawnTemplate(s, parent, "core/field");
+    uiBindField(s, id, text, filter, clear);
     return id;
 }
 
@@ -407,8 +380,8 @@ void uiBindField(UiState& s, uint16_t id, const char* text, uint8_t filter, bool
         return;
     }
     UiField field{};
-    field.padL = uiStyle(s, "input_field", UiStyleKey::PadL, field.padL);
-    field.padR = uiStyle(s, "input_field", UiStyleKey::PadR, field.padR);
+    field.padL = uiStyle(s, "input_field", UiStyleKey::PadL);
+    field.padR = uiStyle(s, "input_field", UiStyleKey::PadR);
     const uint8_t n = uiStrCopy(field.bytes, text);
     field.len = n;
     field.caret = n;
@@ -457,7 +430,7 @@ uint8_t caretFromPointer(const UiState& s, uint16_t id, const UiField& field, fl
 }
 
 float fieldView(const UiState& s, uint16_t id, const UiField& field) {
-    const float clearW = field.clear != 0 && field.len > 0 && field.readOnly == 0 ? 22.0f : 0.0f;
+    const float clearW = field.clear != 0 && field.len > 0 && field.readOnly == 0 ? uiStyle(s, "input_field", UiStyleKey::ClearW) : 0.0f;
     return s.box[id].w - field.padL - field.padR - clearW;
 }
 
@@ -495,7 +468,7 @@ bool fieldHandlePointer(UiState& s, uint16_t id, const InputFrame& in, bool pres
     }
     if (press) {
         uiFieldSetEdit(s, id);
-        const float clearW = field->clear != 0 && field->len > 0 && field->readOnly == 0 ? 22.0f : 0.0f;
+        const float clearW = field->clear != 0 && field->len > 0 && field->readOnly == 0 ? uiStyle(s, "input_field", UiStyleKey::ClearW) : 0.0f;
         if (clearW > 0.0f && in.pointer.x >= s.box[id].x + s.box[id].w - field->padR - clearW) {
             field->len = 0;
             field->caret = 0;
@@ -675,7 +648,7 @@ bool uiFieldInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, 
             return false;
         }
         const UiField* field = s.ent[id].try_get<UiField>();
-        const float clearW = field != nullptr && field->clear != 0 && field->len > 0 && field->readOnly == 0 ? 22.0f : 0.0f;
+        const float clearW = field != nullptr && field->clear != 0 && field->len > 0 && field->readOnly == 0 ? uiStyle(s, "input_field", UiStyleKey::ClearW) : 0.0f;
         const bool onClear = clearW > 0.0f && in.pointer.x >= s.box[id].x + s.box[id].w - field->padR - clearW;
         note.cursor = onClear ? 6 : 5;
         return true;
@@ -740,8 +713,8 @@ void finishField(UiState& s, uint16_t id, const BinTail* spec, const char* text,
     UiFieldFlag flags = UiFieldFlag::None;
     uint8_t filter = 0;
     uint8_t maxChars = 0;
-    float padL = 12.0f;
-    float padR = 12.0f;
+    float padL = uiStyle(s, "input_field", UiStyleKey::PadL);
+    float padR = uiStyle(s, "input_field", UiStyleKey::PadR);
     if (const UiFlex* flex = s.ent[id].try_get<UiFlex>()) {
         if (flex->padL > 0.0f) {
             padL = flex->padL;

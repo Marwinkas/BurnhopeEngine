@@ -12,6 +12,7 @@
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Splitter.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <cstring>
 #include <filesystem>
@@ -45,7 +46,7 @@ void mountFiles(UiState& s) {
         s.ent[b.pop].add<UiPopup>();
         s.ent[b.pop].add<UiMenuSlide>();
         s.ent[b.pop].set<UiPaint>(paintPopup(s.look));
-        s.ent[b.pop].try_get_mut<UiPaint>()->shadow = s.metrics.menuShadow;
+        s.ent[b.pop].try_get_mut<UiPaint>()->shadow = uiStyle(s, "menu", UiStyleKey::Shadow);
     }
     b.importBtn = take("file.import");
     b.searchBox = take("file.search");
@@ -54,9 +55,6 @@ void mountFiles(UiState& s) {
     b.wTree = take("file.tree");
     b.status = take("file.status");
     files->fileView = take("file.grid");
-    for (const uint16_t btn : {b.plus, b.back, b.fwd, b.tune, b.importBtn}) {
-        uiToolFrame(s, btn);
-    }
     fileWire(s);
     if (const uint16_t split = take("file.split"); split != kUiNone) {
         uiSplitterSetWidth(s, split, b.look.tree);

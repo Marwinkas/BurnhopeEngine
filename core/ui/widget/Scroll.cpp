@@ -1,6 +1,7 @@
 #include "ui/Bar.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -61,7 +62,7 @@ void scrollRefresh(UiState& s, uint16_t id, void (*fn)(UiState&, uint16_t)) {
     }
 }
 
-UiScrollMetrics uiCalcScrollMetrics(float viewH, float contentH, float offset) {
+UiScrollMetrics uiCalcScrollMetrics(float viewH, float contentH, float offset, float minThumb) {
     UiScrollMetrics metrics{};
     metrics.contentH = contentH;
     metrics.maxOff = contentH - viewH;
@@ -74,8 +75,8 @@ UiScrollMetrics uiCalcScrollMetrics(float viewH, float contentH, float offset) {
     }
     metrics.shown = 1;
     metrics.thumbH = viewH * viewH / contentH;
-    if (metrics.thumbH < 18.0f) {
-        metrics.thumbH = 18.0f;
+    if (metrics.thumbH < minThumb) {
+        metrics.thumbH = minThumb;
     }
     if (metrics.thumbH > viewH) {
         metrics.thumbH = viewH;
@@ -130,8 +131,8 @@ void scrollBy(UiState& s, uint16_t id, float wheel) {
     }
     const float viewH = s.box[id].h;
     const float contentH = scrollSpan(s, id, scroll->inner);
-    const UiScrollMetrics metrics = uiCalcScrollMetrics(viewH, contentH, scroll->offset);
-    scroll->offset -= wheel * 28.0f;
+    const UiScrollMetrics metrics = uiCalcScrollMetrics(viewH, contentH, scroll->offset, uiStyle(s, "scroll_bar", UiStyleKey::MinThumb));
+    scroll->offset -= wheel * uiStyle(s, "scroll_bar", UiStyleKey::WheelStep);
     if (scroll->offset < 0.0f) {
         scroll->offset = 0.0f;
     }
@@ -165,18 +166,18 @@ bool scrollThumb(const UiState& s, uint16_t id, UiBox& thumb) {
         return false;
     }
     const float viewH = s.box[id].h;
-    const UiScrollMetrics metrics = uiCalcScrollMetrics(viewH, scrollSpan(s, id, scroll->inner), scroll->offset);
+    const UiScrollMetrics metrics = uiCalcScrollMetrics(viewH, scrollSpan(s, id, scroll->inner), scroll->offset, uiStyle(s, "scroll_bar", UiStyleKey::MinThumb));
     if (metrics.shown == 0) {
         return false;
     }
     const float travel = metrics.travel;
     const float t = metrics.t;
-    thumb.x = s.box[id].x + s.box[id].w - 8.0f;
+    thumb.x = s.box[id].x + s.box[id].w - uiStyle(s, "scroll_bar", UiStyleKey::BarInset);
     if (thumb.x < s.box[id].x) {
         thumb.x = s.box[id].x;
     }
     thumb.y = s.box[id].y + t * travel;
-    thumb.w = 6.0f;
+    thumb.w = uiStyle(s, "scroll_bar", UiStyleKey::Width);
     thumb.h = metrics.thumbH;
     return true;
 }
@@ -187,7 +188,7 @@ void dragScroll(UiState& s, uint16_t id, float y) {
         return;
     }
     const float viewH = s.box[id].h;
-    const UiScrollMetrics metrics = uiCalcScrollMetrics(viewH, scrollSpan(s, id, scroll->inner), scroll->offset);
+    const UiScrollMetrics metrics = uiCalcScrollMetrics(viewH, scrollSpan(s, id, scroll->inner), scroll->offset, uiStyle(s, "scroll_bar", UiStyleKey::MinThumb));
     if (metrics.shown == 0 || metrics.maxOff <= 0.0f) {
         return;
     }
@@ -250,11 +251,9 @@ void uiScrollPlace(UiState& s) {
             next.y = thumb.y;
             next.w = thumb.w;
             next.h = thumb.h;
-            next.radius = 2.0f;
-            next.r = s.look.accent[0][0];
-            next.g = s.look.accent[0][1];
-            next.b = s.look.accent[0][2];
-            next.a = 0.95f;
+            next.radius = uiStyle(s, "scroll_bar", UiStyleKey::Radius);
+            tokenRgb(s.look, uiStyleBg(s, "scroll_bar"), next.r, next.g, next.b);
+            next.a = uiStyle(s, "scroll_bar", UiStyleKey::Alpha);
             next.on = 1;
         }
         if (auto* bar = s.ent[id].try_get_mut<UiBar>()) {

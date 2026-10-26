@@ -26,6 +26,11 @@
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/VirtualGrid.hpp"
 #include "ui/LayoutBridge.hpp"
+#include "ui/StyleSheet.hpp"
+#include "ui/Template.hpp"
+#include "ui/Theme.hpp"
+
+#include <spdlog/spdlog.h>
 
 namespace burnhope {
 
@@ -66,6 +71,17 @@ void uiWidgetsInit(UiState& s) {
     uiInstallCalendarBin(s);
     uiCurveBind(s);
     uiGradientBind(s);
+    // Widgets spawn blueprints that read the sheet, so a state starts with the shipped theme, sheet and blueprints.
+    // A host reloads all three on F5 (canvasReload).
+    if (!uiThemeLoadAsset(s, "assets/ui/theme.json")) {
+        spdlog::warn("ui: assets/ui/theme.json unavailable, themes fall back to the default palette");
+    }
+    if (!uiStyleLoadAsset(s, "assets/ui/styles.json")) {
+        spdlog::warn("ui: assets/ui/styles.json unavailable, widgets use the built-in style classes");
+    }
+    if (!uiTemplatesLoadAsset(s, "assets/ui/core/_manifest.json")) {
+        spdlog::warn("ui: assets/ui/core blueprints unavailable, buttons cannot be built");
+    }
 }
 
 } // namespace burnhope

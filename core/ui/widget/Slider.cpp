@@ -3,6 +3,7 @@
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/State.hpp"
+#include "ui/Template.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -32,29 +33,16 @@ void dragSlider(UiState& s, uint16_t id, float x) {
     s.visualDirty = true;
 }
 
-uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float maxV, UiValueChangeFn onChange, void* user, float width) {
-    UiFlex flex{};
-    if (width > 1.0f) {
-        flex.widthMode = UiSize::Px;
-        flex.width = width;
-        flex.grow = 0.0f;
-    } else {
-        flex.widthMode = UiSize::Percent;
-        flex.width = 100.0f;
+uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float maxV, UiValueChangeFn onChange, void* user) {
+    const uint16_t id = uiSpawnTemplate(s, parent, "core/slider");
+    uiSliderInit(s, id, value, minV, maxV, onChange, user);
+    return id;
+}
+
+void uiSliderInit(UiState& s, uint16_t id, float value, float minV, float maxV, UiValueChangeFn onChange, void* user) {
+    if (id >= s.count) {
+        return;
     }
-    flex.heightMode = UiSize::Px;
-    flex.height = s.metrics.sliderH;
-    flex.shrink = 0.0f;
-    UiPaint body = paintToken(s.look, UiToken::Slider, s.look.radiusSm);
-    body.a = 0.0f;
-    body.borderW = 0.0f;
-    body.shadow = 0.0f;
-    const uint16_t id = uiPanel(s, parent, flex, body);
-    if (id == kUiNone) {
-        return id;
-    }
-    uiHover(s, id);
-    uiSetFocusable(s, id);
     if (value < minV) {
         value = minV;
     }
@@ -65,7 +53,6 @@ uint16_t uiSlider(UiState& s, uint16_t parent, float value, float minV, float ma
     if (onChange != nullptr) {
         s.ent[id].set<UiValueHook>({onChange, user});
     }
-    return id;
 }
 
 void uiBindSlider(UiState& s, const char* name, float value, UiValueChangeFn onChange, void* user) {

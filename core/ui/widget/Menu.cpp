@@ -6,6 +6,7 @@
 #include "ui/widget/Scroll.hpp"
 #include "ui/State.hpp"
 #include "ui/StyleSheet.hpp"
+#include "ui/Template.hpp"
 
 #include <span>
 
@@ -13,8 +14,6 @@
 
 namespace burnhope {
 namespace {
-
-constexpr float kUiMenuMinW = 96.0f;
 
 struct UiMenuFlyout {};
 
@@ -24,7 +23,12 @@ UiMenuMetrics metricsOf(const UiState& s, uint16_t menu) {
             return *live;
         }
     }
-    return {};
+    return {
+        .w = uiStyle(s, "menu", UiStyleKey::Width),
+        .itemH = uiStyle(s, "menu", UiStyleKey::RowH),
+        .pad = uiStyle(s, "menu", UiStyleKey::Pad),
+        .gap = uiStyle(s, "menu", UiStyleKey::Gap),
+    };
 }
 
 void menuShell(UiState& s, uint16_t id) {
@@ -40,7 +44,7 @@ void menuShell(UiState& s, uint16_t id) {
         }
     }
     *paint = paintPopup(s.look);
-    paint->shadow = s.metrics.menuShadow;
+    paint->shadow = uiStyle(s, "menu", UiStyleKey::Shadow);
 }
 
 // A bordered trigger (Choice, dropdown) wears the orange accent border while its menu is open.
@@ -54,9 +58,9 @@ void litTrigger(UiState& s, uint16_t menu, bool on) {
             continue;
         }
         if (on) {
-            paint->br = kUiToolActive[0];
-            paint->bg = kUiToolActive[1];
-            paint->bb = kUiToolActive[2];
+            paint->br = s.look.toolActive[0];
+            paint->bg = s.look.toolActive[1];
+            paint->bb = s.look.toolActive[2];
         } else {
             tokenRgb(s.look, UiToken::Muted, paint->br, paint->bg, paint->bb);
         }
@@ -102,14 +106,15 @@ void armMenu(UiState& s) {
 }
 
 float menuTop(const UiState& s, float anchorBottom, float above, float menuH) {
-    float top = anchorBottom + 8.0f;
+    const float offset = uiStyle(s, "menu", UiStyleKey::Offset);
+    float top = anchorBottom + uiStyle(s, "menu", UiStyleKey::AnchorGap);
     const bool bar = above >= 0.0f;
     const float buttonTop = bar ? above : anchorBottom;
-    if (top + menuH > s.laidH - 4.0f) {
-        top = buttonTop - menuH - s.metrics.menuPadX;
+    if (top + menuH > s.laidH - uiStyle(s, "menu", UiStyleKey::ScreenGap)) {
+        top = buttonTop - menuH - offset;
     }
     if (bar && top < anchorBottom && top + menuH > buttonTop) {
-        top = buttonTop - menuH - s.metrics.menuPadX;
+        top = buttonTop - menuH - offset;
     }
     return top;
 }
@@ -137,26 +142,14 @@ void silenceRow(UiState& s, uint16_t row) {
 }
 
 uint16_t separatorRow(UiState& s, uint16_t menu, uint16_t row) {
+    const UiTemplateId tpl = uiTemplateFind(s, "core/menu_sep");
     if (row == kUiNone) {
-        UiFlex line = px(200.0f, 1.0f);
-        line.widthMode = UiSize::Percent;
-        line.width = 100.0f;
-        line.shrink = 0.0f;
-        row = spawn(s, menu, line, paintToken(s.look, UiToken::Muted, 0.0f));
+        row = spawn(s, menu, UiFlex{}, paintClear());
     }
-    if (row >= s.count) {
+    if (row >= s.count || !uiApplyTemplate(s, row, tpl)) {
         return kUiNone;
     }
-    if (auto* flex = s.ent[row].try_get_mut<UiFlex>()) {
-        flex->heightMode = UiSize::Px;
-        flex->height = 1.0f;
-        flex->widthMode = UiSize::Percent;
-        flex->width = 100.0f;
-        flex->shrink = 0.0f;
-    }
-    if (auto* paint = s.ent[row].try_get_mut<UiPaint>()) {
-        *paint = paintToken(s.look, UiToken::Muted, 0.0f);
-    }
+    uiSetWidthPercent(s, row, 100.0f);
     uiText(s, row, "");
     silenceRow(s, row);
     uiShow(s, row, true);
@@ -172,7 +165,7 @@ uint16_t flyoutMenu(UiState& s) {
     if (id < s.count) {
         s.ent[id].remove<UiMenuSlide>();
         if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
-            flex->width = 220.0f;
+            flex->width = uiStyle(s, "menu", UiStyleKey::FlyoutW);
         }
     }
     uiMarkOnly<UiMenuFlyout>(s, id);
@@ -190,33 +183,21 @@ void uiMenuRowBind(UiState& s, uint16_t row, const char* label, UiCommandFn fn, 
     if (row >= s.count) {
         return;
     }
+    const float radius = s.ent[row].try_get<UiPaint>() != nullptr ? s.ent[row].try_get<UiPaint>()->radius : 0.0f;
+    if (!uiApplyTemplate(s, row, uiTemplateFind(s, "core/menu_item"))) {
+        return;
+    }
     if (auto* flex = s.ent[row].try_get_mut<UiFlex>()) {
         flex->heightMode = UiSize::Px;
         flex->height = metricsOf(s, s.parentOf[row]).itemH;
         flex->widthMode = UiSize::Percent;
         flex->width = 100.0f;
-        flex->shrink = 0.0f;
-        flex->align = UiAlign::Start;
-        flex->justify = UiJustify::Start;
-        flex->padL = 8.0f;
     }
     if (auto* paint = s.ent[row].try_get_mut<UiPaint>()) {
-        const float radius = paint->radius;
-        *paint = paintToken(s.look, UiToken::Item, radius > 0.0f ? radius : s.look.radiusSm);
-        paint->a = 0.0f;
-        paint->borderW = 0.0f;
+        paint->radius = radius > 0.0f ? radius : paint->radius; // a row that already had a corner keeps it
         paint->disabled = false;
-    } else {
-        s.ent[row].set<UiPaint>(paintToken(s.look, UiToken::Item, s.look.radiusSm));
-        if (auto* paint = s.ent[row].try_get_mut<UiPaint>()) {
-            paint->a = 0.0f;
-            paint->borderW = 0.0f;
-        }
     }
     uiText(s, row, label != nullptr ? label : "");
-    uiTextStyle(s, row, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-    uiSetFocusable(s, row);
-    uiHover(s, row);
     uiCommandStore(s, row, fn, user, item, owner, command);
 }
 
@@ -224,16 +205,7 @@ uint16_t uiMenuRow(UiState& s, uint16_t menu, const char* label, UiCommandFn fn,
     if (menu >= s.count) {
         return kUiNone;
     }
-    UiFlex itemF{};
-    itemF.heightMode = UiSize::Px;
-    itemF.height = metricsOf(s, menu).itemH;
-    itemF.widthMode = UiSize::Percent;
-    itemF.width = 100.0f;
-    itemF.shrink = 0.0f;
-    itemF.align = UiAlign::Start;
-    itemF.justify = UiJustify::Start;
-    itemF.padL = 8.0f;
-    const uint16_t row = spawn(s, menu, itemF, paintToken(s.look, UiToken::Item, s.look.radiusSm));
+    const uint16_t row = spawn(s, menu, UiFlex{}, paintClear());
     if (row == kUiNone || row >= s.count) {
         return kUiNone;
     }
@@ -345,18 +317,19 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
     float menuH = metrics.pad * 2.0f + body + gaps;
     if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
         flex->position = UiPosition::Absolute;
-        const float menuW = flex->width > 1.0f ? flex->width : 220.0f;
+        const float screenGap = uiStyle(s, "menu", UiStyleKey::ScreenGap);
+        const float menuW = flex->width > 1.0f ? flex->width : uiStyle(s, "menu", UiStyleKey::FlyoutW);
         const float full = menuH;
         const float limit = s.laidH > 64.0f ? s.laidH - 16.0f : full;
         menuH = full < limit ? full : limit;
         float x = screenX;
         float y = screenY;
-        if (x + menuW > s.laidW - 4.0f) {
-            x = s.laidW - menuW - 4.0f;
+        if (x + menuW > s.laidW - screenGap) {
+            x = s.laidW - menuW - screenGap;
         }
         y = menuTop(s, screenY, above, menuH);
-        if (x < 4.0f) {
-            x = 4.0f;
+        if (x < screenGap) {
+            x = screenGap;
         }
         flex->posX = x;
         flex->posY = y;
@@ -381,16 +354,14 @@ uint16_t uiMakeMenu(UiState& s) {
     if (s.count == 0) {
         return kUiNone;
     }
-    UiFlex flex{};
-    flex.position = UiPosition::Absolute;
-    flex.widthMode = UiSize::Px;
     const UiMenuMetrics style = metricsOf(s, uiMenu(s));
-    flex.width = style.w;
-    flex.pad = style.pad;
-    flex.gap = style.gap;
-    flex.shrink = 0.0f;
-    const uint16_t id = uiNode(s, 0, flex, paintToken(s.look, UiToken::Window, s.look.radiusSm));
+    const uint16_t id = uiSpawnTemplate(s, 0, "core/menu");
     if (id != kUiNone) {
+        uiPlace(s, id, true, 0.0f, 0.0f, style.w, 0.0f);
+        if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
+            flex->pad = style.pad;
+            flex->gap = style.gap;
+        }
         menuShell(s, id);
         s.ent[id].set<UiMenuMetrics>(style);
         uiShow(s, id, false);
@@ -453,9 +424,10 @@ void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y, float above) {
     }
     const uint32_t items = uiNodeChildCount(s, menuId);
     const UiMenuMetrics metrics = metricsOf(s, menuId);
-    // A popup never narrows below kUiMenuMinW, whatever trigger width it was sized from.
-    if (flex->width < kUiMenuMinW) {
-        flex->width = kUiMenuMinW;
+    // A popup never narrows below the "menu" class minW, whatever trigger width it was sized from.
+    const float minW = uiStyle(s, "menu", UiStyleKey::PopupMinW);
+    if (flex->width < minW) {
+        flex->width = minW;
     }
     const float menuH = metrics.pad * 2.0f + static_cast<float>(items) * metrics.itemH
         + static_cast<float>(items > 0 ? items - 1 : 0) * metrics.gap;
@@ -465,8 +437,9 @@ void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y, float above) {
         x = s.laidW - shownW;
     }
     y = menuTop(s, anchorY, above, menuH);
-    if (x < 4.0f) {
-        x = 4.0f;
+    const float edge = uiStyle(s, "menu", UiStyleKey::ScreenGap);
+    if (x < edge) {
+        x = edge;
     }
     flex->position = UiPosition::Absolute;
     flex->heightMode = UiSize::Px;
@@ -572,34 +545,13 @@ bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t hit, uint8_t phase, 
     return false;
 }
 
-uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t menu) {
-    UiFlex flex{};
-    flex.direction = UiFlexDir::Row;
-    flex.widthMode = UiSize::Percent;
-    flex.width = 100.0f;
-    flex.heightMode = UiSize::Px;
-    flex.height = uiStyle(s, "dropdown_trigger", UiStyleKey::Height, kUiTriggerH);
-    flex.grow = 1.0f;
-    flex.shrink = 1.0f;
-    flex.align = UiAlign::Center;
-    flex.justify = UiJustify::Start;
-    flex.padL = uiStyle(s, "dropdown_trigger", UiStyleKey::PadL, s.metrics.menuPadX);
-    flex.padR = uiStyle(s, "dropdown_trigger", UiStyleKey::PadR, 22.0f);
-    UiPaint look = paintButtonFill(s.look);
-    look.borderW = uiStyle(s, "dropdown_trigger", UiStyleKey::Border, 1.0f);
-    look.radius = uiStyle(s, "dropdown_trigger", UiStyleKey::Radius, look.radius);
-    tokenRgb(s.look, UiToken::Muted, look.br, look.bg, look.bb);
-    const uint16_t id = uiPanel(s, parent, flex, look);
+uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t menu, const char* blueprint) {
+    const uint16_t id = uiSpawnTemplate(s, parent, blueprint);
     if (id == kUiNone) {
         return id;
     }
     uiText(s, id, label != nullptr ? label : "");
-    uiTextStyle(s, id, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-    if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
-        paint->icon = static_cast<uint8_t>(UiIcon::MenuChevron);
-    }
-    uiHover(s, id);
-    uiSetFocusable(s, id);
+    uiSetIcon(s, id, UiIcon::MenuChevron);
     if (menu != kUiNone) {
         uiSetContextMenu(s, id, menu);
         uiMarkMenuBar(s, id);

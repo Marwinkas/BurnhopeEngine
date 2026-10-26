@@ -3,6 +3,7 @@
 #include "ui/Interaction.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/State.hpp"
+#include "ui/Template.hpp"
 
 #include <bit>
 
@@ -99,17 +100,23 @@ void uiSetIcon(UiState& s, uint16_t id, UiIcon icon) {
     }
 }
 
-void uiSetAlpha(UiState& s, uint16_t id, float alpha) {
-    if (UiPaint* paint = paintOf(s, id)) {
-        paint->a = alpha;
-        s.visualDirty = true;
+void uiSetActive(UiState& s, uint16_t id, bool on) {
+    UiPaint* paint = paintOf(s, id);
+    if (paint == nullptr) {
+        return;
     }
+    paint->picked = on ? 1 : 0;
+    if (paint->activeToken != UiToken::Custom) {
+        paint->token = on ? paint->activeToken : paint->idleToken;
+        tokenRgb(s.look, paint->token, paint->r, paint->g, paint->b);
+    }
+    s.visualDirty = true;
 }
 
-uint16_t uiSpacer(UiState& s, uint16_t parent, const UiFlex& flex) {
-    const uint16_t id = uiPanel(s, parent, flex, paintClear());
+uint16_t uiSpacer(UiState& s, uint16_t parent, const char* cls) {
+    const uint16_t id = uiSpawnTemplate(s, parent, "core/spacer", cls);
     if (id != kUiNone) {
-        uiSetPass(s, id);
+        uiSetGrow(s, id, 1.0f, 1.0f);
     }
     return id;
 }
@@ -134,14 +141,15 @@ uint32_t uiEmitPanel(
         return n;
     }
     const UiBox& box = s.box[id];
+    const UiPaintStyle& ps = s.paintStyle;
     if (paint->disabled) {
-        a *= 0.45f;
+        a *= ps.disabledAlpha;
     }
-    if (paint->shadow > 0.5f && a > 0.02f) {
-        const float sh = paint->shadow;
+    if (paint->shadow > 0.5f && a > kUiInvisibleAlpha) {
+        const float spread = paint->shadow * ps.shadowGrow;
         n = emitMark(
-            dst, n, cap, box.x - sh, box.y - sh * 0.15f, box.w + sh * 2.0f, box.h + sh * 2.0f,
-            0.0f, 0.0f, 0.0f, 0.42f, paint->radius + sh, sh, kUiFlagShadow, clip);
+            dst, n, cap, box.x - spread, box.y - paint->shadow * ps.shadowDy, box.w + spread * 2.0f, box.h + spread * 2.0f,
+            0.0f, 0.0f, 0.0f, ps.shadowAlpha, paint->radius + spread, spread, kUiFlagShadow, clip);
     }
     const uint32_t before = n;
     if (paint->ramp != UiRamp::None) {
@@ -181,24 +189,24 @@ uint32_t uiEmitPanel(
     }
     if (paint->icon != 0 && n < cap) {
         const float fit = box.w < box.h ? box.w : box.h;
-        const bool ghost = paint->a <= 0.02f && paint->borderW < 0.4f;
-        float side = paint->plate != 0 ? kUiToolIconSide : (ghost ? fit : (fit > 18.0f ? fit - 4.0f : 14.0f));
-        if (side > 72.0f) {
-            side = 72.0f;
+        const bool ghost = paint->a <= kUiInvisibleAlpha && paint->borderW < kUiBorderMinW;
+        float side = paint->plate != 0 ? ps.toolIcon : (ghost ? fit : (fit > ps.iconFitMin ? fit - ps.iconFitPad : ps.iconSide));
+        if (side > ps.iconMax) {
+            side = ps.iconMax;
         }
-        if (side < 12.0f) {
-            side = 12.0f;
+        if (side < ps.iconMin) {
+            side = ps.iconMin;
         }
         const UiText* label = s.ent[id].try_get<UiText>();
         const bool labeled = label != nullptr && label->len > 0;
         if (labeled) {
-            side = paint->iconLeft != 0 ? (paint->iconSide != 0 ? static_cast<float>(paint->iconSide) : 16.0f) : 14.0f;
+            side = paint->iconLeft != 0 ? (paint->iconSide != 0 ? static_cast<float>(paint->iconSide) : ps.iconLeft) : ps.iconSide;
         }
         float iconX = box.x + (box.w - side) * 0.5f;
         if (labeled && paint->iconLeft != 0) {
             iconX = box.x + static_cast<float>(paint->iconLeft);
         } else if (labeled) {
-            iconX = box.x + box.w - side - 6.0f;
+            iconX = box.x + box.w - side - ps.iconInset;
             if (iconX < box.x) {
                 iconX = box.x;
             }

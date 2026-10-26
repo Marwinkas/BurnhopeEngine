@@ -5,6 +5,8 @@
 #include "ui/Primitive.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/State.hpp"
+#include "ui/Template.hpp"
+#include "ui/StyleSheet.hpp"
 
 namespace burnhope {
 namespace {
@@ -81,8 +83,9 @@ bool drawCurve(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t 
         prim.texId = static_cast<uint32_t>(step);
         prim.flags = kUiFlagRibbon;
     }
+    const float handle = uiStyle(s, "curve", UiStyleKey::HandleSide);
     for (int p = 0; p < 4; ++p) {
-        n = emitRect(dst, n, cap, box.x + curve->x[p] * box.w - 4.0f, box.y + curve->y[p] * box.h - 4.0f, 8.0f, 8.0f, tr, tg, tb, 1.0f, 4.0f, clip);
+        n = emitRect(dst, n, cap, box.x + curve->x[p] * box.w - handle * 0.5f, box.y + curve->y[p] * box.h - handle * 0.5f, handle, handle, tr, tg, tb, 1.0f, handle * 0.5f, clip);
     }
     return true;
 }
@@ -90,11 +93,7 @@ bool drawCurve(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t 
 } // namespace
 
 uint16_t uiCurve(UiState& s, uint16_t parent) {
-    UiFlex flex{};
-    flex.heightMode = UiSize::Px;
-    flex.height = 120.0f;
-    flex.shrink = 0.0f;
-    const uint16_t id = uiPanel(s, parent, flex, paintToken(s.look, UiToken::Content, 6.0f));
+    const uint16_t id = uiSpawnTemplate(s, parent, "core/panel", "curve");
     if (id == kUiNone) {
         return id;
     }

@@ -11,6 +11,7 @@
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Check.hpp"
 #include "ui/Nodes.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <algorithm>
 
@@ -26,17 +27,17 @@ void hudWire(Canvas& canvas, HudContext* hud, uint16_t details, uint16_t statsBo
     if (hud->viewCap != kUiNone) {
         uiTextStyle(state, hud->viewCap, UiTextAlign::Left, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     }
-    float viewW = uiButtonTextWidth(state, "Lit", 38.0f);
+    const float buttonExtra = uiStyle(state, "view_button", UiStyleKey::Chrome);
+    const float itemExtra = uiStyle(state, "view_popup", UiStyleKey::Chrome);
+    float viewW = uiButtonTextWidth(state, "Lit", buttonExtra);
     for (const ViewMode& mode : kViews) {
-        viewW = std::max(viewW, uiButtonTextWidth(state, mode.name, 52.0f));
+        viewW = std::max(viewW, uiButtonTextWidth(state, mode.name, itemExtra));
     }
-    uiButtonFitText(state, hud->viewBtn, "Lit", 38.0f);
+    uiButtonFitText(state, hud->viewBtn, "Lit", buttonExtra);
     const float viewCount = static_cast<float>(sizeof(kViews) / sizeof(kViews[0]));
-    hud->viewPopH = 16.0f + viewCount * 36.0f + (viewCount - 1.0f) * 2.0f;
+    hud->viewPopH = uiStyle(state, "view_popup", UiStyleKey::Pad) * 2.0f + viewCount * uiStyle(state, "view_popup", UiStyleKey::Height) +
+        (viewCount - 1.0f) * uiStyle(state, "view_popup", UiStyleKey::Gap);
     uiSetSize(state, hud->viewPanel, viewW, hud->viewPopH);
-    for (const uint16_t btn : {hud->camBtn, hud->gearBtn, hud->playBtn, hud->pauseBtn}) {
-        uiToolFrame(state, btn);
-    }
     if (hud->tool.scene != nullptr) {
         sceneFrameActorGizmo(hud->tool.scene, hud->toolMode);
     }

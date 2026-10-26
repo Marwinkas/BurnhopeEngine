@@ -370,7 +370,9 @@ uint16_t uiPropFilterBar(UiState& s, uint16_t parent) {
     s.ent[bar].set<UiPropFilterBar>({});
     s.world.ensure<UiPropRoll>().bar = bar;
     auto* filt = s.ent[bar].try_get_mut<UiPropFilterBar>();
-    const uint16_t search = uiSearchField(s, bar, "Search", onPropSearch, &s, -1.0f);
+    const uint16_t search = uiSearchField(s, bar, "Search", onPropSearch, &s);
+    uiSetWidthPercent(s, search, 100.0f); // the search box takes the rest of the bar
+    uiSetGrow(s, search, 1.0f, 0.0f);
     if (filt != nullptr) {
         filt->search = search;
     }

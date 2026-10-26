@@ -1,6 +1,8 @@
 #include "ui/widget/Breadcrumbs.hpp"
 #include "ui/widget/Button.hpp"
+#include "ui/Panel.hpp"
 #include "ui/State.hpp"
+#include "ui/Template.hpp"
 
 namespace burnhope {
 namespace {
@@ -37,20 +39,11 @@ void onSeg(void* user, uint16_t id) {
 } // namespace
 
 uint16_t uiBreadcrumbs(UiState& s, uint16_t parent, void (*nav)(void* user, uint16_t index), void* user) {
-    UiFlex row{};
-    row.direction = UiFlexDir::Row;
-    row.grow = 1.0f;
-    row.shrink = 1.0f;
-    row.overflow = UiOverflow::Visible;
-    row.align = UiAlign::Center;
-    row.justify = UiJustify::Start;
-    row.gap = 2.0f;
-    row.padL = 4.0f;
-    row.padR = 4.0f;
-    row.widthMode = UiSize::Auto;
-    row.heightMode = UiSize::Px;
-    row.height = 30.0f;
-    const uint16_t id = spawn(s, parent, row, paintLabel(s.look));
+    const uint16_t id = uiSpawnTemplate(s, parent, "core/crumbs");
+    if (id == kUiNone) {
+        return id;
+    }
+    uiSetGrow(s, id, 1.0f, 1.0f); // the trail takes the free width of its bar
     UiCrumbs crumbs{};
     crumbs.nav = nav;
     crumbs.user = user;
@@ -77,17 +70,11 @@ void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* const* labels, uint8_
         if (s.count + 2 >= kUiCap) {
             return;
         }
-        const uint16_t button = uiButton(s, id, UiButtonConfig{.padX = 4.0f, .onClick = onSeg, .user = &s});
+        const uint16_t button = uiButton(s, id, UiButtonConfig{.cls = "crumb", .onClick = onSeg, .user = &s});
         if (button != kUiNone) {
-            if (auto* paint = s.ent[button].try_get_mut<UiPaint>()) {
-                *paint = paintLabel(s.look);
-            }
             uiShow(s, button, false);
         }
-        const UiPaint arrow = paintLabel(s.look);
-        UiFlex sepFlex = px(10.0f, 14.0f);
-        sepFlex.align = UiAlign::Center;
-        const uint16_t sep = spawn(s, id, sepFlex, arrow);
+        const uint16_t sep = uiSpawnTemplate(s, id, "core/mark", "crumb_sep");
         addText(s, sep, ">");
         uiShow(s, sep, false);
     };
@@ -116,10 +103,6 @@ void uiBreadcrumbsSet(UiState& s, uint16_t id, const char* const* labels, uint8_
             break;
         }
         uiText(s, button, piece);
-        if (auto* flex = s.ent[button].try_get_mut<UiFlex>()) {
-            flex->width = uiMeasure(s, piece, len, len) + 8.0f;
-            flex->height = 22.0f;
-        }
         uiShow(s, button, true);
         if (sep < s.count) {
             uiShow(s, sep, true);

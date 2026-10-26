@@ -1,0 +1,7 @@
+{
+  "role": "fold_header",
+  "class": "fold_header",
+  "flex": { "dir": "row", "align": "center", "shrink": 0 },
+  "text": { "align": "left", "valign": "center", "ellipsis": "end", "leading": 1 },
+  "traits": ["hoverable", "focusable"]
+}

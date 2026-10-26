@@ -72,36 +72,6 @@ void uiNumberFill(UiState& s, uint16_t id, bool showFillProgress) {
     range->fill = showFillProgress ? 1 : 0;
 }
 
-uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV, float step) {
-    UiFlex flex{};
-    flex.heightMode = UiSize::Px;
-    flex.height = 30.0f;
-    flex.shrink = 0.0f;
-    flex.align = UiAlign::Center;
-    UiPaint body = paintToken(s.look, UiToken::Button, s.look.radiusSm);
-    body.shadow = 4.0f;
-    body.borderW = 2.0f;
-    body.br = s.look.text[0];
-    body.bg = s.look.text[1];
-    body.bb = s.look.text[2];
-    const uint16_t id = uiPanel(s, parent, flex, body);
-    if (id == kUiNone) {
-        return id;
-    }
-    uiHover(s, id);
-    if (value < minV) {
-        value = minV;
-    }
-    if (value > maxV) {
-        value = maxV;
-    }
-    s.ent[id].set<UiRange>({value, minV, maxV, step > 0.0f ? step : 0.01f});
-    char text[32]{};
-    uiWriteNumber(text, sizeof(text), value);
-    uiText(s, id, text);
-    return id;
-}
-
 namespace {
 
 bool drawNumberFill(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {

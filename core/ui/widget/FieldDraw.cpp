@@ -3,6 +3,7 @@
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <cstdint>
 
@@ -67,7 +68,7 @@ void fieldPlace(UiState& s) {
         if (field->required != 0 && field->len == 0 && paint->borderW < 0.4f) {
             pushBar(s, bars, box.x, box.y, box.w, box.h,
                 s.look.accent[2][0], s.look.accent[2][1], s.look.accent[2][2],
-                paint->a > 0.2f ? paint->a : 1.0f, paint->radius, kUiFlagStroke, 1.5f);
+                paint->a > 0.2f ? paint->a : 1.0f, paint->radius, kUiFlagStroke, uiStyle(s, "input_field", UiStyleKey::ErrorBorder));
         }
         const UiBox inset = fieldInset(s, id, *field);
         const float textW = uiFieldWidth(s, *field, field->len);
@@ -138,7 +139,7 @@ void fieldPlace(UiState& s) {
             }
         }
         if (field->clear != 0 && field->len > 0) {
-            constexpr float kSide = 12.0f;
+            const float kSide = uiStyle(s, "input_field", UiStyleKey::ClearIcon);
             bars.icon = static_cast<uint8_t>(UiIcon::Dismiss);
             bars.iconX = box.x + box.w - field->padR - kSide;
             bars.iconY = box.y + (box.h - kSide) * 0.5f;

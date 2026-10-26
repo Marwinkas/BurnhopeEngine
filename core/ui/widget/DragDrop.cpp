@@ -6,20 +6,13 @@
 #include "ui/Text.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/State.hpp"
+#include "ui/Template.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <algorithm>
 
 namespace burnhope {
 namespace {
-
-constexpr uint8_t kGhostIconPad = 6;
-constexpr uint8_t kGhostIconSide = 16;
-constexpr float kGhostGap = 6.0f;
-constexpr float kGhostRadius = 4.0f;
-constexpr float kGhostMaxW = 180.0f;
-constexpr float kGhostMinW = 52.0f;
-constexpr float kGhostGlyphW = 7.0f;
-constexpr float kGhostCursorOffset = 14.0f;
 
 uint16_t nextHost(const UiState& s, uint16_t start) {
     uint16_t hosts[kUiCap];
@@ -82,25 +75,13 @@ uint16_t ensureGhost(UiState& s, UiDragDrop& drag) {
     if (drag.ghost < s.count && s.ent[drag.ghost].is_alive()) {
         return drag.ghost;
     }
-    UiFlex box = px(s.metrics.ghostW, s.metrics.ghostH);
-    box.position = UiPosition::Absolute;
-    box.padL = static_cast<float>(kGhostIconPad + kGhostIconSide + kGhostGap);
-    box.padR = kGhostGap;
-    UiPaint ink = paintToken(s.look, UiToken::Window, kGhostRadius);
-    ink.a = s.metrics.ghostA;
-    ink.borderW = 1.0f;
-    ink.br = s.look.muted[0];
-    ink.bg = s.look.muted[1];
-    ink.bb = s.look.muted[2];
-    ink.icon = static_cast<uint8_t>(UiIcon::Document);
-    ink.iconLeft = kGhostIconPad;
-    ink.iconSide = kGhostIconSide;
-    const uint16_t id = spawn(s, kUiNone, box, ink);
+    const uint16_t id = uiSpawnTemplate(s, kUiNone, "core/ghost");
     if (id == kUiNone) {
         return kUiNone;
     }
+    uiPlace(s, id, true, 0.0f, 0.0f, 0.0f, 0.0f);
+    uiSetIcon(s, id, UiIcon::Document);
     uiText(s, id, "0");
-    uiTextStyle(s, id, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     s.ent[id].add<UiPopup>();
     s.ent[id].add<UiNoHit>();
     uiShow(s, id, false);
@@ -260,7 +241,7 @@ bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t, uint8_t phase, 
     if (down && drag->armed != 0 && drag->live == 0) {
         const float dx = in.pointer.x - drag->x;
         const float dy = in.pointer.y - drag->y;
-        const float slop = s.metrics.dragSlop;
+        const float slop = uiStyle(s, "drag_ghost", UiStyleKey::DragSlop);
         if (dx * dx + dy * dy > slop * slop) {
             drag->live = 1;
         }
@@ -286,9 +267,11 @@ bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t, uint8_t phase, 
         while (badge[letters] != '\0' && letters < 64) {
             ++letters;
         }
-        float gw = static_cast<float>(letters) * kGhostGlyphW + static_cast<float>(kGhostIconPad + kGhostIconSide) + 2.0f * kGhostGap;
-        gw = std::clamp(gw, kGhostMinW, kGhostMaxW);
-        uiPlace(s, ghost, true, in.pointer.x + kGhostCursorOffset, in.pointer.y + kGhostCursorOffset, gw, s.metrics.ghostH);
+        const float iconWidth = uiStyle(s, "drag_ghost", UiStyleKey::IconLeft) + uiStyle(s, "drag_ghost", UiStyleKey::Icon);
+        float gw = static_cast<float>(letters) * uiStyle(s, "drag_ghost", UiStyleKey::GlyphW) + iconWidth + 2.0f * uiStyle(s, "drag_ghost", UiStyleKey::Gap);
+        gw = std::clamp(gw, uiStyle(s, "drag_ghost", UiStyleKey::MinW), uiStyle(s, "drag_ghost", UiStyleKey::MaxW));
+        const float cursorOffset = uiStyle(s, "drag_ghost", UiStyleKey::Offset);
+        uiPlace(s, ghost, true, in.pointer.x + cursorOffset, in.pointer.y + cursorOffset, gw, uiStyle(s, "drag_ghost", UiStyleKey::Height));
     }
     uint16_t row = kUiNone;
     for (uint16_t host = nextHost(s, 0); host != kUiNone; host = nextHost(s, static_cast<uint16_t>(host + 1))) {

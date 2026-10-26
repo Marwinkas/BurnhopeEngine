@@ -175,7 +175,7 @@ void uiRendererUploadFontTable(UiRenderer& r, Device& d, const UiFontAtlas& font
     }
 }
 
-void uiRendererRecord(VkCommandBuffer cmd, const UiRenderer& r, const Swapchain& sc, const FrameContext& fc, uint32_t primCount, bool keepColor) {
+void uiRendererRecord(VkCommandBuffer cmd, const UiRenderer& r, const Swapchain& sc, const FrameContext& fc, uint32_t primCount, bool keepColor, const float (&clearRgb)[3]) {
     VkPipelineStageFlags2 primDst = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
     if (r.ms.handle != VK_NULL_HANDLE) {
         primDst |= VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT;
@@ -202,9 +202,9 @@ void uiRendererRecord(VkCommandBuffer cmd, const UiRenderer& r, const Swapchain&
         VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
 
     VkClearValue clear{};
-    clear.color.float32[0] = 0.102f;
-    clear.color.float32[1] = 0.106f;
-    clear.color.float32[2] = 0.122f;
+    clear.color.float32[0] = clearRgb[0];
+    clear.color.float32[1] = clearRgb[1];
+    clear.color.float32[2] = clearRgb[2];
     clear.color.float32[3] = 1.0f;
     VkRenderingAttachmentInfo color{
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,

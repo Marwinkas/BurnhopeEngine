@@ -31,6 +31,6 @@ void uiRendererDestroy(UiRenderer& r, Device& d);
 void uiRendererUploadPrims(UiRenderer& r, Device& d, uint32_t flight, std::span<const UiPrimitive> prims, float viewW, float viewH);
 void uiRendererUploadFontTable(UiRenderer& r, Device& d, const UiFontAtlas& font);
 [[nodiscard]] UiPrimitive* uiRendererPrimDst(UiRenderer& r, uint32_t flight, uint32_t& cap);
-void uiRendererRecord(VkCommandBuffer cmd, const UiRenderer& r, const Swapchain& sc, const FrameContext& fc, uint32_t primCount, bool keepColor);
+void uiRendererRecord(VkCommandBuffer cmd, const UiRenderer& r, const Swapchain& sc, const FrameContext& fc, uint32_t primCount, bool keepColor, const float (&clear)[3]);
 
 } // namespace burnhope

@@ -5,6 +5,9 @@
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/rhi/Font.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
+#include "ui/Template.hpp"
+#include "ui/Theme.hpp"
 #include "Str.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "platform/Trace.hpp"
@@ -149,6 +152,16 @@ void canvasReload(Canvas& c) {
         return;
     }
     uiClear(*c.state);
+    if (!uiThemeLoadAsset(*c.state, "assets/ui/theme.json")) {
+        spdlog::warn("ui: theme.json unavailable, themes fall back to the default palette");
+    }
+    if (!uiStyleLoadAsset(*c.state, "assets/ui/styles.json")) {
+        spdlog::warn("ui: styles.json unavailable, widgets use the built-in style classes");
+    }
+    // Blueprints bake their style class into each part, so they reload right after the sheet.
+    if (!uiTemplatesLoadAsset(*c.state, "assets/ui/core/_manifest.json")) {
+        spdlog::warn("ui: assets/ui/core blueprints unavailable, layouts that name one with \"use\" will fail");
+    }
     if (c.builder != nullptr) {
         c.builder(c, c.builderUser);
     }
@@ -169,10 +182,6 @@ void canvasSetClick(Canvas& c, UiClickFn fn, void* user) {
         c.state->onClick = fn;
         c.state->clickUser = user;
     }
-}
-
-bool canvasListen(Canvas& c, UiValueFn fn, void* user) {
-    return c.state != nullptr && uiListen(*c.state, fn, user);
 }
 
 bool canvasLoadPhoto(Canvas& c, uint8_t slot, const char* path) {
@@ -410,7 +419,7 @@ void canvasApplyDpi(Canvas& c, float dpi, float previous) {
 }
 
 void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, const FrameContext& fc, bool keepColor) {
-    uiRendererRecord(cmd, c.rhi, sc, fc, c.rhi.primCount, keepColor);
+    uiRendererRecord(cmd, c.rhi, sc, fc, c.rhi.primCount, keepColor, c.state->look.window);
 }
 
 } // namespace burnhope

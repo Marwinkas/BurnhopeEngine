@@ -72,7 +72,6 @@ void canvasSetLook(Canvas& c, const UiLook& look);
 void canvasSetBuilder(Canvas& c, UiBuilder builder, void* user);
 void canvasSetClick(Canvas& c, UiClickFn fn, void* user);
 void canvasOnFocus(Canvas& c, UiFocusFn fn, void* user);
-bool canvasListen(Canvas& c, UiValueFn fn, void* user);
 
 // 7. Делегирование ресурсов и фотографий (реализация в UiPhoto)
 [[nodiscard]] bool canvasLoadPhoto(Canvas& c, uint8_t slot, const char* path);

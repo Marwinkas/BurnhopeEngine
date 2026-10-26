@@ -187,6 +187,7 @@ uint32_t emitMark(
 }
 
 uint32_t uiEmitSprite(
+    const UiPaintStyle& ps,
     UiPrimitive* dst,
     uint32_t n,
     uint32_t cap,
@@ -229,15 +230,16 @@ uint32_t uiEmitSprite(
         p.corner[3] = clip->h;
     }
     ++n;
-    if (image.minimap == 0 || box.w < 120.0f || box.h < 90.0f || n >= cap) {
+    if (image.minimap == 0 || box.w < ps.mapMinW || box.h < ps.mapMinH || n >= cap) {
         return n;
     }
-    constexpr float kMapW = 72.0f;
-    constexpr float kMapH = 48.0f;
-    constexpr float kMargin = 8.0f;
-    const float mx = box.x + box.w - kMargin - kMapW;
-    const float my = box.y + box.h - kMargin - kMapH;
-    n = emitRect(dst, n, cap, mx - 2.0f, my - 2.0f, kMapW + 4.0f, kMapH + 4.0f, 0.02f, 0.02f, 0.03f, 0.9f, 3.0f, clip);
+    const float kMapW = ps.mapW;
+    const float kMapH = ps.mapH;
+    const float mx = box.x + box.w - ps.mapMargin - kMapW;
+    const float my = box.y + box.h - ps.mapMargin - kMapH;
+    constexpr float kBacking[3]{0.02f, 0.02f, 0.03f}; // near-black plate behind the minimap, in every theme
+    n = emitRect(dst, n, cap, mx - ps.mapPad, my - ps.mapPad, kMapW + ps.mapPad * 2.0f, kMapH + ps.mapPad * 2.0f,
+        kBacking[0], kBacking[1], kBacking[2], ps.mapAlpha, ps.mapRadius, clip);
     if (n >= cap) {
         return n;
     }
@@ -284,14 +286,6 @@ bool uiClipBox(const UiState& s, uint16_t id, UiBox& out) {
     return true;
 }
 
-void uiDrawAdd(UiState& s, UiDrawFn fn) {
-    if (fn == nullptr) {
-        return;
-    }
-    [[maybe_unused]] const bool ok = s.drawHook.add(fn);
-    BH_ASSERT(ok, "ui hook registry full");
-}
-
 void uiDrawUnderAdd(UiState& s, UiDrawFn fn) {
     if (fn == nullptr) {
         return;
@@ -313,14 +307,6 @@ void uiPlaceAdd(UiState& s, void (*fn)(UiState& s)) {
         return;
     }
     [[maybe_unused]] const bool ok = s.placeHook.add(fn);
-    BH_ASSERT(ok, "ui hook registry full");
-}
-
-void uiOverlayAdd(UiState& s, UiOverlayDrawFn fn) {
-    if (fn == nullptr) {
-        return;
-    }
-    [[maybe_unused]] const bool ok = s.overlayHook.add(fn);
     BH_ASSERT(ok, "ui hook registry full");
 }
 
@@ -442,16 +428,6 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             if (s.plug.draw != nullptr && s.plug.draw(s, id, dst, n, cap)) {
                 continue;
             }
-            bool took = false;
-            for (std::size_t hi = 0; hi < s.drawHook.size(); ++hi) {
-                if (s.drawHook[hi] != nullptr && s.drawHook[hi](s, id, dst, n, cap)) {
-                    took = true;
-                    break;
-                }
-            }
-            if (took) {
-                continue;
-            }
             float r = paint->r;
             float g = paint->g;
             float b = paint->b;
@@ -476,7 +452,7 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             const uint16_t host = s.parentOf[id];
             if (paint->plate != 0) {
                 const bool hot = s.hovered == id || (host < s.count && s.hovered == host);
-                const float* ink = paint->picked != 0 ? kUiToolActive : (hot ? kUiToolHover : kUiToolIdle);
+                const float* ink = paint->picked != 0 ? s.look.toolActive : (hot ? s.look.toolHover : s.look.tool);
                 r = ink[0];
                 g = ink[1];
                 b = ink[2];
@@ -484,7 +460,7 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             }
             const UiImage* image = s.ent[id].try_get<UiImage>();
             if (image != nullptr && image->inset <= 0.0f) {
-                n = uiEmitSprite(dst, n, cap, s.box[id], *image, clip, paint->blur, r, g, b, glyphA);
+                n = uiEmitSprite(s.paintStyle, dst, n, cap, s.box[id], *image, clip, paint->blur, r, g, b, glyphA);
             } else {
                 n = uiEmitPanel(s, id, dst, n, cap, clip, r, g, b, a, glyphA);
                 for (std::size_t ui = 0; ui < s.underHook.size(); ++ui) {
@@ -502,7 +478,7 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                     const UiBox spot{host.x + (host.w - image->inset) * 0.5f, host.y + (host.h - image->inset) * 0.5f, image->inset, image->inset};
                     const float* ink = paint->plate != 0 ? nullptr : kUiWhite;
                     n = uiEmitSprite(
-                        dst, n, cap, spot, *image, clip, paint->blur,
+                        s.paintStyle, dst, n, cap, spot, *image, clip, paint->blur,
                         ink != nullptr ? ink[0] : r, ink != nullptr ? ink[1] : g, ink != nullptr ? ink[2] : b, glyphA);
                 }
             }
@@ -564,11 +540,6 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                 continue;
             }
             n = emitRect(dst, n, cap, bar.x, bar.y, bar.w, bar.h, bar.r, bar.g, bar.b, bar.a, bar.radius, nullptr);
-        }
-    }
-    for (std::size_t i = 0; i < s.overlayHook.size(); ++i) {
-        if (s.overlayHook[i] != nullptr) {
-            s.overlayHook[i](s, dst, n, cap);
         }
     }
     if (s.plug.over != nullptr) {

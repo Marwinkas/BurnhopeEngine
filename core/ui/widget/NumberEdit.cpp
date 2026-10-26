@@ -52,7 +52,7 @@ bool numberField(const UiState& s, uint16_t id) {
 
 } // namespace
 
-uint16_t uiNumber(UiState& s, uint16_t parent, float value, float minV, float maxV, float step, UiValueChangeFn onChange, void* user, float width, float height, float shrink) {
+uint16_t uiNumber(UiState& s, uint16_t parent, float value, float minV, float maxV, float step, UiValueChangeFn onChange, void* user) {
     if (value < minV) {
         value = minV;
     }
@@ -69,9 +69,6 @@ uint16_t uiNumber(UiState& s, uint16_t parent, float value, float minV, float ma
         return id;
     }
     s.ent[id].set<UiRange>({value, minV, maxV, step, 1});
-    if (width > 0.0f || height > 0.0f) {
-        uiFlexLimit(s, id, width, height, shrink);
-    }
     if (auto* field = s.ent[id].try_get_mut<UiField>()) {
         field->align = 0;
     }

@@ -8,6 +8,8 @@
 #include "ui/widget/Slider.hpp"
 #include "color/Color.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
+#include "ui/Template.hpp"
 #include "ui/kit/ColorInternal.hpp"
 
 #include <algorithm>
@@ -355,42 +357,23 @@ void refreshColorChrome(UiState& s, UiColorPickerComponent& picker) {
     setBtnLabel(s, picker.colorWinBtn, colorInk(picker).mode == 1 ? "WINDOW *" : "WINDOW");
 }
 
-void colorHead(UiState& s, uint16_t parent) {
-    UiFlex titleF{};
-    titleF.direction = UiFlexDir::Row;
-    titleF.heightMode = UiSize::Px;
-    titleF.height = kColorTitle;
-    titleF.shrink = 0.0f;
-    titleF.align = UiAlign::Center;
-    titleF.padL = 12.0f;
-    titleF.padR = 4.0f;
-    const uint16_t title = uiPanel(s, parent, titleF, paintToken(s.look, UiToken::Title, 0.0f));
+void colorHead(UiState& s, uint16_t parent, const char* label, const char* cls) {
+    const UiTemplateId tpl = uiTemplateFind(s, "core/color_head");
+    const uint16_t title = uiSpawnTemplate(s, parent, tpl, cls);
     if (title >= s.count) {
         return;
     }
-    s.ent[title].add<UiTitleBar>();
-    const uint16_t brand = uiLabel(s, title, "Color");
-    (void)brand;
-    UiFlex gap{};
-    gap.grow = 1.0f;
-    gap.shrink = 1.0f;
-    gap.heightMode = UiSize::Px;
-    gap.height = 1.0f;
-    uiPanel(s, title, gap, paintClear());
-    const uint16_t close = uiButton(s, title, {.label = "", .width = 28.0f, .height = 28.0f, .onClick = colorOnClose, .user = &s});
-    if (close < s.count) {
-        if (auto* paint = s.ent[close].try_get_mut<UiPaint>()) {
-            paint->icon = static_cast<uint8_t>(UiIcon::Dismiss);
-            paint->token = UiToken::Close;
-        }
-    }
+    uiText(s, uiTemplateSlot(s, tpl, title, "brand"), label);
+    const uint16_t close = uiTemplateSlot(s, tpl, title, "close");
+    uiSetIcon(s, close, UiIcon::Dismiss);
+    uiBind(s, close, colorOnClose, &s);
 }
 
 void placeColorMenu(UiState& s, UiColorPickerComponent& picker) {
     float x = 24.0f;
     float y = 48.0f;
-    const float w = kColorW;
-    const float h = kColorH;
+    const float w = uiStyle(s, "color_popup", UiStyleKey::Width);
+    const float h = uiStyle(s, "color_popup", UiStyleKey::Height);
     if (picker.colorAnchor != kUiNone && picker.colorAnchor < s.count) {
         const UiBox& b = s.box[picker.colorAnchor];
         x = b.x;
@@ -558,72 +541,33 @@ void fillColorBody(UiState& s, uint16_t parent) {
     if (picker == nullptr) {
         return;
     }
-
-    UiFlex row{};
-    row.direction = UiFlexDir::Row;
-    UiFlex wheelRow = row;
-    wheelRow.heightMode = UiSize::Px;
-    wheelRow.height = 220.0f;
-    wheelRow.shrink = 0.0f;
-    wheelRow.gap = 10.0f;
-    wheelRow.align = UiAlign::Center;
-    const uint16_t wheelRowId = uiPanel(s, parent, wheelRow, paintClear());
-    UiFlex wheel{};
-    wheel.widthMode = UiSize::Px;
-    wheel.heightMode = UiSize::Px;
-    wheel.width = kColorWheel;
-    wheel.height = kColorWheel;
-    wheel.shrink = 0.0f;
-    (*picker).colorWheel = uiPanel(s, wheelRowId, wheel, colorRampPart(s.look, UiToken::Content, kRampColorWheel));
+    const UiTemplateId rowTpl = uiTemplateFind(s, "core/color_wheel_row");
+    const uint16_t wheelRowId = uiSpawnTemplate(s, parent, rowTpl);
+    if (wheelRowId == kUiNone) {
+        return;
+    }
+    (*picker).colorWheel = uiTemplateSlot(s, rowTpl, wheelRowId, "wheel");
     uiDrag(s, (*picker).colorWheel, colorOnDrag, &s);
-    UiFlex valBar{};
-    valBar.widthMode = UiSize::Px;
-    valBar.heightMode = UiSize::Px;
-    valBar.width = kColorVal;
-    valBar.height = kColorWheel;
-    valBar.shrink = 0.0f;
-    (*picker).colorVal = uiPanel(s, wheelRowId, valBar, colorRampPart(s.look, UiToken::Content, kRampColorValue));
+    (*picker).colorVal = uiTemplateSlot(s, rowTpl, wheelRowId, "val");
     uiDrag(s, (*picker).colorVal, colorOnDrag, &s);
-    UiFlex side{};
-    side.direction = UiFlexDir::Column;
-    side.widthMode = UiSize::Px;
-    side.width = kColorSide;
-    side.heightMode = UiSize::Px;
-    side.height = kColorWheel;
-    side.gap = 8.0f;
-    side.shrink = 0.0f;
-    const uint16_t sideId = uiPanel(s, wheelRowId, side, paintClear());
-    UiFlex swatch{};
-    swatch.heightMode = UiSize::Px;
-    swatch.height = 72.0f;
-    swatch.widthMode = UiSize::Percent;
-    swatch.width = 100.0f;
-    swatch.shrink = 0.0f;
-    {
-        UiPaint swatchPaint = colorRampPart(s.look, UiToken::Preview, kRampColorSwatch, 6.0f);
-        (*picker).colorSwatch = uiPanel(s, sideId, swatch, swatchPaint);
-    }
-    const uint16_t pickId = uiButton(s, sideId, {.label = "PICK", .height = 32.0f, .fillWidth = true, .onClick = colorOnDrop, .user = &s});
+    (*picker).colorSwatch = uiTemplateSlot(s, rowTpl, wheelRowId, "swatch");
+    const uint16_t pickId = uiTemplateSlot(s, rowTpl, wheelRowId, "pick");
     (*picker).colorPickBtn = pickId;
-    if (pickId < s.count) {
-        if (auto* paint = s.ent[pickId].try_get_mut<UiPaint>()) {
-            paint->icon = static_cast<uint8_t>(UiIcon::Search);
-        }
-    }
+    uiText(s, pickId, "PICK");
+    uiSetIcon(s, pickId, UiIcon::Search);
+    uiBind(s, pickId, colorOnDrop, &s);
     const char* names[7] = {"R", "G", "B", "A", "H", "S", "V"};
     const float starts[7] = {colorInk((*picker)).r, colorInk((*picker)).g, colorInk((*picker)).b, colorInk((*picker)).a, colorInk((*picker)).h, colorInk((*picker)).s, colorInk((*picker)).v};
+    const UiValueChangeFn slide[7] = {slideR, slideG, slideB, slideA, slideH, slideS, slideV};
+    const UiTemplateId lineTpl = uiTemplateFind(s, "core/color_line");
     for (int i = 0; i < 7; ++i) {
-        UiFlex line = row;
-        line.heightMode = UiSize::Px;
-        line.height = 26.0f;
-        line.shrink = 0.0f;
-        line.align = UiAlign::Center;
-        line.gap = 8.0f;
-        const uint16_t lineId = uiPanel(s, parent, line, paintClear());
-        const uint16_t lab = uiLabel(s, lineId, names[i]);
-        (void)lab;
-        const UiValueChangeFn slide[7] = {slideR, slideG, slideB, slideA, slideH, slideS, slideV};
-        const uint16_t sliderId = uiSlider(s, lineId, starts[i], 0.0f, 1.0f, slide[i], &s);
+        const uint16_t lineId = uiSpawnTemplate(s, parent, lineTpl);
+        if (lineId == kUiNone) {
+            return;
+        }
+        uiText(s, uiTemplateSlot(s, lineTpl, lineId, "label"), names[i]);
+        const uint16_t sliderId = uiTemplateSlot(s, lineTpl, lineId, "slider");
+        uiSliderInit(s, sliderId, starts[i], 0.0f, 1.0f, slide[i], &s);
         if (i < 3) {
             (*picker).colorRgb[i] = sliderId;
         } else if (i == 3) {
@@ -631,31 +575,21 @@ void fillColorBody(UiState& s, uint16_t parent) {
         } else {
             (*picker).colorHsv[i - 4] = sliderId;
         }
-        const uint16_t numId = uiField(s, lineId, "", static_cast<uint8_t>(UiFieldFilter::Digits), false);
-        if (numId < s.count) {
-            if (auto* flex = s.ent[numId].try_get_mut<UiFlex>()) {
-                flex->widthMode = UiSize::Px;
-                flex->width = kColorSide;
-                flex->heightMode = UiSize::Px;
-                flex->height = 24.0f;
-                flex->shrink = 0.0f;
-            }
-            if (auto* field = s.ent[numId].try_get_mut<UiField>()) {
-                field->padL = 6.0f;
-                field->padR = 4.0f;
-                field->maxChars = 3;
-            }
-            uiEdit(s, numId, colorOnEdit, &s);
+        const uint16_t numId = uiTemplateSlot(s, lineTpl, lineId, "num");
+        uiBindField(s, numId, "", static_cast<uint8_t>(UiFieldFilter::Digits), false);
+        if (auto* field = s.ent[numId].try_get_mut<UiField>()) {
+            field->padL = 6.0f;
+            field->padR = 4.0f;
+            field->maxChars = 3;
         }
+        uiEdit(s, numId, colorOnEdit, &s);
         (*picker).colorNum[i] = numId;
     }
-    (*picker).colorHex = uiField(s, parent, "", static_cast<uint8_t>(UiFieldFilter::Any), false);
+    (*picker).colorHex = uiSpawnTemplate(s, parent, "core/color_hex");
     if ((*picker).colorHex < s.count) {
-        if (auto* flex = s.ent[(*picker).colorHex].try_get_mut<UiFlex>()) {
-            flex->heightMode = UiSize::Px;
-            flex->height = 32.0f;
-            flex->shrink = 0.0f;
-        }
+        // The hex field runs the width of the picker body.
+        uiSetWidthPercent(s, (*picker).colorHex, 100.0f);
+        uiBindField(s, (*picker).colorHex, "", static_cast<uint8_t>(UiFieldFilter::Any), false);
         if (auto* hex = s.ent[(*picker).colorHex].try_get_mut<UiField>()) {
             hex->padL = 10.0f;
             hex->padR = 10.0f;
@@ -669,15 +603,7 @@ void fillColorBody(UiState& s, uint16_t parent) {
 }
 
 void uiBuildColor(UiState& s) {
-    UiFlex col{};
-    col.direction = UiFlexDir::Column;
-    col.shrink = 1.0f;
-    UiFlex row = col;
-    row.direction = UiFlexDir::Row;
-    UiFlex rootF = col;
-    rootF.pad = 12.0f;
-    rootF.gap = 8.0f;
-    const uint16_t root = uiPanel(s, kUiNone, rootF, paintToken(s.look, UiToken::Menu, 0.0f));
+    const uint16_t root = uiSpawnTemplate(s, kUiNone, "core/column", "color_flat");
     if (root == kUiNone) {
         return;
     }
@@ -688,30 +614,7 @@ void uiBuildColor(UiState& s) {
     } else {
         colorLinearToHsv(colorInk(picker).r, colorInk(picker).g, colorInk(picker).b, colorInk(picker).h, colorInk(picker).s, colorInk(picker).v);
     }
-    UiFlex titleF = row;
-    titleF.heightMode = UiSize::Px;
-    titleF.height = 36.0f;
-    titleF.shrink = 0.0f;
-    titleF.align = UiAlign::Center;
-    const uint16_t title = uiPanel(s, root, titleF, paintToken(s.look, UiToken::Title, 0.0f));
-    if (title < s.count) {
-        s.ent[title].add<UiTitleBar>();
-    }
-    const uint16_t brand = uiLabel(s, title, "COLOR");
-    (void)brand;
-    UiFlex gap{};
-    gap.grow = 1.0f;
-    gap.shrink = 1.0f;
-    gap.heightMode = UiSize::Px;
-    gap.height = 1.0f;
-    uiPanel(s, title, gap, paintClear());
-    const uint16_t close = uiButton(s, title, {.label = "", .width = 28.0f, .height = 28.0f, .onClick = colorOnClose, .user = &s});
-    if (close < s.count) {
-        if (auto* paint = s.ent[close].try_get_mut<UiPaint>()) {
-            paint->icon = static_cast<uint8_t>(UiIcon::Dismiss);
-            paint->token = UiToken::Close;
-        }
-    }
+    colorHead(s, root, "COLOR", "cw_title_flat");
     picker.colorPanel = root;
     colorInk(picker).present = 2;
     picker.colorApplied = 2;

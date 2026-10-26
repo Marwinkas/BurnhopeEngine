@@ -2,12 +2,9 @@
 
 #include "ui/widget/Menu.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 namespace burnhope {
-namespace {
-constexpr float kBarMaxH = 64.0f;
-} // namespace
-
 void uiSyncPopover(UiState& s, uint16_t panel, uint16_t anchor, float width, float height, uint8_t& want) {
     if (panel >= s.count) {
         return;
@@ -19,22 +16,24 @@ void uiSyncPopover(UiState& s, uint16_t panel, uint16_t anchor, float width, flo
         if (auto* flex = s.ent[panel].try_get_mut<UiFlex>()) {
             const UiBox& box = s.box[anchor];
             flex->position = UiPosition::Absolute;
+            const float edge = uiStyle(s, "popover", UiStyleKey::ScreenGap);
+            const float gap = uiStyle(s, "popover", UiStyleKey::AnchorGap);
             float x = box.x + box.w - width;
-            if (x + width > s.laidW - 4.0f) {
-                x = s.laidW - width - 4.0f;
+            if (x + width > s.laidW - edge) {
+                x = s.laidW - width - edge;
             }
-            if (x < 4.0f) {
-                x = 4.0f;
+            if (x < edge) {
+                x = edge;
             }
             flex->posX = x;
-            float y = box.y + box.h + 4.0f;
+            float y = box.y + box.h + gap;
             // The bar is the anchor's toolbar row; a grandparent taller than a toolbar is a whole panel, not a bar to clear.
             uint16_t bar = s.parentOf[anchor];
-            if (bar < s.count && s.parentOf[bar] < s.count && s.box[s.parentOf[bar]].h <= kBarMaxH) {
+            if (bar < s.count && s.parentOf[bar] < s.count && s.box[s.parentOf[bar]].h <= uiStyle(s, "popover", UiStyleKey::BarMaxH)) {
                 bar = s.parentOf[bar];
             }
             if (bar < s.count && s.box[bar].h > 1.0f) {
-                const float under = s.box[bar].y + s.box[bar].h + 4.0f;
+                const float under = s.box[bar].y + s.box[bar].h + gap;
                 if (under > y) {
                     y = under;
                 }

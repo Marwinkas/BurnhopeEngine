@@ -1,0 +1,5 @@
+{
+  "role": "menu_sep",
+  "class": "menu_sep",
+  "flex": { "shrink": 0 }
+}

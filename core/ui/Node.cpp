@@ -2,9 +2,11 @@
 #include "Str.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/State.hpp"
+#include "ui/Theme.hpp"
 #include "platform/Trace.hpp"
 
 #include <yoga/Yoga.h>
+#include <spdlog/spdlog.h>
 
 #include <cstdint>
 #include <cmath>
@@ -235,7 +237,6 @@ void uiClear(UiState& s) {
     for (uint16_t i = 0; i < kUiCap; ++i) {
         s.culled[i] = 0;
     }
-    s.valueHook.clear();
     s.laidW = -1.0f;
     s.laidH = -1.0f;
 }
@@ -413,10 +414,6 @@ void uiTextStyle(UiState& s, uint16_t id, UiTextAlign align, UiTextEllipsis elli
     text->deco = deco;
     text->leading = leading;
     s.visualDirty = true;
-}
-
-void uiStamp(UiState& s, uint16_t id, UiToken token) {
-    stamp(s, id, token);
 }
 
 void uiDrop(UiState& s, uint16_t id) {
@@ -681,19 +678,6 @@ void uiSetDrop(UiState& s, uint16_t id, uint8_t drop) {
     }
 }
 
-void uiGrow(UiState& s, uint16_t id, float extraW, float h) {
-    auto* flex = s.ent[id].try_get_mut<UiFlex>();
-    if (flex == nullptr) {
-        return;
-    }
-    flex->width += extraW;
-    if (h > 0.0f) {
-        flex->heightMode = UiSize::Px;
-        flex->height = h;
-    }
-    s.layoutDirty = true;
-}
-
 uint32_t uiNodeChildCount(const UiState& s, uint16_t parent) {
     if (parent >= s.count || s.yoga[parent] == nullptr) {
         return 0;
@@ -854,7 +838,11 @@ void uiApplyLook(UiState& s, bool warm) {
     const float title = s.look.titleBar;
     const float border = s.look.resizeBorder;
     s.altLook = warm;
-    s.look = warm ? uiLookWarm() : UiLook{};
+    UiLook next{};
+    if (!uiThemeLook(s, warm ? "warm" : "default", next)) {
+        spdlog::warn("ui: theme {} is not loaded, using the default palette", warm ? "warm" : "default");
+    }
+    s.look = next;
     s.look.glyphH = glyphH;
     s.look.glyphW = glyphW;
     s.look.advance = advance;

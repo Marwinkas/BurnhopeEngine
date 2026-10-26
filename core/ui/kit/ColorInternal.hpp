@@ -9,14 +9,6 @@ namespace burnhope {
 constexpr UiRamp kRampColorWheel = UiRamp::HueWheel;
 constexpr UiRamp kRampColorValue = UiRamp::ValueRamp;
 constexpr UiRamp kRampColorSwatch = UiRamp::Gradient;
-constexpr float kColorSide = 96.0f;
-constexpr float kColorWheel = 220.0f;
-constexpr float kColorVal = 22.0f;
-constexpr float kColorGap = 10.0f;
-constexpr float kColorPad = 12.0f;
-constexpr float kColorTitle = 36.0f;
-constexpr float kColorW = kColorPad * 2.0f + kColorWheel + kColorGap + kColorVal + kColorGap + kColorSide;
-constexpr float kColorH = 634.0f;
 
 // Shared between Color.cpp (wheel, sliders, fields, HSV/RGB sync) and ColorPopup.cpp (popup lifecycle,
 // color book, eyedropper). Not part of the widget API.
@@ -34,7 +26,7 @@ void applyColor(UiState& s, UiColorPickerComponent& picker, bool fromHsv, bool p
 void takeBook(UiColorPickerComponent& picker);
 void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& b, float& a);
 void refreshColorChrome(UiState& s, UiColorPickerComponent& picker);
-void colorHead(UiState& s, uint16_t parent);
+void colorHead(UiState& s, uint16_t parent, const char* label, const char* cls = nullptr);
 void placeColorMenu(UiState& s, UiColorPickerComponent& picker);
 void fillColorBody(UiState& s, uint16_t parent);
 

@@ -1,0 +1,6 @@
+{
+  "role": "slider",
+  "class": "slider",
+  "flex": { "shrink": 0 },
+  "traits": ["hoverable", "focusable", "draggable"]
+}

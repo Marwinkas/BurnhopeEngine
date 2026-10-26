@@ -297,7 +297,7 @@ TEST_CASE("choice select moves the index once and keeps the pick callback") {
     uiWidgetsInit(state);
     const char* names[] = {"Lit", "Unlit"};
     const uint16_t host = spawn(state, kUiNone, px(200, 200), paintRgb(0.05f, 0.05f, 0.05f));
-    const uint16_t id = uiChoice(state, host, {.labels = names, .count = 2, .selected = 0, .width = 100.0f});
+    const uint16_t id = uiChoice(state, host, {.labels = names, .count = 2, .selected = 0});
     CHECK(id < state.count);
     if (id >= state.count) {
         return;

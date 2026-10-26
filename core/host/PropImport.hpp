@@ -46,11 +46,30 @@ using PropFlagFn = void (*)(void* user, uint16_t index, uint8_t value, uint16_t 
 
 // Read one array from a layout document and build property rows into the binder.
 // `key` selects the array on the root object. Strings in the document are copied
-// into the binder, so the text does not have to stay mapped.
+// into the binder, so the text does not have to stay mapped. The import is strict: an unknown role, key,
+// class or enum word, or a value of the wrong type, fails it and logs the position.
 bool propImport(
     UiState& state,
     uint16_t parent,
     std::string_view text,
+    const char* key,
+    UiPropBinder& bind,
+    const PropSlot* slots,
+    uint16_t slotCount,
+    const PropCommand* commands,
+    uint16_t commandCount,
+    const UiPaint& hidden,
+    PropFlagFn onFlag,
+    void* user,
+    const PropRole* roles = nullptr,
+    uint16_t roleCount = 0);
+
+// propImport that names the document `asset` in error messages: every failure is logged as "asset:line:col: ...".
+bool propImportNamed(
+    UiState& state,
+    uint16_t parent,
+    std::string_view text,
+    const char* asset,
     const char* key,
     UiPropBinder& bind,
     const PropSlot* slots,

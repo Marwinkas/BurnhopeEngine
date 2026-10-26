@@ -41,7 +41,7 @@ void uiMenuClose(UiState& s);
 uint16_t uiMakeMenu(UiState& s);
 void uiMenuStyle(UiState& s, float width, float itemH, float pad, float gap);
 void uiMenuShowAt(UiState& s, uint16_t menuId, float x, float y, float above = -1.0f);
-uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t menu);
+uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t menu, const char* blueprint = "core/menu_button");
 void uiMenuCaption(UiState& s, uint16_t button, const char* text);
 bool uiMenuInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note);
 

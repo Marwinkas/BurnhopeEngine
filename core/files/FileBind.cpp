@@ -22,6 +22,7 @@
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/VirtualGrid.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -138,7 +139,7 @@ void bindNode(UiState& s, uint16_t row, uint32_t index) {
         paint->borderW = 0.0f;
         if (active) {
             *paint = paintToken(s.look, UiToken::Accent, s.look.radiusSm);
-            paint->a = s.metrics.selectedA;
+            paint->a = uiStyle(s, "grid", UiStyleKey::SelectedA);
             paint->borderW = 0.0f;
         } else {
             paint->a = 0.0f;

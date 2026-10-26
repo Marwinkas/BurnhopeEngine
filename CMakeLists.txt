@@ -132,10 +132,36 @@ file(GLOB BH_UI_BRICK_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/ui/widget/Field.* ${BH_CORE}/ui/widget/FieldFilter.* ${BH_CORE}/ui/widget/TextEdit.*
     ${BH_CORE}/ui/widget/Search.* ${BH_CORE}/ui/widget/Number.* ${BH_CORE}/ui/widget/NumberEdit.*
     ${BH_CORE}/ui/widget/Slider.* ${BH_CORE}/ui/widget/Scroll.* ${BH_CORE}/ui/widget/Splitter.*
-    ${BH_CORE}/ui/widget/Fold.* ${BH_CORE}/ui/widget/Tip.* ${BH_CORE}/ui/widget/Curve.*
+    ${BH_CORE}/ui/widget/Fold.* ${BH_CORE}/ui/widget/Curve.*
     ${BH_CORE}/ui/widget/Gradient.* ${BH_CORE}/ui/widget/Image.* ${BH_CORE}/ui/widget/Tabs.*)
 bh_firewall("atomic bricks must not import composite kits"
     "([a-z]+/)*(Virtual|VirtualGrid|TreeView|Thumb|Menu|Choice|Popover|Breadcrumbs|AssetSlot|DragDrop|Rubberband|Chrome|Docking|Calendar|ColorPicker|Widgets)\\.hpp" ${BH_UI_BRICK_SOURCES})
+# Declarative-UI guards: the imperative styling API that blueprints and style classes replaced must not come back.
+function(bh_banned rule pattern)
+    foreach(bh_ban_file ${ARGN})
+        file(READ ${bh_ban_file} bh_ban_text)
+        if(bh_ban_text MATCHES "${pattern}")
+            message(FATAL_ERROR "${rule}: ${bh_ban_file}")
+        endif()
+    endforeach()
+endfunction()
+file(GLOB_RECURSE BH_UI_ALL_SOURCES CONFIGURE_DEPENDS
+    ${BH_CORE}/ui/*.cpp ${BH_CORE}/ui/*.hpp ${BH_CORE}/host/*.cpp ${BH_CORE}/host/*.hpp
+    ${BH_CORE}/files/*.cpp ${BH_CORE}/files/*.hpp ${CMAKE_SOURCE_DIR}/demo/*.cpp ${CMAKE_SOURCE_DIR}/demo/*.hpp)
+bh_banned("legacy button wrappers, fill flags, UiMetrics and the built-in style table are gone; use style classes and blueprints"
+    "uiIconBtn|uiSlotBtn|uiToolFrame|uiToolButtonState|uiButtonTintIcon|uiButtonMark|UiIconChrome|paintToolIcon|fillWidth|fillHeight|UiMetrics|StyleSchema"
+    ${BH_UI_ALL_SOURCES})
+file(GLOB BH_UI_BLUEPRINT_SOURCES CONFIGURE_DEPENDS
+    ${BH_CORE}/ui/widget/Label.cpp ${BH_CORE}/ui/widget/Button.cpp ${BH_CORE}/ui/widget/Check.cpp
+    ${BH_CORE}/ui/widget/Field.cpp ${BH_CORE}/ui/widget/Search.cpp ${BH_CORE}/ui/widget/Slider.cpp
+    ${BH_CORE}/ui/widget/Number.cpp ${BH_CORE}/ui/widget/NumberEdit.cpp ${BH_CORE}/ui/widget/Fold.cpp
+    ${BH_CORE}/ui/widget/Curve.cpp ${BH_CORE}/ui/widget/Gradient.cpp ${BH_CORE}/ui/widget/Image.cpp
+    ${BH_CORE}/ui/widget/Tabs.cpp ${BH_CORE}/ui/widget/Segment.cpp ${BH_CORE}/ui/widget/Popover.cpp
+    ${BH_CORE}/ui/widget/Rubberband.cpp ${BH_CORE}/ui/widget/Breadcrumbs.cpp ${BH_CORE}/ui/widget/AssetSlot.cpp
+    ${BH_CORE}/ui/widget/Chrome.cpp ${BH_CORE}/ui/widget/Menu.cpp ${BH_CORE}/ui/widget/Choice.cpp
+    ${BH_CORE}/ui/widget/TreeView.cpp ${BH_CORE}/ui/widget/VirtualGrid.cpp ${BH_CORE}/ui/kit/Calendar.cpp)
+bh_banned("widgets that spawn blueprints must not build a raw UiFlex; declare it in assets/ui/core and styles.json"
+    "UiFlex [A-Za-z0-9_]+\\{" ${BH_UI_BLUEPRINT_SOURCES})
 file(GLOB_RECURSE BH_T0_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/memory/*.cpp ${BH_CORE}/memory/*.hpp ${BH_CORE}/io/*.cpp ${BH_CORE}/io/*.hpp
     ${BH_CORE}/wasm/*.cpp ${BH_CORE}/wasm/*.hpp ${BH_CORE}/color/*.hpp ${BH_CORE}/time/*.hpp
@@ -167,7 +193,7 @@ bh_firewall("image, files and audio must not import Window, Action, Dialog or SD
     "platform/(Window|Action|Dialog)\\.hpp|SDL3/" ${BH_NOWINDOW_SOURCES})
 file(GLOB_RECURSE BH_FILES_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/files/*.cpp ${BH_CORE}/files/*.hpp)
 bh_firewall("core/files must not import asset" "asset/" ${BH_FILES_SOURCES})
-file(GLOB BH_INSPECTOR_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/host/PropGrid.* ${BH_CORE}/host/PropFilter.*
+file(GLOB BH_INSPECTOR_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/host/PropGrid* ${BH_CORE}/host/PropFilter.*
     ${BH_CORE}/host/PropBind.* ${BH_CORE}/host/PropImport*)
 bh_firewall("ui inspector must not import rhi, Window, ui/rhi or Host"
     "rhi/|platform/Window\\.hpp|ui/rhi/|host/Host\\.hpp" ${BH_INSPECTOR_SOURCES})
@@ -369,7 +395,11 @@ bh_module(ui_core
     core/ui/Json.cpp
     core/ui/LayoutBridge.cpp
     core/ui/Motion.cpp
+    core/ui/StyleParse.cpp
+    core/ui/StyleTokens.cpp
     core/ui/StyleSheet.cpp
+    core/ui/Template.cpp
+    core/ui/Theme.cpp
     core/ui/Node.cpp
     core/ui/NodeDump.cpp
     core/ui/Panel.cpp
@@ -398,7 +428,6 @@ bh_module(ui_bricks
     core/ui/widget/Tabs.cpp
     core/ui/widget/Segment.cpp
     core/ui/widget/TextEdit.cpp
-    core/ui/widget/Tip.cpp
 )
 bh_module(ui_kits
     core/ui/kit/Calendar.cpp
@@ -443,9 +472,18 @@ target_link_libraries(bh_files PUBLIC bh_foundation bh_ui_core bh_ui_bricks bh_u
 bh_module(ui_inspector
     core/host/PropBind.cpp
     core/host/PropImport.cpp
+    core/host/PropImportInputs.cpp
+    core/host/PropImportKeys.cpp
+    core/host/PropImportMake.cpp
+    core/host/PropImportMenu.cpp
+    core/host/PropImportPaint.cpp
     core/host/PropImportParse.cpp
     core/host/PropImportRoles.cpp
     core/host/PropGrid.cpp
+    core/host/PropGridControls.cpp
+    core/host/PropGridCtl.cpp
+    core/host/PropGridMetrics.cpp
+    core/host/PropGridVec.cpp
     core/host/PropFilter.cpp
 )
 target_link_libraries(bh_ui_inspector PUBLIC bh_ui_kits bh_ui_bricks bh_ui_core bh_foundation)
@@ -1000,6 +1038,10 @@ set(BH_TEST_SOURCES
     tests/ui/TestUiPrimitives.cpp
     tests/ui/TestUiBinary.cpp
     tests/ui/TestUiRuntime.cpp
+    tests/ui/TestUiGolden.cpp
+    tests/ui/TestUiStyle.cpp
+    tests/ui/TestUiTemplate.cpp
+    tests/ui/TestPropImport.cpp
     tests/tools/TestFileBrowser.cpp
     tests/tools/TestEditorTools.cpp
 )

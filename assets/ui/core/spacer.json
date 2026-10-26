@@ -1,0 +1,5 @@
+{
+  "role": "spacer",
+  "flex": { "shrink": 0 },
+  "traits": ["pass"]
+}

@@ -73,13 +73,12 @@ void paintTools(HudContext& hud) {
     }
     UiState& s = *hud.tool.canvas->state;
     const uint8_t modes[5] = {3, 0, 1, 2, 4};
-    const char* btnName[5] = {"toolBtn0", "toolBtn1", "toolBtn2", "toolBtn3", "toolBtn4"};
     for (int i = 0; i < 5; ++i) {
-        uiToolButtonState(s, uiFindName(s, btnName[i]), modes[i] == hud.toolMode);
+        uiSetActive(s, hud.toolBtn[i], modes[i] == hud.toolMode);
     }
     for (int i = 0; i < 3; ++i) {
         const bool on = hud.snapOn[i] != 0;
-        uiToolButtonState(s, hud.snapBtn[i], on);
+        uiSetActive(s, hud.snapBtn[i], on);
     }
 }
 
