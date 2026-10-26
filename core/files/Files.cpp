@@ -40,18 +40,21 @@ void mountFiles(UiState& s) {
     b.pop = take("file.tunePanel");
     b.zoom = take("file.zoom");
     if (b.pop != kUiNone) {
+        // The panel floats above the whole window: parented to the root so no ancestor clips or lays it out.
+        uiReparent(s, b.pop, 0);
+        s.ent[b.pop].add<UiPopup>();
         s.ent[b.pop].add<UiMenuSlide>();
         s.ent[b.pop].set<UiPaint>(paintPopup(s.look));
         s.ent[b.pop].try_get_mut<UiPaint>()->shadow = s.metrics.menuShadow;
     }
-    b.searchBtn = take("file.searchBtn");
+    b.importBtn = take("file.import");
     b.searchBox = take("file.search");
     b.filterBtn = take("file.filter");
     b.crumbs = take("file.crumbs");
     b.wTree = take("file.tree");
     b.status = take("file.status");
     files->fileView = take("file.grid");
-    for (const uint16_t btn : {b.plus, b.back, b.fwd, b.tune, b.searchBtn}) {
+    for (const uint16_t btn : {b.plus, b.back, b.fwd, b.tune, b.importBtn}) {
         uiToolFrame(s, btn);
     }
     fileWire(s);
@@ -142,6 +145,16 @@ void filesThumbsFrame(UiState& s) {
     if (thumbFrame(fileBook(s).thumbs)) {
         fileRefresh(s);
     }
+}
+
+void filesOnImportAsk(UiState& s, bool (*fn)(void* user), void* user) {
+    Browser& b = fileBook(s);
+    b.onAskImport = fn;
+    b.askUser = user;
+}
+
+int filesImportPaths(UiState& s, const char* paths, int count) {
+    return fileImportPaths(s, paths, count);
 }
 
 void filesOnOpen(UiState& s, FileOpenFn fn, void* user) {

@@ -18,7 +18,7 @@ struct Browser : FileModel {
     uint16_t back = kUiNone;
     uint16_t fwd = kUiNone;
     uint16_t tune = kUiNone;
-    uint16_t searchBtn = kUiNone;
+    uint16_t importBtn = kUiNone;
     uint16_t searchBox = kUiNone;
     uint16_t filterBtn = kUiNone;
     uint16_t pop = kUiNone;
@@ -29,9 +29,10 @@ struct Browser : FileModel {
     uint16_t zoom = kUiNone;
     void (*onImport)(void* user, const char* path, float x, float y) = nullptr;
     void (*onBadge)(void* user, char* dst, uint8_t cap) = nullptr;
+    bool (*onAskImport)(void* user) = nullptr;
+    void* askUser = nullptr;
     uint8_t ctrl = 0;
     uint8_t shift = 0;
-    uint8_t searchOn = 0;
     uint8_t popWant = 0;
     uint8_t listView = 0;
     uint8_t bandSnap = 0;
@@ -55,6 +56,8 @@ void fileBeginRename(UiState& s, int index);
 void fileMakeFolder(void* user, uint16_t item);
 void fileMakeFile(void* user, uint16_t item);
 void fileMakeMaterial(void* user, uint16_t item);
+// Copies the packed, NUL-separated `paths` into the current folder and reloads the listing. Returns the number copied.
+int fileImportPaths(UiState& s, const char* paths, int count);
 int fileFirstSelected(const Browser& b);
 const char* fileLeaf(const char* path);
 

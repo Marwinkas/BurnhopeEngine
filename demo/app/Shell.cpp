@@ -205,7 +205,7 @@ void shellBuild(Canvas& canvas, void* user) {
     demo->canvas = &canvas;
     demo->chipsOn = true;
     demo->toolsOn = true;
-    if (!canvasUseFont(canvas, 12.0f)) {
+    if (!canvasUseFont(canvas, kCanvasFontPx)) {
         spdlog::error("app font was not set");
     }
     if (canvas.state != nullptr) {
@@ -348,7 +348,7 @@ void shellBuild(Canvas& canvas, void* user) {
 }
 
 void toolBuild(Canvas& canvas, void*) {
-    if (canvas.state == nullptr || !canvasUseFont(canvas, 12.0f)) {
+    if (canvas.state == nullptr || !canvasUseFont(canvas, kCanvasFontPx)) {
         spdlog::error("tool font was not set");
         if (canvas.state == nullptr) {
             return;

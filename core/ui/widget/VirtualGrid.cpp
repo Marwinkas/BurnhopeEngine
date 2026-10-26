@@ -46,7 +46,10 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
     cell.direction = UiFlexDir::Column;
     cell.align = UiAlign::Center;
     cell.justify = UiJustify::Center;
-    cell.pad = s.metrics.cellPad;
+    cell.padL = s.metrics.cellPadX;
+    cell.padR = s.metrics.cellPadX;
+    cell.padT = s.metrics.cellPadT;
+    cell.padB = s.metrics.cellPadT;
     cell.gap = s.metrics.cellGap;
     UiPaint ink = paintToken(s.look, UiToken::Item, s.look.radiusSm);
     ink.a = 0.0f;
@@ -55,7 +58,7 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
     if (slot == kUiNone) {
         return slot;
     }
-    const float iconSide = tile > 24.0f ? tile * 0.52f : 20.0f;
+    const float iconSide = tile > 24.0f ? tile * 0.46f : 20.0f;
     UiFlex glyph{};
     glyph.widthMode = UiSize::Px;
     glyph.width = iconSide;
@@ -79,15 +82,35 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
     const uint16_t label = spawn(s, slot, lab, paintLabel(s.look));
     addText(s, label, " ");
     uiTextStyle(s, label, UiTextAlign::Center, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+    UiFlex subFlex{};
+    subFlex.self = UiAlignSelf::Stretch;
+    subFlex.heightMode = UiSize::Px;
+    subFlex.height = s.metrics.subH;
+    subFlex.shrink = 1.0f;
+    UiPaint subPaint = paintToken(s.look, UiToken::Muted, 0.0f);
+    subPaint.a = 0.0f;
+    subPaint.borderW = 0.0f;
+    const uint16_t sub = spawn(s, slot, subFlex, subPaint);
+    addText(s, sub, " ");
+    uiTextStyle(s, sub, UiTextAlign::Center, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+    if (const uint16_t part = uiTextId(s, sub); part < s.count) {
+        if (auto* text = s.ent[part].try_get_mut<UiText>()) {
+            text->size = s.metrics.subScale;
+        }
+    }
     if (icon < s.count) {
         s.ent[icon].add<UiNoHit>();
     }
     if (label < s.count) {
         s.ent[label].add<UiNoHit>();
     }
+    if (sub < s.count) {
+        s.ent[sub].add<UiNoHit>();
+        uiShow(s, sub, false);
+    }
     uiSetFocusable(s, slot);
     uiHover(s, slot);
-    s.ent[slot].set<UiParts>({icon, kUiNone, label});
+    s.ent[slot].set<UiParts>({icon, kUiNone, label, sub});
     uiBind(s, slot, onCell, &s);
     s.ent[slot].set<UiVirtRow>({});
     uiShow(s, slot, false);
@@ -231,14 +254,18 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
             flex->align = UiAlign::Center;
             flex->justify = rows ? UiJustify::Start : UiJustify::Center;
             flex->gap = rows ? s.metrics.listGap : s.metrics.cellGap;
-            flex->pad = rows ? s.metrics.listPad : s.metrics.cellPad;
+            flex->pad = rows ? s.metrics.listPad : 0.0f;
+            flex->padL = rows ? 0.0f : s.metrics.cellPadX;
+            flex->padR = rows ? 0.0f : s.metrics.cellPadX;
+            flex->padT = rows ? 0.0f : s.metrics.cellPadT;
+            flex->padB = rows ? 0.0f : s.metrics.cellPadT;
             flex->width = tileW > 8.0f ? tileW : 8.0f;
             flex->height = tileH > 8.0f ? tileH : 8.0f;
             flex->shrink = 0.0f;
         }
         if (const UiParts* parts = s.ent[slot].try_get<UiParts>()) {
             if (auto* icon = parts->icon < s.count ? s.ent[parts->icon].try_get_mut<UiFlex>() : nullptr) {
-                const float side = rows ? 22.0f : (square > 24.0f ? square * 0.52f : 20.0f);
+                const float side = rows ? 22.0f : (square > 24.0f ? square * 0.46f : 20.0f);
                 icon->width = side;
                 icon->height = side;
                 icon->shrink = 0.0f;

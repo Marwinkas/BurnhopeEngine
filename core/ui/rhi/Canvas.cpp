@@ -39,7 +39,7 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
         c.photoMeta[slot].delayMs[0] = 100;
     }
 
-    if (!canvasUseFont(c, 20.0f)) {
+    if (!canvasUseFont(c, 18.0f)) {
         spdlog::error("default sdf font failed");
         canvasDestroy(c, d);
         return false;

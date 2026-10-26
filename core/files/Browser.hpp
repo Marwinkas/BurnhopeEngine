@@ -17,6 +17,10 @@ void filesShow(UiState& s, bool on);
 void filesGo(UiState& s, const char* path);
 void filesStyle(UiState& s, const FileLook& look);
 void filesOnOpen(UiState& s, FileOpenFn fn, void* user);
+// `fn` opens the native multi-select dialog when the Import button is pressed; it returns false when no dialog could open.
+void filesOnImportAsk(UiState& s, bool (*fn)(void* user), void* user);
+// Copies the packed, NUL-separated `paths` (`count` of them) into the current folder and reloads the listing.
+int filesImportPaths(UiState& s, const char* paths, int count);
 void filesRoot(UiState& s, const char* path);
 void filesDropOnScene(UiState& s, uint16_t view, void (*fn)(void* user, const char* path, float x, float y), void* user);
 void filesDropBadge(UiState& s, void (*fn)(void* user, char* dst, uint8_t cap));

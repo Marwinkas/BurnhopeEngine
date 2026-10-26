@@ -54,6 +54,7 @@ void hudWire(Canvas& canvas, HudContext* hud, uint16_t details, uint16_t statsBo
     filesDropOnScene(state, hud->viewPane, hudDropImport, hud);
     filesDropBadge(state, hudDragBadge);
     filesOnOpen(state, onFileOpen, hud);
+    filesOnImportAsk(state, hudAskImport, hud);
     matThumbsAttach(hud->thumbs, canvas);
     filesShow(state, true);
     hudRefreshActors(*hud);

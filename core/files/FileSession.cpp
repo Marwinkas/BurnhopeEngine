@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <spdlog/spdlog.h>
 #include <string>
 
 namespace burnhope {
@@ -255,6 +256,37 @@ void fileMakeFolder(void* user, uint16_t) {
     }
     b.setStatus("new folder");
     fileRefresh(s);
+}
+
+int fileImportPaths(UiState& s, const char* paths, int count) {
+    Browser& b = fileBook(s);
+    if (paths == nullptr || b.cwd[0] == '\0') {
+        return 0;
+    }
+    int copied = 0;
+    const char* at = paths;
+    for (int i = 0; i < count; ++i) {
+        const char* src = at;
+        at += std::strlen(at) + 1;
+        const std::string leaf = fs::path(src).filename().string();
+        char stem[256]{};
+        char ext[32]{};
+        splitStem(leaf.c_str(), stem, static_cast<int>(sizeof(stem)), ext, static_cast<int>(sizeof(ext)));
+        char dst[640]{};
+        uniquePath(dst, static_cast<int>(sizeof(dst)), b.cwd, stem, ext);
+        std::error_code ec;
+        if (fs::copy_file(src, dst, fs::copy_options::none, ec) && !ec) {
+            ++copied;
+        } else {
+            spdlog::warn("import: copy failed {} -> {}: {}", src, dst, ec.message());
+        }
+    }
+    char line[64]{};
+    std::snprintf(line, sizeof(line), "imported %d of %d", copied, count);
+    b.setStatus(line);
+    b.reload();
+    fileRefresh(s);
+    return copied;
 }
 
 void fileMakeFile(void* user, uint16_t) {

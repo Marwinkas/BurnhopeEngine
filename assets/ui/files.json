@@ -9,11 +9,27 @@
     "padR": 4,
     "fill": [0, 0, 0, 0],
     "children": [
-      {"name": "file.plus", "role": "button", "icon": "assets/icons/square-plus.svg", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
       {"name": "file.back", "role": "button", "icon": "chevron_left", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
       {"name": "file.fwd", "role": "button", "icon": "chevron_right", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
+      {
+        "dir": "row",
+        "grow": 1,
+        "shrink": 1,
+        "h": 28,
+        "align": "center",
+        "padL": 12,
+        "padR": 8,
+        "token": "side",
+        "radius": 14,
+        "children": [
+          {"name": "file.crumbs", "role": "crumbs"}
+        ]
+      },
+      {"name": "file.search", "role": "search", "w": 180, "hint": "search"},
+      {"name": "file.filter", "role": "choice", "w": 96, "items": ["All", "Folders", "Images", "Text", "Audio"]},
       {"name": "file.tune", "role": "button", "icon": "gear", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
-      {"grow": 1, "shrink": 1, "h": 28, "fill": [0, 0, 0, 0]}
+      {"name": "file.plus", "role": "button", "icon": "assets/icons/square-plus.svg", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
+      {"name": "file.import", "role": "button", "icon": "assets/icons/download.svg", "class": "tool_button", "w": 28, "h": 28, "shrink": 0}
     ]
   },
   {
@@ -34,30 +50,13 @@
           {"name": "file.tree", "role": "tree"}
         ]
       },
-      {"name": "file.split", "role": "split", "marginT": 36},
+      {"name": "file.split", "role": "split"},
       {
         "dir": "column",
         "grow": 1,
         "shrink": 1,
         "fill": [0, 0, 0, 0],
         "children": [
-          {
-            "dir": "row",
-            "h": 30,
-            "shrink": 0,
-            "align": "center",
-            "gap": 6,
-            "padL": 4,
-            "padR": 4,
-            "fill": [0, 0, 0, 0],
-            "children": [
-              {"name": "file.crumbs", "role": "crumbs"},
-              {"grow": 1, "shrink": 1, "h": 28, "fill": [0, 0, 0, 0]},
-              {"name": "file.search", "role": "search", "w": 180, "hint": "search", "show": false},
-              {"name": "file.filter", "role": "choice", "w": 110, "show": false, "items": ["All", "Folders", "Images", "Text", "Audio"]},
-              {"name": "file.searchBtn", "role": "button", "icon": "search", "class": "tool_button", "w": 28, "h": 28, "shrink": 0}
-            ]
-          },
           {
             "dir": "column",
             "grow": 1,

@@ -13,6 +13,7 @@ struct UiParts {
     uint16_t icon = kUiNone;
     uint16_t chevron = kUiNone;
     uint16_t label = kUiNone;
+    uint16_t sub = kUiNone;
 };
 
 struct UiVirtualPool {

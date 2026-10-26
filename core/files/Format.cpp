@@ -147,6 +147,31 @@ bool fileIsModel(const char* name) {
         || strSame(ext, ".bhop");
 }
 
+const char* fileSubLabel(const char* name, int isDir, int kind) {
+    if (isDir != 0) {
+        return "Папка";
+    }
+    if (fileIsModel(name)) {
+        return "3D Модель";
+    }
+    if (kind == 2) {
+        return "Изображение";
+    }
+    if (kind == 5) {
+        return "Материал";
+    }
+    if (kind == 4) {
+        return "Аудио";
+    }
+    if (fileIconClass(name) == FileIconClass::Scene) {
+        return "Сцена";
+    }
+    if (kind == 3 || fileIconClass(name) == FileIconClass::Doc) {
+        return "Документ";
+    }
+    return "Файл";
+}
+
 const char* fileTypeName(int isDir, int kind) {
     if (isDir != 0) {
         return "Папка";

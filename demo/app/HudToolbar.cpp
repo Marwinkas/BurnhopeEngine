@@ -14,7 +14,7 @@ namespace burnhope {
 
 void sceneHud(Canvas& canvas, void* user) {
     auto* hud = static_cast<HudContext*>(user);
-    if (hud == nullptr || (!canvasHasFont(canvas) && !canvasUseFont(canvas, 20.0f)) || canvas.state == nullptr) {
+    if (hud == nullptr || (!canvasHasFont(canvas) && !canvasUseFont(canvas, 18.0f)) || canvas.state == nullptr) {
         return;
     }
     hud->shown = 0xff;

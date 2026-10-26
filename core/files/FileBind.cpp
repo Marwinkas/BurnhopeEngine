@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <spdlog/spdlog.h>
 #include <string>
 
 namespace burnhope {
@@ -165,7 +166,25 @@ void bindCell(UiState& s, uint16_t cell, uint32_t index) {
     const bool header = b.items[index].isDir == 2;
     const UiParts* parts = s.ent[cell].try_get<UiParts>();
     const uint16_t label = parts != nullptr && parts->label != kUiNone ? parts->label : cell;
-    uiText(s, label, b.items[index].name.c_str());
+    const FileItem& item = b.items[index];
+    char stem[96]{};
+    if (header || item.isDir != 0 || b.listView != 0) {
+        copyCap(stem, static_cast<int>(sizeof(stem)), item.name.c_str());
+    } else {
+        char ext[16]{};
+        splitStem(item.name.c_str(), stem, static_cast<int>(sizeof(stem)), ext, static_cast<int>(sizeof(ext)));
+        if (stem[0] == '\0') {
+            copyCap(stem, static_cast<int>(sizeof(stem)), item.name.c_str());
+        }
+    }
+    uiText(s, label, stem);
+    if (parts != nullptr && parts->sub < s.count) {
+        const bool tile = !header && b.listView == 0;
+        uiShow(s, parts->sub, tile);
+        if (tile) {
+            uiText(s, parts->sub, fileSubLabel(item.name.c_str(), item.isDir, item.kind));
+        }
+    }
     if (parts != nullptr && parts->icon < s.count) {
         uiShow(s, parts->icon, !header);
         if (!header) {
@@ -274,23 +293,6 @@ void onSearch(UiState& s, const char* text) {
     }
 }
 
-void onSearchBtn(UiState& s) {
-    Browser& b = fileBook(s);
-    b.searchOn = b.searchOn == 0 ? 1 : 0;
-    const bool on = b.searchOn != 0;
-    if (b.searchBox != kUiNone) {
-        uiShow(s, b.searchBox, on);
-        if (on) {
-            uiFocus(s, b.searchBox);
-        }
-    }
-    if (b.filterBtn != kUiNone) {
-        uiShow(s, b.filterBtn, on);
-    }
-    uiNotifyLayoutDirty(s);
-    uiNotifyVisualDirty(s);
-}
-
 void onHover(UiState& s, uint32_t index) {
     Browser& b = fileBook(s);
     if (b.status == kUiNone) {
@@ -365,10 +367,23 @@ void applyIcon(UiState& s, float value) {
 
 void onTune(UiState& s, uint16_t) {
     Browser& b = fileBook(s);
+    spdlog::info("[FileTune] Click event fired, tuneWant={}", b.popWant);
     if (b.pop == kUiNone || b.pop >= s.count) {
+        spdlog::warn("[FileTune] panel missing: panelId={}, nodes={}", b.pop, s.count);
         return;
     }
     b.popWant = b.popWant == 0 ? 1 : 0;
+}
+
+void onImport(UiState& s) {
+    Browser& b = fileBook(s);
+    if (b.cwd[0] == '\0') {
+        b.setStatus("no folder");
+        return;
+    }
+    if (b.onAskImport == nullptr || !b.onAskImport(b.askUser)) {
+        b.setStatus("import dialog unavailable");
+    }
 }
 
 void onRenameCommit(UiState& s, const char* text) {
@@ -500,7 +515,7 @@ void fileWire(UiState& s) {
     uiBindName(s, "file.plus", [](void* user, uint16_t id) { onPlus(stateOf(user), id); }, &s);
     uiBindName(s, "file.back", [](void* user, uint16_t) { onBack(stateOf(user)); }, &s);
     uiBindName(s, "file.fwd", [](void* user, uint16_t) { onFwd(stateOf(user)); }, &s);
-    uiBindName(s, "file.searchBtn", [](void* user, uint16_t) { onSearchBtn(stateOf(user)); }, &s);
+    uiBindName(s, "file.import", [](void* user, uint16_t) { onImport(stateOf(user)); }, &s);
     uiBindName(s, "file.tune", [](void* user, uint16_t id) { onTune(stateOf(user), id); }, &s);
     uiBindChoice(s, "file.view", b.listView == 0 ? uint8_t{0} : uint8_t{1}, [](void* user, uint8_t index) { onViewPick(stateOf(user), index); }, &s);
     uiBindChoice(s, "file.sort", b.sortKey < 4 ? b.sortKey : uint8_t{0}, [](void* user, uint8_t index) { onSortPick(stateOf(user), index); }, &s);

@@ -696,7 +696,7 @@ Canvas* hostCanvas(Host& host, int slot) {
 namespace {
 
 void colorWindowBuild(Canvas& canvas, void* user) {
-    if (!canvasUseFont(canvas, 12.0f)) {
+    if (!canvasUseFont(canvas, kCanvasFontPx)) {
         spdlog::error("color font was not set");
     }
     if (canvas.state == nullptr) {

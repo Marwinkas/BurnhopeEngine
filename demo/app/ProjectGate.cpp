@@ -2,6 +2,8 @@
 #include "app/HudBuild.hpp"
 
 #include "asset/ProjectDoc.hpp"
+#include "files/Browser.hpp"
+#include "host/Host.hpp"
 #include "platform/Window.hpp"
 #include "render/SceneFrame.hpp"
 #include "Str.hpp"
@@ -144,7 +146,22 @@ void cmdFileSave(void* user, uint16_t) { cmdFile(user, 2); }
 void cmdFileLoad(void* user, uint16_t) { cmdFile(user, 4); }
 void cmdFileExit(void* user, uint16_t) { cmdFile(user, 3); }
 
+bool hudAskImport(void* user) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud == nullptr || hud->host == nullptr || hud->slot < 0) {
+        return false;
+    }
+    return windowAskFile(hud->host->view[hud->slot].window, nullptr, 0, FileAsk::OpenMany);
+}
+
 bool projectGatePoll(Engine& e) {
+    char many[16384]{};
+    if (const int count = windowTakeFiles(many, static_cast<int>(sizeof(many))); count > 0 && e.hud.host != nullptr) {
+        Canvas* canvas = hostCanvas(*e.hud.host, e.hud.slot);
+        if (canvas != nullptr && canvas->state != nullptr) {
+            (void)filesImportPaths(*canvas->state, many, count);
+        }
+    }
     if (e.hud.projectAsk == 0) {
         return false;
     }

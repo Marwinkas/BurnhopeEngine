@@ -78,6 +78,9 @@ bool canvasListen(Canvas& c, UiValueFn fn, void* user);
 [[nodiscard]] bool canvasLoadPhoto(Canvas& c, uint8_t slot, const char* path);
 [[nodiscard]] bool canvasUploadPhoto(Canvas& c, uint8_t slot, const uint8_t* rgba, uint32_t width, uint32_t height);
 [[nodiscard]] const PhotoMeta* canvasPhotoMeta(const Canvas& c, uint8_t slot);
+// Base UI font size in pixels (before DPI scaling) shared by every window.
+inline constexpr float kCanvasFontPx = 10.0f;
+
 [[nodiscard]] bool canvasSetFont(Canvas& c, const char* path, float pixelSize);
 // Loads the default SDF face, or assets/fonts/Inter-Regular.ttf beside the executable when the default is missing.
 [[nodiscard]] bool canvasUseFont(Canvas& c, float pixelSize);

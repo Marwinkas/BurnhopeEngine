@@ -11,6 +11,17 @@
       "paint": "hidden",
       "children": [
         {
+          "role": "label",
+          "label": "Material Preview"
+        },
+        {
+          "role": "preview",
+          "name": "matPreview",
+          "photo": 8,
+          "w": 168,
+          "h": 168
+        },
+        {
           "role": "segment",
           "name": "matShape",
           "command": "mat.shape",
@@ -26,17 +37,6 @@
               "label": "Plane"
             }
           ]
-        },
-        {
-          "role": "preview",
-          "name": "matPreview",
-          "photo": 8,
-          "w": 168,
-          "h": 168
-        },
-        {
-          "role": "label",
-          "label": "Material Preview"
         }
       ]
     },

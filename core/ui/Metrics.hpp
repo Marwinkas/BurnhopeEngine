@@ -22,6 +22,10 @@ struct UiMetrics {
     float chevronW = 22.0f;
     float icon = 16.0f;
     float cellPad = 6.0f;
+    float cellPadX = 7.0f;
+    float cellPadT = 3.5f;
+    float subH = 12.0f;
+    float subScale = 0.8f;
     float cellGap = 4.0f;
     float listPad = 8.0f;
     float listGap = 6.0f;
