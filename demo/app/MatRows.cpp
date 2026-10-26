@@ -18,7 +18,7 @@ namespace burnhope {
 namespace {
 
 constexpr float kRowH = 26.0f;
-constexpr float kLabelW = 95.0f;
+constexpr float kLabelW = 115.0f;
 constexpr float kFieldW = 52.0f;
 constexpr float kFieldH = 24.0f;
 constexpr float kBadgeW = 16.0f;
@@ -26,6 +26,7 @@ constexpr float kBadgeH = 20.0f;
 constexpr float kCheckW = 36.0f;
 constexpr float kResetSide = 22.0f;
 constexpr float kVecRange = 64.0f;
+constexpr float kPickW = 160.0f;
 
 void onType(void* user, uint8_t index) {
     auto* hud = static_cast<HudContext*>(user);
@@ -142,11 +143,11 @@ uint16_t matRowRole(void* user, UiState& s, UiPropBinder& bind, uint16_t panel, 
         .labels = names,
         .count = 2,
         .selected = 0,
-        .width = uiChoiceWidth(s, names, 2),
+        .width = kPickW,
         .onPick = type ? onType : onPack,
         .user = hud,
     });
-    uiChoiceFit(s, pick, uiChoiceWidth(s, names, 2));
+    uiChoiceFit(s, pick, kPickW);
     (type ? hud->matType : hud->matPack) = pick;
     return row;
 }
