@@ -160,8 +160,10 @@ void uiRevealTick(UiState& s) {
             u = 1.0f;
         }
         const float h = rev->from + (rev->to - rev->from) * revealEase(rev->phase, u);
-        revealBox(s, id, h, rev->full);
-        if (u >= 1.0f) {
+        // A closing box under 4px is a sliver of border: finish it now instead of letting it pop out on the last frame.
+        const bool sliver = rev->phase == 2 && h < 4.0f;
+        revealBox(s, id, sliver ? 0.0f : h, rev->full);
+        if (u >= 1.0f || sliver) {
             const bool shut = rev->to <= 0.5f;
             rev->t0 = -1.0f;
             rev->phase = 0;

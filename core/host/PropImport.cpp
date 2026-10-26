@@ -317,7 +317,7 @@ uint16_t addBar(Import& in, uint16_t parent, const Node& node) {
     }
     markNode(in, button, node);
     remember(in, node.name, button);
-    remember(in, node.glyph, glyph);
+    remember(in, node.glyph, glyph, false);
     bindNodeCommand(in, button, node);
     return button;
 }
@@ -442,7 +442,7 @@ uint16_t makeIcon(Import& in, uint16_t parent, const Node& node) {
     uint16_t glyph = kUiNone;
     const uint16_t id = uiIconBtn(*in.state, parent, node.icon, node.h > 0.0f ? node.h : 28.0f, &glyph);
     remember(in, node.name, id);
-    remember(in, node.glyph, glyph);
+    remember(in, node.glyph, glyph, false); // the glyph is the button itself: keep the node's name
     bindNodeCommand(in, id, node);
     return id;
 }

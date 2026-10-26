@@ -84,7 +84,8 @@ bool prepareViewSync(Host& host, int slot) {
                 if (view.swap.flightFence[i] == VK_NULL_HANDLE) {
                     continue;
                 }
-                if (vkGetFenceStatus(host.device.device, view.swap.flightFence[i]) != VK_SUCCESS) {
+                constexpr uint64_t kResizeWaitNs = 50'000'000;
+                if (vkWaitForFences(host.device.device, 1, &view.swap.flightFence[i], VK_TRUE, kResizeWaitNs) != VK_SUCCESS) {
                     busy = true;
                     break;
                 }
