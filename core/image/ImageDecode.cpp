@@ -73,6 +73,15 @@ uint8_t* rasterSvg(const uint8_t* data, size_t size, int& w, int& h) {
     h = static_cast<int>(svg->height * scale + 0.5f);
     w = w < 1 ? 1 : w;
     h = h < 1 ? 1 : h;
+    // Icons are tint masks: every flat paint becomes white so the UI shader's colour multiply owns the hue.
+    for (NSVGshape* shape = svg->shapes; shape != nullptr; shape = shape->next) {
+        if (shape->fill.type == NSVG_PAINT_COLOR) {
+            shape->fill.color |= 0x00FFFFFFu;
+        }
+        if (shape->stroke.type == NSVG_PAINT_COLOR) {
+            shape->stroke.color |= 0x00FFFFFFu;
+        }
+    }
     NSVGrasterizer* rast = nsvgCreateRasterizer();
     uint8_t* pixels = static_cast<uint8_t*>(std::calloc(static_cast<size_t>(w) * static_cast<size_t>(h), 4));
     if (rast != nullptr && pixels != nullptr) {

@@ -34,6 +34,8 @@ using UiTextGateFn = bool (*)(const UiState& s);
 using UiDropFn = void (*)(UiState& s);
 using UiClearFn = void (*)(UiState& s);
 using UiSpawnFn = void (*)(UiState& s, uint16_t id);
+// Maps an asset-path icon to a photo slot, loading it on first use; kPhotoNone when the file cannot be loaded.
+using UiIconResolveFn = uint8_t (*)(UiState& s, const char* path, void* user);
 struct UiValueListen {
     UiValueFn fn = nullptr;
     void* user = nullptr;
@@ -159,6 +161,8 @@ struct UiState {
     UiBox clipBox{};
     UiCustomBinLoader binHooks[kUiBinRoleCap]{};
     UiBinRole binRole[kUiBinRoleCap]{};
+    UiIconResolveFn iconResolve = nullptr;
+    void* iconUser = nullptr;
     UiHookList<UiClearFn> clearHook;
     UiSpawnFn onSpawn[kUiBinRoleCap]{};
     UiRoleFinishFn roleFinish[kUiBinRoleCap]{};

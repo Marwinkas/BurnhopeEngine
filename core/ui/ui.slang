@@ -5,7 +5,7 @@ ByteAddressBuffer gUi;
 [[vk::binding(1, 0)]]
 Texture2D<float> gSdf;
 [[vk::binding(2, 0)]]
-Texture2D<float4> gPhoto[11];
+Texture2D<float4> gPhoto[32]; // kPhotoSlots in core/ui/Primitive.hpp
 [[vk::binding(0, 1)]]
 SamplerState gSdfSamp;
 
@@ -207,16 +207,10 @@ float4 sampleLevel(Texture2D<float4> tex, float2 uv, float blur) {
 }
 
 float4 samplePhoto(uint slot, float2 uv, float blur) {
-    if (slot == 1u) return sampleLevel(gPhoto[1], uv, blur);
-    if (slot == 2u) return sampleLevel(gPhoto[2], uv, blur);
-    if (slot == 3u) return sampleLevel(gPhoto[3], uv, blur);
-    if (slot == 4u) return sampleLevel(gPhoto[4], uv, blur);
-    if (slot == 5u) return sampleLevel(gPhoto[5], uv, blur);
-    if (slot == 6u) return sampleLevel(gPhoto[6], uv, blur);
-    if (slot == 7u) return sampleLevel(gPhoto[7], uv, blur);
-    if (slot == 8u) return sampleLevel(gPhoto[8], uv, blur);
-    if (slot == 9u) return sampleLevel(gPhoto[9], uv, blur);
-    if (slot == 10u) return sampleLevel(gPhoto[10], uv, blur);
+    [unroll]
+    for (uint i = 1u; i < 32u; ++i) {
+        if (slot == i) return sampleLevel(gPhoto[i], uv, blur);
+    }
     return sampleLevel(gPhoto[0], uv, blur);
 }
 
@@ -256,6 +250,9 @@ float4 uiFs(VsOut i) : SV_Target0 {
             } else if ((i.flags & 2u) == 0) {
                 rgb *= i.color.rgb;
             }
+        }
+        if (i.slot >= 11u) {
+            rgb = tex.rgb * i.color.rgb; // dynamic icon slots (kPhotoDynFirst) are white masks tinted by the node colour
         }
         alpha = tex.a * i.color.a;
         const float d = sdRound(i.local, i.size, i.radii);

@@ -212,6 +212,18 @@ uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const B
     return id;
 }
 
+bool uiBindIconPath(UiState& s, uint16_t id, const char* path) {
+    if (id == kUiNone || id >= s.count || path == nullptr || path[0] == '\0' || s.iconResolve == nullptr) {
+        return false;
+    }
+    const uint8_t slot = s.iconResolve(s, path, s.iconUser);
+    if (slot >= kPhotoSlots) {
+        return false;
+    }
+    s.ent[id].set<UiImage>({.slot = slot, .frames = 1, .inset = kUiButtonIcon});
+    return true;
+}
+
 uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t size) {
     if (bytes == nullptr || size < sizeof(BinHead)) {
         return kUiNone;
@@ -237,7 +249,7 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
         const auto past = [&](uint16_t off, uint16_t len) noexcept {
             return len > 0 && static_cast<uint32_t>(off) + len > head.pool;
         };
-        if (past(bin.nameOff, bin.nameLen) || past(bin.textOff, bin.textLen) || past(bin.hintOff, bin.hintLen)) {
+        if (past(bin.nameOff, bin.nameLen) || past(bin.textOff, bin.textLen) || past(bin.hintOff, bin.hintLen) || past(bin.iconOff, bin.iconLen)) {
             return kUiNone;
         }
     }
@@ -278,6 +290,14 @@ uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t si
             continue;
         }
         map[i] = id;
+        if (bin.iconLen > 0) {
+            char icon[kUiIconPathCap]{};
+            uint8_t iconLen = 0;
+            copyPool(icon, iconLen, kUiIconPathCap, pool, head.pool, bin.iconOff, bin.iconLen);
+            if (uiIconIsPath(icon)) {
+                (void)uiBindIconPath(s, id, icon);
+            }
+        }
         if (root == kUiNone && bin.parent == kUiNone) {
             root = id;
         }

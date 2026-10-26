@@ -172,8 +172,9 @@ TEST_CASE("imageLoadFile rasterizes an svg with a Cyrillic path") {
     CHECK(img.width == 64);
     CHECK(img.height == 64);
     const uint8_t* mid = img.rgba + (32u * img.width + 32u) * 4u;
-    CHECK(mid[0] == 255);
-    CHECK(mid[1] == 0);
+    CHECK(mid[0] == 255); // svg paints rasterize as white masks; the UI shader tints them
+    CHECK(mid[1] == 255);
+    CHECK(mid[2] == 255);
     CHECK(mid[3] == 255);
     imageCpuFree(img);
     std::filesystem::remove_all(dir);

@@ -35,4 +35,7 @@ enum class UiIcon : uint8_t {
 // Maps a human name ("plus", "gear", "chevron_left") to its sprite; unknown names give UiIcon::None.
 UiIcon uiIconFromName(std::string_view name);
 
+// True for an asset-path icon ("assets/icons/Snap.svg"): not a procedural name, and it holds a '/' or ends in .svg / .png.
+[[nodiscard]] bool uiIconIsPath(std::string_view name);
+
 } // namespace burnhope

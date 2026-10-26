@@ -699,6 +699,13 @@ bool parseNode(Cur& c, Import& in, uint16_t parent) {
             }
             node.icon = static_cast<uint8_t>(uiIconFromName(word));
             node.hasIcon = true;
+        } else if (keyIs(key, "photo") && (json::skip(c), c.p < c.end && *c.p == '"')) {
+            char path[kUiIconPathCap]{};
+            if (!json::parseStringCap(c, path, sizeof(path), n)) {
+                return false;
+            }
+            node.photo = in.state->iconResolve != nullptr ? in.state->iconResolve(*in.state, path, in.state->iconUser) : kPhotoNone;
+            node.hasPhoto = node.photo < kPhotoSlots;
         } else if (keyIs(key, "icon") || keyIs(key, "photo") || keyIs(key, "kind") || keyIs(key, "group")
             || keyIs(key, "w") || keyIs(key, "h") || keyIs(key, "wp") || keyIs(key, "hp")
             || keyIs(key, "grow") || keyIs(key, "shrink") || keyIs(key, "gap") || keyIs(key, "pad")

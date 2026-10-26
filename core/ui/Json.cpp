@@ -161,6 +161,7 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
     char name[32]{};
     char text[96]{};
     char hint[40]{};
+    char iconPath[kUiIconPathCap]{};
     uint8_t textLen = 0;
     uint8_t hintLen = 0;
     BinTail role{};
@@ -252,10 +253,14 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                     uiFlexApplyAttr(flex, key, v);
                 }
             } else if (strSame(key, "icon") && (skip(c), c.p < c.end && *c.p == '"')) {
-                char word[24]{};
+                char word[kUiIconPathCap]{};
                 uint8_t n = 0;
-                if (parseUiString(c, word, 24, n)) {
-                    bin.icon = static_cast<uint8_t>(uiIconFromName(word));
+                if (parseUiString(c, word, kUiIconPathCap, n)) {
+                    if (uiIconIsPath(word)) {
+                        std::memcpy(iconPath, word, n < kUiIconPathCap ? n : kUiIconPathCap - 1);
+                    } else {
+                        bin.icon = static_cast<uint8_t>(uiIconFromName(word));
+                    }
                 }
             } else if (strSame(key, "pad") || strSame(key, "gap") || strSame(key, "radius") || strSame(key, "icon")) {
                 float v = 0.0f;
@@ -349,6 +354,9 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
     bin.token = static_cast<uint8_t>(ink);
     flexToBin(bin, flex);
     const uint16_t id = uiSpawnDescribed(s, parent, bin, role, name[0] != '\0' ? name : nullptr, textLen > 0 ? text : nullptr, hintLen > 0 ? hint : nullptr);
+    if (iconPath[0] != '\0') {
+        (void)uiBindIconPath(s, id, iconPath);
+    }
     if (id != kUiNone && kids != nullptr) {
         Cur nested{kids, c.end};
         if (!eat(nested, ']')) {

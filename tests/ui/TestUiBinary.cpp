@@ -4,6 +4,8 @@
 #include "ui/widget/Widgets.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
+#include "ui/Icon.hpp"
+#include "ui/Nodes.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Calendar.hpp"
@@ -127,4 +129,84 @@ TEST_CASE("baked scale slider moves") {
     (void)uiApplyInput(state, in);
     const UiRange* after = state.ent[scale].try_get<UiRange>();
     CHECK(after->value == doctest::Approx(before->min + 0.8f * (before->max - before->min)).epsilon(0.08));
+}
+
+namespace {
+
+uint8_t fakeIconSlot(UiState&, const char* path, void* user) {
+    ++*static_cast<int*>(user);
+    return std::strcmp(path, "assets/icons/missing.svg") == 0 ? kPhotoNone : kPhotoDynFirst + 1;
+}
+
+} // namespace
+
+TEST_CASE("blob asset-path icon resolves to a photo sprite") {
+    UiState state;
+    uiWidgetsInit(state);
+    int calls = 0;
+    state.iconResolve = fakeIconSlot;
+    state.iconUser = &calls;
+    const char path[] = "assets/icons/Snap.svg";
+    BinHead head{};
+    head.count = 1;
+    head.pool = sizeof(path);
+    BinNode node{};
+    node.shown = 1;
+    node.a = 1.0f;
+    node.width = 28.0f;
+    node.height = 28.0f;
+    node.iconOff = 0;
+    node.iconLen = sizeof(path) - 1;
+    unsigned char buf[sizeof(BinHead) + (sizeof(BinNode) + sizeof(BinTail)) + sizeof(path)]{};
+    std::memcpy(buf, &head, sizeof(head));
+    std::memcpy(buf + sizeof(head), &node, sizeof(node));
+    std::memcpy(buf + sizeof(head) + sizeof(node) + sizeof(BinTail), path, sizeof(path));
+    const uint16_t root = uiImportBin(state, kUiNone, buf, sizeof(buf));
+    CHECK(root != kUiNone);
+    if (!(root != kUiNone)) {
+        return;
+    }
+    const UiImage* image = state.ent[root].try_get<UiImage>();
+    CHECK(image != nullptr);
+    if (!(image != nullptr)) {
+        return;
+    }
+    CHECK(image->slot == kPhotoDynFirst + 1);
+    CHECK(image->inset == doctest::Approx(kUiButtonIcon));
+    CHECK(calls == 1);
+}
+
+TEST_CASE("json asset-path icon binds and a failed icon falls back") {
+    UiState state;
+    uiWidgetsInit(state);
+    int calls = 0;
+    state.iconResolve = fakeIconSlot;
+    state.iconUser = &calls;
+    const uint16_t good = uiImportJson(state, kUiNone, R"({"name":"a","w":28,"h":28,"icon":"assets/icons/Snap.svg"})");
+    CHECK(good != kUiNone);
+    if (!(good != kUiNone)) {
+        return;
+    }
+    CHECK(state.ent[good].has<UiImage>());
+    const uint16_t bad = uiImportJson(state, kUiNone, R"({"name":"b","w":28,"h":28,"icon":"assets/icons/missing.svg"})");
+    CHECK(bad != kUiNone);
+    if (!(bad != kUiNone)) {
+        return;
+    }
+    CHECK(!state.ent[bad].has<UiImage>());
+    const uint16_t glyph = uiImportJson(state, kUiNone, R"({"name":"c","w":28,"h":28,"icon":"plus"})");
+    CHECK(glyph != kUiNone);
+    if (!(glyph != kUiNone)) {
+        return;
+    }
+    CHECK(!state.ent[glyph].has<UiImage>());
+    CHECK(calls == 2);
+}
+
+TEST_CASE("icon path classification") {
+    CHECK(uiIconIsPath("assets/icons/Snap.svg"));
+    CHECK(uiIconIsPath("Snap.PNG"));
+    CHECK(!uiIconIsPath("plus"));
+    CHECK(!uiIconIsPath("chevron_left"));
+    CHECK(!uiIconIsPath(""));
 }

@@ -123,7 +123,7 @@
                           "role": "menu",
                           "bar": true,
                           "iconbtn": true,
-                          "icon": "plus",
+                          "photo": "assets/icons/square-plus.svg",
                           "name": "spawnBtn",
                           "slide": true,
                           "items": [
@@ -252,7 +252,7 @@
                         },
                         {
                           "role": "slot",
-                          "photo": 3,
+                          "photo": "assets/icons/Snap.svg",
                           "name": "snapBtn0",
                           "glyph": "snapIcon0",
                           "command": "snap.toggle",
@@ -317,7 +317,7 @@
                         },
                         {
                           "role": "slot",
-                          "photo": 4,
+                          "photo": "assets/icons/Snap.svg",
                           "name": "snapBtn1",
                           "glyph": "snapIcon1",
                           "command": "snap.toggle",
@@ -377,7 +377,7 @@
                         },
                         {
                           "role": "slot",
-                          "photo": 5,
+                          "photo": "assets/icons/Snap.svg",
                           "name": "snapBtn2",
                           "glyph": "snapIcon2",
                           "command": "snap.toggle",

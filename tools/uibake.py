@@ -73,7 +73,7 @@ PARENT_ROOT = 0xFFFE
 
 DIRS = {"column": 0, "row": 1, "column-reverse": 2, "row-reverse": 3, "col": 0}
 
-NODE = struct.Struct("<HBBh6H8B7f6f5f6f4f7f9B3B")
+NODE = struct.Struct("<HBBH6H8B7f6f5f6f4f7f9B3B")
 ROLE = struct.Struct("<10B4f")
 HEAD = struct.Struct("<IHH I")
 
@@ -104,8 +104,20 @@ def icon_names():
 ICONS = icon_names()
 
 
+ICON_PATH_EXT = (".svg", ".png")
+
+
+def is_icon_path(value):
+    """True for an asset-path icon ("assets/icons/Snap.svg"); the runtime photo registry resolves it to a slot."""
+    return isinstance(value, str) and value not in ICONS and (
+        value.lower().endswith(ICON_PATH_EXT) or value.startswith("assets/") or "/" in value
+    )
+
+
 def icon_of(value):
     if isinstance(value, str):
+        if is_icon_path(value):
+            return 0
         if value not in ICONS:
             raise SystemExit("unknown icon name: " + value)
         return ICONS[value]
@@ -202,13 +214,18 @@ def flatten(node, parent, out, pool):
     name_off, name_len = put(name)
     text_off, text_len = put(text)
     hint_off, hint_len = put(hint)
+    icon_value = node.get("icon", 0)
+    icon_path = icon_value if is_icon_path(icon_value) else ""
+    if len(icon_path.encode("utf-8")) > 255:
+        raise SystemExit("icon path too long: " + icon_path)
+    icon_off, icon_len = put(icon_path)
     index = len(out)
     out.append(
         {
             "parent": parent_out,
             "role": role,
-            "icon": icon_of(node.get("icon", 0)),
-            "tag": int(node.get("tag", -1)),
+            "icon": icon_of(icon_value),
+            "iconOff": icon_off,
             "nameOff": name_off,
             "nameLen": name_len,
             "textOff": text_off,
@@ -283,7 +300,7 @@ def flatten(node, parent, out, pool):
             "textDeco": int(node.get("deco", 0)),
             "pad0": marks,
             "pad1": token,
-            "pad2": 0,
+            "iconLen": icon_len,
         }
     )
     for child in node.get("children", []):
@@ -295,7 +312,7 @@ def pack_node(n):
         n["parent"],
         n["role"],
         n["icon"],
-        n["tag"],
+        n["iconOff"],
         n["nameOff"],
         n["nameLen"],
         n["textOff"],
@@ -356,7 +373,7 @@ def pack_node(n):
         n["inset"],
         n["pad0"],
         n["pad1"],
-        n["pad2"],
+        n["iconLen"],
     )
 
 
@@ -394,7 +411,7 @@ def main():
         sys.stderr.write("too many nodes\n")
         return 1
     blob = bytearray()
-    blob += HEAD.pack(0x49554842, 3, len(nodes), len(pool))
+    blob += HEAD.pack(0x49554842, 4, len(nodes), len(pool))
     for node in nodes:
         blob += pack_node(node)
     for node in nodes:

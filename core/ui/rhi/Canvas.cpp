@@ -3,6 +3,7 @@
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/rhi/Font.hpp"
 #include "ui/State.hpp"
+#include "Str.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "platform/Trace.hpp"
 
@@ -28,6 +29,11 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
         return false;
     }
 
+    c.state->iconResolve = [](UiState&, const char* path, void* user) {
+        return canvasIconSlot(*static_cast<Canvas*>(user), path);
+    };
+    c.state->iconUser = &c;
+
     for (uint8_t slot = 0; slot < kPhotoSlots; ++slot) {
         c.photoMeta[slot].frames = 1;
         c.photoMeta[slot].delayMs[0] = 100;
@@ -50,6 +56,7 @@ void canvasDestroy(Canvas& c, Device& d) {
         delete c.state;
         c.state = nullptr;
     }
+    c.icons = {};
     c.device = nullptr;
     c.heaps = nullptr;
 }
@@ -193,6 +200,34 @@ bool canvasSetFont(Canvas& c, const char* path, float pixelSize) {
 
 bool canvasHasFont(const Canvas& c) {
     return c.state != nullptr && c.state->font.ready;
+}
+
+uint8_t canvasIconSlot(Canvas& c, const char* assetPath) {
+    if (assetPath == nullptr || assetPath[0] == '\0') {
+        return kPhotoNone;
+    }
+    uint8_t freeSlot = kPhotoNone;
+    for (uint8_t slot = kPhotoDynFirst; slot < kPhotoSlots; ++slot) {
+        if (c.icons.used[slot]) {
+            if (std::strcmp(c.icons.path[slot], assetPath) == 0) {
+                return slot;
+            }
+        } else if (freeSlot == kPhotoNone) {
+            freeSlot = slot;
+        }
+    }
+    if (freeSlot == kPhotoNone) {
+        spdlog::error("Failed to load icon: {} (no free photo slot)", assetPath);
+        return kPhotoNone;
+    }
+    char resolved[640]{};
+    if (!platformResolveAsset(assetPath, resolved, sizeof(resolved)) || !canvasLoadPhoto(c, freeSlot, resolved)) {
+        spdlog::error("Failed to load icon: {}", assetPath);
+        return kPhotoNone;
+    }
+    c.icons.used[freeSlot] = true;
+    strCopyCap(c.icons.path[freeSlot], kUiIconPathCap, assetPath);
+    return freeSlot;
 }
 
 bool canvasLoadIcon(Canvas& c, uint8_t slot, const char* iconFile) {

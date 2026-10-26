@@ -8,17 +8,25 @@
 #include "ui/rhi/UiPhoto.hpp"
 #include "ui/UiWindowBridge.hpp"
 #include "ui/Types.hpp"
+#include "ui/UiBin.hpp"
 #include "ui/rhi/UiRenderer.hpp"
 
 #include <cstdint>
 
 namespace burnhope {
 
+// Asset-path icon registry: path -> photo slot for the dynamic range kPhotoDynFirst..kPhotoSlots-1.
+struct CanvasIconCache {
+    char path[kPhotoSlots][kUiIconPathCap]{};
+    bool used[kPhotoSlots]{};
+};
+
 // Canvas — координатор кадра. Сам ничего не рисует: зовёт верстку, ввод, движение и сборку примитивов.
 struct Canvas {
     UiState* state = nullptr;
     UiRenderer rhi{};
     PhotoMeta photoMeta[kPhotoSlots]{};
+    CanvasIconCache icons{};
     Device* device = nullptr;
     DescriptorHeaps* heaps = nullptr;
     void (*builder)(Canvas&, void*) = nullptr;
@@ -74,6 +82,9 @@ bool canvasListen(Canvas& c, UiValueFn fn, void* user);
 // Loads the default SDF face, or assets/fonts/Inter-Regular.ttf beside the executable when the default is missing.
 [[nodiscard]] bool canvasUseFont(Canvas& c, float pixelSize);
 [[nodiscard]] bool canvasHasFont(const Canvas& c);
+// Photo slot of an asset-path icon, loading and rasterizing it on first use. Repeated paths reuse their slot;
+// kPhotoNone when the file is missing or no dynamic slot is free.
+[[nodiscard]] uint8_t canvasIconSlot(Canvas& c, const char* assetPath);
 // Loads assets/icons/<iconFile> into photo slot `slot`.
 [[nodiscard]] bool canvasLoadIcon(Canvas& c, uint8_t slot, const char* iconFile);
 

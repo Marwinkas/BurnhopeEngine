@@ -6,7 +6,7 @@
 namespace burnhope {
 
 inline constexpr uint32_t kUiBinMagic = 0x49554842u; // "BHUI"
-inline constexpr uint16_t kUiBinVersion = 3;
+inline constexpr uint16_t kUiBinVersion = 4;
 
 inline constexpr uint8_t kUiBinRoleCap = 32;
 inline constexpr uint8_t kBinRoleClear = 1 << 0;
@@ -22,6 +22,7 @@ inline constexpr uint32_t kUiMaxBinFileSize = 8u * 1024u * 1024u;
 inline constexpr uint8_t kUiNameCap = 32;
 inline constexpr uint8_t kUiTextCap = 96;
 inline constexpr uint8_t kUiHintCap = 40;
+inline constexpr uint8_t kUiIconPathCap = 128;
 
 inline constexpr uint8_t kBinDisabled = 1 << 7;
 
@@ -37,7 +38,7 @@ struct BinNode {
     uint16_t parent = kUiNone;
     uint8_t role = 0;
     uint8_t icon = 0;
-    int16_t reservedTag = 0;
+    uint16_t iconOff = 0; // pool offset of the asset-path icon (iconLen bytes), resolved to a photo slot at import
     uint16_t nameOff = 0;
     uint16_t nameLen = 0;
     uint16_t textOff = 0;
@@ -98,7 +99,7 @@ struct BinNode {
     uint8_t inset = 0;
     uint8_t marks = 0;
     uint8_t token = 0;
-    uint8_t pad2 = 0;
+    uint8_t iconLen = 0;
 };
 inline constexpr uint16_t kBinTailBytes = 26;
 
@@ -127,6 +128,10 @@ void uiBinRole(UiState& s, uint8_t role, const char* name, uint8_t token, uint8_
 uint8_t uiBinRoleFind(const UiState& s, const char* name);
 void uiBinBuiltin(UiState& s);
 uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const BinTail& tail, const char* name, const char* text, const char* hint);
+
+// Asks the host's icon resolver (installed by the RHI canvas) for the photo slot of `path` and gives node `id` that
+// photo as a button-sized sprite. Returns false and leaves the node untouched when no resolver is set or the path fails.
+bool uiBindIconPath(UiState& s, uint16_t id, const char* path);
 
 uint16_t uiImportBin(UiState& s, uint16_t parent, const void* bytes, uint32_t size);
 uint16_t uiImportBinFile(UiState& s, uint16_t parent, const char* path);

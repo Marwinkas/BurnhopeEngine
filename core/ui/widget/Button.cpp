@@ -8,12 +8,6 @@
 
 namespace burnhope {
 
-namespace {
-
-constexpr float kButtonIcon = 16.0f;
-
-} // namespace
-
 uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
     const bool hasLabel = cfg.label != nullptr && cfg.label[0] != '\0';
     UiFlex flex{};
@@ -42,7 +36,7 @@ uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
         flex.padR = padX;
         if (cfg.iconSlot < kPhotoSlots && (cfg.label == nullptr || cfg.label[0] == '\0')) {
             flex.widthMode = UiSize::Px;
-            flex.width = kButtonIcon + padX * 2.0f;
+            flex.width = kUiButtonIcon + padX * 2.0f;
             flex.padL = 0.0f;
             flex.padR = 0.0f;
         }
@@ -56,7 +50,7 @@ uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
     uiHover(s, id);
     uiSetFocusable(s, id);
     if (cfg.iconSlot < kPhotoSlots) {
-        s.ent[id].set<UiImage>({.slot = cfg.iconSlot, .frames = 1, .inset = kButtonIcon});
+        s.ent[id].set<UiImage>({.slot = cfg.iconSlot, .frames = 1, .inset = kUiButtonIcon});
     }
     const bool glyph = cfg.icon != UiIcon::None;
     if (glyph && !hasLabel) {

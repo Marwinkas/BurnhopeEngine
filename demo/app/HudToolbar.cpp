@@ -27,12 +27,12 @@ void sceneHud(Canvas& canvas, void* user) {
     }
     filesLoadIcons(canvas);
     canvasSetLook(canvas, uiLookInk());
-    (void)canvasLoadIcon(canvas, 2, "SelectMode.png");
-    (void)canvasLoadIcon(canvas, 3, "MoveMode.png");
-    (void)canvasLoadIcon(canvas, 4, "RotateMode.png");
-    (void)canvasLoadIcon(canvas, 5, "ScallingMode.png");
-    (void)canvasLoadIcon(canvas, 6, "Camera.png");
-    (void)canvasLoadIcon(canvas, 7, "Snap.png");
+    (void)canvasLoadIcon(canvas, 2, "SelectMode.svg");
+    (void)canvasLoadIcon(canvas, 3, "MoveMode.svg");
+    (void)canvasLoadIcon(canvas, 4, "RotateMode.svg");
+    (void)canvasLoadIcon(canvas, 5, "ScallingMode.svg");
+    (void)canvasLoadIcon(canvas, 6, "Camera.svg");
+    (void)canvasLoadIcon(canvas, 7, "Snap.svg");
     UiPaint hidden{};
     hidden.a = 0.0f;
     hud->bind.attach(hud->block.scalars, 256, hud->block.flags, 64);
