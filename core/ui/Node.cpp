@@ -471,6 +471,24 @@ void uiReparent(UiState& s, uint16_t id, uint16_t parent) {
     uiTrace(s, "reparent", id);
 }
 
+void uiSendToEnd(UiState& s, uint16_t id) {
+    if (id >= s.count || s.parentOf[id] >= s.count) {
+        return;
+    }
+    YGNodeRef node = s.yoga[id];
+    YGNodeRef home = s.yoga[s.parentOf[id]];
+    if (node == nullptr || home == nullptr || YGNodeGetParent(node) != home) {
+        return;
+    }
+    const size_t last = YGNodeGetChildCount(home);
+    if (last == 0 || YGNodeGetChild(home, last - 1u) == node) {
+        return;
+    }
+    YGNodeRemoveChild(home, node);
+    YGNodeInsertChild(home, node, YGNodeGetChildCount(home));
+    s.layoutDirty = true;
+}
+
 void uiPlace(UiState& s, uint16_t id, bool absolute, float x, float y, float w, float h) {
     if (id >= s.count) {
         return;

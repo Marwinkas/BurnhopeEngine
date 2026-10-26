@@ -547,14 +547,17 @@ uint16_t uiMenuButton(UiState& s, uint16_t parent, const char* label, uint16_t m
     flex.widthMode = UiSize::Percent;
     flex.width = 100.0f;
     flex.heightMode = UiSize::Px;
-    flex.height = s.metrics.menuItemH;
+    flex.height = kUiTriggerH;
     flex.grow = 1.0f;
     flex.shrink = 1.0f;
     flex.align = UiAlign::Center;
     flex.justify = UiJustify::Start;
     flex.padL = s.metrics.menuPadX;
     flex.padR = 22.0f;
-    const uint16_t id = uiPanel(s, parent, flex, paintButton(s.look));
+    UiPaint look = paintButtonFill(s.look);
+    look.borderW = 1.0f;
+    tokenRgb(s.look, UiToken::Muted, look.br, look.bg, look.bb);
+    const uint16_t id = uiPanel(s, parent, flex, look);
     if (id == kUiNone) {
         return id;
     }

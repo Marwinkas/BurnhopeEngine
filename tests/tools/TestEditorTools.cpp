@@ -10,6 +10,8 @@
 #include "host/Launcher.hpp"
 #include "asset/MaterialBake.hpp"
 #include "ui/widget/Segment.hpp"
+#include "ui/widget/Fold.hpp"
+#include "ui/Nodes.hpp"
 #include "ui/Style.hpp"
 #include "host/PropGrid.hpp"
 #include "host/PropImport.hpp"
@@ -744,4 +746,24 @@ TEST_CASE("property rows keep a reset slot and label width clamps to the panel")
     const float* red = kUiAxis[0];
     CHECK(red[0] > red[1]);
     CHECK(kUiAxis[2][2] > kUiAxis[2][0]);
+}
+
+TEST_CASE("fold headers draw the chevron left and a node can move to the end of its siblings") {
+    UiState state;
+    uiWidgetsInit(state);
+    const uint16_t root = spawn(state, kUiNone, px(300.0f, 200.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t body = uiFoldBody(state, root, "Transform");
+    CHECK(body < state.count);
+    const uint16_t head = uiNodeChild(state, root, 0);
+    const UiPaint* paint = head < state.count ? state.ent[head].try_get<UiPaint>() : nullptr;
+    CHECK(paint != nullptr);
+    if (paint != nullptr) {
+        CHECK(paint->iconLeft == 1);
+    }
+    const uint16_t a = spawn(state, root, px(10.0f, 10.0f), paintRgb(0.2f, 0.2f, 0.2f));
+    const uint16_t b = spawn(state, root, px(10.0f, 10.0f), paintRgb(0.2f, 0.2f, 0.2f));
+    const uint16_t last = uiNodeChild(state, root, uiNodeChildCount(state, root) - 1u);
+    CHECK(last == b);
+    uiSendToEnd(state, a);
+    CHECK(uiNodeChild(state, root, uiNodeChildCount(state, root) - 1u) == a);
 }

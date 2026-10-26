@@ -51,9 +51,12 @@ void applySnap(HudContext& hud, uint8_t channel, uint16_t index);
 void onMaterialAct(void* user, uint16_t id);
 void openMaterialFile(HudContext& hud, const char* path);
 void saveOpenMaterial(HudContext& hud);
+[[nodiscard]] bool matSame(const MaterialInfo& a, const MaterialInfo& b);
 void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel);
 void hudPaintMaterial(HudContext& hud);
 void hudBakeMaterialView(HudContext& hud);
+// Right-drag over the material preview orbits it.
+void hudPreviewOrbit(HudContext& hud, const InputFrame& input);
 void hudCommitMaps(HudContext& hud, uint8_t channel);
 void hudBuildActorMaterial(Canvas& canvas, HudContext* hud, uint16_t panel);
 char* hudDocPath(BhmatDoc& doc, uint8_t channel);

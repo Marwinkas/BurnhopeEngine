@@ -157,7 +157,7 @@ uint16_t uiLauncher(UiState& s, const LauncherConfig& cfg) {
     veil.justify = UiJustify::Center;
     veil.shrink = 0.0f;
     UiPaint dim = paintToken(s.look, UiToken::Window, 0.0f);
-    dim.a = 0.82f;
+    dim.a = 1.0f;
     dim.borderW = 0.0f;
     const uint16_t id = uiNode(s, kUiNone, veil, dim);
     if (id >= s.count) {

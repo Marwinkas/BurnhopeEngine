@@ -19,6 +19,8 @@ uint16_t uiSpacer(UiState& s, uint16_t parent, const UiFlex& flex);
 void uiSetToken(UiState& s, uint16_t id, UiToken token);
 // The node that holds the pointer capture (kUiNone when none), and the active theme.
 [[nodiscard]] uint16_t uiCaptured(const UiState& s);
+// The node under the pointer (kUiNone when none).
+[[nodiscard]] uint16_t uiHovered(const UiState& s);
 [[nodiscard]] const UiLook& uiLook(const UiState& s);
 
 // Node facade: callers never reach into the flex or paint components. A negative number leaves that value as it is.

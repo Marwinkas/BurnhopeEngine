@@ -192,10 +192,12 @@ uint32_t uiEmitPanel(
         const UiText* label = s.ent[id].try_get<UiText>();
         const bool labeled = label != nullptr && label->len > 0;
         if (labeled) {
-            side = 14.0f;
+            side = paint->iconLeft != 0 ? 16.0f : 14.0f;
         }
         float iconX = box.x + (box.w - side) * 0.5f;
-        if (labeled) {
+        if (labeled && paint->iconLeft != 0) {
+            iconX = box.x + kUiIconLeftPad;
+        } else if (labeled) {
             iconX = box.x + box.w - side - 6.0f;
             if (iconX < box.x) {
                 iconX = box.x;
@@ -230,6 +232,10 @@ uint32_t uiEmitPanel(
 
 uint16_t uiCaptured(const UiState& s) {
     return s.capture;
+}
+
+uint16_t uiHovered(const UiState& s) {
+    return s.hovered;
 }
 
 const UiLook& uiLook(const UiState& s) {

@@ -206,6 +206,9 @@ struct HudContext {
     float previewPx = 0.0f;
     float previewPy = 0.0f;
     uint8_t previewDown = 0;
+    MaterialInfo previewSeen{};
+    uint8_t previewOrbit = 0;
+    char cliProject[512]{};
     uint8_t previewShape = 0;
     uint8_t previewDirty = 1;
     uint8_t atlasDirty = 1;

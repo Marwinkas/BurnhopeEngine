@@ -38,6 +38,12 @@ enum class UiRamp : uint8_t {
     Alpha = 5,
 };
 
+// Height of every dropdown trigger (menu button, choice).
+constexpr float kUiTriggerH = 24.0f;
+
+// Distance from a node's left edge to an icon drawn with UiPaint::iconLeft.
+constexpr float kUiIconLeftPad = 10.0f;
+
 // Визуальный компонент сущности (прямоугольник, скругление, цвет, обводка)
 struct UiPaint {
     float r = 0.0f;
@@ -56,6 +62,7 @@ struct UiPaint {
     uint8_t hoverKids = 0;
     UiRamp ramp = UiRamp::None;
     bool disabled = false;
+    uint8_t iconLeft = 0;      // 1: a labeled node draws its icon at the left edge instead of the right
     float shadow = 0.0f;
     float radiusTr = kUiUnset; // Если < 0.0f, наследует radius
     float radiusBr = kUiUnset;

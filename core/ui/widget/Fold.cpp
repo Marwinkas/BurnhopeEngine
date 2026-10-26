@@ -168,8 +168,8 @@ uint16_t uiFoldBody(UiState& s, uint16_t parent, const char* title) {
     row.align = UiAlign::Center;
     row.widthMode = UiSize::Percent;
     row.width = 100.0f;
-    row.padL = 8.0f;
-    row.padR = 22.0f;
+    row.padL = kUiIconLeftPad + 16.0f + 6.0f;
+    row.padR = 8.0f;
     if (parent < s.count) {
         if (const UiFlex* home = s.ent[parent].try_get<UiFlex>()) {
             const float left = home->pad > 0.0f ? home->pad : home->padL;
@@ -184,6 +184,7 @@ uint16_t uiFoldBody(UiState& s, uint16_t parent, const char* title) {
     }
     UiPaint bar = paintToken(s.look, UiToken::Item, 0.0f);
     bar.icon = static_cast<uint8_t>(UiIcon::ChevronRight);
+    bar.iconLeft = 1;
     const uint16_t head = uiPanel(s, parent, row, bar);
     if (head == kUiNone) {
         return kUiNone;

@@ -72,6 +72,7 @@ bool sceneTick(void* user, const InputFrame& input, float dt) {
     if (canvas != nullptr && canvas->state != nullptr && canvas->builder != nullptr && !lookHeld && !toolHeld) {
         sceneMaskInput(*canvas->state, sceneInput);
     }
+    hudPreviewOrbit(*view, input);
     const bool flyLook = sceneFrameTick(view->scene, sceneInput, dt);
     if (view->host != nullptr && view->slot >= 0) {
         const Swapchain& shown = view->host->view[view->slot].swap;
@@ -132,8 +133,11 @@ bool engineImportScene() {
 }
 
 bool engineInit(Engine& e, int argc, char** argv) {
-    (void)argc;
-    (void)argv;
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--project") == 0) {
+            std::snprintf(e.hud.cliProject, sizeof(e.hud.cliProject), "%s", argv[i + 1]);
+        }
+    }
     spdlog::set_level(spdlog::level::info);
     spdlog::info("Burnhope — Vulkan 1.4 core + Yoga/Flecs canvas.");
     if (!hostInit(e.host)) {
@@ -179,6 +183,12 @@ void engineShutdown(Engine& e) {
 
 bool engineTick(Engine& e) {
     (void)projectGatePoll(e);
+    if (e.hud.cliProject[0] != '\0' && e.hud.launcher != kUiNone) {
+        char folder[512]{};
+        std::snprintf(folder, sizeof(folder), "%s", e.hud.cliProject);
+        e.hud.cliProject[0] = '\0';
+        projectTake(e.hud, folder, 2);
+    }
     hudLauncherSync(e);
     if (e.hud.rootReady != 0) {
         e.hud.rootReady = 0;

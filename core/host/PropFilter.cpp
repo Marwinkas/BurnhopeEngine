@@ -1,5 +1,6 @@
 #include "host/PropGrid.hpp"
 #include "host/PropRoll.hpp"
+#include "ui/Nodes.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
@@ -205,6 +206,7 @@ void uiPropRebuildFilters(UiState& s) {
             }
             uiShow(s, all, true);
             uiText(s, all, "All");
+            uiSendToEnd(s, all);
         }
         if (!whichLive) {
             bar->which = kUiNone;

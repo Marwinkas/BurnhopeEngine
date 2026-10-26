@@ -306,7 +306,7 @@ V3 shade(const BhmatDoc& doc, const uint8_t* atlas, const Spin& spin, const Hit&
     }
     n = norm(spin.toView(n));
 
-    const V3 l = norm({0.45f, 0.62f, 0.65f});
+    const V3 l = norm({0.55f, 0.75f, 0.35f});
     const V3 h = norm(l + view);
     const float nol = clamp01(dot(n, l));
     const float nov = std::max(dot(n, view), 1.0e-3f);
@@ -323,13 +323,13 @@ V3 shade(const BhmatDoc& doc, const uint8_t* atlas, const Spin& spin, const Hit&
     const float fw = std::pow(1.0f - voh, 5.0f);
     const V3 fresnel = specColor + (V3{1.0f, 1.0f, 1.0f} - specColor) * fw;
     const V3 diffuseColor = albedo * (1.0f - metal);
-    const V3 sun{3.0f, 2.76f, 2.28f};
+    const V3 sun{3.5f, 3.2f, 2.9f};
     const V3 direct = (diffuseColor * (1.0f / 3.14159265f) * (V3{1.0f, 1.0f, 1.0f} - fresnel)
                        + fresnel * (distribution * vis / std::max(4.0f * nol * nov, 1.0e-4f)))
         * sun * nol;
 
-    const V3 sky{0.78f * 0.45f, 0.82f * 0.45f, 0.88f * 0.45f};
-    const V3 ground{0.07f, 0.065f, 0.06f};
+    const V3 sky{0.35f, 0.4f, 0.5f};
+    const V3 ground{0.15f, 0.12f, 0.1f};
     const V3 irradiance = lerp(ground, sky, n.y * 0.5f + 0.5f);
     const V3 refl = n * (2.0f * dot(n, view)) - view;
     const V3 dome = lerp(ground, sky, refl.y * 0.5f + 0.5f) * (1.0f - rough * 0.55f);
