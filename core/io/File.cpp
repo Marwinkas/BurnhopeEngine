@@ -1,5 +1,7 @@
 #include "io/File.hpp"
 
+#include <cstring>
+
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -12,6 +14,23 @@
 
 namespace burnhope {
 
+size_t fileTrimPath(const char* path, char* out, size_t cap) {
+    if (path == nullptr || out == nullptr || cap == 0) {
+        return 0;
+    }
+    size_t n = std::strlen(path);
+    while (n > 0 && (path[n - 1] == '\r' || path[n - 1] == '\n' || path[n - 1] == ' ' || path[n - 1] == '\t' || path[n - 1] == '"')) {
+        --n;
+    }
+    if (n + 1 > cap) {
+        out[0] = '\0';
+        return 0;
+    }
+    std::memcpy(out, path, n);
+    out[n] = '\0';
+    return n;
+}
+
 bool fileMapReadOnly(const char* path, MappedFile* out) {
     if (path == nullptr || out == nullptr) {
         return false;
@@ -20,6 +39,11 @@ bool fileMapReadOnly(const char* path, MappedFile* out) {
     out->size = 0;
     out->fd = -1;
     out->map = nullptr;
+    char clean[4096];
+    if (fileTrimPath(path, clean, sizeof(clean)) == 0) {
+        return false;
+    }
+    path = clean;
 
 #if defined(_WIN32)
     wchar_t wide[2048];
@@ -84,9 +108,11 @@ bool fileMapReadOnly(const char* path, MappedFile* out) {
 }
 
 bool fileExists(const char* path) {
-    if (path == nullptr || path[0] == '\0') {
+    char clean[4096];
+    if (fileTrimPath(path, clean, sizeof(clean)) == 0) {
         return false;
     }
+    path = clean;
 #if defined(_WIN32)
     const DWORD attr = GetFileAttributesA(path);
     return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY) == 0;

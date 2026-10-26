@@ -4,6 +4,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -109,9 +110,12 @@ bool imageLoadFile(ImageCpu& img, const char* path) {
         return false;
     }
     MappedFile file{};
-    if (!fileMapReadOnly(path, &file) || file.data == nullptr || file.size == 0 || file.size > 64u * 1024u * 1024u) {
+    errno = 0;
+    const bool mapped = fileMapReadOnly(path, &file);
+    const int err = errno;
+    if (!mapped || file.data == nullptr || file.size == 0 || file.size > 64u * 1024u * 1024u) {
         fileUnmap(&file);
-        spdlog::error("image read failed: {}", path);
+        spdlog::error("image read failed: {} ({})", path, err != 0 ? std::strerror(err) : "empty or oversized file");
         return false;
     }
     const int fileBytes = static_cast<int>(file.size);

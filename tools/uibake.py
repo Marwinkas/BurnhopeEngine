@@ -2,6 +2,8 @@
 """Bake a UI JSON tree into a flat BHUI blob. The frame never parses this JSON."""
 
 import json
+import os
+import re
 import struct
 import sys
 
@@ -88,6 +90,26 @@ WRAP = {"nowrap": 0, "wrap": 1, "reverse": 2, "wrap-reverse": 2}
 OVER = {"visible": 0, "hidden": 1, "scroll": 2}
 BOX = {"border": 0, "border-box": 0, "content": 1, "content-box": 1}
 POS = {"static": 0, "absolute": 1, "relative": 2}
+
+
+def icon_names():
+    """Parses core/ui/Icon.hpp and core/ui/IconNames.inc so JSON can say "plus" instead of 16."""
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "core", "ui")
+    with open(os.path.join(root, "Icon.hpp"), encoding="utf-8") as handle:
+        ids = {m.group(1): int(m.group(2)) for m in re.finditer(r"^\s*(\w+)\s*=\s*(\d+),", handle.read(), re.M)}
+    with open(os.path.join(root, "IconNames.inc"), encoding="utf-8") as handle:
+        return {m.group(1): ids[m.group(2)] for m in re.finditer(r'BH_ICON\("(\w+)",\s*(\w+)\)', handle.read())}
+
+
+ICONS = icon_names()
+
+
+def icon_of(value):
+    if isinstance(value, str):
+        if value not in ICONS:
+            raise SystemExit("unknown icon name: " + value)
+        return ICONS[value]
+    return int(value or 0)
 
 
 def word(table, value, default=0):
@@ -185,7 +207,7 @@ def flatten(node, parent, out, pool):
         {
             "parent": parent_out,
             "role": role,
-            "icon": int(node.get("icon", 0)),
+            "icon": icon_of(node.get("icon", 0)),
             "tag": int(node.get("tag", -1)),
             "nameOff": name_off,
             "nameLen": name_len,

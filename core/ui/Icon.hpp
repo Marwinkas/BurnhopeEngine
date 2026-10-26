@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
 namespace burnhope {
 
@@ -30,5 +31,8 @@ enum class UiIcon : uint8_t {
     Cogwheel = 20,
     ChevronLeft = 21,
 };
+
+// Maps a human name ("plus", "gear", "chevron_left") to its sprite; unknown names give UiIcon::None.
+UiIcon uiIconFromName(std::string_view name);
 
 } // namespace burnhope

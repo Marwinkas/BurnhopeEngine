@@ -5,6 +5,7 @@
 #include "io/File.hpp"
 #include "io/JsonCursor.hpp"
 #include "platform/PlatformUtil.hpp"
+#include "ui/Icon.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
@@ -691,6 +692,13 @@ bool parseNode(Cur& c, Import& in, uint16_t parent) {
             } else {
                 node.selfCenter = std::strcmp(text, "center") == 0;
             }
+        } else if (keyIs(key, "icon") && (json::skip(c), c.p < c.end && *c.p == '"')) {
+            char word[24]{};
+            if (!json::parseStringCap(c, word, sizeof(word), n)) {
+                return false;
+            }
+            node.icon = static_cast<uint8_t>(uiIconFromName(word));
+            node.hasIcon = true;
         } else if (keyIs(key, "icon") || keyIs(key, "photo") || keyIs(key, "kind") || keyIs(key, "group")
             || keyIs(key, "w") || keyIs(key, "h") || keyIs(key, "wp") || keyIs(key, "hp")
             || keyIs(key, "grow") || keyIs(key, "shrink") || keyIs(key, "gap") || keyIs(key, "pad")

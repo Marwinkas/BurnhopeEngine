@@ -9,10 +9,10 @@
     "padR": 4,
     "fill": [0, 0, 0, 0],
     "children": [
-      {"name": "file.plus", "role": "button", "icon": 16, "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
-      {"name": "file.back", "role": "button", "icon": 21, "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
-      {"name": "file.fwd", "role": "button", "icon": 10, "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
-      {"name": "file.tune", "role": "button", "icon": 20, "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
+      {"name": "file.plus", "role": "button", "icon": "plus", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
+      {"name": "file.back", "role": "button", "icon": "chevron_left", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
+      {"name": "file.fwd", "role": "button", "icon": "chevron_right", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
+      {"name": "file.tune", "role": "button", "icon": "gear", "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
       {"grow": 1, "shrink": 1, "h": 28, "fill": [0, 0, 0, 0]}
     ]
   },
@@ -34,7 +34,7 @@
           {"name": "file.tree", "role": "tree"}
         ]
       },
-      {"name": "file.split", "role": "split"},
+      {"name": "file.split", "role": "split", "marginT": 32},
       {
         "dir": "column",
         "grow": 1,
@@ -55,7 +55,7 @@
               {"grow": 1, "shrink": 1, "h": 28, "fill": [0, 0, 0, 0]},
               {"name": "file.search", "role": "search", "w": 180, "hint": "search", "show": false},
               {"name": "file.filter", "role": "choice", "w": 110, "show": false, "items": ["All", "Folders", "Images", "Text", "Audio"]},
-              {"name": "file.searchBtn", "role": "button", "icon": 7, "class": "tool_button", "w": 28, "h": 28, "shrink": 0}
+              {"name": "file.searchBtn", "role": "button", "icon": "search", "class": "tool_button", "w": 28, "h": 28, "shrink": 0}
             ]
           },
           {

@@ -3,6 +3,7 @@
 #include "io/JsonCursor.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/FlexAttr.hpp"
+#include "ui/Icon.hpp"
 #include "ui/State.hpp"
 
 #include <spdlog/spdlog.h>
@@ -249,6 +250,12 @@ uint16_t parseNode(UiState& s, uint16_t parent, Cur& c) {
                 float v = 0.0f;
                 if (parseUiNumber(c, v)) {
                     uiFlexApplyAttr(flex, key, v);
+                }
+            } else if (strSame(key, "icon") && (skip(c), c.p < c.end && *c.p == '"')) {
+                char word[24]{};
+                uint8_t n = 0;
+                if (parseUiString(c, word, 24, n)) {
+                    bin.icon = static_cast<uint8_t>(uiIconFromName(word));
                 }
             } else if (strSame(key, "pad") || strSame(key, "gap") || strSame(key, "radius") || strSame(key, "icon")) {
                 float v = 0.0f;

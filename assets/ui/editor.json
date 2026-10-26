@@ -123,7 +123,7 @@
                           "role": "menu",
                           "bar": true,
                           "iconbtn": true,
-                          "icon": 16,
+                          "icon": "plus",
                           "name": "spawnBtn",
                           "slide": true,
                           "items": [
@@ -204,7 +204,7 @@
                         },
                         {
                           "role": "icon",
-                          "icon": 15,
+                          "icon": "crosshair",
                           "name": "toolBtn4",
                           "glyph": "toolIcon4",
                           "command": "gizmo.mode",
@@ -272,7 +272,7 @@
                         {
                           "role": "menu",
                           "bar": true,
-                          "icon": 11,
+                          "icon": "chevron_down",
                           "w": 22,
                           "h": 26,
                           "class": "dropdown_trigger",
@@ -337,7 +337,7 @@
                         {
                           "role": "menu",
                           "bar": true,
-                          "icon": 11,
+                          "icon": "chevron_down",
                           "w": 22,
                           "h": 26,
                           "class": "dropdown_trigger",
@@ -397,7 +397,7 @@
                         {
                           "role": "menu",
                           "bar": true,
-                          "icon": 11,
+                          "icon": "chevron_down",
                           "w": 22,
                           "h": 26,
                           "class": "dropdown_trigger",
@@ -433,14 +433,14 @@
                         },
                         {
                           "role": "icon",
-                          "icon": 17,
+                          "icon": "play",
                           "name": "playBtn",
                           "glyph": "playGlyph",
                           "command": "scene.play"
                         },
                         {
                           "role": "icon",
-                          "icon": 18,
+                          "icon": "pause",
                           "name": "pauseBtn",
                           "command": "scene.pause",
                           "hide": true
@@ -473,7 +473,7 @@
                         {
                           "role": "button",
                           "name": "gearBtn",
-                          "icon": 20,
+                          "icon": "gear",
                           "class": "tool_button",
                           "command": "view.gear"
                         }
@@ -493,7 +493,8 @@
             },
             {
               "role": "split",
-              "vertical": true
+              "vertical": true,
+              "inset": 32
             },
             {
               "role": "panel",

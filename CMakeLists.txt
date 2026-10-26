@@ -364,6 +364,7 @@ bh_module(ui_core
     core/ui/Focus.cpp
     core/ui/Hit.cpp
     core/ui/Hover.cpp
+    core/ui/Icon.cpp
     core/ui/Input.cpp
     core/ui/Json.cpp
     core/ui/LayoutBridge.cpp

@@ -178,3 +178,21 @@ TEST_CASE("imageLoadFile rasterizes an svg with a Cyrillic path") {
     imageCpuFree(img);
     std::filesystem::remove_all(dir);
 }
+
+#include "io/File.hpp"
+#include "ui/Icon.hpp"
+
+TEST_CASE("uiIconFromName resolves names and rejects unknown ones") {
+    CHECK(uiIconFromName("plus") == UiIcon::Add);
+    CHECK(uiIconFromName("gear") == UiIcon::Cogwheel);
+    CHECK(uiIconFromName("chevron_left") == UiIcon::ChevronLeft);
+    CHECK(uiIconFromName("nope") == UiIcon::None);
+}
+
+TEST_CASE("fileTrimPath strips CRLF, spaces and quotes from the tail") {
+    char out[64];
+    CHECK(fileTrimPath("a/b.jpg\r\n", out, sizeof(out)) == 7);
+    CHECK(std::strcmp(out, "a/b.jpg") == 0);
+    CHECK(fileTrimPath("\"x.png\" ", out, sizeof(out)) == 6);
+    CHECK(fileTrimPath("long/path", out, 4) == 0);
+}

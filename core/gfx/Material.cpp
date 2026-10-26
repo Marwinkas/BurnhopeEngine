@@ -92,7 +92,8 @@ void takeStr(BhmatDoc& doc, const char* key, const char* text) {
     if (dst == nullptr) {
         return;
     }
-    std::snprintf(dst, 260, "%s", text != nullptr ? text : "");
+    dst[0] = '\0';
+    fileTrimPath(text, dst, 260);
 }
 
 } // namespace

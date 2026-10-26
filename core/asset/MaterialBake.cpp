@@ -169,8 +169,8 @@ Hit traceSphere(const Spin& spin, float nx, float ny) {
     const V3 nView{nx, ny, std::sqrt(1.0f - d2)};
     out.n = norm(spin.toObject(nView));
     out.pos = out.n;
-    out.u = std::atan2(out.n.x, out.n.z) * 0.15915494f + 0.5f;
-    out.v = std::acos(std::clamp(out.n.y, -1.0f, 1.0f)) * 0.31830988f;
+    out.u = 0.5f + std::atan2(out.n.z, out.n.x) * 0.15915494f;
+    out.v = 0.5f - std::asin(std::clamp(out.n.y, -1.0f, 1.0f)) * 0.31830988f;
     out.hit = true;
     return out;
 }
