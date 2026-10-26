@@ -34,6 +34,9 @@ void uiMenuRowBind(UiState& s, uint16_t row, const char* label, UiCommandFn fn, 
 uint16_t uiMenuRow(UiState& s, uint16_t menu, const char* label, UiCommandFn fn, void* user, uint16_t item, uint16_t owner, uint16_t command);
 void uiMarkMenuBar(UiState& s, uint16_t id);
 void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenuItem> items, void* user, float above = -1.0f);
+// Opens a flyout of `count` rows (labels from labelAt, as many as fit the window) under node `anchor`; picking row i
+// calls onPick(user, i). Clicking anywhere outside dismisses it without a pick.
+void uiMenuList(UiState& s, uint16_t anchor, uint16_t count, const char* (*labelAt)(void* user, uint16_t index), void (*onPick)(void* user, uint16_t index), void* user);
 void uiMenuClose(UiState& s);
 uint16_t uiMakeMenu(UiState& s);
 void uiMenuStyle(UiState& s, float width, float itemH, float pad, float gap);

@@ -226,7 +226,7 @@ void shellBuild(Canvas& canvas, void* user) {
     if (note != kUiNone) {
         uiText(*canvas.state, note, "named in flecs");
     }
-    uiMenuStyle(*canvas.state, 210.0f, 30.0f, 8.0f, 4.0f);
+    uiMenuStyle(*canvas.state, 210.0f, 26.0f, 6.0f, 2.0f);
 
     UiState& s = *canvas.state;
     const uint16_t look = uiFindName(s, "page_look");

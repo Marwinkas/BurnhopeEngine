@@ -138,7 +138,8 @@ uint16_t UiPropBinder::resetBtn(UiState& s, uint16_t parent, UiReset kind, uint1
     if (ui == nullptr) {
         ui = &s;
     }
-    const uint16_t id = uiIconBtn(s, parent, static_cast<uint8_t>(UiIcon::Reset), 22.0f, nullptr);
+    const uint16_t tail = uiPropTrail(s, parent);
+    const uint16_t id = uiIconBtn(s, tail < s.count ? tail : parent, static_cast<uint8_t>(UiIcon::Reset), 22.0f, nullptr);
     if (id == kUiNone) {
         return id;
     }

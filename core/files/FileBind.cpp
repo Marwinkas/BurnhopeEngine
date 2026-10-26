@@ -197,10 +197,6 @@ void onSelect(UiState& s, uint32_t index) {
         b.selectOnly(at);
     }
     fileRefresh(s);
-    if (index < static_cast<uint32_t>(b.count()) && b.items[index].isDir == 0
-        && strExtIs(b.items[index].name.c_str(), ".bhmat")) {
-        fileOpenAt(s, at);
-    }
 }
 
 void onOpen(UiState& s, uint32_t index) {

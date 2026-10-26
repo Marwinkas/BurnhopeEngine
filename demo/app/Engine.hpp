@@ -2,6 +2,7 @@
 
 #include "asset/ProjectDoc.hpp"
 #include "host/Host.hpp"
+#include "host/Recent.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
 #include "ui/widget/ColorPicker.hpp"
@@ -29,7 +30,7 @@ struct ToolHit {
 
 struct MatLeaf {
     char name[96]{};
-    char path[512]{};
+    char path[260]{};
 };
 
 struct HudIds {
@@ -182,14 +183,18 @@ struct HudContext {
     uint16_t sunSwatch = kUiNone;
     uint16_t wxBtn = kUiNone;
     uint8_t projectAsk = 0;
-    uint8_t texAsk = 0;
+    uint8_t texChannel = 0;
     uint8_t rootReady = 0;
+    uint8_t launcherDirty = 1;
+    uint16_t launcher = kUiNone;
+    RecentList recent;
     uint8_t matOpen = 0;
     uint8_t texLive = 0;
     MatHit matHit[kMatSlotN]{};
     uint16_t matTex[kMatSlotN]{};
     uint16_t matThumb[kMatSlotN]{};
     uint16_t matClear[kMatSlotN]{};
+    std::vector<MatLeaf> texList;
     uint16_t matEmpty[kMatSlotN]{};
     uint16_t matVal[kMatSlotN]{};
     uint16_t matType = kUiNone;
@@ -201,6 +206,7 @@ struct HudContext {
     float previewPx = 0.0f;
     float previewPy = 0.0f;
     uint8_t previewDown = 0;
+    uint8_t previewShape = 0;
     uint8_t previewDirty = 1;
     uint8_t atlasDirty = 1;
     bool matEdited = false;

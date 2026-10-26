@@ -7,6 +7,7 @@
 #include "Str.hpp"
 
 #include <cstdio>
+#include <ctime>
 #include <cstring>
 #include <filesystem>
 
@@ -50,12 +51,30 @@ bool sceneFileEmpty(const char* path) {
     return path != nullptr && sceneDocRead(path, recs, 4u, n) && n == 0;
 }
 
-void takeProject(Engine& e, const char* folder, uint8_t ask) {
+void makeProjectFolders(const char* folder) {
+    std::error_code ec;
+    for (const char* sub : {"assets", "cache", "materials"}) {
+        std::filesystem::create_directories(std::filesystem::path(folder) / sub, ec);
+    }
+}
+
+void remember(HudContext& hud) {
+    recentTouch(hud.recent, hud.projectRoot, static_cast<int64_t>(std::time(nullptr)));
+    char file[512]{};
+    if (recentFile(file, sizeof(file))) {
+        std::error_code ec;
+        std::filesystem::create_directories(std::filesystem::path(file).parent_path(), ec);
+        (void)recentSave(hud.recent, file);
+    }
+    hud.launcherDirty = 1;
+}
+
+void takeProject(HudContext& hud, const char* folder, uint8_t ask) {
     if (folder == nullptr || folder[0] == '\0') {
         return;
     }
-    copyRoot(e.hud.projectRoot, sizeof(e.hud.projectRoot), folder);
-    e.hud.matListed = 0;
+    copyRoot(hud.projectRoot, sizeof(hud.projectRoot), folder);
+    hud.matListed = 0;
     char proj[512]{};
     std::snprintf(proj, sizeof(proj), "%s/project.proj", folder);
     ProjectInfo info{};
@@ -64,27 +83,31 @@ void takeProject(Engine& e, const char* folder, uint8_t ask) {
         const char* leaf = strPathLeaf(folder);
         std::snprintf(info.name, sizeof(info.name), "%s", leaf[0] != '\0' ? leaf : "Untitled");
         if (!projectWrite(folder, info)) {
-            e.hud.projectRoot[0] = '\0';
+            hud.projectRoot[0] = '\0';
             return;
         }
     }
+    if (ask == 1) {
+        makeProjectFolders(folder);
+    }
     if (ask == 3) {
-        (void)sceneFrameSave(e.hud.scene, e.hud.projectRoot);
+        (void)sceneFrameSave(hud.scene, hud.projectRoot);
     } else if (ask == 2) {
         char scenePath[640]{};
         std::snprintf(scenePath, sizeof(scenePath), "%s/scene.bscene", folder);
         std::error_code missing;
         if (!std::filesystem::is_regular_file(scenePath, missing) || sceneFileEmpty(scenePath)) {
-            writeEmptyScene(e.hud);
-            sceneFrameBlank(e.hud.scene);
+            writeEmptyScene(hud);
+            sceneFrameBlank(hud.scene);
         } else {
-            (void)sceneFrameLoad(e.hud.scene, e.hud.projectRoot);
+            (void)sceneFrameLoad(hud.scene, hud.projectRoot);
         }
     } else {
-        writeEmptyScene(e.hud);
-        sceneFrameBlank(e.hud.scene);
+        writeEmptyScene(hud);
+        sceneFrameBlank(hud.scene);
     }
-    e.hud.rootReady = 1;
+    hud.rootReady = 1;
+    remember(hud);
 }
 
 } // namespace
@@ -122,18 +145,6 @@ void cmdFileLoad(void* user, uint16_t) { cmdFile(user, 4); }
 void cmdFileExit(void* user, uint16_t) { cmdFile(user, 3); }
 
 bool projectGatePoll(Engine& e) {
-    if (e.hud.texAsk != 0) {
-        char picked[512]{};
-        if (!windowTakeFile(picked, static_cast<int>(sizeof(picked)))) {
-            return false;
-        }
-        const uint8_t channel = static_cast<uint8_t>(e.hud.texAsk - 1u);
-        e.hud.texAsk = 0;
-        if (picked[0] != '\0') {
-            hudTakeTexture(e.hud, channel, picked);
-        }
-        return true;
-    }
     if (e.hud.projectAsk == 0) {
         return false;
     }
@@ -151,8 +162,12 @@ bool projectGatePoll(Engine& e) {
         }
         return true;
     }
-    takeProject(e, picked, ask);
+    projectTake(e.hud, picked, ask);
     return true;
+}
+
+void projectTake(HudContext& hud, const char* folder, uint8_t ask) {
+    takeProject(hud, folder, ask);
 }
 
 void projectImportModel(HudContext& hud, const char* path) {

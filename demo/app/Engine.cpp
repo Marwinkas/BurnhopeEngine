@@ -164,8 +164,6 @@ bool engineInit(Engine& e, int argc, char** argv) {
         return false;
     }
     e.hud.slot = sceneSlot;
-    e.hud.projectAsk = 2;
-    (void)windowAskFile(e.host.view[sceneSlot].window, nullptr, 0, FileAsk::Folder);
     e.host.releaseGpu = releaseScene;
     e.host.releaseUser = e.scene;
     return true;
@@ -181,6 +179,7 @@ void engineShutdown(Engine& e) {
 
 bool engineTick(Engine& e) {
     (void)projectGatePoll(e);
+    hudLauncherSync(e);
     if (e.hud.rootReady != 0) {
         e.hud.rootReady = 0;
         if (e.hud.slot >= 0 && e.hud.projectRoot[0] != '\0') {

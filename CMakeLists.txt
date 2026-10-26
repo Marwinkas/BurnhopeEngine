@@ -394,6 +394,7 @@ bh_module(ui_bricks
     core/ui/widget/Slider.cpp
     core/ui/widget/Splitter.cpp
     core/ui/widget/Tabs.cpp
+    core/ui/widget/Segment.cpp
     core/ui/widget/TextEdit.cpp
     core/ui/widget/Tip.cpp
 )
@@ -448,6 +449,8 @@ bh_module(host
     core/host/Host.cpp
     core/host/HostNote.cpp
     core/host/SceneMask.cpp
+    core/host/Recent.cpp
+    core/host/Launcher.cpp
 )
 target_link_libraries(bh_host PUBLIC volk bh_ui_inspector bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_rhi bh_platform bh_foundation)
 bh_module(app
@@ -467,6 +470,7 @@ bh_module(app
     demo/app/HudSync.cpp
     demo/app/HudPush.cpp
     demo/app/ProjectGate.cpp
+    demo/app/HudLauncher.cpp
     demo/app/SceneBlockFill.cpp
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)

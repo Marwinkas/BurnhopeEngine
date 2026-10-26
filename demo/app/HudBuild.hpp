@@ -114,6 +114,11 @@ void cmdFileSave(void* user, uint16_t item);
 void cmdFileLoad(void* user, uint16_t item);
 void cmdFileExit(void* user, uint16_t item);
 [[nodiscard]] bool projectGatePoll(Engine& e);
+// Opens (ask 2) or creates (ask 1) the project in `folder`, then remembers it in the recent list.
+void projectTake(HudContext& hud, const char* folder, uint8_t ask);
+// Builds the project launcher overlay on the canvas, and keeps it shown exactly while no project is open.
+void hudBuildLauncher(Canvas& canvas, HudContext* hud);
+void hudLauncherSync(Engine& e);
 void projectImportModel(HudContext& hud, const char* path);
 
 } // namespace burnhope

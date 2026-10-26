@@ -188,8 +188,12 @@ bool skipDir(const fs::path& dir) {
     return name == "cache" || name == "build" || name == "build-core" || name == ".git";
 }
 
-// Returns false once `take` asks to stop.
-bool walkMaterials(const fs::path& dir, int depth, ProjectMaterialFn take, void* user) {
+bool textureFile(const char* name) {
+    return strIsImagePath(name) || strExtIs(name, ".dds");
+}
+
+// Returns false once `take` asks to stop. Files whose names `want` accepts are reported.
+bool walkFiles(const fs::path& dir, int depth, bool (*want)(const char* name), ProjectMaterialFn take, void* user) {
     if (depth > 4 || skipDir(dir)) {
         return true;
     }
@@ -199,7 +203,7 @@ bool walkMaterials(const fs::path& dir, int depth, ProjectMaterialFn take, void*
             return true;
         }
         if (ent.is_directory(ec)) {
-            if (!walkMaterials(ent.path(), depth + 1, take, user)) {
+            if (!walkFiles(ent.path(), depth + 1, want, take, user)) {
                 return false;
             }
             continue;
@@ -208,7 +212,7 @@ bool walkMaterials(const fs::path& dir, int depth, ProjectMaterialFn take, void*
             continue;
         }
         const std::string name = ent.path().filename().string();
-        if (strExtIs(name.c_str(), ".bhmat") && !take(user, name.c_str(), ent.path().string().c_str())) {
+        if (want(name.c_str()) && !take(user, name.c_str(), ent.path().string().c_str())) {
             return false;
         }
     }
@@ -255,7 +259,14 @@ void projectListMaterials(const char* root, ProjectMaterialFn take, void* user) 
     if (root == nullptr || root[0] == '\0' || take == nullptr) {
         return;
     }
-    (void)walkMaterials(fs::path(root), 0, take, user);
+    (void)walkFiles(fs::path(root), 0, [](const char* name) { return strExtIs(name, ".bhmat"); }, take, user);
+}
+
+void projectListTextures(const char* root, ProjectMaterialFn take, void* user) {
+    if (root == nullptr || root[0] == '\0' || take == nullptr) {
+        return;
+    }
+    (void)walkFiles(fs::path(root), 0, textureFile, take, user);
 }
 
 bool materialCommitMaps(BhmatDoc& doc, const char* matPath, uint8_t editedChannel) {

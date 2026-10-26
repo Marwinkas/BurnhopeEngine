@@ -179,11 +179,7 @@ UiPaint paintOf(const Import& in, const Node& node) {
         return paint;
     }
     if (std::strcmp(node.paintName, "veil") == 0) {
-        UiPaint paint = paintToken(look, UiToken::Content, look.radiusSm);
-        paint.a = 0.72f;
-        paint.borderW = 1.0f;
-        tokenRgb(look, UiToken::Muted, paint.br, paint.bg, paint.bb);
-        return paint;
+        return paintPopup(look);
     }
     if (std::strcmp(node.paintName, "content") == 0) {
         UiPaint paint = paintToken(look, UiToken::Content, 0.0f);

@@ -53,6 +53,7 @@ constexpr Slot kSlot[kMatSlotN] = {
 
 void lift(UiState& s, uint16_t value) {
     uiPropRowHeight(s, value, 72.0f, 64.0f);
+    uiPropValueMax(s, value, 340.0f);
     uiSetGap(s, value, 8.0f);
 }
 

@@ -64,7 +64,7 @@ void hudBakeMaterialView(HudContext& hud) {
         }
     }
     if (hud.previewDirty != 0) {
-        materialBakeSphere(hud.matDoc, hud.atlasBuf.data(), hud.previewYaw, hud.previewPitch, hud.previewBuf.data());
+        materialBakePreview(hud.matDoc, hud.atlasBuf.data(), static_cast<MatShape>(hud.previewShape), hud.previewYaw, hud.previewPitch, hud.previewBuf.data());
         if (canvasUploadPhoto(*canvas, 8, hud.previewBuf.data(), kMatSphereSide, kMatSphereSide)) {
             hud.previewDirty = 0;
         }

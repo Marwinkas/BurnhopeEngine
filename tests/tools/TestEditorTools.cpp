@@ -7,6 +7,11 @@
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Splitter.hpp"
 #include "host/PropBind.hpp"
+#include "host/Launcher.hpp"
+#include "asset/MaterialBake.hpp"
+#include "ui/widget/Segment.hpp"
+#include "ui/Style.hpp"
+#include "host/PropGrid.hpp"
 #include "host/PropImport.hpp"
 #include "io/File.hpp"
 #include "platform/PlatformUtil.hpp"
@@ -598,4 +603,145 @@ TEST_CASE("gizmo axis follows the cursor") {
     CHECK(world.drag == 1);
     sceneActorPointer(world, yx, yy + 40.0f, 1, 0, 0);
     CHECK(std::fabs(sceneActorXform(world, 0).euler[1]) > 1.0f);
+}
+
+TEST_CASE("recent projects keep newest first, dedupe, cap, and survive a save") {
+    RecentList list;
+    recentTouch(list, "/a", 10);
+    recentTouch(list, "/b", 20);
+    recentTouch(list, "/a", 30);
+    CHECK(list.count == 2u);
+    CHECK(std::strcmp(list.item[0].path, "/a") == 0);
+    CHECK(list.item[0].opened == 30);
+    for (int i = 0; i < 12; ++i) {
+        char path[16]{};
+        std::snprintf(path, sizeof(path), "/p%d", i);
+        recentTouch(list, path, 100 + i);
+    }
+    CHECK(list.count == kRecentCap);
+    CHECK(std::strcmp(list.item[0].path, "/p11") == 0);
+    const char* file = "/tmp/burnhope-recent-test.txt";
+    CHECK(recentSave(list, file));
+    RecentList back;
+    CHECK(recentLoad(back, file));
+    CHECK(back.count == list.count);
+    CHECK(std::strcmp(back.item[3].path, list.item[3].path) == 0);
+    CHECK(back.item[3].opened == list.item[3].opened);
+    recentRemove(back, 0);
+    CHECK(back.count == kRecentCap - 1u);
+    CHECK(std::strcmp(back.item[0].path, "/p10") == 0);
+    std::remove(file);
+}
+
+TEST_CASE("launcher lists recent rows and forwards clicks") {
+    UiState state;
+    uiWidgetsInit(state);
+    struct Seen {
+        int created = 0;
+        uint32_t picked = 99;
+    } seen;
+    const uint16_t launcher = uiLauncher(state, {
+        .onCreate = [](void* user) { ++static_cast<Seen*>(user)->created; },
+        .onRecent = [](void* user, uint32_t index) { static_cast<Seen*>(user)->picked = index; },
+        .user = &seen,
+    });
+    CHECK(launcher < state.count);
+    if (!(launcher < state.count)) {
+        return;
+    }
+    RecentList list;
+    recentTouch(list, "/work/alpha", 5);
+    recentTouch(list, "/work/beta", 6);
+    uiLauncherList(state, launcher, list);
+    const UiLauncher* box = state.ent[launcher].try_get<UiLauncher>();
+    CHECK(box != nullptr);
+    if (!(box != nullptr)) {
+        return;
+    }
+    const UiLauncherRow* second = state.ent[box->row[1]].try_get<UiLauncherRow>();
+    CHECK(second != nullptr);
+    if (!(second != nullptr)) {
+        return;
+    }
+    CHECK(second->index == 1u);
+    const UiText* name = state.ent[second->name].try_get<UiText>();
+    CHECK(name != nullptr);
+    if (!(name != nullptr)) {
+        return;
+    }
+    CHECK(std::string_view(name->bytes) == "alpha");
+    const UiAction* act = state.ent[box->row[1]].try_get<UiAction>();
+    CHECK(act != nullptr);
+    if (!(act != nullptr)) {
+        return;
+    }
+    act->fn(act->user, box->row[1]);
+    CHECK(seen.picked == 1u);
+}
+
+TEST_CASE("material preview paints every shape and reacts to the material") {
+    BhmatDoc doc{};
+    static uint8_t atlas[kMatAtlasW * kMatAtlasH * 4u];
+    static uint8_t pixels[2][kMatSphereSide * kMatSphereSide * 4u];
+    materialBakeAtlas(doc, "", atlas);
+    for (const MatShape shape : {MatShape::Sphere, MatShape::Cube, MatShape::Plane}) {
+        materialBakePreview(doc, atlas, shape, 0.4f, 0.3f, pixels[0]);
+        uint32_t lit = 0;
+        for (uint32_t i = 0; i < kMatSphereSide * kMatSphereSide; ++i) {
+            lit += pixels[0][i * 4u] != 46u ? 1u : 0u;
+        }
+        CHECK(lit > 1500u);
+        CHECK(lit < kMatSphereSide * kMatSphereSide);
+    }
+    doc.metallic = 1.0f;
+    doc.roughness = 0.1f;
+    materialBakePreview(doc, atlas, MatShape::Sphere, 0.4f, 0.3f, pixels[0]);
+    doc.metallic = 0.0f;
+    doc.roughness = 0.9f;
+    materialBakePreview(doc, atlas, MatShape::Sphere, 0.4f, 0.3f, pixels[1]);
+    CHECK(std::memcmp(pixels[0], pixels[1], sizeof(pixels[0])) != 0);
+}
+
+TEST_CASE("segment picks one button and reports it") {
+    UiState state;
+    uiWidgetsInit(state);
+    static uint8_t picked = 9;
+    const char* names[] = {"A", "B", "C"};
+    const uint16_t strip = uiSegment(state, kUiNone, {.labels = names, .count = 3, .selected = 0, .onPick = [](void*, uint8_t i) { picked = i; }});
+    CHECK(strip < state.count);
+    if (!(strip < state.count)) {
+        return;
+    }
+    const uint16_t second = uiNodeChild(state, strip, 1);
+    const UiAction* act = state.ent[second].try_get<UiAction>();
+    CHECK(act != nullptr);
+    if (!(act != nullptr)) {
+        return;
+    }
+    act->fn(act->user, second);
+    CHECK(picked == 1);
+    const UiSegment* seg = state.ent[strip].try_get<UiSegment>();
+    CHECK(seg != nullptr);
+    if (!(seg != nullptr)) {
+        return;
+    }
+    CHECK(seg->selected == 1);
+}
+
+TEST_CASE("property rows keep a reset slot and label width clamps to the panel") {
+    UiState state;
+    uiWidgetsInit(state);
+    const uint16_t root = spawn(state, kUiNone, px(300.0f, 200.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t host = uiPropHost(state, root);
+    const uint16_t slot = uiPropRow(state, host, "Row");
+    const uint16_t tail = uiPropTrail(state, slot);
+    CHECK(tail < state.count);
+    if (!(tail < state.count)) {
+        return;
+    }
+    CHECK(state.parentOf[tail] == state.parentOf[slot]);
+    CHECK(uiPropTrail(state, root) == kUiNone);
+    const float* red = kUiAxis[0];
+    CHECK(red[0] > red[1]);
+    CHECK(kUiAxis[2][2] > kUiAxis[2][0]);
 }

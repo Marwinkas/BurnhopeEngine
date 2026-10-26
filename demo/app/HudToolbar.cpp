@@ -104,6 +104,7 @@ void sceneHud(Canvas& canvas, void* user) {
     uiBindChoice(*canvas.state, "spaceChoice", hud->space, nullptr, nullptr);
     uiBindChoice(*canvas.state, "pivotChoice", hud->pivotSpace, nullptr, nullptr);
     hudWire(canvas, hud, details, statsBody, files, detailsInner);
+    hudBuildLauncher(canvas, hud);
 }
 
 } // namespace burnhope

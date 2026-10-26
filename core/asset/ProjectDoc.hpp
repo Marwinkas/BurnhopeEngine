@@ -34,6 +34,8 @@ using MaterialInfo = BhmatDoc;
 // `take` returns false to stop the walk.
 using ProjectMaterialFn = bool (*)(void* user, const char* name, const char* path);
 void projectListMaterials(const char* root, ProjectMaterialFn take, void* user);
+// Same walk for image files (png, jpg, tga, hdr, dds, ...): the texture picker's source list.
+void projectListTextures(const char* root, ProjectMaterialFn take, void* user);
 
 // Copies every map the material names into the folder of `matPath`, then bakes the ORMH pack when the
 // material owns it. `editedChannel` is the map the user just changed (2 = the pack itself, 255 = none).

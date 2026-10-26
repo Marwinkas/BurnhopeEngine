@@ -36,11 +36,7 @@ void menuShell(UiState& s, uint16_t id) {
             return;
         }
     }
-    const float radius = paint->radius;
-    *paint = paintToken(s.look, UiToken::Menu, radius);
-    paint->a = 1.0f;
-    paint->borderW = 1.0f;
-    tokenRgb(s.look, UiToken::Text, paint->br, paint->bg, paint->bb);
+    *paint = paintPopup(s.look);
     paint->shadow = s.metrics.menuShadow;
 }
 
@@ -377,6 +373,26 @@ uint16_t uiMakeMenu(UiState& s) {
         s.ent[id].add<UiMenuSlide>();
     }
     return id;
+}
+
+void uiMenuList(UiState& s, uint16_t anchor, uint16_t count, const char* (*labelAt)(void* user, uint16_t index), void (*onPick)(void* user, uint16_t index), void* user) {
+    constexpr uint16_t kListCap = 48;
+    if (labelAt == nullptr || onPick == nullptr || count == 0 || anchor >= s.count) {
+        return;
+    }
+    const UiBox& below = s.box[anchor];
+    const UiMenuMetrics metrics = metricsOf(s, uiMenu(s));
+    const float stride = metrics.itemH + metrics.gap;
+    const float room = s.laidH > 64.0f ? s.laidH - 32.0f - metrics.pad * 2.0f : 0.0f;
+    uint16_t fit = room > stride ? static_cast<uint16_t>(room / stride) : uint16_t{1};
+    fit = fit < kListCap ? fit : kListCap;
+    fit = fit < count ? fit : count;
+    UiMenuItem items[kListCap]{};
+    for (uint16_t i = 0; i < fit; ++i) {
+        items[i].label = labelAt(user, i);
+        items[i].onClick = onPick;
+    }
+    uiMenuOpen(s, below.x, below.y + below.h, std::span<const UiMenuItem>(items, fit), user);
 }
 
 void uiMenuStyle(UiState& s, float width, float itemH, float pad, float gap) {

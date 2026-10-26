@@ -10,6 +10,7 @@
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Check.hpp"
+#include "ui/widget/Menu.hpp"
 #include "host/PropGrid.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "Str.hpp"
@@ -79,17 +80,50 @@ void saveOpenMaterial(HudContext& hud) {
     }
 }
 
-void onMaterialAct(void* user, uint16_t) {
+namespace {
+
+constexpr size_t kTexListCap = 512;
+
+bool takeTexture(void* user, const char* name, const char* path) {
+    auto* hud = static_cast<HudContext*>(user);
+    MatLeaf leaf{};
+    std::snprintf(leaf.name, sizeof(leaf.name), "%s", name);
+    std::snprintf(leaf.path, sizeof(leaf.path), "%s", path);
+    hud->texList.push_back(leaf);
+    return hud->texList.size() < kTexListCap;
+}
+
+const char* texLabel(void* user, uint16_t index) {
+    auto* hud = static_cast<HudContext*>(user);
+    return index < hud->texList.size() ? hud->texList[index].name : "";
+}
+
+void texPicked(void* user, uint16_t index) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (index < hud->texList.size()) {
+        hudTakeTexture(*hud, hud->texChannel, hud->texList[index].path);
+    }
+}
+
+} // namespace
+
+void onMaterialAct(void* user, uint16_t id) {
     auto* hit = static_cast<MatHit*>(user);
-    if (hit == nullptr || hit->hud == nullptr || hit->hud->matOpen == 0) {
+    if (hit == nullptr || hit->hud == nullptr || hit->hud->matOpen == 0 || hit->kind < 1 || hit->kind > 9) {
         return;
     }
-    if (hit->hud->host == nullptr || hit->hud->slot < 0 || hit->kind < 1 || hit->kind > 9) {
+    HudContext& hud = *hit->hud;
+    UiState* state = hudUi(hud);
+    if (state == nullptr || hud.projectRoot[0] == '\0') {
         return;
     }
-    hit->hud->texAsk = hit->kind;
-    const FileFilter filter{"Image", "png;jpg;jpeg;dds;tga;hdr"};
-    (void)windowAskFile(hit->hud->host->view[hit->hud->slot].window, &filter, 1, FileAsk::Open);
+    hud.texList.clear();
+    projectListTextures(hud.projectRoot, takeTexture, &hud);
+    if (hud.texList.empty()) {
+        return;
+    }
+    hud.texChannel = static_cast<uint8_t>(hit->kind - 1u);
+    uiMenuList(*state, id, static_cast<uint16_t>(hud.texList.size()), texLabel, texPicked, &hud);
 }
 
 void onFileOpen(void* user, const char* path, int isDir) {

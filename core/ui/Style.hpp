@@ -246,6 +246,22 @@ inline UiPaint paintField(const UiLook& look) noexcept {
     return out;
 }
 
+// The one look of every popup surface (menus, choices, popovers): translucent window fill with a crisp 1px border.
+inline UiPaint paintPopup(const UiLook& look) noexcept {
+    UiPaint out = paintToken(look, UiToken::Window, look.radiusSm);
+    out.a = 0.88f;
+    out.borderW = 1.0f;
+    tokenRgb(look, UiToken::Muted, out.br, out.bg, out.bb);
+    return out;
+}
+
+// X/Y/Z (and U/V) axis caps keep their conventional colors in every theme.
+inline constexpr float kUiAxis[3][3]{
+    {0.90f, 0.24f, 0.20f},
+    {0.28f, 0.76f, 0.30f},
+    {0.26f, 0.50f, 0.95f},
+};
+
 // Neutral tint constants for paints that carry no theme color (photo tint, ramp bases, marker rings).
 inline constexpr float kUiWhite[3]{1.0f, 1.0f, 1.0f};
 inline constexpr float kUiBlack[3]{0.0f, 0.0f, 0.0f};

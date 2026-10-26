@@ -9,6 +9,7 @@
 #include "ui/widget/Choice.hpp"
 #include "ui/widget/Image.hpp"
 #include "ui/widget/Label.hpp"
+#include "ui/widget/Segment.hpp"
 #include "ui/Nodes.hpp"
 
 namespace burnhope {
@@ -38,6 +39,14 @@ void onPack(void* user, uint8_t index) {
         hudPaintMaterial(*hud);
     }
     saveOpenMaterial(*hud);
+}
+
+void onShape(void* user, uint8_t index) {
+    auto* hud = static_cast<HudContext*>(user);
+    if (hud != nullptr) {
+        hud->previewShape = index;
+        hud->previewDirty = 1;
+    }
 }
 
 void onPreviewDrag(void* user, uint16_t, float x, float y) {
@@ -88,6 +97,8 @@ void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel) {
     previewCol.gap = 4.0f;
     previewCol.shrink = 0.0f;
     const uint16_t preview = uiPanel(s, panel, previewCol, paintClear());
+    const char* shapeName[] = {"Sphere", "Cube", "Plane"};
+    (void)uiSegment(s, preview, {.labels = shapeName, .count = 3, .selected = hud->previewShape, .onPick = onShape, .user = hud});
     hud->matPreview = uiIcon(s, preview, 8, static_cast<float>(kMatSphereSide), static_cast<float>(kMatSphereSide));
     uiDrag(s, hud->matPreview, onPreviewDrag, hud);
     uiLabel(s, preview, "Material Preview");

@@ -59,7 +59,11 @@ UiTexSlotIds uiTexSlot(UiState& s, uint16_t parent, const UiTexSlotConfig& cfg) 
     frameFlex.overflow = UiOverflow::Hidden;
     frameFlex.align = UiAlign::Center;
     frameFlex.justify = UiJustify::Center;
-    out.frame = uiPanel(s, parent, frameFlex, paintToken(s.look, UiToken::Field, 4.0f));
+    UiPaint framePaint = paintToken(s.look, UiToken::Field, 0.0f);
+    framePaint.borderW = 1.0f;
+    tokenRgb(s.look, UiToken::Muted, framePaint.br, framePaint.bg, framePaint.bb);
+    framePaint.shadow = 0.0f;
+    out.frame = uiPanel(s, parent, frameFlex, framePaint);
     if (out.frame == kUiNone) {
         return out;
     }
@@ -74,7 +78,7 @@ UiTexSlotIds uiTexSlot(UiState& s, uint16_t parent, const UiTexSlotConfig& cfg) 
         uiSetPass(s, out.empty);
         uiTextStyle(s, out.empty, UiTextAlign::Center, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     }
-    out.thumb = uiIcon(s, out.frame, cfg.photo, cfg.side - 8.0f, cfg.side - 8.0f);
+    out.thumb = uiIcon(s, out.frame, cfg.photo, cfg.side - 2.0f, cfg.side - 2.0f);
     if (out.thumb < s.count) {
         uiSetPass(s, out.thumb);
         const uint8_t cols = cfg.atlasCols > 0 ? cfg.atlasCols : uint8_t{1};
@@ -87,11 +91,12 @@ UiTexSlotIds uiTexSlot(UiState& s, uint16_t parent, const UiTexSlotConfig& cfg) 
         }
         uiShow(s, out.thumb, false);
     }
-    out.clear = uiButton(s, out.frame, {.label = "x", .width = 18.0f, .height = 18.0f, .onClick = cfg.onClear, .user = cfg.user});
+    out.clear = uiIconBtn(s, out.frame, static_cast<uint8_t>(UiIcon::Dismiss), 18.0f);
     if (out.clear < s.count) {
-        uiPlaceAbsolute(s, out.clear, cfg.side - 22.0f, 2.0f);
+        uiBind(s, out.clear, cfg.onClear, cfg.user);
+        uiPlaceAbsolute(s, out.clear, cfg.side - 20.0f, 1.0f);
         if (auto* paint = s.ent[out.clear].try_get_mut<UiPaint>()) {
-            *paint = paintToken(s.look, UiToken::Close, 2.0f);
+            *paint = paintToken(s.look, UiToken::Close, 0.0f);
         }
         uiShow(s, out.clear, false);
     }

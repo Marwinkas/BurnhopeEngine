@@ -6,7 +6,7 @@
 
 namespace burnhope {
 
-// Material editor preview: a 4x3 atlas of 64 px cells (one per map) and a software-shaded sphere.
+// Material editor preview: a 4x3 atlas of 64 px cells (one per map) and a software-shaded preview shape.
 constexpr uint32_t kMatCell = 64;
 constexpr uint32_t kMatAtlasW = 256;
 constexpr uint32_t kMatAtlasH = 192;
@@ -17,7 +17,11 @@ constexpr uint32_t kMatSphereSide = 168;
 // `atlas` holds kMatAtlasW * kMatAtlasH RGBA bytes.
 void materialBakeAtlas(const BhmatDoc& doc, const char* matPath, uint8_t* atlas);
 
-// Shades a UV sphere from the atlas albedo cell, tinted by doc.base. `dst` holds kMatSphereSide^2 RGBA bytes.
-void materialBakeSphere(const BhmatDoc& doc, const uint8_t* atlas, float yaw, float pitch, uint8_t* dst);
+enum class MatShape : uint8_t { Sphere, Cube, Plane };
+
+// Path-free PBR preview of `shape` turned by yaw (about Y) then pitch (about X): a sun with GGX / Smith / Schlick
+// specular plus a hemispherical dome, driven by the albedo, metal, roughness, normal, AO / ORM and emissive cells of
+// the atlas and the scalars of `doc`. `dst` holds kMatSphereSide^2 RGBA bytes.
+void materialBakePreview(const BhmatDoc& doc, const uint8_t* atlas, MatShape shape, float yaw, float pitch, uint8_t* dst);
 
 } // namespace burnhope

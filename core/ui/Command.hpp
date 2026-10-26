@@ -21,7 +21,7 @@ static_assert(std::is_trivially_copyable_v<UiMenuCmd>);
 
 struct UiMenuMetrics {
     float w = 180.0f;
-    float itemH = 28.0f;
+    float itemH = 26.0f;
     float pad = 6.0f;
     float gap = 4.0f;
 };
