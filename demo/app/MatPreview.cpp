@@ -3,6 +3,7 @@
 
 #include "asset/MaterialBake.hpp"
 #include "asset/ProjectDoc.hpp"
+#include "files/Browser.hpp"
 #include "ui/rhi/Canvas.hpp"
 #include "ui/Panel.hpp"
 
@@ -29,6 +30,7 @@ void hudCommitMaps(HudContext& hud, uint8_t channel) {
         return;
     }
     if (UiState* state = hudUi(hud)) {
+        filesThumbsInvalidate(*state);
         hud.bind.write(*state, kScMatHeight, hud.matDoc.heightScale);
     }
 }

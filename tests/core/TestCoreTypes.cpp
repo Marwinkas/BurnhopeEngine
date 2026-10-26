@@ -144,3 +144,37 @@ TEST_CASE("wasm add and apply through linear memory") {
     CHECK(stored == 16);
     frameArenaDestroy(arena);
 }
+
+#include "image/ImageDecode.hpp"
+
+#include <cstdio>
+#include <filesystem>
+
+TEST_CASE("imageLoadFile rasterizes an svg with a Cyrillic path") {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "bh_svg_тест";
+    std::filesystem::create_directories(dir);
+    const std::string file = (dir / "иконка.svg").string();
+    const char svg[] = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\">"
+                       "<rect x=\"0\" y=\"0\" width=\"24\" height=\"24\" fill=\"#ff0000\"/></svg>";
+    FILE* f = std::fopen(file.c_str(), "wb");
+    CHECK(f != nullptr);
+    if (f == nullptr) {
+        return;
+    }
+    std::fwrite(svg, 1, sizeof(svg) - 1, f);
+    std::fclose(f);
+    ImageCpu img{};
+    const bool loaded = imageLoadFile(img, file.c_str());
+    CHECK(loaded);
+    if (!loaded) {
+        return;
+    }
+    CHECK(img.width == 64);
+    CHECK(img.height == 64);
+    const uint8_t* mid = img.rgba + (32u * img.width + 32u) * 4u;
+    CHECK(mid[0] == 255);
+    CHECK(mid[1] == 0);
+    CHECK(mid[3] == 255);
+    imageCpuFree(img);
+    std::filesystem::remove_all(dir);
+}

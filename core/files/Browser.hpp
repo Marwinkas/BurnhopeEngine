@@ -26,6 +26,8 @@ void filesOpenProject(UiState& s, const char* path);
 void filesIconSlots(UiState& s, uint8_t folderSlot, uint8_t fileSlot);
 // Material previews: `fn` bakes a .bhmat into cell `cell` of the 8 x 8 atlas that lives in photo slot `photoSlot`.
 void filesThumbs(UiState& s, uint8_t photoSlot, FileThumbFn fn, void* user);
+// Drops every baked preview and rebakes the visible ones (a material or one of its maps changed).
+void filesThumbsInvalidate(UiState& s);
 void filesOfferPath(UiState& s, const char* path);
 // Offers a dropped path to the browser, then shows an image in photo slot 0 or imports a .json layout.
 void filesOfferDrop(Canvas& canvas, const char* path);

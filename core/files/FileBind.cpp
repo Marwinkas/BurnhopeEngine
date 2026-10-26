@@ -352,21 +352,12 @@ void applyIcon(UiState& s, float value) {
     fileRefresh(s);
 }
 
-void onTune(UiState& s, uint16_t id) {
+void onTune(UiState& s, uint16_t) {
     Browser& b = fileBook(s);
     if (b.pop == kUiNone || b.pop >= s.count) {
         return;
     }
-    const bool open = b.popOn == 0;
-    if (open && id < s.count) {
-        const UiBox& box = s.box[id];
-        const FileTheme& theme = fileTheme(s);
-        uiPlace(s, b.pop, true, box.x, box.y + box.h + theme.popGap, theme.tuneW, theme.tuneH);
-    } else {
-        uiMenuClose(s);
-    }
-    uiShow(s, b.pop, open);
-    b.popOn = open ? 1 : 0;
+    b.popWant = b.popWant == 0 ? 1 : 0;
 }
 
 void onRenameCommit(UiState& s, const char* text) {

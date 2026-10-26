@@ -401,18 +401,18 @@ bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, 
     return false;
 }
 
-uint16_t uiSplitBar(UiState& s, uint16_t parent, bool verticalBar) {
+uint16_t uiSplitBar(UiState& s, uint16_t parent, bool verticalBar, float inset) {
     UiFlex grip{};
     grip.shrink = 0.0f;
     grip.self = UiAlignSelf::Stretch;
     if (verticalBar) {
         grip.widthMode = UiSize::Px;
         grip.width = 2.0f;
-        grip.self = UiAlignSelf::Stretch;
+        grip.marginT = inset;
     } else {
         grip.heightMode = UiSize::Px;
         grip.height = 2.0f;
-        grip.self = UiAlignSelf::Stretch;
+        grip.marginL = inset;
     }
     UiPaint paint = paintToken(s.look, UiToken::Muted, 0.0f);
     paint.a = 0.55f;
@@ -440,7 +440,7 @@ void uiSplitterSetWidth(UiState& s, uint16_t split, float width) {
 
 uint16_t loadSplit(UiState& s, uint16_t parent, const BinNode& node, const BinTail&, const char*, const char*, const char*, void*) {
     const bool vertical = node.direction != static_cast<uint8_t>(UiFlexDir::Row);
-    return uiSplitBar(s, parent, vertical);
+    return uiSplitBar(s, parent, vertical, vertical ? node.marginT : node.marginL);
 }
 
 void uiSplitBin(UiState& s) {

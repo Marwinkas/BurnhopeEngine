@@ -66,6 +66,7 @@ struct Node {
     float padB = 0.0f;
     float minW = 0.0f;
     float minH = 0.0f;
+    float inset = 0.0f;
     float posX = 0.0f;
     float posY = 0.0f;
     bool hasShrink = false;

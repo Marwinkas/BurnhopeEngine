@@ -22,7 +22,12 @@ bool fileMapReadOnly(const char* path, MappedFile* out) {
     out->map = nullptr;
 
 #if defined(_WIN32)
-    const HANDLE hFile = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    wchar_t wide[2048];
+    const int wn = MultiByteToWideChar(CP_UTF8, 0, path, -1, wide, 2048);
+    if (wn <= 0) {
+        return false;
+    }
+    const HANDLE hFile = CreateFileW(wide, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hFile == INVALID_HANDLE_VALUE) {
         return false;
     }

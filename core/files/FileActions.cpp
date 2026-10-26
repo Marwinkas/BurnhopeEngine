@@ -2,6 +2,8 @@
 
 #include "files/FileDomain.hpp"
 #include "files/FileSession.hpp"
+#include "files/FileTheme.hpp"
+#include "ui/widget/Popover.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/VirtualGrid.hpp"
 #include "ui/State.hpp"
@@ -21,19 +23,12 @@ bool fileActionsHandleKey(UiState& s, const InputFrame& in) {
     }
     b.ctrl = in.ctrl;
     b.shift = in.shift;
-    const bool press = (in.pointer.pressed & kPointerLeft) != 0;
     const bool release = (in.pointer.released & kPointerLeft) != 0;
     if (release) {
         b.bandSnap = 0;
     }
-    if (press && b.popOn != 0) {
-        const bool inside = s.hovered == b.tune || s.hovered == b.pop || uiWithin(s, s.hovered, b.pop);
-        if (!inside && b.pop != kUiNone) {
-            uiShow(s, b.pop, false);
-            b.popOn = 0;
-            uiMenuClose(s);
-        }
-    }
+    const FileTheme& theme = fileTheme(s);
+    uiSyncPopover(s, b.pop, b.tune, theme.tuneW, theme.tuneH, b.popWant);
     const bool typing = (b.searchOn != 0 && s.focused == b.searchBox)
         || (uiFilesFind(s) != nullptr && uiVirtualGridEditing(s, uiFilesFind(s)->fileView));
     if (typing) {

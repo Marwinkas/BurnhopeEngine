@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <string_view>
 
 #define STBI_NO_STDIO
 #define STB_IMAGE_IMPLEMENTATION
@@ -16,6 +17,10 @@
 #undef STBI_NO_STDIO
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb/stb_image_write.h"
+#define NANOSVG_IMPLEMENTATION
+#include "nanosvg/nanosvg.h"
+#define NANOSVGRAST_IMPLEMENTATION
+#include "nanosvg/nanosvgrast.h"
 
 namespace burnhope {
 namespace {
@@ -24,6 +29,60 @@ constexpr uint32_t kMaxEdge = 4096;
 
 bool isGif(const uint8_t* data, size_t n) {
     return n >= 6 && data[0] == 'G' && data[1] == 'I' && data[2] == 'F';
+}
+
+constexpr uint32_t kSvgEdge = 64;
+
+bool hasSvgExt(const char* path) {
+    const size_t n = std::strlen(path);
+    return n >= 4 && (path[n - 4] == '.') && (path[n - 3] == 's' || path[n - 3] == 'S')
+        && (path[n - 2] == 'v' || path[n - 2] == 'V') && (path[n - 1] == 'g' || path[n - 1] == 'G');
+}
+
+bool isSvg(const uint8_t* data, size_t n, const char* path) {
+    if (hasSvgExt(path)) {
+        return true;
+    }
+    const size_t head = n < 1024 ? n : 1024;
+    const std::string_view text(reinterpret_cast<const char*>(data), head);
+    const size_t at = text.find_first_not_of(" \t\r\n");
+    if (at == std::string_view::npos || text[at] != '<') {
+        return false;
+    }
+    return text.find("<svg") != std::string_view::npos;
+}
+
+// Rasterizes the longest edge to kSvgEdge pixels. Returns malloc'd RGBA8 or nullptr.
+uint8_t* rasterSvg(const uint8_t* data, size_t size, int& w, int& h) {
+    char* text = static_cast<char*>(std::malloc(size + 1));
+    if (text == nullptr) {
+        return nullptr;
+    }
+    std::memcpy(text, data, size);
+    text[size] = '\0';
+    NSVGimage* svg = nsvgParse(text, "px", 96.0f);
+    std::free(text);
+    if (svg == nullptr || svg->width <= 0.0f || svg->height <= 0.0f) {
+        nsvgDelete(svg);
+        return nullptr;
+    }
+    const float longest = svg->width > svg->height ? svg->width : svg->height;
+    const float scale = static_cast<float>(kSvgEdge) / longest;
+    w = static_cast<int>(svg->width * scale + 0.5f);
+    h = static_cast<int>(svg->height * scale + 0.5f);
+    w = w < 1 ? 1 : w;
+    h = h < 1 ? 1 : h;
+    NSVGrasterizer* rast = nsvgCreateRasterizer();
+    uint8_t* pixels = static_cast<uint8_t*>(std::calloc(static_cast<size_t>(w) * static_cast<size_t>(h), 4));
+    if (rast != nullptr && pixels != nullptr) {
+        nsvgRasterize(rast, svg, 0.0f, 0.0f, scale, pixels, w, h, w * 4);
+    } else {
+        std::free(pixels);
+        pixels = nullptr;
+    }
+    nsvgDeleteRasterizer(rast);
+    nsvgDelete(svg);
+    return pixels;
 }
 
 uint32_t readU32(const uint8_t* p) {
@@ -62,6 +121,20 @@ bool imageLoadFile(ImageCpu& img, const char* path) {
     int frames = 1;
     int* delays = nullptr;
     stbi_uc* pixels = nullptr;
+    if (isSvg(file.data, file.size, path)) {
+        pixels = rasterSvg(file.data, file.size, w, h);
+        fileUnmap(&file);
+        if (pixels == nullptr) {
+            spdlog::error("svg decode failed: {}", path);
+            return false;
+        }
+        img.rgba = pixels;
+        img.width = static_cast<uint32_t>(w);
+        img.height = static_cast<uint32_t>(h);
+        img.frames = 1;
+        img.delayMs[0] = 100;
+        return true;
+    }
     if (stbi_is_hdr_from_memory(file.data, fileBytes) != 0) {
         float* hdr = stbi_loadf_from_memory(file.data, fileBytes, &w, &h, &comp, 3);
         fileUnmap(&file);

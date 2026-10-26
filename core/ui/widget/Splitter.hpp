@@ -35,7 +35,8 @@ bool splitVertical(const UiState& s, uint16_t split);
 bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note);
 void uiSplitBin(UiState& s);
 
-uint16_t uiSplitBar(UiState& s, uint16_t parent, bool verticalBar);
+// `inset` leaves that many pixels free at the start of the bar (below a tab or title header).
+uint16_t uiSplitBar(UiState& s, uint16_t parent, bool verticalBar, float inset = 0.0f);
 void uiSplitterSetWidth(UiState& s, uint16_t split, float width);
 
 } // namespace burnhope

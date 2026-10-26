@@ -267,13 +267,11 @@ V3 shade(const BhmatDoc& doc, const uint8_t* atlas, const Spin& spin, const Hit&
     float rough = doc.roughness;
     float metal = doc.metallic;
     float ao = 1.0f;
-    if (doc.mapPack != 0) {
-        if (doc.ormPath[0] != '\0') {
-            const uint8_t* orm = texel(atlas, 6, u, v);
-            ao = orm[0] / 255.0f;
-            rough *= orm[1] / 255.0f;
-            metal *= orm[2] / 255.0f;
-        }
+    if (doc.mapPack != 0 && doc.ormPath[0] != '\0') {
+        const uint8_t* orm = texel(atlas, 6, u, v);
+        ao = orm[0] / 255.0f;
+        rough *= orm[1] / 255.0f;
+        metal *= orm[2] / 255.0f;
     } else {
         if (doc.roughPath[0] != '\0') {
             rough *= texel(atlas, 2, u, v)[0] / 255.0f;

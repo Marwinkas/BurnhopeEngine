@@ -379,7 +379,7 @@ uint16_t makeMenu(Import& in, uint16_t parent, const Node& node) {
 }
 
 uint16_t makeSplit(Import& in, uint16_t parent, const Node& node) {
-    return uiSplitBar(*in.state, parent, node.vertical);
+    return uiSplitBar(*in.state, parent, node.vertical, node.inset);
 }
 
 uint16_t makeFilter(Import& in, uint16_t parent, const Node& node) {
@@ -695,7 +695,7 @@ bool parseNode(Cur& c, Import& in, uint16_t parent) {
             || keyIs(key, "w") || keyIs(key, "h") || keyIs(key, "wp") || keyIs(key, "hp")
             || keyIs(key, "grow") || keyIs(key, "shrink") || keyIs(key, "gap") || keyIs(key, "pad")
             || keyIs(key, "padL") || keyIs(key, "padR") || keyIs(key, "padT") || keyIs(key, "padB")
-            || keyIs(key, "minW") || keyIs(key, "minH") || keyIs(key, "posX") || keyIs(key, "posY")) {
+            || keyIs(key, "minW") || keyIs(key, "minH") || keyIs(key, "posX") || keyIs(key, "posY") || keyIs(key, "inset")) {
             double number = 0.0;
             if (!json::parseNumber(c, number)) {
                 return false;
@@ -740,6 +740,8 @@ bool parseNode(Cur& c, Import& in, uint16_t parent) {
                 node.minW = v;
             } else if (keyIs(key, "minH")) {
                 node.minH = v;
+            } else if (keyIs(key, "inset")) {
+                node.inset = v;
             } else if (keyIs(key, "posX")) {
                 node.posX = v;
             } else {

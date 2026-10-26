@@ -9,6 +9,7 @@
 #include "ui/widget/Button.hpp"
 #include "ui/widget/DragDrop.hpp"
 #include "ui/widget/Field.hpp"
+#include "ui/widget/Menu.hpp"
 #include "ui/widget/Splitter.hpp"
 #include "ui/State.hpp"
 
@@ -37,6 +38,11 @@ void mountFiles(UiState& s) {
     b.tune = take("file.tune");
     b.pop = take("file.tunePanel");
     b.zoom = take("file.zoom");
+    if (b.pop != kUiNone) {
+        s.ent[b.pop].add<UiMenuSlide>();
+        s.ent[b.pop].set<UiPaint>(paintPopup(s.look));
+        s.ent[b.pop].try_get_mut<UiPaint>()->shadow = s.metrics.menuShadow;
+    }
     b.searchBtn = take("file.searchBtn");
     b.searchBox = take("file.search");
     b.filterBtn = take("file.filter");
@@ -115,6 +121,11 @@ void filesThumbs(UiState& s, uint8_t photoSlot, FileThumbFn fn, void* user) {
     thumbs.bake = fn;
     thumbs.user = user;
     thumbReset(thumbs);
+    fileRefresh(s);
+}
+
+void filesThumbsInvalidate(UiState& s) {
+    thumbReset(fileBook(s).thumbs);
     fileRefresh(s);
 }
 

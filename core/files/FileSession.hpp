@@ -31,7 +31,7 @@ struct Browser : FileModel {
     uint8_t ctrl = 0;
     uint8_t shift = 0;
     uint8_t searchOn = 0;
-    uint8_t popOn = 0;
+    uint8_t popWant = 0;
     uint8_t listView = 0;
     uint8_t bandSnap = 0;
     uint8_t folderSlot = 255;
