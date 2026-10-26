@@ -16,6 +16,7 @@
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Splitter.hpp"
 #include "ui/widget/Virtual.hpp"
+#include "ui/State.hpp"
 
 #include <cstring>
 

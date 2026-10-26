@@ -6,6 +6,7 @@
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Fold.hpp"
 #include "ui/widget/Search.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 

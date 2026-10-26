@@ -41,11 +41,10 @@ UiCalendarComponent* calFor(UiState& s, uint16_t id) {
                 return s.ent[p].try_get_mut<UiCalendarComponent>();
             }
         }
-        for (uint16_t i = 0; i < s.count; ++i) {
-            if (!s.ent[i].is_alive() || !s.ent[i].has<UiCalendarComponent>()) {
-                continue;
-            }
-            UiCalendarComponent* cal = s.ent[i].try_get_mut<UiCalendarComponent>();
+        uint16_t holders[kUiCap];
+        const uint16_t n = uiCollect<UiCalendarComponent>(s, holders, kUiCap);
+        for (uint16_t h = 0; h < n; ++h) {
+            UiCalendarComponent* cal = s.ent[holders[h]].try_get_mut<UiCalendarComponent>();
             if (cal != nullptr && calOwns(*cal, id)) {
                 return cal;
             }
@@ -118,7 +117,10 @@ void calFill(UiState& s, UiCalendarComponent& cal) {
     const int todayY = today.tm_year + 1900;
     const int todayM = today.tm_mon + 1;
     const int todayD = today.tm_mday;
-    for (uint16_t node = 0; node < s.count; ++node) {
+    uint16_t days[kUiCap];
+    const uint16_t dayCount = uiCollect<UiCalDay>(s, days, kUiCap);
+    for (uint16_t d = 0; d < dayCount; ++d) {
+        const uint16_t node = days[d];
         const UiCalDay* cell = s.ent[node].try_get<UiCalDay>();
         if (cell == nullptr || !calDayOf(s, node, cal.calPanel)) {
             continue;
@@ -400,23 +402,13 @@ void uiInstallCalendarBin(UiState& s) {
 }
 
 UiCalendarComponent* uiCalFind(UiState& s) {
-    for (uint16_t i = 0; i < s.count; ++i) {
-        if (!s.ent[i].is_alive() || !s.ent[i].has<UiCalendarComponent>()) {
-            continue;
-        }
-        return s.ent[i].try_get_mut<UiCalendarComponent>();
-    }
-    return nullptr;
+    uint16_t holders[kUiCap];
+    return uiCollect<UiCalendarComponent>(s, holders, kUiCap) > 0 ? s.ent[holders[0]].try_get_mut<UiCalendarComponent>() : nullptr;
 }
 
 const UiCalendarComponent* uiCalFind(const UiState& s) {
-    for (uint16_t i = 0; i < s.count; ++i) {
-        if (!s.ent[i].is_alive() || !s.ent[i].has<UiCalendarComponent>()) {
-            continue;
-        }
-        return s.ent[i].try_get<UiCalendarComponent>();
-    }
-    return nullptr;
+    uint16_t holders[kUiCap];
+    return uiCollect<UiCalendarComponent>(s, holders, kUiCap) > 0 ? s.ent[holders[0]].try_get<UiCalendarComponent>() : nullptr;
 }
 
 } // namespace burnhope

@@ -1,6 +1,7 @@
 #include "files/Browser.hpp"
 #include "files/FileSession.hpp"
 #include "files/FileTheme.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 
@@ -33,6 +34,18 @@ void filesIconSlots(UiState& s, uint8_t folderSlot, uint8_t fileSlot) {
     if (session.ready != 0 && session.browser.mounted != 0) {
         fileRefresh(s);
     }
+}
+
+const FileTheme& fileTheme(const UiState& s) {
+    if (const FileTheme* theme = s.world.try_get<FileTheme>()) {
+        return *theme;
+    }
+    static constexpr FileTheme fallback{};
+    return fallback;
+}
+
+void fileThemeInit(UiState& s, const FileTheme& theme) {
+    s.world.set<FileTheme>(theme);
 }
 
 } // namespace burnhope

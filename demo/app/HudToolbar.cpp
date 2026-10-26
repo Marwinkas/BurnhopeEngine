@@ -7,6 +7,7 @@
 #include "ui/rhi/Canvas.hpp"
 #include "ui/Style.hpp"
 #include "ui/widget/Choice.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 

@@ -10,9 +10,11 @@ namespace burnhope {
 namespace {
 
 uint16_t nextHost(const UiState& s, uint16_t start) {
-    for (uint16_t id = start; id < s.count; ++id) {
-        if (s.ent[id].is_alive() && s.ent[id].has<UiDragHost>()) {
-            return id;
+    uint16_t hosts[kUiCap];
+    const uint16_t count = uiCollect<UiDragHost>(s, hosts, kUiCap);
+    for (uint16_t h = 0; h < count; ++h) {
+        if (hosts[h] >= start) {
+            return hosts[h];
         }
     }
     return kUiNone;
@@ -153,10 +155,10 @@ void uiDragDropBind(UiState& s, const UiDragDropConfig& cfg) {
     if (prev < s.count) {
         s.ent[prev].remove<UiDragDrop>();
     }
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.ent[id].is_alive() && s.ent[id].has<UiDragHost>()) {
-            s.ent[id].remove<UiDragHost>();
-        }
+    uint16_t oldHosts[kUiCap];
+    const uint16_t oldCount = uiCollect<UiDragHost>(s, oldHosts, kUiCap);
+    for (uint16_t h = 0; h < oldCount; ++h) {
+        s.ent[oldHosts[h]].remove<UiDragHost>();
     }
     born.canDrag = cfg.canDrag;
     born.canDrop = cfg.canDrop;

@@ -77,7 +77,8 @@ Only `bh_host` and the executables link `bh_platform`; every other target stays 
 - `core/rhi`: no `platform/Window.hpp`, `ui/`, `files/`, `host/`, `SDL3/`.
 - `core/ui`: no `rhi/`, `image/`, `ui/rhi/`, `ui/widget/`, `ui/kit/`, `files/`, `host/`.
 - `core/ui/widget`, `core/ui/kit`: no `rhi/`, `image/`, `ui/rhi/`, `files/`, `host/`, `yoga/`.
-- Widget headers and `Command.hpp` (except `Widgets.hpp`): no `ui/State.hpp`, no `flecs.h`. Include them from the `.cpp`.
+- No `.hpp` in `core/`, `engine/` or `demo/` (except `core/ui/State.hpp` itself) may include `ui/State.hpp`; headers use `ui/Types.hpp` and the `.cpp` includes State.
+- Widget headers and `Command.hpp`: no `flecs.h`.
 - Atomic bricks: no composite kit headers.
 - Tier 0 (foundation files): no `rhi/`, `image/`, `Window.hpp`, `ui/`, `files/`, `host/`, `gfx/`, `asset/`, `audio/`, volk, `SDL3/`.
 - Tier 1 (platform without `Window*.cpp`): no `rhi/`, `image/`, `ui/`, `files/`, `host/`, `gfx/`, `asset/`, `audio/`, volk.

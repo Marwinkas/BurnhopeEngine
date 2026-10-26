@@ -7,6 +7,7 @@
 #include "ui/widget/Curve.hpp"
 #include "ui/widget/Gradient.hpp"
 #include "ui/widget/Widgets.hpp"
+#include "ui/State.hpp"
 #include "ui/UiBin.hpp"
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/DragDrop.hpp"

@@ -14,6 +14,7 @@
 #include "ui/widget/Label.hpp"
 #include "ui/widget/Number.hpp"
 #include "ui/widget/Slider.hpp"
+#include "ui/State.hpp"
 
 #include <cstring>
 

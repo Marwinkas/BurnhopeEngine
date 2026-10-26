@@ -15,6 +15,7 @@
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/Text.hpp"
+#include "ui/State.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -71,7 +72,7 @@ void placeStats(UiState& state, const HudContext& hud) {
 
 void syncViewport(Engine& e, Canvas& canvas) {
     SceneFrame* scene = e.scene;
-    UiState* state = canvas.state.get();
+    UiState* state = canvas.state;
     if (scene == nullptr || state == nullptr || e.hud.camFov == kUiNone) {
         return;
     }

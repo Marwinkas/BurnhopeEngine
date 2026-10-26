@@ -7,17 +7,16 @@
 #include "ui/Interaction.hpp"
 #include "ui/rhi/UiPhoto.hpp"
 #include "ui/UiWindowBridge.hpp"
-#include "ui/State.hpp"
+#include "ui/Types.hpp"
 #include "ui/rhi/UiRenderer.hpp"
 
 #include <cstdint>
-#include <memory>
 
 namespace burnhope {
 
 // Canvas — координатор кадра. Сам ничего не рисует: зовёт верстку, ввод, движение и сборку примитивов.
 struct Canvas {
-    std::unique_ptr<UiState> state;
+    UiState* state = nullptr;
     UiRenderer rhi{};
     PhotoMeta photoMeta[kPhotoSlots]{};
     Device* device = nullptr;
@@ -75,23 +74,8 @@ bool canvasListen(Canvas& c, UiValueFn fn, void* user);
 [[nodiscard]] bool canvasUseFont(Canvas& c, float pixelSize);
 
 // 8. Делегаты оконных операций.
-inline void canvasTakeWindowOps(Canvas& c, WindowOps& out) {
-    if (c.state != nullptr) {
-        uiWindowTakeOps(*c.state, out);
-    }
-}
-
-inline bool canvasTakeClip(Canvas& c, char* dst, uint8_t cap) {
-    return c.state != nullptr && uiWindowTakeClip(*c.state, dst, cap);
-}
-
-inline void canvasChrome(const Canvas& c, float& titleBar, float& resizeBorder) {
-    if (c.state != nullptr) {
-        uiWindowChromeMetrics(c.state->look, titleBar, resizeBorder);
-    } else {
-        titleBar = 40.0f;
-        resizeBorder = 6.0f;
-    }
-}
+void canvasTakeWindowOps(Canvas& c, WindowOps& out);
+[[nodiscard]] bool canvasTakeClip(Canvas& c, char* dst, uint8_t cap);
+void canvasChrome(const Canvas& c, float& titleBar, float& resizeBorder);
 
 } // namespace burnhope

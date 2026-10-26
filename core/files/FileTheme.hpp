@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ui/Primitive.hpp"
-#include "ui/State.hpp"
+#include "ui/Types.hpp"
 
 #include <cstdint>
 #include <type_traits>
@@ -43,16 +43,7 @@ inline uint8_t filePhotoIndex(uint32_t heapSlot) {
     return static_cast<uint8_t>(heapSlot - kUiDescPhoto);
 }
 
-inline const FileTheme& fileTheme(const UiState& s) {
-    if (const FileTheme* theme = s.world.try_get<FileTheme>()) {
-        return *theme;
-    }
-    static constexpr FileTheme fallback{};
-    return fallback;
-}
-
-inline void fileThemeInit(UiState& s, const FileTheme& theme) {
-    s.world.set<FileTheme>(theme);
-}
+const FileTheme& fileTheme(const UiState& s);
+void fileThemeInit(UiState& s, const FileTheme& theme);
 
 } // namespace burnhope

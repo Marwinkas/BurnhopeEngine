@@ -7,6 +7,7 @@
 #include "ui/widget/AssetSlot.hpp"
 #include "ui/widget/Choice.hpp"
 #include "ui/widget/Menu.hpp"
+#include "ui/State.hpp"
 
 #include <cstdio>
 
@@ -33,7 +34,7 @@ UiState* hudUi(HudContext& hud) {
     if (hud.host == nullptr || hud.slot < 0) {
         return nullptr;
     }
-    return hud.host->view[hud.slot].canvas.state.get();
+    return hud.host->view[hud.slot].canvas.state;
 }
 
 void hudPaintPick(HudContext& hud, UiState& state) {

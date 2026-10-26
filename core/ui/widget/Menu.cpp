@@ -94,17 +94,7 @@ float menuTop(const UiState& s, float anchorBottom, float above, float menuH) {
 }
 
 uint16_t nthChild(const UiState& s, uint16_t parent, uint16_t n) {
-    uint16_t seen = 0;
-    for (uint16_t child = 0; child < s.count; ++child) {
-        if (s.parentOf[child] != parent) {
-            continue;
-        }
-        if (seen == n) {
-            return child;
-        }
-        ++seen;
-    }
-    return kUiNone;
+    return n < uiNodeChildCount(s, parent) ? uiNodeChild(s, parent, n) : kUiNone;
 }
 
 void silenceRow(UiState& s, uint16_t row) {
@@ -296,10 +286,9 @@ void uiMenuOpen(UiState& s, float screenX, float screenY, std::span<const UiMenu
     if (id == kUiNone || id >= s.count) {
         return;
     }
-    for (uint16_t child = 0; child < s.count; ++child) {
-        if (s.parentOf[child] == id) {
-            uiShow(s, child, false);
-        }
+    const uint32_t kids = uiNodeChildCount(s, id);
+    for (uint32_t k = 0; k < kids; ++k) {
+        uiShow(s, uiNodeChild(s, id, k), false);
     }
     uint16_t slot = 0;
     float body = 0.0f;
@@ -402,11 +391,10 @@ void uiMenuStyle(UiState& s, float width, float itemH, float pad, float gap) {
         flex->pad = pad;
         flex->gap = gap;
     }
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.parentOf[id] != menu) {
-            continue;
-        }
-        auto* item = s.ent[id].try_get_mut<UiFlex>();
+    const uint32_t kids = uiNodeChildCount(s, menu);
+    for (uint32_t k = 0; k < kids; ++k) {
+        const uint16_t child = uiNodeChild(s, menu, k);
+        auto* item = child < s.count ? s.ent[child].try_get_mut<UiFlex>() : nullptr;
         if (item != nullptr) {
             item->height = itemH;
         }

@@ -11,6 +11,7 @@
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Menu.hpp"
+#include "ui/State.hpp"
 
 #include <cmath>
 #include <cstring>

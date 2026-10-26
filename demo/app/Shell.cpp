@@ -20,6 +20,7 @@
 #include "ui/widget/Label.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Slider.hpp"
+#include "ui/State.hpp"
 
 #include <cstdio>
 #include <cstring>

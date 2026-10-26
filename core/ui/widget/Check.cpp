@@ -164,7 +164,10 @@ void uiCheckPress(UiState& s, uint16_t id) {
     if (self->group != 0) {
         const uint8_t group = self->group;
         const uint16_t parent = s.parentOf[id];
-        for (uint16_t other = 0; other < s.count; ++other) {
+        uint16_t checks[kUiCap];
+        const uint16_t checkCount = uiCollect<UiCheck>(s, checks, kUiCap);
+        for (uint16_t c = 0; c < checkCount; ++c) {
+            const uint16_t other = checks[c];
             if (other == id) {
                 continue;
             }

@@ -367,15 +367,20 @@ bool uiVirtualGridEditing(const UiState& s, uint16_t gridId) {
 
 bool uiVirtualGridInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote&) {
     if (phase == kUiInEscape) {
-        for (uint16_t n = 0; n < s.count; ++n) {
-            if (s.ent[n].try_get<UiVirtualGrid>() != nullptr && s.ent[n].try_get<UiVirtualGrid>()->editAt != kUiCellNone) {
-                finishEdit(s, n, false);
+        uint16_t grids[kUiCap];
+        const uint16_t count = uiCollect<UiVirtualGrid>(s, grids, kUiCap);
+        for (uint16_t g = 0; g < count; ++g) {
+            if (s.ent[grids[g]].try_get<UiVirtualGrid>()->editAt != kUiCellNone) {
+                finishEdit(s, grids[g], false);
             }
         }
         return false;
     }
     if (phase == kUiInKey && in.enter != 0) {
-        for (uint16_t n = 0; n < s.count; ++n) {
+        uint16_t grids[kUiCap];
+        const uint16_t count = uiCollect<UiVirtualGrid>(s, grids, kUiCap);
+        for (uint16_t g = 0; g < count; ++g) {
+            const uint16_t n = grids[g];
             const UiVirtualGrid* grid = s.ent[n].try_get<UiVirtualGrid>();
             if (grid != nullptr && grid->editAt != kUiCellNone && s.focused == grid->editor) {
                 finishEdit(s, n, true);
@@ -413,7 +418,10 @@ bool uiVirtualGridInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t p
     if (phase != kUiInSync) {
         return false;
     }
-    for (uint16_t n = 0; n < s.count; ++n) {
+    uint16_t grids[kUiCap];
+    const uint16_t gridCount = uiCollect<UiVirtualGrid>(s, grids, kUiCap);
+    for (uint16_t g = 0; g < gridCount; ++g) {
+        const uint16_t n = grids[g];
         auto* grid = s.ent[n].try_get_mut<UiVirtualGrid>();
         if (grid == nullptr) {
             continue;

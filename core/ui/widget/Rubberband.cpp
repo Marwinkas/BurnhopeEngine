@@ -10,7 +10,10 @@ void rubberPick(UiState& s, uint16_t host, UiRubber& band) {
     if (band.pick == nullptr) {
         return;
     }
-    for (uint16_t id = 0; id < s.count; ++id) {
+    uint16_t focusable[kUiCap];
+    const uint16_t count = uiCollect<UiFocusable>(s, focusable, kUiCap);
+    for (uint16_t f = 0; f < count; ++f) {
+        const uint16_t id = focusable[f];
         if (id == band.overlay) {
             continue;
         }

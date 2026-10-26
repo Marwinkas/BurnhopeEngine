@@ -42,8 +42,10 @@ void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& 
     b = s.look.window[2];
     a = 1.0f;
     auto take = [&](bool overlay) -> bool {
-        for (int n = static_cast<int>(s.count) - 1; n >= 0; --n) {
-            const auto id = static_cast<uint16_t>(n);
+        uint16_t painted[kUiCap];
+        const uint16_t paintedCount = uiCollect<UiPaint>(s, painted, kUiCap);
+        for (int n = static_cast<int>(paintedCount) - 1; n >= 0; --n) {
+            const uint16_t id = painted[n];
             if (uiIsOverlay(s, id) != overlay || !nodeShown(s, id)) {
                 continue;
             }

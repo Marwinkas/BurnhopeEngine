@@ -1,8 +1,6 @@
 #pragma once
 
-#include "ui/State.hpp"
-
-#include <flecs.h>
+#include "ui/Types.hpp"
 
 namespace burnhope {
 
@@ -18,11 +16,7 @@ struct UiPick {
     uint8_t len = 0;
 };
 
-inline UiHostNote& uiHostNote(UiState& s) {
-    return s.world.ensure<UiHostNote>();
-}
-inline UiPick& uiPick(UiState& s) {
-    return s.world.ensure<UiPick>();
-}
+UiHostNote& uiHostNote(UiState& s);
+UiPick& uiPick(UiState& s);
 
 } // namespace burnhope

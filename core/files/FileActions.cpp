@@ -4,6 +4,7 @@
 #include "files/FileSession.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/VirtualGrid.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 

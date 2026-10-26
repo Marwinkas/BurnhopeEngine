@@ -7,6 +7,7 @@
 #include "ui/widget/Choice.hpp"
 #include "ui/widget/Image.hpp"
 #include "ui/widget/Label.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 

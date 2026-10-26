@@ -120,6 +120,10 @@ file(GLOB BH_UI_WIDGET_HEADERS CONFIGURE_DEPENDS ${BH_CORE}/ui/widget/*.hpp ${BH
 list(REMOVE_ITEM BH_UI_WIDGET_HEADERS ${BH_CORE}/ui/widget/Widgets.hpp)
 bh_firewall("widget headers must not import ui/State.hpp or flecs; include it from the .cpp"
     "ui/State\\.hpp|flecs\\.h" ${BH_UI_WIDGET_HEADERS})
+file(GLOB_RECURSE BH_ALL_HEADERS CONFIGURE_DEPENDS ${BH_CORE}/*.hpp ${CMAKE_SOURCE_DIR}/engine/*.hpp ${CMAKE_SOURCE_DIR}/demo/*.hpp)
+list(REMOVE_ITEM BH_ALL_HEADERS ${BH_CORE}/ui/State.hpp)
+bh_firewall("headers must not import ui/State.hpp; include it from the .cpp"
+    "ui/State\\.hpp" ${BH_ALL_HEADERS})
 file(GLOB BH_UI_BRICK_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/ui/widget/Label.* ${BH_CORE}/ui/widget/Button.* ${BH_CORE}/ui/widget/Check.*
     ${BH_CORE}/ui/widget/Field.* ${BH_CORE}/ui/widget/FieldFilter.* ${BH_CORE}/ui/widget/TextEdit.*
@@ -423,6 +427,7 @@ bh_module(files
     core/files/FileMenu.cpp
     core/files/FileActions.cpp
     core/files/FileTheme.cpp
+    core/files/FileDomain.cpp
     core/files/Project.cpp
     core/files/Format.cpp
     core/files/Model.cpp
@@ -438,6 +443,7 @@ bh_module(ui_inspector
 target_link_libraries(bh_ui_inspector PUBLIC bh_ui_kits bh_ui_bricks bh_ui_core bh_foundation)
 bh_module(host
     core/host/Host.cpp
+    core/host/HostNote.cpp
     core/host/SceneMask.cpp
 )
 target_link_libraries(bh_host PUBLIC volk bh_ui_inspector bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_rhi bh_platform bh_foundation)
@@ -978,6 +984,7 @@ set(BH_TEST_SOURCES
     tests/ui/TestUiWidgets.cpp
     tests/ui/TestUiPrimitives.cpp
     tests/ui/TestUiBinary.cpp
+    tests/ui/TestUiRuntime.cpp
     tests/tools/TestFileBrowser.cpp
     tests/tools/TestEditorTools.cpp
 )

@@ -15,6 +15,7 @@
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Splitter.hpp"
+#include "ui/State.hpp"
 
 #include <cmath>
 #include <format>

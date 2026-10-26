@@ -8,6 +8,7 @@
 #include "ui/widget/Button.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "ui/widget/VirtualGrid.hpp"
+#include "ui/State.hpp"
 
 #include <cstdio>
 #include <cstring>

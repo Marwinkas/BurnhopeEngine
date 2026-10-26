@@ -7,6 +7,7 @@
 #include "ui/widget/Button.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Menu.hpp"
+#include "ui/State.hpp"
 
 #include <spdlog/spdlog.h>
 

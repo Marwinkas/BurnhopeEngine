@@ -310,9 +310,11 @@ void splitSync(UiState& s, uint16_t hot) {
 namespace {
 
 uint16_t splitAt(const UiState& s, float x, float y) {
-    for (uint16_t n = s.count; n > 0; --n) {
-        const uint16_t id = static_cast<uint16_t>(n - 1);
-        if (!s.ent[id].is_alive() || !s.ent[id].has<UiSplitter>() || !nodeShown(s, id) || !splitAlive(s, id)) {
+    uint16_t splitters[kUiCap];
+    const uint16_t count = uiCollect<UiSplitter>(s, splitters, kUiCap);
+    for (uint16_t n = count; n > 0; --n) {
+        const uint16_t id = splitters[n - 1];
+        if (!nodeShown(s, id) || !splitAlive(s, id)) {
             continue;
         }
         if (hitBox(splitGrip(s, id), x, y)) {

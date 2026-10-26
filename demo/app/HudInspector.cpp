@@ -13,6 +13,7 @@
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/widget/ColorPicker.hpp"
+#include "ui/State.hpp"
 
 #include <cstdio>
 

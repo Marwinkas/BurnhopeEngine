@@ -17,7 +17,7 @@ namespace burnhope {
 
 bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
     canvasDestroy(c, d);
-    c.state = std::make_unique<UiState>();
+    c.state = new UiState();
     c.device = &d;
     c.heaps = &heaps;
 
@@ -48,10 +48,30 @@ void canvasDestroy(Canvas& c, Device& d) {
         if (c.state->plug.shutdown != nullptr) {
             c.state->plug.shutdown(*c.state);
         }
-        c.state.reset();
+        delete c.state;
+        c.state = nullptr;
     }
     c.device = nullptr;
     c.heaps = nullptr;
+}
+
+void canvasTakeWindowOps(Canvas& c, WindowOps& out) {
+    if (c.state != nullptr) {
+        uiWindowTakeOps(*c.state, out);
+    }
+}
+
+bool canvasTakeClip(Canvas& c, char* dst, uint8_t cap) {
+    return c.state != nullptr && uiWindowTakeClip(*c.state, dst, cap);
+}
+
+void canvasChrome(const Canvas& c, float& titleBar, float& resizeBorder) {
+    if (c.state != nullptr) {
+        uiWindowChromeMetrics(c.state->look, titleBar, resizeBorder);
+    } else {
+        titleBar = 40.0f;
+        resizeBorder = 6.0f;
+    }
 }
 
 void canvasSetLook(Canvas& c, const UiLook& look) {

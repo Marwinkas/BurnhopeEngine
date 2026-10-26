@@ -13,6 +13,7 @@
 #include "host/PropGrid.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "Str.hpp"
+#include "ui/State.hpp"
 
 #include <cstdio>
 #include <cstring>

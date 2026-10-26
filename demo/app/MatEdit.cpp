@@ -10,6 +10,7 @@
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/widget/Number.hpp"
+#include "ui/State.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -104,7 +105,7 @@ void forceScalar(HudContext& hud, UiState& s, uint16_t index, float value) {
 
 UiState* matPageState(HudContext& hud) {
     if (hud.tool.canvas != nullptr && hud.tool.canvas->state != nullptr) {
-        return hud.tool.canvas->state.get();
+        return hud.tool.canvas->state;
     }
     return hudUi(hud);
 }

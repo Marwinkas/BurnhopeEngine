@@ -3,6 +3,7 @@
 
 #include "image/ImageDecode.hpp"
 #include "ui/rhi/Canvas.hpp"
+#include "ui/State.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -249,7 +250,7 @@ void hudCommitMaps(HudContext& hud, uint8_t channel) {
 }
 
 void hudBakeMaterialView(HudContext& hud) {
-    UiState* state = hud.tool.canvas != nullptr ? hud.tool.canvas->state.get() : nullptr;
+    UiState* state = hud.tool.canvas != nullptr ? hud.tool.canvas->state : nullptr;
     if (state != nullptr && state->capture != hud.matPreview) {
         hud.previewDown = 0;
     }

@@ -9,6 +9,7 @@
 #include "ui/widget/DragDrop.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Splitter.hpp"
+#include "ui/State.hpp"
 
 #include <filesystem>
 #include <spdlog/spdlog.h>

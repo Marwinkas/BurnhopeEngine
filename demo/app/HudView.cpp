@@ -10,6 +10,7 @@
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Check.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 

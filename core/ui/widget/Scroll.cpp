@@ -320,11 +320,8 @@ void scrollBindInner(UiState& s, uint16_t id, void*) {
     if (scroll == nullptr || scroll->inner != kUiNone) {
         return;
     }
-    for (uint16_t child = 0; child < s.count; ++child) {
-        if (s.parentOf[child] == id) {
-            scroll->inner = child;
-            return;
-        }
+    if (uiNodeChildCount(s, id) > 0) {
+        scroll->inner = uiNodeChild(s, id, 0);
     }
 }
 

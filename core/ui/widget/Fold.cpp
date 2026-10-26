@@ -111,7 +111,10 @@ void uiFoldToggle(UiState& s, uint16_t head) {
 }
 
 void uiFoldOpen(UiState& s, uint16_t body) {
-    for (uint16_t id = 0; id < s.count; ++id) {
+    uint16_t folds[kUiCap];
+    const uint16_t count = uiCollect<UiFold>(s, folds, kUiCap);
+    for (uint16_t f = 0; f < count; ++f) {
+        const uint16_t id = folds[f];
         auto* fold = s.ent[id].try_get_mut<UiFold>();
         if (fold == nullptr || fold->body != body) {
             continue;
