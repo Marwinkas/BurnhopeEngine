@@ -189,6 +189,8 @@ TEST_CASE("uiIconFromName resolves names and rejects unknown ones") {
     CHECK(uiIconFromName("gear") == UiIcon::Cogwheel);
     CHECK(uiIconFromName("chevron_left") == UiIcon::ChevronLeft);
     CHECK(uiIconFromName("nope") == UiIcon::None);
+    CHECK(std::string_view(uiIconAssetPath(UiIcon::Add)) == "assets/icons/plus.svg");
+    CHECK(uiIconAssetPath(UiIcon::None) == nullptr);
 }
 
 TEST_CASE("fileTrimPath strips CRLF, spaces and quotes from the tail") {

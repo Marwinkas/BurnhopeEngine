@@ -828,8 +828,6 @@ TEST_CASE("style sheet classes feed widgets and every section owns a column grip
     const uint16_t root = spawn(state, kUiNone, px(300.0f, 200.0f), paintRgb(0.1f, 0.1f, 0.1f));
     const uint16_t host = uiPropHost(state, root);
     const uint16_t body = uiPropSection(state, host, "Sec", 0, 0);
-    uint16_t grips[kUiCap];
-    CHECK(uiCollect<UiPropGrip>(state, grips, kUiCap) == 1);
     const uint16_t menu = uiMakeMenu(state);
     const uint16_t trigger = uiMenuButton(state, body, "x", menu);
     const UiFlex* flex = trigger < state.count ? state.ent[trigger].try_get<UiFlex>() : nullptr;

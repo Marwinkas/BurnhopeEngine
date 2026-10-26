@@ -1,4 +1,65 @@
 {
+  "actor": [
+    {
+      "role": "section",
+      "label": "Transform",
+      "cat": 0,
+      "owner": 1,
+      "children": [
+        {
+          "role": "vec3",
+          "label": "Location",
+          "bind": 123,
+          "value": 0.0,
+          "value2": 0.0,
+          "value3": 0.0,
+          "min": -3.4028234e+38,
+          "max": 3.4028234e+38,
+          "step": 0.05
+        },
+        {
+          "role": "vec3",
+          "label": "Rotation",
+          "bind": 126,
+          "value": 0.0,
+          "value2": 0.0,
+          "value3": 0.0,
+          "min": -3.4028234e+38,
+          "max": 3.4028234e+38,
+          "step": 0.5
+        },
+        {
+          "role": "vec3",
+          "label": "Scale",
+          "bind": 129,
+          "value": 1.0,
+          "value2": 1.0,
+          "value3": 1.0,
+          "min": -3.4028234e+38,
+          "max": 3.4028234e+38,
+          "step": 0.05,
+          "proportional": true
+        },
+        {
+          "role": "vec3",
+          "label": "Pivot",
+          "bind": 132,
+          "value": 0.0,
+          "value2": 0.0,
+          "value3": 0.0,
+          "min": -3.4028234e+38,
+          "max": 3.4028234e+38,
+          "step": 0.05
+        },
+        {
+          "role": "check",
+          "label": "Static",
+          "bind": 46,
+          "on": false
+        }
+      ]
+    }
+  ],
   "post": [
     {
       "role": "section",

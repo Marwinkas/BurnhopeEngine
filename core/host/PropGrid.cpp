@@ -25,22 +25,11 @@
 namespace burnhope {
 namespace {
 
-// Idle column grip: a faint hairline in the theme's text color.
-void gripIdle(UiPaint& paint, const UiLook& look) {
-    paint.token = UiToken::Custom;
-    paintTint(paint, look.text);
-    paint.a = 0.08f;
-    paint.borderW = 0.0f;
-    paint.shadow = 0.0f;
-}
-
 // Row metrics come from the "prop_row" class of assets/ui/styles.json; these are the fallbacks.
 constexpr float kPropSlotDefault = 26.0f;
 constexpr float kPropRowDefault = 34.0f;
 constexpr float kPropPadDefault = 4.0f;
-constexpr float kPropControlMaxDefault = 380.0f;
-constexpr float kPropMinLabel = 70.0f;
-constexpr float kPropMinValue = 110.0f;
+constexpr float kPropControlMaxDefault = 340.0f;
 
 float propSlotH(const UiState& s) { return uiStyle(s, "prop_row", UiStyleKey::Inner, kPropSlotDefault); }
 float propRowH(const UiState& s) { return uiStyle(s, "prop_row", UiStyleKey::Height, kPropRowDefault); }
@@ -67,13 +56,17 @@ void propHair(UiState& s, uint16_t column) {
 
 } // namespace
 
-constexpr float kPropIndent = 28.0f;
+// Label column and the clear gap before the controls: every control starts at kPropLabelW + kPropGap.
+constexpr float kPropLabelW = 115.0f;
+constexpr float kPropGap = 12.0f;
 constexpr float kPropField = 108.0f;
+constexpr float kPropLockGap = 6.0f;
 constexpr float kPropMargin = 8.0f;
-constexpr float kPropLock = 26.0f; // fallback of the "vector_lock" class
-constexpr float kVecGap = 2.0f;
-constexpr float kVecFieldMin = 85.0f;
-constexpr float kPropGap = 10.0f; // clear space between the splitter line and every value control
+constexpr float kPropLock = 18.0f; // fallback of the "vector_lock" class
+constexpr float kVecBadgeW = 12.0f;
+constexpr float kVecH = 26.0f;
+constexpr float kVecRadius = 3.0f;
+constexpr float kVecFieldMin = 73.0f;
 
 void propLinkLabel(UiState& s, uint16_t caption) {
     UiPropRoll& roll = s.world.ensure<UiPropRoll>();
@@ -103,98 +96,6 @@ uint16_t propBar(const UiState& s) {
     return bar;
 }
 
-// The widest label column a panel `span` px wide can hold while the value column keeps kPropMinValue.
-float propLabelLimit(float span, float indent) {
-    const float room = span - indent - kPropMinValue;
-    return room > kPropMinLabel ? room : kPropMinLabel;
-}
-
-// Gives every label of every property grid the width `w`.
-void propApplyLabelW(UiState& s, float w) {
-    propEachLabel(s, [&](uint16_t id) {
-        const UiFlex* flex = s.ent[id].try_get<UiFlex>();
-        if (flex != nullptr && (flex->widthMode != UiSize::Px || flex->width != w)) {
-            uiSetWidth(s, id, w);
-        }
-        return true;
-    });
-}
-
-// Puts every section grip on the shared label edge and primes its drag so any grip starts from the current width.
-void propSyncGrips(UiState& s, float labelW) {
-    uint16_t grips[kUiCap];
-    const uint16_t count = uiCollect<UiPropGrip>(s, grips, kUiCap);
-    for (uint16_t i = 0; i < count; ++i) {
-        const uint16_t id = grips[i];
-        if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
-            if (flex->posX != labelW + kPropIndent) {
-                flex->posX = labelW + kPropIndent;
-                s.layoutDirty = true;
-            }
-        }
-        // The grip under the pointer keeps the width and mouse x captured at press: re-priming it mid-drag
-        // would add the whole mouse travel again on every step.
-        if (id == s.capture) {
-            continue;
-        }
-        if (auto* drag = s.ent[id].try_get_mut<UiSplitter>()) {
-            drag->live = labelW;
-            drag->startSize = labelW;
-        }
-    }
-}
-
-float propColumnResize(void* user, uint16_t split, float size) {
-    auto& s = *static_cast<UiState*>(user);
-    const uint16_t homeId = split < s.count ? s.parentOf[split] : kUiNone;
-    const float span = homeId < s.count ? s.box[homeId].w : 0.0f;
-    float clamped = size < kPropMinLabel ? kPropMinLabel : size;
-    if (span > 0.0f) {
-        const float limit = propLabelLimit(span, kPropIndent);
-        clamped = clamped > limit ? limit : clamped;
-    }
-    s.world.ensure<UiPropRoll>().labelW = clamped;
-    propApplyLabelW(s, clamped);
-    propSyncGrips(s, clamped);
-    return clamped;
-}
-
-// Runs after the host lays out: keeps the shared label width inside the panel and the section grips on its edge.
-void propPlace(UiState& s, uint16_t id, void*) {
-    auto* grid = id < s.count ? s.ent[id].try_get_mut<UiPropGrid>() : nullptr;
-    if (grid == nullptr) {
-        return;
-    }
-    uint16_t scroll = kUiNone;
-    for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-        if (s.ent[p].try_get<UiScroll>() != nullptr) {
-            scroll = p;
-            break;
-        }
-    }
-    const bool framed = scroll < s.count && s.box[scroll].w > 8.0f;
-    const float want = s.world.ensure<UiPropRoll>().labelW;
-    float labelW = want;
-    if (framed) {
-        const float limit = propLabelLimit(s.box[scroll].w, kPropIndent);
-        labelW = want > limit ? limit : want;
-    }
-    if (labelW != grid->labelW) {
-        grid->labelW = labelW;
-        propApplyLabelW(s, labelW);
-    }
-    propSyncGrips(s, labelW);
-}
-
-const UiPropGrid* propGrid(const UiState& s, uint16_t host) {
-    for (uint16_t p = host; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-        if (const UiPropGrid* grid = s.ent[p].try_get<UiPropGrid>()) {
-            return grid;
-        }
-    }
-    return nullptr;
-}
-
 uint16_t uiPropHost(UiState& s, uint16_t parent) {
     UiFlex column{};
     column.direction = UiFlexDir::Column;
@@ -206,57 +107,10 @@ uint16_t uiPropHost(UiState& s, uint16_t parent) {
     if (id == kUiNone) {
         return id;
     }
-    UiPropRoll& roll = s.world.ensure<UiPropRoll>();
-    if (roll.seeded == 0) {
-        roll.seeded = 1;
-        roll.labelW = uiStyle(s, "prop_row", UiStyleKey::Width, roll.labelW);
-    }
-    const float labelW = roll.labelW;
-    s.ent[id].set<UiPropGrid>({labelW, kUiNone, kUiNone, kUiNone});
-    s.ent[id].set<UiLayoutRefresh>({propPlace, nullptr});
     return id;
 }
 
-uint16_t uiPropGrip(UiState& s, uint16_t body) {
-    const float labelW = s.world.ensure<UiPropRoll>().labelW;
-    const uint16_t grip = uiSplitBar(s, body, true);
-    if (grip >= s.count) {
-        return grip;
-    }
-    if (auto* flex = s.ent[grip].try_get_mut<UiFlex>()) {
-        flex->widthMode = UiSize::Px;
-        flex->width = uiStyle(s, "splitter_grip", UiStyleKey::Width, flex->width);
-        flex->position = UiPosition::Absolute;
-        flex->posX = labelW + kPropIndent;
-        flex->posY = 0.0f;
-        flex->heightMode = UiSize::Percent;
-        flex->height = 100.0f;
-    }
-    if (auto* paint = s.ent[grip].try_get_mut<UiPaint>()) {
-        gripIdle(*paint, s.look);
-    }
-    uiSplitterBind(s, grip, body, 0, propColumnResize, &s);
-    if (auto* drag = s.ent[grip].try_get_mut<UiSplitter>()) {
-        drag->live = labelW;
-        drag->startSize = labelW;
-    }
-    s.ent[grip].add<UiPropGrip>();
-    s.ent[grip].set<UiSplitGroup>({0.08f});
-    return grip;
-}
-
-void uiPropNoGrip(UiState& s, uint16_t body) {
-    propEachChild(s, body, [&](uint16_t id) {
-        if (s.ent[id].has<UiPropGrip>()) {
-            uiShow(s, id, false);
-        }
-        return true;
-    });
-}
-
 uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
-    const UiPropGrid* grid = propGrid(s, host);
-    const float labelW = grid != nullptr && grid->labelW > 8.0f ? grid->labelW : 140.0f;
     propHair(s, host);
     UiFlex line{};
     line.direction = UiFlexDir::Row;
@@ -267,7 +121,7 @@ uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
     line.height = propRowH(s);
     line.padT = propPadV(s);
     line.padB = propPadV(s);
-    line.padL = kPropIndent;
+    line.padL = 0.0f;
     line.padR = kPropMargin;
     line.shrink = 0.0f;
     line.overflow = UiOverflow::Hidden;
@@ -284,7 +138,7 @@ uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
     }
     UiFlex name{};
     name.widthMode = UiSize::Px;
-    name.width = labelW;
+    name.width = kPropLabelW;
     name.heightMode = UiSize::Px;
     name.height = propSlotH(s);
     name.shrink = 0.0f;
@@ -525,18 +379,17 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
     line.maxW = propVectorMax(s);
     line.grow = 1.0f;
     line.shrink = 1.0f;
-    line.gap = kVecGap;
+    line.gap = 0.0f;
     line.heightMode = UiSize::Px;
     line.height = propSlotH(s);
     const uint16_t row = uiPanel(s, slot, line, paintClear());
     // Axis fields share what lock, caps and gaps leave of the row equally (grow 1 from a zero basis).
-    const float capW = propSlotH(s);
     const float lockSide = uiStyle(s, "vector_lock", UiStyleKey::Width, kPropLock);
     const char* letters[3] = {"X", "Y", "Z"};
     UiPropVec3 out{};
     out.row = row;
     uint16_t* ids[3] = {&out.x, &out.y, &out.z};
-    auto square = [&](uint8_t icon, uint16_t home, float side) {
+    auto square = [&](uint8_t icon, uint16_t home, float side, float marginR) {
         UiFlex box{};
         box.widthMode = UiSize::Px;
         box.width = side;
@@ -545,7 +398,7 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         box.shrink = 0.0f;
         box.minW = side;
         box.minH = side;
-        box.marginR = 4.0f;
+        box.marginR = marginR;
         box.self = UiAlignSelf::Center;
         UiPaint paint{};
         paint.token = UiToken::Custom;
@@ -571,7 +424,7 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         return id;
     };
     if (full) {
-        out.lock = square(static_cast<uint8_t>(UiIcon::LockOpen), row, lockSide);
+        out.lock = square(static_cast<uint8_t>(UiIcon::LockOpen), row, lockSide, kPropLockGap);
         if (out.lock < s.count) {
             s.ent[out.lock].set<UiVecCtl>({});
             if (auto* ctl = s.ent[out.lock].try_get_mut<UiVecCtl>()) {
@@ -586,9 +439,9 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         const float* ink = kUiAxis[i];
         UiFlex tag{};
         tag.widthMode = UiSize::Px;
-        tag.width = capW;
+        tag.width = kVecBadgeW;
         tag.heightMode = UiSize::Px;
-        tag.height = propSlotH(s);
+        tag.height = kVecH;
         tag.shrink = 0.0f;
         UiPaint axis{};
         axis.token = UiToken::Custom;
@@ -596,6 +449,10 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         axis.g = ink[1];
         axis.b = ink[2];
         axis.a = 1.0f;
+        axis.radius = kVecRadius;
+        axis.radiusTr = 0.0f;
+        axis.radiusBr = 0.0f;
+        axis.radiusBl = kVecRadius;
         if (full) {
             axis.hr = ink[0] * 1.2f > 1.0f ? 1.0f : ink[0] * 1.2f;
             axis.hg = ink[1] * 1.2f > 1.0f ? 1.0f : ink[1] * 1.2f;
@@ -621,11 +478,18 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         hold.minW = kVecFieldMin;
         hold.align = UiAlign::Center;
         hold.heightMode = UiSize::Px;
-        hold.height = propSlotH(s);
+        hold.height = kVecH;
         const uint16_t box = uiPanel(s, row, hold, paintClear());
         *ids[i] = uiNumber(s, box, axes[i], minV, maxV, step, nullptr, nullptr, kPropField, propSlotH(s), 1.0f);
         propFillWidth(s, *ids[i]);
         uiNumberFill(s, *ids[i], false);
+        // The field closes the pill: square on the badge side, rounded on the outer end.
+        if (auto* paint = *ids[i] < s.count ? s.ent[*ids[i]].try_get_mut<UiPaint>() : nullptr) {
+            paint->radius = 0.0f;
+            paint->radiusTr = kVecRadius;
+            paint->radiusBr = kVecRadius;
+            paint->radiusBl = 0.0f;
+        }
         // Axis numbers sit in a narrow box: the vector_field class gives them tighter side padding than a lone field.
         if (auto* field = *ids[i] < s.count ? s.ent[*ids[i]].try_get_mut<UiField>() : nullptr) {
             field->padL = uiStyle(s, "vector_field", UiStyleKey::PadL, field->padL);
@@ -636,7 +500,7 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         return out;
     }
     const uint16_t tail = uiPropTrail(s, row);
-    out.reset = square(static_cast<uint8_t>(UiIcon::Reset), tail < s.count ? tail : row, propSlotH(s));
+    out.reset = square(static_cast<uint8_t>(UiIcon::Reset), tail < s.count ? tail : row, propSlotH(s), 0.0f);
     UiVecCtl shared{};
     shared.field[0] = out.x;
     shared.field[1] = out.y;

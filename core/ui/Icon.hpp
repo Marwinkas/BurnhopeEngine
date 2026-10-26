@@ -19,7 +19,7 @@ enum class UiIcon : uint8_t {
     MenuChevron = 8,
     Check = 9,
     ChevronRight = 10,
-    ChevronDown = 11,
+    ChevronDown = 11, 
     LockOpen = 12,
     Lock = 13,
     Reset = 14,
@@ -34,6 +34,9 @@ enum class UiIcon : uint8_t {
 
 // Maps a human name ("plus", "gear", "chevron_left") to its sprite; unknown names give UiIcon::None.
 UiIcon uiIconFromName(std::string_view name);
+
+// The vector asset of a procedural sprite ("assets/icons/chevron_down.svg"); nullptr for UiIcon::None and for glyphs without one.
+[[nodiscard]] const char* uiIconAssetPath(UiIcon icon);
 
 // True for an asset-path icon ("assets/icons/Snap.svg"): not a procedural name, and it holds a '/' or ends in .svg / .png.
 [[nodiscard]] bool uiIconIsPath(std::string_view name);

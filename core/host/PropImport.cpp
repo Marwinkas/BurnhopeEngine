@@ -372,6 +372,13 @@ uint16_t makeVec2(Import& in, uint16_t parent, const Node& node) {
     return row.x;
 }
 
+// Three consecutive scalars from `bind` as one vec3 row; "proportional" starts its lock on a ratio-keeping scale.
+uint16_t makeVec3(Import& in, uint16_t parent, const Node& node) {
+    const UiPropVec3 row = in.bind->vec3(*in.state, parent, node.label, node.bind, node.value, node.value2, node.value3, node.minV, node.maxV, node.hasStep ? node.step : 0.5f, node.proportional);
+    remember(in, node.name, row.x);
+    return row.x;
+}
+
 uint16_t makeMenu(Import& in, uint16_t parent, const Node& node) {
     if (node.bar) {
         return addBar(in, parent, node);
@@ -559,6 +566,7 @@ constexpr RoleSpawn kRoleSpawns[] = {
     {"slider", makeSlider},
     {"swatch", makeSwatch},
     {"vec2", makeVec2},
+    {"vec3", makeVec3},
     {"menu", makeMenu},
     {"panel", spawnPanel},
     {"sep", spawnPanel},
@@ -649,7 +657,7 @@ bool parseNode(Cur& c, Import& in, uint16_t parent) {
             } else {
                 node.owner = static_cast<uint8_t>(number);
             }
-        } else if (keyIs(key, "value") || keyIs(key, "value2") || keyIs(key, "min") || keyIs(key, "max") || keyIs(key, "step") || keyIs(key, "g") || keyIs(key, "b")) {
+        } else if (keyIs(key, "value") || keyIs(key, "value2") || keyIs(key, "value3") || keyIs(key, "min") || keyIs(key, "max") || keyIs(key, "step") || keyIs(key, "g") || keyIs(key, "b")) {
             double number = 0.0;
             if (!json::parseNumber(c, number)) {
                 return false;
@@ -659,6 +667,8 @@ bool parseNode(Cur& c, Import& in, uint16_t parent) {
                 node.value = v;
             } else if (keyIs(key, "value2")) {
                 node.value2 = v;
+            } else if (keyIs(key, "value3")) {
+                node.value3 = v;
             } else if (keyIs(key, "min")) {
                 node.minV = v;
             } else if (keyIs(key, "max")) {
@@ -764,7 +774,7 @@ bool parseNode(Cur& c, Import& in, uint16_t parent) {
                 node.posY = v;
             }
         } else if (keyIs(key, "bar") || keyIs(key, "slide") || keyIs(key, "hide") || keyIs(key, "center")
-            || keyIs(key, "ghost") || keyIs(key, "pass") || keyIs(key, "fill") || keyIs(key, "wrap") || keyIs(key, "absolute")
+            || keyIs(key, "ghost") || keyIs(key, "pass") || keyIs(key, "fill") || keyIs(key, "wrap") || keyIs(key, "proportional") || keyIs(key, "absolute")
             || keyIs(key, "vertical") || keyIs(key, "iconbtn")) {
             json::skip(c);
             bool flag = false;
@@ -792,6 +802,8 @@ bool parseNode(Cur& c, Import& in, uint16_t parent) {
                 node.fill = flag;
             } else if (keyIs(key, "wrap")) {
                 node.wrap = flag;
+            } else if (keyIs(key, "proportional")) {
+                node.proportional = flag;
             } else if (keyIs(key, "absolute")) {
                 node.absolute = flag;
             } else if (keyIs(key, "vertical")) {

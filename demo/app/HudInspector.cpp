@@ -30,18 +30,10 @@ void hudBuildInspector(Canvas& canvas, HudContext* hud, uint16_t details, uint16
     hud->ids.statsLbl = uiLabel(*canvas.state, panel, "fps");
     hud->ids.memLbl = uiLabel(*canvas.state, panel, "mem");
     hud->ids.loadLbl = uiLabel(*canvas.state, panel, "gpu");
-    auto tick = [&](const char* label, uint16_t index, bool on) {
-        hud->bind.check(*canvas.state, panel, label, index, on);
-    };
-    const uint8_t catGeneral = static_cast<uint8_t>(UiPropCat::General);
+    // inspector.json holds the scalar and flag indices of the Transform rows as plain numbers.
+    static_assert(kScPos0 == 123 && kScEuler0 == 126 && kScScale0 == 129 && kScPivot0 == 132 && kFlActorStatic == 46);
+    (void)propImportAsset(*canvas.state, details, "assets/ui/inspector.json", "actor", hud->bind, nullptr, 0, nullptr, 0, hidden, onImportFlag, hud);
     const uint8_t catActor = static_cast<uint8_t>(UiPropCat::Actor);
-    panel = uiPropSection(*canvas.state, details, "Transform", catGeneral, kSecTransform);
-    constexpr float kOpen = 3.4028234e+38f;
-    hud->bind.vec3(*canvas.state, panel, "Location", kScPos0, 0.0f, 0.0f, 0.0f, -kOpen, kOpen, 0.05f);
-    hud->bind.vec3(*canvas.state, panel, "Rotation", kScEuler0, 0.0f, 0.0f, 0.0f, -kOpen, kOpen, 0.5f);
-    hud->bind.vec3(*canvas.state, panel, "Scale", kScScale0, 1.0f, 1.0f, 1.0f, -kOpen, kOpen, 0.05f, true);
-    hud->bind.vec3(*canvas.state, panel, "Pivot", kScPivot0, 0.0f, 0.0f, 0.0f, -kOpen, kOpen, 0.05f);
-    tick("Static", kFlActorStatic, false);
     panel = uiPropSection(*canvas.state, details, "Material", catActor, kSecMaterial);
     hudBuildActorMaterial(canvas, hud, panel);
     hudBuildPost(canvas, hud, details, hidden);

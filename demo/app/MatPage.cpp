@@ -103,7 +103,6 @@ void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel) {
     uiDrag(s, hud->matPreview, onPreviewDrag, hud);
     uiDragRight(s, hud->matPreview, onPreviewOrbit, hud);
     uiWheelBind(s, hud->matPreview, onPreviewWheel, hud);
-    uiPropNoGrip(s, panel);
 }
 
 } // namespace burnhope

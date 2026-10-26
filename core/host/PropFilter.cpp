@@ -83,7 +83,6 @@ uint16_t uiPropSection(UiState& s, uint16_t parent, const char* title, uint8_t c
             flex->padT = 0.0f;
             flex->padB = 0.0f;
         }
-        (void)uiPropGrip(s, body);
     }
     return body;
 }

@@ -29,6 +29,7 @@ struct Node {
     uint8_t owner = 0;
     float value = 0.0f;
     float value2 = 0.0f;
+    float value3 = 0.0f;
     float minV = 0.0f;
     float maxV = 1.0f;
     float step = 0.01f;
@@ -79,6 +80,7 @@ struct Node {
     bool pass = false;
     bool fill = false;
     bool wrap = false;
+    bool proportional = false;
     bool absolute = false;
     bool vertical = false;
     bool alignCenter = false;

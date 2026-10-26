@@ -15,28 +15,12 @@ struct UiPropRoll {
     uint16_t sections = kUiNone;
     uint16_t sectionTail = kUiNone;
     uint16_t bar = kUiNone;
-    float labelW = 140.0f;
-    uint8_t seeded = 0; // labelW took the prop_row class width
 };
 
 // Tag on the right-hand slot of a property row; reset buttons sit in it.
 struct UiPropTrail {};
 
-// Tag on a section's column grip; every grip follows UiPropRoll::labelW.
-struct UiPropGrip {};
-
-struct UiPropGrid {
-    float labelW = 140.0f;
-    uint16_t grip = kUiNone;
-    uint16_t labels = kUiNone;
-    uint16_t values = kUiNone;
-};
-
 uint16_t uiPropHost(UiState& s, uint16_t parent);
-// Adds the label/value column grip inside a section body; every section grip shares one label width.
-uint16_t uiPropGrip(UiState& s, uint16_t body);
-// Hides the column grip of a section body that lays out its own cards (the material page).
-void uiPropNoGrip(UiState& s, uint16_t body);
 // The trailing slot of the property row that holds `node`, or kUiNone when `node` is in no property row.
 [[nodiscard]] uint16_t uiPropTrail(const UiState& s, uint16_t node);
 uint16_t uiPropRow(UiState& s, uint16_t host, const char* label);

@@ -37,7 +37,7 @@ constexpr uint8_t kChannelNormal = 1;
 constexpr float kFieldH = 24.0f;
 constexpr float kFieldW = 60.0f;
 constexpr float kBesideGap = 8.0f;
-constexpr float kFlipLabelW = 100.0f;
+constexpr float kFlipLabelW = 116.0f;
 
 UiFlex lineFlex(float height) {
     UiFlex line{};
