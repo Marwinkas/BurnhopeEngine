@@ -32,6 +32,8 @@ void uiChromeClear(UiState& s);
 void uiChromePark(UiState& s, uint16_t home, const UiChromeGesture& gesture);
 
 uint16_t uiWindowChrome(UiState& s, uint16_t parent);
+// Title bar (drag handle) with a fold toggle at its right edge; returns the foldable body under `parent`.
+uint16_t uiDragFoldHeader(UiState& s, uint16_t parent, const char* title);
 void uiInstallChromeBin(UiState& s);
 void uiChromeSetDock(UiState& s, bool (*frame)(const UiState& s, uint16_t id), void (*move)(UiState& s, uint16_t panel, float x, float y), void (*drop)(UiState& s, uint16_t panel));
 ChromePointer uiChromePointer(UiState& s, const InputFrame& in, uint16_t hit, bool press, bool down, bool release);

@@ -3,6 +3,7 @@
 #include "app/MatPriv.hpp"
 #include "app/SceneBlockFill.hpp"
 
+#include "color/Color.hpp"
 #include "ui/Icon.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Check.hpp"
@@ -27,58 +28,6 @@ struct MatHome {
 };
 
 void onMatReset(void* user, uint16_t id);
-
-int nibble(char c) {
-    if (c >= '0' && c <= '9') {
-        return c - '0';
-    }
-    if (c >= 'a' && c <= 'f') {
-        return c - 'a' + 10;
-    }
-    if (c >= 'A' && c <= 'F') {
-        return c - 'A' + 10;
-    }
-    return -1;
-}
-
-int byteOf(float v) {
-    int i = static_cast<int>(v * 255.0f + 0.5f);
-    if (i < 0) {
-        i = 0;
-    }
-    if (i > 255) {
-        i = 255;
-    }
-    return i;
-}
-
-bool parseHex(const char* text, float& r, float& g, float& b, float& a, bool& hasA) {
-    if (text == nullptr) {
-        return false;
-    }
-    if (*text == '#') {
-        ++text;
-    }
-    int n = 0;
-    while (text[n] != '\0' && n < 8) {
-        if (nibble(text[n]) < 0) {
-            return false;
-        }
-        ++n;
-    }
-    if (text[n] != '\0' || (n != 6 && n != 8)) {
-        return false;
-    }
-    const auto chan = [&](int i) { return (nibble(text[i * 2]) << 4) + nibble(text[i * 2 + 1]); };
-    r = static_cast<float>(chan(0)) / 255.0f;
-    g = static_cast<float>(chan(1)) / 255.0f;
-    b = static_cast<float>(chan(2)) / 255.0f;
-    hasA = n == 8;
-    if (hasA) {
-        a = static_cast<float>(chan(3)) / 255.0f;
-    }
-    return true;
-}
 
 void forceScalar(HudContext& hud, UiState& s, uint16_t index, float value) {
     if (hud.bind.scalars != nullptr && index < hud.bind.scalarN) {
@@ -122,14 +71,6 @@ void matSetChoice(UiState& s, uint16_t id, uint8_t index, const char* label) {
         choice->index = index;
     }
     uiMenuCaption(s, id, label);
-}
-
-void matHexText(char* dst, std::size_t cap, float r, float g, float b, float a, bool withA) {
-    if (withA) {
-        std::snprintf(dst, cap, "#%02X%02X%02X%02X", byteOf(r), byteOf(g), byteOf(b), byteOf(a));
-    } else {
-        std::snprintf(dst, cap, "#%02X%02X%02X", byteOf(r), byteOf(g), byteOf(b));
-    }
 }
 
 void matApplyFlag(HudContext& hud, UiState& s, uint16_t index, uint8_t value) {
@@ -194,7 +135,7 @@ void matHexEdited(UiState& s, uint16_t id) {
     float b = 0.0f;
     float a = 1.0f;
     bool hasA = false;
-    if (!parseHex(field->bytes, r, g, b, a, hasA)) {
+    if (!colorParseHex(field->bytes, r, g, b, a, hasA)) {
         return;
     }
     forceScalar(*hex->hud, s, hex->index, r);

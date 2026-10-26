@@ -2,6 +2,8 @@
 #include "files/Browser.hpp"
 #include "files/FileDomain.hpp"
 #include "ui/Command.hpp"
+#include "ui/Icon.hpp"
+#include "ui/Panel.hpp"
 #include "host/HostNote.hpp"
 #include "ui/widget/Chrome.hpp"
 #include "ui/widget/Docking.hpp"
@@ -10,6 +12,7 @@
 #include "ui/widget/Calendar.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Field.hpp"
+#include "ui/widget/Label.hpp"
 #include "ui/widget/Menu.hpp"
 #include "ui/State.hpp"
 
@@ -92,20 +95,7 @@ void applyCompact(UiState& s) {
 
 void formSubmit(UiState& s) {
     const char* why = "";
-    bool bad = false;
-    for (uint16_t id = 0; id < s.count; ++id) {
-        const UiField* field = s.ent[id].try_get<UiField>();
-        if (field == nullptr || field->inForm == 0) {
-            continue;
-        }
-        fieldMark(s, id);
-        const char* msg = "";
-        if (!bad && fieldProblem(*field, msg)) {
-            bad = true;
-            why = msg;
-        }
-    }
-    const char* msg = bad ? why : "sent";
+    const char* msg = uiFormValidate(s, why) ? "sent" : why;
     auto writeStatus = [&](uint16_t id) {
         if (id == kUiNone) {
             return;
@@ -277,11 +267,7 @@ void uiBuildShell(UiState& s) {
     uiCommandAddTo(s, uiFieldMenu(s), "PASTE", cmdFieldPaste, &s);
     uiCommandAddTo(s, uiFieldMenu(s), "SELECT ALL", cmdFieldAll, &s);
     uiCommandAddTo(s, uiFieldMenu(s), "CLEAR", cmdFieldWipe, &s);
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.ent[id].try_get<UiField>() != nullptr && uiFieldMenu(s) < s.count) {
-            uiSetContextMenu(s, id, uiFieldMenu(s));
-        }
-    }
+    uiFieldBindContextMenuAll(s, uiFieldMenu(s));
     if (take("input_host") != kUiNone) {
         (void)uiImportBinFile(s, take("input_host"), BH_UI_SAMPLE);
     }
@@ -299,27 +285,12 @@ void uiBuildShell(UiState& s) {
         flex.pad = 10.0f;
         flex.gap = 6.0f;
         flex.shrink = 0.0f;
-        const uint16_t id = spawn(s, root, flex, paintToken(s.look, UiToken::Window, s.look.radius));
+        const uint16_t id = uiPanel(s, root, flex, paintToken(s.look, UiToken::Window, s.look.radius));
         uiShow(s, id, false);
         return id;
     };
     auto mini = [&](uint16_t host, const char* name, UiClickFn fn) {
-        UiFlex flex{};
-        flex.heightMode = UiSize::Px;
-        flex.height = 28.0f;
-        flex.shrink = 0.0f;
-        const uint16_t id = spawn(s, host, flex, paintToken(s.look, UiToken::Button, s.look.radiusSm));
-        addText(s, id, name);
-        if (auto* box = s.ent[id].try_get_mut<UiFlex>()) {
-            const UiText* label = s.ent[id].try_get<UiText>();
-            const uint8_t n = label != nullptr ? label->len : 1;
-            box->widthMode = UiSize::Px;
-            box->width = static_cast<float>(n) * s.look.advance + 24.0f;
-            box->height = 28.0f;
-            box->heightMode = UiSize::Px;
-        }
-        uiBind(s, id, fn, &s);
-        return id;
+        return uiButton(s, host, {.label = name, .height = 28.0f, .onClick = fn, .user = &s});
     };
     uiFilesOwn(s, floatPanel(70.0f, 64.0f, 1100.0f, 700.0f));
     if (uiFiles(s).fileFrame != kUiNone) {
@@ -334,15 +305,15 @@ void uiBuildShell(UiState& s) {
     fileBar.height = 32.0f;
     fileBar.gap = 8.0f;
     fileBar.pad = 8.0f;
-    const uint16_t fileTools = spawn(s, uiFiles(s).fileFrame, fileBar, paintToken(s.look, UiToken::Title, 0.0f));
+    const uint16_t fileTools = uiPanel(s, uiFiles(s).fileFrame, fileBar, paintToken(s.look, UiToken::Title, 0.0f));
     if (fileTools != kUiNone) {
         s.ent[fileTools].set<UiTitleBar>({});
     }
-    addText(s, spawn(s, fileTools, UiFlex{}, paintLabel(s.look)), "FILES");
+    (void)uiLabel(s, fileTools, "FILES");
     UiFlex fileSpacer{};
     fileSpacer.grow = 1.0f;
     fileSpacer.shrink = 1.0f;
-    spawn(s, fileTools, fileSpacer, paintClear());
+    (void)uiSpacer(s, fileTools, fileSpacer);
     mini(fileTools, "X", onFilesHide);
 
     const uint16_t title = take("title");
@@ -352,37 +323,37 @@ void uiBuildShell(UiState& s) {
     const uint16_t status = take("status");
     const uint16_t scroll = take("scene_scroll");
     const uint16_t slider = take("scale");
-    stamp(s, root, UiToken::Window);
-    stamp(s, title, UiToken::Title);
+    uiSetToken(s, root, UiToken::Window);
+    uiSetToken(s, title, UiToken::Title);
     if (title < s.count) {
         s.ent[title].set<UiTitleBar>({});
     }
-    stamp(s, brand, UiToken::Accent);
-    stamp(s, side, UiToken::Side);
-    stamp(s, content, UiToken::Content);
-    stamp(s, ids.pageLabel, UiToken::Text);
-    stamp(s, ids.compactRow, UiToken::Check);
-    stamp(s, scroll, UiToken::Scroll);
-    stamp(s, slider, UiToken::Slider);
-    stamp(s, ids.preview, UiToken::Preview);
-    stamp(s, uiField(s), UiToken::Field);
-    stamp(s, status, UiToken::Status);
-    stamp(s, ids.statusLabel, UiToken::Muted);
-    stamp(s, uiMenu(s), UiToken::Menu);
+    uiSetToken(s, brand, UiToken::Accent);
+    uiSetToken(s, side, UiToken::Side);
+    uiSetToken(s, content, UiToken::Content);
+    uiSetToken(s, ids.pageLabel, UiToken::Text);
+    uiSetToken(s, ids.compactRow, UiToken::Check);
+    uiSetToken(s, scroll, UiToken::Scroll);
+    uiSetToken(s, slider, UiToken::Slider);
+    uiSetToken(s, ids.preview, UiToken::Preview);
+    uiSetToken(s, uiField(s), UiToken::Field);
+    uiSetToken(s, status, UiToken::Status);
+    uiSetToken(s, ids.statusLabel, UiToken::Muted);
+    uiSetToken(s, uiMenu(s), UiToken::Menu);
     for (uint16_t id = 0; id < s.count; ++id) {
         auto* node = s.ent[id].try_get<UiPaint>();
         if (node == nullptr || node->token != UiToken::Custom) {
             continue;
         }
-        if (node->icon == 3) {
-            stamp(s, id, UiToken::Close);
-        } else if (node->icon == 1 || node->icon == 2) {
-            stamp(s, id, UiToken::Chrome);
+        if (node->icon == static_cast<uint8_t>(UiIcon::Dismiss)) {
+            uiSetToken(s, id, UiToken::Close);
+        } else if (node->icon == static_cast<uint8_t>(UiIcon::Minimize) || node->icon == static_cast<uint8_t>(UiIcon::Maximize)) {
+            uiSetToken(s, id, UiToken::Chrome);
         }
     }
     const uint32_t rows = uiNodeChildCount(s, ids.listInner);
     for (uint32_t i = 0; i < rows; ++i) {
-        stamp(s, uiNodeChild(s, ids.listInner, i), UiToken::Item);
+        uiSetToken(s, uiNodeChild(s, ids.listInner, i), UiToken::Item);
     }
     uiRestyle(s);
 }

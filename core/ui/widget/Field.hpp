@@ -132,6 +132,10 @@ bool fieldAllows(uint8_t filter, uint32_t cp);
 bool fieldCheck(uint8_t filter, const char* bytes, uint8_t len, const char*& msg);
 bool fieldProblem(const UiField& field, const char*& msg);
 void fieldMark(UiState& s, uint16_t id);
+// Marks every form field and returns false with the first problem's text in outMsg; true when all pass.
+bool uiFormValidate(UiState& s, const char*& outMsg);
+// Opens `menuId` as the context menu of every field.
+void uiFieldBindContextMenuAll(UiState& s, uint16_t menuId);
 uint8_t fieldChars(const UiField& field);
 void fieldSelectWord(UiField& field, uint8_t at);
 void fieldDropSel(UiField& field);

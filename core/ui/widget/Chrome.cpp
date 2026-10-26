@@ -4,6 +4,8 @@
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
 #include "ui/widget/Chrome.hpp"
+#include "ui/widget/Fold.hpp"
+#include "ui/widget/Label.hpp"
 #include "ui/State.hpp"
 
 namespace burnhope {
@@ -241,6 +243,43 @@ void uiChromePark(UiState& s, uint16_t home, const UiChromeGesture& gesture) {
         s.ent[prev].remove<UiChromeGesture>();
     }
     s.ent[home].set<UiChromeGesture>(gesture);
+}
+
+uint16_t uiDragFoldHeader(UiState& s, uint16_t parent, const char* title) {
+    UiFlex row{};
+    row.direction = UiFlexDir::Row;
+    row.heightMode = UiSize::Px;
+    row.height = 28.0f;
+    row.widthMode = UiSize::Percent;
+    row.width = 100.0f;
+    row.shrink = 0.0f;
+    row.align = UiAlign::Center;
+    row.padL = 8.0f;
+    row.padR = 4.0f;
+    const uint16_t header = uiPanel(s, parent, row, paintToken(s.look, UiToken::Title, s.look.radiusSm));
+    if (header == kUiNone) {
+        return kUiNone;
+    }
+    s.ent[header].set<UiTitleBar>({});
+    (void)uiLabel(s, header, title);
+    UiFlex gap{};
+    gap.grow = 1.0f;
+    gap.shrink = 1.0f;
+    gap.heightMode = UiSize::Px;
+    gap.height = 1.0f;
+    (void)uiSpacer(s, header, gap);
+    UiFlex mark{};
+    mark.widthMode = UiSize::Px;
+    mark.heightMode = UiSize::Px;
+    mark.width = 22.0f;
+    mark.height = 22.0f;
+    mark.shrink = 0.0f;
+    mark.marginR = 2.0f;
+    UiPaint fold = paintToken(s.look, UiToken::Chrome, s.look.radiusSm);
+    fold.icon = static_cast<uint8_t>(UiIcon::Minimize);
+    const uint16_t foldBtn = uiPanel(s, header, mark, fold);
+    uiHover(s, foldBtn);
+    return uiFoldAttach(s, parent, foldBtn);
 }
 
 } // namespace burnhope

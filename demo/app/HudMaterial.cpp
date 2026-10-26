@@ -20,16 +20,6 @@ char* hudDocPath(BhmatDoc& doc, uint8_t channel) {
     return channel < 9 ? path[channel] : doc.alphaPath;
 }
 
-const char* leaf(const char* path) {
-    const char* name = path != nullptr ? path : "";
-    for (const char* p = name; *p != '\0'; ++p) {
-        if (*p == '/' || *p == '\\') {
-            name = p + 1;
-        }
-    }
-    return name;
-}
-
 UiState* hudUi(HudContext& hud) {
     if (hud.host == nullptr || hud.slot < 0) {
         return nullptr;
@@ -37,35 +27,12 @@ UiState* hudUi(HudContext& hud) {
     return hud.host->view[hud.slot].canvas.state;
 }
 
+const char* matNameAt(void* user, uint16_t index) {
+    return static_cast<HudContext*>(user)->mats[index].name;
+}
+
 void hudPaintPick(HudContext& hud, UiState& state) {
-    if (hud.livePick >= state.count) {
-        return;
-    }
-    const UiChoice* choice = state.ent[hud.livePick].try_get<UiChoice>();
-    if (choice == nullptr) {
-        return;
-    }
-    uint16_t rows = 0;
-    for (uint16_t child = 0; child < state.count; ++child) {
-        if (state.parentOf[child] == choice->menu) {
-            rows = static_cast<uint16_t>(rows + 1u);
-        }
-    }
-    while (rows < hud.mats.size() && rows < 128 && state.count + 4u < kUiCap) {
-        uiMenuRow(state, choice->menu, hud.mats[rows].name, nullptr, nullptr, rows, hud.livePick, kUiNone);
-        rows = static_cast<uint16_t>(rows + 1u);
-    }
-    uint16_t seen = 0;
-    for (uint16_t child = 0; child < state.count; ++child) {
-        if (state.parentOf[child] != choice->menu) {
-            continue;
-        }
-        const bool live = seen < hud.mats.size();
-        uiText(state, child, live ? hud.mats[seen].name : "");
-        uiShow(state, child, live);
-        seen = static_cast<uint16_t>(seen + 1u);
-    }
-    uiMenuCaption(state, hud.livePick, hud.livePath[0] != '\0' ? leaf(hud.livePath) : "None");
+    uiChoiceSync(state, hud.livePick, static_cast<uint16_t>(hud.mats.size()), matNameAt, &hud, hud.livePath[0] != '\0' ? strPathLeaf(hud.livePath) : "None");
 }
 
 namespace {

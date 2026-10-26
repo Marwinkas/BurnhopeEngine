@@ -129,6 +129,37 @@ void fieldMark(UiState& s, uint16_t id) {
     s.visualDirty = true;
 }
 
+bool uiFormValidate(UiState& s, const char*& outMsg) {
+    uint16_t fields[kUiCap];
+    const uint16_t count = uiCollect<UiField>(s, fields, kUiCap);
+    bool valid = true;
+    outMsg = "";
+    for (uint16_t i = 0; i < count; ++i) {
+        const UiField* field = s.ent[fields[i]].try_get<UiField>();
+        if (field == nullptr || field->inForm == 0) {
+            continue;
+        }
+        fieldMark(s, fields[i]);
+        const char* msg = "";
+        if (valid && fieldProblem(*field, msg)) {
+            valid = false;
+            outMsg = msg;
+        }
+    }
+    return valid;
+}
+
+void uiFieldBindContextMenuAll(UiState& s, uint16_t menuId) {
+    if (menuId >= s.count) {
+        return;
+    }
+    uint16_t fields[kUiCap];
+    const uint16_t count = uiCollect<UiField>(s, fields, kUiCap);
+    for (uint16_t i = 0; i < count; ++i) {
+        uiSetContextMenu(s, fields[i], menuId);
+    }
+}
+
 UiBox fieldInset(const UiState& s, uint16_t id, const UiField& field) {
     const UiBox& box = s.box[id];
     const float clearW = field.clear != 0 && field.len > 0 ? 22.0f : 0.0f;

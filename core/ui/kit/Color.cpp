@@ -116,10 +116,7 @@ void setRange(UiState& s, uint16_t id, float value) {
 }
 
 void writeHex(char* dst, uint8_t& len, float r, float g, float b, float a) {
-    const auto byte = [](float c) { return static_cast<unsigned>(std::clamp(c * 255.0f + 0.5f, 0.0f, 255.0f)); };
-    std::format_to_n(dst, 9, "#{:02X}{:02X}{:02X}{:02X}", byte(r), byte(g), byte(b), byte(a));
-    dst[9] = '\0';
-    len = 9;
+    len = static_cast<uint8_t>(colorFormatHex(dst, 10, r, g, b, a, true));
 }
 
 void applyColor(UiState& s, UiColorPickerComponent& picker, bool fromHsv, bool publish) {
@@ -250,27 +247,10 @@ void dragWheel(UiState& s, UiColorPickerComponent& picker, uint16_t id, float x,
 }
 
 bool readHex(const UiField& field, float& r, float& g, float& b, float& a) {
-    std::string_view digits(field.bytes, field.len);
-    if (digits.starts_with('#')) {
-        digits.remove_prefix(1);
-    }
-    if (digits.size() != 6 && digits.size() != 8) {
-        return false;
-    }
-    uint32_t packed = 0;
-    const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), packed, 16);
-    if (parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size()) {
-        return false;
-    }
-    const bool withAlpha = digits.size() == 8;
-    const uint32_t rgb = withAlpha ? packed >> 8 : packed;
-    r = static_cast<float>((rgb >> 16) & 255u) / 255.0f;
-    g = static_cast<float>((rgb >> 8) & 255u) / 255.0f;
-    b = static_cast<float>(rgb & 255u) / 255.0f;
-    if (withAlpha) {
-        a = static_cast<float>(packed & 255u) / 255.0f;
-    }
-    return true;
+    char text[16]{};
+    std::memcpy(text, field.bytes, std::min<size_t>(field.len, sizeof(text) - 1));
+    bool hasA = false;
+    return colorParseHex(text, r, g, b, a, hasA);
 }
 
 bool readInt(const UiField& field, int& out) {

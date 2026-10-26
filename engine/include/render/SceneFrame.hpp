@@ -16,6 +16,10 @@ struct SceneFrame;
 [[nodiscard]] SceneFrame* sceneFrameCreate();
 [[nodiscard]] bool sceneFrameLoadBhop(SceneFrame* scene, const char* path, bool plant = true);
 void sceneFrameBlank(SceneFrame* scene);
+// Writes <projectRoot>/scene.bscene plus one .bhmat per actor under <projectRoot>/materials.
+[[nodiscard]] bool sceneFrameSave(const SceneFrame* scene, const char* projectRoot);
+// Applies pose and PBR from `file` (or <projectRoot>/scene.bscene when file is null or empty) to actors matched by name.
+[[nodiscard]] bool sceneFrameLoad(SceneFrame* scene, const char* projectRoot, const char* file = nullptr);
 void sceneFramePlantCubes(SceneFrame* scene);
 void sceneFrameDestroy(SceneFrame* scene, Device& device);
 void sceneFrameReleaseGpu(SceneFrame* scene, Device& device);

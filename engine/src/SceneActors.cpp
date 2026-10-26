@@ -1,8 +1,13 @@
+#include "asset/ProjectDoc.hpp"
 #include "gpu_scene/Physics.hpp"
 #include "render/SceneFrameImpl.hpp"
 
+#include <spdlog/spdlog.h>
+
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
 
 namespace burnhope {
 
@@ -371,6 +376,124 @@ void sceneFrameMark(SceneFrame* scene, uint8_t actor) {
         return;
     }
     scene->actors.mark = actor;
+}
+
+namespace {
+
+constexpr uint32_t kSceneRecCap = 96;
+
+void sceneRecPath(char* dst, size_t cap, const char* root) {
+    std::snprintf(dst, cap, "%s/scene.bscene", root != nullptr ? root : "");
+}
+
+} // namespace
+
+bool sceneFrameSave(const SceneFrame* scene, const char* projectRoot) {
+    if (scene == nullptr || projectRoot == nullptr || projectRoot[0] == '\0') {
+        return false;
+    }
+    SceneObjectRec recs[kSceneRecCap]{};
+    const uint8_t count = sceneFrameActorCount(scene);
+    uint32_t n = 0;
+    bool wrote = true;
+    for (uint8_t i = 0; i < count && n < kSceneRecCap; ++i) {
+        SceneObjectRec& rec = recs[n];
+        uint8_t kind = 0;
+        sceneFrameActorName(scene, i, rec.name, sizeof(rec.name), &kind);
+        rec.kind = kind;
+        ActorPose pose{};
+        if (sceneFrameActorPose(scene, i, pose)) {
+            std::memcpy(rec.pos, pose.pos, sizeof(rec.pos));
+            std::memcpy(rec.euler, pose.euler, sizeof(rec.euler));
+            std::memcpy(rec.scale, pose.scale, sizeof(rec.scale));
+        }
+        ActorPbr pbr{};
+        if (sceneFrameActorPbr(scene, i, pbr)) {
+            std::memcpy(rec.base, pbr.base, sizeof(rec.base));
+            rec.roughness = pbr.roughness;
+            rec.metallic = pbr.metallic;
+            rec.emissive = pbr.emissive;
+            MaterialInfo mat{};
+            mat.version = kEngineVersion;
+            std::memcpy(mat.base, pbr.base, sizeof(mat.base));
+            mat.roughness = pbr.roughness;
+            mat.metallic = pbr.metallic;
+            mat.emissive = pbr.emissive;
+            char matPath[800]{};
+            std::snprintf(matPath, sizeof(matPath), "%s/materials", projectRoot);
+            std::error_code ec;
+            std::filesystem::create_directories(matPath, ec);
+            std::snprintf(rec.material, sizeof(rec.material), "materials/mat_%u.bhmat", i);
+            std::snprintf(matPath, sizeof(matPath), "%s/%s", projectRoot, rec.material);
+            wrote = materialDocWrite(matPath, mat) && wrote;
+        }
+        n += 1u;
+    }
+    char path[640]{};
+    sceneRecPath(path, sizeof(path), projectRoot);
+    wrote = sceneDocWrite(path, recs, n) && wrote;
+    if (!wrote) {
+        spdlog::warn("scene save incomplete {}", path);
+    }
+    return wrote;
+}
+
+bool sceneFrameLoad(SceneFrame* scene, const char* projectRoot, const char* file) {
+    if (scene == nullptr) {
+        return false;
+    }
+    char path[640]{};
+    if (file != nullptr && file[0] != '\0') {
+        std::snprintf(path, sizeof(path), "%s", file);
+    } else if (projectRoot == nullptr || projectRoot[0] == '\0') {
+        return false;
+    } else {
+        sceneRecPath(path, sizeof(path), projectRoot);
+    }
+    SceneObjectRec recs[kSceneRecCap]{};
+    uint32_t n = 0;
+    if (!sceneDocRead(path, recs, kSceneRecCap, n)) {
+        spdlog::warn("scene load failed {}", path);
+        return false;
+    }
+    const uint8_t count = sceneFrameActorCount(scene);
+    for (uint32_t i = 0; i < n; ++i) {
+        const SceneObjectRec& rec = recs[i];
+        for (uint8_t a = 0; a < count; ++a) {
+            char name[24]{};
+            uint8_t kind = 0;
+            sceneFrameActorName(scene, a, name, sizeof(name), &kind);
+            if (std::strcmp(name, rec.name) != 0) {
+                continue;
+            }
+            ActorPose pose{};
+            std::memcpy(pose.pos, rec.pos, sizeof(pose.pos));
+            std::memcpy(pose.euler, rec.euler, sizeof(pose.euler));
+            for (uint8_t axis = 0; axis < 3; ++axis) {
+                pose.scale[axis] = rec.scale[axis] < 0.05f ? 1.0f : rec.scale[axis];
+            }
+            sceneFrameActorSetPose(scene, a, pose);
+            ActorPbr pbr{};
+            std::memcpy(pbr.base, rec.base, sizeof(pbr.base));
+            pbr.roughness = rec.roughness;
+            pbr.metallic = rec.metallic;
+            pbr.emissive = rec.emissive;
+            if (rec.material[0] != '\0') {
+                char matPath[800]{};
+                std::snprintf(matPath, sizeof(matPath), "%s/%s", projectRoot != nullptr ? projectRoot : "", rec.material);
+                MaterialInfo mat{};
+                if (materialDocRead(matPath, mat)) {
+                    std::memcpy(pbr.base, mat.base, sizeof(pbr.base));
+                    pbr.roughness = mat.roughness * mat.ormGain;
+                    pbr.metallic = mat.metallic * mat.ormGain;
+                    pbr.emissive = mat.emissive * mat.emissiveGain;
+                }
+            }
+            sceneFrameActorSetPbr(scene, a, pbr);
+            break;
+        }
+    }
+    return true;
 }
 
 } // namespace burnhope

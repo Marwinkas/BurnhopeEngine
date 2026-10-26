@@ -12,6 +12,10 @@ uint16_t uiPanel(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint&
     return spawn(s, parent, flex, paint);
 }
 
+void uiSetToken(UiState& s, uint16_t id, UiToken token) {
+    stamp(s, id, token);
+}
+
 uint16_t uiSpacer(UiState& s, uint16_t parent, const UiFlex& flex) {
     const uint16_t id = uiPanel(s, parent, flex, paintClear());
     if (id != kUiNone) {

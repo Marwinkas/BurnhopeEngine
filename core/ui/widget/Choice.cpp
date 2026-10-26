@@ -9,6 +9,8 @@
 namespace burnhope {
 namespace {
 
+constexpr uint32_t kChoiceRowCap = 128;
+
 const char* choiceLabel(const UiState& s, uint16_t menu, uint8_t index) {
     const uint16_t child = uiNodeChild(s, menu, index);
     if (child >= s.count) {
@@ -110,6 +112,28 @@ uint16_t uiChoice(UiState& s, uint16_t parent, const UiChoiceConfig& cfg) {
         .user = cfg.user,
     });
     return id;
+}
+
+void uiChoiceSync(UiState& s, uint16_t id, uint16_t count, const char* (*labelAt)(void* user, uint16_t index), void* user, const char* caption) {
+    const UiChoice* choice = id < s.count ? s.ent[id].try_get<UiChoice>() : nullptr;
+    if (choice == nullptr || choice->menu >= s.count || labelAt == nullptr) {
+        return;
+    }
+    const uint16_t menu = choice->menu;
+    uint32_t rows = uiNodeChildCount(s, menu);
+    while (rows < count && rows < kChoiceRowCap && s.count + 4u < kUiCap) {
+        (void)uiMenuRow(s, menu, labelAt(user, static_cast<uint16_t>(rows)), nullptr, nullptr, static_cast<uint16_t>(rows), id, kUiNone);
+        ++rows;
+    }
+    for (uint32_t i = 0; i < rows; ++i) {
+        const uint16_t row = uiNodeChild(s, menu, i);
+        const bool live = i < count;
+        uiText(s, row, live ? labelAt(user, static_cast<uint16_t>(i)) : "");
+        uiShow(s, row, live);
+    }
+    if (caption != nullptr) {
+        uiMenuCaption(s, id, caption);
+    }
 }
 
 void uiBindChoice(UiState& s, const char* name, uint8_t selected, void (*onPick)(void* user, uint8_t index), void* user) {

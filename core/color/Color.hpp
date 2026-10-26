@@ -1,6 +1,10 @@
 #pragma once
 
+#include "Str.hpp"
+
+#include <charconv>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -119,5 +123,57 @@ inline void colorHsvToLinear(float h, float s, float v, ColorLinear& out) {
     out.b = table[index][2];
     out.a = 1.0f;
 }
+
+// Parses "#RRGGBB", "#RRGGBBAA" (hash optional) into 0..1 channels; `a` is written only when hasA.
+inline bool colorParseHex(const char* text, float& r, float& g, float& b, float& a, bool& hasA) {
+    if (text == nullptr) {
+        return false;
+    }
+    if (*text == '#') {
+        ++text;
+    }
+    size_t n = 0;
+    while (text[n] != '\0' && n < 8) {
+        if (uiHexNib(text[n]) < 0) {
+            return false;
+        }
+        ++n;
+    }
+    if (text[n] != '\0' || (n != 6 && n != 8)) {
+        return false;
+    }
+    uint32_t packed = 0;
+    const auto parsed = std::from_chars(text, text + n, packed, 16);
+    if (parsed.ec != std::errc{} || parsed.ptr != text + n) {
+        return false;
+    }
+    hasA = n == 8;
+    const uint32_t rgb = hasA ? packed >> 8 : packed;
+    r = static_cast<float>((rgb >> 16) & 255u) / 255.0f;
+    g = static_cast<float>((rgb >> 8) & 255u) / 255.0f;
+    b = static_cast<float>(rgb & 255u) / 255.0f;
+    if (hasA) {
+        a = static_cast<float>(packed & 255u) / 255.0f;
+    }
+    return true;
+}
+
+// Writes "#RRGGBB" or "#RRGGBBAA" (uppercase) and a terminator; truncates to cap. Returns the length written.
+inline size_t colorFormatHex(char* dst, size_t cap, float r, float g, float b, float a, bool withA) {
+    if (dst == nullptr || cap == 0) {
+        return 0;
+    }
+    static constexpr char kDigits[] = "0123456789ABCDEF";
+    const uint8_t bytes[4] = {colorQuantize(r), colorQuantize(g), colorQuantize(b), colorQuantize(a)};
+    char full[10]{};
+    full[0] = '#';
+    const size_t count = withA ? 4 : 3;
+    for (size_t i = 0; i < count; ++i) {
+        full[1 + i * 2] = kDigits[bytes[i] >> 4];
+        full[2 + i * 2] = kDigits[bytes[i] & 15u];
+    }
+    return strCopyCap(dst, cap, full);
+}
+
 
 } // namespace burnhope

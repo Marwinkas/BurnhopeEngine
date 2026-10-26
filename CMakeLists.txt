@@ -354,7 +354,7 @@ set_source_files_properties(
     RTXDI/Libraries/Rtxdi/Source/RtxdiUtils.cpp
     PROPERTIES COMPILE_OPTIONS "-w")
 target_compile_definitions(bh_render PUBLIC "BH_SHADER_DIR=\"${CMAKE_CURRENT_BINARY_DIR}/shaders\"")
-target_link_libraries(bh_render PUBLIC volk flecs_static Jolt bh_audio bh_gpu_scene)
+target_link_libraries(bh_render PUBLIC volk flecs_static Jolt bh_audio bh_gpu_scene bh_asset)
 bh_module(ui_core
     core/ui/Command.cpp
     core/ui/FlexAttr.cpp
@@ -978,6 +978,7 @@ set(BH_TEST_SOURCES
     tests/rhi/TestRhiGolden.cpp
     tests/rhi/TestRhiCompute.cpp
     tests/core/TestCoreTypes.cpp
+    tests/core/TestStrColor.cpp
     tests/gfx/TestGfxScene.cpp
     tests/gfx/TestStreaming.cpp
     tests/ui/TestUiLayout.cpp

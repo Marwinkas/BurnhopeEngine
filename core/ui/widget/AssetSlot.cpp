@@ -6,6 +6,8 @@
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/DragDrop.hpp"
+#include "ui/widget/Image.hpp"
+#include "ui/widget/Label.hpp"
 #include "ui/State.hpp"
 
 namespace burnhope {
@@ -44,6 +46,56 @@ uint16_t uiAssetSlot(UiState& s, uint16_t parent, const UiAssetSlotConfig& cfg) 
     s.ent[id].set<UiAssetSlot>(slot);
     uiDragAddHost(s, id);
     return id;
+}
+
+UiTexSlotIds uiTexSlot(UiState& s, uint16_t parent, const UiTexSlotConfig& cfg) {
+    UiTexSlotIds out{};
+    UiFlex frameFlex{};
+    frameFlex.widthMode = UiSize::Px;
+    frameFlex.heightMode = UiSize::Px;
+    frameFlex.width = cfg.side;
+    frameFlex.height = cfg.side;
+    frameFlex.shrink = 0.0f;
+    frameFlex.overflow = UiOverflow::Hidden;
+    frameFlex.align = UiAlign::Center;
+    frameFlex.justify = UiJustify::Center;
+    out.frame = uiPanel(s, parent, frameFlex, paintToken(s.look, UiToken::Field, 4.0f));
+    if (out.frame == kUiNone) {
+        return out;
+    }
+    s.ent[out.frame].add<UiFocusable>();
+    if (cfg.onBrowse != nullptr) {
+        uiBind(s, out.frame, cfg.onBrowse, cfg.user);
+    }
+    s.ent[out.frame].set<UiAssetSlot>({out.frame, cfg.onPath, cfg.user});
+    uiDragAddHost(s, out.frame);
+    out.empty = uiLabel(s, out.frame, cfg.emptyLabel != nullptr ? cfg.emptyLabel : "");
+    if (out.empty < s.count) {
+        s.ent[out.empty].add<UiPass>();
+        uiTextStyle(s, out.empty, UiTextAlign::Center, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+    }
+    out.thumb = uiIcon(s, out.frame, cfg.photo, cfg.side - 8.0f, cfg.side - 8.0f);
+    if (out.thumb < s.count) {
+        s.ent[out.thumb].add<UiPass>();
+        const uint8_t cols = cfg.atlasCols > 0 ? cfg.atlasCols : uint8_t{1};
+        const uint8_t rows = cfg.atlasRows > 0 ? cfg.atlasRows : uint8_t{1};
+        if (auto* image = s.ent[out.thumb].try_get_mut<UiImage>()) {
+            image->viewW = 1.0f / static_cast<float>(cols);
+            image->viewH = 1.0f / static_cast<float>(rows);
+            image->viewX = static_cast<float>(cfg.cell % cols) * image->viewW;
+            image->viewY = static_cast<float>(cfg.cell / cols) * image->viewH;
+        }
+        uiShow(s, out.thumb, false);
+    }
+    out.clear = uiButton(s, out.frame, {.label = "x", .width = 18.0f, .height = 18.0f, .onClick = cfg.onClear, .user = cfg.user});
+    if (out.clear < s.count) {
+        uiPlaceAbsolute(s, out.clear, cfg.side - 22.0f, 2.0f);
+        if (auto* paint = s.ent[out.clear].try_get_mut<UiPaint>()) {
+            *paint = paintToken(s.look, UiToken::Close, 2.0f);
+        }
+        uiShow(s, out.clear, false);
+    }
+    return out;
 }
 
 void uiAssetSlotText(UiState& s, uint16_t id, const char* text) {

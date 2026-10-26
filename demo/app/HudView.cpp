@@ -12,6 +12,8 @@
 #include "ui/widget/Check.hpp"
 #include "ui/State.hpp"
 
+#include <algorithm>
+
 namespace burnhope {
 
 void hudWire(Canvas& canvas, HudContext* hud, uint16_t details, uint16_t statsBody, uint16_t files, uint16_t detailsInner) {
@@ -32,18 +34,11 @@ void hudWire(Canvas& canvas, HudContext* hud, uint16_t details, uint16_t statsBo
     if (hud->viewCap != kUiNone) {
         uiTextStyle(state, hud->viewCap, UiTextAlign::Left, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     }
-    float viewW = uiMeasure(state, "Lit", 3, 3) + 38.0f;
+    float viewW = uiButtonTextWidth(state, "Lit", 38.0f);
     for (const ViewMode& mode : kViews) {
-        uint8_t len = 0;
-        while (mode.name[len] != '\0' && len < 48) {
-            ++len;
-        }
-        const float measured = uiMeasure(state, mode.name, len, len);
-        if (measured + 52.0f > viewW) {
-            viewW = measured + 52.0f;
-        }
+        viewW = std::max(viewW, uiButtonTextWidth(state, mode.name, 52.0f));
     }
-    uiSetWidth(state, hud->viewBtn, uiMeasure(state, "Lit", 3, 3) + 38.0f);
+    uiButtonFitText(state, hud->viewBtn, "Lit", 38.0f);
     const float viewCount = static_cast<float>(sizeof(kViews) / sizeof(kViews[0]));
     hud->viewPopH = 16.0f + viewCount * 36.0f + (viewCount - 1.0f) * 2.0f;
     if (hud->viewPanel < state.count) {

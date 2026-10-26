@@ -15,6 +15,7 @@ constexpr float kButtonIcon = 16.0f;
 } // namespace
 
 uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
+    const bool hasLabel = cfg.label != nullptr && cfg.label[0] != '\0';
     UiFlex flex{};
     flex.shrink = 0.0f;
     flex.align = UiAlign::Center;
@@ -57,6 +58,29 @@ uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
     if (cfg.iconSlot < kPhotoSlots) {
         s.ent[id].set<UiImage>({.slot = cfg.iconSlot, .frames = 1, .inset = kButtonIcon});
     }
+    const bool glyph = cfg.icon != UiIcon::None;
+    if (glyph && !hasLabel) {
+        if (auto* box = s.ent[id].try_get_mut<UiFlex>()) {
+            box->pad = 0.0f;
+            box->padL = 0.0f;
+            box->padR = 0.0f;
+            box->padT = 0.0f;
+            box->padB = 0.0f;
+        }
+    }
+    if (cfg.ghost) {
+        s.ent[id].add<UiIconChrome>();
+    }
+    if (auto* paint = (glyph || cfg.ghost) ? s.ent[id].try_get_mut<UiPaint>() : nullptr) {
+        paint->icon = static_cast<uint8_t>(cfg.icon);
+        if (cfg.ghost) {
+            paintGhost(*paint);
+            paint->plate = 1;
+            paint->r = s.look.text[0];
+            paint->g = s.look.text[1];
+            paint->b = s.look.text[2];
+        }
+    }
     if (cfg.onClick != nullptr) {
         uiBind(s, id, cfg.onClick, cfg.user);
     }
@@ -64,28 +88,7 @@ uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
 }
 
 uint16_t uiIconBtn(UiState& s, uint16_t parent, uint8_t icon, float side, uint16_t* glyph) {
-    const uint16_t id = uiButton(s, parent, {.label = "", .width = side, .height = side});
-    if (id >= s.count) {
-        return id;
-    }
-    if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
-        flex->pad = 0.0f;
-        flex->padL = 0.0f;
-        flex->padR = 0.0f;
-        flex->padT = 0.0f;
-        flex->padB = 0.0f;
-        flex->align = UiAlign::Center;
-        flex->justify = UiJustify::Center;
-    }
-    s.ent[id].add<UiIconChrome>();
-    if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
-        paintGhost(*paint);
-        paint->icon = icon;
-        paint->plate = 1;
-        paint->r = s.look.text[0];
-        paint->g = s.look.text[1];
-        paint->b = s.look.text[2];
-    }
+    const uint16_t id = uiButton(s, parent, {.label = "", .width = side, .height = side, .icon = static_cast<UiIcon>(icon), .ghost = true});
     if (glyph != nullptr) {
         *glyph = id;
     }
@@ -135,6 +138,45 @@ void uiButtonTintIcon(UiState& s, uint16_t icon, bool on) {
     paint->b = rgb[2];
     paint->a = 0.0f;
     uiNotifyVisualDirty(s);
+}
+
+void uiToolButtonState(UiState& s, uint16_t id, bool active, bool ghost) {
+    if (id >= s.count) {
+        return;
+    }
+    uiButtonTintIcon(s, id, active);
+    if (ghost) {
+        s.ent[id].add<UiIconChrome>();
+    }
+    if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
+        paint->bright = active ? 1.0f : 0.7f;
+        if (ghost) {
+            paintGhost(*paint);
+        }
+    }
+}
+
+float uiButtonTextWidth(const UiState& s, const char* text, float extraPad) {
+    const char* label = text != nullptr ? text : "";
+    uint8_t len = 0;
+    while (label[len] != '\0' && len < 48) {
+        ++len;
+    }
+    return uiMeasure(s, label, len, len) + extraPad;
+}
+
+float uiButtonFitText(UiState& s, uint16_t id, const char* text, float extraPad) {
+    const float width = uiButtonTextWidth(s, text, extraPad);
+    if (id < s.count) {
+        if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
+            flex->widthMode = UiSize::Px;
+            flex->width = width;
+            flex->grow = 0.0f;
+            flex->shrink = 0.0f;
+        }
+        uiNotifyLayoutDirty(s);
+    }
+    return width;
 }
 
 uint16_t uiButtonIconChild(const UiState& s, uint16_t id) {

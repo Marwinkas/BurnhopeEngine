@@ -2,6 +2,8 @@
 #include "app/HudBuild.hpp"
 #include "app/SceneBlockFill.hpp"
 
+#include "Str.hpp"
+
 #include "gpu_scene/SceneObject.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
@@ -28,27 +30,8 @@ void fillGpuStat(void* user, uint32_t index, char* dst, uint8_t cap) {
     if (dst == nullptr || cap == 0) {
         return;
     }
-    dst[0] = '\0';
-    const char* cursor = hud != nullptr && hud->scene != nullptr ? sceneFrameGpuText(hud->scene) : nullptr;
-    if (cursor == nullptr) {
-        return;
-    }
-    uint32_t line = 0;
-    while (cursor[0] != '\0' && line < index) {
-        const char* nl = std::strchr(cursor, '\n');
-        if (nl == nullptr) {
-            return;
-        }
-        cursor = nl + 1;
-        line += 1;
-    }
-    const char* nl = std::strchr(cursor, '\n');
-    size_t n = nl != nullptr ? static_cast<size_t>(nl - cursor) : std::strlen(cursor);
-    if (n >= cap) {
-        n = static_cast<size_t>(cap - 1u);
-    }
-    std::memcpy(dst, cursor, n);
-    dst[n] = '\0';
+    const char* text = hud != nullptr && hud->scene != nullptr ? sceneFrameGpuText(hud->scene) : nullptr;
+    strCopyLine(text, index, dst, cap);
 }
 
 void placeStats(UiState& state, const HudContext& hud) {
@@ -276,16 +259,7 @@ void hudPushFrame(Engine& e, Canvas& hud, uint8_t weatherIndex, uint8_t selected
         }
     }
     if (hud.state != nullptr && e.hud.ids.statList != kUiNone) {
-        const char* gpuText = sceneFrameGpuText(e.scene);
-        uint32_t lines = 0;
-        if (gpuText != nullptr && gpuText[0] != '\0') {
-            lines = 1;
-            for (const char* p = gpuText; *p != '\0'; ++p) {
-                if (*p == '\n' && p[1] != '\0') {
-                    lines += 1;
-                }
-            }
-        }
+        const uint32_t lines = strCountLines(sceneFrameGpuText(e.scene));
         uiVirtualSource(*hud.state, e.hud.ids.statList, lines, fillGpuStat, nullptr, &e.hud);
     }
 }

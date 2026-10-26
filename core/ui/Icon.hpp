@@ -22,6 +22,12 @@ enum class UiIcon : uint8_t {
     LockOpen = 12,
     Lock = 13,
     Reset = 14,
+    Crosshair = 15,
+    Add = 16,
+    Play = 17,
+    Pause = 18,
+    Stop = 19,
+    Cogwheel = 20,
 };
 
 } // namespace burnhope

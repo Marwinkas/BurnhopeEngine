@@ -7,6 +7,7 @@
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
 #include "ui/rhi/Canvas.hpp"
+#include "ui/Icon.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
 #include "ui/rhi/UiPhoto.hpp"
@@ -74,29 +75,14 @@ void paintTools(HudContext& hud) {
     const uint8_t modes[5] = {3, 0, 1, 2, 4};
     const char* btnName[5] = {"toolBtn0", "toolBtn1", "toolBtn2", "toolBtn3", "toolBtn4"};
     for (int i = 0; i < 5; ++i) {
-        const bool on = modes[i] == hud.toolMode;
-        const uint16_t btn = uiFindName(s, btnName[i]);
-        const uint16_t icon = btn; // the button draws its own icon
-        uiButtonTintIcon(s, icon, on);
-        if (icon < s.count) {
-            if (auto* paint = s.ent[icon].try_get_mut<UiPaint>()) {
-                paint->bright = on ? 1.0f : 0.7f;
-            }
-        }
-        if (btn < s.count) {
-            s.ent[btn].add<UiIconChrome>();
-            if (auto* paint = s.ent[btn].try_get_mut<UiPaint>()) {
-                paintGhost(*paint);
-            }
-        }
+        uiToolButtonState(s, uiFindName(s, btnName[i]), modes[i] == hud.toolMode);
     }
     for (int i = 0; i < 3; ++i) {
-        uiButtonTintIcon(s, hud.snapIcon[i], hud.snapOn[i] != 0);
+        const bool on = hud.snapOn[i] != 0;
+        uiToolButtonState(s, hud.snapBtn[i], on);
         if (hud.snapBtn[i] < s.count) {
-            s.ent[hud.snapBtn[i]].add<UiIconChrome>();
             if (auto* paint = s.ent[hud.snapBtn[i]].try_get_mut<UiPaint>()) {
-                paintGhost(*paint);
-                paint->a = hud.snapOn[i] != 0 ? 0.18f : 0.0f;
+                paint->a = on ? 0.18f : 0.0f;
             }
         }
     }
@@ -217,13 +203,13 @@ void onPlay(void* user, uint16_t) {
         sceneFramePlay(hud->tool.scene);
         uiShow(s, hud->pauseBtn, true);
         if (auto* paint = s.ent[hud->playGlyph].try_get_mut<UiPaint>()) {
-            paint->icon = 19;
+            paint->icon = static_cast<uint8_t>(UiIcon::Stop);
         }
     } else {
         sceneFrameStop(hud->tool.scene);
         uiShow(s, hud->pauseBtn, false);
         if (auto* paint = s.ent[hud->playGlyph].try_get_mut<UiPaint>()) {
-            paint->icon = 17;
+            paint->icon = static_cast<uint8_t>(UiIcon::Play);
         }
     }
     uiNotifyVisualDirty(s);

@@ -97,21 +97,7 @@ void cmdView(void* user, uint16_t mode) {
     if (hud->viewCap != kUiNone) {
         uiText(state, hud->viewCap, title);
         uiTextStyle(state, hud->viewCap, UiTextAlign::Left, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-        const uint16_t button = uiParent(state, hud->viewCap);
-        uint8_t len = 0;
-        while (title[len] != '\0' && len < 48) {
-            ++len;
-        }
-        const float width = uiMeasure(state, title, len, len) + 38.0f;
-        if (button < state.count) {
-            if (auto* flex = state.ent[button].try_get_mut<UiFlex>()) {
-                flex->widthMode = UiSize::Px;
-                flex->width = width;
-                flex->grow = 0.0f;
-                flex->shrink = 0.0f;
-            }
-        }
-        uiNotifyLayoutDirty(state);
+        uiButtonFitText(state, hud->viewBtn, title, 38.0f);
     }
     hud->viewWant = 0;
 }

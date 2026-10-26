@@ -71,6 +71,70 @@ inline bool strIsImagePath(const char* path) {
         || strExtIs(path, ".bmp") || strExtIs(path, ".tga") || strExtIs(path, ".hdr") || strExtIs(path, ".psd");
 }
 
+// Last path component after '/' or '\\'; never null.
+inline const char* strPathLeaf(const char* path) {
+    const char* name = path != nullptr ? path : "";
+    for (const char* p = name; *p != '\0'; ++p) {
+        if (*p == '/' || *p == '\\') {
+            name = p + 1;
+        }
+    }
+    return name;
+}
+
+// Copies the leaf up to its first '.' into dst; returns the stem length.
+inline size_t strPathStem(const char* path, char* dst, size_t cap) {
+    if (dst == nullptr || cap == 0) {
+        return 0;
+    }
+    size_t n = 0;
+    for (const char* p = strPathLeaf(path); *p != '\0' && *p != '.' && n + 1 < cap; ++p) {
+        dst[n++] = *p;
+    }
+    dst[n] = '\0';
+    return n;
+}
+
+// Number of lines; a trailing '\n' does not open a new line and empty text has none.
+inline uint32_t strCountLines(const char* text) {
+    if (text == nullptr || text[0] == '\0') {
+        return 0;
+    }
+    uint32_t lines = 1;
+    for (const char* p = text; *p != '\0'; ++p) {
+        if (*p == '\n' && p[1] != '\0') {
+            lines += 1;
+        }
+    }
+    return lines;
+}
+
+// Copies line `lineIdx` (without its '\n') into dst, truncated to cap; empty when out of range.
+inline size_t strCopyLine(const char* text, uint32_t lineIdx, char* dst, size_t cap) {
+    if (dst == nullptr || cap == 0) {
+        return 0;
+    }
+    dst[0] = '\0';
+    if (text == nullptr) {
+        return 0;
+    }
+    for (uint32_t line = 0; line < lineIdx; ++line) {
+        const char* nl = std::strchr(text, '\n');
+        if (nl == nullptr) {
+            return 0;
+        }
+        text = nl + 1;
+    }
+    const char* nl = std::strchr(text, '\n');
+    size_t n = nl != nullptr ? static_cast<size_t>(nl - text) : std::strlen(text);
+    if (n >= cap) {
+        n = cap - 1;
+    }
+    std::memcpy(dst, text, n);
+    dst[n] = '\0';
+    return n;
+}
+
 inline void copyCap(char* dst, int cap, const char* src) {
     if (cap <= 0) {
         return;

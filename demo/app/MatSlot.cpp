@@ -2,6 +2,7 @@
 #include "app/HudBuild.hpp"
 #include "app/MatPriv.hpp"
 
+#include "color/Color.hpp"
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Style.hpp"
@@ -94,49 +95,23 @@ uint16_t colorChip(UiState& s, HudContext& hud, uint16_t parent, uint16_t index)
 
 void addThumb(UiState& s, HudContext& hud, uint16_t parent, uint8_t slot) {
     const Slot& spec = kSlot[slot];
-    UiFlex frameFlex{};
-    frameFlex.widthMode = UiSize::Px;
-    frameFlex.heightMode = UiSize::Px;
-    frameFlex.width = kThumb;
-    frameFlex.height = kThumb;
-    frameFlex.shrink = 0.0f;
-    frameFlex.overflow = UiOverflow::Hidden;
-    frameFlex.align = UiAlign::Center;
-    frameFlex.justify = UiJustify::Center;
-    const uint16_t frame = uiPanel(s, parent, frameFlex, paintToken(s.look, UiToken::Field, 4.0f));
     hud.matHit[slot].hud = &hud;
     hud.matHit[slot].kind = static_cast<uint8_t>(spec.channel + 1u);
-    hud.matTex[slot] = frame;
-    if (frame < s.count) {
-        s.ent[frame].add<UiFocusable>();
-        uiBind(s, frame, onMaterialAct, &hud.matHit[slot]);
-        s.ent[frame].set<UiAssetSlot>({frame, matOnPath, &hud.matHit[slot]});
-        uiDragAddHost(s, frame);
-    }
-    hud.matEmpty[slot] = uiLabel(s, frame, "None");
-    if (hud.matEmpty[slot] < s.count) {
-        s.ent[hud.matEmpty[slot]].add<UiPass>();
-        uiTextStyle(s, hud.matEmpty[slot], UiTextAlign::Center, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-    }
-    hud.matThumb[slot] = uiIcon(s, frame, 9, kThumb - 8.0f, kThumb - 8.0f);
-    if (hud.matThumb[slot] < s.count) {
-        s.ent[hud.matThumb[slot]].add<UiPass>();
-        if (auto* image = s.ent[hud.matThumb[slot]].try_get_mut<UiImage>()) {
-            image->viewW = 0.25f;
-            image->viewH = 1.0f / 3.0f;
-            image->viewX = static_cast<float>(spec.cell % 4u) * 0.25f;
-            image->viewY = static_cast<float>(spec.cell / 4u) * (1.0f / 3.0f);
-        }
-        uiShow(s, hud.matThumb[slot], false);
-    }
-    hud.matClear[slot] = uiButton(s, frame, {.label = "x", .width = 18.0f, .height = 18.0f, .onClick = matOnClear, .user = &hud.matHit[slot]});
-    if (hud.matClear[slot] < s.count) {
-        uiPlaceAbsolute(s, hud.matClear[slot], kThumb - 22.0f, 2.0f);
-        if (auto* paint = s.ent[hud.matClear[slot]].try_get_mut<UiPaint>()) {
-            *paint = paintToken(s.look, UiToken::Close, 2.0f);
-        }
-        uiShow(s, hud.matClear[slot], false);
-    }
+    const UiTexSlotIds ids = uiTexSlot(s, parent, {
+        .side = kThumb,
+        .photo = 9,
+        .atlasCols = 4,
+        .atlasRows = 3,
+        .cell = spec.cell,
+        .onBrowse = onMaterialAct,
+        .onClear = matOnClear,
+        .onPath = matOnPath,
+        .user = &hud.matHit[slot],
+    });
+    hud.matTex[slot] = ids.frame;
+    hud.matEmpty[slot] = ids.empty;
+    hud.matThumb[slot] = ids.thumb;
+    hud.matClear[slot] = ids.clear;
 }
 
 void addSlide(UiState& s, HudContext& hud, uint16_t parent, uint8_t slot) {
@@ -219,7 +194,7 @@ void paintHex(UiState& s, HudContext& hud, uint16_t id, uint16_t index, bool wit
         return;
     }
     char next[16]{};
-    matHexText(next, sizeof(next), hud.block.scalars[index], hud.block.scalars[index + 1u], hud.block.scalars[index + 2u],
+    colorFormatHex(next, sizeof(next), hud.block.scalars[index], hud.block.scalars[index + 1u], hud.block.scalars[index + 2u],
         withA ? hud.block.scalars[kScMatOpacity] : 1.0f, withA && hud.block.scalars[kScMatOpacity] < 0.999f);
     if (std::strcmp(field->bytes, next) == 0) {
         return;
