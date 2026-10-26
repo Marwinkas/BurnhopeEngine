@@ -38,7 +38,7 @@ void gripIdle(UiPaint& paint, const UiLook& look) {
 constexpr float kPropSlotDefault = 26.0f;
 constexpr float kPropRowDefault = 34.0f;
 constexpr float kPropPadDefault = 4.0f;
-constexpr float kPropControlMaxDefault = 240.0f;
+constexpr float kPropControlMaxDefault = 320.0f;
 constexpr float kPropMinLabel = 70.0f;
 constexpr float kPropMinValue = 110.0f;
 
@@ -46,6 +46,7 @@ float propSlotH(const UiState& s) { return uiStyle(s, "prop_row", UiStyleKey::In
 float propRowH(const UiState& s) { return uiStyle(s, "prop_row", UiStyleKey::Height, kPropRowDefault); }
 float propPadV(const UiState& s) { return uiStyle(s, "prop_row", UiStyleKey::Pad, kPropPadDefault); }
 float propControlMax(const UiState& s) { return uiStyle(s, "prop_row", UiStyleKey::MaxW, kPropControlMaxDefault); }
+float propVectorMax(const UiState& s) { return uiStyle(s, "vector_row", UiStyleKey::MaxW, propControlMax(s)); }
 
 UiPaint paintHair(const UiLook& look) {
     UiPaint paint = paintToken(look, UiToken::Item, 0.0f);
@@ -509,20 +510,19 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
     line.direction = UiFlexDir::Row;
     line.align = UiAlign::Center;
     line.justify = UiJustify::Start;
-    line.widthMode = UiSize::Px;
-    line.width = propControlMax(s);
-    line.grow = 0.0f;
+    line.widthMode = UiSize::Percent;
+    line.width = 100.0f;
+    line.maxWMode = UiSize::Px;
+    line.maxW = propVectorMax(s);
+    line.grow = 1.0f;
     line.shrink = 1.0f;
     line.gap = kVecGap;
     line.heightMode = UiSize::Px;
     line.height = propSlotH(s);
     const uint16_t row = uiPanel(s, slot, line, paintClear());
-    // Fixed axis width: what is left of the control slot after lock, caps and gaps, split equally.
+    // Axis fields share what lock, caps and gaps leave of the row equally (grow 1 from a zero basis).
     const float capW = propSlotH(s);
-    const int items = (full ? 1 : 0) + 2 * n;
     const float lockSide = uiStyle(s, "vector_lock", UiStyleKey::Width, kPropLock);
-    const float lockUsed = full ? lockSide + 4.0f : 0.0f;
-    const float fieldW = (line.width - lockUsed - capW * static_cast<float>(n) - kVecGap * static_cast<float>(items - 1)) / static_cast<float>(n);
     const char* letters[3] = {"X", "Y", "Z"};
     UiPropVec3 out{};
     out.row = row;
@@ -606,8 +606,8 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         }
         UiFlex hold{};
         hold.widthMode = UiSize::Px;
-        hold.width = fieldW;
-        hold.grow = 0.0f;
+        hold.width = 0.0f;
+        hold.grow = 1.0f;
         hold.shrink = 1.0f;
         hold.minW = 0.0f;
         hold.align = UiAlign::Center;

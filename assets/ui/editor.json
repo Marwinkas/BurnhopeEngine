@@ -25,7 +25,7 @@
               "role": "menu",
               "bar": true,
               "label": "File",
-              "h": 26,
+              "class": "dropdown_trigger",
               "items": [
                 {
                   "label": "New Project...",
@@ -53,7 +53,7 @@
               "role": "menu",
               "bar": true,
               "label": "Edit",
-              "h": 26,
+              "class": "dropdown_trigger",
               "items": [
                 {
                   "label": "Duplicate",
@@ -65,7 +65,7 @@
               "role": "menu",
               "bar": true,
               "label": "View",
-              "h": 26,
+              "class": "dropdown_trigger",
               "items": [
                 {
                   "label": "Stats",
@@ -266,14 +266,14 @@
                           "max": 10000,
                           "step": 0.01,
                           "w": 108,
-                          "h": 28
+                          "class": "input_field"
                         },
                         {
                           "role": "menu",
                           "bar": true,
                           "icon": 11,
                           "w": 108,
-                          "h": 28,
+                          "class": "dropdown_trigger",
                           "slide": true,
                           "items": [
                             {
@@ -329,14 +329,14 @@
                           "max": 10000,
                           "step": 1.0,
                           "w": 108,
-                          "h": 28
+                          "class": "input_field"
                         },
                         {
                           "role": "menu",
                           "bar": true,
                           "icon": 11,
                           "w": 108,
-                          "h": 28,
+                          "class": "dropdown_trigger",
                           "slide": true,
                           "items": [
                             {
@@ -387,14 +387,14 @@
                           "max": 10000,
                           "step": 0.01,
                           "w": 108,
-                          "h": 28
+                          "class": "input_field"
                         },
                         {
                           "role": "menu",
                           "bar": true,
                           "icon": 11,
                           "w": 108,
-                          "h": 28,
+                          "class": "dropdown_trigger",
                           "slide": true,
                           "items": [
                             {
@@ -455,10 +455,8 @@
                           "role": "button",
                           "name": "camBtn",
                           "photo": 6,
-                          "w": 28,
-                          "h": 28,
-                          "command": "camera.open",
-                          "class": "tool_button"
+                          "class": "tool_button",
+                          "command": "camera.open"
                         },
                         {
                           "role": "menubutton",
@@ -470,8 +468,7 @@
                           "role": "button",
                           "name": "gearBtn",
                           "icon": 20,
-                          "w": 28,
-                          "h": 28,
+                          "class": "tool_button",
                           "command": "view.gear"
                         }
                       ]
@@ -729,7 +726,7 @@
                   "max": 120,
                   "step": 1,
                   "w": 72,
-                  "h": 28
+                  "class": "input_field"
                 }
               ]
             },
@@ -765,7 +762,7 @@
                   "max": 10,
                   "step": 0.01,
                   "w": 72,
-                  "h": 28
+                  "class": "input_field"
                 }
               ]
             },
@@ -794,7 +791,7 @@
                   "max": 100000,
                   "step": 10,
                   "w": 72,
-                  "h": 28
+                  "class": "input_field"
                 }
               ]
             },
@@ -830,7 +827,7 @@
                   "max": 200,
                   "step": 0.1,
                   "w": 72,
-                  "h": 28
+                  "class": "input_field"
                 }
               ]
             }

@@ -9,11 +9,11 @@
     "padR": 4,
     "fill": [0, 0, 0, 0],
     "children": [
-      {"name": "file.plus", "role": "button", "text": "+", "w": 28, "h": 28, "shrink": 0, "textAlign": 1, "valign": 1},
-      {"name": "file.back", "role": "button", "text": "<", "w": 28, "h": 28, "shrink": 0, "textAlign": 1, "valign": 1},
-      {"name": "file.fwd", "role": "button", "text": ">", "w": 28, "h": 28, "shrink": 0, "textAlign": 1, "valign": 1},
+      {"name": "file.plus", "role": "button", "text": "+", "class": "tool_button", "shrink": 0, "textAlign": 1, "valign": 1},
+      {"name": "file.back", "role": "button", "text": "<", "class": "tool_button", "shrink": 0, "textAlign": 1, "valign": 1},
+      {"name": "file.fwd", "role": "button", "text": ">", "class": "tool_button", "shrink": 0, "textAlign": 1, "valign": 1},
       {"name": "file.view", "role": "choice", "w": 96, "shrink": 0, "items": ["Icons", "List"]},
-      {"name": "file.tune", "role": "button", "text": "...", "w": 28, "h": 28, "shrink": 0, "textAlign": 1, "valign": 1},
+      {"name": "file.tune", "role": "button", "text": "...", "class": "tool_button", "shrink": 0, "textAlign": 1, "valign": 1},
       {"grow": 1, "shrink": 1, "h": 28, "fill": [0, 0, 0, 0]}
     ]
   },
@@ -56,7 +56,7 @@
               {"grow": 1, "shrink": 1, "h": 28, "fill": [0, 0, 0, 0]},
               {"name": "file.search", "role": "search", "w": 180, "hint": "search", "show": false},
               {"name": "file.filter", "role": "choice", "w": 110, "show": false, "items": ["All", "Folders", "Images", "Text", "Audio"]},
-              {"name": "file.searchBtn", "role": "button", "icon": 7, "w": 28, "h": 28, "shrink": 0}
+              {"name": "file.searchBtn", "role": "button", "icon": 7, "class": "tool_button", "shrink": 0}
             ]
           },
           {

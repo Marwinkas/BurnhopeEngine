@@ -127,18 +127,20 @@ void applyClass(const UiState& s, Node& node, const char* name) {
     if (cls == nullptr) {
         return;
     }
-    auto take = [&](UiStyleKey key, float& dst) {
-        if (uiStyleHas(cls, key)) {
+    // Explicit node attributes win over the class regardless of key order: only fields still at their default take the class value.
+    const Node blank{};
+    auto take = [&](UiStyleKey key, float& dst, float untouched) {
+        if (dst == untouched && uiStyleHas(cls, key)) {
             dst = cls->value[static_cast<size_t>(key)];
         }
     };
-    take(UiStyleKey::Height, node.h);
-    take(UiStyleKey::Width, node.w);
-    take(UiStyleKey::MinW, node.minW);
-    take(UiStyleKey::Pad, node.pad);
-    take(UiStyleKey::PadL, node.padL);
-    take(UiStyleKey::PadR, node.padR);
-    take(UiStyleKey::Gap, node.gap);
+    take(UiStyleKey::Height, node.h, blank.h);
+    take(UiStyleKey::Width, node.w, blank.w);
+    take(UiStyleKey::MinW, node.minW, blank.minW);
+    take(UiStyleKey::Pad, node.pad, blank.pad);
+    take(UiStyleKey::PadL, node.padL, blank.padL);
+    take(UiStyleKey::PadR, node.padR, blank.padR);
+    take(UiStyleKey::Gap, node.gap, blank.gap);
 }
 
 } // namespace burnhope::propimport
