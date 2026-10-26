@@ -5,6 +5,8 @@
 #include "ui/widget/Widgets.hpp"
 #include "ui/State.hpp"
 #include "ui/LayoutBridge.hpp"
+#include "ui/Panel.hpp"
+#include "ui/widget/Choice.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Slider.hpp"
@@ -265,4 +267,42 @@ TEST_CASE("breadcrumb segment opens the folder under the root") {
     in.pointer.y = state.box[leaf].y + state.box[leaf].h * 0.5f;
     (void)uiApplyInput(state, in);
     CHECK(sink.index == 0);
+}
+
+TEST_CASE("node facade edits size, pad and icon through one call") {
+    UiState state;
+    uiWidgetsInit(state);
+    const uint16_t id = spawn(state, kUiNone, px(100, 40), paintRgb(0.1f, 0.1f, 0.1f));
+    uiSetSize(state, id, 50.0f, -1.0f);
+    uiSetPad(state, id, 3.0f);
+    uiSetGrow(state, id, 2.0f, -1.0f);
+    uiSetIcon(state, id, UiIcon::Play);
+    uiAddWidth(state, id, -100.0f, 20.0f);
+    const UiFlex* flex = state.ent[id].try_get<UiFlex>();
+    CHECK(flex != nullptr);
+    if (flex == nullptr) {
+        return;
+    }
+    CHECK(flex->width == 20.0f);
+    CHECK(flex->height == 40.0f);
+    CHECK(flex->padB == 3.0f);
+    CHECK(flex->grow == 2.0f);
+    CHECK(state.ent[id].try_get<UiPaint>()->icon == static_cast<uint8_t>(UiIcon::Play));
+    CHECK(uiStyleWidth(state, id, 7.0f) == 20.0f);
+    CHECK(uiStyleWidth(state, kUiNone, 7.0f) == 7.0f);
+}
+
+TEST_CASE("choice select moves the index once and keeps the pick callback") {
+    UiState state;
+    uiWidgetsInit(state);
+    const char* names[] = {"Lit", "Unlit"};
+    const uint16_t host = spawn(state, kUiNone, px(200, 200), paintRgb(0.05f, 0.05f, 0.05f));
+    const uint16_t id = uiChoice(state, host, {.labels = names, .count = 2, .selected = 0, .width = 100.0f});
+    CHECK(id < state.count);
+    if (id >= state.count) {
+        return;
+    }
+    uiChoiceSelect(state, id, 1, "Unlit");
+    CHECK(state.ent[id].try_get<UiChoice>()->index == 1);
+    uiChoiceSelect(state, kUiNone, 1, "x");
 }

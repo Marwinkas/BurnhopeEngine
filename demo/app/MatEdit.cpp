@@ -5,6 +5,7 @@
 
 #include "color/Color.hpp"
 #include "ui/Icon.hpp"
+#include "ui/Panel.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Check.hpp"
 #include "ui/widget/Choice.hpp"
@@ -30,19 +31,8 @@ struct MatHome {
 void onMatReset(void* user, uint16_t id);
 
 void forceScalar(HudContext& hud, UiState& s, uint16_t index, float value) {
-    if (hud.bind.scalars != nullptr && index < hud.bind.scalarN) {
-        hud.bind.scalars[index] = value;
-    }
+    hud.bind.write(s, index, value);
     sceneBlockPut(hud, index, value);
-    const uint16_t id = hud.bind.idOf(index, kBindFloat);
-    if (id < s.count) {
-        if (auto* range = s.ent[id].try_get_mut<UiRange>()) {
-            range->value = value;
-        }
-        char text[32]{};
-        uiWriteNumber(text, sizeof(text), value);
-        uiSetFieldText(s, id, text);
-    }
     for (uint8_t i = 0; i < kMatSlotN; ++i) {
         if (hud.matLink[i].index == index && hud.matLink[i].slider != 0 && hud.matLink[i].slider != kUiNone) {
             uiRangeSet(s, hud.matLink[i].slider, value);
@@ -57,20 +47,6 @@ UiState* matPageState(HudContext& hud) {
         return hud.tool.canvas->state;
     }
     return hudUi(hud);
-}
-
-void matSetChoice(UiState& s, uint16_t id, uint8_t index, const char* label) {
-    if (id == 0 || id >= s.count) {
-        return;
-    }
-    auto* choice = s.ent[id].try_get_mut<UiChoice>();
-    if (choice != nullptr && choice->index == index) {
-        return;
-    }
-    if (choice != nullptr) {
-        choice->index = index;
-    }
-    uiMenuCaption(s, id, label);
 }
 
 void matApplyFlag(HudContext& hud, UiState& s, uint16_t index, uint8_t value) {
@@ -88,10 +64,10 @@ void matApplyFlag(HudContext& hud, UiState& s, uint16_t index, uint8_t value) {
     }
     uiCheckAssign(s, hud.bind.idOf(index, kBindFlag), value);
     if (index == kFlMatUnlit) {
-        matSetChoice(s, hud.matType, value, value != 0 ? "Unlit" : "Lit");
+        uiChoiceSelect(s, hud.matType, value, value != 0 ? "Unlit" : "Lit");
     }
     if (index == kFlMatPack) {
-        matSetChoice(s, hud.matPack, value, value != 0 ? "ORMH" : "Classic");
+        uiChoiceSelect(s, hud.matPack, value, value != 0 ? "ORMH" : "Classic");
         if (value == 0) {
             hud.matDoc.ormPath[0] = '\0';
         } else {
@@ -177,9 +153,7 @@ uint16_t matResetBtn(UiState& s, HudContext& hud, uint16_t parent, uint16_t inde
     if (id >= s.count) {
         return id;
     }
-    if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
-        flex->shrink = 0.0f;
-    }
+    uiSetGrow(s, id, -1.0f, 0.0f);
     s.ent[id].set<MatHome>({index, home, home2, kind});
     uiBind(s, id, onMatReset, &hud);
     return id;

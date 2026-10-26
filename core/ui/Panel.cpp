@@ -16,6 +16,96 @@ void uiSetToken(UiState& s, uint16_t id, UiToken token) {
     stamp(s, id, token);
 }
 
+namespace {
+
+UiFlex* flexOf(UiState& s, uint16_t id) {
+    return id < s.count ? s.ent[id].try_get_mut<UiFlex>() : nullptr;
+}
+
+UiPaint* paintOf(UiState& s, uint16_t id) {
+    return id < s.count ? s.ent[id].try_get_mut<UiPaint>() : nullptr;
+}
+
+void sizeAxis(UiSize& mode, float& value, float v) {
+    if (v < 0.0f) {
+        return;
+    }
+    mode = v == 0.0f ? UiSize::Auto : UiSize::Px;
+    value = v;
+}
+
+} // namespace
+
+void uiSetSize(UiState& s, uint16_t id, float w, float h) {
+    if (UiFlex* flex = flexOf(s, id)) {
+        sizeAxis(flex->widthMode, flex->width, w);
+        sizeAxis(flex->heightMode, flex->height, h);
+        s.layoutDirty = true;
+    }
+}
+
+void uiSetWidthPercent(UiState& s, uint16_t id, float percent) {
+    if (UiFlex* flex = flexOf(s, id)) {
+        flex->widthMode = UiSize::Percent;
+        flex->width = percent;
+        s.layoutDirty = true;
+    }
+}
+
+void uiSetPad(UiState& s, uint16_t id, float pad) {
+    if (UiFlex* flex = flexOf(s, id)) {
+        flex->pad = pad;
+        flex->padL = pad;
+        flex->padR = pad;
+        flex->padT = pad;
+        flex->padB = pad;
+        s.layoutDirty = true;
+    }
+}
+
+void uiSetGrow(UiState& s, uint16_t id, float grow, float shrink, float minW) {
+    if (UiFlex* flex = flexOf(s, id)) {
+        flex->grow = grow < 0.0f ? flex->grow : grow;
+        flex->shrink = shrink < 0.0f ? flex->shrink : shrink;
+        flex->minW = minW < 0.0f ? flex->minW : minW;
+        s.layoutDirty = true;
+    }
+}
+
+void uiSetGap(UiState& s, uint16_t id, float gap) {
+    if (UiFlex* flex = flexOf(s, id)) {
+        flex->gap = gap;
+        s.layoutDirty = true;
+    }
+}
+
+void uiAddWidth(UiState& s, uint16_t id, float delta, float minW) {
+    if (UiFlex* flex = flexOf(s, id)) {
+        flex->widthMode = UiSize::Px;
+        flex->width = flex->width + delta < minW ? minW : flex->width + delta;
+        s.layoutDirty = true;
+    }
+}
+
+float uiStyleWidth(const UiState& s, uint16_t id, float fallback) {
+    const UiFlex* flex = id < s.count ? s.ent[id].try_get<UiFlex>() : nullptr;
+    return flex != nullptr ? flex->width : fallback;
+}
+
+void uiSetIcon(UiState& s, uint16_t id, UiIcon icon) {
+    if (UiPaint* paint = paintOf(s, id)) {
+        paint->icon = static_cast<uint8_t>(icon);
+        s.visualDirty = true;
+    }
+}
+
+void uiSetAlpha(UiState& s, uint16_t id, float alpha) {
+    if (UiPaint* paint = paintOf(s, id)) {
+        paint->a = alpha;
+        s.visualDirty = true;
+    }
+}
+
 uint16_t uiSpacer(UiState& s, uint16_t parent, const UiFlex& flex) {
     const uint16_t id = uiPanel(s, parent, flex, paintClear());
     if (id != kUiNone) {

@@ -479,6 +479,7 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
     const uint16_t row = uiPanel(s, slot, line, paintClear());
     const char* letters[3] = {"X", "Y", "Z"};
     UiPropVec3 out{};
+    out.row = row;
     uint16_t* ids[3] = {&out.x, &out.y, &out.z};
     auto square = [&](uint8_t icon) {
         UiFlex box{};
@@ -608,7 +609,40 @@ UiPropVec3 uiPropVec3(UiState& s, uint16_t host, const char* label, float x, flo
 UiPropVec2 uiPropVec2(UiState& s, uint16_t host, const char* label, float x, float y, float minV, float maxV, float step) {
     const float axes[2] = {x, y};
     const UiPropVec3 row = propVecN(s, host, label, 2, axes, minV, maxV, step);
-    return {.x = row.x, .y = row.y};
+    return {.x = row.x, .y = row.y, .row = row.row};
+}
+
+uint16_t uiPropSlotOf(const UiState& s, uint16_t control) {
+    return control < s.count ? s.parentOf[control] : kUiNone;
+}
+
+uint16_t uiPropRowOf(const UiState& s, uint16_t valueSlot) {
+    return valueSlot < s.count ? s.parentOf[valueSlot] : kUiNone;
+}
+
+void uiPropRowHeight(UiState& s, uint16_t valueSlot, float rowH, float innerH) {
+    const uint16_t row = uiPropRowOf(s, valueSlot);
+    auto* outer = row < s.count ? s.ent[row].try_get_mut<UiFlex>() : nullptr;
+    auto* inner = valueSlot < s.count ? s.ent[valueSlot].try_get_mut<UiFlex>() : nullptr;
+    if (outer == nullptr || inner == nullptr) {
+        return;
+    }
+    if (outer->heightMode == UiSize::Px && outer->height == rowH && inner->heightMode == UiSize::Px && inner->height == innerH) {
+        return;
+    }
+    outer->heightMode = UiSize::Px;
+    outer->height = rowH;
+    inner->heightMode = UiSize::Px;
+    inner->height = innerH;
+    inner->overflow = UiOverflow::Visible;
+    s.layoutDirty = true;
+}
+
+void uiPropRowShow(UiState& s, uint16_t valueSlot, bool on) {
+    const uint16_t row = uiPropRowOf(s, valueSlot);
+    if (row < s.count) {
+        uiShow(s, row, on);
+    }
 }
 
 bool uiPropLinked(const UiState& s, uint16_t lock) {

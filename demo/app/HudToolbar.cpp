@@ -102,18 +102,8 @@ void sceneHud(Canvas& canvas, void* user) {
     (void)hudImportLayout(*canvas.state, kUiNone, "assets/ui/editor.json", "frame", *hud, slots,
         static_cast<uint16_t>(sizeof slots / sizeof slots[0]), commands,
         static_cast<uint16_t>(sizeof commands / sizeof commands[0]), hidden);
-    const uint16_t spaceId = uiFindName(*canvas.state, "spaceChoice");
-    if (spaceId < canvas.state->count) {
-        if (auto* space = canvas.state->ent[spaceId].try_get<UiChoice>()) {
-            uiBindChoice(*canvas.state, "spaceChoice", hud->space, space->onPick, space->user);
-        }
-    }
-    const uint16_t pivotId = uiFindName(*canvas.state, "pivotChoice");
-    if (pivotId < canvas.state->count) {
-        if (auto* pivot = canvas.state->ent[pivotId].try_get<UiChoice>()) {
-            uiBindChoice(*canvas.state, "pivotChoice", hud->pivotSpace, pivot->onPick, pivot->user);
-        }
-    }
+    uiBindChoice(*canvas.state, "spaceChoice", hud->space, nullptr, nullptr);
+    uiBindChoice(*canvas.state, "pivotChoice", hud->pivotSpace, nullptr, nullptr);
     hudWire(canvas, hud, details, statsBody, files, detailsInner);
 }
 

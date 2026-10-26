@@ -242,8 +242,8 @@ if(BH_TSAN)
 endif()
 bh_module(material core/gfx/Material.cpp)
 target_link_libraries(bh_material PUBLIC bh_foundation)
-bh_module(asset core/asset/AssimpImporter.cpp core/asset/ProjectDoc.cpp)
-target_link_libraries(bh_asset PUBLIC assimp::assimp meshoptimizer bh_foundation bh_material)
+bh_module(asset core/asset/AssimpImporter.cpp core/asset/ProjectDoc.cpp core/asset/MaterialBake.cpp)
+target_link_libraries(bh_asset PUBLIC assimp::assimp meshoptimizer bh_foundation bh_material bh_image)
 set_source_files_properties(core/asset/AssimpImporter.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions;-frtti")
 bh_module(rhi
     core/rhi/Device.cpp

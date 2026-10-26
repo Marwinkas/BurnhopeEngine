@@ -64,8 +64,7 @@ void takeProject(Engine& e, const char* folder, uint8_t ask) {
     ProjectInfo info{};
     if (!projectRead(proj, info)) {
         info.version = kEngineVersion;
-        const char* slash = std::strrchr(folder, '/');
-        const char* leaf = slash != nullptr && slash[1] != '\0' ? slash + 1 : folder;
+        const char* leaf = strPathLeaf(folder);
         std::snprintf(info.name, sizeof(info.name), "%s", leaf[0] != '\0' ? leaf : "Untitled");
         if (!projectWrite(folder, info)) {
             e.hud.projectRoot[0] = '\0';

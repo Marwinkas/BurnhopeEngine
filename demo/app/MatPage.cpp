@@ -2,6 +2,8 @@
 #include "app/HudBuild.hpp"
 #include "app/MatPriv.hpp"
 
+#include "host/PropGrid.hpp"
+#include "asset/MaterialBake.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Style.hpp"
 #include "ui/widget/Choice.hpp"
@@ -69,18 +71,13 @@ void onPreviewDrag(void* user, uint16_t, float x, float y) {
 
 void checkReset(UiState& s, HudContext& hud, uint16_t panel, const char* label, uint16_t flag, bool def) {
     const uint16_t id = hud.bind.check(s, panel, label, flag, def);
-    matResetBtn(s, hud, id < s.count ? s.parentOf[id] : kUiNone, flag, def ? 1.0f : 0.0f, 0.0f, 1);
+    matResetBtn(s, hud, uiPropSlotOf(s, id), flag, def ? 1.0f : 0.0f, 0.0f, 1);
 }
 
 void choiceRow(UiState& s, HudContext& hud, uint16_t panel, const char* label, const char* const* names, void (*fn)(void*, uint8_t), uint16_t& out, uint16_t flag) {
     const uint16_t value = uiPropRow(s, panel, label);
     out = uiChoice(s, value, {.labels = names, .count = 2, .selected = 0, .width = 160.0f, .onPick = fn, .user = &hud});
-    if (out < s.count) {
-        if (auto* flex = s.ent[out].try_get_mut<UiFlex>()) {
-            flex->grow = 1.0f;
-            flex->shrink = 1.0f;
-        }
-    }
+    uiSetGrow(s, out, 1.0f, 1.0f);
     matResetBtn(s, hud, value, flag, 0.0f, 0.0f, 1);
 }
 
@@ -88,9 +85,7 @@ void vecReset(UiState& s, HudContext& hud, uint16_t panel, const char* label, ui
     const UiPropVec2 v = uiPropVec2(s, panel, label, x, y, -64.0f, 64.0f, 0.01f);
     hud.bind.watch(v.x, ix, x);
     hud.bind.watch(v.y, static_cast<uint16_t>(ix + 1u), y);
-    const uint16_t hold = v.x < s.count ? s.parentOf[v.x] : kUiNone;
-    const uint16_t line = hold < s.count ? s.parentOf[hold] : kUiNone;
-    matResetBtn(s, hud, line, ix, x, y, 2);
+    matResetBtn(s, hud, v.row, ix, x, y, 2);
 }
 
 } // namespace
@@ -100,12 +95,8 @@ void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel) {
         return;
     }
     UiState& s = *canvas.state;
-    if (hud->previewBuf.size() != 168u * 168u * 4u) {
-        hud->previewBuf.resize(168u * 168u * 4u);
-    }
-    if (hud->atlasBuf.size() != 256u * 192u * 4u) {
-        hud->atlasBuf.resize(256u * 192u * 4u);
-    }
+    hud->previewBuf.resize(kMatSphereSide * kMatSphereSide * 4u);
+    hud->atlasBuf.resize(kMatAtlasW * kMatAtlasH * 4u);
     UiFlex previewCol{};
     previewCol.direction = UiFlexDir::Column;
     previewCol.align = UiAlign::Center;
@@ -114,7 +105,7 @@ void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel) {
     previewCol.gap = 4.0f;
     previewCol.shrink = 0.0f;
     const uint16_t preview = uiPanel(s, panel, previewCol, paintClear());
-    hud->matPreview = uiIcon(s, preview, 8, 168.0f, 168.0f);
+    hud->matPreview = uiIcon(s, preview, 8, static_cast<float>(kMatSphereSide), static_cast<float>(kMatSphereSide));
     uiDrag(s, hud->matPreview, onPreviewDrag, hud);
     uiLabel(s, preview, "Material Preview");
     const char* typeName[] = {"Lit", "Unlit"};

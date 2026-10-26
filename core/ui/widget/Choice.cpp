@@ -142,8 +142,10 @@ void uiBindChoice(UiState& s, const char* name, uint8_t selected, void (*onPick)
     if (choice == nullptr) {
         return;
     }
-    choice->onPick = onPick;
-    choice->user = user;
+    if (onPick != nullptr) {
+        choice->onPick = onPick;
+        choice->user = user;
+    }
     if (selected == choice->index) {
         return;
     }
@@ -152,6 +154,15 @@ void uiBindChoice(UiState& s, const char* name, uint8_t selected, void (*onPick)
     if (label != nullptr && choice->caption < s.count) {
         uiText(s, choice->caption, label);
     }
+}
+
+void uiChoiceSelect(UiState& s, uint16_t id, uint8_t index, const char* label) {
+    auto* choice = id != 0 && id < s.count ? s.ent[id].try_get_mut<UiChoice>() : nullptr;
+    if (choice == nullptr || choice->index == index) {
+        return;
+    }
+    choice->index = index;
+    uiMenuCaption(s, id, label);
 }
 
 float uiChoiceWidth(const UiState& s, const char* const* labels, uint8_t count) {

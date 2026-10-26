@@ -62,13 +62,7 @@ void onStats(void* user, uint16_t) {
     }
     hit->open = hit->open == 0 ? 1 : 0;
     uiShow(*hit->canvas->state, hit->page, hit->open != 0);
-    auto* flex = hit->canvas->state->ent[hit->dock].try_get_mut<UiFlex>();
-    if (flex != nullptr) {
-        flex->width += hit->open != 0 ? 420.0f : -420.0f;
-        if (flex->width < 300.0f) {
-            flex->width = 300.0f;
-        }
-    }
+    uiAddWidth(*hit->canvas->state, hit->dock, hit->open != 0 ? 420.0f : -420.0f, 300.0f);
 }
 
 void onStatsCmd(void* user, uint16_t) {

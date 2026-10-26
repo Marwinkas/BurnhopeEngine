@@ -199,7 +199,7 @@ struct HudContext {
     uint16_t matThumb[kMatSlotN]{};
     uint16_t matClear[kMatSlotN]{};
     uint16_t matEmpty[kMatSlotN]{};
-    uint16_t matRow[kMatSlotN]{};
+    uint16_t matVal[kMatSlotN]{};
     MatLink matLink[kMatSlotN]{};
     uint16_t matType = kUiNone;
     uint16_t matPack = kUiNone;

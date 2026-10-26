@@ -2,9 +2,13 @@
 #include <doctest/doctest.h>
 
 #include "Str.hpp"
+#include "asset/ProjectDoc.hpp"
 #include "color/Color.hpp"
 
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <string>
 
 using namespace burnhope;
 
@@ -62,4 +66,55 @@ TEST_CASE("hex color round trip") {
     char small[5]{};
     CHECK(colorFormatHex(small, sizeof(small), 1.0f, 1.0f, 1.0f, 1.0f, false) == 4);
     CHECK(std::strcmp(small, "#FFF") == 0);
+}
+
+namespace {
+
+bool takeOne(void* user, const char*, const char*) {
+    ++*static_cast<int*>(user);
+    return true;
+}
+
+} // namespace
+
+TEST_CASE("projectListMaterials finds .bhmat files and skips build folders") {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "bh_proj_list";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    fs::create_directories(root / "sub", ec);
+    fs::create_directories(root / "build", ec);
+    for (const fs::path& file : {root / "a.bhmat", root / "sub" / "b.bhmat", root / "build" / "c.bhmat", root / "d.txt"}) {
+        std::FILE* f = std::fopen(file.string().c_str(), "wb");
+        CHECK(f != nullptr);
+        if (f != nullptr) {
+            std::fclose(f);
+        }
+    }
+    int count = 0;
+    burnhope::projectListMaterials(root.string().c_str(), takeOne, &count);
+    CHECK(count == 2);
+    fs::remove_all(root, ec);
+}
+
+TEST_CASE("materialCommitMaps parks maps next to the material") {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "bh_commit_maps";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    fs::create_directories(root / "src", ec);
+    fs::create_directories(root / "mat", ec);
+    const fs::path map = root / "src" / "tex.png";
+    std::FILE* f = std::fopen(map.string().c_str(), "wb");
+    CHECK(f != nullptr);
+    if (f != nullptr) {
+        std::fclose(f);
+    }
+    burnhope::BhmatDoc doc{};
+    std::snprintf(doc.albedoPath, sizeof(doc.albedoPath), "%s", map.string().c_str());
+    const std::string matPath = (root / "mat" / "m.bhmat").string();
+    CHECK_FALSE(burnhope::materialCommitMaps(doc, matPath.c_str(), 0));
+    CHECK(fs::exists(root / "mat" / "tex.png"));
+    CHECK(fs::path(doc.albedoPath).parent_path() == root / "mat");
+    fs::remove_all(root, ec);
 }

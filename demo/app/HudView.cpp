@@ -21,15 +21,7 @@ void hudWire(Canvas& canvas, HudContext* hud, uint16_t details, uint16_t statsBo
         return;
     }
     UiState& state = *canvas.state;
-    if (detailsInner < state.count) {
-        if (auto* flex = state.ent[detailsInner].try_get_mut<UiFlex>()) {
-            flex->pad = 0.0f;
-            flex->padL = 0.0f;
-            flex->padR = 0.0f;
-            flex->padT = 0.0f;
-            flex->padB = 0.0f;
-        }
-    }
+    uiSetPad(state, detailsInner, 0.0f);
     hud->viewCap = uiFindChildText(state, hud->viewBtn);
     if (hud->viewCap != kUiNone) {
         uiTextStyle(state, hud->viewCap, UiTextAlign::Left, UiTextEllipsis::None, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
@@ -41,12 +33,7 @@ void hudWire(Canvas& canvas, HudContext* hud, uint16_t details, uint16_t statsBo
     uiButtonFitText(state, hud->viewBtn, "Lit", 38.0f);
     const float viewCount = static_cast<float>(sizeof(kViews) / sizeof(kViews[0]));
     hud->viewPopH = 16.0f + viewCount * 36.0f + (viewCount - 1.0f) * 2.0f;
-    if (hud->viewPanel < state.count) {
-        if (auto* flex = state.ent[hud->viewPanel].try_get_mut<UiFlex>()) {
-            flex->width = viewW;
-            flex->height = hud->viewPopH;
-        }
-    }
+    uiSetSize(state, hud->viewPanel, viewW, hud->viewPopH);
     uiButtonTintIcon(state, uiButtonIconChild(state, hud->camBtn), false);
     if (hud->tool.scene != nullptr) {
         sceneFrameActorGizmo(hud->tool.scene, hud->toolMode);

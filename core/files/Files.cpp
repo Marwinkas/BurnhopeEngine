@@ -145,6 +145,20 @@ void filesDropBadge(UiState& s, void (*fn)(void* user, char* dst, uint8_t cap)) 
     fileBook(s).onBadge = fn;
 }
 
+const char* filesDraggedOver(UiState& s, uint16_t paneId, float& outX, float& outY) {
+    const UiDragDrop* drag = s.world.try_get<UiDragDrop>();
+    if (drag == nullptr || drag->live == 0 || paneId >= s.count || !hitBox(uiNodeBox(s, paneId), drag->dropX, drag->dropY)) {
+        return nullptr;
+    }
+    const Browser& b = fileBook(s);
+    if (drag->srcIndex >= b.items.size()) {
+        return nullptr;
+    }
+    outX = drag->dropX;
+    outY = drag->dropY;
+    return b.items[drag->srcIndex].name.c_str();
+}
+
 void filesRoot(UiState& s, const char* path) {
     Browser& b = fileBook(s);
     if (path == nullptr || path[0] == '\0') {

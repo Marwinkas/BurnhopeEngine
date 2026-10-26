@@ -17,6 +17,7 @@
 #include "ui/widget/Scroll.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/Text.hpp"
+#include "ui/Panel.hpp"
 #include "ui/State.hpp"
 
 #include <cmath>
@@ -144,12 +145,7 @@ void syncViewport(Engine& e, Canvas& canvas) {
         return;
     }
     uiSyncPopover(*state, hud.camPanel, hud.camBtn, 400.0f, 500.0f, hud.camWant);
-    float viewW = 160.0f;
-    if (hud.viewPanel < state->count) {
-        if (const UiFlex* flex = state->ent[hud.viewPanel].try_get<UiFlex>()) {
-            viewW = flex->width;
-        }
-    }
+    const float viewW = uiStyleWidth(*state, hud.viewPanel, 160.0f);
     uiSyncPopover(*state, hud.viewPanel, hud.viewBtn, viewW, hud.viewPopH, hud.viewWant);
     bool anyStat = false;
     for (uint8_t i = 0; i < 6; ++i) {

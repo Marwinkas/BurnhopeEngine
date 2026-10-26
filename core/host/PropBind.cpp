@@ -158,7 +158,32 @@ static void binderOnColor(void* user, UiState& s, uint16_t anchor, float r, floa
     }
 }
 
+// Swatches show the scalars they own, so a value written from code reaches the screen without a picker edit.
 void UiPropBinder::syncSwatches(UiState& s) {
+    bool dirty = false;
+    for (const UiBind& row : rows) {
+        if (row.kind != kBindSwatch || row.id >= s.count || static_cast<uint32_t>(row.index) + 2u >= scalarN || scalars == nullptr) {
+            continue;
+        }
+        auto* paint = s.ent[row.id].try_get_mut<UiPaint>();
+        if (paint == nullptr) {
+            continue;
+        }
+        const float r = scalars[row.index];
+        const float g = scalars[row.index + 1u];
+        const float b = scalars[row.index + 2u];
+        if (paint->r == r && paint->g == g && paint->b == b && paint->token == UiToken::Custom) {
+            continue;
+        }
+        paint->r = r;
+        paint->g = g;
+        paint->b = b;
+        paint->token = UiToken::Custom;
+        dirty = true;
+    }
+    if (dirty) {
+        uiNotifyVisualDirty(s);
+    }
     UiColorPickerComponent* picker = uiColorFind(s);
     if (picker == nullptr) {
         return;

@@ -1,5 +1,7 @@
 #include "asset/ProjectDoc.hpp"
 
+#include "Str.hpp"
+#include "image/ImageDecode.hpp"
 #include "io/Json.hpp"
 
 #include <cstdio>
@@ -174,6 +176,117 @@ bool sceneDocRead(const char* path, SceneObjectRec* recs, uint32_t cap, uint32_t
         count += 1u;
     }
     jsonRelease(doc);
+    return true;
+}
+
+namespace fs = std::filesystem;
+
+namespace {
+
+bool skipDir(const fs::path& dir) {
+    const std::string name = dir.filename().string();
+    return name == "cache" || name == "build" || name == "build-core" || name == ".git";
+}
+
+// Returns false once `take` asks to stop.
+bool walkMaterials(const fs::path& dir, int depth, ProjectMaterialFn take, void* user) {
+    if (depth > 4 || skipDir(dir)) {
+        return true;
+    }
+    std::error_code ec;
+    for (const fs::directory_entry& ent : fs::directory_iterator(dir, ec)) {
+        if (ec) {
+            return true;
+        }
+        if (ent.is_directory(ec)) {
+            if (!walkMaterials(ent.path(), depth + 1, take, user)) {
+                return false;
+            }
+            continue;
+        }
+        if (!ent.is_regular_file(ec)) {
+            continue;
+        }
+        const std::string name = ent.path().filename().string();
+        if (strExtIs(name.c_str(), ".bhmat") && !take(user, name.c_str(), ent.path().string().c_str())) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Copies the map into the folder of the material so the project stays self-contained.
+void parkMap(const char* matPath, char* slot) {
+    if (slot[0] == '\0' || matPath[0] == '\0') {
+        return;
+    }
+    std::error_code ec;
+    const fs::path src(slot);
+    if (!fs::is_regular_file(src, ec)) {
+        return;
+    }
+    const fs::path dir = fs::path(matPath).parent_path();
+    if (src.parent_path() == dir) {
+        return;
+    }
+    fs::create_directories(dir, ec);
+    const fs::path dst = dir / src.filename();
+    fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+    if (!ec) {
+        std::snprintf(slot, 260, "%s", dst.string().c_str());
+    }
+}
+
+// The ORMH pack belongs to the material when none is named or the named one is the material's own.
+bool ormOwned(const BhmatDoc& doc, const char* matPath) {
+    if (doc.ormPath[0] == '\0') {
+        return true;
+    }
+    if (matPath[0] == '\0') {
+        return false;
+    }
+    const std::string want = fs::path(matPath).stem().string() + "_ormh.png";
+    return fs::path(doc.ormPath).filename().string() == want;
+}
+
+} // namespace
+
+void projectListMaterials(const char* root, ProjectMaterialFn take, void* user) {
+    if (root == nullptr || root[0] == '\0' || take == nullptr) {
+        return;
+    }
+    (void)walkMaterials(fs::path(root), 0, take, user);
+}
+
+bool materialCommitMaps(BhmatDoc& doc, const char* matPath, uint8_t editedChannel) {
+    if (matPath == nullptr) {
+        matPath = "";
+    }
+    char* slot[] = {doc.albedoPath, doc.normalPath, doc.ormPath, doc.emissivePath, doc.roughPath, doc.metalPath,
+        doc.aoPath, doc.heightPath, doc.alphaPath};
+    for (char* one : slot) {
+        parkMap(matPath, one);
+    }
+    if (doc.mapPack == 0u || editedChannel == 2u || !ormOwned(doc, matPath)) {
+        return false;
+    }
+    const bool maps = doc.roughPath[0] != '\0' || doc.metalPath[0] != '\0' || doc.aoPath[0] != '\0' || doc.heightPath[0] != '\0';
+    if (!maps) {
+        doc.ormPath[0] = '\0';
+        return false;
+    }
+    if (matPath[0] == '\0') {
+        return false;
+    }
+    const fs::path mat(matPath);
+    const fs::path dst = mat.parent_path() / (mat.stem().string() + "_ormh.png");
+    if (!imagePackOrmh(doc.aoPath, doc.roughPath, doc.metalPath, doc.heightPath, dst.string().c_str())) {
+        return false;
+    }
+    std::snprintf(doc.ormPath, sizeof(doc.ormPath), "%s", dst.string().c_str());
+    if (doc.heightPath[0] != '\0' && doc.heightScale < 0.001f) {
+        doc.heightScale = 1.0f;
+    }
     return true;
 }
 

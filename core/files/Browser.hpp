@@ -25,5 +25,8 @@ void filesOpenProject(UiState& s, const char* path);
 void filesIconSlots(UiState& s, uint8_t folderSlot, uint8_t fileSlot);
 void filesOfferPath(UiState& s, const char* path);
 void filesLoadIcons(Canvas& c);
+// Name of the item being dragged out of the file list while the pointer is over `pane`, else nullptr.
+// Writes the pointer position to outX/outY. The name stays valid until the listing reloads.
+const char* filesDraggedOver(UiState& s, uint16_t paneId, float& outX, float& outY);
 
 } // namespace burnhope

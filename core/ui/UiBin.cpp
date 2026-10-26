@@ -1,5 +1,6 @@
 #include "ui/UiBin.hpp"
 #include "ui/FlexAttr.hpp"
+#include "ui/Icon.hpp"
 #include "ui/State.hpp"
 #include "io/File.hpp"
 
@@ -135,6 +136,14 @@ uint16_t uiSpawnDescribed(UiState& s, uint16_t host, const BinNode& bin, const B
         inkToken = static_cast<UiToken>(bin.token);
     } else if (inkToken == UiToken::Custom && bin.token != 0) {
         inkToken = static_cast<UiToken>(bin.token);
+    }
+    // A custom node wearing a window-control glyph follows the theme's close / chrome colors.
+    if (inkToken == UiToken::Custom && !marked) {
+        if (bin.icon == static_cast<uint8_t>(UiIcon::Dismiss)) {
+            inkToken = UiToken::Close;
+        } else if (bin.icon == static_cast<uint8_t>(UiIcon::Minimize) || bin.icon == static_cast<uint8_t>(UiIcon::Maximize)) {
+            inkToken = UiToken::Chrome;
+        }
     }
     float r = bin.r;
     float g = bin.g;

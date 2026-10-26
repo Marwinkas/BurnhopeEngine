@@ -8,7 +8,9 @@
 #include "ui/Style.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/AssetSlot.hpp"
+#include "host/PropGrid.hpp"
 #include "ui/widget/Button.hpp"
+#include "ui/widget/Choice.hpp"
 #include "ui/widget/DragDrop.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Image.hpp"
@@ -50,21 +52,8 @@ constexpr Slot kSlot[kMatSlotN] = {
 };
 
 void lift(UiState& s, uint16_t value) {
-    const uint16_t row = value < s.count ? s.parentOf[value] : kUiNone;
-    if (row < s.count) {
-        if (auto* flex = s.ent[row].try_get_mut<UiFlex>()) {
-            flex->heightMode = UiSize::Px;
-            flex->height = 72.0f;
-        }
-    }
-    if (value < s.count) {
-        if (auto* flex = s.ent[value].try_get_mut<UiFlex>()) {
-            flex->heightMode = UiSize::Px;
-            flex->height = 64.0f;
-            flex->gap = 8.0f;
-            flex->overflow = UiOverflow::Visible;
-        }
-    }
+    uiPropRowHeight(s, value, 72.0f, 64.0f);
+    uiSetGap(s, value, 8.0f);
 }
 
 uint16_t colorChip(UiState& s, HudContext& hud, uint16_t parent, uint16_t index) {
@@ -120,15 +109,8 @@ void addSlide(UiState& s, HudContext& hud, uint16_t parent, uint8_t slot) {
     hud.matLink[slot].index = spec.bind;
     const uint16_t slide = uiSlider(s, parent, spec.def, spec.lo, spec.hi, matOnSlide, &hud.matLink[slot], 0.0f);
     hud.matLink[slot].slider = slide;
-    if (slide < s.count) {
-        if (auto* flex = s.ent[slide].try_get_mut<UiFlex>()) {
-            flex->widthMode = UiSize::Auto;
-            flex->width = 0.0f;
-            flex->grow = 1.0f;
-            flex->shrink = 1.0f;
-            flex->minW = 48.0f;
-        }
-    }
+    uiSetSize(s, slide, 0.0f, -1.0f);
+    uiSetGrow(s, slide, 1.0f, 1.0f, 48.0f);
     const uint16_t number = uiNumber(s, parent, spec.def, spec.lo, spec.hi, 0.01f, matOnNumber, &hud.matLink[slot], 84.0f, 24.0f, 0.0f);
     hud.matLink[slot].number = number;
     uiNumberFill(s, number, false);
@@ -152,13 +134,9 @@ void addColor(UiState& s, HudContext& hud, uint16_t parent, uint8_t slot) {
     const uint8_t hexAt = spec.bind == kScMatEm0 ? 1u : 0u;
     hud.matHex[hexAt] = field;
     if (field < s.count) {
-        if (auto* flex = s.ent[field].try_get_mut<UiFlex>()) {
-            flex->widthMode = UiSize::Percent;
-            flex->width = 100.0f;
-            flex->heightMode = UiSize::Px;
-            flex->height = 24.0f;
-            flex->shrink = 0.0f;
-        }
+        uiSetWidthPercent(s, field, 100.0f);
+        uiSetSize(s, field, -1.0f, 24.0f);
+        uiSetGrow(s, field, -1.0f, 0.0f);
         s.ent[field].set<MatHex>({&hud, spec.bind, chip});
         uiAfterTextAdd(s, field, matHexEdited);
     }
@@ -170,19 +148,6 @@ void showIf(UiState& s, uint16_t id, bool on) {
         return;
     }
     uiShow(s, id, on);
-}
-
-void rowHeight(UiState& s, uint16_t id, float h) {
-    if (id == 0 || id >= s.count) {
-        return;
-    }
-    auto* flex = s.ent[id].try_get_mut<UiFlex>();
-    if (flex == nullptr || flex->height == h) {
-        return;
-    }
-    flex->heightMode = UiSize::Px;
-    flex->height = h;
-    s.layoutDirty = true;
 }
 
 void paintHex(UiState& s, HudContext& hud, uint16_t id, uint16_t index, bool withA) {
@@ -207,7 +172,7 @@ void paintHex(UiState& s, HudContext& hud, uint16_t id, uint16_t index, bool wit
 void matAddSlot(UiState& s, HudContext& hud, uint16_t panel, uint8_t slot) {
     const Slot& spec = kSlot[slot];
     const uint16_t value = uiPropRow(s, panel, spec.label);
-    hud.matRow[slot] = value < s.count ? s.parentOf[value] : kUiNone;
+    hud.matVal[slot] = value;
     lift(s, value);
     addThumb(s, hud, value, slot);
     if (spec.kind == 0) {
@@ -217,8 +182,8 @@ void matAddSlot(UiState& s, HudContext& hud, uint16_t panel, uint8_t slot) {
     } else {
         matResetBtn(s, hud, value, spec.channel, 0.0f, 0.0f, 6);
     }
-    if (spec.group == 2 && hud.matRow[slot] != kUiNone) {
-        uiShow(s, hud.matRow[slot], false);
+    if (spec.group == 2) {
+        uiPropRowShow(s, value, false);
     }
 }
 
@@ -230,13 +195,10 @@ void hudPaintMaterial(HudContext& hud) {
     const bool pack = hud.block.flags[kFlMatPack] != 0;
     for (uint8_t i = 0; i < kMatSlotN; ++i) {
         if (kSlot[i].group == 2) {
-            showIf(*state, hud.matRow[i], pack);
+            uiPropRowShow(*state, hud.matVal[i], pack);
         }
         if (kSlot[i].group == 1) {
-            rowHeight(*state, hud.matRow[i], pack ? 32.0f : 72.0f);
-            if (hud.matTex[i] != 0 && hud.matTex[i] < state->count) {
-                rowHeight(*state, state->parentOf[hud.matTex[i]], pack ? 24.0f : 64.0f);
-            }
+            uiPropRowHeight(*state, hud.matVal[i], pack ? 32.0f : 72.0f, pack ? 24.0f : 64.0f);
         }
         const char* path = hudDocPath(hud.matDoc, kSlot[i].channel);
         const bool face = kSlot[i].group != 1 || !pack;
@@ -249,37 +211,10 @@ void hudPaintMaterial(HudContext& hud) {
             uiRangeSet(*state, hud.matLink[i].slider, hud.block.scalars[kSlot[i].bind]);
         }
     }
-    matSetChoice(*state, hud.matType, hud.block.flags[kFlMatUnlit] != 0 ? 1u : 0u, hud.block.flags[kFlMatUnlit] != 0 ? "Unlit" : "Lit");
-    matSetChoice(*state, hud.matPack, pack ? 1u : 0u, pack ? "ORMH" : "Classic");
+    uiChoiceSelect(*state, hud.matType, hud.block.flags[kFlMatUnlit] != 0 ? 1u : 0u, hud.block.flags[kFlMatUnlit] != 0 ? "Unlit" : "Lit");
+    uiChoiceSelect(*state, hud.matPack, pack ? 1u : 0u, pack ? "ORMH" : "Classic");
     paintHex(*state, hud, hud.matHex[0], kScMatBase0, true);
     paintHex(*state, hud, hud.matHex[1], kScMatEm0, false);
-    bool dirty = false;
-    for (const UiBind& row : hud.bind.rows) {
-        if (row.kind != kBindSwatch || row.id >= state->count || row.index + 2u >= hud.bind.scalarN) {
-            continue;
-        }
-        if (row.index != kScMatBase0 && row.index != kScMatEm0) {
-            continue;
-        }
-        auto* paint = state->ent[row.id].try_get_mut<UiPaint>();
-        if (paint == nullptr) {
-            continue;
-        }
-        const float r = hud.block.scalars[row.index];
-        const float g = hud.block.scalars[row.index + 1u];
-        const float b = hud.block.scalars[row.index + 2u];
-        if (paint->r == r && paint->g == g && paint->b == b && paint->token == UiToken::Custom) {
-            continue;
-        }
-        paint->r = r;
-        paint->g = g;
-        paint->b = b;
-        paint->token = UiToken::Custom;
-        dirty = true;
-    }
-    if (dirty) {
-        uiNotifyVisualDirty(*state);
-    }
 }
 
 } // namespace burnhope

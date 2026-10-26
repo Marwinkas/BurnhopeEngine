@@ -282,4 +282,41 @@ uint16_t uiDragFoldHeader(UiState& s, uint16_t parent, const char* title) {
     return uiFoldAttach(s, parent, foldBtn);
 }
 
+uint16_t uiTitleBar(UiState& s, uint16_t parent, const char* title, UiClickFn onClose, void* user, float height) {
+    UiFlex row{};
+    row.direction = UiFlexDir::Row;
+    row.widthMode = UiSize::Percent;
+    row.width = 100.0f;
+    row.heightMode = UiSize::Px;
+    row.height = height;
+    row.align = UiAlign::Center;
+    row.shrink = 0.0f;
+    row.pad = 8.0f;
+    row.gap = 8.0f;
+    const uint16_t bar = uiPanel(s, parent, row, paintToken(s.look, UiToken::Title, 0.0f));
+    if (bar == kUiNone) {
+        return kUiNone;
+    }
+    s.ent[bar].set<UiTitleBar>({});
+    (void)uiLabel(s, bar, title);
+    UiFlex gap{};
+    gap.grow = 1.0f;
+    gap.shrink = 1.0f;
+    (void)uiSpacer(s, bar, gap);
+    UiFlex mark{};
+    mark.widthMode = UiSize::Px;
+    mark.heightMode = UiSize::Px;
+    mark.width = 22.0f;
+    mark.height = 22.0f;
+    mark.shrink = 0.0f;
+    UiPaint close = paintToken(s.look, UiToken::Close, s.look.radiusSm);
+    close.icon = static_cast<uint8_t>(UiIcon::Dismiss);
+    const uint16_t closeBtn = uiPanel(s, bar, mark, close);
+    uiHover(s, closeBtn);
+    if (onClose != nullptr) {
+        uiBind(s, closeBtn, onClose, user);
+    }
+    return bar;
+}
+
 } // namespace burnhope

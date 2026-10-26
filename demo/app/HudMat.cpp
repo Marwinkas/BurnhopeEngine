@@ -2,14 +2,13 @@
 #include "app/HudBuild.hpp"
 
 #include "asset/ProjectDoc.hpp"
-#include "files/FileSession.hpp"
+#include "files/Browser.hpp"
 #include "gpu_scene/SceneObject.hpp"
 #include "platform/Window.hpp"
 #include "render/SceneFrame.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Check.hpp"
-#include "ui/widget/DragDrop.hpp"
 #include "host/PropGrid.hpp"
 #include "ui/widget/Scroll.hpp"
 #include "Str.hpp"
@@ -17,7 +16,6 @@
 
 #include <cstdio>
 #include <cstring>
-#include <filesystem>
 
 namespace burnhope {
 
@@ -128,48 +126,24 @@ void onFileOpen(void* user, const char* path, int isDir) {
 
 namespace {
 
-namespace fs = std::filesystem;
+constexpr size_t kMatListCap = 128;
 
-bool skipDir(const fs::path& dir) {
-    const std::string name = dir.filename().string();
-    return name == "cache" || name == "build" || name == "build-core" || name == ".git";
-}
-
-void walkMats(HudContext& hud, const fs::path& dir, int depth) {
-    if (depth > 4 || hud.mats.size() >= 128 || skipDir(dir)) {
-        return;
-    }
-    std::error_code ec;
-    for (const fs::directory_entry& ent : fs::directory_iterator(dir, ec)) {
-        if (ec || hud.mats.size() >= 128) {
-            return;
-        }
-        if (ent.is_directory(ec)) {
-            walkMats(hud, ent.path(), depth + 1);
-            continue;
-        }
-        if (!ent.is_regular_file(ec)) {
-            continue;
-        }
-        const std::string name = ent.path().filename().string();
-        if (!strExtIs(name.c_str(), ".bhmat")) {
-            continue;
-        }
-        MatLeaf leaf{};
-        std::snprintf(leaf.name, sizeof(leaf.name), "%s", name.c_str());
-        std::snprintf(leaf.path, sizeof(leaf.path), "%s", ent.path().string().c_str());
-        hud.mats.push_back(leaf);
-    }
+bool takeMat(void* user, const char* name, const char* path) {
+    auto* hud = static_cast<HudContext*>(user);
+    MatLeaf leaf{};
+    std::snprintf(leaf.name, sizeof(leaf.name), "%s", name);
+    std::snprintf(leaf.path, sizeof(leaf.path), "%s", path);
+    hud->mats.push_back(leaf);
+    return hud->mats.size() < kMatListCap;
 }
 
 void fillMatList(HudContext& hud) {
     hud.mats.clear();
     hud.mats.push_back({});
     std::snprintf(hud.mats.front().name, sizeof(hud.mats.front().name), "None");
-    if (hud.projectRoot[0] == '\0') {
-        return;
+    if (hud.projectRoot[0] != '\0') {
+        projectListMaterials(hud.projectRoot, takeMat, &hud);
     }
-    walkMats(hud, fs::path(hud.projectRoot), 0);
 }
 
 } // namespace
@@ -218,12 +192,11 @@ void hudMaterialDrag(HudContext& hud, UiState& state) {
         return;
     }
     uint8_t mark = kSceneActorNone;
-    const UiDragDrop* drag = state.world.try_get<UiDragDrop>();
-    if (drag != nullptr && drag->live != 0 && hud.viewPane < state.count && hitBox(uiNodeBox(state, hud.viewPane), drag->dropX, drag->dropY)) {
-        Browser& book = fileBook(state);
-        if (drag->srcIndex < book.items.size() && strExtIs(book.items[drag->srcIndex].name.c_str(), ".bhmat")) {
-            mark = sceneFramePick(hud.scene, drag->dropX, drag->dropY);
-        }
+    float x = 0.0f;
+    float y = 0.0f;
+    const char* name = filesDraggedOver(state, hud.viewPane, x, y);
+    if (name != nullptr && strExtIs(name, ".bhmat")) {
+        mark = sceneFramePick(hud.scene, x, y);
     }
     sceneFrameMark(hud.scene, mark);
 }
@@ -255,24 +228,19 @@ void hudDragBadge(void* user, char* dst, uint8_t cap) {
     }
     dst[0] = '\0';
     UiState* state = hud != nullptr ? hudUi(*hud) : nullptr;
-    const UiDragDrop* drag = state != nullptr ? state->world.try_get<UiDragDrop>() : nullptr;
-    if (hud == nullptr || drag == nullptr || drag->live == 0 || hud->viewPane >= state->count) {
-        return;
-    }
-    if (!hitBox(uiNodeBox(*state, hud->viewPane), drag->dropX, drag->dropY)) {
-        return;
-    }
-    Browser& book = fileBook(*state);
-    if (drag->srcIndex >= book.items.size() || !strExtIs(book.items[drag->srcIndex].name.c_str(), ".bhmat")) {
+    float x = 0.0f;
+    float y = 0.0f;
+    const char* name = state != nullptr ? filesDraggedOver(*state, hud->viewPane, x, y) : nullptr;
+    if (name == nullptr || !strExtIs(name, ".bhmat")) {
         return;
     }
     char actor[24] = "Scene";
-    const uint8_t mark = sceneFramePick(hud->scene, drag->dropX, drag->dropY);
+    const uint8_t mark = sceneFramePick(hud->scene, x, y);
     uint8_t kind = 0;
     if (mark != kSceneActorNone) {
         sceneFrameActorName(hud->scene, mark, actor, sizeof(actor), &kind);
     }
-    std::snprintf(dst, cap, "%s -> %s", book.items[drag->srcIndex].name.c_str(), actor);
+    std::snprintf(dst, cap, "%s -> %s", name, actor);
 }
 
 } // namespace burnhope

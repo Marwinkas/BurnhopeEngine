@@ -80,11 +80,7 @@ void paintTools(HudContext& hud) {
     for (int i = 0; i < 3; ++i) {
         const bool on = hud.snapOn[i] != 0;
         uiToolButtonState(s, hud.snapBtn[i], on);
-        if (hud.snapBtn[i] < s.count) {
-            if (auto* paint = s.ent[hud.snapBtn[i]].try_get_mut<UiPaint>()) {
-                paint->a = on ? 0.18f : 0.0f;
-            }
-        }
+        uiSetAlpha(s, hud.snapBtn[i], on ? 0.18f : 0.0f);
     }
 }
 
@@ -202,15 +198,11 @@ void onPlay(void* user, uint16_t) {
     if (sceneFrameSim(hud->tool.scene) == 0) {
         sceneFramePlay(hud->tool.scene);
         uiShow(s, hud->pauseBtn, true);
-        if (auto* paint = s.ent[hud->playGlyph].try_get_mut<UiPaint>()) {
-            paint->icon = static_cast<uint8_t>(UiIcon::Stop);
-        }
+        uiSetIcon(s, hud->playGlyph, UiIcon::Stop);
     } else {
         sceneFrameStop(hud->tool.scene);
         uiShow(s, hud->pauseBtn, false);
-        if (auto* paint = s.ent[hud->playGlyph].try_get_mut<UiPaint>()) {
-            paint->icon = static_cast<uint8_t>(UiIcon::Play);
-        }
+        uiSetIcon(s, hud->playGlyph, UiIcon::Play);
     }
     uiNotifyVisualDirty(s);
     uiNotifyLayoutDirty(s);

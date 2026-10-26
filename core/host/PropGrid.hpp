@@ -28,6 +28,13 @@ uint16_t uiPropHost(UiState& s, uint16_t parent);
 uint16_t uiPropRow(UiState& s, uint16_t host, const char* label);
 uint16_t uiPropCheck(UiState& s, uint16_t host, const char* label, uint8_t kind = 0, uint8_t group = 0, bool on = false);
 uint16_t uiPropNumber(UiState& s, uint16_t host, const char* label, float value, float minV, float maxV, float step);
+// The value slot a control built by uiPropCheck / uiPropNumber / uiPropMenu sits in, and the row that holds a value slot.
+[[nodiscard]] uint16_t uiPropSlotOf(const UiState& s, uint16_t control);
+[[nodiscard]] uint16_t uiPropRowOf(const UiState& s, uint16_t valueSlot);
+// Gives the row of `valueSlot` a fixed height `rowH` and the slot itself `innerH` (children may overflow it).
+// Does nothing when both already match.
+void uiPropRowHeight(UiState& s, uint16_t valueSlot, float rowH, float innerH);
+void uiPropRowShow(UiState& s, uint16_t valueSlot, bool on);
 uint16_t uiPropMenu(UiState& s, uint16_t host, const char* label, const char* value, uint16_t menu);
 
 struct UiPropVec3 {
@@ -36,11 +43,13 @@ struct UiPropVec3 {
     uint16_t z = kUiNone;
     uint16_t lock = kUiNone;
     uint16_t reset = kUiNone;
+    uint16_t row = kUiNone;
 };
 
 struct UiPropVec2 {
     uint16_t x = kUiNone;
     uint16_t y = kUiNone;
+    uint16_t row = kUiNone;
 };
 
 struct UiVecCtl {

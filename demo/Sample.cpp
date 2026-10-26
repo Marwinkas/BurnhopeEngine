@@ -56,10 +56,8 @@ void setPage(UiState& s, int8_t tag) {
         uiShow(s, ids.pages[i], i == tag);
     }
     if (ids.pageLabel != kUiNone) {
-        auto* text = s.ent[ids.pageLabel].try_get_mut<UiText>();
-        text->len = static_cast<uint8_t>(strCopyCap(text->bytes, sizeof(text->bytes), kPages[tag]));
-        auto* flex = s.ent[ids.pageLabel].try_get_mut<UiFlex>();
-        flex->width = uiMeasure(s, text->bytes, text->len, text->len);
+        uiText(s, ids.pageLabel, kPages[tag]);
+        (void)uiButtonFitText(s, ids.pageLabel, kPages[tag], 0.0f);
     }
     uiNotifyLayoutDirty(s);
     uiNotifyVisualDirty(s);
@@ -75,20 +73,12 @@ void applyCompact(UiState& s) {
     const float itemH = on ? 24.0f : 36.0f;
     const float gap = on ? 2.0f : 8.0f;
     const float pad = on ? 2.0f : 8.0f;
-    auto* inner = s.ent[ids.listInner].try_get_mut<UiFlex>();
-    if (inner != nullptr) {
-        inner->gap = gap;
-    }
+    uiSetGap(s, ids.listInner, gap);
     const uint32_t rows = uiNodeChildCount(s, ids.listInner);
     for (uint32_t i = 0; i < rows; ++i) {
         const uint16_t id = uiNodeChild(s, ids.listInner, i);
-        auto* flex = s.ent[id].try_get_mut<UiFlex>();
-        if (flex == nullptr) {
-            continue;
-        }
-        flex->heightMode = UiSize::Px;
-        flex->height = itemH;
-        flex->pad = pad;
+        uiSetSize(s, id, -1.0f, itemH);
+        uiSetPad(s, id, pad);
     }
     uiNotifyLayoutDirty(s);
 }
@@ -109,17 +99,7 @@ void formSubmit(UiState& s) {
 
 void cmdClear(void* user, uint16_t) {
     auto& s = *static_cast<UiState*>(user);
-    auto* field = s.ent[uiField(s)].try_get_mut<UiField>();
-    if (field == nullptr) {
-        return;
-    }
-    field->len = 0;
-    field->caret = 0;
-    field->anchor = 0;
-    field->scroll = 0.0f;
-    field->bytes[0] = '\0';
-    fieldSyncText(s, uiField(s));
-    uiNotifyVisualDirty(s);
+    uiSetFieldText(s, uiField(s), "");
 }
 
 void onPage(void* user, uint16_t id) {
@@ -289,32 +269,11 @@ void uiBuildShell(UiState& s) {
         uiShow(s, id, false);
         return id;
     };
-    auto mini = [&](uint16_t host, const char* name, UiClickFn fn) {
-        return uiButton(s, host, {.label = name, .height = 28.0f, .onClick = fn, .user = &s});
-    };
     uiFilesOwn(s, floatPanel(70.0f, 64.0f, 1100.0f, 700.0f));
     if (uiFiles(s).fileFrame != kUiNone) {
         s.ent[uiFiles(s).fileFrame].set<UiResizable>({});
     }
-    UiFlex fileBar{};
-    fileBar.direction = UiFlexDir::Row;
-    fileBar.shrink = 0.0f;
-    fileBar.widthMode = UiSize::Percent;
-    fileBar.width = 100.0f;
-    fileBar.heightMode = UiSize::Px;
-    fileBar.height = 32.0f;
-    fileBar.gap = 8.0f;
-    fileBar.pad = 8.0f;
-    const uint16_t fileTools = uiPanel(s, uiFiles(s).fileFrame, fileBar, paintToken(s.look, UiToken::Title, 0.0f));
-    if (fileTools != kUiNone) {
-        s.ent[fileTools].set<UiTitleBar>({});
-    }
-    (void)uiLabel(s, fileTools, "FILES");
-    UiFlex fileSpacer{};
-    fileSpacer.grow = 1.0f;
-    fileSpacer.shrink = 1.0f;
-    (void)uiSpacer(s, fileTools, fileSpacer);
-    mini(fileTools, "X", onFilesHide);
+    (void)uiTitleBar(s, uiFiles(s).fileFrame, "FILES", onFilesHide, &s);
 
     const uint16_t title = take("title");
     const uint16_t brand = take("brand");
@@ -340,17 +299,6 @@ void uiBuildShell(UiState& s) {
     uiSetToken(s, status, UiToken::Status);
     uiSetToken(s, ids.statusLabel, UiToken::Muted);
     uiSetToken(s, uiMenu(s), UiToken::Menu);
-    for (uint16_t id = 0; id < s.count; ++id) {
-        auto* node = s.ent[id].try_get<UiPaint>();
-        if (node == nullptr || node->token != UiToken::Custom) {
-            continue;
-        }
-        if (node->icon == static_cast<uint8_t>(UiIcon::Dismiss)) {
-            uiSetToken(s, id, UiToken::Close);
-        } else if (node->icon == static_cast<uint8_t>(UiIcon::Minimize) || node->icon == static_cast<uint8_t>(UiIcon::Maximize)) {
-            uiSetToken(s, id, UiToken::Chrome);
-        }
-    }
     const uint32_t rows = uiNodeChildCount(s, ids.listInner);
     for (uint32_t i = 0; i < rows; ++i) {
         uiSetToken(s, uiNodeChild(s, ids.listInner, i), UiToken::Item);
