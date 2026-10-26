@@ -27,6 +27,8 @@ constexpr float kCheckW = 36.0f;
 constexpr float kResetSide = 22.0f;
 constexpr float kVecRange = 64.0f;
 constexpr float kPickW = 160.0f;
+constexpr float kCheckGap = 8.0f;  // clear space between a check row's label and its box
+constexpr float kRowGap = 2.0f;    // gap after the caption of the Tiling / Offset / choice rows
 
 void onType(void* user, uint8_t index) {
     auto* hud = static_cast<HudContext*>(user);
@@ -91,12 +93,12 @@ uint16_t badgeOf(UiState& s, uint16_t row, const char* letter, uint8_t axis) {
 
 } // namespace
 
-// A property row: the label in a fixed-width column, then the check box.
+// A property row: the label in a fixed-width column, kCheckGap of clear space, then the check box.
 uint16_t matFlagCheck(UiState& s, UiPropBinder& bind, uint16_t parent, const char* label, float labelW, uint16_t flag, bool on) {
     if (bind.flags != nullptr && flag < bind.flagN) {
         bind.flags[flag] = on ? 1u : 0u;
     }
-    const uint16_t row = rowOf(s, parent, 0.0f, UiJustify::Start);
+    const uint16_t row = rowOf(s, parent, kCheckGap, UiJustify::Start);
     const uint16_t caption = uiLabel(s, row, label);
     uiSetWidth(s, caption, labelW);
     uiSetGrow(s, caption, 0.0f, 0.0f, labelW);
@@ -122,9 +124,9 @@ uint16_t matRowRole(void* user, UiState& s, UiPropBinder& bind, uint16_t panel, 
         return kUiNone;
     }
     if (spec.kind == 0) {
-        return matFlagCheck(s, bind, panel, spec.label, kLabelW, spec.bind, spec.value >= 0.5f);
+        return matFlagCheck(s, bind, panel, spec.label, kLabelW + kRowGap - kCheckGap, spec.bind, spec.value >= 0.5f);
     }
-    const uint16_t row = rowOf(s, panel, 2.0f, UiJustify::Start);
+    const uint16_t row = rowOf(s, panel, kRowGap, UiJustify::Start);
     (void)captionOf(s, row, spec.label);
     if (spec.kind == 1) {
         for (uint16_t axis = 0; axis < 2u; ++axis) {

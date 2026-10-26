@@ -182,6 +182,7 @@ TEST_CASE("imageLoadFile rasterizes an svg with a Cyrillic path") {
 }
 
 #include "io/File.hpp"
+#include "platform/PlatformUtil.hpp"
 #include "ui/Icon.hpp"
 
 TEST_CASE("uiIconFromName resolves names and rejects unknown ones") {
@@ -191,6 +192,39 @@ TEST_CASE("uiIconFromName resolves names and rejects unknown ones") {
     CHECK(uiIconFromName("nope") == UiIcon::None);
     CHECK(std::string_view(uiIconAssetPath(UiIcon::Add)) == "assets/icons/plus.svg");
     CHECK(uiIconAssetPath(UiIcon::None) == nullptr);
+}
+
+TEST_CASE("every built-in glyph rasterizes into its own atlas cell") {
+    constexpr uint32_t kEdge = kUiIconAtlasEdge;
+    std::vector<uint8_t> atlas(static_cast<size_t>(kEdge) * kEdge * 4u, 0);
+    for (uint32_t id = 1; id <= static_cast<uint32_t>(UiIcon::ChevronLeft); ++id) {
+        const char* asset = uiIconAssetPath(static_cast<UiIcon>(id));
+        if (asset == nullptr) {
+            continue;
+        }
+        char path[640]{};
+        if (!platformResolveAsset(asset, path, sizeof(path))) {
+            CHECK(false);
+            continue;
+        }
+        const uint32_t x = (id % kUiIconAtlasCells) * kUiIconCell;
+        const uint32_t y = (id / kUiIconAtlasCells) * kUiIconCell;
+        if (!imageRasterSvgCell(path, atlas.data(), kEdge, x, y, kUiIconCell)) {
+            CHECK(false);
+            continue;
+        }
+        uint32_t ink = 0;
+        for (uint32_t row = 0; row < kUiIconCell; ++row) {
+            for (uint32_t col = 0; col < kUiIconCell; ++col) {
+                const uint8_t* px = &atlas[((static_cast<size_t>(y) + row) * kEdge + x + col) * 4u];
+                ink += px[3] > 0 ? 1u : 0u;
+                if (row == 0 || col == 0 || row == kUiIconCell - 1 || col == kUiIconCell - 1) {
+                    CHECK(px[3] == 0);
+                }
+            }
+        }
+        CHECK(ink > 8);
+    }
 }
 
 TEST_CASE("fileTrimPath strips CRLF, spaces and quotes from the tail") {

@@ -53,8 +53,8 @@ bool isSvg(const uint8_t* data, size_t n, const char* path) {
     return text.find("<svg") != std::string_view::npos;
 }
 
-// Rasterizes the longest edge to kSvgEdge pixels. Returns malloc'd RGBA8 or nullptr.
-uint8_t* rasterSvg(const uint8_t* data, size_t size, int& w, int& h) {
+// Rasterizes the longest edge to `edge` pixels. Returns malloc'd RGBA8 or nullptr.
+uint8_t* rasterSvg(const uint8_t* data, size_t size, int& w, int& h, uint32_t edge = kSvgEdge) {
     char* text = static_cast<char*>(std::malloc(size + 1));
     if (text == nullptr) {
         return nullptr;
@@ -68,7 +68,7 @@ uint8_t* rasterSvg(const uint8_t* data, size_t size, int& w, int& h) {
         return nullptr;
     }
     const float longest = svg->width > svg->height ? svg->width : svg->height;
-    const float scale = static_cast<float>(kSvgEdge) / longest;
+    const float scale = static_cast<float>(edge) / longest;
     w = static_cast<int>(svg->width * scale + 0.5f);
     h = static_cast<int>(svg->height * scale + 0.5f);
     w = w < 1 ? 1 : w;
@@ -101,6 +101,35 @@ uint32_t readU32(const uint8_t* p) {
 }
 
 } // namespace
+
+bool imageRasterSvgCell(const char* path, uint8_t* atlas, uint32_t atlasW, uint32_t cellX, uint32_t cellY, uint32_t cell) {
+    if (path == nullptr || atlas == nullptr || cell < 4) {
+        return false;
+    }
+    MappedFile file{};
+    if (!fileMapReadOnly(path, &file) || file.data == nullptr || file.size == 0 || file.size > 1024u * 1024u) {
+        fileUnmap(&file);
+        return false;
+    }
+    int w = 0;
+    int h = 0;
+    // One transparent texel around the glyph keeps bilinear taps from bleeding into the neighbouring cell.
+    uint8_t* pixels = rasterSvg(file.data, file.size, w, h, cell - 2u);
+    fileUnmap(&file);
+    if (pixels == nullptr) {
+        return false;
+    }
+    const uint32_t offX = cellX + 1u + (cell - 2u - static_cast<uint32_t>(w)) / 2u;
+    const uint32_t offY = cellY + 1u + (cell - 2u - static_cast<uint32_t>(h)) / 2u;
+    for (int y = 0; y < h; ++y) {
+        std::memcpy(
+            atlas + (static_cast<size_t>(offY) + static_cast<size_t>(y)) * atlasW * 4u + static_cast<size_t>(offX) * 4u,
+            pixels + static_cast<size_t>(y) * static_cast<size_t>(w) * 4u,
+            static_cast<size_t>(w) * 4u);
+    }
+    std::free(pixels);
+    return true;
+}
 
 void imageCpuFree(ImageCpu& img) {
     std::free(img.rgba);

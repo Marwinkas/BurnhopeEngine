@@ -5,7 +5,11 @@
 
 namespace burnhope {
 
-// Procedural sprite ids. The value is the glyph drawn by ui.slang.
+// Built-in sprite ids. The value is the cell of the icon atlas ui.slang samples (kUiIconAtlasCells wide).
+constexpr uint32_t kUiIconAtlasCells = 8;
+constexpr uint32_t kUiIconCell = 32;
+constexpr uint32_t kUiIconAtlasEdge = kUiIconAtlasCells * kUiIconCell;
+
 enum class UiIcon : uint8_t {
     None = 0,
     Minimize = 1,

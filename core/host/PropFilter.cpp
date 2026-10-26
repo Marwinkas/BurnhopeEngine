@@ -53,6 +53,9 @@ void propEachSection(UiState& s, Fn&& fn) {
 
 } // namespace
 
+// Every section body shares one left margin so all labels, Transform included, start at the same x.
+constexpr float kPropBodyPadL = 12.0f;
+
 uint16_t uiPropSection(UiState& s, uint16_t parent, const char* title, uint8_t cat, uint8_t owner) {
     UiFlex column{};
     column.direction = UiFlexDir::Column;
@@ -78,7 +81,7 @@ uint16_t uiPropSection(UiState& s, uint16_t parent, const char* title, uint8_t c
     if (body < s.count) {
         if (auto* flex = s.ent[body].try_get_mut<UiFlex>()) {
             flex->pad = 0.0f;
-            flex->padL = 0.0f;
+            flex->padL = kPropBodyPadL;
             flex->padR = 0.0f;
             flex->padT = 0.0f;
             flex->padB = 0.0f;

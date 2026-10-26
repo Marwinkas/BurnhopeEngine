@@ -22,6 +22,10 @@ void imageCpuFree(ImageCpu& img);
 // Still images and GIF. Frames are stacked top to bottom in rgba.
 [[nodiscard]] bool imageLoadFile(ImageCpu& img, const char* path);
 
+// Rasterizes the SVG at `path` as a white tint mask, centred inside the cell x cell square at (cellX, cellY) of the
+// RGBA8 image `atlas` (row stride atlasW texels), leaving a one texel transparent margin. False when the file is unreadable.
+[[nodiscard]] bool imageRasterSvgCell(const char* path, uint8_t* atlas, uint32_t atlasW, uint32_t cellX, uint32_t cellY, uint32_t cell);
+
 // R = AO, G = roughness, B = metal. One PNG the material file can name.
 [[nodiscard]] bool imagePackOrm(const char* aoPath, const char* roughPath, const char* metalPath, const char* outPath);
 

@@ -31,7 +31,7 @@ const char* uiIconAssetPath(UiIcon icon) {
         case UiIcon::Menu: return "assets/icons/menu.svg";
         case UiIcon::Search: return "assets/icons/search.svg";
         case UiIcon::ChevronRight: return "assets/icons/chevron_right.svg";
-        case UiIcon::MenuChevron:
+        case UiIcon::MenuChevron: return "assets/icons/circle-chevron-down.svg";
         case UiIcon::ChevronDown: return "assets/icons/chevron_down.svg";
         case UiIcon::ChevronLeft: return "assets/icons/chevron_left.svg";
         case UiIcon::LockOpen: return "assets/icons/lock_open.svg";
@@ -42,7 +42,7 @@ const char* uiIconAssetPath(UiIcon icon) {
         case UiIcon::Play: return "assets/icons/play.svg";
         case UiIcon::Pause: return "assets/icons/pause.svg";
         case UiIcon::Stop: return "assets/icons/stop.svg";
-        case UiIcon::Check:
+        case UiIcon::Check: return "assets/icons/check.svg";
         case UiIcon::None: break;
     }
     return nullptr;

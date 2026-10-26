@@ -11,7 +11,8 @@ namespace burnhope {
 constexpr uint32_t kUiDescFont = 661;
 constexpr uint32_t kUiDescPhoto = 662;
 constexpr uint8_t kPhotoSlots = 32; // keep equal to gPhoto[] in ui.slang
-constexpr uint8_t kPhotoDynFirst = 11; // slots below are owned by fixed host code; the icon registry hands out kPhotoDynFirst..kPhotoSlots-1
+constexpr uint8_t kPhotoIconAtlas = 11; // 256x256 atlas of the built-in SVG glyphs, 8x8 cells of 32 texels, cell = UiIcon value
+constexpr uint8_t kPhotoDynFirst = 12; // slots below are owned by fixed host code; the icon registry hands out kPhotoDynFirst..kPhotoSlots-1
 constexpr uint8_t kPhotoNone = 255;
 constexpr float kUiButtonIcon = 16.0f; // side of the sprite a button draws for its photo icon
 

@@ -1,4 +1,6 @@
 #include "ui/rhi/Canvas.hpp"
+#include "image/ImageDecode.hpp"
+#include "ui/Icon.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/rhi/Font.hpp"
@@ -15,8 +17,35 @@
 #include <cstring>
 #include <memory>
 #include <span>
+#include <vector>
 
 namespace burnhope {
+
+namespace {
+
+// Rasterizes every built-in glyph's SVG into its cell of one 256x256 atlas and uploads it to kPhotoIconAtlas.
+bool buildIconAtlas(Canvas& c) {
+    std::vector<uint8_t> atlas(static_cast<size_t>(kUiIconAtlasEdge) * kUiIconAtlasEdge * 4u, 0);
+    uint32_t drawn = 0;
+    for (uint32_t id = 1; id < kUiIconAtlasCells * kUiIconAtlasCells; ++id) {
+        const char* asset = uiIconAssetPath(static_cast<UiIcon>(id));
+        char resolved[640]{};
+        if (asset == nullptr || !platformResolveAsset(asset, resolved, sizeof(resolved))) {
+            continue;
+        }
+        const uint32_t x = (id % kUiIconAtlasCells) * kUiIconCell;
+        const uint32_t y = (id / kUiIconAtlasCells) * kUiIconCell;
+        if (imageRasterSvgCell(resolved, atlas.data(), kUiIconAtlasEdge, x, y, kUiIconCell)) {
+            ++drawn;
+        } else {
+            spdlog::error("icon atlas: failed to rasterize {}", asset);
+        }
+    }
+    spdlog::info("icon atlas: {} glyphs", drawn);
+    return canvasUploadPhoto(c, kPhotoIconAtlas, atlas.data(), kUiIconAtlasEdge, kUiIconAtlasEdge);
+}
+
+} // namespace
 
 bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
     canvasDestroy(c, d);
@@ -41,6 +70,11 @@ bool canvasCreate(Canvas& c, Device& d, DescriptorHeaps& heaps) {
 
     if (!canvasUseFont(c, 18.0f)) {
         spdlog::error("default sdf font failed");
+        canvasDestroy(c, d);
+        return false;
+    }
+    if (!buildIconAtlas(c)) {
+        spdlog::error("icon atlas upload failed");
         canvasDestroy(c, d);
         return false;
     }

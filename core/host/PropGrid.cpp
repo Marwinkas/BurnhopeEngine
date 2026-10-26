@@ -57,7 +57,7 @@ void propHair(UiState& s, uint16_t column) {
 } // namespace
 
 // Label column and the clear gap before the controls: every control starts at kPropLabelW + kPropGap.
-constexpr float kPropLabelW = 115.0f;
+constexpr float kPropLabelW = 135.0f;
 constexpr float kPropGap = 12.0f;
 constexpr float kPropField = 108.0f;
 constexpr float kPropLockGap = 6.0f;
