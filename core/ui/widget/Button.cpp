@@ -111,12 +111,10 @@ uint16_t uiSlotBtn(UiState& s, uint16_t parent, uint8_t slot, float side, uint16
     }
     s.ent[id].add<UiIconChrome>();
     if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
-        paintGhost(*paint);
-        paintTint(*paint, kUiWhite);
-        paint->plate = 1;
+        paintToolIcon(*paint);
     }
     if (auto* image = s.ent[id].try_get_mut<UiImage>()) {
-        image->inset = side;
+        image->inset = kUiToolIconSide;
     }
     if (icon != nullptr) {
         *icon = id;
@@ -140,32 +138,26 @@ void uiButtonTintIcon(UiState& s, uint16_t icon, bool on) {
     uiNotifyVisualDirty(s);
 }
 
-void uiToolButtonState(UiState& s, uint16_t id, bool active, bool ghost) {
+void uiToolFrame(UiState& s, uint16_t id) {
     if (id >= s.count) {
         return;
     }
-    uiButtonTintIcon(s, id, active);
-    if (ghost) {
-        s.ent[id].add<UiIconChrome>();
-    }
     if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
-        paint->bright = active ? 1.0f : 0.7f;
-        if (ghost) {
-            paintGhost(*paint);
-            paintToolFrame(*paint, s.look.text);
-        }
+        paintToolIcon(*paint);
     }
-}
-
-void uiToolFrame(UiState& s, uint16_t id) {
-    auto* paint = id < s.count ? s.ent[id].try_get_mut<UiPaint>() : nullptr;
-    if (paint == nullptr) {
-        return;
+    if (auto* image = s.ent[id].try_get_mut<UiImage>()) {
+        image->inset = kUiToolIconSide;
     }
-    paintGhost(*paint);
-    paintToolFrame(*paint, s.look.text);
     s.ent[id].add<UiIconChrome>();
     uiNotifyVisualDirty(s);
+}
+
+void uiToolButtonState(UiState& s, uint16_t id, bool active) {
+    if (id >= s.count) {
+        return;
+    }
+    uiToolFrame(s, id);
+    uiButtonTintIcon(s, id, active);
 }
 
 float uiButtonTextWidth(const UiState& s, const char* text, float extraPad) {

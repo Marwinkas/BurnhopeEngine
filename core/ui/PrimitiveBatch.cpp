@@ -482,17 +482,12 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             float glyphA = 1.0f;
             const uint16_t host = s.parentOf[id];
             if (paint->plate != 0) {
-                glyphA = paint->bright > 0.02f ? paint->bright : 0.7f;
                 const bool hot = s.hovered == id || (host < s.count && s.hovered == host);
-                if (paint->picked == 0 && hot) {
-                    glyphA = 1.0f;
-                    const UiBox& mark = s.box[id];
-                    const float side = (mark.w < mark.h ? mark.w : mark.h) + 10.0f;
-                    n = emitRect(
-                        dst, n, cap,
-                        mark.x + (mark.w - side) * 0.5f, mark.y + (mark.h - side) * 0.5f, side, side,
-                        s.look.text[0], s.look.text[1], s.look.text[2], 0.22f, side * 0.5f, clip);
-                }
+                const float* ink = paint->picked != 0 ? kUiToolActive : (hot ? kUiToolHover : kUiToolIdle);
+                r = ink[0];
+                g = ink[1];
+                b = ink[2];
+                a = 0.0f;
             }
             const UiImage* image = s.ent[id].try_get<UiImage>();
             if (image != nullptr && image->inset <= 0.0f) {

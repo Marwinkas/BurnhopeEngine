@@ -38,7 +38,7 @@ void gripIdle(UiPaint& paint, const UiLook& look) {
 constexpr float kPropSlotDefault = 26.0f;
 constexpr float kPropRowDefault = 34.0f;
 constexpr float kPropPadDefault = 4.0f;
-constexpr float kPropControlMaxDefault = 320.0f;
+constexpr float kPropControlMaxDefault = 380.0f;
 constexpr float kPropMinLabel = 70.0f;
 constexpr float kPropMinValue = 110.0f;
 
@@ -72,6 +72,7 @@ constexpr float kPropField = 108.0f;
 constexpr float kPropMargin = 8.0f;
 constexpr float kPropLock = 18.0f; // fallback of the "vector_lock" class
 constexpr float kVecGap = 2.0f;
+constexpr float kVecFieldMin = 85.0f;
 constexpr float kPropGap = 10.0f; // clear space between the splitter line and every value control
 
 void propLinkLabel(UiState& s, uint16_t caption) {
@@ -609,7 +610,7 @@ UiPropVec3 propVecN(UiState& s, uint16_t host, const char* label, int n, const f
         hold.width = 0.0f;
         hold.grow = 1.0f;
         hold.shrink = 1.0f;
-        hold.minW = 0.0f;
+        hold.minW = kVecFieldMin;
         hold.align = UiAlign::Center;
         hold.heightMode = UiSize::Px;
         hold.height = propSlotH(s);

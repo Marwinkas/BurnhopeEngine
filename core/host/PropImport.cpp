@@ -287,6 +287,13 @@ uint16_t addBar(Import& in, uint16_t parent, const Node& node) {
         button = uiMenuButton(*in.state, parent, node.label, kUiNone);
     } else {
         button = uiButton(*in.state, parent, {.label = node.label, .width = node.w, .height = node.h > 0.0f ? node.h : 26.0f});
+        // Icon-less bar triggers (File / Edit / View) are flat: transparent, borderless, hover-lifted text.
+        if (!node.hasIcon && button < in.state->count) {
+            if (auto* paint = in.state->ent[button].try_get_mut<UiPaint>()) {
+                paintGhost(*paint);
+                paint->radius = uiStyle(*in.state, "menu_bar", UiStyleKey::Radius, 4.0f);
+            }
+        }
     }
     if (node.h > 0.0f) {
         uiSetHeight(*in.state, button, node.h);

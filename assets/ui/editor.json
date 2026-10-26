@@ -25,7 +25,7 @@
               "role": "menu",
               "bar": true,
               "label": "File",
-              "class": "dropdown_trigger",
+              "class": "menu_bar",
               "items": [
                 {
                   "label": "New Project...",
@@ -53,7 +53,7 @@
               "role": "menu",
               "bar": true,
               "label": "Edit",
-              "class": "dropdown_trigger",
+              "class": "menu_bar",
               "items": [
                 {
                   "label": "Duplicate",
@@ -65,7 +65,7 @@
               "role": "menu",
               "bar": true,
               "label": "View",
-              "class": "dropdown_trigger",
+              "class": "menu_bar",
               "items": [
                 {
                   "label": "Stats",
@@ -265,14 +265,16 @@
                           "min": 0.001,
                           "max": 10000,
                           "step": 0.01,
-                          "w": 108,
+                          "w": 56,
+                          "h": 26,
                           "class": "input_field"
                         },
                         {
                           "role": "menu",
                           "bar": true,
                           "icon": 11,
-                          "w": 108,
+                          "w": 22,
+                          "h": 26,
                           "class": "dropdown_trigger",
                           "slide": true,
                           "items": [
@@ -328,14 +330,16 @@
                           "min": 0.001,
                           "max": 10000,
                           "step": 1.0,
-                          "w": 108,
+                          "w": 56,
+                          "h": 26,
                           "class": "input_field"
                         },
                         {
                           "role": "menu",
                           "bar": true,
                           "icon": 11,
-                          "w": 108,
+                          "w": 22,
+                          "h": 26,
                           "class": "dropdown_trigger",
                           "slide": true,
                           "items": [
@@ -386,14 +390,16 @@
                           "min": 0.001,
                           "max": 10000,
                           "step": 0.01,
-                          "w": 108,
+                          "w": 56,
+                          "h": 26,
                           "class": "input_field"
                         },
                         {
                           "role": "menu",
                           "bar": true,
                           "icon": 11,
-                          "w": 108,
+                          "w": 22,
+                          "h": 26,
                           "class": "dropdown_trigger",
                           "slide": true,
                           "items": [

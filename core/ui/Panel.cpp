@@ -182,7 +182,7 @@ uint32_t uiEmitPanel(
     if (paint->icon != 0 && n < cap) {
         const float fit = box.w < box.h ? box.w : box.h;
         const bool ghost = paint->a <= 0.02f && paint->borderW < 0.4f;
-        float side = ghost ? fit : (fit > 18.0f ? fit - 4.0f : 14.0f);
+        float side = paint->plate != 0 ? kUiToolIconSide : (ghost ? fit : (fit > 18.0f ? fit - 4.0f : 14.0f));
         if (side > 72.0f) {
             side = 72.0f;
         }
@@ -210,9 +210,10 @@ uint32_t uiEmitPanel(
         icon.sizeX = side;
         icon.sizeY = side;
         const bool glyph = paint->a <= 0.02f;
-        icon.color[0] = glyph ? paint->r : s.look.text[0];
-        icon.color[1] = glyph ? paint->g : s.look.text[1];
-        icon.color[2] = glyph ? paint->b : s.look.text[2];
+        const bool tool = paint->plate != 0;
+        icon.color[0] = glyph ? (tool ? r : paint->r) : s.look.text[0];
+        icon.color[1] = glyph ? (tool ? g : paint->g) : s.look.text[1];
+        icon.color[2] = glyph ? (tool ? b : paint->b) : s.look.text[2];
         icon.color[3] = glyphA > 0.0f ? glyphA : 1.0f;
         icon.texId = paint->icon;
         icon.flags = kUiFlagIcon;

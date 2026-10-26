@@ -289,20 +289,22 @@ inline void paintGhost(UiPaint& paint) noexcept {
     paint.radius = 0.0f;
 }
 
-// Every toolbar tool button shares one frame: transparent plate, 1px muted border, 4px corners.
+// Toolbar tool icons ("tool_icon"): no plate and no border, one glyph size, ink by state (idle gray, hover white, active orange).
 constexpr float kUiToolRadius = 4.0f;
-constexpr float kUiToolBorder = 1.0f;
+constexpr float kUiToolIconSide = 20.0f;
+inline constexpr float kUiToolIdle[3]{0.75f, 0.78f, 0.84f};
+inline constexpr float kUiToolHover[3]{1.0f, 1.0f, 1.0f};
+inline constexpr float kUiToolActive[3]{1.0f, 0.55f, 0.10f};
 
-inline void paintToolFrame(UiPaint& paint, const float (&text)[3]) noexcept {
+inline void paintToolIcon(UiPaint& paint) noexcept {
+    paintGhost(paint);
     paint.radius = kUiToolRadius;
     paint.radiusTr = kUiUnset;
     paint.radiusBr = kUiUnset;
     paint.radiusBl = kUiUnset;
-    paint.borderW = kUiToolBorder;
-    paint.shadow = 0.0f;
-    paint.br = text[0] * 0.35f;
-    paint.bg = text[1] * 0.35f;
-    paint.bb = text[2] * 0.35f;
+    paint.plate = 1;
+    paint.bright = 1.0f;
+    paintTint(paint, kUiToolIdle);
 }
 
 inline UiLook uiLookInk() noexcept {

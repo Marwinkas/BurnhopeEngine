@@ -80,7 +80,6 @@ void paintTools(HudContext& hud) {
     for (int i = 0; i < 3; ++i) {
         const bool on = hud.snapOn[i] != 0;
         uiToolButtonState(s, hud.snapBtn[i], on);
-        uiSetAlpha(s, hud.snapBtn[i], on ? 0.18f : 0.0f);
     }
 }
 
