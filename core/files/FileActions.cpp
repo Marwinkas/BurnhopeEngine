@@ -30,11 +30,7 @@ bool fileActionsHandleKey(UiState& s, const InputFrame& in) {
         b.bandSnap = 0;
     }
     const FileTheme& theme = fileTheme(s);
-    const uint8_t wantBefore = b.popWant;
     uiSyncPopover(s, b.pop, b.tune, theme.tuneW, theme.tuneH, b.popWant);
-    if (wantBefore != b.popWant || wantBefore == 1) {
-        spdlog::info("[FileTune] Popover sync: panelId={}, btnId={}, want {} -> {}", b.pop, b.tune, wantBefore, b.popWant);
-    }
     const bool typing = (b.searchBox != kUiNone && s.focused == b.searchBox)
         || uiVirtualGridEditing(s, browser->fileView);
     if (typing) {

@@ -125,6 +125,25 @@ void bindNode(UiState& s, uint16_t row, uint32_t index) {
         shown = fileLeaf(rel.c_str());
     }
     uiText(s, parts->label, shown);
+    char full[1100]{};
+    const char* base = b.root[0] != '\0' ? b.root : b.cwd;
+    if (rel.empty()) {
+        std::snprintf(full, sizeof(full), "%s", base);
+    } else {
+        std::snprintf(full, sizeof(full), "%s/%s", base, rel.c_str());
+    }
+    const bool active = b.cwd[0] != '\0' && sameText(full, b.cwd);
+    if (auto* paint = s.ent[row].try_get_mut<UiPaint>()) {
+        *paint = paintToken(s.look, UiToken::Item, s.look.radiusSm);
+        paint->borderW = 0.0f;
+        if (active) {
+            *paint = paintToken(s.look, UiToken::Accent, s.look.radiusSm);
+            paint->a = s.metrics.selectedA;
+            paint->borderW = 0.0f;
+        } else {
+            paint->a = 0.0f;
+        }
+    }
 }
 
 void onToggle(UiState& s, uint32_t index) {
@@ -367,9 +386,7 @@ void applyIcon(UiState& s, float value) {
 
 void onTune(UiState& s, uint16_t) {
     Browser& b = fileBook(s);
-    spdlog::info("[FileTune] Click event fired, tuneWant={}", b.popWant);
     if (b.pop == kUiNone || b.pop >= s.count) {
-        spdlog::warn("[FileTune] panel missing: panelId={}, nodes={}", b.pop, s.count);
         return;
     }
     b.popWant = b.popWant == 0 ? 1 : 0;

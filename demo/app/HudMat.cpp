@@ -15,6 +15,7 @@
 #include "ui/widget/Scroll.hpp"
 #include "Str.hpp"
 #include "ui/Nodes.hpp"
+#include "ui/State.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -35,6 +36,15 @@ void openMaterialFile(HudContext& hud, const char* path) {
         return;
     }
     UiState& s = *hud.tool.canvas->state;
+    if (hud.matTitle < s.count) {
+        const char* leaf = std::strrchr(path, '/');
+        leaf = leaf != nullptr ? leaf + 1 : path;
+        const char* dot = std::strrchr(leaf, '.');
+        const int stem = dot != nullptr && dot > leaf ? static_cast<int>(dot - leaf) : static_cast<int>(std::strlen(leaf));
+        char title[160]{};
+        std::snprintf(title, sizeof(title), "Editing: %.*s", stem, leaf);
+        uiText(s, hud.matTitle, title);
+    }
     auto put = [&](uint16_t index, float value) { hud.bind.write(s, index, value); };
     for (const ScalarField& field : kDocFields) {
         put(field.scalar, scalarLoad(hud.matDoc, field.offset));

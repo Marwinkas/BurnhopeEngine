@@ -30,6 +30,8 @@ struct UiMetrics {
     float listPad = 8.0f;
     float listGap = 6.0f;
     float gridInset = 8.0f;
+    float tileGap = 8.0f;
+    float tilePad = 4.0f;
     float labelH = 18.0f;
     float listRowH = 36.0f;
     float iconMin = 48.0f;

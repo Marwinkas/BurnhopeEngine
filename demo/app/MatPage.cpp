@@ -13,10 +13,13 @@
 #include "ui/widget/Label.hpp"
 #include "ui/widget/Segment.hpp"
 #include "ui/Nodes.hpp"
+#include "ui/State.hpp"
 
 namespace burnhope {
 
 namespace {
+
+constexpr float kHintScale = 0.8f;
 
 void onType(void* user, uint16_t index) {
     auto* hud = static_cast<HudContext*>(user);
@@ -41,6 +44,12 @@ void onPack(void* user, uint16_t index) {
         hudPaintMaterial(*hud);
     }
     saveOpenMaterial(*hud);
+}
+
+void onSave(void* user, uint16_t) {
+    if (auto* hud = static_cast<HudContext*>(user)) {
+        saveOpenMaterial(*hud);
+    }
 }
 
 void onShape(void* user, uint16_t index) {
@@ -100,15 +109,30 @@ void hudBuildMaterialPage(Canvas& canvas, HudContext* hud, uint16_t panel) {
         {"matPreview", &hud->matPreview},
         {"matType", &hud->matType},
         {"matPack", &hud->matPack},
+        {"matTitle", &hud->matTitle},
+        {"matHint", &hud->matHint},
     };
     const PropCommand commands[] = {
         {"mat.shape", onShape, hud},
         {"mat.type", onType, hud},
         {"mat.pack", onPack, hud},
+        {"mat.save", onSave, hud},
     };
     const PropRole roles[] = {{"matslot", matSlotRole, hud}};
-    if (!propImportAsset(s, panel, "assets/ui/material.json", "material", hud->bind, slots, 3, commands, 3, paintClear(), nullptr, hud, roles, 1)) {
+    if (!propImportAsset(s, panel, "assets/ui/material.json", "material", hud->bind, slots, 5, commands, 4, paintClear(), nullptr, hud, roles, 1)) {
         return;
+    }
+    if (hud->matHint < s.count) {
+        if (auto* paint = s.ent[hud->matHint].try_get_mut<UiPaint>()) {
+            *paint = paintToken(s.look, UiToken::Muted, 0.0f);
+            paint->a = 0.0f;
+            paint->borderW = 0.0f;
+        }
+        if (const uint16_t part = uiTextId(s, hud->matHint); part < s.count) {
+            if (auto* text = s.ent[part].try_get_mut<UiText>()) {
+                text->size = kHintScale;
+            }
+        }
     }
     uiDrag(s, hud->matPreview, onPreviewDrag, hud);
     uiDragRight(s, hud->matPreview, onPreviewOrbit, hud);

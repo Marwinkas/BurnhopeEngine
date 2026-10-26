@@ -4,6 +4,9 @@
 #include "ui/State.hpp"
 
 namespace burnhope {
+namespace {
+constexpr float kBarMaxH = 64.0f;
+} // namespace
 
 void uiSyncPopover(UiState& s, uint16_t panel, uint16_t anchor, float width, float height, uint8_t& want) {
     if (panel >= s.count) {
@@ -25,8 +28,9 @@ void uiSyncPopover(UiState& s, uint16_t panel, uint16_t anchor, float width, flo
             }
             flex->posX = x;
             float y = box.y + box.h + 4.0f;
+            // The bar is the anchor's toolbar row; a grandparent taller than a toolbar is a whole panel, not a bar to clear.
             uint16_t bar = s.parentOf[anchor];
-            if (bar < s.count) {
+            if (bar < s.count && s.parentOf[bar] < s.count && s.box[s.parentOf[bar]].h <= kBarMaxH) {
                 bar = s.parentOf[bar];
             }
             if (bar < s.count && s.box[bar].h > 1.0f) {

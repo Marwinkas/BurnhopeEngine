@@ -11,6 +11,16 @@
 namespace burnhope {
 namespace {
 
+// Tile pitch for icon mode: a fixed gap and fixed inner padding around a square icon that grows with `itemW`.
+float tileIconSide(const UiState& s, float itemW) {
+    const float side = itemW - s.metrics.tileGap - s.metrics.tilePad * 2.0f;
+    return side > 16.0f ? side : 16.0f;
+}
+
+float tilePitchH(const UiState& s, float itemW) {
+    return tileIconSide(s, itemW) + s.metrics.tilePad * 2.0f + s.metrics.labelH + s.metrics.subH + s.metrics.cellGap * 2.0f + s.metrics.tileGap;
+}
+
 void onCell(void* user, uint16_t id) {
     auto* s = static_cast<UiState*>(user);
     if (s == nullptr || id >= s->count) {
@@ -40,16 +50,15 @@ void onCell(void* user, uint16_t id) {
 }
 
 uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
-    const float tile = itemW < itemH ? itemW : itemH;
-    UiFlex cell = px(tile > 12.0f ? tile - 4.0f : tile, tile > 12.0f ? tile - 4.0f : tile);
+    UiFlex cell = px(itemW - s.metrics.tileGap, itemH - s.metrics.tileGap);
     cell.shrink = 0.0f;
     cell.direction = UiFlexDir::Column;
     cell.align = UiAlign::Center;
     cell.justify = UiJustify::Center;
-    cell.padL = s.metrics.cellPadX;
-    cell.padR = s.metrics.cellPadX;
-    cell.padT = s.metrics.cellPadT;
-    cell.padB = s.metrics.cellPadT;
+    cell.padL = s.metrics.tilePad;
+    cell.padR = s.metrics.tilePad;
+    cell.padT = s.metrics.tilePad;
+    cell.padB = s.metrics.tilePad;
     cell.gap = s.metrics.cellGap;
     UiPaint ink = paintToken(s.look, UiToken::Item, s.look.radiusSm);
     ink.a = 0.0f;
@@ -58,7 +67,7 @@ uint16_t addCell(UiState& s, uint16_t inner, float itemW, float itemH) {
     if (slot == kUiNone) {
         return slot;
     }
-    const float iconSide = tile > 24.0f ? tile * 0.46f : 20.0f;
+    const float iconSide = tileIconSide(s, itemW);
     UiFlex glyph{};
     glyph.widthMode = UiSize::Px;
     glyph.width = iconSide;
@@ -129,7 +138,7 @@ void gridOnLayout(UiState& s, uint16_t id, void*) {
 
 uint16_t uiVirtualGrid(UiState& s, uint16_t parent, const UiVirtualGridConfig& cfg) {
     const float itemW = cfg.itemW < 32.0f ? 84.0f : cfg.itemW;
-    const float itemH = cfg.itemH < 32.0f ? 96.0f : cfg.itemH;
+    const float itemH = tilePitchH(s, itemW);
     const uint16_t scroll = uiVirtualHostCreate(s, parent, UiToken::Content, s.look.radiusSm);
     if (scroll == kUiNone) {
         return scroll;
@@ -169,7 +178,7 @@ void uiBindGrid(UiState& s, const char* name, const UiVirtualGridConfig& cfg) {
         return;
     }
     const float itemW = cfg.itemW < 32.0f ? 84.0f : cfg.itemW;
-    const float itemH = cfg.itemH < 32.0f ? 96.0f : cfg.itemH;
+    const float itemH = tilePitchH(s, itemW);
     grid->itemW = itemW;
     grid->itemH = itemH;
     grid->count = cfg.totalItems;
@@ -200,7 +209,7 @@ void uiVirtualGridSetView(UiState& s, uint16_t id, uint32_t count, uint8_t list,
     grid->count = count;
     grid->list = list;
     grid->itemW = itemW;
-    grid->itemH = itemH;
+    grid->itemH = list != 0 ? itemH : tilePitchH(s, itemW);
     uiVirtualGridRefresh(s, id);
 }
 
@@ -241,9 +250,8 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
         const uint32_t col = grid->list != 0 || cols == 0 ? 0u : index % cols;
         const uint32_t row = grid->list != 0 || cols == 0 ? index : index / cols;
         const bool rows = grid->list != 0;
-        const float square = grid->itemW;
-        const float tileW = rows ? (viewW > 24.0f ? viewW : grid->itemW) : square;
-        const float tileH = rows ? grid->itemH - 4.0f : square;
+        const float tileW = rows ? (viewW > 24.0f ? viewW : grid->itemW) : grid->itemW - s.metrics.tileGap;
+        const float tileH = rows ? grid->itemH - 4.0f : grid->itemH - s.metrics.tileGap;
         if (auto* flex = s.ent[slot].try_get_mut<UiFlex>()) {
             flex->position = UiPosition::Absolute;
             flex->posX = rows ? s.metrics.cellGap : static_cast<float>(col) * grid->itemW + s.metrics.gridInset;
@@ -255,17 +263,17 @@ void uiVirtualGridRefresh(UiState& s, uint16_t id) {
             flex->justify = rows ? UiJustify::Start : UiJustify::Center;
             flex->gap = rows ? s.metrics.listGap : s.metrics.cellGap;
             flex->pad = rows ? s.metrics.listPad : 0.0f;
-            flex->padL = rows ? 0.0f : s.metrics.cellPadX;
-            flex->padR = rows ? 0.0f : s.metrics.cellPadX;
-            flex->padT = rows ? 0.0f : s.metrics.cellPadT;
-            flex->padB = rows ? 0.0f : s.metrics.cellPadT;
+            flex->padL = rows ? 0.0f : s.metrics.tilePad;
+            flex->padR = rows ? 0.0f : s.metrics.tilePad;
+            flex->padT = rows ? 0.0f : s.metrics.tilePad;
+            flex->padB = rows ? 0.0f : s.metrics.tilePad;
             flex->width = tileW > 8.0f ? tileW : 8.0f;
             flex->height = tileH > 8.0f ? tileH : 8.0f;
             flex->shrink = 0.0f;
         }
         if (const UiParts* parts = s.ent[slot].try_get<UiParts>()) {
             if (auto* icon = parts->icon < s.count ? s.ent[parts->icon].try_get_mut<UiFlex>() : nullptr) {
-                const float side = rows ? 22.0f : (square > 24.0f ? square * 0.46f : 20.0f);
+                const float side = rows ? 22.0f : tileIconSide(s, grid->itemW);
                 icon->width = side;
                 icon->height = side;
                 icon->shrink = 0.0f;

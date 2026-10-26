@@ -199,11 +199,15 @@ struct HudContext {
     std::vector<MatLeaf> texList;
     uint16_t matEmpty[kMatSlotN]{};
     uint16_t matVal[kMatSlotN]{};
+    uint16_t matCtl[kMatSlotN]{};
+    uint16_t matDriven[kMatSlotN]{};
     uint8_t matGroup[kMatSlotN]{};
     uint8_t matChannel[kMatSlotN]{};
     uint16_t matType = kUiNone;
     uint16_t matPack = kUiNone;
     uint16_t matPreview = kUiNone;
+    uint16_t matTitle = kUiNone;
+    uint16_t matHint = kUiNone;
     float previewYaw = 0.55f;
     float previewPitch = 0.35f;
     float previewTint[3]{1.0f, 1.0f, 1.0f};
