@@ -5,6 +5,34 @@
 
 namespace burnhope {
 
+// Z-кривая: x в чётных битах, y в нечётных. Ввод до 16 бит на ось.
+constexpr uint32_t morton2DSpread(uint32_t v) {
+    v &= 0x0000ffffu;
+    v = (v | (v << 8u)) & 0x00ff00ffu;
+    v = (v | (v << 4u)) & 0x0f0f0f0fu;
+    v = (v | (v << 2u)) & 0x33333333u;
+    v = (v | (v << 1u)) & 0x55555555u;
+    return v;
+}
+
+constexpr uint32_t morton2DCompact(uint32_t v) {
+    v &= 0x55555555u;
+    v = (v | (v >> 1u)) & 0x33333333u;
+    v = (v | (v >> 2u)) & 0x0f0f0f0fu;
+    v = (v | (v >> 4u)) & 0x00ff00ffu;
+    v = (v | (v >> 8u)) & 0x0000ffffu;
+    return v;
+}
+
+constexpr uint32_t morton2DEncode(uint32_t x, uint32_t y) {
+    return morton2DSpread(x) | (morton2DSpread(y) << 1u);
+}
+
+constexpr void morton2DDecode(uint32_t code, uint32_t& x, uint32_t& y) {
+    x = morton2DCompact(code);
+    y = morton2DCompact(code >> 1u);
+}
+
 inline float hammonDiffuse(float nDotL, float nDotV, float vDotL, float roughness) {
     const float nl = std::fmin(std::fmax(nDotL, 0.0f), 1.0f);
     const float nv = std::fmin(std::fmax(nDotV, 0.0f), 1.0f);

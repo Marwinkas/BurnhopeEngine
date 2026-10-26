@@ -1,5 +1,6 @@
 #include "gpu_scene/Physics.hpp"
 
+#include "gpu_scene/Mat4.hpp"
 #include "gpu_scene/SceneObject.hpp"
 
 #include <Jolt/Jolt.h>
@@ -113,9 +114,9 @@ void instanceAxes(const GpuInstance& inst, float scale[3], float x[3], float y[3
     z[0] = inst.world[2];
     z[1] = inst.world[6];
     z[2] = inst.world[10];
-    scale[0] = std::sqrt(x[0] * x[0] + x[1] * x[1] + x[2] * x[2]);
-    scale[1] = std::sqrt(y[0] * y[0] + y[1] * y[1] + y[2] * y[2]);
-    scale[2] = std::sqrt(z[0] * z[0] + z[1] * z[1] + z[2] * z[2]);
+    scale[0] = vec3Len(x);
+    scale[1] = vec3Len(y);
+    scale[2] = vec3Len(z);
     const float sx = scale[0] > 1.0e-4f ? scale[0] : 1.0f;
     const float sy = scale[1] > 1.0e-4f ? scale[1] : 1.0f;
     const float sz = scale[2] > 1.0e-4f ? scale[2] : 1.0f;

@@ -3,6 +3,7 @@
 
 #include <Rtxdi/DI/ReSTIRDI.h>
 
+#include "gpu_scene/LightMath.hpp"
 #include "render/HeapBind.hpp"
 #include "rhi/Barrier.hpp"
 #include "rhi/DescriptorHeap.hpp"
@@ -22,19 +23,6 @@ namespace {
 constexpr VkDeviceSize kRisPayload = VkDeviceSize{kRestirTileSize} * kRestirTileCount * sizeof(uint32_t) * 2u;
 constexpr VkDeviceSize kRisStatBytes = 256;
 constexpr VkDeviceSize kRisFlight = kRisPayload + kRisStatBytes;
-
-uint32_t integerCompact(uint32_t x) {
-    x = (x & 0x11111111u) | ((x & 0x44444444u) >> 1);
-    x = (x & 0x03030303u) | ((x & 0x30303030u) >> 2);
-    x = (x & 0x000F000Fu) | ((x & 0x0F000F00u) >> 4);
-    x = (x & 0x000000FFu) | ((x & 0x00FF0000u) >> 8);
-    return x;
-}
-
-void linearToZCurve(uint32_t index, uint32_t& x, uint32_t& y) {
-    x = integerCompact(index);
-    y = integerCompact(index >> 1);
-}
 
 float lightPower(const LightGpuData& light, uint32_t passMask) {
     if (light.type == kLightDirectional || light.radius <= 0.0f) {
@@ -265,14 +253,14 @@ void splitLights(const void* lights, uint32_t count, uint32_t& localFirst, uint3
 }
 
 void fillPdf(RestirPass& p, const void* lights, uint32_t localFirst, uint32_t localCount, uint32_t passMask) {
-    std::fill(p.pdfCpu.begin(), p.pdfCpu.end(), 0.0f);
+    std::fill(p.pdfCpu, p.pdfCpu + p.pdfFloats, 0.0f);
     p.powered = 0;
     p.powerSum = 0.0f;
     const uint32_t count = std::min(localCount, kLightCap);
     for (uint32_t k = 0; k < count; ++k) {
         uint32_t x = 0;
         uint32_t y = 0;
-        linearToZCurve(k, x, y);
+        morton2DDecode(k, x, y);
         const float power = lightPower(lightAt(lights, localFirst + k), passMask);
         if (power > 0.0f) {
             p.powered += 1u;
@@ -311,7 +299,7 @@ void fillPdf(RestirPass& p, const void* lights, uint32_t localFirst, uint32_t lo
 void uploadPdf(VkCommandBuffer cmd, RestirPass& p, Device& d, uint32_t flight) {
     const VkDeviceSize bytes = VkDeviceSize{p.pdfFloats} * sizeof(float);
     auto* dst = static_cast<uint8_t*>(p.pdfStaging.mapped) + bytes * flight;
-    std::memcpy(dst, p.pdfCpu.data(), bytes);
+    std::memcpy(dst, p.pdfCpu, bytes);
     gpuBufferFlush(p.pdfStaging, d, bytes * flight, bytes);
     rhiBufferBarrier(cmd, p.pdfStaging.buffer, bytes * flight, bytes,
         VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_WRITE_BIT,
@@ -475,7 +463,8 @@ bool restirCreate(RestirPass& p, Device& d, const DescriptorHeaps& heaps, VkExte
         mw = std::max(mw / 2u, 1u);
         mh = std::max(mh / 2u, 1u);
     }
-    p.pdfCpu.assign(p.pdfFloats, 0.0f);
+    delete[] p.pdfCpu;
+    p.pdfCpu = new float[p.pdfFloats]();
     const VkDeviceSize pdfBytes = VkDeviceSize{p.pdfFloats} * sizeof(float);
     const VkExtent2D pdfExtent{p.pdfW, p.pdfH};
     uint8_t raw[kRestirNeighborCount * 2u];
@@ -532,7 +521,8 @@ void restirDestroy(RestirPass& p, Device& d) {
     gpuBufferDestroy(p.pdfStaging, d);
     gpuImageDestroy(p.pdf[0], d);
     gpuImageDestroy(p.pdf[1], d);
-    p.pdfCpu.clear();
+    delete[] p.pdfCpu;
+    p.pdfCpu = nullptr;
     p.pdfW = 0;
     p.pdfH = 0;
     p.pdfMips = 0;

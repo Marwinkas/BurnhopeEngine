@@ -113,38 +113,24 @@ void bakeAudio(SceneFrameImpl& scene) {
             const GpuVertex& a = scene.vertSrc[mesh.vertexOffset + i0];
             const GpuVertex& b = scene.vertSrc[mesh.vertexOffset + i1];
             const GpuVertex& c = scene.vertSrc[mesh.vertexOffset + i2];
-            float x0, y0, z0, x1, y1, z1, x2, y2, z2;
-            instanceTransformPoint(inst, a.px, a.py, a.pz, x0, y0, z0);
-            instanceTransformPoint(inst, b.px, b.py, b.pz, x1, y1, z1);
-            instanceTransformPoint(inst, c.px, c.py, c.pz, x2, y2, z2);
-            const float e1x = x1 - x0;
-            const float e1y = y1 - y0;
-            const float e1z = z1 - z0;
-            const float e2x = x2 - x0;
-            const float e2y = y2 - y0;
-            const float e2z = z2 - z0;
-            const float nx = e1y * e2z - e1z * e2y;
-            const float ny = e1z * e2x - e1x * e2z;
-            const float nz = e1x * e2y - e1y * e2x;
-            const float area2 = nx * nx + ny * ny + nz * nz;
+            float p0[3];
+            float p1[3];
+            float p2[3];
+            float normal[3];
+            float area2 = 0.0f;
+            instanceTransformTriangle(inst, a, b, c, p0, p1, p2, normal, area2);
             if (area2 < 1.0e-8f) {
                 continue;
             }
             const int32_t base = static_cast<int32_t>(xyz.size() / 3u);
-            xyz.push_back(x0);
-            xyz.push_back(y0);
-            xyz.push_back(z0);
-            xyz.push_back(x1);
-            xyz.push_back(y1);
-            xyz.push_back(z1);
-            xyz.push_back(x2);
-            xyz.push_back(y2);
-            xyz.push_back(z2);
+            xyz.insert(xyz.end(), p0, p0 + 3);
+            xyz.insert(xyz.end(), p1, p1 + 3);
+            xyz.insert(xyz.end(), p2, p2 + 3);
             idx.push_back(base);
             idx.push_back(base + 1);
             idx.push_back(base + 2);
             const float len = std::sqrt(area2);
-            mat.push_back(ny > 0.65f * len ? 1 : 0);
+            mat.push_back(normal[1] > 0.65f * len ? 1 : 0);
             if (mat.size() >= kCap) {
                 break;
             }

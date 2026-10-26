@@ -8,6 +8,7 @@
 #include "gfx/Material.hpp"
 #include "gfx/PrimitiveGen.hpp"
 #include "gpu_scene/InstanceData.hpp"
+#include "gpu_scene/LightMath.hpp"
 #include "gpu_scene/Mat4.hpp"
 
 #include <cstdio>
@@ -213,4 +214,66 @@ TEST_CASE("primitive boxes, instance points and axis bases") {
     CHECK(u[0] * v[0] + u[1] * v[1] + u[2] * v[2] == doctest::Approx(0.0f));
     const float zero[3] = {0.0f, 0.0f, 0.0f};
     CHECK_FALSE(mat4BasisFromAxis(zero, u, v));
+}
+
+TEST_CASE("vector helpers, euler basis roundtrip and reverse-Z box") {
+    const float a[3] = {1.0f, 2.0f, 2.0f};
+    const float b[3] = {4.0f, 6.0f, 2.0f};
+    float out[3]{};
+    vec3Add(a, b, out);
+    CHECK(out[0] == doctest::Approx(5.0f));
+    vec3Sub(b, a, out);
+    CHECK(out[2] == doctest::Approx(0.0f));
+    CHECK(vec3Dot(a, b) == doctest::Approx(20.0f));
+    CHECK(vec3Len(a) == doctest::Approx(3.0f));
+    CHECK(vec3Dist(a, b) == doctest::Approx(5.0f));
+    float n[3] = {a[0], a[1], a[2]};
+    CHECK(vec3Normalize(n) == doctest::Approx(3.0f));
+    CHECK(vec3Len(n) == doctest::Approx(1.0f));
+    float zero[3]{};
+    CHECK(vec3Normalize(zero) == doctest::Approx(0.0f));
+    const float ex[3] = {1.0f, 0.0f, 0.0f};
+    const float ey[3] = {0.0f, 1.0f, 0.0f};
+    vec3Cross(ex, ey, out);
+    CHECK(out[2] == doctest::Approx(1.0f));
+
+    const float euler[3] = {20.0f, 35.0f, -15.0f};
+    float x[3], y[3], z[3], back[3];
+    mat3FromEuler(euler, x, y, z);
+    eulerFromMat3(x, y, z, back);
+    CHECK(back[0] == doctest::Approx(euler[0]).epsilon(0.001));
+    CHECK(back[1] == doctest::Approx(euler[1]).epsilon(0.001));
+    CHECK(back[2] == doctest::Approx(euler[2]).epsilon(0.001));
+
+    const Mat4 box = mat4OrthoBoxReverseZ(10.0f, 10.0f, 1.0f, 101.0f);
+    const Mat4 ref = mat4OrthoReverseZ(10.0f, 10.0f, 1.0f, 101.0f);
+    CHECK(box.m[10] * -1.0f + box.m[14] == doctest::Approx(1.0f)); // near plane, view z = -1 -> depth 1
+    CHECK(box.m[10] * -101.0f + box.m[14] == doctest::Approx(0.0f).epsilon(0.001));
+    CHECK(box.m[0] == doctest::Approx(ref.m[0]));
+}
+
+TEST_CASE("morton codes and triangle transform") {
+    for (uint32_t y = 0; y < 64u; ++y) {
+        for (uint32_t x = 0; x < 64u; ++x) {
+            uint32_t rx = 0, ry = 0;
+            morton2DDecode(morton2DEncode(x, y), rx, ry);
+            CHECK(rx == x);
+            CHECK(ry == y);
+        }
+    }
+    CHECK(morton2DEncode(1u, 0u) == 1u);
+    CHECK(morton2DEncode(0u, 1u) == 2u);
+    CHECK(morton2DEncode(7u, 3u) == 31u);
+
+    GpuVertex a{}, b{}, c{};
+    b.px = 2.0f;
+    c.py = 2.0f;
+    GpuInstance inst{};
+    instanceSet(inst, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0);
+    float p0[3], p1[3], p2[3], normal[3], area2 = 0.0f;
+    instanceTransformTriangle(inst, a, b, c, p0, p1, p2, normal, area2);
+    CHECK(p0[2] == doctest::Approx(1.0f));
+    CHECK(p1[0] == doctest::Approx(2.0f));
+    CHECK(normal[2] == doctest::Approx(4.0f));
+    CHECK(area2 == doctest::Approx(16.0f));
 }

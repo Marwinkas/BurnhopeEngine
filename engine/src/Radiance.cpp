@@ -1,5 +1,7 @@
 #include "render/Radiance.hpp"
 
+#include "gpu_scene/InstanceData.hpp"
+#include "gpu_scene/LightMath.hpp"
 #include "render/HeapBind.hpp"
 #include "render/PassBufferSync.hpp"
 #include "render/RenderDefs.hpp"
@@ -44,29 +46,14 @@ static_assert(sizeof(RcDirAccum) == kDirStride);
 static_assert(sizeof(RcProbeData) == kMetaStride);
 static_assert(sizeof(RcMerged) == kMergedStride);
 
-constexpr uint32_t rcMortonPack(uint32_t x, uint32_t y) {
-    uint32_t code = 0;
-    code |= (x & 1u) << 0u;
-    code |= (y & 1u) << 1u;
-    code |= (x & 2u) << 1u;
-    code |= (y & 2u) << 2u;
-    code |= (x & 4u) << 2u;
-    return code;
-}
-
-constexpr uint32_t rcMortonX(uint32_t code) {
-    return (code & 1u) | ((code & 4u) >> 1u) | ((code & 16u) >> 2u);
-}
-
-constexpr uint32_t rcMortonY(uint32_t code) {
-    return ((code & 2u) >> 1u) | ((code & 8u) >> 2u);
-}
-
 constexpr bool rcMortonRoundtrip() {
     for (uint32_t y = 0; y < 4u; ++y) {
         for (uint32_t x = 0; x < 8u; ++x) {
-            const uint32_t code = rcMortonPack(x, y);
-            if (code >= 32u || rcMortonX(code) != x || rcMortonY(code) != y) {
+            const uint32_t code = morton2DEncode(x, y);
+            uint32_t rx = 0;
+            uint32_t ry = 0;
+            morton2DDecode(code, rx, ry);
+            if (code >= 32u || rx != x || ry != y) {
                 return false;
             }
         }
@@ -75,7 +62,7 @@ constexpr bool rcMortonRoundtrip() {
 }
 
 constexpr uint32_t rcHier(uint32_t u, uint32_t v, uint32_t cascade) {
-    const uint32_t coarse = rcMortonPack(u >> cascade, v >> cascade);
+    const uint32_t coarse = morton2DEncode(u >> cascade, v >> cascade);
     uint32_t fine = 0;
     if (cascade > 0u) {
         fine |= ((v & 1u) << 1u) | (u & 1u);
@@ -487,10 +474,21 @@ void radianceArm(
             }
             const uint32_t at = mlet.indexOffset + t * 3u;
             const uint32_t base = written * 3u;
+            const GpuVertex* corner[3] = {
+                &verts[mlet.vertexOffset + indices[at]],
+                &verts[mlet.vertexOffset + indices[at + 1u]],
+                &verts[mlet.vertexOffset + indices[at + 2u]],
+            };
+            float world[3][3];
+            float faceNormal[3];
+            float area2 = 0.0f;
+            instanceTransformTriangle(instances[i], *corner[0], *corner[1], *corner[2], world[0], world[1], world[2], faceNormal, area2);
             for (uint32_t k = 0; k < 3u; ++k) {
-                const GpuVertex& v = verts[mlet.vertexOffset + indices[at + k]];
+                const GpuVertex& v = *corner[k];
                 RcTriVert out{};
-                instanceTransformPoint(instances[i], v.px, v.py, v.pz, out.x, out.y, out.z);
+                out.x = world[k][0];
+                out.y = world[k][1];
+                out.z = world[k][2];
                 loX = std::min(loX, out.x);
                 loY = std::min(loY, out.y);
                 loZ = std::min(loZ, out.z);

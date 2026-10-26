@@ -175,8 +175,10 @@ struct SceneFrameImpl {
         uint8_t actor = 0xff;
         uint8_t channel = 0xff;
     };
-    TexJob texJob[8]{};
-    uint8_t texJobN = 0;
+    static constexpr uint8_t kTexJobCap = 8; // power of two dividing 256, so wrapped uint8_t counters index the ring
+    TexJob texJob[kTexJobCap]{};
+    uint8_t texJobHead = 0;
+    uint8_t texJobTail = 0;
     uint8_t texPublish = 0;
     uint32_t texPublishBase = 0;
     uint8_t propCount = 0;

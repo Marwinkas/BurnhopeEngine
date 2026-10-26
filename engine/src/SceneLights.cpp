@@ -2,6 +2,7 @@
 #include "render/Weather.hpp"
 #include "render/SceneFrameImpl.hpp"
 #include "gpu_scene/LightMath.hpp"
+#include "gpu_scene/Mat4.hpp"
 #include "gpu_scene/PointShadow.hpp"
 #include "gpu_scene/SunShadow.hpp"
 
@@ -72,10 +73,7 @@ uint32_t uploadLights(SceneFrameImpl& s, uint32_t flight) {
             for (uint32_t l = 0; l < authored; ++l) {
                 LightGpuData prev{};
                 std::memcpy(&prev, dst + sizeof(LightGpuData) * l, sizeof(prev));
-                const float dx = prev.pos[0] - inst.sphere[0];
-                const float dy = prev.pos[1] - inst.sphere[1];
-                const float dz = prev.pos[2] - inst.sphere[2];
-                if (dx * dx + dy * dy + dz * dz < 0.25f) {
+                if (vec3Dist(prev.pos, inst.sphere) < 0.5f) {
                     near = true;
                     break;
                 }

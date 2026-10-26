@@ -1,5 +1,6 @@
 #include "gpu_scene/SceneObject.hpp"
 #include "Str.hpp"
+#include "gpu_scene/Mat4.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -8,35 +9,11 @@
 namespace burnhope {
 
 void actorBasis(const float euler[3], float x[3], float y[3], float z[3]) {
-    const float yaw = euler[1] * 0.017453292f;
-    const float pitch = euler[0] * 0.017453292f;
-    const float roll = euler[2] * 0.017453292f;
-    const float cy = std::cos(yaw);
-    const float sy = std::sin(yaw);
-    const float cp = std::cos(pitch);
-    const float sp = std::sin(pitch);
-    const float cr = std::cos(roll);
-    const float sr = std::sin(roll);
-    x[0] = cy * cr + sy * sp * sr;
-    x[1] = cp * sr;
-    x[2] = -sy * cr + cy * sp * sr;
-    y[0] = -cy * sr + sy * sp * cr;
-    y[1] = cp * cr;
-    y[2] = sy * sr + cy * sp * cr;
-    z[0] = sy * cp;
-    z[1] = -sp;
-    z[2] = cy * cp;
+    mat3FromEuler(euler, x, y, z);
 }
 
 void actorEulerFromBasis(const float x[3], const float y[3], const float z[3], float euler[3]) {
-    euler[0] = std::asin(std::fmax(-1.0f, std::fmin(1.0f, -z[1]))) * 57.2957795f;
-    if (std::fabs(z[1]) < 0.999f) {
-        euler[1] = std::atan2(z[0], z[2]) * 57.2957795f;
-        euler[2] = std::atan2(x[1], y[1]) * 57.2957795f;
-    } else {
-        euler[1] = std::atan2(-x[2], x[0]) * 57.2957795f;
-        euler[2] = 0.0f;
-    }
+    eulerFromMat3(x, y, z, euler);
 }
 
 void actorSpinAround(const float grabEuler[3], const float axis[3], float deltaDeg, float outEuler[3]) {

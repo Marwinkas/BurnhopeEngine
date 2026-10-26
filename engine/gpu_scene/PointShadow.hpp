@@ -2,6 +2,7 @@
 
 #include "gfx/Light.hpp"
 #include "gpu_scene/Camera.hpp"
+#include "gpu_scene/Mat4.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -11,10 +12,8 @@ namespace burnhope {
 constexpr uint32_t kPointShadowSize = 512;
 
 inline float pointShadowDepth(float x, float y, float z, const LightGpuData& light) {
-    const float dx = x - light.pos[0];
-    const float dy = y - light.pos[1];
-    const float dz = z - light.pos[2];
-    const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+    const float p[3] = {x, y, z};
+    const float dist = vec3Dist(p, light.pos);
     if (light.radius <= 1.0e-6f) {
         return 1.0f;
     }

@@ -22,11 +22,11 @@ struct SunShadow {
 
 inline SunShadow sunShadowBuildAt(float cx, float cy, float cz, float dirX, float dirY, float dirZ, float extent = 20.0f, float snapCells = 1.0f) {
     SunShadow sun{};
-    const float len = std::sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
-    const float s = len > 1.0e-6f ? 1.0f / len : 1.0f;
-    dirX *= s;
-    dirY *= s;
-    dirZ *= s;
+    float dir[3] = {dirX, dirY, dirZ};
+    vec3Normalize(dir);
+    dirX = dir[0];
+    dirY = dir[1];
+    dirZ = dir[2];
     float upx = 0.0f;
     float upy = 1.0f;
     float upz = 0.0f;
@@ -53,7 +53,7 @@ inline SunShadow sunShadowBuildAt(float cx, float cy, float cz, float dirX, floa
     sun.view = mat4LookAtYUpRh(ex, ey, ez, tx, ty, tz);
     const float zNear = depthR * 0.02f;
     const float zFar = depthR * 8.0f;
-    sun.proj = mat4OrthoRh(-extent, extent, -extent, extent, zFar, zNear);
+    sun.proj = mat4OrthoBoxReverseZ(extent, extent, zNear, zFar);
     sun.viewProj = mat4Mul(sun.proj, sun.view);
     sun.resolution = kSunShadowResolution;
     sun.radius = extent;
@@ -77,12 +77,10 @@ inline SunShadow sunShadowWindow(
     cx *= 0.125f;
     cy *= 0.125f;
     cz *= 0.125f;
+    const float center[3] = {cx, cy, cz};
     float radius = 0.0f;
     for (int i = 0; i < 8; ++i) {
-        const float dx = corner[i][0] - cx;
-        const float dy = corner[i][1] - cy;
-        const float dz = corner[i][2] - cz;
-        const float d = std::sqrt(dx * dx + dy * dy + dz * dz);
+        const float d = vec3Dist(corner[i], center);
         if (d > radius) {
             radius = d;
         }

@@ -464,17 +464,17 @@ TEST_CASE("scene actor duplicate keeps the transform") {
     float y[3]{};
     float z[3]{};
     actorBasis(pose.euler, x, y, z);
-    CHECK(actorDot(x, y) == doctest::Approx(0.0f).epsilon(0.001));
-    CHECK(actorDot(y, z) == doctest::Approx(0.0f).epsilon(0.001));
-    CHECK(actorLen(z) == doctest::Approx(1.0f).epsilon(0.001));
+    CHECK(vec3Dot(x, y) == doctest::Approx(0.0f).epsilon(0.001));
+    CHECK(vec3Dot(y, z) == doctest::Approx(0.0f).epsilon(0.001));
+    CHECK(vec3Len(z) == doctest::Approx(1.0f).epsilon(0.001));
     float spun[3]{};
     actorSpin(pose.euler, 0, 40.0f, spun);
     float x1[3]{};
     float y1[3]{};
     float z1[3]{};
     actorBasis(spun, x1, y1, z1);
-    CHECK(actorDot(x, x1) == doctest::Approx(1.0f).epsilon(0.001));
-    CHECK(actorDot(y, y1) < 0.95f);
+    CHECK(vec3Dot(x, x1) == doctest::Approx(1.0f).epsilon(0.001));
+    CHECK(vec3Dot(y, y1) < 0.95f);
 }
 TEST_CASE("gizmo keeps a constant screen length") {
     CameraPose camPose{};

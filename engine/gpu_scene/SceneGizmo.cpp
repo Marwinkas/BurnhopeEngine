@@ -6,20 +6,6 @@
 #include <cstring>
 
 namespace burnhope {
-static void actorSub(const float a[3], const float b[3], float o[3]) {
-    o[0] = a[0] - b[0];
-    o[1] = a[1] - b[1];
-    o[2] = a[2] - b[2];
-}
-
-float actorDot(const float a[3], const float b[3]) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-float actorLen(const float a[3]) {
-    return std::sqrt(actorDot(a, a));
-}
-
 void sceneActorSetCamera(SceneActors& world, const CameraCull& cam, float width, float height) {
     world.viewProj = cam.viewProj;
     world.eye[0] = cam.pos[0];
@@ -66,7 +52,7 @@ static void actorRay(const SceneActors& world, float px, float py, float ro[3], 
     rd[0] = world.right[0] * vx + world.up[0] * vy + world.forward[0];
     rd[1] = world.right[1] * vx + world.up[1] * vy + world.forward[1];
     rd[2] = world.right[2] * vx + world.up[2] * vy + world.forward[2];
-    const float n = actorLen(rd);
+    const float n = vec3Len(rd);
     if (n > 1.0e-6f) {
         rd[0] /= n;
         rd[1] /= n;
@@ -115,22 +101,22 @@ static float actorScreenAlong(float px, float py, float ax, float ay, float bx, 
 }
 
 static bool actorRayPlane(const float ro[3], const float rd[3], const float p0[3], const float n[3], float& t) {
-    const float denom = actorDot(rd, n);
+    const float denom = vec3Dot(rd, n);
     if (std::fabs(denom) < 1.0e-6f) {
         return false;
     }
     float w[3];
-    actorSub(p0, ro, w);
-    t = actorDot(w, n) / denom;
+    vec3Sub(p0, ro, w);
+    t = vec3Dot(w, n) / denom;
     return t > 0.0f;
 }
 
 static float actorRayAxis(const float ro[3], const float rd[3], const float p0[3], const float dir[3], float& along) {
     float w0[3];
-    actorSub(ro, p0, w0);
-    const float b = actorDot(rd, dir);
-    const float d = actorDot(rd, w0);
-    const float e = actorDot(dir, w0);
+    vec3Sub(ro, p0, w0);
+    const float b = vec3Dot(rd, dir);
+    const float d = vec3Dot(rd, w0);
+    const float e = vec3Dot(dir, w0);
     const float denom = 1.0f - b * b;
     if (denom < 1.0e-6f) {
         along = e;
@@ -139,7 +125,7 @@ static float actorRayAxis(const float ro[3], const float rd[3], const float p0[3
     }
     const float hit[3] = {p0[0] + dir[0] * along, p0[1] + dir[1] * along, p0[2] + dir[2] * along};
     float closest[3];
-    float t = actorDot(w0, rd);
+    float t = vec3Dot(w0, rd);
     if (denom >= 1.0e-6f) {
         t = (b * e - d) / denom;
     }
@@ -147,8 +133,8 @@ static float actorRayAxis(const float ro[3], const float rd[3], const float p0[3
     closest[1] = ro[1] + rd[1] * t;
     closest[2] = ro[2] + rd[2] * t;
     float delta[3];
-    actorSub(closest, hit, delta);
-    return actorLen(delta);
+    vec3Sub(closest, hit, delta);
+    return vec3Len(delta);
 }
 
 float actorMetersPerPx(const SceneActors& world, const float pos[3]) {
@@ -157,8 +143,8 @@ float actorMetersPerPx(const SceneActors& world, const float pos[3]) {
         return (2.0f * world.tanY) / height;
     }
     float delta[3];
-    actorSub(pos, world.eye, delta);
-    float dist = actorLen(delta);
+    vec3Sub(pos, world.eye, delta);
+    float dist = vec3Len(delta);
     if (dist < 0.2f) {
         dist = 0.2f;
     }
@@ -278,7 +264,7 @@ static bool actorAlong(const SceneActors& world, float px, float py, const float
     float ro[3];
     float rd[3];
     actorRay(world, px, py, ro, rd);
-    const float align = std::fabs(actorDot(rd, dir));
+    const float align = std::fabs(vec3Dot(rd, dir));
     const bool useScreen = stick < 0 ? align > 0.92f : stick == 1;
     if (useScreen) {
         float ax = 0.0f;
@@ -306,7 +292,7 @@ static float actorRingAngle(const SceneActors& world, float px, float py, const 
     float ro[3];
     float rd[3];
     actorRay(world, px, py, ro, rd);
-    const bool flat = std::fabs(actorDot(rd, axis)) <= 0.2f;
+    const bool flat = std::fabs(vec3Dot(rd, axis)) <= 0.2f;
     if (screen == 0xff) {
         screen = flat ? 1 : 0;
     }
@@ -318,8 +304,8 @@ static float actorRingAngle(const SceneActors& world, float px, float py, const 
             float v[3];
             if (mat4BasisFromAxis(axis, u, v)) {
                 float rel[3];
-                actorSub(hit, origin, rel);
-                return std::atan2(actorDot(rel, v), actorDot(rel, u)) * 57.2957795f;
+                vec3Sub(hit, origin, rel);
+                return std::atan2(vec3Dot(rel, v), vec3Dot(rel, u)) * 57.2957795f;
             }
         }
     }
@@ -565,8 +551,8 @@ uint8_t sceneActorHit(const SceneActors& world, float px, float py, uint8_t& axi
             continue;
         }
         float delta[3];
-        actorSub(actor->pos, world.eye, delta);
-        float radius = actorIconPx(actorLen(delta)) * 0.5f;
+        vec3Sub(actor->pos, world.eye, delta);
+        float radius = actorIconPx(vec3Len(delta)) * 0.5f;
         if (world.ent[i].has<ActorBounds>()) {
             const ActorBounds& box = world.ent[i].get<ActorBounds>();
             const float reach = std::max(box.half[0], std::max(box.half[1], box.half[2])) * actor->scale[0];
@@ -579,7 +565,7 @@ uint8_t sceneActorHit(const SceneActors& world, float px, float py, uint8_t& axi
             float ty = 0.0f;
             if (actorProject(world, corner, tx, ty)) {
                 radius = std::sqrt((tx - sx) * (tx - sx) + (ty - sy) * (ty - sy));
-                const float iconR = actorIconPx(actorLen(delta)) * 0.5f;
+                const float iconR = actorIconPx(vec3Len(delta)) * 0.5f;
                 if (radius < iconR) {
                     radius = iconR;
                 }
@@ -701,12 +687,12 @@ void sceneActorPointer(SceneActors& world, float x, float y, uint8_t down, uint8
                     world.grabHit[2] = world.grabOrg[2];
                 }
                 float rel[3];
-                actorSub(world.grabHit, world.grabOrg, rel);
-                const float nd = actorDot(rel, basis[missing]);
+                vec3Sub(world.grabHit, world.grabOrg, rel);
+                const float nd = vec3Dot(rel, basis[missing]);
                 rel[0] -= basis[missing][0] * nd;
                 rel[1] -= basis[missing][1] * nd;
                 rel[2] -= basis[missing][2] * nd;
-                world.grabAlong = actorLen(rel);
+                world.grabAlong = vec3Len(rel);
                 if (world.grabAlong < 0.05f) {
                     world.grabAlong = 0.05f;
                 }
@@ -739,9 +725,9 @@ void sceneActorPointer(SceneActors& world, float x, float y, uint8_t down, uint8
         const float sy = std::fabs(xform.scale[1]) > 1.0e-4f ? xform.scale[1] : 1.0f;
         const float sz = std::fabs(xform.scale[2]) > 1.0e-4f ? xform.scale[2] : 1.0f;
         const float local[3] = {
-            world.grabPivot[0] + actorDot(delta, bx) / sx,
-            world.grabPivot[1] + actorDot(delta, by) / sy,
-            world.grabPivot[2] + actorDot(delta, bz) / sz,
+            world.grabPivot[0] + vec3Dot(delta, bx) / sx,
+            world.grabPivot[1] + vec3Dot(delta, by) / sy,
+            world.grabPivot[2] + vec3Dot(delta, bz) / sz,
         };
         actorWritePivot(world, world.selected, local);
     };
@@ -825,13 +811,13 @@ void sceneActorPointer(SceneActors& world, float x, float y, uint8_t down, uint8
         }
         const float hitPt[3] = {ro[0] + rd[0] * t, ro[1] + rd[1] * t, ro[2] + rd[2] * t};
         float rel[3];
-        actorSub(hitPt, world.grabPos, rel);
-        const float nd = actorDot(rel, basis[missing]);
+        vec3Sub(hitPt, world.grabPos, rel);
+        const float nd = vec3Dot(rel, basis[missing]);
         rel[0] -= basis[missing][0] * nd;
         rel[1] -= basis[missing][1] * nd;
         rel[2] -= basis[missing][2] * nd;
         if (world.gizmo == 2) {
-            const float dist = actorLen(rel);
+            const float dist = vec3Len(rel);
             float factor = dist / world.grabAlong;
             if (factor < 0.05f) {
                 factor = 0.05f;
@@ -854,7 +840,7 @@ void sceneActorPointer(SceneActors& world, float x, float y, uint8_t down, uint8
             hitPt[1] - world.grabHit[1],
             hitPt[2] - world.grabHit[2],
         };
-        const float dn = actorDot(delta, basis[missing]);
+        const float dn = vec3Dot(delta, basis[missing]);
         delta[0] -= basis[missing][0] * dn;
         delta[1] -= basis[missing][1] * dn;
         delta[2] -= basis[missing][2] * dn;
@@ -863,7 +849,7 @@ void sceneActorPointer(SceneActors& world, float x, float y, uint8_t down, uint8
             if (a == missing) {
                 continue;
             }
-            float along = actorDot(delta, basis[a]);
+            float along = vec3Dot(delta, basis[a]);
             if (snapMove) {
                 along = actorSnap(along, world.snapStep[0]);
             }

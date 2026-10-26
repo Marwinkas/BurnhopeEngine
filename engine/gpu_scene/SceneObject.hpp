@@ -238,10 +238,6 @@ uint8_t sceneActorAdd(SceneActors& world, SceneActorKind kind, const float pos[3
 
 uint8_t sceneActorDuplicate(SceneActors& world);
 
-float actorDot(const float a[3], const float b[3]);
-
-float actorLen(const float a[3]);
-
 void sceneActorSetCamera(SceneActors& world, const CameraCull& cam, float width, float height);
 
 bool actorProject(const SceneActors& world, const float p[3], float& sx, float& sy);

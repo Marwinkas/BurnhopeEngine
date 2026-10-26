@@ -10,7 +10,6 @@
 #include <Rtxdi/DI/ReSTIRDIParameters.h>
 
 #include <cstdint>
-#include <vector>
 
 namespace rtxdi {
 class ReSTIRDIContext;
@@ -112,7 +111,7 @@ struct RestirPass {
     GpuImage pdf[2]{};
     GpuImage histPos{};
     GpuImage histMat{};
-    std::vector<float> pdfCpu{};
+    float* pdfCpu = nullptr; // pdfFloats entries, owned by restirCreate/restirDestroy
     rtxdi::ReSTIRDIContext* ctx[2]{};
     uint32_t pdfW = 0;
     uint32_t pdfH = 0;

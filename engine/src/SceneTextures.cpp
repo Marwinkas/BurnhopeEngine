@@ -521,14 +521,15 @@ bool sceneFrameCloneMaterial(SceneFrame* scene, uint8_t actor) {
 }
 
 void sceneFrameQueueTexture(SceneFrame* scene, uint8_t actor, uint8_t channel, const char* path) {
-    if (scene == nullptr || path == nullptr || path[0] == '\0' || channel > 7u || scene->texJobN >= 8u) {
+    if (scene == nullptr || path == nullptr || path[0] == '\0' || channel > 7u
+        || static_cast<uint8_t>(scene->texJobTail - scene->texJobHead) >= SceneFrameImpl::kTexJobCap) {
         return;
     }
-    SceneFrameImpl::TexJob& job = scene->texJob[scene->texJobN];
+    SceneFrameImpl::TexJob& job = scene->texJob[scene->texJobTail % SceneFrameImpl::kTexJobCap];
     std::snprintf(job.path, sizeof(job.path), "%s", path);
     job.actor = actor;
     job.channel = channel;
-    scene->texJobN = static_cast<uint8_t>(scene->texJobN + 1u);
+    scene->texJobTail = static_cast<uint8_t>(scene->texJobTail + 1u);
     scene->texPath[0] = '\0';
     scene->texChannel = 0xff;
     spdlog::info("texture queued ch {} actor {} {}", channel, actor, path);
@@ -606,26 +607,21 @@ bool sceneFrameReadDoc(const SceneFrame* scene, uint8_t actor, BhmatDoc& doc) {
 }
 
 void takeQueuedTexture(SceneFrameImpl& s, Device& device) {
-    if (s.texJobN == 0u) {
+    if (s.texJobHead == s.texJobTail) {
         if (s.texChannel > 7u || s.texPath[0] == '\0') {
             return;
         }
-        if (s.texJobN < 8u) {
-            SceneFrameImpl::TexJob& job = s.texJob[s.texJobN];
-            std::snprintf(job.path, sizeof(job.path), "%s", s.texPath);
-            job.actor = s.texActor;
-            job.channel = s.texChannel;
-            s.texJobN = static_cast<uint8_t>(s.texJobN + 1u);
-        }
+        SceneFrameImpl::TexJob& job = s.texJob[s.texJobTail % SceneFrameImpl::kTexJobCap];
+        std::snprintf(job.path, sizeof(job.path), "%s", s.texPath);
+        job.actor = s.texActor;
+        job.channel = s.texChannel;
+        s.texJobTail = static_cast<uint8_t>(s.texJobTail + 1u);
         s.texPath[0] = '\0';
         s.texChannel = 0xff;
     }
-    while (s.texJobN > 0u && s.ready) {
-        SceneFrameImpl::TexJob job = s.texJob[0];
-        for (uint8_t i = 1; i < s.texJobN; ++i) {
-            s.texJob[i - 1u] = s.texJob[i];
-        }
-        s.texJobN = static_cast<uint8_t>(s.texJobN - 1u);
+    while (s.texJobHead != s.texJobTail && s.ready) {
+        const SceneFrameImpl::TexJob job = s.texJob[s.texJobHead % SceneFrameImpl::kTexJobCap];
+        s.texJobHead = static_cast<uint8_t>(s.texJobHead + 1u);
         s.texPath[0] = '\0';
         s.texChannel = 0xff;
         if (job.channel > 7u || job.path[0] == '\0') {

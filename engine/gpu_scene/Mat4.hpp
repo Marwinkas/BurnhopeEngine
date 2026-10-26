@@ -10,6 +10,86 @@ struct Mat4 {
     float m[16]{}; // column-major, matches Slang/HLSL default
 };
 
+inline void vec3Add(const float a[3], const float b[3], float out[3]) {
+    out[0] = a[0] + b[0];
+    out[1] = a[1] + b[1];
+    out[2] = a[2] + b[2];
+}
+
+inline void vec3Sub(const float a[3], const float b[3], float out[3]) {
+    out[0] = a[0] - b[0];
+    out[1] = a[1] - b[1];
+    out[2] = a[2] - b[2];
+}
+
+inline float vec3Dot(const float a[3], const float b[3]) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+inline float vec3Len(const float a[3]) {
+    return std::sqrt(vec3Dot(a, a));
+}
+
+// Нормализует на месте и возвращает прежнюю длину. Нулевой вектор остаётся нулевым.
+inline float vec3Normalize(float v[3]) {
+    const float len = vec3Len(v);
+    if (len > 1.0e-8f) {
+        const float inv = 1.0f / len;
+        v[0] *= inv;
+        v[1] *= inv;
+        v[2] *= inv;
+    }
+    return len;
+}
+
+inline void vec3Cross(const float a[3], const float b[3], float out[3]) {
+    const float x = a[1] * b[2] - a[2] * b[1];
+    const float y = a[2] * b[0] - a[0] * b[2];
+    const float z = a[0] * b[1] - a[1] * b[0];
+    out[0] = x;
+    out[1] = y;
+    out[2] = z;
+}
+
+inline float vec3Dist(const float a[3], const float b[3]) {
+    float d[3];
+    vec3Sub(a, b, d);
+    return vec3Len(d);
+}
+
+// Оси объекта по углам Эйлера в градусах (x = pitch, y = yaw, z = roll).
+inline void mat3FromEuler(const float euler[3], float x[3], float y[3], float z[3]) {
+    const float yaw = euler[1] * 0.017453292f;
+    const float pitch = euler[0] * 0.017453292f;
+    const float roll = euler[2] * 0.017453292f;
+    const float cy = std::cos(yaw);
+    const float sy = std::sin(yaw);
+    const float cp = std::cos(pitch);
+    const float sp = std::sin(pitch);
+    const float cr = std::cos(roll);
+    const float sr = std::sin(roll);
+    x[0] = cy * cr + sy * sp * sr;
+    x[1] = cp * sr;
+    x[2] = -sy * cr + cy * sp * sr;
+    y[0] = -cy * sr + sy * sp * cr;
+    y[1] = cp * cr;
+    y[2] = sy * sr + cy * sp * cr;
+    z[0] = sy * cp;
+    z[1] = -sp;
+    z[2] = cy * cp;
+}
+
+inline void eulerFromMat3(const float x[3], const float y[3], const float z[3], float euler[3]) {
+    euler[0] = std::asin(std::fmax(-1.0f, std::fmin(1.0f, -z[1]))) * 57.2957795f;
+    if (std::fabs(z[1]) < 0.999f) {
+        euler[1] = std::atan2(z[0], z[2]) * 57.2957795f;
+        euler[2] = std::atan2(x[1], y[1]) * 57.2957795f;
+    } else {
+        euler[1] = std::atan2(-x[2], x[0]) * 57.2957795f;
+        euler[2] = 0.0f;
+    }
+}
+
 inline Mat4 mat4Identity() {
     Mat4 r{};
     r.m[0] = r.m[5] = r.m[10] = r.m[15] = 1.0f;
@@ -77,6 +157,11 @@ inline Mat4 mat4OrthoRh(float left, float right, float bottom, float top, float 
     r.m[14] = zn / (zn - zf);
     r.m[15] = 1.0f;
     return r;
+}
+
+// Reverse-Z orthographic box symmetric in X/Y: near maps to 1, far to 0 (z swapped in mat4OrthoRh).
+inline Mat4 mat4OrthoBoxReverseZ(float halfX, float halfY, float zn, float zf) {
+    return mat4OrthoRh(-halfX, halfX, -halfY, halfY, zf, zn);
 }
 
 inline void mat4Orthonormal(
