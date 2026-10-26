@@ -494,7 +494,7 @@
             {
               "role": "split",
               "vertical": true,
-              "inset": 32
+              "inset": 36
             },
             {
               "role": "panel",

@@ -378,7 +378,7 @@ void materialBakePreview(const BhmatDoc& doc, const uint8_t* atlas, MatShape sha
                 px[0] = 46;
                 px[1] = 48;
                 px[2] = 52;
-                px[3] = 255;
+                px[3] = 0;
                 continue;
             }
             const V3 c = shade(doc, atlas, spin, hit, view);

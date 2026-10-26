@@ -741,6 +741,17 @@ TEST_CASE("material preview paints every shape and reacts to the material") {
     CHECK(std::memcmp(pixels[0], pixels[1], sizeof(pixels[0])) != 0);
 }
 
+TEST_CASE("material sphere preview is transparent outside the ball") {
+    BhmatDoc doc{};
+    static uint8_t atlas[kMatAtlasW * kMatAtlasH * 4u];
+    static uint8_t pixels[kMatSphereSide * kMatSphereSide * 4u];
+    materialBakeAtlas(doc, "", atlas);
+    materialBakePreview(doc, atlas, MatShape::Sphere, 0.0f, 0.0f, pixels);
+    CHECK(pixels[3] == 0);
+    const size_t mid = (static_cast<size_t>(kMatSphereSide / 2) * kMatSphereSide + kMatSphereSide / 2) * 4u;
+    CHECK(pixels[mid + 3] == 255);
+}
+
 TEST_CASE("segment picks one button and reports it") {
     UiState state;
     uiWidgetsInit(state);

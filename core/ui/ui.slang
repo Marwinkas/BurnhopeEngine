@@ -247,7 +247,7 @@ float4 uiFs(VsOut i) : SV_Target0 {
     float3 rgb = i.color.rgb;
     float alpha = i.color.a;
     if ((i.flags & 32u) != 0) {
-        const float4 tex = samplePhoto(min(i.slot, 9u), saturate(i.uv), i.blur);
+        const float4 tex = samplePhoto(i.slot, saturate(i.uv), i.blur);
         rgb = tex.rgb;
         if (i.slot < 8u) {
             const float photoLum = dot(rgb, float3(0.30, 0.59, 0.11));
