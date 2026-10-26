@@ -96,13 +96,6 @@ struct MatHit {
     uint8_t kind = 0;
 };
 
-struct MatLink {
-    HudContext* hud = nullptr;
-    uint16_t slider = kUiNone;
-    uint16_t number = kUiNone;
-    uint16_t index = 0;
-};
-
 inline constexpr uint8_t kMatSlotN = 9;
 
 struct HudContext {
@@ -127,7 +120,6 @@ struct HudContext {
     uint16_t snapBtn[3]{};
     uint16_t snapIcon[3]{};
     uint16_t snapNum[3]{};
-    uint16_t xformLock[4]{};
     uint16_t playBtn = kUiNone;
     uint16_t playGlyph = kUiNone;
     uint16_t pauseBtn = kUiNone;
@@ -200,10 +192,8 @@ struct HudContext {
     uint16_t matClear[kMatSlotN]{};
     uint16_t matEmpty[kMatSlotN]{};
     uint16_t matVal[kMatSlotN]{};
-    MatLink matLink[kMatSlotN]{};
     uint16_t matType = kUiNone;
     uint16_t matPack = kUiNone;
-    uint16_t matHex[2]{};
     uint16_t matPreview = kUiNone;
     float previewYaw = 0.55f;
     float previewPitch = 0.35f;
@@ -213,6 +203,7 @@ struct HudContext {
     uint8_t previewDown = 0;
     uint8_t previewDirty = 1;
     uint8_t atlasDirty = 1;
+    bool matEdited = false;
     uint8_t matListed = 0;
     MaterialInfo matDoc{};
     MaterialInfo matSent{};

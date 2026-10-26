@@ -4,7 +4,7 @@
 #include "asset/MaterialBake.hpp"
 #include "asset/ProjectDoc.hpp"
 #include "ui/rhi/Canvas.hpp"
-#include "ui/State.hpp"
+#include "ui/Panel.hpp"
 
 #include <algorithm>
 
@@ -35,8 +35,13 @@ void hudCommitMaps(HudContext& hud, uint8_t channel) {
 
 void hudBakeMaterialView(HudContext& hud) {
     UiState* state = hud.tool.canvas != nullptr ? hud.tool.canvas->state : nullptr;
-    if (state != nullptr && state->capture != hud.matPreview) {
+    if (state != nullptr && uiCaptured(*state) != hud.matPreview) {
         hud.previewDown = 0;
+    }
+    if (hud.matEdited) {
+        hud.matEdited = false;
+        hud.atlasDirty = 1;
+        hud.previewDirty = 1;
     }
     if (hud.previewTint[0] != hud.matDoc.base[0] || hud.previewTint[1] != hud.matDoc.base[1] || hud.previewTint[2] != hud.matDoc.base[2]) {
         std::copy(hud.matDoc.base, hud.matDoc.base + 3, hud.previewTint);

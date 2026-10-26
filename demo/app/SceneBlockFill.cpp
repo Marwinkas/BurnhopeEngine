@@ -154,70 +154,28 @@ void sceneBlockFill(SceneBlock& block, const HudPost& post, const SceneTweaks& t
     std::memcpy(block.scalars + kScActor, &actor, kScActorN * sizeof(float));
 }
 
+// HudPost and HudActor are contiguous float blocks laid out in scalar order (asserted in sceneBlockFill), so a
+// scalar index is a float index into the record.
 void sceneBlockPutPost(HudPost& post, uint16_t index, float value) {
-    switch (index) {
-    case kScGrain: post.grain = value; break;
-    case kScBrightness: post.brightness = value; break;
-    case kScBloom: post.bloom = value; break;
-    case kScVignette: post.vignette = value; break;
-    case kScCa: post.ca = value; break;
-    case kScContact: post.contact = value; break;
-    case kScSpecOcc: post.specOcc = value; break;
-    case kScToksvig: post.toksvig = value; break;
-    case kScPom: post.pom = value; break;
-    case kScGgx: post.ggx = value; break;
-    case kScSsrcAmt: post.ssrc = value; break;
-    case kScGtaoAmt: post.gtao = value; break;
-    case kScLamp: post.lamp = value; break;
-    case kScSunGain: post.sunGain = value; break;
-    case kScSunR: post.sunR = value; break;
-    case kScSunG: post.sunG = value; break;
-    case kScSunB: post.sunB = value; break;
-    case kScExposure: post.exposure = value; break;
-    case kScTemperature: post.temperature = value; break;
-    case kScTint: post.tint = value; break;
-    case kScContrast: post.contrast = value; break;
-    case kScSaturation: post.saturation = value; break;
-    case kScNight: post.night = value; break;
-    case kScShadows: post.shadows = value; break;
-    case kScMidtones: post.midtones = value; break;
-    case kScHighlights: post.highlights = value; break;
-    case kScSlope: post.slope = value; break;
-    case kScCdlOffset: post.cdlOffset = value; break;
-    case kScPower: post.power = value; break;
-    case kScDofFocus: post.dofFocus = value; break;
-    case kScDofAmount: post.dofAmount = value; break;
-    case kScFlare: post.flare = value; break;
-    case kScGradeFlags: post.gradeFlags = value; break;
-    case kScMix: post.mix = value; break;
-    case kScGenContrast: post.genContrast = value; break;
-    case kScMidIn: post.midIn = value; break;
-    case kScMidOut: post.midOut = value; break;
-    case kScHdrMax: post.hdrMax = value; break;
-    case kScVibrance: post.vibrance = value; break;
-    default: break;
+    static_assert(std::is_standard_layout_v<HudPost>);
+    if (index < kScPost || index >= kScPost + kScPostN) {
+        return;
     }
+    float flat[kScPostN];
+    std::memcpy(flat, &post, sizeof(flat));
+    flat[index - kScPost] = value;
+    std::memcpy(static_cast<void*>(&post), flat, sizeof(flat));
 }
 
 void sceneBlockPutActor(HudActor& actor, uint16_t index, float value) {
-    const uint16_t slot = static_cast<uint16_t>(index - kScColor0);
-    if (slot < 3u) {
-        actor.color[slot] = value;
-    } else if (slot == 3u) {
-        actor.rough = value;
-    } else if (slot == 4u) {
-        actor.metal = value;
-    } else if (slot == 5u) {
-        actor.emissive = value;
-    } else if (slot < 9u) {
-        actor.pos[slot - 6u] = value;
-    } else if (slot < 12u) {
-        actor.euler[slot - 9u] = value;
-    } else if (slot < 15u) {
-        actor.scale[slot - 12u] = value;
-    } else if (slot < 18u) {
-        actor.pivot[slot - 15u] = value;
+    static_assert(std::is_standard_layout_v<HudActor>);
+    if (index < kScActor || index >= kScActor + kScActorN) {
+        return;
     }
+    float flat[kScActorN];
+    std::memcpy(flat, &actor, sizeof(flat));
+    flat[index - kScActor] = value;
+    std::memcpy(static_cast<void*>(&actor), flat, sizeof(flat));
 }
 
 void sceneBlockPut(HudContext& hud, uint16_t index, float value) {

@@ -45,10 +45,9 @@ struct HudMenuItem {
 };
 
 void hudShowBodies(HudContext& hud, UiState& s);
-void onHudSwatch(void* user, uint16_t id);
-uint16_t bindSwatch(HudContext& hud, UiState& s, uint16_t panel, const char* label, uint16_t index, float r0, float g0, float b0);
 void hudRefreshActors(HudContext& hud);
 void spawnAndSelectActor(HudContext& hud, uint8_t index);
+void applySnap(HudContext& hud, uint8_t channel, uint16_t index);
 void onMaterialAct(void* user, uint16_t id);
 void openMaterialFile(HudContext& hud, const char* path);
 void saveOpenMaterial(HudContext& hud);

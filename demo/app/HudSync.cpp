@@ -124,45 +124,6 @@ void syncProp(Engine& e, Canvas& canvas) {
         actor.pos[0], actor.pos[1], actor.pos[2], actor.euler[0], actor.euler[1], actor.euler[2],
         actor.scale[0], actor.scale[1], actor.scale[2], actor.pivot[0], actor.pivot[1], actor.pivot[2],
     };
-    float last[18]{};
-    for (int i = 0; i < 15; ++i) {
-        last[i] = e.hud.propLast[i];
-    }
-    last[15] = e.hud.propPivot[0];
-    last[16] = e.hud.propPivot[1];
-    last[17] = e.hud.propPivot[2];
-    const int base[4] = {6, 9, 12, 15};
-    for (int row = 0; row < 4; ++row) {
-        if (!uiPropLinked(state, e.hud.xformLock[row])) {
-            continue;
-        }
-        int changed = -1;
-        int count = 0;
-        for (int axis = 0; axis < 3; ++axis) {
-            if (std::fabs(cur[base[row] + axis] - last[base[row] + axis]) > 0.0005f) {
-                changed = axis;
-                ++count;
-            }
-        }
-        if (count != 1 || changed < 0) {
-            continue;
-        }
-        const float oldV = last[base[row] + changed];
-        const float newV = cur[base[row] + changed];
-        for (int axis = 0; axis < 3; ++axis) {
-            if (axis == changed) {
-                continue;
-            }
-            float next = last[base[row] + axis];
-            if (row == 2) {
-                next = std::fabs(oldV) < 1.0e-6f ? newV : next * (newV / oldV);
-            } else {
-                next += newV - oldV;
-            }
-            cur[base[row] + axis] = next;
-            e.hud.bind.write(state, static_cast<uint16_t>(kScColor0 + base[row] + axis), next);
-        }
-    }
     bool pivotMoved = false;
     for (int axis = 0; axis < 3; ++axis) {
         if (std::fabs(cur[15 + axis] - e.hud.propPivot[axis]) > 0.0005f) {

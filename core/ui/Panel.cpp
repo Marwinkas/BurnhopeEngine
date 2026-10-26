@@ -228,4 +228,12 @@ uint32_t uiEmitPanel(
     return n;
 }
 
+uint16_t uiCaptured(const UiState& s) {
+    return s.capture;
+}
+
+const UiLook& uiLook(const UiState& s) {
+    return s.look;
+}
+
 } // namespace burnhope

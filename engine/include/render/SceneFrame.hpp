@@ -273,6 +273,9 @@ void sceneFrameWeatherPreset(SceneFrame* scene, uint32_t preset);
 [[nodiscard]] const char* sceneFrameGpuText(const SceneFrame* scene);
 void sceneFrameShift(SceneFrame* scene, float dx, float dy, float dz);
 [[nodiscard]] bool sceneFrameAppendBhop(SceneFrame* scene, const char* path);
+// Converts a glTF/FBX/OBJ model to a .bhop under <projectRoot>/cache (or ./cache) and appends it. The new actors
+// are [outFirstActor, outAfterActor).
+[[nodiscard]] bool sceneFrameImportModel(SceneFrame* scene, const char* projectRoot, const char* path, uint8_t& outFirstActor, uint8_t& outAfterActor);
 // Ползунки панели. Имена, не индексы post[12].
 struct HudPost {
     float grain = 0.04f;

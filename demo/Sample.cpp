@@ -68,8 +68,7 @@ void applyCompact(UiState& s) {
     if (ids.compactRow == kUiNone || ids.listInner == kUiNone) {
         return;
     }
-    const UiCheck* check = s.ent[ids.compactRow].try_get<UiCheck>();
-    const bool on = check != nullptr && check->on != 0;
+    const bool on = uiCheckOn(s, ids.compactRow) > 0;
     const float itemH = on ? 24.0f : 36.0f;
     const float gap = on ? 2.0f : 8.0f;
     const float pad = on ? 2.0f : 8.0f;
@@ -190,7 +189,7 @@ void uiBuildShell(UiState& s) {
     auto link = [&](const char* from, const char* to) {
         const uint16_t a = take(from);
         const uint16_t b = take(to);
-        if (a < s.count && b < s.count) {
+        if (a != kUiNone && b != kUiNone) {
             uiSetContextMenu(s, a, b);
         }
     };
@@ -265,14 +264,12 @@ void uiBuildShell(UiState& s) {
         flex.pad = 10.0f;
         flex.gap = 6.0f;
         flex.shrink = 0.0f;
-        const uint16_t id = uiPanel(s, root, flex, paintToken(s.look, UiToken::Window, s.look.radius));
+        const uint16_t id = uiPanel(s, root, flex, paintToken(uiLook(s), UiToken::Window, uiLook(s).radius));
         uiShow(s, id, false);
         return id;
     };
     uiFilesOwn(s, floatPanel(70.0f, 64.0f, 1100.0f, 700.0f));
-    if (uiFiles(s).fileFrame != kUiNone) {
-        s.ent[uiFiles(s).fileFrame].set<UiResizable>({});
-    }
+    uiSetResizable(s, uiFiles(s).fileFrame);
     (void)uiTitleBar(s, uiFiles(s).fileFrame, "FILES", onFilesHide, &s);
 
     const uint16_t title = take("title");
@@ -284,9 +281,7 @@ void uiBuildShell(UiState& s) {
     const uint16_t slider = take("scale");
     uiSetToken(s, root, UiToken::Window);
     uiSetToken(s, title, UiToken::Title);
-    if (title < s.count) {
-        s.ent[title].set<UiTitleBar>({});
-    }
+    uiSetTitleBar(s, title);
     uiSetToken(s, brand, UiToken::Accent);
     uiSetToken(s, side, UiToken::Side);
     uiSetToken(s, content, UiToken::Content);

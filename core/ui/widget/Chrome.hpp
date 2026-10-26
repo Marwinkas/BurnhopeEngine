@@ -33,6 +33,9 @@ void uiChromeClear(UiState& s);
 void uiChromePark(UiState& s, uint16_t home, const UiChromeGesture& gesture);
 
 uint16_t uiWindowChrome(UiState& s, uint16_t parent);
+// Tags a node as a window that can be resized from its edges / as a drag handle for its window.
+void uiSetResizable(UiState& s, uint16_t id);
+void uiSetTitleBar(UiState& s, uint16_t id);
 // Title bar (drag handle) with a fold toggle at its right edge; returns the foldable body under `parent`.
 uint16_t uiDragFoldHeader(UiState& s, uint16_t parent, const char* title);
 // Draggable title strip: caption, spacer and a close glyph. `onClose` runs on click; without it the window

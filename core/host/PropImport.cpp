@@ -376,9 +376,6 @@ uint16_t makeSlider(Import& in, uint16_t parent, const Node& node) {
 
 uint16_t makeSwatch(Import& in, uint16_t parent, const Node& node) {
     const uint16_t id = in.bind->swatch(*in.state, parent, node.label, node.bind, node.value, node.g, node.b);
-    if (in.onSwatch != nullptr) {
-        in.onSwatch(in.user, *in.state, id);
-    }
     remember(in, node.name, id);
     return id;
 }
@@ -854,7 +851,6 @@ bool propImport(
     uint16_t commandCount,
     const UiPaint& hidden,
     PropFlagFn onFlag,
-    PropSwatchFn onSwatch,
     void* user) {
     if (key == nullptr || text.data() == nullptr) {
         return false;
@@ -872,7 +868,6 @@ bool propImport(
         .commandCount = commandCount,
         .hidden = hidden,
         .onFlag = onFlag,
-        .onSwatch = onSwatch,
         .user = user,
     };
     bool found = false;

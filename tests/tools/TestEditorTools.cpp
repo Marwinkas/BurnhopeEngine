@@ -12,6 +12,8 @@
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneBlock.hpp"
 #include "render/SceneFrame.hpp"
+#include "ui/widget/Field.hpp"
+#include "ui/widget/Number.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "debug/DebugStats.hpp"
@@ -125,6 +127,108 @@ TEST_CASE("inspector drag writes the bound float") {
     CHECK(debugFormatStats(stats, hud, sizeof(hud)) > 0);
     CHECK(std::strstr(hud, "60.0") != nullptr);
 }
+TEST_CASE("linked vec3 moves the other axes by the same delta, or by ratio") {
+    UiState state;
+    uiWidgetsInit(state);
+    SceneBlock block{};
+    UiPropBinder binder;
+    binder.attach(block.scalars, 256, block.flags, 64);
+    const uint16_t root = spawn(state, kUiNone, px(300.0f, 200.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t host = uiPropHost(state, root);
+    const UiPropVec3 move = binder.vec3(state, host, "Location", 6, 1.0f, 2.0f, 3.0f, -100.0f, 100.0f, 0.1f);
+    const UiPropVec3 scale = binder.vec3(state, host, "Scale", 12, 1.0f, 2.0f, 4.0f, -100.0f, 100.0f, 0.1f, true);
+    auto* moveCtl = state.ent[move.lock].try_get_mut<UiVecCtl>();
+    auto* scaleCtl = state.ent[scale.lock].try_get_mut<UiVecCtl>();
+    CHECK(moveCtl != nullptr);
+    CHECK(scaleCtl != nullptr);
+    if (moveCtl == nullptr || scaleCtl == nullptr) {
+        return;
+    }
+    uiRangeSet(state, move.x, 4.0f);
+    binder.sync(state);
+    CHECK(block.scalars[6] == doctest::Approx(4.0f));
+    CHECK(block.scalars[7] == doctest::Approx(2.0f));
+    moveCtl->linked = 1;
+    scaleCtl->linked = 1;
+    uiRangeSet(state, move.y, 5.0f);
+    uiRangeSet(state, scale.x, 2.0f);
+    binder.sync(state);
+    CHECK(block.scalars[6] == doctest::Approx(7.0f));
+    CHECK(block.scalars[7] == doctest::Approx(5.0f));
+    CHECK(block.scalars[8] == doctest::Approx(6.0f));
+    CHECK(block.scalars[12] == doctest::Approx(2.0f));
+    CHECK(block.scalars[13] == doctest::Approx(4.0f));
+    CHECK(block.scalars[14] == doctest::Approx(8.0f));
+    binder.write(state, 6, 0.0f);
+    binder.sync(state);
+    CHECK(block.scalars[7] == doctest::Approx(5.0f));
+}
+
+TEST_CASE("slider and number share one scalar") {
+    UiState state;
+    uiWidgetsInit(state);
+    SceneBlock block{};
+    UiPropBinder binder;
+    binder.attach(block.scalars, 256, block.flags, 64);
+    const uint16_t root = spawn(state, kUiNone, px(400.0f, 40.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t number = binder.sliderNumber(state, root, 3, 0.25f, 0.0f, 1.0f, 0.01f);
+    const uint16_t slider = binder.rows.back().pair;
+    CHECK(slider != kUiNone);
+    CHECK(block.scalars[3] == doctest::Approx(0.25f));
+    uiLayout(state, 400.0f, 40.0f);
+    const UiBox& box = state.box[slider];
+    dragSlider(state, slider, box.x + box.w * 0.6f);
+    binder.sync(state);
+    float value = 0.0f;
+    float minV = 0.0f;
+    float maxV = 0.0f;
+    CHECK(uiRange(state, number, value, minV, maxV));
+    CHECK(block.scalars[3] == doctest::Approx(0.6f).epsilon(0.03));
+    CHECK(value == doctest::Approx(block.scalars[3]));
+    uiRangeSet(state, number, 0.9f);
+    binder.sync(state);
+    CHECK(block.scalars[3] == doctest::Approx(0.9f));
+    CHECK(uiRange(state, slider, value, minV, maxV));
+    CHECK(value == doctest::Approx(0.9f));
+    binder.write(state, 3, 0.1f);
+    CHECK(uiRange(state, slider, value, minV, maxV));
+    CHECK(value == doctest::Approx(0.1f));
+}
+
+TEST_CASE("colour hex field shows the scalars it owns") {
+    UiState state;
+    uiWidgetsInit(state);
+    SceneBlock block{};
+    UiPropBinder binder;
+    binder.attach(block.scalars, 256, block.flags, 64);
+    const uint16_t root = spawn(state, kUiNone, px(300.0f, 120.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    bool dirty = false;
+    const uint16_t chip = binder.colorHex(state, root, 20, 30, true, &dirty);
+    CHECK(chip < state.count);
+    CHECK(binder.hexFields.size() == 1);
+    CHECK(block.scalars[20] == doctest::Approx(1.0f));
+    block.scalars[20] = 1.0f;
+    block.scalars[21] = 0.5f;
+    block.scalars[22] = 0.0f;
+    block.scalars[30] = 1.0f;
+    binder.syncSwatches(state);
+    const UiField* field = state.ent[binder.hexFields[0]].try_get<UiField>();
+    CHECK(field != nullptr);
+    if (field == nullptr) {
+        return;
+    }
+    CHECK(std::strcmp(field->bytes, "#FF8000") == 0);
+    block.scalars[30] = 0.5f;
+    binder.syncSwatches(state);
+    CHECK(std::strlen(field->bytes) == 9);
+    const UiPaint* paint = state.ent[chip].try_get<UiPaint>();
+    CHECK(paint != nullptr);
+    if (paint != nullptr) {
+        CHECK(paint->g == doctest::Approx(0.5f));
+    }
+    CHECK(!dirty);
+}
+
 TEST_CASE("inspector json writes the slider index") {
     UiState state;
     uiWidgetsInit(state);
@@ -134,7 +238,7 @@ TEST_CASE("inspector json writes the slider index") {
     const char* text =
         R"({"page":[{"role":"check","label":"Sun","bind":22,"on":true},{"role":"slider","label":"Gain","bind":13,"value":1.5,"min":0,"max":4}]})";
     const uint16_t root = spawn(state, kUiNone, px(220.0f, 80.0f), paintRgb(0.1f, 0.1f, 0.1f));
-    CHECK(propImport(state, root, text, "page", binder, nullptr, 0, nullptr, 0, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr, nullptr));
+    CHECK(propImport(state, root, text, "page", binder, nullptr, 0, nullptr, 0, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr));
     CHECK(block.flags[22] == 1);
     CHECK(block.scalars[13] == doctest::Approx(1.5f));
     CHECK(binder.idOf(13, kBindFloat) != kUiNone);
@@ -146,8 +250,8 @@ TEST_CASE("inspector json writes the slider index") {
     const std::string_view doc{reinterpret_cast<const char*>(file.data), file.size};
     UiPropBinder page;
     page.attach(block.scalars, 256, block.flags, 64);
-    CHECK(propImport(state, root, doc, "post", page, nullptr, 0, nullptr, 0, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr, nullptr));
-    CHECK(propImport(state, root, doc, "material", page, nullptr, 0, nullptr, 0, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr, nullptr));
+    CHECK(propImport(state, root, doc, "post", page, nullptr, 0, nullptr, 0, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr));
+    CHECK(propImport(state, root, doc, "material", page, nullptr, 0, nullptr, 0, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr));
     CHECK(page.idOf(kScGiGain, kBindFloat) != kUiNone);
     CHECK(page.idOf(kFlRestirTemporal, kBindFlag) != kUiNone);
     CHECK(page.idOf(kScMatRough, kBindFloat) == kUiNone);
@@ -170,7 +274,7 @@ TEST_CASE("shell json names the spawn button") {
     CHECK(fileMapReadOnly(path, &file));
     const std::string_view doc{reinterpret_cast<const char*>(file.data), file.size};
     const uint16_t root = spawn(state, kUiNone, px(800.0f, 600.0f), paintRgb(0.1f, 0.1f, 0.1f));
-    CHECK(propImport(state, root, doc, "frame", binder, slots, 2, nullptr, 0, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr, nullptr));
+    CHECK(propImport(state, root, doc, "frame", binder, slots, 2, nullptr, 0, paintRgb(0.0f, 0.0f, 0.0f), nullptr, nullptr));
     CHECK(spawnBtn != kUiNone);
     CHECK(actors != kUiNone);
     CHECK(state.ent[actors].try_get<UiVirtual>() != nullptr);

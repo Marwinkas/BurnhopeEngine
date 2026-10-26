@@ -39,15 +39,8 @@ void hudWire(Canvas& canvas, HudContext* hud, uint16_t details, uint16_t statsBo
         sceneFrameActorGizmo(hud->tool.scene, hud->toolMode);
     }
     paintTools(*hud);
-    const float moveSteps[] = {0.1f, 0.25f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f};
-    const float rotSteps[] = {5.0f, 10.0f, 15.0f, 30.0f, 45.0f, 90.0f};
-    const float scaleSteps[] = {0.1f, 0.25f, 0.5f, 1.0f};
-    const float* stepTable[] = {moveSteps, rotSteps, scaleSteps};
-    const uint8_t stepCount[] = {7, 6, 4};
     for (uint8_t channel = 0; channel < 3; ++channel) {
-        const uint8_t picked = hud->snapPick[channel] < stepCount[channel] ? hud->snapPick[channel] : 0;
-        hud->snapSent[channel] = stepTable[channel][picked];
-        setSlide(canvas, hud->snapNum[channel], hud->snapSent[channel]);
+        applySnap(*hud, channel, hud->snapPick[channel]);
     }
     cmdView(hud, hud->flags.viewMode);
     hud->stats.canvas = &canvas;

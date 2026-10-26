@@ -27,7 +27,6 @@ struct ShellDemo {
 
 void shellBuild(Canvas& canvas, void* user);
 void toolBuild(Canvas& canvas, void* user);
-void colorBuild(Canvas& canvas, void* user);
 void sampleDrop(Host& host, int slot, const char* path, void* user);
 void sampleOps(Host& host, int slot, const WindowOps& ops, void* user);
 

@@ -1,5 +1,9 @@
 #include "host/PropBind.hpp"
 
+#include "color/Color.hpp"
+#include "ui/Hover.hpp"
+#include "ui/Panel.hpp"
+#include "ui/Style.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Check.hpp"
 #include "ui/widget/ColorPicker.hpp"
@@ -8,9 +12,81 @@
 #include "ui/widget/Slider.hpp"
 #include "ui/State.hpp"
 
+#include <cmath>
 #include <cstdio>
+#include <cstring>
 
 namespace burnhope {
+
+namespace {
+
+constexpr float kLinkEps = 0.0005f;
+constexpr float kHexStackH = 64.0f;
+constexpr float kHexRowH = 24.0f;
+constexpr float kChipH = 22.0f;
+constexpr float kNumberW = 84.0f;
+constexpr float kSliderMinW = 48.0f;
+
+UiBind* findRow(std::vector<UiBind>& rows, uint16_t index, uint8_t kind) {
+    for (UiBind& row : rows) {
+        if (row.kind == kind && row.index == index) {
+            return &row;
+        }
+    }
+    return nullptr;
+}
+
+void swatchClick(void* user, uint16_t id) {
+    auto* bind = static_cast<UiPropBinder*>(user);
+    if (bind == nullptr || bind->ui == nullptr) {
+        return;
+    }
+    UiState& s = *bind->ui;
+    UiColorPickerComponent* color = uiColor(s);
+    ColorBook* book = color != nullptr ? color->book : nullptr;
+    if (book != nullptr && bind->scalars != nullptr) {
+        for (const UiBind& row : bind->rows) {
+            if (row.kind != kBindSwatch || row.id != id || static_cast<uint32_t>(row.index) + 2u >= bind->scalarN) {
+                continue;
+            }
+            book->r = bind->scalars[row.index];
+            book->g = bind->scalars[row.index + 1u];
+            book->b = bind->scalars[row.index + 2u];
+            book->a = 1.0f;
+            book->gen += 1;
+            break;
+        }
+    }
+    colorOnOpen(&s, id);
+}
+
+void hexEdited(UiState& s, uint16_t id) {
+    const UiHexBind* hex = id < s.count ? s.ent[id].try_get<UiHexBind>() : nullptr;
+    const UiField* field = id < s.count ? s.ent[id].try_get<UiField>() : nullptr;
+    if (hex == nullptr || hex->bind == nullptr || field == nullptr) {
+        return;
+    }
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+    float a = 1.0f;
+    bool hasA = false;
+    if (!colorParseHex(field->bytes, r, g, b, a, hasA)) {
+        return;
+    }
+    hex->bind->write(s, hex->rgb, r);
+    hex->bind->write(s, static_cast<uint16_t>(hex->rgb + 1u), g);
+    hex->bind->write(s, static_cast<uint16_t>(hex->rgb + 2u), b);
+    if (hasA && hex->withAlpha != 0) {
+        hex->bind->write(s, hex->alpha, a);
+    }
+    uiPaintRgb(s, hex->chip, r, g, b);
+    if (hex->dirty != nullptr) {
+        *hex->dirty = true;
+    }
+}
+
+} // namespace
 
 void UiPropBinder::attach(float* scalarBase, uint16_t scalarCount, uint8_t* flagBase, uint16_t flagCount) {
     scalars = scalarBase;
@@ -21,6 +97,8 @@ void UiPropBinder::attach(float* scalarBase, uint16_t scalarCount, uint8_t* flag
 
 void UiPropBinder::clear() {
     rows.clear();
+    vecs.clear();
+    hexFields.clear();
     shown.clear();
     menus.clear();
     commands.clear();
@@ -112,13 +190,87 @@ uint16_t UiPropBinder::swatch(UiState& s, uint16_t panel, const char* label, uin
         scalars[static_cast<uint16_t>(index + 1u)] = g0;
         scalars[static_cast<uint16_t>(index + 2u)] = b0;
     }
+    ui = &s;
     const uint16_t id = uiPropSwatch(s, panel, label, r0, g0, b0);
+    uiBind(s, id, swatchClick, this);
     rows.push_back(UiBind{.id = id, .index = index, .kind = kBindSwatch, .fallback = r0});
     return id;
 }
 
-void UiPropBinder::sync(const UiState& s) const {
-    for (const UiBind& row : rows) {
+UiPropVec3 UiPropBinder::vec3(UiState& s, uint16_t host, const char* label, uint16_t index, float x, float y, float z, float minV, float maxV, float step, bool proportional) {
+    const UiPropVec3 row = uiPropVec3(s, host, label, x, y, z, minV, maxV, step);
+    watch(row.x, index, x);
+    watch(row.y, static_cast<uint16_t>(index + 1u), y);
+    watch(row.z, static_cast<uint16_t>(index + 2u), z);
+    vecs.push_back(UiVecLink{.index = index, .lock = row.lock, .proportional = static_cast<uint8_t>(proportional), .last = {x, y, z}});
+    return row;
+}
+
+uint16_t UiPropBinder::sliderNumber(UiState& s, uint16_t parent, uint16_t index, float def, float lo, float hi, float step) {
+    const uint16_t slider = uiSlider(s, parent, def, lo, hi, nullptr, nullptr, 0.0f);
+    uiSetSize(s, slider, 0.0f, -1.0f);
+    uiSetGrow(s, slider, 1.0f, 1.0f, kSliderMinW);
+    const uint16_t number = uiNumber(s, parent, def, lo, hi, step, nullptr, nullptr, kNumberW, kHexRowH, 0.0f);
+    uiNumberFill(s, number, false);
+    watch(number, index, def);
+    rows.back().pair = slider;
+    rows.back().last = def;
+    return number;
+}
+
+uint16_t UiPropBinder::colorHex(UiState& s, uint16_t parent, uint16_t rgbIndex, uint16_t alphaIndex, bool withAlpha, bool* outDirty) {
+    ui = &s;
+    if (scalars != nullptr && static_cast<uint32_t>(rgbIndex) + 2u < scalarN) {
+        scalars[rgbIndex] = 1.0f;
+        scalars[static_cast<uint16_t>(rgbIndex + 1u)] = 1.0f;
+        scalars[static_cast<uint16_t>(rgbIndex + 2u)] = 1.0f;
+    }
+    UiFlex col{};
+    col.direction = UiFlexDir::Column;
+    col.justify = UiJustify::Between;
+    col.grow = 1.0f;
+    col.shrink = 1.0f;
+    col.heightMode = UiSize::Px;
+    col.height = kHexStackH;
+    col.minW = 96.0f;
+    const uint16_t column = uiPanel(s, parent, col, paintClear());
+    UiFlex flex{};
+    flex.widthMode = UiSize::Percent;
+    flex.width = 100.0f;
+    flex.heightMode = UiSize::Px;
+    flex.height = kChipH;
+    flex.shrink = 0.0f;
+    UiPaint paint{};
+    paint.token = UiToken::Custom;
+    paint.r = 1.0f;
+    paint.g = 1.0f;
+    paint.b = 1.0f;
+    paint.a = 1.0f;
+    paint.radius = s.look.radiusSm;
+    paint.borderW = 1.0f;
+    const uint16_t chip = uiPanel(s, column, flex, paint);
+    if (chip >= s.count) {
+        return chip;
+    }
+    uiHover(s, chip);
+    s.ent[chip].add<UiFocusable>();
+    uiBind(s, chip, swatchClick, this);
+    rows.push_back(UiBind{.id = chip, .index = rgbIndex, .kind = kBindSwatch, .fallback = 1.0f});
+    const uint16_t field = uiField(s, column, "#FFFFFF", 0, false);
+    if (field >= s.count) {
+        return chip;
+    }
+    uiSetWidthPercent(s, field, 100.0f);
+    uiSetSize(s, field, -1.0f, kHexRowH);
+    uiSetGrow(s, field, -1.0f, 0.0f);
+    s.ent[field].set<UiHexBind>({this, outDirty, chip, rgbIndex, alphaIndex, static_cast<uint8_t>(withAlpha)});
+    uiAfterTextAdd(s, field, hexEdited);
+    hexFields.push_back(field);
+    return chip;
+}
+
+void UiPropBinder::sync(UiState& s) {
+    for (UiBind& row : rows) {
         if (row.kind == kBindFloat) {
             if (scalars == nullptr || row.index >= scalarN) {
                 continue;
@@ -126,9 +278,22 @@ void UiPropBinder::sync(const UiState& s) const {
             float value = row.fallback;
             float minV = 0.0f;
             float maxV = 1.0f;
-            if (uiRange(s, row.id, value, minV, maxV)) {
-                scalars[row.index] = value;
+            if (!uiRange(s, row.id, value, minV, maxV)) {
+                continue;
             }
+            float slid = 0.0f;
+            if (row.pair != kUiNone && uiRange(s, row.pair, slid, minV, maxV)) {
+                if (slid != row.last) {
+                    write(s, row.index, slid);
+                    row.last = slid;
+                    continue;
+                }
+                if (slid != value) {
+                    uiRangeSet(s, row.pair, value);
+                }
+                row.last = value;
+            }
+            scalars[row.index] = value;
             continue;
         }
         if (row.kind != kBindFlag || flags == nullptr || row.index >= flagN) {
@@ -136,6 +301,42 @@ void UiPropBinder::sync(const UiState& s) const {
         }
         const int on = uiCheckOn(s, row.id);
         flags[row.index] = on < 0 ? static_cast<uint8_t>(row.fallback != 0.0f) : static_cast<uint8_t>(on != 0);
+    }
+    if (scalars == nullptr) {
+        return;
+    }
+    for (UiVecLink& vec : vecs) {
+        if (static_cast<uint32_t>(vec.index) + 2u >= scalarN) {
+            continue;
+        }
+        const float* cur = scalars + vec.index;
+        int changed = -1;
+        int count = 0;
+        for (int axis = 0; axis < 3; ++axis) {
+            if (std::fabs(cur[axis] - vec.last[axis]) > kLinkEps) {
+                changed = axis;
+                ++count;
+            }
+        }
+        if (count == 1 && uiPropLinked(s, vec.lock)) {
+            const float oldV = vec.last[changed];
+            const float newV = cur[changed];
+            for (int axis = 0; axis < 3; ++axis) {
+                if (axis == changed) {
+                    continue;
+                }
+                float next = vec.last[axis];
+                if (vec.proportional != 0) {
+                    next = std::fabs(oldV) < 1.0e-6f ? newV : next * (newV / oldV);
+                } else {
+                    next += newV - oldV;
+                }
+                write(s, static_cast<uint16_t>(vec.index + axis), next);
+            }
+        }
+        for (int axis = 0; axis < 3; ++axis) {
+            vec.last[axis] = cur[axis];
+        }
     }
 }
 
@@ -184,6 +385,19 @@ void UiPropBinder::syncSwatches(UiState& s) {
     if (dirty) {
         uiNotifyVisualDirty(s);
     }
+    for (const uint16_t field : hexFields) {
+        const UiHexBind* hex = field < s.count && s.focused != field ? s.ent[field].try_get<UiHexBind>() : nullptr;
+        const UiField* text = hex != nullptr ? s.ent[field].try_get<UiField>() : nullptr;
+        if (text == nullptr || scalars == nullptr || static_cast<uint32_t>(hex->rgb) + 2u >= scalarN || hex->alpha >= scalarN) {
+            continue;
+        }
+        const float a = hex->withAlpha != 0 ? scalars[hex->alpha] : 1.0f;
+        char next[16]{};
+        colorFormatHex(next, sizeof(next), scalars[hex->rgb], scalars[hex->rgb + 1u], scalars[hex->rgb + 2u], a, hex->withAlpha != 0 && a < 0.999f);
+        if (std::strcmp(text->bytes, next) != 0) {
+            uiSetFieldText(s, field, next);
+        }
+    }
     UiColorPickerComponent* picker = uiColorFind(s);
     if (picker == nullptr) {
         return;
@@ -192,13 +406,19 @@ void UiPropBinder::syncSwatches(UiState& s) {
     picker->colorUser = this;
 }
 
-void UiPropBinder::write(UiState& s, uint16_t index, float value) const {
-    const uint16_t id = idOf(index, kBindFloat);
+void UiPropBinder::write(UiState& s, uint16_t index, float value) {
+    const UiBind* row = findRow(rows, index, kBindFloat);
+    const uint16_t id = row != nullptr ? row->id : kUiNone;
     if (id != kUiNone && id < s.count && (s.capture == id || s.focused == id)) {
         return;
     }
     if (scalars != nullptr && index < scalarN) {
         scalars[index] = value;
+    }
+    for (UiVecLink& vec : vecs) {
+        if (index >= vec.index && index < vec.index + 3u) {
+            vec.last[index - vec.index] = value;
+        }
     }
     if (id == kUiNone || id >= s.count) {
         return;
@@ -211,6 +431,9 @@ void UiPropBinder::write(UiState& s, uint16_t index, float value) const {
     char text[32]{};
     std::snprintf(text, sizeof(text), "%.4g", static_cast<double>(value));
     uiSetFieldText(s, id, text);
+    if (row->pair != kUiNone) {
+        uiRangeSet(s, row->pair, value);
+    }
     uiNotifyVisualDirty(s);
 }
 

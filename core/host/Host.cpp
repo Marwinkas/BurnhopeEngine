@@ -1,5 +1,6 @@
 #include "host/Host.hpp"
 #include "Str.hpp"
+#include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Widgets.hpp"
 #include "platform/Action.hpp"
 #include "platform/Jobs.hpp"
@@ -689,6 +690,55 @@ Canvas* hostCanvas(Host& host, int slot) {
         return nullptr;
     }
     return &host.view[slot].canvas;
+}
+
+namespace {
+
+void colorWindowBuild(Canvas& canvas, void* user) {
+    if (!canvasUseFont(canvas, 12.0f)) {
+        spdlog::error("color font was not set");
+    }
+    if (canvas.state == nullptr) {
+        return;
+    }
+    uiBuildColor(*canvas.state);
+    if (user != nullptr) {
+        uiSetColorBook(*canvas.state, static_cast<ColorBook*>(user));
+    }
+}
+
+void colorWindowClosed(Host&, int, void* user) {
+    auto* colors = static_cast<ColorBook*>(user);
+    if (colors != nullptr) {
+        colors->present = 0;
+        ++colors->gen;
+    }
+}
+
+} // namespace
+
+bool hostSyncColorWindow(Host& host, ColorBook* colors) {
+    if (colors == nullptr || colors->present != 2) {
+        return false;
+    }
+    for (const HostView& view : host.view) {
+        if (view.on && sameName(view, "color")) {
+            return false;
+        }
+    }
+    ViewDesc desc{};
+    desc.name = "color";
+    desc.window.title = "Color";
+    desc.window.width = 440;
+    desc.window.height = 720;
+    desc.window.minWidth = 360;
+    desc.window.minHeight = 480;
+    desc.window.bordered = false;
+    desc.window.resizable = true;
+    desc.builder = colorWindowBuild;
+    desc.onClose = colorWindowClosed;
+    desc.user = colors;
+    return hostOpen(host, desc) >= 0;
 }
 
 } // namespace burnhope

@@ -17,6 +17,9 @@ uint16_t uiPanel(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint&
 uint16_t uiSpacer(UiState& s, uint16_t parent, const UiFlex& flex);
 // Re-skins one node with a theme token; the node keeps the rest of its paint.
 void uiSetToken(UiState& s, uint16_t id, UiToken token);
+// The node that holds the pointer capture (kUiNone when none), and the active theme.
+[[nodiscard]] uint16_t uiCaptured(const UiState& s);
+[[nodiscard]] const UiLook& uiLook(const UiState& s);
 
 // Node facade: callers never reach into the flex or paint components. A negative number leaves that value as it is.
 // uiSetSize: 0 is auto, a positive number is pixels.

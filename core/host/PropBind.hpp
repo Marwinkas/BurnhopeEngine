@@ -17,14 +17,38 @@ enum BindKind : uint8_t {
 // One row per control. index is a scalar or a flag in the window block.
 // A swatch owns three scalars starting at index. The table grows while the
 // layout is built and is only walked during the frame.
+// A float row built by sliderNumber also owns `pair`, the slider that mirrors it. `last` is the slider value
+// seen at the previous sync, so a slider the user moved is told apart from one that only followed the number.
 struct UiBind {
     uint16_t id = kUiNone;
     uint16_t index = 0;
     uint8_t kind = kBindFloat;
     float fallback = 0.0f;
+    uint16_t pair = kUiNone;
+    float last = 0.0f;
+};
+
+// Three consecutive scalars shown as one vec3 row. While the row's lock is on, one axis edited alone moves the
+// other two with it (by the same delta, or by the same ratio when proportional). `last` is the value seen at the
+// previous sync.
+struct UiVecLink {
+    uint16_t index = 0;
+    uint16_t lock = kUiNone;
+    uint8_t proportional = 0;
+    float last[3]{};
 };
 
 struct UiPropBinder;
+
+// Sits on the hex field built by colorHex: where the colour lives and who to tell when the text is edited.
+struct UiHexBind {
+    UiPropBinder* bind = nullptr;
+    bool* dirty = nullptr;
+    uint16_t chip = kUiNone;
+    uint16_t rgb = 0;
+    uint16_t alpha = 0;
+    uint8_t withAlpha = 0;
+};
 
 struct UiMenuPick {
     UiPropBinder* bind = nullptr;
@@ -63,7 +87,10 @@ struct UiPropBinder {
     uint8_t* flags = nullptr;
     uint16_t scalarN = 0;
     uint16_t flagN = 0;
+    UiState* ui = nullptr;
     std::vector<UiBind> rows;
+    std::vector<UiVecLink> vecs;
+    std::vector<uint16_t> hexFields;
     std::vector<UiShowRule> shown;
     std::deque<UiMenuPick> menus;
     std::deque<UiCommandPick> commands;
@@ -76,10 +103,17 @@ struct UiPropBinder {
     uint16_t slideStep(UiState& s, uint16_t panel, const char* label, uint16_t index, float def, float minV, float maxV, float step);
     void slides(UiState& s, uint16_t panel, const UiSlideSpec* spec, uint16_t count);
     uint16_t check(UiState& s, uint16_t panel, const char* label, uint16_t index, bool def);
+    // Clicking the swatch loads its three scalars into the colour book and opens the picker.
     uint16_t swatch(UiState& s, uint16_t panel, const char* label, uint16_t index, float r0, float g0, float b0);
-    void sync(const UiState& s) const;
+    UiPropVec3 vec3(UiState& s, uint16_t host, const char* label, uint16_t index, float x, float y, float z, float minV, float maxV, float step, bool proportional = false);
+    // A slider and a number sharing one scalar. Returns the number; whichever the user moves drives the other.
+    uint16_t sliderNumber(UiState& s, uint16_t parent, uint16_t index, float def, float lo, float hi, float step);
+    // A swatch stacked over a #RRGGBB field on scalars rgbIndex..+2. withAlpha adds the scalar at alphaIndex as #RRGGBBAA
+    // while it is below 1. *outDirty is set when the user edits the text. Returns the swatch.
+    uint16_t colorHex(UiState& s, uint16_t parent, uint16_t rgbIndex, uint16_t alphaIndex, bool withAlpha, bool* outDirty = nullptr);
+    void sync(UiState& s);
     void syncSwatches(UiState& s);
-    void write(UiState& s, uint16_t index, float value) const;
+    void write(UiState& s, uint16_t index, float value);
     [[nodiscard]] uint16_t idOf(uint16_t index, uint8_t kind) const;
 };
 

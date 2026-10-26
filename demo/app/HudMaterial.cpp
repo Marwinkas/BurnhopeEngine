@@ -7,7 +7,6 @@
 #include "ui/widget/AssetSlot.hpp"
 #include "ui/widget/Choice.hpp"
 #include "ui/widget/Menu.hpp"
-#include "ui/State.hpp"
 
 #include <cstdio>
 

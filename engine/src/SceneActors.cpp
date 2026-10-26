@@ -1,3 +1,5 @@
+#include "Str.hpp"
+#include "asset/AssimpImporter.hpp"
 #include "asset/ProjectDoc.hpp"
 #include "gpu_scene/Physics.hpp"
 #include "render/SceneFrameImpl.hpp"
@@ -493,6 +495,43 @@ bool sceneFrameLoad(SceneFrame* scene, const char* projectRoot, const char* file
             break;
         }
     }
+    return true;
+}
+
+bool sceneFrameImportModel(SceneFrame* scene, const char* projectRoot, const char* path, uint8_t& outFirstActor, uint8_t& outAfterActor) {
+    outFirstActor = 0;
+    outAfterActor = 0;
+    if (scene == nullptr || path == nullptr) {
+        return false;
+    }
+    if (!strExtIs(path, ".gltf") && !strExtIs(path, ".glb") && !strExtIs(path, ".fbx") && !strExtIs(path, ".obj")) {
+        return false;
+    }
+    char dir[640]{};
+    if (projectRoot != nullptr && projectRoot[0] != '\0') {
+        std::snprintf(dir, sizeof(dir), "%s/cache", projectRoot);
+    } else {
+        std::snprintf(dir, sizeof(dir), "cache");
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    char stem[64]{};
+    strPathStem(path, stem, sizeof(stem));
+    char out[720]{};
+    std::snprintf(out, sizeof(out), "%s/%s.bhop", dir, stem[0] != '\0' ? stem : "model");
+    spdlog::info("import {} cache {}", path, out);
+    const uint8_t before = sceneFrameActorCount(scene);
+    if (!sceneImportFbx(path, out)) {
+        spdlog::error("import failed {}", path);
+        return false;
+    }
+    if (!sceneFrameAppendBhop(scene, out)) {
+        spdlog::error("append failed {}", out);
+        return false;
+    }
+    outFirstActor = before;
+    outAfterActor = sceneFrameActorCount(scene);
+    spdlog::info("import appended {} actors {}..{}", out, before, outAfterActor);
     return true;
 }
 

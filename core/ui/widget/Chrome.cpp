@@ -319,4 +319,16 @@ uint16_t uiTitleBar(UiState& s, uint16_t parent, const char* title, UiClickFn on
     return bar;
 }
 
+void uiSetResizable(UiState& s, uint16_t id) {
+    if (id < s.count) {
+        s.ent[id].set<UiResizable>({});
+    }
+}
+
+void uiSetTitleBar(UiState& s, uint16_t id) {
+    if (id < s.count) {
+        s.ent[id].set<UiTitleBar>({});
+    }
+}
+
 } // namespace burnhope

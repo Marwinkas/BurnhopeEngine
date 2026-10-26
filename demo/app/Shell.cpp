@@ -31,7 +31,6 @@
 namespace burnhope {
 
 void uiBuildShell(UiState& s);
-void uiBuildColor(UiState& s);
 
 namespace {
 
@@ -222,9 +221,7 @@ void shellBuild(Canvas& canvas, void* user) {
     demo->scale = uiFindName(*canvas.state, "scale");
     demo->preview = uiFindName(*canvas.state, "preview");
     demo->scaleText = uiFindName(*canvas.state, "scale_text");
-    if (demo->scale < canvas.state->count) {
-        canvas.state->ent[demo->scale].set<UiValueHook>({onScaleHook, demo});
-    }
+    uiBindValue(*canvas.state, demo->scale, onScaleHook, demo);
     filesOnOpen(*canvas.state, onBrowse, demo);
     const uint16_t note = uiFindName(*canvas.state, "json_note");
     if (note != kUiNone) {
@@ -240,8 +237,8 @@ void shellBuild(Canvas& canvas, void* user) {
     block.shrink = 0.0f;
     const uint16_t section = uiPanel(s, look, block, paintClear());
 
-    const UiLook theme = s.look;
-    const float textH = s.look.glyphH + 6.0f;
+    const UiLook theme = uiLook(s);
+    const float textH = uiLook(s).glyphH + 6.0f;
     (void)uiButton(s, section, {.label = "YOGA GROW", .height = textH, .ghost = true, .onClick = toggleChips, .user = demo});
 
     UiFlex strip{};
@@ -342,9 +339,7 @@ void shellBuild(Canvas& canvas, void* user) {
     win.gap = 8.0f;
     win.shrink = 0.0f;
     const uint16_t settings = uiPanel(s, 0, win, paintToken(theme, UiToken::Window, theme.radius));
-    if (settings != kUiNone) {
-        s.ent[settings].set<UiResizable>({});
-    }
+    uiSetResizable(s, settings);
     demo->settings = settings;
     const uint16_t settingsPage = uiDragFoldHeader(s, settings, "SETTINGS");
     (void)uiLabel(s, settingsPage, "separate window, drag the header");
@@ -375,7 +370,7 @@ void toolBuild(Canvas& canvas, void*) {
     UiState& s = *canvas.state;
     UiFlex rootFlex{};
     rootFlex.direction = UiFlexDir::Column;
-    const uint16_t root = uiPanel(s, kUiNone, rootFlex, paintToken(s.look, UiToken::Window, 0.0f));
+    const uint16_t root = uiPanel(s, kUiNone, rootFlex, paintToken(uiLook(s), UiToken::Window, 0.0f));
     (void)uiTitleBar(s, root, "SETTINGS", nullptr, nullptr, 40.0f);
     UiFlex body{};
     body.direction = UiFlexDir::Column;
@@ -412,7 +407,6 @@ void sampleOps(Host& host, int slot, const WindowOps& ops, void* user) {
     ColorBook* colors = demo != nullptr ? demo->colors : nullptr;
     Canvas* canvas = hostCanvas(host, slot);
     bool wantTool = false;
-    bool wantColor = false;
     bool wantFile = false;
     if (canvas != nullptr && canvas->state != nullptr) {
         UiHostNote& note = uiHostNote(*canvas->state);
@@ -420,16 +414,7 @@ void sampleOps(Host& host, int slot, const WindowOps& ops, void* user) {
         wantFile = note.file;
         note = {};
     }
-    bool colorOpen = false;
-    for (int i = 0; i < kHostSlots; ++i) {
-        if (host.view[i].on && std::strcmp(host.view[i].name, "color") == 0) {
-            colorOpen = true;
-            break;
-        }
-    }
-    if (colors != nullptr && colors->present == 2 && !colorOpen) {
-        wantColor = true;
-    }
+    (void)hostSyncColorWindow(host, colors);
     if (wantFile && demo != nullptr && slot >= 0 && slot < kHostSlots) {
         static const FileFilter filters[] = {
             {"All files", "*"},
@@ -454,42 +439,6 @@ void sampleOps(Host& host, int slot, const WindowOps& ops, void* user) {
         desc.onOps = sampleOps;
         desc.user = demo;
         (void)hostOpen(host, desc);
-    }
-    if (wantColor) {
-        ViewDesc desc{};
-        desc.name = "color";
-        desc.window.title = "Color";
-        desc.window.width = 440;
-        desc.window.height = 720;
-        desc.window.minWidth = 360;
-        desc.window.minHeight = 480;
-        desc.window.bordered = false;
-        desc.window.resizable = true;
-        desc.builder = colorBuild;
-        desc.onOps = sampleOps;
-        desc.onClose = [](Host&, int, void* user) {
-            auto* demo = static_cast<ShellDemo*>(user);
-            if (demo == nullptr || demo->colors == nullptr) {
-                return;
-            }
-            demo->colors->present = 0;
-            ++demo->colors->gen;
-        };
-        desc.user = demo;
-        (void)hostOpen(host, desc);
-    }
-}
-
-void colorBuild(Canvas& canvas, void* user) {
-    if (!canvasUseFont(canvas, 12.0f)) {
-        spdlog::error("color font was not set");
-    }
-    if (canvas.state != nullptr) {
-        uiBuildColor(*canvas.state);
-        auto* demo = static_cast<ShellDemo*>(user);
-        if (demo != nullptr && demo->colors != nullptr) {
-            uiSetColorBook(*canvas.state, demo->colors);
-        }
     }
 }
 

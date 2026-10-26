@@ -30,16 +30,6 @@ struct MatHome {
 
 void onMatReset(void* user, uint16_t id);
 
-void forceScalar(HudContext& hud, UiState& s, uint16_t index, float value) {
-    hud.bind.write(s, index, value);
-    sceneBlockPut(hud, index, value);
-    for (uint8_t i = 0; i < kMatSlotN; ++i) {
-        if (hud.matLink[i].index == index && hud.matLink[i].slider != 0 && hud.matLink[i].slider != kUiNone) {
-            uiRangeSet(s, hud.matLink[i].slider, value);
-        }
-    }
-}
-
 } // namespace
 
 UiState* matPageState(HudContext& hud) {
@@ -75,55 +65,6 @@ void matApplyFlag(HudContext& hud, UiState& s, uint16_t index, uint8_t value) {
         }
         hud.atlasDirty = 1;
     }
-}
-
-void matOnSlide(void* user, float value) {
-    auto* link = static_cast<MatLink*>(user);
-    if (link == nullptr || link->hud == nullptr) {
-        return;
-    }
-    UiState* state = matPageState(*link->hud);
-    if (state == nullptr) {
-        return;
-    }
-    link->hud->bind.write(*state, link->index, value);
-}
-
-void matOnNumber(void* user, float value) {
-    auto* link = static_cast<MatLink*>(user);
-    if (link == nullptr || link->hud == nullptr) {
-        return;
-    }
-    UiState* state = matPageState(*link->hud);
-    if (state != nullptr) {
-        uiRangeSet(*state, link->slider, value);
-    }
-}
-
-void matHexEdited(UiState& s, uint16_t id) {
-    const MatHex* hex = id < s.count ? s.ent[id].try_get<MatHex>() : nullptr;
-    const UiField* field = id < s.count ? s.ent[id].try_get<UiField>() : nullptr;
-    if (hex == nullptr || hex->hud == nullptr || field == nullptr) {
-        return;
-    }
-    float r = 0.0f;
-    float g = 0.0f;
-    float b = 0.0f;
-    float a = 1.0f;
-    bool hasA = false;
-    if (!colorParseHex(field->bytes, r, g, b, a, hasA)) {
-        return;
-    }
-    forceScalar(*hex->hud, s, hex->index, r);
-    forceScalar(*hex->hud, s, static_cast<uint16_t>(hex->index + 1u), g);
-    forceScalar(*hex->hud, s, static_cast<uint16_t>(hex->index + 2u), b);
-    if (hasA && hex->index == kScMatBase0) {
-        forceScalar(*hex->hud, s, kScMatOpacity, a);
-    }
-    uiPaintRgb(s, hex->chip, r, g, b);
-    hex->hud->previewDirty = 1;
-    hex->hud->atlasDirty = 1;
-    saveOpenMaterial(*hex->hud);
 }
 
 void matOnClear(void* user, uint16_t) {
@@ -179,18 +120,16 @@ void onMatReset(void* user, uint16_t id) {
         hud->atlasDirty = 1;
         hud->previewDirty = 1;
     } else if (home->kind == 2) {
-        forceScalar(*hud, *state, home->index, home->home);
-        forceScalar(*hud, *state, static_cast<uint16_t>(home->index + 1u), home->home2);
+        hud->bind.write(*state, home->index, home->home);
+        hud->bind.write(*state, static_cast<uint16_t>(home->index + 1u), home->home2);
     } else if (home->kind == 3) {
-        forceScalar(*hud, *state, home->index, 1.0f);
-        forceScalar(*hud, *state, static_cast<uint16_t>(home->index + 1u), 1.0f);
-        forceScalar(*hud, *state, static_cast<uint16_t>(home->index + 2u), 1.0f);
-        const uint16_t chip = hud->bind.idOf(home->index, kBindSwatch);
-        uiPaintRgb(*state, chip, 1.0f, 1.0f, 1.0f);
+        hud->bind.write(*state, home->index, 1.0f);
+        hud->bind.write(*state, static_cast<uint16_t>(home->index + 1u), 1.0f);
+        hud->bind.write(*state, static_cast<uint16_t>(home->index + 2u), 1.0f);
         hud->previewDirty = 1;
         hud->atlasDirty = 1;
     } else {
-        forceScalar(*hud, *state, home->index, home->home);
+        hud->bind.write(*state, home->index, home->home);
     }
     hudPaintMaterial(*hud);
     saveOpenMaterial(*hud);

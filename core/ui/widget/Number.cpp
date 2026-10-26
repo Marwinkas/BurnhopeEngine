@@ -134,4 +134,10 @@ void uiNumberBind(UiState& s) {
     uiDrawUnderAdd(s, drawNumberFill);
 }
 
+void uiBindValue(UiState& s, uint16_t id, UiValueChangeFn onChange, void* user) {
+    if (id < s.count) {
+        s.ent[id].set<UiValueHook>({onChange, user});
+    }
+}
+
 } // namespace burnhope

@@ -20,7 +20,6 @@
 #include "ui/widget/Slider.hpp"
 #include "ui/widget/TreeView.hpp"
 #include "ui/Interaction.hpp"
-#include "ui/State.hpp"
 #include "ui/rhi/Canvas.hpp"
 #include "ui/Text.hpp"
 #include "ui/rhi/UiPhoto.hpp"
@@ -33,6 +32,7 @@
 #include <spdlog/spdlog.h>
 
 #include "gpu_scene/SceneObject.hpp"
+#include "ui/State.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -195,6 +195,7 @@ bool engineTick(Engine& e) {
             }
         }
     }
+    (void)hostSyncColorWindow(e.host, &e.colors);
     const bool ok = hostTick(e.host);
     if (e.scene != nullptr && e.host.primary >= 0) {
         hudFrame(e);

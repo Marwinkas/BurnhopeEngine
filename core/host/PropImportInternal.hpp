@@ -92,7 +92,6 @@ struct Import {
     uint16_t commandCount = 0;
     UiPaint hidden{};
     PropFlagFn onFlag = nullptr;
-    PropSwatchFn onSwatch = nullptr;
     void* user = nullptr;
 };
 

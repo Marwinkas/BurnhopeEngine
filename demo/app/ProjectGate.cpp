@@ -1,13 +1,10 @@
 #include "app/Engine.hpp"
 #include "app/HudBuild.hpp"
 
-#include "asset/AssimpImporter.hpp"
 #include "asset/ProjectDoc.hpp"
 #include "platform/Window.hpp"
 #include "render/SceneFrame.hpp"
 #include "Str.hpp"
-
-#include <spdlog/spdlog.h>
 
 #include <cstdio>
 #include <cstring>
@@ -159,39 +156,14 @@ bool projectGatePoll(Engine& e) {
 }
 
 void projectImportModel(HudContext& hud, const char* path) {
-    if (hud.scene == nullptr || path == nullptr) {
+    uint8_t first = 0;
+    uint8_t after = 0;
+    if (!sceneFrameImportModel(hud.scene, hud.projectRoot, path, first, after)) {
         return;
     }
-    if (!strExtIs(path, ".gltf") && !strExtIs(path, ".glb") && !strExtIs(path, ".fbx") && !strExtIs(path, ".obj")) {
-        return;
-    }
-    char dir[640]{};
-    if (hud.projectRoot[0] != '\0') {
-        std::snprintf(dir, sizeof(dir), "%s/cache", hud.projectRoot);
-    } else {
-        std::snprintf(dir, sizeof(dir), "cache");
-    }
-    std::error_code ec;
-    std::filesystem::create_directories(dir, ec);
-    char stem[64]{};
-    strPathStem(path, stem, sizeof(stem));
-    char out[720]{};
-    std::snprintf(out, sizeof(out), "%s/%s.bhop", dir, stem[0] != '\0' ? stem : "model");
-    spdlog::info("drop {} cache {}", path, out);
-    const uint8_t before = sceneFrameActorCount(hud.scene);
-    if (!sceneImportFbx(path, out)) {
-        spdlog::error("drop import failed {}", path);
-        return;
-    }
-    if (!sceneFrameAppendBhop(hud.scene, out)) {
-        spdlog::error("drop append failed {}", out);
-        return;
-    }
-    const uint8_t after = sceneFrameActorCount(hud.scene);
-    for (uint8_t i = before; i < after; ++i) {
+    for (uint8_t i = first; i < after; ++i) {
         spawnAndSelectActor(hud, i);
     }
-    spdlog::info("drop appended {} actors {}..{}", out, before, after);
 }
 
 } // namespace burnhope

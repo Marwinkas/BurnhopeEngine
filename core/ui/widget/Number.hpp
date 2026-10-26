@@ -15,6 +15,8 @@ bool uiRange(const UiState& s, uint16_t id, float& value, float& minV, float& ma
 void dragSpin(UiState& s, uint16_t id, float x);
 uint16_t uiNumber(UiState& s, uint16_t parent, float value, float minV, float maxV, float step, UiValueChangeFn onChange = nullptr, void* user = nullptr, float width = 0.0f, float height = 0.0f, float shrink = 0.0f);
 void uiNumberFill(UiState& s, uint16_t id, bool showFillProgress);
+// Calls `onChange` with every value the user gives the slider or number `id`.
+void uiBindValue(UiState& s, uint16_t id, UiValueChangeFn onChange, void* user);
 uint16_t uiSpin(UiState& s, uint16_t parent, float value, float minV, float maxV, float step);
 void uiNumberWatch(UiState& s);
 void uiNumberBind(UiState& s);

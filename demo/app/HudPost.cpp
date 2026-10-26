@@ -7,7 +7,6 @@
 #include "ui/widget/Button.hpp"
 #include "ui/widget/ColorPicker.hpp"
 #include "ui/widget/Menu.hpp"
-#include "ui/State.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -27,10 +26,6 @@ void onImportFlag(void* user, uint16_t, uint8_t, uint16_t button, const char* la
     propApplyShow(state, hud->bind);
 }
 
-void onImportSwatch(void* user, UiState& state, uint16_t id) {
-    uiBind(state, id, onHudSwatch, user);
-}
-
 bool hudImportLayout(UiState& state, uint16_t parent, const char* asset, const char* key, HudContext& hud, const PropSlot* slots, uint16_t slotCount, const PropCommand* commands, uint16_t commandCount, const UiPaint& hidden) {
     char path[512]{};
     if (asset == nullptr || !platformResolveAsset(asset, path, sizeof(path))) {
@@ -43,7 +38,7 @@ bool hudImportLayout(UiState& state, uint16_t parent, const char* asset, const c
         return false;
     }
     const std::string_view text{reinterpret_cast<const char*>(file.data), file.size};
-    const bool ok = propImport(state, parent, text, key, hud.bind, slots, slotCount, commands, commandCount, hidden, onImportFlag, onImportSwatch, &hud);
+    const bool ok = propImport(state, parent, text, key, hud.bind, slots, slotCount, commands, commandCount, hidden, onImportFlag, &hud);
     fileUnmap(&file);
     if (!ok) {
         spdlog::error("inspector layout {} did not import", key != nullptr ? key : "");

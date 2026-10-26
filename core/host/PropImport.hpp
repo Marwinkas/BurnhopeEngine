@@ -20,7 +20,6 @@ struct PropCommand {
 };
 
 using PropFlagFn = void (*)(void* user, uint16_t index, uint8_t value, uint16_t button, const char* label);
-using PropSwatchFn = void (*)(void* user, UiState& state, uint16_t id);
 
 // Read one array from a layout document and build property rows into the binder.
 // `key` selects the array on the root object. Strings in the document are copied
@@ -37,7 +36,6 @@ bool propImport(
     uint16_t commandCount,
     const UiPaint& hidden,
     PropFlagFn onFlag,
-    PropSwatchFn onSwatch,
     void* user);
 
 } // namespace burnhope
