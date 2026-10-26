@@ -242,6 +242,19 @@ bool imageLoadFile(ImageCpu& img, const char* path) {
     return true;
 }
 
+namespace {
+
+constexpr uint32_t kDxgiBc1Unorm = 71;
+constexpr uint32_t kDxgiBc1UnormSrgb = 72;
+constexpr uint32_t kDxgiBc3Unorm = 77;
+constexpr uint32_t kDxgiBc3UnormSrgb = 78;
+constexpr uint32_t kDxgiBc5Unorm = 83;
+constexpr uint32_t kDxgiBc5Snorm = 84;
+constexpr uint32_t kDxgiBc7Unorm = 98;
+constexpr uint32_t kDxgiBc7UnormSrgb = 99;
+
+} // namespace
+
 bool imageParseDds(const uint8_t* data, size_t size, DdsView& out) {
     out = {};
     if (data == nullptr || size < 128 || std::memcmp(data, "DDS ", 4) != 0) {
@@ -252,7 +265,38 @@ bool imageParseDds(const uint8_t* data, size_t size, DdsView& out) {
     uint32_t mips = readU32(data + 28);
     const uint8_t* four = data + 84;
     uint32_t blockBytes = 0;
-    if (std::memcmp(four, "DXT1", 4) == 0) {
+    uint64_t dataStart = 128;
+    if (std::memcmp(four, "DX10", 4) == 0) {
+        // DDS_HEADER_DXT10 (20 bytes) follows the main header; only dxgiFormat matters for block decoding.
+        if (size < 148) {
+            return false;
+        }
+        dataStart = 148;
+        switch (readU32(data + 128)) {
+        case kDxgiBc1Unorm:
+        case kDxgiBc1UnormSrgb:
+            out.block = ImageBlock::Bc1;
+            blockBytes = 8;
+            break;
+        case kDxgiBc3Unorm:
+        case kDxgiBc3UnormSrgb:
+            out.block = ImageBlock::Bc3;
+            blockBytes = 16;
+            break;
+        case kDxgiBc5Unorm:
+        case kDxgiBc5Snorm:
+            out.block = ImageBlock::Bc5;
+            blockBytes = 16;
+            break;
+        case kDxgiBc7Unorm:
+        case kDxgiBc7UnormSrgb:
+            out.block = ImageBlock::Bc7;
+            blockBytes = 16;
+            break;
+        default:
+            return false;
+        }
+    } else if (std::memcmp(four, "DXT1", 4) == 0) {
         out.block = ImageBlock::Bc1;
         blockBytes = 8;
     } else if (std::memcmp(four, "DXT5", 4) == 0) {
@@ -276,7 +320,7 @@ bool imageParseDds(const uint8_t* data, size_t size, DdsView& out) {
     if (mips > 16) {
         mips = 16;
     }
-    uint64_t cursor = 128;
+    uint64_t cursor = dataStart;
     uint32_t w = width;
     uint32_t ht = height;
     uint32_t count = 0;

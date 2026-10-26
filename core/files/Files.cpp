@@ -133,6 +133,17 @@ void filesThumbsInvalidate(UiState& s) {
     fileRefresh(s);
 }
 
+void filesThumbInvalidate(UiState& s, const char* path) {
+    thumbInvalidate(fileBook(s).thumbs, path);
+    fileRefresh(s);
+}
+
+void filesThumbsFrame(UiState& s) {
+    if (thumbFrame(fileBook(s).thumbs)) {
+        fileRefresh(s);
+    }
+}
+
 void filesOnOpen(UiState& s, FileOpenFn fn, void* user) {
     Browser& b = fileBook(s);
     b.onOpen = fn;

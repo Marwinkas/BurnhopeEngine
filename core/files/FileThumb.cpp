@@ -38,11 +38,17 @@ uint8_t thumbCell(FileThumbs& cache, const char* path, uint64_t mtime) {
             break;
         }
     }
-    if (cell == kThumbNone) {
-        cell = pickCell(cache);
-    } else if (cache.stamp[cell] == mtime) {
+    if (cell != kThumbNone && cache.stamp[cell] == mtime) {
         cache.used[cell] = ++cache.clock;
         return cache.ok[cell] != 0 ? cell : kThumbNone;
+    }
+    if (cache.budget == 0) {
+        cache.pending = 1;
+        return cell != kThumbNone && cache.ok[cell] != 0 ? cell : kThumbNone;
+    }
+    --cache.budget;
+    if (cell == kThumbNone) {
+        cell = pickCell(cache);
     }
     cache.key[cell] = key;
     cache.stamp[cell] = mtime;
@@ -59,6 +65,34 @@ void thumbReset(FileThumbs& cache) {
         cache.ok[i] = 0;
     }
     cache.clock = 0;
+    cache.budget = kThumbPerFrame;
+    cache.pending = 0;
+}
+
+bool thumbFrame(FileThumbs& cache) {
+    cache.budget = kThumbPerFrame;
+    const bool due = cache.pending != 0;
+    cache.pending = 0;
+    return due;
+}
+
+void thumbInvalidate(FileThumbs& cache, const char* path) {
+    const uint64_t key = path != nullptr ? hashPath(path) : 0;
+    bool found = false;
+    for (uint8_t i = 0; i < kThumbCells && key != 0; ++i) {
+        if (cache.key[i] == key) {
+            cache.stamp[i] = kThumbStale;
+            found = true;
+        }
+    }
+    if (found) {
+        return;
+    }
+    for (uint8_t i = 0; i < kThumbCells; ++i) {
+        if (cache.key[i] != 0) {
+            cache.stamp[i] = kThumbStale;
+        }
+    }
 }
 
 } // namespace burnhope

@@ -233,6 +233,35 @@ bool decodeOne(ImageBlock format, const uint8_t* block, uint32_t blockBytes, uin
 
 } // namespace
 
+TEST_CASE("dds DX10 extension header selects the block format from dxgiFormat") {
+    const uint8_t bc1[8] = {0x00, 0xF8, 0x1F, 0x00, 0, 0, 0, 0};
+    const uint32_t dxgi[] = {71, 72, 98, 99, 77, 83, 84, 28};
+    const bool good[] = {true, true, true, true, true, true, true, false};
+    for (size_t i = 0; i < std::size(dxgi); ++i) {
+        uint8_t file[148 + 16]{};
+        std::memcpy(file, "DDS ", 4);
+        const uint32_t side = 4;
+        const uint32_t mips = 1;
+        std::memcpy(file + 12, &side, 4);
+        std::memcpy(file + 16, &side, 4);
+        std::memcpy(file + 28, &mips, 4);
+        std::memcpy(file + 84, "DX10", 4);
+        std::memcpy(file + 128, &dxgi[i], 4);
+        std::memcpy(file + 148, bc1, 8);
+        DdsView view{};
+        CHECK(imageParseDds(file, sizeof(file), view) == good[i]);
+        if (good[i]) {
+            CHECK(view.levels[0].offset == 148);
+            CHECK(view.block == (dxgi[i] <= 72 ? ImageBlock::Bc1 : dxgi[i] <= 78 ? ImageBlock::Bc3 : dxgi[i] <= 84 ? ImageBlock::Bc5 : ImageBlock::Bc7));
+        }
+    }
+    uint8_t shortFile[140]{};
+    std::memcpy(shortFile, "DDS ", 4);
+    std::memcpy(shortFile + 84, "DX10", 4);
+    DdsView view{};
+    CHECK(!imageParseDds(shortFile, sizeof(shortFile), view));
+}
+
 TEST_CASE("dds block decoders expand BC1 BC3 BC5 and BC7 modes 5 and 6") {
     uint8_t px[4]{};
     const uint8_t bc1[8] = {0x00, 0xF8, 0x1F, 0x00, 0, 0, 0, 0};

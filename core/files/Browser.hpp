@@ -28,6 +28,10 @@ void filesIconSlots(UiState& s, uint8_t folderSlot, uint8_t fileSlot);
 void filesThumbs(UiState& s, uint8_t photoSlot, FileThumbFn fn, void* user);
 // Drops every baked preview and rebakes the visible ones (a material or one of its maps changed).
 void filesThumbsInvalidate(UiState& s);
+// Marks the preview of one file stale and rebakes it (other cells keep their pixels). Unknown spellings stale all cells.
+void filesThumbInvalidate(UiState& s, const char* path);
+// Once per frame: refills the bake budget and rebinds the cells that were deferred by the previous frame's budget.
+void filesThumbsFrame(UiState& s);
 void filesOfferPath(UiState& s, const char* path);
 // Offers a dropped path to the browser, then shows an image in photo slot 0 or imports a .json layout.
 void filesOfferDrop(Canvas& canvas, const char* path);

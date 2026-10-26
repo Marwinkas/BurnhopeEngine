@@ -1,13 +1,25 @@
 #include "ui/widget/DragDrop.hpp"
 
 #include "ui/Geometry.hpp"
+#include "ui/Icon.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/State.hpp"
 
+#include <algorithm>
+
 namespace burnhope {
 namespace {
+
+constexpr uint8_t kGhostIconPad = 6;
+constexpr uint8_t kGhostIconSide = 16;
+constexpr float kGhostGap = 6.0f;
+constexpr float kGhostRadius = 4.0f;
+constexpr float kGhostMaxW = 180.0f;
+constexpr float kGhostMinW = 52.0f;
+constexpr float kGhostGlyphW = 7.0f;
+constexpr float kGhostCursorOffset = 14.0f;
 
 uint16_t nextHost(const UiState& s, uint16_t start) {
     uint16_t hosts[kUiCap];
@@ -72,14 +84,23 @@ uint16_t ensureGhost(UiState& s, UiDragDrop& drag) {
     }
     UiFlex box = px(s.metrics.ghostW, s.metrics.ghostH);
     box.position = UiPosition::Absolute;
-    UiPaint ink = paintToken(s.look, UiToken::Menu, s.look.radiusSm);
+    box.padL = static_cast<float>(kGhostIconPad + kGhostIconSide + kGhostGap);
+    box.padR = kGhostGap;
+    UiPaint ink = paintToken(s.look, UiToken::Window, kGhostRadius);
     ink.a = s.metrics.ghostA;
+    ink.borderW = 1.0f;
+    ink.br = s.look.muted[0];
+    ink.bg = s.look.muted[1];
+    ink.bb = s.look.muted[2];
+    ink.icon = static_cast<uint8_t>(UiIcon::Document);
+    ink.iconLeft = kGhostIconPad;
+    ink.iconSide = kGhostIconSide;
     const uint16_t id = spawn(s, kUiNone, box, ink);
     if (id == kUiNone) {
         return kUiNone;
     }
     uiText(s, id, "0");
-    uiTextStyle(s, id, UiTextAlign::Center, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
+    uiTextStyle(s, id, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
     s.ent[id].add<UiPopup>();
     s.ent[id].add<UiNoHit>();
     uiShow(s, id, false);
@@ -164,6 +185,7 @@ void uiDragDropBind(UiState& s, const UiDragDropConfig& cfg) {
     born.canDrop = cfg.canDrop;
     born.onDrop = cfg.onDrop;
     born.badge = cfg.badge;
+    born.badgeIcon = cfg.badgeIcon;
     born.user = cfg.user;
     uint16_t home = kUiNone;
     for (uint16_t host : cfg.hosts) {
@@ -188,11 +210,17 @@ void uiDragAddHost(UiState& s, uint16_t host) {
 }
 
 bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t, uint8_t phase, UiPhaseNote&) {
-    if (phase != kUiInSync && phase != kUiInPress) {
+    if (phase != kUiInSync && phase != kUiInPress && phase != kUiInEscape) {
         return false;
     }
     UiDragDrop* drag = dragSession(s);
     if (drag == nullptr) {
+        return false;
+    }
+    if (phase == kUiInEscape) {
+        if (drag->live != 0 || drag->armed != 0) {
+            endDrag(s, *drag, false);
+        }
         return false;
     }
     const bool press = (in.pointer.pressed & kPointerLeft) != 0;
@@ -249,20 +277,18 @@ bool uiDragDropInput(UiState& s, const InputFrame& in, uint16_t, uint8_t phase, 
             drag->badge(drag->user, badge, 64);
         }
         uiText(s, ghost, badge);
+        if (auto* paint = s.ent[ghost].try_get_mut<UiPaint>()) {
+            paint->icon = drag->badgeIcon != nullptr ? drag->badgeIcon(drag->user) : static_cast<uint8_t>(UiIcon::Document);
+        }
         uiShow(s, ghost, true);
         uiRequestTop(s, true);
-        float gw = s.metrics.ghostW;
         uint8_t letters = 0;
         while (badge[letters] != '\0' && letters < 64) {
             ++letters;
         }
-        if (letters > 3) {
-            gw = static_cast<float>(letters) * 7.0f + 16.0f;
-            if (gw > 240.0f) {
-                gw = 240.0f;
-            }
-        }
-        uiPlace(s, ghost, true, in.pointer.x + 12.0f, in.pointer.y + 12.0f, gw, s.metrics.ghostH);
+        float gw = static_cast<float>(letters) * kGhostGlyphW + static_cast<float>(kGhostIconPad + kGhostIconSide) + 2.0f * kGhostGap;
+        gw = std::clamp(gw, kGhostMinW, kGhostMaxW);
+        uiPlace(s, ghost, true, in.pointer.x + kGhostCursorOffset, in.pointer.y + kGhostCursorOffset, gw, s.metrics.ghostH);
     }
     uint16_t row = kUiNone;
     for (uint16_t host = nextHost(s, 0); host != kUiNone; host = nextHost(s, static_cast<uint16_t>(host + 1))) {

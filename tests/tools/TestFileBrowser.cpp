@@ -212,14 +212,55 @@ TEST_CASE("material thumbnails bake once per modification time") {
     CHECK(count.n == 1);
     CHECK(thumbCell(cache, "/p/a.bhmat", 101) == a);
     CHECK(count.n == 2);
+    thumbFrame(cache);
     CHECK(thumbCell(cache, "/p/b.bhmat", 5) != a);
     for (int i = 0; i < 100; ++i) {
+        thumbFrame(cache);
         char path[32];
         std::snprintf(path, sizeof(path), "/p/m%d.bhmat", i);
         CHECK(thumbCell(cache, path, 1) < kThumbCells);
     }
     cache.bake = nullptr;
     CHECK(thumbCell(cache, "/p/a.bhmat", 100) == kThumbNone);
+}
+
+TEST_CASE("thumbnail baking is budgeted per frame and defers the rest") {
+    BakeCount count;
+    FileThumbs cache;
+    cache.bake = countBake;
+    cache.user = &count;
+    cache.slot = 10;
+    CHECK(thumbCell(cache, "/p/a", 1) != kThumbNone);
+    CHECK(thumbCell(cache, "/p/b", 1) != kThumbNone);
+    CHECK(thumbCell(cache, "/p/c", 1) == kThumbNone);
+    CHECK(count.n == kThumbPerFrame);
+    CHECK(thumbFrame(cache));
+    CHECK(thumbCell(cache, "/p/c", 1) != kThumbNone);
+    CHECK(count.n == kThumbPerFrame + 1);
+    CHECK(!thumbFrame(cache));
+}
+
+TEST_CASE("invalidated thumbnail keeps its pixels until the rebake gets a slot") {
+    BakeCount count;
+    FileThumbs cache;
+    cache.bake = countBake;
+    cache.user = &count;
+    cache.slot = 10;
+    const uint8_t a = thumbCell(cache, "/p/a.bhmat", 7);
+    const uint8_t b = thumbCell(cache, "/p/b.bhmat", 7);
+    thumbFrame(cache);
+    thumbInvalidate(cache, "/p/a.bhmat");
+    CHECK(thumbCell(cache, "/p/b.bhmat", 7) == b);
+    CHECK(count.n == 2);
+    CHECK(thumbCell(cache, "/p/a.bhmat", 7) == a);
+    CHECK(count.n == 3);
+    thumbInvalidate(cache, "/other/spelling.bhmat");
+    thumbFrame(cache);
+    CHECK(thumbCell(cache, "/p/a.bhmat", 7) == a);
+    CHECK(thumbCell(cache, "/p/b.bhmat", 7) == b);
+    CHECK(count.n == 5);
+    CHECK(thumbCell(cache, "/p/a.bhmat", 7) == a);
+    CHECK(count.n == 5);
 }
 
 namespace {

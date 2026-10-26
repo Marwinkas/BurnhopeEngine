@@ -34,7 +34,7 @@ struct UiMetrics {
     float dragSlop = 6.0f;
     float ghostW = 36.0f;
     float ghostH = 22.0f;
-    float ghostA = 0.86f;
+    float ghostA = 0.88f;
     float selectedA = 0.92f;
     float headerA = 0.95f;
     float tuneW = 220.0f;

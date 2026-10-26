@@ -36,24 +36,35 @@ void hudCommitMaps(HudContext& hud, uint8_t channel) {
 }
 
 void hudBakeMaterialView(HudContext& hud) {
-    matThumbsFlush(hud.thumbs);
     UiState* state = hud.tool.canvas != nullptr ? hud.tool.canvas->state : nullptr;
+    if (state != nullptr) {
+        filesThumbsFrame(*state);
+    }
     if (state != nullptr && uiCaptured(*state) != hud.matPreview) {
         hud.previewDown = 0;
     }
+    bool changed = hud.atlasDirty != 0;
     if (hud.matEdited) {
         hud.matEdited = false;
         hud.atlasDirty = 1;
         hud.previewDirty = 1;
+        changed = true;
     }
     if (!matSame(hud.matDoc, hud.previewSeen)) {
         hud.previewSeen = hud.matDoc;
         hud.previewDirty = 1;
+        changed = true;
     }
     if (hud.previewTint[0] != hud.matDoc.base[0] || hud.previewTint[1] != hud.matDoc.base[1] || hud.previewTint[2] != hud.matDoc.base[2]) {
         std::copy(hud.matDoc.base, hud.matDoc.base + 3, hud.previewTint);
         hud.previewDirty = 1;
+        changed = true;
     }
+    if (changed && state != nullptr && hud.matOpen != 0 && hud.matPath[0] != '\0') {
+        // saveOpenMaterial already wrote the document this frame, so the browser's baker reads the edited file.
+        filesThumbInvalidate(*state, hud.matPath);
+    }
+    matThumbsFlush(hud.thumbs);
     if (hud.atlasDirty == 0 && hud.previewDirty == 0) {
         return;
     }

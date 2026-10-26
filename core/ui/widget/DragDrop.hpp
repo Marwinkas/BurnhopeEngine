@@ -27,6 +27,7 @@ struct UiDragDrop {
     uint8_t (*canDrop)(void* user, uint16_t host, uint32_t index) = nullptr;
     void (*onDrop)(void* user, uint16_t srcHost, uint32_t srcIndex, uint16_t dstHost, uint32_t dstIndex) = nullptr;
     void (*badge)(void* user, char* dst, uint8_t cap) = nullptr;
+    uint8_t (*badgeIcon)(void* user) = nullptr;
     void* user = nullptr;
 };
 
@@ -36,6 +37,7 @@ struct UiDragDropConfig {
     uint8_t (*canDrop)(void* user, uint16_t host, uint32_t index) = nullptr;
     void (*onDrop)(void* user, uint16_t srcHost, uint32_t srcIndex, uint16_t dstHost, uint32_t dstIndex) = nullptr;
     void (*badge)(void* user, char* dst, uint8_t cap) = nullptr;
+    uint8_t (*badgeIcon)(void* user) = nullptr;
     void* user = nullptr;
 };
 

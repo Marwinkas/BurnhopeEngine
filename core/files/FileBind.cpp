@@ -486,6 +486,13 @@ void dragBadge(UiState& s, char* dst, uint8_t cap) {
     std::snprintf(dst, cap, "%d", n);
 }
 
+uint8_t dragIcon(UiState& s) {
+    const Browser& b = fileBook(s);
+    const UiDragDrop* drag = s.world.try_get<UiDragDrop>();
+    const bool dir = drag != nullptr && drag->srcIndex < b.items.size() && b.items[drag->srcIndex].isDir == 1;
+    return static_cast<uint8_t>(dir ? UiIcon::Folder : UiIcon::Document);
+}
+
 } // namespace
 
 void fileWire(UiState& s) {
@@ -571,6 +578,7 @@ void fileWire(UiState& s) {
             onDrop(stateOf(user), srcIndex, dstHost, dstIndex);
         },
         .badge = [](void* user, char* dst, uint8_t cap) { dragBadge(stateOf(user), dst, cap); },
+        .badgeIcon = [](void* user) { return dragIcon(stateOf(user)); },
         .user = &s,
     });
 }
