@@ -37,9 +37,9 @@ void takeBook(UiColorPickerComponent& picker) {
 }
 
 void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& b, float& a) {
-    r = 0.102f;
-    g = 0.106f;
-    b = 0.122f;
+    r = s.look.window[0];
+    g = s.look.window[1];
+    b = s.look.window[2];
     a = 1.0f;
     auto take = [&](bool overlay) -> bool {
         for (int n = static_cast<int>(s.count) - 1; n >= 0; --n) {

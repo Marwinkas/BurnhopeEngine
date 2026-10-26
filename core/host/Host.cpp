@@ -112,7 +112,7 @@ bool prepareViewSync(Host& host, int slot) {
         }
     }
     if (view.window.input.f12) {
-        rhiCaptureToggle();
+        rhiCaptureToggle(host.device);
     }
     if ((view.window.input.pointer.pressed & kPointerLeft) != 0) {
         view.swap.clickTick = platformCounter();
@@ -356,6 +356,10 @@ bool hostInit(Host& host) {
     }
     host.ready = true;
     return true;
+}
+
+uint64_t hostGpuMemoryUsed(const Host& host) {
+    return deviceMemoryUsed(host.device);
 }
 
 void hostShutdown(Host& host) {
@@ -656,7 +660,7 @@ bool hostTick(Host& host) {
         jobs[jobCount] = Job{&recordAndPresentViewTrampoline, &ctx[jobCount]};
         ++jobCount;
     }
-    jobsRunAndWait(jobs, jobCount);
+    jobsRunAndWait(deviceJobs(host.device), jobs, jobCount);
     // Фаза 3: SDL + onOps, строго последовательно, в прежнем порядке (primary первым).
     for (int j = 0; j < jobCount; ++j) {
         finishView(host, jobSlot[j], ctx[j].result);

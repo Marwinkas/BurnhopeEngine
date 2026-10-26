@@ -161,48 +161,30 @@ inline bool sceneBlobWrite(
     header.version = 10;
     header.typeHash = kSceneBlobTypeHash;
     header.dataSize = static_cast<uint32_t>(payload);
-    const bool wrote = std::fwrite(&header, sizeof(header), 1, file) == 1
-        && std::fwrite(&info, sizeof(info), 1, file) == 1
-        && std::fwrite(meshlets, sizeof(Meshlet), meshletCount, file) == meshletCount
-        && std::fwrite(vertices, sizeof(SceneVertex), vertexCount, file) == vertexCount
-        && std::fwrite(indices, sizeof(uint32_t), indexCount, file) == indexCount;
-    if (wrote && info.indexBytes > indexCount * sizeof(uint32_t)) {
-        const uint8_t pad[16]{};
-        if (std::fwrite(pad, info.indexBytes - indexCount * sizeof(uint32_t), 1, file) != 1) {
-            std::fclose(file);
-            return false;
+    // The header leads the file but carries the payload checksum, so it is rewritten in place once the stream is hashed.
+    uint32_t hash = 2166136261u;
+    const auto put = [&](const void* data, size_t elem, size_t count) {
+        if (count == 0) {
+            return true;
         }
-    }
-    if (!wrote || std::fwrite(instances, sizeof(SceneInstance), instanceCount, file) != instanceCount) {
-        std::fclose(file);
-        return false;
-    }
-    if (materialCount > 0 && std::fwrite(materials, sizeof(MaterialGpuData), materialCount, file) != materialCount) {
-        std::fclose(file);
-        return false;
-    }
-    if (textureCount > 0 && std::fwrite(textures, sizeof(SceneTexName), textureCount, file) != textureCount) {
-        std::fclose(file);
-        return false;
-    }
-    if (lightCount > 0 && std::fwrite(lights, sizeof(LightGpuData), lightCount, file) != lightCount) {
-        std::fclose(file);
-        return false;
-    }
-    std::fclose(file);
-    MappedFile mapped{};
-    if (!fileMapReadOnly(path, &mapped)) {
-        return false;
-    }
-    header.checksum = assetHashBytes(mapped.data + sizeof(AssetHeader), header.dataSize);
-    fileUnmap(&mapped);
-    file = std::fopen(path, "rb+");
-    if (file == nullptr) {
-        return false;
-    }
-    const bool stamped = std::fwrite(&header, sizeof(header), 1, file) == 1;
-    std::fclose(file);
-    return stamped;
+        hash = assetHashStep(hash, static_cast<const uint8_t*>(data), elem * count);
+        return std::fwrite(data, elem, count, file) == count;
+    };
+    const uint8_t pad[16]{};
+    const bool wrote = std::fwrite(&header, sizeof(header), 1, file) == 1
+        && put(&info, sizeof(info), 1)
+        && put(meshlets, sizeof(Meshlet), meshletCount)
+        && put(vertices, sizeof(SceneVertex), vertexCount)
+        && put(indices, sizeof(uint32_t), indexCount)
+        && put(pad, 1, info.indexBytes - indexCount * sizeof(uint32_t))
+        && put(instances, sizeof(SceneInstance), instanceCount)
+        && put(materials, sizeof(MaterialGpuData), materialCount)
+        && put(textures, sizeof(SceneTexName), textureCount)
+        && put(lights, sizeof(LightGpuData), lightCount);
+    header.checksum = hash;
+    const bool stamped = wrote && std::fseek(file, 0, SEEK_SET) == 0 && std::fwrite(&header, sizeof(header), 1, file) == 1;
+    const bool closed = std::fclose(file) == 0;
+    return stamped && closed;
 }
 
 } // namespace burnhope

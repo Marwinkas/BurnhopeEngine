@@ -16,9 +16,7 @@ uint16_t uiIcon(UiState& s, uint16_t parent, uint8_t slot, float w, float h) {
     flex.shrink = 0.0f;
     UiPaint ink = paintToken(s.look, UiToken::Content, 4.0f);
     ink.a = 0.0f;
-    ink.r = 1.0f;
-    ink.g = 1.0f;
-    ink.b = 1.0f;
+    paintTint(ink, kUiWhite);
     const uint16_t id = uiPanel(s, parent, flex, ink);
     if (id == kUiNone) {
         return id;
@@ -137,7 +135,7 @@ void photoDrag(void* user, uint16_t id, float x, float y) {
         image->viewX = u - image->viewW * 0.5f;
         image->viewY = v - image->viewH * 0.5f;
         photoClamp(*image);
-        s.capture = kUiNone;
+        uiReleaseCapture(s);
         s.visualDirty = true;
         return;
     }

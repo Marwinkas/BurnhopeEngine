@@ -62,43 +62,7 @@ void putFloat(uint32_t& dst, float v) {
 }
 
 bool emitShown(const UiState& s, uint16_t id) {
-    for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-        if (s.tight[p] != 0) {
-            return false;
-        }
-        if (s.culled[p] != 0 || !nodeShown(s, p)) {
-            return false;
-        }
-    }
-    return s.box[id].w >= 1.0f && s.box[id].h >= 1.0f;
-}
-
-bool clipAncestors(const UiState& s, uint16_t id, UiBox& out) {
-    bool any = false;
-    for (uint16_t p = s.parentOf[id]; p != kUiNone; p = s.parentOf[p]) {
-        const UiFlex* flex = s.ent[p].try_get<UiFlex>();
-        const UiScissor* scissor = s.ent[p].try_get<UiScissor>();
-        const bool clip = (scissor != nullptr && scissor->enabled)
-            || (flex != nullptr && (flex->overflow == UiOverflow::Hidden || flex->overflow == UiOverflow::Scroll));
-        if (!clip) {
-            continue;
-        }
-        const UiBox& box = s.box[p];
-        if (!any) {
-            out = box;
-            any = true;
-            continue;
-        }
-        const float x0 = out.x > box.x ? out.x : box.x;
-        const float y0 = out.y > box.y ? out.y : box.y;
-        const float x1 = out.x + out.w < box.x + box.w ? out.x + out.w : box.x + box.w;
-        const float y1 = out.y + out.h < box.y + box.h ? out.y + out.h : box.y + box.h;
-        out.x = x0;
-        out.y = y0;
-        out.w = x1 > x0 ? x1 - x0 : 0.0f;
-        out.h = y1 > y0 ? y1 - y0 : 0.0f;
-    }
-    return any;
+    return s.vis[id].hidden == 0 && s.box[id].w >= 1.0f && s.box[id].h >= 1.0f;
 }
 } // namespace
 
@@ -313,71 +277,58 @@ uint32_t uiEmitSprite(
 
 
 bool uiClipBox(const UiState& s, uint16_t id, UiBox& out) {
-    return clipAncestors(s, id, out);
+    if (id >= s.count || s.vis[id].clipped == 0) {
+        return false;
+    }
+    out = s.vis[id].clip;
+    return true;
 }
 
 void uiDrawAdd(UiState& s, UiDrawFn fn) {
     if (fn == nullptr) {
         return;
     }
-    for (UiDrawFn have : s.drawHook) {
-        if (have == fn) {
-            return;
-        }
-    }
-    s.drawHook.push_back(fn);
+    [[maybe_unused]] const bool ok = s.drawHook.add(fn);
+    BH_ASSERT(ok, "ui hook registry full");
 }
 
 void uiDrawUnderAdd(UiState& s, UiDrawFn fn) {
     if (fn == nullptr) {
         return;
     }
-    for (UiDrawFn have : s.underHook) {
-        if (have == fn) {
-            return;
-        }
-    }
-    s.underHook.push_back(fn);
+    [[maybe_unused]] const bool ok = s.underHook.add(fn);
+    BH_ASSERT(ok, "ui hook registry full");
 }
 
 void uiDrawDecorAdd(UiState& s, UiDrawFn fn) {
     if (fn == nullptr) {
         return;
     }
-    for (UiDrawFn have : s.decorHook) {
-        if (have == fn) {
-            return;
-        }
-    }
-    s.decorHook.push_back(fn);
+    [[maybe_unused]] const bool ok = s.decorHook.add(fn);
+    BH_ASSERT(ok, "ui hook registry full");
 }
 
 void uiPlaceAdd(UiState& s, void (*fn)(UiState& s)) {
     if (fn == nullptr) {
         return;
     }
-    for (void (*have)(UiState&) : s.placeHook) {
-        if (have == fn) {
-            return;
-        }
-    }
-    s.placeHook.push_back(fn);
+    [[maybe_unused]] const bool ok = s.placeHook.add(fn);
+    BH_ASSERT(ok, "ui hook registry full");
 }
 
 void uiOverlayAdd(UiState& s, UiOverlayDrawFn fn) {
     if (fn == nullptr) {
         return;
     }
-    for (UiOverlayDrawFn have : s.overlayHook) {
-        if (have == fn) {
-            return;
-        }
-    }
-    s.overlayHook.push_back(fn);
+    [[maybe_unused]] const bool ok = s.overlayHook.add(fn);
+    BH_ASSERT(ok, "ui hook registry full");
 }
 
 static uint32_t emitBars(const UiState& s, UiPrimitive* dst, uint32_t n, uint32_t cap) {
-    for (uint16_t id = 0; id < s.count; ++id) {
+    uint16_t ids[kUiCap];
+    const uint16_t holders = uiCollect<UiBar>(s, ids, kUiCap);
+    for (uint16_t k = 0; k < holders; ++k) {
+        const uint16_t id = ids[k];
         const UiBar* bar = s.ent[id].try_get<UiBar>();
         if (bar == nullptr || bar->on == 0 || bar->w < 0.5f || bar->h < 0.5f) {
             continue;
@@ -406,6 +357,7 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
             fn(s);
         }
     }
+    uiCacheVisibility(s);
     uint16_t order[kUiCap];
     uint16_t nOrder = 0;
     uint16_t childHead[kUiCap];
@@ -493,7 +445,7 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                 continue;
             }
             UiBox ancestor{};
-            const bool hasClip = clipAncestors(s, id, ancestor);
+            const bool hasClip = uiClipBox(s, id, ancestor);
             const UiBox* clip = hasClip ? &ancestor : nullptr;
             if (hasClip && (ancestor.w < 0.5f || ancestor.h < 0.5f
                 || s.box[id].x >= ancestor.x + ancestor.w || ancestor.x >= s.box[id].x + s.box[id].w
@@ -552,7 +504,8 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                         s.look.text[0], s.look.text[1], s.look.text[2], 0.22f, side * 0.5f, clip);
                 }
             }
-            if (const UiImage* image = s.ent[id].try_get<UiImage>()) {
+            const UiImage* image = s.ent[id].try_get<UiImage>();
+            if (image != nullptr && image->inset <= 0.0f) {
                 n = uiEmitSprite(dst, n, cap, s.box[id], *image, clip, paint->blur, r, g, b, glyphA);
             } else {
                 n = uiEmitPanel(s, id, dst, n, cap, clip, r, g, b, a, glyphA);
@@ -564,6 +517,15 @@ uint32_t uiEmit(UiState& s, UiPrimitive* dst, uint32_t cap) {
                 const UiText* shown = s.ent[id].try_get<UiText>();
                 if (shown == nullptr || shown->ownRun == 0) {
                     n = uiEmitTextNode(s, id, dst, n, cap, clip, r, g, b, a);
+                }
+                if (image != nullptr) {
+                    // Ghost icon buttons (plate) tint the sprite with their paint colour; solid buttons show it untinted.
+                    const UiBox& host = s.box[id];
+                    const UiBox spot{host.x + (host.w - image->inset) * 0.5f, host.y + (host.h - image->inset) * 0.5f, image->inset, image->inset};
+                    const float* ink = paint->plate != 0 ? nullptr : kUiWhite;
+                    n = uiEmitSprite(
+                        dst, n, cap, spot, *image, clip, paint->blur,
+                        ink != nullptr ? ink[0] : r, ink != nullptr ? ink[1] : g, ink != nullptr ? ink[2] : b, glyphA);
                 }
             }
             if (const UiNodeBars* bars = s.ent[id].try_get<UiNodeBars>(); bars != nullptr && bars->bar != nullptr) {

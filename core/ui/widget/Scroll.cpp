@@ -283,7 +283,7 @@ bool uiScrollInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase,
         }
         UiBox thumb{};
         if (scrollThumb(s, owner, thumb) && hitBox(thumb, in.pointer.x, in.pointer.y)) {
-            s.capture = owner;
+            uiCapture(s, owner);
             dragScroll(s, owner, in.pointer.y);
             return true;
         }

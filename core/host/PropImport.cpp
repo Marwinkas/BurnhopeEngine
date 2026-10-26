@@ -24,7 +24,7 @@ namespace {
 
 using namespace propimport;
 
-void remember(Import& in, const char* name, uint16_t id) {
+void remember(Import& in, const char* name, uint16_t id, bool rename = true) {
     if (name == nullptr || name[0] == '\0') {
         return;
     }
@@ -33,7 +33,7 @@ void remember(Import& in, const char* name, uint16_t id) {
             *in.slots[i].id = id;
         }
     }
-    if (in.state != nullptr) {
+    if (rename && in.state != nullptr) {
         uiName(*in.state, id, name);
     }
 }
@@ -471,7 +471,7 @@ uint16_t makeSlot(Import& in, uint16_t parent, const Node& node) {
     uint16_t glyph = kUiNone;
     const uint16_t id = uiSlotBtn(*in.state, parent, node.photo, node.h > 0.0f ? node.h : 28.0f, &glyph);
     remember(in, node.name, id);
-    remember(in, node.glyph, glyph);
+    remember(in, node.glyph, glyph, false); // the icon is the button itself: bind the pointer, keep the node's name
     bindNodeCommand(in, id, node);
     return id;
 }

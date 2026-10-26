@@ -1,5 +1,6 @@
 #include "rhi/Device.hpp"
 #include "Str.hpp"
+#include "platform/Jobs.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -709,6 +710,14 @@ void deviceDestroy(Device& d) {
     if (d.device != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(d.device);
     }
+    if (d.compress.release != nullptr) {
+        d.compress.release(d, d.compress.state);
+    }
+    d.compress = {};
+    if (d.jobs.release != nullptr) {
+        d.jobs.release(d, d.jobs.state);
+    }
+    d.jobs = {};
     if (d.allocator != VK_NULL_HANDLE) {
         vmaDestroyAllocator(d.allocator);
         d.allocator = VK_NULL_HANDLE;
@@ -752,45 +761,52 @@ void deviceName(Device& d, uint64_t handle, VkObjectType type, const char* name)
     vkSetDebugUtilsObjectNameEXT(d.device, &info);
 }
 
-void rhiCaptureToggle() {
+JobPool& deviceJobs(Device& d) {
+    std::lock_guard<std::mutex> lock(d.queueMutex);
+    if (d.jobs.state == nullptr) {
+        d.jobs = {.state = jobsCreate(), .release = [](Device&, void* pool) { jobsDestroy(static_cast<JobPool*>(pool)); }};
+    }
+    return *static_cast<JobPool*>(d.jobs.state);
+}
+
+void rhiCaptureToggle(Device& d) {
     using GetApi = int (*)(int, void**);
-    static void* lib = nullptr;
-    static RENDERDOC_API_1_6_0* api = nullptr;
-    static bool open = false;
-    if (api == nullptr) {
+    if (d.renderDocApi == nullptr) {
 #if defined(_WIN32)
-        if (lib == nullptr) {
-            lib = reinterpret_cast<void*>(GetModuleHandleA("renderdoc.dll"));
-            if (lib == nullptr) {
-                lib = reinterpret_cast<void*>(LoadLibraryA("renderdoc.dll"));
+        if (d.renderDocLib == nullptr) {
+            d.renderDocLib = reinterpret_cast<void*>(GetModuleHandleA("renderdoc.dll"));
+            if (d.renderDocLib == nullptr) {
+                d.renderDocLib = reinterpret_cast<void*>(LoadLibraryA("renderdoc.dll"));
             }
         }
-        if (lib == nullptr) {
+        if (d.renderDocLib == nullptr) {
             return;
         }
-        auto get = reinterpret_cast<GetApi>(GetProcAddress(reinterpret_cast<HMODULE>(lib), "RENDERDOC_GetAPI"));
+        auto get = reinterpret_cast<GetApi>(GetProcAddress(reinterpret_cast<HMODULE>(d.renderDocLib), "RENDERDOC_GetAPI"));
 #else
-        if (lib == nullptr) {
-            lib = dlopen("librenderdoc.so", RTLD_NOW | RTLD_NOLOAD);
-            if (lib == nullptr) {
-                lib = dlopen("librenderdoc.so", RTLD_NOW);
+        if (d.renderDocLib == nullptr) {
+            d.renderDocLib = dlopen("librenderdoc.so", RTLD_NOW | RTLD_NOLOAD);
+            if (d.renderDocLib == nullptr) {
+                d.renderDocLib = dlopen("librenderdoc.so", RTLD_NOW);
             }
         }
-        if (lib == nullptr) {
+        if (d.renderDocLib == nullptr) {
             return;
         }
-        auto get = reinterpret_cast<GetApi>(dlsym(lib, "RENDERDOC_GetAPI"));
+        auto get = reinterpret_cast<GetApi>(dlsym(d.renderDocLib, "RENDERDOC_GetAPI"));
 #endif
-        if (get == nullptr || get(eRENDERDOC_API_Version_1_6_0, reinterpret_cast<void**>(&api)) != 1 || api == nullptr) {
+        if (get == nullptr || get(eRENDERDOC_API_Version_1_6_0, &d.renderDocApi) != 1 || d.renderDocApi == nullptr) {
+            d.renderDocApi = nullptr;
             return;
         }
     }
-    if (!open) {
+    auto* api = static_cast<RENDERDOC_API_1_6_0*>(d.renderDocApi);
+    if (!d.renderDocOpen) {
         api->StartFrameCapture(nullptr, nullptr);
-        open = true;
+        d.renderDocOpen = true;
     } else {
         api->EndFrameCapture(nullptr, nullptr);
-        open = false;
+        d.renderDocOpen = false;
     }
 }
 

@@ -72,11 +72,10 @@ void paintTools(HudContext& hud) {
     UiState& s = *hud.tool.canvas->state;
     const uint8_t modes[5] = {3, 0, 1, 2, 4};
     const char* btnName[5] = {"toolBtn0", "toolBtn1", "toolBtn2", "toolBtn3", "toolBtn4"};
-    const char* iconName[5] = {"toolIcon0", "toolIcon1", "toolIcon2", "toolIcon3", "toolIcon4"};
     for (int i = 0; i < 5; ++i) {
         const bool on = modes[i] == hud.toolMode;
-        const uint16_t icon = uiFindName(s, iconName[i]);
         const uint16_t btn = uiFindName(s, btnName[i]);
+        const uint16_t icon = btn; // the button draws its own icon
         uiButtonTintIcon(s, icon, on);
         if (icon < s.count) {
             if (auto* paint = s.ent[icon].try_get_mut<UiPaint>()) {

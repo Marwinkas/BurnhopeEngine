@@ -1,3 +1,4 @@
+#include "platform/Check.hpp"
 #include "Str.hpp"
 #include "ui/State.hpp"
 
@@ -55,25 +56,15 @@ void uiInputAdd(UiState& s, UiInputHookFn fn) {
     if (fn == nullptr) {
         return;
     }
-    for (UiInputHookFn have : s.inputHook) {
-        if (have == fn) {
-            return;
-        }
-    }
-    s.inputHook.push_back(fn);
+    [[maybe_unused]] const bool ok = s.inputHook.add(fn);
+    BH_ASSERT(ok, "ui hook registry full");
 }
 
 bool uiListen(UiState& s, UiValueFn fn, void* user) {
     if (fn == nullptr) {
         return false;
     }
-    for (const UiValueListen& row : s.valueHook) {
-        if (row.fn == fn && row.user == user) {
-            return true;
-        }
-    }
-    s.valueHook.push_back({.fn = fn, .user = user});
-    return true;
+    return s.valueHook.add({.fn = fn, .user = user});
 }
 
 void plantIme(UiState& s, const InputFrame& in) {
@@ -95,7 +86,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
     UiPhaseNote unused{};
     if (in.escape) {
         probe(s, in, hit, kUiInEscape, unused, false);
-        s.capture = kUiNone;
+        uiReleaseCapture(s);
         s.relative = 0;
         uiFocus(s, kUiNone);
     }
@@ -135,7 +126,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
     probe(s, in, hit, kUiPhase4, unused, false);
 
     if (press && hit != s.capture) {
-        s.capture = kUiNone;
+        uiReleaseCapture(s);
     }
     UiPhaseNote chrome{};
     chrome.plugAte = plugAte ? 1 : 0;
@@ -149,7 +140,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         if (p != nullptr && p->disabled) {
         } else if (probe(s, in, hit, kUiInPress, unused, true)) {
         } else if (p != nullptr && s.ent[hit].try_get<UiDrag>() != nullptr) {
-            s.capture = hit;
+            uiCapture(s, hit);
             s.grabX = in.pointer.x;
             s.grabY = in.pointer.y;
             const UiDrag* drag = s.ent[hit].try_get<UiDrag>();
@@ -175,7 +166,7 @@ UiEvent uiApplyInput(UiState& s, const InputFrame& in) {
         }
     }
     if (release || !down) {
-        s.capture = kUiNone;
+        uiReleaseCapture(s);
         s.relative = 0;
         probe(s, in, hit, kUiInRelease, unused, false);
     }

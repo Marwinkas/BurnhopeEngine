@@ -18,7 +18,9 @@ struct Batch {
     std::atomic<int> engaged{0};
 };
 
-struct Pool {
+} // namespace
+
+struct JobPool {
     std::vector<std::thread> workers;
     std::mutex m;
     std::condition_variable cv;
@@ -63,7 +65,7 @@ struct Pool {
         }
     }
 
-    ~Pool() {
+    ~JobPool() {
         {
             std::lock_guard<std::mutex> lk(m);
             stop = true;
@@ -77,27 +79,26 @@ struct Pool {
     }
 };
 
-Pool& pool() {
-    static Pool p;
-    static std::once_flag once;
-    std::call_once(once, [] {
-        const unsigned hw = std::thread::hardware_concurrency();
-        // Вызывающий поток тоже берёт работу. Остальные ядра ждут в пуле.
-        const unsigned extra = hw > 1 ? hw - 1u : 0u;
-        for (unsigned i = 0; i < extra; ++i) {
-            p.workers.emplace_back([] { p.workerLoop(); });
-        }
-    });
+JobPool* jobsCreate() {
+    auto* p = new JobPool{};
+    const unsigned hw = std::thread::hardware_concurrency();
+    // Вызывающий поток тоже берёт работу. Остальные ядра ждут в пуле.
+    const unsigned extra = hw > 1 ? hw - 1u : 0u;
+    for (unsigned i = 0; i < extra; ++i) {
+        p->workers.emplace_back([p] { p->workerLoop(); });
+    }
     return p;
 }
 
-} // namespace
-
-int jobsWorkerCount() {
-    return static_cast<int>(pool().workers.size()) + 1;
+void jobsDestroy(JobPool* pool) {
+    delete pool;
 }
 
-void jobsRunAndWait(Job* jobs, int count) {
+int jobsWorkerCount(const JobPool& pool) {
+    return static_cast<int>(pool.workers.size()) + 1;
+}
+
+void jobsRunAndWait(JobPool& p, Job* jobs, int count) {
     if (count <= 0) {
         return;
     }
@@ -105,7 +106,6 @@ void jobsRunAndWait(Job* jobs, int count) {
         jobs[0].fn(jobs[0].user);
         return;
     }
-    Pool& p = pool();
     Batch batch;
     batch.jobs = jobs;
     batch.count = count;
@@ -118,7 +118,7 @@ void jobsRunAndWait(Job* jobs, int count) {
         p.epoch += 1;
     }
     p.cv.notify_all();
-    Pool::runSlice(batch);
+    JobPool::runSlice(batch);
     while (batch.remaining.load(std::memory_order_acquire) > 0) {
         std::this_thread::yield();
     }

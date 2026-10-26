@@ -61,6 +61,7 @@ void uiMotionTo(UiState& s, uint16_t id, float r, float g, float b, float a) {
     }
     const UiPaint* paint = s.ent[id].try_get<UiPaint>();
     UiAnim& anim = s.anim[id];
+    const bool wasOn = anim.on;
     anim.fr = paint != nullptr ? paint->r : r;
     anim.fg = paint != nullptr ? paint->g : g;
     anim.fb = paint != nullptr ? paint->b : b;
@@ -85,6 +86,9 @@ void uiMotionTo(UiState& s, uint16_t id, float r, float g, float b, float a) {
     anim.t0 = s.time;
     anim.dur = s.look.motion > 0.0f ? s.look.motion : 0.01f;
     anim.on = 1;
+    if (!wasOn) {
+        s.animList[s.animN++] = id;
+    }
 }
 
 void uiReveal(UiState& s, uint16_t id, float full, bool open) {
@@ -138,7 +142,10 @@ void uiReveal(UiState& s, uint16_t id, float full, bool open) {
 
 void uiRevealTick(UiState& s) {
     bool live = false;
-    for (uint16_t id = 0; id < s.count; ++id) {
+    uint16_t ids[kUiCap];
+    const uint16_t holders = uiCollect<UiReveal>(s, ids, kUiCap);
+    for (uint16_t k = 0; k < holders; ++k) {
+        const uint16_t id = ids[k];
         UiReveal* rev = s.ent[id].try_get_mut<UiReveal>();
         if (rev == nullptr || rev->t0 < 0.0f) {
             continue;
@@ -173,15 +180,21 @@ void uiRevealTick(UiState& s) {
 }
 
 bool uiTickMotion(UiState& s) {
-    bool live = false;
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (s.anim[id].on != 0) {
-            live = true;
-            if (s.time - s.anim[id].t0 >= s.anim[id].dur) {
-                s.anim[id].on = 0;
-            }
+    const bool live = s.animN > 0;
+    uint16_t kept = 0;
+    for (uint16_t i = 0; i < s.animN; ++i) {
+        const uint16_t id = s.animList[i];
+        UiAnim& anim = s.anim[id];
+        if (anim.on == 0) {
+            continue;
         }
+        if (s.time - anim.t0 >= anim.dur) {
+            anim.on = 0;
+            continue;
+        }
+        s.animList[kept++] = id;
     }
+    s.animN = kept;
     return live;
 }
 

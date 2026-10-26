@@ -480,7 +480,7 @@ bool fieldHandlePointer(UiState& s, uint16_t id, const InputFrame& in, bool pres
         }
         field->caret = caretFromPointer(s, id, *field, in.pointer.x, in.pointer.y);
         field->anchor = field->caret;
-        s.capture = id;
+        uiCapture(s, id);
         s.grabX = in.pointer.x;
         s.relative = 0;
         fieldReveal(s, *field, fieldView(s, id, *field));

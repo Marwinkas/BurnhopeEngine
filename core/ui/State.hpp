@@ -14,13 +14,17 @@
 
 #include <flecs.h>
 
-#include <vector>
-
 typedef struct YGNode* YGNodeRef;
 
 namespace burnhope {
 
 struct UiState;
+
+// Yoga node context: the owning state and the node slot, so measure callbacks need no thread-local.
+struct UiYogaCtx {
+    UiState* state = nullptr;
+    uint16_t id = kUiNone;
+};
 
 using UiInputFn = bool (*)(UiState& s, const InputFrame& in);
 using UiDrawFn = bool (*)(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap);
@@ -29,10 +33,41 @@ using UiTextGateFn = bool (*)(const UiState& s);
 using UiDropFn = void (*)(UiState& s);
 using UiClearFn = void (*)(UiState& s);
 using UiSpawnFn = void (*)(UiState& s, uint16_t id);
-using UiBootFn = void (*)(UiState& s);
 struct UiValueListen {
     UiValueFn fn = nullptr;
     void* user = nullptr;
+    bool operator==(const UiValueListen&) const = default;
+};
+inline constexpr uint8_t kUiHookCap = 32;
+// Fixed-capacity registry of callbacks: no heap, registration order is call order, duplicates are ignored.
+template <class T>
+struct UiHookList {
+    T fn[kUiHookCap]{};
+    uint8_t n = 0;
+    [[nodiscard]] bool add(const T& f) {
+        for (uint8_t i = 0; i < n; ++i) {
+            if (fn[i] == f) {
+                return true;
+            }
+        }
+        if (n >= kUiHookCap) {
+            return false;
+        }
+        fn[n++] = f;
+        return true;
+    }
+    void clear() { n = 0; }
+    [[nodiscard]] std::size_t size() const { return n; }
+    const T& operator[](std::size_t i) const { return fn[i]; }
+    const T* begin() const { return fn; }
+    const T* end() const { return fn + n; }
+};
+// Per-node results of one top-down pass (uiCacheVisibility); hit testing and emission read them in O(1).
+struct UiNodeVis {
+    UiBox clip{};
+    uint8_t hidden = 0;
+    uint8_t overlay = 0;
+    uint8_t clipped = 0;
 };
 using UiRoleFinishFn = void (*)(UiState& s, uint16_t id, const BinTail* tail, const char* text, const char* hint);
 struct UiNoHit {}; // Пустой тег: объект нематериален для курсора мыши
@@ -73,16 +108,25 @@ struct UiState {
     uint8_t cursorN = 0;
     uint16_t focused = kUiNone;
     uint16_t capture = kUiNone;
-    std::vector<UiInputHookFn> inputHook;
-    std::vector<UiDrawFn> drawHook;
-    std::vector<UiDrawFn> underHook;
-    std::vector<UiDrawFn> decorHook;
-    std::vector<UiOverlayDrawFn> overlayHook;
-    std::vector<void (*)(UiState&)> placeHook;
-    std::vector<UiValueListen> valueHook;
+    UiHookList<UiInputHookFn> inputHook;
+    UiHookList<UiDrawFn> drawHook;
+    UiHookList<UiDrawFn> underHook;
+    UiHookList<UiDrawFn> decorHook;
+    UiHookList<UiOverlayDrawFn> overlayHook;
+    UiHookList<void (*)(UiState&)> placeHook;
+    UiHookList<UiValueListen> valueHook;
     UiPlug plug{};
     uint8_t cursor = 0;
     uint8_t culled[kUiCap]{};
+    uint16_t culledList[kUiFlexDropVictimCap]{};
+    uint16_t culledN = 0;
+    UiNodeVis vis[kUiCap]{};
+    uint16_t hoveredTagged = kUiNone;
+    uint16_t focusedTagged = kUiNone;
+    uint16_t captureTagged = kUiNone;
+    uint16_t animList[kUiCap]{};
+    uint16_t animN = 0;
+    UiYogaCtx yogaCtx[kUiCap]{};
     float grabX = 0;
     float grabY = 0;
     UiClickFn onClick = nullptr;
@@ -112,11 +156,10 @@ struct UiState {
     UiBox clipBox{};
     UiCustomBinLoader binHooks[kUiBinRoleCap]{};
     UiBinRole binRole[kUiBinRoleCap]{};
-    std::vector<UiClearFn> clearHook;
+    UiHookList<UiClearFn> clearHook;
     UiSpawnFn onSpawn[kUiBinRoleCap]{};
     UiRoleFinishFn roleFinish[kUiBinRoleCap]{};
-    std::vector<UiBootFn> bootHook;
-    std::vector<void (*)(UiState&)> beforeHook;
+    UiHookList<void (*)(UiState&)> beforeHook;
 
     UiState();
     ~UiState();
@@ -130,6 +173,10 @@ void uiTab(UiState& s, uint16_t id, uint16_t index);
 void uiCursorPush(UiState& s, uint8_t kind);
 void uiCursorPop(UiState& s);
 void uiSyncInput(UiState& s);
+[[nodiscard]] uint16_t uiYogaId(const UiState& s, const struct YGNode* node);
+void uiCacheVisibility(UiState& s);
+void uiCapture(UiState& s, uint16_t id);
+void uiReleaseCapture(UiState& s);
 void uiMarkLayout(UiState& s, uint16_t id);
 void uiShowOnly(UiState& s, uint16_t id);
 void uiBind(UiState& s, uint16_t id, UiClickFn fn, void* user);
@@ -200,6 +247,28 @@ void uiMarkOnly(UiState& s, uint16_t id) {
     }
 }
 
+// Slots (ascending) of every live node carrying T, up to `cap`. Flecs walks only the tables holding T.
+template <typename T>
+uint16_t uiCollect(const UiState& s, uint16_t* out, uint16_t cap) {
+    uint16_t n = 0;
+    s.world.each(s.world.id<T>(), [&](flecs::entity e) {
+        const UiSlot* slot = n < cap ? e.try_get<UiSlot>() : nullptr;
+        if (slot != nullptr && slot->index < s.count && s.ent[slot->index] == e) {
+            out[n++] = slot->index;
+        }
+    });
+    for (uint16_t i = 1; i < n; ++i) {
+        const uint16_t v = out[i];
+        uint16_t j = i;
+        while (j > 0 && out[j - 1] > v) {
+            out[j] = out[j - 1];
+            --j;
+        }
+        out[j] = v;
+    }
+    return n;
+}
+
 template <typename Tag>
 uint16_t uiMarked(const UiState& s) {
     return uiMarkedOther<Tag>(s, kUiNone);
@@ -211,7 +280,6 @@ void uiDrawUnderAdd(UiState& s, UiDrawFn fn);
 void uiDrawDecorAdd(UiState& s, UiDrawFn fn);
 void uiOverlayAdd(UiState& s, UiOverlayDrawFn fn);
 void uiPlaceAdd(UiState& s, void (*fn)(UiState& s));
-void uiBootAdd(UiBootFn fn);
 void uiBeforeLayoutAdd(UiState& s, void (*fn)(UiState& s));
 void uiClearAdd(UiState& s, UiClearFn fn);
 void uiRegisterSpawnHook(UiState& s, uint8_t role, UiSpawnFn fn);
@@ -356,21 +424,26 @@ inline bool uiWithin(const UiState& s, uint16_t id, uint16_t ancestor) {
     return false;
 }
 
+// True when `id` itself is an absolutely placed node that floats outside normal flow.
+inline bool uiOverlayHere(const UiState& s, uint16_t id) {
+    const UiFlex* flex = s.ent[id].try_get<UiFlex>();
+    if (flex == nullptr || flex->position != UiPosition::Absolute) {
+        return false;
+    }
+    const uint16_t parent = s.parentOf[id];
+    if (parent == kUiNone || parent >= s.count) {
+        return true;
+    }
+    const UiFlex* home = s.ent[parent].try_get<UiFlex>();
+    return home == nullptr || home->position == UiPosition::Static;
+}
+
 inline bool uiIsOverlay(const UiState& s, uint16_t id) {
     if (id >= s.count) {
         return false;
     }
     for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
-        const UiFlex* flex = s.ent[p].try_get<UiFlex>();
-        if (flex == nullptr || flex->position != UiPosition::Absolute) {
-            continue;
-        }
-        const uint16_t parent = s.parentOf[p];
-        if (parent == kUiNone || parent >= s.count) {
-            return true;
-        }
-        const UiFlex* home = s.ent[parent].try_get<UiFlex>();
-        if (home == nullptr || home->position == UiPosition::Static) {
+        if (uiOverlayHere(s, p)) {
             return true;
         }
     }

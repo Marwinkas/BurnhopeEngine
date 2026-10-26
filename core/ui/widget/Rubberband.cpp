@@ -113,7 +113,7 @@ bool uiRubberbandTrack(UiState& s, uint16_t host, const InputFrame& in) {
             band->begin(band->user);
         }
         rubberPick(s, host, *band);
-        s.capture = host;
+        uiCapture(s, host);
         return true;
     }
     if (release || !down) {
@@ -127,7 +127,7 @@ bool uiRubberbandTrack(UiState& s, uint16_t host, const InputFrame& in) {
         band->active = 0;
         uiShow(s, band->overlay, false);
         if (s.capture == host) {
-            s.capture = kUiNone;
+            uiReleaseCapture(s);
         }
         return dragged;
     }

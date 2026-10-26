@@ -113,7 +113,7 @@ bool uiNumberInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase,
         if (field == nullptr) {
             return false;
         }
-        s.capture = id;
+        uiCapture(s, id);
         s.grabX = in.pointer.x;
         uiFieldSetEdit(s, id);
         field->scrub = 1;

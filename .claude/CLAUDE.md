@@ -107,6 +107,8 @@ Never duplicate parsers, string helpers, math, or virtualization across modules.
 | Shader directory & math | `engine/include/render/RenderDefs.hpp`; `engine/shader/core/` and `camera.slang`. |
 | Descriptor slots | `core/rhi/DescriptorSlots.hpp` and `engine/include/render/HeapBind.hpp`. |
 | Node names | `uiName` / `uiFindName` in Layer 1 `Node.cpp` (build-time only; banned inside `engineTick`). |
+| UI callback registries | `UiHookList` (fixed cap `kUiHookCap`, no heap) in `core/ui/State.hpp`. Per-node hidden/overlay/clip results live in `UiState::vis`, filled top-down by `uiCacheVisibility`; `hitTest` and `uiClipBox` read them in O(1). |
+| Worker pool & device-owned state | `deviceJobs(Device&)` (job pool) and `Device::compress` (GPU block compressor) are torn down by `deviceDestroy`; no process-wide statics. |
 | Asserts & profiling | `core/platform/Check.hpp` (`BH_ASSERT`), `Trace.hpp`, `core/debug/CpuScope.hpp`. |
 
 **C++26 & Header Hygiene:**

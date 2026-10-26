@@ -73,6 +73,8 @@ struct Host {
 
 [[nodiscard]] bool hostInit(Host& host);
 void hostShutdown(Host& host);
+// Bytes of device memory the host's GPU allocator currently holds.
+[[nodiscard]] uint64_t hostGpuMemoryUsed(const Host& host);
 // То же имя поднимает уже открытое окно. Новое окно — первый свободный слот.
 [[nodiscard]] int hostOpen(Host& host, const ViewDesc& desc);
 void hostClose(Host& host, int slot);

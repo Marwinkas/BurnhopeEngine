@@ -3,7 +3,6 @@
 
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
-#include "rhi/Device.hpp"
 #include "files/Browser.hpp"
 #include "files/FileDomain.hpp"
 #include "host/HostNote.hpp"

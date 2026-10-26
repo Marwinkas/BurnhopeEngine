@@ -340,7 +340,7 @@ bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, 
         if (id < s.count && id != under && s.ent[id].has<UiFocusable>() && !s.ent[id].has<UiSplitter>()) {
             return false;
         }
-        s.capture = under;
+        uiCapture(s, under);
         splitBegin(s, under, in.pointer.x, in.pointer.y);
         return true;
     }

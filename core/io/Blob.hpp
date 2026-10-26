@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -32,16 +33,20 @@ constexpr uint32_t assetHash(const char* name) {
     return hash;
 }
 
-inline uint32_t assetHashBytes(const uint8_t* data, uint32_t size) {
-    uint32_t hash = 2166136261u;
+// FNV-1a; feed consecutive spans through `assetHashStep` to hash a stream without buffering it.
+inline uint32_t assetHashStep(uint32_t hash, const uint8_t* data, size_t size) {
     if (data == nullptr) {
         return hash;
     }
-    for (uint32_t i = 0; i < size; ++i) {
+    for (size_t i = 0; i < size; ++i) {
         hash ^= data[i];
         hash *= 16777619u;
     }
     return hash;
+}
+
+inline uint32_t assetHashBytes(const uint8_t* data, uint32_t size) {
+    return assetHashStep(2166136261u, data, size);
 }
 
 } // namespace burnhope

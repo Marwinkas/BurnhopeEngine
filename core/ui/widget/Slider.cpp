@@ -113,7 +113,7 @@ bool uiSliderInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase,
         return false;
     }
     if (phase == kUiInPressLate) {
-        s.capture = id;
+        uiCapture(s, id);
         dragSlider(s, id, in.pointer.x);
         return true;
     }

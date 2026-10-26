@@ -5,7 +5,6 @@
 #include "gpu_scene/SceneObject.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "render/SceneFrame.hpp"
-#include "rhi/Device.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Check.hpp"
 #include "ui/widget/Field.hpp"
@@ -179,7 +178,7 @@ void syncViewport(Engine& e, Canvas& canvas) {
         HostMeters meters{};
         platformHostMeters(hud.sampler, meters);
         const double ram = static_cast<double>(meters.rss) / (1024.0 * 1024.0);
-        const double vram = static_cast<double>(deviceMemoryUsed(e.host.device)) / (1024.0 * 1024.0);
+        const double vram = static_cast<double>(hostGpuMemoryUsed(e.host)) / (1024.0 * 1024.0);
         const float fps = sceneFrameFps(scene);
         const float frame = fps > 1.0f ? 1000.0f / fps : 0.0f;
         char line[6][64]{};
@@ -298,7 +297,7 @@ void hudFrame(Engine& e) {
     sceneFrameStats(e.scene, fps, sizeof(fps));
     HostMeters meters{};
     platformHostMeters(e.hud.sampler, meters);
-    const uint64_t vram = deviceMemoryUsed(e.host.device);
+    const uint64_t vram = hostGpuMemoryUsed(e.host);
     char memLine[96];
     char loadLine[96];
     std::snprintf(memLine, sizeof(memLine), "vram %.0f МБ   ram %.0f МБ", static_cast<double>(vram) / (1024.0 * 1024.0), static_cast<double>(meters.rss) / (1024.0 * 1024.0));

@@ -39,8 +39,10 @@ TEST_CASE("tsan jobs run without lost updates") {
         {&jobProbe, &probes[0]},
         {&jobProbe, &probes[1]},
     };
-    jobsRunAndWait(jobs, 2);
-    std::fprintf(stderr, "tsan jobs shared=%d done=%d workers=%d\n", shared, done.load(), jobsWorkerCount());
+    JobPool* pool = jobsCreate();
+    jobsRunAndWait(*pool, jobs, 2);
+    std::fprintf(stderr, "tsan jobs shared=%d done=%d workers=%d\n", shared, done.load(), jobsWorkerCount(*pool));
+    jobsDestroy(pool);
     CHECK(shared == 8000);
     CHECK(done.load() == 2);
 }
@@ -65,7 +67,7 @@ TEST_CASE("tsan host ticks two hidden windows") {
         hostShutdown(host);
         return;
     }
-    spdlog::info("tsan host: two windows, {} workers", jobsWorkerCount());
+    spdlog::info("tsan host: two windows, {} workers", jobsWorkerCount(deviceJobs(host.device)));
     bool ok = true;
     for (int i = 0; i < 24; ++i) {
         if (!hostTick(host)) {

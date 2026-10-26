@@ -6,11 +6,18 @@ namespace burnhope {
 // jobsRunAndWait запускает N независимых работ параллельно и блокирует вызывающий
 // поток, пока все не закончатся. Поток вызова тоже тянет работу из того же массива
 // (work-stealing через atomic-счётчик), так что при N <= 1 потоке в пуле всё равно
-// не простаивает. Пул создаётся лениво один раз и живёт до конца процесса.
+// не простаивает. 
 //
 // Используется в core/host/Host.cpp для параллельной записи кадра разных окон и
 // может использоваться для CPU-тяжёлых задач (BC7/BC6H encode по блокам, etc.) —
 // не привязан к рендеру.
+//
+// Пул принадлежит владельцу: jobsCreate / jobsDestroy. Рендер держит его на Device (deviceJobs).
+struct JobPool;
+
+[[nodiscard]] JobPool* jobsCreate();
+void jobsDestroy(JobPool* pool);
+
 using JobFn = void (*)(void* user);
 
 struct Job {
@@ -20,9 +27,9 @@ struct Job {
 
 // Блокирует вызывающий поток до завершения всех jobs[0..count). count может быть 0 или 1
 // (тогда работа идёт прямо на вызывающем потоке, без пула).
-void jobsRunAndWait(Job* jobs, int count);
+void jobsRunAndWait(JobPool& pool, Job* jobs, int count);
 
 // Сколько потоков реально тянут работу, включая вызывающий (для логов/диагностики).
-int jobsWorkerCount();
+int jobsWorkerCount(const JobPool& pool);
 
 } // namespace burnhope

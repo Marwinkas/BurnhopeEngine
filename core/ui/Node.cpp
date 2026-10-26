@@ -1,3 +1,4 @@
+#include "platform/Check.hpp"
 #include "Str.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/State.hpp"
@@ -11,6 +12,14 @@
 #include <cstring>
 
 namespace burnhope {
+
+uint16_t uiYogaId(const UiState& s, const YGNode* node) {
+    if (node == nullptr) {
+        return kUiNone;
+    }
+    const auto* ctx = static_cast<const UiYogaCtx*>(YGNodeGetContext(node));
+    return ctx != nullptr && ctx->id < s.count ? ctx->id : kUiNone;
+}
 
 bool nodeShown(const UiState& s, uint16_t id) {
     for (uint16_t p = id; p != kUiNone && p < s.count; p = s.parentOf[p]) {
@@ -51,7 +60,8 @@ uint16_t spawn(UiState& s, uint16_t parent, const UiFlex& flex, const UiPaint& p
     }
     const uint16_t id = s.count++;
     YGNodeRef node = YGNodeNew();
-    YGNodeSetContext(node, reinterpret_cast<void*>(static_cast<uintptr_t>(id)));
+    s.yogaCtx[id] = {.state = &s, .id = id};
+    YGNodeSetContext(node, &s.yogaCtx[id]);
     s.yoga[id] = node;
     s.parentOf[id] = parent;
     if (parent != kUiNone) {
@@ -127,34 +137,45 @@ void uiCursorPop(UiState& s) {
     }
 }
 
-void uiSyncInput(UiState& s) {
-    for (uint16_t id = 0; id < s.count; ++id) {
-        auto& ent = s.ent[id];
-        if (!ent.is_alive()) {
-            continue;
-        }
-        if (id == s.hovered) {
-            ent.add<UiHovered>();
-        } else {
-            ent.remove<UiHovered>();
-        }
-        if (id == s.focused) {
-            ent.add<UiFocused>();
-        } else {
-            ent.remove<UiFocused>();
-        }
-        if (id == s.capture) {
-            ent.add<UiCapture>();
-        } else {
-            ent.remove<UiCapture>();
-        }
-        if (id == s.capture) {
-            ent.set<UiPressed>({1, s.grabX, s.grabY});
-        } else {
-            ent.remove<UiPressed>();
-        }
-        ent.remove<UiDragState>();
+namespace {
+
+template <typename Tag>
+void retag(UiState& s, uint16_t& tagged, uint16_t now) {
+    if (tagged == now) {
+        return;
     }
+    if (tagged < s.count && s.ent[tagged].is_alive()) {
+        s.ent[tagged].remove<Tag>();
+    }
+    if (now < s.count && s.ent[now].is_alive()) {
+        s.ent[now].add<Tag>();
+    }
+    tagged = now;
+}
+
+} // namespace
+
+// Interaction tags follow the three live ids: only the nodes that gain or lose the state are touched.
+void uiSyncInput(UiState& s) {
+    retag<UiHovered>(s, s.hoveredTagged, s.hovered);
+    retag<UiFocused>(s, s.focusedTagged, s.focused);
+    if (s.captureTagged != s.capture) {
+        if (s.captureTagged < s.count && s.ent[s.captureTagged].is_alive()) {
+            s.ent[s.captureTagged].remove<UiPressed>();
+        }
+        retag<UiCapture>(s, s.captureTagged, s.capture);
+    }
+    if (s.capture < s.count && s.ent[s.capture].is_alive()) {
+        s.ent[s.capture].set<UiPressed>({1, s.grabX, s.grabY});
+    }
+}
+
+void uiCapture(UiState& s, uint16_t id) {
+    s.capture = id;
+}
+
+void uiReleaseCapture(UiState& s) {
+    s.capture = kUiNone;
 }
 
 void uiRestyle(UiState& s) {
@@ -193,11 +214,18 @@ void uiClear(UiState& s) {
         s.contextOf[i] = kUiNone;
         s.box[i] = {};
         s.anim[i] = {};
+        s.vis[i] = {};
+        s.yogaCtx[i] = {};
     }
+    s.animN = 0;
+    s.culledN = 0;
+    s.hoveredTagged = kUiNone;
+    s.focusedTagged = kUiNone;
+    s.captureTagged = kUiNone;
     s.count = 0;
     s.hovered = kUiNone;
     s.focused = kUiNone;
-    s.capture = kUiNone;
+    uiReleaseCapture(s);
     for (UiClearFn hook : s.clearHook) {
         if (hook != nullptr) {
             hook(s);
@@ -414,7 +442,7 @@ void uiDrop(UiState& s, uint16_t id) {
             s.focused = kUiNone;
         }
         if (s.capture == node) {
-            s.capture = kUiNone;
+            uiReleaseCapture(s);
         }
     }
     s.layoutDirty = true;
@@ -627,11 +655,7 @@ uint16_t uiNodeChild(const UiState& s, uint16_t parent, uint32_t index) {
     if (node == nullptr) {
         return kUiNone;
     }
-    const auto raw = reinterpret_cast<uintptr_t>(YGNodeGetContext(node));
-    if (raw >= s.count) {
-        return kUiNone;
-    }
-    return static_cast<uint16_t>(raw);
+    return uiYogaId(s, node);
 }
 
 void uiNodeMoveChild(UiState& s, uint16_t parent, uint16_t child, uint32_t newIndex) {
@@ -720,46 +744,20 @@ UiState::~UiState() {
     uiClear(*this);
 }
 
-namespace {
-
-std::vector<UiBootFn> gBoot;
-
-} // namespace
-
-void uiBootAdd(UiBootFn fn) {
-    if (fn == nullptr) {
-        return;
-    }
-    for (UiBootFn have : gBoot) {
-        if (have == fn) {
-            return;
-        }
-    }
-    gBoot.push_back(fn);
-}
-
 void uiBeforeLayoutAdd(UiState& s, void (*fn)(UiState& s)) {
     if (fn == nullptr) {
         return;
     }
-    for (void (*have)(UiState&) : s.beforeHook) {
-        if (have == fn) {
-            return;
-        }
-    }
-    s.beforeHook.push_back(fn);
+    [[maybe_unused]] const bool ok = s.beforeHook.add(fn);
+    BH_ASSERT(ok, "ui hook registry full");
 }
 
 void uiClearAdd(UiState& s, UiClearFn fn) {
     if (fn == nullptr) {
         return;
     }
-    for (UiClearFn have : s.clearHook) {
-        if (have == fn) {
-            return;
-        }
-    }
-    s.clearHook.push_back(fn);
+    [[maybe_unused]] const bool ok = s.clearHook.add(fn);
+    BH_ASSERT(ok, "ui hook registry full");
 }
 
 void uiRegisterSpawnHook(UiState& s, uint8_t role, UiSpawnFn fn) {
@@ -779,12 +777,6 @@ UiState::UiState()
     for (uint16_t i = 0; i < kUiCap; ++i) {
         parentOf[i] = kUiNone;
         contextOf[i] = kUiNone;
-    }
-    bootHook = gBoot;
-    for (UiBootFn fn : bootHook) {
-        if (fn != nullptr) {
-            fn(*this);
-        }
     }
 }
 

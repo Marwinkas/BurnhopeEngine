@@ -25,7 +25,6 @@ struct CompressFlight {
 };
 
 struct CompressKeep {
-    Device* device = nullptr;
     DescriptorHeaps heaps{};
     ShaderExt shader[8]{};
     const char* path[8]{};
@@ -41,9 +40,33 @@ struct CompressPipeline {
     CompressFlight flight{};
 };
 
-CompressPipeline& pipeline() {
-    static CompressPipeline pipe;
-    return pipe;
+void joinFlight(CompressPipeline& pipe, Device& d);
+
+void releasePipeline(Device& d, void* state) {
+    auto* pipe = static_cast<CompressPipeline*>(state);
+    if (pipe == nullptr) {
+        return;
+    }
+    joinFlight(*pipe, d);
+    CompressKeep& keep = pipe->keep;
+    gpuBufferDestroy(keep.src, d);
+    gpuBufferDestroy(keep.dst, d);
+    for (ShaderExt& shader : keep.shader) {
+        shaderDestroy(d, shader);
+    }
+    if (keep.heaps.writeResources != nullptr) {
+        descriptorHeapsDestroy(keep.heaps, d);
+    }
+    delete pipe;
+}
+
+// The compressor lives on the device it records for and is torn down with it.
+CompressPipeline& pipeline(Device& d) {
+    std::lock_guard<std::mutex> lock(d.queueMutex);
+    if (d.compress.state == nullptr) {
+        d.compress = {.state = new CompressPipeline{}, .release = releasePipeline};
+    }
+    return *static_cast<CompressPipeline*>(d.compress.state);
 }
 
 void joinFlight(CompressPipeline& pipe, Device& d) {
@@ -79,15 +102,11 @@ bool gpuCompressBlocks(
     const VkDeviceSize srcBytes = 16 + static_cast<VkDeviceSize>(width) * height * pixelBytes;
     const VkBufferUsageFlags usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
-    CompressPipeline& pipe = pipeline();
+    CompressPipeline& pipe = pipeline(d);
     std::lock_guard<std::mutex> keepLock(pipe.mu);
     joinFlight(pipe, d);
 
     CompressKeep& keep = pipe.keep;
-    if (keep.device != &d) {
-        keep = {};
-        keep.device = &d;
-    }
 
     GpuBuffer* src = &keep.src;
     GpuBuffer* dstBuf = &keep.dst;
@@ -322,7 +341,7 @@ uint32_t imageBlockBytes(ImageBlock format) {
 }
 
 void gpuCompressJoin(Device& d) {
-    CompressPipeline& pipe = pipeline();
+    CompressPipeline& pipe = pipeline(d);
     std::lock_guard<std::mutex> keepLock(pipe.mu);
     joinFlight(pipe, d);
 }

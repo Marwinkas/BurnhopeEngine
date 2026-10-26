@@ -45,16 +45,15 @@ void colorPlaceNode(UiState& s, uint16_t id, const UiColorPickerComponent* color
     UiRampDraw drawn{};
     UiNodeBars bars{};
     if (ramp == UiRamp::HueWheel) {
-        paint->r = 1.0f;
-        paint->g = 1.0f;
-        paint->b = 1.0f;
+        paint->token = UiToken::Custom;
+        paintTint(*paint, kUiWhite);
         drawn.mode = 0;
         drawn.flags = kUiFlagWheel;
         const float radius = std::min(box.w, box.h) * 0.5f;
         const float ang = (colorInk(*color).h - 0.5f) * 6.2831853f;
         const float mx = box.x + box.w * 0.5f + std::cos(ang) * colorInk(*color).s * radius;
         const float my = box.y + box.h * 0.5f + std::sin(ang) * colorInk(*color).s * radius;
-        pushColorBar(s, bars, mx - 7.0f, my - 7.0f, 14.0f, 14.0f, 1.0f, 1.0f, 1.0f, 1.0f, 7.0f);
+        pushColorBar(s, bars, mx - 7.0f, my - 7.0f, 14.0f, 14.0f, kUiWhite[0], kUiWhite[1], kUiWhite[2], 1.0f, 7.0f);
         pushColorBar(s, bars, mx - 4.0f, my - 4.0f, 8.0f, 8.0f, colorInk(*color).r, colorInk(*color).g, colorInk(*color).b, 1.0f, 4.0f);
     } else if (ramp == UiRamp::ValueRamp) {
         ColorLinear hue{};
@@ -65,13 +64,12 @@ void colorPlaceNode(UiState& s, uint16_t id, const UiColorPickerComponent* color
         drawn.mode = 1;
         drawn.flags = kUiFlagRamp;
         const float ty = box.y + (1.0f - colorInk(*color).v) * box.h;
-        pushColorBar(s, bars, box.x - 2.0f, ty - 3.0f, box.w + 4.0f, 6.0f, 1.0f, 1.0f, 1.0f, 1.0f, 2.0f);
+        pushColorBar(s, bars, box.x - 2.0f, ty - 3.0f, box.w + 4.0f, 6.0f, kUiWhite[0], kUiWhite[1], kUiWhite[2], 1.0f, 2.0f);
     } else if (ramp == UiRamp::Gradient) {
         drawn.mode = 6;
         drawn.flags = kUiFlagRamp;
-        paint->r = 0.0f;
-        paint->g = 0.0f;
-        paint->b = 0.0f;
+        paint->token = UiToken::Custom;
+        paintTint(*paint, kUiBlack);
         pushColorBar(s, bars, box.x, box.y, box.w, box.h, colorInk(*color).r, colorInk(*color).g, colorInk(*color).b, colorInk(*color).a, paint->radius);
     } else {
         paint->r = colorInk(*color).r;
@@ -80,7 +78,7 @@ void colorPlaceNode(UiState& s, uint16_t id, const UiColorPickerComponent* color
         drawn.mode = 2;
         drawn.flags = kUiFlagRamp;
         const float tx = box.x + colorInk(*color).a * box.w;
-        pushColorBar(s, bars, tx - 3.0f, box.y - 2.0f, 6.0f, box.h + 4.0f, 1.0f, 1.0f, 1.0f, 1.0f, 2.0f);
+        pushColorBar(s, bars, tx - 3.0f, box.y - 2.0f, 6.0f, box.h + 4.0f, kUiWhite[0], kUiWhite[1], kUiWhite[2], 1.0f, 2.0f);
     }
     if (auto* live = s.ent[id].try_get_mut<UiRampDraw>()) {
         *live = drawn;

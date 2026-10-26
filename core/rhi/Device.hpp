@@ -12,6 +12,16 @@
 
 namespace burnhope {
 
+struct Device;
+
+// Owner-supplied state whose lifetime follows the device: `release` runs in deviceDestroy while the device is idle.
+struct DeviceAttachment {
+    void* state = nullptr;
+    void (*release)(Device& d, void* state) = nullptr;
+};
+
+struct JobPool;
+
 struct Device {
     VkInstance instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debug = VK_NULL_HANDLE;
@@ -42,6 +52,14 @@ struct Device {
     // 1 after VK_ERROR_DEVICE_LOST. Draws return before any Vulkan call.
     // hostTick on the main thread is the only place that clears it, after recover.
     std::atomic<uint32_t> lost{0};
+    // RenderDoc in-application API, loaded on the first capture toggle (type erased: renderdoc_app.h stays in Device.cpp).
+    void* renderDocLib = nullptr;
+    void* renderDocApi = nullptr;
+    bool renderDocOpen = false;
+    // Slot for the image tier's GPU block compressor.
+    DeviceAttachment compress{};
+    // Fork-join worker pool shared by everything that records for this device.
+    DeviceAttachment jobs{};
 };
 
 [[nodiscard]] inline bool deviceLost(const Device& d) {
@@ -58,6 +76,7 @@ void deviceMarkLost(Device& d, const char* where, int32_t result);
 void deviceDestroy(Device& d);
 void deviceDumpCaps(const Device& d);
 void deviceName(Device& d, uint64_t handle, VkObjectType type, const char* name);
-void rhiCaptureToggle();
+void rhiCaptureToggle(Device& d);
+[[nodiscard]] JobPool& deviceJobs(Device& d);
 
 } // namespace burnhope

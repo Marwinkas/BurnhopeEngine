@@ -9,6 +9,7 @@
 #include <cstring>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -18,22 +19,30 @@ namespace fs = std::filesystem;
 
 namespace {
 
-bool searchHit(const FileModel& model, const std::string& name) {
-    if (model.search[0] == '\0') {
+char foldAscii(char c) {
+    return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+// Case-insensitive substring test with no temporary strings.
+bool searchHit(const FileModel& model, std::string_view name) {
+    const char* needle = model.search;
+    const std::size_t m = std::strlen(needle);
+    if (m == 0) {
         return true;
     }
-    auto lower = [](unsigned char c) {
-        return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : static_cast<char>(c);
-    };
-    std::string hay = name;
-    std::string needle = model.search;
-    for (char& c : hay) {
-        c = lower(static_cast<unsigned char>(c));
+    if (name.size() < m) {
+        return false;
     }
-    for (char& c : needle) {
-        c = lower(static_cast<unsigned char>(c));
+    for (std::size_t i = 0; i + m <= name.size(); ++i) {
+        std::size_t k = 0;
+        while (k < m && foldAscii(name[i + k]) == foldAscii(needle[k])) {
+            ++k;
+        }
+        if (k == m) {
+            return true;
+        }
     }
-    return hay.find(needle) != std::string::npos;
+    return false;
 }
 
 std::vector<std::string> listDirs(const fs::path& abs, const FileModel& model, std::unordered_set<std::string>& seen) {

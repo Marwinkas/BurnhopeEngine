@@ -1,6 +1,5 @@
 #include "ui/widget/Button.hpp"
 
-#include "ui/widget/Image.hpp"
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
 #include "ui/State.hpp"
@@ -8,6 +7,12 @@
 #include "ui/Text.hpp"
 
 namespace burnhope {
+
+namespace {
+
+constexpr float kButtonIcon = 16.0f;
+
+} // namespace
 
 uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
     UiFlex flex{};
@@ -34,6 +39,12 @@ uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
     } else {
         flex.padL = padX;
         flex.padR = padX;
+        if (cfg.iconSlot < kPhotoSlots && (cfg.label == nullptr || cfg.label[0] == '\0')) {
+            flex.widthMode = UiSize::Px;
+            flex.width = kButtonIcon + padX * 2.0f;
+            flex.padL = 0.0f;
+            flex.padR = 0.0f;
+        }
     }
     const uint16_t id = uiPanel(s, parent, flex, paintButton(s.look));
     if (id == kUiNone) {
@@ -44,10 +55,7 @@ uint16_t uiButton(UiState& s, uint16_t parent, const UiButtonConfig& cfg) {
     uiHover(s, id);
     s.ent[id].add<UiFocusable>();
     if (cfg.iconSlot < kPhotoSlots) {
-        const uint16_t iconId = uiIcon(s, id, cfg.iconSlot, 16.0f, 16.0f);
-        if (iconId != kUiNone) {
-            s.ent[iconId].add<UiNoHit>();
-        }
+        s.ent[id].set<UiImage>({.slot = cfg.iconSlot, .frames = 1, .inset = kButtonIcon});
     }
     if (cfg.onClick != nullptr) {
         uiBind(s, id, cfg.onClick, cfg.user);
@@ -101,19 +109,14 @@ uint16_t uiSlotBtn(UiState& s, uint16_t parent, uint8_t slot, float side, uint16
     s.ent[id].add<UiIconChrome>();
     if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
         paintGhost(*paint);
+        paintTint(*paint, kUiWhite);
+        paint->plate = 1;
     }
-    const uint16_t child = uiButtonIconChild(s, id);
-    if (child < s.count) {
-        if (auto* flex = s.ent[child].try_get_mut<UiFlex>()) {
-            flex->width = side;
-            flex->height = side;
-        }
-        if (auto* glyph = s.ent[child].try_get_mut<UiPaint>()) {
-            glyph->plate = 1;
-        }
+    if (auto* image = s.ent[id].try_get_mut<UiImage>()) {
+        image->inset = side;
     }
     if (icon != nullptr) {
-        *icon = child;
+        *icon = id;
     }
     return id;
 }
@@ -135,14 +138,8 @@ void uiButtonTintIcon(UiState& s, uint16_t icon, bool on) {
 }
 
 uint16_t uiButtonIconChild(const UiState& s, uint16_t id) {
-    const uint32_t n = uiNodeChildCount(s, id);
-    for (uint32_t i = 0; i < n; ++i) {
-        const uint16_t child = uiNodeChild(s, id, i);
-        if (child < s.count && s.ent[child].has<UiImage>()) {
-            return child;
-        }
-    }
-    return kUiNone;
+    const UiImage* image = id < s.count ? s.ent[id].try_get<UiImage>() : nullptr;
+    return image != nullptr && image->inset > 0.0f ? id : kUiNone;
 }
 
 namespace {

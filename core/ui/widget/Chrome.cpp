@@ -130,7 +130,7 @@ ChromePointer uiChromePointer(UiState& s, const InputFrame& in, uint16_t hit, bo
         }
     }
     if (press && hoverEdge != 0 && frame != kUiNone) {
-        s.capture = frame;
+        uiCapture(s, frame);
         gesture.resizeId = frame;
         gesture.resizeEdge = static_cast<uint8_t>(hoverEdge);
         s.grabX = in.pointer.x;
@@ -138,7 +138,7 @@ ChromePointer uiChromePointer(UiState& s, const InputFrame& in, uint16_t hit, bo
         out.took = 1;
     } else if (press && hit != kUiNone && s.ent[hit].has<UiTitleBar>() && s.parentOf[hit] != kUiNone) {
         const uint16_t panel = s.parentOf[hit];
-        s.capture = hit;
+        uiCapture(s, hit);
         gesture.floatWin = panel;
         s.grabX = in.pointer.x - s.box[panel].x;
         s.grabY = in.pointer.y - s.box[panel].y;

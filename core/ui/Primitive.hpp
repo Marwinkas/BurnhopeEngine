@@ -25,6 +25,8 @@ struct UiImage {
     float viewY = 0.0f;
     float viewW = 1.0f;
     float viewH = 1.0f;
+    // > 0: a centred square sprite of this side drawn by a node that keeps its own panel and text (button icons).
+    float inset = 0.0f;
 };
 
 struct PhotoMeta {

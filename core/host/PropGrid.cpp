@@ -23,6 +23,15 @@
 namespace burnhope {
 namespace {
 
+// Idle column grip: a faint hairline in the theme's text color.
+void gripIdle(UiPaint& paint, const UiLook& look) {
+    paint.token = UiToken::Custom;
+    paintTint(paint, look.text);
+    paint.a = 0.08f;
+    paint.borderW = 0.0f;
+    paint.shadow = 0.0f;
+}
+
 constexpr float kPropSlot = 24.0f;
 constexpr float kPropRow = 32.0f;
 constexpr float kPropPad = 4.0f;
@@ -197,13 +206,7 @@ void propPlace(UiState& s, uint16_t id, void*) {
     const bool live = s.hovered == grid->grip || (drag != nullptr && drag->armed != 0);
     if (!live) {
         if (auto* paint = s.ent[grid->grip].try_get_mut<UiPaint>()) {
-            paint->token = UiToken::Custom;
-            paint->r = 1.0f;
-            paint->g = 1.0f;
-            paint->b = 1.0f;
-            paint->a = 0.08f;
-            paint->borderW = 0.0f;
-            paint->shadow = 0.0f;
+            gripIdle(*paint, s.look);
         }
     }
 }
@@ -232,13 +235,7 @@ uint16_t uiPropHost(UiState& s, uint16_t parent) {
     if (grip < s.count) {
         uiPlace(s, grip, true, 140.0f + kPropIndent, 0.0f, 2.0f, 360.0f);
         if (auto* paint = s.ent[grip].try_get_mut<UiPaint>()) {
-            paint->token = UiToken::Custom;
-            paint->r = 1.0f;
-            paint->g = 1.0f;
-            paint->b = 1.0f;
-            paint->a = 0.08f;
-            paint->borderW = 0.0f;
-            paint->shadow = 0.0f;
+            gripIdle(*paint, s.look);
         }
         uiSplitterBind(s, grip, id, 0, propColumnResize, &s);
         if (auto* drag = s.ent[grip].try_get_mut<UiSplitter>()) {

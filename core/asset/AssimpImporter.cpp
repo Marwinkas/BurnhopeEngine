@@ -1,3 +1,4 @@
+#include "io/File.hpp"
 #include "asset/AssimpImporter.hpp"
 
 #include "asset/SceneBlob.hpp"
@@ -43,18 +44,6 @@ struct TexSearch {
     bool hasModelDir = false;
 };
 
-bool fileReadable(const char* path) {
-    if (path == nullptr || path[0] == '\0') {
-        return false;
-    }
-    std::FILE* f = std::fopen(path, "rb");
-    if (f == nullptr) {
-        return false;
-    }
-    std::fclose(f);
-    return true;
-}
-
 void texSearchFromFbx(const char* fbxPath, TexSearch& out) {
     out.hasModelDir = pathParent(fbxPath, out.modelDir, sizeof(out.modelDir));
 }
@@ -67,14 +56,14 @@ bool texReadableAt(const char* dir, std::string_view mid, const char* file) {
         return false;
     }
     *res.out = '\0';
-    return fileReadable(path);
+    return fileExists(path);
 }
 
 bool texOnDisk(const TexSearch& search, const char* file) {
     if (file == nullptr || file[0] == '\0') {
         return false;
     }
-    if (fileReadable(file)) {
+    if (fileExists(file)) {
         return true;
     }
     if (!search.hasModelDir) {

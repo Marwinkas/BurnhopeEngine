@@ -246,6 +246,16 @@ inline UiPaint paintField(const UiLook& look) noexcept {
     return out;
 }
 
+// Neutral tint constants for paints that carry no theme color (photo tint, ramp bases, marker rings).
+inline constexpr float kUiWhite[3]{1.0f, 1.0f, 1.0f};
+inline constexpr float kUiBlack[3]{0.0f, 0.0f, 0.0f};
+
+inline void paintTint(UiPaint& paint, const float (&rgb)[3]) noexcept {
+    paint.r = rgb[0];
+    paint.g = rgb[1];
+    paint.b = rgb[2];
+}
+
 inline void paintGhost(UiPaint& paint) noexcept {
     paint.token = UiToken::Custom;
     paint.a = 0.0f;

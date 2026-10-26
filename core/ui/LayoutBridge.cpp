@@ -9,10 +9,6 @@
 namespace burnhope {
 namespace {
 
-// Потокобезопасный указатель на активный контекст верстки.
-// В Фазе 2 каждый поток-воркер безопасно имеет собственный активный контекст.
-thread_local UiState* tl_activeLayoutState = nullptr;
-
 YGFlexDirection flexDir(UiFlexDir direction) noexcept {
     switch (direction) {
     case UiFlexDir::Row: return YGFlexDirectionRow;
@@ -69,13 +65,12 @@ YGAlign flexSelf(UiAlignSelf self) noexcept {
 // Замер произвольного содержимого (текст/картинка) через независимый интерфейс.
 // Никакого разыменования rawId как указателя!
 YGSize yogaMeasureAdapter(YGNodeConstRef node, float width, YGMeasureMode widthMode, float height, YGMeasureMode heightMode) {
-    UiState* s = tl_activeLayoutState;
-    if (s == nullptr) {
+    const auto* ctx = static_cast<const UiYogaCtx*>(YGNodeGetContext(node));
+    if (ctx == nullptr || ctx->state == nullptr) {
         return { 0.0f, 0.0f };
     }
-
-    const auto rawId = reinterpret_cast<uintptr_t>(YGNodeGetContext(node));
-    const auto id = static_cast<uint16_t>(rawId);
+    UiState* s = ctx->state;
+    const uint16_t id = ctx->id;
     if (id >= s->count || !s->ent[id].is_alive()) {
         return { 0.0f, 0.0f };
     }
@@ -264,22 +259,12 @@ void uiLayout(UiState& s, float w, float h) {
         return;
     }
 
-    // Привязываем активный контекст верстки к текущему потоку
-    tl_activeLayoutState = &s;
-
     // Изолированная переверстка поддерева (sub-layout)
     if (s.layoutFrom != kUiNone && s.layoutFrom != 0 && s.layoutFrom < s.count && s.yoga[s.layoutFrom] != nullptr
         && s.box[s.layoutFrom].w > kUiLayoutEpsilon) {
         const uint16_t root = s.layoutFrom;
         const auto yogaId = [&](YGNodeRef node) -> uint16_t {
-            if (node == nullptr) {
-                return kUiNone;
-            }
-            const auto raw = reinterpret_cast<uintptr_t>(YGNodeGetContext(node));
-            if (raw >= s.count) {
-                return kUiNone;
-            }
-            return static_cast<uint16_t>(raw);
+            return uiYogaId(s, node);
         };
         const auto applySub = [&](auto&& self, uint16_t id) -> void {
             const UiFlex* flex = s.ent[id].try_get<UiFlex>();
@@ -362,7 +347,7 @@ void uiLayout(UiState& s, float w, float h) {
         s.layoutFrom = kUiNone;
         s.layoutDirty = false;
         s.visualDirty = true;
-        tl_activeLayoutState = nullptr;
+        uiCacheVisibility(s);
         return;
     }
 
@@ -397,9 +382,9 @@ void uiLayout(UiState& s, float w, float h) {
             cacheBox(s, id);
             const uint32_t kids = YGNodeGetChildCount(s.yoga[id]);
             for (uint32_t i = 0; i < kids; ++i) {
-                const auto raw = reinterpret_cast<uintptr_t>(YGNodeGetContext(YGNodeGetChild(s.yoga[id], i)));
-                if (raw < s.count) {
-                    self(self, static_cast<uint16_t>(raw));
+                const uint16_t child = uiYogaId(s, YGNodeGetChild(s.yoga[id], i));
+                if (child != kUiNone) {
+                    self(self, child);
                 }
             }
         };
@@ -407,12 +392,14 @@ void uiLayout(UiState& s, float w, float h) {
     };
 
     // Сброс скрытых ранее элементов
-    for (uint16_t id = 0; id < s.count; ++id) {
+    for (uint16_t i = 0; i < s.culledN; ++i) {
+        const uint16_t id = s.culledList[i];
         if (s.culled[id] != 0 && s.yoga[id] != nullptr) {
             YGNodeStyleSetDisplay(s.yoga[id], YGDisplayFlex);
-            s.culled[id] = 0;
         }
+        s.culled[id] = 0;
     }
+    s.culledN = 0;
 
     measure();
 
@@ -445,11 +432,10 @@ void uiLayout(UiState& s, float w, float h) {
             if (childNode == nullptr || YGNodeStyleGetDisplay(childNode) == YGDisplayNone) {
                 continue;
             }
-            const auto raw = reinterpret_cast<uintptr_t>(YGNodeGetContext(childNode));
-            if (raw >= s.count) {
+            const uint16_t id = uiYogaId(s, childNode);
+            if (id == kUiNone) {
                 continue;
             }
-            const uint16_t id = static_cast<uint16_t>(raw);
             if (first == kUiNone) {
                 first = id;
             }
@@ -473,6 +459,7 @@ void uiLayout(UiState& s, float w, float h) {
         for (uint16_t i = 0; i < nv; ++i) {
             YGNodeStyleSetDisplay(s.yoga[victims[i]], YGDisplayNone);
             s.culled[victims[i]] = 1;
+            s.culledList[s.culledN++] = victims[i];
         }
         measure();
     }
@@ -495,26 +482,23 @@ void uiLayout(UiState& s, float w, float h) {
 
     // Чистая инверсия контроля: опрос универсальных компонентов обновления верстки (UiLayoutRefresh)
     bool refreshed = false;
-    for (uint16_t id = 0; id < s.count; ++id) {
-        if (!s.ent[id].is_alive()) {
-            continue;
-        }
-        if (const auto* r = s.ent[id].try_get<UiLayoutRefresh>()) {
+    uint16_t holders[kUiCap];
+    uint16_t nHolders = uiCollect<UiLayoutRefresh>(s, holders, kUiCap);
+    for (uint16_t k = 0; k < nHolders; ++k) {
+        if (const auto* r = s.ent[holders[k]].try_get<UiLayoutRefresh>()) {
             if (r->fn != nullptr) {
-                r->fn(s, id, r->user);
+                r->fn(s, holders[k], r->user);
                 refreshed = true;
             }
         }
     }
     if (refreshed) {
         measure();
-        for (uint16_t id = 0; id < s.count; ++id) {
-            if (!s.ent[id].is_alive()) {
-                continue;
-            }
-            if (const auto* r = s.ent[id].try_get<UiLayoutRefresh>()) {
+        nHolders = uiCollect<UiLayoutRefresh>(s, holders, kUiCap);
+        for (uint16_t k = 0; k < nHolders; ++k) {
+            if (const auto* r = s.ent[holders[k]].try_get<UiLayoutRefresh>()) {
                 if (r->fn != nullptr) {
-                    r->fn(s, id, r->user);
+                    r->fn(s, holders[k], r->user);
                 }
             }
         }
@@ -531,7 +515,7 @@ void uiLayout(UiState& s, float w, float h) {
     }
 
     s.visualDirty = true;
-    tl_activeLayoutState = nullptr;
+    uiCacheVisibility(s);
 }
 
 void uiRegisterLayoutFinish(UiState& s, UiLayoutFinishFn fn, void* user) {

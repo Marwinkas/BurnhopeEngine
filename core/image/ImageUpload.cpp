@@ -451,7 +451,7 @@ bool uploadBlockChain(
         jobCount += 1;
     }
     if (jobCount > 0) {
-        jobsRunAndWait(jobs, jobCount);
+        jobsRunAndWait(deviceJobs(d), jobs, jobCount);
     }
     if (gpuKicked) {
         gpuCompressJoin(d);
