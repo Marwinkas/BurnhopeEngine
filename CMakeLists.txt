@@ -432,6 +432,7 @@ bh_module(files
     core/files/FileMenu.cpp
     core/files/FileActions.cpp
     core/files/FileTheme.cpp
+    core/files/FileThumb.cpp
     core/files/FileDomain.cpp
     core/files/Project.cpp
     core/files/Format.cpp
@@ -464,6 +465,7 @@ bh_module(app
     demo/app/MatEdit.cpp
     demo/app/MatSlot.cpp
     demo/app/MatPreview.cpp
+    demo/app/MatThumb.cpp
     demo/app/HudPick.cpp
     demo/app/HudToolbar.cpp
     demo/app/HudView.cpp

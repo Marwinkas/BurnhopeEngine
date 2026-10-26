@@ -28,6 +28,7 @@ enum class UiIcon : uint8_t {
     Pause = 18,
     Stop = 19,
     Cogwheel = 20,
+    ChevronLeft = 21,
 };
 
 } // namespace burnhope

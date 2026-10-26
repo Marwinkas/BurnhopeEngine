@@ -10,7 +10,7 @@ namespace burnhope {
 // Слоты дескрипторной кучи Vulkan 1.4
 constexpr uint32_t kUiDescFont = 661;
 constexpr uint32_t kUiDescPhoto = 662;
-constexpr uint8_t kPhotoSlots = 10;
+constexpr uint8_t kPhotoSlots = 11;
 
 inline constexpr uint8_t kPhotoFrameCap = 16;
 

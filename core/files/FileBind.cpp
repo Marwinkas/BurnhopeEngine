@@ -136,6 +136,27 @@ void onToggle(UiState& s, uint32_t index) {
     fileRefresh(s);
 }
 
+bool bindMaterialThumb(UiState& s, uint16_t icon, Browser& b, const FileItem& item) {
+    char path[1100];
+    std::snprintf(path, sizeof(path), "%s/%s", b.cwd, item.name.c_str());
+    const uint8_t cell = thumbCell(b.thumbs, path, item.mtime);
+    if (cell == kThumbNone) {
+        return false;
+    }
+    uiThumb(s, icon, b.thumbs.slot, UiIcon::Document);
+    if (auto* paint = s.ent[icon].try_get_mut<UiPaint>()) {
+        paintTint(*paint, kUiWhite);
+    }
+    if (auto* image = s.ent[icon].try_get_mut<UiImage>()) {
+        constexpr float kCell = 1.0f / static_cast<float>(kThumbCols);
+        image->viewX = static_cast<float>(cell % kThumbCols) * kCell;
+        image->viewY = static_cast<float>(cell / kThumbCols) * kCell;
+        image->viewW = kCell;
+        image->viewH = kCell;
+    }
+    return true;
+}
+
 void bindCell(UiState& s, uint16_t cell, uint32_t index) {
     Browser& b = fileBook(s);
     if (index >= static_cast<uint32_t>(b.count())) {
@@ -151,7 +172,7 @@ void bindCell(UiState& s, uint16_t cell, uint32_t index) {
             const bool dir = b.items[index].isDir != 0;
             const bool material = !dir && b.items[index].kind == 5;
             uiThumb(s, parts->icon, dir ? b.folderSlot : b.fileSlot, dir ? UiIcon::Folder : UiIcon::Document);
-            if (material) {
+            if (material && !bindMaterialThumb(s, parts->icon, b, b.items[index])) {
                 if (auto* paint = s.ent[parts->icon].try_get_mut<UiPaint>()) {
                     const UiPaint badge = paintToken(s.look, UiToken::Accent, s.look.radiusSm);
                     paint->token = badge.token;

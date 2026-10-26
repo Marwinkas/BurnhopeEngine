@@ -1,4 +1,5 @@
 #define DOCTEST_CONFIG_NO_EXCEPTIONS
+#include "files/FileThumb.hpp"
 #include <doctest/doctest.h>
 
 #include "ui/widget/Widgets.hpp"
@@ -109,16 +110,12 @@ TEST_CASE("file new folder and view menu") {
     filesShow(state, true);
     filesRoot(state, dir.c_str());
     uiLayout(state, 900.0f, 640.0f);
-    uint16_t neu = kUiNone;
+    const uint16_t neu = uiFindName(state, "file.plus");
     uint16_t sort = kUiNone;
     for (uint16_t id = 0; id < state.count; ++id) {
-        const UiPaint* paint = state.ent[id].try_get<UiPaint>();
         const UiText* text = state.ent[id].try_get<UiText>();
-        if (paint == nullptr || text == nullptr) {
+        if (text == nullptr) {
             continue;
-        }
-        if (paint->token == UiToken::Button && std::strcmp(text->bytes, "+") == 0) {
-            neu = id;
         }
         if (std::strcmp(text->bytes, "Sort by name") == 0) {
             sort = id;
@@ -186,4 +183,39 @@ TEST_CASE("file listing keeps every file and folder") {
     }
     filesShutdown(state);
     fs::remove_all(dir, ec);
+}
+
+namespace {
+
+struct BakeCount {
+    int n = 0;
+};
+
+bool countBake(void* user, const char*, uint8_t) {
+    ++static_cast<BakeCount*>(user)->n;
+    return true;
+}
+
+} // namespace
+
+TEST_CASE("material thumbnails bake once per modification time") {
+    BakeCount count;
+    FileThumbs cache;
+    cache.bake = countBake;
+    cache.user = &count;
+    cache.slot = 10;
+    const uint8_t a = thumbCell(cache, "/p/a.bhmat", 100);
+    CHECK(a != kThumbNone);
+    CHECK(thumbCell(cache, "/p/a.bhmat", 100) == a);
+    CHECK(count.n == 1);
+    CHECK(thumbCell(cache, "/p/a.bhmat", 101) == a);
+    CHECK(count.n == 2);
+    CHECK(thumbCell(cache, "/p/b.bhmat", 5) != a);
+    for (int i = 0; i < 100; ++i) {
+        char path[32];
+        std::snprintf(path, sizeof(path), "/p/m%d.bhmat", i);
+        CHECK(thumbCell(cache, path, 1) < kThumbCells);
+    }
+    cache.bake = nullptr;
+    CHECK(thumbCell(cache, "/p/a.bhmat", 100) == kThumbNone);
 }

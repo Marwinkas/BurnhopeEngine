@@ -6,6 +6,7 @@
 #include "files/FileSession.hpp"
 #include "files/FileTheme.hpp"
 #include "ui/widget/AssetSlot.hpp"
+#include "ui/widget/Button.hpp"
 #include "ui/widget/DragDrop.hpp"
 #include "ui/widget/Field.hpp"
 #include "ui/widget/Splitter.hpp"
@@ -43,6 +44,9 @@ void mountFiles(UiState& s) {
     b.wTree = take("file.tree");
     b.status = take("file.status");
     files->fileView = take("file.grid");
+    for (const uint16_t btn : {b.plus, b.back, b.fwd, b.tune, b.searchBtn}) {
+        uiToolFrame(s, btn);
+    }
     fileWire(s);
     if (const uint16_t split = take("file.split"); split != kUiNone) {
         uiSplitterSetWidth(s, split, b.look.tree);
@@ -74,7 +78,10 @@ void filesShutdown(UiState& s) {
     if (auto* session = s.world.try_get_mut<FileSession>()) {
         const uint8_t folder = session->browser.folderSlot;
         const uint8_t file = session->browser.fileSlot;
+        FileThumbs thumbs = session->browser.thumbs;
+        thumbReset(thumbs);
         session->browser = {};
+        session->browser.thumbs = thumbs;
         session->browser.folderSlot = folder;
         session->browser.fileSlot = file;
         session->ready = 0;
@@ -99,6 +106,15 @@ void filesStyle(UiState& s, const FileLook& look) {
     b.look = look;
     b.showHidden = look.showHidden;
     b.reload();
+    fileRefresh(s);
+}
+
+void filesThumbs(UiState& s, uint8_t photoSlot, FileThumbFn fn, void* user) {
+    FileThumbs& thumbs = fileBook(s).thumbs;
+    thumbs.slot = photoSlot;
+    thumbs.bake = fn;
+    thumbs.user = user;
+    thumbReset(thumbs);
     fileRefresh(s);
 }
 

@@ -16,6 +16,8 @@ void uiThumb(UiState& s, uint16_t id, uint8_t photoSlot, UiIcon fallback) {
         }
         image.slot = photoSlot;
         image.frames = image.frames == 0 ? 1 : image.frames;
+        image.viewX = 0.0f;
+        image.viewY = 0.0f;
         image.viewW = 1.0f;
         image.viewH = 1.0f;
         s.ent[id].set<UiImage>(image);

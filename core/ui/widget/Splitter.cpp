@@ -80,6 +80,19 @@ void writeSize(UiState& s, uint16_t pane, bool vertical, float size) {
     uiFlexShrink(s, pane, 0.0f);
 }
 
+// A control, label or tab caption drawn over the grip owns the pointer: the splitter never claims it.
+bool coversGrip(const UiState& s, uint16_t id, uint16_t under) {
+    if (id >= s.count || id == under || s.ent[id].has<UiSplitter>()) {
+        return false;
+    }
+    if (s.ent[id].has<UiFocusable>()) {
+        return true;
+    }
+    const UiText* text = s.ent[id].try_get<UiText>();
+    const UiPaint* paint = s.ent[id].try_get<UiPaint>();
+    return (text != nullptr && text->len > 0) || (paint != nullptr && paint->icon != 0);
+}
+
 } // namespace
 
 uint16_t splitTarget(const UiState& s, uint16_t split) {
@@ -349,7 +362,7 @@ uint16_t splitAt(const UiState& s, float x, float y) {
 bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, UiPhaseNote& note) {
     const uint16_t under = splitAt(s, in.pointer.x, in.pointer.y);
     if (phase == kUiInCursor) {
-        if (under == kUiNone) {
+        if (under == kUiNone || coversGrip(s, id, under)) {
             return false;
         }
         note.cursor = splitCursor(s, under);
@@ -359,7 +372,7 @@ bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, 
         if (under == kUiNone) {
             return false;
         }
-        if (id < s.count && id != under && s.ent[id].has<UiFocusable>() && !s.ent[id].has<UiSplitter>()) {
+        if (coversGrip(s, id, under)) {
             return false;
         }
         uiCapture(s, under);

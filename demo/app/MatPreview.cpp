@@ -34,6 +34,7 @@ void hudCommitMaps(HudContext& hud, uint8_t channel) {
 }
 
 void hudBakeMaterialView(HudContext& hud) {
+    matThumbsFlush(hud.thumbs);
     UiState* state = hud.tool.canvas != nullptr ? hud.tool.canvas->state : nullptr;
     if (state != nullptr && uiCaptured(*state) != hud.matPreview) {
         hud.previewDown = 0;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "files/FileThumb.hpp"
 #include "files/Model.hpp"
 #include "ui/rhi/Canvas.hpp"
 
@@ -23,6 +24,8 @@ void filesNewProject(UiState& s, const char* path);
 void filesOpenProject(UiState& s, const char* path);
 // Local photo indices (heap slot minus 662). Pass 255 when the icon is missing.
 void filesIconSlots(UiState& s, uint8_t folderSlot, uint8_t fileSlot);
+// Material previews: `fn` bakes a .bhmat into cell `cell` of the 8 x 8 atlas that lives in photo slot `photoSlot`.
+void filesThumbs(UiState& s, uint8_t photoSlot, FileThumbFn fn, void* user);
 void filesOfferPath(UiState& s, const char* path);
 // Offers a dropped path to the browser, then shows an image in photo slot 0 or imports a .json layout.
 void filesOfferDrop(Canvas& canvas, const char* path);

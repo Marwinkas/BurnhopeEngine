@@ -1,6 +1,7 @@
 #pragma once
 
 #include "asset/ProjectDoc.hpp"
+#include "app/MatThumb.hpp"
 #include "host/Host.hpp"
 #include "host/Recent.hpp"
 #include "platform/PlatformUtil.hpp"
@@ -230,6 +231,7 @@ struct HudContext {
     std::vector<MatLeaf> mats;
     std::vector<uint8_t> previewBuf;
     std::vector<uint8_t> atlasBuf;
+    MatThumbs thumbs{};
 };
 
 struct Engine {

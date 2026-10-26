@@ -1,6 +1,7 @@
 #pragma once
 
 #include "files/FileTheme.hpp"
+#include "files/FileThumb.hpp"
 #include "files/Model.hpp"
 
 #include <cstdint>
@@ -9,6 +10,7 @@ namespace burnhope {
 
 struct Browser : FileModel {
     FileLook look{};
+    FileThumbs thumbs{};
     FileOpenFn onOpen = nullptr;
     void* user = nullptr;
     uint16_t plus = kUiNone;

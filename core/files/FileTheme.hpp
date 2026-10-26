@@ -12,8 +12,8 @@ namespace burnhope {
 // Heap slots sit in the UI photo range 662..669. The photo loader takes the local index.
 struct alignas(16) FileTheme {
     const char* layout = "build-core/ui/files.uib";
-    const char* folderIcon = "assets/icons/folder.png";
-    const char* folderIconAlt = "../assets/icons/folder.png";
+    const char* folderIcon = "assets/icons/folder.svg";
+    const char* folderIconAlt = "../assets/icons/folder.svg";
     const char* fileIcon = "assets/icons/file.png";
     const char* fileIconAlt = "../assets/icons/file.png";
     float listItemW = 480.0f;
@@ -23,7 +23,7 @@ struct alignas(16) FileTheme {
     float iconMax = 256.0f;
     float iconStep = 8.0f;
     float tuneW = 220.0f;
-    float tuneH = 120.0f;
+    float tuneH = 154.0f;
     float icon = 84.0f;
     float tree = 188.0f;
     uint32_t folderSlot = kUiDescPhoto;

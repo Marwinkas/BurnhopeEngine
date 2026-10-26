@@ -9,11 +9,10 @@
     "padR": 4,
     "fill": [0, 0, 0, 0],
     "children": [
-      {"name": "file.plus", "role": "button", "text": "+", "class": "tool_button", "shrink": 0, "textAlign": 1, "valign": 1},
-      {"name": "file.back", "role": "button", "text": "<", "class": "tool_button", "shrink": 0, "textAlign": 1, "valign": 1},
-      {"name": "file.fwd", "role": "button", "text": ">", "class": "tool_button", "shrink": 0, "textAlign": 1, "valign": 1},
-      {"name": "file.view", "role": "choice", "w": 96, "shrink": 0, "items": ["Icons", "List"]},
-      {"name": "file.tune", "role": "button", "text": "...", "class": "tool_button", "shrink": 0, "textAlign": 1, "valign": 1},
+      {"name": "file.plus", "role": "button", "icon": 16, "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
+      {"name": "file.back", "role": "button", "icon": 21, "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
+      {"name": "file.fwd", "role": "button", "icon": 10, "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
+      {"name": "file.tune", "role": "button", "icon": 20, "class": "tool_button", "w": 28, "h": 28, "shrink": 0},
       {"grow": 1, "shrink": 1, "h": 28, "fill": [0, 0, 0, 0]}
     ]
   },
@@ -56,7 +55,7 @@
               {"grow": 1, "shrink": 1, "h": 28, "fill": [0, 0, 0, 0]},
               {"name": "file.search", "role": "search", "w": 180, "hint": "search", "show": false},
               {"name": "file.filter", "role": "choice", "w": 110, "show": false, "items": ["All", "Folders", "Images", "Text", "Audio"]},
-              {"name": "file.searchBtn", "role": "button", "icon": 7, "class": "tool_button", "shrink": 0}
+              {"name": "file.searchBtn", "role": "button", "icon": 7, "class": "tool_button", "w": 28, "h": 28, "shrink": 0}
             ]
           },
           {
@@ -91,17 +90,17 @@
     "mount": "root",
     "position": "absolute",
     "dir": "column",
+    "class": "window_panel",
     "w": 220,
-    "h": 120,
-    "pad": 10,
-    "gap": 8,
-    "token": "menu",
-    "radius": 8,
+    "h": 154,
+    "pad": 8,
+    "gap": 6,
     "show": false,
     "popup": true,
     "children": [
-      {"name": "file.sort", "role": "choice", "w": 200, "shrink": 0, "items": ["Sort by name", "Sort by size", "Sort by type", "Sort by date"]},
-      {"name": "file.group", "role": "choice", "w": 200, "shrink": 0, "items": ["No group", "Group by type"]},
+      {"name": "file.view", "role": "choice", "w": 200, "shrink": 0, "class": "dropdown_trigger", "items": ["Icons", "List"]},
+      {"name": "file.sort", "role": "choice", "w": 200, "shrink": 0, "class": "dropdown_trigger", "items": ["Sort by name", "Sort by size", "Sort by type", "Sort by date"]},
+      {"name": "file.group", "role": "choice", "w": 200, "shrink": 0, "class": "dropdown_trigger", "items": ["No group", "Group by type"]},
       {"name": "file.zoom", "role": "slider", "w": 200, "h": 18, "shrink": 0, "min": 48, "maxv": 256, "value": 84}
     ]
   }

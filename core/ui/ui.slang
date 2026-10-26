@@ -5,7 +5,7 @@ ByteAddressBuffer gUi;
 [[vk::binding(1, 0)]]
 Texture2D<float> gSdf;
 [[vk::binding(2, 0)]]
-Texture2D<float4> gPhoto[10];
+Texture2D<float4> gPhoto[11];
 [[vk::binding(0, 1)]]
 SamplerState gSdfSamp;
 
@@ -216,6 +216,7 @@ float4 samplePhoto(uint slot, float2 uv, float blur) {
     if (slot == 7u) return sampleLevel(gPhoto[7], uv, blur);
     if (slot == 8u) return sampleLevel(gPhoto[8], uv, blur);
     if (slot == 9u) return sampleLevel(gPhoto[9], uv, blur);
+    if (slot == 10u) return sampleLevel(gPhoto[10], uv, blur);
     return sampleLevel(gPhoto[0], uv, blur);
 }
 
@@ -392,15 +393,16 @@ float4 uiFs(VsOut i) : SV_Target0 {
             const float rad = length(p);
             const float tooth = 0.42 + 0.16 * step(0.0, sin(atan2(p.y, p.x) * 6.0));
             cov = (rad < tooth && rad > 0.28) || rad < 0.14 ? 1.0 : 0.0;
-        } else if (icon == 10u) {
+        } else if (icon == 10u || icon == 21u) {
+            const float2 q = float2(icon == 21u ? -p.x : p.x, p.y);
             const float2 a = float2(-0.18, -0.42);
             const float2 b = float2(0.28, 0.0);
             const float2 c = float2(-0.18, 0.42);
             const float2 ab = b - a;
             const float2 cb = b - c;
-            const float ta = saturate(dot(p - a, ab) / max(dot(ab, ab), 0.0001));
-            const float tc = saturate(dot(p - c, cb) / max(dot(cb, cb), 0.0001));
-            cov = length(p - (a + ab * ta)) < 0.14 || length(p - (c + cb * tc)) < 0.14 ? 1.0 : 0.0;
+            const float ta = saturate(dot(q - a, ab) / max(dot(ab, ab), 0.0001));
+            const float tc = saturate(dot(q - c, cb) / max(dot(cb, cb), 0.0001));
+            cov = length(q - (a + ab * ta)) < 0.14 || length(q - (c + cb * tc)) < 0.14 ? 1.0 : 0.0;
         }
     } else if ((i.flags & 256u) != 0) {
         const float2 pix = i.origin + i.local;
