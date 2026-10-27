@@ -3,10 +3,12 @@
 #include <cstddef>
 #include <cstring>
 
+#include "gui/data/GuiRow.hpp"
 #include "gui/interaction/Interact.hpp"
 #include "gui/layout/GuiLayoutEngine.hpp"
 #include "gui/layout/GuiScissor.hpp"
 #include "gui/overlay/GuiOverlay.hpp"
+#include "gui/overlay/GuiTooltip.hpp"
 #include "gui/render/GuiEmitter.hpp"
 #include "platform/Check.hpp"
 
@@ -38,6 +40,10 @@ void registerComponents(flecs::world& w) {
     w.component<UiVirtualItem>();
     w.component<UiOverlay>();
     w.component<UiToggle>();
+    w.component<UiTooltipText>();
+    w.component<UiBindKey>();
+    w.component<UiTooltipHost>();
+    w.component<GuiRow>();
     w.component<GuiVirtualSlots>();
     w.component<GuiTextMetrics>();
     w.component<UiHoverable>();
@@ -90,6 +96,7 @@ void guiLayout(GuiContext& ctx, float screenW, float screenH) {
     flecs::world& w = *ctx.ecs;
     ctx.screenW = screenW;
     ctx.screenH = screenH;
+    guiTooltipRun(w, ctx.in, ctx.interact, ctx.tooltip);
     guiOverlayRun(w, ctx.in, ctx.interact, screenW, screenH);
     guiLayoutRun(w, screenW, screenH);
     guiScissorRun(w, screenW, screenH);

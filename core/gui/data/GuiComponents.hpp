@@ -59,6 +59,11 @@ struct UiText {
     uint8_t pad0 = 0;
 };
 
+// Hint an empty, unfocused UiEditable shows in the muted colour.
+struct UiPlaceholder {
+    char text[32] = {};
+};
+
 // Style class assigned from styles.json (index into GuiStyleSheet).
 struct UiClass {
     uint32_t id = kGuiNoClass;
@@ -143,6 +148,16 @@ struct UiOverlay {
     uint8_t layer = 0;
 };
 
+// Static tooltip of a node (JSON "tooltip"): shown by guiTooltipRun after the hover delay.
+struct UiTooltipText {
+    char text[kGuiTextCap] = {};
+};
+
+// Semantic key of a node (JSON "bind": "actor.pos.x"): C++ addresses the node by it instead of by its DOM path.
+struct UiBindKey {
+    char key[32] = {};
+};
+
 // Click side effect: a release over the clickable flips `target`. A UiOverlay target opens/closes (anchored at this
 // entity's box when it opens); any other target is shown/hidden together with its Yoga display.
 struct UiToggle {
@@ -169,8 +184,10 @@ struct UiPressed {};
 struct UiFocusable {};
 struct UiFocused {};
 struct UiScrollable {};
+struct UiPassive {}; // painted but never the hit-test target (floating hints, the marquee, the drop highlight)
 struct UiClipChildren {}; // entity clips descendants to its own box (scroll views, popups)
 struct UiHidden {};       // entity and subtree skipped by hit test and emitter
+struct UiTooltipHost {};  // the overlay entity guiTooltipRun shows tips in
 struct UiRoot {};         // layout root (one per screen / overlay)
 
 } // namespace burnhope::gui

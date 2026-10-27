@@ -1,5 +1,6 @@
 {
  "name": "launcher",
+ "bind": "launcher.veil",
  "class": "launcher_veil",
  "behaviors": [
   "hover"
@@ -47,6 +48,7 @@
     },
     {
      "name": "empty",
+     "bind": "launcher.empty",
      "class": "label_small",
      "text": "No recent projects"
     },
@@ -56,11 +58,13 @@
      "children": [
       {
        "name": "r0",
+       "bind": "launcher.r0",
        "class": "recent_row",
        "hidden": true,
        "children": [
         {
          "name": "open",
+        "bind": "launcher.r0.open",
          "class": "recent_open",
          "text": "",
          "behaviors": [
@@ -83,11 +87,13 @@
       },
       {
        "name": "r1",
+       "bind": "launcher.r1",
        "class": "recent_row",
        "hidden": true,
        "children": [
         {
          "name": "open",
+        "bind": "launcher.r1.open",
          "class": "recent_open",
          "text": "",
          "behaviors": [
@@ -110,11 +116,13 @@
       },
       {
        "name": "r2",
+       "bind": "launcher.r2",
        "class": "recent_row",
        "hidden": true,
        "children": [
         {
          "name": "open",
+        "bind": "launcher.r2.open",
          "class": "recent_open",
          "text": "",
          "behaviors": [
@@ -137,11 +145,13 @@
       },
       {
        "name": "r3",
+       "bind": "launcher.r3",
        "class": "recent_row",
        "hidden": true,
        "children": [
         {
          "name": "open",
+        "bind": "launcher.r3.open",
          "class": "recent_open",
          "text": "",
          "behaviors": [
@@ -164,11 +174,13 @@
       },
       {
        "name": "r4",
+       "bind": "launcher.r4",
        "class": "recent_row",
        "hidden": true,
        "children": [
         {
          "name": "open",
+        "bind": "launcher.r4.open",
          "class": "recent_open",
          "text": "",
          "behaviors": [
@@ -191,11 +203,13 @@
       },
       {
        "name": "r5",
+       "bind": "launcher.r5",
        "class": "recent_row",
        "hidden": true,
        "children": [
         {
          "name": "open",
+        "bind": "launcher.r5.open",
          "class": "recent_open",
          "text": "",
          "behaviors": [
@@ -218,11 +232,13 @@
       },
       {
        "name": "r6",
+       "bind": "launcher.r6",
        "class": "recent_row",
        "hidden": true,
        "children": [
         {
          "name": "open",
+        "bind": "launcher.r6.open",
          "class": "recent_open",
          "text": "",
          "behaviors": [
@@ -245,11 +261,13 @@
       },
       {
        "name": "r7",
+       "bind": "launcher.r7",
        "class": "recent_row",
        "hidden": true,
        "children": [
         {
          "name": "open",
+        "bind": "launcher.r7.open",
          "class": "recent_open",
          "text": "",
          "behaviors": [

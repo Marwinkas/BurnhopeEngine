@@ -110,6 +110,9 @@ struct GuiStyleSheet {
     float themeRadiusSm = 6.0f;
     float hover = 0.08f; // default hover lift for classes without "hoverAlpha"
     uint8_t ready = 0;   // set by guiStyleInit
+    uint32_t constCount = 0;
+    char constName[kGuiStyleTokenCap][24] = {}; // the "tokens" block ("tile.gutter"), kept for guiStyleNumber
+    float constValue[kGuiStyleTokenCap] = {};
     GuiTextMetrics text = {};
 };
 
@@ -130,6 +133,10 @@ bool guiStyleLoadFile(GuiStyleSheet& sheet, const char* path);
 // Applies one theme of an assets/ui/theme.json document ({"themes": {"name": {"window": [r,g,b], ...}}}) onto the palette.
 // The palette is reset to the default first. Returns false when the document or the theme name is missing.
 bool guiStyleLoadTheme(GuiStyleSheet& sheet, std::string_view json, std::string_view theme);
+
+// Numeric constant of the "tokens" block by its dotted name ("tile.gutter"); false when the sheet has no such token.
+// Application code reads its sizes from here instead of hard-coding them.
+bool guiStyleNumber(const GuiStyleSheet& sheet, std::string_view name, float& out);
 
 // Class id of a name, or kGuiNoClass (0xFFFF, see GuiComponents.hpp) when absent. Build-time only (hash scan).
 uint32_t guiStyleFind(const GuiStyleSheet& sheet, std::string_view name);

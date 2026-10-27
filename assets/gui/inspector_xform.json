@@ -1,0 +1,32 @@
+[
+ {"name": "xformSec", "bind": "inspector.xform", "class": "dock_column", "children": [
+  {"name": "head", "class": "section_header", "text": "Transform", "behaviors": ["hover", "click"], "toggles": "main::inspector::xformSec::body"},
+  {"name": "body", "class": "section_body", "hidden": false, "children": [
+   {"name": "pos", "class": "row", "children": [
+    {"class": "label_cell", "text": "Position"},
+    {"name": "x", "bind": "actor.pos.x", "class": "number", "text": "X", "behaviors": ["hover", "drag"], "axis": "x", "mode": 2, "value": 0.5, "minV": -200, "maxV": 200, "flat": true},
+    {"name": "y", "bind": "actor.pos.y", "class": "number", "text": "Y", "behaviors": ["hover", "drag"], "axis": "x", "mode": 2, "value": 0.5, "minV": -200, "maxV": 200, "flat": true},
+    {"name": "z", "bind": "actor.pos.z", "class": "number", "text": "Z", "behaviors": ["hover", "drag"], "axis": "x", "mode": 2, "value": 0.5, "minV": -200, "maxV": 200, "flat": true},
+    {"name": "reset", "class": "reset_button", "text": "R", "behaviors": ["hover", "click"], "action": 52}
+   ]},
+   {"name": "rot", "class": "row", "children": [
+    {"class": "label_cell", "text": "Rotation"},
+    {"name": "x", "bind": "actor.rot.x", "class": "number", "text": "X", "behaviors": ["hover", "drag"], "axis": "x", "mode": 2, "value": 0.5, "minV": -180, "maxV": 180, "flat": true},
+    {"name": "y", "bind": "actor.rot.y", "class": "number", "text": "Y", "behaviors": ["hover", "drag"], "axis": "x", "mode": 2, "value": 0.5, "minV": -180, "maxV": 180, "flat": true},
+    {"name": "z", "bind": "actor.rot.z", "class": "number", "text": "Z", "behaviors": ["hover", "drag"], "axis": "x", "mode": 2, "value": 0.5, "minV": -180, "maxV": 180, "flat": true},
+    {"name": "reset", "class": "reset_button", "text": "R", "behaviors": ["hover", "click"], "action": 53}
+   ]},
+   {"name": "scl", "class": "row", "children": [
+    {"class": "label_cell", "text": "Scale"},
+    {"name": "x", "bind": "actor.scl.x", "class": "number", "text": "X", "behaviors": ["hover", "drag"], "axis": "x", "mode": 2, "value": 0.0495247623811906, "minV": 0.01, "maxV": 20, "flat": true},
+    {"name": "y", "bind": "actor.scl.y", "class": "number", "text": "Y", "behaviors": ["hover", "drag"], "axis": "x", "mode": 2, "value": 0.0495247623811906, "minV": 0.01, "maxV": 20, "flat": true},
+    {"name": "z", "bind": "actor.scl.z", "class": "number", "text": "Z", "behaviors": ["hover", "drag"], "axis": "x", "mode": 2, "value": 0.0495247623811906, "minV": 0.01, "maxV": 20, "flat": true},
+    {"name": "reset", "class": "reset_button", "text": "R", "behaviors": ["hover", "click"], "action": 54}
+   ]},
+   {"name": "static", "class": "row", "children": [
+    {"class": "label_cell", "text": "Static"},
+    {"name": "t", "bind": "actor.static", "class": "toggle", "text": "Off", "behaviors": ["hover", "click"], "action": 50}
+   ]}
+  ]}
+ ]}
+]

@@ -40,22 +40,17 @@ void windowArm(Window& w) {
     const uint32_t down = w.input.pointer.down;
     const float x = w.input.pointer.x;
     const float y = w.input.pointer.y;
-    const PointerFrame kept = w.input.pointer;
-    const float wheel = w.input.wheel;
-    const float wheelX = w.input.wheelX;
-    const uint8_t clicks = w.input.clicks;
-    w.input = {};
+    // A frame that was not consumed (keepEdges) keeps every latched edge: pointer edges, wheel and the typed text / keys.
+    if (w.keepEdges) {
+        w.input.pointer.dx = 0.0f;
+        w.input.pointer.dy = 0.0f;
+        w.keepEdges = false;
+    } else {
+        w.input = {};
+    }
     w.input.pointer.down = down;
     w.input.pointer.x = x;
     w.input.pointer.y = y;
-    if (w.keepEdges) {
-        w.input.pointer.pressed = kept.pressed;
-        w.input.pointer.released = kept.released;
-        w.input.wheel = wheel;
-        w.input.wheelX = wheelX;
-        w.input.clicks = clicks;
-        w.keepEdges = false;
-    }
     w.motionDx = 0.0f;
     w.motionDy = 0.0f;
 }

@@ -1,0 +1,14 @@
+[
+ {"name": "inspector", "class": "dock_right", "behaviors": ["scroll"], "children": [
+  {"name": "hierTitle", "class": "label_title", "text": "Scene"},
+  {"name": "hier", "bind": "scene.hier", "class": "list_hier", "behaviors": ["virtual", "hover"], "count": 0, "itemH": 26, "itemAction": 83},
+  {"name": "title", "class": "row_tall", "children": [
+   {"name": "actor", "bind": "inspector.actor", "class": "label_title_fill", "text": "No selection"},
+   {"name": "dup", "class": "button", "text": "Duplicate", "behaviors": ["hover", "click"], "action": 31}
+  ]},
+  {"$include": "assets/gui/inspector_xform.json"},
+  {"$include": "assets/gui/inspector_light.json"},
+  {"$include": "assets/gui/inspector_post.json"},
+  {"$include": "assets/gui/inspector_mat.json"}
+ ]}
+]

@@ -22,17 +22,17 @@ constexpr DebugView kDebugViews[] = {
     {15, "ReSTIR Свет"}, {16, "ReSTIR Вес"}, {17, "ReSTIR M"}, {18, "ReSTIR Тень"}, {19, "ReSTIR Индекс"},
 };
 constexpr const char* kDebugItem[] = {
-    "debugMenu::dbg0", "debugMenu::dbg1", "debugMenu::dbg2", "debugMenu::dbg3", "debugMenu::dbg4", "debugMenu::dbg5",
-    "debugMenu::dbg6", "debugMenu::dbg7", "debugMenu::dbg8", "debugMenu::dbg9", "debugMenu::dbg10", "debugMenu::dbg11",
-    "debugMenu::dbg12", "debugMenu::dbg13", "debugMenu::dbg14", "debugMenu::dbg15", "debugMenu::dbg16", "debugMenu::dbg17",
-    "debugMenu::dbg18",
+    "dbg.0", "dbg.1", "dbg.2", "dbg.3", "dbg.4", "dbg.5",
+    "dbg.6", "dbg.7", "dbg.8", "dbg.9", "dbg.10", "dbg.11",
+    "dbg.12", "dbg.13", "dbg.14", "dbg.15", "dbg.16", "dbg.17",
+    "dbg.18",
 };
 static_assert(std::size(kDebugItem) == std::size(kDebugViews));
 constexpr float kSnapStep[3] = {0.5f, 15.0f, 0.1f}; // move (m), rotate (deg), scale
 constexpr uint8_t kMenuView[4] = {0, 2, 9, 13}; // View menu entries: Lit, Normals, Albedo, AO
 constexpr float kSpeedScale[] = {0.25f, 0.5f, 1.0f, 2.0f, 4.0f};
 constexpr const char* kSpeedName[] = {"0.25x", "0.5x", "1x", "2x", "4x"};
-constexpr const char* kToolButton[4] = {"bar::tSelect", "bar::tMove", "bar::tRotate", "bar::tScale"};
+constexpr const char* kToolButton[4] = {"tool.select", "tool.move", "tool.rotate", "tool.scale"};
 
 uint32_t viewIndex(uint8_t mode) {
     for (uint32_t i = 0; i < std::size(kDebugViews); ++i) {
@@ -75,7 +75,7 @@ void onClick(void* user, uint32_t action) {
         break;
     case kActFileNew: sceneFrameBlank(e.scene); break;
     case kActFileBistro: (void)sceneFrameLoadBhop(e.scene, "cache/BistroExterior.bhop"); break;
-    case kActFileSave: (void)sceneFrameSave(e.scene, std::filesystem::current_path().string().c_str()); break;
+    case kActFileSave: (void)sceneFrameSave(e.scene, "."); break;
     case kActFileQuit: e.quit = true; break;
     case kActAddCube: (void)sceneFrameSpawnCube(e.scene); break;
     case kActDuplicate: (void)sceneFrameActorDuplicate(e.scene); break;
@@ -112,23 +112,23 @@ void toolbarSync(Engine& e) {
         guiHostSetActive(e.gui, kToolButton[i], tb.tool == i);
     }
     const uint8_t sim = sceneFrameSim(e.scene);
-    guiHostSetActive(e.gui, "bar::play", sim == 1);
-    guiHostSetActive(e.gui, "bar::pause", sim == 2);
+    guiHostSetActive(e.gui, "bar.play", sim == 1);
+    guiHostSetActive(e.gui, "bar.pause", sim == 2);
     const uint32_t view = viewIndex(e.editor.flags.viewMode);
-    guiHostSetText(e.gui, "bar::debug", kDebugViews[view].name);
+    guiHostSetText(e.gui, "bar.debug", kDebugViews[view].name);
     for (uint32_t i = 0; i < std::size(kDebugViews); ++i) {
         guiHostSetActive(e.gui, kDebugItem[i], i == view);
         guiHostSetIcon(e.gui, kDebugItem[i], i == view ? "check" : nullptr);
     }
-    guiHostSetActive(e.gui, "bar::snap", tb.snap != 0);
-    guiHostSetText(e.gui, "bar::proj", sceneFrameCameraProject(e.scene) != 0 ? "Ortho" : "Persp");
-    guiHostSetText(e.gui, "bar::speed", kSpeedName[tb.speedStep]);
+    guiHostSetActive(e.gui, "bar.snap", tb.snap != 0);
+    guiHostSetText(e.gui, "bar.proj", sceneFrameCameraProject(e.scene) != 0 ? "Ortho" : "Persp");
+    guiHostSetText(e.gui, "bar.speed", kSpeedName[tb.speedStep]);
     if (tb.frame++ % 15 == 0) {
         char stats[80];
         std::snprintf(stats, sizeof(stats), "%.0f fps  %.1f ms  GPU %.1f ms  %.1fM tris", sceneFrameFps(e.scene),
                       sceneFrameFps(e.scene) > 0.0f ? 1000.0f / sceneFrameFps(e.scene) : 0.0f, sceneFrameGpuMs(e.scene),
                       static_cast<double>(sceneFrameTriangles(e.scene)) / 1.0e6);
-        guiHostSetText(e.gui, "bar::stats", stats);
+        guiHostSetText(e.gui, "bar.stats", stats);
     }
 }
 

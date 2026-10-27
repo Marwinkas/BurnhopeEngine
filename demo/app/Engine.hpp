@@ -73,6 +73,7 @@ struct EditorState {
     HudActor actor{};
     uint8_t lookGrab = 0;
     uint8_t toolGrab = 0;
+    uint8_t guiHold = 0; // pointer buttons pressed over the GUI and still held
     uint32_t presentSeen = 0;
     float lookX = 0.0f;
     float lookY = 0.0f;

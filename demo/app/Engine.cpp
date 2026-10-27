@@ -19,8 +19,8 @@ namespace burnhope {
 namespace {
 
 // The GUI owns the pointer and the keyboard while it is under the cursor or holds text focus.
-void maskInput(const Canvas& canvas, InputFrame& input) {
-    if (canvasPointerOver(canvas)) {
+void maskInput(const Canvas& canvas, InputFrame& input, bool guiOwnsPointer) {
+    if (guiOwnsPointer) {
         input.pointer.dx = 0.0f;
         input.pointer.dy = 0.0f;
         input.pointer.down = 0;
@@ -60,9 +60,17 @@ bool sceneTick(void* user, const InputFrame& input, float dt) {
         sceneInput.pointer.y = ed.lookY;
     }
     Canvas* canvas = hostCanvas(e->host, e->slot);
-    const bool overGui = canvas != nullptr && canvasPointerOver(*canvas);
+    // A button pressed over the GUI (LMB, RMB or MMB) stays GUI-owned until released, even if the cursor leaves the panel.
+    // The feedback is a frame old, so the press position is also tested against the live layout.
+    const float dpi = canvas != nullptr && canvas->dpi >= 0.5f ? canvas->dpi : 1.0f;
+    const bool pointerOver = canvas != nullptr && (canvasPointerOver(*canvas) || guiHostCovers(e->gui, input.pointer.x / dpi, input.pointer.y / dpi));
+    if (pointerOver) {
+        ed.guiHold |= static_cast<uint8_t>(input.pointer.pressed);
+    }
+    ed.guiHold &= static_cast<uint8_t>(input.pointer.down);
+    const bool overGui = pointerOver || ed.guiHold != 0;
     if (canvas != nullptr && !lookHeld && !toolHeld) {
-        maskInput(*canvas, sceneInput);
+        maskInput(*canvas, sceneInput, overGui);
     }
     const bool flyLook = sceneFrameTick(e->scene, sceneInput, dt);
     if (e->slot >= 0) {

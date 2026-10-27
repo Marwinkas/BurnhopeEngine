@@ -61,7 +61,7 @@ enum GuiAction : uint32_t {
     kActBrowserForward = 162,
     kActBrowserCreate = 170, // 170..173: new folder, material, scene, file
     kActBrowserSort = 175,
-    kActBrowserHidden = 176,
+    kActBrowserView = 177, // tile grid <-> compact list
     kActCtxOpen = 180,
     kActCtxReveal = 181,
     kActCtxDuplicate = 182,

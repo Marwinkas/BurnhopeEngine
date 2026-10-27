@@ -1,0 +1,68 @@
+[
+ {"name": "fileMenu", "class": "menu_popup", "behaviors": ["overlay"], "placement": "below", "children": [
+  {"class": "menu_item", "text": "New Scene", "behaviors": ["hover", "click"], "action": 20, "toggles": "fileMenu"},
+  {"class": "menu_item", "text": "Open Bistro", "behaviors": ["hover", "click"], "action": 21, "toggles": "fileMenu"},
+  {"class": "menu_item", "text": "Save Scene", "behaviors": ["hover", "click"], "action": 22, "toggles": "fileMenu"},
+  {"name": "projects", "class": "menu_item", "text": "Projects...", "behaviors": ["hover", "click"], "action": 24, "toggles": "fileMenu"},
+  {"class": "menu_item", "text": "Quit", "behaviors": ["hover", "click"], "action": 23, "toggles": "fileMenu"}
+ ]},
+ {"name": "editMenu", "class": "menu_popup", "behaviors": ["overlay"], "placement": "below", "children": [
+  {"class": "menu_item", "text": "Add Cube", "behaviors": ["hover", "click"], "action": 30, "toggles": "editMenu"},
+  {"class": "menu_item", "text": "Duplicate", "behaviors": ["hover", "click"], "action": 31, "toggles": "editMenu"}
+ ]},
+ {"name": "viewMenu", "class": "menu_popup", "behaviors": ["overlay"], "placement": "below", "children": [
+  {"class": "menu_item", "text": "Lit", "behaviors": ["hover", "click"], "action": 40, "toggles": "viewMenu"},
+  {"class": "menu_item", "text": "Normals", "behaviors": ["hover", "click"], "action": 41, "toggles": "viewMenu"},
+  {"class": "menu_item", "text": "Albedo", "behaviors": ["hover", "click"], "action": 42, "toggles": "viewMenu"},
+  {"class": "menu_item", "text": "Ambient occlusion", "behaviors": ["hover", "click"], "action": 43, "toggles": "viewMenu"}
+ ]},
+ {"name": "debugMenu", "class": "menu_popup", "behaviors": ["overlay"], "placement": "below", "children": [
+  {"name": "dbg0", "bind": "dbg.0", "class": "menu_item", "text": "Lit", "behaviors": ["hover", "click"], "action": 100, "toggles": "debugMenu"},
+  {"name": "dbg1", "bind": "dbg.1", "class": "menu_item", "text": "Primitive ID", "behaviors": ["hover", "click"], "action": 101, "toggles": "debugMenu"},
+  {"name": "dbg2", "bind": "dbg.2", "class": "menu_item", "text": "Normals", "behaviors": ["hover", "click"], "action": 102, "toggles": "debugMenu"},
+  {"name": "dbg3", "bind": "dbg.3", "class": "menu_item", "text": "GI", "behaviors": ["hover", "click"], "action": 103, "toggles": "debugMenu"},
+  {"name": "dbg4", "bind": "dbg.4", "class": "menu_item", "text": "Каскады", "behaviors": ["hover", "click"], "action": 104, "toggles": "debugMenu"},
+  {"name": "dbg5", "bind": "dbg.5", "class": "menu_item", "text": "Контакт", "behaviors": ["hover", "click"], "action": 105, "toggles": "debugMenu"},
+  {"name": "dbg6", "bind": "dbg.6", "class": "menu_item", "text": "Луч", "behaviors": ["hover", "click"], "action": 106, "toggles": "debugMenu"},
+  {"name": "dbg7", "bind": "dbg.7", "class": "menu_item", "text": "Прямой", "behaviors": ["hover", "click"], "action": 107, "toggles": "debugMenu"},
+  {"name": "dbg8", "bind": "dbg.8", "class": "menu_item", "text": "Альбедо", "behaviors": ["hover", "click"], "action": 108, "toggles": "debugMenu"},
+  {"name": "dbg9", "bind": "dbg.9", "class": "menu_item", "text": "Солнце", "behaviors": ["hover", "click"], "action": 109, "toggles": "debugMenu"},
+  {"name": "dbg10", "bind": "dbg.10", "class": "menu_item", "text": "Шероховатость", "behaviors": ["hover", "click"], "action": 110, "toggles": "debugMenu"},
+  {"name": "dbg11", "bind": "dbg.11", "class": "menu_item", "text": "Металл", "behaviors": ["hover", "click"], "action": 111, "toggles": "debugMenu"},
+  {"name": "dbg12", "bind": "dbg.12", "class": "menu_item", "text": "AO", "behaviors": ["hover", "click"], "action": 112, "toggles": "debugMenu"},
+  {"name": "dbg13", "bind": "dbg.13", "class": "menu_item", "text": "Свечение", "behaviors": ["hover", "click"], "action": 113, "toggles": "debugMenu"},
+  {"name": "dbg14", "bind": "dbg.14", "class": "menu_item", "text": "ReSTIR Свет", "behaviors": ["hover", "click"], "action": 114, "toggles": "debugMenu"},
+  {"name": "dbg15", "bind": "dbg.15", "class": "menu_item", "text": "ReSTIR Вес", "behaviors": ["hover", "click"], "action": 115, "toggles": "debugMenu"},
+  {"name": "dbg16", "bind": "dbg.16", "class": "menu_item", "text": "ReSTIR M", "behaviors": ["hover", "click"], "action": 116, "toggles": "debugMenu"},
+  {"name": "dbg17", "bind": "dbg.17", "class": "menu_item", "text": "ReSTIR Тень", "behaviors": ["hover", "click"], "action": 117, "toggles": "debugMenu"},
+  {"name": "dbg18", "bind": "dbg.18", "class": "menu_item", "text": "ReSTIR Индекс", "behaviors": ["hover", "click"], "action": 118, "toggles": "debugMenu"}
+ ]},
+ {"name": "filterMenu", "class": "menu_popup", "behaviors": ["overlay"], "placement": "below", "children": [
+  {"name": "flt0", "class": "menu_item", "text": "All", "behaviors": ["hover", "click"], "action": 90, "toggles": "filterMenu"},
+  {"name": "flt1", "class": "menu_item", "text": "Textures", "behaviors": ["hover", "click"], "action": 91, "toggles": "filterMenu"},
+  {"name": "flt2", "class": "menu_item", "text": "Materials", "behaviors": ["hover", "click"], "action": 92, "toggles": "filterMenu"},
+  {"name": "flt3", "class": "menu_item", "text": "Scenes", "behaviors": ["hover", "click"], "action": 93, "toggles": "filterMenu"},
+  {"name": "flt4", "class": "menu_item", "text": "Models", "behaviors": ["hover", "click"], "action": 94, "toggles": "filterMenu"}
+ ]},
+ {"name": "createMenu", "class": "menu_popup", "behaviors": ["overlay"], "children": [
+  {"name": "mkFolder", "class": "menu_item", "text": "New Folder", "behaviors": ["hover", "click"], "action": 170, "toggles": "createMenu"},
+  {"name": "mkMaterial", "class": "menu_item", "text": "New Material", "behaviors": ["hover", "click"], "action": 171, "toggles": "createMenu"},
+  {"name": "mkScene", "class": "menu_item", "text": "New Scene", "behaviors": ["hover", "click"], "action": 172, "toggles": "createMenu"},
+  {"name": "mkFile", "class": "menu_item", "text": "New File", "behaviors": ["hover", "click"], "action": 173, "toggles": "createMenu"}
+ ]},
+ {"name": "tuneMenu", "class": "menu_popup", "behaviors": ["overlay"], "children": [
+  {"name": "sort", "class": "menu_item", "text": "Sort: Name", "behaviors": ["hover", "click"], "action": 175},
+  {"name": "view", "class": "menu_item", "text": "View: Grid", "behaviors": ["hover", "click"], "action": 177},
+  {"name": "size", "class": "menu_slider", "text": "Icon size", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.14285714285714285, "minV": 48, "maxV": 160}
+ ]},
+ {"name": "ctxMenu", "class": "menu_popup", "behaviors": ["overlay"], "placement": "pointer", "children": [
+  {"name": "ctxOpen", "class": "menu_item", "text": "Open", "behaviors": ["hover", "click"], "action": 180, "toggles": "ctxMenu"},
+  {"name": "ctxReveal", "class": "menu_item", "text": "Reveal in Explorer", "behaviors": ["hover", "click"], "action": 181, "toggles": "ctxMenu"},
+  {"name": "ctxDup", "class": "menu_item", "text": "Duplicate", "behaviors": ["hover", "click"], "action": 182, "toggles": "ctxMenu"},
+  {"name": "ctxDel", "class": "menu_item", "text": "Delete", "behaviors": ["hover", "click"], "action": 183, "toggles": "ctxMenu"}
+ ]},
+ {"name": "rubber", "class": "marquee", "passive": true, "hidden": true},
+ {"name": "tip", "class": "tooltip", "behaviors": ["overlay"], "placement": "pointer", "dismiss": false, "tooltipHost": true, "passive": true, "text": ""},
+ {"name": "dragGhost", "class": "drag_ghost", "passive": true, "text": "", "hidden": true},
+ {"name": "dropBox", "class": "marquee", "passive": true, "hidden": true}
+]

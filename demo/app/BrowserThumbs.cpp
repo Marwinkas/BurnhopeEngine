@@ -11,13 +11,12 @@
 
 #include <algorithm>
 #include <cstring>
-#include <new>
+#include <string>
 
 namespace burnhope {
 namespace {
 
 constexpr uint32_t kBakePerFrame = 3;
-constexpr uint8_t kPlate[3] = {38, 40, 48};
 constexpr uint8_t kKindColor[kFileKinds][3] = {
     {255, 184, 76}, {110, 170, 255}, {90, 210, 180}, {140, 200, 110}, {210, 120, 220}, {170, 175, 185},
 };
@@ -34,7 +33,7 @@ uint64_t hashPath(const char* path) {
 uint8_t* cellPixels(ThumbCache& c, uint32_t cell) {
     const size_t x = (cell % kThumbGrid) * kThumbPx;
     const size_t y = (cell / kThumbGrid) * kThumbPx;
-    return c.atlas.get() + (y * kThumbGrid * kThumbPx + x) * 4u;
+    return c.atlas.data() + (y * kThumbGrid * kThumbPx + x) * 4u;
 }
 
 void fillPlate(ThumbCache& c, uint32_t cell) {
@@ -42,9 +41,9 @@ void fillPlate(ThumbCache& c, uint32_t cell) {
     for (uint32_t y = 0; y < kThumbPx; ++y) {
         uint8_t* row = base + static_cast<size_t>(y) * kThumbGrid * kThumbPx * 4u;
         for (uint32_t x = 0; x < kThumbPx; ++x) {
-            row[x * 4 + 0] = kPlate[0];
-            row[x * 4 + 1] = kPlate[1];
-            row[x * 4 + 2] = kPlate[2];
+            row[x * 4 + 0] = kThumbPlate[0];
+            row[x * 4 + 1] = kThumbPlate[1];
+            row[x * 4 + 2] = kThumbPlate[2];
             row[x * 4 + 3] = 255;
         }
     }
@@ -84,7 +83,7 @@ void blitScaled(ThumbCache& c, uint32_t cell, const uint8_t* src, uint32_t sw, u
             const uint32_t alpha = n != 0 ? sum[3] / n : 0;
             for (int ch = 0; ch < 3; ++ch) {
                 const uint32_t color = sum[3] != 0 ? sum[ch] / sum[3] : 0;
-                dst[ch] = static_cast<uint8_t>((color * alpha + kPlate[ch] * (255 - alpha)) / 255);
+                dst[ch] = static_cast<uint8_t>((color * alpha + kThumbPlate[ch] * (255 - alpha)) / 255);
             }
             dst[3] = 255;
         }
@@ -130,16 +129,16 @@ bool bakeMaterial(ThumbCache& c, uint32_t cell, const char* path) {
     if (!materialLoadBhmat(path, doc)) {
         return false;
     }
-    materialBakeAtlas(doc, path, c.matAtlas.get());
-    materialBakePreview(doc, c.matAtlas.get(), MatShape::Sphere, 0.6f, -0.25f, 1.0f, c.matPreview.get());
-    blitScaled(c, cell, c.matPreview.get(), kMatSphereSide, kMatSphereSide);
+    materialBakeAtlas(doc, path, c.matAtlas.data());
+    materialBakePreview(doc, c.matAtlas.data(), MatShape::Sphere, 0.6f, -0.25f, 1.0f, c.matPreview.data());
+    blitScaled(c, cell, c.matPreview.data(), kMatSphereSide, kMatSphereSide);
     return true;
 }
 
 // Least recently used preview cell (kind cells are never evicted).
 uint32_t pickCell(const ThumbCache& c) {
     uint32_t best = kFileKinds;
-    for (uint32_t i = kFileKinds; i < kThumbCells; ++i) {
+    for (uint32_t i = kFileKinds; i < kThumbEnd; ++i) {
         if (c.key[i] == 0) {
             return i;
         }
@@ -155,20 +154,39 @@ void setThumb(Engine& e, uint32_t index, uint8_t cell) {
     guiHostSetListThumb(e.gui, browserGridPath(), index, cell);
 }
 
+// A free or least recently used preview cell; the tiles that showed an evicted preview re-resolve.
+uint32_t claimCell(Engine& e) {
+    const uint32_t cell = pickCell(e.browser.thumbs);
+    for (uint32_t j = 0; j < e.browser.files.size(); ++j) {
+        if (e.browser.files[j].cell == cell + 1u) {
+            setThumb(e, j, 0);
+        }
+    }
+    return cell;
+}
+
+void copyCell(ThumbCache& c, uint32_t cell, const uint8_t* rgba) {
+    uint8_t* base = cellPixels(c, cell);
+    for (uint32_t y = 0; y < kThumbPx; ++y) {
+        std::memcpy(base + static_cast<size_t>(y) * kThumbGrid * kThumbPx * 4u, rgba + static_cast<size_t>(y) * kThumbPx * 4u, kThumbPx * 4u);
+    }
+}
+
 } // namespace
 
 bool thumbsInit(ThumbCache& c) {
-    c.atlas.reset(new (std::nothrow) uint8_t[static_cast<size_t>(kThumbGrid) * kThumbPx * kThumbGrid * kThumbPx * 4u]());
-    c.matAtlas.reset(new (std::nothrow) uint8_t[static_cast<size_t>(kMatAtlasW) * kMatAtlasH * 4u]());
-    c.matPreview.reset(new (std::nothrow) uint8_t[static_cast<size_t>(kMatSphereSide) * kMatSphereSide * 4u]());
-    return c.atlas != nullptr && c.matAtlas != nullptr && c.matPreview != nullptr;
+    c.atlas.assign(static_cast<size_t>(kThumbGrid) * kThumbPx * kThumbGrid * kThumbPx * 4u, 0);
+    c.matAtlas.assign(static_cast<size_t>(kMatAtlasW) * kMatAtlasH * 4u, 0);
+    c.matPreview.assign(static_cast<size_t>(kMatSphereSide) * kMatSphereSide * 4u, 0);
+    c.baker.reset(modelBakerCreate());
+    return c.baker != nullptr;
 }
 
 void thumbsSync(Engine& e) {
     BrowserState& b = e.browser;
     ThumbCache& c = b.thumbs;
     Canvas* canvas = hostCanvas(e.host, e.slot);
-    if (canvas == nullptr || c.atlas == nullptr) {
+    if (canvas == nullptr || c.atlas.empty()) {
         return;
     }
     if (!c.kindsReady) {
@@ -193,32 +211,38 @@ void thumbsSync(Engine& e) {
             continue;
         }
         const uint8_t kindCell = static_cast<uint8_t>(static_cast<uint32_t>(item.kind) + 1u);
-        if (item.kind != FileKind::Texture && item.kind != FileKind::Material) {
+        if (item.kind != FileKind::Texture && item.kind != FileKind::Material && item.kind != FileKind::Model) {
             setThumb(e, i, kindCell);
             continue;
         }
         const std::string full = item.path.string();
         const uint64_t key = hashPath(full.c_str());
-        uint32_t cell = kThumbCells;
-        for (uint32_t k = kFileKinds; k < kThumbCells; ++k) {
+        uint32_t cell = kThumbEnd;
+        for (uint32_t k = kFileKinds; k < kThumbEnd; ++k) {
             if (c.key[k] == key && c.stamp[k] == item.mtime) {
                 cell = k;
                 break;
             }
         }
-        if (cell == kThumbCells) {
-            if (budget == 0) {
-                guiHostSetListThumb(e.gui, browserGridPath(), i, kindCell); // its kind icon until a later frame bakes the preview
-                continue;
-            }
-            --budget;
-            cell = pickCell(c);
-            for (uint32_t j = 0; j < b.files.size(); ++j) { // the evicted preview's tiles fall back to re-resolving
-                if (b.files[j].cell == cell + 1u) {
-                    setThumb(e, j, 0);
+        if (cell == kThumbEnd) {
+            bool ok = true;
+            if (item.kind == FileKind::Model) {
+                uint8_t pixels[kModelThumbBytes];
+                if (c.baker == nullptr || modelThumbFetch(*c.baker, b.root, full.c_str(), key, item.mtime, pixels) == ModelThumbState::Pending) {
+                    guiHostSetListThumb(e.gui, browserGridPath(), i, kindCell); // its kind icon until the background bake lands
+                    continue;
                 }
+                cell = claimCell(e);
+                copyCell(c, cell, pixels);
+            } else {
+                if (budget == 0) {
+                    guiHostSetListThumb(e.gui, browserGridPath(), i, kindCell); // its kind icon until a later frame bakes the preview
+                    continue;
+                }
+                --budget;
+                cell = claimCell(e);
+                ok = item.kind == FileKind::Texture ? bakeTexture(c, cell, full.c_str()) : bakeMaterial(c, cell, full.c_str());
             }
-            const bool ok = item.kind == FileKind::Texture ? bakeTexture(c, cell, full.c_str()) : bakeMaterial(c, cell, full.c_str());
             if (!ok) {
                 setThumb(e, i, kindCell);
                 continue;
@@ -230,7 +254,7 @@ void thumbsSync(Engine& e) {
         c.used[cell] = ++c.clock;
         setThumb(e, i, static_cast<uint8_t>(cell + 1u));
     }
-    if (c.dirty && canvasUploadPhoto(*canvas, kThumbSlot, c.atlas.get(), kThumbGrid * kThumbPx, kThumbGrid * kThumbPx)) {
+    if (c.dirty && canvasUploadPhoto(*canvas, kThumbSlot, c.atlas.data(), kThumbGrid * kThumbPx, kThumbGrid * kThumbPx)) {
         c.dirty = false;
     }
 }
@@ -238,7 +262,7 @@ void thumbsSync(Engine& e) {
 void thumbsInvalidate(Engine& e, const char* path) {
     BrowserState& b = e.browser;
     const uint64_t key = path != nullptr ? hashPath(path) : 0;
-    for (uint32_t k = kFileKinds; k < kThumbCells && key != 0; ++k) {
+    for (uint32_t k = kFileKinds; k < kThumbEnd && key != 0; ++k) {
         if (b.thumbs.key[k] == key) {
             b.thumbs.key[k] = 0;
             for (uint32_t j = 0; j < b.files.size(); ++j) {

@@ -1,0 +1,26 @@
+[
+ {"name": "matSec", "bind": "inspector.mat", "class": "dock_column", "children": [
+  {"name": "head", "class": "section_header", "text": "Material", "behaviors": ["hover", "click"], "toggles": "main::inspector::matSec::body"},
+  {"name": "body", "class": "section_body", "hidden": true, "children": [
+   {"name": "preview", "bind": "actor.mat.preview", "class": "swatch"},
+   {"name": "base", "class": "row", "children": [
+    {"class": "label_cell", "text": "Albedo"},
+    {"name": "r", "bind": "actor.mat.base.r", "class": "slider", "text": "R", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 1.0, "minV": 0.0, "maxV": 1.0},
+    {"name": "g", "bind": "actor.mat.base.g", "class": "slider", "text": "G", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 1.0, "minV": 0.0, "maxV": 1.0},
+    {"name": "b", "bind": "actor.mat.base.b", "class": "slider", "text": "B", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 1.0, "minV": 0.0, "maxV": 1.0}
+   ]},
+   {"name": "rough", "class": "row", "children": [
+    {"class": "label_cell", "text": "Roughness"},
+    {"name": "v", "bind": "actor.mat.rough", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.5, "minV": 0, "maxV": 1}
+   ]},
+   {"name": "metal", "class": "row", "children": [
+    {"class": "label_cell", "text": "Metallic"},
+    {"name": "v", "bind": "actor.mat.metal", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.0, "minV": 0, "maxV": 1}
+   ]},
+   {"name": "emissive", "class": "row", "children": [
+    {"class": "label_cell", "text": "Emissive"},
+    {"name": "v", "bind": "actor.mat.emissive", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.0, "minV": 0, "maxV": 10}
+   ]}
+  ]}
+ ]}
+]

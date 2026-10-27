@@ -13,7 +13,8 @@
     {
      "name": "title",
      "class": "label_title_fill",
-     "text": "Material"
+     "text": "Material",
+     "bind": "mat.title"
     },
     {
      "name": "close",
@@ -41,7 +42,8 @@
      ],
      "axis": "xy",
      "mode": 0,
-     "value": 0.5
+     "value": 0.5,
+     "bind": "mat.preview"
     }
    ]
   },
@@ -57,7 +59,8 @@
       "hover",
       "click"
      ],
-     "action": 145
+     "action": 145,
+     "bind": "mat.shape.sphere"
     },
     {
      "name": "cube",
@@ -67,7 +70,8 @@
       "hover",
       "click"
      ],
-     "action": 146
+     "action": 146,
+     "bind": "mat.shape.cube"
     },
     {
      "name": "plane",
@@ -77,7 +81,8 @@
       "hover",
       "click"
      ],
-     "action": 147
+     "action": 147,
+     "bind": "mat.shape.plane"
     }
    ]
   },
@@ -103,7 +108,8 @@
          "children": [
           {
            "name": "thumb",
-           "class": "card_thumb"
+           "class": "card_thumb",
+           "bind": "mat.albedo.thumb"
           },
           {
            "name": "ctl",
@@ -116,7 +122,8 @@
              "behaviors": [
               "edit"
              ],
-             "maxLen": 7
+             "maxLen": 7,
+             "bind": "mat.albedo.hex"
             }
            ]
           }
@@ -128,7 +135,8 @@
          "text": "",
          "behaviors": [
           "edit"
-         ]
+         ],
+         "bind": "mat.albedo.path"
         }
        ]
       },
@@ -146,7 +154,8 @@
          "children": [
           {
            "name": "thumb",
-           "class": "card_thumb"
+           "class": "card_thumb",
+           "bind": "mat.normal.thumb"
           },
           {
            "name": "ctl",
@@ -160,7 +169,8 @@
               "hover",
               "click"
              ],
-             "action": 141
+             "action": 141,
+             "bind": "mat.normal.flip"
             },
             {
              "name": "scale",
@@ -174,7 +184,8 @@
              "mode": 0,
              "value": 0.25,
              "minV": 0,
-             "maxV": 4
+             "maxV": 4,
+             "bind": "mat.normal.scale"
             }
            ]
           }
@@ -186,7 +197,8 @@
          "text": "",
          "behaviors": [
           "edit"
-         ]
+         ],
+         "bind": "mat.normal.path"
         }
        ]
       },
@@ -204,7 +216,8 @@
          "children": [
           {
            "name": "thumb",
-           "class": "card_thumb"
+           "class": "card_thumb",
+           "bind": "mat.metal.thumb"
           },
           {
            "name": "ctl",
@@ -222,7 +235,8 @@
              "mode": 0,
              "value": 0,
              "minV": 0,
-             "maxV": 1
+             "maxV": 1,
+             "bind": "mat.metal.value"
             }
            ]
           }
@@ -234,7 +248,8 @@
          "text": "",
          "behaviors": [
           "edit"
-         ]
+         ],
+         "bind": "mat.metal.path"
         }
        ]
       },
@@ -252,7 +267,8 @@
          "children": [
           {
            "name": "thumb",
-           "class": "card_thumb"
+           "class": "card_thumb",
+           "bind": "mat.height.thumb"
           },
           {
            "name": "ctl",
@@ -270,7 +286,8 @@
              "mode": 0,
              "value": 0,
              "minV": 0,
-             "maxV": 0.5
+             "maxV": 0.5,
+             "bind": "mat.height.value"
             }
            ]
           }
@@ -282,7 +299,8 @@
          "text": "",
          "behaviors": [
           "edit"
-         ]
+         ],
+         "bind": "mat.height.path"
         }
        ]
       }
@@ -306,7 +324,8 @@
          "children": [
           {
            "name": "thumb",
-           "class": "card_thumb"
+           "class": "card_thumb",
+           "bind": "mat.alpha.thumb"
           },
           {
            "name": "ctl",
@@ -324,7 +343,8 @@
              "mode": 0,
              "value": 1,
              "minV": 0,
-             "maxV": 1
+             "maxV": 1,
+             "bind": "mat.alpha.value"
             }
            ]
           }
@@ -336,7 +356,8 @@
          "text": "",
          "behaviors": [
           "edit"
-         ]
+         ],
+         "bind": "mat.alpha.path"
         }
        ]
       },
@@ -354,7 +375,8 @@
          "children": [
           {
            "name": "thumb",
-           "class": "card_thumb"
+           "class": "card_thumb",
+           "bind": "mat.rough.thumb"
           },
           {
            "name": "ctl",
@@ -372,7 +394,8 @@
              "mode": 0,
              "value": 0.5,
              "minV": 0,
-             "maxV": 1
+             "maxV": 1,
+             "bind": "mat.rough.value"
             }
            ]
           }
@@ -384,7 +407,8 @@
          "text": "",
          "behaviors": [
           "edit"
-         ]
+         ],
+         "bind": "mat.rough.path"
         }
        ]
       },
@@ -402,7 +426,8 @@
          "children": [
           {
            "name": "thumb",
-           "class": "card_thumb"
+           "class": "card_thumb",
+           "bind": "mat.ao.thumb"
           },
           {
            "name": "ctl",
@@ -420,7 +445,8 @@
              "mode": 0,
              "value": 1,
              "minV": 0,
-             "maxV": 1
+             "maxV": 1,
+             "bind": "mat.ao.value"
             }
            ]
           }
@@ -432,7 +458,8 @@
          "text": "",
          "behaviors": [
           "edit"
-         ]
+         ],
+         "bind": "mat.ao.path"
         }
        ]
       },
@@ -450,7 +477,8 @@
          "children": [
           {
            "name": "thumb",
-           "class": "card_thumb"
+           "class": "card_thumb",
+           "bind": "mat.emission.thumb"
           },
           {
            "name": "ctl",
@@ -463,7 +491,8 @@
              "behaviors": [
               "edit"
              ],
-             "maxLen": 7
+             "maxLen": 7,
+             "bind": "mat.emission.hex"
             },
             {
              "name": "v",
@@ -477,7 +506,8 @@
              "mode": 0,
              "value": 0,
              "minV": 0,
-             "maxV": 16
+             "maxV": 16,
+             "bind": "mat.emission.value"
             }
            ]
           }
@@ -489,7 +519,8 @@
          "text": "",
          "behaviors": [
           "edit"
-         ]
+         ],
+         "bind": "mat.emission.path"
         }
        ]
       }
@@ -518,7 +549,8 @@
      "value": 0.5,
      "minV": -64,
      "maxV": 64,
-     "flat": true
+     "flat": true,
+     "bind": "mat.tiling.x"
     },
     {
      "name": "y",
@@ -533,7 +565,8 @@
      "value": 0.5,
      "minV": -64,
      "maxV": 64,
-     "flat": true
+     "flat": true,
+     "bind": "mat.tiling.y"
     },
     {
      "name": "reset",
@@ -568,7 +601,8 @@
      "value": 0.5,
      "minV": -64,
      "maxV": 64,
-     "flat": true
+     "flat": true,
+     "bind": "mat.offset.x"
     },
     {
      "name": "y",
@@ -583,7 +617,8 @@
      "value": 0.5,
      "minV": -64,
      "maxV": 64,
-     "flat": true
+     "flat": true,
+     "bind": "mat.offset.y"
     },
     {
      "name": "reset",
@@ -607,5 +642,6 @@
    ],
    "action": 144
   }
- ]
+ ],
+ "bind": "mat.panel"
 }

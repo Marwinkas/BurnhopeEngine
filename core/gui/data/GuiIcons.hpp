@@ -11,6 +11,8 @@ constexpr uint32_t kGuiIconCells = 8;
 constexpr uint32_t kGuiIconCell = 32;
 constexpr uint32_t kGuiIconEdge = kGuiIconCells * kGuiIconCell;
 constexpr float kGuiIconDrawPx = 16.0f; // side of the glyph a node draws inside its box
+constexpr float kGuiIconPad = 4.0f;      // padding between an icon-only button's edge and its glyph
+constexpr float kGuiIconMaxPx = 24.0f;    // largest glyph an icon-only button draws
 constexpr float kGuiIconTrailPad = 6.0f; // gap between a trailing glyph (icon next to a caption) and the right edge
 
 // Cell of a registered icon name ("play", "chevron_down"), 0 when the name is unknown.

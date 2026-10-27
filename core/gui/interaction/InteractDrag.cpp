@@ -9,8 +9,9 @@ namespace burnhope::gui {
 
 namespace {
 
-float clampTo(float v, const UiDraggable& d) {
-    return std::clamp(v, d.minV, d.maxV);
+// `UiDraggable::value` is normalized (0..1); `minV`/`maxV` only map it to the real range.
+float clampTo(float v, const UiDraggable&) {
+    return std::clamp(v, 0.0f, 1.0f);
 }
 
 void release(flecs::world& world, GuiInteractState& state, bool push) {

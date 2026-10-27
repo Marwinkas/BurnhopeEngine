@@ -1,0 +1,65 @@
+[
+ {"name": "lightSec", "class": "dock_column", "children": [
+  {"name": "head", "class": "section_header", "text": "Lighting", "behaviors": ["hover", "click"], "toggles": "main::inspector::lightSec::body"},
+  {"name": "body", "class": "section_body", "hidden": false, "children": [
+   {"name": "sunGain", "class": "row", "children": [
+    {"class": "label_cell", "text": "Sun power"},
+    {"name": "v", "bind": "light.sunGain", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.1, "minV": 0, "maxV": 10}
+   ]},
+   {"name": "sunZenith", "class": "row", "children": [
+    {"class": "label_cell", "text": "Sun zenith"},
+    {"name": "v", "bind": "light.sunZenith", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.3888888888888889, "minV": 0, "maxV": 90}
+   ]},
+   {"name": "sunAzimuth", "class": "row", "children": [
+    {"class": "label_cell", "text": "Sun azimuth"},
+    {"name": "v", "bind": "light.sunAzimuth", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.08333333333333333, "minV": 0, "maxV": 360}
+   ]},
+   {"name": "sunKelvin", "class": "row", "children": [
+    {"class": "label_cell", "text": "Sun kelvin"},
+    {"name": "v", "bind": "light.sunKelvin", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.36, "minV": 2000, "maxV": 12000}
+   ]},
+   {"name": "sunColor", "class": "row", "children": [
+    {"class": "label_cell", "text": "Sun color"},
+    {"name": "r", "bind": "light.sunColor.r", "class": "slider", "text": "R", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 1.0, "minV": 0.0, "maxV": 1.0},
+    {"name": "g", "bind": "light.sunColor.g", "class": "slider", "text": "G", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 1.0, "minV": 0.0, "maxV": 1.0},
+    {"name": "b", "bind": "light.sunColor.b", "class": "slider", "text": "B", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 1.0, "minV": 0.0, "maxV": 1.0}
+   ]},
+   {"name": "sunOn", "class": "row", "children": [
+    {"class": "label_cell", "text": "Sun"},
+    {"name": "t", "bind": "light.sunOn", "class": "toggle", "text": "Off", "behaviors": ["hover", "click"], "action": 60}
+   ]},
+   {"name": "sunCast", "class": "row", "children": [
+    {"class": "label_cell", "text": "Shadows"},
+    {"name": "t", "bind": "light.sunCast", "class": "toggle", "text": "Off", "behaviors": ["hover", "click"], "action": 61}
+   ]},
+   {"name": "sunCsm", "class": "row", "children": [
+    {"class": "label_cell", "text": "Cascades"},
+    {"name": "t", "bind": "light.sunCsm", "class": "toggle", "text": "Off", "behaviors": ["hover", "click"], "action": 62}
+   ]},
+   {"name": "sky", "class": "row", "children": [
+    {"class": "label_cell", "text": "Sky"},
+    {"name": "t", "bind": "light.sky", "class": "toggle", "text": "Off", "behaviors": ["hover", "click"], "action": 63}
+   ]},
+   {"name": "clouds", "class": "row", "children": [
+    {"class": "label_cell", "text": "Clouds"},
+    {"name": "t", "bind": "light.clouds", "class": "toggle", "text": "Off", "behaviors": ["hover", "click"], "action": 64}
+   ]},
+   {"name": "cloudCover", "class": "row", "children": [
+    {"class": "label_cell", "text": "Cloud cover"},
+    {"name": "v", "bind": "light.cloudCover", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.42, "minV": 0, "maxV": 1}
+   ]},
+   {"name": "cloudDensity", "class": "row", "children": [
+    {"class": "label_cell", "text": "Cloud dens."},
+    {"name": "v", "bind": "light.cloudDensity", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.16, "minV": 0, "maxV": 0.5}
+   ]},
+   {"name": "clock", "class": "row", "children": [
+    {"class": "label_cell", "text": "Clock sun"},
+    {"name": "t", "bind": "light.clock", "class": "toggle", "text": "Off", "behaviors": ["hover", "click"], "action": 65}
+   ]},
+   {"name": "timeOfDay", "class": "row", "children": [
+    {"class": "label_cell", "text": "Time of day"},
+    {"name": "v", "bind": "light.timeOfDay", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.47500000000000003, "minV": 0, "maxV": 24}
+   ]}
+  ]}
+ ]}
+]

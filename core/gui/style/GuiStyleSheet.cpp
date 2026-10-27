@@ -27,31 +27,31 @@ struct Rgb {
 
 constexpr Rgb kDefaultPalette[kTokCount] = {
     {{1.0f, 1.0f, 1.0f}},          // Custom
-    {{0.102f, 0.106f, 0.122f}},    // Window
-    {{0.145f, 0.153f, 0.176f}},    // Title
-    {{0.118f, 0.125f, 0.145f}},    // Side
-    {{0.086f, 0.090f, 0.106f}},    // Content
-    {{0.20f, 0.22f, 0.28f}},       // Button
-    {{0.14f, 0.15f, 0.19f}},       // Field
-    {{0.11f, 0.12f, 0.15f}},       // Menu
+    {{0.055f, 0.055f, 0.067f}},    // Window     #0e0e11
+    {{0.094f, 0.094f, 0.106f}},    // Title      #18181b
+    {{0.094f, 0.094f, 0.106f}},    // Side       #18181b
+    {{0.055f, 0.055f, 0.067f}},    // Content    #0e0e11
+    {{0.133f, 0.133f, 0.153f}},    // Button     #222227
+    {{0.075f, 0.075f, 0.086f}},    // Field
+    {{0.094f, 0.094f, 0.106f}},    // Menu       #18181b
     {{0.55f, 0.28f, 0.28f}},       // Close
-    {{0.93f, 0.94f, 0.96f}},       // Text
-    {{0.62f, 0.66f, 0.74f}},       // Muted
-    {{0.16f, 0.17f, 0.21f}},       // Item
-    {{0.36f, 0.42f, 0.55f}},       // Preview
-    {{0.078f, 0.082f, 0.098f}},    // Status
-    {{0.18f, 0.20f, 0.26f}},       // Slider
-    {{0.16f, 0.17f, 0.21f}},       // Check
-    {{0.086f, 0.090f, 0.106f}},    // Scroll (follows Content)
-    {{0.22f, 0.24f, 0.28f}},       // Chrome
-    {{0.36f, 0.55f, 0.92f}},       // Accent
-    {{0.45f, 0.72f, 0.48f}},       // Accent1
-    {{0.86f, 0.55f, 0.32f}},       // Accent2
-    {{1.0f, 0.55f, 0.10f}},        // ToolActive
+    {{0.98f, 0.98f, 0.98f}},       // Text
+    {{0.631f, 0.631f, 0.667f}},    // Muted     #a1a1aa (>= 4.5:1 on the dark surfaces)
+    {{0.133f, 0.133f, 0.153f}},    // Item       #222227
+    {{0.976f, 0.451f, 0.086f}},    // Preview    #f97316
+    {{0.055f, 0.055f, 0.067f}},    // Status
+    {{0.133f, 0.133f, 0.153f}},    // Slider
+    {{0.133f, 0.133f, 0.153f}},    // Check
+    {{0.055f, 0.055f, 0.067f}},    // Scroll (follows Content)
+    {{0.180f, 0.180f, 0.212f}},    // Chrome     #2e2e36
+    {{0.976f, 0.451f, 0.086f}},    // Accent     #f97316
+    {{0.976f, 0.451f, 0.086f}},    // Accent1
+    {{0.600f, 0.270f, 0.060f}},    // Accent2
+    {{0.976f, 0.451f, 0.086f}},    // ToolActive
     {{0.90f, 0.24f, 0.20f}},       // AxisX
     {{0.28f, 0.76f, 0.30f}},       // AxisY
     {{0.26f, 0.50f, 0.95f}},       // AxisZ
-    {{0.75f, 0.78f, 0.84f}},       // Tool
+    {{0.75f, 0.75f, 0.78f}},       // Tool
     {{1.0f, 1.0f, 1.0f}},          // ToolHover
 };
 
@@ -543,6 +543,7 @@ bool loadImpl(GuiStyleSheet& sheet, std::string_view text, bool overlayMode) {
     }
     if (!overlayMode) {
         sheet.count = 0;
+        sheet.constCount = 0;
     }
     Consts tokens;
     const Cur whole{text.data(), text.data() + text.size()};
@@ -550,6 +551,17 @@ bool loadImpl(GuiStyleSheet& sheet, std::string_view text, bool overlayMode) {
     const Seek hasTokens = seek(scan, "tokens");
     bool ok = hasTokens != Seek::Malformed && (hasTokens == Seek::Absent || parseTokens(scan, tokens));
     if (ok) {
+        for (uint32_t i = 0; i < tokens.count; ++i) {
+            uint32_t slot = 0;
+            while (slot < sheet.constCount && std::strcmp(sheet.constName[slot], tokens.name[i]) != 0) {
+                ++slot;
+            }
+            if (slot < kGuiStyleTokenCap) {
+                std::memcpy(sheet.constName[slot], tokens.name[i], sizeof(sheet.constName[slot]));
+                sheet.constValue[slot] = tokens.value[i];
+                sheet.constCount = std::max(sheet.constCount, slot + 1u);
+            }
+        }
         scan = whole;
         const Seek hasClasses = seek(scan, "classes");
         ok = hasClasses == Seek::Absent || (hasClasses == Seek::Found && parseClasses(scan, tokens, sheet, overlayMode));
@@ -683,6 +695,16 @@ bool guiStyleLoadTheme(GuiStyleSheet& sheet, std::string_view text, std::string_
             return false;
         }
         skipComma(c);
+    }
+    return false;
+}
+
+bool guiStyleNumber(const GuiStyleSheet& sheet, std::string_view name, float& out) {
+    for (uint32_t i = 0; i < sheet.constCount; ++i) {
+        if (name == sheet.constName[i]) {
+            out = sheet.constValue[i];
+            return true;
+        }
     }
     return false;
 }

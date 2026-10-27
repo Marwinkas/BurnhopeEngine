@@ -49,6 +49,9 @@ void guiLayoutRun(flecs::world& w, float screenW, float screenH);
 // Shows or hides `e` and its subtree: toggles UiHidden and the Yoga display so a hidden node also frees its space.
 void guiSetShown(flecs::entity e, bool shown);
 
+// Pins `e` at an absolute (x, y, w, h) inside its parent (screen space for a direct child of the screen root).
+void guiLayoutSetRect(flecs::entity e, float x, float y, float w, float h);
+
 // Entity owning a Yoga node, or an invalid entity when the node has no context.
 flecs::entity guiLayoutEntity(flecs::world& w, YGNodeConstRef node);
 

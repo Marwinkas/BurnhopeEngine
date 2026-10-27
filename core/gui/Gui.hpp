@@ -7,6 +7,7 @@
 #include "gui/data/GuiComponents.hpp"
 #include "gui/interaction/InteractState.hpp"
 #include "gui/interaction/InteractTextEdit.hpp"
+#include "gui/overlay/GuiTooltip.hpp"
 #include "gui/style/GuiStyleSheet.hpp"
 #include "gui/virtual/GuiVirtualPool.hpp"
 #include "platform/Input.hpp"
@@ -21,6 +22,7 @@ struct GuiContext {
     flecs::world* ecs = nullptr;
     GuiStyleSheet* style = nullptr;
     GuiInteractState interact = {};
+    GuiTooltipState tooltip = {};
     UiPrimitive* prims = nullptr; // first primitive of the host-mapped slot-48 buffer; the 64-byte header sits right before it
     uint32_t primCap = 0;
     uint32_t primCount = 0;

@@ -6,6 +6,8 @@
 #include <string_view>
 
 #include "gui/data/GuiIcons.hpp"
+#include "gui/data/GuiRow.hpp"
+#include "gui/interaction/InteractScroll.hpp"
 #include "gui/interaction/InteractTextEdit.hpp"
 #include "gui/text/GuiTextEngine.hpp"
 
@@ -121,6 +123,9 @@ void emitPhoto(Sink& s, const UiBox& b, uint8_t slot, const float tint[4], const
 }
 
 constexpr float kGuiTileTop = 6.0f; // gap above a file tile's thumbnail
+constexpr float kGuiTileNameH = 22.0f;  // line box of a tile name
+constexpr float kGuiTileTypeH = 16.0f;  // line box of the type under it
+constexpr uint8_t kGuiTileTypePx = 11;  // type caption size
 
 // A photo of a paint: the whole slot, one cell of its atlas grid, or (tile mode) that cell as a square at the top of the box.
 void emitPaintPhoto(Sink& s, const UiBox& box, const UiPaint& paint, const UiClip& clip) {
@@ -145,8 +150,8 @@ void emitPaintPhoto(Sink& s, const UiBox& box, const UiPaint& paint, const UiCli
 }
 
 // One glyph of the icon atlas (photo slot kPhotoIconAtlas): a white mask tinted by `rgba`, centred in the box.
-void emitIcon(Sink& s, const UiBox& b, uint8_t cell, bool trailing, const float rgba[4], const UiClip& clip) {
-    const float side = std::min(kGuiIconDrawPx, std::min(b.w, b.h));
+void emitIcon(Sink& s, const UiBox& b, uint8_t cell, bool trailing, float want, const float rgba[4], const UiClip& clip) {
+    const float side = std::min(want, std::min(b.w, b.h));
     if (side < 1.0f || rgba[3] <= 0.0f) {
         return;
     }
@@ -204,7 +209,8 @@ TextArea textArea(flecs::entity e, const UiBox& b) {
     return a;
 }
 
-void emitText(Sink& s, flecs::entity e, const UiBox& box, const UiText& t, const UiClip& clip) {
+// single: one line, never wrapped; text wider than the box is cut with a trailing "..." (list / tree / table rows).
+void emitText(Sink& s, flecs::entity e, const UiBox& box, const UiText& t, const UiClip& clip, bool single) {
     const GuiTextMetrics& m = s.sheet->text;
     const UiEditable* edit = e.try_get<UiEditable>();
     const bool focused = edit != nullptr && s.interact != nullptr && e.has<UiFocused>();
@@ -215,7 +221,7 @@ void emitText(Sink& s, flecs::entity e, const UiBox& box, const UiText& t, const
     const float px = static_cast<float>(t.size);
     const TextArea area = textArea(e, box);
     const float lineH = guiTextLineHeight(m, px);
-    const bool wrap = edit == nullptr && area.h >= lineH * 1.5f;
+    const bool wrap = !single && edit == nullptr && area.h >= lineH * 1.5f;
     GuiTextLine lines[kGuiEmitLineCap];
     uint32_t count = guiTextWrap(m, str, px, wrap ? area.w : 0.0f, lines, kGuiEmitLineCap);
     count = std::min(count, kGuiEmitLineCap);
@@ -251,6 +257,11 @@ void emitText(Sink& s, flecs::entity e, const UiBox& box, const UiText& t, const
         }
         const float baseline = lineTop + m.ascent * px;
         const std::string_view run = str.substr(line.begin, line.end - line.begin);
+        const bool cut = single && edit == nullptr && line.width > area.w;
+        const float limit = area.x + area.w;
+        GuiGlyph dot{};
+        const float dotsW = cut && guiTextGlyph(m, static_cast<uint32_t>('.'), dot) ? 3.0f * dot.advance * px : 0.0f;
+        bool ellipsis = false;
         for (uint32_t at = 0; at < run.size() && s.n < s.cap;) {
             uint32_t step = 0;
             const uint32_t cp = guiTextDecode(run, at, step);
@@ -258,6 +269,10 @@ void emitText(Sink& s, flecs::entity e, const UiBox& box, const UiText& t, const
                 break;
             }
             at += step;
+            if (cut && guiTextGlyph(m, cp, unknown) && pen + unknown.advance * px + dotsW > limit) {
+                ellipsis = true;
+                break;
+            }
             const bool known = guiTextGlyph(m, cp, unknown);
             const float x = pen + unknown.bearingX * px;
             const float y = baseline - unknown.bearingY * px;
@@ -281,6 +296,22 @@ void emitText(Sink& s, flecs::entity e, const UiBox& box, const UiText& t, const
             p->flags = kUiFlagGlyph;
             putClip(*p, clip, false);
         }
+        for (uint32_t d = 0; ellipsis && d < 3 && s.n < s.cap; ++d) {
+            const int slot = guiTextSlot(static_cast<uint32_t>('.'));
+            UiPrimitive* p = take(s);
+            if (p == nullptr) {
+                break;
+            }
+            p->posX = pen + dot.bearingX * px;
+            p->posY = baseline - dot.bearingY * px;
+            p->sizeX = dot.w * px;
+            p->sizeY = dot.h * px;
+            std::copy_n(s.text, 4, p->color);
+            p->texId = static_cast<uint32_t>(slot < 0 ? 0 : slot);
+            p->flags = kUiFlagGlyph;
+            putClip(*p, clip, false);
+            pen += dot.advance * px;
+        }
     }
 
     if (focused && (s.interact->caretTick % 60u) < 30u) {
@@ -288,6 +319,98 @@ void emitText(Sink& s, flecs::entity e, const UiBox& box, const UiText& t, const
         const float cx = originX + guiTextXFromCaret(m, str, px, caret);
         emitRect(s, cx, top, 1.5f, lineH, s.text, 0.0f, clip);
     }
+}
+
+// ---------------------------------------------------------------- list / tree rows
+void emitRun(Sink& s, flecs::entity e, const UiBox& box, std::string_view run, uint8_t align, uint8_t size, const UiClip& clip) {
+    if (run.empty()) {
+        return;
+    }
+    UiText part{};
+    const size_t n = std::min<size_t>(run.size(), kGuiTextCap - 1);
+    std::copy_n(run.data(), n, part.text);
+    part.len = static_cast<uint8_t>(n);
+    part.align = align;
+    part.size = size;
+    emitText(s, e, box, part, clip, true);
+}
+
+// A row with typed fields: indent, chevron column, icon, the name (cut with "..." at its column) and the date / size columns.
+void emitRow(Sink& s, flecs::entity e, const UiBox& box, const UiText& t, const GuiRow& r, const UiClip& clip) {
+    const float padL = textArea(e, box).x - box.x;
+    const bool columns = r.col1[0] != '\0' || r.col2[0] != '\0';
+    const float nameEnd = box.x + (columns ? box.w * 0.60f : box.w);
+    float pen = box.x + static_cast<float>(r.depth) * kGuiRowIndentPx;
+    if ((r.flags & kGuiRowTree) != 0) {
+        if (r.chevron != 0) {
+            emitIcon(s, UiBox{pen + padL, box.y, kGuiRowCellPx - 4.0f, box.h}, r.chevron, false, kGuiIconDrawPx, s.text, clip);
+        }
+        pen += kGuiRowCellPx;
+    }
+    if (r.icon != 0) {
+        emitIcon(s, UiBox{pen + padL, box.y, kGuiRowCellPx - 4.0f, box.h}, r.icon, false, kGuiIconDrawPx, s.text, clip);
+        pen += kGuiRowCellPx;
+    }
+    emitRun(s, e, UiBox{pen, box.y, std::max(0.0f, nameEnd - pen), box.h}, std::string_view(t.text, t.len), 0, t.size, clip);
+    emitRun(s, e, UiBox{box.x + box.w * 0.60f, box.y, box.w * 0.24f, box.h}, r.col1, 0, t.size, clip);
+    emitRun(s, e, UiBox{box.x + box.w * 0.84f, box.y, box.w * 0.16f, box.h}, r.col2, 2, t.size, clip);
+}
+
+// Empty, unfocused editable: its hint in the muted colour.
+void emitPlaceholder(Sink& s, flecs::entity e, const UiBox& box, const UiText& t, const UiPlaceholder& hint, const UiClip& clip) {
+    float muted[4];
+    const float one[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    paletteColor(*s.sheet, kTokMuted, one, muted);
+    float saved[4];
+    std::copy_n(s.text, 4, saved);
+    std::copy_n(muted, 4, s.text);
+    UiText part{};
+    std::copy_n(hint.text, sizeof(hint.text), part.text);
+    part.len = static_cast<uint8_t>(std::char_traits<char>::length(hint.text));
+    part.size = t.size;
+    emitText(s, e, box, part, clip, false);
+    std::copy_n(saved, 4, s.text);
+}
+
+// File tile caption: "name\ntype" - the name in the text colour, the type underneath in the muted colour and a smaller size.
+void emitTileCaption(Sink& s, flecs::entity e, const UiBox& box, const UiText& t, const UiClip& clip) {
+    const std::string_view full(t.text, t.len);
+    const size_t cut = full.find('\n');
+    emitRun(s, e, UiBox{box.x, box.y, box.w, kGuiTileNameH}, full.substr(0, cut), t.align, t.size, clip);
+    if (cut == std::string_view::npos) {
+        return;
+    }
+    float muted[4];
+    const float one[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    paletteColor(*s.sheet, kTokMuted, one, muted);
+    float saved[4];
+    std::copy_n(s.text, 4, saved);
+    std::copy_n(muted, 4, s.text);
+    emitRun(s, e, UiBox{box.x, box.y + kGuiTileNameH - 2.0f, box.w, kGuiTileTypeH}, full.substr(cut + 1), t.align, kGuiTileTypePx, clip);
+    std::copy_n(saved, 4, s.text);
+}
+
+// Track and thumb of an overflowing scroll view, painted over its content: the thumb is grey, orange while the
+// pointer is over the right band or the thumb is dragged.
+void emitScrollBar(Sink& s, flecs::entity e, const UiBox& box, const UiClip& clip) {
+    const UiScroll* scroll = e.has<UiScrollable>() ? e.try_get<UiScroll>() : nullptr;
+    if (scroll == nullptr) {
+        return;
+    }
+    const GuiBarGeometry g = guiScrollBar(box, *scroll);
+    if (g.range <= 0.0f) {
+        return;
+    }
+    float track[4];
+    float thumb[4];
+    guiStyleColor(*s.sheet, kTokChrome, track);
+    track[3] = 0.55f;
+    const bool hot = s.interact != nullptr &&
+                     (s.interact->barDrag == e.id() || (s.interact->pointerX >= box.x + box.w - kGuiBarHitW && s.interact->pointerX < box.x + box.w &&
+                                                        s.interact->pointerY >= box.y && s.interact->pointerY < box.y + box.h));
+    guiStyleColor(*s.sheet, hot ? kTokAccent : kTokMuted, thumb);
+    emitRect(s, g.trackX, g.trackY, kGuiBarW, g.trackH, track, kGuiBarW * 0.5f, clip);
+    emitRect(s, g.trackX, g.thumbY, kGuiBarW, g.thumbH, thumb, kGuiBarW * 0.5f, clip);
 }
 
 void emitEntity(Sink& s, flecs::entity e, uint32_t depth);
@@ -347,7 +470,10 @@ void emitEntity(Sink& s, flecs::entity e, uint32_t depth) {
                 const float white[4] = {paint->tint[0], paint->tint[1], paint->tint[2], 1.0f};
                 paletteColor(*s.sheet, kTokText, white, glyph);
                 const UiText* caption = e.try_get<UiText>();
-                emitIcon(s, *box, paint->icon, caption != nullptr && caption->len != 0, glyph, clip);
+                const bool captioned = caption != nullptr && caption->len != 0;
+                // An icon button keeps kGuiIconPad around the glyph, so a bigger button shows a bigger icon.
+                const float want = captioned ? kGuiIconDrawPx : std::clamp(std::min(box->w, box->h) - 2.0f * kGuiIconPad, kGuiIconDrawPx - 4.0f, kGuiIconMaxPx);
+                emitIcon(s, *box, paint->icon, captioned, want, glyph, clip);
             }
             if (paint->borderW > 0.5f) {
                 const float one[4] = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -359,13 +485,20 @@ void emitEntity(Sink& s, flecs::entity e, uint32_t depth) {
             const UiPaint* paint = e.try_get<UiPaint>();
             if (paint != nullptr && paint->tile != 0) { // a file tile: the caption starts under the thumbnail
                 const float used = std::min(box->h, static_cast<float>(paint->tile) + kGuiTileTop * 1.5f);
-                emitText(s, e, UiBox{box->x, box->y + used, box->w, box->h - used}, *text, clip);
+                emitTileCaption(s, e, UiBox{box->x, box->y + used, box->w, box->h - used}, *text, clip);
+            } else if (const GuiRow* row = e.try_get<GuiRow>(); row != nullptr && guiRowActive(*row)) {
+                emitRow(s, e, *box, *text, *row, clip);
+            } else if (const UiPlaceholder* hint = text->len == 0 && !e.has<UiFocused>() ? e.try_get<UiPlaceholder>() : nullptr) {
+                emitPlaceholder(s, e, *box, *text, *hint, clip);
             } else {
-                emitText(s, e, *box, *text, clip);
+                emitText(s, e, *box, *text, clip, e.has<UiVirtualItem>());
             }
         }
     }
     emitChildren(s, e, depth);
+    if (!clipEmpty(clip)) {
+        emitScrollBar(s, e, *box, clip);
+    }
 }
 
 } // namespace

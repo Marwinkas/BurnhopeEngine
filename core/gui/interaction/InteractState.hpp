@@ -30,9 +30,11 @@ struct GuiInteractState {
     uint64_t capture = 0; // entity owning the pointer (InteractDrag only)
     uint64_t focus = 0;   // keyboard focus
     uint64_t press = 0;   // clickable pressed with the left button (InteractClick only)
+    uint64_t barDrag = 0; // scroll view whose scrollbar thumb is being dragged (InteractScroll only)
     uint64_t tinted = 0;  // entity whose UiPaint.tint currently carries the hover tint (InteractHover only)
     float pointerX = 0.0f;
     float pointerY = 0.0f;
+    float barGrab = 0.0f; // pointer offset inside the grabbed thumb
     uint32_t caretTick = 0; // frames since the last edit/focus change; the emitter blinks the caret from it
     uint32_t actionCount = 0;
     uint8_t overlayOpen = 0; // written by the overlay module

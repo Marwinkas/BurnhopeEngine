@@ -213,7 +213,7 @@ if(BH_TSAN)
 endif()
 bh_module(material core/gfx/Material.cpp)
 target_link_libraries(bh_material PUBLIC bh_foundation)
-bh_module(asset core/asset/AssimpImporter.cpp core/asset/ProjectDoc.cpp core/asset/MaterialBake.cpp core/asset/ModelMesh.cpp)
+bh_module(asset core/asset/AssimpImporter.cpp core/asset/ProjectDoc.cpp core/asset/MaterialBake.cpp core/asset/ModelMesh.cpp core/asset/ModelThumb.cpp)
 target_link_libraries(bh_asset PUBLIC assimp::assimp meshoptimizer bh_foundation bh_material bh_image)
 set_source_files_properties(core/asset/AssimpImporter.cpp core/asset/ModelMesh.cpp PROPERTIES COMPILE_OPTIONS "-fexceptions;-frtti")
 bh_module(rhi
@@ -343,13 +343,18 @@ bh_module(app
     demo/app/SceneBlockFill.cpp
     demo/app/InspectorController.cpp
     demo/app/BrowserController.cpp
+    demo/app/BrowserView.cpp
+    demo/app/BrowserSelect.cpp
+    demo/app/BrowserDrag.cpp
     demo/app/ToolbarController.cpp
     demo/app/HierarchyController.cpp
     demo/app/MaterialController.cpp
+    demo/app/MaterialFields.cpp
     demo/app/LauncherController.cpp
     demo/app/BrowserModel.cpp
     demo/app/BrowserFiles.cpp
     demo/app/BrowserThumbs.cpp
+    demo/app/BrowserModelThumb.cpp
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
 target_link_libraries(bh_app PUBLIC bh_host bh_gui bh_rhi_ui bh_gpu_scene)
@@ -829,7 +834,12 @@ set(BH_TEST_SOURCES
     tests/gfx/TestGfxScene.cpp
     tests/gfx/TestStreaming.cpp
     tests/gui/TestGuiCore.cpp
+    tests/gui/TestGuiEdit.cpp
     tests/gui/TestGuiWidgets.cpp
+    tests/gui/TestGuiRows.cpp
+    tests/app/TestBrowserFiles.cpp
+    demo/app/BrowserModel.cpp
+    demo/app/BrowserFiles.cpp
 )
 add_executable(BurnhopeTest ${BH_TEST_SOURCES})
 target_link_libraries(BurnhopeTest PRIVATE

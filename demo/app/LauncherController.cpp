@@ -18,20 +18,19 @@
 namespace burnhope {
 namespace {
 
-constexpr const char* kVeil = "launcher";
+constexpr const char* kVeil = "launcher.veil";
 constexpr const char* kProjectFile = "project.proj";
 
-void rowPath(char* out, size_t cap, uint32_t i, const char* leaf) {
-    std::snprintf(out, cap, "%s::card::list::r%u::%s", kVeil, i, leaf);
+void rowPath(char* out, size_t cap, uint32_t i) {
+    std::snprintf(out, cap, "launcher.r%u.open", i);
 }
 
 void showList(Engine& e) {
     LauncherState& l = e.launcher;
     char node[128];
-    std::snprintf(node, sizeof(node), "%s::card::empty", kVeil);
-    guiHostSetShown(e.gui, node, l.recent.count == 0);
+    guiHostSetShown(e.gui, "launcher.empty", l.recent.count == 0);
     for (uint32_t i = 0; i < kRecentCap; ++i) {
-        std::snprintf(node, sizeof(node), "%s::card::list::r%u", kVeil, i);
+        std::snprintf(node, sizeof(node), "launcher.r%u", i);
         const bool live = i < l.recent.count;
         guiHostSetShown(e.gui, node, live);
         if (!live) {
@@ -47,9 +46,10 @@ void showList(Engine& e) {
                           local.tm_min);
         }
         char text[128]{};
+        char openKey[40]{};
         std::snprintf(text, sizeof(text), "%s\n%.80s%s", leaf[0] != '\0' ? leaf : entry.path, entry.path, when);
-        rowPath(node, sizeof(node), i, "open");
-        guiHostSetText(e.gui, node, text);
+        rowPath(openKey, sizeof(openKey), i);
+        guiHostSetText(e.gui, openKey, text);
     }
 }
 

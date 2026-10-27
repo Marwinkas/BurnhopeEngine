@@ -232,3 +232,21 @@ cmake --build build-core --target BurnhopeTest BurnhopeEngine -j && ./build-core
 | `engine/src/SceneTargets.cpp` | Transient screen targets and resize. |
 | `engine/src/SceneTextures.cpp` | Material and texture upload. |
 | `engine/src/SceneUniforms.cpp` / `SceneLights.cpp` | Camera, weather, block and grade uniforms / light upload (`uploadLights`). |
+
+---
+
+## 9. Additional Architectural Laws
+
+- **Law 1 (No Guesswork Bugfixing):** Never claim a bug is fixed based on a mocked unit test. If keyboard input, clicking, or camera leaks fail, you MUST trace the real data pipeline from SDL3 events (`WindowEvents.cpp`) through `InputFrame` to the GUI entity.
+- **Law 2 (No Multiline in Tree/List Items):** Nodes in `list_tree`, `list_hier`, and table rows MUST strictly enforce single-line text (`wrap = false`, `white-space: nowrap`). Under no circumstances may a word break across lines in a hierarchy row. If it overflows, truncate cleanly with trailing ellipsis (`...`) or clip.
+- **Law 3 (Readable Contrast Standards):** Muted/secondary text (file types, subtitles, dates) on dark backgrounds MUST NOT use dark gray (`#71717a`). Use `#a1a1aa` or lighter (minimum 4.5:1 contrast ratio).
+- **Law 4 (Promote Generic Interactions to Core):** Generic UI mechanisms (Drag & Drop ghost nodes, drag deadzones, drop-target highlights) belong strictly in `core/gui/`, NEVER ad-hoc in `demo/`.
+
+## 10. Architectural Retrospective (Permanent Laws)
+
+- **Law 5 (Never Re-invent Text Truncation in Application Code):** BANNED: `kGlyphPx = 7.2f`, manual `fitName()` string cutting, or any pixel-to-character division in controllers. Truncation (`...`) is the exclusive job of `GuiEmitter` / the GUI text engine, which know the real FreeType glyph advances. Controllers pass the full display name.
+- **Law 6 (No Magic Control-Code String Packing for Hierarchy Rows):** BANNED: packing control bytes (icon, column, indent) into a `char text[]` of a tree or list item. Rows carry typed fields (`GuiRow`: `depth`, `icon`, `chevron`, `col1`, `col2`) next to the plain `text`.
+- **Law 7 (Tooltips & Floating Windows Belong in Core GUI):** BANNED: tooltip delays, tooltip sizes and cursor-clamp logic in `demo/`. A node with `"tooltip": "Text"` shows a screen-clamped popup after the core delay (`core/gui/overlay/GuiTooltip.cpp`); lists only supply the text of an item through `guiHostBindTooltip`.
+- **Law 8 (Decouple C++ from DOM Paths):** BANNED: rigid DOM path strings in C++ (`main::matPanel::cols::left::albedo::row::ctl::scale`). Nodes that C++ drives carry `"bind": "actor.pos.x"` in JSON; C++ addresses them by that key so the layout hierarchy can change freely.
+- **Law 9 (Bundle Multi-File Asset Companions):** a `.gltf` and its same-stem `.bin` are ONE asset in the file explorer: the `.bin` is hidden, and duplicate / trash / move carry it along. Never show orphan buffers.
+- **Law 10 (Controllers under 300 LOC):** a controller file that grows past 300 lines is split along responsibility with a shared internal header.

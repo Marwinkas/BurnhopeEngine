@@ -9,7 +9,7 @@
 namespace burnhope {
 namespace {
 
-constexpr const char* kList = "main::inspector::hier";
+constexpr const char* kList = "scene.hier";
 
 void onPick(void* user, uint32_t index, bool) {
     auto& e = *static_cast<Engine*>(user);

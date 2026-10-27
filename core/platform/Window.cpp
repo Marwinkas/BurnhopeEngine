@@ -486,7 +486,7 @@ bool windowDisplay(const Window& w, DisplayInfo& out) {
 }
 
 void windowText(Window& w, bool on) {
-    if (!live(w)) {
+    if (!live(w) || SDL_TextInputActive(w.handle) == on) {
         return;
     }
     if (on) {

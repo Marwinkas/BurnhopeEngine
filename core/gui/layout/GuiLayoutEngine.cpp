@@ -335,6 +335,18 @@ void guiSetShown(flecs::entity e, bool shown) {
     }
 }
 
+void guiLayoutSetRect(flecs::entity e, float x, float y, float w, float h) {
+    const UiFlex* flex = e.is_alive() ? e.try_get<UiFlex>() : nullptr;
+    if (flex == nullptr || flex->node == nullptr) {
+        return;
+    }
+    YGNodeStyleSetPositionType(flex->node, YGPositionTypeAbsolute);
+    YGNodeStyleSetPosition(flex->node, YGEdgeLeft, x);
+    YGNodeStyleSetPosition(flex->node, YGEdgeTop, y);
+    YGNodeStyleSetWidth(flex->node, w);
+    YGNodeStyleSetHeight(flex->node, h);
+}
+
 flecs::entity guiLayoutEntity(flecs::world& w, YGNodeConstRef node) {
     return entityOf(w.c_ptr(), ctxOf(node));
 }

@@ -59,7 +59,7 @@ struct HitCtx {
 GuiWalk hitVisit(flecs::entity e, void* user) {
     auto& hit = *static_cast<HitCtx*>(user);
     const UiClip* clip = e.try_get<UiClip>();
-    if (clip == nullptr || !guiClipContains(*clip, hit.x, hit.y)) {
+    if (e.has<UiPassive>() || clip == nullptr || !guiClipContains(*clip, hit.x, hit.y)) {
         return GuiWalk::Continue;
     }
     // A fully transparent panel (layout container, viewport window) does not occlude what is behind it.

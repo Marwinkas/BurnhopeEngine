@@ -1,0 +1,27 @@
+[
+ {"name": "bar", "class": "topbar", "children": [
+  {"name": "file", "class": "menu_button", "text": "File", "behaviors": ["hover", "click"], "action": 0, "toggles": "fileMenu"},
+  {"name": "edit", "class": "menu_button", "text": "Edit", "behaviors": ["hover", "click"], "action": 0, "toggles": "editMenu"},
+  {"name": "view", "class": "menu_button", "text": "View", "behaviors": ["hover", "click"], "action": 0, "toggles": "viewMenu"},
+  {"class": "bar_sep"},
+  {"name": "tSelect", "bind": "tool.select", "class": "tool_button", "icon": "select", "behaviors": ["hover", "click"], "action": 7},
+  {"name": "tMove", "bind": "tool.move", "class": "tool_button", "icon": "move", "behaviors": ["hover", "click"], "action": 8},
+  {"name": "tRotate", "bind": "tool.rotate", "class": "tool_button", "icon": "rotate", "behaviors": ["hover", "click"], "action": 9},
+  {"name": "tScale", "bind": "tool.scale", "class": "tool_button", "icon": "scale", "behaviors": ["hover", "click"], "action": 10},
+  {"name": "snap", "bind": "bar.snap", "class": "tool_button", "icon": "snap", "behaviors": ["hover", "click"], "action": 11},
+  {"name": "maximize", "class": "tool_button", "icon": "maximize", "behaviors": ["hover", "click"], "action": 0, "toggles": "bottom"},
+  {"class": "bar_sep"},
+  {"name": "play", "bind": "bar.play", "class": "tool_button", "icon": "play", "behaviors": ["hover", "click"], "action": 1},
+  {"name": "pause", "bind": "bar.pause", "class": "tool_button", "icon": "pause", "behaviors": ["hover", "click"], "action": 2},
+  {"name": "stop", "class": "tool_button", "icon": "stop", "behaviors": ["hover", "click"], "action": 3},
+  {"class": "bar_sep"},
+  {"name": "speedIcon", "class": "tool_button", "icon": "camera", "behaviors": ["hover", "click"], "action": 5},
+  {"name": "speed", "bind": "bar.speed", "class": "button", "text": "1x", "icon": "chevron_down", "behaviors": ["hover", "click"], "action": 5},
+  {"name": "debug", "bind": "bar.debug", "class": "button", "text": "Lit", "icon": "chevron_down", "behaviors": ["hover", "click"], "action": 0, "toggles": "debugMenu"},
+  {"name": "proj", "bind": "bar.proj", "class": "button", "text": "Persp", "behaviors": ["hover", "click"], "action": 6},
+  {"name": "files", "class": "button", "text": "Files", "behaviors": ["hover", "click"], "action": 0, "toggles": "bottom"},
+  {"class": "bar_spacer"},
+  {"name": "stats", "bind": "bar.stats", "class": "bar_stats", "text": ""},
+  {"name": "settings", "class": "tool_button", "icon": "gear", "behaviors": ["hover", "click"], "action": 0, "toggles": "main::inspector"}
+ ]}
+]

@@ -1,0 +1,59 @@
+[
+ {"name": "postSec", "class": "dock_column", "children": [
+  {"name": "head", "class": "section_header", "text": "Post-Processing", "behaviors": ["hover", "click"], "toggles": "main::inspector::postSec::body"},
+  {"name": "body", "class": "section_body", "hidden": true, "children": [
+   {"name": "bloomOn", "class": "row", "children": [
+    {"class": "label_cell", "text": "Bloom"},
+    {"name": "t", "bind": "post.bloomOn", "class": "toggle", "text": "Off", "behaviors": ["hover", "click"], "action": 70}
+   ]},
+   {"name": "bloom", "class": "row", "children": [
+    {"class": "label_cell", "text": "Bloom amount"},
+    {"name": "v", "bind": "post.bloom", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.15, "minV": 0, "maxV": 1}
+   ]},
+   {"name": "bloomThreshold", "class": "row", "children": [
+    {"class": "label_cell", "text": "Bloom thresh."},
+    {"name": "v", "bind": "post.bloomThreshold", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.175, "minV": 0, "maxV": 2}
+   ]},
+   {"name": "aoOn", "class": "row", "children": [
+    {"class": "label_cell", "text": "GTAO"},
+    {"name": "t", "bind": "post.aoOn", "class": "toggle", "text": "Off", "behaviors": ["hover", "click"], "action": 71}
+   ]},
+   {"name": "gtao", "class": "row", "children": [
+    {"class": "label_cell", "text": "GTAO strength"},
+    {"name": "v", "bind": "post.gtao", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.3333333333333333, "minV": 0, "maxV": 3}
+   ]},
+   {"name": "gtaoRadius", "class": "row", "children": [
+    {"class": "label_cell", "text": "GTAO radius"},
+    {"name": "v", "bind": "post.gtaoRadius", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.2105263157894737, "minV": 0.1, "maxV": 2}
+   ]},
+   {"name": "exposure", "class": "row", "children": [
+    {"class": "label_cell", "text": "Exposure"},
+    {"name": "v", "bind": "post.exposure", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.375, "minV": -4, "maxV": 4}
+   ]},
+   {"name": "contrast", "class": "row", "children": [
+    {"class": "label_cell", "text": "Contrast"},
+    {"name": "v", "bind": "post.contrast", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.3333333333333333, "minV": 0.5, "maxV": 2}
+   ]},
+   {"name": "saturation", "class": "row", "children": [
+    {"class": "label_cell", "text": "Saturation"},
+    {"name": "v", "bind": "post.saturation", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.5, "minV": 0, "maxV": 2}
+   ]},
+   {"name": "vignette", "class": "row", "children": [
+    {"class": "label_cell", "text": "Vignette"},
+    {"name": "v", "bind": "post.vignette", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.175, "minV": 0, "maxV": 2}
+   ]},
+   {"name": "grain", "class": "row", "children": [
+    {"class": "label_cell", "text": "Grain"},
+    {"name": "v", "bind": "post.grain", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.0, "minV": 0, "maxV": 0.2}
+   ]},
+   {"name": "fogOn", "class": "row", "children": [
+    {"class": "label_cell", "text": "Fog"},
+    {"name": "t", "bind": "post.fogOn", "class": "toggle", "text": "Off", "behaviors": ["hover", "click"], "action": 72}
+   ]},
+   {"name": "fogDensity", "class": "row", "children": [
+    {"class": "label_cell", "text": "Fog density"},
+    {"name": "v", "bind": "post.fogDensity", "class": "slider", "text": "", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.12, "minV": 0, "maxV": 0.5}
+   ]}
+  ]}
+ ]}
+]

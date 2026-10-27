@@ -20,6 +20,7 @@ constexpr uint32_t kGuiTogglePathCap = 64;
 //   "text"            UiText (UTF-8, truncated to 127 bytes)       "size": px   "align": "left"|"center"|"right"
 //   "color": [r,g,b,a]  UiPaint token 0 with this tint (without it a token-0 node is transparent)
 //   "photo": slot     UiPaint::photo                                "hidden": true  starts hidden (UiHidden + Yoga display none)
+//   "passive": true  UiPassive: painted, never the hit-test target
 //   "behaviors": ["hover","click","drag","scroll","focus","edit","virtual","overlay"]
 //        hover   UiHoverable                     click   UiClickable{"action"}
 //        drag    UiDraggable{"axis": "x"|"y"|"xy", "mode", "value", "minV", "maxV", "flat": no value bar} + UiDragState

@@ -1,7 +1,10 @@
 #include "app/BrowserFiles.hpp"
 
+#include "app/BrowserModel.hpp"
 #include "asset/ProjectDoc.hpp"
 #include "gfx/Material.hpp"
+
+#include <iterator>
 
 #include <fstream>
 #include <string>
@@ -17,6 +20,20 @@ fs::path uniqueIn(const fs::path& dir, const std::string& stem, const std::strin
         candidate = dir / (stem + " " + std::to_string(n) + ext);
     }
     return candidate;
+}
+
+// A copied .gltf must read its own buffer: the old buffer file name inside the JSON becomes the new one.
+void retargetBuffer(const fs::path& gltf, const fs::path& from, const fs::path& to) {
+    std::ifstream in(gltf, std::ios::binary);
+    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    in.close();
+    const std::string oldName = from.filename().string();
+    const std::string newName = to.filename().string();
+    for (size_t at = text.find(oldName); at != std::string::npos; at = text.find(oldName, at + newName.size())) {
+        text.replace(at, oldName.size(), newName);
+    }
+    std::ofstream out(gltf, std::ios::binary | std::ios::trunc);
+    out << text;
 }
 
 } // namespace
@@ -53,7 +70,61 @@ fs::path browserDuplicate(const fs::path& path) {
     const std::string stem = path.stem().string() + " copy";
     const fs::path target = uniqueIn(path.parent_path(), stem, path.extension().string());
     fs::copy(path, target, fs::copy_options::recursive | fs::copy_options::copy_symlinks, ec);
-    return ec ? fs::path{} : target;
+    if (ec) {
+        return {};
+    }
+    const fs::path buffer = modelCompanion(path);
+    if (!buffer.empty()) {
+        fs::path copy = target;
+        copy.replace_extension(".bin");
+        fs::copy_file(buffer, copy, fs::copy_options::overwrite_existing, ec);
+        if (ec) {
+            fs::remove(target, ec);
+            return {};
+        }
+        retargetBuffer(target, buffer, copy);
+    }
+    return target;
+}
+
+bool browserMove(const fs::path& from, const fs::path& to) {
+    std::error_code ec;
+    const fs::path buffer = modelCompanion(from);
+    fs::path bufferTo = to;
+    bufferTo.replace_extension(".bin");
+    if (!buffer.empty() && fs::exists(bufferTo, ec)) {
+        return false;
+    }
+    fs::rename(from, to, ec);
+    if (ec) {
+        return false;
+    }
+    if (!buffer.empty()) {
+        fs::rename(buffer, bufferTo, ec);
+    }
+    return !ec;
+}
+
+fs::path browserImport(const fs::path& dir, const fs::path& src) {
+    std::error_code ec;
+    if (!fs::is_regular_file(src, ec)) {
+        return {};
+    }
+    const fs::path target = uniqueIn(dir, src.stem().string(), src.extension().string());
+    if (!fs::copy_file(src, target, fs::copy_options::none, ec) || ec) {
+        return {};
+    }
+    const fs::path buffer = modelCompanion(src);
+    if (!buffer.empty()) {
+        fs::path copy = target;
+        copy.replace_extension(".bin");
+        if (!fs::copy_file(buffer, copy, fs::copy_options::overwrite_existing, ec) || ec) {
+            fs::remove(target, ec);
+            return {};
+        }
+        retargetBuffer(target, buffer, copy);
+    }
+    return target;
 }
 
 bool browserTrash(const fs::path& root, const fs::path& path) {
@@ -64,8 +135,7 @@ bool browserTrash(const fs::path& root, const fs::path& path) {
         return false;
     }
     const fs::path target = uniqueIn(bin, path.stem().string(), path.extension().string());
-    fs::rename(path, target, ec);
-    return !ec;
+    return browserMove(path, target);
 }
 
 } // namespace burnhope

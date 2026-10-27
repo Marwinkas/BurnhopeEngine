@@ -7,6 +7,7 @@
 
 #include "gui/layout/GuiLayoutEngine.hpp"
 #include "gui/style/GuiStyleResolver.hpp"
+#include "io/File.hpp"
 #include "io/JsonCursor.hpp"
 
 namespace burnhope::gui {
@@ -28,6 +29,9 @@ struct NodeDesc {
     char name[kGuiStyleNameCap] = {};
     char text[kGuiTextCap] = {};
     char toggles[kGuiTogglePathCap] = {};
+    char tooltip[kGuiTextCap] = {};
+    char bind[32] = {};
+    bool tooltipHost = false;
     char itemClass[kGuiStyleNameCap] = {};
     uint8_t textLen = 0;
     int8_t align = -1;
@@ -38,6 +42,7 @@ struct NodeDesc {
     bool hidden = false;
     bool multiline = false;
     bool flat = false;
+    bool passive = false;
     uint8_t axis = 0;
     uint8_t mode = 0;
     uint8_t maxLen = 127;
@@ -64,7 +69,11 @@ struct PendingToggle {
     char path[kGuiTogglePathCap] = {};
 };
 
+constexpr uint32_t kGuiIncludeDepthCap = 4;
+constexpr uint32_t kGuiIncludePathCap = 128;
+
 struct LoadCtx {
+    uint32_t includeDepth = 0;
     flecs::world* world = nullptr;
     const GuiStyleSheet* sheet = nullptr;
     flecs::entity root;
@@ -224,6 +233,15 @@ bool readField(json::Cur& c, const char* key, NodeDesc& d) {
     if (isKey(key, "toggles")) {
         return readString(c, d.toggles, sizeof(d.toggles), len);
     }
+    if (isKey(key, "tooltip")) {
+        return readString(c, d.tooltip, sizeof(d.tooltip), len);
+    }
+    if (isKey(key, "bind")) {
+        return readString(c, d.bind, sizeof(d.bind), len);
+    }
+    if (isKey(key, "tooltipHost")) {
+        return readBool(c, d.tooltipHost);
+    }
     if (isKey(key, "itemClass")) {
         return readString(c, d.itemClass, sizeof(d.itemClass), len);
     }
@@ -289,6 +307,9 @@ bool readField(json::Cur& c, const char* key, NodeDesc& d) {
     }
     if (isKey(key, "hidden")) {
         return readBool(c, d.hidden);
+    }
+    if (isKey(key, "passive")) {
+        return readBool(c, d.passive);
     }
     if (isKey(key, "flat")) {
         return readBool(c, d.flat);
@@ -389,12 +410,57 @@ void applyBehaviors(flecs::entity e, const NodeDesc& d, uint32_t itemClass) {
         e.add<UiRoot>();
         e.add<UiHidden>();
     }
+    if (d.passive) {
+        e.add<UiPassive>();
+    }
+    if (d.tooltip[0] != '\0') {
+        UiTooltipText tip{};
+        std::memcpy(tip.text, d.tooltip, sizeof(tip.text));
+        e.set<UiTooltipText>(tip);
+    }
+    if (d.bind[0] != '\0') {
+        UiBindKey bind{};
+        std::memcpy(bind.key, d.bind, sizeof(bind.key));
+        e.set<UiBindKey>(bind);
+    }
+    if (d.tooltipHost) {
+        e.add<UiTooltipHost>();
+    }
     if (d.hidden) {
         guiSetShown(e, false);
     }
 }
 
 bool parseNode(LoadCtx& ctx, json::Cur& c, flecs::entity parent, uint32_t depth);
+
+bool parseChildren(LoadCtx& ctx, json::Cur c, flecs::entity parent, uint32_t depth);
+
+// `{"$include": "path"}` in a children array: the file holds an array of nodes that take the object's place.
+// Returns 0 when `c` is not an include, 1 when it was spliced in, -1 on failure.
+int parseInclude(LoadCtx& ctx, json::Cur& c, flecs::entity parent, uint32_t depth) {
+    json::Cur probe = c;
+    char key[24] = {};
+    if (!json::eat(probe, '{') || !readKey(probe, key, sizeof(key)) || !isKey(key, "$include")) {
+        return 0;
+    }
+    char path[kGuiIncludePathCap] = {};
+    uint8_t len = 0;
+    if (!json::eat(probe, ':') || !readString(probe, path, sizeof(path), len) || !json::eat(probe, '}') ||
+        ctx.includeDepth >= kGuiIncludeDepthCap) {
+        return -1;
+    }
+    c = probe;
+    MappedFile file{};
+    if (!fileMapReadOnly(path, &file) || file.data == nullptr) {
+        return -1;
+    }
+    ++ctx.includeDepth;
+    const json::Cur body{reinterpret_cast<const char*>(file.data), reinterpret_cast<const char*>(file.data) + file.size};
+    const bool ok = parseChildren(ctx, body, parent, depth);
+    --ctx.includeDepth;
+    fileUnmap(&file);
+    return ok ? 1 : -1;
+}
 
 bool parseChildren(LoadCtx& ctx, json::Cur c, flecs::entity parent, uint32_t depth) {
     if (!json::eat(c, '[')) {
@@ -404,7 +470,8 @@ bool parseChildren(LoadCtx& ctx, json::Cur c, flecs::entity parent, uint32_t dep
         return true;
     }
     for (;;) {
-        if (!parseNode(ctx, c, parent, depth + 1)) {
+        const int included = parseInclude(ctx, c, parent, depth);
+        if (included < 0 || (included == 0 && !parseNode(ctx, c, parent, depth + 1))) {
             return false;
         }
         if (json::eat(c, ']')) {
