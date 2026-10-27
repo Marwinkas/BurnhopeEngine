@@ -44,6 +44,26 @@ void uiNodeBarPush(UiState& s, UiNodeBars& bars, const UiBar& bar) {
     ++bars.n;
 }
 
+void uiBarPush(UiState& s, UiNodeBars& bars, float x, float y, float w, float h, float r, float g, float b, float a, float radius, uint32_t flags, float spread) {
+    if (w < kUiBarMinSide || h < kUiBarMinSide) {
+        return;
+    }
+    UiBar bar{};
+    bar.x = x;
+    bar.y = y;
+    bar.w = w;
+    bar.h = h;
+    bar.r = r;
+    bar.g = g;
+    bar.b = b;
+    bar.a = a;
+    bar.radius = radius;
+    bar.flags = flags;
+    bar.spread = spread;
+    bar.on = 1;
+    uiNodeBarPush(s, bars, bar);
+}
+
 void uiBarScratchReset(UiState& s) {
     if (UiBarScratch* scratch = s.world.try_get_mut<UiBarScratch>()) {
         frameArenaReset(scratch->arena);
@@ -138,6 +158,48 @@ uint32_t emitRamp(
     p.flags = kind;
     p.extra[0] = 1.0f;
     return n + 1;
+}
+
+uint32_t emitIcon(
+    UiPrimitive* dst,
+    uint32_t n,
+    uint32_t cap,
+    float x,
+    float y,
+    float side,
+    float r,
+    float g,
+    float b,
+    float a,
+    uint32_t icon,
+    float angle,
+    const UiBox* clip) {
+    if (n >= cap) {
+        return n;
+    }
+    UiPrimitive& p = dst[n++];
+    p = {};
+    p.posX = x;
+    p.posY = y;
+    p.sizeX = side;
+    p.sizeY = side;
+    p.color[0] = r;
+    p.color[1] = g;
+    p.color[2] = b;
+    p.color[3] = a;
+    p.texId = icon;
+    p.flags = kUiFlagIcon;
+    if (angle != 0.0f) {
+        p.pad1 = std::bit_cast<uint32_t>(angle);
+    }
+    if (clip != nullptr) {
+        p.flags |= kUiFlagClip;
+        p.extra[1] = clip->x;
+        p.extra[2] = clip->y;
+        p.extra[3] = clip->w;
+        p.pad0 = std::bit_cast<uint32_t>(clip->h);
+    }
+    return n;
 }
 
 uint32_t emitMark(

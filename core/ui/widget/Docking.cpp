@@ -61,29 +61,31 @@ void dockChromeMove(UiState& s, uint16_t panel, float px, float py) {
     if (panel < s.count && s.parentOf[panel] == 0 && panel == dock->panel && dock->home != kUiNone && dock->home < s.count
         && hitBox(s.box[dock->home], px, py)) {
         const UiBox& home = s.box[dock->home];
+        const float trigger = uiStyle(s, "dock_zone", UiStyleKey::Trigger);
+        const float frac = uiStyle(s, "dock_zone", UiStyleKey::HintFrac);
         const float lx = home.w > 1.0f ? (px - home.x) / home.w : 0.5f;
         const float ly = home.h > 1.0f ? (py - home.y) / home.h : 0.5f;
         uint8_t edge = 0;
-        if (lx < 0.28f && (dock->edges & 1) != 0) {
+        if (lx < trigger && (dock->edges & 1) != 0) {
             edge = 1;
-        } else if (lx > 0.72f && (dock->edges & 2) != 0) {
+        } else if (lx > 1.0f - trigger && (dock->edges & 2) != 0) {
             edge = 2;
-        } else if (ly < 0.28f && (dock->edges & 4) != 0) {
+        } else if (ly < trigger && (dock->edges & 4) != 0) {
             edge = 3;
-        } else if (ly > 0.72f && (dock->edges & 8) != 0) {
+        } else if (ly > 1.0f - trigger && (dock->edges & 8) != 0) {
             edge = 4;
         }
         dock->edge = edge;
         if (edge != 0) {
             dock->hintOn = 1;
             if (edge == 1) {
-                dock->hint = {home.x, home.y, home.w * 0.34f, home.h};
+                dock->hint = {home.x, home.y, home.w * frac, home.h};
             } else if (edge == 2) {
-                dock->hint = {home.x + home.w * 0.66f, home.y, home.w * 0.34f, home.h};
+                dock->hint = {home.x + home.w * (1.0f - frac), home.y, home.w * frac, home.h};
             } else if (edge == 3) {
-                dock->hint = {home.x, home.y, home.w, home.h * 0.34f};
+                dock->hint = {home.x, home.y, home.w, home.h * frac};
             } else {
-                dock->hint = {home.x, home.y + home.h * 0.66f, home.w, home.h * 0.34f};
+                dock->hint = {home.x, home.y + home.h * (1.0f - frac), home.w, home.h * frac};
             }
         }
     }
@@ -116,25 +118,15 @@ void dockChromeDrop(UiState& s, uint16_t panel) {
 void dockPlace(UiState& s) {
     UiNodeBars bars{};
     const UiDock* dock = uiDockFind(s);
+    const UiRgb zone = tokenColor(s.look, uiStyleBg(s, "dock_zone"));
     auto push = [&](float x, float y, float w, float h, float a, float radius) {
-        UiBar bar{};
-        bar.x = x;
-        bar.y = y;
-        bar.w = w;
-        bar.h = h;
-        bar.radius = radius;
-        bar.r = s.look.accent[0][0];
-        bar.g = s.look.accent[0][1];
-        bar.b = s.look.accent[0][2];
-        bar.a = a;
-        bar.on = 1;
-        uiNodeBarPush(s, bars, bar);
+        uiBarPush(s, bars, x, y, w, h, zone.r, zone.g, zone.b, a, radius);
     };
     if (dock != nullptr && dock->hintOn != 0) {
-        push(dock->hint.x, dock->hint.y, dock->hint.w, dock->hint.h, 0.35f, 4.0f);
+        push(dock->hint.x, dock->hint.y, dock->hint.w, dock->hint.h, uiStyle(s, "dock_zone", UiStyleKey::Alpha), uiStyle(s, "dock_zone", UiStyleKey::Radius));
     }
     if (dock != nullptr && dock->edgeOn != 0) {
-        push(dock->edgeLine.x, dock->edgeLine.y, dock->edgeLine.w, dock->edgeLine.h, 0.95f, 0.0f);
+        push(dock->edgeLine.x, dock->edgeLine.y, dock->edgeLine.w, dock->edgeLine.h, uiStyle(s, "dock_zone", UiStyleKey::LineAlpha), 0.0f);
     }
     UiStamps stamps{};
     stamps.bar = bars.bar;

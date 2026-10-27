@@ -217,18 +217,13 @@ void bindCell(UiState& s, uint16_t cell, uint32_t index) {
             uiThumb(s, parts->icon, plain, dir ? UiIcon::Folder : UiIcon::Document);
             if (classSlot < kPhotoSlots) {
                 if (auto* paint = s.ent[parts->icon].try_get_mut<UiPaint>()) {
-                    paint->r = s.look.text[0];
-                    paint->g = s.look.text[1];
-                    paint->b = s.look.text[2];
+                    paintFillToken(s.look, *paint, UiToken::Text);
                 }
             }
             if (thumbable && !bindMaterialThumb(s, parts->icon, b, b.items[index]) && material) {
                 if (auto* paint = s.ent[parts->icon].try_get_mut<UiPaint>()) {
-                    const UiPaint badge = paintToken(s.look, UiToken::Accent, s.look.radiusSm);
-                    paint->token = badge.token;
-                    paint->r = badge.r;
-                    paint->g = badge.g;
-                    paint->b = badge.b;
+                    paint->token = UiToken::Accent;
+                    paintFillToken(s.look, *paint, UiToken::Accent);
                     paint->icon = static_cast<uint8_t>(UiIcon::Document);
                 }
             }

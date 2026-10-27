@@ -20,6 +20,8 @@ constexpr TokenName kTokens[] = {
     {"window", UiToken::Window}, {"dock", UiToken::Content}, {"title", UiToken::Title}, {"side", UiToken::Side}, {"content", UiToken::Content},
     {"button", UiToken::Button}, {"field", UiToken::Field}, {"menu", UiToken::Menu}, {"text", UiToken::Text},
     {"close", UiToken::Close}, {"preview", UiToken::Preview}, {"chrome", UiToken::Chrome}, {"slider", UiToken::Slider}, {"check", UiToken::Check}, {"muted", UiToken::Muted}, {"item", UiToken::Item}, {"accent", UiToken::Accent},
+    {"accent1", UiToken::Accent1}, {"accent2", UiToken::Accent2}, {"toolActive", UiToken::ToolActive},
+    {"axisX", UiToken::AxisX}, {"axisY", UiToken::AxisY}, {"axisZ", UiToken::AxisZ},
 };
 
 UiToken tokenNamed(const char* text) {
@@ -41,6 +43,18 @@ void overlay(UiStyleClass& dst, const UiStyleClass& src) {
     dst.bg = src.bg != UiToken::Custom ? src.bg : dst.bg;
     dst.activeBg = src.activeBg != UiToken::Custom ? src.activeBg : dst.activeBg;
     dst.borderBg = src.borderBg != UiToken::Custom ? src.borderBg : dst.borderBg;
+    for (size_t i = 0; i < static_cast<size_t>(UiStyleTone::Count); ++i) {
+        dst.tone[i] = src.tone[i] != UiToken::Custom ? src.tone[i] : dst.tone[i];
+    }
+}
+
+// The tone whose JSON name is `key`, or Count.
+size_t toneIndex(const char* key) {
+    size_t index = 0;
+    while (index < static_cast<size_t>(UiStyleTone::Count) && std::strcmp(uiStyleToneName(static_cast<UiStyleTone>(index)), key) != 0) {
+        ++index;
+    }
+    return index;
 }
 
 bool parseClass(json::Cur& c, const Constants& tokens, const UiStyleSheet& sheet, UiStyleClass& cls) {
@@ -73,6 +87,11 @@ bool parseClass(json::Cur& c, const Constants& tokens, const UiStyleSheet& sheet
                 return false;
             }
             own.borderBg = tokenNamed(text);
+        } else if (toneIndex(key) < static_cast<size_t>(UiStyleTone::Count)) {
+            if (!json::parseStringCap(c, text, sizeof(text), n)) {
+                return false;
+            }
+            own.tone[toneIndex(key)] = tokenNamed(text);
         } else if (std::strcmp(key, "extends") == 0) {
             if (!json::parseStringCap(c, base, sizeof(base), n)) {
                 return false;

@@ -18,6 +18,7 @@
 #include "ui/widget/Splitter.hpp"
 #include "ui/State.hpp"
 #include "ui/StyleSheet.hpp"
+#include "ui/Template.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -25,23 +26,11 @@
 namespace burnhope {
 namespace {
 
-UiPaint paintHair(const UiState& s, const PropMetrics& m) {
-    UiStyleClass hair;
-    const UiToken token = uiStyleResolve(s, "prop_hair", hair) ? hair.bg : UiToken::Item;
-    UiPaint paint = paintToken(s.look, token, 0.0f);
-    paint.a = m.hairAlpha;
-    return paint;
-}
-
-void propHair(UiState& s, uint16_t column, const PropMetrics& m) {
+void propHair(UiState& s, uint16_t column) {
     if (column >= s.count || uiNodeChildCount(s, column) == 0) {
         return;
     }
-    UiFlex line{};
-    line.heightMode = UiSize::Px;
-    line.height = m.hairH;
-    line.shrink = 0.0f;
-    (void)uiPanel(s, column, line, paintHair(s, m));
+    (void)uiSpawnTemplate(s, column, "core/panel", "prop_hair");
 }
 
 } // namespace
@@ -75,93 +64,26 @@ uint16_t propBar(const UiState& s) {
 }
 
 uint16_t uiPropHost(UiState& s, uint16_t parent) {
-    UiFlex column{};
-    column.direction = UiFlexDir::Column;
-    column.position = UiPosition::Relative;
-    column.shrink = 0.0f;
-    column.widthMode = UiSize::Percent;
-    column.width = 100.0f;
-    const uint16_t id = uiPanel(s, parent, column, paintClear());
-    if (id == kUiNone) {
-        return id;
-    }
-    return id;
+    return uiSpawnTemplate(s, parent, "core/prop_host");
 }
 
 uint16_t uiPropRow(UiState& s, uint16_t host, const char* label) {
-    const PropMetrics m = propMetrics(s);
-    propHair(s, host, m);
-    UiFlex line{};
-    line.direction = UiFlexDir::Row;
-    line.align = UiAlign::Center;
-    line.widthMode = UiSize::Percent;
-    line.width = 100.0f;
-    line.heightMode = UiSize::Px;
-    line.height = m.rowH;
-    line.padT = m.padV;
-    line.padB = m.padV;
-    line.padL = 0.0f;
-    line.padR = m.margin;
-    line.shrink = 0.0f;
-    line.overflow = UiOverflow::Hidden;
-    const uint16_t row = uiPanel(s, host, line, paintClear());
-    if (row < s.count) {
-        s.ent[row].add<UiRowHover>();
-        if (auto* paint = s.ent[row].try_get_mut<UiPaint>()) {
-            paint->hoverKids = 1;
-            paint->hr = s.look.text[0];
-            paint->hg = s.look.text[1];
-            paint->hb = s.look.text[2];
-            paint->ha = m.hoverAlpha;
-        }
+    propHair(s, host);
+    const UiTemplateId tpl = uiTemplateFind(s, "core/prop_row");
+    const uint16_t row = uiSpawnTemplate(s, host, tpl);
+    if (row == kUiNone) {
+        return kUiNone;
     }
-    UiFlex name{};
-    name.widthMode = UiSize::Px;
-    name.width = m.labelW;
-    name.heightMode = UiSize::Px;
-    name.height = m.slotH;
-    name.shrink = 0.0f;
-    name.overflow = UiOverflow::Hidden;
-    name.padR = m.labelPad;
-    const uint16_t caption = uiPanel(s, row, name, paintLabel(s.look));
+    s.ent[row].add<UiRowHover>();
+    if (auto* paint = s.ent[row].try_get_mut<UiPaint>()) {
+        paint->hoverKids = 1;
+        paintHoverToken(s.look, *paint, UiToken::Text, propMetrics(s).hoverAlpha);
+    }
+    const uint16_t caption = uiTemplateSlot(s, tpl, row, "caption");
     uiText(s, caption, label != nullptr ? label : "");
-    uiTextStyle(s, caption, UiTextAlign::Left, UiTextEllipsis::End, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-    if (caption < s.count) {
-        propLinkLabel(s, caption);
-        uiSetPass(s, caption);
-    }
-    UiFlex value{};
-    value.direction = UiFlexDir::Row;
-    value.align = UiAlign::Center;
-    value.justify = UiJustify::Start;
-    value.grow = 0.0f;
-    value.shrink = 1.0f;
-    value.widthMode = UiSize::Percent;
-    value.width = 100.0f;
-    value.maxWMode = UiSize::Px;
-    value.maxW = m.controlMax + m.gap;
-    value.heightMode = UiSize::Px;
-    value.height = m.slotH;
-    value.padL = m.gap;
-    value.overflow = UiOverflow::Hidden;
-    const uint16_t slot = uiPanel(s, row, value, paintClear());
-    UiFlex trail{};
-    trail.direction = UiFlexDir::Row;
-    trail.align = UiAlign::Center;
-    trail.justify = UiJustify::End;
-    trail.widthMode = UiSize::Px;
-    trail.width = m.trailW;
-    trail.heightMode = UiSize::Px;
-    trail.height = m.slotH;
-    trail.grow = 1.0f;
-    trail.shrink = 0.0f;
-    trail.overflow = UiOverflow::Hidden;
-    const uint16_t tail = uiPanel(s, row, trail, paintClear());
-    if (tail < s.count) {
-        s.ent[tail].add<UiPropTrail>();
-        uiSetPass(s, tail);
-    }
-    return slot;
+    propLinkLabel(s, caption);
+    s.ent[uiTemplateSlot(s, tpl, row, "trail")].add<UiPropTrail>();
+    return uiTemplateSlot(s, tpl, row, "slot");
 }
 
 uint16_t uiPropTrail(const UiState& s, uint16_t node) {
@@ -189,33 +111,6 @@ uint16_t uiPropSlotOf(const UiState& s, uint16_t control) {
 
 uint16_t uiPropRowOf(const UiState& s, uint16_t valueSlot) {
     return valueSlot < s.count ? s.parentOf[valueSlot] : kUiNone;
-}
-
-void uiPropRowHeight(UiState& s, uint16_t valueSlot, float rowH, float innerH) {
-    const uint16_t row = uiPropRowOf(s, valueSlot);
-    auto* outer = row < s.count ? s.ent[row].try_get_mut<UiFlex>() : nullptr;
-    auto* inner = valueSlot < s.count ? s.ent[valueSlot].try_get_mut<UiFlex>() : nullptr;
-    if (outer == nullptr || inner == nullptr) {
-        return;
-    }
-    if (outer->heightMode == UiSize::Px && outer->height == rowH && inner->heightMode == UiSize::Px && inner->height == innerH) {
-        return;
-    }
-    outer->heightMode = UiSize::Px;
-    outer->height = rowH;
-    inner->heightMode = UiSize::Px;
-    inner->height = innerH;
-    inner->overflow = UiOverflow::Visible;
-    s.layoutDirty = true;
-}
-
-void uiPropValueMax(UiState& s, uint16_t valueSlot, float maxW) {
-    auto* flex = valueSlot < s.count ? s.ent[valueSlot].try_get_mut<UiFlex>() : nullptr;
-    if (flex != nullptr && flex->maxW != maxW) {
-        flex->maxWMode = UiSize::Px;
-        flex->maxW = maxW;
-        s.layoutDirty = true;
-    }
 }
 
 void uiPropRowShow(UiState& s, uint16_t valueSlot, bool on) {

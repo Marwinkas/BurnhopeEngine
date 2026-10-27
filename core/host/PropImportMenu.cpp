@@ -99,10 +99,7 @@ uint16_t addBar(Import& in, uint16_t parent, const Node& node) {
         }
         if (flat && button < in.state->count) {
             if (auto* paint = in.state->ent[button].try_get_mut<UiPaint>()) {
-                paint->hr = in.state->look.text[0];
-                paint->hg = in.state->look.text[1];
-                paint->hb = in.state->look.text[2];
-                paint->ha = uiStyle(*in.state, "menu_bar", UiStyleKey::HoverAlpha);
+                paintHoverToken(in.state->look, *paint, UiToken::Text, uiStyle(*in.state, "menu_bar", UiStyleKey::HoverAlpha));
             }
         }
     }

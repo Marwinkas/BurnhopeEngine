@@ -11,6 +11,8 @@ struct UiNodeBars;
 struct UiBar;
 
 void uiNodeBarPush(UiState& s, UiNodeBars& bars, const UiBar& bar);
+// The one way a place hook adds a solid rect to `bars`; rects under half a pixel in either side are dropped.
+void uiBarPush(UiState& s, UiNodeBars& bars, float x, float y, float w, float h, float r, float g, float b, float a, float radius, uint32_t flags = 0, float spread = 0.0f);
 void uiBarScratchReset(UiState& s);
 void uiBarScratchShutdown(UiState& s);
 
@@ -34,6 +36,21 @@ uint32_t emitRect(
     float b,
     float a,
     float radius,
+    const UiBox* clip);
+// One square atlas icon `icon` (a UiIcon value) of side `side`, tinted r,g,b,a and turned by `angle` degrees.
+uint32_t emitIcon(
+    UiPrimitive* dst,
+    uint32_t n,
+    uint32_t cap,
+    float x,
+    float y,
+    float side,
+    float r,
+    float g,
+    float b,
+    float a,
+    uint32_t icon,
+    float angle,
     const UiBox* clip);
 uint32_t emitRamp(
     UiPrimitive* dst,

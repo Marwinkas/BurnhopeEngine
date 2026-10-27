@@ -3,6 +3,9 @@
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/widget/Slider.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
+
+#include <algorithm>
 #include "ui/Template.hpp"
 
 #include <cstdio>
@@ -115,7 +118,8 @@ namespace {
 
 uint32_t paintTrack(const UiState& s, uint16_t id, const UiRange& range, UiPrimitive* dst, uint32_t n, uint32_t cap) {
     const UiBox& box = s.box[id];
-    if (box.w < 8.0f || box.h < 8.0f) {
+    const float minDraw = uiStyle(s, "slider", UiStyleKey::MinDraw);
+    if (box.w < minDraw || box.h < minDraw) {
         return n;
     }
     UiBox ancestor{};
@@ -129,20 +133,24 @@ uint32_t paintTrack(const UiState& s, uint16_t id, const UiRange& range, UiPrimi
     if (t > 1.0f) {
         t = 1.0f;
     }
-    const float inset = 2.0f;
-    const float trackH = 4.0f;
+    using K = UiStyleKey;
+    const float inset = uiStyle(s, "slider", K::TrackInset);
+    const float trackH = uiStyle(s, "slider", K::TrackH);
+    const UiRgb trackInk = uiStyleTint(s, "slider", UiStyleTone::Track);
+    const UiRgb fillInk = uiStyleTint(s, "slider", UiStyleTone::Fill);
+    const UiRgb thumbInk = uiStyleTint(s, "slider", UiStyleTone::Thumb);
     const float trackW = box.w - inset * 2.0f;
     const float trackY = box.y + (box.h - trackH) * 0.5f;
     n = emitRect(dst, n, cap, box.x + inset, trackY, trackW, trackH,
-        s.look.muted[0], s.look.muted[1], s.look.muted[2], 0.7f, trackH * 0.5f, clip);
+        trackInk.r, trackInk.g, trackInk.b, uiStyle(s, "slider", K::TrackAlpha), trackH * 0.5f, clip);
     n = emitRect(dst, n, cap, box.x + inset, trackY, trackW * t, trackH,
-        s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 1.0f, trackH * 0.5f, clip);
-    const float thumb = box.h > 16.0f ? 14.0f : box.h - 4.0f;
+        fillInk.r, fillInk.g, fillInk.b, 1.0f, trackH * 0.5f, clip);
+    const float thumb = std::min(uiStyle(s, "slider", K::ThumbSide), box.h - uiStyle(s, "slider", K::ThumbPad));
     const float travel = trackW > thumb ? trackW - thumb : 0.0f;
     const float tx = box.x + inset + travel * t;
     const float ty = box.y + (box.h - thumb) * 0.5f;
     return emitRect(dst, n, cap, tx, ty, thumb, thumb,
-        s.look.text[0], s.look.text[1], s.look.text[2], 1.0f, thumb * 0.5f, clip);
+        thumbInk.r, thumbInk.g, thumbInk.b, 1.0f, thumb * 0.5f, clip);
 }
 
 bool drawSlider(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t cap) {

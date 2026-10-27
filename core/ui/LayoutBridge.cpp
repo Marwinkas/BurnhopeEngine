@@ -98,7 +98,13 @@ YGSize yogaMeasureAdapter(YGNodeConstRef node, float width, YGMeasureMode widthM
     return { outW, outH };
 }
 
-void applyFlex(YGNodeRef node, const UiFlex& f) {
+const UiFlex* parentFlex(const UiState& s, uint16_t id) {
+    const uint16_t parent = s.parentOf[id];
+    return parent != kUiNone && parent < s.count ? s.ent[parent].try_get<UiFlex>() : nullptr;
+}
+
+// `parent` is the flex block of the node's parent; a bleeding node cancels that padding with an equal negative margin.
+void applyFlex(YGNodeRef node, const UiFlex& f, const UiFlex* parent) {
     YGNodeStyleSetFlexDirection(node, flexDir(f.direction));
     YGNodeStyleSetFlexWrap(node, f.wrap == UiFlexWrap::Wrap ? YGWrapWrap
                                : f.wrap == UiFlexWrap::WrapReverse ? YGWrapWrapReverse
@@ -109,7 +115,7 @@ void applyFlex(YGNodeRef node, const UiFlex& f) {
     YGNodeStyleSetJustifyContent(node, flexJustify(f.justify));
     YGNodeStyleSetBoxSizing(node, f.box == UiBoxSizing::ContentBox ? YGBoxSizingContentBox : YGBoxSizingBorderBox);
 
-    if (f.widthMode == UiSize::Px) {
+    if (f.widthMode == UiSize::Px || f.widthMode == UiSize::Fit) {
         YGNodeStyleSetWidth(node, f.width);
     } else if (f.widthMode == UiSize::Percent) {
         YGNodeStyleSetWidthPercent(node, f.width);
@@ -183,10 +189,21 @@ void applyFlex(YGNodeRef node, const UiFlex& f) {
         YGNodeStyleSetGap(node, YGGutterRow, f.gapRow);
     }
 
-    YGNodeStyleSetMargin(node, YGEdgeLeft, f.marginL);
-    YGNodeStyleSetMargin(node, YGEdgeRight, f.marginR);
-    YGNodeStyleSetMargin(node, YGEdgeTop, f.marginT);
-    YGNodeStyleSetMargin(node, YGEdgeBottom, f.marginB);
+    float bleedL = 0.0f;
+    float bleedR = 0.0f;
+    float bleedT = 0.0f;
+    float bleedB = 0.0f;
+    if (f.bleed != 0 && parent != nullptr) {
+        uiPadOf(*parent, bleedL, bleedR, bleedT, bleedB);
+        bleedL = (f.bleed & kUiBleedX) != 0 ? bleedL : 0.0f;
+        bleedR = (f.bleed & kUiBleedX) != 0 ? bleedR : 0.0f;
+        bleedT = (f.bleed & kUiBleedY) != 0 ? bleedT : 0.0f;
+        bleedB = (f.bleed & kUiBleedY) != 0 ? bleedB : 0.0f;
+    }
+    YGNodeStyleSetMargin(node, YGEdgeLeft, f.marginL - bleedL);
+    YGNodeStyleSetMargin(node, YGEdgeRight, f.marginR - bleedR);
+    YGNodeStyleSetMargin(node, YGEdgeTop, f.marginT - bleedT - f.scrollY);
+    YGNodeStyleSetMargin(node, YGEdgeBottom, f.marginB - bleedB);
 
     if (f.position == UiPosition::Absolute) {
         YGNodeStyleSetPositionType(node, YGPositionTypeAbsolute);
@@ -269,7 +286,7 @@ void uiLayout(UiState& s, float w, float h) {
         const auto applySub = [&](auto&& self, uint16_t id) -> void {
             const UiFlex* flex = s.ent[id].try_get<UiFlex>();
             if (flex != nullptr && s.yoga[id] != nullptr) {
-                applyFlex(s.yoga[id], *flex);
+                applyFlex(s.yoga[id], *flex, parentFlex(s, id));
             }
             if (s.yoga[id] == nullptr) {
                 return;
@@ -362,7 +379,7 @@ void uiLayout(UiState& s, float w, float h) {
             if (flex == nullptr || s.yoga[id] == nullptr) {
                 continue;
             }
-            applyFlex(s.yoga[id], *flex);
+            applyFlex(s.yoga[id], *flex, parentFlex(s, id));
 
             if (s.ent[id].has<UiContentMeasure>() && YGNodeGetChildCount(s.yoga[id]) == 0) {
                 YGNodeSetMeasureFunc(s.yoga[id], yogaMeasureAdapter);

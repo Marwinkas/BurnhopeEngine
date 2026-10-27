@@ -1,0 +1,5 @@
+{
+  "role": "splitter_grip",
+  "class": "splitter_grip",
+  "flex": { "shrink": 0 }
+}

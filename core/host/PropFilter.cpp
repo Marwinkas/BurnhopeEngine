@@ -2,6 +2,7 @@
 #include "host/PropRoll.hpp"
 #include "ui/Nodes.hpp"
 #include "ui/Panel.hpp"
+#include "ui/Template.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Field.hpp"
@@ -53,39 +54,16 @@ void propEachSection(UiState& s, Fn&& fn) {
 
 } // namespace
 
-// Every section body shares one left margin so all labels, Transform included, start at the same x.
-constexpr float kPropBodyPadL = 12.0f;
-
 uint16_t uiPropSection(UiState& s, uint16_t parent, const char* title, uint8_t cat, uint8_t owner) {
-    UiFlex column{};
-    column.direction = UiFlexDir::Column;
-    column.shrink = 0.0f;
-    column.widthMode = UiSize::Percent;
-    column.width = 100.0f;
-    const uint16_t wrap = uiPanel(s, parent, column, paintClear());
+    const uint16_t wrap = uiSpawnTemplate(s, parent, "core/prop_section");
     if (wrap == kUiNone) {
         return wrap;
     }
     propLinkSection(s, wrap, cat, owner);
     const uint16_t body = uiFoldBody(s, wrap, title);
-    propEachChild(s, wrap, [&](uint16_t id) {
-        const UiFold* fold = s.ent[id].try_get<UiFold>();
-        if (fold == nullptr || fold->body != body) {
-            return true;
-        }
-        if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
-            flex->marginL = 0.0f;
-        }
-        return false;
-    });
+    // Every section body shares one left margin so all labels, Transform included, start at the same x.
     if (body < s.count) {
-        if (auto* flex = s.ent[body].try_get_mut<UiFlex>()) {
-            flex->pad = 0.0f;
-            flex->padL = kPropBodyPadL;
-            flex->padR = 0.0f;
-            flex->padT = 0.0f;
-            flex->padB = 0.0f;
-        }
+        (void)uiApplyTemplate(s, body, uiTemplateFind(s, "core/prop_body"));
     }
     return body;
 }
@@ -353,17 +331,7 @@ void onPropFilter(void* user, uint16_t id) {
 }
 
 uint16_t uiPropFilterBar(UiState& s, uint16_t parent) {
-    UiFlex column{};
-    column.direction = UiFlexDir::Column;
-    column.shrink = 0.0f;
-    column.widthMode = UiSize::Percent;
-    column.width = 100.0f;
-    column.padL = 12.0f;
-    column.padR = 8.0f;
-    column.padT = 10.0f;
-    column.padB = 8.0f;
-    column.gap = 8.0f;
-    const uint16_t bar = uiPanel(s, parent, column, paintToken(s.look, UiToken::Content, 0.0f));
+    const uint16_t bar = uiSpawnTemplate(s, parent, "core/prop_filter_bar");
     if (bar == kUiNone) {
         return bar;
     }
@@ -376,15 +344,7 @@ uint16_t uiPropFilterBar(UiState& s, uint16_t parent) {
     if (filt != nullptr) {
         filt->search = search;
     }
-    UiFlex row{};
-    row.direction = UiFlexDir::Row;
-    row.wrap = UiFlexWrap::Wrap;
-    row.gap = 4.0f;
-    row.shrink = 0.0f;
-    row.minH = 22.0f;
-    row.widthMode = UiSize::Percent;
-    row.width = 100.0f;
-    const uint16_t chips = uiPanel(s, bar, row, paintClear());
+    const uint16_t chips = uiSpawnTemplate(s, bar, "core/prop_chips");
     if (filt != nullptr) {
         filt->chips = chips;
         filt->which = kUiNone;

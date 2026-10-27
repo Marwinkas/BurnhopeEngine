@@ -1,0 +1,6 @@
+{
+  "role": "panel",
+  "class": "hex_chip",
+  "flex": { "shrink": 0 },
+  "traits": ["hoverable", "focusable"]
+}

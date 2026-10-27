@@ -56,7 +56,8 @@ void onScale(void* user, uint16_t id, float value) {
     uiSetHeight(*demo->canvas->state, demo->preview, 40.0f + t * 260.0f);
     if (demo->canvas->state != nullptr) {
         const UiLook look = canvasLook(*demo->canvas);
-        uiSetPaint(*demo->canvas->state, demo->preview, look.accent[0][0], look.accent[0][1], look.accent[0][2], 0.45f + t * 0.55f);
+        const UiRgb accent = tokenColor(look, UiToken::Accent);
+        uiSetPaint(*demo->canvas->state, demo->preview, accent.r, accent.g, accent.b, 0.45f + t * 0.55f);
     }
     char text[16]{};
     std::snprintf(text, sizeof(text), "SCALE %.2f", value);

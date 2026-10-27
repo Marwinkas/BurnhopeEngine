@@ -1,0 +1,5 @@
+{
+  "role": "row",
+  "class": "hex_row",
+  "flex": { "dir": "row", "align": "center", "shrink": 0 }
+}

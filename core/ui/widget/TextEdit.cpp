@@ -340,7 +340,7 @@ void fieldReveal(const UiState& s, UiField& field, float view) {
     if (field.multi != 0) {
         FieldRow rows[16]{};
         const int n = fieldRows(s, field, view, rows, 16);
-        const float lineH = s.look.glyphH > 1.0f ? s.look.glyphH : 18.0f;
+        const float lineH = s.look.lineH();
         int line = 0;
         for (int i = 0; i < n; ++i) {
             const bool on = field.caret >= rows[i].begin && (field.caret < rows[i].end || field.caret == rows[i].end);
@@ -497,7 +497,7 @@ uint8_t fieldCaretAt2(const UiState& s, const UiField& field, float localX, floa
     if (n <= 0) {
         return 0;
     }
-    const float lineH = s.look.glyphH > 1.0f ? s.look.glyphH : 18.0f;
+    const float lineH = s.look.lineH();
     int line = static_cast<int>(localY / lineH);
     if (line < 0) {
         line = 0;

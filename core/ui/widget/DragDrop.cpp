@@ -40,17 +40,10 @@ uint16_t ensureMark(UiState& s, UiDragDrop& drag) {
     if (drag.mark < s.count && s.ent[drag.mark].is_alive()) {
         return drag.mark;
     }
-    UiFlex box = px(1.0f, 1.0f);
-    box.position = UiPosition::Absolute;
-    UiPaint ink = paintToken(s.look, UiToken::Accent, s.look.radiusSm);
-    ink.a = 0.0f;
-    ink.borderW = 1.0f;
-    const uint16_t id = spawn(s, kUiNone, box, ink);
+    const uint16_t id = uiSpawnTemplate(s, kUiNone, "core/drag_mark");
     if (id == kUiNone) {
         return kUiNone;
     }
-    s.ent[id].add<UiPopup>();
-    s.ent[id].add<UiNoHit>();
     uiShow(s, id, false);
     drag.mark = id;
     return id;

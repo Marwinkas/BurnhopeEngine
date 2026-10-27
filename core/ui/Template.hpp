@@ -10,7 +10,7 @@
 
 namespace burnhope {
 
-constexpr uint8_t kUiTemplateCap = 32;
+constexpr uint8_t kUiTemplateCap = 64;
 constexpr uint16_t kUiTplPartCap = 512;
 constexpr uint8_t kUiTplDepth = 8;
 constexpr uint8_t kUiTplSlotCap = 8;
@@ -66,8 +66,8 @@ struct UiTemplateSource {
     std::string_view text;
 };
 
-// Registers a trait a blueprint can list in "traits". The built-ins are hoverable, focusable, text_input and the
-// markers pressable / draggable (which add nothing). Widgets register their own (resizable, ...) before loading.
+// Registers a trait a blueprint can list in "traits". The built-ins are hoverable, focusable, text_input, nohit, pass,
+// popup and the markers pressable / draggable (which add nothing). Widgets register their own (resizable, ...) before loading.
 // A null `fn` makes the trait a marker. Registering a name twice keeps the first. False when the table is full.
 bool uiTemplateTrait(UiState& s, const char* name, UiTraitFn fn);
 

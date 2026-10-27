@@ -159,9 +159,30 @@ file(GLOB BH_UI_BLUEPRINT_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/ui/widget/Tabs.cpp ${BH_CORE}/ui/widget/Segment.cpp ${BH_CORE}/ui/widget/Popover.cpp
     ${BH_CORE}/ui/widget/Rubberband.cpp ${BH_CORE}/ui/widget/Breadcrumbs.cpp ${BH_CORE}/ui/widget/AssetSlot.cpp
     ${BH_CORE}/ui/widget/Chrome.cpp ${BH_CORE}/ui/widget/Menu.cpp ${BH_CORE}/ui/widget/Choice.cpp
-    ${BH_CORE}/ui/widget/TreeView.cpp ${BH_CORE}/ui/widget/VirtualGrid.cpp ${BH_CORE}/ui/kit/Calendar.cpp)
+    ${BH_CORE}/ui/widget/TreeView.cpp ${BH_CORE}/ui/widget/VirtualGrid.cpp ${BH_CORE}/ui/kit/Calendar.cpp
+    ${BH_CORE}/ui/kit/ColorBody.cpp ${BH_CORE}/ui/kit/ColorHex.cpp ${BH_CORE}/ui/kit/ColorPicker.cpp ${BH_CORE}/ui/kit/ColorQuery.cpp ${BH_CORE}/ui/kit/ColorRamps.cpp)
 bh_banned("widgets that spawn blueprints must not build a raw UiFlex; declare it in assets/ui/core and styles.json"
     "UiFlex [A-Za-z0-9_]+\\{" ${BH_UI_BLUEPRINT_SOURCES})
+# Declarative purge: layout lives in blueprints and styles.json, colour in tokens. Comments quoting these patterns trip
+# the check, so reword them.
+bh_banned("negative margins as layout are gone; use bleed or the scrollY offset"
+    "margin[LRTB][ ]*=[ ]*-" ${BH_UI_WIDGET_SOURCES})
+bh_banned("widgets and kits spawn blueprints (uiSpawnTemplate), never raw spawn()"
+    "[^A-Za-z_]spawn\\(" ${BH_UI_WIDGET_SOURCES})
+bh_banned("widgets and kits build no raw UiFlex; declare it in assets/ui/core and styles.json"
+    "UiFlex [A-Za-z0-9_]+[ ]*(=|\\{)|UiFlex\\{" ${BH_UI_WIDGET_SOURCES})
+file(GLOB_RECURSE BH_HOST_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/host/*.cpp ${BH_CORE}/host/*.hpp)
+bh_banned("host code spawns blueprints, never raw spawn(), a UiFlex or a corner-radius split"
+    "[^A-Za-z_]spawn\\(|UiFlex [A-Za-z0-9_]+[ ]*(=|\\{|;)|UiFlex\\{|(try_get_mut|set)<UiFlex>|margin[LRTB][ ]*=[ ]*-|radius(Tr|Br|Bl|Tl)[ ]*="
+    ${BH_HOST_SOURCES})
+bh_banned("host code takes axis colours from UiToken::AxisX/Y/Z, never kUiAxis floats"
+    "kUiAxis" ${BH_HOST_SOURCES})
+file(GLOB_RECURSE BH_PALETTE_SOURCES CONFIGURE_DEPENDS
+    ${BH_CORE}/ui/widget/*.cpp ${BH_CORE}/ui/kit/*.cpp ${BH_CORE}/host/*.cpp ${BH_CORE}/files/*.cpp ${CMAKE_SOURCE_DIR}/demo/*.cpp)
+bh_banned("palette arrays are not indexed in widgets; name a UiToken or a style tone (tokenColor, uiStyleTint)"
+    "look\\.(accent|text|muted)\\[" ${BH_PALETTE_SOURCES})
+bh_banned("a live paint is recoloured through paintFillToken, paintBorderToken, paintHoverToken or paintFillRgb"
+    "paint->(r|g|b|br|bg|bb|hr|hg|hb|ha)[ ]*=[^=]" ${BH_PALETTE_SOURCES})
 file(GLOB_RECURSE BH_T0_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/memory/*.cpp ${BH_CORE}/memory/*.hpp ${BH_CORE}/io/*.cpp ${BH_CORE}/io/*.hpp
     ${BH_CORE}/wasm/*.cpp ${BH_CORE}/wasm/*.hpp ${BH_CORE}/color/*.hpp ${BH_CORE}/time/*.hpp
@@ -431,8 +452,12 @@ bh_module(ui_bricks
 )
 bh_module(ui_kits
     core/ui/kit/Calendar.cpp
-    core/ui/kit/Color.cpp
+    core/ui/kit/ColorBody.cpp
+    core/ui/kit/ColorHex.cpp
+    core/ui/kit/ColorPicker.cpp
     core/ui/kit/ColorPopup.cpp
+    core/ui/kit/ColorQuery.cpp
+    core/ui/kit/ColorRamps.cpp
     core/ui/kit/ColorDraw.cpp
     core/ui/widget/AssetSlot.cpp
     core/ui/widget/Breadcrumbs.cpp

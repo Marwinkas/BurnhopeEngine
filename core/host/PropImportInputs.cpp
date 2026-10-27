@@ -52,29 +52,19 @@ uint16_t makeNumber(Import& in, uint16_t parent, const Node& node) {
         uiSetWidth(*in.state, id, node.w);
     }
     uiNumberFill(*in.state, id, false);
-    if (id < in.state->count) {
-        if (auto* flex = in.state->ent[id].try_get_mut<UiFlex>()) {
-            flex->widthMode = UiSize::Px;
-            flex->width = node.w > 0.0f ? node.w : uiStyle(*in.state, "number_field", UiStyleKey::Width);
-            flex->grow = 0.0f;
-            flex->shrink = 0.0f;
-        }
-    }
+    uiApplyLayout(*in.state, id, {.w = node.w > 0.0f ? node.w : uiStyle(*in.state, "number_field", UiStyleKey::Width), .shrink = 0.0f});
     remember(in, node.name, id);
     return id;
 }
 
 uint16_t makeRange(Import& in, uint16_t parent, const Node& node) {
     const uint16_t id = uiSlider(*in.state, parent, node.value, node.minV, node.maxV);
-    if (id < in.state->count) {
-        if (auto* flex = in.state->ent[id].try_get_mut<UiFlex>()) {
-            flex->widthMode = UiSize::Px;
-            flex->width = node.w > 0.0f ? node.w : uiStyle(*in.state, "range_slider", UiStyleKey::Width);
-            flex->grow = node.grow > 0.0f ? node.grow : 1.0f;
-            flex->shrink = 1.0f;
-            flex->minW = node.minW > 0.0f ? node.minW : uiStyle(*in.state, "range_slider", UiStyleKey::MinW);
-        }
-    }
+    uiApplyLayout(*in.state, id, {
+        .w = node.w > 0.0f ? node.w : uiStyle(*in.state, "range_slider", UiStyleKey::Width),
+        .grow = node.grow > 0.0f ? node.grow : 1.0f,
+        .shrink = 1.0f,
+        .minW = node.minW > 0.0f ? node.minW : uiStyle(*in.state, "range_slider", UiStyleKey::MinW),
+    });
     remember(in, node.name, id);
     return id;
 }

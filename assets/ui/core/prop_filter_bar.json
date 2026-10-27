@@ -1,0 +1,5 @@
+{
+  "role": "panel",
+  "class": "prop_filter_bar",
+  "flex": { "dir": "column", "shrink": 0, "wp": 100, "padT": 10, "padB": 8 }
+}

@@ -64,8 +64,12 @@ bool drawGradient(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
     const bool hasClip = uiClipBox(s, id, ancestor);
     const UiBox* clip = hasClip ? &ancestor : nullptr;
     const int stops = grad->stops < 2 ? 2 : (grad->stops > 4 ? 4 : grad->stops);
-    for (int band = 0; band < 24; ++band) {
-        const float t0 = static_cast<float>(band) / 24.0f;
+    const int bandCount = static_cast<int>(uiStyle(s, "gradient", UiStyleKey::Bands));
+    const float bands = static_cast<float>(bandCount);
+    const float ribbonTop = uiStyle(s, "gradient", UiStyleKey::RibbonTop);
+    const float ribbonH = uiStyle(s, "gradient", UiStyleKey::RibbonH);
+    for (int band = 0; band < bandCount; ++band) {
+        const float t0 = static_cast<float>(band) / bands;
         int seg = 0;
         for (int sidx = 0; sidx < stops - 1; ++sidx) {
             if (t0 >= grad->t[sidx] && t0 <= grad->t[sidx + 1]) {
@@ -77,15 +81,15 @@ bool drawGradient(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32
         const float cr = grad->r[seg] + (grad->r[seg + 1] - grad->r[seg]) * u;
         const float cg = grad->g[seg] + (grad->g[seg + 1] - grad->g[seg]) * u;
         const float cb = grad->b[seg] + (grad->b[seg + 1] - grad->b[seg]) * u;
-        n = emitRect(dst, n, cap, box.x + t0 * box.w, box.y + box.h * 0.35f, box.w / 24.0f + 1.0f, box.h * 0.3f, cr, cg, cb, 1.0f, 0.0f, clip);
+        n = emitRect(dst, n, cap, box.x + t0 * box.w, box.y + box.h * ribbonTop, box.w / bands + 1.0f, box.h * ribbonH, cr, cg, cb, 1.0f, 0.0f, clip);
     }
-    const float tr = s.look.text[0];
-    const float tg = s.look.text[1];
-    const float tb = s.look.text[2];
+    const UiRgb ink = uiStyleTint(s, "gradient", UiStyleTone::Handle);
     const float handle = uiStyle(s, "gradient", UiStyleKey::HandleSide);
+    const float overshoot = uiStyle(s, "gradient", UiStyleKey::ThumbPad);
     for (int p = 0; p < stops; ++p) {
         n = emitRect(
-            dst, n, cap, box.x + grad->t[p] * box.w - handle * 0.5f, box.y + box.h * 0.35f - 4.0f, handle, box.h * 0.3f + 8.0f, tr, tg, tb, 0.9f, 2.0f, clip);
+            dst, n, cap, box.x + grad->t[p] * box.w - handle * 0.5f, box.y + box.h * ribbonTop - overshoot, handle, box.h * ribbonH + 2.0f * overshoot, ink.r, ink.g, ink.b,
+            uiStyle(s, "gradient", UiStyleKey::LineAlpha), uiStyle(s, "gradient", UiStyleKey::HandleRadius), clip);
     }
     return true;
 }

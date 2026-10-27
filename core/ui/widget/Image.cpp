@@ -37,12 +37,12 @@ void uiSetIcon(UiState& s, uint16_t id, uint8_t slot) {
     uiShow(s, id, on);
 }
 
-void photoClamp(UiImage& image) {
-    if (image.viewW < 0.08f) {
-        image.viewW = 0.08f;
+void photoClamp(const UiPaintStyle& style, UiImage& image) {
+    if (image.viewW < style.minView) {
+        image.viewW = style.minView;
     }
-    if (image.viewH < 0.08f) {
-        image.viewH = 0.08f;
+    if (image.viewH < style.minView) {
+        image.viewH = style.minView;
     }
     if (image.viewW > 1.0f) {
         image.viewW = 1.0f;
@@ -64,20 +64,17 @@ void photoClamp(UiImage& image) {
     }
 }
 
-bool photoMinimap(const UiBox& box, float x, float y, float& u, float& v) {
-    constexpr float kMapW = 72.0f;
-    constexpr float kMapH = 48.0f;
-    constexpr float kMargin = 8.0f;
-    if (box.w < 120.0f || box.h < 90.0f) {
+bool photoMinimap(const UiPaintStyle& style, const UiBox& box, float x, float y, float& u, float& v) {
+    if (box.w < style.mapMinW || box.h < style.mapMinH) {
         return false;
     }
-    const float mx = box.x + box.w - kMargin - kMapW;
-    const float my = box.y + box.h - kMargin - kMapH;
-    if (x < mx || y < my || x >= mx + kMapW || y >= my + kMapH) {
+    const float mx = box.x + box.w - style.mapMargin - style.mapW;
+    const float my = box.y + box.h - style.mapMargin - style.mapH;
+    if (x < mx || y < my || x >= mx + style.mapW || y >= my + style.mapH) {
         return false;
     }
-    u = (x - mx) / kMapW;
-    v = (y - my) / kMapH;
+    u = (x - mx) / style.mapW;
+    v = (y - my) / style.mapH;
     return true;
 }
 
@@ -89,14 +86,14 @@ void photoZoom(UiState& s, uint16_t id, float wheel, float x, float y) {
     }
     const float u = (x - box.x) / box.w;
     const float v = (y - box.y) / box.h;
-    const float factor = wheel > 0.0f ? 0.85f : 1.18f;
+    const float factor = wheel > 0.0f ? s.paintStyle.zoomIn : s.paintStyle.zoomOut;
     const float cx = image->viewX + u * image->viewW;
     const float cy = image->viewY + v * image->viewH;
     image->viewW *= factor;
     image->viewH *= factor;
     image->viewX = cx - u * image->viewW;
     image->viewY = cy - v * image->viewH;
-    photoClamp(*image);
+    photoClamp(s.paintStyle, *image);
     s.visualDirty = true;
 }
 
@@ -110,7 +107,7 @@ void photoPan(UiState& s, uint16_t id, float x, float y) {
     image->viewY -= (y - s.grabY) / box.h * image->viewH;
     s.grabX = x;
     s.grabY = y;
-    photoClamp(*image);
+    photoClamp(s.paintStyle, *image);
     s.visualDirty = true;
 }
 
@@ -127,10 +124,10 @@ void photoDrag(void* user, uint16_t id, float x, float y) {
     const bool press = dx > -0.01f && dx < 0.01f && dy > -0.01f && dy < 0.01f;
     float u = 0.0f;
     float v = 0.0f;
-    if (press && photoMinimap(s.box[id], x, y, u, v)) {
+    if (press && photoMinimap(s.paintStyle, s.box[id], x, y, u, v)) {
         image->viewX = u - image->viewW * 0.5f;
         image->viewY = v - image->viewH * 0.5f;
-        photoClamp(*image);
+        photoClamp(s.paintStyle, *image);
         uiReleaseCapture(s);
         s.visualDirty = true;
         return;

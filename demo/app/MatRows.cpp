@@ -70,9 +70,7 @@ uint16_t badgeOf(UiState& s, uint16_t row, const char* letter, uint8_t axis) {
     flex.shrink = 0.0f;
     UiPaint paint{};
     paint.token = UiToken::Custom;
-    paint.r = kUiAxis[axis][0];
-    paint.g = kUiAxis[axis][1];
-    paint.b = kUiAxis[axis][2];
+    paintFillRgb(paint, UiRgb{kUiAxis[axis][0], kUiAxis[axis][1], kUiAxis[axis][2]});
     paint.a = 1.0f;
     paint.radius = uiStyle(s, "mat_badge", UiStyleKey::Radius);
     const uint16_t id = uiPanel(s, row, flex, paint);

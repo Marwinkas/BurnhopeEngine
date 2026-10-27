@@ -4,6 +4,7 @@
 #include "ui/Text.hpp"
 #include "ui/widget/Number.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 
 #include <cstdio>
 
@@ -100,8 +101,10 @@ bool drawNumberFill(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint
     UiBox ancestor{};
     const bool hasClip = uiClipBox(s, id, ancestor);
     const UiBox* clip = hasClip ? &ancestor : nullptr;
-    n = emitRect(dst, n, cap, box.x + 1.0f, box.y + 1.0f, (box.w - 2.0f) * span, box.h - 2.0f,
-        s.look.muted[0], s.look.muted[1], s.look.muted[2], 0.85f, paint->radius, clip);
+    const float edge = uiStyle(s, "number_field", UiStyleKey::Border);
+    const UiRgb fill = uiStyleTint(s, "number_field", UiStyleTone::Fill);
+    n = emitRect(dst, n, cap, box.x + edge, box.y + edge, (box.w - 2.0f * edge) * span, box.h - 2.0f * edge,
+        fill.r, fill.g, fill.b, uiStyle(s, "number_field", UiStyleKey::TrackAlpha), paint->radius, clip);
     return true;
 }
 

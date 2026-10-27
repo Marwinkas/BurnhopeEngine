@@ -2,6 +2,7 @@
 
 #include "host/PropImport.hpp"
 #include "io/JsonCursor.hpp"
+#include "ui/Panel.hpp"
 #include "ui/Style.hpp"
 #include "ui/StyleSheet.hpp"
 #include "ui/widget/Number.hpp"
@@ -142,6 +143,8 @@ void fillRow(UiState& s, uint16_t id);
 bool spawnRole(Import& in, uint16_t parent, const Node& node, uint16_t& out);
 
 // Makers shared by the role table (PropImportRoles.cpp) and the files that define them.
+// The placement a layout node asks for: size, grow, gap, padding and position.
+UiLayoutSpec layoutOf(const Node& node);
 uint16_t spawnPanel(Import& in, uint16_t parent, const Node& node);
 uint16_t spawnScroll(Import& in, uint16_t parent, const Node& node);
 uint16_t makeMenu(Import& in, uint16_t parent, const Node& node);

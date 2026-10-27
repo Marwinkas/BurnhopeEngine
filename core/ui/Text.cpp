@@ -134,7 +134,7 @@ uint32_t emitGlyphs(
     float spaceGap,
     float emScale) {
     const float scale = ui.font.ready && ui.font.fontPx > 1.0f ? ui.look.glyphH / ui.font.fontPx : 1.0f;
-    const float em = ui.look.glyphH > 1.0f ? ui.look.glyphH : 18.0f;
+    const float em = ui.look.lineH();
     float fit = emScale > 0.05f ? emScale : 1.0f;
     if (emScale <= 0.05f && em > box.h && em > 0.5f) {
         fit = box.h / em;
@@ -198,7 +198,7 @@ uint32_t emitGlyphs(
 
 void measureLabel(UiState& s, uint16_t id, float maxW, float& outW, float& outH, void*) {
     outW = 0.0f;
-    outH = s.look.glyphH > 1.0f ? s.look.glyphH : 18.0f;
+    outH = s.look.lineH();
     const UiText* text = id < s.count ? s.ent[id].try_get<UiText>() : nullptr;
     if (text == nullptr || text->len == 0) {
         return;
@@ -278,6 +278,15 @@ void uiText(UiState& s, uint16_t id, const char* text) {
         s.ent[id].set<UiContentMeasure>(UiContentMeasure{measureLabel, nullptr});
     }
     s.visualDirty = true;
+    if (auto* own = s.ent[id].try_get_mut<UiFlex>(); own != nullptr && own->widthMode == UiSize::Fit) {
+        float padL = 0.0f;
+        float padR = 0.0f;
+        float padT = 0.0f;
+        float padB = 0.0f;
+        uiPadOf(*own, padL, padR, padT, padB);
+        own->width = uiMeasure(s, bytes, n, n) + padL + padR;
+        s.layoutDirty = true;
+    }
     const uint16_t parent = s.parentOf[id];
     const UiFlex* parentFlex = parent < s.count ? s.ent[parent].try_get<UiFlex>() : nullptr;
     const bool column = parentFlex != nullptr
@@ -296,7 +305,7 @@ TextRun textRun(const UiState& s, const UiText& text, const UiBox& slot) {
         run.box.w = 0.0f;
         return run;
     }
-    const float em = s.look.glyphH > 1.0f ? s.look.glyphH : 18.0f;
+    const float em = s.look.lineH();
     float scale = text.size > 0.05f ? text.size : 1.0f;
     if (em * scale > slot.h && em > 0.5f) {
         scale = slot.h / em;
@@ -595,7 +604,7 @@ uint32_t uiEmitTextNode(
     float tg = g;
     float tb = b;
     float ta = a;
-    const bool bare = paint != nullptr && (paint->token == UiToken::Text || paint->a <= 0.02f);
+    const bool bare = paint != nullptr && (paint->token == UiToken::Text || paint->a <= kUiInvisibleAlpha);
     if (bare && paint->token == UiToken::Custom) {
         tr = paint->r;
         tg = paint->g;

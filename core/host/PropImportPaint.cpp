@@ -19,6 +19,7 @@
 #include "ui/widget/Splitter.hpp"
 #include "ui/widget/Virtual.hpp"
 #include "ui/State.hpp"
+#include "ui/Template.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -41,47 +42,18 @@ UiPaint paintFromClass(const UiState& s, const char* cls) {
     }
     return paint;
 }
-
-void sizeFlex(UiFlex& flex, const Node& node) {
-    flex.direction = node.row ? UiFlexDir::Row : UiFlexDir::Column;
-    flex.grow = node.grow;
-    flex.shrink = node.hasShrink ? node.shrink : flex.shrink;
-    flex.gap = node.gap;
-    flex.wrap = node.wrap ? UiFlexWrap::Wrap : UiFlexWrap::NoWrap;
-    flex.pad = node.pad;
-    flex.padL = node.padL;
-    flex.padR = node.padR;
-    flex.padT = node.padT;
-    flex.padB = node.padB;
-    flex.minW = node.minW;
-    flex.minH = node.minH;
-    flex.posX = node.posX;
-    flex.posY = node.posY;
-    if (node.wp > 0.0f) {
-        flex.widthMode = UiSize::Percent;
-        flex.width = node.wp;
-    } else if (node.w > 0.0f) {
-        flex.widthMode = UiSize::Px;
-        flex.width = node.w;
-    }
-    if (node.hp > 0.0f) {
-        flex.heightMode = UiSize::Percent;
-        flex.height = node.hp;
-    } else if (node.h > 0.0f) {
-        flex.heightMode = UiSize::Px;
-        flex.height = node.h;
-    }
-    if (node.absolute) {
-        flex.position = UiPosition::Absolute;
-    }
-    if (node.alignCenter) {
-        flex.align = UiAlign::Center;
-    }
-    if (node.selfCenter) {
-        flex.self = UiAlignSelf::Center;
-    }
-}
 } // namespace
+
+UiLayoutSpec layoutOf(const Node& node) {
+    return {
+        .w = node.w, .h = node.h, .wp = node.wp, .hp = node.hp,
+        .grow = node.grow, .shrink = node.hasShrink ? node.shrink : -1.0f,
+        .gap = node.gap, .pad = node.pad, .padL = node.padL, .padR = node.padR, .padT = node.padT, .padB = node.padB,
+        .minW = node.minW, .minH = node.minH, .posX = node.posX, .posY = node.posY,
+        .box = true, .row = node.row, .wrap = node.wrap, .absolute = node.absolute,
+        .alignCenter = node.alignCenter, .selfCenter = node.selfCenter,
+    };
+}
 
 void rememberShow(Import& in, uint16_t node, const Node& spec) {
     if (!spec.hasShow || in.bind == nullptr) {
@@ -91,12 +63,11 @@ void rememberShow(Import& in, uint16_t node, const Node& spec) {
 }
 
 uint16_t spawnGroup(Import& in, uint16_t parent) {
-    UiFlex col{};
-    col.direction = UiFlexDir::Column;
-    col.shrink = 0.0f;
-    col.widthMode = UiSize::Percent;
-    col.width = 100.0f;
-    return uiPanel(*in.state, parent, col, in.hidden);
+    const uint16_t id = uiSpawnTemplate(*in.state, parent, "core/prop_group");
+    if (id != kUiNone) {
+        in.state->ent[id].set<UiPaint>(in.hidden);
+    }
+    return id;
 }
 
 void bindNodeCommand(Import& in, uint16_t id, const Node& node) {
@@ -126,17 +97,13 @@ UiPaint paintOf(const Import& in, const Node& node) {
     if (std::strcmp(node.paintName, "glyph") == 0) {
         UiPaint paint = paintClear();
         paint.icon = node.icon;
-        paint.r = look.text[0];
-        paint.g = look.text[1];
-        paint.b = look.text[2];
+        paintFillToken(look, paint, UiToken::Text);
         return paint;
     }
     if (std::strcmp(node.paintName, "accent") == 0) {
         UiPaint paint = paintFromClass(*in.state, "paint_accent");
         paint.token = UiToken::Custom;
-        paint.r = look.accent[0][0];
-        paint.g = look.accent[0][1];
-        paint.b = look.accent[0][2];
+        paintFillToken(look, paint, UiToken::Accent);
         return paint;
     }
     for (const char* name : {"dock", "content", "sep", "line"}) {
@@ -172,29 +139,34 @@ void markNode(Import& in, uint16_t id, const Node& node) {
 }
 
 uint16_t spawnPanel(Import& in, uint16_t parent, const Node& node) {
-    UiFlex flex{};
-    flex.shrink = node.hasShrink ? node.shrink : 0.0f;
-    sizeFlex(flex, node);
-    const uint16_t id = uiPanel(*in.state, parent, flex, paintOf(in, node));
+    const uint16_t id = uiSpawnTemplate(*in.state, parent, "core/panel");
+    if (id == kUiNone) {
+        return id;
+    }
+    in.state->ent[id].set<UiPaint>(paintOf(in, node));
+    uiApplyLayout(*in.state, id, layoutOf(node));
     markNode(in, id, node);
     remember(in, node.name, id);
     return id;
 }
 
 uint16_t spawnScroll(Import& in, uint16_t parent, const Node& node) {
-    UiFlex view{};
-    view.shrink = 1.0f;
-    sizeFlex(view, node);
-    view.overflow = UiOverflow::Scroll;
-    const uint16_t outer = uiPanel(*in.state, parent, view, paintOf(in, node));
-    UiFlex column{};
-    column.gap = node.gap;
-    column.pad = node.pad;
-    column.shrink = 0.0f;
-    column.widthMode = UiSize::Percent;
-    column.width = 100.0f;
-    const uint16_t inner = uiPanel(*in.state, outer, column, in.hidden);
-    uiBindScroll(*in.state, outer, inner);
+    UiState& s = *in.state;
+    const uint16_t outer = uiSpawnTemplate(s, parent, "core/prop_scroll");
+    if (outer == kUiNone) {
+        return outer;
+    }
+    s.ent[outer].set<UiPaint>(paintOf(in, node));
+    UiLayoutSpec view = layoutOf(node);
+    view.scroll = true;
+    uiApplyLayout(s, outer, view);
+    const uint16_t inner = uiSpawnTemplate(s, outer, "core/prop_group");
+    if (inner == kUiNone) {
+        return inner;
+    }
+    s.ent[inner].set<UiPaint>(in.hidden);
+    uiApplyLayout(s, inner, {.gap = node.gap, .pad = node.pad, .box = true});
+    uiBindScroll(s, outer, inner);
     remember(in, node.glyph, outer);
     remember(in, node.name, inner);
     return inner;

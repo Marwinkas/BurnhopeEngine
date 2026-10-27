@@ -39,9 +39,7 @@ void takeBook(UiColorPickerComponent& picker) {
 }
 
 void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& b, float& a) {
-    r = s.look.window[0];
-    g = s.look.window[1];
-    b = s.look.window[2];
+    tokenRgb(s.look, UiToken::Window, r, g, b);
     a = 1.0f;
     auto take = [&](bool overlay) -> bool {
         uint16_t painted[kUiCap];
@@ -110,7 +108,7 @@ void samplePixel(const UiState& s, float x, float y, float& r, float& g, float& 
                 a = 1.0f;
                 return true;
             }
-            if (paint->a <= 0.02f) {
+            if (paint->a <= kUiInvisibleAlpha) {
                 continue;
             }
             r = paint->r;

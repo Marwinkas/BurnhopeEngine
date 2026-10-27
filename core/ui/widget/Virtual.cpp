@@ -27,14 +27,13 @@ void onVirtClick(void* user, uint16_t id) {
 }
 
 uint16_t addVirtSlot(UiState& s, uint16_t scroll, float itemH) {
-    const uint16_t slot = uiSpawnTemplate(s, scroll, "core/row", "list_row");
+    const uint16_t slot = uiSpawnTemplate(s, scroll, "core/row_full", "list_row");
     if (slot == kUiNone) {
         return slot;
     }
     // A pooled row hangs in the scroll view: absolute, full width, a little shorter than its pitch.
     const float inset = uiStyle(s, "list_row", UiStyleKey::RowInset);
     uiPlace(s, slot, true, 0.0f, 0.0f, 0.0f, itemH > inset ? itemH - inset : itemH);
-    uiSetWidthPercent(s, slot, 100.0f);
     addText(s, slot, " ");
     uiBind(s, slot, onVirtClick, &s);
     uiSetFocusable(s, slot);
@@ -216,28 +215,22 @@ uint32_t uiVirtRowIndex(const UiState& s, uint16_t id) {
 }
 
 uint16_t uiVirtualHostCreate(UiState& s, uint16_t parent, UiToken token, float radius) {
-    UiFlex host{};
-    host.grow = 1.0f;
-    host.shrink = 1.0f;
-    host.overflow = UiOverflow::Scroll;
-    host.position = UiPosition::Relative;
-    host.justify = UiJustify::Start;
-    host.align = UiAlign::Stretch;
-    host.content = UiAlignContent::Start;
-    const uint16_t scroll = spawn(s, parent, host, paintToken(s.look, token, radius));
+    const UiTemplateId tpl = uiTemplateFind(s, "core/virtual_host");
+    const uint16_t scroll = uiSpawnTemplate(s, parent, tpl);
     if (scroll == kUiNone) {
         return kUiNone;
     }
-    UiFlex spacer{};
-    spacer.widthMode = UiSize::Percent;
-    spacer.width = 100.0f;
-    spacer.heightMode = UiSize::Px;
-    spacer.height = 1.0f;
-    spacer.shrink = 0.0f;
-    spacer.position = UiPosition::Absolute;
-    spacer.posX = 0.0f;
-    spacer.posY = 0.0f;
-    const uint16_t inner = spawn(s, scroll, spacer, paintClear());
+    // The host fills what its parent leaves; the spacer inside it is a one-pixel absolute strip that uiVirtualSyncSpacer resizes.
+    if (auto* host = s.ent[scroll].try_get_mut<UiFlex>()) {
+        host->grow = 1.0f;
+        host->shrink = 1.0f;
+        host->position = UiPosition::Relative;
+        host->content = UiAlignContent::Start;
+    }
+    s.ent[scroll].set<UiPaint>(paintToken(s.look, token, radius));
+    const uint16_t inner = uiTemplateSlot(s, tpl, scroll, "inner");
+    s.ent[inner].set<UiPaint>(paintClear());
+    uiVirtualSyncSpacer(s, inner, 1.0f);
     s.ent[scroll].set<UiScroll>({0.0f, inner});
     return scroll;
 }
@@ -251,7 +244,7 @@ void uiVirtualSyncSpacer(UiState& s, uint16_t inner, float totalHeight) {
         flex->position = UiPosition::Absolute;
         flex->posX = 0.0f;
         flex->posY = 0.0f;
-        flex->marginT = 0.0f;
+        flex->scrollY = 0.0f;
         flex->marginB = 0.0f;
     }
 }

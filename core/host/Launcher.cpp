@@ -6,6 +6,7 @@
 #include "ui/Nodes.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Style.hpp"
+#include "ui/Template.hpp"
 #include "ui/Text.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Label.hpp"
@@ -18,10 +19,6 @@
 
 namespace burnhope {
 namespace {
-
-constexpr float kCardW = 560.0f;
-constexpr float kRowH = 44.0f;
-constexpr float kDateW = 160.0f;
 
 UiLauncher* launcherOf(UiState& s, uint16_t id) {
     return id < s.count ? s.ent[id].try_get_mut<UiLauncher>() : nullptr;
@@ -62,84 +59,25 @@ void forgetClick(void* user, uint16_t id) {
     }
 }
 
-uint16_t column(UiState& s, uint16_t parent, float width, float gap) {
-    UiFlex flex{};
-    flex.direction = UiFlexDir::Column;
-    flex.gap = gap;
-    flex.shrink = 0.0f;
-    if (width > 0.0f) {
-        flex.widthMode = UiSize::Px;
-        flex.width = width;
-    }
-    return uiPanel(s, parent, flex, paintClear());
-}
-
-uint16_t cell(UiState& s, uint16_t parent, float width, float height, UiTextAlign align, UiTextEllipsis ellipsis) {
-    UiFlex flex{};
-    if (width > 0.0f) {
-        flex.widthMode = UiSize::Px;
-        flex.width = width;
-        flex.shrink = 0.0f;
-    } else {
-        flex.grow = 1.0f;
-        flex.shrink = 1.0f;
-        flex.minW = 0.0f;
-    }
-    flex.heightMode = UiSize::Px;
-    flex.height = height;
-    const uint16_t id = uiPanel(s, parent, flex, paintLabel(s.look));
-    uiTextStyle(s, id, align, ellipsis, UiTextValign::Center, false, UiTextDeco::None, 1.0f);
-    uiSetPass(s, id);
-    return id;
-}
-
 uint16_t spawnRow(UiState& s, uint16_t list, uint16_t launcher) {
-    UiFlex line{};
-    line.direction = UiFlexDir::Row;
-    line.align = UiAlign::Center;
-    line.widthMode = UiSize::Percent;
-    line.width = 100.0f;
-    line.heightMode = UiSize::Px;
-    line.height = kRowH;
-    line.padL = 10.0f;
-    line.padR = 6.0f;
-    line.gap = 8.0f;
-    line.shrink = 0.0f;
-    UiPaint paint = paintToken(s.look, UiToken::Item, s.look.radiusSm);
-    paint.a = 0.0f;
-    paint.hr = s.look.text[0];
-    paint.hg = s.look.text[1];
-    paint.hb = s.look.text[2];
-    paint.ha = 0.10f;
-    const uint16_t id = uiPanel(s, list, line, paint);
+    const UiTemplateId tpl = uiTemplateFind(s, "core/launcher_row");
+    const uint16_t id = uiSpawnTemplate(s, list, tpl);
     if (id >= s.count) {
         return id;
     }
+    if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
+        paintHoverToken(s.look, *paint, UiToken::Text, 0.10f);
+    }
     UiLauncherRow row{};
     row.launcher = launcher;
-    UiFlex stack{};
-    stack.direction = UiFlexDir::Column;
-    stack.grow = 1.0f;
-    stack.shrink = 1.0f;
-    stack.minW = 0.0f;
-    const uint16_t text = uiPanel(s, id, stack, paintClear());
-    uiSetPass(s, text);
-    row.name = cell(s, text, 0.0f, 22.0f, UiTextAlign::Left, UiTextEllipsis::End);
-    row.path = cell(s, text, 0.0f, 16.0f, UiTextAlign::Left, UiTextEllipsis::End);
-    if (auto* paintPath = s.ent[row.path].try_get_mut<UiPaint>()) {
-        tokenRgb(s.look, UiToken::Muted, paintPath->r, paintPath->g, paintPath->b);
-    }
-    row.date = cell(s, id, kDateW, 22.0f, UiTextAlign::Right, UiTextEllipsis::End);
+    row.name = uiTemplateSlot(s, tpl, id, "name");
+    row.path = uiTemplateSlot(s, tpl, id, "path");
+    row.date = uiTemplateSlot(s, tpl, id, "date");
     row.forget = uiButton(s, id, {.cls = "tool_button_sm", .icon = UiIcon::Dismiss});
     if (row.forget < s.count) {
-        if (auto* box = s.ent[row.forget].try_get_mut<UiFlex>()) {
-            box->shrink = 0.0f;
-        }
         uiBind(s, row.forget, forgetClick, &s);
     }
     s.ent[id].set<UiLauncherRow>(row);
-    uiHover(s, id);
-    uiSetFocusable(s, id);
     uiBind(s, id, rowClick, &s);
     uiShow(s, id, false);
     return id;
@@ -148,46 +86,23 @@ uint16_t spawnRow(UiState& s, uint16_t list, uint16_t launcher) {
 } // namespace
 
 uint16_t uiLauncher(UiState& s, const LauncherConfig& cfg) {
-    UiFlex veil{};
-    veil.position = UiPosition::Absolute;
-    veil.posX = 0.0f;
-    veil.posY = 0.0f;
-    veil.widthMode = UiSize::Percent;
-    veil.width = 100.0f;
-    veil.heightMode = UiSize::Percent;
-    veil.height = 100.0f;
-    veil.align = UiAlign::Center;
-    veil.justify = UiJustify::Center;
-    veil.shrink = 0.0f;
-    UiPaint dim = paintToken(s.look, UiToken::Window, 0.0f);
-    dim.a = 1.0f;
-    dim.borderW = 0.0f;
     // Layout only solves the tree under node 0, so the veil must hang from it (a parentless node is never laid out).
-    const uint16_t id = uiNode(s, s.count > 0 ? 0 : kUiNone, veil, dim);
+    const UiTemplateId tpl = uiTemplateFind(s, "core/launcher");
+    const uint16_t id = uiSpawnTemplate(s, s.count > 0 ? 0 : kUiNone, tpl);
     if (id >= s.count) {
         return id;
     }
-    uiSetFocusable(s, id);
-    UiFlex cardFlex{};
-    cardFlex.direction = UiFlexDir::Column;
-    cardFlex.widthMode = UiSize::Px;
-    cardFlex.width = kCardW;
-    cardFlex.pad = 20.0f;
-    cardFlex.gap = 14.0f;
-    cardFlex.shrink = 0.0f;
-    const uint16_t card = uiPanel(s, id, cardFlex, paintPopup(s.look));
-    (void)uiLabel(s, card, "Burnhope");
-    UiFlex buttons{};
-    buttons.direction = UiFlexDir::Row;
-    buttons.gap = 10.0f;
-    buttons.shrink = 0.0f;
-    const uint16_t bar = uiPanel(s, card, buttons, paintClear());
+    uiPlace(s, id, true, 0.0f, 0.0f, 0.0f, 0.0f);
+    const uint16_t card = uiTemplateSlot(s, tpl, id, "card");
+    s.ent[card].set<UiPaint>(paintPopup(s.look));
+    uiText(s, uiTemplateSlot(s, tpl, id, "title"), "Burnhope");
+    uiText(s, uiTemplateSlot(s, tpl, id, "recent"), "Recent Projects");
+    const uint16_t bar = uiTemplateSlot(s, tpl, id, "bar");
     (void)uiButton(s, bar, {.cls = "launcher_button", .label = "Create Project", .onClick = createClick, .user = &s});
     (void)uiButton(s, bar, {.cls = "launcher_button", .label = "Open Project", .onClick = openClick, .user = &s});
     UiLauncher box{};
     box.cfg = cfg;
-    (void)uiLabel(s, card, "Recent Projects");
-    const uint16_t list = column(s, card, 0.0f, 2.0f);
+    const uint16_t list = uiTemplateSlot(s, tpl, id, "list");
     box.empty = uiLabel(s, list, "No recent projects");
     for (uint16_t& row : box.row) {
         row = spawnRow(s, list, id);

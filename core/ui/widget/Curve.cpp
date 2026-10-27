@@ -58,13 +58,9 @@ bool drawCurve(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t 
     UiBox ancestor{};
     const bool hasClip = uiClipBox(s, id, ancestor);
     const UiBox* clip = hasClip ? &ancestor : nullptr;
-    const float ar = s.look.accent[0][0];
-    const float ag = s.look.accent[0][1];
-    const float ab = s.look.accent[0][2];
-    const float tr = s.look.text[0];
-    const float tg = s.look.text[1];
-    const float tb = s.look.text[2];
-    const int steps = 16;
+    const UiRgb line = uiStyleTint(s, "curve", UiStyleTone::Line);
+    const UiRgb grip = uiStyleTint(s, "curve", UiStyleTone::Handle);
+    const int steps = static_cast<int>(uiStyle(s, "curve", UiStyleKey::Steps));
     for (int step = 0; step < steps && n < cap; ++step) {
         UiPrimitive& prim = dst[n++];
         prim = {};
@@ -76,16 +72,16 @@ bool drawCurve(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t 
         prim.extra[1] = box.y + curve->y[2] * box.h;
         prim.extra[2] = box.x + curve->x[3] * box.w;
         prim.extra[3] = box.y + curve->y[3] * box.h;
-        prim.color[0] = ar;
-        prim.color[1] = ag;
-        prim.color[2] = ab;
+        prim.color[0] = line.r;
+        prim.color[1] = line.g;
+        prim.color[2] = line.b;
         prim.color[3] = 1.0f;
         prim.texId = static_cast<uint32_t>(step);
         prim.flags = kUiFlagRibbon;
     }
     const float handle = uiStyle(s, "curve", UiStyleKey::HandleSide);
     for (int p = 0; p < 4; ++p) {
-        n = emitRect(dst, n, cap, box.x + curve->x[p] * box.w - handle * 0.5f, box.y + curve->y[p] * box.h - handle * 0.5f, handle, handle, tr, tg, tb, 1.0f, handle * 0.5f, clip);
+        n = emitRect(dst, n, cap, box.x + curve->x[p] * box.w - handle * 0.5f, box.y + curve->y[p] * box.h - handle * 0.5f, handle, handle, grip.r, grip.g, grip.b, 1.0f, handle * 0.5f, clip);
     }
     return true;
 }

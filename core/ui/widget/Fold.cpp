@@ -59,9 +59,7 @@ uint16_t makeBody(UiState& s, uint16_t parent, uint16_t head) {
     if (clip == kUiNone || child == kUiNone) {
         return kUiNone;
     }
-    // The body is revealed by animating the clip's height from 0, and both span the fold's parent.
-    uiSetWidthPercent(s, clip, 100.0f);
-    uiSetWidthPercent(s, child, 100.0f);
+    // The body is revealed by animating the clip's height from 0.
     if (auto* flex = s.ent[clip].try_get_mut<UiFlex>()) {
         flex->heightMode = UiSize::Px;
         flex->height = 0.0f;
@@ -158,23 +156,8 @@ uint16_t uiFoldBody(UiState& s, uint16_t parent, const char* title) {
     if (head == kUiNone) {
         return kUiNone;
     }
-    // A header runs edge to edge: it counters the padding of the container it sits in.
     if (auto* row = s.ent[head].try_get_mut<UiFlex>()) {
         row->position = UiPosition::Relative;
-        row->widthMode = UiSize::Percent;
-        row->width = 100.0f;
-        if (parent < s.count) {
-            if (const UiFlex* home = s.ent[parent].try_get<UiFlex>()) {
-                const float left = home->pad > 0.0f ? home->pad : home->padL;
-                const float right = home->pad > 0.0f ? home->pad : home->padR;
-                if (left > 0.0f) {
-                    row->marginL = -left;
-                }
-                if (right > 0.0f) {
-                    row->marginR = -right;
-                }
-            }
-        }
     }
     uiSetIcon(s, head, UiIcon::ChevronRight);
     uiText(s, head, title != nullptr ? title : "");

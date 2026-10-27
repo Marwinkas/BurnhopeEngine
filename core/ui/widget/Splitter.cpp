@@ -1,6 +1,7 @@
 #include "ui/Panel.hpp"
 #include "ui/widget/Splitter.hpp"
 #include "ui/State.hpp"
+#include "ui/Template.hpp"
 #include "ui/StyleSheet.hpp"
 
 #include <algorithm>
@@ -312,7 +313,7 @@ void splitPaint(UiState& s, uint16_t id, bool hot) {
                 peer->a = 1.0f;
             } else {
                 *peer = paintToken(s.look, UiToken::Custom, 0.0f);
-                paintTint(*peer, s.look.text);
+                paintFillToken(s.look, *peer, UiToken::Text);
                 peer->a = group->idleA;
             }
         }
@@ -403,26 +404,26 @@ bool uiSplitInput(UiState& s, const InputFrame& in, uint16_t id, uint8_t phase, 
 }
 
 uint16_t uiSplitBar(UiState& s, uint16_t parent, bool verticalBar, float inset) {
-    const float thickness = uiStyle(s, "splitter_grip", UiStyleKey::Width);
-    UiFlex grip{};
-    grip.shrink = 0.0f;
-    grip.self = UiAlignSelf::Stretch;
-    if (verticalBar) {
-        grip.widthMode = UiSize::Px;
-        grip.width = thickness;
-        grip.marginT = inset;
-    } else {
-        grip.heightMode = UiSize::Px;
-        grip.height = thickness;
-        grip.marginL = inset;
+    const uint16_t bar = uiSpawnTemplate(s, parent, "core/splitter_grip");
+    if (bar == kUiNone) {
+        return bar;
     }
-    UiPaint paint = paintToken(s.look, uiStyleBg(s, "splitter_grip"), 0.0f);
-    paint.a = uiStyle(s, "splitter_grip", UiStyleKey::Alpha);
-    const uint16_t bar = uiPanel(s, parent, grip, paint);
-    if (bar != kUiNone) {
-        s.ent[bar].set<UiSplitter>({});
-        uiSetFocusable(s, bar);
+    // The class gives a vertical bar its thickness as a width; a horizontal bar turns that into a height. `inset` is the
+    // bar's offset along its pane, and it always spans the pane across.
+    if (auto* grip = s.ent[bar].try_get_mut<UiFlex>()) {
+        grip->self = UiAlignSelf::Stretch;
+        if (verticalBar) {
+            grip->marginT = inset;
+        } else {
+            grip->heightMode = UiSize::Px;
+            grip->height = grip->width;
+            grip->widthMode = UiSize::Auto;
+            grip->width = 0.0f;
+            grip->marginL = inset;
+        }
     }
+    s.ent[bar].set<UiSplitter>({});
+    uiSetFocusable(s, bar);
     return bar;
 }
 

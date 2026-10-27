@@ -9,6 +9,7 @@
 #include "ui/Style.hpp"
 #include "ui/LayoutBridge.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 #include "ui/Template.hpp"
 
 #include <cmath>
@@ -160,9 +161,7 @@ void calFill(UiState& s, UiCalendarComponent& cal) {
                 paint->token = UiToken::Item;
             }
             if (today && !empty && day != cal.calSel) {
-                paint->r = s.look.accent[1][0];
-                paint->g = s.look.accent[1][1];
-                paint->b = s.look.accent[1][2];
+                paintFillToken(s.look, *paint, uiStyleTone(s, "cal_day", UiStyleTone::Today));
             } else {
                 tokenRgb(s.look, paint->token, paint->r, paint->g, paint->b);
             }

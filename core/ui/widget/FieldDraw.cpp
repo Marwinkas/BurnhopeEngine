@@ -11,26 +11,6 @@ namespace burnhope {
 
 namespace {
 
-void pushBar(UiState& s, UiNodeBars& bars, float x, float y, float w, float h, float r, float g, float b, float a, float radius, uint32_t flags, float spread) {
-    if (w < 0.5f || h < 0.5f) {
-        return;
-    }
-    UiBar bar{};
-    bar.x = x;
-    bar.y = y;
-    bar.w = w;
-    bar.h = h;
-    bar.r = r;
-    bar.g = g;
-    bar.b = b;
-    bar.a = a;
-    bar.radius = radius;
-    bar.flags = flags;
-    bar.spread = spread;
-    bar.on = 1;
-    uiNodeBarPush(s, bars, bar);
-}
-
 void putChrome(UiState& s, uint16_t id, const UiNodeBars& bars, const UiTextInk& ink) {
     if (auto* live = s.ent[id].try_get_mut<UiNodeBars>()) {
         *live = bars;
@@ -55,6 +35,26 @@ void fieldPlace(UiState& s) {
             fields[nf++] = slot->index;
         }
     });
+    if (nf == 0) {
+        return;
+    }
+    using K = UiStyleKey;
+    using T = UiStyleTone;
+    const UiRgb errorInk = uiStyleTint(s, "input_field", T::Error);
+    const UiRgb fillInk = uiStyleTint(s, "input_field", T::Fill);
+    const UiRgb textInk = uiStyleTint(s, "input_field", T::Text);
+    const UiRgb hintInk = uiStyleTint(s, "input_field", T::Hint);
+    const UiRgb clearInk = uiStyleTint(s, "input_field", T::Clear);
+    const float lineH = s.look.lineH();
+    const float caretW = uiStyle(s, "input_field", K::CaretW);
+    const float caretInset = uiStyle(s, "input_field", K::CaretInset);
+    const float selectionAlpha = uiStyle(s, "input_field", K::SelectionAlpha);
+    const float selectionInset = uiStyle(s, "input_field", K::SelectionInset);
+    const float selectionRadius = uiStyle(s, "input_field", K::SelectionRadius);
+    const float imeOffset = uiStyle(s, "input_field", K::ImeOffset);
+    const float imeH = uiStyle(s, "input_field", K::ImeH);
+    const float imeAlpha = uiStyle(s, "input_field", K::ImeAlpha);
+    const float blinkRate = uiStyle(s, "input_field", K::BlinkRate);
     for (uint16_t at = 0; at < nf; ++at) {
         const uint16_t id = fields[at];
         const UiPaint* paint = s.ent[id].try_get<UiPaint>();
@@ -65,9 +65,9 @@ void fieldPlace(UiState& s) {
         const UiBox& box = s.box[id];
         UiNodeBars bars{};
         UiTextInk ink{};
-        if (field->required != 0 && field->len == 0 && paint->borderW < 0.4f) {
-            pushBar(s, bars, box.x, box.y, box.w, box.h,
-                s.look.accent[2][0], s.look.accent[2][1], s.look.accent[2][2],
+        if (field->required != 0 && field->len == 0 && paint->borderW < kUiBorderMinW) {
+            uiBarPush(s, bars, box.x, box.y, box.w, box.h,
+                errorInk.r, errorInk.g, errorInk.b,
                 paint->a > 0.2f ? paint->a : 1.0f, paint->radius, kUiFlagStroke, uiStyle(s, "input_field", UiStyleKey::ErrorBorder));
         }
         const UiBox inset = fieldInset(s, id, *field);
@@ -83,7 +83,6 @@ void fieldPlace(UiState& s) {
         if (field->multi != 0) {
             FieldRow rows[16]{};
             const int rn = fieldRows(s, *field, inset.w, rows, 16);
-            const float lineH = s.look.glyphH > 1.0f ? s.look.glyphH : 18.0f;
             if (sel0 != sel1) {
                 for (int li = 0; li < rn; ++li) {
                     const uint8_t a = sel0 > rows[li].begin ? sel0 : rows[li].begin;
@@ -98,7 +97,7 @@ void fieldPlace(UiState& s) {
                     const float x1 = origin + fieldOffset(s, *field, rows[li].begin, b);
                     const float y = inset.y + static_cast<float>(li) * lineH - field->scroll;
                     if (x1 > x0 && y + lineH > box.y && y < box.y + box.h) {
-                        pushBar(s, bars, x0, y, x1 - x0, lineH, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.45f, 2.0f, 0, 0.0f);
+                        uiBarPush(s, bars, x0, y, x1 - x0, lineH, fillInk.r, fillInk.g, fillInk.b, selectionAlpha, selectionRadius);
                     }
                 }
             }
@@ -108,13 +107,12 @@ void fieldPlace(UiState& s) {
             const float left = x0 > inset.x ? x0 : inset.x;
             const float right = x1 < inset.x + inset.w ? x1 : inset.x + inset.w;
             if (right > left) {
-                pushBar(s, bars, left, box.y + 6.0f, right - left, box.h - 12.0f, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.45f, 2.0f, 0, 0.0f);
+                uiBarPush(s, bars, left, box.y + selectionInset, right - left, box.h - 2.0f * selectionInset, fillInk.r, fillInk.g, fillInk.b, selectionAlpha, selectionRadius);
             }
         }
         if (id == s.focused && paint->disabled == 0 && field->multi != 0) {
             FieldRow rows[16]{};
             const int rn = fieldRows(s, *field, inset.w, rows, 16);
-            const float lineH = s.look.glyphH > 1.0f ? s.look.glyphH : 18.0f;
             int line = 0;
             for (int li = 0; li < rn; ++li) {
                 if (field->caret >= rows[li].begin && field->caret <= rows[li].end) {
@@ -124,18 +122,18 @@ void fieldPlace(UiState& s) {
             const float cx = origin + fieldOffset(s, *field, rows[line].begin, field->caret);
             const float cy = inset.y + static_cast<float>(line) * lineH - field->scroll;
             if (cy + lineH > box.y && cy < box.y + box.h) {
-                pushBar(s, bars, cx, cy, 1.5f, lineH, s.look.text[0], s.look.text[1], s.look.text[2], 1.0f, 0.0f, 0, 0.0f);
+                uiBarPush(s, bars, cx, cy, caretW, lineH, textInk.r, textInk.g, textInk.b, 1.0f, 0.0f);
             }
         } else if (id == s.focused && paint->disabled == 0 && field->scrub == 0) {
-            const bool blink = (static_cast<int>(s.time * 1.6f) & 1) == 0;
+            const bool blink = (static_cast<int>(s.time * blinkRate) & 1) == 0;
             const float cx = origin + uiFieldWidth(s, *field, field->caret);
             if (blink && cx >= inset.x - 1.0f && cx <= inset.x + inset.w) {
-                pushBar(s, bars, cx, box.y + 7.0f, 1.5f, box.h - 14.0f, s.look.text[0], s.look.text[1], s.look.text[2], 1.0f, 0.0f, 0, 0.0f);
+                uiBarPush(s, bars, cx, box.y + caretInset, caretW, box.h - 2.0f * caretInset, textInk.r, textInk.g, textInk.b, 1.0f, 0.0f);
             }
             const UiIme* ime = s.ent[id].try_get<UiIme>();
             if (ime != nullptr && ime->len > 0) {
                 const float mark = s.look.advance * static_cast<float>(ime->len);
-                pushBar(s, bars, cx, box.y + box.h - 10.0f, mark, 2.0f, s.look.accent[0][0], s.look.accent[0][1], s.look.accent[0][2], 0.9f, 0.0f, 0, 0.0f);
+                uiBarPush(s, bars, cx, box.y + box.h - imeOffset, mark, imeH, fillInk.r, fillInk.g, fillInk.b, imeAlpha, 0.0f);
             }
         }
         if (field->clear != 0 && field->len > 0) {
@@ -144,17 +142,18 @@ void fieldPlace(UiState& s) {
             bars.iconX = box.x + box.w - field->padR - kSide;
             bars.iconY = box.y + (box.h - kSide) * 0.5f;
             bars.iconS = kSide;
-            bars.iconR = s.look.muted[0];
-            bars.iconG = s.look.muted[1];
-            bars.iconB = s.look.muted[2];
+            bars.iconR = clearInk.r;
+            bars.iconG = clearInk.g;
+            bars.iconB = clearInk.b;
             bars.iconA = 1.0f;
         }
         const UiText* shown = s.ent[id].try_get<UiText>();
         if (shown != nullptr && shown->len > 0) {
             const bool hint = field->len == 0 && field->hintLen > 0;
-            ink.r = hint ? s.look.muted[0] : s.look.text[0];
-            ink.g = hint ? s.look.muted[1] : s.look.text[1];
-            ink.b = hint ? s.look.muted[2] : s.look.text[2];
+            const UiRgb& shade = hint ? hintInk : textInk;
+            ink.r = shade.r;
+            ink.g = shade.g;
+            ink.b = shade.b;
             ink.a = 1.0f;
             ink.x = inset.x;
             ink.y = inset.y;

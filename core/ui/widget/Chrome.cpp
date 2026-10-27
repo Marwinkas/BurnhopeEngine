@@ -35,25 +35,17 @@ uint16_t uiFloatWindow(UiState& s, uint16_t parent, float x, float y, float w, f
 }
 
 uint16_t uiWindowChrome(UiState& s, uint16_t parent) {
-    const uint16_t cluster = uiSpawnTemplate(s, parent, "core/cluster", "chrome_cluster");
+    const UiTemplateId chromeTpl = uiTemplateFind(s, "core/window_chrome");
+    const uint16_t cluster = uiSpawnTemplate(s, parent, chromeTpl);
     if (cluster == kUiNone) {
         return cluster;
     }
-    const uint16_t minB = uiSpawnTemplate(s, cluster, "core/panel", "chrome_button");
-    const uint16_t maxB = uiSpawnTemplate(s, cluster, "core/panel", "chrome_button");
-    const uint16_t closeB = uiSpawnTemplate(s, cluster, "core/panel", "chrome_close");
-    uiHover(s, minB);
-    uiHover(s, maxB);
-    uiHover(s, closeB);
-    if (auto* icon = s.ent[minB].try_get_mut<UiPaint>()) {
-        icon->icon = static_cast<uint8_t>(UiIcon::Minimize);
-    }
-    if (auto* icon = s.ent[maxB].try_get_mut<UiPaint>()) {
-        icon->icon = static_cast<uint8_t>(UiIcon::Maximize);
-    }
-    if (auto* icon = s.ent[closeB].try_get_mut<UiPaint>()) {
-        icon->icon = static_cast<uint8_t>(UiIcon::Dismiss);
-    }
+    const uint16_t minB = uiTemplateSlot(s, chromeTpl, cluster, "min");
+    const uint16_t maxB = uiTemplateSlot(s, chromeTpl, cluster, "max");
+    const uint16_t closeB = uiTemplateSlot(s, chromeTpl, cluster, "close");
+    uiSetIcon(s, minB, UiIcon::Minimize);
+    uiSetIcon(s, maxB, UiIcon::Maximize);
+    uiSetIcon(s, closeB, UiIcon::Dismiss);
     uiBind(s, minB, onMin, &s);
     uiBind(s, maxB, onMax, &s);
     return cluster;
@@ -83,8 +75,12 @@ void uiChromeSetDock(UiState& s, bool (*frame)(const UiState& s, uint16_t id), v
 
 ChromePointer uiChromePointer(UiState& s, const InputFrame& in, uint16_t hit, bool press, bool down, bool release) {
     ChromePointer out{};
-    auto edgeAt = [](const UiBox& b, float x, float y) {
-        const float m = 6.0f;
+    const float m = uiStyle(s, "window_limits", UiStyleKey::HitSlop);
+    const float minW = uiStyle(s, "window_limits", UiStyleKey::MinW);
+    const float minH = uiStyle(s, "window_limits", UiStyleKey::MinH);
+    const float dragSlop = uiStyle(s, "window_limits", UiStyleKey::DragSlop);
+    const float dragMin = uiStyle(s, "window_limits", UiStyleKey::MinDragW);
+    auto edgeAt = [m](const UiBox& b, float x, float y) {
         if (!hitBox(b, x, y)) {
             return 0;
         }
@@ -179,17 +175,17 @@ ChromePointer uiChromePointer(UiState& s, const InputFrame& in, uint16_t hit, bo
             if ((gesture.resizeEdge & 8) != 0) {
                 h += dy;
             }
-            if (w < 220.0f) {
+            if (w < minW) {
                 if ((gesture.resizeEdge & 1) != 0) {
-                    x -= 220.0f - w;
+                    x -= minW - w;
                 }
-                w = 220.0f;
+                w = minW;
             }
-            if (h < 120.0f) {
+            if (h < minH) {
                 if ((gesture.resizeEdge & 4) != 0) {
-                    y -= 120.0f - h;
+                    y -= minH - h;
                 }
-                h = 120.0f;
+                h = minH;
             }
             uiPlace(s, gesture.resizeId, true, x, y, w, h);
         }
@@ -200,9 +196,9 @@ ChromePointer uiChromePointer(UiState& s, const InputFrame& in, uint16_t hit, bo
         const float y = in.pointer.y - s.grabY;
         const float dx = x - s.box[gesture.floatWin].x;
         const float dy = y - s.box[gesture.floatWin].y;
-        if (dx * dx + dy * dy > 16.0f || s.parentOf[gesture.floatWin] == 0) {
-            const float w = s.box[gesture.floatWin].w > 40.0f ? s.box[gesture.floatWin].w : 280.0f;
-            const float h = s.box[gesture.floatWin].h > 40.0f ? s.box[gesture.floatWin].h : 180.0f;
+        if (dx * dx + dy * dy > dragSlop * dragSlop || s.parentOf[gesture.floatWin] == 0) {
+            const float w = s.box[gesture.floatWin].w > dragMin ? s.box[gesture.floatWin].w : uiStyle(s, "window_limits", UiStyleKey::Width);
+            const float h = s.box[gesture.floatWin].h > dragMin ? s.box[gesture.floatWin].h : uiStyle(s, "window_limits", UiStyleKey::Height);
             if (s.parentOf[gesture.floatWin] != 0) {
                 uiReparent(s, gesture.floatWin, 0);
             }
@@ -254,11 +250,10 @@ void uiChromePark(UiState& s, uint16_t home, const UiChromeGesture& gesture) {
 }
 
 uint16_t uiDragFoldHeader(UiState& s, uint16_t parent, const char* title) {
-    const uint16_t header = uiSpawnTemplate(s, parent, "core/row", "fold_title");
+    const uint16_t header = uiSpawnTemplate(s, parent, "core/row_full", "fold_title");
     if (header == kUiNone) {
         return kUiNone;
     }
-    uiSetWidthPercent(s, header, 100.0f);
     s.ent[header].set<UiTitleBar>({});
     (void)uiLabel(s, header, title);
     (void)uiSpacer(s, header);
@@ -269,13 +264,12 @@ uint16_t uiDragFoldHeader(UiState& s, uint16_t parent, const char* title) {
 }
 
 uint16_t uiTitleBar(UiState& s, uint16_t parent, const char* title, UiClickFn onClose, void* user, float height) {
-    const uint16_t bar = uiSpawnTemplate(s, parent, "core/row", "title_bar");
+    const uint16_t bar = uiSpawnTemplate(s, parent, "core/row_full", "title_bar");
     if (bar == kUiNone) {
         return kUiNone;
     }
-    uiSetWidthPercent(s, bar, 100.0f);
     if (height > 0.0f) {
-        uiSetSize(s, bar, -1.0f, height);
+        uiSetHeight(s, bar, height);
     }
     s.ent[bar].set<UiTitleBar>({});
     (void)uiLabel(s, bar, title);

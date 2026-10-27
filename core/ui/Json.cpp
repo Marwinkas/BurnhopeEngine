@@ -66,6 +66,12 @@ bool tokenNamed(const char* word, UiToken& out) {
         {"Scroll", UiToken::Scroll},
         {"Chrome", UiToken::Chrome},
         {"Accent", UiToken::Accent},
+        {"Accent1", UiToken::Accent1},
+        {"Accent2", UiToken::Accent2},
+        {"ToolActive", UiToken::ToolActive},
+        {"AxisX", UiToken::AxisX},
+        {"AxisY", UiToken::AxisY},
+        {"AxisZ", UiToken::AxisZ},
     };
     for (const Pair& row : table) {
         if (strSame(word, row.name)) {
@@ -89,7 +95,10 @@ void readSize(Cur& c, UiSize& mode, float& value) {
         if (!parseUiString(c, buf, 16, n)) {
             return;
         }
-        if (n > 0 && buf[n - 1] == '%') {
+        if (n == 3 && buf[0] == 'f' && buf[1] == 'i' && buf[2] == 't') {
+            mode = UiSize::Fit;
+            value = 0.0f;
+        } else if (n > 0 && buf[n - 1] == '%') {
             mode = UiSize::Percent;
             (void)parseSizeFloat(buf, buf + n - 1, value);
         } else {

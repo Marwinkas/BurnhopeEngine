@@ -131,13 +131,71 @@ TEST_CASE("style sheet resolves tokens, extends, and keeps the built-in value fo
     CHECK(uiStyle(state, "child", UiStyleKey::Gap) == 3.0f);
     CHECK(uiStyle(state, "child", UiStyleKey::Alpha) == 0.5f);
     CHECK(uiStyle(state, "prop_row", UiStyleKey::Height) == 50.0f);
-    CHECK(uiStyle(state, "prop_row", UiStyleKey::LabelW) == 135.0f);
+    CHECK(uiStyle(state, "prop_label", UiStyleKey::Width) == 135.0f);
     CHECK(uiStyleFind(state, "nope") == nullptr);
     UiStyleClass merged;
     CHECK(uiStyleResolve(state, "prop_row", merged));
     CHECK(merged.value[static_cast<size_t>(UiStyleKey::Height)] == 50.0f);
-    CHECK(merged.value[static_cast<size_t>(UiStyleKey::Gap)] == 12.0f);
+    CHECK(uiStyleResolve(state, "prop_slot", merged));
+    CHECK(merged.value[static_cast<size_t>(UiStyleKey::PadL)] == 12.0f);
     CHECK(!uiStyleResolve(state, "nope", merged));
+}
+
+TEST_CASE("a class names palette tones and the metric keys the draw hooks read, and extends and overlays keep them") {
+    UiState state;
+    uiWidgetsInit(state);
+    const char* doc = R"({"classes":{"lined":{"lineH":18,"caretInset":7,"imeAlpha":0.9,"steps":16,"bands":24,"zoomIn":0.85,"fillBg":"accent","todayBg":"accent1","errorBg":"accent2"},
+                                     "child":{"extends":"lined","lineH":20,"hintBg":"muted"}}})";
+    CHECK(uiStyleLoad(state, doc));
+    CHECK(uiStyle(state, "lined", UiStyleKey::LineH) == 18.0f);
+    CHECK(uiStyle(state, "lined", UiStyleKey::CaretInset) == 7.0f);
+    CHECK(uiStyle(state, "lined", UiStyleKey::ImeAlpha) == 0.9f);
+    CHECK(uiStyle(state, "lined", UiStyleKey::Steps) == 16.0f);
+    CHECK(uiStyle(state, "lined", UiStyleKey::Bands) == 24.0f);
+    CHECK(uiStyle(state, "lined", UiStyleKey::ZoomIn) == 0.85f);
+    CHECK(uiStyleTone(state, "lined", UiStyleTone::Fill) == UiToken::Accent);
+    CHECK(uiStyleTone(state, "lined", UiStyleTone::Today) == UiToken::Accent1);
+    CHECK(uiStyleTone(state, "lined", UiStyleTone::Error) == UiToken::Accent2);
+    CHECK(uiStyle(state, "child", UiStyleKey::LineH) == 20.0f);
+    CHECK(uiStyle(state, "child", UiStyleKey::Steps) == 16.0f);
+    CHECK(uiStyleTone(state, "child", UiStyleTone::Fill) == UiToken::Accent);
+    CHECK(uiStyleTone(state, "child", UiStyleTone::Hint) == UiToken::Muted);
+    CHECK(uiStyleLoadOver(state, R"({"classes":{"lined":{"lineH":21,"markBg":"text"}}})"));
+    CHECK(uiStyle(state, "lined", UiStyleKey::LineH) == 21.0f);
+    CHECK(uiStyle(state, "lined", UiStyleKey::Steps) == 16.0f);
+    CHECK(uiStyleTone(state, "lined", UiStyleTone::Fill) == UiToken::Accent);
+    CHECK(uiStyleTone(state, "lined", UiStyleTone::Mark) == UiToken::Text);
+    CHECK(std::strcmp(uiStyleToneName(UiStyleTone::MarkActive), "markActiveBg") == 0);
+    CHECK(std::strcmp(uiStyleKeyName(UiStyleKey::Bands), "bands") == 0);
+}
+
+TEST_CASE("styles.json carries the draw-hook metrics and the sheet value wins over the number the code used to hold") {
+    UiState state;
+    uiWidgetsInit(state);
+    CHECK(uiStyleLoadAsset(state, "assets/ui/styles.json"));
+    using K = UiStyleKey;
+    CHECK(uiStyle(state, "input_field", K::CaretW) == 1.5f);
+    CHECK(uiStyle(state, "input_field", K::SelectionInset) == 6.0f);
+    CHECK(uiStyle(state, "input_field", K::BlinkRate) == 1.6f);
+    CHECK(uiStyle(state, "check_box", K::Width) == 22.0f);
+    CHECK(uiStyle(state, "check_box", K::Inner) == 10.0f);
+    CHECK(uiStyle(state, "check_box", K::CompactW) == 40.0f);
+    CHECK(uiStyle(state, "slider", K::ThumbPad) == 4.0f);
+    CHECK(uiStyle(state, "curve", K::Steps) == 16.0f);
+    CHECK(uiStyle(state, "gradient", K::Bands) == 24.0f);
+    CHECK(uiStyle(state, "image_viewer", K::ZoomIn) == 0.85f);
+    CHECK(uiStyle(state, "image_viewer", K::ZoomOut) == 1.18f);
+    CHECK(uiStyle(state, "dock_zone", K::Trigger) == 0.28f);
+    CHECK(uiStyle(state, "dock_zone", K::HintFrac) == 0.34f);
+    CHECK(uiStyle(state, "window_limits", K::MinW) == 220.0f);
+    CHECK(uiStyle(state, "window_limits", K::Height) == 180.0f);
+    CHECK(uiStyle(state, "drag_mark", K::Border) == 1.0f);
+    // Drift: the sheet is the authority, not the literal the widget used to carry.
+    CHECK(uiStyle(state, "checkbox", K::PadL) == 36.0f);
+    CHECK(uiStyle(state, "search_field", K::Width) == 160.0f);
+    CHECK(uiStyle(state, "list", K::RowH) == 28.0f);
+    CHECK(uiStyle(state, "color_flat", K::Pad) == 12.0f);
+    CHECK(uiStyle(state, "color_flat", K::Gap) == 8.0f);
 }
 
 TEST_CASE("style sheet rejects bad documents and leaves the loaded sheet alone") {
@@ -191,7 +249,7 @@ TEST_CASE("a style sheet value moves the property row") {
 TEST_CASE("styles.json numbers move the label column and the vector row") {
     UiState state;
     uiWidgetsInit(state);
-    CHECK(uiStyleLoadOver(state, R"({"classes":{"prop_row":{"labelW":160,"gap":20},"vector_field":{"h":32},"vector_row":{"badgeW":16}}})"));
+    CHECK(uiStyleLoadOver(state, R"({"classes":{"prop_label":{"w":160},"prop_slot":{"padL":20},"vector_cap_x":{"w":16,"h":32}}})"));
     const uint16_t root = spawn(state, kUiNone, px(900.0f, 600.0f), paintRgb(0.1f, 0.1f, 0.1f));
     const uint16_t host = uiPropHost(state, root);
     const UiPropVec3 vec = uiPropVec3(state, host, "Pos", 1.0f, 2.0f, 3.0f, -10.0f, 10.0f, 0.1f);

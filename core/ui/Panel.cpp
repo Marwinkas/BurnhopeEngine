@@ -3,6 +3,7 @@
 #include "ui/Interaction.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 #include "ui/Template.hpp"
 
 #include <bit>
@@ -45,6 +46,13 @@ void uiSetSize(UiState& s, uint16_t id, float w, float h) {
     }
 }
 
+void uiSetCap(UiState& s, uint16_t id, UiCap cap, const char* cls) {
+    if (UiPaint* paint = paintOf(s, id)) {
+        paintCap(*paint, cap, uiStyle(s, cls, UiStyleKey::Radius));
+        s.visualDirty = true;
+    }
+}
+
 void uiSetWidthPercent(UiState& s, uint16_t id, float percent) {
     if (UiFlex* flex = flexOf(s, id)) {
         flex->widthMode = UiSize::Percent;
@@ -75,6 +83,58 @@ void uiSetGrow(UiState& s, uint16_t id, float grow, float shrink, float minW) {
 
 void uiSetGap(UiState& s, uint16_t id, float gap) {
     if (UiFlex* flex = flexOf(s, id)) {
+        flex->gap = gap;
+        s.layoutDirty = true;
+    }
+}
+
+void uiApplyLayout(UiState& s, uint16_t id, const UiLayoutSpec& spec) {
+    UiFlex* flex = flexOf(s, id);
+    if (flex == nullptr) {
+        return;
+    }
+    if (spec.box) {
+        flex->direction = spec.row ? UiFlexDir::Row : UiFlexDir::Column;
+        flex->wrap = spec.wrap ? UiFlexWrap::Wrap : UiFlexWrap::NoWrap;
+        flex->gap = spec.gap;
+        flex->pad = spec.pad;
+        flex->padL = spec.padL;
+        flex->padR = spec.padR;
+        flex->padT = spec.padT;
+        flex->padB = spec.padB;
+    }
+    flex->grow = spec.grow;
+    flex->shrink = spec.shrink < 0.0f ? flex->shrink : spec.shrink;
+    if (spec.wp > 0.0f) {
+        flex->widthMode = UiSize::Percent;
+        flex->width = spec.wp;
+    } else if (spec.w > 0.0f) {
+        flex->widthMode = UiSize::Px;
+        flex->width = spec.w;
+    }
+    if (spec.hp > 0.0f) {
+        flex->heightMode = UiSize::Percent;
+        flex->height = spec.hp;
+    } else if (spec.h > 0.0f) {
+        flex->heightMode = UiSize::Px;
+        flex->height = spec.h;
+    }
+    flex->minW = spec.minW > 0.0f ? spec.minW : flex->minW;
+    flex->minH = spec.minH > 0.0f ? spec.minH : flex->minH;
+    flex->posX = spec.posX;
+    flex->posY = spec.posY;
+    flex->position = spec.absolute ? UiPosition::Absolute : flex->position;
+    flex->align = spec.alignCenter ? UiAlign::Center : flex->align;
+    flex->self = spec.selfCenter ? UiAlignSelf::Center : flex->self;
+    flex->overflow = spec.scroll ? UiOverflow::Scroll : flex->overflow;
+    s.layoutDirty = true;
+}
+
+void uiSetRowCentered(UiState& s, uint16_t id, float gap) {
+    if (UiFlex* flex = flexOf(s, id)) {
+        flex->direction = UiFlexDir::Row;
+        flex->align = UiAlign::Center;
+        flex->justify = UiJustify::Center;
         flex->gap = gap;
         s.layoutDirty = true;
     }
@@ -181,7 +241,7 @@ uint32_t uiEmitPanel(
         filled.flags |= kUiFlagTransform;
         uiPackTransform(filled.pad0, filled.pad1, fillAngle, paint->scaleX, paint->scaleY, paint->bright, paint->contrast);
     }
-    if (paint->borderW > 0.4f) {
+    if (paint->borderW > kUiBorderMinW) {
         n = emitMark(
             dst, n, cap, box.x, box.y, box.w, box.h,
             paint->br, paint->bg, paint->bb, a > 0.2f ? a : 1.0f,
@@ -211,30 +271,11 @@ uint32_t uiEmitPanel(
                 iconX = box.x;
             }
         }
-        UiPrimitive& icon = dst[n++];
-        icon = {};
-        icon.posX = iconX;
-        icon.posY = box.y + (box.h - side) * 0.5f;
-        icon.sizeX = side;
-        icon.sizeY = side;
-        const bool glyph = paint->a <= 0.02f;
+        const bool glyph = paint->a <= kUiInvisibleAlpha;
         const bool tool = paint->plate != 0;
-        icon.color[0] = glyph ? (tool ? r : paint->r) : s.look.text[0];
-        icon.color[1] = glyph ? (tool ? g : paint->g) : s.look.text[1];
-        icon.color[2] = glyph ? (tool ? b : paint->b) : s.look.text[2];
-        icon.color[3] = glyphA > 0.0f ? glyphA : 1.0f;
-        icon.texId = paint->icon;
-        icon.flags = kUiFlagIcon;
-        if (paint->angle != 0.0f) {
-            icon.pad1 = std::bit_cast<uint32_t>(paint->angle);
-        }
-        if (clip != nullptr) {
-            icon.flags |= kUiFlagClip;
-            icon.extra[1] = clip->x;
-            icon.extra[2] = clip->y;
-            icon.extra[3] = clip->w;
-            icon.pad0 = std::bit_cast<uint32_t>(clip->h);
-        }
+        n = emitIcon(dst, n, cap, iconX, box.y + (box.h - side) * 0.5f, side,
+            glyph ? (tool ? r : paint->r) : s.look.text[0], glyph ? (tool ? g : paint->g) : s.look.text[1],
+            glyph ? (tool ? b : paint->b) : s.look.text[2], glyphA > 0.0f ? glyphA : 1.0f, paint->icon, paint->angle, clip);
     }
     return n;
 }

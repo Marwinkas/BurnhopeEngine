@@ -37,9 +37,7 @@ void uiThumb(UiState& s, uint16_t id, uint8_t photoSlot, UiIcon fallback) {
         paint->borderW = 0.0f;
         paint->shadow = 0.0f;
         paint->icon = static_cast<uint8_t>(fallback);
-        paint->r = s.look.text[0];
-        paint->g = s.look.text[1];
-        paint->b = s.look.text[2];
+        paintFillToken(s.look, *paint, UiToken::Text);
     }
 }
 

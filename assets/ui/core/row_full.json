@@ -1,0 +1,4 @@
+{
+  "role": "row",
+  "flex": { "dir": "row", "align": "center", "shrink": 0, "wp": 100 }
+}

@@ -118,14 +118,10 @@ void fieldMark(UiState& s, uint16_t id) {
     }
     const char* msg = "";
     if (fieldProblem(*field, msg)) {
-        paint->br = s.look.accent[2][0];
-        paint->bg = s.look.accent[2][1];
-        paint->bb = s.look.accent[2][2];
+        paintBorderToken(s.look, *paint, uiStyleTone(s, "input_field", UiStyleTone::Error));
         paint->borderW = uiStyle(s, "input_field", UiStyleKey::ErrorBorder);
     } else {
-        paint->br = s.look.muted[0];
-        paint->bg = s.look.muted[1];
-        paint->bb = s.look.muted[2];
+        paintBorderToken(s.look, *paint, uiStyleTone(s, "input_field", UiStyleTone::Line));
         paint->borderW = uiStyle(s, "input_field", UiStyleKey::Border);
     }
     s.visualDirty = true;
@@ -577,7 +573,7 @@ bool fieldHandleKey(UiState& s, uint16_t id, const InputFrame& in) {
             const float viewW = s.box[id].w - field->padL - field->padR;
             FieldRow rows[16]{};
             const int rn = fieldRows(s, *field, viewW, rows, 16);
-            const float lineH = s.look.glyphH > 1.0f ? s.look.glyphH : 18.0f;
+            const float lineH = s.look.lineH();
             int line = 0;
             for (int li = 0; li < rn; ++li) {
                 if (field->caret >= rows[li].begin && field->caret <= rows[li].end) {

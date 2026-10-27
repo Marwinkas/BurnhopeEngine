@@ -27,6 +27,12 @@ enum class UiToken : uint8_t {
     Scroll,
     Chrome,
     Accent,
+    Accent1, // look.accent[1]
+    Accent2, // look.accent[2]
+    ToolActive, // look.toolActive
+    AxisX, // X / U cap ink, fixed in every theme
+    AxisY,
+    AxisZ,
 };
 
 enum class UiRamp : uint8_t {
@@ -124,7 +130,13 @@ struct UiLook {
     float popupAlpha = 0.88f;
     float popupBorder = 1.0f;
     float popupRadius = -1.0f;
+
+    // One line of text: the glyph height, or kUiLineFallback before a font sets it.
+    [[nodiscard]] float lineH() const noexcept { return glyphH > 1.0f ? glyphH : 18.0f; }
 };
+
+// A rect narrower than this in either side is not worth a bar.
+constexpr float kUiBarMinSide = 0.5f;
 
 // A fill at or below this alpha is invisible: it neither blocks the pointer nor casts a shadow. A border thinner than
 // kUiBorderMinW is not drawn.
@@ -158,6 +170,9 @@ struct UiPaintStyle {
     float mapRadius = 3.0f;
     float mapMinW = 120.0f;       // smallest image box that shows a minimap
     float mapMinH = 90.0f;
+    float zoomIn = 0.85f;         // "image_viewer": view scale per wheel notch in, out, and the smallest view
+    float zoomOut = 1.18f;
+    float minView = 0.08f;
 };
 
 // Множитель альфы узла и его детей. 1 — без изменений.
@@ -184,6 +199,13 @@ static_assert(std::is_trivially_copyable_v<UiPaint>);
 static_assert(std::is_trivially_copyable_v<UiLook>);
 static_assert(std::is_trivially_copyable_v<UiAnim>);
 
+// X/Y/Z (and U/V) axis caps keep their conventional colors in every theme.
+inline constexpr float kUiAxis[3][3]{
+    {0.90f, 0.24f, 0.20f},
+    {0.28f, 0.76f, 0.30f},
+    {0.26f, 0.50f, 0.95f},
+};
+
 inline void tokenRgb(const UiLook& look, UiToken token, float& r, float& g, float& b) noexcept {
     const float* src = look.window;
     switch (token) {
@@ -204,11 +226,62 @@ inline void tokenRgb(const UiLook& look, UiToken token, float& r, float& g, floa
     case UiToken::Scroll: src = look.content; break;
     case UiToken::Chrome: src = look.chrome; break;
     case UiToken::Accent: src = look.accent[0]; break;
+    case UiToken::Accent1: src = look.accent[1]; break;
+    case UiToken::Accent2: src = look.accent[2]; break;
+    case UiToken::ToolActive: src = look.toolActive; break;
+    case UiToken::AxisX: src = kUiAxis[0]; break;
+    case UiToken::AxisY: src = kUiAxis[1]; break;
+    case UiToken::AxisZ: src = kUiAxis[2]; break;
     default: break;
     }
     r = src[0];
     g = src[1];
     b = src[2];
+}
+
+struct UiRgb {
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+};
+
+// The theme colour of `token` as one value, for code that tints a rect or a glyph run.
+inline UiRgb tokenColor(const UiLook& look, UiToken token) noexcept {
+    UiRgb out;
+    tokenRgb(look, token, out.r, out.g, out.b);
+    return out;
+}
+
+// The only ways to recolour a paint that is already live. Token variants follow the theme; the Rgb variants are for
+// colours that belong to the data (a swatch, a hue wheel), which then carry UiToken::Custom.
+inline void paintFillToken(const UiLook& look, UiPaint& paint, UiToken token) noexcept { tokenRgb(look, token, paint.r, paint.g, paint.b); }
+inline void paintBorderToken(const UiLook& look, UiPaint& paint, UiToken token) noexcept { tokenRgb(look, token, paint.br, paint.bg, paint.bb); }
+inline void paintHoverToken(const UiLook& look, UiPaint& paint, UiToken token, float alpha) noexcept {
+    tokenRgb(look, token, paint.hr, paint.hg, paint.hb);
+    paint.ha = alpha;
+}
+inline void paintFillRgb(UiPaint& paint, UiRgb color) noexcept {
+    paint.r = color.r;
+    paint.g = color.g;
+    paint.b = color.b;
+}
+
+// Which end of a pill a node rounds: Left keeps the top-left and bottom-left corners, Right the other two, so two
+// neighbours (an axis cap and its number) read as one pill.
+enum class UiCap : uint8_t { None = 0, Left = 1, Right = 2 };
+
+inline void paintCap(UiPaint& paint, UiCap cap, float radius) noexcept {
+    paint.radius = cap == UiCap::Right ? 0.0f : radius;
+    paint.radiusTr = cap == UiCap::Left ? 0.0f : radius;
+    paint.radiusBr = cap == UiCap::Left ? 0.0f : radius;
+    paint.radiusBl = cap == UiCap::Right ? 0.0f : radius;
+}
+
+// Hover colour: the fill brightened by `gain`, clamped to white.
+inline void paintHoverGain(UiPaint& paint, float gain) noexcept {
+    paint.hr = paint.r * gain < 1.0f ? paint.r * gain : 1.0f;
+    paint.hg = paint.g * gain < 1.0f ? paint.g * gain : 1.0f;
+    paint.hb = paint.b * gain < 1.0f ? paint.b * gain : 1.0f;
 }
 
 inline float tokenRadius(const UiLook& look, UiToken token) noexcept {
@@ -276,13 +349,6 @@ inline UiPaint paintPopup(const UiLook& look) noexcept {
     tokenRgb(look, UiToken::Muted, out.br, out.bg, out.bb);
     return out;
 }
-
-// X/Y/Z (and U/V) axis caps keep their conventional colors in every theme.
-inline constexpr float kUiAxis[3][3]{
-    {0.90f, 0.24f, 0.20f},
-    {0.28f, 0.76f, 0.30f},
-    {0.26f, 0.50f, 0.95f},
-};
 
 // Neutral tint constants for paints that carry no theme color (photo tint, ramp bases, marker rings).
 inline constexpr float kUiWhite[3]{1.0f, 1.0f, 1.0f};

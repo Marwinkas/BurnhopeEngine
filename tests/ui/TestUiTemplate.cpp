@@ -165,6 +165,63 @@ TEST_CASE("a part may use an earlier blueprint and repeat, and a part below the 
     }
 }
 
+TEST_CASE("a blueprint root may size itself in percent and bleed through its parent's padding") {
+    Shipped rig;
+    UiState& state = rig.state;
+    CHECK(loadOne(state, "core/edge", R"({"class":"btn_default","flex":{"shrink":0,"wp":100,"bleed":"x"}})"));
+    CHECK(!loadOne(state, "core/edge", R"({"flex":{"bleed":"z"}})"));
+    UiFlex frame = px(200.0f, 100.0f);
+    frame.pad = 10.0f;
+    const uint16_t root = spawn(state, kUiNone, frame, paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t edge = uiSpawnTemplate(state, root, "core/edge");
+    CHECK(edge != kUiNone);
+    const UiFlex* flex = state.ent[edge].try_get<UiFlex>();
+    CHECK(flex != nullptr);
+    if (flex != nullptr) {
+        CHECK(flex->widthMode == UiSize::Percent);
+        CHECK(flex->bleed == kUiBleedX);
+        CHECK(flex->marginL == 0.0f);
+    }
+    uiLayout(state, 200.0f, 100.0f);
+    CHECK(uiNodeBox(state, edge).x == uiNodeBox(state, root).x);
+    CHECK(uiNodeBox(state, edge).w == 180.0f);
+    CHECK(uiNodeBox(state, edge).y == uiNodeBox(state, root).y + 10.0f);
+}
+
+TEST_CASE("a fit width follows the label: text advance plus both paddings") {
+    Shipped rig;
+    UiState& state = rig.state;
+    CHECK(loadOne(state, "core/fit", R"({"flex":{"w":"fit","shrink":0,"padL":5,"padR":7}})"));
+    CHECK(!loadOne(state, "core/fit", R"({"flex":{"w":"wide"}})"));
+    const uint16_t root = spawn(state, kUiNone, px(400.0f, 100.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    const uint16_t node = uiSpawnTemplate(state, root, "core/fit");
+    CHECK(node != kUiNone);
+    uiText(state, node, "Go");
+    const UiFlex* flex = state.ent[node].try_get<UiFlex>();
+    CHECK(flex != nullptr);
+    if (flex == nullptr) {
+        return;
+    }
+    CHECK(flex->widthMode == UiSize::Fit);
+    CHECK(flex->width == doctest::Approx(uiMeasure(state, "Go", 2, 2) + 12.0f));
+    uiText(state, node, "Longer label");
+    CHECK(state.ent[node].try_get<UiFlex>()->width == doctest::Approx(uiMeasure(state, "Longer label", 12, 12) + 12.0f));
+    uiLayout(state, 400.0f, 100.0f);
+    CHECK(uiNodeBox(state, node).w == doctest::Approx(state.ent[node].try_get<UiFlex>()->width));
+}
+
+TEST_CASE("scrollY shifts a node's content up without touching its margins") {
+    Shipped rig;
+    UiState& state = rig.state;
+    const uint16_t root = spawn(state, kUiNone, px(200.0f, 100.0f), paintRgb(0.1f, 0.1f, 0.1f));
+    UiFlex inner = px(200.0f, 50.0f);
+    inner.scrollY = 20.0f;
+    const uint16_t node = spawn(state, root, inner, paintRgb(0.2f, 0.2f, 0.2f));
+    uiLayout(state, 200.0f, 100.0f);
+    CHECK(uiNodeBox(state, node).y == uiNodeBox(state, root).y - 20.0f);
+    CHECK(state.ent[node].try_get<UiFlex>()->marginT == 0.0f);
+}
+
 TEST_CASE("a spawn-time class overrides the keys it sets and keeps the blueprint's others") {
     Shipped rig;
     UiState& state = rig.state;

@@ -33,6 +33,7 @@ void addFocusable(UiState& s, uint16_t id) { s.ent[id].add<UiFocusable>(); }
 void addTextInput(UiState& s, uint16_t id) { s.ent[id].add<UiTextInput>(); }
 void addNoHit(UiState& s, uint16_t id) { s.ent[id].add<UiNoHit>(); }
 void addPass(UiState& s, uint16_t id) { s.ent[id].add<UiPass>(); }
+void addPopup(UiState& s, uint16_t id) { s.ent[id].add<UiPopup>(); }
 
 bool addTrait(UiTraitTable& table, const char* name, UiTraitFn fn) {
     if (name == nullptr || name[0] == '\0' || std::strlen(name) >= sizeof(table.name[0])) {
@@ -57,7 +58,8 @@ UiTraitTable& traitTable(UiState& s) {
     if (table.count == 0) {
         [[maybe_unused]] const bool seeded = addTrait(table, "hoverable", addHoverable) && addTrait(table, "focusable", addFocusable) &&
                             addTrait(table, "text_input", addTextInput) && addTrait(table, "pressable", nullptr) &&
-                            addTrait(table, "draggable", nullptr) && addTrait(table, "nohit", addNoHit) && addTrait(table, "pass", addPass);
+                            addTrait(table, "draggable", nullptr) && addTrait(table, "nohit", addNoHit) && addTrait(table, "pass", addPass) &&
+                            addTrait(table, "popup", addPopup);
         BH_ASSERT(seeded, "built-in blueprint traits exceed the trait table");
     }
     return table;
@@ -76,6 +78,8 @@ struct Resolved {
     float borderDim = -1.0f; // border colour = fill colour times this; -1 keeps the paint's default
     float hoverAlpha = -1.0f; // >= 0: the node hovers to its own colour at this alpha
     float ramp = 0.0f;       // UiRamp of a colour-ramp panel (wheel, value bar, swatch)
+    float cap = 0.0f;        // UiCap: round only one end
+    float hoverGain = 0.0f;  // > 0: the node hovers to its fill brightened by this factor
     float iconLeft = -1.0f;   // >= 0: a labelled node draws its icon this far from the left edge, "icon" px wide
     float iconSide = 0.0f;
     uint8_t plate = 0;
@@ -116,6 +120,9 @@ void mergeClass(Resolved& part, const UiStyleClass& cls) {
     }
     if (has(UiStyleKey::PadR)) {
         flex.padR = get(UiStyleKey::PadR);
+    }
+    if (has(UiStyleKey::PadV)) {
+        flex.padT = flex.padB = get(UiStyleKey::PadV);
     }
     if (has(UiStyleKey::Gap)) {
         flex.gap = get(UiStyleKey::Gap);
@@ -158,6 +165,12 @@ void mergeClass(Resolved& part, const UiStyleClass& cls) {
     }
     if (has(UiStyleKey::Ramp)) {
         part.ramp = get(UiStyleKey::Ramp);
+    }
+    if (has(UiStyleKey::Cap)) {
+        part.cap = get(UiStyleKey::Cap);
+    }
+    if (has(UiStyleKey::HoverGain)) {
+        part.hoverGain = get(UiStyleKey::HoverGain);
     }
     if (has(UiStyleKey::IconLeft)) {
         part.iconLeft = get(UiStyleKey::IconLeft);
@@ -211,6 +224,12 @@ UiPaint partPaint(const UiLook& look, const Resolved& part) {
         paint.hg = paint.g;
         paint.hb = paint.b;
         paint.ha = part.hoverAlpha;
+    }
+    if (part.cap > 0.0f) {
+        paintCap(paint, static_cast<UiCap>(static_cast<uint8_t>(part.cap)), radius);
+    }
+    if (part.hoverGain > 0.0f) {
+        paintHoverGain(paint, part.hoverGain);
     }
     paint.idleToken = part.bg;
     paint.activeToken = part.activeBg;
@@ -368,6 +387,13 @@ bool parseFlexBlock(Load& load, Cur& c, UiTplPart& part, bool root) {
             return number(flex.shrink);
         }
         // A part below the root is placed by its own blueprint, so it may state how it sits in its parent.
+        if (std::strcmp(key, "w") == 0) {
+            if (wordOf(c, {"fit"}) < 0) {
+                return fail(load, valueAt, "a blueprint's width is \"fit\" or lives in the style class");
+            }
+            flex.widthMode = UiSize::Fit;
+            return true;
+        }
         if (!root && std::strcmp(key, "grow") == 0) {
             return number(flex.grow);
         }
@@ -378,7 +404,7 @@ bool parseFlexBlock(Load& load, Cur& c, UiTplPart& part, bool root) {
             }
             return w >= 0;
         }
-        if (!root && (std::strcmp(key, "wp") == 0 || std::strcmp(key, "hp") == 0)) {
+        if (std::strcmp(key, "wp") == 0 || std::strcmp(key, "hp") == 0) {
             const bool wide = key[0] == 'w';
             float percent = 0.0f;
             if (!number(percent)) {
@@ -387,6 +413,21 @@ bool parseFlexBlock(Load& load, Cur& c, UiTplPart& part, bool root) {
             (wide ? flex.widthMode : flex.heightMode) = UiSize::Percent;
             (wide ? flex.width : flex.height) = percent;
             return true;
+        }
+        if (std::strcmp(key, "position") == 0) {
+            if (wordOf(c, {"relative"}) < 0) {
+                return fail(load, valueAt, "a blueprint may only be \"relative\" (the anchor of absolute descendants); other placement belongs to the instance");
+            }
+            flex.position = UiPosition::Relative;
+            return true;
+        }
+        if (std::strcmp(key, "bleed") == 0) {
+            const int w = word({"x", "y", "xy"});
+            static constexpr uint8_t kBleeds[] = {kUiBleedX, kUiBleedY, kUiBleedX | kUiBleedY};
+            if (w >= 0) {
+                flex.bleed = kBleeds[w];
+            }
+            return w >= 0;
         }
         if (std::strcmp(key, "pad") == 0) {
             return number(flex.pad);
@@ -403,7 +444,7 @@ bool parseFlexBlock(Load& load, Cur& c, UiTplPart& part, bool root) {
         if (std::strcmp(key, "padB") == 0) {
             return number(flex.padB);
         }
-        return fail(load, keyAt, "a blueprint root's flex may hold dir, align, justify, wrap, gap, shrink and pad* (parts below it also grow, self, wp, hp); sizes live in the style class and placement on the instance, not", key);
+        return fail(load, keyAt, "a blueprint root's flex may hold dir, align, justify, wrap, gap, shrink, wp, hp, bleed and pad* (parts below it also grow, self); sizes live in the style class and placement on the instance, not", key);
     });
 }
 
@@ -713,7 +754,7 @@ bool uiTemplatesLoadAsset(UiState& s, const char* manifest) {
             while (c.p < c.end && *c.p != ']') {
                 uint32_t n = 0;
                 if (count >= kUiTemplateCap || !json::parseStringCap(c, names[count], sizeof(names[count]), n)) {
-                    return fail(load, c.p, "a template name has at most 23 characters, and the manifest lists at most 32");
+                    return fail(load, c.p, "a template name has at most 23 characters, and the manifest lists at most 48");
                 }
                 ++count;
                 json::skip(c);

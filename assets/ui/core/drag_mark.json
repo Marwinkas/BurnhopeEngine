@@ -1,0 +1,6 @@
+{
+  "role": "drag_mark",
+  "class": "drag_mark",
+  "flex": { "shrink": 0 },
+  "traits": ["nohit", "popup"]
+}

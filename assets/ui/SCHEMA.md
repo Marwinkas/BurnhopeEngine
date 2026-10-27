@@ -22,6 +22,7 @@ Press F5 in the running editor: theme, sheet, blueprints and every layout are re
   `"radius": "$theme.radius"` / `"$theme.radiusSm"` follows the active palette instead of a fixed number.
 - `extends` copies an earlier class first; the class's own keys then win. A sheet holds at most 192 classes; names are at
   most 23 characters; the 128-bit key mask limits the key list (`core/ui/StyleSheet.hpp`, `UiStyleKey`, `uiStyleKeyName`).
+- Shape keys: `padV` (top and bottom padding), `cap` (1 rounds only the left end, 2 only the right end, so two neighbours read as one pill), `hoverGain` (hover colour = fill times this). The axis tokens `axisX axisY axisZ` keep their colours in every theme.
 - Token-valued keys: `bg` (the fill), `activeBg` (the fill while `uiSetActive(node, true)`), `borderBg` (the border).
   Names: `window dock title side content button field menu text muted item accent close chrome slider check preview`.
 - The sheet is the only copy of these numbers. `uiStyle(state, "class", UiStyleKey::Key)` reads it; a missing class or
@@ -47,7 +48,7 @@ for `use`. A blueprint:
   "slots": { "icon": "icon" } }
 ```
 
-- The root's `flex` may hold `dir align justify wrap gap shrink pad*`. Sizes live in the class; placement (`grow`, `self`,
+- The root's `flex` may hold `dir align justify wrap gap shrink pad* position` (`position` is only ever `"relative"`, the anchor of absolute descendants). Sizes live in the class; placement (`grow`, `self`,
   `w`, `h`, margins, position) belongs to whoever spawns the blueprint. A part below the root may also carry `grow self
   wp hp`, because its own blueprint places it.
 - The class is read when the blueprint is spawned, so a sheet reload shows on the next spawn. `uiSpawnTemplate(state,

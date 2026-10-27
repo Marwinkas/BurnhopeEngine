@@ -27,10 +27,42 @@ void uiSetToken(UiState& s, uint16_t id, UiToken token);
 // Node facade: callers never reach into the flex or paint components. A negative number leaves that value as it is.
 // uiSetSize: 0 is auto, a positive number is pixels.
 void uiSetSize(UiState& s, uint16_t id, float w, float h);
+// Rounds only one end of the node with the Radius of style class `cls` (see UiCap).
+void uiSetCap(UiState& s, uint16_t id, UiCap cap, const char* cls);
 void uiSetWidthPercent(UiState& s, uint16_t id, float percent);
 void uiSetPad(UiState& s, uint16_t id, float pad);
 void uiSetGrow(UiState& s, uint16_t id, float grow, float shrink, float minW = -1.0f);
 void uiSetGap(UiState& s, uint16_t id, float gap);
+// Per-instance placement of a spawned blueprint, as a layout file states it. A zero size, minimum or position leaves the
+// blueprint's value; `shrink` below zero does too. `box` also applies direction, gap and padding (a panel, not a placed part).
+struct UiLayoutSpec {
+    float w = 0.0f;
+    float h = 0.0f;
+    float wp = 0.0f;
+    float hp = 0.0f;
+    float grow = 0.0f;
+    float shrink = -1.0f;
+    float gap = 0.0f;
+    float pad = 0.0f;
+    float padL = 0.0f;
+    float padR = 0.0f;
+    float padT = 0.0f;
+    float padB = 0.0f;
+    float minW = 0.0f;
+    float minH = 0.0f;
+    float posX = 0.0f;
+    float posY = 0.0f;
+    bool box = false;
+    bool row = false;
+    bool wrap = false;
+    bool absolute = false;
+    bool alignCenter = false;
+    bool selfCenter = false;
+    bool scroll = false;
+};
+void uiApplyLayout(UiState& s, uint16_t id, const UiLayoutSpec& spec);
+// Row layout a button asks for: centred content with the "btn_row" gap.
+void uiSetRowCentered(UiState& s, uint16_t id, float gap);
 // Adds `delta` to the pixel width, never going below `minW`.
 void uiAddWidth(UiState& s, uint16_t id, float delta, float minW);
 [[nodiscard]] float uiStyleWidth(const UiState& s, uint16_t id, float fallback);

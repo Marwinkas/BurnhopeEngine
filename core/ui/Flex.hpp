@@ -6,11 +6,14 @@
 namespace burnhope {
 
 constexpr float kUiGapUnset = -1.0f;
+constexpr uint8_t kUiBleedX = 1;
+constexpr uint8_t kUiBleedY = 2;
 
 enum class UiSize : uint8_t {
     Auto = 0,
     Px = 1,
     Percent = 2,
+    Fit = 3, // a px width that uiText recomputes from the label: text advance plus padL and padR (which hold any icon)
 };
 
 enum class UiFlexDir : uint8_t {
@@ -141,6 +144,8 @@ struct UiFlex {
     float aspect = 0.0f;
     float posR = 0.0f;
     float posB = 0.0f;
+    float scrollY = 0.0f; // content shifted up by this many px (a scroll view's offset), applied by the layout bridge
+    uint8_t bleed = 0; // kUiBleedX / kUiBleedY: the node ignores its parent's padding on that axis
 
     [[nodiscard]] float effectiveRowGap() const noexcept {
         return gapRow < 0.0f ? gap : gapRow;

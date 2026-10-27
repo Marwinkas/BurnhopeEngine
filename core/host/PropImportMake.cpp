@@ -142,12 +142,7 @@ uint16_t makeButton(Import& in, uint16_t parent, const Node& node) {
     }
     markNode(in, id, node);
     if (node.row && id < in.state->count) {
-        if (auto* flex = in.state->ent[id].try_get_mut<UiFlex>()) {
-            flex->direction = UiFlexDir::Row;
-            flex->align = UiAlign::Center;
-            flex->justify = UiJustify::Center;
-            flex->gap = uiStyle(*in.state, "btn_row", UiStyleKey::Gap);
-        }
+        uiSetRowCentered(*in.state, id, uiStyle(*in.state, "btn_row", UiStyleKey::Gap));
     }
     remember(in, node.name, id);
     bindNodeCommand(in, id, node);
@@ -184,30 +179,10 @@ uint16_t makeUse(Import& in, uint16_t parent, const Node& node) {
         return kUiNone;
     }
     // The blueprint owns everything intrinsic; the instance only places it.
-    UiFlex flex = *s.ent[id].try_get<UiFlex>();
-    flex.grow = node.grow;
-    flex.shrink = node.hasShrink ? node.shrink : flex.shrink;
-    if (node.wp > 0.0f) {
-        flex.widthMode = UiSize::Percent;
-        flex.width = node.wp;
-    } else if (node.w > 0.0f) {
-        flex.widthMode = UiSize::Px;
-        flex.width = node.w;
-    }
-    if (node.hp > 0.0f) {
-        flex.heightMode = UiSize::Percent;
-        flex.height = node.hp;
-    } else if (node.h > 0.0f) {
-        flex.heightMode = UiSize::Px;
-        flex.height = node.h;
-    }
-    flex.minW = node.minW > 0.0f ? node.minW : flex.minW;
-    flex.minH = node.minH > 0.0f ? node.minH : flex.minH;
-    flex.posX = node.posX;
-    flex.posY = node.posY;
-    flex.position = node.absolute ? UiPosition::Absolute : flex.position;
-    flex.self = node.selfCenter ? UiAlignSelf::Center : flex.self;
-    s.ent[id].set<UiFlex>(flex);
+    UiLayoutSpec place = layoutOf(node);
+    place.box = false;
+    place.alignCenter = false;
+    uiApplyLayout(s, id, place);
     if (node.label[0] != '\0') {
         uiText(s, id, node.label);
     }

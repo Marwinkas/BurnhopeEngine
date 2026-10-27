@@ -13,10 +13,10 @@
 namespace burnhope {
 namespace {
 
-// Caches the render-path classes ("ui", "minimap") so emission reads plain floats.
+// Caches the render-path classes ("ui", "minimap", "image_viewer") so emission reads plain floats.
 void refreshPaintStyle(UiState& s) {
     using K = UiStyleKey;
-    if (uiStyleFind(s, "ui") == nullptr || uiStyleFind(s, "minimap") == nullptr) {
+    if (uiStyleFind(s, "ui") == nullptr || uiStyleFind(s, "minimap") == nullptr || uiStyleFind(s, "image_viewer") == nullptr) {
         return; // a partial sheet keeps the paint style it has
     }
     UiPaintStyle& p = s.paintStyle;
@@ -44,6 +44,9 @@ void refreshPaintStyle(UiState& s) {
     p.mapRadius = uiStyle(s, "minimap", K::Radius);
     p.mapMinW = uiStyle(s, "minimap", K::MinW);
     p.mapMinH = uiStyle(s, "minimap", K::MinH);
+    p.zoomIn = uiStyle(s, "image_viewer", K::ZoomIn);
+    p.zoomOut = uiStyle(s, "image_viewer", K::ZoomOut);
+    p.minView = uiStyle(s, "image_viewer", K::MinView);
 }
 
 bool applySheet(UiState& s, const UiStyleSheet& sheet) {
@@ -130,6 +133,25 @@ float uiStyle(const UiState& s, const char* cls, UiStyleKey key) {
     return 0.0f;
 }
 
+UiToken uiStyleTone(const UiState& s, const char* cls, UiStyleTone tone) {
+    const UiStyleClass* found = uiStyleFind(s, cls);
+    const UiToken token = found != nullptr ? found->tone[static_cast<size_t>(tone)] : UiToken::Custom;
+    BH_ASSERT(token != UiToken::Custom, "style class or tone is not in styles.json");
+    return token;
+}
+
+UiRgb uiStyleTint(const UiState& s, const char* cls, UiStyleTone tone) {
+    return tokenColor(s.look, uiStyleTone(s, cls, tone));
+}
+
+const char* uiStyleToneName(UiStyleTone tone) {
+    static constexpr const char* kNames[] = {
+        "fillBg", "markBg", "markActiveBg", "hoverBg", "errorBg", "lineBg", "handleBg", "trackBg", "thumbBg", "todayBg", "textBg", "hintBg", "clearBg",
+    };
+    static_assert(sizeof(kNames) / sizeof(kNames[0]) == static_cast<size_t>(UiStyleTone::Count));
+    return kNames[static_cast<size_t>(tone)];
+}
+
 const char* uiStyleKeyName(UiStyleKey key) {
     static constexpr const char* kNames[] = {
         "h", "inner", "w", "maxW", "minW", "pad", "padL", "padR", "gap", "border", "radius", "icon", "alpha", "trail",
@@ -139,6 +161,9 @@ const char* uiStyleKeyName(UiStyleKey key) {
         "hoverLift", "hoverFallback", "hoverMinAlpha", "plate",
         "margin", "maxH", "minH", "caretW", "selectionAlpha", "trackH", "thumbSide", "handleSide",
         "iconFitPad", "iconMin", "iconMax", "inkThreshold", "shadow", "toolIcon", "borderDim", "clearW", "iconLeft", "marginR", "offset", "anchorGap", "screenGap", "flyoutW", "popupMinW", "minThumb", "wheelStep", "barInset", "basePane", "hitSlop", "minPane", "hotAlpha", "idleAlpha", "barMaxH", "chevron", "treeIndent", "tileGap", "gridInset", "labelH", "subH", "subScale", "listPad", "listGap", "selectedA", "headerA", "dragSlop", "offsetY", "glyphW", "rowInset", "ramp",
+        "lineH", "caretInset", "imeOffset", "imeH", "imeAlpha", "selectionInset", "blinkRate", "zoomIn", "zoomOut", "trigger", "hintFrac", "lineAlpha", "steps", "bands",
+        "minView", "markInset", "borderRadio", "compactW", "thumbPad", "minDraw", "trackAlpha", "minDragW",
+        "selectionRadius", "ribbonTop", "ribbonH", "handleRadius", "trackInset", "padV", "cap",
     };
     static_assert(sizeof(kNames) / sizeof(kNames[0]) == static_cast<size_t>(UiStyleKey::Count));
     return kNames[static_cast<size_t>(key)];

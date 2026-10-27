@@ -1,0 +1,6 @@
+{
+  "role": "vec_cap",
+  "class": "vector_cap",
+  "flex": { "shrink": 0 },
+  "text": { "align": "center", "valign": "center", "ellipsis": "none", "leading": 1 }
+}

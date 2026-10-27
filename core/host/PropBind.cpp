@@ -4,6 +4,8 @@
 #include "ui/Hover.hpp"
 #include "ui/Panel.hpp"
 #include "ui/Style.hpp"
+#include "ui/StyleSheet.hpp"
+#include "ui/Template.hpp"
 #include "ui/widget/Button.hpp"
 #include "ui/widget/Check.hpp"
 #include "ui/widget/Choice.hpp"
@@ -25,8 +27,6 @@ constexpr float kLinkEps = 0.0005f;
 constexpr float kHexRowH = 24.0f;
 constexpr float kHexW = 96.0f;
 constexpr float kChoiceW = 160.0f;
-constexpr float kChipW = 52.0f;
-constexpr float kHexGap = 6.0f;
 constexpr float kNumberW = 84.0f;
 constexpr float kSliderMinW = 48.0f;
 
@@ -305,42 +305,23 @@ uint16_t UiPropBinder::colorHex(UiState& s, uint16_t parent, uint16_t rgbIndex, 
         scalars[static_cast<uint16_t>(rgbIndex + 1u)] = 1.0f;
         scalars[static_cast<uint16_t>(rgbIndex + 2u)] = 1.0f;
     }
-    UiFlex row{};
-    row.direction = UiFlexDir::Row;
-    row.align = UiAlign::Center;
-    row.gap = kHexGap;
-    row.grow = 0.0f;
-    row.shrink = 0.0f;
-    row.heightMode = UiSize::Px;
-    row.height = kHexRowH;
-    const uint16_t column = uiPanel(s, parent, row, paintClear());
-    UiFlex flex{};
-    flex.widthMode = UiSize::Px;
-    flex.width = kChipW;
-    flex.heightMode = UiSize::Px;
-    flex.height = kHexRowH;
-    flex.shrink = 0.0f;
-    UiPaint paint{};
-    paint.token = UiToken::Custom;
-    paint.r = 1.0f;
-    paint.g = 1.0f;
-    paint.b = 1.0f;
-    paint.a = 1.0f;
-    paint.radius = 4.0f;
-    paint.borderW = 1.0f;
-    const uint16_t chip = uiPanel(s, column, flex, paint);
+    const float rowH = uiStyle(s, "hex_row", UiStyleKey::Height);
+    const uint16_t column = uiSpawnTemplate(s, parent, "core/hex_row");
+    const uint16_t chip = uiSpawnTemplate(s, column, "core/hex_chip");
+    if (auto* paint = chip < s.count ? s.ent[chip].try_get_mut<UiPaint>() : nullptr) {
+        paint->token = UiToken::Custom;
+        paintFillRgb(*paint, UiRgb{1.0f, 1.0f, 1.0f});
+    }
     if (chip >= s.count) {
         return chip;
     }
-    uiHover(s, chip);
-    uiSetFocusable(s, chip);
     uiBind(s, chip, swatchClick, this);
     rows.push_back(UiBind{.id = chip, .index = rgbIndex, .kind = kBindSwatch, .fallback = 1.0f});
     const uint16_t field = uiField(s, column, "#FFFFFF", 0, false);
     if (field >= s.count) {
         return chip;
     }
-    uiSetSize(s, field, kHexW, kHexRowH);
+    uiSetSize(s, field, kHexW, rowH);
     uiSetGrow(s, field, 0.0f, 0.0f);
     s.ent[field].set<UiHexBind>({this, outDirty, chip, rgbIndex, alphaIndex, static_cast<uint8_t>(withAlpha)});
     uiAfterTextAdd(s, field, hexEdited);
@@ -455,9 +436,7 @@ void UiPropBinder::syncSwatches(UiState& s) {
         if (paint->r == r && paint->g == g && paint->b == b && paint->token == UiToken::Custom) {
             continue;
         }
-        paint->r = r;
-        paint->g = g;
-        paint->b = b;
+        paintFillRgb(*paint, UiRgb{r, g, b});
         paint->token = UiToken::Custom;
         dirty = true;
     }

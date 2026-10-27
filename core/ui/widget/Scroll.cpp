@@ -102,7 +102,7 @@ void scrollReset(UiState& s, uint16_t id) {
         if (auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>()) {
             flex->position = UiPosition::Static;
             flex->posY = 0.0f;
-            flex->marginT = 0.0f;
+            flex->scrollY = 0.0f;
         }
     }
     uiMarkLayout(s, id);
@@ -119,7 +119,7 @@ void scrollClamp(UiState& s, uint16_t id) {
     const float maxScroll = std::max(0.0f, contentH - viewH);
     scroll->offset = contentH <= viewH ? 0.0f : std::clamp(scroll->offset, 0.0f, maxScroll);
     if (auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>()) {
-        flex->marginT = -scroll->offset;
+        flex->scrollY = scroll->offset;
     }
     scrollRefresh(s, id, scroll->onScroll);
 }
@@ -146,12 +146,11 @@ void scrollBy(UiState& s, uint16_t id, float wheel) {
         return;
     }
     auto* flex = s.ent[scroll->inner].try_get_mut<UiFlex>();
-    const float next = -scroll->offset;
-    if (flex != nullptr && (flex->position != UiPosition::Static || std::fabs(flex->posY) > 0.5f || std::fabs(flex->marginT - next) > 0.5f)) {
+    if (flex != nullptr && (flex->position != UiPosition::Static || std::fabs(flex->posY) > 0.5f || std::fabs(flex->scrollY - scroll->offset) > 0.5f)) {
         flex->position = UiPosition::Static;
         flex->posX = 0.0f;
         flex->posY = 0.0f;
-        flex->marginT = next;
+        flex->scrollY = scroll->offset;
         uiMarkLayout(s, id);
     }
     uiTrace(s, "scroll", id);
@@ -212,7 +211,7 @@ void dragScroll(UiState& s, uint16_t id, float y) {
         flex->position = UiPosition::Static;
         flex->posX = 0.0f;
         flex->posY = 0.0f;
-        flex->marginT = -scroll->offset;
+        flex->scrollY = scroll->offset;
     }
     uiMarkLayout(s, id);
     s.visualDirty = true;

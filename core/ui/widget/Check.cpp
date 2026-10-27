@@ -6,6 +6,7 @@
 #include "ui/Panel.hpp"
 #include "ui/PrimitiveBatch.hpp"
 #include "ui/State.hpp"
+#include "ui/StyleSheet.hpp"
 #include "ui/Template.hpp"
 #include "ui/Text.hpp"
 
@@ -41,21 +42,18 @@ void hostText(UiState& s, uint16_t id) {
 void clearRow(UiState& s, uint16_t id) {
     if (auto* paint = s.ent[id].try_get_mut<UiPaint>()) {
         paintGhost(*paint);
-        paint->r = s.look.text[0];
-        paint->g = s.look.text[1];
-        paint->b = s.look.text[2];
-        paint->hr = s.look.text[0];
-        paint->hg = s.look.text[1];
-        paint->hb = s.look.text[2];
-        paint->ha = 0.0f;
+        const UiToken ink = uiStyleBg(s, "checkbox");
+        paintFillToken(s.look, *paint, ink);
+        paintHoverToken(s.look, *paint, ink, uiStyle(s, "checkbox", UiStyleKey::HoverAlpha));
     }
 }
 
 void adornCheck(UiState& s, uint16_t id) {
     hostText(s, id);
     if (auto* flex = s.ent[id].try_get_mut<UiFlex>()) {
-        if (flex->padL < 32.0f) {
-            flex->padL = 32.0f;
+        const float padL = uiStyle(s, "checkbox", UiStyleKey::PadL);
+        if (flex->padL < padL) {
+            flex->padL = padL;
         }
     }
 }
@@ -69,41 +67,26 @@ bool drawCheck(UiState& s, uint16_t id, UiPrimitive* dst, uint32_t& n, uint32_t 
     UiBox ancestor{};
     const bool hasClip = uiClipBox(s, id, ancestor);
     const UiBox* clip = hasClip ? &ancestor : nullptr;
-    const float side = 22.0f;
+    using K = UiStyleKey;
+    const float side = uiStyle(s, "check_box", K::Width);
     const bool hot = s.hovered == id;
-    const float* edge = hot ? s.look.text : s.look.muted;
-    const float x = box.w < 40.0f ? box.x + (box.w - side) * 0.5f : box.x + 8.0f;
+    const UiRgb edge = uiStyleTint(s, "check_box", hot ? UiStyleTone::Hover : UiStyleTone::Mark);
+    const float x = box.w < uiStyle(s, "check_box", K::CompactW) ? box.x + (box.w - side) * 0.5f : box.x + uiStyle(s, "check_box", K::IconLeft);
     const float y = box.y + (box.h - side) * 0.5f;
     if (mark->shape != 0) {
-        n = emitMark(dst, n, cap, x, y, side, side, edge[0], edge[1], edge[2], 1.0f, side * 0.5f, 1.5f, kUiFlagStroke, clip);
+        n = emitMark(dst, n, cap, x, y, side, side, edge.r, edge.g, edge.b, 1.0f, side * 0.5f, uiStyle(s, "check_box", K::BorderRadio), kUiFlagStroke, clip);
         if (mark->on != 0) {
-            const float dot = 10.0f;
-            n = emitRect(dst, n, cap, x + (side - dot) * 0.5f, y + (side - dot) * 0.5f, dot, dot,
-                s.look.text[0], s.look.text[1], s.look.text[2], 1.0f, dot * 0.5f, clip);
+            const float dot = uiStyle(s, "check_box", K::Inner);
+            const UiRgb ink = uiStyleTint(s, "check_box", UiStyleTone::Text);
+            n = emitRect(dst, n, cap, x + (side - dot) * 0.5f, y + (side - dot) * 0.5f, dot, dot, ink.r, ink.g, ink.b, 1.0f, dot * 0.5f, clip);
         }
         return true;
     }
-    n = emitMark(dst, n, cap, x, y, side, side, edge[0], edge[1], edge[2], 1.0f, 3.0f, 1.0f, kUiFlagStroke, clip);
-    if (mark->on != 0 && n < cap) {
-        UiPrimitive& drawn = dst[n++];
-        drawn = {};
-        drawn.posX = x + 1.0f;
-        drawn.posY = y + 1.0f;
-        drawn.sizeX = side - 2.0f;
-        drawn.sizeY = side - 2.0f;
-        drawn.color[0] = s.look.accent[0][0];
-        drawn.color[1] = s.look.accent[0][1];
-        drawn.color[2] = s.look.accent[0][2];
-        drawn.color[3] = 1.0f;
-        drawn.texId = static_cast<uint32_t>(UiIcon::Check);
-        drawn.flags = kUiFlagIcon;
-        if (clip != nullptr) {
-            drawn.flags |= kUiFlagClip;
-            drawn.extra[1] = clip->x;
-            drawn.extra[2] = clip->y;
-            drawn.extra[3] = clip->w;
-            drawn.pad0 = std::bit_cast<uint32_t>(clip->h);
-        }
+    n = emitMark(dst, n, cap, x, y, side, side, edge.r, edge.g, edge.b, 1.0f, uiStyle(s, "check_box", K::Radius), uiStyle(s, "check_box", K::Border), kUiFlagStroke, clip);
+    if (mark->on != 0) {
+        const float inset = uiStyle(s, "check_box", K::MarkInset);
+        const UiRgb tick = uiStyleTint(s, "check_box", UiStyleTone::MarkActive);
+        n = emitIcon(dst, n, cap, x + inset, y + inset, side - 2.0f * inset, tick.r, tick.g, tick.b, 1.0f, static_cast<uint32_t>(UiIcon::Check), 0.0f, clip);
     }
     return true;
 }

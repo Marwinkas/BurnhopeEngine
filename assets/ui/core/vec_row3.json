@@ -1,0 +1,15 @@
+{
+  "role": "vec_row",
+  "class": "vector_row",
+  "flex": { "dir": "row", "align": "center", "justify": "start", "wp": 100 },
+  "parts": [
+    { "use": "core/vec_square", "name": "lock" },
+    { "use": "core/vec_cap", "name": "capx", "class": "vector_cap_x", "traits": ["hoverable", "focusable"] },
+    { "use": "core/vec_hold", "name": "holdx", "flex": { "grow": 1, "shrink": 1 } },
+    { "use": "core/vec_cap", "name": "capy", "class": "vector_cap_y", "traits": ["hoverable", "focusable"] },
+    { "use": "core/vec_hold", "name": "holdy", "flex": { "grow": 1, "shrink": 1 } },
+    { "use": "core/vec_cap", "name": "capz", "class": "vector_cap_z", "traits": ["hoverable", "focusable"] },
+    { "use": "core/vec_hold", "name": "holdz", "flex": { "grow": 1, "shrink": 1 } }
+  ],
+  "slots": { "lock": "lock", "capx": "capx", "capy": "capy", "capz": "capz", "holdx": "holdx", "holdy": "holdy", "holdz": "holdz" }
+}

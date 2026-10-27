@@ -54,15 +54,13 @@ void litTrigger(UiState& s, uint16_t menu, bool on) {
             continue;
         }
         auto* paint = s.ent[p].try_get_mut<UiPaint>();
-        if (paint == nullptr || paint->borderW < 0.4f) {
+        if (paint == nullptr || paint->borderW < kUiBorderMinW) {
             continue;
         }
         if (on) {
-            paint->br = s.look.toolActive[0];
-            paint->bg = s.look.toolActive[1];
-            paint->bb = s.look.toolActive[2];
+            paintBorderToken(s.look, *paint, UiToken::ToolActive);
         } else {
-            tokenRgb(s.look, UiToken::Muted, paint->br, paint->bg, paint->bb);
+            paintBorderToken(s.look, *paint, UiToken::Muted);
         }
     }
     uiNotifyVisualDirty(s);
@@ -144,12 +142,13 @@ void silenceRow(UiState& s, uint16_t row) {
 uint16_t separatorRow(UiState& s, uint16_t menu, uint16_t row) {
     const UiTemplateId tpl = uiTemplateFind(s, "core/menu_sep");
     if (row == kUiNone) {
-        row = spawn(s, menu, UiFlex{}, paintClear());
-    }
-    if (row >= s.count || !uiApplyTemplate(s, row, tpl)) {
+        row = uiSpawnTemplate(s, menu, tpl);
+    } else if (row < s.count && !uiApplyTemplate(s, row, tpl)) {
         return kUiNone;
     }
-    uiSetWidthPercent(s, row, 100.0f);
+    if (row >= s.count) {
+        return kUiNone;
+    }
     uiText(s, row, "");
     silenceRow(s, row);
     uiShow(s, row, true);
@@ -190,8 +189,6 @@ void uiMenuRowBind(UiState& s, uint16_t row, const char* label, UiCommandFn fn, 
     if (auto* flex = s.ent[row].try_get_mut<UiFlex>()) {
         flex->heightMode = UiSize::Px;
         flex->height = metricsOf(s, s.parentOf[row]).itemH;
-        flex->widthMode = UiSize::Percent;
-        flex->width = 100.0f;
     }
     if (auto* paint = s.ent[row].try_get_mut<UiPaint>()) {
         paint->radius = radius > 0.0f ? radius : paint->radius; // a row that already had a corner keeps it
@@ -205,7 +202,7 @@ uint16_t uiMenuRow(UiState& s, uint16_t menu, const char* label, UiCommandFn fn,
     if (menu >= s.count) {
         return kUiNone;
     }
-    const uint16_t row = spawn(s, menu, UiFlex{}, paintClear());
+    const uint16_t row = uiSpawnTemplate(s, menu, "core/menu_item");
     if (row == kUiNone || row >= s.count) {
         return kUiNone;
     }

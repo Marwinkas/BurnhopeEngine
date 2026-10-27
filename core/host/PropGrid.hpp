@@ -29,11 +29,6 @@ uint16_t uiPropNumber(UiState& s, uint16_t host, const char* label, float value,
 // The value slot a control built by uiPropCheck / uiPropNumber / uiPropMenu sits in, and the row that holds a value slot.
 [[nodiscard]] uint16_t uiPropSlotOf(const UiState& s, uint16_t control);
 [[nodiscard]] uint16_t uiPropRowOf(const UiState& s, uint16_t valueSlot);
-// Gives the row of `valueSlot` a fixed height `rowH` and the slot itself `innerH` (children may overflow it).
-// Does nothing when both already match.
-void uiPropRowHeight(UiState& s, uint16_t valueSlot, float rowH, float innerH);
-// Lets the value slot of a row grow to `maxW` px (rows with a thumbnail need more than the usual control width).
-void uiPropValueMax(UiState& s, uint16_t valueSlot, float maxW);
 void uiPropRowShow(UiState& s, uint16_t valueSlot, bool on);
 uint16_t uiPropMenu(UiState& s, uint16_t host, const char* label, const char* value, uint16_t menu);
 

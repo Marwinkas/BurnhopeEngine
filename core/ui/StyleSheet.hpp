@@ -96,10 +96,58 @@ enum class UiStyleKey : uint8_t {
     GlyphW,
     RowInset,
     Ramp,
+    LineH,
+    CaretInset,
+    ImeOffset,
+    ImeH,
+    ImeAlpha,
+    SelectionInset,
+    BlinkRate,
+    ZoomIn,
+    ZoomOut,
+    Trigger,
+    HintFrac,
+    LineAlpha,
+    Steps,
+    Bands,
+    MinView,
+    MarkInset,
+    BorderRadio,
+    CompactW,
+    ThumbPad,
+    MinDraw,
+    TrackAlpha,
+    MinDragW,
+    SelectionRadius,
+    RibbonTop,
+    RibbonH,
+    HandleRadius,
+    TrackInset,
+    PadV,
+    Cap,
     Count,
 };
 
 static_assert(static_cast<size_t>(UiStyleKey::Count) <= 128, "UiKeyMask holds 128 keys");
+
+// Palette roles a class can name besides "bg" / "activeBg" / "borderBg": "fillBg", "markBg", ... Each holds a UiToken
+// (Custom when the class leaves it out), so drawing code colours from the theme and never indexes the palette.
+enum class UiStyleTone : uint8_t {
+    Fill,
+    Mark,
+    MarkActive,
+    Hover,
+    Error,
+    Line,
+    Handle,
+    Track,
+    Thumb,
+    Today,
+    Text,
+    Hint,
+    Clear,
+    Count,
+};
 
 // The keys a class sets, one bit per UiStyleKey.
 struct UiKeyMask {
@@ -130,6 +178,7 @@ struct UiStyleClass {
     UiToken bg = UiToken::Custom;
     UiToken activeBg = UiToken::Custom; // token while the node is active (uiSetActive)
     UiToken borderBg = UiToken::Custom; // token the border is drawn in
+    UiToken tone[static_cast<size_t>(UiStyleTone::Count)]{};
 };
 
 // Classes sorted by name hash so a lookup is a binary search.
@@ -159,8 +208,13 @@ bool uiStyleLoadOver(UiState& s, std::string_view json);
 [[nodiscard]] UiToken uiStyleBg(const UiState& s, const char* name);
 // The sheet's value. A class or key the sheet lacks is a bug: BH_ASSERT in debug, 0 in release.
 [[nodiscard]] float uiStyle(const UiState& s, const char* cls, UiStyleKey key);
+// The token the class names for `tone`. A class or tone the sheet lacks is a bug: BH_ASSERT in debug, Custom in release.
+[[nodiscard]] UiToken uiStyleTone(const UiState& s, const char* cls, UiStyleTone tone);
+// The theme colour of that tone: what a draw hook tints with.
+[[nodiscard]] UiRgb uiStyleTint(const UiState& s, const char* cls, UiStyleTone tone);
 
-// JSON spelling of a key ("h", "labelW", ...).
+// JSON spelling of a key ("h", "labelW", ...) and of a tone ("fillBg", ...).
 [[nodiscard]] const char* uiStyleKeyName(UiStyleKey key);
+[[nodiscard]] const char* uiStyleToneName(UiStyleTone tone);
 
 } // namespace burnhope
