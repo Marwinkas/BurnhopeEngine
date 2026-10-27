@@ -51,9 +51,9 @@
   {"name": "mkFile", "class": "menu_item", "text": "New File", "behaviors": ["hover", "click"], "action": 173, "toggles": "createMenu"}
  ]},
  {"name": "tuneMenu", "class": "menu_popup", "behaviors": ["overlay"], "children": [
-  {"name": "sort", "class": "menu_item", "text": "Sort: Name", "behaviors": ["hover", "click"], "action": 175},
-  {"name": "view", "class": "menu_item", "text": "View: Grid", "behaviors": ["hover", "click"], "action": 177},
-  {"name": "size", "class": "menu_slider", "text": "Icon size", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.14285714285714285, "minV": 48, "maxV": 160}
+  {"name": "sort", "bind": "browser.sort", "class": "menu_item", "text": "Sort: Name", "behaviors": ["hover", "click"], "action": 175},
+  {"name": "view", "bind": "browser.view", "class": "menu_item", "text": "View: Grid", "behaviors": ["hover", "click"], "action": 177},
+  {"name": "size", "bind": "browser.size", "class": "menu_slider", "text": "Icon size", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 0.14285714285714285, "minV": 48, "maxV": 160}
  ]},
  {"name": "ctxMenu", "class": "menu_popup", "behaviors": ["overlay"], "placement": "pointer", "children": [
   {"name": "ctxOpen", "class": "menu_item", "text": "Open", "behaviors": ["hover", "click"], "action": 180, "toggles": "ctxMenu"},

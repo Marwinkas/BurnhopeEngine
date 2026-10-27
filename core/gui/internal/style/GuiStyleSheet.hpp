@@ -3,8 +3,8 @@
 #include <cstdint>
 #include <string_view>
 
-#include "gui/data/GuiComponents.hpp" // kGuiNoClass
-#include "gui/text/GuiTextEngine.hpp"
+#include "data/GuiComponents.hpp" // kGuiNoClass
+#include "text/GuiTextEngine.hpp"
 
 namespace burnhope::gui {
 

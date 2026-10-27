@@ -1,8 +1,7 @@
 #include "app/LauncherController.hpp"
 
-#include "app/BrowserController.hpp"
-#include "app/Engine.hpp"
-#include "app/GuiActions.hpp"
+#include "gui/GuiHost.hpp"
+#include "platform/Dialog.hpp"
 #include "asset/ProjectDoc.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "Str.hpp"
@@ -25,14 +24,13 @@ void rowPath(char* out, size_t cap, uint32_t i) {
     std::snprintf(out, cap, "launcher.r%u.open", i);
 }
 
-void showList(Engine& e) {
-    LauncherState& l = e.launcher;
+void showList(LauncherState& l) {
     char node[128];
-    guiHostSetShown(e.gui, "launcher.empty", l.recent.count == 0);
+    guiHostSetShown(l.gui, "launcher.empty", l.recent.count == 0);
     for (uint32_t i = 0; i < kRecentCap; ++i) {
         std::snprintf(node, sizeof(node), "launcher.r%u", i);
         const bool live = i < l.recent.count;
-        guiHostSetShown(e.gui, node, live);
+        guiHostSetShown(l.gui, node, live);
         if (!live) {
             continue;
         }
@@ -49,73 +47,72 @@ void showList(Engine& e) {
         char openKey[40]{};
         std::snprintf(text, sizeof(text), "%s\n%.80s%s", leaf[0] != '\0' ? leaf : entry.path, entry.path, when);
         rowPath(openKey, sizeof(openKey), i);
-        guiHostSetText(e.gui, openKey, text);
+        guiHostSetText(l.gui, openKey, text);
     }
 }
 
-void hide(Engine& e) {
-    guiHostSetShown(e.gui, kVeil, false);
+void hide(LauncherState& l) {
+    guiHostSetShown(l.gui, kVeil, false);
 }
 
 // Makes `dir` the project: the file browser roots there and it moves to the top of the recent list.
-bool openProject(Engine& e, const std::filesystem::path& dir) {
+bool openProject(LauncherState& l, const std::filesystem::path& dir) {
     ProjectInfo info{};
     const std::string manifest = (dir / kProjectFile).string();
     if (!projectRead(manifest.c_str(), info)) {
         spdlog::warn("launcher: {} is not a project folder", dir.string());
         return false;
     }
-    LauncherState& l = e.launcher;
     recentTouch(l.recent, dir.string().c_str(), static_cast<int64_t>(std::time(nullptr)));
     (void)recentSave(l.recent, l.recentFile);
-    browserSetRoot(e, dir);
-    showList(e);
-    hide(e);
+    l.openRoot(l.app, dir);
+    showList(l);
+    hide(l);
     spdlog::info("project opened: {} ({})", info.name, dir.string());
     return true;
 }
 
-void ask(Engine& e, uint8_t what) {
-    LauncherState& l = e.launcher;
-    if (l.asking != 0 || e.slot < 0) {
+void ask(LauncherState& l, uint8_t what) {
+    if (l.asking != 0 || l.window == nullptr) {
         return;
     }
-    if (windowAskFile(e.host.view[e.slot].window, nullptr, 0, FileAsk::Folder)) {
+    if (windowAskFile(*l.window, nullptr, 0, FileAsk::Folder)) {
         l.asking = what;
     }
 }
 
 void onClick(void* user, uint32_t action) {
-    Engine& e = *static_cast<Engine*>(user);
-    LauncherState& l = e.launcher;
+    LauncherState& l = *static_cast<LauncherState*>(user);
     if (action == kActFileProjects) {
-        launcherShow(e);
+        launcherShow(l);
     } else if (action == kActLauncherClose) {
-        hide(e);
+        hide(l);
     } else if (action == kActLauncherCreate) {
-        ask(e, 1);
+        ask(l, 1);
     } else if (action == kActLauncherOpen) {
-        ask(e, 2);
+        ask(l, 2);
     } else if (action >= kActLauncherRecent && action < kActLauncherRecent + kRecentCap) {
         const uint32_t i = action - kActLauncherRecent;
-        if (i < l.recent.count && !openProject(e, l.recent.item[i].path)) {
+        if (i < l.recent.count && !openProject(l, l.recent.item[i].path)) {
             recentRemove(l.recent, i);
             (void)recentSave(l.recent, l.recentFile);
-            showList(e);
+            showList(l);
         }
     } else if (action >= kActLauncherForget && action < kActLauncherForget + kRecentCap) {
         recentRemove(l.recent, action - kActLauncherForget);
         (void)recentSave(l.recent, l.recentFile);
-        showList(e);
+        showList(l);
     }
 }
 
 } // namespace
 
-bool launcherBind(Engine& e) {
-    LauncherState& l = e.launcher;
+bool launcherBind(LauncherState& l, GuiHost& gui, void* app, LauncherOpenFn openRoot) {
+    l.gui = &gui;
+    l.app = app;
+    l.openRoot = openRoot;
     char screen[512]{};
-    if (!platformResolveAsset("assets/gui/launcher.json", screen, sizeof(screen)) || !guiHostMount(e.gui, screen, "")) {
+    if (!platformResolveAsset("assets/gui/launcher.json", screen, sizeof(screen)) || !guiHostSpawnSnippet(l.gui, "", screen)) {
         spdlog::error("launcher: screen failed to mount");
         return false;
     }
@@ -124,22 +121,22 @@ bool launcherBind(Engine& e) {
     }
     bool ok = true;
     for (uint32_t i = 0; i < kRecentCap; ++i) {
-        ok = guiHostBindClick(e.gui, kActLauncherRecent + i, onClick, &e) && guiHostBindClick(e.gui, kActLauncherForget + i, onClick, &e) && ok;
+        ok = guiHostBindClick(l.gui, kActLauncherRecent + i, onClick, &l) && guiHostBindClick(l.gui, kActLauncherForget + i, onClick, &l) && ok;
     }
     for (const uint32_t action : std::initializer_list<uint32_t>{kActLauncherCreate, kActLauncherOpen, kActLauncherClose, kActFileProjects}) {
-        ok = guiHostBindClick(e.gui, action, onClick, &e) && ok;
+        ok = guiHostBindClick(l.gui, action, onClick, &l) && ok;
     }
-    showList(e);
+    showList(l);
     return ok;
 }
 
-void launcherShow(Engine& e) {
-    showList(e);
-    guiHostSetShown(e.gui, kVeil, true);
+void launcherShow(LauncherState& l) {
+    showList(l);
+    guiHostSetShown(l.gui, kVeil, true);
 }
 
-void launcherSync(Engine& e) {
-    LauncherState& l = e.launcher;
+void launcherSync(LauncherState& l, Window* window) {
+    l.window = window;
     char picked[512]{};
     if (l.asking == 0 || !windowTakeFile(picked, sizeof(picked))) {
         return;
@@ -155,7 +152,7 @@ void launcherSync(Engine& e) {
             return;
         }
     }
-    (void)openProject(e, dir);
+    (void)openProject(l, dir);
 }
 
 } // namespace burnhope

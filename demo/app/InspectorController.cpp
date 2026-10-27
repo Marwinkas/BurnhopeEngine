@@ -1,7 +1,7 @@
 #include "app/InspectorController.hpp"
 
-#include "app/Engine.hpp"
-#include "app/GuiActions.hpp"
+#include "app/EditorState.hpp"
+#include "gui/GuiHost.hpp"
 #include "gpu_scene/SceneObject.hpp"
 
 #include <array>
@@ -75,9 +75,9 @@ float* pbrSlot(ActorPbr& pbr, uint32_t field) {
     return field < 3 ? &pbr.base[field] : (field == 3 ? &pbr.roughness : (field == 4 ? &pbr.metallic : &pbr.emissive));
 }
 
-uint8_t selectedActor(const Engine& e) {
-    const uint8_t s = sceneFrameActorSelected(e.scene);
-    return s < sceneFrameActorCount(e.scene) ? s : kSceneActorNone;
+uint8_t selectedActor(const InspectorState& ins) {
+    const uint8_t s = sceneFrameActorSelected(ins.scene);
+    return s < sceneFrameActorCount(ins.scene) ? s : kSceneActorNone;
 }
 
 void setFloat(void* user, float value) {
@@ -86,35 +86,35 @@ void setFloat(void* user, float value) {
 
 void onPose(void* user, float value) {
     const auto* field = static_cast<const InspectorField*>(user);
-    const uint8_t a = selectedActor(*field->engine);
+    const uint8_t a = selectedActor(*field->state);
     ActorPose pose{};
-    if (a != kSceneActorNone && sceneFrameActorPose(field->engine->scene, a, pose)) {
+    if (a != kSceneActorNone && sceneFrameActorPose(field->state->scene, a, pose)) {
         *poseSlot(pose, field->index) = value;
-        sceneFrameActorSetPose(field->engine->scene, a, pose);
+        sceneFrameActorSetPose(field->state->scene, a, pose);
     }
 }
 
-void pushSwatch(Engine& e, const ActorPbr& pbr) {
-    guiHostSetColor(e.gui, "actor.mat.preview", pbr.base[0], pbr.base[1], pbr.base[2]);
+void pushSwatch(InspectorState& ins, const ActorPbr& pbr) {
+    guiHostSetColor(ins.gui, "actor.mat.preview", pbr.base[0], pbr.base[1], pbr.base[2]);
 }
 
 void onPbr(void* user, float value) {
     const auto* field = static_cast<const InspectorField*>(user);
-    Engine& e = *field->engine;
-    const uint8_t a = selectedActor(e);
+    InspectorState& ins = *field->state;
+    const uint8_t a = selectedActor(ins);
     ActorPbr pbr{};
-    if (a != kSceneActorNone && sceneFrameActorPbr(e.scene, a, pbr)) {
+    if (a != kSceneActorNone && sceneFrameActorPbr(ins.scene, a, pbr)) {
         *pbrSlot(pbr, field->index) = value;
-        sceneFrameActorSetPbr(e.scene, a, pbr);
-        pushSwatch(e, pbr);
+        sceneFrameActorSetPbr(ins.scene, a, pbr);
+        pushSwatch(ins, pbr);
     }
 }
 
 void onClick(void* user, uint32_t action) {
-    auto& e = *static_cast<Engine*>(user);
+    auto& ins = *static_cast<InspectorState*>(user);
     for (uint32_t i = 0; i < kToggleCount; ++i) {
         if (kToggle[i].action == action) {
-            const ToggleRef t = toggleRef(e.editor, i);
+            const ToggleRef t = toggleRef(*ins.editor, i);
             if (t.word != nullptr) {
                 *t.word = *t.word != 0 ? 0 : 1;
             } else {
@@ -123,9 +123,9 @@ void onClick(void* user, uint32_t action) {
             return;
         }
     }
-    const uint8_t a = selectedActor(e);
+    const uint8_t a = selectedActor(ins);
     ActorPose pose{};
-    if (a == kSceneActorNone || !sceneFrameActorPose(e.scene, a, pose)) {
+    if (a == kSceneActorNone || !sceneFrameActorPose(ins.scene, a, pose)) {
         return;
     }
     switch (action) {
@@ -135,59 +135,62 @@ void onClick(void* user, uint32_t action) {
     case kActResetScale: pose.scale[0] = pose.scale[1] = pose.scale[2] = 1.0f; break;
     default: return;
     }
-    sceneFrameActorSetPose(e.scene, a, pose);
+    sceneFrameActorSetPose(ins.scene, a, pose);
 }
 
-void showToggle(Engine& e, const char* key, uint8_t& last, bool on) {
+void showToggle(InspectorState& ins, const char* key, uint8_t& last, bool on) {
     if (last == static_cast<uint8_t>(on)) {
         return;
     }
     last = static_cast<uint8_t>(on);
-    guiHostSetText(e.gui, key, on ? "On" : "Off");
-    guiHostSetActive(e.gui, key, on);
+    guiHostSetText(ins.gui, key, on ? "On" : "Off");
+    guiHostSetActive(ins.gui, key, on);
 }
 
-void followSelection(Engine& e, uint8_t actor) {
+void followSelection(InspectorState& ins, uint8_t actor) {
     char name[24] = "No selection";
     uint8_t kind = 0;
     if (actor != kSceneActorNone) {
-        sceneFrameActorName(e.scene, actor, name, sizeof(name), &kind);
+        sceneFrameActorName(ins.scene, actor, name, sizeof(name), &kind);
     }
-    const uint8_t sections = actor != kSceneActorNone ? sceneFrameActorSections(e.scene, actor) : 0;
-    guiHostSetText(e.gui, "inspector.actor", name);
-    guiHostSetShown(e.gui, "inspector.xform", (sections & kSecTransform) != 0);
-    guiHostSetShown(e.gui, "inspector.mat", (sections & kSecMaterial) != 0);
+    const uint8_t sections = actor != kSceneActorNone ? sceneFrameActorSections(ins.scene, actor) : 0;
+    guiHostSetText(ins.gui, "inspector.actor", name);
+    guiHostSetShown(ins.gui, "inspector.xform", (sections & kSecTransform) != 0);
+    guiHostSetShown(ins.gui, "inspector.mat", (sections & kSecMaterial) != 0);
     ActorPbr pbr{};
-    if ((sections & kSecMaterial) != 0 && sceneFrameActorPbr(e.scene, actor, pbr)) {
+    if ((sections & kSecMaterial) != 0 && sceneFrameActorPbr(ins.scene, actor, pbr)) {
         for (uint32_t i = 0; i < 6; ++i) {
-            guiHostSetValue(e.gui, kPbrKey[i], *pbrSlot(pbr, i));
+            guiHostSetValue(ins.gui, kPbrKey[i], *pbrSlot(pbr, i));
         }
-        pushSwatch(e, pbr);
+        pushSwatch(ins, pbr);
     }
 }
 
 } // namespace
 
-bool inspectorBind(Engine& e) {
-    InspectorState& st = e.inspector;
+bool inspectorBind(InspectorState& ins, GuiHost& gui, SceneFrame* scene, EditorState& editor) {
+    ins.gui = &gui;
+    ins.scene = scene;
+    ins.editor = &editor;
+    InspectorState& st = ins;
     bool ok = true;
-    for (const Slot& s : slotsOf(e.editor)) {
-        ok = guiHostBindDrag(e.gui, s.key, setFloat, s.value) && ok;
-        guiHostSetValue(e.gui, s.key, *s.value);
+    for (const Slot& s : slotsOf(*ins.editor)) {
+        ok = guiHostBindDrag(ins.gui, s.key, setFloat, s.value) && ok;
+        guiHostSetValue(ins.gui, s.key, *s.value);
     }
     for (uint32_t i = 0; i < 9; ++i) {
-        st.pose[i] = {&e, i};
-        ok = guiHostBindDrag(e.gui, kPoseKey[i], onPose, &st.pose[i]) && ok;
+        st.pose[i] = {&ins, i};
+        ok = guiHostBindDrag(ins.gui, kPoseKey[i], onPose, &st.pose[i]) && ok;
     }
     for (uint32_t i = 0; i < 6; ++i) {
-        st.pbr[i] = {&e, i};
-        ok = guiHostBindDrag(e.gui, kPbrKey[i], onPbr, &st.pbr[i]) && ok;
+        st.pbr[i] = {&ins, i};
+        ok = guiHostBindDrag(ins.gui, kPbrKey[i], onPbr, &st.pbr[i]) && ok;
     }
     for (const ToggleDef& t : kToggle) {
-        ok = guiHostBindClick(e.gui, t.action, onClick, &e) && ok;
+        ok = guiHostBindClick(ins.gui, t.action, onClick, &ins) && ok;
     }
     for (uint32_t action : {kActStatic, kActResetPos, kActResetRot, kActResetScale}) {
-        ok = guiHostBindClick(e.gui, action, onClick, &e) && ok;
+        ok = guiHostBindClick(ins.gui, action, onClick, &ins) && ok;
     }
     for (uint8_t& last : st.lastToggle) {
         last = 0xff;
@@ -195,23 +198,23 @@ bool inspectorBind(Engine& e) {
     return ok;
 }
 
-void inspectorSync(Engine& e) {
-    InspectorState& st = e.inspector;
-    const uint8_t actor = selectedActor(e);
+void inspectorSync(InspectorState& ins) {
+    InspectorState& st = ins;
+    const uint8_t actor = selectedActor(ins);
     if (actor != st.shown) {
         st.shown = actor;
-        followSelection(e, actor);
+        followSelection(ins, actor);
     }
     ActorPose pose{};
-    if (actor != kSceneActorNone && sceneFrameActorPose(e.scene, actor, pose)) {
+    if (actor != kSceneActorNone && sceneFrameActorPose(ins.scene, actor, pose)) {
         for (uint32_t i = 0; i < 9; ++i) {
-            guiHostSetValue(e.gui, kPoseKey[i], *poseSlot(pose, i));
+            guiHostSetValue(ins.gui, kPoseKey[i], *poseSlot(pose, i));
         }
-        showToggle(e, "actor.static", st.lastToggle[kPoseToggle], pose.isStatic != 0);
+        showToggle(ins, "actor.static", st.lastToggle[kPoseToggle], pose.isStatic != 0);
     }
     for (uint32_t i = 0; i < kToggleCount; ++i) {
-        const ToggleRef t = toggleRef(e.editor, i);
-        showToggle(e, kToggle[i].key, st.lastToggle[i], t.word != nullptr ? *t.word != 0 : *t.byte != 0);
+        const ToggleRef t = toggleRef(*ins.editor, i);
+        showToggle(ins, kToggle[i].key, st.lastToggle[i], t.word != nullptr ? *t.word != 0 : *t.byte != 0);
     }
 }
 

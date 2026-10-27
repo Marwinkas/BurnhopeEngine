@@ -6,12 +6,12 @@
 #include <thread>
 
 #include "asset/ModelThumb.hpp"
-#include "gui/Gui.hpp"
-#include "gui/data/GuiRow.hpp"
-#include "gui/layout/GuiLayoutEngine.hpp"
-#include "gui/loader/GuiLoader.hpp"
-#include "gui/overlay/GuiTooltip.hpp"
-#include "gui/style/GuiStyleSheet.hpp"
+#include "Gui.hpp"
+#include "gui/GuiRow.hpp"
+#include "layout/GuiLayoutEngine.hpp"
+#include "loader/GuiLoader.hpp"
+#include "overlay/GuiTooltip.hpp"
+#include "style/GuiStyleSheet.hpp"
 
 using namespace burnhope;
 using namespace burnhope::gui;

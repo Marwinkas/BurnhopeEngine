@@ -6,11 +6,12 @@
 #include <memory>
 
 #include "app/BrowserModel.hpp"
-#include "app/BrowserModelThumb.hpp"
+#include "asset/ModelThumb.hpp"
 
 namespace burnhope {
 
-struct Engine;
+struct BrowserState;
+struct JobPool;
 
 constexpr uint8_t kThumbSlot = 10;   // photo slot of the thumbnail atlas
 constexpr uint32_t kThumbPx = 64;    // texels per cell
@@ -29,15 +30,15 @@ struct ThumbCache {
     int64_t stamp[kThumbCells]{};
     uint32_t used[kThumbCells]{};
     uint32_t clock = 0;
-    std::unique_ptr<ModelBaker, ModelBakerDelete> baker; // 3D model previews are baked off the frame loop
+    ModelBakerPtr baker; // 3D model previews are baked off the frame loop
     bool kindsReady = false;
     bool dirty = false;
 };
 
-[[nodiscard]] bool thumbsInit(ThumbCache& cache);
+[[nodiscard]] bool thumbsInit(ThumbCache& cache, JobPool& pool);
 // Gives every shown tile a thumbnail cell (baking at most a few previews per call), then uploads the atlas when it changed.
-void thumbsSync(Engine& e);
+void thumbsSync(BrowserState& br);
 // Forgets the cached preview of `path` (after it was edited); its tile re-bakes when next shown.
-void thumbsInvalidate(Engine& e, const char* path);
+void thumbsInvalidate(BrowserState& br, const char* path);
 
 } // namespace burnhope

@@ -1,5 +1,5 @@
 [
- {"name": "inspector", "class": "dock_right", "behaviors": ["scroll"], "children": [
+ {"name": "inspector", "bind": "inspector.panel", "class": "dock_right", "behaviors": ["scroll"], "children": [
   {"name": "hierTitle", "class": "label_title", "text": "Scene"},
   {"name": "hier", "bind": "scene.hier", "class": "list_hier", "behaviors": ["virtual", "hover"], "count": 0, "itemH": 26, "itemAction": 83},
   {"name": "title", "class": "row_tall", "children": [

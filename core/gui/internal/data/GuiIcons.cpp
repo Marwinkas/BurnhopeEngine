@@ -1,4 +1,4 @@
-#include "gui/data/GuiIcons.hpp"
+#include "gui/GuiIcons.hpp"
 
 #include <iterator>
 

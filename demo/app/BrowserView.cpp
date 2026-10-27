@@ -2,14 +2,13 @@
 #include <cstdio>
 
 #include "app/BrowserInternal.hpp"
-#include "app/Engine.hpp"
 
 namespace burnhope {
 namespace fs = std::filesystem;
 namespace {
 
-constexpr const char* kStatus = "bottom::filesCol::info::status";
-constexpr const char* kDetail = "bottom::filesCol::info::detail";
+constexpr const char* kStatus = "browser.status";
+constexpr const char* kDetail = "browser.detail";
 constexpr uint32_t kTreeCap = 400;
 constexpr uint8_t kNoThumbSlot = 255;
 
@@ -24,9 +23,9 @@ const char* kindIcon(FileKind kind) {
     }
 }
 
-GuiListEntry tileRow(const Engine& e, const BrowserItem& item) {
+GuiListEntry tileRow(const BrowserState& br, const BrowserItem& item) {
     GuiListEntry row{};
-    if (e.browser.listView) {
+    if (br.listView) {
         std::snprintf(row.text, sizeof(row.text), "%s", item.name);
         row.row.icon = guiHostIconCell(kindIcon(item.kind));
         fileDateText(row.row.col1, sizeof(row.row.col1), item.mtime);
@@ -72,35 +71,29 @@ void scanTree(BrowserState& b, const fs::path& dir, uint32_t depth) {
     }
 }
 
-// Breadcrumb pill: the folders from the project root to the working directory, the last kCrumbCap of them.
-void showCrumbs(Engine& e) {
-    BrowserState& b = e.browser;
-    std::vector<fs::path> chain;
+// Breadcrumb strip: one crumb per folder from the project root to the working directory.
+void showCrumbs(BrowserState& br) {
+    BrowserState& b = br;
+    b.crumbs.clear();
     std::error_code ec;
     const fs::path rel = fs::relative(b.cwd, b.root, ec);
     fs::path at = b.root;
-    chain.push_back(at);
+    b.crumbs.push_back(at);
     if (!ec && rel != ".") {
         for (const fs::path& part : rel) {
             at /= part;
-            chain.push_back(at);
+            b.crumbs.push_back(at);
         }
     }
-    const size_t skip = chain.size() > kCrumbCap ? chain.size() - kCrumbCap : 0;
-    char node[96];
-    for (uint32_t i = 0; i < kCrumbCap; ++i) {
-        const bool live = skip + i < chain.size();
-        std::snprintf(node, sizeof(node), "%sc%u", kBrowserPill, i);
-        guiHostSetShown(e.gui, node, live);
-        if (live) {
-            b.crumb[i] = chain[skip + i];
-            guiHostSetText(e.gui, node, (skip + i == 0 ? b.root.filename() : chain[skip + i].filename()).string().c_str());
-        }
-        if (i + 1 < kCrumbCap) {
-            std::snprintf(node, sizeof(node), "%ss%u", kBrowserPill, i);
-            guiHostSetShown(e.gui, node, skip + i + 1 < chain.size());
-        }
+    b.crumbNames.clear();
+    for (size_t i = 0; i < b.crumbs.size(); ++i) {
+        b.crumbNames.push_back((i == 0 ? b.root.filename() : b.crumbs[i].filename()).string());
     }
+    b.crumbText.clear();
+    for (const std::string& name : b.crumbNames) {
+        b.crumbText.push_back(name.c_str());
+    }
+    (void)guiHostSetCrumbs(br.gui, kBrowserPill, b.crumbText.data(), static_cast<uint32_t>(b.crumbText.size()));
 }
 
 } // namespace
@@ -117,24 +110,24 @@ uint32_t browserDepthOf(const BrowserState& b, const fs::path& dir) {
     return depth;
 }
 
-void browserShowTree(Engine& e) {
-    BrowserState& b = e.browser;
+void browserShowTree(BrowserState& br) {
+    BrowserState& b = br;
     b.tree.clear();
     b.rows.clear();
     if (!browserContains(b.expanded, b.root)) {
         b.expanded.push_back(b.root);
     }
     scanTree(b, b.root, 0);
-    guiHostSetList(e.gui, kBrowserTree, b.rows.data(), static_cast<uint32_t>(b.rows.size()));
+    guiHostSetList(br.gui, kBrowserTree, b.rows.data(), static_cast<uint32_t>(b.rows.size()));
     for (uint32_t i = 0; i < b.tree.size(); ++i) {
         if (b.tree[i] == b.cwd) {
-            guiHostSetListSelected(e.gui, kBrowserTree, i);
+            guiHostSetListSelected(br.gui, kBrowserTree, i);
         }
     }
 }
 
-void browserShowStatus(Engine& e) {
-    BrowserState& b = e.browser;
+void browserShowStatus(BrowserState& br) {
+    BrowserState& b = br;
     uint32_t folders = 0;
     uint32_t marked = 0;
     uintmax_t bytes = 0;
@@ -149,7 +142,7 @@ void browserShowStatus(Engine& e) {
     char text[128];
     std::snprintf(text, sizeof(text), "%u %s, %u %s (%s)", folders, folders == 1 ? "folder" : "folders", files, files == 1 ? "file" : "files",
                   size);
-    guiHostSetText(e.gui, kStatus, text);
+    guiHostSetText(br.gui, kStatus, text);
     if (marked > 1) {
         std::snprintf(text, sizeof(text), "Selected: %u items", marked);
     } else if (b.selected < b.files.size()) {
@@ -161,57 +154,57 @@ void browserShowStatus(Engine& e) {
     } else {
         text[0] = '\0';
     }
-    guiHostSetText(e.gui, kDetail, text);
+    guiHostSetText(br.gui, kDetail, text);
 }
 
-void browserShowFiles(Engine& e) {
-    BrowserState& b = e.browser;
+void browserShowFiles(BrowserState& br) {
+    BrowserState& b = br;
     browserScan(b.cwd, BrowserQuery{b.filter, b.kindFilter, b.sort}, b.files);
     b.rows.clear();
     for (const BrowserItem& item : b.files) {
-        b.rows.push_back(tileRow(e, item));
+        b.rows.push_back(tileRow(br, item));
     }
     b.selected = kGuiNoSelection;
     b.anchor = kGuiNoSelection;
-    guiHostSetList(e.gui, kBrowserGrid, b.rows.data(), static_cast<uint32_t>(b.rows.size()));
-    showCrumbs(e);
-    browserShowStatus(e);
+    guiHostSetList(br.gui, kBrowserGrid, b.rows.data(), static_cast<uint32_t>(b.rows.size()));
+    showCrumbs(br);
+    browserShowStatus(br);
 }
 
-void browserApplyTile(Engine& e) {
-    BrowserState& b = e.browser;
+void browserApplyTile(BrowserState& br) {
+    BrowserState& b = br;
     if (b.listView) {
-        guiHostSetListItemClass(e.gui, kBrowserGrid, "row_item");
-        guiHostSetListThumbs(e.gui, kBrowserGrid, kNoThumbSlot, 0, 0, 0);
-        guiHostSetListMetrics(e.gui, kBrowserGrid, 0.0f, guiHostToken(e.gui, "list.rowH"), false);
+        guiHostSetListItemClass(br.gui, kBrowserGrid, "row_item");
+        guiHostSetListThumbs(br.gui, kBrowserGrid, kNoThumbSlot, 0, 0, 0);
+        guiHostSetListMetrics(br.gui, kBrowserGrid, 0.0f, guiHostToken(br.gui, "list.rowH"), false);
         return;
     }
     const float tile = static_cast<float>(b.tilePx);
-    guiHostSetListItemClass(e.gui, kBrowserGrid, "tile_item");
-    guiHostSetListThumbs(e.gui, kBrowserGrid, kThumbSlot, kThumbGrid, kThumbGrid, b.tilePx);
-    guiHostSetListMetrics(e.gui, kBrowserGrid, tile + guiHostToken(e.gui, "tile.gutter"), tile + guiHostToken(e.gui, "tile.caption"), true);
+    guiHostSetListItemClass(br.gui, kBrowserGrid, "tile_item");
+    guiHostSetListThumbs(br.gui, kBrowserGrid, kThumbSlot, kThumbGrid, kThumbGrid, b.tilePx);
+    guiHostSetListMetrics(br.gui, kBrowserGrid, tile + guiHostToken(br.gui, "tile.gutter"), tile + guiHostToken(br.gui, "tile.caption"), true);
 }
 
 // Re-renders the tile captions (zoom, view switch) in place: scroll position and marks stay.
-void browserRestyleTiles(Engine& e) {
-    BrowserState& b = e.browser;
-    browserApplyTile(e);
+void browserRestyleTiles(BrowserState& br) {
+    BrowserState& b = br;
+    browserApplyTile(br);
     b.rows.clear();
     for (const BrowserItem& item : b.files) {
-        b.rows.push_back(tileRow(e, item));
+        b.rows.push_back(tileRow(br, item));
     }
-    guiHostUpdateList(e.gui, kBrowserGrid, b.rows.data(), static_cast<uint32_t>(b.rows.size()));
+    guiHostUpdateList(br.gui, kBrowserGrid, b.rows.data(), static_cast<uint32_t>(b.rows.size()));
 }
 
-void browserEnter(Engine& e, const fs::path& dir, bool record) {
-    BrowserState& b = e.browser;
+void browserEnter(BrowserState& br, const fs::path& dir, bool record) {
+    BrowserState& b = br;
     if (record && (b.history.empty() || b.history[b.historyAt] != dir)) {
         b.history.resize(b.historyAt + 1);
         b.history.push_back(dir);
         b.historyAt = b.history.size() - 1;
     }
     b.cwd = dir;
-    browserShowFiles(e);
+    browserShowFiles(br);
     // The tree unfolds every parent of the folder (the folder itself stays as it was) and lights the active row.
     for (fs::path up = dir.parent_path(); !up.lexically_relative(b.root).empty() && *up.lexically_relative(b.root).begin() != ".."; up = up.parent_path()) {
         if (!browserContains(b.expanded, up)) {
@@ -221,7 +214,7 @@ void browserEnter(Engine& e, const fs::path& dir, bool record) {
             break;
         }
     }
-    browserShowTree(e);
+    browserShowTree(br);
 }
 
 } // namespace burnhope

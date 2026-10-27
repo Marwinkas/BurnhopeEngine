@@ -1,27 +1,29 @@
-#include "host/GuiHost.hpp"
+#include "gui/GuiHost.hpp"
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <span>
 #include <new>
 #include <string_view>
+#include <vector>
 
 #include <flecs.h>
 #include <yoga/Yoga.h>
 #include <spdlog/spdlog.h>
 
 #include "Str.hpp"
-#include "gui/Gui.hpp"
-#include "gui/interaction/InteractDragDrop.hpp"
-#include "gui/data/GuiIcons.hpp"
-#include "gui/input/GuiHitTest.hpp"
-#include "gui/layout/GuiLayoutEngine.hpp"
-#include "gui/style/GuiStyleResolver.hpp"
-#include "gui/style/GuiStyleSheet.hpp"
-#include "gui/loader/GuiLoader.hpp"
-#include "gui/text/GuiTextEngine.hpp"
+#include "Gui.hpp"
+#include "interaction/InteractDragDrop.hpp"
+#include "gui/GuiIcons.hpp"
+#include "input/GuiHitTest.hpp"
+#include "layout/GuiLayoutEngine.hpp"
+#include "style/GuiStyleResolver.hpp"
+#include "style/GuiStyleSheet.hpp"
+#include "loader/GuiLoader.hpp"
+#include "text/GuiTextEngine.hpp"
 #include "image/ImageDecode.hpp"
 #include "io/File.hpp"
 #include "platform/PlatformUtil.hpp"
@@ -40,7 +42,11 @@ constexpr float kListSelectedPlate = 0.9f;
 constexpr float kListCardPlate = 1.0f;
 constexpr float kListTonePlate = 0.12f;
 
-enum class BindKind : uint8_t { None = 0, Click, Drag, Drag2, Edit, List };
+enum class BindKind : uint8_t { None = 0, Click, Drag, Drag2, Edit, List, Crumbs };
+
+// Crumb buttons of every strip click with action kCrumbAction | strip bind << 16 | crumb index.
+constexpr uint32_t kCrumbAction = 0x40000000u;
+constexpr uint32_t kCrumbIndexMask = 0xFFFFu;
 enum class Gesture : uint8_t { Click = 0, Activate, Context };
 
 struct Bind {
@@ -53,6 +59,7 @@ struct Bind {
     GuiListFn list = nullptr;
     GuiContextFn context = nullptr;
     GuiValue2Fn value2 = nullptr;
+    GuiCrumbFn crumb = nullptr;
     void* user = nullptr;
     float last = 0.0f;
     float lastY = 0.0f;
@@ -92,6 +99,12 @@ struct Event {
 
 } // namespace
 
+struct CrumbStrip {
+    uint64_t pill = 0;
+    uint32_t bind = 0;
+    std::vector<uint64_t> nodes; // crumb buttons and separators spawned below the pill
+};
+
 struct GuiHost {
     flecs::world world;
     gui::GuiStyleSheet style{};
@@ -113,6 +126,7 @@ struct GuiHost {
     gui::GuiDragDropOps dragOps{};
     mutable KeyEntry keys[kKeyCap]{}; // index of the bind keys, rebuilt when a key is not found (panels mount at run time)
     mutable uint32_t keyCount = 0;
+    std::vector<CrumbStrip> strips;
 };
 
 namespace {
@@ -205,6 +219,14 @@ void collect(GuiHost& g) {
                     if (at != nullptr && at->index != gui::kGuiVirtualUnbound && item.parent().id() == bind.entity) {
                         push(g, b, static_cast<float>(at->index), nullptr, Gesture::Context);
                     }
+                }
+            }
+            continue;
+        }
+        if (bind.kind == BindKind::Crumbs) {
+            for (uint32_t i = 0; i < in.actionCount && i < gui::kGuiActionCap; ++i) {
+                if ((in.actions[i].action & ~kCrumbIndexMask) == bind.action) {
+                    push(g, b, static_cast<float>(in.actions[i].action & kCrumbIndexMask), nullptr);
                 }
             }
             continue;
@@ -852,8 +874,10 @@ bool guiHostBox(const GuiHost* gui, const char* path, float& x, float& y, float&
     return true;
 }
 
-void guiHostSetRect(GuiHost* gui, const char* path, float x, float y, float w, float h) {
-    gui::guiLayoutSetRect(target(gui, path), x, y, w, h);
+void guiHostShowMarquee(GuiHost* gui, const char* path, float x0, float y0, float x1, float y1) {
+    const flecs::entity e = target(gui, path);
+    gui::guiLayoutSetRect(e, std::min(x0, x1), std::min(y0, y1), std::abs(x1 - x0), std::abs(y1 - y0));
+    gui::guiSetShown(e, true);
 }
 
 uint32_t guiHostListHits(const GuiHost* gui, const char* path, float x0, float y0, float x1, float y1, uint32_t* out, uint32_t cap) {
@@ -1014,22 +1038,144 @@ void guiHostOpenAtPointer(GuiHost* gui, const char* path) {
     o->open = 1;
 }
 
-bool guiHostMount(GuiHost* gui, const char* screenPath, const char* parentPath) {
-    if (gui == nullptr || screenPath == nullptr) {
+bool guiHostSpawnSnippet(GuiHost* gui, const char* parentPath, const char* snippetPath) {
+    if (gui == nullptr || snippetPath == nullptr) {
         return false;
     }
-    const flecs::entity parent = parentPath != nullptr && parentPath[0] != '\0' ? gui->root.lookup(parentPath) : gui->root;
+    const flecs::entity parent = parentPath != nullptr && parentPath[0] != '\0' ? target(gui, parentPath) : gui->root;
     if (!parent.is_valid()) {
-        spdlog::error("gui: mount parent {} not found", parentPath);
+        spdlog::error("gui: snippet parent {} not found", parentPath);
         return false;
     }
     MappedFile file{};
-    if (!fileMapReadOnly(screenPath, &file) || file.data == nullptr) {
+    if (!fileMapReadOnly(snippetPath, &file) || file.data == nullptr) {
         return false;
     }
-    flecs::entity mounted;
-    const bool ok = gui::guiLoadScreen(gui->world, gui->style, std::string_view{reinterpret_cast<const char*>(file.data), file.size}, parent, &mounted);
+    flecs::entity spawned;
+    const bool ok = gui::guiLoadScreen(gui->world, gui->style, std::string_view{reinterpret_cast<const char*>(file.data), file.size}, parent, &spawned);
     fileUnmap(&file);
+    gui->keyCount = 0;
+    return ok;
+}
+
+bool guiHostDestroyNode(GuiHost* gui, const char* path) {
+    const flecs::entity e = target(gui, path);
+    if (!e.is_valid() || !e.is_alive() || e == gui->root) {
+        return false;
+    }
+    gui::guiLayoutDetach(e);
+    e.destruct();
+    gui->keyCount = 0;
+    return true;
+}
+
+bool guiHostSetClass(GuiHost* gui, const char* path, const char* styleClass) {
+    const flecs::entity e = target(gui, path);
+    if (!e.is_valid() || styleClass == nullptr) {
+        return false;
+    }
+    const uint32_t id = gui::guiStyleFind(gui->style, styleClass);
+    return id != gui::kGuiNoClass && gui::guiStyleApply(gui->style, e, id);
+}
+
+bool guiHostSetTheme(GuiHost* gui, const char* name) {
+    char resolved[640]{};
+    MappedFile file{};
+    if (gui == nullptr || name == nullptr || !platformResolveAsset("assets/ui/theme.json", resolved, sizeof(resolved)) ||
+        !fileMapReadOnly(resolved, &file) || file.data == nullptr) {
+        return false;
+    }
+    const bool ok = gui::guiStyleLoadTheme(gui->style, std::string_view{reinterpret_cast<const char*>(file.data), file.size}, name);
+    fileUnmap(&file);
+    return ok;
+}
+
+bool guiHostBindCrumbs(GuiHost* gui, const char* path, GuiCrumbFn fn, void* user) {
+    const uint32_t index = gui != nullptr ? gui->bindCount : 0;
+    Bind* b = addBind(gui, BindKind::Crumbs, path, fn != nullptr, user);
+    if (b == nullptr) {
+        return false;
+    }
+    b->crumb = fn;
+    b->action = kCrumbAction | (index << 16);
+    gui->strips.push_back(CrumbStrip{.pill = b->entity, .bind = index});
+    return true;
+}
+
+namespace {
+
+// Appends `text` as a JSON string body: quotes and backslashes escaped, control bytes dropped, cut at kTextCap - 1 bytes on a
+// UTF-8 boundary.
+void appendJsonText(char* out, size_t cap, size_t& at, std::string_view text) {
+    size_t take = std::min<size_t>(text.size(), kTextCap - 1);
+    while (take > 0 && take < text.size() && (static_cast<uint8_t>(text[take]) & 0xC0u) == 0x80u) {
+        --take;
+    }
+    for (size_t i = 0; i < take && at + 3 < cap; ++i) {
+        const char c = text[i];
+        if (static_cast<uint8_t>(c) < 0x20u) {
+            continue;
+        }
+        if (c == '"' || c == '\\') {
+            out[at++] = '\\';
+        }
+        out[at++] = c;
+    }
+    out[at] = '\0';
+}
+
+bool spawnCrumbNode(GuiHost& g, CrumbStrip& strip, const char* cls, std::string_view text, uint32_t action) {
+    char json[2 * kTextCap + 192];
+    size_t at = 0;
+    const int head = action != 0
+        ? std::snprintf(json, sizeof(json), R"({"class":"%s","behaviors":["hover","click"],"action":%u,"text":")", cls, action)
+        : std::snprintf(json, sizeof(json), R"({"class":"%s","text":")", cls);
+    if (head <= 0) {
+        return false;
+    }
+    at = static_cast<size_t>(head);
+    appendJsonText(json, sizeof(json) - 4, at, text);
+    json[at++] = '"';
+    json[at++] = '}';
+    json[at] = '\0';
+    flecs::entity node;
+    if (!gui::guiLoadScreen(g.world, g.style, std::string_view{json, at}, g.world.entity(strip.pill), &node) || !node.is_valid()) {
+        return false;
+    }
+    strip.nodes.push_back(node.id());
+    return true;
+}
+
+} // namespace
+
+bool guiHostSetCrumbs(GuiHost* gui, const char* path, const char* const* names, uint32_t count) {
+    const flecs::entity pill = target(gui, path);
+    if (!pill.is_valid()) {
+        return false;
+    }
+    CrumbStrip* strip = nullptr;
+    for (CrumbStrip& s : gui->strips) {
+        if (s.pill == pill.id()) {
+            strip = &s;
+        }
+    }
+    if (strip == nullptr || count > kCrumbIndexMask) {
+        spdlog::error("gui: {} has no crumb binding", path);
+        return false;
+    }
+    for (const uint64_t id : strip->nodes) {
+        const flecs::entity old = gui->world.entity(id);
+        if (old.is_alive()) {
+            gui::guiLayoutDetach(old);
+            old.destruct();
+        }
+    }
+    strip->nodes.clear();
+    bool ok = true;
+    for (uint32_t i = 0; i < count; ++i) {
+        ok = (i == 0 || spawnCrumbNode(*gui, *strip, "crumb_sep", ">", 0)) && ok;
+        ok = spawnCrumbNode(*gui, *strip, "crumb", names[i], gui->binds[strip->bind].action | i) && ok;
+    }
     return ok;
 }
 
@@ -1077,6 +1223,9 @@ void guiHostPump(GuiHost* gui) {
             } else {
                 b.list(b.user, static_cast<uint32_t>(ev.value), ev.gesture == Gesture::Activate);
             }
+            break;
+        case BindKind::Crumbs:
+            b.crumb(b.user, static_cast<uint32_t>(ev.value));
             break;
         case BindKind::None:
             break;

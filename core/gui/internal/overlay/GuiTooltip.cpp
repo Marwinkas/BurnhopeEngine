@@ -1,4 +1,4 @@
-#include "gui/overlay/GuiTooltip.hpp"
+#include "overlay/GuiTooltip.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -6,8 +6,8 @@
 
 #include <yoga/Yoga.h>
 
-#include "gui/text/GuiTextEngine.hpp"
-#include "gui/virtual/GuiVirtualPool.hpp"
+#include "text/GuiTextEngine.hpp"
+#include "virtual/GuiVirtualPool.hpp"
 
 namespace burnhope::gui {
 namespace {

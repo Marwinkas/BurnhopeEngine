@@ -1,7 +1,7 @@
-#include "gui/interaction/InteractClick.hpp"
+#include "interaction/InteractClick.hpp"
 
-#include "gui/input/GuiHitTest.hpp"
-#include "gui/layout/GuiLayoutEngine.hpp"
+#include "input/GuiHitTest.hpp"
+#include "layout/GuiLayoutEngine.hpp"
 
 namespace burnhope::gui {
 namespace {

@@ -1,12 +1,12 @@
 #define DOCTEST_CONFIG_NO_EXCEPTIONS
 #include <doctest/doctest.h>
 
-#include "gui/Gui.hpp"
-#include "gui/input/GuiHitTest.hpp"
-#include "gui/layout/GuiLayoutEngine.hpp"
-#include "gui/loader/GuiLoader.hpp"
-#include "gui/render/GuiEmitter.hpp"
-#include "gui/style/GuiStyleSheet.hpp"
+#include "Gui.hpp"
+#include "input/GuiHitTest.hpp"
+#include "layout/GuiLayoutEngine.hpp"
+#include "loader/GuiLoader.hpp"
+#include "render/GuiEmitter.hpp"
+#include "style/GuiStyleSheet.hpp"
 
 using namespace burnhope;
 using namespace burnhope::gui;

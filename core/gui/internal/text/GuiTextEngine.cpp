@@ -1,4 +1,4 @@
-#include "gui/text/GuiTextEngine.hpp"
+#include "text/GuiTextEngine.hpp"
 
 #include <cstring>
 

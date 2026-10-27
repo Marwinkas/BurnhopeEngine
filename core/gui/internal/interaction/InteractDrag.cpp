@@ -1,9 +1,9 @@
-#include "gui/interaction/InteractDrag.hpp"
+#include "interaction/InteractDrag.hpp"
 
 #include <algorithm>
 #include <cmath>
 
-#include "gui/input/GuiHitTest.hpp"
+#include "input/GuiHitTest.hpp"
 
 namespace burnhope::gui {
 

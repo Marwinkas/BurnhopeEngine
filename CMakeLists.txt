@@ -85,6 +85,8 @@ set(BH_CORE ${CMAKE_CURRENT_SOURCE_DIR}/core)
 set(BH_DEMO ${CMAKE_CURRENT_SOURCE_DIR}/demo)
 set(BH_ENGINE ${CMAKE_CURRENT_SOURCE_DIR}/engine)
 set(BH_INCLUDES ${BH_CORE} ${vma_SOURCE_DIR}/include)
+set(BH_GUI_PUBLIC ${BH_CORE}/gui/include)
+set(BH_GUI_INTERNAL ${BH_CORE}/gui/internal)
 
 # Ядро видит только core/. Демо и движок подключают ядро снаружи.
 # Если в core появится include демо или движка, конфигурация падает.
@@ -111,6 +113,10 @@ bh_firewall("core/rhi must not import Window, ui, gui, files, host or SDL3"
 file(GLOB_RECURSE BH_DEMO_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/demo/*.cpp ${CMAKE_SOURCE_DIR}/demo/*.hpp)
 bh_firewall("demo must not import flecs; it reaches the GUI through the GuiHost facade"
     "flecs\\.h" ${BH_DEMO_SOURCES})
+include(${CMAKE_SOURCE_DIR}/tools/BhHygiene.cmake)
+add_custom_target(bh_hygiene ALL
+    COMMAND ${CMAKE_COMMAND} -DBH_DEMO=${BH_DEMO} -DBH_CORE=${BH_CORE} -DBH_ENGINE=${BH_ENGINE} -P ${CMAKE_SOURCE_DIR}/tools/BhHygiene.cmake
+    COMMENT "bh_hygiene: demo/ architectural gates" VERBATIM)
 file(GLOB_RECURSE BH_T0_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/memory/*.cpp ${BH_CORE}/memory/*.hpp ${BH_CORE}/io/*.cpp ${BH_CORE}/io/*.hpp
     ${BH_CORE}/wasm/*.cpp ${BH_CORE}/wasm/*.hpp ${BH_CORE}/color/*.hpp ${BH_CORE}/time/*.hpp
@@ -317,6 +323,7 @@ bh_module(render
     engine/src/SceneTargets.cpp
     engine/src/SceneTextures.cpp
     engine/src/SceneUniforms.cpp
+    engine/src/SceneBlockFill.cpp
     engine/src/SceneLights.cpp
 )
 target_include_directories(bh_render PUBLIC ${BH_ENGINE} ${BH_ENGINE}/include ${CMAKE_CURRENT_SOURCE_DIR}/RTXDI/Libraries/Rtxdi/Include)
@@ -334,13 +341,11 @@ bh_module(rhi_ui
 )
 bh_module(host
     core/host/Host.cpp
-    core/host/GuiHost.cpp
     core/host/Recent.cpp
 )
 target_link_libraries(bh_host PUBLIC bh_gui bh_rhi_ui volk bh_rhi bh_platform bh_foundation)
 bh_module(app
     demo/app/Engine.cpp
-    demo/app/SceneBlockFill.cpp
     demo/app/InspectorController.cpp
     demo/app/BrowserController.cpp
     demo/app/BrowserView.cpp
@@ -354,17 +359,18 @@ bh_module(app
     demo/app/BrowserModel.cpp
     demo/app/BrowserFiles.cpp
     demo/app/BrowserThumbs.cpp
-    demo/app/BrowserModelThumb.cpp
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
 target_link_libraries(bh_app PUBLIC bh_host bh_gui bh_rhi_ui bh_gpu_scene)
 file(GLOB_RECURSE BH_GUI_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/gui/*.cpp)
 add_library(bh_gui STATIC ${BH_GUI_SOURCES})
-target_include_directories(bh_gui PUBLIC ${BH_INCLUDES})
+# Public headers (gui/*.hpp) are visible to every consumer; the internal tree (Flecs components, Yoga layout, emitter,
+# interaction, GuiHost.cpp) is private to bh_gui. Only the unit-test target may reach into it.
+target_include_directories(bh_gui PUBLIC ${BH_INCLUDES} ${BH_GUI_PUBLIC} PRIVATE ${BH_GUI_INTERNAL})
 target_compile_definitions(bh_gui PUBLIC ${BH_DEFS})
 target_compile_options(bh_gui PRIVATE ${BH_OPTS})
-target_link_libraries(bh_gui PUBLIC bh_foundation yogacore flecs_static Vulkan::Headers spdlog::spdlog)
-target_link_libraries(bh_rhi_ui PUBLIC bh_gui bh_rhi bh_image volk Freetype::Freetype)
+target_link_libraries(bh_gui PUBLIC bh_foundation bh_rhi_ui bh_rhi bh_image yogacore flecs_static Vulkan::Headers spdlog::spdlog)
+target_link_libraries(bh_rhi_ui PUBLIC bh_rhi bh_image volk Freetype::Freetype)
 target_compile_definitions(bh_rhi_ui PRIVATE
     "BH_UI_VERT=\"${CMAKE_CURRENT_BINARY_DIR}/shaders/ui.vert.spv\""
     "BH_UI_FRAG=\"${CMAKE_CURRENT_BINARY_DIR}/shaders/ui.frag.spv\""
@@ -810,6 +816,7 @@ target_compile_definitions(bh_image PRIVATE
 add_dependencies(bh_image CompressSpv)
 
 add_executable(BurnhopeEngine demo/app/Main.cpp)
+add_dependencies(BurnhopeEngine bh_hygiene)
 target_link_libraries(BurnhopeEngine PRIVATE
     bh_app bh_host bh_gui bh_rhi_ui bh_image bh_rhi bh_foundation bh_platform bh_render bh_audio bh_gpu_scene bh_asset bh_material
     yogacore flecs_static
@@ -847,6 +854,6 @@ target_link_libraries(BurnhopeTest PRIVATE
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads Freetype::Freetype
 )
-target_include_directories(BurnhopeTest PRIVATE ${BH_DEMO} ${BH_CORE} ${BH_ENGINE} ${BH_ENGINE}/include ${vma_SOURCE_DIR}/include)
+target_include_directories(BurnhopeTest PRIVATE ${BH_GUI_PUBLIC} ${BH_GUI_INTERNAL} ${BH_DEMO} ${BH_CORE} ${BH_ENGINE} ${BH_ENGINE}/include ${vma_SOURCE_DIR}/include)
 target_compile_options(BurnhopeTest PRIVATE ${BH_OPTS})
 add_dependencies(BurnhopeTest UiSpv)

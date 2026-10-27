@@ -1,6 +1,16 @@
 #include "asset/ModelThumb.hpp"
 
+#include <spdlog/spdlog.h>
+
+#include "io/File.hpp"
+#include "platform/Jobs.hpp"
+
 #include <algorithm>
+#include <atomic>
+#include <cstdio>
+#include <cstring>
+#include <filesystem>
+#include <string>
 #include <array>
 #include <cmath>
 #include <limits>
@@ -178,6 +188,125 @@ bool modelBakeThumb(const ModelMesh& mesh, const uint8_t plate[3], uint8_t* rgba
         }
     }
     return any;
+}
+
+
+namespace {
+
+namespace fs = std::filesystem;
+
+std::string cacheFile(const fs::path& root, uint64_t key, int64_t mtime) {
+    char name[64];
+    std::snprintf(name, sizeof(name), "%016llx_%lld.bin", static_cast<unsigned long long>(key), static_cast<long long>(mtime));
+    return (root / "cache" / "thumbs" / name).string();
+}
+
+bool readCache(const std::string& file, uint8_t* rgba) {
+    MappedFile map{};
+    const bool ok = fileMapReadOnly(file.c_str(), &map) && map.data != nullptr && map.size == kModelThumbBytes;
+    if (ok) {
+        std::memcpy(rgba, map.data, kModelThumbBytes);
+    }
+    fileUnmap(&map);
+    return ok;
+}
+
+void writeCache(const std::string& file, const uint8_t* rgba) {
+    std::error_code ec;
+    fs::create_directories(fs::path(file).parent_path(), ec);
+    if (FILE* out = std::fopen(file.c_str(), "wb")) {
+        std::fwrite(rgba, 1, kModelThumbBytes, out);
+        std::fclose(out);
+    }
+}
+
+} // namespace
+
+// One bake at a time on the engine job pool. `state` hands the request to the job (Working) and the result back to the
+// main thread (Finished); the request fields are written before the release store of Working, the pixels before Finished.
+enum BakeState : uint8_t { kBakeIdle = 0, kBakeWorking, kBakeFinished };
+
+struct ModelBaker {
+    JobPool& pool;
+    uint8_t plate[3];
+    std::atomic<uint8_t> state{kBakeIdle};
+    std::string path;
+    std::string file;
+    uint64_t key = 0;
+    int64_t mtime = 0;
+    uint64_t doneKey = 0;
+    int64_t doneMtime = 0;
+    uint8_t pixels[kModelThumbBytes]{};
+};
+
+namespace {
+
+void bakeJob(void* user) {
+    auto& baker = *static_cast<ModelBaker*>(user);
+    ModelMesh mesh;
+    uint8_t rgba[kModelThumbBytes];
+    const bool loaded = modelLoadMesh(baker.path.c_str(), mesh);
+    if (!loaded || !modelBakeThumb(mesh, baker.plate, rgba)) {
+        spdlog::warn("model thumb: cannot preview {}", baker.path);
+        for (uint32_t i = 0; i < kModelThumbPx * kModelThumbPx; ++i) { // a failed model keeps a plain plate and is not retried
+            rgba[i * 4 + 0] = baker.plate[0];
+            rgba[i * 4 + 1] = baker.plate[1];
+            rgba[i * 4 + 2] = baker.plate[2];
+            rgba[i * 4 + 3] = 255;
+        }
+    }
+    writeCache(baker.file, rgba);
+    std::memcpy(baker.pixels, rgba, kModelThumbBytes);
+    baker.doneKey = baker.key;
+    baker.doneMtime = baker.mtime;
+    baker.state.store(kBakeFinished, std::memory_order_release);
+}
+
+} // namespace
+
+void ModelBakerDelete::operator()(ModelBaker* baker) const {
+    if (baker == nullptr) {
+        return;
+    }
+    jobsDrain(baker->pool); // the running bake reads the baker
+    delete baker;
+}
+
+ModelBaker* assetModelBakerCreate(JobPool& pool, const uint8_t plate[3]) {
+    return new ModelBaker{.pool = pool, .plate = {plate[0], plate[1], plate[2]}};
+}
+
+ModelThumbState assetFetchModelThumb(ModelBaker& baker, const fs::path& root, const char* path, uint64_t key, int64_t mtime, uint8_t* rgba) {
+    uint8_t st = baker.state.load(std::memory_order_acquire);
+    if (st == kBakeFinished) {
+        const bool mine = baker.doneKey == key && baker.doneMtime == mtime;
+        if (mine) {
+            std::memcpy(rgba, baker.pixels, kModelThumbBytes);
+        }
+        baker.state.store(kBakeIdle, std::memory_order_relaxed); // a result nobody asks for is already on disk
+        st = kBakeIdle;
+        if (mine) {
+            return ModelThumbState::Ready;
+        }
+    }
+    if (st == kBakeWorking && baker.key == key && baker.mtime == mtime) {
+        return ModelThumbState::Pending;
+    }
+    const std::string file = cacheFile(root, key, mtime);
+    if (readCache(file, rgba)) {
+        return ModelThumbState::Ready;
+    }
+    if (st == kBakeIdle) {
+        baker.path = path;
+        baker.file = file;
+        baker.key = key;
+        baker.mtime = mtime;
+        baker.state.store(kBakeWorking, std::memory_order_release);
+        if (!jobsRun(baker.pool, Job{.fn = bakeJob, .user = &baker})) {
+            baker.state.store(kBakeIdle, std::memory_order_relaxed);
+        }
+    }
+    return ModelThumbState::Pending;
 }
 
 } // namespace burnhope

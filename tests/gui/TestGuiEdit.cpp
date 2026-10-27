@@ -4,11 +4,11 @@
 #include <cstdio>
 #include <string_view>
 
-#include "gui/Gui.hpp"
-#include "gui/interaction/InteractDragDrop.hpp"
-#include "gui/layout/GuiLayoutEngine.hpp"
-#include "gui/loader/GuiLoader.hpp"
-#include "gui/style/GuiStyleSheet.hpp"
+#include "Gui.hpp"
+#include "interaction/InteractDragDrop.hpp"
+#include "layout/GuiLayoutEngine.hpp"
+#include "loader/GuiLoader.hpp"
+#include "style/GuiStyleSheet.hpp"
 #include "io/File.hpp"
 
 using namespace burnhope;

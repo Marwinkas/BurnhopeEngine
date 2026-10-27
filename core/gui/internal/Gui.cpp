@@ -1,15 +1,15 @@
-#include "gui/Gui.hpp"
+#include "Gui.hpp"
 
 #include <cstddef>
 #include <cstring>
 
-#include "gui/data/GuiRow.hpp"
-#include "gui/interaction/Interact.hpp"
-#include "gui/layout/GuiLayoutEngine.hpp"
-#include "gui/layout/GuiScissor.hpp"
-#include "gui/overlay/GuiOverlay.hpp"
-#include "gui/overlay/GuiTooltip.hpp"
-#include "gui/render/GuiEmitter.hpp"
+#include "gui/GuiRow.hpp"
+#include "interaction/Interact.hpp"
+#include "layout/GuiLayoutEngine.hpp"
+#include "layout/GuiScissor.hpp"
+#include "overlay/GuiOverlay.hpp"
+#include "overlay/GuiTooltip.hpp"
+#include "render/GuiEmitter.hpp"
 #include "platform/Check.hpp"
 
 namespace burnhope::gui {

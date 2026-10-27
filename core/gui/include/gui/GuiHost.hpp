@@ -2,8 +2,8 @@
 
 #include <cstdint>
 
-#include "gui/data/GuiRow.hpp"
-#include "gui/interaction/InteractDragTypes.hpp"
+#include "gui/GuiRow.hpp"
+#include "gui/GuiDragTypes.hpp"
 #include "rhi/ui/Canvas.hpp"
 
 namespace burnhope {
@@ -19,6 +19,8 @@ using GuiTextFn = void (*)(void* user, const char* text);
 // A pooled list item was clicked (activate = false) or double-clicked (activate = true).
 using GuiListFn = void (*)(void* user, uint32_t index, bool activate);
 // A pooled list item was right-clicked.
+// A crumb of a breadcrumb strip was clicked (index 0 = the first shown crumb).
+using GuiCrumbFn = void (*)(void* user, uint32_t index);
 using GuiContextFn = void (*)(void* user, uint32_t index);
 // A two-axis draggable (x, y in minV..maxV of its range 0..1) changed.
 using GuiValue2Fn = void (*)(void* user, float x, float y);
@@ -61,6 +63,10 @@ void guiHostDestroy(GuiHost* gui);
 // shows it at the pointer after the hover delay (core/gui/overlay/GuiTooltip); nodes with a JSON "tooltip" need no binding.
 using GuiTipFn = bool (*)(void* user, uint32_t index, char* out, uint32_t cap);
 [[nodiscard]] bool guiHostBindTooltip(GuiHost* gui, const char* path, GuiTipFn fn, void* user);
+// Breadcrumb strip: the node at `path` keeps its own first child (the "up" button); every call replaces the rest by one crumb
+// button per name, separated by ">" labels. The strip has no length limit. Clicks arrive through guiHostBindCrumbs.
+[[nodiscard]] bool guiHostBindCrumbs(GuiHost* gui, const char* path, GuiCrumbFn fn, void* user);
+[[nodiscard]] bool guiHostSetCrumbs(GuiHost* gui, const char* path, const char* const* names, uint32_t count);
 // Replaces the rows of a bound list (copied; at most kGuiListCap). Main thread only, outside the draw phase.
 void guiHostSetList(GuiHost* gui, const char* path, const GuiListEntry* entries, uint32_t count);
 void guiHostSetListSelected(GuiHost* gui, const char* path, uint32_t index);
@@ -105,8 +111,9 @@ void guiHostDragDropStep(GuiHost* gui);
 // ("actor.pos.x"), recognised by its '.' and the lack of "::". Keys survive any change of the layout hierarchy.
 // Screen box of a node; false when the path is unknown.
 [[nodiscard]] bool guiHostBox(const GuiHost* gui, const char* path, float& x, float& y, float& w, float& h);
-// Pins a direct child of the screen root at a screen rectangle (selection marquee).
-void guiHostSetRect(GuiHost* gui, const char* path, float x, float y, float w, float h);
+// Shows the passive marquee node at `path` (a direct child of the screen root) between two pointer corners; the core pins it,
+// so the application never assigns layout rectangles. guiHostSetShown(false) hides it again.
+void guiHostShowMarquee(GuiHost* gui, const char* path, float x0, float y0, float x1, float y1);
 // Indices of the pooled items of a list whose box meets the screen rectangle; returns how many were written (<= cap).
 [[nodiscard]] uint32_t guiHostListHits(const GuiHost* gui, const char* path, float x0, float y0, float x1, float y1, uint32_t* out, uint32_t cap);
 // Screen box of the pooled item that shows list row `index`; false when that row is not pooled (scrolled out).
@@ -125,8 +132,14 @@ void guiHostOpenAtPointer(GuiHost* gui, const char* path);
 // True when a painted or interactive GUI node covers the point (GUI units) in the current layout.
 [[nodiscard]] bool guiHostCovers(GuiHost* gui, float x, float y);
 
-// Parses another screen file and mounts its root below the node at `parentPath` ("" = the screen root). False on any failure.
-[[nodiscard]] bool guiHostMount(GuiHost* gui, const char* screenPath, const char* parentPath);
+// Parses a JSON snippet file and spawns its root below the node at `parentPath` ("" = the screen root). False on any failure.
+[[nodiscard]] bool guiHostSpawnSnippet(GuiHost* gui, const char* parentPath, const char* snippetPath);
+// Destroys a node and its whole subtree (layout nodes included). False when the node is unknown or is the screen root.
+[[nodiscard]] bool guiHostDestroyNode(GuiHost* gui, const char* path);
+// Re-styles a node with the style class `styleClass` of the loaded sheet. False when the node or the class is unknown.
+[[nodiscard]] bool guiHostSetClass(GuiHost* gui, const char* path, const char* styleClass);
+// Applies the palette of theme `name` (assets/ui/theme.json); the next frame paints with it. False when the theme is unknown.
+[[nodiscard]] bool guiHostSetTheme(GuiHost* gui, const char* name);
 // Shows cell `cell` of a cols x rows grid of photo slot `slot` in a node (slot 255 clears the photo).
 void guiHostSetPhoto(GuiHost* gui, const char* path, uint8_t slot, uint8_t cell, uint8_t cols, uint8_t rows);
 

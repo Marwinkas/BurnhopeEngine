@@ -1,12 +1,12 @@
-#include "gui/loader/GuiLoader.hpp"
+#include "loader/GuiLoader.hpp"
 
-#include "gui/data/GuiIcons.hpp"
+#include "gui/GuiIcons.hpp"
 
 #include <algorithm>
 #include <cstring>
 
-#include "gui/layout/GuiLayoutEngine.hpp"
-#include "gui/style/GuiStyleResolver.hpp"
+#include "layout/GuiLayoutEngine.hpp"
+#include "style/GuiStyleResolver.hpp"
 #include "io/File.hpp"
 #include "io/JsonCursor.hpp"
 

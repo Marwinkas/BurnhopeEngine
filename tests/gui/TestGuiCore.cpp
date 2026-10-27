@@ -1,13 +1,13 @@
 #define DOCTEST_CONFIG_NO_EXCEPTIONS
 #include <doctest/doctest.h>
 
-#include "gui/Gui.hpp"
+#include "Gui.hpp"
 #include <cstring>
 
-#include "gui/layout/GuiLayoutEngine.hpp"
-#include "gui/render/GuiEmitter.hpp"
-#include "gui/loader/GuiLoader.hpp"
-#include "gui/style/GuiStyleSheet.hpp"
+#include "layout/GuiLayoutEngine.hpp"
+#include "render/GuiEmitter.hpp"
+#include "loader/GuiLoader.hpp"
+#include "style/GuiStyleSheet.hpp"
 
 using namespace burnhope;
 using namespace burnhope::gui;
@@ -306,7 +306,7 @@ TEST_CASE("gui virtual pool recycles a bounded entity set over 10000 items") {
     CHECK(list.try_get<UiVirtual>()->first >= 9000);
 }
 
-TEST_CASE("gui scissor clamps clipped children to a zero rect and the emitter skips them") {
+TEST_CASE("gui scissor lets a node inherit its parent clip and the emitter skips boxes outside it") {
     Fixture f(kClipScreen, 400.0f, 600.0f);
     const flecs::entity clip = f.root.lookup("clip");
     const flecs::entity inside = clip.lookup("inside");
@@ -321,12 +321,18 @@ TEST_CASE("gui scissor clamps clipped children to a zero rect and the emitter sk
         FAIL("scissor pass wrote no UiClip");
         return;
     }
-    CHECK(in->w == doctest::Approx(40.0f));
-    CHECK(in->h == doctest::Approx(20.0f));
-    CHECK(out->x == 0.0f);
-    CHECK(out->y == 0.0f);
-    CHECK(out->w == 0.0f);
-    CHECK(out->h == 0.0f);
+    const UiBox* clipBox = clip.try_get<UiBox>();
+    if (clipBox == nullptr) {
+        FAIL("clip node has no box");
+        return;
+    }
+    // Children keep the clip of their clipping ancestor; it is never narrowed to their own box.
+    for (const UiClip* c : {in, out}) {
+        CHECK(c->x == doctest::Approx(clipBox->x));
+        CHECK(c->y == doctest::Approx(clipBox->y));
+        CHECK(c->w == doctest::Approx(clipBox->w));
+        CHECK(c->h == doctest::Approx(clipBox->h));
+    }
 
     static UiPrimitive buffer[kUiPrimCap];
     const uint32_t n = guiEmit(f.world, f.sheet, buffer, kUiPrimCap);

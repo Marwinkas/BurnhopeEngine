@@ -1,8 +1,6 @@
 #include "app/MaterialController.hpp"
 
-#include "app/BrowserThumbs.hpp"
-#include "app/Engine.hpp"
-#include "app/GuiActions.hpp"
+#include "gui/GuiHost.hpp"
 #include "app/MaterialInternal.hpp"
 #include "gpu_scene/SceneObject.hpp"
 #include "platform/PlatformUtil.hpp"
@@ -17,17 +15,16 @@ namespace burnhope {
 namespace {
 
 void onClick(void* user, uint32_t action) {
-    Engine& e = *static_cast<Engine*>(user);
-    MaterialState& m = e.material;
+    MaterialState& m = *static_cast<MaterialState*>(user);
     switch (action) {
     case kActMatClose:
         m.open = false;
         m.target = kSceneActorNone;
-        guiHostSetShown(e.gui, "mat.panel", false);
+        guiHostSetShown(m.gui, "mat.panel", false);
         return;
     case kActMatFlipY:
         m.doc.flipNormalY = m.doc.flipNormalY != 0 ? 0 : 1;
-        materialPushFlip(e);
+        materialPushFlip(m);
         materialTouch(m);
         return;
     case kActMatResetTiling:
@@ -38,14 +35,14 @@ void onClick(void* user, uint32_t action) {
         if (!tiling) {
             m.doc.uvOffset[0] = m.doc.uvOffset[1] = 0.0f;
         }
-        materialPushVec(e);
+        materialPushVec(m);
         materialTouch(m);
         return;
     }
     case kActMatSave:
         if (m.open && materialSaveBhmat(m.path, m.doc)) {
             spdlog::info("material saved: {}", m.path);
-            thumbsInvalidate(e, m.path);
+            m.saved(m.app, m.path);
         } else {
             spdlog::error("material save failed: {}", m.path);
         }
@@ -55,33 +52,35 @@ void onClick(void* user, uint32_t action) {
     }
     if (action >= kActMatShape && action < kActMatShape + 3) {
         m.shape = static_cast<uint8_t>(action - kActMatShape);
-        materialPushDoc(e);
+        materialPushDoc(m);
         materialTouch(m);
     }
 }
 
 } // namespace
 
-bool materialBind(Engine& e) {
-    MaterialState& m = e.material;
+bool materialBind(MaterialState& m, GuiHost& gui, SceneFrame* scene, void* app, MaterialSavedFn saved) {
+    m.gui = &gui;
+    m.scene = scene;
+    m.app = app;
+    m.saved = saved;
     m.atlas.assign(static_cast<size_t>(kMatAtlasW) * kMatAtlasH * 4u, 0);
     m.preview.assign(static_cast<size_t>(kMatSphereSide) * kMatSphereSide * 4u, 0);
     char screen[512]{};
     if (!platformResolveAsset("assets/gui/material.json", screen, sizeof(screen)) ||
-        !guiHostMount(e.gui, screen, "main")) {
+        !guiHostSpawnSnippet(m.gui, "main", screen)) {
         spdlog::error("material editor panel failed to mount");
         return false;
     }
-    bool ok = materialBindFields(e);
+    bool ok = materialBindFields(m);
     for (const uint32_t action : std::initializer_list<uint32_t>{kActMatClose, kActMatFlipY, kActMatResetTiling, kActMatResetOffset, kActMatSave, kActMatShape,
                             kActMatShape + 1u, kActMatShape + 2u}) {
-        ok = guiHostBindClick(e.gui, action, onClick, &e) && ok;
+        ok = guiHostBindClick(m.gui, action, onClick, &m) && ok;
     }
     return ok;
 }
 
-bool materialOpen(Engine& e, const char* path) {
-    MaterialState& m = e.material;
+bool materialOpen(MaterialState& m, const char* path) {
     BhmatDoc doc{};
     if (path == nullptr || !materialLoadBhmat(path, doc)) {
         spdlog::warn("material: cannot read {}", path != nullptr ? path : "(null)");
@@ -93,34 +92,32 @@ bool materialOpen(Engine& e, const char* path) {
     m.atlasDirty = true;
     m.previewDirty = true;
     m.sceneDirty = false;
-    const uint8_t picked = sceneFrameActorSelected(e.scene);
-    m.target = picked < sceneFrameActorCount(e.scene) ? picked : kSceneActorNone;
-    guiHostSetShown(e.gui, "mat.panel", true);
-    materialPushDoc(e);
+    const uint8_t picked = sceneFrameActorSelected(m.scene);
+    m.target = picked < sceneFrameActorCount(m.scene) ? picked : kSceneActorNone;
+    guiHostSetShown(m.gui, "mat.panel", true);
+    materialPushDoc(m);
     return true;
 }
 
-bool materialAssign(Engine& e, const char* path, uint8_t actor) {
+bool materialAssign(MaterialState& m, const char* path, uint8_t actor) {
     BhmatDoc doc{};
-    if (path == nullptr || actor >= sceneFrameActorCount(e.scene) || !materialLoadBhmat(path, doc)) {
+    if (path == nullptr || actor >= sceneFrameActorCount(m.scene) || !materialLoadBhmat(path, doc)) {
         return false;
     }
-    if (!sceneFrameApplyDoc(e.scene, actor, doc)) {
+    if (!sceneFrameApplyDoc(m.scene, actor, doc)) {
         spdlog::warn("material: cannot apply {} to actor {}", path, actor);
         return false;
     }
-    if (!materialOpen(e, path)) {
+    if (!materialOpen(m, path)) {
         return false;
     }
-    e.material.target = actor;
+    m.target = actor;
     return true;
 }
 
-void materialSync(Engine& e) {
-    MaterialState& m = e.material;
-    Canvas* canvas = hostCanvas(e.host, e.slot);
+void materialSync(MaterialState& m, Canvas* canvas) {
     if (m.open && m.sceneDirty && m.target != kSceneActorNone) {
-        if (sceneFrameApplyDoc(e.scene, m.target, m.doc)) {
+        if (sceneFrameApplyDoc(m.scene, m.target, m.doc)) {
             m.sceneDirty = false;
         }
     }

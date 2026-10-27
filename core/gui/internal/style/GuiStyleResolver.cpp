@@ -1,4 +1,4 @@
-#include "gui/style/GuiStyleResolver.hpp"
+#include "style/GuiStyleResolver.hpp"
 
 #include "platform/Check.hpp"
 

@@ -1,11 +1,11 @@
-#include "gui/layout/GuiLayoutEngine.hpp"
+#include "layout/GuiLayoutEngine.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <new>
 #include <string_view>
 
-#include "gui/text/GuiTextEngine.hpp"
+#include "text/GuiTextEngine.hpp"
 #include "platform/Check.hpp"
 
 namespace burnhope::gui {
@@ -173,7 +173,7 @@ Extent placeTree(ecs_world_t* world, YGNodeRef node, float ox, float oy) {
     const float top = YGNodeLayoutGetTop(node);
     const float w = YGNodeLayoutGetWidth(node);
     const float h = YGNodeLayoutGetHeight(node);
-    const Extent self{left + w, top + h};
+    Extent self{left + w, top + h};
     if (!e.is_alive()) {
         return self;
     }
@@ -202,6 +202,12 @@ Extent placeTree(ecs_world_t* world, YGNodeRef node, float ox, float oy) {
             scroll->contentW = content.right + YGNodeLayoutGetPadding(node, YGEdgeRight);
             scroll->contentH = content.bottom + YGNodeLayoutGetPadding(node, YGEdgeBottom);
         }
+    }
+    // A node that does not clip its children also reaches as far as its deep descendants, so an enclosing scroll
+    // container measures the whole overflowing subtree, not just its direct children.
+    if (!e.has<UiClipChildren>() && scroll == nullptr) {
+        self.right = std::max(self.right, left + content.right);
+        self.bottom = std::max(self.bottom, top + content.bottom);
     }
     return self;
 }

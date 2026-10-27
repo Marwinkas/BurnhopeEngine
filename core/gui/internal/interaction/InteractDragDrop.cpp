@@ -1,12 +1,12 @@
-#include "gui/interaction/InteractDragDrop.hpp"
+#include "interaction/InteractDragDrop.hpp"
 
 #include <algorithm>
 #include <cstring>
 #include <string_view>
 
-#include "gui/interaction/InteractState.hpp"
-#include "gui/layout/GuiLayoutEngine.hpp"
-#include "gui/text/GuiTextEngine.hpp"
+#include "interaction/InteractState.hpp"
+#include "layout/GuiLayoutEngine.hpp"
+#include "text/GuiTextEngine.hpp"
 
 namespace burnhope::gui {
 

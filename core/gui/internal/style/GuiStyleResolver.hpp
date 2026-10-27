@@ -2,8 +2,8 @@
 
 #include <cstdint>
 
-#include "gui/data/GuiComponents.hpp"
-#include "gui/style/GuiStyleSheet.hpp"
+#include "data/GuiComponents.hpp"
+#include "style/GuiStyleSheet.hpp"
 
 namespace burnhope::gui {
 

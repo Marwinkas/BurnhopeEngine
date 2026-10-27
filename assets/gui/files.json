@@ -1,7 +1,7 @@
 [
  {"name": "bottom", "class": "dock_bottom", "children": [
   {"name": "treeCol", "class": "dock_tree", "children": [
-   {"name": "tree", "class": "list_tree", "behaviors": ["virtual", "hover"], "count": 0, "itemH": 28, "itemAction": 80, "itemClass": "list_item"}
+   {"name": "tree", "bind": "browser.tree", "class": "list_tree", "behaviors": ["virtual", "hover"], "count": 0, "itemH": 28, "itemAction": 80, "itemClass": "list_item"}
   ]},
   {"name": "filesCol", "class": "dock_files", "children": [
    {"name": "bar", "class": "row", "children": [
@@ -9,28 +9,17 @@
     {"name": "page", "class": "tool_button", "icon": "upload", "behaviors": ["hover", "click"], "action": 160},
     {"name": "back", "class": "tool_button", "icon": "chevron_left", "behaviors": ["hover", "click"], "action": 161},
     {"name": "fwd", "class": "tool_button", "icon": "chevron_right", "behaviors": ["hover", "click"], "action": 162},
-    {"name": "pill", "class": "crumb_pill", "children": [
-     {"name": "up", "class": "up_button", "icon": "chevron_up", "behaviors": ["hover", "click"], "action": 82},
-     {"name": "c0", "class": "crumb", "text": "", "behaviors": ["hover", "click"], "action": 150, "hidden": false},
-     {"name": "s0", "class": "crumb_sep", "text": ">", "hidden": true},
-     {"name": "c1", "class": "crumb", "text": "", "behaviors": ["hover", "click"], "action": 151, "hidden": true},
-     {"name": "s1", "class": "crumb_sep", "text": ">", "hidden": true},
-     {"name": "c2", "class": "crumb", "text": "", "behaviors": ["hover", "click"], "action": 152, "hidden": true},
-     {"name": "s2", "class": "crumb_sep", "text": ">", "hidden": true},
-     {"name": "c3", "class": "crumb", "text": "", "behaviors": ["hover", "click"], "action": 153, "hidden": true},
-     {"name": "s3", "class": "crumb_sep", "text": ">", "hidden": true},
-     {"name": "c4", "class": "crumb", "text": "", "behaviors": ["hover", "click"], "action": 154, "hidden": true},
-     {"name": "s4", "class": "crumb_sep", "text": ">", "hidden": true},
-     {"name": "c5", "class": "crumb", "text": "", "behaviors": ["hover", "click"], "action": 155, "hidden": true}
+    {"name": "pill", "bind": "browser.pill", "class": "crumb_pill", "children": [
+     {"name": "up", "class": "up_button", "icon": "chevron_up", "behaviors": ["hover", "click"], "action": 82}
     ]},
-    {"name": "search", "class": "search", "text": "", "behaviors": ["hover", "focus", "click", "edit"], "maxLen": 40},
-    {"name": "filter", "class": "button", "text": "All", "icon": "chevron_down", "behaviors": ["hover", "click"], "action": 0, "toggles": "filterMenu"},
+    {"name": "search", "bind": "browser.search", "class": "search", "text": "", "behaviors": ["hover", "focus", "click", "edit"], "maxLen": 40},
+    {"name": "filter", "bind": "browser.filter", "class": "button", "text": "All", "icon": "chevron_down", "behaviors": ["hover", "click"], "action": 0, "toggles": "filterMenu"},
     {"name": "tune", "class": "tool_button", "icon": "gear", "behaviors": ["hover", "click"], "action": 0, "toggles": "tuneMenu"}
    ]},
-   {"name": "grid", "class": "list_files", "behaviors": ["virtual", "hover"], "count": 0, "itemW": 108, "itemH": 114, "columns": 8, "itemAction": 81, "itemClass": "tile_item"},
+   {"name": "grid", "bind": "browser.grid", "class": "list_files", "behaviors": ["virtual", "hover"], "count": 0, "itemW": 108, "itemH": 114, "columns": 8, "itemAction": 81, "itemClass": "tile_item"},
    {"name": "info", "class": "row_info", "children": [
-    {"name": "status", "class": "label_small_fill", "text": ""},
-    {"name": "detail", "class": "label_small_right", "text": ""}
+    {"name": "status", "bind": "browser.status", "class": "label_small_fill", "text": ""},
+    {"name": "detail", "bind": "browser.detail", "class": "label_small_right", "text": ""}
    ]}
   ]}
  ]}

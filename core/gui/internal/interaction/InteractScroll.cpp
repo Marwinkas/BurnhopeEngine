@@ -1,4 +1,4 @@
-#include "gui/interaction/InteractScroll.hpp"
+#include "interaction/InteractScroll.hpp"
 
 #include <algorithm>
 

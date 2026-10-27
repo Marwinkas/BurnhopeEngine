@@ -1,5 +1,5 @@
 #include "app/Engine.hpp"
-#include "app/SceneBlockFill.hpp"
+#include "render/SceneBlockFill.hpp"
 
 #include "platform/PlatformUtil.hpp"
 #include "gpu_scene/SceneObject.hpp"
@@ -117,12 +117,31 @@ void syncScene(Engine& e) {
                     ed.flags.shadowCull != 0, ed.flags.backf != 0, ed.flags.scrn != 0, ed.flags.behind != 0, ed.flags.viewMode);
     sceneBlockFill(ed.block, ed.post, ed.tweaks, ed.flags, ed.actor);
     sceneFrameSetBlock(e.scene, ed.block);
-    inspectorSync(e);
-    toolbarSync(e);
-    hierarchySync(e);
-    materialSync(e);
-    browserSync(e);
-    launcherSync(e);
+    Canvas* canvas = hostCanvas(e.host, e.slot);
+    Window* window = e.slot >= 0 ? &e.host.view[e.slot].window : nullptr;
+    inspectorSync(e.inspector);
+    toolbarSync(e.toolbar);
+    hierarchySync(e.hierarchy);
+    materialSync(e.material, canvas);
+    browserSync(e.browser, canvas, window);
+    launcherSync(e.launcher, window);
+}
+
+// Cross-controller links. The controllers know nothing of each other; the Engine is the one place that wires them.
+bool openMaterialHook(void* app, const char* path) {
+    return materialOpen(static_cast<Engine*>(app)->material, path);
+}
+
+bool assignMaterialHook(void* app, const char* path, uint8_t actor) {
+    return materialAssign(static_cast<Engine*>(app)->material, path, actor);
+}
+
+void materialSavedHook(void* app, const char* path) {
+    thumbsInvalidate(static_cast<Engine*>(app)->browser, path);
+}
+
+void openProjectHook(void* app, const std::filesystem::path& dir) {
+    browserSetRoot(static_cast<Engine*>(app)->browser, dir);
 }
 
 } // namespace
@@ -186,7 +205,11 @@ bool engineInit(Engine& e, int argc, char** argv) {
         spdlog::error("bh_gui screen failed to load");
         return false;
     }
-    return inspectorBind(e) && toolbarBind(e) && browserBind(e) && hierarchyBind(e) && materialBind(e) && launcherBind(e);
+    GuiHost& gui = *e.gui;
+    return inspectorBind(e.inspector, gui, e.scene, e.editor) && toolbarBind(e.toolbar, gui, e.scene, e.editor.flags, e.quit) &&
+           browserBind(e.browser, gui, e.scene, deviceJobs(e.host.device), &e, openMaterialHook, assignMaterialHook) &&
+           hierarchyBind(e.hierarchy, gui, e.scene) && materialBind(e.material, gui, e.scene, &e, materialSavedHook) &&
+           launcherBind(e.launcher, gui, &e, openProjectHook);
 }
 
 void engineShutdown(Engine& e) {

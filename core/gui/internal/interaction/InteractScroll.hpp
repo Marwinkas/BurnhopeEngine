@@ -2,8 +2,8 @@
 
 #include <algorithm>
 
-#include "gui/data/GuiComponents.hpp"
-#include "gui/interaction/InteractState.hpp"
+#include "data/GuiComponents.hpp"
+#include "interaction/InteractState.hpp"
 #include "platform/Input.hpp"
 
 namespace burnhope::gui {

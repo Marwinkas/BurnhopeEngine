@@ -1,15 +1,15 @@
-#include "gui/render/GuiEmitter.hpp"
+#include "render/GuiEmitter.hpp"
 
 #include <algorithm>
 #include <bit>
 #include <cmath>
 #include <string_view>
 
-#include "gui/data/GuiIcons.hpp"
-#include "gui/data/GuiRow.hpp"
-#include "gui/interaction/InteractScroll.hpp"
-#include "gui/interaction/InteractTextEdit.hpp"
-#include "gui/text/GuiTextEngine.hpp"
+#include "gui/GuiIcons.hpp"
+#include "gui/GuiRow.hpp"
+#include "interaction/InteractScroll.hpp"
+#include "interaction/InteractTextEdit.hpp"
+#include "text/GuiTextEngine.hpp"
 
 namespace burnhope::gui {
 namespace {
@@ -39,6 +39,11 @@ const EmitRootQuery& rootQuery(flecs::world& world) {
 
 bool clipEmpty(const UiClip& c) {
     return c.w <= 0.0f || c.h <= 0.0f;
+}
+
+// A node paints only where its own box meets the clip it inherited; a box wholly outside the clip is culled.
+bool boxVisible(const UiBox& b, const UiClip& c) {
+    return !clipEmpty(c) && b.x < c.x + c.w && b.x + b.w > c.x && b.y < c.y + c.h && b.y + b.h > c.y;
 }
 
 void putClip(UiPrimitive& p, const UiClip& c, bool inCorner) {
@@ -447,7 +452,8 @@ void emitEntity(Sink& s, flecs::entity e, uint32_t depth) {
     }
     const UiClip* clipPtr = e.try_get<UiClip>();
     const UiClip clip = clipPtr != nullptr ? *clipPtr : UiClip{box->x, box->y, box->w, box->h};
-    if (!clipEmpty(clip)) {
+    const bool visible = boxVisible(*box, clip);
+    if (visible) {
         if (const UiPaint* paint = e.try_get<UiPaint>()) {
             float rgba[4];
             const float radius = std::max(0.0f, paint->radius);
@@ -496,7 +502,7 @@ void emitEntity(Sink& s, flecs::entity e, uint32_t depth) {
         }
     }
     emitChildren(s, e, depth);
-    if (!clipEmpty(clip)) {
+    if (visible) {
         emitScrollBar(s, e, *box, clip);
     }
 }

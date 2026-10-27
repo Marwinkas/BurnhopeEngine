@@ -1,9 +1,9 @@
-#include "gui/virtual/GuiVirtualPool.hpp"
+#include "virtual/GuiVirtualPool.hpp"
 
 #include <algorithm>
 #include <cmath>
 
-#include "gui/layout/GuiLayoutEngine.hpp"
+#include "layout/GuiLayoutEngine.hpp"
 #include "platform/Check.hpp"
 
 namespace burnhope::gui {

@@ -1,10 +1,9 @@
 #include "app/BrowserThumbs.hpp"
 
 #include "app/BrowserController.hpp"
-#include "app/Engine.hpp"
 #include "asset/MaterialBake.hpp"
 #include "image/ImageDecode.hpp"
-#include "gui/data/GuiIcons.hpp"
+#include "gui/GuiIcons.hpp"
 #include "platform/PlatformUtil.hpp"
 
 #include <spdlog/spdlog.h>
@@ -149,17 +148,17 @@ uint32_t pickCell(const ThumbCache& c) {
     return best;
 }
 
-void setThumb(Engine& e, uint32_t index, uint8_t cell) {
-    e.browser.files[index].cell = cell;
-    guiHostSetListThumb(e.gui, browserGridPath(), index, cell);
+void setThumb(BrowserState& br, uint32_t index, uint8_t cell) {
+    br.files[index].cell = cell;
+    guiHostSetListThumb(br.gui, browserGridPath(), index, cell);
 }
 
 // A free or least recently used preview cell; the tiles that showed an evicted preview re-resolve.
-uint32_t claimCell(Engine& e) {
-    const uint32_t cell = pickCell(e.browser.thumbs);
-    for (uint32_t j = 0; j < e.browser.files.size(); ++j) {
-        if (e.browser.files[j].cell == cell + 1u) {
-            setThumb(e, j, 0);
+uint32_t claimCell(BrowserState& br) {
+    const uint32_t cell = pickCell(br.thumbs);
+    for (uint32_t j = 0; j < br.files.size(); ++j) {
+        if (br.files[j].cell == cell + 1u) {
+            setThumb(br, j, 0);
         }
     }
     return cell;
@@ -174,18 +173,18 @@ void copyCell(ThumbCache& c, uint32_t cell, const uint8_t* rgba) {
 
 } // namespace
 
-bool thumbsInit(ThumbCache& c) {
+bool thumbsInit(ThumbCache& c, JobPool& pool) {
     c.atlas.assign(static_cast<size_t>(kThumbGrid) * kThumbPx * kThumbGrid * kThumbPx * 4u, 0);
     c.matAtlas.assign(static_cast<size_t>(kMatAtlasW) * kMatAtlasH * 4u, 0);
     c.matPreview.assign(static_cast<size_t>(kMatSphereSide) * kMatSphereSide * 4u, 0);
-    c.baker.reset(modelBakerCreate());
+    c.baker.reset(assetModelBakerCreate(pool, kThumbPlate));
     return c.baker != nullptr;
 }
 
-void thumbsSync(Engine& e) {
-    BrowserState& b = e.browser;
+void thumbsSync(BrowserState& br) {
+    BrowserState& b = br;
     ThumbCache& c = b.thumbs;
-    Canvas* canvas = hostCanvas(e.host, e.slot);
+    Canvas* canvas = br.canvas;
     if (canvas == nullptr || c.atlas.empty()) {
         return;
     }
@@ -200,7 +199,7 @@ void thumbsSync(Engine& e) {
     }
     uint32_t first = 0;
     uint32_t live = 0;
-    guiHostListWindow(e.gui, browserGridPath(), first, live);
+    guiHostListWindow(br.gui, browserGridPath(), first, live);
     uint32_t budget = kBakePerFrame;
     for (uint32_t i = first; i < first + live && i < b.files.size(); ++i) {
         BrowserItem& item = b.files[i];
@@ -212,7 +211,7 @@ void thumbsSync(Engine& e) {
         }
         const uint8_t kindCell = static_cast<uint8_t>(static_cast<uint32_t>(item.kind) + 1u);
         if (item.kind != FileKind::Texture && item.kind != FileKind::Material && item.kind != FileKind::Model) {
-            setThumb(e, i, kindCell);
+            setThumb(br, i, kindCell);
             continue;
         }
         const std::string full = item.path.string();
@@ -228,23 +227,23 @@ void thumbsSync(Engine& e) {
             bool ok = true;
             if (item.kind == FileKind::Model) {
                 uint8_t pixels[kModelThumbBytes];
-                if (c.baker == nullptr || modelThumbFetch(*c.baker, b.root, full.c_str(), key, item.mtime, pixels) == ModelThumbState::Pending) {
-                    guiHostSetListThumb(e.gui, browserGridPath(), i, kindCell); // its kind icon until the background bake lands
+                if (c.baker == nullptr || assetFetchModelThumb(*c.baker, b.root, full.c_str(), key, item.mtime, pixels) == ModelThumbState::Pending) {
+                    guiHostSetListThumb(br.gui, browserGridPath(), i, kindCell); // its kind icon until the background bake lands
                     continue;
                 }
-                cell = claimCell(e);
+                cell = claimCell(br);
                 copyCell(c, cell, pixels);
             } else {
                 if (budget == 0) {
-                    guiHostSetListThumb(e.gui, browserGridPath(), i, kindCell); // its kind icon until a later frame bakes the preview
+                    guiHostSetListThumb(br.gui, browserGridPath(), i, kindCell); // its kind icon until a later frame bakes the preview
                     continue;
                 }
                 --budget;
-                cell = claimCell(e);
+                cell = claimCell(br);
                 ok = item.kind == FileKind::Texture ? bakeTexture(c, cell, full.c_str()) : bakeMaterial(c, cell, full.c_str());
             }
             if (!ok) {
-                setThumb(e, i, kindCell);
+                setThumb(br, i, kindCell);
                 continue;
             }
             c.key[cell] = key;
@@ -252,22 +251,22 @@ void thumbsSync(Engine& e) {
             c.dirty = true;
         }
         c.used[cell] = ++c.clock;
-        setThumb(e, i, static_cast<uint8_t>(cell + 1u));
+        setThumb(br, i, static_cast<uint8_t>(cell + 1u));
     }
     if (c.dirty && canvasUploadPhoto(*canvas, kThumbSlot, c.atlas.data(), kThumbGrid * kThumbPx, kThumbGrid * kThumbPx)) {
         c.dirty = false;
     }
 }
 
-void thumbsInvalidate(Engine& e, const char* path) {
-    BrowserState& b = e.browser;
+void thumbsInvalidate(BrowserState& br, const char* path) {
+    BrowserState& b = br;
     const uint64_t key = path != nullptr ? hashPath(path) : 0;
     for (uint32_t k = kFileKinds; k < kThumbEnd && key != 0; ++k) {
         if (b.thumbs.key[k] == key) {
             b.thumbs.key[k] = 0;
             for (uint32_t j = 0; j < b.files.size(); ++j) {
                 if (b.files[j].cell == k + 1u) {
-                    setThumb(e, j, 0);
+                    setThumb(br, j, 0);
                 }
             }
         }

@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "gui/data/GuiComponents.hpp"
+#include "data/GuiComponents.hpp"
 
 namespace burnhope::gui {
 

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "gui/data/GuiComponents.hpp"
+#include "data/GuiComponents.hpp"
 
 namespace burnhope::gui {
 

@@ -25,6 +25,11 @@ struct JobPool {
     std::mutex m;
     std::condition_variable cv;
     std::condition_variable idle;
+    std::condition_variable taskIdle;
+    Job tasks[kJobQueueCap]{};
+    int taskHead = 0;
+    int taskCount = 0;
+    int tasksRunning = 0;
     Batch* current = nullptr;
     uint64_t epoch = 0;
     bool stop = false;
@@ -44,17 +49,35 @@ struct JobPool {
         uint64_t seen = 0;
         for (;;) {
             Batch* batch = nullptr;
+            Job task{};
             {
                 std::unique_lock<std::mutex> lk(m);
-                cv.wait(lk, [&] { return stop || epoch != seen; });
-                if (stop && current == nullptr) {
-                    return;
+                cv.wait(lk, [&] { return stop || epoch != seen || taskCount > 0; });
+                if (epoch != seen) {
+                    seen = epoch;
+                    batch = current;
+                } else if (taskCount > 0) {
+                    task = tasks[taskHead];
+                    taskHead = (taskHead + 1) % kJobQueueCap;
+                    --taskCount;
+                    ++tasksRunning;
+                } else if (current == nullptr) {
+                    return; // stop, nothing queued, no batch in flight
+                } else {
+                    batch = current;
                 }
-                seen = epoch;
-                batch = current;
                 if (batch != nullptr) {
                     batch->engaged.fetch_add(1, std::memory_order_acq_rel);
                 }
+            }
+            if (task.fn != nullptr) {
+                task.fn(task.user);
+                {
+                    std::lock_guard<std::mutex> lk(m);
+                    --tasksRunning;
+                }
+                taskIdle.notify_all();
+                continue;
             }
             if (batch == nullptr) {
                 continue;
@@ -96,6 +119,31 @@ void jobsDestroy(JobPool* pool) {
 
 int jobsWorkerCount(const JobPool& pool) {
     return static_cast<int>(pool.workers.size()) + 1;
+}
+
+bool jobsRun(JobPool& p, Job job) {
+    if (job.fn == nullptr) {
+        return false;
+    }
+    if (p.workers.empty()) {
+        job.fn(job.user);
+        return true;
+    }
+    {
+        std::lock_guard<std::mutex> lk(p.m);
+        if (p.taskCount >= kJobQueueCap) {
+            return false;
+        }
+        p.tasks[(p.taskHead + p.taskCount) % kJobQueueCap] = job;
+        ++p.taskCount;
+    }
+    p.cv.notify_one();
+    return true;
+}
+
+void jobsDrain(JobPool& p) {
+    std::unique_lock<std::mutex> lk(p.m);
+    p.taskIdle.wait(lk, [&] { return p.taskCount == 0 && p.tasksRunning == 0; });
 }
 
 void jobsRunAndWait(JobPool& p, Job* jobs, int count) {

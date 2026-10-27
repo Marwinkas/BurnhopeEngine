@@ -1,7 +1,7 @@
-#include "gui/input/GuiHitTest.hpp"
+#include "input/GuiHitTest.hpp"
 
-#include "gui/layout/GuiLayoutEngine.hpp"
-#include "gui/layout/GuiScissor.hpp"
+#include "layout/GuiLayoutEngine.hpp"
+#include "layout/GuiScissor.hpp"
 
 namespace burnhope::gui {
 
@@ -59,7 +59,9 @@ struct HitCtx {
 GuiWalk hitVisit(flecs::entity e, void* user) {
     auto& hit = *static_cast<HitCtx*>(user);
     const UiClip* clip = e.try_get<UiClip>();
-    if (e.has<UiPassive>() || clip == nullptr || !guiClipContains(*clip, hit.x, hit.y)) {
+    const UiBox* box = e.try_get<UiBox>();
+    if (e.has<UiPassive>() || clip == nullptr || box == nullptr || !guiClipContains(*clip, hit.x, hit.y) ||
+        hit.x < box->x || hit.x >= box->x + box->w || hit.y < box->y || hit.y >= box->y + box->h) {
         return GuiWalk::Continue;
     }
     // A fully transparent panel (layout container, viewport window) does not occlude what is behind it.

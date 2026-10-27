@@ -1,6 +1,6 @@
-#include "gui/interaction/InteractHover.hpp"
+#include "interaction/InteractHover.hpp"
 
-#include "gui/input/GuiHitTest.hpp"
+#include "input/GuiHitTest.hpp"
 
 namespace burnhope::gui {
 

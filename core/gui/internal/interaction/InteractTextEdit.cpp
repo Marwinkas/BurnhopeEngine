@@ -1,10 +1,10 @@
-#include "gui/interaction/InteractTextEdit.hpp"
+#include "interaction/InteractTextEdit.hpp"
 
 #include <algorithm>
 #include <cstring>
 #include <string_view>
 
-#include "gui/input/GuiHitTest.hpp"
+#include "input/GuiHitTest.hpp"
 
 namespace burnhope::gui {
 

@@ -3,9 +3,9 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "gui/data/GuiComponents.hpp"
-#include "gui/interaction/InteractState.hpp"
-#include "gui/style/GuiStyleSheet.hpp"
+#include "data/GuiComponents.hpp"
+#include "interaction/InteractState.hpp"
+#include "style/GuiStyleSheet.hpp"
 #include "platform/Input.hpp"
 
 namespace burnhope::gui {

@@ -4,12 +4,12 @@
 
 #include <vulkan/vulkan_core.h> // VkCommandBuffer handle type only; this module never links Vulkan
 
-#include "gui/data/GuiComponents.hpp"
-#include "gui/interaction/InteractState.hpp"
-#include "gui/interaction/InteractTextEdit.hpp"
-#include "gui/overlay/GuiTooltip.hpp"
-#include "gui/style/GuiStyleSheet.hpp"
-#include "gui/virtual/GuiVirtualPool.hpp"
+#include "data/GuiComponents.hpp"
+#include "interaction/InteractState.hpp"
+#include "interaction/InteractTextEdit.hpp"
+#include "overlay/GuiTooltip.hpp"
+#include "style/GuiStyleSheet.hpp"
+#include "virtual/GuiVirtualPool.hpp"
 #include "platform/Input.hpp"
 #include "rhi/UiPrimitive.hpp"
 

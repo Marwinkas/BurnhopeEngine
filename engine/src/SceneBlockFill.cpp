@@ -1,5 +1,5 @@
-#include "app/SceneBlockFill.hpp"
-#include "app/SceneBlockMap.hpp"
+#include "render/SceneBlockFill.hpp"
+#include "render/SceneBlockMap.hpp"
 
 #include <cstring>
 #include <type_traits>

@@ -1,4 +1,4 @@
-#include "gui/style/GuiStyleSheet.hpp"
+#include "style/GuiStyleSheet.hpp"
 
 #include <algorithm>
 #include <charconv>

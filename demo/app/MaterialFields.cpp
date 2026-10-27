@@ -1,9 +1,8 @@
 #include "app/MaterialInternal.hpp"
 
-#include "app/Engine.hpp"
 #include "app/BrowserThumbs.hpp"
-#include "app/GuiActions.hpp"
 #include "gpu_scene/SceneObject.hpp"
+#include "gui/GuiHost.hpp"
 #include "render/SceneFrame.hpp"
 #include "platform/PlatformUtil.hpp"
 #include "Str.hpp"
@@ -107,7 +106,7 @@ void touch(MaterialState& m) {
 
 void onScalar(void* user, float value) {
     auto* f = static_cast<MaterialField*>(user);
-    MaterialState& m = f->engine->material;
+    MaterialState& m = *f->state;
     float* slot = scalarSlot(m.doc, f->index);
     if (*slot != value) {
         *slot = value;
@@ -117,7 +116,7 @@ void onScalar(void* user, float value) {
 
 void onVec(void* user, float value) {
     auto* f = static_cast<MaterialField*>(user);
-    MaterialState& m = f->engine->material;
+    MaterialState& m = *f->state;
     float* slot = vecSlot(m.doc, f->index - kFieldVec);
     if (*slot != value) {
         *slot = value;
@@ -127,7 +126,7 @@ void onVec(void* user, float value) {
 
 void onPath(void* user, const char* text) {
     auto* f = static_cast<MaterialField*>(user);
-    MaterialState& m = f->engine->material;
+    MaterialState& m = *f->state;
     char* dst = m.doc.*kCards[f->index - kFieldPath].path;
     if (std::strncmp(dst, text, 260) != 0) {
         (void)strCopyCap(dst, 260, text);
@@ -138,7 +137,7 @@ void onPath(void* user, const char* text) {
 
 void onHex(void* user, const char* text) {
     auto* f = static_cast<MaterialField*>(user);
-    MaterialState& m = f->engine->material;
+    MaterialState& m = *f->state;
     float rgb[3];
     if (parseHex(text, rgb)) {
         std::copy_n(rgb, 3, hexSlot(m.doc, f->index));
@@ -148,7 +147,7 @@ void onHex(void* user, const char* text) {
 }
 
 void onOrbit(void* user, float x, float y) {
-    MaterialState& m = static_cast<Engine*>(user)->material;
+    MaterialState& m = *static_cast<MaterialState*>(user);
     m.yaw = (x - 0.5f) * 2.0f * kPi;
     m.pitch = (y - 0.5f) * kPi * 0.9f;
     touch(m);
@@ -160,62 +159,60 @@ void materialTouch(MaterialState& m) {
     touch(m);
 }
 
-void materialPushFlip(Engine& e) {
-    guiHostSetText(e.gui, "mat.normal.flip", e.material.doc.flipNormalY != 0 ? "Flip Y: on" : "Flip Y: off");
-    guiHostSetActive(e.gui, "mat.normal.flip", e.material.doc.flipNormalY != 0);
+void materialPushFlip(MaterialState& m) {
+    guiHostSetText(m.gui, "mat.normal.flip", m.doc.flipNormalY != 0 ? "Flip Y: on" : "Flip Y: off");
+    guiHostSetActive(m.gui, "mat.normal.flip", m.doc.flipNormalY != 0);
 }
 
-void materialPushVec(Engine& e) {
+void materialPushVec(MaterialState& m) {
     for (uint32_t i = 0; i < 4; ++i) {
-        guiHostSetValue(e.gui, kVecKey[i], *vecSlot(e.material.doc, i));
+        guiHostSetValue(m.gui, kVecKey[i], *vecSlot(m.doc, i));
     }
 }
 
 // Mirrors the whole document into the GUI.
-void materialPushDoc(Engine& e) {
-    MaterialState& m = e.material;
+void materialPushDoc(MaterialState& m) {
     for (uint32_t i = 0; i < 7; ++i) {
-        guiHostSetValue(e.gui, kScalarKey[i], *scalarSlot(m.doc, i));
+        guiHostSetValue(m.gui, kScalarKey[i], *scalarSlot(m.doc, i));
     }
     for (uint32_t i = 0; i < 8; ++i) {
-        guiHostSetText(e.gui, kPathKey[i], m.doc.*kCards[i].path);
-        guiHostSetPhoto(e.gui, kThumbKey[i], 9, kCards[i].cell, 4, 3);
+        guiHostSetText(m.gui, kPathKey[i], m.doc.*kCards[i].path);
+        guiHostSetPhoto(m.gui, kThumbKey[i], 9, kCards[i].cell, 4, 3);
     }
     char hex[16];
     formatHex(hex, sizeof(hex), m.doc.base);
-    guiHostSetText(e.gui, "mat.albedo.hex", hex);
+    guiHostSetText(m.gui, "mat.albedo.hex", hex);
     formatHex(hex, sizeof(hex), m.doc.emissiveColor);
-    guiHostSetText(e.gui, "mat.emission.hex", hex);
-    materialPushVec(e);
-    materialPushFlip(e);
+    guiHostSetText(m.gui, "mat.emission.hex", hex);
+    materialPushVec(m);
+    materialPushFlip(m);
     const char* name = std::strrchr(m.path, '/');
-    guiHostSetText(e.gui, "mat.title", name != nullptr ? name + 1 : m.path);
+    guiHostSetText(m.gui, "mat.title", name != nullptr ? name + 1 : m.path);
     static constexpr const char* kShapeKey[3] = {"mat.shape.sphere", "mat.shape.cube", "mat.shape.plane"};
     for (uint32_t s = 0; s < 3; ++s) {
-        guiHostSetActive(e.gui, kShapeKey[s], m.shape == s);
+        guiHostSetActive(m.gui, kShapeKey[s], m.shape == s);
     }
 }
 
-bool materialBindFields(Engine& e) {
-    MaterialState& m = e.material;
+bool materialBindFields(MaterialState& m) {
     bool ok = true;
     for (uint32_t i = 0; i < 7; ++i) {
-        m.field[i] = {&e, i};
-        ok = guiHostBindDrag(e.gui, kScalarKey[i], onScalar, &m.field[i]) && ok;
+        m.field[i] = {&m, i};
+        ok = guiHostBindDrag(m.gui, kScalarKey[i], onScalar, &m.field[i]) && ok;
     }
     for (uint32_t i = 0; i < 8; ++i) {
-        m.field[kFieldPath + i] = {&e, kFieldPath + i};
-        ok = guiHostBindEdit(e.gui, kPathKey[i], onPath, &m.field[kFieldPath + i]) && ok;
+        m.field[kFieldPath + i] = {&m, kFieldPath + i};
+        ok = guiHostBindEdit(m.gui, kPathKey[i], onPath, &m.field[kFieldPath + i]) && ok;
     }
-    m.field[kFieldHexBase + 8] = {&e, kFieldHexBase};
-    m.field[kFieldHexEmission + 8] = {&e, kFieldHexEmission};
-    ok = guiHostBindEdit(e.gui, "mat.albedo.hex", onHex, &m.field[kFieldHexBase + 8]) && ok;
-    ok = guiHostBindEdit(e.gui, "mat.emission.hex", onHex, &m.field[kFieldHexEmission + 8]) && ok;
+    m.field[kFieldHexBase + 8] = {&m, kFieldHexBase};
+    m.field[kFieldHexEmission + 8] = {&m, kFieldHexEmission};
+    ok = guiHostBindEdit(m.gui, "mat.albedo.hex", onHex, &m.field[kFieldHexBase + 8]) && ok;
+    ok = guiHostBindEdit(m.gui, "mat.emission.hex", onHex, &m.field[kFieldHexEmission + 8]) && ok;
     for (uint32_t i = 0; i < 4; ++i) {
-        m.field[kFieldVec + i] = {&e, kFieldVec + i};
-        ok = guiHostBindDrag(e.gui, kVecKey[i], onVec, &m.field[kFieldVec + i]) && ok;
+        m.field[kFieldVec + i] = {&m, kFieldVec + i};
+        ok = guiHostBindDrag(m.gui, kVecKey[i], onVec, &m.field[kFieldVec + i]) && ok;
     }
-    return guiHostBindDrag2(e.gui, "mat.preview", onOrbit, &e) && ok;
+    return guiHostBindDrag2(m.gui, "mat.preview", onOrbit, &m) && ok;
 }
 
 

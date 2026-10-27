@@ -1,3 +1,4 @@
+#include "platform/Dialog.hpp"
 #include "platform/Window.hpp"
 #include "platform/PlatformUtil.hpp"
 

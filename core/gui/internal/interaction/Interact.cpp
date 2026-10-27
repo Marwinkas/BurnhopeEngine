@@ -1,10 +1,10 @@
-#include "gui/interaction/Interact.hpp"
+#include "interaction/Interact.hpp"
 
-#include "gui/interaction/InteractClick.hpp"
-#include "gui/interaction/InteractDrag.hpp"
-#include "gui/interaction/InteractFocus.hpp"
-#include "gui/interaction/InteractHover.hpp"
-#include "gui/interaction/InteractScroll.hpp"
+#include "interaction/InteractClick.hpp"
+#include "interaction/InteractDrag.hpp"
+#include "interaction/InteractFocus.hpp"
+#include "interaction/InteractHover.hpp"
+#include "interaction/InteractScroll.hpp"
 
 namespace burnhope::gui {
 

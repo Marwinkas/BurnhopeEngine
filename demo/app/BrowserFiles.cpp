@@ -3,10 +3,11 @@
 #include "app/BrowserModel.hpp"
 #include "asset/ProjectDoc.hpp"
 #include "gfx/Material.hpp"
+#include "io/File.hpp"
 
 #include <iterator>
 
-#include <fstream>
+#include <cstdio>
 #include <string>
 
 namespace burnhope {
@@ -24,16 +25,23 @@ fs::path uniqueIn(const fs::path& dir, const std::string& stem, const std::strin
 
 // A copied .gltf must read its own buffer: the old buffer file name inside the JSON becomes the new one.
 void retargetBuffer(const fs::path& gltf, const fs::path& from, const fs::path& to) {
-    std::ifstream in(gltf, std::ios::binary);
-    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    in.close();
+    const std::string gltfPath = gltf.string();
+    MappedFile map{};
+    if (!fileMapReadOnly(gltfPath.c_str(), &map) || map.data == nullptr) {
+        fileUnmap(&map);
+        return;
+    }
+    std::string text(reinterpret_cast<const char*>(map.data), map.size);
+    fileUnmap(&map);
     const std::string oldName = from.filename().string();
     const std::string newName = to.filename().string();
     for (size_t at = text.find(oldName); at != std::string::npos; at = text.find(oldName, at + newName.size())) {
         text.replace(at, oldName.size(), newName);
     }
-    std::ofstream out(gltf, std::ios::binary | std::ios::trunc);
-    out << text;
+    if (std::FILE* out = std::fopen(gltfPath.c_str(), "wb")) {
+        std::fwrite(text.data(), 1, text.size(), out);
+        std::fclose(out);
+    }
 }
 
 } // namespace
@@ -58,8 +66,12 @@ fs::path browserCreate(const fs::path& dir, NewFile what) {
         return sceneDocWrite(made.string().c_str(), nullptr, 0) ? made : fs::path{};
     case NewFile::Plain: {
         made = uniqueIn(dir, "New File", ".txt");
-        std::ofstream out(made);
-        return out.good() ? made : fs::path{};
+        std::FILE* out = std::fopen(made.string().c_str(), "wb");
+        if (out == nullptr) {
+            return {};
+        }
+        std::fclose(out);
+        return made;
     }
     }
     return {};

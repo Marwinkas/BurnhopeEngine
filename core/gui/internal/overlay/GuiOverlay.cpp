@@ -1,4 +1,4 @@
-#include "gui/overlay/GuiOverlay.hpp"
+#include "overlay/GuiOverlay.hpp"
 
 #include <algorithm>
 
