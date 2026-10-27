@@ -1,8 +1,10 @@
 [
- {"name": "bottom", "class": "dock_bottom", "children": [
+ {"name": "bottom", "bind": "dock.bottom", "class": "dock_bottom", "dock": true, "children": [
+ {"name": "browser", "class": "dock_panel_row", "tab": "Content Browser", "tabIcon": "folder", "children": [
   {"name": "treeCol", "class": "dock_tree", "children": [
    {"name": "tree", "bind": "browser.tree", "class": "list_tree", "behaviors": ["virtual", "hover"], "count": 0, "itemH": 28, "itemAction": 80, "itemClass": "list_item"}
   ]},
+  {"name": "splitTree", "class": "splitter_v", "splitter": "x", "resize": "prev", "splitMin": 140, "splitMax": 600},
   {"name": "filesCol", "class": "dock_files", "children": [
    {"name": "bar", "class": "row", "children": [
     {"name": "plus", "class": "tool_button", "icon": "square_plus", "behaviors": ["hover", "click"], "action": 0, "toggles": "createMenu"},
@@ -22,5 +24,6 @@
     {"name": "detail", "bind": "browser.detail", "class": "label_small_right", "text": ""}
    ]}
   ]}
+ ]}
  ]}
 ]

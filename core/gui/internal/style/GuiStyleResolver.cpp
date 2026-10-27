@@ -63,6 +63,9 @@ void applyYoga(const GuiStyle& s, YGNodeRef node) {
     if (has(kSbGrow)) {
         YGNodeStyleSetFlexGrow(node, s.grow);
     }
+    if (has(kSbBasis)) {
+        YGNodeStyleSetFlexBasis(node, s.basis);
+    }
     if (has(kSbShrink)) {
         YGNodeStyleSetFlexShrink(node, s.shrink);
     }

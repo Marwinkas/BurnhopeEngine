@@ -17,12 +17,14 @@
 #include "Str.hpp"
 #include "Gui.hpp"
 #include "interaction/InteractDragDrop.hpp"
+#include "layout/GuiDock.hpp"
 #include "gui/GuiIcons.hpp"
 #include "input/GuiHitTest.hpp"
 #include "layout/GuiLayoutEngine.hpp"
 #include "style/GuiStyleResolver.hpp"
 #include "style/GuiStyleSheet.hpp"
 #include "loader/GuiLoader.hpp"
+#include "overlay/GuiColorPicker.hpp"
 #include "text/GuiTextEngine.hpp"
 #include "image/ImageDecode.hpp"
 #include "io/File.hpp"
@@ -32,7 +34,7 @@ namespace burnhope {
 
 namespace {
 
-constexpr uint32_t kBindCap = 192;
+constexpr uint32_t kBindCap = 320;
 constexpr uint32_t kEventCap = 128;
 constexpr uint32_t kTextCap = gui::kGuiTextCap;
 
@@ -127,6 +129,7 @@ struct GuiHost {
     mutable KeyEntry keys[kKeyCap]{}; // index of the bind keys, rebuilt when a key is not found (panels mount at run time)
     mutable uint32_t keyCount = 0;
     std::vector<CrumbStrip> strips;
+    std::unique_ptr<gui::GuiColorPicker> picker = std::make_unique<gui::GuiColorPicker>();
 };
 
 namespace {
@@ -364,6 +367,7 @@ uint32_t guiLayer(void* user, const InputFrame& input, float w, float h, UiPrimi
 
     const gui::GuiInteractState& in = g->ctx.interact;
     fb.pointerOver = in.under != 0 || in.capture != 0;
+    fb.cursor = in.cursor;
     fb.wantsText = in.focus != 0 && g->world.entity(in.focus).has<gui::UiEditable>();
     return g->ctx.primCount;
 }
@@ -694,6 +698,30 @@ void guiHostSetListMark(GuiHost* gui, const char* path, uint32_t index, bool mar
     }
 }
 
+bool guiHostDockOpen(GuiHost* gui, const char* path) {
+    const flecs::entity e = target(gui, path);
+    if (!e.is_valid() || !e.has<gui::UiDockPanel>()) {
+        return false;
+    }
+    gui::guiDockOpen(gui->world, e);
+    return true;
+}
+
+bool guiHostDockClose(GuiHost* gui, const char* path) {
+    const flecs::entity e = target(gui, path);
+    if (!e.is_valid() || !e.has<gui::UiDockPanel>()) {
+        return false;
+    }
+    gui::guiDockClose(e);
+    return true;
+}
+
+bool guiHostDockIsOpen(const GuiHost* gui, const char* path) {
+    const flecs::entity e = target(gui, path);
+    const gui::UiDockPanel* p = e.is_valid() ? e.try_get<gui::UiDockPanel>() : nullptr;
+    return p != nullptr && p->closed == 0;
+}
+
 void guiHostSetShown(GuiHost* gui, const char* path, bool shown) {
     const flecs::entity e = target(gui, path);
     if (e.is_valid() && e.has<gui::UiHidden>() == shown) {
@@ -777,6 +805,10 @@ float guiHostToken(const GuiHost* gui, const char* name) {
         spdlog::warn("gui: style token {} is not defined", name != nullptr ? name : "(null)");
     }
     return value;
+}
+
+bool guiHostColor8(const GuiHost* gui, const char* role, uint8_t (&rgb)[3]) {
+    return gui != nullptr && role != nullptr && gui::guiStyleColor8(gui->style, role, rgb);
 }
 
 uint8_t guiHostIconCell(const char* name) {
@@ -1036,6 +1068,37 @@ void guiHostOpenAtPointer(GuiHost* gui, const char* path) {
     o->anchorW = 1.0f;
     o->anchorH = 1.0f;
     o->open = 1;
+}
+
+void guiHostOpenAt(GuiHost* gui, const char* popup, const char* anchor) {
+    const flecs::entity e = target(gui, popup);
+    gui::UiOverlay* o = e.is_valid() ? e.try_get_mut<gui::UiOverlay>() : nullptr;
+    float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+    if (o == nullptr || !guiHostBox(gui, anchor, x, y, w, h)) {
+        return;
+    }
+    o->anchorX = x;
+    o->anchorY = y;
+    o->anchorW = w;
+    o->anchorH = h;
+    o->open = 1;
+}
+
+bool guiHostIsOpen(const GuiHost* gui, const char* popup) {
+    const flecs::entity e = target(gui, popup);
+    const gui::UiOverlay* o = e.is_valid() ? e.try_get<gui::UiOverlay>() : nullptr;
+    return o != nullptr && o->open != 0;
+}
+
+void guiHostClose(GuiHost* gui, const char* popup) {
+    const flecs::entity e = target(gui, popup);
+    if (gui::UiOverlay* o = e.is_valid() ? e.try_get_mut<gui::UiOverlay>() : nullptr) {
+        o->open = 0;
+    }
+}
+
+bool guiHostOpenColorPicker(GuiHost* gui, const char* anchor, const float (&rgb)[3], GuiColorFn fn, void* user) {
+    return gui != nullptr && gui::guiColorPickerOpen(gui, *gui->picker, anchor, rgb, fn, user);
 }
 
 bool guiHostSpawnSnippet(GuiHost* gui, const char* parentPath, const char* snippetPath) {

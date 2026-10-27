@@ -4,6 +4,7 @@
   {"name": "viewport", "class": "viewport"},
   {"$include": "assets/gui/inspector.json"}
  ]},
+ {"name": "splitBottom", "class": "splitter_h", "splitter": "y", "resize": "next", "splitMin": 140, "splitMax": 640},
  {"$include": "assets/gui/files.json"},
  {"$include": "assets/gui/menus.json"}
 ]}

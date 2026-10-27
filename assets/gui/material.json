@@ -1,36 +1,17 @@
 {
  "name": "matPanel",
- "class": "dock_mat",
+ "class": "dock_panel",
+ "tab": "Material",
+ "tabIcon": "box",
+ "closed": true,
  "behaviors": [
   "scroll"
  ],
- "hidden": true,
+ "bind": "mat.panel",
  "children": [
   {
-   "name": "head",
-   "class": "row_tall",
-   "children": [
-    {
-     "name": "title",
-     "class": "label_title_fill",
-     "text": "Material",
-     "bind": "mat.title"
-    },
-    {
-     "name": "close",
-     "class": "button",
-     "text": "Close",
-     "behaviors": [
-      "hover",
-      "click"
-     ],
-     "action": 140
-    }
-   ]
-  },
-  {
    "name": "pvRow",
-   "class": "row_center",
+   "class": "row_preview",
    "children": [
     {
      "name": "preview",
@@ -49,10 +30,9 @@
   },
   {
    "name": "shapes",
-   "class": "row_center",
+   "class": "row_shapes",
    "children": [
     {
-     "name": "sphere",
      "class": "button",
      "text": "Sphere",
      "behaviors": [
@@ -63,7 +43,6 @@
      "bind": "mat.shape.sphere"
     },
     {
-     "name": "cube",
      "class": "button",
      "text": "Cube",
      "behaviors": [
@@ -74,7 +53,6 @@
      "bind": "mat.shape.cube"
     },
     {
-     "name": "plane",
      "class": "button",
      "text": "Plane",
      "behaviors": [
@@ -87,444 +65,44 @@
    ]
   },
   {
-   "name": "cols",
-   "class": "cards",
+   "name": "type",
+   "class": "row",
    "children": [
     {
-     "name": "left",
-     "class": "card_col",
-     "children": [
-      {
-       "name": "albedo",
-       "class": "card",
-       "children": [
-        {
-         "class": "card_title",
-         "text": "Albedo"
-        },
-        {
-         "name": "row",
-         "class": "card_row",
-         "children": [
-          {
-           "name": "thumb",
-           "class": "card_thumb",
-           "bind": "mat.albedo.thumb"
-          },
-          {
-           "name": "ctl",
-           "class": "card_ctl",
-           "children": [
-            {
-             "name": "hex",
-             "class": "card_path",
-             "text": "#FFFFFF",
-             "behaviors": [
-              "edit"
-             ],
-             "maxLen": 7,
-             "bind": "mat.albedo.hex"
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "name": "path",
-         "class": "card_path",
-         "text": "",
-         "behaviors": [
-          "edit"
-         ],
-         "bind": "mat.albedo.path"
-        }
-       ]
-      },
-      {
-       "name": "normal",
-       "class": "card",
-       "children": [
-        {
-         "class": "card_title",
-         "text": "Normal"
-        },
-        {
-         "name": "row",
-         "class": "card_row",
-         "children": [
-          {
-           "name": "thumb",
-           "class": "card_thumb",
-           "bind": "mat.normal.thumb"
-          },
-          {
-           "name": "ctl",
-           "class": "card_ctl",
-           "children": [
-            {
-             "name": "flip",
-             "class": "toggle_small",
-             "text": "Flip Y",
-             "behaviors": [
-              "hover",
-              "click"
-             ],
-             "action": 141,
-             "bind": "mat.normal.flip"
-            },
-            {
-             "name": "scale",
-             "class": "mat_slider",
-             "text": "Scale",
-             "behaviors": [
-              "hover",
-              "drag"
-             ],
-             "axis": "x",
-             "mode": 0,
-             "value": 0.25,
-             "minV": 0,
-             "maxV": 4,
-             "bind": "mat.normal.scale"
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "name": "path",
-         "class": "card_path",
-         "text": "",
-         "behaviors": [
-          "edit"
-         ],
-         "bind": "mat.normal.path"
-        }
-       ]
-      },
-      {
-       "name": "metal",
-       "class": "card",
-       "children": [
-        {
-         "class": "card_title",
-         "text": "Metallic"
-        },
-        {
-         "name": "row",
-         "class": "card_row",
-         "children": [
-          {
-           "name": "thumb",
-           "class": "card_thumb",
-           "bind": "mat.metal.thumb"
-          },
-          {
-           "name": "ctl",
-           "class": "card_ctl",
-           "children": [
-            {
-             "name": "v",
-             "class": "mat_slider",
-             "text": "Metal",
-             "behaviors": [
-              "hover",
-              "drag"
-             ],
-             "axis": "x",
-             "mode": 0,
-             "value": 0,
-             "minV": 0,
-             "maxV": 1,
-             "bind": "mat.metal.value"
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "name": "path",
-         "class": "card_path",
-         "text": "",
-         "behaviors": [
-          "edit"
-         ],
-         "bind": "mat.metal.path"
-        }
-       ]
-      },
-      {
-       "name": "height",
-       "class": "card",
-       "children": [
-        {
-         "class": "card_title",
-         "text": "Height"
-        },
-        {
-         "name": "row",
-         "class": "card_row",
-         "children": [
-          {
-           "name": "thumb",
-           "class": "card_thumb",
-           "bind": "mat.height.thumb"
-          },
-          {
-           "name": "ctl",
-           "class": "card_ctl",
-           "children": [
-            {
-             "name": "v",
-             "class": "mat_slider",
-             "text": "Height",
-             "behaviors": [
-              "hover",
-              "drag"
-             ],
-             "axis": "x",
-             "mode": 0,
-             "value": 0,
-             "minV": 0,
-             "maxV": 0.5,
-             "bind": "mat.height.value"
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "name": "path",
-         "class": "card_path",
-         "text": "",
-         "behaviors": [
-          "edit"
-         ],
-         "bind": "mat.height.path"
-        }
-       ]
-      }
-     ]
+     "class": "label_cell",
+     "text": "Type"
     },
     {
-     "name": "right",
-     "class": "card_col",
-     "children": [
-      {
-       "name": "alpha",
-       "class": "card",
-       "children": [
-        {
-         "class": "card_title",
-         "text": "Alpha"
-        },
-        {
-         "name": "row",
-         "class": "card_row",
-         "children": [
-          {
-           "name": "thumb",
-           "class": "card_thumb",
-           "bind": "mat.alpha.thumb"
-          },
-          {
-           "name": "ctl",
-           "class": "card_ctl",
-           "children": [
-            {
-             "name": "v",
-             "class": "mat_slider",
-             "text": "Opacity",
-             "behaviors": [
-              "hover",
-              "drag"
-             ],
-             "axis": "x",
-             "mode": 0,
-             "value": 1,
-             "minV": 0,
-             "maxV": 1,
-             "bind": "mat.alpha.value"
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "name": "path",
-         "class": "card_path",
-         "text": "",
-         "behaviors": [
-          "edit"
-         ],
-         "bind": "mat.alpha.path"
-        }
-       ]
-      },
-      {
-       "name": "rough",
-       "class": "card",
-       "children": [
-        {
-         "class": "card_title",
-         "text": "Roughness"
-        },
-        {
-         "name": "row",
-         "class": "card_row",
-         "children": [
-          {
-           "name": "thumb",
-           "class": "card_thumb",
-           "bind": "mat.rough.thumb"
-          },
-          {
-           "name": "ctl",
-           "class": "card_ctl",
-           "children": [
-            {
-             "name": "v",
-             "class": "mat_slider",
-             "text": "Rough",
-             "behaviors": [
-              "hover",
-              "drag"
-             ],
-             "axis": "x",
-             "mode": 0,
-             "value": 0.5,
-             "minV": 0,
-             "maxV": 1,
-             "bind": "mat.rough.value"
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "name": "path",
-         "class": "card_path",
-         "text": "",
-         "behaviors": [
-          "edit"
-         ],
-         "bind": "mat.rough.path"
-        }
-       ]
-      },
-      {
-       "name": "ao",
-       "class": "card",
-       "children": [
-        {
-         "class": "card_title",
-         "text": "Ambient Occlusion"
-        },
-        {
-         "name": "row",
-         "class": "card_row",
-         "children": [
-          {
-           "name": "thumb",
-           "class": "card_thumb",
-           "bind": "mat.ao.thumb"
-          },
-          {
-           "name": "ctl",
-           "class": "card_ctl",
-           "children": [
-            {
-             "name": "v",
-             "class": "mat_slider",
-             "text": "AO",
-             "behaviors": [
-              "hover",
-              "drag"
-             ],
-             "axis": "x",
-             "mode": 0,
-             "value": 1,
-             "minV": 0,
-             "maxV": 1,
-             "bind": "mat.ao.value"
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "name": "path",
-         "class": "card_path",
-         "text": "",
-         "behaviors": [
-          "edit"
-         ],
-         "bind": "mat.ao.path"
-        }
-       ]
-      },
-      {
-       "name": "emission",
-       "class": "card",
-       "children": [
-        {
-         "class": "card_title",
-         "text": "Emission"
-        },
-        {
-         "name": "row",
-         "class": "card_row",
-         "children": [
-          {
-           "name": "thumb",
-           "class": "card_thumb",
-           "bind": "mat.emission.thumb"
-          },
-          {
-           "name": "ctl",
-           "class": "card_ctl",
-           "children": [
-            {
-             "name": "hex",
-             "class": "card_path",
-             "text": "#FFFFFF",
-             "behaviors": [
-              "edit"
-             ],
-             "maxLen": 7,
-             "bind": "mat.emission.hex"
-            },
-            {
-             "name": "v",
-             "class": "mat_slider",
-             "text": "Gain",
-             "behaviors": [
-              "hover",
-              "drag"
-             ],
-             "axis": "x",
-             "mode": 0,
-             "value": 0,
-             "minV": 0,
-             "maxV": 16,
-             "bind": "mat.emission.value"
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "name": "path",
-         "class": "card_path",
-         "text": "",
-         "behaviors": [
-          "edit"
-         ],
-         "bind": "mat.emission.path"
-        }
-       ]
-      }
-     ]
+     "bind": "mat.type.button",
+     "class": "drop_button",
+     "text": "Lit",
+     "icon": "chevron_down",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 320
+    }
+   ]
+  },
+  {
+   "name": "maps",
+   "class": "row",
+   "children": [
+    {
+     "class": "label_cell",
+     "text": "Maps"
+    },
+    {
+     "bind": "mat.maps.button",
+     "class": "drop_button",
+     "text": "Classic",
+     "icon": "chevron_down",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 324
     }
    ]
   },
@@ -538,7 +116,8 @@
     },
     {
      "name": "x",
-     "class": "number",
+     "bind": "mat.tiling.x",
+     "class": "mat_number",
      "text": "X",
      "behaviors": [
       "hover",
@@ -547,14 +126,15 @@
      "axis": "x",
      "mode": 2,
      "value": 0.5,
-     "minV": -64,
-     "maxV": 64,
-     "flat": true,
-     "bind": "mat.tiling.x"
+     "minV": -32,
+     "maxV": 32,
+     "step": 0.01,
+     "flat": true
     },
     {
      "name": "y",
-     "class": "number",
+     "bind": "mat.tiling.y",
+     "class": "mat_number",
      "text": "Y",
      "behaviors": [
       "hover",
@@ -563,20 +143,19 @@
      "axis": "x",
      "mode": 2,
      "value": 0.5,
-     "minV": -64,
-     "maxV": 64,
-     "flat": true,
-     "bind": "mat.tiling.y"
+     "minV": -32,
+     "maxV": 32,
+     "step": 0.01,
+     "flat": true
     },
     {
-     "name": "reset",
      "class": "reset_button",
-     "text": "R",
      "behaviors": [
       "hover",
       "click"
      ],
-     "action": 142
+     "action": 142,
+     "icon": "reset"
     }
    ]
   },
@@ -590,7 +169,8 @@
     },
     {
      "name": "x",
-     "class": "number",
+     "bind": "mat.offset.x",
+     "class": "mat_number",
      "text": "X",
      "behaviors": [
       "hover",
@@ -599,14 +179,15 @@
      "axis": "x",
      "mode": 2,
      "value": 0.5,
-     "minV": -64,
-     "maxV": 64,
-     "flat": true,
-     "bind": "mat.offset.x"
+     "minV": -32,
+     "maxV": 32,
+     "step": 0.01,
+     "flat": true
     },
     {
      "name": "y",
-     "class": "number",
+     "bind": "mat.offset.y",
+     "class": "mat_number",
      "text": "Y",
      "behaviors": [
       "hover",
@@ -615,20 +196,719 @@
      "axis": "x",
      "mode": 2,
      "value": 0.5,
-     "minV": -64,
-     "maxV": 64,
-     "flat": true,
-     "bind": "mat.offset.y"
+     "minV": -32,
+     "maxV": 32,
+     "step": 0.01,
+     "flat": true
     },
     {
-     "name": "reset",
      "class": "reset_button",
-     "text": "R",
      "behaviors": [
       "hover",
       "click"
      ],
-     "action": 143
+     "action": 143,
+     "icon": "reset"
+    }
+   ]
+  },
+  {
+   "name": "flags",
+   "class": "row",
+   "children": [
+    {
+     "bind": "mat.flag.double",
+     "class": "toggle_flag",
+     "text": "Double Sided",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 330
+    },
+    {
+     "bind": "mat.flag.repeat",
+     "class": "toggle_flag",
+     "text": "Repeat",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 331
+    },
+    {
+     "bind": "mat.flag.tri",
+     "class": "toggle_flag",
+     "text": "Triplanar",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 332
+    }
+   ]
+  },
+  {
+   "name": "cols",
+   "class": "cards",
+   "children": [
+    {
+     "name": "left",
+     "class": "card_col",
+     "children": [
+      {
+       "name": "albedo",
+       "bind": "mat.albedo.card",
+       "class": "card",
+       "children": [
+        {
+         "class": "card_title",
+         "text": "Albedo"
+        },
+        {
+         "class": "card_row",
+         "children": [
+          {
+           "bind": "mat.albedo.thumb",
+           "class": "card_thumb",
+           "text": "None",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 300
+          },
+          {
+           "class": "card_ctl",
+           "children": [
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.albedo.swatch",
+               "class": "color_swatch",
+               "behaviors": [
+                "click"
+               ],
+               "action": 340
+              },
+              {
+               "class": "reset_small",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 342,
+               "icon": "reset"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "name": "normal",
+       "bind": "mat.normal.card",
+       "class": "card",
+       "children": [
+        {
+         "class": "card_title",
+         "text": "Normal"
+        },
+        {
+         "class": "card_row",
+         "children": [
+          {
+           "bind": "mat.normal.thumb",
+           "class": "card_thumb",
+           "text": "None",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 301
+          },
+          {
+           "class": "card_ctl",
+           "children": [
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.normal.flip",
+               "class": "toggle_wide",
+               "text": "Flip Normal Y",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 141
+              }
+             ]
+            },
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.normal.scale",
+               "class": "mat_slider",
+               "text": "Scale",
+               "behaviors": [
+                "hover",
+                "drag"
+               ],
+               "axis": "x",
+               "mode": 0,
+               "value": 0.25,
+               "minV": 0,
+               "maxV": 4
+              },
+              {
+               "class": "reset_small",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 310,
+               "icon": "reset"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "name": "orm",
+       "bind": "mat.orm.card",
+       "class": "card",
+       "children": [
+        {
+         "class": "card_title",
+         "text": "ORMH"
+        },
+        {
+         "class": "card_row",
+         "children": [
+          {
+           "bind": "mat.orm.thumb",
+           "class": "card_thumb",
+           "text": "None",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 308
+          },
+          {
+           "class": "card_ctl",
+           "children": [
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.orm.rough",
+               "class": "mat_slider",
+               "text": "Rough",
+               "behaviors": [
+                "hover",
+                "drag"
+               ],
+               "axis": "x",
+               "mode": 0,
+               "value": 0.5,
+               "minV": 0,
+               "maxV": 1
+              },
+              {
+               "class": "reset_small",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 314,
+               "icon": "reset"
+              }
+             ]
+            },
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.orm.metal",
+               "class": "mat_slider",
+               "text": "Metal",
+               "behaviors": [
+                "hover",
+                "drag"
+               ],
+               "axis": "x",
+               "mode": 0,
+               "value": 0,
+               "minV": 0,
+               "maxV": 1
+              },
+              {
+               "class": "reset_small",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 311,
+               "icon": "reset"
+              }
+             ]
+            },
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.orm.ao",
+               "class": "mat_slider",
+               "text": "AO",
+               "behaviors": [
+                "hover",
+                "drag"
+               ],
+               "axis": "x",
+               "mode": 0,
+               "value": 1,
+               "minV": 0,
+               "maxV": 1
+              },
+              {
+               "class": "reset_small",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 315,
+               "icon": "reset"
+              }
+             ]
+            },
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.orm.height",
+               "class": "mat_slider",
+               "text": "Height",
+               "behaviors": [
+                "hover",
+                "drag"
+               ],
+               "axis": "x",
+               "mode": 0,
+               "value": 0,
+               "minV": 0,
+               "maxV": 0.5
+              },
+              {
+               "class": "reset_small",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 312,
+               "icon": "reset"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "name": "metal",
+       "bind": "mat.metal.card",
+       "class": "card",
+       "children": [
+        {
+         "class": "card_title",
+         "text": "Metallic"
+        },
+        {
+         "class": "card_row",
+         "children": [
+          {
+           "bind": "mat.metal.thumb",
+           "class": "card_thumb",
+           "text": "None",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 302
+          },
+          {
+           "class": "card_ctl",
+           "children": [
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.metal.value",
+               "class": "mat_slider",
+               "text": "Metal",
+               "behaviors": [
+                "hover",
+                "drag"
+               ],
+               "axis": "x",
+               "mode": 0,
+               "value": 0,
+               "minV": 0,
+               "maxV": 1
+              },
+              {
+               "class": "reset_small",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 311,
+               "icon": "reset"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "name": "height",
+       "bind": "mat.height.card",
+       "class": "card",
+       "children": [
+        {
+         "class": "card_title",
+         "text": "Height"
+        },
+        {
+         "class": "card_row",
+         "children": [
+          {
+           "bind": "mat.height.thumb",
+           "class": "card_thumb",
+           "text": "None",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 303
+          },
+          {
+           "class": "card_ctl",
+           "children": [
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.height.value",
+               "class": "mat_slider",
+               "text": "Height",
+               "behaviors": [
+                "hover",
+                "drag"
+               ],
+               "axis": "x",
+               "mode": 0,
+               "value": 0,
+               "minV": 0,
+               "maxV": 0.5
+              },
+              {
+               "class": "reset_small",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 312,
+               "icon": "reset"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "right",
+     "class": "card_col",
+     "children": [
+      {
+       "name": "alpha",
+       "bind": "mat.alpha.card",
+       "class": "card",
+       "children": [
+        {
+         "class": "card_title",
+         "text": "Alpha"
+        },
+        {
+         "class": "card_row",
+         "children": [
+          {
+           "bind": "mat.alpha.thumb",
+           "class": "card_thumb",
+           "text": "None",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 304
+          },
+          {
+           "class": "card_ctl",
+           "children": [
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.alpha.value",
+               "class": "mat_slider",
+               "text": "Opacity",
+               "behaviors": [
+                "hover",
+                "drag"
+               ],
+               "axis": "x",
+               "mode": 0,
+               "value": 1,
+               "minV": 0,
+               "maxV": 1
+              },
+              {
+               "class": "reset_small",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 313,
+               "icon": "reset"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "name": "rough",
+       "bind": "mat.rough.card",
+       "class": "card",
+       "children": [
+        {
+         "class": "card_title",
+         "text": "Roughness"
+        },
+        {
+         "class": "card_row",
+         "children": [
+          {
+           "bind": "mat.rough.thumb",
+           "class": "card_thumb",
+           "text": "None",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 305
+          },
+          {
+           "class": "card_ctl",
+           "children": [
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.rough.value",
+               "class": "mat_slider",
+               "text": "Rough",
+               "behaviors": [
+                "hover",
+                "drag"
+               ],
+               "axis": "x",
+               "mode": 0,
+               "value": 0.5,
+               "minV": 0,
+               "maxV": 1
+              },
+              {
+               "class": "reset_small",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 314,
+               "icon": "reset"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "name": "ao",
+       "bind": "mat.ao.card",
+       "class": "card",
+       "children": [
+        {
+         "class": "card_title",
+         "text": "Ambient Occlusion"
+        },
+        {
+         "class": "card_row",
+         "children": [
+          {
+           "bind": "mat.ao.thumb",
+           "class": "card_thumb",
+           "text": "None",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 306
+          },
+          {
+           "class": "card_ctl",
+           "children": [
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.ao.value",
+               "class": "mat_slider",
+               "text": "AO",
+               "behaviors": [
+                "hover",
+                "drag"
+               ],
+               "axis": "x",
+               "mode": 0,
+               "value": 1,
+               "minV": 0,
+               "maxV": 1
+              },
+              {
+               "class": "reset_small",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 315,
+               "icon": "reset"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "name": "emission",
+       "bind": "mat.emission.card",
+       "class": "card",
+       "children": [
+        {
+         "class": "card_title",
+         "text": "Emission"
+        },
+        {
+         "class": "card_row",
+         "children": [
+          {
+           "bind": "mat.emission.thumb",
+           "class": "card_thumb",
+           "text": "None",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 307
+          },
+          {
+           "class": "card_ctl",
+           "children": [
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.emission.swatch",
+               "class": "color_swatch",
+               "behaviors": [
+                "click"
+               ],
+               "action": 341
+              },
+              {
+               "class": "reset_small",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 343,
+               "icon": "reset"
+              }
+             ]
+            },
+            {
+             "class": "card_line",
+             "children": [
+              {
+               "bind": "mat.emission.value",
+               "class": "mat_slider",
+               "text": "Gain",
+               "behaviors": [
+                "hover",
+                "drag"
+               ],
+               "axis": "x",
+               "mode": 0,
+               "value": 0,
+               "minV": 0,
+               "maxV": 16
+              },
+              {
+               "class": "reset_small",
+               "behaviors": [
+                "hover",
+                "click"
+               ],
+               "action": 316,
+               "icon": "reset"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
     }
    ]
   },
@@ -642,6 +922,5 @@
    ],
    "action": 144
   }
- ],
- "bind": "mat.panel"
+ ]
 }

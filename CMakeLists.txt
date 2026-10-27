@@ -355,10 +355,12 @@ bh_module(app
     demo/app/HierarchyController.cpp
     demo/app/MaterialController.cpp
     demo/app/MaterialFields.cpp
+    demo/app/MaterialPick.cpp
     demo/app/LauncherController.cpp
     demo/app/BrowserModel.cpp
     demo/app/BrowserFiles.cpp
     demo/app/BrowserThumbs.cpp
+    demo/app/BrowserThumbBake.cpp
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
 target_link_libraries(bh_app PUBLIC bh_host bh_gui bh_rhi_ui bh_gpu_scene)
@@ -844,6 +846,7 @@ set(BH_TEST_SOURCES
     tests/gui/TestGuiEdit.cpp
     tests/gui/TestGuiWidgets.cpp
     tests/gui/TestGuiRows.cpp
+    tests/gui/TestGuiDock.cpp
     tests/app/TestBrowserFiles.cpp
     demo/app/BrowserModel.cpp
     demo/app/BrowserFiles.cpp

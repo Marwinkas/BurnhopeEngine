@@ -1,5 +1,7 @@
 [
- {"name": "inspector", "bind": "inspector.panel", "class": "dock_right", "behaviors": ["scroll"], "children": [
+ {"name": "splitRight", "class": "splitter_v", "splitter": "x", "resize": "next", "splitMin": 280, "splitMax": 900},
+ {"name": "rightDock", "bind": "dock.right", "class": "dock_right", "dock": true, "children": [
+ {"name": "inspector", "bind": "inspector.panel", "class": "dock_panel", "tab": "Inspector", "tabIcon": "gear", "behaviors": ["scroll"], "children": [
   {"name": "hierTitle", "class": "label_title", "text": "Scene"},
   {"name": "hier", "bind": "scene.hier", "class": "list_hier", "behaviors": ["virtual", "hover"], "count": 0, "itemH": 26, "itemAction": 83},
   {"name": "title", "class": "row_tall", "children": [
@@ -10,5 +12,6 @@
   {"$include": "assets/gui/inspector_light.json"},
   {"$include": "assets/gui/inspector_post.json"},
   {"$include": "assets/gui/inspector_mat.json"}
+ ]}
  ]}
 ]

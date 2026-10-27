@@ -1,6 +1,6 @@
 [
  {"name": "lightSec", "class": "dock_column", "children": [
-  {"name": "head", "class": "section_header", "text": "Lighting", "behaviors": ["hover", "click"], "toggles": "main::inspector::lightSec::body"},
+  {"name": "head", "class": "section_header", "text": "Lighting", "behaviors": ["hover", "click"], "toggles": "main::rightDock::inspector::lightSec::body"},
   {"name": "body", "class": "section_body", "hidden": false, "children": [
    {"name": "sunGain", "class": "row", "children": [
     {"class": "label_cell", "text": "Sun power"},

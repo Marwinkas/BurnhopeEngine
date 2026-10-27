@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "layout/GuiDock.hpp"
 #include "layout/GuiLayoutEngine.hpp"
 #include "style/GuiStyleResolver.hpp"
 #include "io/File.hpp"
@@ -43,6 +44,15 @@ struct NodeDesc {
     bool multiline = false;
     bool flat = false;
     bool passive = false;
+    bool dock = false;       // "dock": true
+    bool closed = false;     // "closed": true (a dock panel that starts closed)
+    bool splitter = false;   // "splitter": "x" | "y"
+    uint8_t splitHorizontal = 0;
+    uint8_t splitNext = 0;
+    float splitMin = 0.0f;
+    float splitMax = 0.0f;
+    char tab[kGuiTextCap] = {};     // "tab": title of the dock tab this node gets when its parent is a dock
+    uint8_t tabIcon = 0;            // "tabIcon": icon name of that tab
     uint8_t axis = 0;
     uint8_t mode = 0;
     uint8_t maxLen = 127;
@@ -59,6 +69,7 @@ struct NodeDesc {
     float value = 0.0f;
     float minV = 0.0f;
     float maxV = 1.0f;
+    float step = 0.0f;
     float color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     json::Cur children = {};
     bool hasChildren = false;
@@ -230,6 +241,38 @@ bool readField(json::Cur& c, const char* key, NodeDesc& d) {
         d.icon = guiIconFind(iconName);
         return true;
     }
+    if (isKey(key, "tab")) {
+        return readString(c, d.tab, sizeof(d.tab), len);
+    }
+    if (isKey(key, "tabIcon")) {
+        char iconName[24] = {};
+        if (!readString(c, iconName, sizeof(iconName), len)) {
+            return false;
+        }
+        d.tabIcon = guiIconFind(iconName);
+        return true;
+    }
+    if (isKey(key, "dock")) {
+        return readBool(c, d.dock);
+    }
+    if (isKey(key, "closed")) {
+        return readBool(c, d.closed);
+    }
+    if (isKey(key, "splitter")) { // "x": a vertical bar that sizes the width of a sibling, "y": a horizontal bar sizing its height
+        if (!readString(c, word, sizeof(word), len)) {
+            return false;
+        }
+        d.splitter = true;
+        d.splitHorizontal = std::strcmp(word, "y") == 0 ? 1 : 0;
+        return true;
+    }
+    if (isKey(key, "resize")) { // "prev" (default) | "next": which sibling the splitter sizes
+        if (!readString(c, word, sizeof(word), len)) {
+            return false;
+        }
+        d.splitNext = std::strcmp(word, "next") == 0 ? 1 : 0;
+        return true;
+    }
     if (isKey(key, "toggles")) {
         return readString(c, d.toggles, sizeof(d.toggles), len);
     }
@@ -289,13 +332,13 @@ bool readField(json::Cur& c, const char* key, NodeDesc& d) {
                 return false;
             }
             d.placement = std::strcmp(word, "above") == 0 ? 1 : std::strcmp(word, "right") == 0 ? 2
-                : std::strcmp(word, "left") == 0 ? 3 : std::strcmp(word, "pointer") == 0 ? 4 : 0;
+                : std::strcmp(word, "left") == 0 ? 3 : std::strcmp(word, "pointer") == 0 ? 4 : std::strcmp(word, "center") == 0 ? 5 : 0;
             return true;
         }
         if (!readNumber(c, n)) {
             return false;
         }
-        d.placement = static_cast<uint8_t>(std::clamp(n, 0.0, 4.0));
+        d.placement = static_cast<uint8_t>(std::clamp(n, 0.0, 5.0));
         return true;
     }
     if (isKey(key, "behaviors")) {
@@ -331,7 +374,8 @@ bool readField(json::Cur& c, const char* key, NodeDesc& d) {
     }
     const bool numeric = isKey(key, "size") || isKey(key, "photo") || isKey(key, "action") || isKey(key, "count") || isKey(key, "itemAction") ||
         isKey(key, "itemW") || isKey(key, "itemH") || isKey(key, "columns") || isKey(key, "mode") ||
-        isKey(key, "value") || isKey(key, "minV") || isKey(key, "maxV") || isKey(key, "maxLen") || isKey(key, "layer");
+        isKey(key, "value") || isKey(key, "minV") || isKey(key, "maxV") || isKey(key, "step") || isKey(key, "maxLen") || isKey(key, "layer") ||
+        isKey(key, "splitMin") || isKey(key, "splitMax");
     if (!numeric) {
         return json::skipValue(c);
     }
@@ -350,7 +394,10 @@ bool readField(json::Cur& c, const char* key, NodeDesc& d) {
     else if (isKey(key, "value")) d.value = static_cast<float>(n);
     else if (isKey(key, "minV")) d.minV = static_cast<float>(n);
     else if (isKey(key, "maxV")) d.maxV = static_cast<float>(n);
+    else if (isKey(key, "step")) d.step = static_cast<float>(std::max(n, 0.0));
     else if (isKey(key, "maxLen")) d.maxLen = static_cast<uint8_t>(std::clamp(n, 1.0, 127.0));
+    else if (isKey(key, "splitMin")) d.splitMin = static_cast<float>(std::max(n, 0.0));
+    else if (isKey(key, "splitMax")) d.splitMax = static_cast<float>(std::max(n, 0.0));
     else d.layer = static_cast<uint8_t>(std::clamp(n, 0.0, 255.0));
     return true;
 }
@@ -371,6 +418,7 @@ void applyBehaviors(flecs::entity e, const NodeDesc& d, uint32_t itemClass) {
         drag.value = d.value;
         drag.minV = d.minV;
         drag.maxV = d.maxV;
+        drag.step = d.step;
         drag.axis = d.axis;
         drag.mode = d.mode;
         drag.flat = d.flat ? 1 : 0;
@@ -409,6 +457,13 @@ void applyBehaviors(flecs::entity e, const NodeDesc& d, uint32_t itemClass) {
         e.set<UiOverlay>(o);
         e.add<UiRoot>();
         e.add<UiHidden>();
+    }
+    if (d.splitter) {
+        e.set<UiSplitter>(UiSplitter{.minSize = d.splitMin, .maxSize = d.splitMax, .horizontal = d.splitHorizontal, .resizeNext = d.splitNext});
+        e.add<UiHoverable>();
+    }
+    if (d.dock) {
+        e.set<UiDock>(UiDock{});
     }
     if (d.passive) {
         e.add<UiPassive>();
@@ -555,6 +610,12 @@ flecs::entity buildEntity(LoadCtx& ctx, const NodeDesc& d, flecs::entity parent)
         }
     }
     applyBehaviors(e, d, d.itemClass[0] != '\0' ? guiStyleFind(*ctx.sheet, d.itemClass) : kGuiNoClass);
+    if (d.dock) {
+        (void)guiDockCreateBar(world, *ctx.sheet, e);
+    }
+    if (!top && parent.has<UiDock>() && d.tab[0] != '\0') {
+        (void)guiDockAddPanel(world, *ctx.sheet, parent, e, d.tab, d.tabIcon, d.closed);
+    }
     if (d.toggles[0] != '\0' && ctx.toggleCount < kGuiToggleCap) {
         PendingToggle& pending = ctx.toggles[ctx.toggleCount++];
         pending.entity = e.id();

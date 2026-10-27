@@ -1,6 +1,6 @@
 [
  {"name": "matSec", "bind": "inspector.mat", "class": "dock_column", "children": [
-  {"name": "head", "class": "section_header", "text": "Material", "behaviors": ["hover", "click"], "toggles": "main::inspector::matSec::body"},
+  {"name": "head", "class": "section_header", "text": "Material", "behaviors": ["hover", "click"], "toggles": "main::rightDock::inspector::matSec::body"},
   {"name": "body", "class": "section_body", "hidden": true, "children": [
    {"name": "preview", "bind": "actor.mat.preview", "class": "swatch"},
    {"name": "base", "class": "row", "children": [

@@ -140,7 +140,12 @@ void materialSavedHook(void* app, const char* path) {
     thumbsInvalidate(static_cast<Engine*>(app)->browser, path);
 }
 
+uint8_t materialThumbHook(void* app, const char* path, uint32_t& budget) {
+    return thumbsTextureCell(static_cast<Engine*>(app)->browser, path, budget);
+}
+
 void openProjectHook(void* app, const std::filesystem::path& dir) {
+    static_cast<Engine*>(app)->material.root = dir;
     browserSetRoot(static_cast<Engine*>(app)->browser, dir);
 }
 
@@ -208,7 +213,7 @@ bool engineInit(Engine& e, int argc, char** argv) {
     GuiHost& gui = *e.gui;
     return inspectorBind(e.inspector, gui, e.scene, e.editor) && toolbarBind(e.toolbar, gui, e.scene, e.editor.flags, e.quit) &&
            browserBind(e.browser, gui, e.scene, deviceJobs(e.host.device), &e, openMaterialHook, assignMaterialHook) &&
-           hierarchyBind(e.hierarchy, gui, e.scene) && materialBind(e.material, gui, e.scene, &e, materialSavedHook) &&
+           hierarchyBind(e.hierarchy, gui, e.scene) && materialBind(e.material, gui, e.scene, &e, materialSavedHook, materialThumbHook) &&
            launcherBind(e.launcher, gui, &e, openProjectHook);
 }
 

@@ -27,6 +27,8 @@ void interactHover(flecs::world& world, const InputFrame& in, GuiInteractState& 
     const flecs::entity captured = guiEntityOf(world, state.capture);
     if (captured.id() != 0) {
         target = captured;
+    } else if (const flecs::entity grip = guiEntityOf(world, state.split); grip.id() != 0) {
+        target = grip; // a grabbed splitter keeps the hover while the pointer leaves its thin bar
     }
 
     if (state.hover != target.id()) {

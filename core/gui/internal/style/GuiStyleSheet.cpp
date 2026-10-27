@@ -125,6 +125,7 @@ auto fslot(S& s, uint32_t bit) -> decltype(&s.w) {
     case kSbShadow: return &s.shadow;
     case kSbIconSize: return &s.iconSize;
     case kSbHoverAlpha: return &s.hoverAlpha;
+    case kSbBasis: return &s.basis;
     default: return nullptr;
     }
 }
@@ -189,6 +190,7 @@ constexpr NumKey kNumKeys[] = {
     {"border", 1, {kSbBorderW}}, {"borderW", 1, {kSbBorderW}}, {"radius", 1, {kSbRadius}}, {"alpha", 1, {kSbAlpha}},
     {"shadow", 1, {kSbShadow}}, {"icon", 1, {kSbIconSize}}, {"iconSize", 1, {kSbIconSize}},
     {"textSize", 1, {kSbTextSize}}, {"fontSize", 1, {kSbTextSize}}, {"hoverAlpha", 1, {kSbHoverAlpha}},
+    {"basis", 1, {kSbBasis}}, {"flexBasis", 1, {kSbBasis}},
 };
 
 struct EnumName {
@@ -697,6 +699,17 @@ bool guiStyleLoadTheme(GuiStyleSheet& sheet, std::string_view text, std::string_
         skipComma(c);
     }
     return false;
+}
+
+bool guiStyleColor8(const GuiStyleSheet& sheet, std::string_view role, uint8_t (&rgb)[3]) {
+    uint8_t id = 0;
+    if (!tokenNamed(role, id) || id >= kGuiPaletteCap) {
+        return false;
+    }
+    for (int i = 0; i < 3; ++i) {
+        rgb[i] = static_cast<uint8_t>(std::clamp(sheet.colors[id][i], 0.0f, 1.0f) * 255.0f + 0.5f);
+    }
+    return true;
 }
 
 bool guiStyleNumber(const GuiStyleSheet& sheet, std::string_view name, float& out) {

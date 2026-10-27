@@ -46,6 +46,7 @@ scene/
 Libraries/
 .cursorignore
 .cursorrules
+RTXGI/
 # --- Скомпилированные шейдеры ---
 *.spv
 

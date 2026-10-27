@@ -230,10 +230,7 @@ TEST_CASE("shell: clicking the real file-browser search field focuses it and typ
         return;
     }
     guiLayout(ctx, 1600.0f, 900.0f);
-    flecs::entity field = world.lookup("shell::files::bar::search");
-    if (!field.is_valid()) {
-        world.each([&](flecs::entity e, const UiEditable&) { field = e; });
-    }
+    const flecs::entity field = world.lookup("shell::bottom::browser::filesCol::bar::search");
     CHECK(field.is_valid());
     if (!field.is_valid()) {
         guiLayoutDetach(root);

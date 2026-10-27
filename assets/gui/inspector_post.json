@@ -1,6 +1,6 @@
 [
  {"name": "postSec", "class": "dock_column", "children": [
-  {"name": "head", "class": "section_header", "text": "Post-Processing", "behaviors": ["hover", "click"], "toggles": "main::inspector::postSec::body"},
+  {"name": "head", "class": "section_header", "text": "Post-Processing", "behaviors": ["hover", "click"], "toggles": "main::rightDock::inspector::postSec::body"},
   {"name": "body", "class": "section_body", "hidden": true, "children": [
    {"name": "bloomOn", "class": "row", "children": [
     {"class": "label_cell", "text": "Bloom"},

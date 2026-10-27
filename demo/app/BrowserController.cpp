@@ -208,7 +208,7 @@ bool browserBind(BrowserState& br, GuiHost& gui, SceneFrame* scene, JobPool& job
     b.root = fs::current_path(ec);
     b.cwd = b.root;
     b.history.push_back(b.cwd);
-    bool ok = thumbsInit(b.thumbs, jobs) && guiHostBindList(br.gui, kBrowserTree, browserOnTree, &br) && guiHostBindList(br.gui, kBrowserGrid, browserOnFile, &br) &&
+    bool ok = thumbsInit(b.thumbs, jobs, b.gui) && guiHostBindList(br.gui, kBrowserTree, browserOnTree, &br) && guiHostBindList(br.gui, kBrowserGrid, browserOnFile, &br) &&
               guiHostBindListContext(br.gui, kBrowserGrid, browserOnContext, &br);
     ok = guiHostBindEdit(br.gui, kBrowserSearch, onSearch, &br) && ok;
     ok = guiHostBindDrag(br.gui, "browser.size", onTileSize, &br) && ok;

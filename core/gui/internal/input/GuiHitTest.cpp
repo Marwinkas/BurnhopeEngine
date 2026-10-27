@@ -121,7 +121,7 @@ bool guiIsHidden(flecs::entity e) {
 
 bool guiIsTarget(flecs::entity e) {
     return e.has<UiHoverable>() || e.has<UiClickable>() || e.has<UiDraggable>() || e.has<UiScrollable>() ||
-           e.has<UiFocusable>() || e.has<UiEditable>();
+           e.has<UiFocusable>() || e.has<UiEditable>() || e.has<UiSplitter>() || e.has<UiTab>();
 }
 
 flecs::entity guiHitTestEx(flecs::world& world, float x, float y, flecs::entity* under) {

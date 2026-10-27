@@ -9,6 +9,9 @@
 namespace burnhope::gui {
 
 constexpr uint32_t kGuiTextCap = 128;
+constexpr uint32_t kGuiSplitterCap = 32; // splitter grips one screen can hold
+constexpr uint32_t kGuiDockCap = 16;     // tabbed docks one screen can hold
+constexpr uint32_t kGuiDockPanelCap = 16; // panels (and tabs) one dock can hold
 constexpr uint8_t kGuiNoPhoto = 255;
 constexpr uint32_t kGuiNoClass = 0xFFFFu;
 
@@ -89,6 +92,7 @@ struct UiDraggable {
     uint8_t mode = 0; // 0 absolute track (value follows pointer inside track box), 1 relative delta, 2 scrub (pointer.dx accumulation)
     uint8_t flat = 0; // 1: the emitter draws no value bar (number fields whose range is not a meaningful fraction)
     uint8_t pad1 = 0;
+    float step = 0.0f; // mode 2: real units per pixel (0 = a fraction of the range, see kGuiScrubPerPixel)
 };
 
 // Runtime drag session, written only by InteractDrag.
@@ -164,7 +168,38 @@ struct UiToggle {
     uint64_t target = 0;
 };
 
+// Splitter grip (JSON "splitter"): dragging it resizes the sibling it borders. A vertical bar (horizontal == 0) sizes the
+// width of that sibling, a horizontal bar its height; the size is clamped to minSize..maxSize (maxSize 0 = unbounded).
+struct UiSplitter {
+    float minSize = 0.0f;
+    float maxSize = 0.0f;
+    uint8_t horizontal = 0;
+    uint8_t resizeNext = 0; // 0: the sibling before the grip is resized, 1: the one after it
+    uint8_t pad0 = 0;
+    uint8_t pad1 = 0;
+};
+
+// Tabbed dock (JSON "dock"): a column holding one UiTabBar (child "tabs", synthesized by the loader) and any number of
+// UiDockPanel children, of which exactly one is shown. `active` is that panel's entity id (0 = pick the first open one).
+struct UiDock {
+    uint64_t active = 0;
+    uint8_t shown = 1; // the dock was visible at the last refresh
+    uint8_t pad0[7] = {};
+};
+
+// A panel inside a UiDock. A closed panel has no visible tab and no content until it is opened again.
+struct UiDockPanel {
+    uint8_t closed = 0;
+};
+
+// Tab header: the entity carries the panel title (UiText) and icon (UiPaint::icon); `panel` is the panel it selects.
+struct UiTab {
+    uint64_t panel = 0;
+};
+
 static_assert(std::is_trivially_copyable_v<UiToggle>);
+static_assert(std::is_trivially_copyable_v<UiSplitter> && sizeof(UiSplitter) == 12);
+static_assert(std::is_trivially_copyable_v<UiDock> && std::is_trivially_copyable_v<UiDockPanel> && std::is_trivially_copyable_v<UiTab>);
 static_assert(std::is_trivially_copyable_v<UiFlex>);
 static_assert(std::is_trivially_copyable_v<UiBox> && sizeof(UiBox) == 16);
 static_assert(std::is_trivially_copyable_v<UiClip> && sizeof(UiClip) == 16);
@@ -189,5 +224,7 @@ struct UiClipChildren {}; // entity clips descendants to its own box (scroll vie
 struct UiHidden {};       // entity and subtree skipped by hit test and emitter
 struct UiTooltipHost {};  // the overlay entity guiTooltipRun shows tips in
 struct UiRoot {};         // layout root (one per screen / overlay)
+struct UiTabBar {};       // row that holds the UiTab headers of a UiDock
+struct UiTabClose {};     // the close button child of a UiTab
 
 } // namespace burnhope::gui

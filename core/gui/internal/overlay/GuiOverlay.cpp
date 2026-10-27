@@ -85,6 +85,10 @@ void place(flecs::entity e, const UiOverlay& o, const InputFrame& in, float scre
         x = fit(ax - w, ax + aw, w, screenW, ax, screenW - (ax + aw));
         y = std::clamp(ay, 0.0f, std::max(0.0f, screenH - h));
         break;
+    case 5: // modal: centred on the screen whatever the anchor
+        x = std::max(0.0f, (screenW - w) * 0.5f);
+        y = std::max(0.0f, (screenH - h) * 0.5f);
+        break;
     case 4: // at point: the box starts at the point and flips to its other side when it overflows
         x = fit(ax, ax - w, w, screenW, screenW - ax, ax);
         y = fit(ay, ay - h, h, screenH, screenH - ay, ay);

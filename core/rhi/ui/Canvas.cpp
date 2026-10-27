@@ -38,7 +38,11 @@ void canvasDestroy(Canvas& c, Device& d) {
 }
 
 bool canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& input, uint32_t flight, bool upload) {
+    // A skipped frame (no prim buffer, zero extent) clears the one-shot feedback (ops, cursor) but keeps the text-focus
+    // request: reporting "no text focus" would make the host stop SDL text input and lose the next keystrokes.
+    const bool wantsText = c.feedback.wantsText;
     c.feedback = {};
+    c.feedback.wantsText = wantsText;
     if (c.layer == nullptr || w < 1.0f || h < 1.0f) {
         return c.layer == nullptr;
     }
@@ -56,6 +60,7 @@ bool canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& inp
     if (dst == nullptr || primCap == 0) {
         return false;
     }
+    c.feedback = {};
     const uint32_t n = c.layer(c.layerUser, local, pointsW, pointsH, dst, primCap, c.feedback);
     uiRendererUploadPrims(c.rhi, d, flight, std::span<const UiPrimitive>(dst, n < primCap ? n : primCap), pointsW, pointsH);
     return true;

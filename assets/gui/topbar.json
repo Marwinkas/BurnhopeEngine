@@ -22,6 +22,6 @@
   {"name": "files", "class": "button", "text": "Files", "behaviors": ["hover", "click"], "action": 0, "toggles": "bottom"},
   {"class": "bar_spacer"},
   {"name": "stats", "bind": "bar.stats", "class": "bar_stats", "text": ""},
-  {"name": "settings", "class": "tool_button", "icon": "gear", "behaviors": ["hover", "click"], "action": 0, "toggles": "main::inspector"}
+  {"name": "settings", "class": "tool_button", "icon": "gear", "behaviors": ["hover", "click"], "action": 0, "toggles": "main::rightDock"}
  ]}
 ]

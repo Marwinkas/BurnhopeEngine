@@ -68,7 +68,9 @@ void apply(const InputFrame& in, UiDraggable& drag, UiDragState& ds, const UiBox
         }
         return;
     }
-    const float k = (drag.maxV - drag.minV) * kGuiScrubPerPixel * (in.shift != 0 ? kGuiScrubFine : 1.0f);
+    const float range = std::max(drag.maxV - drag.minV, 1e-6f);
+    const float perPixel = drag.step > 0.0f ? drag.step / range : range * kGuiScrubPerPixel;
+    const float k = perPixel * (in.shift != 0 ? kGuiScrubFine : 1.0f);
     ds.dx += in.pointer.dx * k;
     ds.dy += in.pointer.dy * k;
     if (horizontal) {

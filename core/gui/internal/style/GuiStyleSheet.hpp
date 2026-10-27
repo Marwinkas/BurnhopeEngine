@@ -64,7 +64,7 @@ enum GuiStyleBit : uint8_t {
     kSbPosL, kSbPosT, kSbPosR, kSbPosB,
     kSbFlexDir, kSbGrow, kSbShrink, kSbAlignItems, kSbAlignSelf, kSbJustify, kSbWrap, kSbOverflow, kSbPosition,
     kSbToken, kSbBorderToken, kSbActiveToken, kSbBorderW, kSbRadius, kSbAlpha, kSbShadow,
-    kSbIconSize, kSbTextSize, kSbTextAlign, kSbHoverAlpha,
+    kSbIconSize, kSbTextSize, kSbTextAlign, kSbHoverAlpha, kSbBasis,
     kSbCount,
 };
 static_assert(kSbCount <= 64);
@@ -88,6 +88,7 @@ struct alignas(16) GuiStyle {
     float shadow = 0.0f;
     float iconSize = 0.0f;
     float hoverAlpha = 0.0f;
+    float basis = 0.0f; // flex-basis in px (kSbBasis); 0 makes grow share the whole row regardless of content
     uint8_t flexDir = 0, alignItems = 0, alignSelf = 0, justify = 0, wrap = 0, overflow = 0, position = 0;
     uint8_t token = 0, borderToken = 0, activeToken = 0;
     uint8_t textSize = 0, textAlign = 0;
@@ -137,6 +138,9 @@ bool guiStyleLoadTheme(GuiStyleSheet& sheet, std::string_view json, std::string_
 // Numeric constant of the "tokens" block by its dotted name ("tile.gutter"); false when the sheet has no such token.
 // Application code reads its sizes from here instead of hard-coding them.
 bool guiStyleNumber(const GuiStyleSheet& sheet, std::string_view name, float& out);
+
+// Theme colour of a palette role by its "bg" name ("item", "content", ...) as 8-bit RGB; false for an unknown role.
+bool guiStyleColor8(const GuiStyleSheet& sheet, std::string_view role, uint8_t (&rgb)[3]);
 
 // Class id of a name, or kGuiNoClass (0xFFFF, see GuiComponents.hpp) when absent. Build-time only (hash scan).
 uint32_t guiStyleFind(const GuiStyleSheet& sheet, std::string_view name);

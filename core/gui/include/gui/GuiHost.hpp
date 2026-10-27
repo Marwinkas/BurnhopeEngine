@@ -24,6 +24,8 @@ using GuiCrumbFn = void (*)(void* user, uint32_t index);
 using GuiContextFn = void (*)(void* user, uint32_t index);
 // A two-axis draggable (x, y in minV..maxV of its range 0..1) changed.
 using GuiValue2Fn = void (*)(void* user, float x, float y);
+// The colour picker popup changed the colour (components 0..1).
+using GuiColorFn = void (*)(void* user, float r, float g, float b);
 
 constexpr uint32_t kGuiListTextCap = 128; // bytes (UTF-8), the width of a UiText
 constexpr uint32_t kGuiListCap = 1024;           // entries one list can show
@@ -81,6 +83,8 @@ void guiHostSetListMark(GuiHost* gui, const char* path, uint32_t index, bool mar
 void guiHostSetListThumbs(GuiHost* gui, const char* path, uint8_t slot, uint8_t cols, uint8_t rows, uint8_t tilePx);
 // Numeric constant of the "tokens" block of styles.json ("tile.gutter"); 0 (and a warning) when undefined.
 [[nodiscard]] float guiHostToken(const GuiHost* gui, const char* name);
+// Theme colour of a palette role ("item", "content", ...) as 8-bit RGB; false when the role is unknown.
+[[nodiscard]] bool guiHostColor8(const GuiHost* gui, const char* role, uint8_t (&rgb)[3]);
 // Icon cell of a registered icon name ("folder"), 0 when unknown.
 [[nodiscard]] uint8_t guiHostIconCell(const char* name);
 // Style class of the pooled items of a list ("tile_item", "row_item").
@@ -129,6 +133,15 @@ void guiHostSetListThumb(GuiHost* gui, const char* path, uint32_t index, uint8_t
 void guiHostSetListMetrics(GuiHost* gui, const char* path, float itemW, float itemH, bool fitColumns);
 // Opens the overlay at `path` with its anchor on the pointer (context menus).
 void guiHostOpenAtPointer(GuiHost* gui, const char* path);
+// Opens the overlay at `popup` anchored to the box of the node `anchor` (dropdowns, pickers).
+void guiHostOpenAt(GuiHost* gui, const char* popup, const char* anchor);
+// True while the overlay at `popup` is open (it closes itself on a click outside or Escape).
+[[nodiscard]] bool guiHostIsOpen(const GuiHost* gui, const char* popup);
+// Closes the overlay at `popup`.
+void guiHostClose(GuiHost* gui, const char* popup);
+// Opens the colour picker popup (menus.json "colorPicker": swatch, R / G / B sliders, hex field) below `anchor`, showing
+// `rgb`. `fn` fires on every edit while the popup is open. False when the popup is not mounted.
+[[nodiscard]] bool guiHostOpenColorPicker(GuiHost* gui, const char* anchor, const float (&rgb)[3], GuiColorFn fn, void* user);
 // True when a painted or interactive GUI node covers the point (GUI units) in the current layout.
 [[nodiscard]] bool guiHostCovers(GuiHost* gui, float x, float y);
 
@@ -142,6 +155,15 @@ void guiHostOpenAtPointer(GuiHost* gui, const char* path);
 [[nodiscard]] bool guiHostSetTheme(GuiHost* gui, const char* name);
 // Shows cell `cell` of a cols x rows grid of photo slot `slot` in a node (slot 255 clears the photo).
 void guiHostSetPhoto(GuiHost* gui, const char* path, uint8_t slot, uint8_t cell, uint8_t cols, uint8_t rows);
+
+// Tabbed docks (JSON "dock": true; panels carry "tab": "Title", "tabIcon": "gear", "closed": true). Opens the panel at `path`
+// (a child of a dock): its tab reappears, it becomes the dock's selected panel and the dock is shown. False for a node that is
+// not a dock panel.
+[[nodiscard]] bool guiHostDockOpen(GuiHost* gui, const char* path);
+// Closes the dock panel at `path`: its tab and content leave the layout until guiHostDockOpen.
+[[nodiscard]] bool guiHostDockClose(GuiHost* gui, const char* path);
+// True when the dock panel at `path` is open (its tab is listed; the panel is shown when it is also the selected one).
+[[nodiscard]] bool guiHostDockIsOpen(const GuiHost* gui, const char* path);
 
 // Shows or hides a node and its subtree (the space it takes is released too).
 void guiHostSetShown(GuiHost* gui, const char* path, bool shown);

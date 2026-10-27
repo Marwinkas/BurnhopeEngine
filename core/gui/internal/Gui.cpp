@@ -5,6 +5,8 @@
 
 #include "gui/GuiRow.hpp"
 #include "interaction/Interact.hpp"
+#include "interaction/InteractSplitter.hpp"
+#include "layout/GuiDock.hpp"
 #include "layout/GuiLayoutEngine.hpp"
 #include "layout/GuiScissor.hpp"
 #include "overlay/GuiOverlay.hpp"
@@ -40,6 +42,12 @@ void registerComponents(flecs::world& w) {
     w.component<UiVirtualItem>();
     w.component<UiOverlay>();
     w.component<UiToggle>();
+    w.component<UiSplitter>();
+    w.component<UiDock>();
+    w.component<UiDockPanel>();
+    w.component<UiTab>();
+    w.component<UiTabBar>();
+    w.component<UiTabClose>();
     w.component<UiTooltipText>();
     w.component<UiBindKey>();
     w.component<UiTooltipHost>();
@@ -98,6 +106,8 @@ void guiLayout(GuiContext& ctx, float screenW, float screenH) {
     ctx.screenH = screenH;
     guiTooltipRun(w, ctx.in, ctx.interact, ctx.tooltip);
     guiOverlayRun(w, ctx.in, ctx.interact, screenW, screenH);
+    guiDockRefresh(w, *ctx.style);
+    guiSplitterRefresh(w);
     guiLayoutRun(w, screenW, screenH);
     guiScissorRun(w, screenW, screenH);
     if (guiVirtualRun(w, ctx.virtualBind, ctx.virtualUser, &ctx.interact) != 0) {

@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "gui/GuiIcons.hpp"
+#include "layout/GuiDock.hpp"
 #include "gui/GuiRow.hpp"
 #include "interaction/InteractScroll.hpp"
 #include "interaction/InteractTextEdit.hpp"
@@ -127,10 +128,11 @@ void emitPhoto(Sink& s, const UiBox& b, uint8_t slot, const float tint[4], const
     putClip(*p, clip, true);
 }
 
-constexpr float kGuiTileTop = 6.0f; // gap above a file tile's thumbnail
-constexpr float kGuiTileNameH = 22.0f;  // line box of a tile name
-constexpr float kGuiTileTypeH = 16.0f;  // line box of the type under it
-constexpr uint8_t kGuiTileTypePx = 11;  // type caption size
+// Tile metrics come from the "tile" group of the style sheet's tokens (assets/ui/styles.json); a missing token reads 0.
+float tileMetric(const GuiStyleSheet& sheet, std::string_view name) {
+    float v = 0.0f;
+    return guiStyleNumber(sheet, name, v) ? v : 0.0f;
+}
 
 // A photo of a paint: the whole slot, one cell of its atlas grid, or (tile mode) that cell as a square at the top of the box.
 void emitPaintPhoto(Sink& s, const UiBox& box, const UiPaint& paint, const UiClip& clip) {
@@ -148,7 +150,7 @@ void emitPaintPhoto(Sink& s, const UiBox& box, const UiPaint& paint, const UiCli
     }
     if (paint.tile != 0) {
         const float side = std::min(static_cast<float>(paint.tile), box.w);
-        target = UiBox{box.x + (box.w - side) * 0.5f, box.y + kGuiTileTop, side, side};
+        target = UiBox{box.x + (box.w - side) * 0.5f, box.y + tileMetric(*s.sheet, "tile.top"), side, side};
         tint = white;
     }
     emitPhoto(s, target, paint.photo, tint, clip, uv);
@@ -254,15 +256,17 @@ void emitText(Sink& s, flecs::entity e, const UiBox& box, const UiText& t, const
         if (lineTop + lineH <= clip.y || lineTop >= clip.y + clip.h) {
             continue;
         }
+        const bool cut = single && edit == nullptr && line.width > area.w;
         float pen = originX;
-        if (edit == nullptr && t.align == 1) {
+        if (cut) { // overflowing text never centres or right-aligns: it anchors at the left edge and ends in "..."
+            pen = area.x;
+        } else if (edit == nullptr && t.align == 1) {
             pen = area.x + (area.w - line.width) * 0.5f;
         } else if (edit == nullptr && t.align == 2) {
             pen = area.x + area.w - line.width;
         }
         const float baseline = lineTop + m.ascent * px;
         const std::string_view run = str.substr(line.begin, line.end - line.begin);
-        const bool cut = single && edit == nullptr && line.width > area.w;
         const float limit = area.x + area.w;
         GuiGlyph dot{};
         const float dotsW = cut && guiTextGlyph(m, static_cast<uint32_t>('.'), dot) ? 3.0f * dot.advance * px : 0.0f;
@@ -381,7 +385,21 @@ void emitPlaceholder(Sink& s, flecs::entity e, const UiBox& box, const UiText& t
 void emitTileCaption(Sink& s, flecs::entity e, const UiBox& box, const UiText& t, const UiClip& clip) {
     const std::string_view full(t.text, t.len);
     const size_t cut = full.find('\n');
-    emitRun(s, e, UiBox{box.x, box.y, box.w, kGuiTileNameH}, full.substr(0, cut), t.align, t.size, clip);
+    const float pad = tileMetric(*s.sheet, "tile.pad");
+    const float nameH = tileMetric(*s.sheet, "tile.nameH");
+    const float typeH = tileMetric(*s.sheet, "tile.typeH");
+    const uint8_t typePx = static_cast<uint8_t>(tileMetric(*s.sheet, "tile.typePx"));
+    // The caption is scissored to its own cell, so no glyph can reach a sibling tile.
+    UiClip cell = clip;
+    cell.x = std::max(clip.x, box.x);
+    cell.y = std::max(clip.y, box.y);
+    cell.w = std::max(0.0f, std::min(clip.x + clip.w, box.x + box.w) - cell.x);
+    cell.h = std::max(0.0f, std::min(clip.y + clip.h, box.y + box.h) - cell.y);
+    if (clipEmpty(cell)) {
+        return;
+    }
+    const float innerW = std::max(0.0f, box.w - pad * 2.0f);
+    emitRun(s, e, UiBox{box.x + pad, box.y, innerW, nameH}, full.substr(0, cut), t.align, t.size, cell);
     if (cut == std::string_view::npos) {
         return;
     }
@@ -391,7 +409,7 @@ void emitTileCaption(Sink& s, flecs::entity e, const UiBox& box, const UiText& t
     float saved[4];
     std::copy_n(s.text, 4, saved);
     std::copy_n(muted, 4, s.text);
-    emitRun(s, e, UiBox{box.x, box.y + kGuiTileNameH - 2.0f, box.w, kGuiTileTypeH}, full.substr(cut + 1), t.align, kGuiTileTypePx, clip);
+    emitRun(s, e, UiBox{box.x + pad, box.y + nameH - 2.0f, innerW, typeH}, full.substr(cut + 1), t.align, typePx, cell);
     std::copy_n(saved, 4, s.text);
 }
 
@@ -479,7 +497,11 @@ void emitEntity(Sink& s, flecs::entity e, uint32_t depth) {
                 const bool captioned = caption != nullptr && caption->len != 0;
                 // An icon button keeps kGuiIconPad around the glyph, so a bigger button shows a bigger icon.
                 const float want = captioned ? kGuiIconDrawPx : std::clamp(std::min(box->w, box->h) - 2.0f * kGuiIconPad, kGuiIconDrawPx - 4.0f, kGuiIconMaxPx);
-                emitIcon(s, *box, paint->icon, captioned, want, glyph, clip);
+                if (e.has<UiTab>()) { // a tab's icon leads the title, the close button owns the trailing edge
+                    emitIcon(s, UiBox{box->x + kGuiTabIconX, box->y, want, box->h}, paint->icon, false, want, glyph, clip);
+                } else {
+                    emitIcon(s, *box, paint->icon, captioned, want, glyph, clip);
+                }
             }
             if (paint->borderW > 0.5f) {
                 const float one[4] = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -490,7 +512,7 @@ void emitEntity(Sink& s, flecs::entity e, uint32_t depth) {
         if (const UiText* text = e.try_get<UiText>()) {
             const UiPaint* paint = e.try_get<UiPaint>();
             if (paint != nullptr && paint->tile != 0) { // a file tile: the caption starts under the thumbnail
-                const float used = std::min(box->h, static_cast<float>(paint->tile) + kGuiTileTop * 1.5f);
+                const float used = std::min(box->h, static_cast<float>(paint->tile) + tileMetric(*s.sheet, "tile.top") * 1.5f);
                 emitTileCaption(s, e, UiBox{box->x, box->y + used, box->w, box->h - used}, *text, clip);
             } else if (const GuiRow* row = e.try_get<GuiRow>(); row != nullptr && guiRowActive(*row)) {
                 emitRow(s, e, *box, *text, *row, clip);

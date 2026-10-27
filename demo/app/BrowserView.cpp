@@ -9,7 +9,6 @@ namespace {
 
 constexpr const char* kStatus = "browser.status";
 constexpr const char* kDetail = "browser.detail";
-constexpr uint32_t kTreeCap = 400;
 constexpr uint8_t kNoThumbSlot = 255;
 
 const char* kindIcon(FileKind kind) {
@@ -42,9 +41,6 @@ GuiListEntry tileRow(const BrowserState& br, const BrowserItem& item) {
 
 // Appends `dir` as a tree row (depth = path components below the project root) and, when unfolded, its listed subfolders.
 void scanTree(BrowserState& b, const fs::path& dir, uint32_t depth) {
-    if (b.tree.size() >= kTreeCap) {
-        return;
-    }
     const bool open = browserContains(b.expanded, dir);
     const bool branch = dirHasFolders(dir);
     b.tree.push_back(dir);

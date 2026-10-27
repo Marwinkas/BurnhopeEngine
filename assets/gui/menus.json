@@ -61,6 +61,14 @@
   {"name": "ctxDup", "class": "menu_item", "text": "Duplicate", "behaviors": ["hover", "click"], "action": 182, "toggles": "ctxMenu"},
   {"name": "ctxDel", "class": "menu_item", "text": "Delete", "behaviors": ["hover", "click"], "action": 183, "toggles": "ctxMenu"}
  ]},
+ {"name": "matTypeMenu", "class": "menu_popup", "behaviors": ["overlay"], "placement": "below", "children": [{"class": "menu_item", "text": "Lit", "behaviors": ["hover", "click"], "action": 321, "toggles": "matTypeMenu"}, {"class": "menu_item", "text": "Unlit", "behaviors": ["hover", "click"], "action": 322, "toggles": "matTypeMenu"}, {"class": "menu_item", "text": "ClearCoat", "behaviors": ["hover", "click"], "action": 323, "toggles": "matTypeMenu"}]},
+ {"name": "matMapsMenu", "class": "menu_popup", "behaviors": ["overlay"], "placement": "below", "children": [{"class": "menu_item", "text": "Classic", "behaviors": ["hover", "click"], "action": 325, "toggles": "matMapsMenu"}, {"class": "menu_item", "text": "ORMH", "behaviors": ["hover", "click"], "action": 326, "toggles": "matMapsMenu"}]},
+ {"name": "colorPicker", "class": "mat_popup", "behaviors": ["overlay"], "placement": "below", "children": [{"bind": "colorpick.swatch", "class": "popup_swatch"}, {"class": "card_line", "children": [{"bind": "colorpick.r", "class": "mat_slider", "text": "R", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 1, "minV": 0, "maxV": 1}]}, {"class": "card_line", "children": [{"bind": "colorpick.g", "class": "mat_slider", "text": "G", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 1, "minV": 0, "maxV": 1}]}, {"class": "card_line", "children": [{"bind": "colorpick.b", "class": "mat_slider", "text": "B", "behaviors": ["hover", "drag"], "axis": "x", "mode": 0, "value": 1, "minV": 0, "maxV": 1}]}, {"class": "card_line", "children": [{"bind": "colorpick.hex", "class": "card_path", "text": "#FFFFFF", "behaviors": ["edit"], "maxLen": 7}]}]},
+ {"name": "texPicker", "class": "tex_popup", "behaviors": ["overlay"], "placement": "center", "layer": 1, "children": [
+  {"name": "texTitle", "class": "label_title", "text": "Select Texture"},
+  {"name": "texSearch", "bind": "mat.tex.search", "class": "tex_search", "text": "", "behaviors": ["hover", "focus", "click", "edit"], "maxLen": 40},
+  {"name": "texList", "bind": "mat.tex.list", "class": "list_tex", "behaviors": ["virtual", "hover"], "count": 0, "itemAction": 350, "itemClass": "tile_item"}
+ ]},
  {"name": "rubber", "class": "marquee", "passive": true, "hidden": true},
  {"name": "tip", "class": "tooltip", "behaviors": ["overlay"], "placement": "pointer", "dismiss": false, "tooltipHost": true, "passive": true, "text": ""},
  {"name": "dragGhost", "class": "drag_ghost", "passive": true, "text": "", "hidden": true},
