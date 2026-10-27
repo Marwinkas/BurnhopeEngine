@@ -5,11 +5,9 @@
 #include "rhi/DescriptorHeap.hpp"
 #include "rhi/Device.hpp"
 #include "rhi/Swapchain.hpp"
-#include "ui/rhi/Canvas.hpp"
+#include "rhi/ui/Canvas.hpp"
 
 namespace burnhope {
-
-struct ColorBook;
 
 constexpr int kHostSlots = 8;
 
@@ -29,7 +27,6 @@ struct ViewDesc {
     const char* name = nullptr;
     WindowConfig window{};
     FrameDesc frame{};
-    UiBuilder builder = nullptr;
     float chromeTitle = 40.0f;
     float chromeBorder = 6.0f;
     HostOpsFn onOps = nullptr;
@@ -85,8 +82,5 @@ void hostClose(Host& host, int slot);
 [[nodiscard]] bool hostTick(Host& host);
 [[nodiscard]] bool hostQuit(const Host& host);
 [[nodiscard]] Canvas* hostCanvas(Host& host, int slot);
-// Opens the colour picker as its own OS window when the book asks for it (present == 2) and none is open yet.
-// Closing the window resets the book. Returns true when a window was opened.
-bool hostSyncColorWindow(Host& host, ColorBook* colors);
 
 } // namespace burnhope

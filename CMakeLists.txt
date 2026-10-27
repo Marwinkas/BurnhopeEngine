@@ -106,83 +106,11 @@ function(bh_firewall rule pattern)
     endforeach()
 endfunction()
 file(GLOB_RECURSE BH_RHI_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/rhi/*.cpp ${BH_CORE}/rhi/*.hpp)
-file(GLOB BH_UI_CORE_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/ui/*.cpp ${BH_CORE}/ui/*.hpp)
-file(GLOB_RECURSE BH_UI_WIDGET_SOURCES CONFIGURE_DEPENDS
-    ${BH_CORE}/ui/widget/*.cpp ${BH_CORE}/ui/widget/*.hpp
-    ${BH_CORE}/ui/kit/*.cpp ${BH_CORE}/ui/kit/*.hpp)
-bh_firewall("core/rhi must not import Window, ui, files, host or SDL3"
-    "platform/Window\\.hpp|ui/|files/|host/|SDL3/" ${BH_RHI_SOURCES})
-bh_firewall("core/ui must not import rhi, image, ui/rhi, widgets, kits, files or host"
-    "rhi/|image/|ui/rhi/|ui/widget/|ui/kit/|files/|host/" ${BH_UI_CORE_SOURCES})
-bh_firewall("core/ui/widget and core/ui/kit must not import rhi, image, ui/rhi, files, host or yoga"
-    "rhi/|image/|ui/rhi/|files/|host/|yoga/" ${BH_UI_WIDGET_SOURCES})
-file(GLOB BH_UI_WIDGET_HEADERS CONFIGURE_DEPENDS ${BH_CORE}/ui/widget/*.hpp ${BH_CORE}/ui/Command.hpp)
-list(REMOVE_ITEM BH_UI_WIDGET_HEADERS ${BH_CORE}/ui/widget/Widgets.hpp)
-bh_firewall("widget headers must not import ui/State.hpp or flecs; include it from the .cpp"
-    "ui/State\\.hpp|flecs\\.h" ${BH_UI_WIDGET_HEADERS})
-file(GLOB_RECURSE BH_ALL_HEADERS CONFIGURE_DEPENDS ${BH_CORE}/*.hpp ${CMAKE_SOURCE_DIR}/engine/*.hpp ${CMAKE_SOURCE_DIR}/demo/*.hpp)
-list(REMOVE_ITEM BH_ALL_HEADERS ${BH_CORE}/ui/State.hpp)
-bh_firewall("headers must not import ui/State.hpp; include it from the .cpp"
-    "ui/State\\.hpp" ${BH_ALL_HEADERS})
+bh_firewall("core/rhi must not import Window, ui, gui, files, host or SDL3"
+    "platform/Window\\.hpp|ui/|gui/|files/|host/|SDL3/" ${BH_RHI_SOURCES})
 file(GLOB_RECURSE BH_DEMO_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/demo/*.cpp ${CMAKE_SOURCE_DIR}/demo/*.hpp)
-bh_firewall("demo must not import ui/State.hpp or flecs; it reaches the UI through the id-based facades"
-    "ui/State\\.hpp|flecs\\.h" ${BH_DEMO_SOURCES})
-file(GLOB BH_UI_BRICK_SOURCES CONFIGURE_DEPENDS
-    ${BH_CORE}/ui/widget/Label.* ${BH_CORE}/ui/widget/Button.* ${BH_CORE}/ui/widget/Check.*
-    ${BH_CORE}/ui/widget/Field.* ${BH_CORE}/ui/widget/FieldFilter.* ${BH_CORE}/ui/widget/TextEdit.*
-    ${BH_CORE}/ui/widget/Search.* ${BH_CORE}/ui/widget/Number.* ${BH_CORE}/ui/widget/NumberEdit.*
-    ${BH_CORE}/ui/widget/Slider.* ${BH_CORE}/ui/widget/Scroll.* ${BH_CORE}/ui/widget/Splitter.*
-    ${BH_CORE}/ui/widget/Fold.* ${BH_CORE}/ui/widget/Curve.*
-    ${BH_CORE}/ui/widget/Gradient.* ${BH_CORE}/ui/widget/Image.* ${BH_CORE}/ui/widget/Tabs.*)
-bh_firewall("atomic bricks must not import composite kits"
-    "([a-z]+/)*(Virtual|VirtualGrid|TreeView|Thumb|Menu|Choice|Popover|Breadcrumbs|AssetSlot|DragDrop|Rubberband|Chrome|Docking|Calendar|ColorPicker|Widgets)\\.hpp" ${BH_UI_BRICK_SOURCES})
-# Declarative-UI guards: the imperative styling API that blueprints and style classes replaced must not come back.
-function(bh_banned rule pattern)
-    foreach(bh_ban_file ${ARGN})
-        file(READ ${bh_ban_file} bh_ban_text)
-        if(bh_ban_text MATCHES "${pattern}")
-            message(FATAL_ERROR "${rule}: ${bh_ban_file}")
-        endif()
-    endforeach()
-endfunction()
-file(GLOB_RECURSE BH_UI_ALL_SOURCES CONFIGURE_DEPENDS
-    ${BH_CORE}/ui/*.cpp ${BH_CORE}/ui/*.hpp ${BH_CORE}/host/*.cpp ${BH_CORE}/host/*.hpp
-    ${BH_CORE}/files/*.cpp ${BH_CORE}/files/*.hpp ${CMAKE_SOURCE_DIR}/demo/*.cpp ${CMAKE_SOURCE_DIR}/demo/*.hpp)
-bh_banned("legacy button wrappers, fill flags, UiMetrics and the built-in style table are gone; use style classes and blueprints"
-    "uiIconBtn|uiSlotBtn|uiToolFrame|uiToolButtonState|uiButtonTintIcon|uiButtonMark|UiIconChrome|paintToolIcon|fillWidth|fillHeight|UiMetrics|StyleSchema"
-    ${BH_UI_ALL_SOURCES})
-file(GLOB BH_UI_BLUEPRINT_SOURCES CONFIGURE_DEPENDS
-    ${BH_CORE}/ui/widget/Label.cpp ${BH_CORE}/ui/widget/Button.cpp ${BH_CORE}/ui/widget/Check.cpp
-    ${BH_CORE}/ui/widget/Field.cpp ${BH_CORE}/ui/widget/Search.cpp ${BH_CORE}/ui/widget/Slider.cpp
-    ${BH_CORE}/ui/widget/Number.cpp ${BH_CORE}/ui/widget/NumberEdit.cpp ${BH_CORE}/ui/widget/Fold.cpp
-    ${BH_CORE}/ui/widget/Curve.cpp ${BH_CORE}/ui/widget/Gradient.cpp ${BH_CORE}/ui/widget/Image.cpp
-    ${BH_CORE}/ui/widget/Tabs.cpp ${BH_CORE}/ui/widget/Segment.cpp ${BH_CORE}/ui/widget/Popover.cpp
-    ${BH_CORE}/ui/widget/Rubberband.cpp ${BH_CORE}/ui/widget/Breadcrumbs.cpp ${BH_CORE}/ui/widget/AssetSlot.cpp
-    ${BH_CORE}/ui/widget/Chrome.cpp ${BH_CORE}/ui/widget/Menu.cpp ${BH_CORE}/ui/widget/Choice.cpp
-    ${BH_CORE}/ui/widget/TreeView.cpp ${BH_CORE}/ui/widget/VirtualGrid.cpp ${BH_CORE}/ui/kit/Calendar.cpp
-    ${BH_CORE}/ui/kit/ColorBody.cpp ${BH_CORE}/ui/kit/ColorHex.cpp ${BH_CORE}/ui/kit/ColorPicker.cpp ${BH_CORE}/ui/kit/ColorQuery.cpp ${BH_CORE}/ui/kit/ColorRamps.cpp)
-bh_banned("widgets that spawn blueprints must not build a raw UiFlex; declare it in assets/ui/core and styles.json"
-    "UiFlex [A-Za-z0-9_]+\\{" ${BH_UI_BLUEPRINT_SOURCES})
-# Declarative purge: layout lives in blueprints and styles.json, colour in tokens. Comments quoting these patterns trip
-# the check, so reword them.
-bh_banned("negative margins as layout are gone; use bleed or the scrollY offset"
-    "margin[LRTB][ ]*=[ ]*-" ${BH_UI_WIDGET_SOURCES})
-bh_banned("widgets and kits spawn blueprints (uiSpawnTemplate), never raw spawn()"
-    "[^A-Za-z_]spawn\\(" ${BH_UI_WIDGET_SOURCES})
-bh_banned("widgets and kits build no raw UiFlex; declare it in assets/ui/core and styles.json"
-    "UiFlex [A-Za-z0-9_]+[ ]*(=|\\{)|UiFlex\\{" ${BH_UI_WIDGET_SOURCES})
-file(GLOB_RECURSE BH_HOST_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/host/*.cpp ${BH_CORE}/host/*.hpp)
-bh_banned("host code spawns blueprints, never raw spawn(), a UiFlex or a corner-radius split"
-    "[^A-Za-z_]spawn\\(|UiFlex [A-Za-z0-9_]+[ ]*(=|\\{|;)|UiFlex\\{|(try_get_mut|set)<UiFlex>|margin[LRTB][ ]*=[ ]*-|radius(Tr|Br|Bl|Tl)[ ]*="
-    ${BH_HOST_SOURCES})
-bh_banned("host code takes axis colours from UiToken::AxisX/Y/Z, never kUiAxis floats"
-    "kUiAxis" ${BH_HOST_SOURCES})
-file(GLOB_RECURSE BH_PALETTE_SOURCES CONFIGURE_DEPENDS
-    ${BH_CORE}/ui/widget/*.cpp ${BH_CORE}/ui/kit/*.cpp ${BH_CORE}/host/*.cpp ${BH_CORE}/files/*.cpp ${CMAKE_SOURCE_DIR}/demo/*.cpp)
-bh_banned("palette arrays are not indexed in widgets; name a UiToken or a style tone (tokenColor, uiStyleTint)"
-    "look\\.(accent|text|muted)\\[" ${BH_PALETTE_SOURCES})
-bh_banned("a live paint is recoloured through paintFillToken, paintBorderToken, paintHoverToken or paintFillRgb"
-    "paint->(r|g|b|br|bg|bb|hr|hg|hb|ha)[ ]*=[^=]" ${BH_PALETTE_SOURCES})
+bh_firewall("demo must not import flecs; it reaches the GUI through the GuiHost facade"
+    "flecs\\.h" ${BH_DEMO_SOURCES})
 file(GLOB_RECURSE BH_T0_SOURCES CONFIGURE_DEPENDS
     ${BH_CORE}/memory/*.cpp ${BH_CORE}/memory/*.hpp ${BH_CORE}/io/*.cpp ${BH_CORE}/io/*.hpp
     ${BH_CORE}/wasm/*.cpp ${BH_CORE}/wasm/*.hpp ${BH_CORE}/color/*.hpp ${BH_CORE}/time/*.hpp
@@ -208,16 +136,9 @@ bh_firewall("tier 2 world and asset data must not import ui, files, host or Wind
 bh_firewall("tier 5 engine must not import ui, files, host or Window"
     "ui/|files/|host/|platform/Window\\.hpp" ${BH_T5_SOURCES})
 file(GLOB_RECURSE BH_NOWINDOW_SOURCES CONFIGURE_DEPENDS
-    ${BH_CORE}/image/*.cpp ${BH_CORE}/image/*.hpp ${BH_CORE}/files/*.cpp ${BH_CORE}/files/*.hpp
-    ${BH_CORE}/audio/*.cpp ${BH_CORE}/audio/*.hpp)
-bh_firewall("image, files and audio must not import Window, Action, Dialog or SDL3"
+    ${BH_CORE}/image/*.cpp ${BH_CORE}/image/*.hpp ${BH_CORE}/audio/*.cpp ${BH_CORE}/audio/*.hpp)
+bh_firewall("image and audio must not import Window, Action, Dialog or SDL3"
     "platform/(Window|Action|Dialog)\\.hpp|SDL3/" ${BH_NOWINDOW_SOURCES})
-file(GLOB_RECURSE BH_FILES_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/files/*.cpp ${BH_CORE}/files/*.hpp)
-bh_firewall("core/files must not import asset" "asset/" ${BH_FILES_SOURCES})
-file(GLOB BH_INSPECTOR_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/host/PropGrid* ${BH_CORE}/host/PropFilter.*
-    ${BH_CORE}/host/PropBind.* ${BH_CORE}/host/PropImport*)
-bh_firewall("ui inspector must not import rhi, Window, ui/rhi or Host"
-    "rhi/|platform/Window\\.hpp|ui/rhi/|host/Host\\.hpp" ${BH_INSPECTOR_SOURCES})
 file(GLOB BH_RENDER_HEADERS CONFIGURE_DEPENDS ${BH_ENGINE}/include/render/*.hpp)
 bh_firewall("engine/include/render headers must not import flecs or the RTXDI context" "flecs\\.h|Rtxdi/DI/ReSTIRDI\\.h" ${BH_RENDER_HEADERS})
 file(GLOB_RECURSE BH_LIVE_SOURCES CONFIGURE_DEPENDS
@@ -405,151 +326,31 @@ set_source_files_properties(
     PROPERTIES COMPILE_OPTIONS "-w")
 target_compile_definitions(bh_render PUBLIC "BH_SHADER_DIR=\"${CMAKE_CURRENT_BINARY_DIR}/shaders\"")
 target_link_libraries(bh_render PUBLIC volk flecs_static Jolt bh_audio bh_gpu_scene bh_asset)
-bh_module(ui_core
-    core/ui/Command.cpp
-    core/ui/FlexAttr.cpp
-    core/ui/Focus.cpp
-    core/ui/Hit.cpp
-    core/ui/Hover.cpp
-    core/ui/Icon.cpp
-    core/ui/Input.cpp
-    core/ui/Json.cpp
-    core/ui/LayoutBridge.cpp
-    core/ui/Motion.cpp
-    core/ui/StyleParse.cpp
-    core/ui/StyleTokens.cpp
-    core/ui/StyleSheet.cpp
-    core/ui/Template.cpp
-    core/ui/Theme.cpp
-    core/ui/Node.cpp
-    core/ui/NodeDump.cpp
-    core/ui/Panel.cpp
-    core/ui/PrimitiveBatch.cpp
-    core/ui/Text.cpp
-    core/ui/UiBin.cpp
-    core/ui/UiWindowBridge.cpp
+bh_module(rhi_ui
+    core/rhi/ui/Canvas.cpp
+    core/rhi/ui/Font.cpp
+    core/rhi/ui/UiPhoto.cpp
+    core/rhi/ui/UiRenderer.cpp
 )
-bh_module(ui_bricks
-    core/ui/widget/Button.cpp
-    core/ui/widget/Check.cpp
-    core/ui/widget/Curve.cpp
-    core/ui/widget/Field.cpp
-    core/ui/widget/FieldDraw.cpp
-    core/ui/widget/FieldFilter.cpp
-    core/ui/widget/Fold.cpp
-    core/ui/widget/Gradient.cpp
-    core/ui/widget/Image.cpp
-    core/ui/widget/Label.cpp
-    core/ui/widget/Number.cpp
-    core/ui/widget/NumberEdit.cpp
-    core/ui/widget/Scroll.cpp
-    core/ui/widget/Search.cpp
-    core/ui/widget/Slider.cpp
-    core/ui/widget/Splitter.cpp
-    core/ui/widget/Tabs.cpp
-    core/ui/widget/Segment.cpp
-    core/ui/widget/TextEdit.cpp
-)
-bh_module(ui_kits
-    core/ui/kit/Calendar.cpp
-    core/ui/kit/ColorBody.cpp
-    core/ui/kit/ColorHex.cpp
-    core/ui/kit/ColorPicker.cpp
-    core/ui/kit/ColorPopup.cpp
-    core/ui/kit/ColorQuery.cpp
-    core/ui/kit/ColorRamps.cpp
-    core/ui/kit/ColorDraw.cpp
-    core/ui/widget/AssetSlot.cpp
-    core/ui/widget/Breadcrumbs.cpp
-    core/ui/widget/Choice.cpp
-    core/ui/widget/Chrome.cpp
-    core/ui/widget/Docking.cpp
-    core/ui/widget/DragDrop.cpp
-    core/ui/widget/Menu.cpp
-    core/ui/widget/Popover.cpp
-    core/ui/widget/Rubberband.cpp
-    core/ui/widget/Thumb.cpp
-    core/ui/widget/TreeView.cpp
-    core/ui/widget/Virtual.cpp
-    core/ui/widget/VirtualGrid.cpp
-    core/ui/widget/Widgets.cpp
-)
-bh_module(ui_rhi
-    core/ui/rhi/Canvas.cpp
-    core/ui/rhi/Font.cpp
-    core/ui/rhi/UiPhoto.cpp
-    core/ui/rhi/UiRenderer.cpp
-)
-bh_module(files
-    core/files/Files.cpp
-    core/files/FileSession.cpp
-    core/files/FileBind.cpp
-    core/files/FileMenu.cpp
-    core/files/FileActions.cpp
-    core/files/FileTheme.cpp
-    core/files/FileThumb.cpp
-    core/files/FileDomain.cpp
-    core/files/Project.cpp
-    core/files/Format.cpp
-    core/files/Model.cpp
-)
-target_link_libraries(bh_files PUBLIC bh_foundation bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_material)
-bh_module(ui_inspector
-    core/host/PropBind.cpp
-    core/host/PropImport.cpp
-    core/host/PropImportInputs.cpp
-    core/host/PropImportKeys.cpp
-    core/host/PropImportMake.cpp
-    core/host/PropImportMenu.cpp
-    core/host/PropImportPaint.cpp
-    core/host/PropImportParse.cpp
-    core/host/PropImportRoles.cpp
-    core/host/PropGrid.cpp
-    core/host/PropGridControls.cpp
-    core/host/PropGridCtl.cpp
-    core/host/PropGridMetrics.cpp
-    core/host/PropGridVec.cpp
-    core/host/PropFilter.cpp
-)
-target_link_libraries(bh_ui_inspector PUBLIC bh_ui_kits bh_ui_bricks bh_ui_core bh_foundation)
 bh_module(host
     core/host/Host.cpp
-    core/host/HostNote.cpp
-    core/host/SceneMask.cpp
-    core/host/Recent.cpp
-    core/host/Launcher.cpp
+    core/host/GuiHost.cpp
 )
-target_link_libraries(bh_host PUBLIC volk bh_ui_inspector bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_rhi bh_platform bh_foundation)
+target_link_libraries(bh_host PUBLIC bh_gui bh_rhi_ui volk bh_rhi bh_platform bh_foundation)
 bh_module(app
     demo/app/Engine.cpp
-    demo/app/HudAct.cpp
-    demo/app/HudMat.cpp
-    demo/app/HudMaterial.cpp
-    demo/app/MatPage.cpp
-    demo/app/MatEdit.cpp
-    demo/app/MatSlot.cpp
-    demo/app/MatRows.cpp
-    demo/app/MatPreview.cpp
-    demo/app/MatThumb.cpp
-    demo/app/ModelThumb.cpp
-    demo/app/HudPick.cpp
-    demo/app/HudToolbar.cpp
-    demo/app/HudView.cpp
-    demo/app/HudInspector.cpp
-    demo/app/HudPost.cpp
-    demo/app/HudSync.cpp
-    demo/app/HudPush.cpp
-    demo/app/ProjectGate.cpp
-    demo/app/HudLauncher.cpp
     demo/app/SceneBlockFill.cpp
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
-target_link_libraries(bh_app PUBLIC bh_ui_inspector bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_files bh_gpu_scene)
-target_link_libraries(bh_ui_core PUBLIC bh_foundation yogacore flecs_static)
-target_link_libraries(bh_ui_bricks PUBLIC bh_ui_core bh_foundation)
-target_link_libraries(bh_ui_kits PUBLIC bh_ui_bricks)
-target_link_libraries(bh_ui_rhi PUBLIC bh_ui_core bh_rhi bh_image volk Freetype::Freetype)
-target_compile_definitions(bh_ui_rhi PRIVATE
+target_link_libraries(bh_app PUBLIC bh_host bh_gui bh_rhi_ui bh_gpu_scene)
+file(GLOB_RECURSE BH_GUI_SOURCES CONFIGURE_DEPENDS ${BH_CORE}/gui/*.cpp)
+add_library(bh_gui STATIC ${BH_GUI_SOURCES})
+target_include_directories(bh_gui PUBLIC ${BH_INCLUDES})
+target_compile_definitions(bh_gui PUBLIC ${BH_DEFS})
+target_compile_options(bh_gui PRIVATE ${BH_OPTS})
+target_link_libraries(bh_gui PUBLIC bh_foundation yogacore flecs_static Vulkan::Headers spdlog::spdlog)
+target_link_libraries(bh_rhi_ui PUBLIC bh_gui bh_rhi bh_image volk Freetype::Freetype)
+target_compile_definitions(bh_rhi_ui PRIVATE
     "BH_UI_VERT=\"${CMAKE_CURRENT_BINARY_DIR}/shaders/ui.vert.spv\""
     "BH_UI_FRAG=\"${CMAKE_CURRENT_BINARY_DIR}/shaders/ui.frag.spv\""
     "BH_UI_MESH=\"${CMAKE_CURRENT_BINARY_DIR}/shaders/ui.mesh.spv\""
@@ -933,7 +734,7 @@ add_custom_target(BurnhopeSpv ALL DEPENDS
     ${SHADER_OUT_DIR}/tonemap.frag.spv
 )
 
-set(UI_SHADER ${CMAKE_CURRENT_SOURCE_DIR}/core/ui/ui.slang)
+set(UI_SHADER ${CMAKE_CURRENT_SOURCE_DIR}/core/rhi/ui/ui.slang)
 add_custom_command(
     OUTPUT
         ${SHADER_OUT_DIR}/ui.vert.spv
@@ -993,36 +794,9 @@ target_compile_definitions(bh_image PRIVATE
 )
 add_dependencies(bh_image CompressSpv)
 
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-set(UI_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/ui)
-file(MAKE_DIRECTORY ${UI_BIN_DIR})
-add_custom_command(
-    OUTPUT ${UI_BIN_DIR}/shell.uib
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/uibake.py
-            ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/shell.json ${UI_BIN_DIR}/shell.uib
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/uibake.py ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/shell.json
-    COMMENT "bake shell.json → shell.uib"
-)
-add_custom_command(
-    OUTPUT ${UI_BIN_DIR}/sample.uib
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/uibake.py
-            ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/sample.json ${UI_BIN_DIR}/sample.uib
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/uibake.py ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/sample.json
-    COMMENT "bake sample.json → sample.uib"
-)
-add_custom_command(
-    OUTPUT ${UI_BIN_DIR}/files.uib
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/uibake.py
-            ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/files.json ${UI_BIN_DIR}/files.uib
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/uibake.py ${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/files.json
-    COMMENT "bake files.json → files.uib"
-)
-add_custom_target(UiBin DEPENDS ${UI_BIN_DIR}/shell.uib ${UI_BIN_DIR}/sample.uib ${UI_BIN_DIR}/files.uib)
-target_compile_definitions(bh_files PRIVATE "BH_UI_FILES=\"${UI_BIN_DIR}/files.uib\"")
-
 add_executable(BurnhopeEngine demo/app/Main.cpp)
 target_link_libraries(BurnhopeEngine PRIVATE
-    bh_app bh_host bh_ui_inspector bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_render bh_audio bh_gpu_scene bh_asset bh_material
+    bh_app bh_host bh_gui bh_rhi_ui bh_image bh_rhi bh_foundation bh_platform bh_render bh_audio bh_gpu_scene bh_asset bh_material
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
 )
@@ -1032,21 +806,7 @@ target_compile_options(BurnhopeEngine PRIVATE ${BH_OPTS})
 set_target_properties(BurnhopeEngine PROPERTIES
     BUILD_RPATH "${CMAKE_SOURCE_DIR}/steamaudio/lib/linux-x64"
 )
-add_dependencies(BurnhopeEngine BurnhopeSpv UiSpv UiBin)
-
-add_executable(BurnhopeSample demo/sample/Main.cpp demo/Sample.cpp demo/app/Shell.cpp)
-target_link_libraries(BurnhopeSample PRIVATE
-    bh_host bh_ui_inspector bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_gpu_scene bh_asset bh_material
-    yogacore flecs_static
-    SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads
-)
-target_include_directories(BurnhopeSample PRIVATE ${BH_CORE} ${BH_ENGINE} ${BH_ENGINE}/include ${BH_DEMO} ${vma_SOURCE_DIR}/include)
-target_compile_definitions(BurnhopeSample PRIVATE ${BH_DEFS}
-    "BH_UI_SHELL=\"${UI_BIN_DIR}/shell.uib\""
-    "BH_UI_SAMPLE=\"${UI_BIN_DIR}/sample.uib\""
-)
-target_compile_options(BurnhopeSample PRIVATE ${BH_OPTS})
-add_dependencies(BurnhopeSample UiSpv UiBin)
+add_dependencies(BurnhopeEngine BurnhopeSpv UiSpv)
 
 set(BH_TEST_SOURCES
     tests/Main.cpp
@@ -1058,25 +818,14 @@ set(BH_TEST_SOURCES
     tests/core/TestStrColor.cpp
     tests/gfx/TestGfxScene.cpp
     tests/gfx/TestStreaming.cpp
-    tests/ui/TestUiLayout.cpp
-    tests/ui/TestUiWidgets.cpp
-    tests/ui/TestUiPrimitives.cpp
-    tests/ui/TestUiBinary.cpp
-    tests/ui/TestUiRuntime.cpp
-    tests/ui/TestUiGolden.cpp
-    tests/ui/TestUiStyle.cpp
-    tests/ui/TestUiTemplate.cpp
-    tests/ui/TestPropImport.cpp
-    tests/tools/TestFileBrowser.cpp
-    tests/tools/TestEditorTools.cpp
+    tests/gui/TestGuiCore.cpp
 )
 add_executable(BurnhopeTest ${BH_TEST_SOURCES})
 target_link_libraries(BurnhopeTest PRIVATE
-    bh_host bh_ui_inspector bh_files bh_ui_core bh_ui_bricks bh_ui_kits bh_ui_rhi bh_image bh_rhi bh_foundation bh_platform bh_gpu_scene bh_asset bh_material
+    bh_gui bh_host bh_rhi_ui bh_image bh_rhi bh_foundation bh_platform bh_gpu_scene bh_asset bh_material
     yogacore flecs_static
     SDL3::SDL3 Vulkan::Vulkan volk spdlog::spdlog Threads::Threads Freetype::Freetype
 )
-target_sources(BurnhopeTest PRIVATE demo/app/ModelThumb.cpp)
 target_include_directories(BurnhopeTest PRIVATE ${BH_DEMO} ${BH_CORE} ${BH_ENGINE} ${BH_ENGINE}/include ${vma_SOURCE_DIR}/include)
 target_compile_options(BurnhopeTest PRIVATE ${BH_OPTS})
-add_dependencies(BurnhopeTest UiSpv UiBin)
+add_dependencies(BurnhopeTest UiSpv)

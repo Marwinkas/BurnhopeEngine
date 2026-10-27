@@ -1,7 +1,5 @@
 #include "host/Host.hpp"
 #include "Str.hpp"
-#include "ui/widget/ColorPicker.hpp"
-#include "ui/widget/Widgets.hpp"
 #include "platform/Action.hpp"
 #include "platform/Jobs.hpp"
 #include "platform/PlatformUtil.hpp"
@@ -131,17 +129,10 @@ bool prepareViewSync(Host& host, int slot) {
 struct DrawJobResult {
     bool handled = false;
     bool needsResize = false;
-    UiEvent ev = UiEvent::None;
     WindowOps ops{};
-    char clip[96]{};
-    bool hasClip = false;
     int cursor = 0;
     bool wantsText = false;
     bool wantsRelative = false;
-    bool hasClipRect = false;
-    float clipX = 0, clipY = 0, clipW = 0, clipH = 0;
-    bool hasFocus = false;
-    float focusX = 0, focusY = 0, focusW = 0, focusH = 0;
     char dropPath[260]{};
     bool hasDrop = false;
 };
@@ -160,15 +151,12 @@ struct DrawJobCtx {
 // swapchainSubmitPresent/submitImage. SDL и onOps сюда не попадают — их нельзя звать не с
 // главного потока (SDL) и нельзя звать параллельно друг другу (onOps может реентерантно
 // дёргать hostOpen/hostClose, которые мутируют общий Host).
-void readCanvas(HostView& view, DrawJobResult& out, Device& device, float w, float h, float now, uint32_t flight, bool upload) {
-    out.ev = canvasConsume(view.canvas, device, w, h, view.window.input, now, flight, upload);
-    out.hasClip = canvasTakeClip(view.canvas, out.clip, sizeof(out.clip));
-    canvasTakeWindowOps(view.canvas, out.ops);
-    out.cursor = canvasCursor(view.canvas);
-    out.wantsText = canvasWantsText(view.canvas);
-    out.wantsRelative = canvasWantsRelative(view.canvas);
-    out.hasClipRect = canvasMouseClip(view.canvas, out.clipX, out.clipY, out.clipW, out.clipH);
-    out.hasFocus = canvasFocusBox(view.canvas, out.focusX, out.focusY, out.focusW, out.focusH);
+void readCanvas(HostView& view, DrawJobResult& out, Device& device, float w, float h, uint32_t flight, bool upload) {
+    canvasConsume(view.canvas, device, w, h, view.window.input, flight, upload);
+    out.ops = view.canvas.feedback.ops;
+    out.cursor = view.canvas.feedback.cursor;
+    out.wantsText = view.canvas.feedback.wantsText;
+    out.wantsRelative = view.canvas.feedback.wantsRelative;
 }
 
 void recordAndPresentView(DrawJobCtx& ctx) {
@@ -187,10 +175,7 @@ void recordAndPresentView(DrawJobCtx& ctx) {
     }
     const float dt = host.frameDt;
     const bool sceneView = view.sceneRecord != nullptr;
-    const bool hasCanvas = view.canvas.builder != nullptr;
-    if (view.window.input.reload && hasCanvas) {
-        canvasReload(view.canvas);
-    }
+    const bool hasCanvas = view.canvas.layer != nullptr;
     FrameContext frame{};
     const bool began = swapchainBegin(view.swap, host.device, frame);
     if (!began && view.swap.gpuBusy == 0) {
@@ -203,7 +188,7 @@ void recordAndPresentView(DrawJobCtx& ctx) {
         flyLook = view.sceneTick(view.user, view.window.input, dt);
     }
     if (hasCanvas) {
-        readCanvas(view, out, host.device, viewW, viewH, ctx.now, began ? frame.flight : 0u, began);
+        readCanvas(view, out, host.device, viewW, viewH, began ? frame.flight : 0u, began);
         if (sceneView && flyLook) {
             out.wantsRelative = true;
             out.cursor = 0;
@@ -279,9 +264,6 @@ void finishView(Host& host, int slot, const DrawJobResult& r) {
     if (!r.handled) {
         return;
     }
-    if (r.hasClip) {
-        windowClipboardSet(r.clip);
-    }
     WindowCommand command{};
     command.minimize = r.ops.minimize;
     command.toggleMaximize = r.ops.toggleMaximize;
@@ -290,23 +272,10 @@ void finishView(Host& host, int slot, const DrawJobResult& r) {
     windowApply(view.window, command);
     windowSetCursor(view.window, r.cursor);
     windowText(view.window, r.wantsText);
-    if (r.hasClipRect) {
-        windowMouseRect(view.window, static_cast<int>(r.clipX), static_cast<int>(r.clipY), static_cast<int>(r.clipW), static_cast<int>(r.clipH));
-    } else {
-        windowMouseRect(view.window, 0, 0, 0, 0);
-    }
+    windowMouseRect(view.window, 0, 0, 0, 0);
     windowRelativeMouse(view.window, r.wantsRelative);
-    if (r.hasFocus && view.window.pixelW > 0 && view.swap.extent.width > 0) {
-        const float sx = static_cast<float>(view.window.pixelW) / static_cast<float>(view.swap.extent.width);
-        windowTextArea(
-            view.window,
-            static_cast<int>(r.focusX * sx),
-            static_cast<int>(r.focusY * sx),
-            static_cast<int>(r.focusW * sx),
-            static_cast<int>(r.focusH * sx));
-    }
     WindowOps ops = r.ops;
-    if (r.ev == UiEvent::Close || ops.close) {
+    if (ops.close) {
         if (slot == host.primary) {
             view.window.closeRequested = true;
         } else {
@@ -446,9 +415,6 @@ int hostOpen(Host& host, const ViewDesc& desc) {
         destroyView(host, slot, false);
         return -1;
     }
-    uiWidgetsInit(*view.canvas.state);
-    canvasSetBuilder(view.canvas, desc.builder, desc.user);
-    canvasReload(view.canvas);
     copyName(view, desc.name);
     view.onOps = desc.onOps;
     view.onClose = desc.onClose;
@@ -498,8 +464,8 @@ FrameDesc hostFrame(const Host& host, int slot) {
 
 void releaseViewGpu(Host& host, int slot) {
     HostView& view = host.view[slot];
-    const UiBuilder builder = view.canvas.builder;
-    void* builderUser = view.canvas.builderUser;
+    const CanvasLayerFn layer = view.canvas.layer;
+    void* layerUser = view.canvas.layerUser;
     canvasDestroy(view.canvas, host.device);
     descriptorHeapsDestroy(view.heaps, host.device);
     swapchainDestroy(view.swap, host.device);
@@ -513,8 +479,8 @@ void releaseViewGpu(Host& host, int slot) {
     view.swap = {};
     view.heaps = {};
     view.canvas = {};
-    view.canvas.builder = builder;
-    view.canvas.builderUser = builderUser;
+    view.canvas.layer = layer;
+    view.canvas.layerUser = layerUser;
 }
 
 bool restoreViewGpu(Host& host, int slot, bool ownsDeviceSurface) {
@@ -534,9 +500,6 @@ bool restoreViewGpu(Host& host, int slot, bool ownsDeviceSurface) {
         spdlog::error("HOST recover canvas failed {}", view.name);
         return false;
     }
-    uiWidgetsInit(*view.canvas.state);
-    canvasSetBuilder(view.canvas, view.canvas.builder, view.canvas.builderUser);
-    canvasReload(view.canvas);
     return true;
 }
 
@@ -691,55 +654,6 @@ Canvas* hostCanvas(Host& host, int slot) {
         return nullptr;
     }
     return &host.view[slot].canvas;
-}
-
-namespace {
-
-void colorWindowBuild(Canvas& canvas, void* user) {
-    if (!canvasUseFont(canvas, kCanvasFontPx)) {
-        spdlog::error("color font was not set");
-    }
-    if (canvas.state == nullptr) {
-        return;
-    }
-    uiBuildColor(*canvas.state);
-    if (user != nullptr) {
-        uiSetColorBook(*canvas.state, static_cast<ColorBook*>(user));
-    }
-}
-
-void colorWindowClosed(Host&, int, void* user) {
-    auto* colors = static_cast<ColorBook*>(user);
-    if (colors != nullptr) {
-        colors->present = 0;
-        ++colors->gen;
-    }
-}
-
-} // namespace
-
-bool hostSyncColorWindow(Host& host, ColorBook* colors) {
-    if (colors == nullptr || colors->present != 2) {
-        return false;
-    }
-    for (const HostView& view : host.view) {
-        if (view.on && sameName(view, "color")) {
-            return false;
-        }
-    }
-    ViewDesc desc{};
-    desc.name = "color";
-    desc.window.title = "Color";
-    desc.window.width = 440;
-    desc.window.height = 720;
-    desc.window.minWidth = 360;
-    desc.window.minHeight = 480;
-    desc.window.bordered = false;
-    desc.window.resizable = true;
-    desc.builder = colorWindowBuild;
-    desc.onClose = colorWindowClosed;
-    desc.user = colors;
-    return hostOpen(host, desc) >= 0;
 }
 
 } // namespace burnhope

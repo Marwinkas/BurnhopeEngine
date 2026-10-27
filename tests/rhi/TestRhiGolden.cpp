@@ -1,10 +1,7 @@
 #define DOCTEST_CONFIG_NO_EXCEPTIONS
 #include <doctest/doctest.h>
 
-#include "ui/State.hpp"
-#include "ui/LayoutBridge.hpp"
-#include "ui/rhi/Canvas.hpp"
-#include "ui/widget/Widgets.hpp"
+#include "rhi/ui/Canvas.hpp"
 #include "rhi/Device.hpp"
 #include "rhi/Swapchain.hpp"
 #include "rhi/DescriptorHeap.hpp"
@@ -39,8 +36,20 @@ constexpr float kGoldenR = 0.76f;
 constexpr float kGoldenG = 0.30f;
 constexpr float kGoldenB = 0.10f;
 
-void goldenBuilder(Canvas& c, void*) {
-    spawn(*c.state, kUiNone, px(64.0f, 64.0f), paintRgb(kGoldenR, kGoldenG, kGoldenB));
+// Canvas layer that emits the single full-frame panel straight into the mapped primitive ring.
+uint32_t goldenLayer(void*, const InputFrame&, float, float, UiPrimitive* dst, uint32_t cap, CanvasFeedback&) {
+    if (cap == 0) {
+        return 0;
+    }
+    UiPrimitive p{};
+    p.sizeX = 64.0f;
+    p.sizeY = 64.0f;
+    p.color[0] = kGoldenR;
+    p.color[1] = kGoldenG;
+    p.color[2] = kGoldenB;
+    p.color[3] = 1.0f;
+    dst[0] = p;
+    return 1;
 }
 
 // Рендерит текущее содержимое canvas в offscreen-картинку W×H и возвращает RGBA байты через
@@ -176,11 +185,9 @@ TEST_CASE("golden image: panel fill is exact and mesh/vertex paths match") {
         windowDestroy(window);
         return;
     }
-    uiWidgetsInit(*canvas.state);
-    canvasSetBuilder(canvas, goldenBuilder, nullptr);
-    canvasReload(canvas);
+    canvas.layer = goldenLayer;
     InputFrame input{};
-    (void)canvasConsume(canvas, device, 64.0f, 64.0f, input, 0.0);
+    canvasConsume(canvas, device, 64.0f, 64.0f, input, 0, true);
 
     constexpr uint32_t kW = 64;
     constexpr uint32_t kH = 64;

@@ -1,394 +1,43 @@
 === 1. FILE LINE COUNTS (MONOLITH CHECK) ===
-    214 core/platform/Window.hpp
-    179 core/platform/Dialog.cpp
-     20 core/platform/Check.hpp
-     15 core/platform/Check.cpp
-      8 core/platform/Trace.hpp
-     35 core/platform/Jobs.hpp
-    133 core/platform/Jobs.cpp
-     11 core/platform/Desktop.hpp
-    136 core/platform/Desktop.cpp
-    271 core/platform/Action.cpp
-    264 core/platform/PlatformUtil.cpp
-     35 core/platform/PlatformUtil.hpp
-     37 core/platform/Action.hpp
-     88 core/platform/Input.hpp
-    399 core/platform/WindowEvents.cpp
-    811 core/platform/Window.cpp
-     30 core/memory/FrameArena.hpp
-     49 core/memory/FrameArena.cpp
-     82 core/rhi/Device.hpp
-    541 core/rhi/Swapchain.cpp
-      6 core/rhi/VolkVma.cpp
-    158 core/rhi/Barrier.hpp
-     57 core/rhi/GpuImage.hpp
-    180 core/rhi/GpuImage.cpp
-     28 core/rhi/GpuBuffer.hpp
-     68 core/rhi/GpuBuffer.cpp
-    304 core/rhi/DescriptorHeap.cpp
-     43 core/rhi/MeshDraw.hpp
-     28 core/rhi/MeshDraw.cpp
-     49 core/rhi/GpuProfiler.hpp
-    133 core/rhi/GpuProfiler.cpp
-    813 core/rhi/Device.cpp
-     50 core/rhi/DeviceCaps.hpp
-    224 core/rhi/ShaderObject.cpp
-     52 core/rhi/ShaderObject.hpp
-    114 core/rhi/DescriptorHeap.hpp
-     89 core/rhi/Swapchain.hpp
-     13 core/rhi/DescriptorSlots.hpp
-     55 core/ui/Panel.hpp
-      9 core/ui/widget/Widgets.hpp
-     27 core/ui/widget/BinSlots.hpp
-     24 core/ui/widget/Check.hpp
-    211 core/ui/widget/Choice.cpp
-    304 core/ui/widget/Chrome.cpp
-    111 core/ui/widget/Curve.cpp
-    297 core/ui/widget/DragDrop.cpp
-    745 core/ui/widget/Field.cpp
-    176 core/ui/widget/FieldFilter.cpp
-    186 core/ui/widget/Fold.cpp
-    111 core/ui/widget/Gradient.cpp
-    159 core/ui/widget/Image.cpp
-     22 core/ui/widget/Label.cpp
-    575 core/ui/widget/Menu.cpp
-     48 core/ui/widget/Menu.hpp
-    120 core/ui/widget/Number.cpp
-    201 core/ui/widget/NumberEdit.cpp
-     59 core/ui/widget/Popover.cpp
-    151 core/ui/widget/Rubberband.cpp
-     54 core/ui/widget/Search.cpp
-     12 core/ui/widget/Search.hpp
-     37 core/ui/widget/TreeView.hpp
-    263 core/ui/widget/Virtual.cpp
-     72 core/ui/widget/VirtualGrid.hpp
-     12 core/ui/widget/Label.hpp
-     43 core/ui/widget/Scroll.hpp
-     42 core/ui/widget/Splitter.hpp
-      9 core/ui/widget/Tabs.hpp
-     11 core/ui/widget/Thumb.hpp
-    206 core/ui/widget/Slider.cpp
-     25 core/ui/widget/Tabs.cpp
-     46 core/ui/widget/Thumb.cpp
-     14 core/ui/widget/CurveData.hpp
-     18 core/ui/widget/GradientData.hpp
-     17 core/ui/widget/Mark.hpp
-     26 core/ui/widget/Range.hpp
-    240 core/ui/widget/Check.cpp
-     23 core/ui/widget/Slider.hpp
-     30 core/ui/widget/Button.hpp
-    185 core/ui/widget/FieldDraw.cpp
-     40 core/ui/widget/Calendar.hpp
-     19 core/ui/widget/Image.hpp
-     20 core/ui/widget/Breadcrumbs.hpp
-    113 core/ui/widget/ColorPicker.hpp
-     48 core/ui/widget/AssetSlot.hpp
-     11 core/ui/widget/Gradient.hpp
-     27 core/ui/widget/Fold.hpp
-     48 core/ui/widget/DragDrop.hpp
-     25 core/ui/widget/Rubberband.hpp
-     11 core/ui/widget/Curve.hpp
-    166 core/ui/widget/Virtual.hpp
-      9 core/ui/widget/Popover.hpp
-     31 core/ui/widget/Docking.hpp
-    183 core/ui/widget/Field.hpp
-     26 core/ui/widget/Number.hpp
-     87 core/ui/widget/Widgets.cpp
-     50 core/ui/widget/Chrome.hpp
-    106 core/ui/widget/AssetSlot.cpp
-     31 core/ui/widget/Segment.hpp
-    548 core/ui/widget/TextEdit.cpp
-     83 core/ui/widget/Button.cpp
-     37 core/ui/widget/Choice.hpp
-     71 core/ui/widget/Segment.cpp
-    216 core/ui/widget/Docking.cpp
-    453 core/ui/widget/Splitter.cpp
-    339 core/ui/widget/Scroll.cpp
-    466 core/ui/widget/VirtualGrid.cpp
-    206 core/ui/widget/TreeView.cpp
-    135 core/ui/widget/Breadcrumbs.cpp
-    382 core/ui/kit/Calendar.cpp
-    117 core/ui/kit/ColorDraw.cpp
-    258 core/ui/kit/ColorPopup.cpp
-     33 core/ui/kit/ColorInternal.hpp
-    703 core/ui/kit/Color.cpp
-    252 core/ui/rhi/UiRenderer.cpp
-     36 core/ui/rhi/UiRenderer.hpp
-     34 core/ui/rhi/UiPhoto.hpp
-     31 core/ui/rhi/Font.hpp
-    162 core/ui/rhi/Font.cpp
-    116 core/ui/rhi/UiPhoto.cpp
-     97 core/ui/rhi/Canvas.hpp
-    424 core/ui/rhi/Canvas.cpp
-     57 core/ui/FlexAttr.hpp
-    175 core/ui/Flex.hpp
-     41 core/ui/Geometry.hpp
-     39 core/ui/LayoutBridge.hpp
-    247 core/ui/FlexAttr.cpp
-     13 core/ui/Hover.hpp
-     77 core/ui/Bar.hpp
-     53 core/ui/Command.cpp
-     73 core/ui/Focus.cpp
-    222 core/ui/Input.cpp
-    514 core/ui/LayoutBridge.cpp
-    204 core/ui/Motion.cpp
-    854 core/ui/Node.cpp
-     83 core/ui/PrimitiveBatch.hpp
-    100 core/ui/Text.hpp
-    143 core/ui/Typography.hpp
-     54 core/ui/UiWindowBridge.cpp
-     19 core/ui/UiWindowBridge.hpp
-     11 core/ui/Types.hpp
-    112 core/ui/NodeDump.cpp
-     49 core/ui/Command.hpp
-    118 core/ui/Interaction.hpp
-    110 core/ui/Nodes.hpp
-     74 core/ui/Icon.cpp
-     48 core/ui/Icon.hpp
-    411 core/ui/Json.cpp
-    147 core/ui/Primitive.hpp
-    326 core/ui/UiBin.cpp
-    138 core/ui/UiBin.hpp
-    119 core/ui/StyleTokens.cpp
-     34 core/ui/StyleInternal.hpp
-    235 core/ui/StyleParse.cpp
-    110 core/ui/Template.hpp
-    887 core/ui/Template.cpp
-    166 core/ui/StyleSheet.hpp
-    147 core/ui/StyleSheet.cpp
-     71 core/ui/Hover.cpp
-    304 core/ui/Style.hpp
-    112 core/ui/Hit.cpp
-    254 core/ui/Panel.cpp
-    619 core/ui/Text.cpp
-    550 core/ui/PrimitiveBatch.cpp
-     25 core/ui/Theme.hpp
-    227 core/ui/Theme.cpp
-    342 core/ui/State.hpp
-     28 core/files/Format.hpp
-    103 core/files/Model.hpp
-     10 core/files/FileMenu.hpp
-     10 core/files/FileActions.hpp
-      9 core/files/FileBind.hpp
-     57 core/files/FileTheme.cpp
-    194 core/files/Format.cpp
-    750 core/files/Model.cpp
-     22 core/files/FileDomain.hpp
-     97 core/files/FileMenu.cpp
-    330 core/files/FileSession.cpp
-     64 core/files/FileSession.hpp
-    269 core/files/Files.cpp
-     63 core/files/Project.cpp
-     47 core/files/Browser.hpp
-     56 core/files/FileDomain.cpp
-     44 core/files/FileThumb.hpp
-     98 core/files/FileThumb.cpp
-     48 core/files/FileTheme.hpp
-     84 core/files/FileActions.cpp
-    619 core/files/FileBind.cpp
-      5 core/image/ImageFile.hpp
-     39 core/image/ImageCompress.hpp
-    426 core/image/ImageCompress.cpp
-     81 core/image/ImageDecode.hpp
-    673 core/image/ImageUpload.cpp
-     72 core/image/ImageUpload.hpp
-    576 core/image/ImageDecode.cpp
-    327 core/image/ImageBlockDecode.cpp
-     22 core/host/HostNote.hpp
-     91 core/host/PropGrid.hpp
-    102 core/host/PropImport.hpp
-     39 core/host/SceneMask.cpp
-     11 core/host/SceneMask.hpp
-     92 core/host/Host.hpp
-    407 core/host/PropFilter.cpp
-    745 core/host/Host.cpp
-     14 core/host/HostNote.cpp
-     43 core/host/PropRoll.hpp
-     30 core/host/Recent.hpp
-    100 core/host/Recent.cpp
-     38 core/host/Launcher.hpp
-    251 core/host/Launcher.cpp
-    236 core/host/PropGrid.cpp
-    155 core/host/PropImportParse.cpp
-    150 core/host/PropBind.hpp
-     47 core/host/PropGridMetrics.hpp
-    158 core/host/PropGridControls.cpp
-    205 core/host/PropGridVec.cpp
-     39 core/host/PropGridMetrics.cpp
-     91 core/host/PropImportSetters.hpp
-    202 core/host/PropImportPaint.cpp
-    138 core/host/PropImportMenu.cpp
-    111 core/host/PropImportInputs.cpp
-     87 core/host/PropGridCtl.cpp
-    178 core/host/PropImportInternal.hpp
-    186 core/host/PropImportKeys.cpp
-    180 core/host/PropImport.cpp
-    141 core/host/PropImportRoles.cpp
-    220 core/host/PropImportMake.cpp
-    528 core/host/PropBind.cpp
-     74 core/wasm/WasmHost.hpp
-    449 core/wasm/WasmHost.cpp
-    150 core/anim/Animation.hpp
-     50 core/time/Time.hpp
-    218 core/color/Color.hpp
-     33 core/doc/UndoStack.hpp
-    114 core/doc/Document.hpp
-    145 core/text/TextLayout.hpp
-     24 core/io/File.hpp
-    147 core/io/File.cpp
-     41 core/io/Json.hpp
-    400 core/io/Json.cpp
-    237 core/io/JsonCursor.hpp
-     52 core/io/Blob.hpp
-    247 core/gfx/Meshlet.hpp
-    200 core/gfx/ClusterGrid.hpp
-     40 core/gfx/HiZ.hpp
-    251 core/gfx/PrimitiveGen.hpp
-     67 core/gfx/Portal.hpp
-     42 core/gfx/Decal.hpp
-     54 core/gfx/Probe.hpp
-    323 core/gfx/Material.hpp
-    191 core/gfx/MeshletBuilder.hpp
-     45 core/gfx/Light.hpp
-    246 core/gfx/Material.cpp
-     81 core/debug/DebugStats.hpp
-     39 core/debug/CpuScope.hpp
-     99 core/scene/TestScene.hpp
-    165 core/scene/FlyCam.hpp
-     78 core/stream/StreamRing.hpp
-     57 core/stream/StreamQueue.hpp
-     61 core/stream/ResidencyTable.hpp
-     10 core/asset/AssimpImporter.hpp
-     57 core/asset/ProjectDoc.hpp
-    190 core/asset/SceneBlob.hpp
-    675 core/asset/AssimpImporter.cpp
-     27 core/asset/MaterialBake.hpp
-    432 core/asset/MaterialBake.cpp
-    304 core/asset/ProjectDoc.cpp
-     20 core/asset/ModelMesh.hpp
-    108 core/asset/ModelMesh.cpp
-     53 core/Units.hpp
-     30 core/audio/Audio.hpp
-    656 core/audio/Audio.cpp
-    269 core/Str.hpp
-    296 engine/gpu_scene/Mat4.hpp
-     24 engine/gpu_scene/MeshletGpu.hpp
-    191 engine/gpu_scene/Camera.hpp
-     64 engine/gpu_scene/InstanceData.hpp
-    117 engine/gpu_scene/InstanceCull.hpp
-    120 engine/gpu_scene/SunShadow.hpp
-     28 engine/gpu_scene/MeshletCull.hpp
-     63 engine/gpu_scene/PointShadow.hpp
-    155 engine/gpu_scene/LightMath.hpp
-    234 engine/gpu_scene/FrameUniforms.hpp
-    260 engine/gpu_scene/SceneObject.hpp
-     40 engine/gpu_scene/Physics.hpp
-    521 engine/gpu_scene/Physics.cpp
-    217 engine/gpu_scene/SceneObject.cpp
-    891 engine/gpu_scene/SceneGizmo.cpp
-    157 engine/src/Cube.cpp
-    127 engine/src/Cull.cpp
-     48 engine/src/Hiz.cpp
-     18 engine/src/PassClusters.cpp
-     60 engine/src/PassCull.cpp
-     33 engine/src/PassPoints.cpp
-     28 engine/src/PassRadiance.cpp
-     59 engine/src/PassSun.cpp
-     53 engine/src/PassVis.cpp
-    927 engine/src/Radiance.cpp
-    175 engine/src/Sky.cpp
-    248 engine/src/Visbuffer.cpp
-    143 engine/src/PassGizmo.cpp
-    368 engine/src/Voxel.cpp
-     25 engine/src/PassVoxel.cpp
-    777 engine/src/Fsr.cpp
-    352 engine/src/Gtao.cpp
-     21 engine/src/PassRestir.cpp
-     77 engine/src/PassShade.cpp
-     54 engine/src/PassTonemap.cpp
-    862 engine/src/Restir.cpp
-    292 engine/src/Shade.cpp
-    352 engine/src/Sharc.cpp
-     40 engine/src/PassSharc.cpp
-    220 engine/src/Particles.cpp
-    128 engine/src/Rain.cpp
-     78 engine/src/Fog.cpp
-    721 engine/src/SceneTextures.cpp
-    452 engine/src/SceneTargets.cpp
-    524 engine/src/SceneActors.cpp
-    443 engine/src/SceneProcedural.cpp
-    211 engine/src/Weather.cpp
-    239 engine/src/SceneCullUpload.cpp
-    108 engine/src/SceneLights.cpp
-    929 engine/src/SceneGeometry.cpp
-    143 engine/src/Tonemap.cpp
-    885 engine/src/SceneUniforms.cpp
-    579 engine/src/SceneFrame.cpp
-     24 engine/include/render/Cube.hpp
-     58 engine/include/render/Cull.hpp
-     40 engine/include/render/PassAllocators.hpp
-     92 engine/include/render/PassBufferSync.hpp
-    239 engine/include/render/PassCommon.hpp
-     39 engine/include/render/PassDebug.hpp
-    141 engine/include/render/PassRendering.hpp
-    127 engine/include/render/PassShaderGroup.hpp
-     68 engine/include/render/PassTargets.hpp
-    156 engine/include/render/Radiance.hpp
-     44 engine/include/render/Shade.hpp
-     45 engine/include/render/Sky.hpp
-     44 engine/include/render/Visbuffer.hpp
-     40 engine/include/render/VisResolve.hpp
-     24 engine/include/render/Gizmo.hpp
-      5 engine/include/render/RenderDefs.hpp
-     74 engine/include/render/Voxel.hpp
-     98 engine/include/render/Fsr.hpp
-     75 engine/include/render/Gtao.hpp
-    327 engine/include/render/HeapBind.hpp
-    201 engine/include/render/Restir.hpp
-     34 engine/include/render/Tonemap.hpp
-    120 engine/include/render/Sharc.hpp
-     83 engine/include/render/Particles.hpp
-     32 engine/include/render/Fog.hpp
-     44 engine/include/render/Rain.hpp
-     65 engine/include/render/Weather.hpp
-    336 engine/include/render/SceneBlock.hpp
-    377 engine/include/render/SceneFrameImpl.hpp
-     21 engine/include/render/Hiz.hpp
-    335 engine/include/render/SceneFrame.hpp
-     29 demo/app/Main.cpp
-    219 demo/app/HudSync.cpp
-     53 demo/app/Shell.hpp
-     28 demo/app/MatPriv.hpp
-    216 demo/app/SceneBlockFill.cpp
-     18 demo/app/SceneBlockFill.hpp
-    127 demo/app/HudBuild.hpp
-     62 demo/app/HudInspector.cpp
-     60 demo/app/HudPost.cpp
-     99 demo/app/HudMaterial.cpp
-    211 demo/app/Engine.cpp
-    254 demo/app/HudAct.cpp
-     99 demo/app/HudPick.cpp
-    316 demo/app/HudPush.cpp
-     65 demo/app/HudView.cpp
-    105 demo/app/MatEdit.cpp
-    430 demo/app/Shell.cpp
-    209 demo/app/SceneBlockMap.hpp
-    253 demo/app/Engine.hpp
-     88 demo/app/HudLauncher.cpp
-     28 demo/app/MatThumb.hpp
-    140 demo/app/MatThumb.cpp
-    101 demo/app/MatPreview.cpp
-     11 demo/app/ModelThumb.hpp
-    149 demo/app/ModelThumb.cpp
-    201 demo/app/ProjectGate.cpp
-    108 demo/app/MatPage.cpp
-    255 demo/app/HudMat.cpp
-    152 demo/app/MatRows.cpp
-    190 demo/app/MatSlot.cpp
-    119 demo/app/HudToolbar.cpp
-     48 demo/sample/Main.cpp
-    289 demo/Sample.cpp
-  65513 итого
+   162 core/gui/data/GuiComponents.hpp
+    79 core/gui/text/GuiTextEngine.hpp
+   305 core/gui/text/GuiTextEngine.cpp
+    66 core/gui/interaction/InteractState.hpp
+    15 core/gui/interaction/InteractHover.hpp
+    66 core/gui/interaction/InteractHover.cpp
+    14 core/gui/interaction/InteractClick.hpp
+    33 core/gui/interaction/InteractClick.cpp
+    24 core/gui/interaction/InteractDrag.hpp
+    16 core/gui/interaction/InteractScroll.hpp
+    56 core/gui/interaction/InteractScroll.cpp
+    18 core/gui/interaction/InteractFocus.hpp
+    93 core/gui/interaction/InteractFocus.cpp
+    52 core/gui/interaction/InteractTextEdit.hpp
+   305 core/gui/interaction/InteractTextEdit.cpp
+    16 core/gui/interaction/Interact.hpp
+    22 core/gui/interaction/Interact.cpp
+   133 core/gui/interaction/InteractDrag.cpp
+    38 core/gui/virtual/GuiVirtualPool.hpp
+   195 core/gui/virtual/GuiVirtualPool.cpp
+    31 core/gui/overlay/GuiOverlay.hpp
+   177 core/gui/overlay/GuiOverlay.cpp
+    40 core/gui/render/GuiEmitter.hpp
+   343 core/gui/render/GuiEmitter.cpp
+    36 core/gui/loader/GuiLoader.hpp
+   494 core/gui/loader/GuiLoader.cpp
+    42 core/gui/input/GuiHitTest.hpp
+   150 core/gui/input/GuiHitTest.cpp
+    17 core/gui/style/GuiStyleResolver.hpp
+   149 core/gui/style/GuiStyleSheet.hpp
+   720 core/gui/style/GuiStyleSheet.cpp
+   135 core/gui/style/GuiStyleResolver.cpp
+    46 core/gui/layout/GuiScissor.hpp
+    31 core/gui/layout/GuiScissor.cpp
+    52 core/gui/layout/GuiLayoutEngine.hpp
+   328 core/gui/layout/GuiLayoutEngine.cpp
+    58 core/gui/Gui.hpp
+   117 core/gui/Gui.cpp
+  4674 итого
 
 === 2. HPP INCLUDES ===
 core/platform/Window.hpp:3:#include "platform/Input.hpp"
@@ -567,8 +216,6 @@ core/ui/rhi/Canvas.hpp:12:#include "ui/rhi/UiRenderer.hpp"
 core/ui/rhi/Canvas.hpp:14:#include <cstdint>
 core/ui/FlexAttr.hpp:3:#include "ui/Flex.hpp"
 core/ui/FlexAttr.hpp:4:#include <cstdint>
-core/ui/Flex.hpp:3:#include <cstdint>
-core/ui/Flex.hpp:4:#include <type_traits>
 core/ui/Geometry.hpp:3:#include "ui/Types.hpp"
 core/ui/Geometry.hpp:5:#include <cstdint>
 core/ui/Geometry.hpp:6:#include <type_traits>
@@ -578,9 +225,6 @@ core/ui/LayoutBridge.hpp:5:#include <cstdint>
 core/ui/Hover.hpp:3:#include <cstdint>
 core/ui/Bar.hpp:3:#include <cstdint>
 core/ui/Bar.hpp:4:#include <type_traits>
-core/ui/PrimitiveBatch.hpp:3:#include "ui/Geometry.hpp"
-core/ui/PrimitiveBatch.hpp:4:#include "ui/Primitive.hpp"
-core/ui/PrimitiveBatch.hpp:5:#include "ui/Style.hpp"
 core/ui/Text.hpp:3:#include "ui/Geometry.hpp"
 core/ui/Text.hpp:4:#include "ui/Primitive.hpp"
 core/ui/Text.hpp:5:#include "ui/Style.hpp"
@@ -621,20 +265,6 @@ core/ui/UiBin.hpp:4:#include <cstdint>
 core/ui/StyleInternal.hpp:3:#include "ui/StyleSheet.hpp"
 core/ui/StyleInternal.hpp:5:#include <cstdint>
 core/ui/StyleInternal.hpp:6:#include <string_view>
-core/ui/Template.hpp:3:#include "ui/Flex.hpp"
-core/ui/Template.hpp:4:#include "ui/Style.hpp"
-core/ui/Template.hpp:5:#include "ui/Types.hpp"
-core/ui/Template.hpp:7:#include <cstdint>
-core/ui/Template.hpp:8:#include <span>
-core/ui/Template.hpp:9:#include <string_view>
-core/ui/StyleSheet.hpp:3:#include "ui/Style.hpp"
-core/ui/StyleSheet.hpp:4:#include "ui/Types.hpp"
-core/ui/StyleSheet.hpp:6:#include <cstdint>
-core/ui/StyleSheet.hpp:7:#include <span>
-core/ui/StyleSheet.hpp:8:#include <string_view>
-core/ui/Style.hpp:3:#include "ui/Geometry.hpp"
-core/ui/Style.hpp:4:#include <cstdint>
-core/ui/Style.hpp:5:#include <type_traits>
 core/ui/Theme.hpp:3:#include "ui/Style.hpp"
 core/ui/Theme.hpp:4:#include "ui/Types.hpp"
 core/ui/Theme.hpp:6:#include <string_view>
@@ -650,6 +280,25 @@ core/ui/State.hpp:11:#include "ui/Text.hpp"
 core/ui/State.hpp:12:#include "ui/Typography.hpp"
 core/ui/State.hpp:13:#include "ui/UiBin.hpp"
 core/ui/State.hpp:15:#include <flecs.h>
+core/ui/Template.hpp:3:#include "ui/Flex.hpp"
+core/ui/Template.hpp:4:#include "ui/Style.hpp"
+core/ui/Template.hpp:5:#include "ui/Types.hpp"
+core/ui/Template.hpp:7:#include <cstdint>
+core/ui/Template.hpp:8:#include <span>
+core/ui/Template.hpp:9:#include <string_view>
+core/ui/Flex.hpp:3:#include <cstdint>
+core/ui/Flex.hpp:4:#include <type_traits>
+core/ui/PrimitiveBatch.hpp:3:#include "ui/Geometry.hpp"
+core/ui/PrimitiveBatch.hpp:4:#include "ui/Primitive.hpp"
+core/ui/PrimitiveBatch.hpp:5:#include "ui/Style.hpp"
+core/ui/StyleSheet.hpp:3:#include "ui/Style.hpp"
+core/ui/StyleSheet.hpp:4:#include "ui/Types.hpp"
+core/ui/StyleSheet.hpp:6:#include <cstdint>
+core/ui/StyleSheet.hpp:7:#include <span>
+core/ui/StyleSheet.hpp:8:#include <string_view>
+core/ui/Style.hpp:3:#include "ui/Geometry.hpp"
+core/ui/Style.hpp:4:#include <cstdint>
+core/ui/Style.hpp:5:#include <type_traits>
 core/files/Format.hpp:3:#include "Str.hpp"
 core/files/Format.hpp:4:#include "Units.hpp"
 core/files/Format.hpp:6:#include <cstdint>
@@ -715,10 +364,11 @@ core/host/PropImportSetters.hpp:6:#include <initializer_list>
 core/host/PropImportSetters.hpp:7:#include <type_traits>
 core/host/PropImportInternal.hpp:3:#include "host/PropImport.hpp"
 core/host/PropImportInternal.hpp:4:#include "io/JsonCursor.hpp"
-core/host/PropImportInternal.hpp:5:#include "ui/Style.hpp"
-core/host/PropImportInternal.hpp:6:#include "ui/StyleSheet.hpp"
-core/host/PropImportInternal.hpp:7:#include "ui/widget/Number.hpp"
-core/host/PropImportInternal.hpp:9:#include <cstdint>
+core/host/PropImportInternal.hpp:5:#include "ui/Panel.hpp"
+core/host/PropImportInternal.hpp:6:#include "ui/Style.hpp"
+core/host/PropImportInternal.hpp:7:#include "ui/StyleSheet.hpp"
+core/host/PropImportInternal.hpp:8:#include "ui/widget/Number.hpp"
+core/host/PropImportInternal.hpp:10:#include <cstdint>
 core/wasm/WasmHost.hpp:3:#include "memory/FrameArena.hpp"
 core/wasm/WasmHost.hpp:5:#include <cstdint>
 core/anim/Animation.hpp:3:#include <algorithm>
@@ -834,6 +484,78 @@ core/Str.hpp:4:#include <cstdint>
 core/Str.hpp:5:#include <charconv>
 core/Str.hpp:6:#include <cstring>
 core/Str.hpp:7:#include <string_view>
+core/gui/data/GuiComponents.hpp:3:#include <cstdint>
+core/gui/data/GuiComponents.hpp:4:#include <type_traits>
+core/gui/data/GuiComponents.hpp:6:#include <flecs.h>
+core/gui/data/GuiComponents.hpp:7:#include <yoga/Yoga.h>
+core/gui/text/GuiTextEngine.hpp:3:#include <cstdint>
+core/gui/text/GuiTextEngine.hpp:4:#include <string_view>
+core/gui/interaction/InteractState.hpp:3:#include <cstdint>
+core/gui/interaction/InteractState.hpp:4:#include <type_traits>
+core/gui/interaction/InteractState.hpp:6:#include "gui/data/GuiComponents.hpp"
+core/gui/interaction/InteractHover.hpp:3:#include "gui/data/GuiComponents.hpp"
+core/gui/interaction/InteractHover.hpp:4:#include "gui/interaction/InteractState.hpp"
+core/gui/interaction/InteractHover.hpp:5:#include "gui/style/GuiStyleSheet.hpp"
+core/gui/interaction/InteractHover.hpp:6:#include "platform/Input.hpp"
+core/gui/interaction/InteractClick.hpp:3:#include "gui/data/GuiComponents.hpp"
+core/gui/interaction/InteractClick.hpp:4:#include "gui/interaction/InteractState.hpp"
+core/gui/interaction/InteractClick.hpp:5:#include "platform/Input.hpp"
+core/gui/interaction/InteractDrag.hpp:3:#include "gui/data/GuiComponents.hpp"
+core/gui/interaction/InteractDrag.hpp:4:#include "gui/interaction/InteractState.hpp"
+core/gui/interaction/InteractDrag.hpp:5:#include "platform/Input.hpp"
+core/gui/interaction/InteractScroll.hpp:3:#include "gui/data/GuiComponents.hpp"
+core/gui/interaction/InteractScroll.hpp:4:#include "gui/interaction/InteractState.hpp"
+core/gui/interaction/InteractScroll.hpp:5:#include "platform/Input.hpp"
+core/gui/interaction/InteractFocus.hpp:3:#include "gui/data/GuiComponents.hpp"
+core/gui/interaction/InteractFocus.hpp:4:#include "gui/interaction/InteractState.hpp"
+core/gui/interaction/InteractFocus.hpp:5:#include "platform/Input.hpp"
+core/gui/interaction/InteractTextEdit.hpp:3:#include <cstdint>
+core/gui/interaction/InteractTextEdit.hpp:4:#include <type_traits>
+core/gui/interaction/InteractTextEdit.hpp:6:#include "gui/data/GuiComponents.hpp"
+core/gui/interaction/InteractTextEdit.hpp:7:#include "gui/interaction/InteractState.hpp"
+core/gui/interaction/InteractTextEdit.hpp:8:#include "gui/style/GuiStyleSheet.hpp"
+core/gui/interaction/InteractTextEdit.hpp:9:#include "platform/Input.hpp"
+core/gui/interaction/Interact.hpp:3:#include "gui/data/GuiComponents.hpp"
+core/gui/interaction/Interact.hpp:4:#include "gui/interaction/InteractState.hpp"
+core/gui/interaction/Interact.hpp:5:#include "gui/interaction/InteractTextEdit.hpp"
+core/gui/interaction/Interact.hpp:6:#include "gui/style/GuiStyleSheet.hpp"
+core/gui/interaction/Interact.hpp:7:#include "platform/Input.hpp"
+core/gui/virtual/GuiVirtualPool.hpp:3:#include <cstdint>
+core/gui/virtual/GuiVirtualPool.hpp:4:#include <type_traits>
+core/gui/virtual/GuiVirtualPool.hpp:6:#include "gui/data/GuiComponents.hpp"
+core/gui/overlay/GuiOverlay.hpp:3:#include <cstdint>
+core/gui/overlay/GuiOverlay.hpp:5:#include "gui/data/GuiComponents.hpp"
+core/gui/overlay/GuiOverlay.hpp:6:#include "gui/interaction/InteractState.hpp"
+core/gui/overlay/GuiOverlay.hpp:7:#include "platform/Input.hpp"
+core/gui/render/GuiEmitter.hpp:3:#include <cstdint>
+core/gui/render/GuiEmitter.hpp:5:#include "gui/data/GuiComponents.hpp"
+core/gui/render/GuiEmitter.hpp:6:#include "gui/interaction/InteractState.hpp"
+core/gui/render/GuiEmitter.hpp:7:#include "gui/style/GuiStyleSheet.hpp"
+core/gui/render/GuiEmitter.hpp:8:#include "ui/Primitive.hpp"
+core/gui/loader/GuiLoader.hpp:3:#include <string_view>
+core/gui/loader/GuiLoader.hpp:5:#include "gui/data/GuiComponents.hpp"
+core/gui/loader/GuiLoader.hpp:6:#include "gui/style/GuiStyleSheet.hpp"
+core/gui/input/GuiHitTest.hpp:3:#include <cstdint>
+core/gui/input/GuiHitTest.hpp:5:#include "gui/data/GuiComponents.hpp"
+core/gui/style/GuiStyleResolver.hpp:3:#include <cstdint>
+core/gui/style/GuiStyleResolver.hpp:5:#include "gui/data/GuiComponents.hpp"
+core/gui/style/GuiStyleResolver.hpp:6:#include "gui/style/GuiStyleSheet.hpp"
+core/gui/style/GuiStyleSheet.hpp:3:#include <cstdint>
+core/gui/style/GuiStyleSheet.hpp:4:#include <string_view>
+core/gui/style/GuiStyleSheet.hpp:6:#include "gui/data/GuiComponents.hpp" // kGuiNoClass
+core/gui/style/GuiStyleSheet.hpp:7:#include "gui/text/GuiTextEngine.hpp"
+core/gui/layout/GuiScissor.hpp:3:#include <algorithm>
+core/gui/layout/GuiScissor.hpp:5:#include "gui/data/GuiComponents.hpp"
+core/gui/layout/GuiLayoutEngine.hpp:3:#include "gui/data/GuiComponents.hpp"
+core/gui/Gui.hpp:3:#include <cstdint>
+core/gui/Gui.hpp:5:#include <vulkan/vulkan_core.h> // VkCommandBuffer handle type only; this module never links Vulkan
+core/gui/Gui.hpp:7:#include "gui/data/GuiComponents.hpp"
+core/gui/Gui.hpp:8:#include "gui/interaction/InteractState.hpp"
+core/gui/Gui.hpp:9:#include "gui/interaction/InteractTextEdit.hpp"
+core/gui/Gui.hpp:10:#include "gui/style/GuiStyleSheet.hpp"
+core/gui/Gui.hpp:11:#include "gui/virtual/GuiVirtualPool.hpp"
+core/gui/Gui.hpp:12:#include "platform/Input.hpp"
+core/gui/Gui.hpp:13:#include "ui/Primitive.hpp"
 engine/gpu_scene/Mat4.hpp:3:#include <cmath>
 engine/gpu_scene/Mat4.hpp:4:#include <cstdint>
 engine/gpu_scene/Mat4.hpp:5:#include <cstring>
@@ -1181,17 +903,6 @@ core/ui/widget/Choice.cpp:4:#include "ui/State.hpp"
 core/ui/widget/Choice.cpp:5:#include "ui/StyleSheet.hpp"
 core/ui/widget/Choice.cpp:7:#include <cstring>
 core/ui/widget/Choice.cpp:8:#include <cstdint>
-core/ui/widget/Chrome.cpp:1:#include "ui/Geometry.hpp"
-core/ui/widget/Chrome.cpp:2:#include "ui/Icon.hpp"
-core/ui/widget/Chrome.cpp:3:#include "ui/UiBin.hpp"
-core/ui/widget/Chrome.cpp:4:#include "ui/Hover.hpp"
-core/ui/widget/Chrome.cpp:5:#include "ui/Panel.hpp"
-core/ui/widget/Chrome.cpp:6:#include "ui/widget/Chrome.hpp"
-core/ui/widget/Chrome.cpp:7:#include "ui/widget/Fold.hpp"
-core/ui/widget/Chrome.cpp:8:#include "ui/widget/Label.hpp"
-core/ui/widget/Chrome.cpp:9:#include "ui/State.hpp"
-core/ui/widget/Chrome.cpp:10:#include "ui/StyleSheet.hpp"
-core/ui/widget/Chrome.cpp:11:#include "ui/Template.hpp"
 core/ui/widget/Curve.cpp:1:#include "ui/widget/Curve.hpp"
 core/ui/widget/Curve.cpp:3:#include "ui/Hover.hpp"
 core/ui/widget/Curve.cpp:4:#include "ui/Panel.hpp"
@@ -1210,30 +921,7 @@ core/ui/widget/DragDrop.cpp:8:#include "ui/State.hpp"
 core/ui/widget/DragDrop.cpp:9:#include "ui/Template.hpp"
 core/ui/widget/DragDrop.cpp:10:#include "ui/StyleSheet.hpp"
 core/ui/widget/DragDrop.cpp:12:#include <algorithm>
-core/ui/widget/Field.cpp:1:#include "Str.hpp"
-core/ui/widget/Field.cpp:2:#include "ui/Bar.hpp"
-core/ui/widget/Field.cpp:3:#include "ui/Icon.hpp"
-core/ui/widget/Field.cpp:4:#include "ui/Primitive.hpp"
-core/ui/widget/Field.cpp:5:#include "ui/PrimitiveBatch.hpp"
-core/ui/widget/Field.cpp:6:#include "ui/Hover.hpp"
-core/ui/widget/Field.cpp:7:#include "ui/Panel.hpp"
-core/ui/widget/Field.cpp:8:#include "ui/widget/Field.hpp"
-core/ui/widget/Field.cpp:9:#include "ui/State.hpp"
-core/ui/widget/Field.cpp:10:#include "ui/StyleSheet.hpp"
-core/ui/widget/Field.cpp:11:#include "ui/Template.hpp"
-core/ui/widget/Field.cpp:13:#include <charconv>
-core/ui/widget/Field.cpp:14:#include <cmath>
-core/ui/widget/Field.cpp:15:#include <cstdio>
-core/ui/widget/Field.cpp:16:#include <cstring>
 core/ui/widget/FieldFilter.cpp:1:#include "ui/widget/Field.hpp"
-core/ui/widget/Fold.cpp:1:#include "ui/Hover.hpp"
-core/ui/widget/Fold.cpp:2:#include "ui/Icon.hpp"
-core/ui/widget/Fold.cpp:3:#include "ui/Panel.hpp"
-core/ui/widget/Fold.cpp:4:#include "ui/Text.hpp"
-core/ui/widget/Fold.cpp:5:#include "ui/widget/Fold.hpp"
-core/ui/widget/Fold.cpp:6:#include "ui/State.hpp"
-core/ui/widget/Fold.cpp:7:#include "ui/StyleSheet.hpp"
-core/ui/widget/Fold.cpp:8:#include "ui/Template.hpp"
 core/ui/widget/Gradient.cpp:1:#include "ui/widget/Gradient.hpp"
 core/ui/widget/Gradient.cpp:3:#include "ui/Hover.hpp"
 core/ui/widget/Gradient.cpp:4:#include "ui/Panel.hpp"
@@ -1251,24 +939,6 @@ core/ui/widget/Label.cpp:2:#include "ui/State.hpp"
 core/ui/widget/Label.cpp:3:#include "ui/Template.hpp"
 core/ui/widget/Label.cpp:4:#include "ui/Text.hpp"
 core/ui/widget/Label.cpp:5:#include "ui/widget/Label.hpp"
-core/ui/widget/Menu.cpp:1:#include "ui/Hover.hpp"
-core/ui/widget/Menu.cpp:2:#include "ui/Icon.hpp"
-core/ui/widget/Menu.cpp:3:#include "ui/Panel.hpp"
-core/ui/widget/Menu.cpp:4:#include "ui/widget/Choice.hpp"
-core/ui/widget/Menu.cpp:5:#include "ui/widget/Menu.hpp"
-core/ui/widget/Menu.cpp:6:#include "ui/widget/Scroll.hpp"
-core/ui/widget/Menu.cpp:7:#include "ui/State.hpp"
-core/ui/widget/Menu.cpp:8:#include "ui/StyleSheet.hpp"
-core/ui/widget/Menu.cpp:9:#include "ui/Template.hpp"
-core/ui/widget/Menu.cpp:11:#include <span>
-core/ui/widget/Menu.cpp:13:#include <spdlog/spdlog.h>
-core/ui/widget/Number.cpp:1:#include "ui/Hover.hpp"
-core/ui/widget/Number.cpp:2:#include "ui/Panel.hpp"
-core/ui/widget/Number.cpp:3:#include "ui/PrimitiveBatch.hpp"
-core/ui/widget/Number.cpp:4:#include "ui/Text.hpp"
-core/ui/widget/Number.cpp:5:#include "ui/widget/Number.hpp"
-core/ui/widget/Number.cpp:6:#include "ui/State.hpp"
-core/ui/widget/Number.cpp:8:#include <cstdio>
 core/ui/widget/NumberEdit.cpp:1:#include "ui/widget/Field.hpp"
 core/ui/widget/NumberEdit.cpp:2:#include "ui/widget/Number.hpp"
 core/ui/widget/NumberEdit.cpp:3:#include "ui/State.hpp"
@@ -1288,46 +958,12 @@ core/ui/widget/Search.cpp:4:#include "ui/Hover.hpp"
 core/ui/widget/Search.cpp:5:#include "ui/Panel.hpp"
 core/ui/widget/Search.cpp:6:#include "ui/State.hpp"
 core/ui/widget/Search.cpp:7:#include "ui/Template.hpp"
-core/ui/widget/Virtual.cpp:1:#include "ui/Hover.hpp"
-core/ui/widget/Virtual.cpp:2:#include "ui/widget/Virtual.hpp"
-core/ui/widget/Virtual.cpp:3:#include "ui/State.hpp"
-core/ui/widget/Virtual.cpp:4:#include "ui/Panel.hpp"
-core/ui/widget/Virtual.cpp:5:#include "ui/Template.hpp"
-core/ui/widget/Virtual.cpp:6:#include "ui/StyleSheet.hpp"
-core/ui/widget/Virtual.cpp:8:#include <cstdio>
-core/ui/widget/Virtual.cpp:9:#include <cstring>
-core/ui/widget/Slider.cpp:1:#include "ui/Hover.hpp"
-core/ui/widget/Slider.cpp:2:#include "ui/Panel.hpp"
-core/ui/widget/Slider.cpp:3:#include "ui/PrimitiveBatch.hpp"
-core/ui/widget/Slider.cpp:4:#include "ui/widget/Slider.hpp"
-core/ui/widget/Slider.cpp:5:#include "ui/State.hpp"
-core/ui/widget/Slider.cpp:6:#include "ui/Template.hpp"
-core/ui/widget/Slider.cpp:8:#include <cstdio>
-core/ui/widget/Slider.cpp:9:#include <cstring>
 core/ui/widget/Tabs.cpp:1:#include "ui/Panel.hpp"
 core/ui/widget/Tabs.cpp:2:#include "ui/widget/Tabs.hpp"
 core/ui/widget/Tabs.cpp:3:#include "ui/State.hpp"
 core/ui/widget/Thumb.cpp:1:#include "ui/widget/Thumb.hpp"
 core/ui/widget/Thumb.cpp:2:#include "ui/State.hpp"
 core/ui/widget/Thumb.cpp:3:#include "ui/widget/Image.hpp"
-core/ui/widget/Check.cpp:1:#include "ui/widget/Check.hpp"
-core/ui/widget/Check.cpp:3:#include "ui/Hover.hpp"
-core/ui/widget/Check.cpp:4:#include "ui/Icon.hpp"
-core/ui/widget/Check.cpp:5:#include "ui/widget/Mark.hpp"
-core/ui/widget/Check.cpp:6:#include "ui/Panel.hpp"
-core/ui/widget/Check.cpp:7:#include "ui/PrimitiveBatch.hpp"
-core/ui/widget/Check.cpp:8:#include "ui/State.hpp"
-core/ui/widget/Check.cpp:9:#include "ui/Template.hpp"
-core/ui/widget/Check.cpp:10:#include "ui/Text.hpp"
-core/ui/widget/Check.cpp:12:#include <bit>
-core/ui/widget/Check.cpp:13:#include <cstdint>
-core/ui/widget/FieldDraw.cpp:1:#include "ui/Bar.hpp"
-core/ui/widget/FieldDraw.cpp:2:#include "ui/Icon.hpp"
-core/ui/widget/FieldDraw.cpp:3:#include "ui/PrimitiveBatch.hpp"
-core/ui/widget/FieldDraw.cpp:4:#include "ui/widget/Field.hpp"
-core/ui/widget/FieldDraw.cpp:5:#include "ui/State.hpp"
-core/ui/widget/FieldDraw.cpp:6:#include "ui/StyleSheet.hpp"
-core/ui/widget/FieldDraw.cpp:8:#include <cstdint>
 core/ui/widget/Widgets.cpp:1:#include "ui/Command.hpp"
 core/ui/widget/Widgets.cpp:2:#include "ui/widget/Button.hpp"
 core/ui/widget/Widgets.cpp:3:#include "ui/widget/Check.hpp"
@@ -1372,9 +1008,6 @@ core/ui/widget/AssetSlot.cpp:10:#include "ui/widget/Label.hpp"
 core/ui/widget/AssetSlot.cpp:11:#include "ui/State.hpp"
 core/ui/widget/AssetSlot.cpp:12:#include "ui/Template.hpp"
 core/ui/widget/AssetSlot.cpp:13:#include "ui/StyleSheet.hpp"
-core/ui/widget/TextEdit.cpp:1:#include "ui/widget/Field.hpp"
-core/ui/widget/TextEdit.cpp:2:#include "ui/State.hpp"
-core/ui/widget/TextEdit.cpp:4:#include <cstring>
 core/ui/widget/Button.cpp:1:#include "ui/widget/Button.hpp"
 core/ui/widget/Button.cpp:3:#include "ui/Hover.hpp"
 core/ui/widget/Button.cpp:4:#include "ui/Panel.hpp"
@@ -1389,26 +1022,6 @@ core/ui/widget/Segment.cpp:5:#include "ui/widget/Button.hpp"
 core/ui/widget/Segment.cpp:6:#include "ui/State.hpp"
 core/ui/widget/Segment.cpp:7:#include "ui/Template.hpp"
 core/ui/widget/Segment.cpp:8:#include "ui/StyleSheet.hpp"
-core/ui/widget/Docking.cpp:1:#include "ui/Bar.hpp"
-core/ui/widget/Docking.cpp:2:#include "ui/PrimitiveBatch.hpp"
-core/ui/widget/Docking.cpp:3:#include "ui/Geometry.hpp"
-core/ui/widget/Docking.cpp:4:#include "ui/widget/Chrome.hpp"
-core/ui/widget/Docking.cpp:5:#include "ui/widget/Docking.hpp"
-core/ui/widget/Docking.cpp:6:#include "ui/LayoutBridge.hpp"
-core/ui/widget/Docking.cpp:7:#include "ui/State.hpp"
-core/ui/widget/Docking.cpp:8:#include "ui/StyleSheet.hpp"
-core/ui/widget/Splitter.cpp:1:#include "ui/Panel.hpp"
-core/ui/widget/Splitter.cpp:2:#include "ui/widget/Splitter.hpp"
-core/ui/widget/Splitter.cpp:3:#include "ui/State.hpp"
-core/ui/widget/Splitter.cpp:4:#include "ui/StyleSheet.hpp"
-core/ui/widget/Splitter.cpp:6:#include <algorithm>
-core/ui/widget/Scroll.cpp:1:#include "ui/Bar.hpp"
-core/ui/widget/Scroll.cpp:2:#include "ui/widget/Scroll.hpp"
-core/ui/widget/Scroll.cpp:3:#include "ui/State.hpp"
-core/ui/widget/Scroll.cpp:4:#include "ui/StyleSheet.hpp"
-core/ui/widget/Scroll.cpp:6:#include <algorithm>
-core/ui/widget/Scroll.cpp:7:#include <cmath>
-core/ui/widget/Scroll.cpp:8:#include <cstring>
 core/ui/widget/VirtualGrid.cpp:1:#include "ui/Hover.hpp"
 core/ui/widget/VirtualGrid.cpp:2:#include "ui/Icon.hpp"
 core/ui/widget/VirtualGrid.cpp:3:#include "ui/widget/Virtual.hpp"
@@ -1432,30 +1045,120 @@ core/ui/widget/Breadcrumbs.cpp:2:#include "ui/widget/Button.hpp"
 core/ui/widget/Breadcrumbs.cpp:3:#include "ui/Panel.hpp"
 core/ui/widget/Breadcrumbs.cpp:4:#include "ui/State.hpp"
 core/ui/widget/Breadcrumbs.cpp:5:#include "ui/Template.hpp"
-core/ui/kit/Calendar.cpp:1:#include "Str.hpp"
-core/ui/kit/Calendar.cpp:2:#include "platform/PlatformUtil.hpp"
-core/ui/kit/Calendar.cpp:3:#include "ui/UiBin.hpp"
-core/ui/kit/Calendar.cpp:4:#include "ui/widget/Button.hpp"
-core/ui/kit/Calendar.cpp:5:#include "ui/widget/Calendar.hpp"
-core/ui/kit/Calendar.cpp:6:#include "ui/widget/Field.hpp"
-core/ui/kit/Calendar.cpp:7:#include "ui/widget/Label.hpp"
-core/ui/kit/Calendar.cpp:8:#include "ui/Panel.hpp"
-core/ui/kit/Calendar.cpp:9:#include "ui/Style.hpp"
-core/ui/kit/Calendar.cpp:10:#include "ui/LayoutBridge.hpp"
-core/ui/kit/Calendar.cpp:11:#include "ui/State.hpp"
-core/ui/kit/Calendar.cpp:12:#include "ui/Template.hpp"
-core/ui/kit/Calendar.cpp:14:#include <cmath>
-core/ui/kit/Calendar.cpp:15:#include <cstring>
-core/ui/kit/Calendar.cpp:16:#include <ctime>
-core/ui/kit/ColorDraw.cpp:1:#include "ui/Bar.hpp"
-core/ui/kit/ColorDraw.cpp:2:#include "ui/PrimitiveBatch.hpp"
-core/ui/kit/ColorDraw.cpp:3:#include "ui/widget/ColorPicker.hpp"
-core/ui/kit/ColorDraw.cpp:4:#include "color/Color.hpp"
-core/ui/kit/ColorDraw.cpp:5:#include "ui/State.hpp"
-core/ui/kit/ColorDraw.cpp:6:#include "ui/StyleSheet.hpp"
-core/ui/kit/ColorDraw.cpp:8:#include <algorithm>
-core/ui/kit/ColorDraw.cpp:9:#include <numbers>
-core/ui/kit/ColorDraw.cpp:10:#include <cmath>
+core/ui/widget/Fold.cpp:1:#include "ui/Hover.hpp"
+core/ui/widget/Fold.cpp:2:#include "ui/Icon.hpp"
+core/ui/widget/Fold.cpp:3:#include "ui/Panel.hpp"
+core/ui/widget/Fold.cpp:4:#include "ui/Text.hpp"
+core/ui/widget/Fold.cpp:5:#include "ui/widget/Fold.hpp"
+core/ui/widget/Fold.cpp:6:#include "ui/State.hpp"
+core/ui/widget/Fold.cpp:7:#include "ui/StyleSheet.hpp"
+core/ui/widget/Fold.cpp:8:#include "ui/Template.hpp"
+core/ui/widget/Scroll.cpp:1:#include "ui/Bar.hpp"
+core/ui/widget/Scroll.cpp:2:#include "ui/widget/Scroll.hpp"
+core/ui/widget/Scroll.cpp:3:#include "ui/State.hpp"
+core/ui/widget/Scroll.cpp:4:#include "ui/StyleSheet.hpp"
+core/ui/widget/Scroll.cpp:6:#include <algorithm>
+core/ui/widget/Scroll.cpp:7:#include <cmath>
+core/ui/widget/Scroll.cpp:8:#include <cstring>
+core/ui/widget/Menu.cpp:1:#include "ui/Hover.hpp"
+core/ui/widget/Menu.cpp:2:#include "ui/Icon.hpp"
+core/ui/widget/Menu.cpp:3:#include "ui/Panel.hpp"
+core/ui/widget/Menu.cpp:4:#include "ui/widget/Choice.hpp"
+core/ui/widget/Menu.cpp:5:#include "ui/widget/Menu.hpp"
+core/ui/widget/Menu.cpp:6:#include "ui/widget/Scroll.hpp"
+core/ui/widget/Menu.cpp:7:#include "ui/State.hpp"
+core/ui/widget/Menu.cpp:8:#include "ui/StyleSheet.hpp"
+core/ui/widget/Menu.cpp:9:#include "ui/Template.hpp"
+core/ui/widget/Menu.cpp:11:#include <span>
+core/ui/widget/Menu.cpp:13:#include <spdlog/spdlog.h>
+core/ui/widget/TextEdit.cpp:1:#include "ui/widget/Field.hpp"
+core/ui/widget/TextEdit.cpp:2:#include "ui/State.hpp"
+core/ui/widget/TextEdit.cpp:4:#include <cstring>
+core/ui/widget/FieldDraw.cpp:1:#include "ui/Bar.hpp"
+core/ui/widget/FieldDraw.cpp:2:#include "ui/Icon.hpp"
+core/ui/widget/FieldDraw.cpp:3:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/FieldDraw.cpp:4:#include "ui/widget/Field.hpp"
+core/ui/widget/FieldDraw.cpp:5:#include "ui/State.hpp"
+core/ui/widget/FieldDraw.cpp:6:#include "ui/StyleSheet.hpp"
+core/ui/widget/FieldDraw.cpp:8:#include <cstdint>
+core/ui/widget/Field.cpp:1:#include "Str.hpp"
+core/ui/widget/Field.cpp:2:#include "ui/Bar.hpp"
+core/ui/widget/Field.cpp:3:#include "ui/Icon.hpp"
+core/ui/widget/Field.cpp:4:#include "ui/Primitive.hpp"
+core/ui/widget/Field.cpp:5:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/Field.cpp:6:#include "ui/Hover.hpp"
+core/ui/widget/Field.cpp:7:#include "ui/Panel.hpp"
+core/ui/widget/Field.cpp:8:#include "ui/widget/Field.hpp"
+core/ui/widget/Field.cpp:9:#include "ui/State.hpp"
+core/ui/widget/Field.cpp:10:#include "ui/StyleSheet.hpp"
+core/ui/widget/Field.cpp:11:#include "ui/Template.hpp"
+core/ui/widget/Field.cpp:13:#include <charconv>
+core/ui/widget/Field.cpp:14:#include <cmath>
+core/ui/widget/Field.cpp:15:#include <cstdio>
+core/ui/widget/Field.cpp:16:#include <cstring>
+core/ui/widget/Docking.cpp:1:#include "ui/Bar.hpp"
+core/ui/widget/Docking.cpp:2:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/Docking.cpp:3:#include "ui/Geometry.hpp"
+core/ui/widget/Docking.cpp:4:#include "ui/widget/Chrome.hpp"
+core/ui/widget/Docking.cpp:5:#include "ui/widget/Docking.hpp"
+core/ui/widget/Docking.cpp:6:#include "ui/LayoutBridge.hpp"
+core/ui/widget/Docking.cpp:7:#include "ui/State.hpp"
+core/ui/widget/Docking.cpp:8:#include "ui/StyleSheet.hpp"
+core/ui/widget/Check.cpp:1:#include "ui/widget/Check.hpp"
+core/ui/widget/Check.cpp:3:#include "ui/Hover.hpp"
+core/ui/widget/Check.cpp:4:#include "ui/Icon.hpp"
+core/ui/widget/Check.cpp:5:#include "ui/widget/Mark.hpp"
+core/ui/widget/Check.cpp:6:#include "ui/Panel.hpp"
+core/ui/widget/Check.cpp:7:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/Check.cpp:8:#include "ui/State.hpp"
+core/ui/widget/Check.cpp:9:#include "ui/StyleSheet.hpp"
+core/ui/widget/Check.cpp:10:#include "ui/Template.hpp"
+core/ui/widget/Check.cpp:11:#include "ui/Text.hpp"
+core/ui/widget/Check.cpp:13:#include <bit>
+core/ui/widget/Check.cpp:14:#include <cstdint>
+core/ui/widget/Number.cpp:1:#include "ui/Hover.hpp"
+core/ui/widget/Number.cpp:2:#include "ui/Panel.hpp"
+core/ui/widget/Number.cpp:3:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/Number.cpp:4:#include "ui/Text.hpp"
+core/ui/widget/Number.cpp:5:#include "ui/widget/Number.hpp"
+core/ui/widget/Number.cpp:6:#include "ui/State.hpp"
+core/ui/widget/Number.cpp:7:#include "ui/StyleSheet.hpp"
+core/ui/widget/Number.cpp:9:#include <cstdio>
+core/ui/widget/Slider.cpp:1:#include "ui/Hover.hpp"
+core/ui/widget/Slider.cpp:2:#include "ui/Panel.hpp"
+core/ui/widget/Slider.cpp:3:#include "ui/PrimitiveBatch.hpp"
+core/ui/widget/Slider.cpp:4:#include "ui/widget/Slider.hpp"
+core/ui/widget/Slider.cpp:5:#include "ui/State.hpp"
+core/ui/widget/Slider.cpp:6:#include "ui/StyleSheet.hpp"
+core/ui/widget/Slider.cpp:8:#include <algorithm>
+core/ui/widget/Slider.cpp:9:#include "ui/Template.hpp"
+core/ui/widget/Slider.cpp:11:#include <cstdio>
+core/ui/widget/Slider.cpp:12:#include <cstring>
+core/ui/widget/Chrome.cpp:1:#include "ui/Geometry.hpp"
+core/ui/widget/Chrome.cpp:2:#include "ui/Icon.hpp"
+core/ui/widget/Chrome.cpp:3:#include "ui/UiBin.hpp"
+core/ui/widget/Chrome.cpp:4:#include "ui/Hover.hpp"
+core/ui/widget/Chrome.cpp:5:#include "ui/Panel.hpp"
+core/ui/widget/Chrome.cpp:6:#include "ui/widget/Chrome.hpp"
+core/ui/widget/Chrome.cpp:7:#include "ui/widget/Fold.hpp"
+core/ui/widget/Chrome.cpp:8:#include "ui/widget/Label.hpp"
+core/ui/widget/Chrome.cpp:9:#include "ui/State.hpp"
+core/ui/widget/Chrome.cpp:10:#include "ui/StyleSheet.hpp"
+core/ui/widget/Chrome.cpp:11:#include "ui/Template.hpp"
+core/ui/widget/Virtual.cpp:1:#include "ui/Hover.hpp"
+core/ui/widget/Virtual.cpp:2:#include "ui/widget/Virtual.hpp"
+core/ui/widget/Virtual.cpp:3:#include "ui/State.hpp"
+core/ui/widget/Virtual.cpp:4:#include "ui/Panel.hpp"
+core/ui/widget/Virtual.cpp:5:#include "ui/Template.hpp"
+core/ui/widget/Virtual.cpp:6:#include "ui/StyleSheet.hpp"
+core/ui/widget/Virtual.cpp:8:#include <cstdio>
+core/ui/widget/Virtual.cpp:9:#include <cstring>
+core/ui/widget/Splitter.cpp:1:#include "ui/Panel.hpp"
+core/ui/widget/Splitter.cpp:2:#include "ui/widget/Splitter.hpp"
+core/ui/widget/Splitter.cpp:3:#include "ui/State.hpp"
+core/ui/widget/Splitter.cpp:4:#include "ui/Template.hpp"
+core/ui/widget/Splitter.cpp:5:#include "ui/StyleSheet.hpp"
+core/ui/widget/Splitter.cpp:7:#include <algorithm>
 core/ui/kit/ColorPopup.cpp:1:#include "ui/Panel.hpp"
 core/ui/kit/ColorPopup.cpp:2:#include "color/Color.hpp"
 core/ui/kit/ColorPopup.cpp:3:#include "ui/State.hpp"
@@ -1469,26 +1172,101 @@ core/ui/kit/ColorPopup.cpp:11:#include <string_view>
 core/ui/kit/ColorPopup.cpp:12:#include <cmath>
 core/ui/kit/ColorPopup.cpp:13:#include <cstring>
 core/ui/kit/ColorPopup.cpp:14:#include <ctime>
-core/ui/kit/Color.cpp:1:#include "Str.hpp"
-core/ui/kit/Color.cpp:2:#include "ui/Icon.hpp"
-core/ui/kit/Color.cpp:3:#include "ui/Panel.hpp"
-core/ui/kit/Color.cpp:4:#include "ui/widget/Button.hpp"
-core/ui/kit/Color.cpp:5:#include "ui/widget/Chrome.hpp"
-core/ui/kit/Color.cpp:6:#include "ui/widget/Field.hpp"
-core/ui/kit/Color.cpp:7:#include "ui/widget/Label.hpp"
-core/ui/kit/Color.cpp:8:#include "ui/widget/Slider.hpp"
-core/ui/kit/Color.cpp:9:#include "color/Color.hpp"
-core/ui/kit/Color.cpp:10:#include "ui/State.hpp"
-core/ui/kit/Color.cpp:11:#include "ui/StyleSheet.hpp"
-core/ui/kit/Color.cpp:12:#include "ui/Template.hpp"
-core/ui/kit/Color.cpp:13:#include "ui/kit/ColorInternal.hpp"
-core/ui/kit/Color.cpp:15:#include <algorithm>
-core/ui/kit/Color.cpp:16:#include <charconv>
-core/ui/kit/Color.cpp:17:#include <format>
-core/ui/kit/Color.cpp:18:#include <string_view>
-core/ui/kit/Color.cpp:19:#include <cmath>
-core/ui/kit/Color.cpp:20:#include <cstring>
-core/ui/kit/Color.cpp:21:#include <ctime>
+core/ui/kit/ColorDraw.cpp:1:#include "ui/Bar.hpp"
+core/ui/kit/ColorDraw.cpp:2:#include "ui/PrimitiveBatch.hpp"
+core/ui/kit/ColorDraw.cpp:3:#include "ui/widget/ColorPicker.hpp"
+core/ui/kit/ColorDraw.cpp:4:#include "color/Color.hpp"
+core/ui/kit/ColorDraw.cpp:5:#include "ui/State.hpp"
+core/ui/kit/ColorDraw.cpp:6:#include "ui/StyleSheet.hpp"
+core/ui/kit/ColorDraw.cpp:8:#include <algorithm>
+core/ui/kit/ColorDraw.cpp:9:#include <numbers>
+core/ui/kit/ColorDraw.cpp:10:#include <cmath>
+core/ui/kit/Calendar.cpp:1:#include "Str.hpp"
+core/ui/kit/Calendar.cpp:2:#include "platform/PlatformUtil.hpp"
+core/ui/kit/Calendar.cpp:3:#include "ui/UiBin.hpp"
+core/ui/kit/Calendar.cpp:4:#include "ui/widget/Button.hpp"
+core/ui/kit/Calendar.cpp:5:#include "ui/widget/Calendar.hpp"
+core/ui/kit/Calendar.cpp:6:#include "ui/widget/Field.hpp"
+core/ui/kit/Calendar.cpp:7:#include "ui/widget/Label.hpp"
+core/ui/kit/Calendar.cpp:8:#include "ui/Panel.hpp"
+core/ui/kit/Calendar.cpp:9:#include "ui/Style.hpp"
+core/ui/kit/Calendar.cpp:10:#include "ui/LayoutBridge.hpp"
+core/ui/kit/Calendar.cpp:11:#include "ui/State.hpp"
+core/ui/kit/Calendar.cpp:12:#include "ui/StyleSheet.hpp"
+core/ui/kit/Calendar.cpp:13:#include "ui/Template.hpp"
+core/ui/kit/Calendar.cpp:15:#include <cmath>
+core/ui/kit/Calendar.cpp:16:#include <cstring>
+core/ui/kit/Calendar.cpp:17:#include <ctime>
+core/ui/kit/ColorRamps.cpp:1:#include "Str.hpp"
+core/ui/kit/ColorRamps.cpp:2:#include "color/Color.hpp"
+core/ui/kit/ColorRamps.cpp:3:#include "ui/Icon.hpp"
+core/ui/kit/ColorRamps.cpp:4:#include "ui/Panel.hpp"
+core/ui/kit/ColorRamps.cpp:5:#include "ui/State.hpp"
+core/ui/kit/ColorRamps.cpp:6:#include "ui/StyleSheet.hpp"
+core/ui/kit/ColorRamps.cpp:7:#include "ui/Template.hpp"
+core/ui/kit/ColorRamps.cpp:8:#include "ui/kit/ColorInternal.hpp"
+core/ui/kit/ColorRamps.cpp:9:#include "ui/widget/Button.hpp"
+core/ui/kit/ColorRamps.cpp:10:#include "ui/widget/Chrome.hpp"
+core/ui/kit/ColorRamps.cpp:11:#include "ui/widget/Field.hpp"
+core/ui/kit/ColorRamps.cpp:12:#include "ui/widget/Label.hpp"
+core/ui/kit/ColorRamps.cpp:13:#include "ui/widget/Slider.hpp"
+core/ui/kit/ColorRamps.cpp:15:#include <algorithm>
+core/ui/kit/ColorRamps.cpp:16:#include <cmath>
+core/ui/kit/ColorHex.cpp:1:#include "Str.hpp"
+core/ui/kit/ColorHex.cpp:2:#include "color/Color.hpp"
+core/ui/kit/ColorHex.cpp:3:#include "ui/Icon.hpp"
+core/ui/kit/ColorHex.cpp:4:#include "ui/Panel.hpp"
+core/ui/kit/ColorHex.cpp:5:#include "ui/State.hpp"
+core/ui/kit/ColorHex.cpp:6:#include "ui/StyleSheet.hpp"
+core/ui/kit/ColorHex.cpp:7:#include "ui/Template.hpp"
+core/ui/kit/ColorHex.cpp:8:#include "ui/kit/ColorInternal.hpp"
+core/ui/kit/ColorHex.cpp:9:#include "ui/widget/Button.hpp"
+core/ui/kit/ColorHex.cpp:10:#include "ui/widget/Chrome.hpp"
+core/ui/kit/ColorHex.cpp:11:#include "ui/widget/Field.hpp"
+core/ui/kit/ColorHex.cpp:12:#include "ui/widget/Label.hpp"
+core/ui/kit/ColorHex.cpp:13:#include "ui/widget/Slider.hpp"
+core/ui/kit/ColorHex.cpp:15:#include <algorithm>
+core/ui/kit/ColorHex.cpp:16:#include <charconv>
+core/ui/kit/ColorHex.cpp:17:#include <cstring>
+core/ui/kit/ColorPicker.cpp:1:#include "Str.hpp"
+core/ui/kit/ColorPicker.cpp:2:#include "color/Color.hpp"
+core/ui/kit/ColorPicker.cpp:3:#include "ui/Icon.hpp"
+core/ui/kit/ColorPicker.cpp:4:#include "ui/Panel.hpp"
+core/ui/kit/ColorPicker.cpp:5:#include "ui/State.hpp"
+core/ui/kit/ColorPicker.cpp:6:#include "ui/StyleSheet.hpp"
+core/ui/kit/ColorPicker.cpp:7:#include "ui/Template.hpp"
+core/ui/kit/ColorPicker.cpp:8:#include "ui/kit/ColorInternal.hpp"
+core/ui/kit/ColorPicker.cpp:9:#include "ui/widget/Button.hpp"
+core/ui/kit/ColorPicker.cpp:10:#include "ui/widget/Chrome.hpp"
+core/ui/kit/ColorPicker.cpp:11:#include "ui/widget/Field.hpp"
+core/ui/kit/ColorPicker.cpp:12:#include "ui/widget/Label.hpp"
+core/ui/kit/ColorPicker.cpp:13:#include "ui/widget/Slider.hpp"
+core/ui/kit/ColorQuery.cpp:1:#include "Str.hpp"
+core/ui/kit/ColorQuery.cpp:2:#include "color/Color.hpp"
+core/ui/kit/ColorQuery.cpp:3:#include "ui/Icon.hpp"
+core/ui/kit/ColorQuery.cpp:4:#include "ui/Panel.hpp"
+core/ui/kit/ColorQuery.cpp:5:#include "ui/State.hpp"
+core/ui/kit/ColorQuery.cpp:6:#include "ui/StyleSheet.hpp"
+core/ui/kit/ColorQuery.cpp:7:#include "ui/Template.hpp"
+core/ui/kit/ColorQuery.cpp:8:#include "ui/kit/ColorInternal.hpp"
+core/ui/kit/ColorQuery.cpp:9:#include "ui/widget/Button.hpp"
+core/ui/kit/ColorQuery.cpp:10:#include "ui/widget/Chrome.hpp"
+core/ui/kit/ColorQuery.cpp:11:#include "ui/widget/Field.hpp"
+core/ui/kit/ColorQuery.cpp:12:#include "ui/widget/Label.hpp"
+core/ui/kit/ColorQuery.cpp:13:#include "ui/widget/Slider.hpp"
+core/ui/kit/ColorBody.cpp:1:#include "Str.hpp"
+core/ui/kit/ColorBody.cpp:2:#include "color/Color.hpp"
+core/ui/kit/ColorBody.cpp:3:#include "ui/Icon.hpp"
+core/ui/kit/ColorBody.cpp:4:#include "ui/Panel.hpp"
+core/ui/kit/ColorBody.cpp:5:#include "ui/State.hpp"
+core/ui/kit/ColorBody.cpp:6:#include "ui/StyleSheet.hpp"
+core/ui/kit/ColorBody.cpp:7:#include "ui/Template.hpp"
+core/ui/kit/ColorBody.cpp:8:#include "ui/kit/ColorInternal.hpp"
+core/ui/kit/ColorBody.cpp:9:#include "ui/widget/Button.hpp"
+core/ui/kit/ColorBody.cpp:10:#include "ui/widget/Chrome.hpp"
+core/ui/kit/ColorBody.cpp:11:#include "ui/widget/Field.hpp"
+core/ui/kit/ColorBody.cpp:12:#include "ui/widget/Label.hpp"
+core/ui/kit/ColorBody.cpp:13:#include "ui/widget/Slider.hpp"
 core/ui/rhi/UiRenderer.cpp:1:#include "ui/rhi/UiRenderer.hpp"
 core/ui/rhi/UiRenderer.cpp:3:#include "ui/PrimitiveBatch.hpp"
 core/ui/rhi/UiRenderer.cpp:4:#include "image/ImageFile.hpp"
@@ -1542,12 +1320,6 @@ core/ui/Focus.cpp:1:#include "ui/State.hpp"
 core/ui/Input.cpp:1:#include "platform/Check.hpp"
 core/ui/Input.cpp:2:#include "Str.hpp"
 core/ui/Input.cpp:3:#include "ui/State.hpp"
-core/ui/LayoutBridge.cpp:1:#include "ui/LayoutBridge.hpp"
-core/ui/LayoutBridge.cpp:2:#include "ui/State.hpp"
-core/ui/LayoutBridge.cpp:3:#include "platform/Trace.hpp"
-core/ui/LayoutBridge.cpp:5:#include <cstdint>
-core/ui/LayoutBridge.cpp:6:#include <yoga/YGValue.h>
-core/ui/LayoutBridge.cpp:7:#include <yoga/Yoga.h>
 core/ui/Motion.cpp:1:#include "ui/State.hpp"
 core/ui/Motion.cpp:3:#include <yoga/Yoga.h>
 core/ui/Node.cpp:1:#include "platform/Check.hpp"
@@ -1571,18 +1343,6 @@ core/ui/NodeDump.cpp:7:#include <cstdint>
 core/ui/NodeDump.cpp:8:#include <cstring>
 core/ui/Icon.cpp:1:#include "ui/Icon.hpp"
 core/ui/Icon.cpp:12:#include "ui/IconNames.inc"
-core/ui/Json.cpp:1:#include "Str.hpp"
-core/ui/Json.cpp:2:#include "io/File.hpp"
-core/ui/Json.cpp:3:#include "io/JsonCursor.hpp"
-core/ui/Json.cpp:4:#include "ui/LayoutBridge.hpp"
-core/ui/Json.cpp:5:#include "ui/FlexAttr.hpp"
-core/ui/Json.cpp:6:#include "ui/Icon.hpp"
-core/ui/Json.cpp:7:#include "ui/State.hpp"
-core/ui/Json.cpp:9:#include <spdlog/spdlog.h>
-core/ui/Json.cpp:11:#include <charconv>
-core/ui/Json.cpp:12:#include <cstring>
-core/ui/Json.cpp:13:#include <cstdio>
-core/ui/Json.cpp:14:#include <system_error>
 core/ui/UiBin.cpp:1:#include "ui/UiBin.hpp"
 core/ui/UiBin.cpp:2:#include "ui/FlexAttr.hpp"
 core/ui/UiBin.cpp:3:#include "ui/Icon.hpp"
@@ -1595,12 +1355,40 @@ core/ui/StyleTokens.cpp:3:#include "io/JsonCursor.hpp"
 core/ui/StyleTokens.cpp:5:#include <spdlog/spdlog.h>
 core/ui/StyleTokens.cpp:7:#include <cstdio>
 core/ui/StyleTokens.cpp:8:#include <cstring>
+core/ui/Hover.cpp:1:#include "ui/Hover.hpp"
+core/ui/Hover.cpp:2:#include "ui/Interaction.hpp"
+core/ui/Hover.cpp:3:#include "ui/State.hpp"
+core/ui/Hit.cpp:1:#include "ui/Interaction.hpp"
+core/ui/Hit.cpp:2:#include "ui/PrimitiveBatch.hpp"
+core/ui/Hit.cpp:3:#include "ui/State.hpp"
+core/ui/Hit.cpp:4:#include "platform/Trace.hpp"
+core/ui/Hit.cpp:6:#include <yoga/Yoga.h>
+core/ui/Theme.cpp:1:#include "ui/Theme.hpp"
+core/ui/Theme.cpp:3:#include "io/File.hpp"
+core/ui/Theme.cpp:4:#include "io/JsonCursor.hpp"
+core/ui/Theme.cpp:5:#include "platform/PlatformUtil.hpp"
+core/ui/Theme.cpp:6:#include "ui/State.hpp"
+core/ui/Theme.cpp:8:#include <spdlog/spdlog.h>
+core/ui/Theme.cpp:10:#include <cstdio>
+core/ui/Theme.cpp:11:#include <cstring>
 core/ui/StyleParse.cpp:1:#include "ui/StyleInternal.hpp"
 core/ui/StyleParse.cpp:3:#include "io/JsonCursor.hpp"
 core/ui/StyleParse.cpp:5:#include <spdlog/spdlog.h>
 core/ui/StyleParse.cpp:7:#include <algorithm>
 core/ui/StyleParse.cpp:8:#include <cstdio>
 core/ui/StyleParse.cpp:9:#include <cstring>
+core/ui/Json.cpp:1:#include "Str.hpp"
+core/ui/Json.cpp:2:#include "io/File.hpp"
+core/ui/Json.cpp:3:#include "io/JsonCursor.hpp"
+core/ui/Json.cpp:4:#include "ui/LayoutBridge.hpp"
+core/ui/Json.cpp:5:#include "ui/FlexAttr.hpp"
+core/ui/Json.cpp:6:#include "ui/Icon.hpp"
+core/ui/Json.cpp:7:#include "ui/State.hpp"
+core/ui/Json.cpp:9:#include <spdlog/spdlog.h>
+core/ui/Json.cpp:11:#include <charconv>
+core/ui/Json.cpp:12:#include <cstring>
+core/ui/Json.cpp:13:#include <cstdio>
+core/ui/Json.cpp:14:#include <system_error>
 core/ui/Template.cpp:1:#include "ui/Template.hpp"
 core/ui/Template.cpp:3:#include "io/File.hpp"
 core/ui/Template.cpp:4:#include "io/JsonCursor.hpp"
@@ -1614,29 +1402,12 @@ core/ui/Template.cpp:13:#include <algorithm>
 core/ui/Template.cpp:14:#include <cstdio>
 core/ui/Template.cpp:15:#include <cstring>
 core/ui/Template.cpp:16:#include <initializer_list>
-core/ui/StyleSheet.cpp:1:#include "ui/StyleSheet.hpp"
-core/ui/StyleSheet.cpp:3:#include "io/File.hpp"
-core/ui/StyleSheet.cpp:4:#include "platform/Check.hpp"
-core/ui/StyleSheet.cpp:5:#include "platform/PlatformUtil.hpp"
-core/ui/StyleSheet.cpp:6:#include "ui/State.hpp"
-core/ui/StyleSheet.cpp:7:#include "ui/StyleInternal.hpp"
-core/ui/StyleSheet.cpp:9:#include <spdlog/spdlog.h>
-core/ui/StyleSheet.cpp:11:#include <cstring>
-core/ui/Hover.cpp:1:#include "ui/Hover.hpp"
-core/ui/Hover.cpp:2:#include "ui/Interaction.hpp"
-core/ui/Hover.cpp:3:#include "ui/State.hpp"
-core/ui/Hit.cpp:1:#include "ui/Interaction.hpp"
-core/ui/Hit.cpp:2:#include "ui/PrimitiveBatch.hpp"
-core/ui/Hit.cpp:3:#include "ui/State.hpp"
-core/ui/Hit.cpp:4:#include "platform/Trace.hpp"
-core/ui/Hit.cpp:6:#include <yoga/Yoga.h>
-core/ui/Panel.cpp:1:#include "ui/Bar.hpp"
-core/ui/Panel.cpp:2:#include "ui/Panel.hpp"
-core/ui/Panel.cpp:3:#include "ui/Interaction.hpp"
-core/ui/Panel.cpp:4:#include "ui/PrimitiveBatch.hpp"
-core/ui/Panel.cpp:5:#include "ui/State.hpp"
-core/ui/Panel.cpp:6:#include "ui/Template.hpp"
-core/ui/Panel.cpp:8:#include <bit>
+core/ui/LayoutBridge.cpp:1:#include "ui/LayoutBridge.hpp"
+core/ui/LayoutBridge.cpp:2:#include "ui/State.hpp"
+core/ui/LayoutBridge.cpp:3:#include "platform/Trace.hpp"
+core/ui/LayoutBridge.cpp:5:#include <cstdint>
+core/ui/LayoutBridge.cpp:6:#include <yoga/YGValue.h>
+core/ui/LayoutBridge.cpp:7:#include <yoga/Yoga.h>
 core/ui/Text.cpp:1:#include "Str.hpp"
 core/ui/Text.cpp:2:#include "ui/Text.hpp"
 core/ui/Text.cpp:3:#include "ui/LayoutBridge.hpp"
@@ -1656,14 +1427,22 @@ core/ui/PrimitiveBatch.cpp:10:#include <algorithm>
 core/ui/PrimitiveBatch.cpp:11:#include <bit>
 core/ui/PrimitiveBatch.cpp:12:#include <cmath>
 core/ui/PrimitiveBatch.cpp:13:#include <cstring>
-core/ui/Theme.cpp:1:#include "ui/Theme.hpp"
-core/ui/Theme.cpp:3:#include "io/File.hpp"
-core/ui/Theme.cpp:4:#include "io/JsonCursor.hpp"
-core/ui/Theme.cpp:5:#include "platform/PlatformUtil.hpp"
-core/ui/Theme.cpp:6:#include "ui/State.hpp"
-core/ui/Theme.cpp:8:#include <spdlog/spdlog.h>
-core/ui/Theme.cpp:10:#include <cstdio>
-core/ui/Theme.cpp:11:#include <cstring>
+core/ui/Panel.cpp:1:#include "ui/Bar.hpp"
+core/ui/Panel.cpp:2:#include "ui/Panel.hpp"
+core/ui/Panel.cpp:3:#include "ui/Interaction.hpp"
+core/ui/Panel.cpp:4:#include "ui/PrimitiveBatch.hpp"
+core/ui/Panel.cpp:5:#include "ui/State.hpp"
+core/ui/Panel.cpp:6:#include "ui/StyleSheet.hpp"
+core/ui/Panel.cpp:7:#include "ui/Template.hpp"
+core/ui/Panel.cpp:9:#include <bit>
+core/ui/StyleSheet.cpp:1:#include "ui/StyleSheet.hpp"
+core/ui/StyleSheet.cpp:3:#include "io/File.hpp"
+core/ui/StyleSheet.cpp:4:#include "platform/Check.hpp"
+core/ui/StyleSheet.cpp:5:#include "platform/PlatformUtil.hpp"
+core/ui/StyleSheet.cpp:6:#include "ui/State.hpp"
+core/ui/StyleSheet.cpp:7:#include "ui/StyleInternal.hpp"
+core/ui/StyleSheet.cpp:9:#include <spdlog/spdlog.h>
+core/ui/StyleSheet.cpp:11:#include <cstring>
 core/files/FileTheme.cpp:1:#include "files/Browser.hpp"
 core/files/FileTheme.cpp:2:#include "files/FileSession.hpp"
 core/files/FileTheme.cpp:3:#include "files/FileTheme.hpp"
@@ -1818,16 +1597,6 @@ core/image/ImageBlockDecode.cpp:5:#include <cstring>
 core/host/SceneMask.cpp:1:#include "host/SceneMask.hpp"
 core/host/SceneMask.cpp:3:#include "ui/State.hpp"
 core/host/SceneMask.cpp:5:#include <cstring>
-core/host/PropFilter.cpp:1:#include "host/PropGrid.hpp"
-core/host/PropFilter.cpp:2:#include "host/PropRoll.hpp"
-core/host/PropFilter.cpp:3:#include "ui/Nodes.hpp"
-core/host/PropFilter.cpp:4:#include "ui/Panel.hpp"
-core/host/PropFilter.cpp:5:#include "ui/Text.hpp"
-core/host/PropFilter.cpp:6:#include "ui/widget/Button.hpp"
-core/host/PropFilter.cpp:7:#include "ui/widget/Field.hpp"
-core/host/PropFilter.cpp:8:#include "ui/widget/Fold.hpp"
-core/host/PropFilter.cpp:9:#include "ui/widget/Search.hpp"
-core/host/PropFilter.cpp:10:#include "ui/State.hpp"
 core/host/Host.cpp:1:#include "host/Host.hpp"
 core/host/Host.cpp:2:#include "Str.hpp"
 core/host/Host.cpp:3:#include "ui/widget/ColorPicker.hpp"
@@ -1857,14 +1626,15 @@ core/host/Launcher.cpp:5:#include "ui/Icon.hpp"
 core/host/Launcher.cpp:6:#include "ui/Nodes.hpp"
 core/host/Launcher.cpp:7:#include "ui/Panel.hpp"
 core/host/Launcher.cpp:8:#include "ui/Style.hpp"
-core/host/Launcher.cpp:9:#include "ui/Text.hpp"
-core/host/Launcher.cpp:10:#include "ui/widget/Button.hpp"
-core/host/Launcher.cpp:11:#include "ui/widget/Label.hpp"
-core/host/Launcher.cpp:12:#include "ui/State.hpp"
-core/host/Launcher.cpp:13:#include "Str.hpp"
-core/host/Launcher.cpp:15:#include <cstdio>
-core/host/Launcher.cpp:16:#include <cstring>
-core/host/Launcher.cpp:17:#include <ctime>
+core/host/Launcher.cpp:9:#include "ui/Template.hpp"
+core/host/Launcher.cpp:10:#include "ui/Text.hpp"
+core/host/Launcher.cpp:11:#include "ui/widget/Button.hpp"
+core/host/Launcher.cpp:12:#include "ui/widget/Label.hpp"
+core/host/Launcher.cpp:13:#include "ui/State.hpp"
+core/host/Launcher.cpp:14:#include "Str.hpp"
+core/host/Launcher.cpp:16:#include <cstdio>
+core/host/Launcher.cpp:17:#include <cstring>
+core/host/Launcher.cpp:18:#include <ctime>
 core/host/PropGrid.cpp:1:#include "ui/Hover.hpp"
 core/host/PropGrid.cpp:2:#include "ui/Icon.hpp"
 core/host/PropGrid.cpp:3:#include "ui/Interaction.hpp"
@@ -1885,8 +1655,9 @@ core/host/PropGrid.cpp:17:#include "ui/widget/Slider.hpp"
 core/host/PropGrid.cpp:18:#include "ui/widget/Splitter.hpp"
 core/host/PropGrid.cpp:19:#include "ui/State.hpp"
 core/host/PropGrid.cpp:20:#include "ui/StyleSheet.hpp"
-core/host/PropGrid.cpp:22:#include <cmath>
-core/host/PropGrid.cpp:23:#include <cstring>
+core/host/PropGrid.cpp:21:#include "ui/Template.hpp"
+core/host/PropGrid.cpp:23:#include <cmath>
+core/host/PropGrid.cpp:24:#include <cstring>
 core/host/PropImportParse.cpp:1:#include "host/PropImportInternal.hpp"
 core/host/PropImportParse.cpp:2:#include "Str.hpp"
 core/host/PropImportParse.cpp:3:#include "ui/State.hpp"
@@ -1912,8 +1683,9 @@ core/host/PropGridControls.cpp:17:#include "ui/widget/Slider.hpp"
 core/host/PropGridControls.cpp:18:#include "ui/widget/Splitter.hpp"
 core/host/PropGridControls.cpp:19:#include "ui/State.hpp"
 core/host/PropGridControls.cpp:20:#include "ui/StyleSheet.hpp"
-core/host/PropGridControls.cpp:22:#include <cmath>
-core/host/PropGridControls.cpp:23:#include <cstring>
+core/host/PropGridControls.cpp:21:#include "ui/Template.hpp"
+core/host/PropGridControls.cpp:23:#include <cmath>
+core/host/PropGridControls.cpp:24:#include <cstring>
 core/host/PropGridVec.cpp:1:#include "ui/Hover.hpp"
 core/host/PropGridVec.cpp:2:#include "ui/Icon.hpp"
 core/host/PropGridVec.cpp:3:#include "ui/Interaction.hpp"
@@ -1934,12 +1706,14 @@ core/host/PropGridVec.cpp:17:#include "ui/widget/Slider.hpp"
 core/host/PropGridVec.cpp:18:#include "ui/widget/Splitter.hpp"
 core/host/PropGridVec.cpp:19:#include "ui/State.hpp"
 core/host/PropGridVec.cpp:20:#include "ui/StyleSheet.hpp"
-core/host/PropGridVec.cpp:22:#include <cmath>
-core/host/PropGridVec.cpp:23:#include <format>
-core/host/PropGridVec.cpp:24:#include <cstring>
+core/host/PropGridVec.cpp:21:#include "ui/Template.hpp"
+core/host/PropGridVec.cpp:23:#include <cmath>
+core/host/PropGridVec.cpp:24:#include <format>
+core/host/PropGridVec.cpp:25:#include <cstring>
 core/host/PropGridMetrics.cpp:1:#include "host/PropGridMetrics.hpp"
-core/host/PropGridMetrics.cpp:3:#include "ui/State.hpp"
-core/host/PropGridMetrics.cpp:4:#include "ui/StyleSheet.hpp"
+core/host/PropGridMetrics.cpp:3:#include "ui/Panel.hpp"
+core/host/PropGridMetrics.cpp:4:#include "ui/State.hpp"
+core/host/PropGridMetrics.cpp:5:#include "ui/StyleSheet.hpp"
 core/host/PropImportPaint.cpp:1:#include "host/PropImportInternal.hpp"
 core/host/PropImportPaint.cpp:2:#include "Str.hpp"
 core/host/PropImportPaint.cpp:4:#include "io/File.hpp"
@@ -1960,9 +1734,10 @@ core/host/PropImportPaint.cpp:18:#include "ui/widget/Slider.hpp"
 core/host/PropImportPaint.cpp:19:#include "ui/widget/Splitter.hpp"
 core/host/PropImportPaint.cpp:20:#include "ui/widget/Virtual.hpp"
 core/host/PropImportPaint.cpp:21:#include "ui/State.hpp"
-core/host/PropImportPaint.cpp:23:#include <spdlog/spdlog.h>
-core/host/PropImportPaint.cpp:25:#include <cstdio>
-core/host/PropImportPaint.cpp:26:#include <cstring>
+core/host/PropImportPaint.cpp:22:#include "ui/Template.hpp"
+core/host/PropImportPaint.cpp:24:#include <spdlog/spdlog.h>
+core/host/PropImportPaint.cpp:26:#include <cstdio>
+core/host/PropImportPaint.cpp:27:#include <cstring>
 core/host/PropImportMenu.cpp:1:#include "host/PropImportInternal.hpp"
 core/host/PropImportMenu.cpp:2:#include "Str.hpp"
 core/host/PropImportMenu.cpp:4:#include "io/File.hpp"
@@ -2080,17 +1855,30 @@ core/host/PropBind.cpp:3:#include "color/Color.hpp"
 core/host/PropBind.cpp:4:#include "ui/Hover.hpp"
 core/host/PropBind.cpp:5:#include "ui/Panel.hpp"
 core/host/PropBind.cpp:6:#include "ui/Style.hpp"
-core/host/PropBind.cpp:7:#include "ui/widget/Button.hpp"
-core/host/PropBind.cpp:8:#include "ui/widget/Check.hpp"
-core/host/PropBind.cpp:9:#include "ui/widget/Choice.hpp"
-core/host/PropBind.cpp:10:#include "ui/widget/ColorPicker.hpp"
-core/host/PropBind.cpp:11:#include "ui/widget/Field.hpp"
-core/host/PropBind.cpp:12:#include "ui/widget/Number.hpp"
-core/host/PropBind.cpp:13:#include "ui/widget/Slider.hpp"
-core/host/PropBind.cpp:14:#include "ui/State.hpp"
-core/host/PropBind.cpp:16:#include <cmath>
-core/host/PropBind.cpp:17:#include <cstdio>
-core/host/PropBind.cpp:18:#include <cstring>
+core/host/PropBind.cpp:7:#include "ui/StyleSheet.hpp"
+core/host/PropBind.cpp:8:#include "ui/Template.hpp"
+core/host/PropBind.cpp:9:#include "ui/widget/Button.hpp"
+core/host/PropBind.cpp:10:#include "ui/widget/Check.hpp"
+core/host/PropBind.cpp:11:#include "ui/widget/Choice.hpp"
+core/host/PropBind.cpp:12:#include "ui/widget/ColorPicker.hpp"
+core/host/PropBind.cpp:13:#include "ui/widget/Field.hpp"
+core/host/PropBind.cpp:14:#include "ui/widget/Number.hpp"
+core/host/PropBind.cpp:15:#include "ui/widget/Slider.hpp"
+core/host/PropBind.cpp:16:#include "ui/State.hpp"
+core/host/PropBind.cpp:18:#include <cmath>
+core/host/PropBind.cpp:19:#include <cstdio>
+core/host/PropBind.cpp:20:#include <cstring>
+core/host/PropFilter.cpp:1:#include "host/PropGrid.hpp"
+core/host/PropFilter.cpp:2:#include "host/PropRoll.hpp"
+core/host/PropFilter.cpp:3:#include "ui/Nodes.hpp"
+core/host/PropFilter.cpp:4:#include "ui/Panel.hpp"
+core/host/PropFilter.cpp:5:#include "ui/Template.hpp"
+core/host/PropFilter.cpp:6:#include "ui/Text.hpp"
+core/host/PropFilter.cpp:7:#include "ui/widget/Button.hpp"
+core/host/PropFilter.cpp:8:#include "ui/widget/Field.hpp"
+core/host/PropFilter.cpp:9:#include "ui/widget/Fold.hpp"
+core/host/PropFilter.cpp:10:#include "ui/widget/Search.hpp"
+core/host/PropFilter.cpp:11:#include "ui/State.hpp"
 core/wasm/WasmHost.cpp:1:#include "wasm/WasmHost.hpp"
 core/wasm/WasmHost.cpp:2:#include "Str.hpp"
 core/wasm/WasmHost.cpp:4:#include <cstring>
@@ -2171,6 +1959,81 @@ core/audio/Audio.cpp:15:#include <cmath>
 core/audio/Audio.cpp:16:#include <cstdint>
 core/audio/Audio.cpp:17:#include <cstring>
 core/audio/Audio.cpp:18:#include <vector>
+core/gui/text/GuiTextEngine.cpp:1:#include "gui/text/GuiTextEngine.hpp"
+core/gui/text/GuiTextEngine.cpp:3:#include <cstring>
+core/gui/interaction/InteractHover.cpp:1:#include "gui/interaction/InteractHover.hpp"
+core/gui/interaction/InteractHover.cpp:3:#include "gui/input/GuiHitTest.hpp"
+core/gui/interaction/InteractClick.cpp:1:#include "gui/interaction/InteractClick.hpp"
+core/gui/interaction/InteractClick.cpp:3:#include "gui/input/GuiHitTest.hpp"
+core/gui/interaction/InteractScroll.cpp:1:#include "gui/interaction/InteractScroll.hpp"
+core/gui/interaction/InteractScroll.cpp:3:#include <algorithm>
+core/gui/interaction/InteractFocus.cpp:1:#include "gui/interaction/InteractFocus.hpp"
+core/gui/interaction/InteractFocus.cpp:3:#include "gui/input/GuiHitTest.hpp"
+core/gui/interaction/InteractTextEdit.cpp:1:#include "gui/interaction/InteractTextEdit.hpp"
+core/gui/interaction/InteractTextEdit.cpp:3:#include <algorithm>
+core/gui/interaction/InteractTextEdit.cpp:4:#include <cstring>
+core/gui/interaction/InteractTextEdit.cpp:5:#include <string_view>
+core/gui/interaction/InteractTextEdit.cpp:7:#include "gui/input/GuiHitTest.hpp"
+core/gui/interaction/Interact.cpp:1:#include "gui/interaction/Interact.hpp"
+core/gui/interaction/Interact.cpp:3:#include "gui/interaction/InteractClick.hpp"
+core/gui/interaction/Interact.cpp:4:#include "gui/interaction/InteractDrag.hpp"
+core/gui/interaction/Interact.cpp:5:#include "gui/interaction/InteractFocus.hpp"
+core/gui/interaction/Interact.cpp:6:#include "gui/interaction/InteractHover.hpp"
+core/gui/interaction/Interact.cpp:7:#include "gui/interaction/InteractScroll.hpp"
+core/gui/interaction/InteractDrag.cpp:1:#include "gui/interaction/InteractDrag.hpp"
+core/gui/interaction/InteractDrag.cpp:3:#include <algorithm>
+core/gui/interaction/InteractDrag.cpp:4:#include <cmath>
+core/gui/interaction/InteractDrag.cpp:6:#include "gui/input/GuiHitTest.hpp"
+core/gui/virtual/GuiVirtualPool.cpp:1:#include "gui/virtual/GuiVirtualPool.hpp"
+core/gui/virtual/GuiVirtualPool.cpp:3:#include <algorithm>
+core/gui/virtual/GuiVirtualPool.cpp:4:#include <cmath>
+core/gui/virtual/GuiVirtualPool.cpp:6:#include "gui/layout/GuiLayoutEngine.hpp"
+core/gui/virtual/GuiVirtualPool.cpp:7:#include "platform/Check.hpp"
+core/gui/overlay/GuiOverlay.cpp:1:#include "gui/overlay/GuiOverlay.hpp"
+core/gui/overlay/GuiOverlay.cpp:3:#include <algorithm>
+core/gui/render/GuiEmitter.cpp:1:#include "gui/render/GuiEmitter.hpp"
+core/gui/render/GuiEmitter.cpp:3:#include <algorithm>
+core/gui/render/GuiEmitter.cpp:4:#include <bit>
+core/gui/render/GuiEmitter.cpp:5:#include <cmath>
+core/gui/render/GuiEmitter.cpp:6:#include <string_view>
+core/gui/render/GuiEmitter.cpp:8:#include "gui/interaction/InteractTextEdit.hpp"
+core/gui/render/GuiEmitter.cpp:9:#include "gui/text/GuiTextEngine.hpp"
+core/gui/loader/GuiLoader.cpp:1:#include "gui/loader/GuiLoader.hpp"
+core/gui/loader/GuiLoader.cpp:3:#include <algorithm>
+core/gui/loader/GuiLoader.cpp:4:#include <cstring>
+core/gui/loader/GuiLoader.cpp:6:#include "gui/layout/GuiLayoutEngine.hpp"
+core/gui/loader/GuiLoader.cpp:7:#include "gui/style/GuiStyleResolver.hpp"
+core/gui/loader/GuiLoader.cpp:8:#include "io/JsonCursor.hpp"
+core/gui/input/GuiHitTest.cpp:1:#include "gui/input/GuiHitTest.hpp"
+core/gui/input/GuiHitTest.cpp:3:#include "gui/layout/GuiLayoutEngine.hpp"
+core/gui/input/GuiHitTest.cpp:4:#include "gui/layout/GuiScissor.hpp"
+core/gui/style/GuiStyleSheet.cpp:1:#include "gui/style/GuiStyleSheet.hpp"
+core/gui/style/GuiStyleSheet.cpp:3:#include <charconv>
+core/gui/style/GuiStyleSheet.cpp:4:#include <cstdio>
+core/gui/style/GuiStyleSheet.cpp:5:#include <cstring>
+core/gui/style/GuiStyleSheet.cpp:6:#include <span>
+core/gui/style/GuiStyleSheet.cpp:8:#include "io/File.hpp"
+core/gui/style/GuiStyleSheet.cpp:9:#include "io/JsonCursor.hpp"
+core/gui/style/GuiStyleSheet.cpp:10:#include "platform/Check.hpp"
+core/gui/style/GuiStyleResolver.cpp:1:#include "gui/style/GuiStyleResolver.hpp"
+core/gui/style/GuiStyleResolver.cpp:3:#include "platform/Check.hpp"
+core/gui/layout/GuiScissor.cpp:1:#include "gui/layout/GuiScissor.hpp"
+core/gui/layout/GuiLayoutEngine.cpp:1:#include "gui/layout/GuiLayoutEngine.hpp"
+core/gui/layout/GuiLayoutEngine.cpp:3:#include <algorithm>
+core/gui/layout/GuiLayoutEngine.cpp:4:#include <cmath>
+core/gui/layout/GuiLayoutEngine.cpp:5:#include <new>
+core/gui/layout/GuiLayoutEngine.cpp:6:#include <string_view>
+core/gui/layout/GuiLayoutEngine.cpp:8:#include "gui/text/GuiTextEngine.hpp"
+core/gui/layout/GuiLayoutEngine.cpp:9:#include "platform/Check.hpp"
+core/gui/Gui.cpp:1:#include "gui/Gui.hpp"
+core/gui/Gui.cpp:3:#include <cstddef>
+core/gui/Gui.cpp:4:#include <cstring>
+core/gui/Gui.cpp:6:#include "gui/interaction/Interact.hpp"
+core/gui/Gui.cpp:7:#include "gui/layout/GuiLayoutEngine.hpp"
+core/gui/Gui.cpp:8:#include "gui/layout/GuiScissor.hpp"
+core/gui/Gui.cpp:9:#include "gui/overlay/GuiOverlay.hpp"
+core/gui/Gui.cpp:10:#include "gui/render/GuiEmitter.hpp"
+core/gui/Gui.cpp:11:#include "platform/Check.hpp"
 engine/gpu_scene/Physics.cpp:1:#include "gpu_scene/Physics.hpp"
 engine/gpu_scene/Physics.cpp:3:#include "gpu_scene/Mat4.hpp"
 engine/gpu_scene/Physics.cpp:4:#include "gpu_scene/SceneObject.hpp"
@@ -3066,6 +2929,14 @@ core/image/ImageCompress.hpp:34:void compressRgbaLevel(const uint8_t* src, uint3
 core/image/ImageUpload.hpp:58:    VkFormat format,
 core/host/Host.hpp:24:using HostSceneRecordFn = void (*)(void* user, VkCommandBuffer cmd, Device& device, DescriptorHeaps& heaps, const Swapchain& swap, const FrameContext& frame);
 core/host/Host.hpp:50:    VkSurfaceKHR surface = VK_NULL_HANDLE;
+core/gui/data/GuiComponents.hpp:17:// Yoga node owned by the layout engine. The entity is stored in YGNodeGetContext.
+core/gui/data/GuiComponents.hpp:19:    YGNodeRef node = nullptr;
+core/gui/layout/GuiLayoutEngine.hpp:9:// Ownership: every entity with a UiFlex owns one YGNode created by guiLayoutAttach. The node's context points at a
+core/gui/layout/GuiLayoutEngine.hpp:12:// Yoga styles are written by the style resolver (YGNodeStyleSet* on UiFlex::node); this module never styles nodes.
+core/gui/layout/GuiLayoutEngine.hpp:27:// Creates the YGNode of `e`, stores the entity id in its context, sets UiFlex (and an empty UiBox) on `e` and appends
+core/gui/layout/GuiLayoutEngine.hpp:50:flecs::entity guiLayoutEntity(flecs::world& w, YGNodeConstRef node);
+core/gui/Gui.hpp:5:#include <vulkan/vulkan_core.h> // VkCommandBuffer handle type only; this module never links Vulkan
+core/gui/Gui.hpp:52:void guiRender(GuiContext& ctx, VkCommandBuffer cmd);
 engine/include/render/Cube.hpp:21:void cubePassRecord(VkCommandBuffer cmd, const CubePass& p, TrackedImage& color, TrackedImage& depth, const uint32_t counts[6], uint32_t face, bool clearColor);
 engine/include/render/Cube.hpp:22:void probeBakeRecord(VkCommandBuffer cmd, const CubePass& p, VkBuffer probes, VkDeviceSize probeBytes);
 engine/include/render/Cull.hpp:20:void occlPassRecord(VkCommandBuffer cmd, const OcclPass& p, const GpuBuffer& indirect, const GpuBuffer& flags, const GpuBuffer& visible, uint32_t count, bool late, uint32_t flight);
@@ -3283,12 +3154,10 @@ core/ui/widget/Field.hpp:25:struct UiFieldMenuMark {};
 core/ui/widget/Field.hpp:26:struct UiFieldCaret {};
 core/ui/widget/Chrome.hpp:12:struct UiTitleBar {};
 core/ui/widget/Chrome.hpp:13:struct UiResizable {};
+core/ui/kit/ColorInternal.hpp:9:struct UiField;
 core/ui/rhi/UiPhoto.hpp:12:struct UiState;
 core/ui/LayoutBridge.hpp:9:struct UiState;
 core/ui/Hover.hpp:7:struct UiState;
-core/ui/PrimitiveBatch.hpp:9:struct UiState;
-core/ui/PrimitiveBatch.hpp:10:struct UiNodeBars;
-core/ui/PrimitiveBatch.hpp:11:struct UiBar;
 core/ui/Text.hpp:12:struct UiState;
 core/ui/UiWindowBridge.hpp:9:struct UiState;
 core/ui/Types.hpp:7:struct UiState;
@@ -3311,6 +3180,9 @@ core/ui/UiBin.hpp:117:struct UiState;
 core/ui/StyleInternal.hpp:9:struct Cur;
 core/ui/State.hpp:21:struct UiState;
 core/ui/State.hpp:72:struct UiNoHit {}; // Пустой тег: объект нематериален для курсора мыши
+core/ui/PrimitiveBatch.hpp:9:struct UiState;
+core/ui/PrimitiveBatch.hpp:10:struct UiNodeBars;
+core/ui/PrimitiveBatch.hpp:11:struct UiBar;
 core/host/PropGrid.hpp:7:struct UiRowHover {};
 core/host/PropGrid.hpp:21:struct UiPropTrail {};
 core/host/SceneMask.hpp:7:struct UiState;
@@ -3318,6 +3190,15 @@ core/host/Host.hpp:12:struct ColorBook;
 core/host/Host.hpp:18:struct Host;
 core/host/PropBind.hpp:56:struct UiPropBinder;
 core/audio/Audio.hpp:7:struct AudioWorld;
+core/gui/data/GuiComponents.hpp:152:struct UiHoverable {};
+core/gui/data/GuiComponents.hpp:153:struct UiHovered {};
+core/gui/data/GuiComponents.hpp:154:struct UiPressed {};
+core/gui/data/GuiComponents.hpp:155:struct UiFocusable {};
+core/gui/data/GuiComponents.hpp:156:struct UiFocused {};
+core/gui/data/GuiComponents.hpp:157:struct UiScrollable {};
+core/gui/data/GuiComponents.hpp:158:struct UiClipChildren {}; // entity clips descendants to its own box (scroll views, popups)
+core/gui/data/GuiComponents.hpp:159:struct UiHidden {};       // entity and subtree skipped by hit test and emitter
+core/gui/data/GuiComponents.hpp:160:struct UiRoot {};         // layout root (one per screen / overlay)
 engine/gpu_scene/SceneObject.hpp:85:struct SunObj {};
 engine/gpu_scene/SceneObject.hpp:86:struct PostObj {};
 engine/gpu_scene/SceneObject.hpp:87:struct PropObj {};
