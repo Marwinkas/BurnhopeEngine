@@ -1,7 +1,0 @@
-{
-  "role": "menu_item",
-  "class": "menu_item",
-  "flex": { "align": "start", "justify": "start", "shrink": 0, "wp": 100 },
-  "text": { "align": "left", "valign": "center", "ellipsis": "end", "leading": 1 },
-  "traits": ["hoverable", "focusable"]
-}

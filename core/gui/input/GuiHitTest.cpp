@@ -62,7 +62,9 @@ GuiWalk hitVisit(flecs::entity e, void* user) {
     if (clip == nullptr || !guiClipContains(*clip, hit.x, hit.y)) {
         return GuiWalk::Continue;
     }
-    if (e.has<UiPaint>() || guiIsTarget(e)) {
+    // A fully transparent panel (layout container, viewport window) does not occlude what is behind it.
+    const UiPaint* paint = e.try_get<UiPaint>();
+    if ((paint != nullptr && paint->tint[3] > 0.0f) || guiIsTarget(e)) {
         hit.best = e.id();
     }
     return GuiWalk::Continue;

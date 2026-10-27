@@ -1,6 +1,0 @@
-{
-  "role": "search",
-  "class": "search_field",
-  "flex": { "shrink": 0 },
-  "traits": ["hoverable", "focusable", "text_input"]
-}

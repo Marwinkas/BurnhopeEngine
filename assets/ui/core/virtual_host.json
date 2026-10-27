@@ -1,9 +1,0 @@
-{
-  "role": "virtual_host",
-  "flex": { "dir": "column", "align": "stretch", "justify": "start" },
-  "traits": ["scroll"],
-  "parts": [
-    { "name": "inner", "role": "virtual_inner", "flex": { "shrink": 0, "wp": 100 } }
-  ],
-  "slots": { "inner": "inner" }
-}

@@ -6,7 +6,7 @@ namespace burnhope {
 
 // One registered draw pass (plan Фаза 1/5 contract): explicit shaders in, explicit draw
 // count in, exactly one vkCmdDraw*/vkCmdDrawMeshTasksEXT out, no hidden global state between
-// passes. This is the single point core/ui and engine/render both call instead of repeating
+// passes. This is the single point core/rhi/ui and engine/render both call instead of repeating
 // cmdBindMeshFrag/cmdBindVertFrag + the draw call — a later render graph (Фаза 13) can be
 // built out of a list of these without either side knowing about the other.
 struct MeshDrawDesc {

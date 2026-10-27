@@ -340,6 +340,9 @@ target_link_libraries(bh_host PUBLIC bh_gui bh_rhi_ui volk bh_rhi bh_platform bh
 bh_module(app
     demo/app/Engine.cpp
     demo/app/SceneBlockFill.cpp
+    demo/app/InspectorController.cpp
+    demo/app/BrowserController.cpp
+    demo/app/ToolbarController.cpp
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
 target_link_libraries(bh_app PUBLIC bh_host bh_gui bh_rhi_ui bh_gpu_scene)
@@ -819,6 +822,7 @@ set(BH_TEST_SOURCES
     tests/gfx/TestGfxScene.cpp
     tests/gfx/TestStreaming.cpp
     tests/gui/TestGuiCore.cpp
+    tests/gui/TestGuiWidgets.cpp
 )
 add_executable(BurnhopeTest ${BH_TEST_SOURCES})
 target_link_libraries(BurnhopeTest PRIVATE

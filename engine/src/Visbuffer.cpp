@@ -161,7 +161,7 @@ void visPassRecord(VkCommandBuffer cmd, VkExtent2D extent, VisPass& p, const Vis
     depthClear.depthStencil.depth = 0.0f;
     RenderingPass rendering = beginRenderingColorDepth(cmd, extent, t.vis.image.view, t.depth.image.view, visClear, depthClear, !load);
     cmdSetGraphicsDynamic(cmd, extent, 1, true, false, BlendMode::None, true);
-    // Same rhi/MeshDraw entry point as core/ui/Canvas.cpp — one registered draw per pass
+    // Same rhi/MeshDraw entry point as core/rhi/ui/Canvas.cpp — one registered draw per pass
     // (plan Фаза 1/5), no second mesh-shader dispatch path for engine/.
     const FlightPush push{flight & 1u, 0, 0, 0};
     meshDrawRecord(cmd, MeshDrawDesc{

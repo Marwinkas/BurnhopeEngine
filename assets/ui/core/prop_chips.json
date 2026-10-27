@@ -1,5 +1,0 @@
-{
-  "role": "row",
-  "class": "prop_chips",
-  "flex": { "dir": "row", "wrap": true, "shrink": 0, "wp": 100 }
-}

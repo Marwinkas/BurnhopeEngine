@@ -1,6 +1,0 @@
-{
-  "role": "check",
-  "class": "checkbox",
-  "text": { "align": "left", "valign": "center", "ellipsis": "end", "leading": 1 },
-  "traits": ["hoverable", "focusable", "pressable"]
-}

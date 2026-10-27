@@ -1,5 +1,8 @@
 #pragma once
 
+#include "app/BrowserController.hpp"
+#include "app/InspectorController.hpp"
+#include "app/ToolbarController.hpp"
 #include "host/GuiHost.hpp"
 #include "host/Host.hpp"
 #include "render/SceneFrame.hpp"
@@ -70,8 +73,6 @@ struct EditorState {
     uint32_t presentSeen = 0;
     float lookX = 0.0f;
     float lookY = 0.0f;
-    uint8_t paused = 0;
-    uint8_t shownActor = 0xff;
 };
 
 struct Engine {
@@ -79,7 +80,11 @@ struct Engine {
     SceneFrame* scene = nullptr;
     EditorState editor{};
     GuiHost* gui = nullptr;
+    InspectorState inspector{};
+    BrowserState browser{};
+    ToolbarState toolbar{};
     int slot = -1;
+    bool quit = false;
 };
 
 [[nodiscard]] bool engineImportScene();

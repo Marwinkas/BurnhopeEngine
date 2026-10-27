@@ -1,5 +1,6 @@
 #include "gui/style/GuiStyleSheet.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cstdio>
 #include <cstring>
@@ -399,7 +400,11 @@ bool parseClass(Cur& c, const Consts& tokens, const GuiStyleSheet& sheet, GuiSty
                     own.set = (own.set & ~(mask(bit) | mask(isW ? kSbWPercent : kSbHPercent))) | mask(isW ? kSbWAuto : kSbHAuto);
                     continue;
                 }
-                *fslot(own, bit) = value;
+                if (float* f = fslot(own, bit)) {
+                    *f = value;
+                } else if (uint8_t* b = bslot(own, bit)) { // byte-sized numeric fields (textSize)
+                    *b = static_cast<uint8_t>(std::clamp(value, 0.0f, 255.0f));
+                }
                 own.set |= mask(bit);
                 if (isW || isH) {
                     const uint64_t pct = mask(isW ? kSbWPercent : kSbHPercent);

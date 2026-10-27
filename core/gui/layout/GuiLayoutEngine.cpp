@@ -321,6 +321,20 @@ void guiLayoutRun(flecs::world& w, float screenW, float screenH) {
     shared->metrics = nullptr;
 }
 
+void guiSetShown(flecs::entity e, bool shown) {
+    if (!e.is_alive()) {
+        return;
+    }
+    if (shown) {
+        e.remove<UiHidden>();
+    } else {
+        e.add<UiHidden>();
+    }
+    if (const UiFlex* flex = e.try_get<UiFlex>(); flex != nullptr && flex->node != nullptr) {
+        YGNodeStyleSetDisplay(flex->node, shown ? YGDisplayFlex : YGDisplayNone);
+    }
+}
+
 flecs::entity guiLayoutEntity(flecs::world& w, YGNodeConstRef node) {
     return entityOf(w.c_ptr(), ctxOf(node));
 }

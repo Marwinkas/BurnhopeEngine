@@ -25,6 +25,8 @@ struct NodeDesc {
     char cls[kGuiStyleNameCap] = {};
     char name[kGuiStyleNameCap] = {};
     char text[kGuiTextCap] = {};
+    char toggles[kGuiTogglePathCap] = {};
+    char itemClass[kGuiStyleNameCap] = {};
     uint8_t textLen = 0;
     int8_t align = -1;
     int16_t size = -1;
@@ -32,6 +34,7 @@ struct NodeDesc {
     bool hasColor = false;
     bool hidden = false;
     bool multiline = false;
+    bool flat = false;
     uint8_t axis = 0;
     uint8_t mode = 0;
     uint8_t maxLen = 127;
@@ -41,6 +44,7 @@ struct NodeDesc {
     uint32_t behaviors = 0;
     uint32_t action = 0;
     uint32_t count = 0;
+    uint32_t itemAction = 0;
     uint32_t columns = 1;
     float itemW = 0.0f;
     float itemH = 0.0f;
@@ -52,10 +56,17 @@ struct NodeDesc {
     bool hasChildren = false;
 };
 
+struct PendingToggle {
+    uint64_t entity = 0;
+    char path[kGuiTogglePathCap] = {};
+};
+
 struct LoadCtx {
     flecs::world* world = nullptr;
     const GuiStyleSheet* sheet = nullptr;
     flecs::entity root;
+    PendingToggle toggles[kGuiToggleCap] = {};
+    uint32_t toggleCount = 0;
 };
 
 bool readNumber(json::Cur& c, double& out) {
@@ -199,6 +210,12 @@ bool readField(json::Cur& c, const char* key, NodeDesc& d) {
     if (isKey(key, "name")) {
         return readString(c, d.name, sizeof(d.name), len);
     }
+    if (isKey(key, "toggles")) {
+        return readString(c, d.toggles, sizeof(d.toggles), len);
+    }
+    if (isKey(key, "itemClass")) {
+        return readString(c, d.itemClass, sizeof(d.itemClass), len);
+    }
     if (isKey(key, "text")) {
         if (!readString(c, d.text, sizeof(d.text), len)) {
             return false;
@@ -262,6 +279,9 @@ bool readField(json::Cur& c, const char* key, NodeDesc& d) {
     if (isKey(key, "hidden")) {
         return readBool(c, d.hidden);
     }
+    if (isKey(key, "flat")) {
+        return readBool(c, d.flat);
+    }
     if (isKey(key, "multiline")) {
         return readBool(c, d.multiline);
     }
@@ -277,7 +297,7 @@ bool readField(json::Cur& c, const char* key, NodeDesc& d) {
         d.hasChildren = true;
         return json::skipValue(c);
     }
-    const bool numeric = isKey(key, "size") || isKey(key, "photo") || isKey(key, "action") || isKey(key, "count") ||
+    const bool numeric = isKey(key, "size") || isKey(key, "photo") || isKey(key, "action") || isKey(key, "count") || isKey(key, "itemAction") ||
         isKey(key, "itemW") || isKey(key, "itemH") || isKey(key, "columns") || isKey(key, "mode") ||
         isKey(key, "value") || isKey(key, "minV") || isKey(key, "maxV") || isKey(key, "maxLen") || isKey(key, "layer");
     if (!numeric) {
@@ -290,6 +310,7 @@ bool readField(json::Cur& c, const char* key, NodeDesc& d) {
     else if (isKey(key, "photo")) d.photo = static_cast<int16_t>(std::clamp(n, 0.0, 254.0));
     else if (isKey(key, "action")) d.action = static_cast<uint32_t>(std::max(n, 0.0));
     else if (isKey(key, "count")) d.count = static_cast<uint32_t>(std::max(n, 0.0));
+    else if (isKey(key, "itemAction")) d.itemAction = static_cast<uint32_t>(std::max(n, 0.0));
     else if (isKey(key, "itemW")) d.itemW = static_cast<float>(n);
     else if (isKey(key, "itemH")) d.itemH = static_cast<float>(n);
     else if (isKey(key, "columns")) d.columns = static_cast<uint32_t>(std::max(n, 1.0));
@@ -302,7 +323,7 @@ bool readField(json::Cur& c, const char* key, NodeDesc& d) {
     return true;
 }
 
-void applyBehaviors(flecs::entity e, const NodeDesc& d) {
+void applyBehaviors(flecs::entity e, const NodeDesc& d, uint32_t itemClass) {
     const uint32_t b = d.behaviors;
     if ((b & (kBhHover | kBhEdit)) != 0) {
         e.add<UiHoverable>();
@@ -320,6 +341,7 @@ void applyBehaviors(flecs::entity e, const NodeDesc& d) {
         drag.maxV = d.maxV;
         drag.axis = d.axis;
         drag.mode = d.mode;
+        drag.flat = d.flat ? 1 : 0;
         e.set<UiDraggable>(drag);
         e.set<UiDragState>({});
     }
@@ -334,6 +356,8 @@ void applyBehaviors(flecs::entity e, const NodeDesc& d) {
         v.itemW = d.itemW;
         v.itemH = d.itemH;
         v.columns = std::max(1u, d.columns);
+        v.itemAction = d.itemAction;
+        v.itemClass = itemClass;
         e.set<UiVirtual>(v);
     }
     if ((b & kBhEdit) != 0) {
@@ -355,7 +379,7 @@ void applyBehaviors(flecs::entity e, const NodeDesc& d) {
         e.add<UiHidden>();
     }
     if (d.hidden) {
-        e.add<UiHidden>();
+        guiSetShown(e, false);
     }
 }
 
@@ -409,6 +433,14 @@ flecs::entity buildEntity(LoadCtx& ctx, const NodeDesc& d, flecs::entity parent)
     if (!guiLayoutAttach(e)) {
         return e;
     }
+    if (!top && (d.behaviors & kBhOverlay) != 0) {
+        // An overlay is its own layout root: it stays a flecs child (for name lookup) but leaves the parent's Yoga tree.
+        const UiFlex* parentFlex = parent.try_get<UiFlex>();
+        const UiFlex* selfFlex = e.try_get<UiFlex>();
+        if (parentFlex != nullptr && parentFlex->node != nullptr && selfFlex != nullptr && selfFlex->node != nullptr) {
+            YGNodeRemoveChild(parentFlex->node, selfFlex->node);
+        }
+    }
     const uint32_t classId = d.cls[0] != '\0' ? guiStyleFind(*ctx.sheet, d.cls) : kGuiNoClass;
     if (classId != kGuiNoClass) {
         guiStyleApply(*ctx.sheet, e, classId);
@@ -435,7 +467,12 @@ flecs::entity buildEntity(LoadCtx& ctx, const NodeDesc& d, flecs::entity parent)
             t->align = static_cast<uint8_t>(d.align);
         }
     }
-    applyBehaviors(e, d);
+    applyBehaviors(e, d, d.itemClass[0] != '\0' ? guiStyleFind(*ctx.sheet, d.itemClass) : kGuiNoClass);
+    if (d.toggles[0] != '\0' && ctx.toggleCount < kGuiToggleCap) {
+        PendingToggle& pending = ctx.toggles[ctx.toggleCount++];
+        pending.entity = e.id();
+        std::memcpy(pending.path, d.toggles, sizeof(pending.path));
+    }
     return e;
 }
 
@@ -477,7 +514,14 @@ bool guiLoadScreen(flecs::world& world, const GuiStyleSheet& sheet, std::string_
     ctx.world = &world;
     ctx.sheet = &sheet;
     json::Cur cur{source.data(), source.data() + source.size()};
-    const bool ok = parseNode(ctx, cur, parent, 0);
+    bool ok = parseNode(ctx, cur, parent, 0);
+    for (uint32_t i = 0; ok && i < ctx.toggleCount; ++i) {
+        const flecs::entity target = ctx.root.lookup(ctx.toggles[i].path);
+        ok = target.is_valid();
+        if (ok) {
+            world.entity(static_cast<flecs::entity_t>(ctx.toggles[i].entity)).set<UiToggle>({target.id()});
+        }
+    }
     if (!ok) {
         if (ctx.root.is_valid() && ctx.root.is_alive()) {
             guiLayoutDetach(ctx.root);

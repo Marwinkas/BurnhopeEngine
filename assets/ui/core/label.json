@@ -1,6 +1,0 @@
-{
-  "role": "label",
-  "class": "label",
-  "flex": { "shrink": 0 },
-  "traits": ["pass"]
-}

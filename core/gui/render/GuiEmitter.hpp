@@ -12,6 +12,7 @@ namespace burnhope::gui {
 constexpr uint32_t kGuiEmitDepthCap = 48; // deepest entity nesting that is painted
 constexpr uint32_t kGuiEmitRootCap = 32;  // UiRoot entities painted per frame
 constexpr uint32_t kGuiEmitLineCap = 8;   // wrapped text lines per entity
+constexpr float kGuiDragFillAlpha = 0.55f; // accent fill of a horizontal UiDraggable up to its value
 
 // Paints every visible entity into `out` (legacy slot-48 UiPrimitive layout, 80 bytes) and returns the primitive count
 // (never above `cap`). Zero allocation.
@@ -26,6 +27,7 @@ constexpr uint32_t kGuiEmitLineCap = 8;   // wrapped text lines per entity
 //      a photo is set on a token-0 entity (sprite only);
 //      token 0 (kTokCustom) is white, so the tint carries custom colors and tint[3] = 0 makes an entity transparent;
 //   2. photo sprite when UiPaint::photo != kGuiNoPhoto (texId = photo slot, tinted);
+//   2b. horizontal UiDraggable (axis 0): accent bar from the left edge to value * width, under the border and text;
 //   3. border stroke (palette(borderToken), UiPaint::borderW) when borderW > 0.5;
 //   4. UiText glyphs in palette kTokText inside the box minus its Yoga padding. Lines wrap (guiTextWrap) only when the
 //      padded box can hold at least 1.5 lines, otherwise one line; align 0/1/2 = left/center/right; a single line is

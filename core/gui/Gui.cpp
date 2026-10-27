@@ -13,7 +13,7 @@
 namespace burnhope::gui {
 namespace {
 
-// Mirrors UiGpuHeader (core/ui/PrimitiveBatch.hpp), the first 16 bytes of the 64-byte slot-48 header.
+// Mirrors UiGpuHeader (rhi/UiPrimitive.hpp), the first 16 bytes of the 64-byte slot-48 header.
 struct GuiGpuHeader {
     float extentX;
     float extentY;
@@ -37,6 +37,7 @@ void registerComponents(flecs::world& w) {
     w.component<UiVirtual>();
     w.component<UiVirtualItem>();
     w.component<UiOverlay>();
+    w.component<UiToggle>();
     w.component<GuiVirtualSlots>();
     w.component<GuiTextMetrics>();
     w.component<UiHoverable>();

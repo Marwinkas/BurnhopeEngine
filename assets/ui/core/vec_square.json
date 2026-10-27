@@ -1,6 +1,0 @@
-{
-  "role": "vec_square",
-  "class": "vector_lock",
-  "flex": { "shrink": 0 },
-  "traits": ["hoverable", "focusable"]
-}

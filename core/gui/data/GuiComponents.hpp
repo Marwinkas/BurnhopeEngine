@@ -77,7 +77,7 @@ struct UiDraggable {
     float maxV = 1.0f;
     uint8_t axis = 0;
     uint8_t mode = 0; // 0 absolute track (value follows pointer inside track box), 1 relative delta, 2 scrub (pointer.dx accumulation)
-    uint8_t pad0 = 0;
+    uint8_t flat = 0; // 1: the emitter draws no value bar (number fields whose range is not a meaningful fraction)
     uint8_t pad1 = 0;
 };
 
@@ -117,6 +117,8 @@ struct UiVirtual {
     uint32_t columns = 1;
     uint32_t first = 0; // first visible item index (written by pool)
     uint32_t live = 0;  // live entity count (written by pool)
+    uint32_t itemAction = 0; // click action id given to every pooled item (0 = items are not clickable)
+    uint32_t itemClass = kGuiNoClass; // style class applied to every pooled item by the host
 };
 
 // Per-child binding written by the pool: which logical item this recycled entity currently shows.
@@ -136,6 +138,13 @@ struct UiOverlay {
     uint8_t layer = 0;
 };
 
+// Click side effect: a release over the clickable flips `target`. A UiOverlay target opens/closes (anchored at this
+// entity's box when it opens); any other target is shown/hidden together with its Yoga display.
+struct UiToggle {
+    uint64_t target = 0;
+};
+
+static_assert(std::is_trivially_copyable_v<UiToggle>);
 static_assert(std::is_trivially_copyable_v<UiFlex>);
 static_assert(std::is_trivially_copyable_v<UiBox> && sizeof(UiBox) == 16);
 static_assert(std::is_trivially_copyable_v<UiClip> && sizeof(UiClip) == 16);

@@ -1,6 +1,9 @@
 #include "host/GuiHost.hpp"
 
+#include <algorithm>
+#include <charconv>
 #include <cstring>
+#include <memory>
 #include <new>
 #include <string_view>
 
@@ -10,6 +13,8 @@
 #include "Str.hpp"
 #include "gui/Gui.hpp"
 #include "gui/layout/GuiLayoutEngine.hpp"
+#include "gui/style/GuiStyleResolver.hpp"
+#include "gui/style/GuiStyleSheet.hpp"
 #include "gui/loader/GuiLoader.hpp"
 #include "gui/text/GuiTextEngine.hpp"
 #include "io/File.hpp"
@@ -18,11 +23,16 @@ namespace burnhope {
 
 namespace {
 
-constexpr uint32_t kBindCap = 64;
-constexpr uint32_t kEventCap = 64;
+constexpr uint32_t kBindCap = 192;
+constexpr uint32_t kEventCap = 128;
 constexpr uint32_t kTextCap = gui::kGuiTextCap;
 
-enum class BindKind : uint8_t { None = 0, Click, Drag, Edit };
+constexpr uint32_t kListCap = 4;
+constexpr float kListHoverPlate = 0.18f;
+constexpr float kListSelectedPlate = 0.5f;
+constexpr float kListTonePlate = 0.12f;
+
+enum class BindKind : uint8_t { None = 0, Click, Drag, Edit, List };
 
 struct Bind {
     BindKind kind = BindKind::None;
@@ -31,14 +41,24 @@ struct Bind {
     GuiClickFn click = nullptr;
     GuiValueFn value = nullptr;
     GuiTextFn text = nullptr;
+    GuiListFn list = nullptr;
     void* user = nullptr;
     float last = 0.0f;
     char lastText[kTextCap] = {};
+    char caption[kTextCap] = {}; // Drag: text of the node at bind time
+};
+
+struct List {
+    uint64_t entity = 0;
+    std::unique_ptr<GuiListEntry[]> rows;
+    uint32_t count = 0;
+    uint32_t selected = kGuiNoSelection;
 };
 
 struct Event {
     uint32_t bind = 0;
     float value = 0.0f;
+    bool activate = false;
     char text[kTextCap] = {};
 };
 
@@ -53,27 +73,43 @@ struct GuiHost {
     float appliedPx = 0.0f; // atlas size the text metrics were last taken from
     Bind binds[kBindCap]{};
     uint32_t bindCount = 0;
+    List lists[kListCap]{};
+    uint32_t listCount = 0;
     Event events[kEventCap]{};
     uint32_t eventCount = 0;
 };
 
 namespace {
 
+// Takes advances and glyph boxes from the SDF atlas (FreeType, in atlas pixels) as fractions of the atlas size.
 bool applyFontMetrics(const UiFontAtlas& atlas, gui::GuiStyleSheet& sheet) {
     float advances[kUiFontGlyphs]{};
     for (uint32_t i = 0; i < kUiFontGlyphs; ++i) {
         advances[i] = atlas.glyphs[i].advance;
     }
-    return gui::guiTextMetricsSetAdvances(sheet.text, advances, kUiFontGlyphs, atlas.fontPx);
+    if (!gui::guiTextMetricsSetAdvances(sheet.text, advances, kUiFontGlyphs, atlas.fontPx)) {
+        return false;
+    }
+    const float inv = 1.0f / atlas.fontPx;
+    for (uint32_t i = 0; i < kUiFontGlyphs; ++i) {
+        gui::GuiGlyph& g = sheet.text.glyphs[i];
+        const UiGlyphMetric& m = atlas.glyphs[i];
+        g.bearingX = m.bx * inv;
+        g.bearingY = m.by * inv;
+        g.w = m.w * inv;
+        g.h = m.h * inv;
+    }
+    return true;
 }
 
-void push(GuiHost& g, uint32_t bind, float value, const char* text) {
+void push(GuiHost& g, uint32_t bind, float value, const char* text, bool activate = false) {
     if (g.eventCount >= kEventCap) {
         return;
     }
     Event& e = g.events[g.eventCount++];
     e.bind = bind;
     e.value = value;
+    e.activate = activate;
     e.text[0] = '\0';
     if (text != nullptr) {
         (void)strCopyCap(e.text, sizeof(e.text), text);
@@ -84,11 +120,46 @@ float dragReal(const gui::UiDraggable& d) {
     return d.minV + d.value * (d.maxV - d.minV);
 }
 
+// Writes "caption  value" into a draggable node; the decimals follow the size of its range.
+void writeDragLabel(const Bind& bind, flecs::entity e, const gui::UiDraggable& d) {
+    gui::UiText* t = e.try_get_mut<gui::UiText>();
+    if (t == nullptr) {
+        return;
+    }
+    const float range = d.maxV - d.minV;
+    const int decimals = range >= 1000.0f ? 0 : (range >= 100.0f ? 1 : 2);
+    char* at = t->text;
+    char* const end = t->text + kTextCap - 1;
+    const size_t capLen = std::strlen(bind.caption);
+    if (capLen > 0 && capLen + 3 < kTextCap) {
+        std::memcpy(at, bind.caption, capLen);
+        at += capLen;
+        *at++ = ' ';
+        *at++ = ' ';
+    }
+    const auto res = std::to_chars(at, end, dragReal(d), std::chars_format::fixed, decimals);
+    *res.ptr = '\0';
+    t->len = static_cast<uint8_t>(res.ptr - t->text);
+}
+
 // Queues the events of this frame: click actions, changed drag values and changed edit texts.
 void collect(GuiHost& g) {
     const gui::GuiInteractState& in = g.ctx.interact;
     for (uint32_t b = 0; b < g.bindCount; ++b) {
         Bind& bind = g.binds[b];
+        if (bind.kind == BindKind::List) {
+            for (uint32_t i = 0; i < in.actionCount && i < gui::kGuiActionCap; ++i) {
+                if (in.actions[i].action != bind.action) {
+                    continue;
+                }
+                const flecs::entity item = g.world.entity(in.actions[i].entity);
+                const gui::UiVirtualItem* at = item.is_alive() ? item.try_get<gui::UiVirtualItem>() : nullptr;
+                if (at != nullptr && at->index != gui::kGuiVirtualUnbound) {
+                    push(g, b, static_cast<float>(at->index), nullptr, g.ctx.in.clicks >= 2);
+                }
+            }
+            continue;
+        }
         if (bind.kind == BindKind::Click) {
             for (uint32_t i = 0; i < in.actionCount && i < gui::kGuiActionCap; ++i) {
                 if (in.actions[i].action == bind.action) {
@@ -105,6 +176,7 @@ void collect(GuiHost& g) {
             const gui::UiDraggable* d = e.try_get<gui::UiDraggable>();
             if (d != nullptr && dragReal(*d) != bind.last) {
                 bind.last = dragReal(*d);
+                writeDragLabel(bind, e, *d);
                 push(g, b, bind.last, nullptr);
             }
         } else if (bind.kind == BindKind::Edit) {
@@ -112,6 +184,43 @@ void collect(GuiHost& g) {
             if (t != nullptr && std::strncmp(t->text, bind.lastText, kTextCap) != 0) {
                 (void)strCopyCap(bind.lastText, sizeof(bind.lastText), t->text);
                 push(g, b, 0.0f, bind.lastText);
+            }
+        }
+    }
+}
+
+// Fills the live pooled items of every bound list from its rows and paints the hover / selection plates.
+void refreshLists(GuiHost& g) {
+    for (uint32_t li = 0; li < g.listCount; ++li) {
+        List& list = g.lists[li];
+        const flecs::entity host = g.world.entity(list.entity);
+        const gui::GuiVirtualSlots* slots = host.try_get<gui::GuiVirtualSlots>();
+        const gui::UiVirtual* v = host.try_get<gui::UiVirtual>();
+        if (slots == nullptr || v == nullptr) {
+            continue;
+        }
+        for (uint32_t s = 0; s < gui::kGuiVirtualCap; ++s) {
+            flecs::entity item = slots->item[s] != 0 ? g.world.entity(slots->item[s]) : flecs::entity();
+            const gui::UiVirtualItem* at = item.is_valid() && item.is_alive() ? item.try_get<gui::UiVirtualItem>() : nullptr;
+            if (at == nullptr || at->index >= list.count) {
+                continue;
+            }
+            const gui::UiClass* cls = item.try_get<gui::UiClass>();
+            if (v->itemClass != gui::kGuiNoClass && (cls == nullptr || cls->id != v->itemClass)) {
+                (void)gui::guiStyleApply(g.style, item, v->itemClass);
+            }
+            const GuiListEntry& row = list.rows[at->index];
+            gui::UiText* text = item.try_get_mut<gui::UiText>();
+            if (text != nullptr && std::strncmp(text->text, row.text, kGuiListTextCap) != 0) {
+                (void)strCopyCap(text->text, sizeof(text->text), row.text);
+                text->len = static_cast<uint8_t>(std::strlen(text->text));
+            }
+            gui::UiPaint* paint = item.try_get_mut<gui::UiPaint>();
+            if (paint != nullptr) {
+                const bool selected = at->index == list.selected;
+                paint->token = selected ? gui::kTokAccent : gui::kTokItem;
+                paint->tint[3] = selected ? kListSelectedPlate
+                                          : (g.ctx.interact.hover == item.id() ? kListHoverPlate : kListTonePlate * static_cast<float>(row.tone));
             }
         }
     }
@@ -128,6 +237,7 @@ uint32_t guiLayer(void* user, const InputFrame& input, float w, float h, UiPrimi
     gui::guiSetPrimBuffer(g->ctx, dst, cap);
     gui::guiConsumeInput(g->ctx, input);
     gui::guiLayout(g->ctx, w, h);
+    refreshLists(*g);
     gui::guiRender(g->ctx, VK_NULL_HANDLE);
     collect(*g);
 
@@ -149,7 +259,11 @@ bool loadScreen(GuiHost& g, const char* path) {
 }
 
 Bind* addBind(GuiHost* g, BindKind kind, const char* path, bool hasFn, void* user) {
-    if (g == nullptr || !hasFn || g->bindCount >= kBindCap) {
+    if (g == nullptr || !hasFn) {
+        return nullptr;
+    }
+    if (g->bindCount >= kBindCap) {
+        spdlog::error("gui: bind table is full ({} entries)", kBindCap);
         return nullptr;
     }
     uint64_t entity = 0;
@@ -230,6 +344,10 @@ bool guiHostBindDrag(GuiHost* gui, const char* path, GuiValueFn fn, void* user) 
         return false;
     }
     b->last = dragReal(*d);
+    if (const gui::UiText* t = gui->world.entity(b->entity).try_get<gui::UiText>()) {
+        (void)strCopyCap(b->caption, sizeof(b->caption), t->text);
+    }
+    writeDragLabel(*b, gui->world.entity(b->entity), *d);
     return true;
 }
 
@@ -263,6 +381,7 @@ void guiHostSetValue(GuiHost* gui, const char* path, float value) {
     for (uint32_t b = 0; b < gui->bindCount; ++b) {
         if (gui->binds[b].kind == BindKind::Drag && gui->binds[b].entity == e.id()) {
             gui->binds[b].last = dragReal(*d);
+            writeDragLabel(gui->binds[b], e, *d);
         }
     }
 }
@@ -279,6 +398,97 @@ void guiHostSetText(GuiHost* gui, const char* path, const char* text) {
         if (gui->binds[b].kind == BindKind::Edit && gui->binds[b].entity == e.id()) {
             (void)strCopyCap(gui->binds[b].lastText, sizeof(gui->binds[b].lastText), t->text);
         }
+    }
+}
+
+bool guiHostBindList(GuiHost* gui, const char* path, GuiListFn fn, void* user) {
+    if (gui == nullptr || gui->listCount >= kListCap) {
+        return false;
+    }
+    Bind* b = addBind(gui, BindKind::List, path, fn != nullptr, user);
+    if (b == nullptr) {
+        return false;
+    }
+    const flecs::entity e = gui->world.entity(b->entity);
+    const gui::UiVirtual* v = e.try_get<gui::UiVirtual>();
+    auto rows = std::unique_ptr<GuiListEntry[]>(new (std::nothrow) GuiListEntry[kGuiListCap]);
+    if (v == nullptr || v->itemAction == 0 || rows == nullptr) {
+        spdlog::error("gui: {} is not a clickable virtual list", path);
+        --gui->bindCount;
+        return false;
+    }
+    b->list = fn;
+    b->action = v->itemAction;
+    List& list = gui->lists[gui->listCount++];
+    list.entity = e.id();
+    list.rows = std::move(rows);
+    return true;
+}
+
+void guiHostSetList(GuiHost* gui, const char* path, const GuiListEntry* entries, uint32_t count) {
+    const flecs::entity e = target(gui, path);
+    if (!e.is_valid() || (entries == nullptr && count > 0)) {
+        return;
+    }
+    for (uint32_t i = 0; i < gui->listCount; ++i) {
+        List& list = gui->lists[i];
+        if (list.entity != e.id()) {
+            continue;
+        }
+        list.count = count < kGuiListCap ? count : kGuiListCap;
+        std::copy_n(entries, list.count, list.rows.get());
+        list.selected = kGuiNoSelection;
+        if (gui::UiVirtual* v = e.try_get_mut<gui::UiVirtual>()) {
+            v->count = list.count;
+        }
+        if (gui::UiScroll* scroll = e.try_get_mut<gui::UiScroll>()) {
+            scroll->offY = 0.0f;
+        }
+        return;
+    }
+}
+
+void guiHostSetListSelected(GuiHost* gui, const char* path, uint32_t index) {
+    const flecs::entity e = target(gui, path);
+    for (uint32_t i = 0; e.is_valid() && i < gui->listCount; ++i) {
+        if (gui->lists[i].entity == e.id()) {
+            gui->lists[i].selected = index;
+        }
+    }
+}
+
+void guiHostSetShown(GuiHost* gui, const char* path, bool shown) {
+    const flecs::entity e = target(gui, path);
+    if (e.is_valid() && e.has<gui::UiHidden>() == shown) {
+        gui::guiSetShown(e, shown);
+    }
+}
+
+void guiHostSetColor(GuiHost* gui, const char* path, float r, float g, float b) {
+    const flecs::entity e = target(gui, path);
+    gui::UiPaint* paint = e.is_valid() ? e.try_get_mut<gui::UiPaint>() : nullptr;
+    if (paint == nullptr) {
+        return;
+    }
+    paint->token = gui::kTokCustom;
+    paint->tint[0] = r;
+    paint->tint[1] = g;
+    paint->tint[2] = b;
+    paint->tint[3] = 1.0f;
+}
+
+void guiHostSetActive(GuiHost* gui, const char* path, bool active) {
+    const flecs::entity e = target(gui, path);
+    const gui::UiClass* cls = e.is_valid() ? e.try_get<gui::UiClass>() : nullptr;
+    const gui::GuiStyle* style = cls != nullptr ? gui::guiStyleGet(gui->style, cls->id) : nullptr;
+    gui::UiPaint* paint = style != nullptr ? e.try_get_mut<gui::UiPaint>() : nullptr;
+    if (paint == nullptr) {
+        return;
+    }
+    if (active && gui::guiStyleHas(*style, gui::kSbActiveToken)) {
+        paint->token = style->activeToken;
+    } else if (gui::guiStyleHas(*style, gui::kSbToken)) {
+        paint->token = style->token;
     }
 }
 
@@ -300,6 +510,9 @@ void guiHostPump(GuiHost* gui) {
             break;
         case BindKind::Edit:
             b.text(b.user, ev.text);
+            break;
+        case BindKind::List:
+            b.list(b.user, static_cast<uint32_t>(ev.value), ev.activate);
             break;
         case BindKind::None:
             break;

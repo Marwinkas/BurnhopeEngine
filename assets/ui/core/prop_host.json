@@ -1,4 +1,0 @@
-{
-  "role": "prop_host",
-  "flex": { "dir": "column", "shrink": 0, "wp": 100, "position": "relative" }
-}

@@ -1,7 +1,0 @@
-{
-  "role": "menu_button",
-  "class": "dropdown_trigger",
-  "flex": { "dir": "row", "align": "center", "justify": "start" },
-  "text": { "align": "left", "valign": "center", "ellipsis": "end", "leading": 1 },
-  "traits": ["hoverable", "focusable"]
-}

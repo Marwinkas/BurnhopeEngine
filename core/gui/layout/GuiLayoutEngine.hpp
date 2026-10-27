@@ -46,6 +46,9 @@ void guiLayoutInvalidate(flecs::world& w);
 //  - Run guiScissorRun afterwards to refresh UiClip.
 void guiLayoutRun(flecs::world& w, float screenW, float screenH);
 
+// Shows or hides `e` and its subtree: toggles UiHidden and the Yoga display so a hidden node also frees its space.
+void guiSetShown(flecs::entity e, bool shown);
+
 // Entity owning a Yoga node, or an invalid entity when the node has no context.
 flecs::entity guiLayoutEntity(flecs::world& w, YGNodeConstRef node);
 

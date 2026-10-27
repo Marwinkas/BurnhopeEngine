@@ -8,7 +8,7 @@ namespace burnhope::gui {
 // Pure text measurement for the gui module. No Flecs, no RHI, no allocation.
 // All metrics are stored for a 1.0 em font and scaled by the caller's pixel size.
 //
-// Glyph slots follow the legacy atlas layout (core/ui/Typography.hpp uiGlyphIndex): slots 0..94 are ASCII 32..126,
+// Glyph slots follow the legacy atlas layout (rhi/ui/UiFont.hpp uiGlyphCodepoint): slots 0..94 are ASCII 32..126,
 // 95 is U+0401, 96..159 are U+0410..U+044F, 160 is U+0451. Every other codepoint falls back to '?'.
 constexpr uint32_t kGuiGlyphSlots = 192;
 

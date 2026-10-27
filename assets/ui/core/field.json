@@ -1,6 +1,0 @@
-{
-  "role": "field",
-  "class": "input_box",
-  "flex": { "shrink": 0 },
-  "traits": ["hoverable", "focusable", "text_input"]
-}

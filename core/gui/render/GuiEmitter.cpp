@@ -248,12 +248,15 @@ void emitChildren(Sink& s, flecs::entity e, uint32_t depth) {
     if (e.has(flecs::OrderedChildren)) {
         const ecs_entities_t kids = ecs_get_ordered_children(*s.world, e);
         for (int32_t i = 0; i < kids.count && s.n < s.cap; ++i) {
-            emitEntity(s, flecs::entity(*s.world, kids.ids[i]), depth + 1);
+            const flecs::entity kid(*s.world, kids.ids[i]);
+            if (!kid.has<UiOverlay>()) { // overlays are roots of their own and painted by guiEmit
+                emitEntity(s, kid, depth + 1);
+            }
         }
         return;
     }
     e.children([&](flecs::entity child) {
-        if (s.n < s.cap) {
+        if (s.n < s.cap && !child.has<UiOverlay>()) {
             emitEntity(s, child, depth + 1);
         }
     });
@@ -278,6 +281,12 @@ void emitEntity(Sink& s, flecs::entity e, uint32_t depth) {
             const bool spriteOnly = paint->photo != kGuiNoPhoto && paint->token == kTokCustom;
             if (!spriteOnly) {
                 emitRect(s, box->x, box->y, box->w, box->h, rgba, radius, clip);
+            }
+            if (const UiDraggable* drag = e.try_get<UiDraggable>(); drag != nullptr && drag->axis == 0 && drag->flat == 0) {
+                float fill[4];
+                guiStyleColor(*s.sheet, kTokAccent, fill);
+                fill[3] = kGuiDragFillAlpha;
+                emitRect(s, box->x, box->y, box->w * std::clamp(drag->value, 0.0f, 1.0f), box->h, fill, radius, clip);
             }
             if (paint->photo != kGuiNoPhoto) {
                 emitPhoto(s, *box, paint->photo, paint->tint, clip);

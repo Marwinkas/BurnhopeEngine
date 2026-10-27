@@ -55,7 +55,7 @@ void placeItem(flecs::entity item, const UiVirtual& v, uint32_t index) {
     YGNodeStyleSetHeight(node, v.itemH);
 }
 
-flecs::entity spawnItem(flecs::world& world, flecs::entity host) {
+flecs::entity spawnItem(flecs::world& world, flecs::entity host, uint32_t action) {
     flecs::entity item = world.entity().child_of(host);
     item.set<UiBox>({});
     UiPaint paint{};
@@ -64,6 +64,9 @@ flecs::entity spawnItem(flecs::world& world, flecs::entity host) {
     item.set<UiText>({});
     item.set<UiVirtualItem>({kGuiVirtualUnbound});
     item.add<UiHoverable>();
+    if (action != 0) {
+        item.set<UiClickable>({action});
+    }
     if (!guiLayoutAttach(item)) {
         item.destruct();
         return flecs::entity();
@@ -129,7 +132,7 @@ uint32_t runHost(flecs::world& world, flecs::entity host, GuiVirtualBind bind, v
         covered[s] = true;
         flecs::entity item = slots->item[s] != 0 ? world.entity(slots->item[s]) : flecs::entity();
         if (!item.is_valid() || !item.is_alive()) {
-            item = spawnItem(world, host);
+            item = spawnItem(world, host, v->itemAction);
             if (!item.is_valid()) {
                 slots->item[s] = 0;
                 covered[s] = false;

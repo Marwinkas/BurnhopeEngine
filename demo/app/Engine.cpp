@@ -18,68 +18,6 @@
 namespace burnhope {
 namespace {
 
-constexpr uint32_t kActPlay = 1;
-constexpr uint32_t kActPause = 2;
-constexpr uint32_t kActView = 3;
-constexpr uint32_t kActCamera = 4;
-constexpr uint8_t kViewCycle[] = {0, 2, 9, 13};
-
-// Poses the inspector fields drive, in the order of kPoseField.
-const char* const kPoseField[9] = {
-    "panel::posX", "panel::posY", "panel::posZ", "panel::rotX", "panel::rotY", "panel::rotZ", "panel::sclX", "panel::sclY", "panel::sclZ",
-};
-
-float* poseSlot(ActorPose& pose, uint32_t field) {
-    return field < 3 ? &pose.pos[field] : (field < 6 ? &pose.euler[field - 3] : &pose.scale[field - 6]);
-}
-
-struct FieldBind {
-    Engine* engine = nullptr;
-    uint32_t field = 0;
-};
-FieldBind gFieldBind[9];
-
-void onClick(void* user, uint32_t action) {
-    auto* e = static_cast<Engine*>(user);
-    switch (action) {
-    case kActPlay:
-        sceneFramePlay(e->scene);
-        e->editor.paused = 0;
-        break;
-    case kActPause:
-        e->editor.paused = e->editor.paused != 0 ? 0 : 1;
-        sceneFramePause(e->scene, e->editor.paused);
-        break;
-    case kActView: {
-        uint32_t next = 0;
-        for (uint32_t i = 0; i < sizeof(kViewCycle); ++i) {
-            if (kViewCycle[i] == e->editor.flags.viewMode) {
-                next = (i + 1) % sizeof(kViewCycle);
-            }
-        }
-        e->editor.flags.viewMode = kViewCycle[next];
-        break;
-    }
-    case kActCamera:
-        sceneFrameCameraProject(e->scene, sceneFrameCameraProject(e->scene) != 0 ? 0 : 1);
-        break;
-    default:
-        break;
-    }
-}
-
-void onPoseField(void* user, float value) {
-    auto* bind = static_cast<FieldBind*>(user);
-    Engine& e = *bind->engine;
-    const uint8_t selected = sceneFrameActorSelected(e.scene);
-    ActorPose pose{};
-    if (selected == kSceneActorNone || !sceneFrameActorPose(e.scene, selected, pose)) {
-        return;
-    }
-    *poseSlot(pose, bind->field) = value;
-    sceneFrameActorSetPose(e.scene, selected, pose);
-}
-
 // The GUI owns the pointer and the keyboard while it is under the cursor or holds text focus.
 void maskInput(const Canvas& canvas, InputFrame& input) {
     if (canvasPointerOver(canvas)) {
@@ -164,21 +102,15 @@ void releaseScene(void* user, Device& device) {
     sceneFrameReleaseGpu(static_cast<SceneFrame*>(user), device);
 }
 
-// Pushes the live editor records to the scene and mirrors the selected actor's pose into the inspector fields.
+// Pushes the live editor records to the scene, then lets the controllers mirror the scene back into the GUI.
 void syncScene(Engine& e) {
     EditorState& ed = e.editor;
     sceneFrameDebug(e.scene, ed.flags.hiz != 0, ed.flags.cone != 0, ed.flags.lod != 0, ed.flags.frust != 0, ed.flags.small != 0,
                     ed.flags.shadowCull != 0, ed.flags.backf != 0, ed.flags.scrn != 0, ed.flags.behind != 0, ed.flags.viewMode);
     sceneBlockFill(ed.block, ed.post, ed.tweaks, ed.flags, ed.actor);
     sceneFrameSetBlock(e.scene, ed.block);
-    const uint8_t selected = sceneFrameActorSelected(e.scene);
-    ActorPose pose{};
-    if (selected == kSceneActorNone || !sceneFrameActorPose(e.scene, selected, pose)) {
-        return;
-    }
-    for (uint32_t i = 0; i < 9; ++i) {
-        guiHostSetValue(e.gui, kPoseField[i], *poseSlot(pose, i));
-    }
+    inspectorSync(e);
+    toolbarSync(e);
 }
 
 } // namespace
@@ -235,22 +167,14 @@ bool engineInit(Engine& e, int argc, char** argv) {
     char stylesPath[512]{};
     char screenPath[512]{};
     if (canvas != nullptr && platformResolveAsset("assets/ui/styles.json", stylesPath, sizeof(stylesPath)) &&
-        platformResolveAsset("assets/gui/main.json", screenPath, sizeof(screenPath))) {
+        platformResolveAsset("assets/gui/shell.json", screenPath, sizeof(screenPath))) {
         e.gui = guiHostCreate(*canvas, stylesPath, screenPath);
     }
     if (e.gui == nullptr) {
         spdlog::error("bh_gui screen failed to load");
         return false;
     }
-    bool bound = true;
-    for (uint32_t action = kActPlay; action <= kActCamera; ++action) {
-        bound = guiHostBindClick(e.gui, action, onClick, &e) && bound;
-    }
-    for (uint32_t i = 0; i < 9; ++i) {
-        gFieldBind[i] = {&e, i};
-        bound = guiHostBindDrag(e.gui, kPoseField[i], onPoseField, &gFieldBind[i]) && bound;
-    }
-    return bound;
+    return inspectorBind(e) && toolbarBind(e) && browserBind(e);
 }
 
 void engineShutdown(Engine& e) {
@@ -271,7 +195,7 @@ bool engineTick(Engine& e) {
         sceneFrameKick(e.scene, e.host.device);
         windowTitle(e.host.view[e.host.primary].window, sceneFrameTitle(e.scene));
     }
-    return ok;
+    return ok && !e.quit;
 }
 
 } // namespace burnhope
