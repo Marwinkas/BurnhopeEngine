@@ -12,12 +12,15 @@
 
 #include "Str.hpp"
 #include "gui/Gui.hpp"
+#include "gui/data/GuiIcons.hpp"
 #include "gui/layout/GuiLayoutEngine.hpp"
 #include "gui/style/GuiStyleResolver.hpp"
 #include "gui/style/GuiStyleSheet.hpp"
 #include "gui/loader/GuiLoader.hpp"
 #include "gui/text/GuiTextEngine.hpp"
+#include "image/ImageDecode.hpp"
 #include "io/File.hpp"
+#include "platform/PlatformUtil.hpp"
 
 namespace burnhope {
 
@@ -32,7 +35,8 @@ constexpr float kListHoverPlate = 0.18f;
 constexpr float kListSelectedPlate = 0.5f;
 constexpr float kListTonePlate = 0.12f;
 
-enum class BindKind : uint8_t { None = 0, Click, Drag, Edit, List };
+enum class BindKind : uint8_t { None = 0, Click, Drag, Drag2, Edit, List };
+enum class Gesture : uint8_t { Click = 0, Activate, Context };
 
 struct Bind {
     BindKind kind = BindKind::None;
@@ -42,8 +46,11 @@ struct Bind {
     GuiValueFn value = nullptr;
     GuiTextFn text = nullptr;
     GuiListFn list = nullptr;
+    GuiContextFn context = nullptr;
+    GuiValue2Fn value2 = nullptr;
     void* user = nullptr;
     float last = 0.0f;
+    float lastY = 0.0f;
     char lastText[kTextCap] = {};
     char caption[kTextCap] = {}; // Drag: text of the node at bind time
 };
@@ -53,12 +60,18 @@ struct List {
     std::unique_ptr<GuiListEntry[]> rows;
     uint32_t count = 0;
     uint32_t selected = kGuiNoSelection;
+    uint8_t thumbSlot = gui::kGuiNoPhoto;
+    uint8_t thumbCols = 0;
+    uint8_t thumbRows = 0;
+    uint8_t tilePx = 0;
+    bool fitColumns = false;
 };
 
 struct Event {
     uint32_t bind = 0;
     float value = 0.0f;
-    bool activate = false;
+    float valueY = 0.0f;
+    Gesture gesture = Gesture::Click;
     char text[kTextCap] = {};
 };
 
@@ -102,14 +115,15 @@ bool applyFontMetrics(const UiFontAtlas& atlas, gui::GuiStyleSheet& sheet) {
     return true;
 }
 
-void push(GuiHost& g, uint32_t bind, float value, const char* text, bool activate = false) {
+void push(GuiHost& g, uint32_t bind, float value, const char* text, Gesture gesture = Gesture::Click, float valueY = 0.0f) {
     if (g.eventCount >= kEventCap) {
         return;
     }
     Event& e = g.events[g.eventCount++];
     e.bind = bind;
     e.value = value;
-    e.activate = activate;
+    e.valueY = valueY;
+    e.gesture = gesture;
     e.text[0] = '\0';
     if (text != nullptr) {
         (void)strCopyCap(e.text, sizeof(e.text), text);
@@ -155,7 +169,19 @@ void collect(GuiHost& g) {
                 const flecs::entity item = g.world.entity(in.actions[i].entity);
                 const gui::UiVirtualItem* at = item.is_alive() ? item.try_get<gui::UiVirtualItem>() : nullptr;
                 if (at != nullptr && at->index != gui::kGuiVirtualUnbound) {
-                    push(g, b, static_cast<float>(at->index), nullptr, g.ctx.in.clicks >= 2);
+                    push(g, b, static_cast<float>(at->index), nullptr, g.ctx.in.clicks >= 2 ? Gesture::Activate : Gesture::Click);
+                }
+            }
+            if (bind.context != nullptr) {
+                for (uint32_t i = 0; i < in.actionCount && i < gui::kGuiActionCap; ++i) {
+                    if (in.actions[i].action != gui::kGuiActionSecondary) {
+                        continue;
+                    }
+                    const flecs::entity item = g.world.entity(in.actions[i].entity);
+                    const gui::UiVirtualItem* at = item.is_alive() ? item.try_get<gui::UiVirtualItem>() : nullptr;
+                    if (at != nullptr && at->index != gui::kGuiVirtualUnbound && item.parent().id() == bind.entity) {
+                        push(g, b, static_cast<float>(at->index), nullptr, Gesture::Context);
+                    }
                 }
             }
             continue;
@@ -179,6 +205,13 @@ void collect(GuiHost& g) {
                 writeDragLabel(bind, e, *d);
                 push(g, b, bind.last, nullptr);
             }
+        } else if (bind.kind == BindKind::Drag2) {
+            const gui::UiDraggable* d = e.try_get<gui::UiDraggable>();
+            if (d != nullptr && (d->value != bind.last || d->valueY != bind.lastY)) {
+                bind.last = d->value;
+                bind.lastY = d->valueY;
+                push(g, b, d->value, nullptr, Gesture::Click, d->valueY);
+            }
         } else if (bind.kind == BindKind::Edit) {
             const gui::UiText* t = e.try_get<gui::UiText>();
             if (t != nullptr && std::strncmp(t->text, bind.lastText, kTextCap) != 0) {
@@ -198,6 +231,13 @@ void refreshLists(GuiHost& g) {
         const gui::UiVirtual* v = host.try_get<gui::UiVirtual>();
         if (slots == nullptr || v == nullptr) {
             continue;
+        }
+        if (list.fitColumns && v->itemW > 0.0f) {
+            const gui::UiBox* box = host.try_get<gui::UiBox>();
+            const uint32_t cols = box != nullptr ? std::max(1u, static_cast<uint32_t>(box->w / v->itemW)) : 1u;
+            if (cols != v->columns) {
+                host.try_get_mut<gui::UiVirtual>()->columns = cols;
+            }
         }
         for (uint32_t s = 0; s < gui::kGuiVirtualCap; ++s) {
             flecs::entity item = slots->item[s] != 0 ? g.world.entity(slots->item[s]) : flecs::entity();
@@ -221,6 +261,12 @@ void refreshLists(GuiHost& g) {
                 paint->token = selected ? gui::kTokAccent : gui::kTokItem;
                 paint->tint[3] = selected ? kListSelectedPlate
                                           : (g.ctx.interact.hover == item.id() ? kListHoverPlate : kListTonePlate * static_cast<float>(row.tone));
+                const bool thumbed = list.thumbSlot != gui::kGuiNoPhoto && row.thumb != 0;
+                paint->photo = thumbed ? list.thumbSlot : gui::kGuiNoPhoto;
+                paint->cell = thumbed ? static_cast<uint8_t>(row.thumb - 1u) : 0;
+                paint->cols = thumbed ? list.thumbCols : 0;
+                paint->rows = thumbed ? list.thumbRows : 0;
+                paint->tile = list.thumbSlot != gui::kGuiNoPhoto ? list.tilePx : 0;
             }
         }
     }
@@ -287,6 +333,32 @@ flecs::entity target(GuiHost* g, const char* path) {
     return g != nullptr && path != nullptr ? g->root.lookup(path) : flecs::entity();
 }
 
+// Rasterizes every registered icon SVG into its cell of one atlas and uploads it to kPhotoIconAtlas.
+bool buildIconAtlas(Canvas& canvas) {
+    std::unique_ptr<uint8_t[]> atlas(new (std::nothrow) uint8_t[static_cast<size_t>(gui::kGuiIconEdge) * gui::kGuiIconEdge * 4u]());
+    if (atlas == nullptr) {
+        return false;
+    }
+    uint32_t drawn = 0;
+    for (uint32_t cell = 1; cell < gui::guiIconCount(); ++cell) {
+        char resolved[640]{};
+        const char* asset = gui::guiIconPath(cell);
+        if (asset == nullptr || !platformResolveAsset(asset, resolved, sizeof(resolved))) {
+            spdlog::warn("gui icon: asset {} not found", asset != nullptr ? asset : "(null)");
+            continue;
+        }
+        const uint32_t x = (cell % gui::kGuiIconCells) * gui::kGuiIconCell;
+        const uint32_t y = (cell / gui::kGuiIconCells) * gui::kGuiIconCell;
+        if (imageRasterSvgCell(resolved, atlas.get(), gui::kGuiIconEdge, x, y, gui::kGuiIconCell)) {
+            ++drawn;
+        } else {
+            spdlog::warn("gui icon: failed to rasterize {}", asset);
+        }
+    }
+    spdlog::info("gui icon atlas: {} glyphs", drawn);
+    return canvasUploadPhoto(canvas, kPhotoIconAtlas, atlas.get(), gui::kGuiIconEdge, gui::kGuiIconEdge);
+}
+
 } // namespace
 
 GuiHost* guiHostCreate(Canvas& canvas, const char* stylesPath, const char* screenPath) {
@@ -301,6 +373,9 @@ GuiHost* guiHostCreate(Canvas& canvas, const char* stylesPath, const char* scree
         spdlog::error("gui: failed to load {} / {}", stylesPath, screenPath);
         guiHostDestroy(g);
         return nullptr;
+    }
+    if (!buildIconAtlas(canvas)) {
+        spdlog::warn("gui: icon atlas upload failed, icons stay blank");
     }
     canvas.layer = guiLayer;
     canvas.layerUser = g;
@@ -477,6 +552,17 @@ void guiHostSetColor(GuiHost* gui, const char* path, float r, float g, float b) 
     paint->tint[3] = 1.0f;
 }
 
+void guiHostSetIcon(GuiHost* gui, const char* path, const char* name) {
+    const flecs::entity e = target(gui, path);
+    if (!e.is_valid()) {
+        return;
+    }
+    gui::UiPaint* paint = e.try_get_mut<gui::UiPaint>();
+    if (paint != nullptr) {
+        paint->icon = name != nullptr ? gui::guiIconFind(name) : 0;
+    }
+}
+
 void guiHostSetActive(GuiHost* gui, const char* path, bool active) {
     const flecs::entity e = target(gui, path);
     const gui::UiClass* cls = e.is_valid() ? e.try_get<gui::UiClass>() : nullptr;
@@ -489,6 +575,137 @@ void guiHostSetActive(GuiHost* gui, const char* path, bool active) {
         paint->token = style->activeToken;
     } else if (gui::guiStyleHas(*style, gui::kSbToken)) {
         paint->token = style->token;
+    }
+}
+
+bool guiHostBindDrag2(GuiHost* gui, const char* path, GuiValue2Fn fn, void* user) {
+    Bind* b = addBind(gui, BindKind::Drag2, path, fn != nullptr, user);
+    if (b == nullptr) {
+        return false;
+    }
+    b->value2 = fn;
+    const gui::UiDraggable* d = gui->world.entity(b->entity).try_get<gui::UiDraggable>();
+    if (d == nullptr || d->axis != 2) {
+        spdlog::error("gui: {} is not an xy draggable", path);
+        --gui->bindCount;
+        return false;
+    }
+    b->last = d->value;
+    b->lastY = d->valueY;
+    return true;
+}
+
+namespace {
+
+List* listOf(GuiHost* gui, const char* path) {
+    const flecs::entity e = target(gui, path);
+    for (uint32_t i = 0; e.is_valid() && i < gui->listCount; ++i) {
+        if (gui->lists[i].entity == e.id()) {
+            return &gui->lists[i];
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+bool guiHostBindListContext(GuiHost* gui, const char* path, GuiContextFn fn, void* user) {
+    const flecs::entity e = target(gui, path);
+    for (uint32_t b = 0; fn != nullptr && e.is_valid() && b < gui->bindCount; ++b) {
+        Bind& bind = gui->binds[b];
+        if (bind.kind == BindKind::List && bind.entity == e.id()) {
+            bind.context = fn;
+            if (bind.user == nullptr) {
+                bind.user = user;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+void guiHostSetListThumbs(GuiHost* gui, const char* path, uint8_t slot, uint8_t cols, uint8_t rows, uint8_t tilePx) {
+    if (List* list = listOf(gui, path)) {
+        list->thumbSlot = slot;
+        list->thumbCols = cols;
+        list->thumbRows = rows;
+        list->tilePx = tilePx;
+    }
+}
+
+void guiHostSetListThumb(GuiHost* gui, const char* path, uint32_t index, uint8_t thumb) {
+    if (List* list = listOf(gui, path); list != nullptr && index < list->count) {
+        list->rows[index].thumb = thumb;
+    }
+}
+
+void guiHostSetListMetrics(GuiHost* gui, const char* path, float itemW, float itemH, bool fitColumns) {
+    List* list = listOf(gui, path);
+    gui::UiVirtual* v = list != nullptr ? gui->world.entity(list->entity).try_get_mut<gui::UiVirtual>() : nullptr;
+    if (v == nullptr || itemH <= 0.0f) {
+        return;
+    }
+    v->itemW = itemW;
+    v->itemH = itemH;
+    list->fitColumns = fitColumns;
+}
+
+void guiHostListWindow(GuiHost* gui, const char* path, uint32_t& first, uint32_t& live) {
+    first = 0;
+    live = 0;
+    const flecs::entity e = target(gui, path);
+    const gui::UiVirtual* v = e.is_valid() ? e.try_get<gui::UiVirtual>() : nullptr;
+    if (v != nullptr) {
+        first = v->first;
+        live = v->live;
+    }
+}
+
+void guiHostOpenAtPointer(GuiHost* gui, const char* path) {
+    const flecs::entity e = target(gui, path);
+    gui::UiOverlay* o = e.is_valid() ? e.try_get_mut<gui::UiOverlay>() : nullptr;
+    if (o == nullptr) {
+        return;
+    }
+    o->anchorX = gui->ctx.interact.pointerX;
+    o->anchorY = gui->ctx.interact.pointerY;
+    o->anchorW = 1.0f;
+    o->anchorH = 1.0f;
+    o->open = 1;
+}
+
+bool guiHostMount(GuiHost* gui, const char* screenPath, const char* parentPath) {
+    if (gui == nullptr || screenPath == nullptr) {
+        return false;
+    }
+    const flecs::entity parent = parentPath != nullptr && parentPath[0] != '\0' ? gui->root.lookup(parentPath) : gui->root;
+    if (!parent.is_valid()) {
+        spdlog::error("gui: mount parent {} not found", parentPath);
+        return false;
+    }
+    MappedFile file{};
+    if (!fileMapReadOnly(screenPath, &file) || file.data == nullptr) {
+        return false;
+    }
+    flecs::entity mounted;
+    const bool ok = gui::guiLoadScreen(gui->world, gui->style, std::string_view{reinterpret_cast<const char*>(file.data), file.size}, parent, &mounted);
+    fileUnmap(&file);
+    return ok;
+}
+
+void guiHostSetPhoto(GuiHost* gui, const char* path, uint8_t slot, uint8_t cell, uint8_t cols, uint8_t rows) {
+    const flecs::entity e = target(gui, path);
+    gui::UiPaint* paint = e.is_valid() ? e.try_get_mut<gui::UiPaint>() : nullptr;
+    if (paint == nullptr) {
+        return;
+    }
+    paint->photo = slot;
+    paint->cell = cell;
+    paint->cols = cols;
+    paint->rows = rows;
+    if (slot != gui::kGuiNoPhoto) {
+        paint->token = gui::kTokCustom;
+        paint->tint[0] = paint->tint[1] = paint->tint[2] = paint->tint[3] = 1.0f;
     }
 }
 
@@ -511,8 +728,15 @@ void guiHostPump(GuiHost* gui) {
         case BindKind::Edit:
             b.text(b.user, ev.text);
             break;
+        case BindKind::Drag2:
+            b.value2(b.user, ev.value, ev.valueY);
+            break;
         case BindKind::List:
-            b.list(b.user, static_cast<uint32_t>(ev.value), ev.activate);
+            if (ev.gesture == Gesture::Context) {
+                b.context(b.user, static_cast<uint32_t>(ev.value));
+            } else {
+                b.list(b.user, static_cast<uint32_t>(ev.value), ev.gesture == Gesture::Activate);
+            }
             break;
         case BindKind::None:
             break;

@@ -1,7 +1,10 @@
 #pragma once
 
 #include "app/BrowserController.hpp"
+#include "app/HierarchyController.hpp"
 #include "app/InspectorController.hpp"
+#include "app/LauncherController.hpp"
+#include "app/MaterialController.hpp"
 #include "app/ToolbarController.hpp"
 #include "host/GuiHost.hpp"
 #include "host/Host.hpp"
@@ -82,6 +85,9 @@ struct Engine {
     GuiHost* gui = nullptr;
     InspectorState inspector{};
     BrowserState browser{};
+    HierarchyState hierarchy{};
+    MaterialState material{};
+    LauncherState launcher{};
     ToolbarState toolbar{};
     int slot = -1;
     bool quit = false;

@@ -5,6 +5,7 @@
 #include <cmath>
 #include <string_view>
 
+#include "gui/data/GuiIcons.hpp"
 #include "gui/interaction/InteractTextEdit.hpp"
 #include "gui/text/GuiTextEngine.hpp"
 
@@ -100,7 +101,7 @@ void emitStroke(Sink& s, const UiBox& b, const float rgba[4], float radius, floa
     putClip(*p, clip, false);
 }
 
-void emitPhoto(Sink& s, const UiBox& b, uint8_t slot, const float tint[4], const UiClip& clip) {
+void emitPhoto(Sink& s, const UiBox& b, uint8_t slot, const float tint[4], const UiClip& clip, const float uv[4]) {
     if (b.w < 1.0f || b.h < 1.0f) {
         return;
     }
@@ -115,8 +116,58 @@ void emitPhoto(Sink& s, const UiBox& b, uint8_t slot, const float tint[4], const
     std::copy_n(tint, 4, p->color);
     p->texId = slot;
     p->flags = kUiFlagPhoto;
-    p->extra[2] = 1.0f;
-    p->extra[3] = 1.0f;
+    std::copy_n(uv, 4, p->extra);
+    putClip(*p, clip, true);
+}
+
+constexpr float kGuiTileTop = 6.0f; // gap above a file tile's thumbnail
+
+// A photo of a paint: the whole slot, one cell of its atlas grid, or (tile mode) that cell as a square at the top of the box.
+void emitPaintPhoto(Sink& s, const UiBox& box, const UiPaint& paint, const UiClip& clip) {
+    float uv[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    UiBox target = box;
+    float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    const float* tint = paint.tint;
+    if (paint.cols != 0 && paint.rows != 0) {
+        const float du = 1.0f / static_cast<float>(paint.cols);
+        const float dv = 1.0f / static_cast<float>(paint.rows);
+        uv[0] = static_cast<float>(paint.cell % paint.cols) * du;
+        uv[1] = static_cast<float>(paint.cell / paint.cols) * dv;
+        uv[2] = uv[0] + du;
+        uv[3] = uv[1] + dv;
+    }
+    if (paint.tile != 0) {
+        const float side = std::min(static_cast<float>(paint.tile), box.w);
+        target = UiBox{box.x + (box.w - side) * 0.5f, box.y + kGuiTileTop, side, side};
+        tint = white;
+    }
+    emitPhoto(s, target, paint.photo, tint, clip, uv);
+}
+
+// One glyph of the icon atlas (photo slot kPhotoIconAtlas): a white mask tinted by `rgba`, centred in the box.
+void emitIcon(Sink& s, const UiBox& b, uint8_t cell, bool trailing, const float rgba[4], const UiClip& clip) {
+    const float side = std::min(kGuiIconDrawPx, std::min(b.w, b.h));
+    if (side < 1.0f || rgba[3] <= 0.0f) {
+        return;
+    }
+    UiPrimitive* p = take(s);
+    if (p == nullptr) {
+        return;
+    }
+    constexpr float kCell = 1.0f / static_cast<float>(kGuiIconCells);
+    const float u0 = static_cast<float>(cell % kGuiIconCells) * kCell;
+    const float v0 = static_cast<float>(cell / kGuiIconCells) * kCell;
+    p->posX = trailing ? b.x + b.w - side - kGuiIconTrailPad : b.x + (b.w - side) * 0.5f;
+    p->posY = b.y + (b.h - side) * 0.5f;
+    p->sizeX = side;
+    p->sizeY = side;
+    std::copy_n(rgba, 4, p->color);
+    p->texId = kPhotoIconAtlas;
+    p->flags = kUiFlagPhoto;
+    p->extra[0] = u0;
+    p->extra[1] = v0;
+    p->extra[2] = u0 + kCell;
+    p->extra[3] = v0 + kCell;
     putClip(*p, clip, true);
 }
 
@@ -289,7 +340,14 @@ void emitEntity(Sink& s, flecs::entity e, uint32_t depth) {
                 emitRect(s, box->x, box->y, box->w * std::clamp(drag->value, 0.0f, 1.0f), box->h, fill, radius, clip);
             }
             if (paint->photo != kGuiNoPhoto) {
-                emitPhoto(s, *box, paint->photo, paint->tint, clip);
+                emitPaintPhoto(s, *box, *paint, clip);
+            }
+            if (paint->icon != 0) {
+                float glyph[4];
+                const float white[4] = {paint->tint[0], paint->tint[1], paint->tint[2], 1.0f};
+                paletteColor(*s.sheet, kTokText, white, glyph);
+                const UiText* caption = e.try_get<UiText>();
+                emitIcon(s, *box, paint->icon, caption != nullptr && caption->len != 0, glyph, clip);
             }
             if (paint->borderW > 0.5f) {
                 const float one[4] = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -298,7 +356,13 @@ void emitEntity(Sink& s, flecs::entity e, uint32_t depth) {
             }
         }
         if (const UiText* text = e.try_get<UiText>()) {
-            emitText(s, e, *box, *text, clip);
+            const UiPaint* paint = e.try_get<UiPaint>();
+            if (paint != nullptr && paint->tile != 0) { // a file tile: the caption starts under the thumbnail
+                const float used = std::min(box->h, static_cast<float>(paint->tile) + kGuiTileTop * 1.5f);
+                emitText(s, e, UiBox{box->x, box->y + used, box->w, box->h - used}, *text, clip);
+            } else {
+                emitText(s, e, *box, *text, clip);
+            }
         }
     }
     emitChildren(s, e, depth);

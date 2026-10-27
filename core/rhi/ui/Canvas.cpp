@@ -37,10 +37,10 @@ void canvasDestroy(Canvas& c, Device& d) {
     c.heaps = nullptr;
 }
 
-void canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& input, uint32_t flight, bool upload) {
+bool canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& input, uint32_t flight, bool upload) {
     c.feedback = {};
     if (c.layer == nullptr || w < 1.0f || h < 1.0f) {
-        return;
+        return c.layer == nullptr;
     }
     const float dpi = c.dpi < 0.5f ? 1.0f : c.dpi;
     const float pointsW = w / dpi;
@@ -54,10 +54,11 @@ void canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& inp
     uint32_t primCap = 0;
     UiPrimitive* dst = upload ? uiRendererPrimDst(c.rhi, flight, primCap) : nullptr;
     if (dst == nullptr || primCap == 0) {
-        return;
+        return false;
     }
     const uint32_t n = c.layer(c.layerUser, local, pointsW, pointsH, dst, primCap, c.feedback);
     uiRendererUploadPrims(c.rhi, d, flight, std::span<const UiPrimitive>(dst, n < primCap ? n : primCap), pointsW, pointsH);
+    return true;
 }
 
 void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, const FrameContext& fc, bool keepColor) {

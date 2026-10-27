@@ -152,7 +152,9 @@ struct DrawJobCtx {
 // главного потока (SDL) и нельзя звать параллельно друг другу (onOps может реентерантно
 // дёргать hostOpen/hostClose, которые мутируют общий Host).
 void readCanvas(HostView& view, DrawJobResult& out, Device& device, float w, float h, uint32_t flight, bool upload) {
-    canvasConsume(view.canvas, device, w, h, view.window.input, flight, upload);
+    if (!canvasConsume(view.canvas, device, w, h, view.window.input, flight, upload)) {
+        view.window.keepEdges = true;
+    }
     out.ops = view.canvas.feedback.ops;
     out.cursor = view.canvas.feedback.cursor;
     out.wantsText = view.canvas.feedback.wantsText;

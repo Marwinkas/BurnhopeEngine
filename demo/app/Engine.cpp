@@ -111,6 +111,10 @@ void syncScene(Engine& e) {
     sceneFrameSetBlock(e.scene, ed.block);
     inspectorSync(e);
     toolbarSync(e);
+    hierarchySync(e);
+    materialSync(e);
+    browserSync(e);
+    launcherSync(e);
 }
 
 } // namespace
@@ -174,7 +178,7 @@ bool engineInit(Engine& e, int argc, char** argv) {
         spdlog::error("bh_gui screen failed to load");
         return false;
     }
-    return inspectorBind(e) && toolbarBind(e) && browserBind(e);
+    return inspectorBind(e) && toolbarBind(e) && browserBind(e) && hierarchyBind(e) && materialBind(e) && launcherBind(e);
 }
 
 void engineShutdown(Engine& e) {

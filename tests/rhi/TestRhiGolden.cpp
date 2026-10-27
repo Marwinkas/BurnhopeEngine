@@ -187,7 +187,7 @@ TEST_CASE("golden image: panel fill is exact and mesh/vertex paths match") {
     }
     canvas.layer = goldenLayer;
     InputFrame input{};
-    canvasConsume(canvas, device, 64.0f, 64.0f, input, 0, true);
+    (void)canvasConsume(canvas, device, 64.0f, 64.0f, input, 0, true);
 
     constexpr uint32_t kW = 64;
     constexpr uint32_t kH = 64;

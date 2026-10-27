@@ -56,7 +56,8 @@ inline constexpr float kCanvasFontPx = 10.0f;
 void canvasDestroy(Canvas& c, Device& d);
 
 // Runs the layer on the mapped primitive ring of `flight` and uploads the result. No-op without a layer.
-void canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& input, uint32_t flight, bool upload);
+// Returns true when the layer consumed this frame's input; false means the caller must re-offer the pointer edges next pump.
+[[nodiscard]] bool canvasConsume(Canvas& c, Device& d, float w, float h, const InputFrame& input, uint32_t flight, bool upload);
 // Records the single UI draw for the primitives uploaded by the last canvasConsume.
 void canvasRecord(VkCommandBuffer cmd, const Canvas& c, const Swapchain& sc, const FrameContext& fc, bool keepColor = false);
 

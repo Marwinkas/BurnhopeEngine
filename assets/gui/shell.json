@@ -44,8 +44,8 @@
     },
     {
      "name": "tSelect",
-     "class": "button",
-     "text": "Select",
+     "class": "tool_button",
+     "icon": "select",
      "behaviors": [
       "hover",
       "click"
@@ -54,8 +54,8 @@
     },
     {
      "name": "tMove",
-     "class": "button",
-     "text": "Move",
+     "class": "tool_button",
+     "icon": "move",
      "behaviors": [
       "hover",
       "click"
@@ -64,8 +64,8 @@
     },
     {
      "name": "tRotate",
-     "class": "button",
-     "text": "Rotate",
+     "class": "tool_button",
+     "icon": "rotate",
      "behaviors": [
       "hover",
       "click"
@@ -74,8 +74,8 @@
     },
     {
      "name": "tScale",
-     "class": "button",
-     "text": "Scale",
+     "class": "tool_button",
+     "icon": "scale",
      "behaviors": [
       "hover",
       "click"
@@ -83,12 +83,33 @@
      "action": 10
     },
     {
+     "name": "snap",
+     "class": "tool_button",
+     "icon": "snap",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 11
+    },
+    {
+     "name": "maximize",
+     "class": "tool_button",
+     "icon": "maximize",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 0,
+     "toggles": "bottom"
+    },
+    {
      "class": "bar_sep"
     },
     {
      "name": "play",
-     "class": "button",
-     "text": "Play",
+     "class": "tool_button",
+     "icon": "play",
      "behaviors": [
       "hover",
       "click"
@@ -97,8 +118,8 @@
     },
     {
      "name": "pause",
-     "class": "button",
-     "text": "Pause",
+     "class": "tool_button",
+     "icon": "pause",
      "behaviors": [
       "hover",
       "click"
@@ -107,8 +128,8 @@
     },
     {
      "name": "stop",
-     "class": "button",
-     "text": "Stop",
+     "class": "tool_button",
+     "icon": "stop",
      "behaviors": [
       "hover",
       "click"
@@ -119,9 +140,20 @@
      "class": "bar_sep"
     },
     {
+     "name": "speedIcon",
+     "class": "tool_button",
+     "icon": "camera",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 5
+    },
+    {
      "name": "speed",
      "class": "button",
-     "text": "Speed 1x",
+     "text": "1x",
+     "icon": "chevron_down",
      "behaviors": [
       "hover",
       "click"
@@ -132,11 +164,13 @@
      "name": "debug",
      "class": "button",
      "text": "Lit",
+     "icon": "chevron_down",
      "behaviors": [
       "hover",
       "click"
      ],
-     "action": 4
+     "action": 0,
+     "toggles": "debugMenu"
     },
     {
      "name": "proj",
@@ -166,6 +200,17 @@
      "name": "stats",
      "class": "bar_stats",
      "text": ""
+    },
+    {
+     "name": "settings",
+     "class": "tool_button",
+     "icon": "gear",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 0,
+     "toggles": "main::inspector"
     }
    ]
   },
@@ -184,6 +229,22 @@
       "scroll"
      ],
      "children": [
+      {
+       "name": "hierTitle",
+       "class": "label_title",
+       "text": "Scene"
+      },
+      {
+       "name": "hier",
+       "class": "list_hier",
+       "behaviors": [
+        "virtual",
+        "hover"
+       ],
+       "count": 0,
+       "itemH": 26,
+       "itemAction": 83
+      },
       {
        "name": "title",
        "class": "row_tall",
@@ -1319,19 +1380,157 @@
        "class": "row",
        "children": [
         {
-         "name": "up",
-         "class": "button",
-         "text": "Up",
+         "name": "plus",
+         "class": "tool_button",
+         "icon": "square_plus",
          "behaviors": [
           "hover",
           "click"
          ],
-         "action": 82
+         "action": 0,
+         "toggles": "createMenu"
         },
         {
-         "name": "path",
-         "class": "crumbs",
-         "text": ""
+         "name": "page",
+         "class": "tool_button",
+         "icon": "file",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 160
+        },
+        {
+         "name": "back",
+         "class": "tool_button",
+         "icon": "chevron_left",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 161
+        },
+        {
+         "name": "fwd",
+         "class": "tool_button",
+         "icon": "chevron_right",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 162
+        },
+        {
+         "name": "pill",
+         "class": "crumb_pill",
+         "children": [
+          {
+           "name": "up",
+           "class": "tool_button",
+           "icon": "folder",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 82
+          },
+          {
+           "name": "c0",
+           "class": "crumb",
+           "text": "",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 150,
+           "hidden": false
+          },
+          {
+           "name": "s0",
+           "class": "crumb_sep",
+           "text": ">",
+           "hidden": true
+          },
+          {
+           "name": "c1",
+           "class": "crumb",
+           "text": "",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 151,
+           "hidden": true
+          },
+          {
+           "name": "s1",
+           "class": "crumb_sep",
+           "text": ">",
+           "hidden": true
+          },
+          {
+           "name": "c2",
+           "class": "crumb",
+           "text": "",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 152,
+           "hidden": true
+          },
+          {
+           "name": "s2",
+           "class": "crumb_sep",
+           "text": ">",
+           "hidden": true
+          },
+          {
+           "name": "c3",
+           "class": "crumb",
+           "text": "",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 153,
+           "hidden": true
+          },
+          {
+           "name": "s3",
+           "class": "crumb_sep",
+           "text": ">",
+           "hidden": true
+          },
+          {
+           "name": "c4",
+           "class": "crumb",
+           "text": "",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 154,
+           "hidden": true
+          },
+          {
+           "name": "s4",
+           "class": "crumb_sep",
+           "text": ">",
+           "hidden": true
+          },
+          {
+           "name": "c5",
+           "class": "crumb",
+           "text": "",
+           "behaviors": [
+            "hover",
+            "click"
+           ],
+           "action": 155,
+           "hidden": true
+          }
+         ]
         },
         {
          "name": "search",
@@ -1341,6 +1540,29 @@
           "edit"
          ],
          "maxLen": 40
+        },
+        {
+         "name": "filter",
+         "class": "button",
+         "text": "All",
+         "icon": "chevron_down",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 0,
+         "toggles": "filterMenu"
+        },
+        {
+         "name": "tune",
+         "class": "tool_button",
+         "icon": "gear",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 0,
+         "toggles": "tuneMenu"
         }
        ]
       },
@@ -1352,11 +1574,27 @@
         "hover"
        ],
        "count": 0,
-       "itemW": 230,
-       "itemH": 28,
-       "columns": 3,
+       "itemW": 108,
+       "itemH": 114,
+       "columns": 8,
        "itemAction": 81,
-       "itemClass": "list_item"
+       "itemClass": "tile_item"
+      },
+      {
+       "name": "info",
+       "class": "row_info",
+       "children": [
+        {
+         "name": "status",
+         "class": "label_small_fill",
+         "text": ""
+        },
+        {
+         "name": "detail",
+         "class": "label_small_right",
+         "text": ""
+        }
+       ]
       }
      ]
     }
@@ -1398,6 +1636,17 @@
       "click"
      ],
      "action": 22,
+     "toggles": "fileMenu"
+    },
+    {
+     "name": "projects",
+     "class": "menu_item",
+     "text": "Projects...",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 24,
      "toggles": "fileMenu"
     },
     {
@@ -1491,6 +1740,440 @@
      "toggles": "viewMenu"
     }
    ]
+  },
+  {
+   "name": "debugMenu",
+   "class": "menu_popup",
+   "behaviors": [
+    "overlay"
+   ],
+   "placement": "below",
+   "children": [
+    {
+     "name": "dbg0",
+     "class": "menu_item",
+     "text": "Lit",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 100,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg1",
+     "class": "menu_item",
+     "text": "Primitive ID",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 101,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg2",
+     "class": "menu_item",
+     "text": "Normals",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 102,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg3",
+     "class": "menu_item",
+     "text": "GI",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 103,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg4",
+     "class": "menu_item",
+     "text": "Каскады",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 104,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg5",
+     "class": "menu_item",
+     "text": "Контакт",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 105,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg6",
+     "class": "menu_item",
+     "text": "Луч",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 106,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg7",
+     "class": "menu_item",
+     "text": "Прямой",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 107,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg8",
+     "class": "menu_item",
+     "text": "Альбедо",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 108,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg9",
+     "class": "menu_item",
+     "text": "Солнце",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 109,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg10",
+     "class": "menu_item",
+     "text": "Шероховатость",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 110,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg11",
+     "class": "menu_item",
+     "text": "Металл",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 111,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg12",
+     "class": "menu_item",
+     "text": "AO",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 112,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg13",
+     "class": "menu_item",
+     "text": "Свечение",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 113,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg14",
+     "class": "menu_item",
+     "text": "ReSTIR Свет",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 114,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg15",
+     "class": "menu_item",
+     "text": "ReSTIR Вес",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 115,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg16",
+     "class": "menu_item",
+     "text": "ReSTIR M",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 116,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg17",
+     "class": "menu_item",
+     "text": "ReSTIR Тень",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 117,
+     "toggles": "debugMenu"
+    },
+    {
+     "name": "dbg18",
+     "class": "menu_item",
+     "text": "ReSTIR Индекс",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 118,
+     "toggles": "debugMenu"
+    }
+   ]
+  },
+  {
+   "name": "filterMenu",
+   "class": "menu_popup",
+   "behaviors": [
+    "overlay"
+   ],
+   "placement": "below",
+   "children": [
+    {
+     "name": "flt0",
+     "class": "menu_item",
+     "text": "All",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 90,
+     "toggles": "filterMenu"
+    },
+    {
+     "name": "flt1",
+     "class": "menu_item",
+     "text": "Textures",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 91,
+     "toggles": "filterMenu"
+    },
+    {
+     "name": "flt2",
+     "class": "menu_item",
+     "text": "Materials",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 92,
+     "toggles": "filterMenu"
+    },
+    {
+     "name": "flt3",
+     "class": "menu_item",
+     "text": "Scenes",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 93,
+     "toggles": "filterMenu"
+    },
+    {
+     "name": "flt4",
+     "class": "menu_item",
+     "text": "Models",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 94,
+     "toggles": "filterMenu"
+    }
+   ]
+  },
+  {
+   "name": "createMenu",
+   "class": "menu_popup",
+   "behaviors": [
+    "overlay"
+   ],
+   "children": [
+    {
+     "name": "mkFolder",
+     "class": "menu_item",
+     "text": "New Folder",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 170,
+     "toggles": "createMenu"
+    },
+    {
+     "name": "mkMaterial",
+     "class": "menu_item",
+     "text": "New Material",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 171,
+     "toggles": "createMenu"
+    },
+    {
+     "name": "mkScene",
+     "class": "menu_item",
+     "text": "New Scene",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 172,
+     "toggles": "createMenu"
+    },
+    {
+     "name": "mkFile",
+     "class": "menu_item",
+     "text": "New File",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 173,
+     "toggles": "createMenu"
+    }
+   ]
+  },
+  {
+   "name": "tuneMenu",
+   "class": "menu_popup",
+   "behaviors": [
+    "overlay"
+   ],
+   "children": [
+    {
+     "name": "sort",
+     "class": "menu_item",
+     "text": "Sort: Name",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 175
+    },
+    {
+     "name": "hidden",
+     "class": "menu_item",
+     "text": "Hidden: Off",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 176
+    },
+    {
+     "name": "size",
+     "class": "menu_slider",
+     "text": "Icon size",
+     "behaviors": [
+      "hover",
+      "drag"
+     ],
+     "axis": "x",
+     "mode": 0,
+     "value": 0.5,
+     "minV": 48,
+     "maxV": 96
+    }
+   ]
+  },
+  {
+   "name": "ctxMenu",
+   "class": "menu_popup",
+   "behaviors": [
+    "overlay"
+   ],
+   "children": [
+    {
+     "name": "ctxOpen",
+     "class": "menu_item",
+     "text": "Open",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 180,
+     "toggles": "ctxMenu"
+    },
+    {
+     "name": "ctxReveal",
+     "class": "menu_item",
+     "text": "Reveal in Explorer",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 181,
+     "toggles": "ctxMenu"
+    },
+    {
+     "name": "ctxDup",
+     "class": "menu_item",
+     "text": "Duplicate",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 182,
+     "toggles": "ctxMenu"
+    },
+    {
+     "name": "ctxDel",
+     "class": "menu_item",
+     "text": "Delete",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 183,
+     "toggles": "ctxMenu"
+    }
+   ],
+   "placement": "pointer"
   }
  ]
 }

@@ -14,6 +14,7 @@ constexpr uint32_t kGuiActionEngineBase = 0xE0000000u;
 constexpr uint32_t kGuiActionEditChanged = kGuiActionEngineBase + 1; // text of a UiEditable changed this frame
 constexpr uint32_t kGuiActionEditCommit = kGuiActionEngineBase + 2;  // Enter pressed in a single-line UiEditable
 constexpr uint32_t kGuiActionDragEnd = kGuiActionEngineBase + 3;     // a UiDraggable gesture was released
+constexpr uint32_t kGuiActionSecondary = kGuiActionEngineBase + 4;   // right button released over a UiClickable (entity = that clickable)
 
 struct GuiAction {
     uint64_t entity = 0;

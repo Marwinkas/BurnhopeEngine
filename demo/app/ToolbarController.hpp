@@ -9,6 +9,7 @@ struct Engine;
 struct ToolbarState {
     uint8_t tool = 0;      // gizmo mode: 0 select, 1 move, 2 rotate, 3 scale
     uint8_t speedStep = 2; // index into the camera speed multipliers
+    uint8_t snap = 0;
     uint8_t frame = 0;
     float baseSpeed = 4.0f;
 };

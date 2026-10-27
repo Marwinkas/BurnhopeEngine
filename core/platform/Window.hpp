@@ -104,6 +104,8 @@ struct Window {
     float resizeBorderPx = 6.0f;
     uint32_t lastLeftMs = 0;
     uint8_t lastClickN = 0;
+    // Set by the host when the GUI layer did not run this pump: the next pump keeps the click edges and wheel instead of dropping them.
+    bool keepEdges = false;
     float lastClickX = 0;
     float lastClickY = 0;
     float dpi = 1;

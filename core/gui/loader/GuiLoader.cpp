@@ -1,5 +1,7 @@
 #include "gui/loader/GuiLoader.hpp"
 
+#include "gui/data/GuiIcons.hpp"
+
 #include <algorithm>
 #include <cstring>
 
@@ -31,6 +33,7 @@ struct NodeDesc {
     int8_t align = -1;
     int16_t size = -1;
     int16_t photo = -1;
+    uint8_t icon = 0;
     bool hasColor = false;
     bool hidden = false;
     bool multiline = false;
@@ -209,6 +212,14 @@ bool readField(json::Cur& c, const char* key, NodeDesc& d) {
     }
     if (isKey(key, "name")) {
         return readString(c, d.name, sizeof(d.name), len);
+    }
+    if (isKey(key, "icon")) {
+        char iconName[24] = {};
+        if (!readString(c, iconName, sizeof(iconName), len)) {
+            return false;
+        }
+        d.icon = guiIconFind(iconName);
+        return true;
     }
     if (isKey(key, "toggles")) {
         return readString(c, d.toggles, sizeof(d.toggles), len);
@@ -457,6 +468,15 @@ flecs::entity buildEntity(LoadCtx& ctx, const NodeDesc& d, flecs::entity parent)
         }
         if (d.photo >= 0) {
             p->photo = static_cast<uint8_t>(d.photo);
+        }
+        if (d.icon != 0) {
+            p->icon = d.icon;
+            if (d.textLen != 0) { // a caption with an icon: the glyph trails the text, so reserve its room
+                if (const UiFlex* flex = e.try_get<UiFlex>(); flex != nullptr && flex->node != nullptr) {
+                    const float room = kGuiIconDrawPx + kGuiIconTrailPad;
+                    YGNodeStyleSetPadding(flex->node, YGEdgeRight, YGNodeStyleGetPadding(flex->node, YGEdgeRight).value + room);
+                }
+            }
         }
     }
     if (t != nullptr) {

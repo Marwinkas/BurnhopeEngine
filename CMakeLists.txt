@@ -335,6 +335,7 @@ bh_module(rhi_ui
 bh_module(host
     core/host/Host.cpp
     core/host/GuiHost.cpp
+    core/host/Recent.cpp
 )
 target_link_libraries(bh_host PUBLIC bh_gui bh_rhi_ui volk bh_rhi bh_platform bh_foundation)
 bh_module(app
@@ -343,6 +344,12 @@ bh_module(app
     demo/app/InspectorController.cpp
     demo/app/BrowserController.cpp
     demo/app/ToolbarController.cpp
+    demo/app/HierarchyController.cpp
+    demo/app/MaterialController.cpp
+    demo/app/LauncherController.cpp
+    demo/app/BrowserModel.cpp
+    demo/app/BrowserFiles.cpp
+    demo/app/BrowserThumbs.cpp
 )
 target_include_directories(bh_app PUBLIC ${BH_DEMO} ${BH_ENGINE} ${BH_ENGINE}/include)
 target_link_libraries(bh_app PUBLIC bh_host bh_gui bh_rhi_ui bh_gpu_scene)

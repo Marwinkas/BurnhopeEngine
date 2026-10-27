@@ -1,0 +1,288 @@
+{
+ "name": "launcher",
+ "class": "launcher_veil",
+ "behaviors": [
+  "hover"
+ ],
+ "children": [
+  {
+   "name": "card",
+   "class": "launcher_card",
+   "children": [
+    {
+     "name": "title",
+     "class": "label_title",
+     "text": "Burnhope"
+    },
+    {
+     "name": "actions",
+     "class": "row",
+     "children": [
+      {
+       "name": "create",
+       "class": "button_wide",
+       "text": "Create Project",
+       "behaviors": [
+        "hover",
+        "click"
+       ],
+       "action": 190
+      },
+      {
+       "name": "open",
+       "class": "button_wide",
+       "text": "Open Project",
+       "behaviors": [
+        "hover",
+        "click"
+       ],
+       "action": 191
+      }
+     ]
+    },
+    {
+     "name": "recentTitle",
+     "class": "label",
+     "text": "Recent Projects"
+    },
+    {
+     "name": "empty",
+     "class": "label_small",
+     "text": "No recent projects"
+    },
+    {
+     "name": "list",
+     "class": "recent_list",
+     "children": [
+      {
+       "name": "r0",
+       "class": "recent_row",
+       "hidden": true,
+       "children": [
+        {
+         "name": "open",
+         "class": "recent_open",
+         "text": "",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 192
+        },
+        {
+         "name": "forget",
+         "class": "tool_button",
+         "icon": "dismiss",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 200
+        }
+       ]
+      },
+      {
+       "name": "r1",
+       "class": "recent_row",
+       "hidden": true,
+       "children": [
+        {
+         "name": "open",
+         "class": "recent_open",
+         "text": "",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 193
+        },
+        {
+         "name": "forget",
+         "class": "tool_button",
+         "icon": "dismiss",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 201
+        }
+       ]
+      },
+      {
+       "name": "r2",
+       "class": "recent_row",
+       "hidden": true,
+       "children": [
+        {
+         "name": "open",
+         "class": "recent_open",
+         "text": "",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 194
+        },
+        {
+         "name": "forget",
+         "class": "tool_button",
+         "icon": "dismiss",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 202
+        }
+       ]
+      },
+      {
+       "name": "r3",
+       "class": "recent_row",
+       "hidden": true,
+       "children": [
+        {
+         "name": "open",
+         "class": "recent_open",
+         "text": "",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 195
+        },
+        {
+         "name": "forget",
+         "class": "tool_button",
+         "icon": "dismiss",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 203
+        }
+       ]
+      },
+      {
+       "name": "r4",
+       "class": "recent_row",
+       "hidden": true,
+       "children": [
+        {
+         "name": "open",
+         "class": "recent_open",
+         "text": "",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 196
+        },
+        {
+         "name": "forget",
+         "class": "tool_button",
+         "icon": "dismiss",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 204
+        }
+       ]
+      },
+      {
+       "name": "r5",
+       "class": "recent_row",
+       "hidden": true,
+       "children": [
+        {
+         "name": "open",
+         "class": "recent_open",
+         "text": "",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 197
+        },
+        {
+         "name": "forget",
+         "class": "tool_button",
+         "icon": "dismiss",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 205
+        }
+       ]
+      },
+      {
+       "name": "r6",
+       "class": "recent_row",
+       "hidden": true,
+       "children": [
+        {
+         "name": "open",
+         "class": "recent_open",
+         "text": "",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 198
+        },
+        {
+         "name": "forget",
+         "class": "tool_button",
+         "icon": "dismiss",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 206
+        }
+       ]
+      },
+      {
+       "name": "r7",
+       "class": "recent_row",
+       "hidden": true,
+       "children": [
+        {
+         "name": "open",
+         "class": "recent_open",
+         "text": "",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 199
+        },
+        {
+         "name": "forget",
+         "class": "tool_button",
+         "icon": "dismiss",
+         "behaviors": [
+          "hover",
+          "click"
+         ],
+         "action": 207
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "close",
+     "class": "button_wide",
+     "text": "Continue without a project",
+     "behaviors": [
+      "hover",
+      "click"
+     ],
+     "action": 208
+    }
+   ]
+  }
+ ]
+}

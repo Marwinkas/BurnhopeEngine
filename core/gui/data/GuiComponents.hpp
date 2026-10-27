@@ -40,11 +40,16 @@ struct UiPaint {
     uint8_t token = 0;
     uint8_t borderToken = 0;
     uint8_t photo = kGuiNoPhoto;
-    uint8_t pad0 = 0;
+    uint8_t icon = 0; // atlas cell of GuiIcons.hpp drawn centred in the box, tinted by the text colour; 0 = none
+    uint8_t cell = 0; // photo atlas cell (row-major in a cols x rows grid); only read when cols != 0
+    uint8_t cols = 0; // 0 = the photo shows its whole slot
+    uint8_t rows = 0;
+    uint8_t tile = 0; // != 0: the photo is a tile x tile square at the top centre of the box (file tiles), drawn untinted
     float radius = 0.0f;
     float borderW = 0.0f;
     float tint[4] = {1.0f, 1.0f, 1.0f, 1.0f}; // multiplied into the token color; hover tints write here
 };
+static_assert(sizeof(UiPaint) % 16 == 0);
 
 struct UiText {
     char text[kGuiTextCap] = {};

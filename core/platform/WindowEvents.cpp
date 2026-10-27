@@ -40,10 +40,22 @@ void windowArm(Window& w) {
     const uint32_t down = w.input.pointer.down;
     const float x = w.input.pointer.x;
     const float y = w.input.pointer.y;
+    const PointerFrame kept = w.input.pointer;
+    const float wheel = w.input.wheel;
+    const float wheelX = w.input.wheelX;
+    const uint8_t clicks = w.input.clicks;
     w.input = {};
     w.input.pointer.down = down;
     w.input.pointer.x = x;
     w.input.pointer.y = y;
+    if (w.keepEdges) {
+        w.input.pointer.pressed = kept.pressed;
+        w.input.pointer.released = kept.released;
+        w.input.wheel = wheel;
+        w.input.wheelX = wheelX;
+        w.input.clicks = clicks;
+        w.keepEdges = false;
+    }
     w.motionDx = 0.0f;
     w.motionDy = 0.0f;
 }
@@ -98,6 +110,27 @@ void windowEvent(Window& w, const SDL_Event& e, bool primary) {
         if (e.motion.windowID == self) {
             w.motionDx += e.motion.xrel;
             w.motionDy += e.motion.yrel;
+        }
+        break;
+    // Button events latch the edges themselves, so a tap that presses and releases between two polls still clicks.
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+        if (e.button.windowID == self) {
+            uint32_t bit = 0;
+            switch (e.button.button) {
+            case SDL_BUTTON_LEFT: bit = kPointerLeft; break;
+            case SDL_BUTTON_RIGHT: bit = kPointerRight; break;
+            case SDL_BUTTON_MIDDLE: bit = kPointerMiddle; break;
+            default: break;
+            }
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+                w.input.pointer.pressed |= bit;
+                if (bit == kPointerLeft) {
+                    w.input.clicks = e.button.clicks > 3 ? 3 : e.button.clicks;
+                }
+            } else {
+                w.input.pointer.released |= bit;
+            }
         }
         break;
     case SDL_EVENT_MOUSE_WHEEL:
@@ -321,11 +354,13 @@ void windowFinish(Window& w) {
     if (!wasLeft && left) {
         w.input.pointer.pressed |= kPointerLeft;
         const uint32_t now = SDL_GetTicks();
-        w.input.clicks = 1;
-        const float movedX = w.input.pointer.x - w.lastClickX;
-        const float movedY = w.input.pointer.y - w.lastClickY;
-        if ((now - w.lastLeftMs) < 400 && movedX * movedX + movedY * movedY <= 16.0f) {
-            w.input.clicks = w.lastClickN >= 2 ? 3 : 2;
+        if (w.input.clicks == 0) {
+            w.input.clicks = 1;
+            const float movedX = w.input.pointer.x - w.lastClickX;
+            const float movedY = w.input.pointer.y - w.lastClickY;
+            if ((now - w.lastLeftMs) < 400 && movedX * movedX + movedY * movedY <= 16.0f) {
+                w.input.clicks = w.lastClickN >= 2 ? 3 : 2;
+            }
         }
         w.lastClickN = w.input.clicks;
         w.lastLeftMs = now;

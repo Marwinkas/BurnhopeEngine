@@ -39,6 +39,12 @@ void interactClick(flecs::world& world, const InputFrame& in, GuiInteractState& 
             target.add<UiPressed>();
         }
     }
+    if ((in.pointer.released & kPointerRight) != 0 && state.capture == 0) {
+        const flecs::entity target = guiAncestorWith<UiClickable>(guiEntityOf(world, state.under));
+        if (target.id() != 0) {
+            guiPushAction(state, target.id(), kGuiActionSecondary);
+        }
+    }
     if ((in.pointer.released & kPointerLeft) != 0 && state.press != 0) {
         const flecs::entity pressed = guiEntityOf(world, state.press);
         const uint64_t id = state.press;
